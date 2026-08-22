@@ -6,7 +6,7 @@
 
 ## Boundary
 
-递归下降 `Expr`。`x ≤ u64Max - y` → `checkedAddU64`；`y ≤ x` → `checkedSubU64`。可变方法无守卫则 fail closed。
+递归下降 `Expr`。`x ≤ u64Max - y` → `checkedAddU64`；`y ≤ x` → `checkedSubU64`；`y = 0 ∨ x ≤ u64Max / y` → `checkedMulU64`；`y ≠ 0` 后 `/` `%` → `checkedDivU64` / `checkedModU64`。比较认 `=` `≠` `<` `≤` `>` `≥`。假支不必是 overflow。可变方法无 checked 算术则 fail closed。
 
 `fields` 默认从 `init` 返回类型收：必须是已注册 `structure`、无 `extends`、每个直接字段 `UInt64`。声明顺序 = 账户槽顺序。`#solana_extract … with "a","b"` 仍可覆盖。ops 里出现的字段名必须在表内。
 

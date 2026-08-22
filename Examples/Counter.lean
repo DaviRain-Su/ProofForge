@@ -56,4 +56,36 @@ theorem decrement_underflow_not_ok
   have : Except.error Error.overflow = Except.ok (t, r) := h.symm.trans hok
   cases this
 
+/-- `factor = 0` 得 0；否则 `value ≤ u64Max / factor` 才乘。 -/
+@[solana_entry]
+def scale (s : State) (factor : UInt64) : Except Error (State × UInt64) :=
+  if factor = 0 then
+    .ok ({ value := 0 }, 0)
+  else if s.value ≤ u64Max / factor then
+    let next := s.value * factor
+    .ok ({ value := next }, next)
+  else
+    .error .overflow
+
+@[solana_entry]
+def divide (s : State) (den : UInt64) : Except Error (State × UInt64) :=
+  if den ≠ 0 then
+    let next := s.value / den
+    .ok ({ value := next }, next)
+  else
+    .error .overflow
+
+@[solana_entry]
+def modulo (s : State) (den : UInt64) : Except Error (State × UInt64) :=
+  if den ≠ 0 then
+    let next := s.value % den
+    .ok ({ value := next }, next)
+  else
+    .error .overflow
+
+/-- view：value = 0 返回 1，否则 0。 -/
+@[solana_entry]
+def nonzero (s : State) : UInt64 :=
+  if s.value = 0 then 1 else 0
+
 end Examples.Counter

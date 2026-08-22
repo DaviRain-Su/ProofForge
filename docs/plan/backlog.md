@@ -9,11 +9,11 @@
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
 - `@[solana_entry]` + `#solana_build`；按名 disc；Counter 同程序 decrement
+- 任意 `ite`；checked mul/div/mod；`=` `≠` 比较；Counter scale/divide/modulo/nonzero
 
 ## 下一刀（L1）
 
-1. 任意 `ite` 树；checked mul/div/mod；更多比较
-2. `Program` 内容寻址 digest（证明主语 = 编译主语）
+1. `Program` 内容寻址 digest（证明主语 = 编译主语）
 
 ## 其后（L2 / L3）
 

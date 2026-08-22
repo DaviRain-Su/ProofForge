@@ -198,6 +198,142 @@ fn decrement_underflow_holds() {
 }
 
 #[test]
+fn scale_updates_and_returns() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("scale", 1);
+    let ix = build_ix(program_id, state_key, &disc, &[3], true, false);
+    let account = state_account(&program_id, count_state(true, 5));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&15u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&count_state(true, 15))
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn scale_zero_factor() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("scale", 1);
+    let ix = build_ix(program_id, state_key, &disc, &[0], true, false);
+    let account = state_account(&program_id, count_state(true, 5));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&0u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&count_state(true, 0))
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn scale_overflow_holds() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("scale", 1);
+    let pre = count_state(true, u64::MAX);
+    let ix = build_ix(program_id, state_key, &disc, &[2], true, false);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::err(ProgramError::Custom(ARITHMETIC_OVERFLOW)),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
+fn divide_updates_and_returns() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("divide", 1);
+    let ix = build_ix(program_id, state_key, &disc, &[3], true, false);
+    let account = state_account(&program_id, count_state(true, 8));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&2u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&count_state(true, 2))
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn divide_by_zero_holds() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("divide", 1);
+    let pre = count_state(true, 8);
+    let ix = build_ix(program_id, state_key, &disc, &[0], true, false);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::err(ProgramError::Custom(ARITHMETIC_OVERFLOW)),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
+fn modulo_updates_and_returns() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("modulo", 1);
+    let ix = build_ix(program_id, state_key, &disc, &[3], true, false);
+    let account = state_account(&program_id, count_state(true, 8));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&2u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&count_state(true, 2))
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn nonzero_view() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("nonzero", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let account = state_account(&program_id, count_state(true, 0));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&1u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&count_state(true, 0))
+                .build(),
+        ],
+    );
+}
+
+#[test]
 fn increment_overflow_holds() {
     let (program_id, mollusk) = harness();
     let state_key = Pubkey::new_unique();

@@ -40,3 +40,17 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 -/
 #guard_msgs (error) in
 #solana_extract Examples.Pair.init Examples.Pair.creditLeft Examples.Pair.getLeft with "value"
+
+#solana_extract Examples.Counter.init Examples.Counter.scale Examples.Counter.get
+
+#solana_extract Examples.Counter.init Examples.Counter.divide Examples.Counter.get
+
+#solana_extract Examples.Counter.init Examples.Counter.modulo Examples.Counter.get
+
+#solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
+
+/--
+error: extract/unsupported: mutating method missing checked arith
+-/
+#guard_msgs (error) in
+#solana_extract Examples.Counter.init Tests.Fixtures.wrappingMul Examples.Counter.get

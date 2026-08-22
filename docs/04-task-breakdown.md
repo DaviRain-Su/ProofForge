@@ -18,7 +18,7 @@
 
 | 阶段 | 目标 | 开的条件 |
 |---|---|---|
-| L1 剖面 | 属性入口、按名 disc 已绿；if/算术、digest 未做 | 现在 |
+| L1 剖面 | 属性、disc、ite、四则已绿；digest 未做 | 现在 |
 | L2 布局 | 窄整数 / Option / Array | L1 绿 |
 | L3 形状 | N 入口、init 全字段 | L1 绿 |
 | L4 recipe | caller / clock / 封闭 CPI | 有具体第二合约 |

@@ -38,6 +38,11 @@ def wrappingSub (s : Examples.Counter.State) (delta : UInt64) :
   let next := s.value - delta
   .ok ({ value := next }, next)
 
+def wrappingMul (s : Examples.Counter.State) (factor : UInt64) :
+    Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
+  let next := s.value * factor
+  .ok ({ value := next }, next)
+
 /-- 负向：state 含非 UInt64 字段。 -/
 structure FlagState where
   value : UInt64

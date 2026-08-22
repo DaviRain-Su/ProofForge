@@ -9,9 +9,7 @@ private def handlerLabel (m : IR.Method) : String :=
   if m.ixName != "" then m.ixName else IR.ixNameOfLean (IR.lastName m.name)
 
 private def ixLenOf (m : IR.Method) : Nat :=
-  match m.kind with
-  | .get => 8
-  | _ => 16
+  8 + 8 * m.paramCount
 
 /-- Loader V3 单账户预检。`ixLen` 是 instruction data 期望长度。 -/
 private def prelude (p : IR.Program) (marker : String) (label : String) (ixLen : Nat)
@@ -107,39 +105,123 @@ body_initialize:
   exit
 "
 
-private def emitCheckedArithBody (p : IR.Program) (label : String) (lhs rhs : Ops.Val) (isAdd : Bool) :
-    Except String String := do
-  let loadL ← loadVal p lhs 8
-  let loadR ← loadVal p rhs 16
-  let destName :=
-    match lhs with
-    | .field _ n => n
-    | _ => p.fields[0]?.getD "value"
-  let store ← storeField p destName 24
-  let arith :=
-    if isAdd then
+private def destField (p : IR.Program) (lhs : Ops.Val) : String :=
+  match lhs with
+  | .field _ n => n
+  | _ => p.fields[0]?.getD "value"
+
+private def emitOverflowExit (label : String) : String :=
+  s!"err_{label}:\n  lddw r0, {overflowCode}\n  exit\n"
+
+private def emitReturnU64 (fromStack : Nat) : String :=
+  s!"  ldxdw r1, [r10 - {fromStack}]\n  stxdw [r10 - 32], r1\n  mov64 r1, r10\n  add64 r1, -32\n  lddw r2, 8\n  call sol_set_return_data\n  lddw r0, 0\n  exit\n"
+
+private def emitStoreAndReturn (p : IR.Program) (dest : String) (fromStack : Nat) : Except String String := do
+  let store ← storeField p dest fromStack
+  return store ++ emitReturnU64 fromStack
+
+private def jmpIf (cmp : Ops.Cmp) (thenLab : String) : String :=
+  match cmp with
+  | .eq => s!"  jeq r1, r2, {thenLab}\n"
+  | .ne => s!"  jne r1, r2, {thenLab}\n"
+  | .lt => s!"  jlt r1, r2, {thenLab}\n"
+  | .le => s!"  jle r1, r2, {thenLab}\n"
+  | .gt => s!"  jgt r1, r2, {thenLab}\n"
+  | .ge => s!"  jge r1, r2, {thenLab}\n"
+
+private def emitArithOp (label : String) (kind : String) : String :=
+  match kind with
+  | "add" =>
       s!"  lddw r3, 0xffffffffffffffff\n  sub64 r3, r2\n  jgt r1, r3, err_{label}\n  mov64 r4, r1\n  add64 r4, r2\n"
-    else
+  | "sub" =>
       s!"  jlt r1, r2, err_{label}\n  mov64 r4, r1\n  sub64 r4, r2\n"
-  return s!"\
-body_{label}:
-{loadL}{loadR}  ldxdw r1, [r10 - 8]
-  ldxdw r2, [r10 - 16]
-{arith}  stxdw [r10 - 24], r4
-  ja ok_{label}
-err_{label}:
-  lddw r0, {overflowCode}
-  exit
-ok_{label}:
-{store}  ldxdw r1, [r10 - 24]
-  stxdw [r10 - 32], r1
-  mov64 r1, r10
-  add64 r1, -32
-  lddw r2, 8
-  call sol_set_return_data
-  lddw r0, 0
-  exit
-"
+  | "mul" =>
+      s!"  lddw r3, 0xffffffffffffffff\n  jeq r2, 0, mul_ok_{label}\n  div64 r3, r2\n  jgt r1, r3, err_{label}\nmul_ok_{label}:\n  mov64 r4, r1\n  mul64 r4, r2\n"
+  | "div" =>
+      s!"  jeq r2, 0, err_{label}\n  mov64 r4, r1\n  div64 r4, r2\n"
+  | "mod" =>
+      s!"  jeq r2, 0, err_{label}\n  mov64 r4, r1\n  mod64 r4, r2\n"
+  | _ => ""
+
+private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.Op) (fresh : Nat) :
+    Except String (String × Nat) := do
+  let mut acc := ""
+  let mut n := fresh
+  for op in ops do
+    match op with
+    | .checkedAddU64 l r =>
+      let loadL ← loadVal p l 8
+      let loadR ← loadVal p r 16
+      acc := acc ++ loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
+        emitArithOp label "add" ++
+        "  stxdw [r10 - 24], r4\n"
+    | .checkedSubU64 l r =>
+      let loadL ← loadVal p l 8
+      let loadR ← loadVal p r 16
+      acc := acc ++ loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
+        emitArithOp label "sub" ++
+        "  stxdw [r10 - 24], r4\n"
+    | .checkedMulU64 l r =>
+      let loadL ← loadVal p l 8
+      let loadR ← loadVal p r 16
+      acc := acc ++ loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
+        emitArithOp label "mul" ++
+        "  stxdw [r10 - 24], r4\n"
+    | .checkedDivU64 l r =>
+      let loadL ← loadVal p l 8
+      let loadR ← loadVal p r 16
+      acc := acc ++ loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
+        emitArithOp label "div" ++
+        "  stxdw [r10 - 24], r4\n"
+    | .checkedModU64 l r =>
+      let loadL ← loadVal p l 8
+      let loadR ← loadVal p r 16
+      acc := acc ++ loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
+        emitArithOp label "mod" ++
+        "  stxdw [r10 - 24], r4\n"
+    | .ite cmp l r thn els =>
+      let loadL ← loadVal p l 8
+      let loadR ← loadVal p r 16
+      let thenLab := s!"then_{label}_{n}"
+      let elseLab := s!"else_{label}_{n}"
+      n := n + 1
+      let (thenTxt, n1) ← emitOps p thenLab thn n
+      let (elseTxt, n2) ← emitOps p elseLab els n1
+      n := n2
+      acc := acc ++ loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
+        jmpIf cmp thenLab ++
+        s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
+    | .okState v =>
+      match v with
+      | .lit k =>
+        let dest := p.fields[0]?.getD "value"
+        acc := acc ++ s!"  lddw r1, {k.toNat}\n  stxdw [r10 - 24], r1\n"
+        acc := acc ++ (← emitStoreAndReturn p dest 24)
+      | .field _ name =>
+        acc := acc ++ (← emitStoreAndReturn p name 24)
+      | .arg _ =>
+        let dest := p.fields[0]?.getD "value"
+        acc := acc ++ (← emitStoreAndReturn p dest 24)
+    | .errorOverflow =>
+      acc := acc ++ emitOverflowExit label
+    | .returnU64 v =>
+      let load ← loadVal p v 8
+      acc := acc ++ load ++ emitReturnU64 8
+    | .returnState v =>
+      let load ← loadVal p v 8
+      let dest := p.fields[0]?.getD "value"
+      acc := acc ++ load ++ (← emitStoreAndReturn p dest 8)
+  return (acc, n)
+
+private def emitMutBody (p : IR.Program) (label : String) (ops : Array Ops.Op) : Except String String := do
+  let (body, _) ← emitOps p label ops 0
+  return s!"body_{label}:\n{body}"
 
 private def emitGetBody (p : IR.Program) (label : String) (v : Ops.Val) : Except String String := do
   let load ← loadVal p v 8
@@ -195,18 +277,17 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   | .increment =>
     if !Ops.hasCheckedArith m.ops then
       .error "extract/unsupported: increment missing checked arith"
-    else if !hasErrorOverflow m.ops then
-      .error "extract/unsupported: increment missing errorOverflow"
-    else if !hasOkState m.ops then
-      .error "extract/unsupported: increment missing okState"
     else do
-      let (lhs, rhs, isAdd) ← arithArgs m.ops
-      let body ← emitCheckedArithBody p label lhs rhs isAdd
+      let body ← emitMutBody p label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) false true false}{body}"
   | .get =>
-    let v ← getVal m.ops
-    let body ← emitGetBody p label v
-    return s!"{label}:\n{prelude p marker label (ixLenOf m) false false false}{body}"
+    if m.ops.any (fun | .ite .. => true | _ => false) then
+      let body ← emitMutBody p label m.ops
+      return s!"{label}:\n{prelude p marker label (ixLenOf m) false false false}{body}"
+    else
+      let v ← getVal m.ops
+      let body ← emitGetBody p label v
+      return s!"{label}:\n{prelude p marker label (ixLenOf m) false false false}{body}"
 
 private def emitDispatch (program : IR.Program) : Except String String := do
   if program.methods.isEmpty then
@@ -215,7 +296,7 @@ private def emitDispatch (program : IR.Program) : Except String String := do
   for i in [0:program.methods.size] do
     let m := program.methods[i]!
     let label := handlerLabel m
-    let disc ← IR.discHex label m.kind
+    let disc ← IR.discHex m
     let next :=
       if i + 1 == program.methods.size then "err_unknown_disc"
       else s!"dispatch_next_{label}"

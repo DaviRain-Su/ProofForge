@@ -35,15 +35,15 @@ private def pairShape : SolanaLean.IR.Program :=
   { name := "Pair"
     fields := #["left", "right"]
     methods := #[
-      { kind := .init, name := "init", ixName := "initialize"
+      { kind := .init, name := "init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
-      { kind := .increment, name := "creditLeft", ixName := "creditLeft"
+      { kind := .increment, name := "creditLeft", ixName := "creditLeft", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "left") (.arg 0),
           .okState (.arg 0),
           .errorOverflow
         ] },
-      { kind := .get, name := "getLeft", ixName := "getLeft"
+      { kind := .get, name := "getLeft", ixName := "getLeft", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "left")] }
     ] }
 
@@ -92,15 +92,15 @@ private def swappedIncrement : SolanaLean.IR.Program :=
   { name := "Counter"
     fields := #["value"]
     methods := #[
-      { kind := .init, name := "init", ixName := "initialize"
+      { kind := .init, name := "init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
-      { kind := .increment, name := "increment", ixName := "increment"
+      { kind := .increment, name := "increment", ixName := "increment", paramCount := 1
         ops := #[
           .checkedAddU64 (.arg 0) (.field (.arg 1) "value"),
           .okState (.arg 0),
           .errorOverflow
         ] },
-      { kind := .get, name := "get", ixName := "get"
+      { kind := .get, name := "get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "value")] }
     ] }
 

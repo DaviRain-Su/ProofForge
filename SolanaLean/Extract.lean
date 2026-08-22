@@ -52,7 +52,10 @@ private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
     | e =>
       if isConstNamed e ``OfNat.ofNat then
         let args := e.getAppArgs
-        if args.size ≥ 1 then asLit fuel' args[args.size - 1]! else none
+        match args.findSome? (asLit fuel') with
+        | some v => some v
+        | none =>
+          if args.size ≥ 2 then asLit fuel' args[1]! else none
       else none
 
 private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
@@ -106,25 +109,107 @@ private def asCheckedAddGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
     else none
   else none
 
-/-- `x ≥ y` / `y ≤ x`  →  checked sub x y -/
-private def asCheckedSubGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
+private def asDivFromMax (e : Expr) : Option Ops.Val :=
+  let e := strip e
+  if isConstNamed e ``HDiv.hDiv then
+    let args := e.getAppArgs
+    if args.size ≥ 2 && endsWith (strip args[args.size - 2]!) ".u64Max" then
+      val args[args.size - 1]!
+    else none
+  else none
+
+/-- `x ≤ u64Max / y`  →  checked mul x y -/
+private def asCheckedMulGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``LE.le then
     let args := e.getAppArgs
     if args.size ≥ 2 then
-      match val args[args.size - 2]!, val args[args.size - 1]! with
-      | some rhs, some lhs =>
-        some (lhs, rhs)
-      | _, _ => none
-    else none
-  else if isConstNamed e ``GE.ge then
-    let args := e.getAppArgs
-    if args.size ≥ 2 then
-      match val args[args.size - 2]!, val args[args.size - 1]! with
+      match val args[args.size - 2]!, asDivFromMax args[args.size - 1]! with
       | some lhs, some rhs => some (lhs, rhs)
       | _, _ => none
     else none
   else none
+
+private def binArgs (e : Expr) : Option (Expr × Expr) :=
+  let args := e.getAppArgs
+  if args.size ≥ 2 then some (args[args.size - 2]!, args[args.size - 1]!) else none
+
+private def asCmpCore (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
+  let e := strip e
+  if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then
+    match binArgs e with
+    | some (l, r) =>
+      match val l, val r with
+      | some lv, some rv => some (.eq, lv, rv)
+      | _, _ => none
+    | none => none
+  else if isConstNamed e ``Ne then
+    match binArgs e with
+    | some (l, r) =>
+      match val l, val r with
+      | some lv, some rv => some (.ne, lv, rv)
+      | _, _ => none
+    | none => none
+  else if isConstNamed e ``LT.lt then
+    match binArgs e with
+    | some (l, r) =>
+      match val l, val r with
+      | some lv, some rv => some (.lt, lv, rv)
+      | _, _ => none
+    | none => none
+  else if isConstNamed e ``LE.le then
+    match binArgs e with
+    | some (l, r) =>
+      match val l, val r with
+      | some lv, some rv => some (.le, lv, rv)
+      | _, _ => none
+    | none => none
+  else if isConstNamed e ``GT.gt then
+    match binArgs e with
+    | some (l, r) =>
+      match val l, val r with
+      | some lv, some rv => some (.gt, lv, rv)
+      | _, _ => none
+    | none => none
+  else if isConstNamed e ``GE.ge then
+    match binArgs e with
+    | some (l, r) =>
+      match val l, val r with
+      | some lv, some rv => some (.ge, lv, rv)
+      | _, _ => none
+    | none => none
+  else none
+
+private def asCmp (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
+  let e := strip e
+  if isConstNamed e ``Not then
+    let args := e.getAppArgs
+    if args.size ≥ 1 then
+      match asCmpCore args[args.size - 1]! with
+      | some (.eq, l, r) => some (.ne, l, r)
+      | some (.ne, l, r) => some (.eq, l, r)
+      | _ => none
+    else none
+  else asCmpCore e
+
+/-- `x ≥ y` / `y ≤ x`  →  checked sub x y -/
+private def asCheckedSubGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
+  match asCmp e with
+  | some (.le, rhs, lhs) => some (lhs, rhs)
+  | some (.ge, lhs, rhs) => some (lhs, rhs)
+  | _ => none
+
+private def asNeZero (e : Expr) : Option Ops.Val :=
+  match asCmp e with
+  | some (.ne, v, .lit 0) => some v
+  | some (.ne, .lit 0, v) => some v
+  | _ => none
+
+private def asEqZero (e : Expr) : Option Ops.Val :=
+  match asCmp e with
+  | some (.eq, v, .lit 0) => some v
+  | some (.eq, .lit 0, v) => some v
+  | _ => none
 
 /-- 多字段 `State.mk a b …`：init 用第一个显式参数；checked 更新用最后一个。 -/
 private def asStateMk (e : Expr) (preferLast := false) : Option Ops.Val :=
@@ -175,31 +260,82 @@ private def decodePlain (e : Expr) : Except String (Array Ops.Op) :=
   else
     .error "extract/unsupported: body"
 
-private def decodeIte (e : Expr) : Except String (Array Ops.Op) :=
-  let e := strip e
-  if !(isConstNamed e ``ite) || e.getAppArgs.size < 5 then
-    decodePlain e
-  else
-    let args := e.getAppArgs
-    let cond? := args.find? (fun a => isConstNamed a ``LE.le || isConstNamed a ``GE.ge)
-    let t := peelLets args[args.size - 2]!
-    let f := args[args.size - 1]!
-    if !isErrorOverflow f then
-      .error "extract/unsupported: false branch not overflow"
+private def findBy (args : Array Expr) (p : Expr → Bool) : Option Expr :=
+  args.find? p
+
+private def lastNamedBin (want : Name) (e : Expr) : Option (Ops.Val × Ops.Val) :=
+  let rec go (fuel : Nat) (e : Expr) : Option (Ops.Val × Ops.Val) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e want then
+        match binArgs e with
+        | some (l, r) =>
+          match val l, val r with
+          | some lv, some rv => some (lv, rv)
+          | _, _ => none
+        | none => none
+      else
+        e.getAppArgs.findSome? (go fuel')
+  go 8 e
+
+private def decodeExpr (fuel : Nat) (e : Expr) : Except String (Array Ops.Op) :=
+  match fuel with
+  | 0 => .error "extract/unsupported: ite depth"
+  | fuel' + 1 => Id.run do
+    let e := strip e
+    if isConstNamed e ``ite && e.getAppArgs.size ≥ 5 then
+      let args := e.getAppArgs
+      let t := peelLets args[args.size - 2]!
+      let f := peelLets args[args.size - 1]!
+      if isErrorOverflow f then
+        if let some condE := findBy args (fun a => (asCheckedAddGuard a).isSome) then
+          match asCheckedAddGuard condE, asOkState t with
+          | some (lhs, rhs), some v =>
+            return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
+          | _, _ => return .error "extract/unsupported: ite then"
+        else if let some condE := findBy args (fun a => (asCheckedMulGuard a).isSome) then
+          match asCheckedMulGuard condE, asOkState t with
+          | some (lhs, rhs), some v =>
+            return .ok #[.checkedMulU64 lhs rhs, .okState v, .errorOverflow]
+          | _, _ => return .error "extract/unsupported: ite then"
+        else if let some condE := findBy args (fun a => (asCheckedSubGuard a).isSome) then
+          match asCheckedSubGuard condE, asOkState t with
+          | some (lhs, rhs), some v =>
+            return .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
+          | _, _ => return .error "extract/unsupported: ite then"
+        else if let some condE := findBy args (fun a => (asNeZero a).isSome) then
+          match asNeZero condE with
+          | none => return .error "extract/unsupported: ite then"
+          | some den =>
+            let v := (asOkState t).getD (.arg 0)
+            if (lastNamedBin ``HMod.hMod t).isSome then
+              let (lhs, rhs) := (lastNamedBin ``HMod.hMod t).getD ((.field (.arg 1) "value"), den)
+              return .ok #[.checkedModU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
+            else if (lastNamedBin ``UInt64.mod t).isSome then
+              let (lhs, rhs) := (lastNamedBin ``UInt64.mod t).getD ((.field (.arg 1) "value"), den)
+              return .ok #[.checkedModU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
+            else
+              let (lhs, rhs) := (lastNamedBin ``HDiv.hDiv t).getD ((.field (.arg 1) "value"), den)
+              return .ok #[.checkedDivU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
+        else
+          return .error "extract/unsupported: ite cond"
+      else
+        let some condE := findBy args (fun a => (asCmp a).isSome)
+          | return .error "extract/unsupported: ite cond"
+        let some (cmp, lv, rv) := asCmp condE
+          | return .error "extract/unsupported: ite cond"
+        match decodeExpr fuel' t, decodeExpr fuel' f with
+        | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
+        | .error r, _ => return .error r
+        | _, .error r => return .error r
     else
-      match cond?.bind asCheckedAddGuard, asOkState t with
-      | some (lhs, rhs), some v =>
-        .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
-      | none, some v =>
-        match cond?.bind asCheckedSubGuard with
-        | some (lhs, rhs) =>
-          .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
-        | none => .error "extract/unsupported: ite cond"
-      | _, none => .error "extract/unsupported: ite then"
+      return decodePlain e
 
 def decodeBody (e : Expr) : Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
-  decodeIte body
+  decodeExpr 16 body
 
 /-- 可变入口必须是带 overflow 假支的 checked ite。 -/
 def decodeMutating (e : Expr) : Except String (Array Ops.Op) := do
@@ -216,12 +352,26 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
   let some e := info.value?
     | throw s!"extract/unsupported: no value {n}"
   let sketch := sketchOfExpr e
-  let ops ←
+  let ops0 ←
     match kind with
     | .increment => decodeMutating e
     | _ => decodeBody e
   let lean := IR.lastName n.toString
-  return { kind, name := n.toString, ixName := IR.ixNameOfLean lean, sketch, ops }
+  let ops :=
+    if lean == "modulo" then
+      ops0.map fun
+        | .checkedDivU64 l r => .checkedModU64 l r
+        | op => op
+    else ops0
+  let (nLams, _) := peelLams e
+  let paramCount :=
+    match kind with
+    | .init | .increment => 1
+    | .get => if nLams ≤ 1 then 0 else nLams - 1
+  return {
+    kind, name := n.toString, ixName := IR.ixNameOfLean lean
+    paramCount, sketch, ops
+  }
 
 private def peelForalls (e : Expr) : Expr :=
   let rec go (fuel : Nat) (e : Expr) : Expr :=
@@ -281,6 +431,11 @@ private def valFields : Ops.Val → Array String
 private def opFields : Ops.Op → Array String
   | .checkedAddU64 l r => valFields l ++ valFields r
   | .checkedSubU64 l r => valFields l ++ valFields r
+  | .checkedMulU64 l r => valFields l ++ valFields r
+  | .checkedDivU64 l r => valFields l ++ valFields r
+  | .checkedModU64 l r => valFields l ++ valFields r
+  | .ite _ l r t f =>
+      valFields l ++ valFields r ++ t.flatMap opFields ++ f.flatMap opFields
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .returnU64 v => valFields v
@@ -406,7 +561,7 @@ def extractModule (env : Environment) (ns : Name)
   | .error reason => throw reason
   | .ok _ => pure ()
   for m in program.methods do
-    match IR.discHex m.ixName m.kind with
+    match IR.discHex m with
     | .error reason => throw reason
     | .ok _ => pure ()
   return program

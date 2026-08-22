@@ -33,6 +33,32 @@ private def isOverflow (r : Except Error (State × UInt64)) : Bool :=
   | .ok _ => false
 #guard isOkValue (increment (s (u64Max - 1)) 1) u64Max
 #guard get (init 7) == 7
+#guard
+  match scale (s 5) 3 with
+  | .ok (st, ret) => st.value == 15 && ret == 15
+  | .error _ => false
+#guard
+  match scale (s 5) 0 with
+  | .ok (st, ret) => st.value == 0 && ret == 0
+  | .error _ => false
+#guard
+  match scale (s u64Max) 2 with
+  | .error .overflow => true
+  | .ok _ => false
+#guard
+  match divide (s 8) 3 with
+  | .ok (st, ret) => st.value == 2 && ret == 2
+  | .error _ => false
+#guard
+  match divide (s 8) 0 with
+  | .error .overflow => true
+  | .ok _ => false
+#guard
+  match modulo (s 8) 3 with
+  | .ok (st, ret) => st.value == 2 && ret == 2
+  | .error _ => false
+#guard nonzero (s 0) == 1
+#guard nonzero (s 7) == 0
 #guard SolanaLean.IR.isCounterShape SolanaLean.IR.extractedCounter
 #guard SolanaLean.IR.isCounterShape SolanaLean.IR.extractedPair
 #guard SolanaLean.IR.dataLen SolanaLean.IR.extractedPair == 24

@@ -19,5 +19,6 @@
 | [fld-001](tasks/fld-001.md) | done | 多字段 UInt64 布局 + Pair |
 | [fld-002](tasks/fld-002.md) | done | 从 structure 收字段 + Pair .so |
 | [l1-001](tasks/l1-001.md) | done | 属性入口 + 按名 disc + 多 mutate |
+| [l1-002](tasks/l1-002.md) | done | 任意 ite + checked mul/div/mod |
 
 积压：[backlog.md](backlog.md)

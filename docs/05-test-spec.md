@@ -51,3 +51,10 @@
 | T-L1-03 | happy | Pair Mollusk | disc 为 creditLeft / getLeft |
 | T-L1-04 | happy | decrement 8-3 | return 5，写回 5 |
 | T-L1-05 | error | decrement 2-3 | `0x1001`，状态保持 |
+| T-L1-06 | happy | scale 5×3 | 15 |
+| T-L1-07 | happy | scale 5×0 | 0 |
+| T-L1-08 | error | scale max×2 | `0x1001` 保持 |
+| T-L1-09 | happy | divide 8/3 | 2 |
+| T-L1-10 | error | divide n/0 | `0x1001` 保持 |
+| T-L1-11 | happy | modulo 8%3 | 2 |
+| T-L1-12 | happy | nonzero 0 / 7 | return 1 / 0 |
