@@ -433,6 +433,8 @@ def extractedSysSeed : Program :=
         ops := #[Ops.systemAllocateWithSeed (.lit 16), .returnU64 (.lit 16)] },
       { kind := .increment, name := "Examples.SysSeed.createSeed", ixName := "createSeed", paramCount := 1
         ops := #[Ops.systemCreateWithSeed (.arg 0) (.lit 16), .returnU64 (.arg 0)] },
+      { kind := .increment, name := "Examples.SysSeed.assignSeed", ixName := "assignSeed", paramCount := 0
+        ops := #[Ops.systemAssignWithSeed, .returnU64 (.lit 0)] },
       { kind := .get, name := "Examples.SysSeed.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.lit 0)] }
     ] }

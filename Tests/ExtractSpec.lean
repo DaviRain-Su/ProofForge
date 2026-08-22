@@ -152,6 +152,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 
 #solana_extract Examples.SysSeed.init Examples.SysSeed.createSeed Examples.SysSeed.get
 
+#solana_extract Examples.SysSeed.init Examples.SysSeed.assignSeed Examples.SysSeed.get
+
 /--
 error: extract/unsupported: field tag enum has payload
 -/

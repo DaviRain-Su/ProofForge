@@ -52,6 +52,7 @@
 | [l4-022](tasks/l4-022.md) | done | tokenAccountSize / cpiReturn |
 | [l4-023](tasks/l4-023.md) | done | systemAllocateWithSeed |
 | [l4-024](tasks/l4-024.md) | done | systemCreateWithSeed |
+| [l4-025](tasks/l4-025.md) | done | systemAssignWithSeed |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

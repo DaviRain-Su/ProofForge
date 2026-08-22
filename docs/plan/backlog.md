@@ -42,6 +42,7 @@
 - `tokenAccountSize` / `cpiReturn`；TokenSize Mollusk 返回 165
 - `systemAllocateWithSeed`；SysSeed Mollusk
 - `systemCreateWithSeed`；SysSeed Mollusk 转 lamports
+- `systemAssignWithSeed`；SysSeed Mollusk 改 owner
 
 ## 下一刀
 
@@ -49,7 +50,7 @@
 
 剩余可开、仍落在现有抽出/发射器上：
 
-1. `systemAssignWithSeed` — 同种子布局，只改 owner
+1. `systemTransferWithSeed` — 派生账户付款；种子仍钉死
 2. `sol_get_return_data` 单独叶子已随 L4-022 开出；无 CPI 仍 Custom(1)
 
 nonce / Token-2022 / remaining accounts / 运行时 program id 仍关。

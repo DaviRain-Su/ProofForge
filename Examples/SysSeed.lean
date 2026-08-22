@@ -34,6 +34,15 @@ def createSeed (_s : State) (lamports : UInt64) : Except Error (State × UInt64)
   else
     .error .overflow
 
+/-- AssignWithSeed；种子钉死 `"vault"`。 -/
+@[solana_entry]
+def assignSeed (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := systemAssignWithSeed
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
 @[solana_entry]
 def get (_s : State) : UInt64 :=
   0

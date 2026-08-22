@@ -250,3 +250,86 @@ fn create_with_seed_wrong_address_fails() {
         ],
     );
 }
+
+fn build_assign_ix(
+    program_id: Pubkey,
+    base: Pubkey,
+    derived_key: Pubkey,
+    system: Pubkey,
+    base_signer: bool,
+) -> Instruction {
+    let disc = instruction_discriminator("assignSeed", 0);
+    Instruction::new_with_bytes(
+        program_id,
+        &instruction_data(&disc, &[]),
+        vec![
+            AccountMeta::new(base, base_signer),
+            AccountMeta::new(derived_key, false),
+            AccountMeta::new_readonly(system, false),
+        ],
+    )
+}
+
+#[test]
+fn assign_with_seed_sets_owner() {
+    let (program_id, mollusk) = harness();
+    let base = Pubkey::new_unique();
+    let derived_key = derived(&base, &program_id);
+    let (system, system_acc) = system_program_keyed();
+    let ix = build_assign_ix(program_id, base, derived_key, system, true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (base, funded(BASE_LAMPORTS)),
+            (derived_key, funded(BASE_LAMPORTS)),
+            (system, system_acc),
+        ],
+        &[
+            Check::success(),
+            Check::return_data(&0u64.to_le_bytes()),
+            Check::account(&derived_key).owner(&program_id).build(),
+        ],
+    );
+}
+
+#[test]
+fn assign_with_seed_missing_signer_fails() {
+    let (program_id, mollusk) = harness();
+    let base = Pubkey::new_unique();
+    let derived_key = derived(&base, &program_id);
+    let (system, system_acc) = system_program_keyed();
+    let ix = build_assign_ix(program_id, base, derived_key, system, false);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (base, funded(BASE_LAMPORTS)),
+            (derived_key, funded(BASE_LAMPORTS)),
+            (system, system_acc),
+        ],
+        &[
+            Check::err(ProgramError::Custom(1)),
+            Check::account(&derived_key).owner(&Pubkey::default()).build(),
+        ],
+    );
+}
+
+#[test]
+fn assign_with_seed_wrong_address_fails() {
+    let (program_id, mollusk) = harness();
+    let base = Pubkey::new_unique();
+    let wrong = Pubkey::new_unique();
+    let (system, system_acc) = system_program_keyed();
+    let ix = build_assign_ix(program_id, base, wrong, system, true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (base, funded(BASE_LAMPORTS)),
+            (wrong, funded(BASE_LAMPORTS)),
+            (system, system_acc),
+        ],
+        &[
+            Check::err(ProgramError::Custom(5)),
+            Check::account(&wrong).owner(&Pubkey::default()).build(),
+        ],
+    );
+}
