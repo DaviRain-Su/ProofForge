@@ -17,7 +17,8 @@ def sources : Array ProofForge.IR.Program := #[
   ProofForge.Golden.extractedTipJar,
   ProofForge.Golden.extractedLang,
   ProofForge.Golden.extractedVault,
-  ProofForge.Golden.extractedOwnable
+  ProofForge.Golden.extractedOwnable,
+  ProofForge.Golden.extractedToken
 ]
 
 def programs : Array IR.Program :=

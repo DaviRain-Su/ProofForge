@@ -428,7 +428,82 @@ def extractedOwnable : Program :=
         ops := #[.returnU64 (.field (.arg 0) "owner2")] }
       ] }
 
-      def extractedPing : Program :=
+def extractedToken : Program :=
+  { name := "Token"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Token.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Token.approve", ixName := "approve", paramCount := 4
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetPair (.lit 1) .evmCallerW0 .evmCallerW1 .evmCallerW2
+                (.arg 0) (.arg 1) (.arg 2) (.arg 3),
+              .evmLog "Approval" (.arg 3), .returnU64 (.arg 3)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Token.logApprove", ixName := "logApprove", paramCount := 1
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmLog "Approval" (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Token.logXfer", ixName := "logXfer", paramCount := 1
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmLog "Transfer" (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Token.mint", ixName := "mint", paramCount := 4
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Token.transfer", ixName := "transfer", paramCount := 4
+        ops := #[
+          .ite .ge
+            (.mapGetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 3)
+            #[.mapSetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2
+                (.subU64 (.mapGetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 3)),
+              .mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)
+                (.addU64 (.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)) (.arg 3)),
+              .evmLog "Transfer" (.arg 3), .returnU64 (.arg 3)]
+            #[.errorNamed "insufficient"]
+        ] },
+      { kind := .increment, name := "Examples.Token.transferFrom", ixName := "transferFrom",
+        paramCount := 7
+        ops := #[
+          .ite .ge
+            (.mapGetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2)
+              .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 6)
+            #[.ite .ge
+                (.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)) (.arg 6)
+                #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)
+                    (.subU64 (.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)) (.arg 6)),
+                  .mapSetAddr (.lit 0) (.arg 3) (.arg 4) (.arg 5)
+                    (.addU64 (.mapGetAddr (.lit 0) (.arg 3) (.arg 4) (.arg 5)) (.arg 6)),
+                  .mapSetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2)
+                    .evmCallerW0 .evmCallerW1 .evmCallerW2
+                    (.subU64
+                      (.mapGetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2)
+                        .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 6)),
+                  .evmLog "Transfer" (.arg 6), .returnU64 (.arg 6)]
+                #[.errorNamed "insufficient"]]
+            #[.errorNamed "insufficient"]
+        ] },
+      { kind := .get, name := "Examples.Token.allowanceOf", ixName := "allowanceOf", paramCount := 6
+        ops := #[
+          .mapGetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5),
+          .returnU64 (.arg 0)
+        ] },
+      { kind := .get, name := "Examples.Token.balanceOf", ixName := "balanceOf", paramCount := 3
+        ops := #[.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Token.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
+def extractedPing : Program :=
   { name := "Ping"
     slots := #[{ name := "dummy" }]
     methods := #[
@@ -990,7 +1065,8 @@ def programs : Array Program := #[
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
   extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio,
   extractedGate, extractedNonce, extractedTokenOwner, extractedTokenMs,
-  extractedEvmCtx, extractedTipJar, extractedLang, extractedVault, extractedOwnable
+  extractedEvmCtx, extractedTipJar, extractedLang, extractedVault, extractedOwnable,
+  extractedToken
 ]
 
 /-- `#pf_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

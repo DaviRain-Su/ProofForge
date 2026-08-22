@@ -13,6 +13,7 @@ import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
 import Examples.Ownable
+import Examples.Token
 import Tests.Fixtures
 
 #pf_evm_build Examples.Counter
@@ -36,6 +37,8 @@ import Tests.Fixtures
 #pf_evm_build Examples.Vault
 
 #pf_evm_build Examples.Ownable
+
+#pf_evm_build Examples.Token
 
 /--
 error: extract/unsupported: evm rejects svm leaf in stamp

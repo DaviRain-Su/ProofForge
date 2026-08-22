@@ -10,7 +10,7 @@
 |---|---|---|
 | `Evm.Keccak` | Ethereum Keccak-256、ABI selector | SHA-256、链上 opcode |
 | `Evm.IR` | storage slot、constructor、selector、digest | Loader V3、账户 disc |
-| `Evm.Emit` | Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance | 任意 CALL / Token-2022 |
+| `Evm.Emit` | Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance、event ABI、本合约 transfer/transferFrom | 任意 CALL / Token-2022 |
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
 | `Evm.Commands` | `#pf_evm_build` | 新 DSL |
 
@@ -26,6 +26,7 @@ overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 - `Emit.emitYul` / `Emit.emitAbi`
 - `Assemble.assembleProgram`
 - `#pf_evm_build Namespace`
+- `#pf_evm_dump Namespace`（打抽出 ops / digest，不汇编）
 
 ## Tests
 
@@ -42,5 +43,6 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_lang.sh`：位运算、移位越界、`uint8` ABI、tuple return、运行时下标、有界 for、`oob` revert
 - `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、ERC-20 transfer、超额保持、USDT 无返回成功
 - `runtime-tests/evm/anvil_ownable.sh`：owner 三槽、非 owner revert、Incremented log、approve / allowance / spend、超额额度保持
+- `runtime-tests/evm/anvil_token.sh`：mint / transfer 扣余额、不足 revert、approve / transferFrom 扣额度、Transfer/Approval log
 
 入口：`runtime-tests/evm/anvil.sh`（Darwin / Linux）。工具查找：`FOUNDRY_BIN`、`~/.foundry/bin`、`PATH`。缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。

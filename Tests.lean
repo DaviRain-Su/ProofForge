@@ -52,5 +52,6 @@ import Tests.TipJarSpec
 import Tests.LangSpec
 import Tests.VaultSpec
 import Tests.OwnableSpec
+import Tests.TokenSpec
 import Tests.IdlSpec
 import Tests.DumpIncrement

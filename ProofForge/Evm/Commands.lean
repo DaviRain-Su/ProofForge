@@ -35,4 +35,18 @@ elab "#pf_evm_build " n:ident : command => do
           logInfo m!"proofforge-evm: digest = {digest}"
           logInfo m!"proofforge-evm: emitted {yul.length} bytes of Yul"
 
+elab "#pf_evm_dump " n:ident : command => do
+  let ns := n.getId
+  let env ← getEnv
+  match Extract.extractModule env ns none with
+  | .error reason => throwError reason
+  | .ok src =>
+      logInfo m!"proofforge-evm-dump: {src.name} methods = {src.methods.map (·.ixName)}"
+      for m in src.methods do
+        logInfo m!"proofforge-evm-dump: {m.ixName} pc={m.paramCount} ops={repr m.ops}"
+      match IR.fromProgram src with
+      | .error reason => throwError reason
+      | .ok program =>
+          logInfo m!"proofforge-evm-dump: digest = {IR.digestHex program}"
+
 end ProofForge.Evm.Commands

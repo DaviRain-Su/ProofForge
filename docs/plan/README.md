@@ -42,6 +42,7 @@
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |
 | [e-own-001](tasks/e-own-001.md) | done | Ownable + 通用 event + allowance |
+| [e-tok-001](tasks/e-tok-001.md) | done | 封闭 ERC-20 形：余额 + 真额度扣减 |
 | [l4-003](tasks/l4-003.md) | done | 编译期钉死的 invoke 原语 |
 | [l4-004](tasks/l4-004.md) | done | 账户 0 AccountInfo 只读叶子 |
 | [l4-005](tasks/l4-005.md) | done | 表层通用 invoke |

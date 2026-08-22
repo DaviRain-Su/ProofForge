@@ -22,4 +22,4 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 
-当前阶段：**L4 + EVM**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。L4-034 已绿；EVM 平行剖面（到 Ownable）已并入。SVM 名不翻译。
+当前阶段：**L4 + EVM**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。E-TOK 已并入：本合约余额 + 真额度扣减。SVM 名不翻译。

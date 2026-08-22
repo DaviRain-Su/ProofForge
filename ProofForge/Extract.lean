@@ -215,13 +215,32 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let a := acc.toNat
             if a ≤ 3 then some (.ownerIsSelf a) else none
           | _ => none
+        else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Runtime.evmMapGetAddr then
+          let args := e.getAppArgs
+          let get (n : Nat) : Ops.Val :=
+            if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
+            else .arg n
+          some (.mapGetAddr (get 3) (get 2) (get 1) (get 0))
+        else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Runtime.evmMapGetPair then
+          let args := e.getAppArgs
+          let get (n : Nat) : Ops.Val :=
+            if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
+            else .arg n
+          some (.mapGetPair (get 6) (get 5) (get 4) (get 3) (get 2) (get 1) (get 0))
+        else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Runtime.evmMapGetU64 then
+          let args := e.getAppArgs
+          let get (n : Nat) : Ops.Val :=
+            if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
+            else .arg n
+          some (.mapGetU64 (get 1) (get 0))
         else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
           let proj :=
             match field.splitOn "." with
             | [] => field
             | parts => parts.getLast!
           if proj == "mk" || proj == "ok" || proj == "error" ||
-              proj.startsWith "_proof" || proj == "rfl" then none
+              proj.startsWith "_proof" || proj == "rfl" ||
+              field.startsWith "ProofForge.Runtime." then none
           else if match env.find? n with | some (.ctorInfo _) => true | _ => false then none
           else
             -- 整个 Vector 投影本身不是叶；下标再展开成 `name_i`。
@@ -248,7 +267,17 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             isConstNamed e ``UInt64.toNat) &&
             e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-        else if (isConstNamed e ``HAnd.hAnd || endsWith e ".hAnd") && e.getAppArgs.size ≥ 2 then
+          else if (isConstNamed e ``HAdd.hAdd || endsWith e ".hAdd") && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.addU64 l r)
+          | _, _ => none
+          else if (isConstNamed e ``HSub.hSub || endsWith e ".hSub") && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.subU64 l r)
+          | _, _ => none
+          else if (isConstNamed e ``HAnd.hAnd || endsWith e ".hAnd") && e.getAppArgs.size ≥ 2 then
           match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
                 asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some l, some r => some (.bitAnd l r)
@@ -289,7 +318,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | none => none
         else if endsWith e ".u64Max" then
           some (.lit (~~~(0 : UInt64)))
-        else if endsWith e ".shareBase" || endsWith e ".allowBase" then
+        else if endsWith e ".shareBase" || endsWith e ".balBase" then
+          some (.lit 0)
+        else if endsWith e ".Token.allowBase" then
+          some (.lit 1)
+        else if endsWith e ".allowBase" then
           some (.lit 0)
         else if endsWith e ".clockSlot" || isConstNamed e ``ProofForge.Runtime.clockSlot then
           some .clockSlot
@@ -368,6 +401,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             isConstNamed e ``ProofForge.Runtime.evmLogTipped) ||
             (endsWith e ".evmLogIncremented" ||
             isConstNamed e ``ProofForge.Runtime.evmLogIncremented) ||
+            (endsWith e ".evmLogTransfer" ||
+            isConstNamed e ``ProofForge.Runtime.evmLogTransfer) ||
+            (endsWith e ".evmLogApproval" ||
+            isConstNamed e ``ProofForge.Runtime.evmLogApproval) ||
             (endsWith e ".evmSendEth" ||
             isConstNamed e ``ProofForge.Runtime.evmSendEth) ||
             (endsWith e ".evmMapGetU64" ||
@@ -387,9 +424,28 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             (endsWith e ".evmTokenBalanceOfSelf" ||
             isConstNamed e ``ProofForge.Runtime.evmTokenBalanceOfSelf)) &&
             e.getAppArgs.size ≥ 1 then
-          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-        else if isConstNamed e ``Bool.true || endsWith e ".true" then
-          some (.lit 1)
+            if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Runtime.evmMapGetU64 then
+            let args := e.getAppArgs
+            let get (n : Nat) : Ops.Val :=
+              if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
+              else .arg n
+            some (.mapGetU64 (get 1) (get 0))
+            else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Runtime.evmMapGetAddr then
+            let args := e.getAppArgs
+            let get (n : Nat) : Ops.Val :=
+              if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
+              else .arg n
+            some (.mapGetAddr (get 3) (get 2) (get 1) (get 0))
+            else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Runtime.evmMapGetPair then
+            let args := e.getAppArgs
+            let get (n : Nat) : Ops.Val :=
+              if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
+              else .arg n
+            some (.mapGetPair (get 6) (get 5) (get 4) (get 3) (get 2) (get 1) (get 0))
+            else
+            asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+            else if isConstNamed e ``Bool.true || endsWith e ".true" then
+            some (.lit 1)
         else if isConstNamed e ``Bool.false || endsWith e ".false" then
           some (.lit 0)
         else if user && e.getAppArgs.isEmpty then
@@ -550,7 +606,7 @@ private def asCmpCore (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Va
       | some lv, some rv => some (.gt, lv, rv)
       | _, _ => none
     | none => none
-  else if isConstNamed e ``GE.ge then
+  else if isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe" then
     match binArgs e with
     | some (l, r) =>
       match val env l, val env r with
@@ -891,7 +947,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
   else none
 
 private def errorCtorName (e : Expr) : Option String :=
-  let e := strip e
+  let e := peelLets (strip e)
   if isConstNamed e ``Except.error then
     let args := e.getAppArgs
     if h : args.size > 0 then
@@ -905,7 +961,7 @@ private def errorCtorName (e : Expr) : Option String :=
   else none
 
 private def isErrorOverflow (e : Expr) : Bool :=
-  let e := strip e
+  let e := peelLets (strip e)
   if isConstNamed e ``Except.error then
     let args := e.getAppArgs
     if h : args.size > 0 then
@@ -1316,6 +1372,12 @@ private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
 private def findEvmLogIncremented (env : Environment) (e : Expr) : Option Ops.Val :=
   findUnaryRuntime env ``ProofForge.Runtime.evmLogIncremented ".evmLogIncremented" e
 
+private def findEvmLogTransfer (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``ProofForge.Runtime.evmLogTransfer ".evmLogTransfer" e
+
+private def findEvmLogApproval (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``ProofForge.Runtime.evmLogApproval ".evmLogApproval" e
+
 private def findEvmSendEth (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime e "evmSendEth" then
@@ -1417,8 +1479,86 @@ private def findEvmTokenBalance (env : Environment) (e : Expr) :
   findTernaryRuntime env ``ProofForge.Runtime.evmTokenBalanceOfSelf
     ".evmTokenBalanceOfSelf" e
 
+private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
+  let args := app.getAppArgs
+  if isConstNamed app ``ProofForge.Runtime.evmDeposit || endsWith app ".evmDeposit" then
+    some (.evmDeposit (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmSendEth || endsWith app ".evmSendEth" then
+    some (.evmSendEth (valAtEnd env args 3) (valAtEnd env args 2)
+      (valAtEnd env args 1) (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmLogTipped || endsWith app ".evmLogTipped" then
+    some (.evmLog "Tipped" (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmLogIncremented ||
+      endsWith app ".evmLogIncremented" then
+    some (.evmLog "Incremented" (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmLogTransfer ||
+      endsWith app ".evmLogTransfer" then
+    some (.evmLog "Transfer" (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmLogApproval ||
+      endsWith app ".evmLogApproval" then
+    some (.evmLog "Approval" (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
+    some (.mapSetU64 (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmMapSetAddr || endsWith app ".evmMapSetAddr" then
+    some (.mapSetAddr (valAtEnd env args 4) (valAtEnd env args 3) (valAtEnd env args 2)
+      (valAtEnd env args 1) (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmMapSetPair || endsWith app ".evmMapSetPair" then
+    some (.mapSetPair (valAtEnd env args 7) (valAtEnd env args 6) (valAtEnd env args 5)
+      (valAtEnd env args 4) (valAtEnd env args 3) (valAtEnd env args 2)
+      (valAtEnd env args 1) (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Runtime.evmTokenTransfer ||
+      endsWith app ".evmTokenTransfer" then
+    some (.evmTokenTransfer (valAtEnd env args 6) (valAtEnd env args 5) (valAtEnd env args 4)
+      (valAtEnd env args 3) (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
+  else none
+
+private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
+  let specs : Array (Name × String) := #[
+    (``ProofForge.Runtime.evmDeposit, ".evmDeposit"),
+    (``ProofForge.Runtime.evmSendEth, ".evmSendEth"),
+    (``ProofForge.Runtime.evmLogTipped, ".evmLogTipped"),
+    (``ProofForge.Runtime.evmLogIncremented, ".evmLogIncremented"),
+    (``ProofForge.Runtime.evmLogTransfer, ".evmLogTransfer"),
+    (``ProofForge.Runtime.evmLogApproval, ".evmLogApproval"),
+    (``ProofForge.Runtime.evmMapSetU64, ".evmMapSetU64"),
+    (``ProofForge.Runtime.evmMapSetAddr, ".evmMapSetAddr"),
+    (``ProofForge.Runtime.evmMapSetPair, ".evmMapSetPair"),
+    (``ProofForge.Runtime.evmTokenTransfer, ".evmTokenTransfer")
+  ]
+  let rec walk (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      if specs.any (fun (want, suf) =>
+          e.getAppFn.constName? == some want || endsWith e suf) then
+        match opOfRuntimeApp env e with
+        | some op => acc.push op
+        | none => acc
+      else
+        match e with
+        | .letE _ _ value body _ => walk fuel' body (walk fuel' value acc)
+        | .lam _ _ body _ => walk fuel' body acc
+        | .app f a => walk fuel' a (walk fuel' f acc)
+        | _ => acc
+  walk 24 e #[]
+
+private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
+  match ops.back? with
+  | some (.evmDeposit v) => v
+  | some (.evmSendEth _ _ _ v) => v
+  | some (.evmLog _ v) => v
+  | some (.mapSetU64 _ _ v) => v
+  | some (.mapSetAddr _ _ _ _ v) => v
+  | some (.mapSetPair _ _ _ _ _ _ _ v) => v
+  | some (.evmTokenTransfer _ _ _ _ _ _ v) => v
+  | _ => .arg 0
+
 private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
-  if let some amount := findEvmDeposit env e then
+  let writes := collectEvmEffectOps env e
+  if writes.size ≥ 1 then
+    some (writes.push (.returnU64 (retOfEvmOps writes)))
+  else if let some amount := findEvmDeposit env e then
     some #[.evmDeposit amount, .returnU64 amount]
   else if let some (w0, w1, w2, amt) := findEvmSendEth env e then
     some #[.evmSendEth w0 w1 w2 amt, .returnU64 amt]
@@ -1426,6 +1566,10 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.evmLog "Tipped" amount, .returnU64 amount]
   else if let some amount := findEvmLogIncremented env e then
     some #[.evmLog "Incremented" amount, .returnU64 amount]
+  else if let some amount := findEvmLogTransfer env e then
+    some #[.evmLog "Transfer" amount, .returnU64 amount]
+  else if let some amount := findEvmLogApproval env e then
+    some #[.evmLog "Approval" amount, .returnU64 amount]
   else if let some (b, k, v) := findEvmMapSetU64 env e then
     some #[.mapSetU64 b k v, .returnU64 v]
   else if let some (b, a0, a1, a2, v) := findEvmMapSetAddr env e then
@@ -1536,8 +1680,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           match strip e with
           | .lam _ _ body _ => peelProofLam fuel' body
           | e => e
-      let t := peelProofLam 4 (peelLets args[args.size - 2]!)
-      let f := peelProofLam 4 (peelLets args[args.size - 1]!)
+      -- 不在这里 peelLets：`let debit := evmMapSetAddr …` 必须留给 decodeEvmEffect。
+      let t := peelProofLam 4 args[args.size - 2]!
+      let f := peelProofLam 4 args[args.size - 1]!
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
           match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asOkState env t with
@@ -1549,20 +1694,36 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
-          match asCheckedAddGuard env condE, asOkState env t with
-          | some (lhs, rhs), some v =>
+          match asCheckedAddGuard env condE, asOkState env t, decodeEvmEffect env t, decodeExpr env fuel' t with
+          | some (lhs, rhs), some v, _, _ =>
             return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
-          | _, _ => return .error "extract/unsupported: ite then"
+          | some _, none, some evmOps, _ =>
+            let some (cmp, lv, rv) := asCmp env condE
+              | return .error "extract/unsupported: ite then"
+            return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
+          | some _, none, none, .ok thn =>
+            let some (cmp, lv, rv) := asCmp env condE
+              | return .error "extract/unsupported: ite then"
+            return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+          | _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedMulGuard env a).isSome) then
           match asCheckedMulGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
             return .ok #[.checkedMulU64 lhs rhs, .okState v, .errorOverflow]
           | _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedSubGuard env a).isSome) then
-          match asCheckedSubGuard env condE, asOkState env t with
-          | some (lhs, rhs), some v =>
+          match asCheckedSubGuard env condE, asOkState env t, decodeEvmEffect env t, decodeExpr env fuel' t, decodeExpr env fuel' f with
+          | some (lhs, rhs), some v, _, _, _ =>
             return .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
-          | _, _ => return .error "extract/unsupported: ite then"
+          | some _, none, some evmOps, _, _ =>
+            let some (cmp, lv, rv) := asCmp env condE
+              | return .error "extract/unsupported: ite then"
+            return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
+          | some _, none, none, .ok thn, .ok els =>
+            let some (cmp, lv, rv) := asCmp env condE
+              | return .error "extract/unsupported: ite then"
+            return .ok #[.ite cmp lv rv thn els]
+          | _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asNeZero env a).isSome) then
           match asNeZero env condE with
           | none => return .error "extract/unsupported: ite then"
@@ -1581,7 +1742,12 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         else
           return .error "extract/unsupported: ite cond"
       else
-        let some condE := findBy args (fun a => (asCmp env a).isSome)
+        let isValueCmp (a : Expr) : Bool :=
+          (asCmp env a).isSome &&
+            (asCheckedAddGuard env a).isNone &&
+            (asCheckedMulGuard env a).isNone &&
+            (asCheckedSubGuard env a).isNone
+        let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
           | return .error "extract/unsupported: ite cond"
         let some (cmp, lv, rv) := asCmp env condE
           | return .error "extract/unsupported: ite cond"
@@ -1741,6 +1907,14 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .shiftR l r => .shiftR (flipVal fuel' l) (flipVal fuel' r)
       | .indexGet b n i k => .indexGet (flipVal fuel' b) n (flipVal fuel' i) k
       | .loopIx => v
+      | .addU64 l r => .addU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .subU64 l r => .subU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
+      | .mapGetAddr b a0 a1 a2 =>
+          .mapGetAddr (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2)
+      | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+          .mapGetPair (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
+            (flipVal fuel' a2) (flipVal fuel' c0) (flipVal fuel' c1) (flipVal fuel' c2)
       | v => v
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
@@ -1935,6 +2109,13 @@ private def valFields : Ops.Val → Array String
   | .bitNot v => valFields v
   | .indexGet b _ i _ => valFields b ++ valFields i
   | .loopIx => #[]
+  | .addU64 l r | .subU64 l r => valFields l ++ valFields r
+  | .mapGetU64 b k => valFields b ++ valFields k
+  | .mapGetAddr b a0 a1 a2 =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2
+  | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++
+        valFields c0 ++ valFields c1 ++ valFields c2
   | v => if Ops.hasEvmLeaf #[.returnU64 v] then #[] else #[]
 
 private def opFields : Ops.Op → Array String

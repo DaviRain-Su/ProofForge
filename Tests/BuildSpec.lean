@@ -13,6 +13,7 @@ import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
 import Examples.Ownable
+import Examples.Token
 import Examples.Ping
 import Examples.Call
 import Examples.Info
@@ -158,6 +159,12 @@ error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
 #pf_build Examples.Ownable
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#pf_build Examples.Token
 
 /--
 error: extract/unsupported: no pf_entry

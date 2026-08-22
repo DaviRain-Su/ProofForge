@@ -594,6 +594,12 @@ SVM 发射器碰到这个叶子 fail closed。
 /-- LOG1 `Incremented(uint64)`。宿主返回 amt。 -/
 @[irreducible] def evmLogIncremented (amt : UInt64) : UInt64 := amt
 
+/-- LOG1 `Transfer(uint64)`。宿主返回 amt。 -/
+@[irreducible] def evmLogTransfer (amt : UInt64) : UInt64 := amt
+
+/-- LOG1 `Approval(uint64)`。宿主返回 amt。 -/
+@[irreducible] def evmLogApproval (amt : UInt64) : UInt64 := amt
+
 /-- hashed `Map` 读 payload。缺席是 0。宿主返回 0。 -/
 @[irreducible] def evmMapGetU64 (_base _key : UInt64) : UInt64 := 0
 

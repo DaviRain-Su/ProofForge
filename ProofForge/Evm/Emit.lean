@@ -290,6 +290,91 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
         return (txt, nm, st2)
     | .loopIx =>
         return ("", st.loopIx.getD "i", st)
+    | .addU64 l r =>
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (nm, st3) := fresh st2
+        let txt := preL ++ preR ++
+          indent ++ "if gt(" ++ lv ++ ", sub(" ++ u64MaxYul ++ ", " ++ rv ++
+            ")) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := add(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
+        return (txt, nm, st3)
+    | .subU64 l r =>
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (nm, st3) := fresh st2
+        let txt := preL ++ preR ++
+          indent ++ "if lt(" ++ lv ++ ", " ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := sub(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
+        return (txt, nm, st3)
+    | .mapGetU64 base key =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
+        let (slot, st3) := fresh st2
+        let (tag, st4) := fresh st3
+        let (pay, st5) := fresh st4
+        let txt := pb ++ pk ++
+          indent ++ "mstore(0, " ++ k ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 64)" ++ nl ++
+          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
+          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
+          indent ++ "if " ++ tag ++ " {" ++ nl ++
+          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
+          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "}" ++ nl
+        return (txt, pay, st5)
+    | .mapGetAddr base w0 w1 w2 =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount w0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount w1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount w2 st3
+        let (slot, st5) := fresh st4
+        let (tag, st6) := fresh st5
+        let (pay, st7) := fresh st6
+        let txt := pb ++ p0 ++ p1 ++ p2 ++
+          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
+          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
+          indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
+          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
+          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
+          indent ++ "if " ++ tag ++ " {" ++ nl ++
+          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
+          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "}" ++ nl
+        return (txt, pay, st7)
+    | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount o0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount o1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount o2 st3
+        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount s0 st4
+        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount s1 st5
+        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount s2 st6
+        let (slot, st8) := fresh st7
+        let (tag, st9) := fresh st8
+        let (pay, st10) := fresh st9
+        let txt := pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
+          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
+          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
+          indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
+          indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
+          indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
+          indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
+          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
+          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
+          indent ++ "if " ++ tag ++ " {" ++ nl ++
+          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
+          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "}" ++ nl
+        return (txt, pay, st10)
     | _ =>
         let e ← loadVal p paramPrefix paramCount v
         return ("", e, st)
@@ -356,14 +441,14 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := mod(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         st := { st with last := some nm }
     | .ite c l r thn els =>
-        let lv ← loadVal p paramPrefix paramCount l
-        let rv ← loadVal p paramPrefix paramCount r
-        let (nm, st') := fresh st
+        let (preL, lv, stL) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, stR) ← materializeVal p indent paramPrefix paramCount r stL
+        let (nm, st') := fresh stR
         st := st'
         let (thenTxt, st1) ← emitOps p (indent ++ "  ") paramPrefix paramCount thn st
         let (elseTxt, st2) ← emitOps p (indent ++ "  ") paramPrefix paramCount els st1
         st := { st2 with last := none }
-        acc := acc ++
+        acc := acc ++ preL ++ preR ++
           indent ++ "let " ++ nm ++ " := " ++ cmpYul c lv rv ++ nl ++
           indent ++ "if " ++ nm ++ " " ++ brace thenTxt ++ nl ++
           indent ++ "if iszero(" ++ nm ++ ") " ++ brace elseTxt ++ nl
@@ -818,8 +903,28 @@ private def entryAbi (m : IR.Method) : String :=
     paramsJsonOf m.paramWidths m.paramCount ++
     "],\"outputs\":" ++ outputsJson m ++ "}"
 
+private def eventAbi (name : String) : String :=
+  "{\"type\":\"event\",\"name\":\"" ++ escapeJson name ++
+    "\",\"inputs\":[{\"name\":\"amt\",\"type\":\"uint64\",\"indexed\":false}],\"anonymous\":false}"
+
+private def collectLogNames (fuel : Nat) (ops : Array Ops.Op) : Array String :=
+  match fuel with
+  | 0 => #[]
+  | fuel' + 1 =>
+    ops.foldl (init := #[]) fun acc op =>
+      match op with
+      | .evmLog n _ => if acc.contains n then acc else acc.push n
+      | .ite _ _ _ t f =>
+        (collectLogNames fuel' t ++ collectLogNames fuel' f).foldl (init := acc) fun acc n =>
+          if acc.contains n then acc else acc.push n
+      | _ => acc
+
 def emitAbi (p : IR.Program) : String :=
-  let items := #[ctorAbi p] ++ p.entries.map entryAbi
+  let evs :=
+    p.entries.foldl (init := #[]) fun acc m =>
+      (collectLogNames 8 m.ops).foldl (init := acc) fun acc n =>
+        if acc.contains n then acc else acc.push n
+  let items := #[ctorAbi p] ++ evs.map eventAbi ++ p.entries.map entryAbi
   "[\n  " ++ String.intercalate ",\n  " items.toList ++ "\n]\n"
 
 def emit (p : IR.Program) : Except String (String × String) := do
