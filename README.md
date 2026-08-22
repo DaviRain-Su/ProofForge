@@ -53,7 +53,8 @@ lake exe evmLeanAssemble -- build/evm
 # 写出 Counter.yul / Counter.abi.json / Counter.bin
 # 要求本机 solc 恰好 0.8.34
 FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_counter.sh
-# constructor / increment / get / overflow 保持；缺 anvil/cast 则 skip
+FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_pair.sh
+# constructor / increment / get / overflow；Pair 双槽 + right 保持；缺 anvil/cast 则 skip
 ```
 
 ## 文档

@@ -23,7 +23,7 @@
 
 ## 进行中
 
-- EVM 竖切 E0–E4 已绿（Yul + solc 0.8.34 + Anvil Counter 四条）。下一刀可选 Pair 多 slot Anvil，或窄槽 / Option。
+- EVM 竖切到 Pair 多 slot Anvil 已绿。下一刀：窄槽 / Option，或 Window/Phase Anvil。
 
 ## 下一刀
 

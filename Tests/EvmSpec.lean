@@ -102,3 +102,18 @@ import SolanaLean.Golden
       abi.contains "\"type\":\"constructor\"" &&
         abi.contains "\"name\":\"increment\"" &&
         abi.contains "\"stateMutability\":\"view\""
+
+#guard
+  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedPair with
+  | .error _ => false
+  | .ok p =>
+      match SolanaLean.Evm.Emit.emitYul p with
+      | .error _ => false
+      | .ok yul =>
+          let both :=
+            match yul.splitOn "case 0x8ced0f9f" with
+            | _ :: rest :: _ => rest
+            | _ => ""
+          both.contains "sstore(0, arg0)" &&
+            both.contains "sstore(1, arg1)" &&
+            !both.contains "return(0, 32)\n        sstore(1"

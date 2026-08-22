@@ -8,6 +8,12 @@ open SolanaLean.Evm
 
 private def u64MaxYul : String := "0xffffffffffffffff"
 
+private def returnStateCount (ops : Array Ops.Op) : Nat :=
+  ops.foldl (init := 0) fun acc op =>
+    match op with
+    | .returnState _ => acc + 1
+    | _ => acc
+
 private def destHint (p : IR.Program) (ops : Array Ops.Op) : String :=
   match ops.findSome? (fun
     | .checkedAddU64 l _ =>
@@ -91,8 +97,10 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
     (paramCount : Nat) (ops : Array Ops.Op) (st : Render) :
     Except String (String × Render) := do
   let destSlot0 ← slotOf p (destHint p ops)
+  let nStates := returnStateCount ops
   let mut acc := ""
   let mut st := st
+  let mut returnStateIdx : Nat := 0
   for op in ops do
     match op with
     | .checkedAddU64 l r =>
@@ -182,7 +190,16 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         acc := acc ++ returnWord indent value
     | .returnState v =>
         let value ← loadVal p paramPrefix paramCount v
-        acc := acc ++ storeSlot indent destSlot0 value ++ returnWord indent value
+        if nStates > 1 then
+          match p.slots[returnStateIdx]? with
+          | none => throw "extract/unsupported: returnState exceeds slots"
+          | some slot =>
+              acc := acc ++ storeSlot indent slot.index value
+              if returnStateIdx + 1 == nStates then
+                acc := acc ++ returnWord indent value
+              returnStateIdx := returnStateIdx + 1
+        else
+          acc := acc ++ storeSlot indent destSlot0 value ++ returnWord indent value
   return (acc, st)
 
 private def q (s : String) : String :=

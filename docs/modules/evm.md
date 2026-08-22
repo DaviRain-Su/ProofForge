@@ -31,4 +31,9 @@ overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 
 `Tests/EvmSpec.lean`、`Tests/EvmBuildSpec.lean`。solc 门在 `evmLeanAssemble`。
 
-Anvil（工程门，不是 refinement）：`runtime-tests/evm/anvil_counter.sh`。缺 `anvil`/`cast` 干净跳过。本机 Foundry 在则 fail-closed：constructor 写 slot 0、`eth_call` 不提交、`send increment` 写回、overflow revert 且 slot 保持、nonpayable。
+Anvil（工程门，不是 refinement）：
+
+- `runtime-tests/evm/anvil_counter.sh`：constructor / increment / get / overflow
+- `runtime-tests/evm/anvil_pair.sh`：constructor 只写 left；`initBoth` 写两槽；`creditLeft` 保 right
+
+缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。
