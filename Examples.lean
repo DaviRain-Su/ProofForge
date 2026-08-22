@@ -7,3 +7,4 @@ import Examples.Phase
 import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
+import Examples.EvmCtx
