@@ -52,11 +52,9 @@ EVM 平行剖面（同一 `Examples.Counter`，不搬 PF DSL）：
 lake exe evmLeanAssemble -- build/evm
 # 写出 Counter.yul / Counter.abi.json / Counter.bin
 # 要求本机 solc 恰好 0.8.34
-FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_counter.sh
-FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_pair.sh
-FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_flag.sh
-FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_maybe.sh
-# Counter / Pair / Flag(u8) / Maybe(Option)；缺 anvil/cast 则 skip
+runtime-tests/evm/anvil.sh
+# Darwin / Linux 同一入口。找 ~/.foundry/bin 或 PATH 里的 anvil/cast。
+# 缺工具则 skip，不当绿。也可单独跑 anvil_counter.sh 等。
 ```
 
 ## 文档

@@ -38,4 +38,4 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_flag.sh`：UInt8 mask + count 保持
 - `runtime-tests/evm/anvil_maybe.sh`：none 清零、some 写双叶
 
-缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。
+入口：`runtime-tests/evm/anvil.sh`（Darwin / Linux）。工具查找：`FOUNDRY_BIN`、`~/.foundry/bin`、`PATH`。缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。

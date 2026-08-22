@@ -23,7 +23,7 @@
 
 ## 进行中
 
-- EVM 竖切到 Flag / Maybe Anvil 已绿。下一刀：Window/Phase Anvil，或 SVM 叶子的 EVM 对应物（先不要硬译）。
+- EVM Anvil 在 Darwin / Linux 共用 `runtime-tests/evm/anvil.sh`。下一刀：Window/Phase，或 SVM 叶子的 EVM 对应物（先不要硬译）。
 
 ## 下一刀
 

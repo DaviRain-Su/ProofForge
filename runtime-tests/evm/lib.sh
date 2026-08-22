@@ -1,0 +1,174 @@
+# Shared Anvil helpers for Darwin and Linux.
+# Source after `set -euo pipefail`. Sets: root, anvil, cast, python, chain_id, private_key.
+# Missing tools → skip (exit 0), not pass. Unsupported OS → skip.
+
+solana_lean_evm_root() {
+  local here
+  here="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
+  (cd "$here/../.." && pwd)
+}
+
+solana_lean_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    echo python3
+  elif command -v python >/dev/null 2>&1; then
+    echo python
+  else
+    return 1
+  fi
+}
+
+# Prefer FOUNDRY_BIN, then ~/.foundry/bin (foundryup on macOS and Linux), then PATH.
+solana_lean_find_tool() {
+  local name="$1"
+  local dir candidate
+  if [[ -n "${FOUNDRY_BIN:-}" ]]; then
+    candidate="${FOUNDRY_BIN%/}/$name"
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  fi
+  if [[ -n "${HOME:-}" ]]; then
+    candidate="$HOME/.foundry/bin/$name"
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  fi
+  if command -v "$name" >/dev/null 2>&1; then
+    command -v "$name"
+    return 0
+  fi
+  for dir in /usr/local/bin /opt/homebrew/bin /usr/bin; do
+    candidate="$dir/$name"
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+solana_lean_evm_init() {
+  local label="${1:-evm-anvil}"
+  case "$(uname -s)" in
+    Darwin|Linux) ;;
+    *)
+      echo "$label: skip: unsupported host $(uname -s) (want Darwin or Linux)" >&2
+      exit 0
+      ;;
+  esac
+  root="$(solana_lean_evm_root)"
+  cd "$root"
+  python="$(solana_lean_python)" || {
+    echo "$label: skip: python3/python not found" >&2
+    exit 0
+  }
+  anvil="$(solana_lean_find_tool anvil)" || {
+    echo "$label: skip: anvil not found (install foundryup, or set FOUNDRY_BIN)" >&2
+    exit 0
+  }
+  cast="$(solana_lean_find_tool cast)" || {
+    echo "$label: skip: cast not found (install foundryup, or set FOUNDRY_BIN)" >&2
+    exit 0
+  }
+  chain_id="${SOLANA_LEAN_EVM_CHAIN_ID:-31338}"
+  # Anvil default account 0.
+  private_key="${SOLANA_LEAN_EVM_PRIVATE_KEY:-ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
+}
+
+solana_lean_to_dec() {
+  local x="$1"
+  x="${x//$'\n'/}"
+  x="${x%%[*}"
+  x="${x// /}"
+  if [[ -z "$x" ]]; then
+    echo ""
+    return
+  fi
+  if [[ "$x" == 0x* || "$x" == 0X* ]]; then
+    "$python" -I -S -c "print(int('$x', 16))"
+  else
+    echo "$x"
+  fi
+}
+
+solana_lean_require_equal() {
+  local actual="$1" expected="$2" message="$3"
+  [[ "$actual" == "$expected" ]] || {
+    echo "FAIL: $message (expected '$expected', got '$actual')" >&2
+    exit 1
+  }
+}
+
+solana_lean_require_uint() {
+  local raw="$1" expected="$2" message="$3"
+  solana_lean_require_equal "$(solana_lean_to_dec "$raw")" "$expected" "$message (raw='$raw')"
+}
+
+solana_lean_require_storage() {
+  local addr="$1" slot="$2" expected="$3" message="$4"
+  local raw
+  raw="$("$cast" storage --rpc-url "$rpc" "$addr" "$slot")"
+  solana_lean_require_uint "$raw" "$expected" "$message (slot $slot)"
+}
+
+solana_lean_contract_address() {
+  "$python" -I -S -c 'import json,sys; print(json.load(sys.stdin)["contractAddress"])'
+}
+
+solana_lean_ensure_bin() {
+  local path="$1"
+  if [[ ! -f "$path" ]]; then
+    echo "assembling $path" >&2
+    lake exe evmLeanAssemble -- "$root/build/evm" >/dev/null \
+      || { echo "FAIL: lake exe evmLeanAssemble failed" >&2; exit 1; }
+  fi
+  [[ -f "$path" ]] || { echo "FAIL: missing $path" >&2; exit 1; }
+}
+
+# Start anvil on $port. Sets rpc, anvil_pid. Traps cleanup.
+solana_lean_start_anvil() {
+  local port="$1"
+  local log="$2"
+  rpc="http://127.0.0.1:$port"
+  if "$cast" chain-id --rpc-url "$rpc" >/dev/null 2>&1; then
+    echo "FAIL: RPC endpoint $rpc is already occupied" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$log")"
+  "$anvil" --host 127.0.0.1 --port "$port" --chain-id "$chain_id" \
+    --silent >"$log" 2>&1 &
+  anvil_pid=$!
+  cleanup() {
+    kill "$anvil_pid" 2>/dev/null || true
+    wait "$anvil_pid" 2>/dev/null || true
+  }
+  trap cleanup EXIT
+  local ready=0 i
+  for i in $(seq 1 50); do
+    if ! kill -0 "$anvil_pid" 2>/dev/null; then
+      echo "FAIL: anvil exited before readiness; see $log" >&2
+      exit 1
+    fi
+    if "$cast" chain-id --rpc-url "$rpc" >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    sleep 0.1
+  done
+  [[ "$ready" == 1 ]] || { echo "FAIL: anvil failed to start; see $log" >&2; exit 1; }
+  solana_lean_require_equal "$("$cast" chain-id --rpc-url "$rpc")" "$chain_id" \
+    "launched Anvil chain identity mismatch"
+}
+
+solana_lean_deploy_ctor_u64() {
+  local bytecode="$1"
+  local initial="$2"
+  local encoded receipt
+  encoded="$("$cast" abi-encode 'constructor(uint64)' "$initial")"
+  receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
+    --create "0x${bytecode}${encoded#0x}")"
+  printf '%s' "$receipt" | solana_lean_contract_address
+}
