@@ -36,6 +36,24 @@ solana-lean 是 Lean 4 的一个 **Solana 编译剖面**：普通 `def` 写合�
 - 用户定理（例如 overflow 不改状态）被 kernel 接受；
 - 同一闭包编出的 `.so` 在 Mollusk 上复现 PF StateCell 行为。
 
+## 竖切之后才是通用合约
+
+Counter 不是产品终点，是第一条打穿的竖切：
+
+```
+普通 Lean def → Profile → Extract → IR → .s → sbpf → .so → Mollusk
+```
+
+竖切绿了，才把中间三层做成**与业务无关的剖面**：
+
+| 层 | Counter 现在 | 通用之后 |
+|---|---|---|
+| 用户表面 | `init` / `increment` / `get` | 任意通过 Profile 的 `def` |
+| Extract | 认 Counter 三方法 + `u64Max` sketch | 按 `Expr` 白名单抽出（if / let / checked 加减 / 构造子） |
+| Emit | 整段 StateCell 模板 | 按抽出的操作序列吐汇编 |
+
+v0 通用面仍然单账户、`UInt64`、无 CPI。多账户 / Token 不在这条竖切里。
+
 ## 非目标指标
 
 不和 Anchor 比功能面。不和 PF 比多链。只比「Lean 表面 + 可执行 + 可证」。

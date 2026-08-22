@@ -8,4 +8,4 @@
 | [Profile](profile.md) | 传递闭包剖面 |
 | [Extract](extract.md) | Expr → IR |
 | [Emit](emit.md) | Counter → sBPF 文本（S3） |
-| Assemble | S4：`sbpf` 子进程 |
+| [Assemble](assemble.md) | `sbpf` 子进程 → `.so` |

@@ -1,0 +1,69 @@
+import SolanaLean.Emit
+import SolanaLean.IR
+
+namespace SolanaLean.Assemble
+
+structure Result where
+  asmPath : System.FilePath
+  soPath : System.FilePath
+  soBytes : ByteArray
+
+/-- ELF 64-bit LSB shared object, eBPF：前 4 字节 `\x7fELF`，EI_CLASS=2。 -/
+def looksLikeElf (bytes : ByteArray) : Bool :=
+  bytes.size ≥ 5 &&
+    bytes[0]! == 0x7f &&
+    bytes[1]! == 0x45 &&
+    bytes[2]! == 0x4c &&
+    bytes[3]! == 0x46 &&
+    bytes[4]! == 2
+
+private def runSbpf (projectRoot deployDir : System.FilePath) : IO Unit := do
+  let proc ← IO.Process.output {
+    cmd := "sbpf"
+    args := #["build", "-d", deployDir.toString]
+    cwd := projectRoot
+  }
+  unless proc.exitCode == 0 do
+    throw <| IO.userError s!"assemble/tool: sbpf failed\n{proc.stderr}"
+
+partial def findFileNamed (dir : System.FilePath) (name : String) : IO (Option System.FilePath) := do
+  if !(← dir.pathExists) then
+    return none
+  let entries ← dir.readDir
+  for e in entries do
+    let p := e.path
+    if e.fileName == name then
+      return some p
+    if (← p.isDir) then
+      if let some hit ← findFileNamed p name then
+        return some hit
+  return none
+
+/-- 把 Counter 汇编写成 `src/Counter/Counter.s`，调用本机 `sbpf 0.2.2`。 -/
+def assembleCounter (outDir : System.FilePath) (program : IR.Program := IR.counterProgram) :
+    IO Result := do
+  let asm ← match Emit.emitCounterAsm program with
+    | .error reason => throw <| IO.userError reason
+    | .ok text => pure text
+  let project := outDir / "sbpf-project"
+  let srcDir := project / "src" / "Counter"
+  let deployDir := project / "deploy"
+  IO.FS.createDirAll srcDir
+  IO.FS.createDirAll deployDir
+  let asmPath := srcDir / "Counter.s"
+  IO.FS.writeFile asmPath asm
+  runSbpf project deployDir
+  let some soPath ← findFileNamed project "Counter.so"
+    | throw <| IO.userError "assemble/tool: sbpf did not produce Counter.so"
+  let soBytes ← IO.FS.readBinFile soPath
+  unless looksLikeElf soBytes do
+    throw <| IO.userError "assemble/tool: output is not ELF"
+  unless soBytes.size > 0 do
+    throw <| IO.userError "assemble/tool: empty ELF"
+  let stagedAsm := outDir / "Counter.s"
+  let stagedSo := outDir / "Counter.so"
+  IO.FS.writeFile stagedAsm asm
+  IO.FS.writeBinFile stagedSo soBytes
+  return { asmPath := stagedAsm, soPath := stagedSo, soBytes }
+
+end SolanaLean.Assemble

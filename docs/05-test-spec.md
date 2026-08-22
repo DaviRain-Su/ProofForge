@@ -27,3 +27,7 @@
 | T-S2-02 | error | extract 夹带 `usesNat` | fail closed |
 | T-S3-01 | happy | `emitCounterAsm` Counter | 含 entrypoint / overflow / disc / return data |
 | T-S3-02 | error | 空 IR | `not counter shape` |
+| T-S4-01 | happy | Mollusk init(5) | 账户 count=5 |
+| T-S4-02 | happy | increment 5+3 | return 8，写回 8 |
+| T-S4-03 | happy | get | return 8，不改账户 |
+| T-S4-04 | error | increment max+1 | `0x1001`，状态保持 |

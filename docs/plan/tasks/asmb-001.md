@@ -1,7 +1,7 @@
 ---
 id: asmb-001
 scope: assemble
-status: pending
+status: done
 depends-on: [lowr-001]
 ---
 

@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**S3**。普通 Lean Counter 可检查、可抽出、可发射 sBPF 文本。尚未调 `sbpf`。
+当前：**Counter 竖切已通**。`lake exe solanaLeanAssemble` + Mollusk 4/4。下一步是通用抽出，不是再堆业务合约。
 
 ## 「难的是 loading 吗？」
 
@@ -30,6 +30,8 @@ PF emitSbpf + sbpf          ← 搬（S3–S4）
 
 ```bash
 lake build
+lake exe solanaLeanAssemble -- build/sbpf
+(cd runtime-tests/solana && SOLANA_LEAN_COUNTER_SO=../../build/sbpf/Counter.so cargo test --test counter)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。

@@ -10,3 +10,6 @@ lean_lib SolanaLean
 lean_lib Examples
 
 lean_lib Tests
+
+lean_exe solanaLeanAssemble where
+  root := `SolanaLean.AssembleMain
