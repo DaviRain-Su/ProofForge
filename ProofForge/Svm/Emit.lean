@@ -656,15 +656,49 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     emitLoadCheckPda p seed bump stackOff
   | .rentExemption n =>
     .ok (emitLoadRentExemption n.toNat stackOff)
+  | .loopIx =>
+    .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
+  | .indexGet _ name idx len =>
+    emitLoadIndexGet p name idx len stackOff
   | v =>
-    if Ops.isEvmLeaf v then
-      .error "extract/unsupported: svm rejects evm leaf"
-    else if Ops.isLangVal v then
+    if Ops.isEvmLeaf v || Ops.isBitVal v then
       .error "extract/unsupported: svm rejects evm leaf"
     else do
       let mem ← memOfVal p v
       let insn ← loadInsn (widthOfVal p v)
       return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+
+/-- `cells_0` 起的连续 u64 槽。`idx ≥ len` → Custom(1)。 -/
+private def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops.Val)
+    (len stackOff : Nat) : Except String String := do
+  let baseName :=
+    if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0" else name
+  let some baseOff := IR.fieldOffset p baseName
+    | .error s!"extract/unsupported: unknown vector {name}"
+  let loadIdx ← loadVal p idx (stackOff + 8)
+  let inferred :=
+    p.slots.foldl (init := 0) fun acc s =>
+      if s.name.startsWith (name ++ "_") then acc + 1 else acc
+  let bound := if len == 0 then (if inferred == 0 then 1 else inferred) else len
+  return loadIdx ++
+    s!"\
+  ; indexGet {name}[{bound}]
+  ldxdw r2, [r10 - {stackOff + 8}]
+  lddw r3, {bound}
+  jge r2, r3, err_idx_{stackOff}
+  mul64 r2, 8
+  mov64 r1, r6
+  add64 r1, ACC0_DATA
+  add64 r1, {baseOff}
+  add64 r1, r2
+  ldxdw r1, [r1 + 0]
+  stxdw [r10 - {stackOff}], r1
+  ja ok_idx_{stackOff}
+err_idx_{stackOff}:
+  lddw r0, 0x1
+  exit
+ok_idx_{stackOff}:
+"
 
 /--
 `sol_create_program_address`：一条 ASCII 种子 + bump 字节 + 当前 program id。
@@ -1118,8 +1152,70 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       acc := acc ++ (← emitInvoke p label prog metas data seed bump)
     | .evmDeposit _ | .evmSendEth .. | .evmLog .. =>
       throw "extract/unsupported: svm rejects evm leaf"
-    | .forAccum .. | .indexSet .. | .errorNamed _ =>
+    | .errorNamed _ =>
       throw "extract/unsupported: svm rejects evm leaf"
+    | .forAccum bound addend =>
+      let loopLab := s!"loop_{label}_{n}"
+      let doneLab := s!"done_{label}_{n}"
+      n := n + 1
+      let loadAdd ← loadVal p addend 16
+      acc := acc ++
+        s!"\
+  ; forAccum {bound}
+  lddw r1, 0
+  stxdw [r10 - 24], r1
+  stxdw [r10 - 40], r1
+{loopLab}:
+  ldxdw r1, [r10 - 40]
+  lddw r2, {bound}
+  jge r1, r2, {doneLab}
+{loadAdd}  ldxdw r1, [r10 - 24]
+  ldxdw r2, [r10 - 16]
+  lddw r3, 0xffffffffffffffff
+  sub64 r3, r2
+  jgt r1, r3, err_{label}
+  add64 r1, r2
+  stxdw [r10 - 24], r1
+  ldxdw r1, [r10 - 40]
+  add64 r1, 1
+  stxdw [r10 - 40], r1
+  ja {loopLab}
+{doneLab}:
+"
+    | .indexSet name idx value len =>
+      let baseName :=
+        if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0" else name
+      let some baseOff := IR.fieldOffset p baseName
+        | throw s!"extract/unsupported: unknown vector {name}"
+      let loadI ← loadVal p idx 8
+      let loadV ← loadVal p value 16
+      let inferred :=
+        p.slots.foldl (init := 0) fun acc s =>
+          if s.name.startsWith (name ++ "_") then acc + 1 else acc
+      let bound := if len == 0 then (if inferred == 0 then 1 else inferred) else len
+      let oob := s!"err_iset_{label}_{n}"
+      let ok := s!"ok_iset_{label}_{n}"
+      n := n + 1
+      acc := acc ++ loadI ++ loadV ++
+        s!"\
+  ; indexSet {name}[{bound}]
+  ldxdw r2, [r10 - 8]
+  lddw r3, {bound}
+  jge r2, r3, {oob}
+  mul64 r2, 8
+  mov64 r1, r6
+  add64 r1, ACC0_DATA
+  add64 r1, {baseOff}
+  add64 r1, r2
+  ldxdw r3, [r10 - 16]
+  stxdw [r1 + 0], r3
+  stxdw [r10 - 24], r3
+  ja {ok}
+{oob}:
+  lddw r0, 0x1
+  exit
+{ok}:
+"
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
     | .mapGetPair .. | .mapSetPair ..
     | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. =>
@@ -1183,7 +1279,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | v =>
-          if Ops.isEvmLeaf v || Ops.isLangVal v then
+          if Ops.isEvmLeaf v || Ops.isBitVal v then
             throw "extract/unsupported: svm rejects evm leaf"
           else if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
@@ -1266,12 +1362,13 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if Ops.hasEvmEffect m.ops || Ops.hasLangOp m.ops then
+    if Ops.hasEvmEffect m.ops || Ops.hasSvmRejectedLang m.ops then
       .error "extract/unsupported: svm rejects evm leaf"
     else if Ops.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
-    else if !(Ops.hasCheckedArith m.ops || m.ops.any (fun | .ite .. => true | _ => false)) then
+    else if !(Ops.hasCheckedArith m.ops ||
+        m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
       let body ← emitMutBody p label m.ops

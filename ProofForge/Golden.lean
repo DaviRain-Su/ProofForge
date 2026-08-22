@@ -1055,6 +1055,36 @@ def extractedTokenMs : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedBook : Program :=
+  { name := "Book"
+    slots := #[
+      { name := "cells_0" }, { name := "cells_1" },
+      { name := "cells_2" }, { name := "cells_3" }
+    ]
+    methods := #[
+      { kind := .init, name := "Examples.Book.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "Examples.Book.setAt", ixName := "setAt", paramCount := 2
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.indexSet "cells" (.arg 0) (.arg 1) 4, .okState (.arg 1)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Book.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "cells_0")] },
+      { kind := .get, name := "Examples.Book.getAt", ixName := "getAt", paramCount := 1
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.returnU64 (.indexGet (.arg 1) "cells" (.arg 0) 0)]
+            #[.returnU64 (.lit 0)]
+        ] },
+      { kind := .get, name := "Examples.Book.sum4", ixName := "sum4", paramCount := 0
+        ops := #[
+          .forAccum 4 (.indexGet (.arg 0) "cells" .loopIx 0),
+          .returnU64 (.indexGet (.arg 0) "cells" .loopIx 0)
+        ] }
+    ] }
+
 def extractedPhoenix : Program :=
   { name := "Phoenix"
     slots := #[{ name := "askPrice" }, { name := "askSize" }, { name := "baseFree" }]
@@ -1096,7 +1126,7 @@ def programs : Array Program := #[
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
   extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio,
   extractedGate, extractedNonce, extractedTokenOwner, extractedTokenMs,
-  extractedPhoenix,
+  extractedPhoenix, extractedBook,
   extractedEvmCtx, extractedTipJar, extractedLang, extractedVault, extractedOwnable,
   extractedToken
 ]

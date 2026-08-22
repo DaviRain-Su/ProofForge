@@ -16,7 +16,7 @@
 
 | 官方 | 为什么关 |
 |---|---|
-| 红黑树 / 512–4096 档 | 不定长 `Array`、运行时下标 SVM 拒 |
+| 红黑树 / 512–4096 档 | 不定长 `Array`；有界 `Vector` + for 已开，树还没有 |
 | u128 client id / 费用中间量 | 只有 `UInt64` |
 | Seat PDA + 多账户图 | 账户叶 0..3；初始化要 System+Token+两个 vault |
 | `Log` self-CPI | 变长 event batch |

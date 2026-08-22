@@ -2,6 +2,7 @@ import Tests.CounterSpec
 import Tests.PairSpec
 import Tests.FlagSpec
 import Tests.WindowSpec
+import Tests.BookSpec
 import Tests.PhaseSpec
 import Tests.ChoiceSpec
 import Tests.ClockSpec

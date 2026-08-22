@@ -485,6 +485,11 @@ def hasCheckedArith (ops : Array Op) : Bool :=
   hasCheckedAdd ops || hasCheckedSub ops ||
     hasCheckedMul ops || hasCheckedDiv ops || hasCheckedMod ops
 
+def isBitVal : Val → Bool
+  | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. => true
+  | .field b _ => isBitVal b
+  | _ => false
+
 def isLangVal : Val → Bool
   | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR ..
   | .indexGet .. | .loopIx => true
@@ -620,6 +625,19 @@ def hasTokenOp (ops : Array Op) : Bool :=
 
 def hasLangOp (ops : Array Op) : Bool :=
   hasForAccum ops || hasIndexSet ops || hasErrorNamed ops || hasLangLeaf ops
+
+/-- SVM 还不能发的语言叶：位运算、命名错误。for / index 不算。 -/
+def hasSvmRejectedLang (ops : Array Op) : Bool :=
+  hasErrorNamed ops ||
+    walk 16 ops (fun
+      | .returnU64 v | .okState v | .returnState v => isBitVal v
+      | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
+      | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
+          isBitVal l || isBitVal r
+      | .invoke _ _ data _ bump =>
+          (data.any fun | .u64le v => isBitVal v | _ => false) ||
+            (match bump with | some v => isBitVal v | none => false)
+      | _ => false)
 
 def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmDeposit ops || hasEvmSendEth ops || hasEvmLog ops || hasEvmLeaf ops ||

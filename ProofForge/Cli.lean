@@ -59,7 +59,7 @@ private def parseArgs (args : List String) : Except String Options :=
 
 private def svmSources : Array IR.Program :=
   Golden.programs.filter fun p =>
-    !p.methods.any (fun m => Ops.hasEvmEffect m.ops || Ops.hasLangOp m.ops)
+    !p.methods.any (fun m => Ops.hasEvmEffect m.ops || Ops.hasSvmRejectedLang m.ops)
 
 private def selectSvm (names : Array String) : Except String (Array IR.Program) :=
   if names.isEmpty then .ok svmSources

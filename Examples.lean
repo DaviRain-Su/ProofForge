@@ -3,6 +3,7 @@ import Examples.Pair
 import Examples.Flag
 import Examples.Maybe
 import Examples.Window
+import Examples.Book
 import Examples.Phase
 import Examples.Choice
 import Examples.Clock

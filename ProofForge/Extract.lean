@@ -547,10 +547,13 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               | none => none
             | _, _ => none
           | some idx =>
+            let lits := args.filterMap (asLit fuel')
             let len :=
-              match args.findSome? (asLit fuel') with
-              | some (.lit n) => n.toNat
-              | _ => 0
+              if h : lits.size > 0 then
+                match lits[0] with
+                | .lit n => n.toNat
+                | _ => 0
+              else 0
             match findState fuel' e, fieldNameOf 8 e with
             | some j, some fname => some (.indexGet (.arg j) fname idx len)
             | some j, none => some (.indexGet (.arg j) "cells" idx len)
@@ -814,10 +817,20 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``Vector.set || endsWith e ".set" then
     let args := e.getAppArgs
-    let idx? :=
-      match (args.filterMap (asLit 8)).back? with
-      | some (.lit n) => some n.toNat
-      | _ => none
+    -- 只认编译期常量下标。运行时下标走 `asIndexSet`。
+    -- `Vector.set.{u} α n xs i v h` 里 `n` 是长度，不能当 index。
+    let idx? : Option Nat :=
+      Id.run do
+        let mut seenLen := false
+        for a in args do
+          match asLit 8 a with
+          | some (.lit n) =>
+            if !seenLen then
+              seenLen := true
+            else
+              return some n.toNat
+          | _ => pure ()
+        return none
     -- `Vector.set xs i v h`：值在字面量下标之后。
     let payload :=
       Id.run do
@@ -867,10 +880,13 @@ private def asIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
             e.getAppArgs.findSome? (baseName fuel')
           else some last
           | none => e.getAppArgs.findSome? (baseName fuel')
+          let lits := args.filterMap (asLit 8)
           let len :=
-      match args.findSome? (asLit 8) with
-      | some (.lit n) => n.toNat
-      | _ => 0
+            if h : lits.size > 0 then
+              match lits[0] with
+              | .lit n => n.toNat
+              | _ => 0
+            else 0
     let vals := args.filterMap (val env)
     if vals.size ≥ 3 then
       let idx := vals[vals.size - 2]!
@@ -1885,7 +1901,8 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
 def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
   let ops ← decodeBody env e
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
-      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops then
+      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops ||
+        Ops.hasForAccum ops || Ops.hasIndexSet ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"

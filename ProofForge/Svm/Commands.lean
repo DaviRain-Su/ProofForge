@@ -34,9 +34,10 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
     let mutOps := (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.ops)
     match mutOps with
     | some ops =>
-      if Ops.hasEvmEffect ops || Ops.hasLangOp ops then
+      if Ops.hasEvmEffect ops || Ops.hasSvmRejectedLang ops then
         throwError "extract/unsupported: svm rejects evm leaf"
-      unless Ops.hasCheckedArith ops || ops.any (fun | .ite .. => true | _ => false) ||
+      unless Ops.hasCheckedArith ops ||
+          ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | _ => false) ||
           Ops.hasInvoke ops do
         throwError "extract/unsupported: mutating method missing checked arith"
     | none => throwError "extract/unsupported: missing mutating method"
