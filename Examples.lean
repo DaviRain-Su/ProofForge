@@ -21,3 +21,5 @@ import Examples.SysAlloc
 import Examples.TokenAcc
 import Examples.Memo
 import Examples.CreatePda
+import Examples.TokenApprove
+import Examples.TokenFreeze

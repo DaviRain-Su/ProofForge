@@ -22,6 +22,8 @@ import Examples.SysAlloc
 import Examples.TokenAcc
 import Examples.Memo
 import Examples.CreatePda
+import Examples.TokenApprove
+import Examples.TokenFreeze
 
 #solana_build Examples.Counter
 
@@ -68,6 +70,10 @@ import Examples.CreatePda
 #solana_build Examples.Memo
 
 #solana_build Examples.CreatePda
+
+#solana_build Examples.TokenApprove
+
+#solana_build Examples.TokenFreeze
 
 /--
 error: extract/unsupported: no solana_entry

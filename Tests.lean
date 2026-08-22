@@ -20,6 +20,8 @@ import Tests.SysAllocSpec
 import Tests.TokenAccSpec
 import Tests.MemoSpec
 import Tests.CreatePdaSpec
+import Tests.TokenApproveSpec
+import Tests.TokenFreezeSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

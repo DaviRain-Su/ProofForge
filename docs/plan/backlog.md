@@ -35,6 +35,7 @@
 - `memoWrite`；Memo Mollusk
 - `createPda`；CreatePda Mollusk
 - `checkPda`；Pda Mollusk 验证 bump
+- `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount`；TokenApprove / TokenFreeze Mollusk
 
 ## 下一刀
 

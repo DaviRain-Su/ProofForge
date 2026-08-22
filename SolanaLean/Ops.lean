@@ -124,6 +124,28 @@ def tokenCloseAccount : Op :=
       { acc := 0, signer := true, writable := false }]
     #[.u8le 9]
 
+def tokenApproveChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 13, .u64le amount, .u8le decimals]
+
+def tokenFreezeAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 10]
+
+def tokenThawAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 11]
+
 def memoWrite : Op :=
   .invoke 1
     #[{ acc := 0, signer := true, writable := false }]

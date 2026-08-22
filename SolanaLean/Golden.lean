@@ -306,6 +306,32 @@ def extractedTokenXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTokenApprove : Program :=
+  { name := "TokenApprove"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenApprove.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenApprove.approve", ixName := "approve", paramCount := 1
+        ops := #[Ops.tokenApproveChecked (.arg 0) 6, .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.TokenApprove.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
+def extractedTokenFreeze : Program :=
+  { name := "TokenFreeze"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenFreeze.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenFreeze.freeze", ixName := "freeze", paramCount := 0
+        ops := #[Ops.tokenFreezeAccount, .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenFreeze.thaw", ixName := "thaw", paramCount := 0
+        ops := #[Ops.tokenThawAccount, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TokenFreeze.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedCreatePda : Program :=
   { name := "CreatePda"
     slots := #[{ name := "dummy" }]
@@ -439,7 +465,7 @@ def programs : Array Program := #[
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
-  extractedCreatePda
+  extractedCreatePda, extractedTokenApprove, extractedTokenFreeze
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

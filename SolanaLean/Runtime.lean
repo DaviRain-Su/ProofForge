@@ -170,6 +170,39 @@ def tokenCloseAccount : UInt64 :=
     #[.u8le 9]
 
 /--
+Token `ApproveChecked`：普通包装。decimals 编译期常量。
+外层 0 是 owner。内层：source w / mint r / delegate r / owner s。
+-/
+def tokenApproveChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
+  invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 13, .u64le amount, .u8le decimals]
+
+/--
+Token `FreezeAccount`：普通包装。
+外层 0 是 mint freeze authority。内层：account w / mint r / authority s。
+-/
+def tokenFreezeAccount : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 10]
+
+/--
+Token `ThawAccount`：普通包装。账户表与 Freeze 相同。
+-/
+def tokenThawAccount : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 11]
+
+/--
 Memo 写一条 UTF-8 字面量。本切片钉死 `"ok"`。
 外层 0 是 signer；callee 是外层账户 1。
 -/
