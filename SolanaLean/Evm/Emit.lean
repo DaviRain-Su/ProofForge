@@ -73,6 +73,8 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       return maskExpr w s!"sload({slot})"
   | .clockSlot => .error "extract/unsupported: evm rejects clockSlot"
   | .signerKey0 => .error "extract/unsupported: evm rejects signerKey0"
+  | .evmCaller => .ok "and(caller(), 0xffffffffffffffff)"
+  | .evmBlockNumber => .ok "number()"
 
 private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
   match c with
@@ -115,6 +117,22 @@ private structure Render where
 
 private def fresh (r : Render) : String × Render :=
   (s!"v{r.next}", { r with next := r.next + 1 })
+
+private def bindNumber (indent name : String) : String :=
+  indent ++ "let " ++ name ++ " := number()" ++ nl ++
+    indent ++ "if gt(" ++ name ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl
+
+/-- `number()` 必须先 range-check 再当值用。 -/
+private def materializeVal (p : IR.Program) (indent paramPrefix : String)
+    (paramCount : Nat) (v : Ops.Val) (st : Render) :
+    Except String (String × String × Render) := do
+  match v with
+  | .evmBlockNumber =>
+      let (nm, st') := fresh st
+      return (bindNumber indent nm, nm, st')
+  | _ =>
+      let e ← loadVal p paramPrefix paramCount v
+      return ("", e, st)
 
 private def brace (inner : String) : String :=
   "{" ++ nl ++ inner ++ "}"
@@ -203,7 +221,9 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
               acc := acc ++ (← storeNamed p indent payN (yulLit k))
               acc := acc ++ returnWord indent (yulLit k)
           | _ =>
-              let payload ← loadVal p paramPrefix paramCount v
+              let (pre, payload, st') ← materializeVal p indent paramPrefix paramCount v st
+              st := st'
+              acc := acc ++ pre
               acc := acc ++ (← storeNamed p indent tagN "1")
               acc := acc ++ (← storeNamed p indent payN payload)
               acc := acc ++ returnWord indent payload
@@ -222,7 +242,11 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
                       loadVal p paramPrefix paramCount v
                     else
                       loadVal p paramPrefix paramCount (.arg 0)
-                | _ => loadVal p paramPrefix paramCount v
+                | _ =>
+                    let (pre, e, st') ← materializeVal p indent paramPrefix paramCount v st
+                    st := st'
+                    acc := acc ++ pre
+                    pure e
           let w := (IR.slotWidth p destName).getD 8
           acc := acc ++ storeSlot indent destS (maskExpr w value) ++ returnWord indent value
         st := { st with last := none }
@@ -231,10 +255,13 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         unless Ops.hasCheckedArith ops do
           acc := acc ++ indent ++ revert0 ++ nl
     | .returnU64 v =>
-        let value ← loadVal p paramPrefix paramCount v
-        acc := acc ++ returnWord indent value
+        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount v st
+        st := st'
+        acc := acc ++ pre ++ returnWord indent value
     | .returnState v =>
-        let value ← loadVal p paramPrefix paramCount v
+        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount v st
+        st := st'
+        acc := acc ++ pre
         if nStates > 1 then
           match p.slots[returnStateIdx]? with
           | none => throw "extract/unsupported: returnState exceeds slots"

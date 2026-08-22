@@ -163,6 +163,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .clockSlot
         else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
           some .signerKey0
+        else if endsWith e ".evmCaller" || isConstNamed e ``SolanaLean.Runtime.evmCaller then
+          some .evmCaller
+        else if endsWith e ".evmBlockNumber" || isConstNamed e ``SolanaLean.Runtime.evmBlockNumber then
+          some .evmBlockNumber
         else if (endsWith e ".systemTransfer" ||
             isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
@@ -561,6 +565,8 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             match val env st with
             | some (.clockSlot) => some .clockSlot
             | some (.signerKey0) => some .signerKey0
+            | some (.evmCaller) => some .evmCaller
+            | some (.evmBlockNumber) => some .evmBlockNumber
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -642,7 +648,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
-    | .clockSlot | .signerKey0 => .ok #[.returnU64 v]
+    | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -831,7 +837,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
-      | .clockSlot | .signerKey0 => v
+      | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber => v
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -969,7 +975,7 @@ private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
   | .lit _ => #[]
-  | .clockSlot | .signerKey0 => #[]
+  | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber => #[]
 
 private def opFields : Ops.Op → Array String
   | .checkedAddU64 l r => valFields l ++ valFields r

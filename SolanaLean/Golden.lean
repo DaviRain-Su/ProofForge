@@ -200,6 +200,26 @@ def extractedClock : Program :=
         ops := #[.returnU64 (.field (.arg 0) "stamped")] }
     ] }
 
+def extractedEvmCtx : Program :=
+  { name := "EvmCtx"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.EvmCtx.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.EvmCtx.stamp", ixName := "stamp", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState .evmBlockNumber]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.EvmCtx.caller", ixName := "caller", paramCount := 0
+        ops := #[.returnU64 .evmCaller] },
+      { kind := .get, name := "Examples.EvmCtx.height", ixName := "height", paramCount := 0
+        ops := #[.returnU64 .evmBlockNumber] },
+      { kind := .get, name := "Examples.EvmCtx.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "dummy")] }
+    ] }
+
 def extractedTransfer : Program :=
   { name := "Transfer"
     slots := #[{ name := "dummy" }]
@@ -215,7 +235,7 @@ def extractedTransfer : Program :=
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
-  extractedClock, extractedTransfer
+  extractedClock, extractedTransfer, extractedEvmCtx
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

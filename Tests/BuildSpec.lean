@@ -8,6 +8,7 @@ import Examples.Phase
 import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
+import Examples.EvmCtx
 
 #solana_build Examples.Counter
 
@@ -26,6 +27,12 @@ import Examples.Transfer
 #solana_build Examples.Clock
 
 #solana_build Examples.Transfer
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.EvmCtx
 
 /--
 error: extract/unsupported: no solana_entry

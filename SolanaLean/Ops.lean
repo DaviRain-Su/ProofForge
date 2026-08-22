@@ -1,12 +1,14 @@
 namespace SolanaLean.Ops
 
-/-- 可 load 的值。`clockSlot` / `signerKey0` 是运行时叶子，不是账户槽。 -/
+/-- 可 load 的值。`clockSlot` / `signerKey0` 是 SVM 叶子；`evmCaller` / `evmBlockNumber` 是 EVM 叶子。 -/
 inductive Val where
   | arg (i : Nat)
   | field (base : Val) (name : String)
   | lit (n : UInt64)
   | clockSlot
   | signerKey0
+  | evmCaller
+  | evmBlockNumber
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where
@@ -58,5 +60,24 @@ def hasCheckedMod (ops : Array Op) : Bool :=
 def hasCheckedArith (ops : Array Op) : Bool :=
   hasCheckedAdd ops || hasCheckedSub ops ||
     hasCheckedMul ops || hasCheckedDiv ops || hasCheckedMod ops
+
+private def isEvmLeaf : Val → Bool
+  | .evmCaller | .evmBlockNumber => true
+  | .field b _ => isEvmLeaf b
+  | _ => false
+
+def hasEvmLeaf (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .checkedAddU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedSubU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedMulU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedDivU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedModU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .ite _ l r _ _ => isEvmLeaf l || isEvmLeaf r
+    | .systemTransfer v => isEvmLeaf v
+    | .okState v => isEvmLeaf v
+    | .returnU64 v => isEvmLeaf v
+    | .returnState v => isEvmLeaf v
+    | .errorOverflow => false
 
 end SolanaLean.Ops

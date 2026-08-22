@@ -23,7 +23,7 @@
 
 ## 进行中
 
-- EVM Anvil 在 Darwin / Linux 共用 `runtime-tests/evm/anvil.sh`。下一刀：Window/Phase，或 SVM 叶子的 EVM 对应物（先不要硬译）。
+- `evmCaller` / `evmBlockNumber` 已开。下一刀：`evmTimestamp` / 完整 20B caller，或 payable。不做 Window。不把 `clockSlot` 译成 `NUMBER`。
 
 ## 下一刀
 

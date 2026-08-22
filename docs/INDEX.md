@@ -20,4 +20,4 @@
 | [research/03-feasibility.md](research/03-feasibility.md) | Solana 可行性调研结论 |
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 
-当前阶段：**EVM Anvil 门可在 Darwin / Linux 跑**。入口 `runtime-tests/evm/anvil.sh`。
+当前阶段：**EVM runtime 叶子已开**。`evmCaller` / `evmBlockNumber`；SVM 名不翻译。

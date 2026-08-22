@@ -8,6 +8,7 @@ import Examples.Flag
 import Examples.Maybe
 import Examples.Clock
 import Examples.Transfer
+import Examples.EvmCtx
 import Tests.Fixtures
 
 #evm_build Examples.Counter
@@ -21,6 +22,8 @@ import Tests.Fixtures
 #evm_build Examples.Flag
 
 #evm_build Examples.Maybe
+
+#evm_build Examples.EvmCtx
 
 /--
 error: extract/unsupported: evm rejects svm leaf in stamp

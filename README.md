@@ -53,8 +53,8 @@ lake exe evmLeanAssemble -- build/evm
 # 写出 Counter.yul / Counter.abi.json / Counter.bin
 # 要求本机 solc 恰好 0.8.34
 runtime-tests/evm/anvil.sh
-# Darwin / Linux 同一入口。找 ~/.foundry/bin 或 PATH 里的 anvil/cast。
-# 缺工具则 skip，不当绿。也可单独跑 anvil_counter.sh 等。
+# Darwin / Linux。含 Counter / Pair / Flag / Maybe / EvmCtx（caller+number）。
+# 缺 anvil/cast 则 skip。`clockSlot` 不是 `NUMBER`。
 ```
 
 ## 文档

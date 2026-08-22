@@ -28,4 +28,17 @@ payer / recipient / System Program，内层 `u32le(2) || u64le(lamports)`，
 -/
 @[irreducible] def systemTransfer (lamports : UInt64) : UInt64 := lamports
 
+/--
+`CALLER` 的低 8 字节：`and(caller(), 0xffffffffffffffff)`。
+这是 20 字节地址的末 8 字节，不是完整 address，也不是 `tx.origin`。
+SVM 发射器碰到这个叶子 fail closed。
+-/
+@[irreducible] def evmCaller : UInt64 := 0
+
+/--
+`NUMBER`，超出 `UInt64` 则 revert。这是 EVM block number，不是 Solana slot。
+`clockSlot` 继续只表示 `Clock.slot`。
+-/
+@[irreducible] def evmBlockNumber : UInt64 := 0
+
 end SolanaLean.Runtime

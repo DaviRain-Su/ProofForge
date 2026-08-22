@@ -37,6 +37,7 @@
 | [evm-005](tasks/evm-005.md) | done | Pair 多 slot + Anvil |
 | [evm-006](tasks/evm-006.md) | done | 窄槽 + Option 双叶 |
 | [evm-007](tasks/evm-007.md) | done | Darwin / Linux 共用 Anvil 入口 |
+| [evm-008](tasks/evm-008.md) | done | 独立 EVM runtime 叶子 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

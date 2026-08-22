@@ -133,7 +133,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
-  | .lit _ | .clockSlot | .signerKey0 =>
+  | .lit _ | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -187,6 +187,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadClockSlot stackOff)
   | .signerKey0 =>
     .ok (emitLoadSignerKey0 stackOff)
+  | .evmCaller | .evmBlockNumber =>
+    .error "extract/unsupported: svm rejects evm leaf"
   | _ => do
     let mem ← memOfVal p v
     let insn ← loadInsn (widthOfVal p v)
@@ -531,6 +533,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
+        | .evmCaller | .evmBlockNumber =>
+          throw "extract/unsupported: svm rejects evm leaf"
         | _ =>
           if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)

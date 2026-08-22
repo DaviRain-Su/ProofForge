@@ -40,7 +40,7 @@ def hasOptionLeaves (p : Program) : Bool :=
 private def valForbidden : Ops.Val → Bool
   | .clockSlot | .signerKey0 => true
   | .field b _ => valForbidden b
-  | .arg _ | .lit _ => false
+  | .arg _ | .lit _ | .evmCaller | .evmBlockNumber => false
 
 private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -140,6 +140,8 @@ private def valCanon : Ops.Val → String
   | .field b n => s!"f.{n}({valCanon b})"
   | .clockSlot => "clk"
   | .signerKey0 => "k0"
+  | .evmCaller => "ecall"
+  | .evmBlockNumber => "eblk"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
