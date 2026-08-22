@@ -8,6 +8,7 @@
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
+| `Svm.Runtime` | sysvar / AccountInfo / CPI / PDA 宿主 stub | EVM opcode |
 | `Svm.Emit` | Loader V3 单账户 `.s`；checked 算术、CPI、sysvar | Yul、EVM opcode |
 | `Svm.Idl` | Solana IDL spec 0.1.0 JSON | ABI JSON、链上字节 |
 | `Svm.Assemble` | locked `sbpf 0.2.2` 子进程 | FFI、PATH 随便一个 sbpf |

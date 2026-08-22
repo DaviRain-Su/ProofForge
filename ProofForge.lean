@@ -1,6 +1,8 @@
 import ProofForge.Ops
 import ProofForge.Sha256
 import ProofForge.IR
+import ProofForge.Svm.Runtime
+import ProofForge.Evm.Runtime
 import ProofForge.Runtime
 import ProofForge.Golden
 import ProofForge.Attr

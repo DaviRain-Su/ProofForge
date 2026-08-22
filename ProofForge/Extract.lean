@@ -120,22 +120,22 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         let user :=
           field.startsWith "Examples." || field.startsWith "ProofForge." ||
             field.startsWith "Tests."
-        if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Runtime.findPda) &&
+        if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Svm.Runtime.findPda) &&
             e.getAppArgs.size ≥ 1 then
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
           | .lit (.strVal s) => if s.isEmpty then none else some (.findPda s)
           | _ => none
-        else if (endsWith e ".sha256Lit" || isConstNamed e ``ProofForge.Runtime.sha256Lit) &&
+        else if (endsWith e ".sha256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.sha256Lit) &&
             e.getAppArgs.size ≥ 1 then
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
           | .lit (.strVal s) => some (.sha256Lit s)
           | _ => none
-        else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Runtime.keccak256Lit) &&
+        else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
             e.getAppArgs.size ≥ 1 then
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
           | .lit (.strVal s) => some (.keccak256Lit s)
           | _ => none
-        else if (endsWith e ".accKeyWord" || isConstNamed e ``ProofForge.Runtime.accKeyWord) &&
+        else if (endsWith e ".accKeyWord" || isConstNamed e ``ProofForge.Svm.Runtime.accKeyWord) &&
             e.getAppArgs.size ≥ 2 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
               asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -144,7 +144,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let w := word.toNat
             if a ≤ 3 && w ≤ 3 then some (.accKeyWord a w) else none
           | _, _ => none
-        else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Runtime.accOwnerWord) &&
+        else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Svm.Runtime.accOwnerWord) &&
             e.getAppArgs.size ≥ 2 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
               asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -153,7 +153,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let w := word.toNat
             if a ≤ 3 && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
-        else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Runtime.checkPda) &&
+        else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
           match strip e.getAppArgs[e.getAppArgs.size - 2]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -161,73 +161,73 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             if s.isEmpty then none else some (.checkPda s bump)
           | _, _ => none
         else if (endsWith e ".rentExemption" ||
-            isConstNamed e ``ProofForge.Runtime.rentExemption) &&
+            isConstNamed e ``ProofForge.Svm.Runtime.rentExemption) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit n) => some (.rentExemption n)
           | _ => none
-        else if (endsWith e ".accLamports" || isConstNamed e ``ProofForge.Runtime.accLamports) &&
+        else if (endsWith e ".accLamports" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if a ≤ 3 then some (.accLamportsN a) else none
           | _ => none
-        else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Runtime.accDataLen) &&
+        else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if a ≤ 3 then some (.accDataLenN a) else none
           | _ => none
-        else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Runtime.isSigner) &&
+        else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if a ≤ 3 then some (.isSignerN a) else none
           | _ => none
-        else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Runtime.isWritable) &&
+        else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if a ≤ 3 then some (.isWritableN a) else none
           | _ => none
-        else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Runtime.isExecutable) &&
+        else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if a ≤ 3 then some (.isExecutableN a) else none
           | _ => none
-        else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Runtime.signerKey) &&
+        else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if a ≤ 3 then some (.signerKeyN a) else none
           | _ => none
-        else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Runtime.ownerIsSelf) &&
+        else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Svm.Runtime.ownerIsSelf) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if a ≤ 3 then some (.ownerIsSelf a) else none
           | _ => none
-        else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Runtime.evmMapGetAddr then
+        else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
           let args := e.getAppArgs
           let get (n : Nat) : Ops.Val :=
             if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
             else .arg n
           some (.mapGetAddr (get 3) (get 2) (get 1) (get 0))
-        else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Runtime.evmMapGetPair then
+        else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair then
           let args := e.getAppArgs
           let get (n : Nat) : Ops.Val :=
             if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
             else .arg n
           some (.mapGetPair (get 6) (get 5) (get 4) (get 3) (get 2) (get 1) (get 0))
-        else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Runtime.evmMapGetU64 then
+        else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
           let args := e.getAppArgs
           let get (n : Nat) : Ops.Val :=
             if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
@@ -240,7 +240,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | parts => parts.getLast!
           if proj == "mk" || proj == "ok" || proj == "error" ||
               proj.startsWith "_proof" || proj == "rfl" ||
-              field.startsWith "ProofForge.Runtime." then none
+              (field.startsWith "ProofForge.Runtime." || field.startsWith "ProofForge.Svm.Runtime." || field.startsWith "ProofForge.Evm.Runtime.") then none
           else if match env.find? n with | some (.ctorInfo _) => true | _ => false then none
           else
             -- 整个 Vector 投影本身不是叶；下标再展开成 `name_i`。
@@ -324,119 +324,119 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some (.lit 1)
         else if endsWith e ".allowBase" then
           some (.lit 0)
-        else if endsWith e ".clockSlot" || isConstNamed e ``ProofForge.Runtime.clockSlot then
+        else if endsWith e ".clockSlot" || isConstNamed e ``ProofForge.Svm.Runtime.clockSlot then
           some .clockSlot
-        else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Runtime.clockEpoch then
+        else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
           some .clockEpoch
-        else if endsWith e ".unixTime" || isConstNamed e ``ProofForge.Runtime.unixTime then
+        else if endsWith e ".unixTime" || isConstNamed e ``ProofForge.Svm.Runtime.unixTime then
           some .unixTime
-        else if endsWith e ".slotsPerEpoch" || isConstNamed e ``ProofForge.Runtime.slotsPerEpoch then
+        else if endsWith e ".slotsPerEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.slotsPerEpoch then
           some .slotsPerEpoch
-        else if endsWith e ".cpiReturn" || isConstNamed e ``ProofForge.Runtime.cpiReturn then
+        else if endsWith e ".cpiReturn" || isConstNamed e ``ProofForge.Svm.Runtime.cpiReturn then
           some .cpiReturn
-        else if endsWith e ".signerKey0" || isConstNamed e ``ProofForge.Runtime.signerKey0 then
+        else if endsWith e ".signerKey0" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey0 then
           some .signerKey0
-        else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Runtime.evmCaller then
+        else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller then
           some .evmCaller
-        else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Runtime.evmBlockNumber then
+        else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Evm.Runtime.evmBlockNumber then
           some .evmBlockNumber
-        else if endsWith e ".evmTimestamp" || isConstNamed e ``ProofForge.Runtime.evmTimestamp then
+        else if endsWith e ".evmTimestamp" || isConstNamed e ``ProofForge.Evm.Runtime.evmTimestamp then
           some .evmTimestamp
-        else if endsWith e ".evmChainId" || isConstNamed e ``ProofForge.Runtime.evmChainId then
+        else if endsWith e ".evmChainId" || isConstNamed e ``ProofForge.Evm.Runtime.evmChainId then
           some .evmChainId
-        else if endsWith e ".evmSelf" || isConstNamed e ``ProofForge.Runtime.evmSelf then
+        else if endsWith e ".evmSelf" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf then
           some .evmSelf
-        else if endsWith e ".evmCallValue" || isConstNamed e ``ProofForge.Runtime.evmCallValue then
+        else if endsWith e ".evmCallValue" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallValue then
           some .evmCallValue
-        else if endsWith e ".evmSelfBalance" || isConstNamed e ``ProofForge.Runtime.evmSelfBalance then
+        else if endsWith e ".evmSelfBalance" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfBalance then
           some .evmSelfBalance
-        else if endsWith e ".evmCallerW0" || isConstNamed e ``ProofForge.Runtime.evmCallerW0 then
+        else if endsWith e ".evmCallerW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW0 then
           some .evmCallerW0
-        else if endsWith e ".evmCallerW1" || isConstNamed e ``ProofForge.Runtime.evmCallerW1 then
+        else if endsWith e ".evmCallerW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW1 then
           some .evmCallerW1
-        else if endsWith e ".evmCallerW2" || isConstNamed e ``ProofForge.Runtime.evmCallerW2 then
+        else if endsWith e ".evmCallerW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW2 then
           some .evmCallerW2
-        else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Runtime.evmSelfW0 then
+        else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
           some .evmSelfW0
-        else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Runtime.evmSelfW1 then
+        else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then
           some .evmSelfW1
-        else if endsWith e ".evmSelfW2" || isConstNamed e ``ProofForge.Runtime.evmSelfW2 then
+        else if endsWith e ".evmSelfW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW2 then
           some .evmSelfW2
-        else if endsWith e ".accLamports0" || isConstNamed e ``ProofForge.Runtime.accLamports0 then
+        else if endsWith e ".accLamports0" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports0 then
           some .accLamports0
-        else if endsWith e ".accOwner0" || isConstNamed e ``ProofForge.Runtime.accOwner0 then
+        else if endsWith e ".accOwner0" || isConstNamed e ``ProofForge.Svm.Runtime.accOwner0 then
           some .accOwner0
-        else if endsWith e ".accDataLen0" || isConstNamed e ``ProofForge.Runtime.accDataLen0 then
+        else if endsWith e ".accDataLen0" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen0 then
           some .accDataLen0
-        else if endsWith e ".accN" || isConstNamed e ``ProofForge.Runtime.accN then
+        else if endsWith e ".accN" || isConstNamed e ``ProofForge.Svm.Runtime.accN then
           some .accN
-        else if endsWith e ".isSigner0" || isConstNamed e ``ProofForge.Runtime.isSigner0 then
+        else if endsWith e ".isSigner0" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner0 then
           some .isSigner0
-        else if endsWith e ".isWritable0" || isConstNamed e ``ProofForge.Runtime.isWritable0 then
+        else if endsWith e ".isWritable0" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable0 then
           some .isWritable0
-        else if endsWith e ".isExecutable0" || isConstNamed e ``ProofForge.Runtime.isExecutable0 then
+        else if endsWith e ".isExecutable0" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable0 then
           some .isExecutable0
-        else if endsWith e ".accLamports1" || isConstNamed e ``ProofForge.Runtime.accLamports1 then
+        else if endsWith e ".accLamports1" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports1 then
           some .accLamports1
-        else if endsWith e ".accOwner1" || isConstNamed e ``ProofForge.Runtime.accOwner1 then
+        else if endsWith e ".accOwner1" || isConstNamed e ``ProofForge.Svm.Runtime.accOwner1 then
           some .accOwner1
-        else if endsWith e ".accDataLen1" || isConstNamed e ``ProofForge.Runtime.accDataLen1 then
+        else if endsWith e ".accDataLen1" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen1 then
           some .accDataLen1
-        else if endsWith e ".isSigner1" || isConstNamed e ``ProofForge.Runtime.isSigner1 then
+        else if endsWith e ".isSigner1" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner1 then
           some .isSigner1
-        else if endsWith e ".isWritable1" || isConstNamed e ``ProofForge.Runtime.isWritable1 then
+        else if endsWith e ".isWritable1" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable1 then
           some .isWritable1
-        else if endsWith e ".isExecutable1" || isConstNamed e ``ProofForge.Runtime.isExecutable1 then
+        else if endsWith e ".isExecutable1" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable1 then
           some .isExecutable1
         else if (endsWith e ".systemTransfer" ||
-            isConstNamed e ``ProofForge.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
+            isConstNamed e ``ProofForge.Svm.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-        else if endsWith e ".invokeAcc1" || isConstNamed e ``ProofForge.Runtime.invokeAcc1 ||
-            endsWith e ".invoke" || isConstNamed e ``ProofForge.Runtime.invoke ||
-            endsWith e ".invokeSigned" || isConstNamed e ``ProofForge.Runtime.invokeSigned then
+        else if endsWith e ".invokeAcc1" || isConstNamed e ``ProofForge.Svm.Runtime.invokeAcc1 ||
+            endsWith e ".invoke" || isConstNamed e ``ProofForge.Svm.Runtime.invoke ||
+            endsWith e ".invokeSigned" || isConstNamed e ``ProofForge.Svm.Runtime.invokeSigned then
           some (.lit 0)
         else if ((endsWith e ".evmDeposit" ||
-            isConstNamed e ``ProofForge.Runtime.evmDeposit) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmDeposit) ||
             (endsWith e ".evmLogTipped" ||
-            isConstNamed e ``ProofForge.Runtime.evmLogTipped) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmLogTipped) ||
             (endsWith e ".evmLogIncremented" ||
-            isConstNamed e ``ProofForge.Runtime.evmLogIncremented) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmLogIncremented) ||
             (endsWith e ".evmLogTransfer" ||
-            isConstNamed e ``ProofForge.Runtime.evmLogTransfer) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmLogTransfer) ||
             (endsWith e ".evmLogApproval" ||
-            isConstNamed e ``ProofForge.Runtime.evmLogApproval) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmLogApproval) ||
             (endsWith e ".evmSendEth" ||
-            isConstNamed e ``ProofForge.Runtime.evmSendEth) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth) ||
             (endsWith e ".evmMapGetU64" ||
-            isConstNamed e ``ProofForge.Runtime.evmMapGetU64) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64) ||
             (endsWith e ".evmMapSetU64" ||
-            isConstNamed e ``ProofForge.Runtime.evmMapSetU64) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetU64) ||
             (endsWith e ".evmMapGetAddr" ||
-            isConstNamed e ``ProofForge.Runtime.evmMapGetAddr) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr) ||
             (endsWith e ".evmMapSetAddr" ||
-            isConstNamed e ``ProofForge.Runtime.evmMapSetAddr) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetAddr) ||
             (endsWith e ".evmMapGetPair" ||
-            isConstNamed e ``ProofForge.Runtime.evmMapGetPair) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair) ||
             (endsWith e ".evmMapSetPair" ||
-            isConstNamed e ``ProofForge.Runtime.evmMapSetPair) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetPair) ||
             (endsWith e ".evmTokenTransfer" ||
-            isConstNamed e ``ProofForge.Runtime.evmTokenTransfer) ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenTransfer) ||
             (endsWith e ".evmTokenBalanceOfSelf" ||
-            isConstNamed e ``ProofForge.Runtime.evmTokenBalanceOfSelf)) &&
+            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf)) &&
             e.getAppArgs.size ≥ 1 then
-            if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Runtime.evmMapGetU64 then
+            if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
             let args := e.getAppArgs
             let get (n : Nat) : Ops.Val :=
               if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
               else .arg n
             some (.mapGetU64 (get 1) (get 0))
-            else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Runtime.evmMapGetAddr then
+            else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
             let args := e.getAppArgs
             let get (n : Nat) : Ops.Val :=
               if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
               else .arg n
             some (.mapGetAddr (get 3) (get 2) (get 1) (get 0))
-            else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Runtime.evmMapGetPair then
+            else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair then
             let args := e.getAppArgs
             let get (n : Nat) : Ops.Val :=
               if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
@@ -979,7 +979,10 @@ private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
     vs.map Ops.Op.returnState
 
 private def isRuntimeName (n : Name) (suf : String) : Bool :=
-  n == (`ProofForge.Runtime).append suf.toName || n.toString.endsWith s!".{suf}"
+  n == (`ProofForge.Runtime).append suf.toName ||
+    n == (`ProofForge.Svm.Runtime).append suf.toName ||
+    n == (`ProofForge.Evm.Runtime).append suf.toName ||
+    n.toString.endsWith s!".{suf}"
 
 private def mentionsRuntime (e : Expr) (suf : String) : Bool :=
   let suf := if suf.front == '.' then String.ofList (suf.toList.drop 1) else suf
@@ -997,7 +1000,7 @@ private def asBoolLit (e : Expr) : Option Bool :=
 /-- `CpiMeta.mk acc signer writable` 或具名字段。 -/
 private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
   let e := strip e
-  if isConstNamed e ``ProofForge.Runtime.CpiMeta.mk || endsWith e ".mk" then
+  if isConstNamed e ``ProofForge.Svm.Runtime.CpiMeta.mk || endsWith e ".mk" then
     let args := e.getAppArgs
     if args.size ≥ 3 then
       match val env args[args.size - 3]!, asBoolLit args[args.size - 2]!,
@@ -1012,33 +1015,33 @@ private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
 
 private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
   let e := strip e
-  if isConstNamed e ``ProofForge.Runtime.CpiWord.u8le || endsWith e ".u8le" then
+  if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u8le || endsWith e ".u8le" then
     if e.getAppArgs.size ≥ 1 then
       match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
       | some n => some (.u8le (UInt64.ofNat n))
       | none => none
     else none
-  else if isConstNamed e ``ProofForge.Runtime.CpiWord.u32le || endsWith e ".u32le" then
+  else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u32le || endsWith e ".u32le" then
     if e.getAppArgs.size ≥ 1 then
       match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
       | some n => some (.u32le (UInt64.ofNat n))
       | none => none
     else none
-  else if isConstNamed e ``ProofForge.Runtime.CpiWord.u64le || endsWith e ".u64le" then
+  else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u64le || endsWith e ".u64le" then
     if e.getAppArgs.size ≥ 1 then
       match val env e.getAppArgs[e.getAppArgs.size - 1]! with
       | some v => some (.u64le v)
       | none => none
     else none
-  else if isConstNamed e ``ProofForge.Runtime.CpiWord.ascii || endsWith e ".ascii" then
+  else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.ascii || endsWith e ".ascii" then
     if e.getAppArgs.size ≥ 1 then
       match e.getAppArgs[e.getAppArgs.size - 1]! with
       | .lit (.strVal s) => some (.ascii s)
       | _ => none
     else none
-  else if isConstNamed e ``ProofForge.Runtime.CpiWord.programId || endsWith e ".programId" then
+  else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.programId || endsWith e ".programId" then
     some .programId
-  else if isConstNamed e ``ProofForge.Runtime.CpiWord.accKey || endsWith e ".accKey" then
+  else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.accKey || endsWith e ".accKey" then
     if e.getAppArgs.size ≥ 1 then
       match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
       | some i => some (.accKey i)
@@ -1094,7 +1097,7 @@ private def asAsciiLit (e : Expr) : Option String :=
 private def decodeInvokeArgs (env : Environment) (e : Expr) :
     Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
   let e := strip e
-  if isConstNamed e ``ProofForge.Runtime.invokeSigned || endsWith e ".invokeSigned" then
+  if isConstNamed e ``ProofForge.Svm.Runtime.invokeSigned || endsWith e ".invokeSigned" then
     let args := e.getAppArgs
     if args.size < 5 then none
     else
@@ -1107,7 +1110,7 @@ private def decodeInvokeArgs (env : Environment) (e : Expr) :
         | some prog => some (prog, metas, data, some seed, some bump)
         | none => none
       | _, _, _, _ => none
-  else if isConstNamed e ``ProofForge.Runtime.invoke || endsWith e ".invoke" then
+  else if isConstNamed e ``ProofForge.Svm.Runtime.invoke || endsWith e ".invoke" then
     let args := e.getAppArgs
     if args.size < 3 then none
     else
@@ -1364,24 +1367,24 @@ private def valAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val
   | none => .arg n
 
 private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Runtime.evmDeposit ".evmDeposit" e
+  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmDeposit ".evmDeposit" e
 
 private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Runtime.evmLogTipped ".evmLogTipped" e
+  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogTipped ".evmLogTipped" e
 
 private def findEvmLogIncremented (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Runtime.evmLogIncremented ".evmLogIncremented" e
+  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogIncremented ".evmLogIncremented" e
 
 private def findEvmLogTransfer (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Runtime.evmLogTransfer ".evmLogTransfer" e
+  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogTransfer ".evmLogTransfer" e
 
 private def findEvmLogApproval (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Runtime.evmLogApproval ".evmLogApproval" e
+  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogApproval ".evmLogApproval" e
 
 private def findEvmSendEth (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime e "evmSendEth" then
-    match findRuntimeApp 16 e ``ProofForge.Runtime.evmSendEth ".evmSendEth" with
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmSendEth ".evmSendEth" with
     | some app =>
       let args := app.getAppArgs
       some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
@@ -1413,16 +1416,16 @@ private def findTernaryRuntime (env : Environment) (want : Name) (suffix : Strin
 
 private def findEvmMapGetU64 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val) :=
-  findBinaryRuntime env ``ProofForge.Runtime.evmMapGetU64 ".evmMapGetU64" e
+  findBinaryRuntime env ``ProofForge.Evm.Runtime.evmMapGetU64 ".evmMapGetU64" e
 
 private def findEvmMapSetU64 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val) :=
-  findTernaryRuntime env ``ProofForge.Runtime.evmMapSetU64 ".evmMapSetU64" e
+  findTernaryRuntime env ``ProofForge.Evm.Runtime.evmMapSetU64 ".evmMapSetU64" e
 
 private def findEvmMapGetAddr (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime e "evmMapGetAddr" then
-    match findRuntimeApp 16 e ``ProofForge.Runtime.evmMapGetAddr ".evmMapGetAddr" with
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetAddr ".evmMapGetAddr" with
     | some app =>
       let args := app.getAppArgs
       some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
@@ -1432,7 +1435,7 @@ private def findEvmMapGetAddr (env : Environment) (e : Expr) :
 private def findEvmMapSetAddr (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime e "evmMapSetAddr" then
-    match findRuntimeApp 16 e ``ProofForge.Runtime.evmMapSetAddr ".evmMapSetAddr" with
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetAddr ".evmMapSetAddr" with
     | some app =>
       let args := app.getAppArgs
       some (valAtEnd env args 4, valAtEnd env args 3, valAtEnd env args 2,
@@ -1443,7 +1446,7 @@ private def findEvmMapSetAddr (env : Environment) (e : Expr) :
 private def findEvmMapGetPair (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime e "evmMapGetPair" then
-    match findRuntimeApp 16 e ``ProofForge.Runtime.evmMapGetPair ".evmMapGetPair" with
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetPair ".evmMapGetPair" with
     | some app =>
       let args := app.getAppArgs
       some (valAtEnd env args 6, valAtEnd env args 5, valAtEnd env args 4,
@@ -1454,7 +1457,7 @@ private def findEvmMapGetPair (env : Environment) (e : Expr) :
 private def findEvmMapSetPair (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime e "evmMapSetPair" then
-    match findRuntimeApp 16 e ``ProofForge.Runtime.evmMapSetPair ".evmMapSetPair" with
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetPair ".evmMapSetPair" with
     | some app =>
       let args := app.getAppArgs
       some (valAtEnd env args 7, valAtEnd env args 6, valAtEnd env args 5,
@@ -1466,7 +1469,7 @@ private def findEvmMapSetPair (env : Environment) (e : Expr) :
 private def findEvmTokenTransfer (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime e "evmTokenTransfer" then
-    match findRuntimeApp 16 e ``ProofForge.Runtime.evmTokenTransfer ".evmTokenTransfer" with
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenTransfer ".evmTokenTransfer" with
     | some app =>
       let args := app.getAppArgs
       some (valAtEnd env args 6, valAtEnd env args 5, valAtEnd env args 4,
@@ -1476,37 +1479,37 @@ private def findEvmTokenTransfer (env : Environment) (e : Expr) :
 
 private def findEvmTokenBalance (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val) :=
-  findTernaryRuntime env ``ProofForge.Runtime.evmTokenBalanceOfSelf
+  findTernaryRuntime env ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf
     ".evmTokenBalanceOfSelf" e
 
 private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   let args := app.getAppArgs
-  if isConstNamed app ``ProofForge.Runtime.evmDeposit || endsWith app ".evmDeposit" then
+  if isConstNamed app ``ProofForge.Evm.Runtime.evmDeposit || endsWith app ".evmDeposit" then
     some (.evmDeposit (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmSendEth || endsWith app ".evmSendEth" then
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmSendEth || endsWith app ".evmSendEth" then
     some (.evmSendEth (valAtEnd env args 3) (valAtEnd env args 2)
       (valAtEnd env args 1) (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmLogTipped || endsWith app ".evmLogTipped" then
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogTipped || endsWith app ".evmLogTipped" then
     some (.evmLog "Tipped" (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmLogIncremented ||
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogIncremented ||
       endsWith app ".evmLogIncremented" then
     some (.evmLog "Incremented" (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmLogTransfer ||
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogTransfer ||
       endsWith app ".evmLogTransfer" then
     some (.evmLog "Transfer" (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmLogApproval ||
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogApproval ||
       endsWith app ".evmLogApproval" then
     some (.evmLog "Approval" (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
     some (.mapSetU64 (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmMapSetAddr || endsWith app ".evmMapSetAddr" then
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetAddr || endsWith app ".evmMapSetAddr" then
     some (.mapSetAddr (valAtEnd env args 4) (valAtEnd env args 3) (valAtEnd env args 2)
       (valAtEnd env args 1) (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmMapSetPair || endsWith app ".evmMapSetPair" then
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetPair || endsWith app ".evmMapSetPair" then
     some (.mapSetPair (valAtEnd env args 7) (valAtEnd env args 6) (valAtEnd env args 5)
       (valAtEnd env args 4) (valAtEnd env args 3) (valAtEnd env args 2)
       (valAtEnd env args 1) (valAtEnd env args 0))
-  else if isConstNamed app ``ProofForge.Runtime.evmTokenTransfer ||
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmTokenTransfer ||
       endsWith app ".evmTokenTransfer" then
     some (.evmTokenTransfer (valAtEnd env args 6) (valAtEnd env args 5) (valAtEnd env args 4)
       (valAtEnd env args 3) (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
@@ -1514,16 +1517,16 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
 
 private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
   let specs : Array (Name × String) := #[
-    (``ProofForge.Runtime.evmDeposit, ".evmDeposit"),
-    (``ProofForge.Runtime.evmSendEth, ".evmSendEth"),
-    (``ProofForge.Runtime.evmLogTipped, ".evmLogTipped"),
-    (``ProofForge.Runtime.evmLogIncremented, ".evmLogIncremented"),
-    (``ProofForge.Runtime.evmLogTransfer, ".evmLogTransfer"),
-    (``ProofForge.Runtime.evmLogApproval, ".evmLogApproval"),
-    (``ProofForge.Runtime.evmMapSetU64, ".evmMapSetU64"),
-    (``ProofForge.Runtime.evmMapSetAddr, ".evmMapSetAddr"),
-    (``ProofForge.Runtime.evmMapSetPair, ".evmMapSetPair"),
-    (``ProofForge.Runtime.evmTokenTransfer, ".evmTokenTransfer")
+    (``ProofForge.Evm.Runtime.evmDeposit, ".evmDeposit"),
+    (``ProofForge.Evm.Runtime.evmSendEth, ".evmSendEth"),
+    (``ProofForge.Evm.Runtime.evmLogTipped, ".evmLogTipped"),
+    (``ProofForge.Evm.Runtime.evmLogIncremented, ".evmLogIncremented"),
+    (``ProofForge.Evm.Runtime.evmLogTransfer, ".evmLogTransfer"),
+    (``ProofForge.Evm.Runtime.evmLogApproval, ".evmLogApproval"),
+    (``ProofForge.Evm.Runtime.evmMapSetU64, ".evmMapSetU64"),
+    (``ProofForge.Evm.Runtime.evmMapSetAddr, ".evmMapSetAddr"),
+    (``ProofForge.Evm.Runtime.evmMapSetPair, ".evmMapSetPair"),
+    (``ProofForge.Evm.Runtime.evmTokenTransfer, ".evmTokenTransfer")
   ]
   let rec walk (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
     match fuel with

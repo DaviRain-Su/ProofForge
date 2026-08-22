@@ -2,7 +2,17 @@
 
 ## Purpose
 
-普通 Lean 名，抽出后变成 syscall / AccountInfo 读。不是新 DSL。
+普通 Lean 名，抽出后变成 syscall / AccountInfo 读 / EVM opcode。不是新 DSL。
+
+宿主 stub 按链分目录：
+
+| 模块 | 拥有 |
+|---|---|
+| `ProofForge.Svm.Runtime` | sysvar、AccountInfo、CPI、PDA、hash syscall |
+| `ProofForge.Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 |
+| `ProofForge.Runtime` | 两边重新导出，保住旧名和抽出器 `` `ProofForge.Runtime.* `` |
+
+新合约应 `open ProofForge.Svm.Runtime` 或 `open ProofForge.Evm.Runtime`。
 
 ## Surface
 

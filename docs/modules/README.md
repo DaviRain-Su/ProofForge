@@ -14,5 +14,5 @@
 | [Assemble](assemble.md) | `Svm.Assemble`：`sbpf` 子进程 → `.so` + IDL |
 | [Idl](idl.md) | `Svm.Idl`：Solana IDL spec 0.1.0 |
 | [Cli](cli.md) | `pf build --target svm|evm` |
-| [Runtime](runtime.md) | `clockSlot` / `signerKey0` / `acc*` 宿主 stub；抽出按名认 |
+| [Runtime](runtime.md) | `Svm.Runtime` / `Evm.Runtime` 宿主 stub；抽出按名认 |
 | [Evm](evm.md) | Ops → Yul / ABI / locked solc |
