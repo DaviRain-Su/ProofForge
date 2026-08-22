@@ -121,20 +121,41 @@ def accountSpan (accountDataLen : Nat) : Nat :=
   let align := (8 - dataEnd % 8) % 8
   dataEnd + align + 8
 
-/-- 程序是否含封闭 `system.transfer`（三账户：payer / recipient / System）。 -/
+/-- 程序是否含 CPI（要走多账户虚地址 walk）。 -/
+def usesCpi (p : Program) : Bool :=
+  p.methods.any (fun m => Ops.hasInvoke m.ops)
+
 def usesSystemTransfer (p : Program) : Bool :=
-  p.methods.any (fun m => Ops.hasSystemTransfer m.ops)
+  usesCpi p
+
+/-- CPI 外层账户数：所有 `invoke.programIx` / meta 下标的最大值 + 1，至少 2。 -/
+def cpiAccountCount (p : Program) : Nat :=
+  let rec maxIx (fuel : Nat) (ops : Array Ops.Op) (acc : Nat) : Nat :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      ops.foldl (init := acc) fun a op =>
+        match op with
+        | .invoke prog metas _ =>
+          let m := metas.foldl (init := prog) fun b mt => Nat.max b mt.acc
+          Nat.max a m
+        | .ite _ _ _ t f => Nat.max (maxIx fuel' t a) (maxIx fuel' f a)
+        | _ => a
+  let n := p.methods.foldl (init := 0) fun a m => Nat.max a (maxIx 8 m.ops 0)
+  Nat.max 2 (n + 1)
 
 def inputLayout (p : Program) : InputLayout :=
-  if usesSystemTransfer p then
-    -- 三个 data_len=0 的账户：每个 span = 0x2860，instruction 紧跟第三账户 rent。
-    let acc0 := 8
-    let acc1 := acc0 + accountSpan 0
-    let acc2 := acc1 + accountSpan 0
-    let rent2 := acc2 + accountSpan 0 - 8
-    { rentEpoch := rent2
-      instructionDataLen := rent2 + 8
-      instructionData := rent2 + 16 }
+  if usesCpi p then
+    -- N 个 data_len=0 的账户：每个 span = 0x2860，instruction 紧跟最后账户 rent。
+    let n := cpiAccountCount p
+    let rec lastRent (i : Nat) (off : Nat) : Nat :=
+      match i with
+      | 0 => off - 8
+      | i' + 1 => lastRent i' (off + accountSpan 0)
+    let rent := lastRent n 8
+    { rentEpoch := rent
+      instructionDataLen := rent + 8
+      instructionData := rent + 16 }
   else
     let dataEnd := acc0Data + dataLen p + maxPermittedDataIncrease
     let align := (8 - dataEnd % 8) % 8
@@ -191,6 +212,13 @@ private def valCanon : Ops.Val → String
   | .field b n => s!"f.{n}({valCanon b})"
   | .clockSlot => "clk"
   | .signerKey0 => "k0"
+  | .accLamports0 => "lp0"
+  | .accOwner0 => "ow0"
+  | .accDataLen0 => "dl0"
+  | .accN => "nacc"
+  | .isSigner0 => "sg0"
+  | .isWritable0 => "wr0"
+  | .isExecutable0 => "ex0"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
@@ -201,7 +229,18 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
-    | .systemTransfer v => s!"xfer({valCanon v})"
+    | .invoke prog metas data =>
+      let ms :=
+        String.intercalate ","
+          (metas.toList.map fun m =>
+            s!"{m.acc}{if m.signer then "s" else ""}{if m.writable then "w" else ""}")
+      let rec word (w : Ops.CpiWord) : String :=
+        match w with
+        | .u32le n => s!"u32.{n.toNat}"
+        | .u64le v => s!"u64.{valCanon v}"
+        | .ascii s => s!"s.{s}"
+      let ds := String.intercalate "," (data.toList.map word)
+      s!"inv({prog},[{ms}],[{ds}])"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .returnU64 v => s!"retu({valCanon v})"

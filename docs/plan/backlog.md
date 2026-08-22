@@ -20,13 +20,15 @@
 - 单字段用户 inductive 作 tag+payload；Choice Mollusk
 - `clockSlot` + 账户 0 `signerKey0`；Clock Mollusk
 - 封闭 `system.transfer`；三账户虚地址 walk + `sol_invoke_signed_c`；Transfer Mollusk
+- 编译期钉死的 `invoke`；`systemTransfer` / `invokeAcc1` 共用发射器；Ping Mollusk
+- 账户 0 AccountInfo 只读叶子（lamports / owner 首 u64 / data_len / NUM_ACCOUNTS / 三旗）；Info Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原语）。
-再后：AccountInfo 叶子 → PDA find / invokeSigned → System create / Token+ATA。
+建议下一条：L4-pda-find + L4-cpi-signed。
+再后：System create / Token+ATA。
 
 ## 其后（L2 / L3）
 

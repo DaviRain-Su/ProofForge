@@ -207,15 +207,57 @@ def extractedTransfer : Program :=
       { kind := .init, name := "Examples.Transfer.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.lit 0)] },
       { kind := .increment, name := "Examples.Transfer.transfer", ixName := "transfer", paramCount := 1
-        ops := #[.systemTransfer (.arg 0), .returnU64 (.arg 0)] },
+        ops := #[Ops.systemTransfer (.arg 0), .returnU64 (.arg 0)] },
       { kind := .get, name := "Examples.Transfer.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.lit 0)] }
+    ] }
+
+def extractedPing : Program :=
+  { name := "Ping"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Ping.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Ping.ping", ixName := "ping", paramCount := 0
+        ops := #[Ops.invokeAcc1, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Ping.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
+def extractedInfo : Program :=
+  { name := "Info"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Info.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Info.touch", ixName := "touch", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Info.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Info.lamports", ixName := "lamports", paramCount := 0
+        ops := #[.returnU64 .accLamports0] },
+      { kind := .get, name := "Examples.Info.owner0", ixName := "owner0", paramCount := 0
+        ops := #[.returnU64 .accOwner0] },
+      { kind := .get, name := "Examples.Info.dataLen", ixName := "dataLen", paramCount := 0
+        ops := #[.returnU64 .accDataLen0] },
+      { kind := .get, name := "Examples.Info.nacc", ixName := "nacc", paramCount := 0
+        ops := #[.returnU64 .accN] },
+      { kind := .get, name := "Examples.Info.signer", ixName := "signer", paramCount := 0
+        ops := #[.returnU64 .isSigner0] },
+      { kind := .get, name := "Examples.Info.writable", ixName := "writable", paramCount := 0
+        ops := #[.returnU64 .isWritable0] },
+      { kind := .get, name := "Examples.Info.executable", ixName := "executable", paramCount := 0
+        ops := #[.returnU64 .isExecutable0] }
     ] }
 
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
-  extractedClock, extractedTransfer
+  extractedClock, extractedTransfer, extractedPing, extractedInfo
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

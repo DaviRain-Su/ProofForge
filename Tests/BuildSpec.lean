@@ -8,6 +8,8 @@ import Examples.Phase
 import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
+import Examples.Ping
+import Examples.Info
 
 #solana_build Examples.Counter
 
@@ -26,6 +28,10 @@ import Examples.Transfer
 #solana_build Examples.Clock
 
 #solana_build Examples.Transfer
+
+#solana_build Examples.Ping
+
+#solana_build Examples.Info
 
 /--
 error: extract/unsupported: no solana_entry

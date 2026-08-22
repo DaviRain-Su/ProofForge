@@ -28,4 +28,31 @@ payer / recipient / System Program，内层 `u32le(2) || u64le(lamports)`，
 -/
 @[irreducible] def systemTransfer (lamports : UInt64) : UInt64 := lamports
 
+/--
+编译期钉死的 `invoke`：CPI 到外层账户 1，空 metas、空 data。
+program id 来自账户 1 的 key，不是写死 System。
+-/
+@[irreducible] def invokeAcc1 : UInt64 := 0
+
+/-- 账户 0 的 lamports。只读；改余额走 `systemTransfer`。 -/
+@[irreducible] def accLamports0 : UInt64 := 0
+
+/-- 账户 0 owner 的第一个小端 `u64`。不是完整 32B。 -/
+@[irreducible] def accOwner0 : UInt64 := 0
+
+/-- 账户 0 `data_len`。只读。 -/
+@[irreducible] def accDataLen0 : UInt64 := 0
+
+/-- `NUM_ACCOUNTS`。只读；不开放 remaining accounts。 -/
+@[irreducible] def accN : UInt64 := 0
+
+/-- 账户 0 `is_signer`，0 或 1。不因此强制入口签名。 -/
+@[irreducible] def isSigner0 : UInt64 := 0
+
+/-- 账户 0 `is_writable`，0 或 1。 -/
+@[irreducible] def isWritable0 : UInt64 := 0
+
+/-- 账户 0 `is_executable`，0 或 1。 -/
+@[irreducible] def isExecutable0 : UInt64 := 0
+
 end SolanaLean.Runtime

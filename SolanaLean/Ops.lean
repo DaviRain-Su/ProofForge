@@ -1,17 +1,38 @@
 namespace SolanaLean.Ops
 
-/-- 可 load 的值。`clockSlot` / `signerKey0` 是运行时叶子，不是账户槽。 -/
+/-- 可 load 的值。`clockSlot` / `signerKey0` / `acc*` 是运行时叶子，不是账户槽。 -/
 inductive Val where
   | arg (i : Nat)
   | field (base : Val) (name : String)
   | lit (n : UInt64)
   | clockSlot
   | signerKey0
+  | accLamports0
+  | accOwner0
+  | accDataLen0
+  | accN
+  | isSigner0
+  | isWritable0
+  | isExecutable0
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where
   | eq | ne | lt | le | gt | ge
   deriving BEq, Repr, Inhabited, DecidableEq
+
+/-- 内层 AccountMeta：外层账户下标 + 旗。编译期钉死。 -/
+structure CpiMeta where
+  acc : Nat
+  signer : Bool := false
+  writable : Bool := false
+  deriving BEq, Repr, Inhabited
+
+/-- 内层 instruction data 的一段。 -/
+inductive CpiWord where
+  | u32le (n : UInt64)
+  | u64le (v : Val)
+  | ascii (s : String)
+  deriving BEq, Repr, Inhabited
 
 inductive Op where
   | checkedAddU64 (lhs rhs : Val)
@@ -20,12 +41,23 @@ inductive Op where
   | checkedDivU64 (lhs rhs : Val)
   | checkedModU64 (lhs rhs : Val)
   | ite (cmp : Cmp) (lhs rhs : Val) (thn els : Array Op)
-  | systemTransfer (amount : Val)
+  | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array CpiWord)
   | okState (value : Val)
   | errorOverflow
   | returnU64 (value : Val)
   | returnState (value : Val)
   deriving BEq, Repr, Inhabited
+
+/-- `system.transfer` 特化。 -/
+def systemTransfer (amount : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true }]
+    #[.u32le 2, .u64le amount]
+
+/-- CPI 到外层账户 1；空 metas、空 data。 -/
+def invokeAcc1 : Op :=
+  .invoke 1 #[] #[]
 
 private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
   match fuel with
@@ -37,8 +69,11 @@ private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
         | .ite _ _ _ t f => walk fuel' t p || walk fuel' f p
         | _ => false
 
+def hasInvoke (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .invoke .. => true | _ => false)
+
 def hasSystemTransfer (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .systemTransfer _ => true | _ => false)
+  hasInvoke ops
 
 def hasCheckedAdd (ops : Array Op) : Bool :=
   walk 16 ops (fun | .checkedAddU64 .. => true | _ => false)

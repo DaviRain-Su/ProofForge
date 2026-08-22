@@ -30,6 +30,8 @@
 | [l3-003](tasks/l3-003.md) | done | 单字段用户 inductive 作 tag+payload |
 | [l4-001](tasks/l4-001.md) | done | clock.slot + account-0 signer key |
 | [l4-002](tasks/l4-002.md) | done | 封闭 system.transfer |
+| [l4-003](tasks/l4-003.md) | done | 编译期钉死的 invoke 原语 |
+| [l4-004](tasks/l4-004.md) | done | 账户 0 AccountInfo 只读叶子 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

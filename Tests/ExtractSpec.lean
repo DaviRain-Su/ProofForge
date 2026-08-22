@@ -8,6 +8,8 @@ import Examples.Phase
 import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
+import Examples.Ping
+import Examples.Info
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -73,6 +75,10 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.key0
 
 #solana_extract Examples.Transfer.init Examples.Transfer.transfer Examples.Transfer.get
+
+#solana_extract Examples.Ping.init Examples.Ping.ping Examples.Ping.get
+
+#solana_extract Examples.Info.init Examples.Info.touch Examples.Info.lamports
 
 /--
 error: extract/unsupported: field tag enum has payload

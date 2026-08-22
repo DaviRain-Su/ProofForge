@@ -34,6 +34,9 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `clockSlot` | `sol_get_clock_sysvar` → `Clock.slot` | L4-001 |
 | `signerKey0` | `ACC0_KEY+0` 首 u64；入口 `is_signer` | L4-001 |
 | `systemTransfer` | 三账户 walk + `sol_invoke_signed_c`；内层 `u32le(2)\|\|u64le` | L4-002 |
+| `invoke` / `invokeAcc1` | 编译期钉死 program/metas/data；N 账户 walk | L4-003 |
+| `accLamports0` / `accOwner0` / `accDataLen0` / `accN` | 账户 0 header 只读 | L4-004 |
+| `isSigner0` / `isWritable0` / `isExecutable0` | header +1/+2/+3，0 或 1 | L4-004 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -182,8 +185,8 @@ Multisig owner 默认关。
 
 按依赖，不是按「像 SDK」。
 
-1. **L4-cpi-nacc + L4-cpi-invoke** — 把 transfer 的 walk/`sol_invoke_signed_c` 收成原语；Memo 或 mock 证第二条 callee。
-2. **L4-acc-*** — AccountInfo 叶子（lamports / key32 / flags）。
+1. **L4-cpi-nacc + L4-cpi-invoke** — 已绿（L4-003：Ping stub）。
+2. **L4-acc-*** — 账户 0 只读叶子已绿（L4-004）。完整 32B key / 账户 1 仍 FC。
 3. **L4-pda-find + L4-cpi-signed** — 找 bump，再用种子签字。
 4. **L4-sys-create / L4-tok-xfer / L4-ata-idem** — 特化，不再手写发射器。
 5. 其余 System / Token / sysvar 有具体合约再开。

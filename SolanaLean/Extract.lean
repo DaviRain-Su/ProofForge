@@ -163,9 +163,25 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .clockSlot
         else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
           some .signerKey0
+        else if endsWith e ".accLamports0" || isConstNamed e ``SolanaLean.Runtime.accLamports0 then
+          some .accLamports0
+        else if endsWith e ".accOwner0" || isConstNamed e ``SolanaLean.Runtime.accOwner0 then
+          some .accOwner0
+        else if endsWith e ".accDataLen0" || isConstNamed e ``SolanaLean.Runtime.accDataLen0 then
+          some .accDataLen0
+        else if endsWith e ".accN" || isConstNamed e ``SolanaLean.Runtime.accN then
+          some .accN
+        else if endsWith e ".isSigner0" || isConstNamed e ``SolanaLean.Runtime.isSigner0 then
+          some .isSigner0
+        else if endsWith e ".isWritable0" || isConstNamed e ``SolanaLean.Runtime.isWritable0 then
+          some .isWritable0
+        else if endsWith e ".isExecutable0" || isConstNamed e ``SolanaLean.Runtime.isExecutable0 then
+          some .isExecutable0
         else if (endsWith e ".systemTransfer" ||
             isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else if endsWith e ".invokeAcc1" || isConstNamed e ``SolanaLean.Runtime.invokeAcc1 then
+          some (.lit 0)
         else if isConstNamed e ``Bool.true || endsWith e ".true" then
           some (.lit 1)
         else if isConstNamed e ``Bool.false || endsWith e ".false" then
@@ -561,6 +577,13 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             match val env st with
             | some (.clockSlot) => some .clockSlot
             | some (.signerKey0) => some .signerKey0
+            | some (.accLamports0) => some .accLamports0
+            | some (.accOwner0) => some .accOwner0
+            | some (.accDataLen0) => some .accDataLen0
+            | some (.accN) => some .accN
+            | some (.isSigner0) => some .isSigner0
+            | some (.isWritable0) => some .isWritable0
+            | some (.isExecutable0) => some .isExecutable0
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -628,7 +651,10 @@ private def findSystemTransfer (env : Environment) (fuel : Nat) (e : Expr) : Opt
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找 systemTransfer：剥掉 `have sent := …` 后调用就没了。
   if let some amount := findSystemTransfer env 16 e then
-    .ok #[.systemTransfer amount, .returnU64 amount]
+    .ok #[Ops.systemTransfer amount, .returnU64 amount]
+  else if e.getUsedConstantsAsSet.toList.any fun n =>
+      n == ``SolanaLean.Runtime.invokeAcc1 || n.toString.endsWith ".invokeAcc1" then
+    .ok #[Ops.invokeAcc1, .returnU64 (.lit 0)]
   else
   let e := peelLets (strip e)
   if let some v := asOkState env e then
@@ -642,7 +668,8 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
-    | .clockSlot | .signerKey0 => .ok #[.returnU64 v]
+    | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+    | .accN | .isSigner0 | .isWritable0 | .isExecutable0 => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -671,7 +698,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
     if let some amount := findSystemTransfer env 16 e then
-      return .ok #[.systemTransfer amount, .returnU64 amount]
+      return .ok #[Ops.systemTransfer amount, .returnU64 amount]
+    if e.getUsedConstantsAsSet.toList.any fun n =>
+        n == ``SolanaLean.Runtime.invokeAcc1 || n.toString.endsWith ".invokeAcc1" then
+      return .ok #[Ops.invokeAcc1, .returnU64 (.lit 0)]
     let e := strip e
     if isConstNamed e ``ite && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
@@ -681,7 +711,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
           match asCmp env condE, findSystemTransfer env 8 t, asOkState env t with
           | some (cmp, lv, rv), some amount, _ =>
-            return .ok #[.ite cmp lv rv #[.systemTransfer amount, .returnU64 amount] #[.errorOverflow]]
+            return .ok #[.ite cmp lv rv #[Ops.systemTransfer amount, .returnU64 amount] #[.errorOverflow]]
           | some (cmp, lv, rv), none, some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | _, _, _ => return .error "extract/unsupported: ite then"
@@ -729,7 +759,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
     else if (endsWith e ".systemTransfer" ||
         isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
       match val env e.getAppArgs[e.getAppArgs.size - 1]! with
-      | some amount => return .ok #[.systemTransfer amount, .returnU64 amount]
+      | some amount => return .ok #[Ops.systemTransfer amount, .returnU64 amount]
       | none => return .error "extract/unsupported: systemTransfer amount"
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
@@ -798,7 +828,7 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
 def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
   let ops ← decodeBody env e
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
-      Ops.hasSystemTransfer ops then
+      Ops.hasInvoke ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"
@@ -831,7 +861,8 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
-      | .clockSlot | .signerKey0 => v
+      | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+      | .accN | .isSigner0 | .isWritable0 | .isExecutable0 => v
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -848,7 +879,10 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .ite c l r t f =>
         .ite c (flipVal fuel' l) (flipVal fuel' r)
           (t.map (flipOp fuel')) (f.map (flipOp fuel'))
-      | .systemTransfer v => .systemTransfer (flipVal fuel' v)
+      | .invoke prog metas data =>
+        .invoke prog metas (data.map fun
+          | .u64le v => .u64le (flipVal fuel' v)
+          | w => w)
       | .errorOverflow => .errorOverflow
   let ops :=
     if kind == .init && nLams > 1 then ops1.map (flipOp 8) else ops1
@@ -969,7 +1003,8 @@ private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
   | .lit _ => #[]
-  | .clockSlot | .signerKey0 => #[]
+  | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 => #[]
 
 private def opFields : Ops.Op → Array String
   | .checkedAddU64 l r => valFields l ++ valFields r
@@ -979,7 +1014,10 @@ private def opFields : Ops.Op → Array String
   | .checkedModU64 l r => valFields l ++ valFields r
   | .ite _ l r t f =>
       valFields l ++ valFields r ++ t.flatMap opFields ++ f.flatMap opFields
-  | .systemTransfer v => valFields v
+  | .invoke _ _ data =>
+      data.flatMap fun
+        | .u64le v => valFields v
+        | _ => #[]
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .returnU64 v => valFields v

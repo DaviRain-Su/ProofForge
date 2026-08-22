@@ -79,43 +79,68 @@ walk_al_{tag}:
   mov64 r8, r5
 "
 
-private def emitWalkThreeAccounts (tag err : String) : String :=
-  s!"\
-  mov64 r8, r6
-  add64 r8, 8
+/-- 账户 i 的 header* 存在 `[r10 - (48 + 8*i)]`。ix 长度指针在最后一个 header 之后。 -/
+private def headerStack (i : Nat) : Nat :=
+  48 + 8 * i
+
+private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
+  Id.run do
+    let mut out := "  mov64 r8, r6\n  add64 r8, 8\n"
+    for i in [0:n] do
+      out := out ++ s!"\
   ldxb r1, [r8 + 0]
   jne r1, 0xff, {err}
-  stxdw [r10 - 48], r8
+  stxdw [r10 - {headerStack i}], r8
   ldxdw r4, [r8 + 80]
-{emitSkipAccount s!"0_{tag}"}  ldxb r1, [r8 + 0]
-  jne r1, 0xff, {err}
-  stxdw [r10 - 56], r8
-  ldxdw r4, [r8 + 80]
-{emitSkipAccount s!"1_{tag}"}  ldxb r1, [r8 + 0]
-  jne r1, 0xff, {err}
-  stxdw [r10 - 64], r8
-  ldxdw r4, [r8 + 80]
-{emitSkipAccount s!"2_{tag}"}  stxdw [r10 - 72], r8
-"
+{emitSkipAccount s!"{i}_{tag}"}"
+    out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
-/-- 封闭 transfer：三账户、零数据。payer 必须 signer+writable。 -/
-private def preludeTransfer (label : String) (ixLen : Nat) : String :=
-  let err := s!"err_check_{label}"
+private def walkInvokeMetas (fuel : Nat) (ops : Array Ops.Op) (acc : Array Ops.CpiMeta) :
+    Array Ops.CpiMeta :=
+  match fuel with
+  | 0 => acc
+  | fuel' + 1 =>
+    ops.foldl (init := acc) fun a op =>
+      match op with
+      | .invoke _ metas _ => a ++ metas
+      | .ite _ _ _ t f => walkInvokeMetas fuel' f (walkInvokeMetas fuel' t a)
+      | _ => a
+
+/-- acc0 必须 signer+writable；其余 meta 按编译期旗检查。 -/
+private def emitCpiFlagChecks (p : IR.Program) (err : String) : String :=
+  let metas := p.methods.foldl (init := #[]) fun a m => walkInvokeMetas 8 m.ops a
+  let extra := Id.run do
+    let mut seen : Array Nat := #[0]
+    let mut out := ""
+    for m in metas do
+      unless seen.any (· == m.acc) do
+        seen := seen.push m.acc
+        if m.writable then
+          out := out ++
+            s!"  ldxdw r8, [r10 - {headerStack m.acc}]\n  ldxb r1, [r8 + 2]\n  jeq r1, 0, {err}\n"
+        if m.signer then
+          out := out ++
+            s!"  ldxdw r8, [r10 - {headerStack m.acc}]\n  ldxb r1, [r8 + 1]\n  jeq r1, 0, {err}\n"
+    return out
   s!"\
-  ldxdw r1, [r6 + NUM_ACCOUNTS]
-  jlt r1, 3, {err}
-{emitWalkThreeAccounts label err}  ldxdw r1, [r10 - 72]
-  ldxdw r1, [r1 + 0]
-  jne r1, {ixLen}, {err}
-  ldxdw r8, [r10 - 48]
+  ldxdw r8, [r10 - {headerStack 0}]
   ldxb r1, [r8 + 1]
   jeq r1, 0, {err}
   ldxb r1, [r8 + 2]
   jeq r1, 0, {err}
-  ldxdw r8, [r10 - 56]
-  ldxb r1, [r8 + 2]
-  jeq r1, 0, {err}
-  ja body_{label}
+{extra}"
+
+/-- CPI 预检：N 账户虚地址 walk；acc0 signer+writable；其余按 meta 旗。 -/
+private def preludeCpi (p : IR.Program) (label : String) (ixLen : Nat) : String :=
+  let err := s!"err_check_{label}"
+  let n := IR.cpiAccountCount p
+  s!"\
+  ldxdw r1, [r6 + NUM_ACCOUNTS]
+  jlt r1, {n}, {err}
+{emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
+  ldxdw r1, [r1 + 0]
+  jne r1, {ixLen}, {err}
+{emitCpiFlagChecks p err}  ja body_{label}
 {err}:
   lddw r0, 0x1
   exit
@@ -129,11 +154,12 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
     | some off => .ok s!"[r6 + ACC0_DATA + {off}]"
     | none => .error s!"extract/unsupported: unknown field {name}"
   | .arg i =>
-    if IR.usesSystemTransfer p then
+    if IR.usesCpi p then
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
-  | .lit _ | .clockSlot | .signerKey0 =>
+  | .lit _ | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -179,6 +205,20 @@ private def emitLoadSignerKey0 (stackOff : Nat) : String :=
   stxdw [r10 - {stackOff}], r1
 "
 
+private def emitLoadAccU64 (comment offset : String) (stackOff : Nat) : String :=
+  s!"\
+  ; {comment}
+  ldxdw r1, [r6 + {offset}]
+  stxdw [r10 - {stackOff}], r1
+"
+
+private def emitLoadAccU8 (comment offset : String) (stackOff : Nat) : String :=
+  s!"\
+  ; {comment}
+  ldxb r1, [r6 + {offset}]
+  stxdw [r10 - {stackOff}], r1
+"
+
 private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
   match v with
   | .lit n =>
@@ -187,6 +227,20 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadClockSlot stackOff)
   | .signerKey0 =>
     .ok (emitLoadSignerKey0 stackOff)
+  | .accLamports0 =>
+    .ok (emitLoadAccU64 "load account-0 lamports" "ACC0_LAMPORTS" stackOff)
+  | .accOwner0 =>
+    .ok (emitLoadAccU64 "load account-0 owner first u64" "ACC0_OWNER + 0" stackOff)
+  | .accDataLen0 =>
+    .ok (emitLoadAccU64 "load account-0 data_len" "ACC0_DATA_LEN" stackOff)
+  | .accN =>
+    .ok (emitLoadAccU64 "load NUM_ACCOUNTS" "NUM_ACCOUNTS" stackOff)
+  | .isSigner0 =>
+    .ok (emitLoadAccU8 "load account-0 is_signer" "ACC0_HEADER + 1" stackOff)
+  | .isWritable0 =>
+    .ok (emitLoadAccU8 "load account-0 is_writable" "ACC0_HEADER + 2" stackOff)
+  | .isExecutable0 =>
+    .ok (emitLoadAccU8 "load account-0 is_executable" "ACC0_HEADER + 3" stackOff)
   | _ => do
     let mem ← memOfVal p v
     let insn ← loadInsn (widthOfVal p v)
@@ -252,7 +306,9 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .ite _ l r t f =>
           valUsesSigner l || valUsesSigner r ||
             walkUsesSigner fuel' t || walkUsesSigner fuel' f
-      | .systemTransfer v => valUsesSigner v
+      | .invoke _ metas data =>
+          metas.any (·.signer) ||
+            data.any (fun | .u64le v => valUsesSigner v | _ => false)
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -313,72 +369,92 @@ fill_rent_{srcStack}:
   stxb [r5 + 55], r1
 "
 
-private def emitSystemTransfer (p : IR.Program) (label : String) (amount : Ops.Val) :
+private def emitCpiData (p : IR.Program) (data : Array Ops.CpiWord) : Except String (String × Nat) := do
+  let mut body := "  lddw r1, 0\n  stxdw [r9 + 0], r1\n  stxdw [r9 + 8], r1\n"
+  let mut off : Nat := 0
+  for w in data do
+    match w with
+    | .u32le n =>
+      body := body ++ s!"  lddw r1, {n.toNat}\n  stxw [r9 + {off}], r1\n"
+      off := off + 4
+    | .u64le v =>
+      let load ← loadVal p v 8
+      body := body ++ load ++ s!"  ldxdw r1, [r10 - 8]\n  stxdw [r9 + {off}], r1\n"
+      off := off + 8
+    | .ascii s =>
+      -- 逐字节；本切片字面量很短。
+      let mut i : Nat := 0
+      for c in s.toList do
+        body := body ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {off + i}], r1\n"
+        i := i + 1
+      off := off + s.length
+  return (body, off)
+
+/-- `r5` 已是 metas 基址（`r9 + metaOff`）；第 i 条相对偏移是 `16*i`，不要再加 16。 -/
+private def emitOneMeta (i : Nat) (m : Ops.CpiMeta) : String :=
+  let base := 16 * i
+  let w := if m.writable then 1 else 0
+  let s := if m.signer then 1 else 0
+  s!"\
+  ldxdw r8, [r10 - {headerStack m.acc}]
+  mov64 r1, r8
+  add64 r1, 8
+  stxdw [r5 + {base}], r1
+  lddw r1, {w}
+  stxb [r5 + {base + 8}], r1
+  lddw r1, {s}
+  stxb [r5 + {base + 9}], r1
+  lddw r1, 0
+  stxb [r5 + {base + 10}], r1
+  stxb [r5 + {base + 11}], r1
+  stxb [r5 + {base + 12}], r1
+  stxb [r5 + {base + 13}], r1
+  stxb [r5 + {base + 14}], r1
+  stxb [r5 + {base + 15}], r1
+"
+
+private def emitInvoke (p : IR.Program) (label : String)
+    (programIx : Nat) (metas : Array Ops.CpiMeta) (data : Array Ops.CpiWord) :
     Except String String := do
-  let load ← loadVal p amount 8
-  return load ++ s!"\
-  ; closed system.transfer via sol_invoke_signed_c
+  let n := IR.cpiAccountCount p
+  let (dataTxt, dataLen) ← emitCpiData p data
+  let metaOff := 16
+  let ixOff := metaOff + 16 * metas.size
+  let infoOff := ixOff + 40
+  let mut metasTxt := ""
+  for i in [0:metas.size] do
+    metasTxt := metasTxt ++ emitOneMeta i metas[i]!
+  let mut infos := ""
+  for i in [0:n] do
+    infos := infos ++ emitFillAccountInfoFromHeader (headerStack i)
+    if i + 1 < n then
+      infos := infos ++ "  add64 r5, 56\n"
+  return s!"\
+  ; invoke programIx={programIx} metas={metas.size} dataLen={dataLen}
   mov64 r9, r10
   add64 r9, -400
-  lddw r1, 0
-  stxdw [r9 + 0], r1
-  stxdw [r9 + 8], r1
-  lddw r1, 2
-  stxw [r9 + 0], r1
-  ldxdw r1, [r10 - 8]
-  stxdw [r9 + 4], r1
-  mov64 r5, r9
-  add64 r5, 16
-  ldxdw r8, [r10 - 48]
-  mov64 r1, r8
-  add64 r1, 8
-  stxdw [r5 + 0], r1
-  lddw r1, 1
-  stxb [r5 + 8], r1
-  stxb [r5 + 9], r1
-  lddw r1, 0
-  stxb [r5 + 10], r1
-  stxb [r5 + 11], r1
-  stxb [r5 + 12], r1
-  stxb [r5 + 13], r1
-  stxb [r5 + 14], r1
-  stxb [r5 + 15], r1
-  ldxdw r8, [r10 - 56]
-  mov64 r1, r8
-  add64 r1, 8
-  stxdw [r5 + 16], r1
-  lddw r1, 1
-  stxb [r5 + 24], r1
-  lddw r1, 0
-  stxb [r5 + 25], r1
-  stxb [r5 + 26], r1
-  stxb [r5 + 27], r1
-  stxb [r5 + 28], r1
-  stxb [r5 + 29], r1
-  stxb [r5 + 30], r1
-  stxb [r5 + 31], r1
-  mov64 r8, r9
-  add64 r8, 48
-  ldxdw r1, [r10 - 64]
+{dataTxt}  mov64 r5, r9
+  add64 r5, {metaOff}
+{metasTxt}  mov64 r8, r9
+  add64 r8, {ixOff}
+  ldxdw r1, [r10 - {headerStack programIx}]
   add64 r1, 8
   stxdw [r8 + 0], r1
   mov64 r1, r9
-  add64 r1, 16
+  add64 r1, {metaOff}
   stxdw [r8 + 8], r1
-  lddw r1, 2
+  lddw r1, {metas.size}
   stxdw [r8 + 16], r1
   stxdw [r8 + 24], r9
-  lddw r1, 12
+  lddw r1, {dataLen}
   stxdw [r8 + 32], r1
   stxdw [r10 - 80], r8
   mov64 r5, r9
-  add64 r5, 88
-{emitFillAccountInfoFromHeader 48}  add64 r5, 56
-{emitFillAccountInfoFromHeader 56}  add64 r5, 56
-{emitFillAccountInfoFromHeader 64}  ldxdw r1, [r10 - 80]
+  add64 r5, {infoOff}
+{infos}  ldxdw r1, [r10 - 80]
   mov64 r2, r9
-  add64 r2, 88
-  lddw r3, 3
+  add64 r2, {infoOff}
+  lddw r3, {n}
   lddw r4, 0
   lddw r5, 0
   call sol_invoke_signed_c
@@ -478,8 +554,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         jmpIf cmp thenLab ++
         s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
-    | .systemTransfer amount =>
-      acc := acc ++ (← emitSystemTransfer p label amount)
+    | .invoke prog metas data =>
+      acc := acc ++ (← emitInvoke p label prog metas data)
     | .okState v =>
       let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
       if hasOpt then
@@ -527,7 +603,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             let load ← loadVal p (.arg 0) 24
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .clockSlot | .signerKey0 => do
+        | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+        | .accN | .isSigner0 | .isWritable0 | .isExecutable0 => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
@@ -552,8 +629,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
 private def emitMutBody (p : IR.Program) (label : String) (ops : Array Ops.Op) : Except String String := do
   let (body, _) ← emitOps p label ops 0
   let ix :=
-    if IR.usesSystemTransfer p then
-      "  ldxdw r7, [r10 - 72]\n  add64 r7, 8\n"
+    if IR.usesCpi p then
+      s!"  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]\n  add64 r7, 8\n"
     else ""
   return s!"body_{label}:\n{ix}{body}"
 
@@ -605,16 +682,15 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   let label := handlerLabel m
   match m.kind with
   | .init =>
-    if IR.usesSystemTransfer p then
-      -- transfer 程序无状态账户；init 只做三账户形状检查。
-      return s!"{label}:\n{preludeTransfer label (ixLenOf m)}body_{label}:\n  lddw r0, 0\n  exit\n"
+    if IR.usesCpi p then
+      return s!"{label}:\n{preludeCpi p label (ixLenOf m)}body_{label}:\n  lddw r0, 0\n  exit\n"
     else
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if Ops.hasSystemTransfer m.ops then
+    if Ops.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
-      return s!"{label}:\n{preludeTransfer label (ixLenOf m)}{body}"
+      return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
     else if !(Ops.hasCheckedArith m.ops || m.ops.any (fun | .ite .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
@@ -640,7 +716,7 @@ private def emitDispatch (program : IR.Program) : Except String String := do
     let next :=
       if i + 1 == program.methods.size then "err_unknown_disc"
       else s!"dispatch_next_{label}"
-    let jump := if IR.usesSystemTransfer program then s!"  ja {label}\n" else s!"  call {label}\n  exit\n"
+    let jump := if IR.usesCpi program then s!"  ja {label}\n" else s!"  call {label}\n  exit\n"
     if i == 0 then
       out := out ++ s!"  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
     else
@@ -657,9 +733,10 @@ def emitCounterAsm (program : IR.Program) : Except String String := do
   for m in program.methods do
     handlers := handlers ++ (← emitHandler program marker m) ++ "\n"
   let entryIx :=
-    if IR.usesSystemTransfer program then
-      emitWalkThreeAccounts "entry" "err_unknown_disc" ++
-        "  ldxdw r1, [r10 - 72]\n  ldxdw r1, [r1 + 0]\n  jlt r1, 8, err_unknown_disc\n  ja dispatch_begin\n"
+    if IR.usesCpi program then
+      let n := IR.cpiAccountCount program
+      emitWalkAccounts n "entry" "err_unknown_disc" ++
+        s!"  ldxdw r1, [r10 - {headerStack n}]\n  ldxdw r1, [r1 + 0]\n  jlt r1, 8, err_unknown_disc\n  ja dispatch_begin\n"
     else
       s!"\
   ldxb r1, [r6 + ACC0_HEADER + 0]
@@ -669,13 +746,13 @@ def emitCounterAsm (program : IR.Program) : Except String String := do
   ja dispatch_begin
 "
   let dispatchHead :=
-    if IR.usesSystemTransfer program then
-      "dispatch_begin:\n  ldxdw r1, [r10 - 72]\n  add64 r1, 8\n  ldxdw r1, [r1 + 0]\n"
+    if IR.usesCpi program then
+      s!"dispatch_begin:\n  ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount program)}]\n  add64 r1, 8\n  ldxdw r1, [r1 + 0]\n"
     else
       "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n"
   -- emitDispatch 自己写了 dispatch_begin 头；transfer 要换掉。
   let dispatchTxt :=
-    if IR.usesSystemTransfer program then
+    if IR.usesCpi program then
       dispatch.replace "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n" dispatchHead
     else dispatch
   return s!"\

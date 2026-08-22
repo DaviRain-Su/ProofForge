@@ -6,11 +6,11 @@
 
 ## Types
 
-`Val`：`arg` / `field` / `lit` / `clockSlot` / `signerKey0`
+`Val`：`arg` / `field` / `lit` / `clockSlot` / `signerKey0` / `accLamports0` / `accOwner0` / `accDataLen0` / `accN` / `isSigner0` / `isWritable0` / `isExecutable0`
 
 `Cmp`：`eq` / `ne` / `lt` / `le` / `gt` / `ge`
 
-`Op`：checked 四则、`ite`、`systemTransfer`、`okState` / `errorOverflow` / `returnU64` / `returnState`
+`Op`：checked 四则、`ite`、`invoke`（编译期 program/metas/data）、`okState` / `errorOverflow` / `returnU64` / `returnState`。`systemTransfer` 是 `invoke` 特化。
 
 ## Tests
 
