@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**单账户 UInt64 剖面已通**（Counter + Pair）。缺口与后续阶段见 [docs/plan/analysis/gap-vs-proofforge.md](docs/plan/analysis/gap-vs-proofforge.md)。下一刀是 `@[solana_entry]`，不是 CPI。
+当前：**单账户 UInt64 剖面已通**（Counter + Pair）。补全依据是官方 SVM/syscall，不是 PF 清单，也不是把 `solana-program` crate 实现一遍。见 [docs/plan/analysis/authority.md](docs/plan/analysis/authority.md)。下一刀是 `@[solana_entry]`，不是 CPI。
 
 ## 「难的是 loading 吗？」
 

@@ -1,11 +1,12 @@
 # 分析：相对 ProofForge Solana 的缺口
 
+补全依据：[authority.md](authority.md)（官方运行时 + syscall，不是 PF 清单，也不是 `solana-program` crate）。
 权威调研：[research/03-feasibility.md](../../research/03-feasibility.md)。
-PF 工程面：[proof_forge/docs/targets/02-solana.md](file:///Users/davirian/orca/projects/proof_forge/docs/targets/02-solana.md)。
+PF 工程面只作 ABI 对照：[proof_forge/docs/targets/02-solana.md](file:///Users/davirian/orca/projects/proof_forge/docs/targets/02-solana.md)。
 
 本仓走的是调研路径 B：普通 Lean `def` / `theorem`，自建 Profile + Extract + 薄发射器。
 **不**搬 PF 的 `program … where`、Normalize、167k 行闭包。
-**不**声称追上 PF 全部工程面。PF 自己也没闭合 formal D1–D4、ELF/SVM refinement、公网部署。
+**不**声称追上 PF 全部工程面，也不声称实现官方 Rust SDK。天花板是 SVM syscall 表；产品面是能 fail-closed 抽出的 Lean 子集。PF 自己也没闭合 formal D1–D4、ELF/SVM refinement、公网部署。
 
 ## 本仓现在有
 

@@ -12,6 +12,7 @@
 | [04-task-breakdown.md](04-task-breakdown.md) | 阶段与任务 |
 | [05-test-spec.md](05-test-spec.md) | 怎样算对 |
 | [plan/README.md](plan/README.md) | 交付队列 |
+| [plan/analysis/authority.md](plan/analysis/authority.md) | 补全对谁对齐（官方 runtime，不是 SDK crate） |
 | [plan/analysis/gap-vs-proofforge.md](plan/analysis/gap-vs-proofforge.md) | 相对 PF 的缺口与阶段 |
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |

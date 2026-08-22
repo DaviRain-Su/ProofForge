@@ -1,6 +1,7 @@
 # Backlog
 
-权威缺口：[analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)。
+补全依据：[analysis/authority.md](analysis/authority.md)。
+缺口阶段：[analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)。
 
 ## 已做
 
