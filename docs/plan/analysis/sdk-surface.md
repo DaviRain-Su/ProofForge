@@ -4,26 +4,26 @@
 官方 syscall 表（2026-08-22）：[Syscall reference](https://solana.com/docs/core/programs/syscall-reference)。
 官方 sysvar：[Anza sysvars](https://docs.anza.xyz/runtime/sysvars)。
 
-SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInfo` 读 / 一条封闭 CPI。不是新 DSL，也不克隆 crate。
+SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInfo` 读 / CPI。不是新 DSL，也不克隆 crate。
+
+通用 CPI **要做**。否掉的只是运行时拼指令：动态 program id、变长 remaining accounts、账户表到链上才知道。那会拆掉 fail-closed 抽出。该做的是编译期钉死的 `invoke`：program id、账户下标、meta 旗、data 布局在抽出时就固定，发射 `sol_invoke_signed_c`。`systemTransfer` 是这条原语的第一条特化。
 
 ```diagram
 ┌──────────────────────────────────────────┐
 │ 已绿                                      │
 │  clockSlot / signerKey0 / systemTransfer │
 └──────────────────┬───────────────────────┘
-                   │ 仍按「一条 recipe 一个任务」
-                   ▼
-┌──────────────────────────────────────────┐
-│ 还该做（能写成普通 Lean、fail-closed）     │
-│  AccountInfo 叶子、其余 get() sysvar、    │
-│  PDA、System/Token/ATA/Memo 封闭 CPI     │
-└──────────────────┬───────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────┐
-│ 明确不做                                  │
-│  通用 CPI、Token-2022、feature-gated 曲线、│
-│  日志当产品语义、alloc_free、公网          │
+│ 通用 CPI 原语（要做）                      │
+│  编译期钉死 program / metas / data        │
+│  发射 sol_invoke_signed_c                 │
+└──────────────────┬───────────────────────┘
+                   │ 特化成具名 recipe
+                   ▼
+┌──────────────────────────────────────────┐
+│ System / Token / ATA / Memo / PDA        │
 └──────────────────────────────────────────┘
 ```
 
@@ -37,7 +37,45 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
-宿主定理仍钉用户 `def`。`unixTime`、完整 32B key、独立 caller 账户、通用 CPI 仍 FC。
+宿主定理仍钉用户 `def`。`unixTime`、完整 32B key、独立 caller 账户仍 FC。
+
+## 还该做：通用 CPI 原语
+
+官方只有 `sol_invoke_signed_c` / `sol_invoke_signed_rust`。本仓走 C ABI（transfer 已通）。
+
+Lean 表面（建议，仍是普通 def，不是 DSL）：
+
+```
+invoke (programIx : Nat) (data : …) : UInt64
+invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
+```
+
+抽出时必须全部已知：
+
+| 钉死项 | 来源 | fail closed 若 |
+|---|---|---|
+| callee program | 外层账户下标，或字面量 32B（System 全零） | 下标非常量 / 运行时才算的 pubkey |
+| 内层 metas | 编译期账户下标列表 + signer/writable | 变长 remaining / 循环里 push |
+| 内层 data | 字面量前缀 + 已抽出的 `Val` 叶 | 动态长度、未布局字节 |
+| signer seeds | 字面量种子 + 可选 bump 叶 | 运行时拼种子 |
+| 外层账户数 | `NUM_ACCOUNTS` 下界 | 调用时才知道有几个账户 |
+
+`systemTransfer` = `invoke` 特化：program=acc2（全零）、metas=`[(0,s+w),(1,w)]`、data=`u32le(2)||u64le(amount)`、seeds 空。Token / ATA / 用户程序走同一发射器，只换这张表。
+
+| ID | 内容 | 完成定义 |
+|---|---|---|
+| L4-cpi-invoke | 无 seeds 的 `invoke`；N 账户 walk 复用 transfer | 一条非 System 的固定 callee Mollusk（可用 Memo 或 mock） |
+| L4-cpi-signed | `invokeSigned` 一组种子 | PDA 付款 / vault 负例：错 bump、缺 signer |
+| L4-cpi-ret | `sol_get_return_data` 8 字节 | callee 写回 u64；无 CPI 则 FC |
+| L4-cpi-nacc | walk N 个账户（N 编译期常量，先 2..8） | 不再为每个 recipe 手写 ACC1/ACC2 |
+
+仍 FC（这才是当初说「不做通用 CPI」的那截）：
+
+- 运行时才知道的 program id
+- remaining accounts / 变长账户表
+- 动态 data 长度
+- 多组任意 seeds
+- `sol_invoke_signed_rust`（C ABI 一条就够）
 
 ## 还该做：AccountInfo 叶子（无 CPI）
 
@@ -71,7 +109,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | L4-fees | — | `sol_get_fees_sysvar` | 已弃用，关 |
 | L4-last-restart | — | `sol_get_last_restart_slot` | feature-gated，关 |
 
-## 还该做：PDA（syscall，仍不是通用 CPI）
+## 还该做：PDA（syscall；`invokeSigned` 的种子来源）
 
 | ID | Lean 表面 | syscall | 约束 |
 |---|---|---|---|
@@ -81,9 +119,9 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 
 没有「任意种子数组」。一条 recipe 钉死种子布局。
 
-## 还该做：封闭 CPI（第 3 层 callee）
+## 还该做：第 3 层 callee（通用 `invoke` 上的特化）
 
-每条先写：syscall、账户表、指令字节、Mollusk 负例（缺 signer / 特权升级 / 错 program id）。权威是 interface crate + 链上程序，PF 只当 ABI 夹具。
+每条先写：账户表、指令字节、Mollusk 负例（缺 signer / 特权升级 / 错 program id）。权威是 interface crate + 链上程序。实现应落在 `invoke` / `invokeSigned` 上，不要再复制一套 transfer 发射器。
 
 ### System（`solana-system-interface`）
 
@@ -131,7 +169,7 @@ Multisig owner 默认关。
 ## 明确不做（不是延期）
 
 - 克隆 `solana-program` / Anchor / Pinocchio
-- 通用 CPI、动态 program id、remaining accounts
+- 运行时拼的 CPI（动态 program id、remaining accounts、变长 data）
 - Token-2022 及全部 extension
 - feature-gated：blake3 / poseidon / curve25519 / alt_bn128 / big_mod_exp / `sol_get_sysvar` / `sol_remaining_compute_units` / `sol_get_epoch_stake`
 - `sol_alloc_free_`（新部署已禁用）
@@ -144,10 +182,10 @@ Multisig owner 默认关。
 
 按依赖，不是按「像 SDK」。
 
-1. **L4-acc-*** — 把已 walk 到的 AccountInfo 叶子暴露成名（lamports / key32 / flags）。不增 syscall。
-2. **L4-pda-find** — `sol_try_find_program_address`，种子冻结。
-3. **L4-sys-create** — 有 PDA 才能建账户。
-4. **L4-tok-xfer + L4-ata-idem** — 一条 Token 转账（可拆两个任务，但要同一账户表）。
+1. **L4-cpi-nacc + L4-cpi-invoke** — 把 transfer 的 walk/`sol_invoke_signed_c` 收成原语；Memo 或 mock 证第二条 callee。
+2. **L4-acc-*** — AccountInfo 叶子（lamports / key32 / flags）。
+3. **L4-pda-find + L4-cpi-signed** — 找 bump，再用种子签字。
+4. **L4-sys-create / L4-tok-xfer / L4-ata-idem** — 特化，不再手写发射器。
 5. 其余 System / Token / sysvar 有具体合约再开。
 
 每条仍是：先写任务文件（syscall、账户、字节、负例），再改 Runtime / Extract / Emit / Mollusk。

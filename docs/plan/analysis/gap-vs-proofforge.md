@@ -42,8 +42,8 @@ PF 产品轨是 `solana-sbpf-cpi-elf-v1`。Mollusk 量级约 24 个 integration 
 | 控制流 | 多块 / match / for 有界 | 单层 `ite`，假支必须 overflow | 任意 if 树、match 枚举 |
 | 状态 | 多字段、Option 双叶、Array、dense Map | 全 UInt64 structure | Option/Array 单账户先；Map 后 |
 | 入口 | 任意 handler 名 + disc | 固定 init/increment/get 三个 disc | `@[solana_entry]` + 按名 disc |
-| 账户 | 单账户 + CPI 多 role | 单账户 | 具名封闭 recipe，不开放 remaining accounts |
-| CPI / Token / PDA | System / Token / ATA / vault PDA 封闭目录 | 无 | 只抄封闭目录，不抄通用 CPI |
+| 账户 | 单账户 + CPI 多 role | 单账户 + transfer 三账户 walk | 编译期 N；不开放 remaining accounts |
+| CPI / Token / PDA | System / Token / ATA / vault PDA 封闭目录 | `systemTransfer` 一条 | 抽出通用 `invoke`；特化仍具名 |
 | sysvar | clock.slot 已开；unixTime FC | L4-001 开 `clockSlot` | unixTime 仍 FC |
 | caller | `context.caller` = 指定 outer signer | L4-001 开账户 0 `signerKey0`（首 u64） | 完整 32B / 独立 caller 账户后做 |
 | 证明 | Reference / HandlerIR 有界证书；D1–D4 0/27 | 宿主 def 上的工程定理 | 继续钉用户 def；不承诺 `.so` refinement |
@@ -93,7 +93,7 @@ L2-marker 已落地：`SolanaLean.Sha256` 是 kernel 可算的纯函数，不是
 
 ### L4 账户与封闭 recipe（明显更贵）
 
-只在 L1–L3 绿、并且有具体合约需要时开。每条都是**具名封闭**，不是通用 CPI。
+L1–L3 已绿。CPI 先收成编译期钉死的 `invoke`，再往上叠具名特化。不开放运行时拼指令。
 
 | ID | 内容 | 完成定义 |
 |---|---|---|
@@ -109,7 +109,7 @@ L2-marker 已落地：`SolanaLean.Sha256` 是 kernel 可算的纯函数，不是
 - Lean FFI → sBPF；Lean C/LLVM → Solana Clang
 - 无约束 Lean（IO、partial、sorry、一般递归）
 - 「定理 ⇒ 已部署 `.so` / loader / SVM」
-- 通用 CPI、动态 program id、remaining accounts
+- 运行时拼的 CPI（动态 program id、remaining accounts）
 - Token-2022、upgradeable loader 管理、公网部署
 - 活跟踪 PF 16 万行；把本仓 IR 填进私有 `HandlerIR.mk`（除非 PF 抽出公共构造）
 - 换 Anza platform-tools（无强理由）

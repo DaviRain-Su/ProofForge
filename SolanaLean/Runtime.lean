@@ -24,7 +24,7 @@ payer / recipient / System Program，内层 `u32le(2) || u64le(lamports)`，
 `sol_invoke_signed_c`，无 signer seeds。
 
 宿主侧是不可约 stub，返回传入的 `lamports`，不要当链上余额用。
-通用 CPI / 动态 program id / remaining accounts 本剖面 fail closed。
+这是编译期钉死的 `invoke` 特化。运行时拼 program id / remaining accounts 仍 fail closed。
 -/
 @[irreducible] def systemTransfer (lamports : UInt64) : UInt64 := lamports
 

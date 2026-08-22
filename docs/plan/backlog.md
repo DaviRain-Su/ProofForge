@@ -25,8 +25,8 @@
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：L4-acc（lamports / key32 / flags），复用已有 walk，不增 syscall。
-再后：PDA find → System `CreateAccount` → Token `TransferChecked` + ATA。
+建议下一条：L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原语）。
+再后：AccountInfo 叶子 → PDA find / invokeSigned → System create / Token+ATA。
 
 ## 其后（L2 / L3）
 
@@ -35,10 +35,10 @@
 ## 有具体合约再开（L4）
 
 - Token mint/burn/close、System assign/allocate、Rent exemption
-- 每条都是具名 recipe，不是通用 CPI
+- 特化仍是具名 recipe；底层是编译期钉死的 `invoke`
 
 ## 不做
 
 - 搬 PF 前端 / `HandlerIR.mk` 私有构造
-- FFI→asm；`.so` refinement；公网；通用 CPI；Token-2022
+- FFI→asm；`.so` refinement；公网；运行时拼 CPI；Token-2022
 - 换 Anza platform-tools

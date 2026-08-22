@@ -144,6 +144,6 @@ L4 开一条之前，先写清：用哪个 syscall、哪几个 AccountInfo 槽�
 
 - 克隆官方 Rust SDK
 - 无约束 Lean（官方 Rust 也不是无约束）
-- 通用 CPI / remaining accounts / 动态 program id
+- 运行时拼的 CPI（动态 program id、remaining accounts、变长 data）。编译期钉死的 `invoke` 要做。
 - Token-2022、公网、`.so` refinement
 - Lean FFI → sBPF
