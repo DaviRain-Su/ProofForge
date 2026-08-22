@@ -48,7 +48,7 @@ Counter 不是产品终点，是第一条打穿的竖切：
 
 | 层 | Counter 现在 | 通用之后 |
 |---|---|---|
-| 用户表面 | `init` / `increment` / `get` | 任意通过 Profile 的 `def` |
+| 用户表面 | `SolanaLean.Counter`（init/increment/decrement/get） | 任意通过 Profile 的 `def` |
 | Extract | 递归下降 `Expr`（checked +/−、字面量、value） | 多字段 / 任意结构 |
 | Emit | 按 Val 生成 load；按 add/sub 选算术 | CPI / 多账户 |
 

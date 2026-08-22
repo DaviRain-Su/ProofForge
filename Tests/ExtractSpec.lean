@@ -1,10 +1,9 @@
 import SolanaLean
-import Examples.Decrement
 import Tests.Fixtures
 
 #solana_extract SolanaLean.Counter.init SolanaLean.Counter.increment SolanaLean.Counter.get
 
-#solana_extract SolanaLean.Counter.init Examples.Decrement.decrement SolanaLean.Counter.get
+#solana_extract SolanaLean.Counter.init SolanaLean.Counter.decrement SolanaLean.Counter.get
 
 /--
 error: profile/rejected: Nat in root type Tests.Fixtures.usesNat
