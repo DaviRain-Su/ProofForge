@@ -13,6 +13,7 @@ import Tests.PdaSpec
 import Tests.SignedSpec
 import Tests.CreateSpec
 import Tests.TokenXferSpec
+import Tests.AtaSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

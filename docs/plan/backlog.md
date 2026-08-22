@@ -27,12 +27,13 @@
 - `invokeSigned` 一组 ASCII 种子 + bump；Signed Mollusk（错 bump 失败）
 - `systemCreate` 普通包装；owner = 当前 program id；Create Mollusk
 - `tokenTransferChecked` 普通包装；Token `TransferChecked`；TokenXfer Mollusk
+- `ataCreateIdempotent` 普通包装；ATA CreateIdempotent；Ata Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：L4-ata-idem / Rent。
+建议下一条：L4-rent。
 再后：Token mint / burn。
 
 ## 其后（L2 / L3）

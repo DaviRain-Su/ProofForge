@@ -306,6 +306,18 @@ def extractedTokenXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedAta : Program :=
+  { name := "Ata"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Ata.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Ata.openAta", ixName := "openAta", paramCount := 0
+        ops := #[Ops.ataCreateIdempotent, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Ata.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedPda : Program :=
   { name := "Pda"
     slots := #[{ name := "dummy" }]
@@ -328,7 +340,7 @@ def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
-  extractedPda, extractedSigned, extractedCreate, extractedTokenXfer
+  extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

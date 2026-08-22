@@ -77,6 +77,16 @@ def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
       { acc := 0, signer := true, writable := false }]
     #[.u8le 12, .u64le amount, .u8le decimals]
 
+def ataCreateIdempotent : Op :=
+  .invoke 6
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false },
+      { acc := 4, signer := false, writable := false },
+      { acc := 5, signer := false, writable := false }]
+    #[.u8le 1]
+
 private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
   match fuel with
   | 0 => false

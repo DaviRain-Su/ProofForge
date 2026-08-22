@@ -15,6 +15,7 @@ import Examples.Pda
 import Examples.Signed
 import Examples.Create
 import Examples.TokenXfer
+import Examples.Ata
 
 #solana_build Examples.Counter
 
@@ -47,6 +48,8 @@ import Examples.TokenXfer
 #solana_build Examples.Create
 
 #solana_build Examples.TokenXfer
+
+#solana_build Examples.Ata
 
 /--
 error: extract/unsupported: no solana_entry

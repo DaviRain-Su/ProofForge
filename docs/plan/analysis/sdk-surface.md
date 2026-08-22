@@ -41,6 +41,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `invokeSigned` | 一组 ASCII 种子 + bump；`sol_invoke_signed_c` | L4-007 |
 | `systemCreate` | System createAccount；owner = 当前 program id | L4-008 |
 | `tokenTransferChecked` | Token TransferChecked；decimals 编译期常量 | L4-009 |
+| `ataCreateIdempotent` | ATA CreateIdempotent；1 字节 tag 1 | L4-010 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -142,7 +143,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-sys-alloc-seed | `AllocateWithSeed` / `CreateAccountWithSeed` | 后做 | 与 PDA 绑定再开 |
 | L4-sys-advance-nonce 等 | nonce / authorize | — | 不做，除非有合约 |
 
-已绿：`TransferChecked`（tag 12，10B packed）。下一条优先 ATA / Rent。
+已绿：`TransferChecked`（tag 12，10B packed）、ATA `CreateIdempotent`（tag 1）。下一条优先 Rent。
 
 ### Token classic（`spl-token-interface`，**不是** Token-2022）
 

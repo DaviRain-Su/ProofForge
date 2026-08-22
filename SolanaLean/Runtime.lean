@@ -98,6 +98,22 @@ def tokenTransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
     #[.u8le 12, .u64le amount, .u8le decimals]
 
 /--
+ATA `CreateIdempotent`：普通包装。
+外层 0 是 payer（prelude 强制 acc0 signer+writable）。
+内层按官方顺序：payer / ata / wallet / mint / System / Token。
+callee 是外层账户 6。
+-/
+def ataCreateIdempotent : UInt64 :=
+  invoke 6
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false },
+      { acc := 4, signer := false, writable := false },
+      { acc := 5, signer := false, writable := false }]
+    #[.u8le 1]
+
+/--
 找当前 program id 下、一条 ASCII 种子的 canonical bump。
 抽出器认这个名字，发射 `sol_try_find_program_address`。
 宿主侧是不可约 stub，返回 0，不要当链上 bump 用。
