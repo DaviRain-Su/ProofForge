@@ -27,6 +27,7 @@ structure CpiMeta where
 
 /-- 内层 instruction data 的一段。长度和布局编译期钉死。 -/
 inductive CpiWord where
+  | u8le (n : UInt64)
   | u32le (n : UInt64)
   | u64le (v : UInt64)
   | ascii (s : String)
@@ -81,6 +82,20 @@ def systemCreate (lamports space : UInt64) : UInt64 :=
       { acc := 1, signer := true, writable := true }]
     -- bincode：u32 tag 0，无 pad；52 字节。
     #[.u32le 0, .u64le lamports, .u64le space, .programId]
+
+/--
+Token `TransferChecked`：普通包装。decimals 编译期常量。
+外层 0 必须是 authority（prelude 强制 acc0 signer）。
+内层账户按官方顺序：source / mint / dest / authority。
+-/
+def tokenTransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
+  invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    -- packed：u8 tag 12 || u64le amount || u8 decimals。
+    #[.u8le 12, .u64le amount, .u8le decimals]
 
 /--
 找当前 program id 下、一条 ASCII 种子的 canonical bump。

@@ -237,6 +237,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
             s!"{m.acc}{if m.signer then "s" else ""}{if m.writable then "w" else ""}")
       let rec word (w : Ops.CpiWord) : String :=
         match w with
+        | .u8le n => s!"u8.{n.toNat}"
         | .u32le n => s!"u32.{n.toNat}"
         | .u64le v => s!"u64.{valCanon v}"
         | .ascii s => s!"s.{s}"

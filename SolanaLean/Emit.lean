@@ -221,7 +221,7 @@ private def emitLoadAccU8 (comment offset : String) (stackOff : Nat) : String :=
 
 /--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
-scratch 用 `r8` 基址 `r10-720`，避开 invoke 的 `r9=r10-400` 和 clock 的 `r10-72`。
+scratch 用 `r8` 基址 `r10-720`，避开 invoke 的 `r9=r10-560` 和 clock 的 `r10-72`。
 CPI 程序的 program id 在 walk 出的 ix 长度字之后。
 -/
 private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat) : String :=
@@ -415,6 +415,9 @@ private def emitCpiData (p : IR.Program) (base : Nat) (data : Array Ops.CpiWord)
   let mut off : Nat := 0
   for w in data do
     match w with
+    | .u8le n =>
+      body := body ++ s!"  lddw r1, {n.toNat}\n  stxb [r9 + {base + off}], r1\n"
+      off := off + 1
     | .u32le n =>
       body := body ++ s!"  lddw r1, {n.toNat}\n  stxw [r9 + {base + off}], r1\n"
       off := off + 4
@@ -539,7 +542,7 @@ private def emitInvoke (p : IR.Program) (label : String)
   return s!"\
   ; invoke programIx={programIx} metas={metas.size} dataLen={dataLen}
   mov64 r9, r10
-  add64 r9, -400
+  add64 r9, -560
 {dataTxt}  mov64 r5, r9
   add64 r5, {metaOff}
 {metasTxt}  mov64 r8, r9
@@ -557,10 +560,10 @@ private def emitInvoke (p : IR.Program) (label : String)
   stxdw [r8 + 24], r1
   lddw r1, {dataLen}
   stxdw [r8 + 32], r1
-  stxdw [r10 - 80], r8
+  stxdw [r10 - 96], r8
   mov64 r5, r9
   add64 r5, {infoOff}
-{infos}{seedTxt}  ldxdw r1, [r10 - 80]
+{infos}{seedTxt}  ldxdw r1, [r10 - 96]
   mov64 r2, r9
   add64 r2, {infoOff}
   lddw r3, {n}

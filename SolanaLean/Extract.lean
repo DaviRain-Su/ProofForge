@@ -660,7 +660,13 @@ private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
 
 private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
   let e := strip e
-  if isConstNamed e ``SolanaLean.Runtime.CpiWord.u32le || endsWith e ".u32le" then
+  if isConstNamed e ``SolanaLean.Runtime.CpiWord.u8le || endsWith e ".u8le" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
+      | some n => some (.u8le (UInt64.ofNat n))
+      | none => none
+    else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.u32le || endsWith e ".u32le" then
     if e.getAppArgs.size ≥ 1 then
       match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
       | some n => some (.u32le (UInt64.ofNat n))
@@ -768,7 +774,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       match decodeInvokeArgs env e with
       | some inv => some inv
       | none =>
-        -- 非 irreducible 的 Runtime 包装（systemTransfer / systemCreate / invokeAcc1）展开成 invoke。
+        -- 非 irreducible 的 Runtime 包装展开成 invoke。
         let unfolded :=
           match e.getAppFn.constName? with
           | none => none
@@ -791,7 +797,8 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
           | _ => none
   if mentionsRuntime e "invoke" || mentionsRuntime e "invokeSigned" ||
       mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" ||
-      mentionsRuntime e "systemCreate" then
+      mentionsRuntime e "systemCreate" ||
+      mentionsRuntime e "tokenTransferChecked" then
     go fuel e
   else none
 
@@ -828,6 +835,7 @@ private def invokeRet
   match inv with
   | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
   | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], none, none) => amount
+  | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => amount
   | _ => .lit 0
 
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=

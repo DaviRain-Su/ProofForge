@@ -30,6 +30,7 @@ structure CpiMeta where
 
 /-- 内层 instruction data 的一段。 -/
 inductive CpiWord where
+  | u8le (n : UInt64)
   | u32le (n : UInt64)
   | u64le (v : Val)
   | ascii (s : String)
@@ -67,6 +68,14 @@ def systemCreate (lamports space : Val) : Op :=
     #[{ acc := 0, signer := true, writable := true },
       { acc := 1, signer := true, writable := true }]
     #[.u32le 0, .u64le lamports, .u64le space, .programId]
+
+def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 12, .u64le amount, .u8le decimals]
 
 private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
   match fuel with

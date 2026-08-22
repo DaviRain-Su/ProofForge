@@ -36,6 +36,7 @@
 | [l4-006](tasks/l4-006.md) | done | findPda 返回 bump |
 | [l4-007](tasks/l4-007.md) | done | invokeSigned 一组种子 |
 | [l4-008](tasks/l4-008.md) | done | System createAccount |
+| [l4-009](tasks/l4-009.md) | done | Token TransferChecked |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)
