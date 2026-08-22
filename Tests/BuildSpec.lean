@@ -20,6 +20,7 @@ import Examples.Rent
 import Examples.TokenMint
 import Examples.SysAlloc
 import Examples.TokenAcc
+import Examples.Memo
 
 #solana_build Examples.Counter
 
@@ -62,6 +63,8 @@ import Examples.TokenAcc
 #solana_build Examples.SysAlloc
 
 #solana_build Examples.TokenAcc
+
+#solana_build Examples.Memo
 
 /--
 error: extract/unsupported: no solana_entry

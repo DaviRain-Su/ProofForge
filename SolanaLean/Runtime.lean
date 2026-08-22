@@ -170,6 +170,15 @@ def tokenCloseAccount : UInt64 :=
     #[.u8le 9]
 
 /--
+Memo 写一条 UTF-8 字面量。本切片钉死 `"ok"`。
+外层 0 是 signer；callee 是外层账户 1。
+-/
+def memoWrite : UInt64 :=
+  invoke 1
+    #[{ acc := 0, signer := true, writable := false }]
+    #[.ascii "ok"]
+
+/--
 ATA `CreateIdempotent`：普通包装。
 外层 0 是 payer（prelude 强制 acc0 signer+writable）。
 内层按官方顺序：payer / ata / wallet / mint / System / Token。

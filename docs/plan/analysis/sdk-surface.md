@@ -46,6 +46,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `tokenMintToChecked` / `tokenBurnChecked` | Token mint / burn；decimals 编译期常量 | L4-012 |
 | `systemAssign` / `systemAllocate` | System assign / allocate；owner = 当前 program id | L4-013 |
 | `tokenInitAccount` / `tokenCloseAccount` | Token init3 / close；owner = acc0 公钥 | L4-014 |
+| `memoWrite` | Memo 写 UTF-8 字面量；本切片 `"ok"` | L4-015 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -167,7 +168,7 @@ Multisig owner 默认关。
 | ID | callee | 要点 |
 |---|---|---|
 | L4-ata-idem | ATA `CreateIdempotent` | tag 1；账户表冻结；常跟 Token transfer 绑一条 |
-| L4-memo | Memo 程序写一条 | 只做 UTF-8 字面量；不做动态字符串 |
+| L4-memo | Memo 程序写一条 | **已绿**；只做 UTF-8 字面量；不做动态字符串 |
 
 ## 发射器自用、不暴露成 Lean 名
 

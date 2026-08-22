@@ -116,6 +116,11 @@ def tokenCloseAccount : Op :=
       { acc := 0, signer := true, writable := false }]
     #[.u8le 9]
 
+def memoWrite : Op :=
+  .invoke 1
+    #[{ acc := 0, signer := true, writable := false }]
+    #[.ascii "ok"]
+
 def ataCreateIdempotent : Op :=
   .invoke 6
     #[{ acc := 0, signer := true, writable := true },

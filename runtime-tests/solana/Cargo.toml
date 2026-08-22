@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 hex = "0.4"
 mollusk-svm = "0.13.4"
+mollusk-svm-programs-memo = "0.13.4"
 mollusk-svm-programs-token = "0.13.4"
 sha2 = "0.10"
 solana-account = "3.4.0"

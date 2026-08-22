@@ -818,6 +818,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       mentionsRuntime e "tokenBurnChecked" ||
       mentionsRuntime e "tokenInitAccount" ||
       mentionsRuntime e "tokenCloseAccount" ||
+      mentionsRuntime e "memoWrite" ||
       mentionsRuntime e "ataCreateIdempotent" then
     go fuel e
   else none
@@ -862,6 +863,7 @@ private def invokeRet
   | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => amount
   | (3, _, #[.u8le 18, .accKey 0], none, none) => .lit 0
   | (3, _, #[.u8le 9], none, none) => .lit 0
+  | (1, _, #[.ascii "ok"], none, none) => .lit 0
   | (6, _, #[.u8le 1], none, none) => .lit 0
   | _ => .lit 0
 

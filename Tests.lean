@@ -18,6 +18,7 @@ import Tests.RentSpec
 import Tests.TokenMintSpec
 import Tests.SysAllocSpec
 import Tests.TokenAccSpec
+import Tests.MemoSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec
