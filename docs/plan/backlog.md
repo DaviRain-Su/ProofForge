@@ -24,13 +24,14 @@
 ## 进行中
 
 - EVM 三大切片已交付（E-RT / E-LANG / E-ASSET）。见 [research/05-evm-coverage-slices.md](../research/05-evm-coverage-slices.md)。不做 Window。不把 SVM 名译成 EVM。
+- E-OWN 已交付：Ownable + 通用 event + pair-key allowance。
 
 ## 下一刀
 
-完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
-
-建议下一条：L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原语）。
+SVM 回 L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原语）。
 再后：AccountInfo 叶子 → PDA find / invokeSigned → System create / Token+ATA。
+
+完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
 ## 其后（L2 / L3）
 

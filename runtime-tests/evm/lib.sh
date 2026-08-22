@@ -172,3 +172,15 @@ solana_lean_deploy_ctor_u64() {
     --create "0x${bytecode}${encoded#0x}")"
   printf '%s' "$receipt" | solana_lean_contract_address
 }
+
+solana_lean_deploy_ctor_u64x3() {
+  local bytecode="$1"
+  local a="$2"
+  local b="$3"
+  local c="$4"
+  local encoded receipt
+  encoded="$("$cast" abi-encode 'constructor(uint64,uint64,uint64)' "$a" "$b" "$c")"
+  receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
+    --create "0x${bytecode}${encoded#0x}")"
+  printf '%s' "$receipt" | solana_lean_contract_address
+}

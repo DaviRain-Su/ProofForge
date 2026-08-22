@@ -66,6 +66,9 @@ SVM 发射器碰到这个叶子 fail closed。
 /-- LOG1 `Tipped(uint64)`。宿主返回 amt。 -/
 @[irreducible] def evmLogTipped (amt : UInt64) : UInt64 := amt
 
+/-- LOG1 `Incremented(uint64)`。宿主返回 amt。 -/
+@[irreducible] def evmLogIncremented (amt : UInt64) : UInt64 := amt
+
 /-- hashed `Map` 读 payload。缺席是 0。宿主返回 0。 -/
 @[irreducible] def evmMapGetU64 (_base _key : UInt64) : UInt64 := 0
 
@@ -79,6 +82,20 @@ SVM 发射器碰到这个叶子 fail closed。
 /-- hashed `Map Addr20` 写。 -/
 @[irreducible] def evmMapSetAddr (_base w0 w1 w2 val : UInt64) : UInt64 :=
   let _ := w0; let _ := w1; let _ := w2; val
+
+/-- pair-key hashed Map 读：owner 三叶 + spender 三叶。缺席是 0。 -/
+@[irreducible] def evmMapGetPair
+    (_base o0 o1 o2 s0 s1 s2 : UInt64) : UInt64 :=
+  let _ := o0; let _ := o1; let _ := o2
+  let _ := s0; let _ := s1; let _ := s2
+  0
+
+/-- pair-key hashed Map 写。 -/
+@[irreducible] def evmMapSetPair
+    (_base o0 o1 o2 s0 s1 s2 val : UInt64) : UInt64 :=
+  let _ := o0; let _ := o1; let _ := o2
+  let _ := s0; let _ := s1; let _ := s2
+  val
 
 /-- 封闭 ERC-20 `transfer`。callee 20B；失败 / 假返回 revert。宿主返回 amt。 -/
 @[irreducible] def evmTokenTransfer

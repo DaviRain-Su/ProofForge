@@ -172,7 +172,7 @@ Anvil：位运算夹具、`for` 求和、`window[i]` 越界、tuple return、命
 
 Anvil：需要一个最小 ERC-20 mock（可手写 30 行 Yul/Solidity 夹具，钉在 testdata，不引进 Foundry 工程）。转 1000、超额 revert 状态保持、USDT 无返回成功。
 
-不做：approve/allowance（可跟在金库绿了之后当第四刀）、Token-2022、任意 CALLEE。
+不做（本刀）：approve/allowance（第四刀 E-OWN）、Token-2022、任意 CALLEE。
 
 ---
 
@@ -184,6 +184,8 @@ Anvil：需要一个最小 ERC-20 mock（可手写 30 行 Yul/Solidity 夹具，
 - TipJar：`deposit` + `sendEth`
 - 计数器 + event `Incremented(uint64)`
 - 金库：收 ERC-20，按 `Map Addr20 UInt64` 记份额
+
+第四刀 **E-OWN**（本仓继续）：Ownable 三槽 + 通用 `LOG Name(uint64)` + pair-key allowance / spend。
 
 仍不能写：DEX 全套、NFT、代理升级、跨合约任意调用、主网部署声明。那不是「再开几个切片」，是另一条产品线。
 

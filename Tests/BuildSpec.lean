@@ -12,6 +12,7 @@ import Examples.EvmCtx
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
+import Examples.Ownable
 
 #solana_build Examples.Counter
 
@@ -54,6 +55,12 @@ error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
 #solana_build Examples.Vault
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.Ownable
 
 /--
 error: extract/unsupported: no solana_entry

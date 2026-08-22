@@ -380,12 +380,13 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
             ", 0, 0, 0, 0)" ++ nl ++
           indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some amt }
-    | .evmLogTipped amount =>
+    | .evmLog name amount =>
         let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount amount st
         st := st'
         acc := acc ++ pre ++
           indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-          indent ++ "log1(0, 32, 0x" ++ Keccak.keccak256HexOfString "Tipped(uint64)" ++ ")" ++ nl
+          indent ++ "log1(0, 32, 0x" ++
+            Keccak.keccak256HexOfString (name ++ "(uint64)") ++ ")" ++ nl
         st := { st with last := some amt }
     | .forAccum n addend =>
         let (accN, st1) := fresh st
@@ -489,6 +490,58 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
           indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
           indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
+          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
+          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
+        st := { st with last := some v }
+    | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount o0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount o1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount o2 st3
+        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount s0 st4
+        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount s1 st5
+        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount s2 st6
+        let (slot, st8) := fresh st7
+        let (tag, st9) := fresh st8
+        let (pay, st10) := fresh st9
+        st := st10
+        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
+          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
+          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
+          indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
+          indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
+          indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
+          indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
+          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
+          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
+          indent ++ "if " ++ tag ++ " {" ++ nl ++
+          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
+          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "}" ++ nl
+        st := { st with last := some pay }
+    | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount o0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount o1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount o2 st3
+        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount s0 st4
+        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount s1 st5
+        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount s2 st6
+        let (pv, v, st8) ← materializeVal p indent paramPrefix paramCount value st7
+        let (slot, st9) := fresh st8
+        st := st9
+        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ pv ++
+          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
+          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
+          indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
+          indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
+          indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
+          indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
           indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
           indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
         st := { st with last := some v }

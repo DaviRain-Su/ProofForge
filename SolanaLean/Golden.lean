@@ -239,11 +239,23 @@ def extractedTipJar : Program :=
       { kind := .init, name := "Examples.TipJar.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.lit 0)] },
       { kind := .increment, name := "Examples.TipJar.deposit", ixName := "deposit", paramCount := 1
-        ops := #[.evmDeposit (.arg 0), .returnU64 (.arg 0)] },
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmDeposit (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
       { kind := .increment, name := "Examples.TipJar.logTip", ixName := "logTip", paramCount := 1
-        ops := #[.evmLogTipped (.arg 0), .returnU64 (.arg 0)] },
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmLog "Tipped" (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
       { kind := .increment, name := "Examples.TipJar.payout", ixName := "payout", paramCount := 4
-        ops := #[.evmSendEth (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)] },
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmSendEth (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.errorOverflow]
+        ] },
       { kind := .get, name := "Examples.TipJar.callValue", ixName := "callValue", paramCount := 0
         ops := #[.returnU64 .evmCallValue] },
       { kind := .get, name := "Examples.TipJar.callerW0", ixName := "callerW0", paramCount := 0
@@ -328,14 +340,24 @@ def extractedVault : Program :=
       { kind := .init, name := "Examples.Vault.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.lit 0)] },
       { kind := .increment, name := "Examples.Vault.credit", ixName := "credit", paramCount := 4
-        ops := #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)] },
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.errorOverflow]
+        ] },
       { kind := .increment, name := "Examples.Vault.pull", ixName := "pull", paramCount := 7
         ops := #[
-          .evmTokenTransfer (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
-          .returnU64 (.arg 6)
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmTokenTransfer (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
+              .returnU64 (.arg 6)]
+            #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Vault.setU64", ixName := "setU64", paramCount := 2
-        ops := #[.mapSetU64 (.lit 0) (.arg 0) (.arg 1), .returnU64 (.arg 1)] },
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetU64 (.lit 0) (.arg 0) (.arg 1), .returnU64 (.arg 1)]
+            #[.errorOverflow]
+        ] },
       { kind := .get, name := "Examples.Vault.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.lit 0)] },
       { kind := .get, name := "Examples.Vault.getU64", ixName := "getU64", paramCount := 1
@@ -346,11 +368,69 @@ def extractedVault : Program :=
         ops := #[.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] }
     ] }
 
+def extractedOwnable : Program :=
+  { name := "Ownable"
+    slots := #[
+      { name := "owner0" }, { name := "owner1" },
+      { name := "owner2" }, { name := "value" }
+    ]
+    methods := #[
+      { kind := .init, name := "Examples.Ownable.init", ixName := "initialize", paramCount := 3
+        ops := #[
+          .returnState (.arg 0), .returnState (.arg 1),
+          .returnState (.arg 2), .returnState (.lit 0)
+        ] },
+      { kind := .increment, name := "Examples.Ownable.approve", ixName := "approve", paramCount := 7
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
+              .returnU64 (.arg 6)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Ownable.bump", ixName := "bump", paramCount := 1
+        ops := #[
+          .ite .eq .evmCallerW0 (.field (.arg 1) "owner0")
+            #[.ite .eq .evmCallerW1 (.field (.arg 1) "owner1")
+              #[.ite .eq .evmCallerW2 (.field (.arg 1) "owner2")
+                #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
+                  .okState (.arg 0), .errorOverflow]
+                #[.errorNamed "unauthorized"]]
+              #[.errorNamed "unauthorized"]]
+            #[.errorNamed "unauthorized"]
+        ] },
+      { kind := .increment, name := "Examples.Ownable.logInc", ixName := "logInc", paramCount := 1
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmLog "Incremented" (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Ownable.spend", ixName := "spend", paramCount := 7
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
+              .returnU64 (.arg 6)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Ownable.allowance", ixName := "allowance", paramCount := 6
+        ops := #[
+          .mapGetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5),
+          .returnU64 (.arg 0)
+        ] },
+      { kind := .get, name := "Examples.Ownable.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "value")] },
+      { kind := .get, name := "Examples.Ownable.ownerW0", ixName := "ownerW0", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "owner0")] },
+      { kind := .get, name := "Examples.Ownable.ownerW1", ixName := "ownerW1", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "owner1")] },
+      { kind := .get, name := "Examples.Ownable.ownerW2", ixName := "ownerW2", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "owner2")] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedEvmCtx, extractedTipJar,
-  extractedLang, extractedVault
+  extractedLang, extractedVault, extractedOwnable
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

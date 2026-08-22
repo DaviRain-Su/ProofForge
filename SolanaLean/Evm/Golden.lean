@@ -16,7 +16,8 @@ def sources : Array SolanaLean.IR.Program := #[
   SolanaLean.Golden.extractedEvmCtx,
   SolanaLean.Golden.extractedTipJar,
   SolanaLean.Golden.extractedLang,
-  SolanaLean.Golden.extractedVault
+  SolanaLean.Golden.extractedVault,
+  SolanaLean.Golden.extractedOwnable
 ]
 
 def programs : Array IR.Program :=

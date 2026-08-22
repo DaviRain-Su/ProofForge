@@ -230,7 +230,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .evmDeposit v => s!"edep({valCanon v})"
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
-    | .evmLogTipped v => s!"elog({valCanon v})"
+    | .evmLog n v => s!"elog.{n}({valCanon v})"
     | .forAccum n v => s!"for({n},{valCanon v})"
     | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
     | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
@@ -239,6 +239,10 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         s!"mgeta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"
     | .mapSetAddr b a0 a1 a2 v =>
         s!"mseta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon v})"
+    | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+        s!"mgetp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2})"
+    | .mapSetPair b a0 a1 a2 c0 c1 c2 v =>
+        s!"msetp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2},{valCanon v})"
     | .evmTokenTransfer a b c d e f g =>
         s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
     | .evmTokenBalanceOfSelf a b c =>

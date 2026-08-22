@@ -11,3 +11,4 @@ import Examples.EvmCtx
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
+import Examples.Ownable

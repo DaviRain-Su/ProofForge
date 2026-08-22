@@ -40,13 +40,15 @@ inductive Op where
   | systemTransfer (amount : Val)
   | evmDeposit (amount : Val)
   | evmSendEth (w0 w1 w2 amount : Val)
-  | evmLogTipped (amount : Val)
+  | evmLog (name : String) (amount : Val)
   | forAccum (n : Nat) (addend : Val)
   | indexSet (name : String) (idx value : Val) (len : Nat)
   | mapGetU64 (base key : Val)
   | mapSetU64 (base key value : Val)
   | mapGetAddr (base w0 w1 w2 : Val)
   | mapSetAddr (base w0 w1 w2 value : Val)
+  | mapGetPair (base o0 o1 o2 s0 s1 s2 : Val)
+  | mapSetPair (base o0 o1 o2 s0 s1 s2 value : Val)
   | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Val)
   | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val)
   | okState (value : Val)
@@ -73,7 +75,7 @@ def hasEvmSendEth (ops : Array Op) : Bool :=
   walk 16 ops (fun | .evmSendEth .. => true | _ => false)
 
 def hasEvmLog (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .evmLogTipped _ => true | _ => false)
+  walk 16 ops (fun | .evmLog .. => true | _ => false)
 
 def hasSystemTransfer (ops : Array Op) : Bool :=
   walk 16 ops (fun | .systemTransfer _ => true | _ => false)
@@ -136,7 +138,7 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
     | .evmDeposit v => isEvmLeaf v
     | .evmSendEth a b c d =>
         isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
-    | .evmLogTipped v => isEvmLeaf v
+    | .evmLog _ v => isEvmLeaf v
     | .forAccum _ v => isEvmLeaf v
     | .indexSet _ i v _ => isEvmLeaf i || isEvmLeaf v
     | .mapGetU64 a b => isEvmLeaf a || isEvmLeaf b
@@ -145,6 +147,12 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
         isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
     | .mapSetAddr a b c d e =>
         isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d || isEvmLeaf e
+    | .mapGetPair a b c d e f g =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
+          isEvmLeaf e || isEvmLeaf f || isEvmLeaf g
+    | .mapSetPair a b c d e f g h =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
+          isEvmLeaf e || isEvmLeaf f || isEvmLeaf g || isEvmLeaf h
     | .evmTokenTransfer a b c d e f g =>
         isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
           isEvmLeaf e || isEvmLeaf f || isEvmLeaf g
@@ -167,7 +175,7 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .evmDeposit v => isLangLeaf v
     | .evmSendEth a b c d =>
         isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d
-    | .evmLogTipped v => isLangLeaf v
+    | .evmLog _ v => isLangLeaf v
     | .forAccum _ v => isLangLeaf v
     | .indexSet _ i v _ => isLangLeaf i || isLangLeaf v
     | .mapGetU64 a b => isLangLeaf a || isLangLeaf b
@@ -176,6 +184,12 @@ def hasLangLeaf (ops : Array Op) : Bool :=
         isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d
     | .mapSetAddr a b c d e =>
         isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d || isLangLeaf e
+    | .mapGetPair a b c d e f g =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d ||
+          isLangLeaf e || isLangLeaf f || isLangLeaf g
+    | .mapSetPair a b c d e f g h =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d ||
+          isLangLeaf e || isLangLeaf f || isLangLeaf g || isLangLeaf h
     | .evmTokenTransfer a b c d e f g =>
         isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d ||
           isLangLeaf e || isLangLeaf f || isLangLeaf g
@@ -197,7 +211,8 @@ def hasErrorNamed (ops : Array Op) : Bool :=
 
 def hasMapOp (ops : Array Op) : Bool :=
   walk 16 ops fun
-    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr .. => true
+    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
+    | .mapGetPair .. | .mapSetPair .. => true
     | _ => false
 
 def hasTokenOp (ops : Array Op) : Bool :=

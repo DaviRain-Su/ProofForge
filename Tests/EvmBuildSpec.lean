@@ -12,6 +12,7 @@ import Examples.EvmCtx
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
+import Examples.Ownable
 import Tests.Fixtures
 
 #evm_build Examples.Counter
@@ -33,6 +34,8 @@ import Tests.Fixtures
 #evm_build Examples.Lang
 
 #evm_build Examples.Vault
+
+#evm_build Examples.Ownable
 
 /--
 error: extract/unsupported: evm rejects svm leaf in stamp

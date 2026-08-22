@@ -266,7 +266,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .evmDeposit v => valUsesSigner v
       | .evmSendEth a b c d =>
           valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
-      | .evmLogTipped v => valUsesSigner v
+      | .evmLog _ v => valUsesSigner v
       | .forAccum _ v => valUsesSigner v
       | .indexSet _ i v _ => valUsesSigner i || valUsesSigner v
       | .mapGetU64 a b => valUsesSigner a || valUsesSigner b
@@ -276,6 +276,12 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .mapSetAddr a b c d e =>
           valUsesSigner a || valUsesSigner b || valUsesSigner c ||
             valUsesSigner d || valUsesSigner e
+      | .mapGetPair a b c d e f g =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
+            valUsesSigner e || valUsesSigner f || valUsesSigner g
+      | .mapSetPair a b c d e f g h =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
+            valUsesSigner e || valUsesSigner f || valUsesSigner g || valUsesSigner h
       | .evmTokenTransfer a b c d e f g =>
           valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
             valUsesSigner e || valUsesSigner f || valUsesSigner g
@@ -508,11 +514,12 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
     | .systemTransfer amount =>
       acc := acc ++ (← emitSystemTransfer p label amount)
-    | .evmDeposit _ | .evmSendEth .. | .evmLogTipped _ =>
+    | .evmDeposit _ | .evmSendEth .. | .evmLog .. =>
       throw "extract/unsupported: svm rejects evm leaf"
     | .forAccum .. | .indexSet .. | .errorNamed _ =>
       throw "extract/unsupported: svm rejects evm leaf"
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
+    | .mapGetPair .. | .mapSetPair ..
     | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. =>
       throw "extract/unsupported: svm rejects evm leaf"
     | .okState v =>

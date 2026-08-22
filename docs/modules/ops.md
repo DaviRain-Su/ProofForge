@@ -10,7 +10,7 @@
 
 `Cmp`：`eq` / `ne` / `lt` / `le` / `gt` / `ge`
 
-`Op`：checked 四则、`ite`、`systemTransfer`、EVM 效应、`forAccum` / `indexSet`、hashed Map / 封闭 ERC-20、`okState` / `errorOverflow` / `errorNamed` / `returnU64` / `returnState`
+`Op`：checked 四则、`ite`、`systemTransfer`、EVM 效应、`forAccum` / `indexSet`、hashed Map / pair-key Map / 封闭 ERC-20、`evmLog`、`okState` / `errorOverflow` / `errorNamed` / `returnU64` / `returnState`
 
 ## Tests
 
