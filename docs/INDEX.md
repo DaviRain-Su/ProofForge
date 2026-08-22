@@ -14,6 +14,7 @@
 | [plan/README.md](plan/README.md) | 交付队列 |
 | [plan/analysis/authority.md](plan/analysis/authority.md) | 补全对谁对齐（官方 runtime，不是 SDK crate） |
 | [plan/analysis/gap-vs-proofforge.md](plan/analysis/gap-vs-proofforge.md) | 相对 PF 的缺口与阶段 |
+| [plan/analysis/sdk-surface.md](plan/analysis/sdk-surface.md) | 剩余 SDK 表面（syscall / 封闭 CPI） |
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 

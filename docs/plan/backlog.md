@@ -23,7 +23,10 @@
 
 ## 下一刀
 
-L4 下一条封闭 recipe（Token `transferChecked` / vault PDA）有具体合约再开。
+完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
+
+建议下一条：L4-acc（lamports / key32 / flags），复用已有 walk，不增 syscall。
+再后：PDA find → System `CreateAccount` → Token `TransferChecked` + ATA。
 
 ## 其后（L2 / L3）
 
@@ -31,8 +34,7 @@ L4 下一条封闭 recipe（Token `transferChecked` / vault PDA）有具体合�
 
 ## 有具体合约再开（L4）
 
-- caller / clock
-- 封闭 `system.transfer`、Token `transferChecked`、vault PDA
+- Token mint/burn/close、System assign/allocate、Rent exemption
 - 每条都是具名 recipe，不是通用 CPI
 
 ## 不做
