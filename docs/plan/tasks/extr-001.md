@@ -17,7 +17,7 @@ docs/02-architecture.md, docs/03-technical-spec.md
 
 ## path
 
-SolanaLean/Extract.lean, Tests/ExtractSpec.lean
+ProofForge/Extract.lean, Tests/ExtractSpec.lean
 
 ## verification
 

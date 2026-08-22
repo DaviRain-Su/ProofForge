@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.TokenMint
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,12 +12,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- Token MintToChecked；decimals 钉死为 6。 -/
-@[solana_entry]
+@[pf_entry]
 def mintTo (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := tokenMintToChecked amount 6
@@ -26,7 +26,7 @@ def mintTo (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
     .error .overflow
 
 /-- Token BurnChecked；decimals 钉死为 6。 -/
-@[solana_entry]
+@[pf_entry]
 def burn (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := tokenBurnChecked amount 6
@@ -34,7 +34,7 @@ def burn (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

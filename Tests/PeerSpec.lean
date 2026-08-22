@@ -3,7 +3,7 @@ import Examples.Peer
 namespace Tests.PeerSpec
 
 open Examples.Peer
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,12 +14,12 @@ open SolanaLean.Runtime
 #guard writable1 (init 0) == isWritable1
 #guard executable1 (init 0) == isExecutable1
 
-#guard !SolanaLean.IR.usesCpi SolanaLean.Golden.extractedPeer
-#guard SolanaLean.IR.usesWalk SolanaLean.Golden.extractedPeer
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedPeer == 2
+#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedPeer
+#guard ProofForge.IR.usesWalk ProofForge.Golden.extractedPeer
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedPeer == 2
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedPeer with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedPeer with
   | .error _ => false
   | .ok asm =>
       asm.contains "load walked acc1 +72" &&

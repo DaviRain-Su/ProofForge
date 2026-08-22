@@ -1,4 +1,4 @@
-# SolanaLean.Evm
+# ProofForge.Evm
 
 ## Purpose
 
@@ -12,7 +12,7 @@
 | `Evm.IR` | storage slot、constructor、selector、digest | Loader V3、账户 disc |
 | `Evm.Emit` | Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance | 任意 CALL / Token-2022 |
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
-| `Evm.Commands` | `#evm_build` | 新 DSL |
+| `Evm.Commands` | `#pf_evm_build` | 新 DSL |
 
 输入是已通过 Profile 的 `IR.Program`。拒绝 SVM 叶子（`clockSlot` / `signerKey0` / `systemTransfer`）。承认独立 EVM 叶子：环境 opcode（超 UInt64 revert）、8 字节 `evmCaller`/`evmSelf`、Addr20 三叶。`evmDeposit` 让该 entry payable；程序若有任一 payable 入口，去掉全局 `callvalue()` 守卫，非 payable 入口本地守卫。`evmSendEth` 是封闭 value CALL。`evmLogTipped` 是 LOG1。窄槽 `UInt8/16/32` 各占一个 storage word。`Option UInt64` 是 tag+payload 两槽。
 
@@ -22,14 +22,14 @@ overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 
 ## API
 
-- `IR.fromProgram : SolanaLean.IR.Program → Except String IR.Program`
+- `IR.fromProgram : ProofForge.IR.Program → Except String IR.Program`
 - `Emit.emitYul` / `Emit.emitAbi`
 - `Assemble.assembleProgram`
-- `#evm_build Namespace`
+- `#pf_evm_build Namespace`
 
 ## Tests
 
-`Tests/EvmSpec.lean`、`Tests/EvmBuildSpec.lean`。solc 门在 `evmLeanAssemble`。
+`Tests/EvmSpec.lean`、`Tests/EvmBuildSpec.lean`。solc 门在 `pfEvmAssemble`。
 
 Anvil（工程门，不是 refinement）：
 

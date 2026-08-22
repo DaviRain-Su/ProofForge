@@ -3,7 +3,7 @@ import Examples.Ownable
 namespace Tests.OwnableSpec
 
 open Examples.Ownable
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 1 2 3).owner0 == 1
 #guard (init 1 2 3).owner1 == 2
@@ -22,14 +22,14 @@ open SolanaLean.Runtime
   | .ok (_, ret) => ret == 7
   | .error _ => false
 
-#guard SolanaLean.Evm.Keccak.keccak256HexOfString "Incremented(uint64)" !=
-  SolanaLean.Evm.Keccak.keccak256HexOfString "Tipped(uint64)"
+#guard ProofForge.Evm.Keccak.keccak256HexOfString "Incremented(uint64)" !=
+  ProofForge.Evm.Keccak.keccak256HexOfString "Tipped(uint64)"
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedOwnable with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedOwnable with
   | .error _ => false
   | .ok p =>
-      match SolanaLean.Evm.Emit.emitYul p with
+      match ProofForge.Evm.Emit.emitYul p with
       | .error _ => false
       | .ok yul =>
           yul.contains "keccak256(0, 224)" &&
@@ -41,7 +41,7 @@ open SolanaLean.Runtime
             yul.contains "sstore(2,"
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedOwnable with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedOwnable with
   | .error _ => false
   | .ok p =>
       (p.entries.find? (·.ixName == "bump")).isSome &&
@@ -50,7 +50,7 @@ open SolanaLean.Runtime
         (p.entries.find? (·.ixName == "logInc")).map (·.payable) == some false
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedOwnable with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedOwnable with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

@@ -1,4 +1,4 @@
-# SolanaLean.Ops
+# ProofForge.Ops
 
 ## Purpose
 

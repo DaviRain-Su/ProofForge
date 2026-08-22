@@ -1,4 +1,4 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Pair
 
@@ -13,25 +13,25 @@ inductive Error where
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
-@[solana_entry]
+@[pf_entry]
 def init (left : UInt64) : State :=
   { left, right := 0 }
 
-@[solana_entry]
+@[pf_entry]
 def getLeft (s : State) : UInt64 :=
   s.left
 
-@[solana_entry]
+@[pf_entry]
 def getRight (s : State) : UInt64 :=
   s.right
 
 /-- 两个参数都写进账户。Lean 名避开命令关键字 `initialize`。 -/
-@[solana_entry]
+@[pf_entry]
 def initBoth (left right : UInt64) : State :=
   { left, right }
 
 /-- 只改 `left`，`right` 保持。 -/
-@[solana_entry]
+@[pf_entry]
 def creditLeft (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if s.left ≤ u64Max - delta then
     let next := s.left + delta

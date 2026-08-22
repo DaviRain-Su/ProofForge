@@ -3,17 +3,17 @@ import Examples.Signed
 namespace Tests.SignedSpec
 
 open Examples.Signed
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
 #guard invokeSigned 1 #[] #[] "vault" 0 == 0
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedSigned
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedSigned == 2
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedSigned
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedSigned == 2
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedSigned with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedSigned with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&
@@ -22,7 +22,7 @@ open SolanaLean.Runtime
         asm.contains "invoke programIx=1"
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTransfer with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with
   | .error _ => false
   | .ok asm =>
       asm.contains "lddw r4, 0" &&

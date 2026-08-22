@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Transfer
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 /-- 无链上状态；init 只占入口形状。 -/
 structure State where
@@ -13,12 +13,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- 封闭 system.transfer。账户表由 `invoke` 钉死，不进 Lean 参数。 -/
-@[solana_entry]
+@[pf_entry]
 def transfer (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := systemTransfer lamports
@@ -26,7 +26,7 @@ def transfer (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

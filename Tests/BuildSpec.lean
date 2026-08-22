@@ -1,4 +1,4 @@
-import SolanaLean
+import ProofForge
 import Examples.Counter
 import Examples.Pair
 import Examples.Flag
@@ -47,151 +47,151 @@ import Examples.TokenOwner
 import Examples.TokenMs
 
 
-#solana_build Examples.Counter
+#pf_build Examples.Counter
 
-#solana_build Examples.Pair
+#pf_build Examples.Pair
 
-#solana_build Examples.Flag
+#pf_build Examples.Flag
 
-#solana_build Examples.Maybe
+#pf_build Examples.Maybe
 
-#solana_build Examples.Window
+#pf_build Examples.Window
 
-#solana_build Examples.Phase
+#pf_build Examples.Phase
 
-#solana_build Examples.Choice
+#pf_build Examples.Choice
 
-#solana_build Examples.Clock
+#pf_build Examples.Clock
 
-#solana_build Examples.Transfer
+#pf_build Examples.Transfer
 
-#solana_build Examples.Ping
+#pf_build Examples.Ping
 
-#solana_build Examples.Call
+#pf_build Examples.Call
 
-#solana_build Examples.Info
+#pf_build Examples.Info
 
-#solana_build Examples.Peer
+#pf_build Examples.Peer
 
-#solana_build Examples.Pda
+#pf_build Examples.Pda
 
-#solana_build Examples.Signed
+#pf_build Examples.Signed
 
-#solana_build Examples.Create
+#pf_build Examples.Create
 
-#solana_build Examples.TokenXfer
+#pf_build Examples.TokenXfer
 
-#solana_build Examples.Ata
+#pf_build Examples.Ata
 
-#solana_build Examples.Rent
+#pf_build Examples.Rent
 
-#solana_build Examples.TokenMint
+#pf_build Examples.TokenMint
 
-#solana_build Examples.SysAlloc
+#pf_build Examples.SysAlloc
 
-#solana_build Examples.TokenAcc
+#pf_build Examples.TokenAcc
 
-#solana_build Examples.Memo
+#pf_build Examples.Memo
 
-#solana_build Examples.CreatePda
+#pf_build Examples.CreatePda
 
-#solana_build Examples.TokenApprove
+#pf_build Examples.TokenApprove
 
-#solana_build Examples.TokenFreeze
+#pf_build Examples.TokenFreeze
 
-#solana_build Examples.TokenAuth
+#pf_build Examples.TokenAuth
 
-#solana_build Examples.Epoch
+#pf_build Examples.Epoch
 
-#solana_build Examples.TokenSize
+#pf_build Examples.TokenSize
 
-#solana_build Examples.SysSeed
+#pf_build Examples.SysSeed
 
-#solana_build Examples.SysXfer
+#pf_build Examples.SysXfer
 
-#solana_build Examples.TokenMint2
+#pf_build Examples.TokenMint2
 
-#solana_build Examples.TokenNative
+#pf_build Examples.TokenNative
 
-#solana_build Examples.Hash
+#pf_build Examples.Hash
 
-#solana_build Examples.Keys
+#pf_build Examples.Keys
 
-#solana_build Examples.Keccak
+#pf_build Examples.Keccak
 
-#solana_build Examples.Trio
+#pf_build Examples.Trio
 
-#solana_build Examples.Gate
+#pf_build Examples.Gate
 
-#solana_build Examples.Nonce
+#pf_build Examples.Nonce
 
-#solana_build Examples.TokenOwner
+#pf_build Examples.TokenOwner
 
-#solana_build Examples.TokenMs
-
-/--
-error: extract/unsupported: svm rejects evm leaf
--/
-#guard_msgs (error) in
-#solana_build Examples.EvmCtx
+#pf_build Examples.TokenMs
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#solana_build Examples.TipJar
+#pf_build Examples.EvmCtx
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#solana_build Examples.Lang
+#pf_build Examples.TipJar
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#solana_build Examples.Vault
+#pf_build Examples.Lang
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#solana_build Examples.Ownable
+#pf_build Examples.Vault
 
 /--
-error: extract/unsupported: no solana_entry
+error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#solana_build Tests.Fixtures
+#pf_build Examples.Ownable
+
+/--
+error: extract/unsupported: no pf_entry
+-/
+#guard_msgs (error) in
+#pf_build Tests.Fixtures
 
 #guard
-  match SolanaLean.IR.discHexOf "decrement" 1 with
+  match ProofForge.IR.discHexOf "decrement" 1 with
   | .ok "0x1b92f24dfb29d300" => true
   | _ => false
 
 #guard
-  match SolanaLean.IR.discHexOf "creditLeft" 1 with
+  match ProofForge.IR.discHexOf "creditLeft" 1 with
   | .ok "0xca5ea3052ea3b57e" => true
   | _ => false
 
 #guard
-  match SolanaLean.IR.discHexOf "getLeft" 0 with
+  match ProofForge.IR.discHexOf "getLeft" 0 with
   | .ok "0xe391a39d1496f393" => true
   | _ => false
 
 #guard
-  match SolanaLean.IR.discHexOf "scale" 1 with
+  match ProofForge.IR.discHexOf "scale" 1 with
   | .ok "0x5f760731ac44bf15" => true
   | _ => false
 
 #guard
-  match SolanaLean.IR.discHexOf "nonzero" 0 with
+  match ProofForge.IR.discHexOf "nonzero" 0 with
   | .ok "0x9d4170637dda8281" => true
   | _ => false
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCounter with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
       asm.contains "0x1b92f24dfb29d300" &&
@@ -199,7 +199,7 @@ error: extract/unsupported: no solana_entry
         asm.contains "call increment"
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedPair with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedPair with
   | .error _ => false
   | .ok asm =>
       asm.contains "0xca5ea3052ea3b57e" &&
@@ -208,24 +208,24 @@ error: extract/unsupported: no solana_entry
         !asm.contains "call increment"
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter ==
-    SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter
+  ProofForge.IR.digestHex ProofForge.Golden.extractedCounter ==
+    ProofForge.IR.digestHex ProofForge.Golden.extractedCounter
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter !=
-    SolanaLean.IR.digestHex SolanaLean.Golden.extractedPair
+  ProofForge.IR.digestHex ProofForge.Golden.extractedCounter !=
+    ProofForge.IR.digestHex ProofForge.Golden.extractedPair
 
 #guard
-  let p := SolanaLean.Golden.extractedPair
-  let q : SolanaLean.IR.Program :=
+  let p := ProofForge.Golden.extractedPair
+  let q : ProofForge.IR.Program :=
     { p with methods := p.methods.map fun m =>
         if m.ixName == "getLeft" then
           { m with ops := #[.returnU64 (.field (.arg 0) "right")] }
         else m }
-  SolanaLean.IR.digestHex p != SolanaLean.IR.digestHex q
+  ProofForge.IR.digestHex p != ProofForge.IR.digestHex q
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCounter with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
-      asm.contains s!"digest={SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter}"
+      asm.contains s!"digest={ProofForge.IR.digestHex ProofForge.Golden.extractedCounter}"

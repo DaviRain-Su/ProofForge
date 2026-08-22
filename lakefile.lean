@@ -1,18 +1,21 @@
 import Lake
 open Lake DSL
 
-package «solana-lean» where
+package «proofforge» where
   version := v!"0.0.1"
 
 @[default_target]
-lean_lib SolanaLean
+lean_lib ProofForge
 
 lean_lib Examples
 
 lean_lib Tests
 
-lean_exe solanaLeanAssemble where
-  root := `SolanaLean.AssembleMain
+lean_exe pfAssemble where
+  root := `ProofForge.AssembleMain
 
-lean_exe evmLeanAssemble where
-  root := `SolanaLean.Evm.AssembleMain
+lean_exe pfEvmAssemble where
+  root := `ProofForge.Evm.AssembleMain
+
+lean_exe pf where
+  root := `ProofForge.Cli

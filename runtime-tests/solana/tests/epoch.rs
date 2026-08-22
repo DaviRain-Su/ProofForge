@@ -72,7 +72,7 @@ fn build_ix(
 }
 
 fn so_path() -> PathBuf {
-    PathBuf::from(env::var("SOLANA_LEAN_EPOCH_SO").unwrap_or_else(|_| {
+    PathBuf::from(env::var("PF_EPOCH_SO").unwrap_or_else(|_| {
         format!(
             "{}/build/sbpf/Epoch.so",
             env::var("CARGO_MANIFEST_DIR")

@@ -41,8 +41,8 @@ def get (s : CounterState) : UInt64 :=
 入口标记（v0 可用手工 `Program` 描述符代替 attribute，避免第一刀就碰 elaborator）：
 
 ```lean
-def counterProgram : SolanaLean.IR.Program :=
-  SolanaLean.IR.counterProgramFor increment init get
+def counterProgram : ProofForge.IR.Program :=
+  ProofForge.IR.counterProgramFor increment init get
 ```
 
 第一刀允许 `counterProgramFor` 是**显式构造 IR 的受控 API**（惰性数据，禁止 `IO` / 任意元程序）。第二刀改为从 `increment` 的 `Expr` 抽出，构造结果必须与手工 IR digest 相同。
@@ -100,7 +100,7 @@ structure Program where
   -- v0: 语义由对应 Lean 函数定义；IR 只记录可编译形状
 ```
 
-digest = `IR.digestHex`：规范化文本（name / fields / kind / ixName / paramCount / ops，按 ixName 排序）的 FNV-1a 64。Lean 4.31 无内建 SHA-256；digest 必须能进 `#guard`。`#solana_build` 抽出的已知例子必须与 `SolanaLean.Golden` 同一 digest，否则 `ir/mismatch`。新例子加进 `Golden.programs`。
+digest = `IR.digestHex`：规范化文本（name / fields / kind / ixName / paramCount / ops，按 ixName 排序）的 FNV-1a 64。Lean 4.31 无内建 SHA-256；digest 必须能进 `#guard`。`#pf_build` 抽出的已知例子必须与 `ProofForge.Golden` 同一 digest，否则 `ir/mismatch`。新例子加进 `Golden.programs`。
 
 ## Lower / Assemble
 

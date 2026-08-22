@@ -4,12 +4,12 @@
 
 | 模块 | 输入 | 输出 | 依赖 |
 |---|---|---|---|
-| Examples.Counter | 无 | 普通 Lean 函数 + 定理 | SolanaLean.IR |
-| SolanaLean.IR | 方法表 | `Program` | 无 |
-| SolanaLean.Profile | 声明名列表 | accept / reject | 无（S1 加深） |
-| SolanaLean.Extract | `Expr` | `Program` | Profile, IR（S2） |
-| SolanaLean.Lower | `Program` | PF HandlerIR / `.s` | PF（S3） |
-| SolanaLean.Assemble | `.s` | `.so` | sbpf（S4） |
+| Examples.Counter | 无 | 普通 Lean 函数 + 定理 | ProofForge.IR |
+| ProofForge.IR | 方法表 | `Program` | 无 |
+| ProofForge.Profile | 声明名列表 | accept / reject | 无（S1 加深） |
+| ProofForge.Extract | `Expr` | `Program` | Profile, IR（S2） |
+| ProofForge.Lower | `Program` | PF HandlerIR / `.s` | PF（S3） |
+| ProofForge.Assemble | `.s` | `.so` | sbpf（S4） |
 
 ## 集成
 

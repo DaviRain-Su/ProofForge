@@ -3,7 +3,7 @@ import Examples.Keccak
 namespace Tests.KeccakSpec
 
 open Examples.Keccak
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,11 +14,11 @@ open SolanaLean.Runtime
 #guard keccak256Lit "ok" == 0
 #guard keccak256Lit "" == 0
 
-#guard !SolanaLean.IR.usesCpi SolanaLean.Golden.extractedKeccak
-#guard !SolanaLean.IR.usesWalk SolanaLean.Golden.extractedKeccak
+#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedKeccak
+#guard !ProofForge.IR.usesWalk ProofForge.Golden.extractedKeccak
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedKeccak with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedKeccak with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_keccak256" &&

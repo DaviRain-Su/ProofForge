@@ -1,4 +1,4 @@
-namespace SolanaLean.Sha256
+namespace ProofForge.Sha256
 
 /-- FIPS 180-4 SHA-256。本机纯函数，能进 `#guard`。不是链上 syscall。 -/
 
@@ -153,4 +153,4 @@ def first8Be (s : String) : UInt64 :=
       v := (v <<< 8) ||| d[i]!.toUInt64
     return v
 
-end SolanaLean.Sha256
+end ProofForge.Sha256

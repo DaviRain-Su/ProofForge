@@ -3,7 +3,7 @@ import Examples.TipJar
 namespace Tests.TipJarSpec
 
 open Examples.TipJar
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -35,10 +35,10 @@ open SolanaLean.Runtime
   | .error _ => false
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedTipJar with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedTipJar with
   | .error _ => false
   | .ok p =>
-      match SolanaLean.Evm.Emit.emitYul p with
+      match ProofForge.Evm.Emit.emitYul p with
       | .error _ => false
       | .ok yul =>
           yul.contains "timestamp()" &&
@@ -54,7 +54,7 @@ open SolanaLean.Runtime
             !yul.contains "sol_invoke_signed_c"
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedTipJar with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedTipJar with
   | .error _ => false
   | .ok p =>
       (p.entries.find? (·.ixName == "deposit")).map (·.payable) == some true &&
@@ -63,16 +63,16 @@ open SolanaLean.Runtime
         (p.entries.find? (·.ixName == "chainId")).map (·.view) == some true
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedTipJar with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedTipJar with
   | .error _ => false
   | .ok p =>
-      let abi := SolanaLean.Evm.Emit.emitAbi p
+      let abi := ProofForge.Evm.Emit.emitAbi p
       abi.contains "\"stateMutability\":\"payable\"" &&
         abi.contains "\"name\":\"deposit\"" &&
         abi.contains "\"name\":\"payout\""
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTipJar with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTipJar with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

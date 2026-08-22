@@ -1,4 +1,4 @@
-# SolanaLean.Emit
+# ProofForge.Emit
 
 ## Purpose
 

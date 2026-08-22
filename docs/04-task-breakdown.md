@@ -26,7 +26,7 @@
 
 ## L1 完成定义
 
-- `@[solana_entry]` 标根；`#solana_build` 不再要三 ident
+- `@[pf_entry]` 标根；`#pf_build` 不再要三 ident
 - increment 与 decrement 可同程序、不同 disc
 - wrapping 入口仍 fail closed
 - digest 变则发射变

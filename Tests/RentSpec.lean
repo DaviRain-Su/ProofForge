@@ -3,7 +3,7 @@ import Examples.Rent
 namespace Tests.RentSpec
 
 open Examples.Rent
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -15,7 +15,7 @@ open SolanaLean.Runtime
   | .error _ => false
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedRent with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedRent with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_get_rent_sysvar" &&

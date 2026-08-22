@@ -18,10 +18,10 @@ open Examples.Lang
   | (a, b) => a == 9 && b == 0
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedLang with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedLang with
   | .error _ => false
   | .ok p =>
-      match SolanaLean.Evm.Emit.emitYul p with
+      match ProofForge.Evm.Emit.emitYul p with
       | .error _ => false
       | .ok yul =>
           yul.contains "and(" &&
@@ -35,18 +35,18 @@ open Examples.Lang
             yul.contains "if gt(arg0, 0xff)"
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedLang with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedLang with
   | .error _ => false
   | .ok p =>
       (p.entries.find? (·.ixName == "mask8")).map (·.paramWidths) == some #[1] &&
         (p.entries.find? (·.ixName == "both")).map (·.retCount) == some 2
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedLang with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedLang with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 
-#guard SolanaLean.Evm.Keccak.selector "mask8" #["uint8"] ==
-  SolanaLean.Evm.Keccak.selectorOfWidths "mask8" #[1]
+#guard ProofForge.Evm.Keccak.selector "mask8" #["uint8"] ==
+  ProofForge.Evm.Keccak.selectorOfWidths "mask8" #[1]
 
 end Tests.LangSpec

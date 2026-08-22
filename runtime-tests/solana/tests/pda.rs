@@ -70,7 +70,7 @@ fn build_ix(
 }
 
 fn so_path() -> PathBuf {
-    PathBuf::from(env::var("SOLANA_LEAN_PDA_SO").unwrap_or_else(|_| {
+    PathBuf::from(env::var("PF_PDA_SO").unwrap_or_else(|_| {
         format!(
             "{}/build/sbpf/Pda.so",
             env::var("CARGO_MANIFEST_DIR")

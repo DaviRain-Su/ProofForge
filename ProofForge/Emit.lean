@@ -1,7 +1,7 @@
-import SolanaLean.IR
-import SolanaLean.Ops
+import ProofForge.IR
+import ProofForge.Ops
 
-namespace SolanaLean.Emit
+namespace ProofForge.Emit
 
 def overflowCode : String := "0x1001"
 
@@ -1373,4 +1373,4 @@ entrypoint:
 {dispatchTxt}
 {handlers}"
 
-end SolanaLean.Emit
+end ProofForge.Emit

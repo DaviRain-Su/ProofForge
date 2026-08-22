@@ -1,4 +1,4 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Window
 
@@ -12,16 +12,16 @@ inductive Error where
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
-@[solana_entry]
+@[pf_entry]
 def init (first : UInt64) : State :=
   { cells := #v[first, 0] }
 
-@[solana_entry]
+@[pf_entry]
 def getHead (s : State) : UInt64 :=
   s.cells[0]
 
 /-- 只改第二格，第一格保持。 -/
-@[solana_entry]
+@[pf_entry]
 def setTail (s : State) (n : UInt64) : Except Error (State × UInt64) :=
   if n ≤ u64Max then
     .ok ({ cells := s.cells.set 1 n }, n)

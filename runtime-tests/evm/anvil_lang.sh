@@ -9,7 +9,7 @@ source "$here/lib.sh"
 solana_lean_evm_init evm-anvil-lang
 bin="$root/build/evm/Lang.bin"
 solana_lean_ensure_bin "$bin"
-solana_lean_start_anvil "${SOLANA_LEAN_EVM_PORT:-18553}" "$root/build/evm/anvil-lang.log"
+solana_lean_start_anvil "${PF_EVM_PORT:-18553}" "$root/build/evm/anvil-lang.log"
 
 bytecode="$(tr -d '\n\r ' < "$bin")"
 addr="$(solana_lean_deploy_ctor_u64 "$bytecode" 3)"

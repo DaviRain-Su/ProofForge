@@ -3,7 +3,7 @@ import Examples.Transfer
 namespace Tests.TransferSpec
 
 open Examples.Transfer
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,15 +14,15 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedTransfer
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedTransfer == 3
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTransfer
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTransfer == 3
 
 #guard
-  let l := SolanaLean.IR.inputLayout SolanaLean.Golden.extractedTransfer
+  let l := ProofForge.IR.inputLayout ProofForge.Golden.extractedTransfer
   l.instructionDataLen == 31016 && l.instructionData == 31024
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTransfer with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&

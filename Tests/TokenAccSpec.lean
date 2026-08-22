@@ -3,7 +3,7 @@ import Examples.TokenAcc
 namespace Tests.TokenAccSpec
 
 open Examples.TokenAcc
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -20,11 +20,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 0
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedTokenAcc
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedTokenAcc == 4
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenAcc
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenAcc == 4
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTokenAcc with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenAcc with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=3" &&

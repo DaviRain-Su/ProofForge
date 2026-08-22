@@ -11,7 +11,7 @@ solana_lean_evm_init evm-anvil-counter
 UINT64_MAX="18446744073709551615"
 bin="$root/build/evm/Counter.bin"
 solana_lean_ensure_bin "$bin"
-solana_lean_start_anvil "${SOLANA_LEAN_EVM_PORT:-18547}" "$root/build/evm/anvil-counter.log"
+solana_lean_start_anvil "${PF_EVM_PORT:-18547}" "$root/build/evm/anvil-counter.log"
 
 bytecode="$(tr -d '\n\r ' < "$bin")"
 [[ -n "$bytecode" ]] || { echo "FAIL: empty Counter.bin" >&2; exit 1; }

@@ -2,7 +2,7 @@ import Lean
 
 open Lean
 
-namespace SolanaLean.Profile
+namespace ProofForge.Profile
 
 inductive Decision where
   | accept
@@ -31,7 +31,7 @@ private def forbiddenTypeConst : Name → Option String
 /-- 用户模块声明才施加 extern/opaque/implemented_by 门。Init 原语自带 extern。 -/
 private def isUserDecl (n : Name) : Bool :=
   let head := n.getRoot
-  head == `SolanaLean || head == `Examples || head == `Tests
+  head == `ProofForge || head == `Examples || head == `Tests
 
 private def enqueueUsed (used : NameSet) (queue : Array Name) (seen : NameSet) :
     Array Name × NameSet :=
@@ -118,4 +118,4 @@ def checkAll (env : Environment) (roots : Array Name) : Decision :=
       | .accept => pure ()
     return .accept
 
-end SolanaLean.Profile
+end ProofForge.Profile

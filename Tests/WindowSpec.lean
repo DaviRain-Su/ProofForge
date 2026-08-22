@@ -16,10 +16,10 @@ open Examples.Window
   | .error _ => false
 
 #guard
-  match SolanaLean.IR.fieldOffset SolanaLean.Golden.extractedWindow "cells_1" with
+  match ProofForge.IR.fieldOffset ProofForge.Golden.extractedWindow "cells_1" with
   | some 16 => true
   | _ => false
 
-#guard SolanaLean.IR.dataLen SolanaLean.Golden.extractedWindow == 24
+#guard ProofForge.IR.dataLen ProofForge.Golden.extractedWindow == 24
 
 end Tests.WindowSpec

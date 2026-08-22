@@ -17,7 +17,7 @@ docs/01-prd.md 成功标准；PF runtime-tests/solana/tests/state_cell_shaped_pr
 
 ## path
 
-SolanaLean/Assemble.lean；runtime-tests/
+ProofForge/Assemble.lean；runtime-tests/
 
 ## verification
 

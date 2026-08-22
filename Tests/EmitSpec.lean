@@ -1,21 +1,21 @@
-import SolanaLean
+import ProofForge
 import Examples.Counter
 
-#solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
+#pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.counterProgram with
+  match ProofForge.Emit.emitCounterAsm ProofForge.IR.counterProgram with
   | .error "extract/unsupported: init missing returnState" => true
   | .error "extract/unsupported: increment missing checked arith" => true
   | _ => false
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm { name := "x", methods := #[] } with
+  match ProofForge.Emit.emitCounterAsm { name := "x", methods := #[] } with
   | .error "extract/unsupported: not program shape" => true
   | _ => false
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCounter with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
       let inc :=
@@ -27,11 +27,11 @@ import Examples.Counter
       | _ => false
 
 #guard
-  match SolanaLean.IR.fieldOffset SolanaLean.Golden.extractedCounter "value" with
+  match ProofForge.IR.fieldOffset ProofForge.Golden.extractedCounter "value" with
   | some 8 => true
   | _ => false
 
-private def pairShape : SolanaLean.IR.Program :=
+private def pairShape : ProofForge.IR.Program :=
   { name := "Pair"
     slots := #[{ name := "left" }, { name := "right" }]
     methods := #[
@@ -48,32 +48,32 @@ private def pairShape : SolanaLean.IR.Program :=
     ] }
 
 #guard
-  match SolanaLean.IR.fieldOffset pairShape "right" with
+  match ProofForge.IR.fieldOffset pairShape "right" with
   | some 16 => true
   | _ => false
 
-#guard SolanaLean.IR.layoutSig pairShape == "2|0:left:0:8:8:u64-le|1:right:0:16:8:u64-le"
+#guard ProofForge.IR.layoutSig pairShape == "2|0:left:0:8:8:u64-le|1:right:0:16:8:u64-le"
 
 #guard
-  match SolanaLean.IR.layoutMarkerHex pairShape with
+  match ProofForge.IR.layoutMarkerHex pairShape with
   | .ok "0x20d45b635e2b016f" => true
   | _ => false
 
 #guard
-  match SolanaLean.IR.layoutMarkerHex SolanaLean.Golden.extractedCounter with
+  match ProofForge.IR.layoutMarkerHex ProofForge.Golden.extractedCounter with
   | .ok "0xbbe897f0336e6fc" => true
   | _ => false
 
 #guard
-  let l := SolanaLean.IR.inputLayout SolanaLean.Golden.extractedCounter
+  let l := ProofForge.IR.inputLayout ProofForge.Golden.extractedCounter
   l.rentEpoch == 0x2870 && l.instructionDataLen == 0x2878 && l.instructionData == 0x2880
 
 #guard
-  let l := SolanaLean.IR.inputLayout SolanaLean.Golden.extractedPair
+  let l := ProofForge.IR.inputLayout ProofForge.Golden.extractedPair
   l.rentEpoch == 0x2878 && l.instructionDataLen == 0x2880 && l.instructionData == 0x2888
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm pairShape with
+  match ProofForge.Emit.emitCounterAsm pairShape with
   | .error _ => false
   | .ok asm =>
       asm.contains "ACC0_DATA + 8" &&
@@ -83,12 +83,12 @@ private def pairShape : SolanaLean.IR.Program :=
         asm.contains ".equ INSTRUCTION_DATA, 10376"
 
 #guard
-  match SolanaLean.IR.layoutMarkerHex
+  match ProofForge.IR.layoutMarkerHex
       { name := "X", slots := #[{ name := "a" }, { name := "b" }, { name := "c" }], methods := #[] } with
   | .ok "0xa2e4c31e74585ac3" => true
   | _ => false
 
-private def swappedIncrement : SolanaLean.IR.Program :=
+private def swappedIncrement : ProofForge.IR.Program :=
   { name := "Counter"
     slots := #[{ name := "value" }]
     methods := #[
@@ -105,7 +105,7 @@ private def swappedIncrement : SolanaLean.IR.Program :=
     ] }
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm swappedIncrement with
+  match ProofForge.Emit.emitCounterAsm swappedIncrement with
   | .error _ => false
   | .ok asm =>
       let inc :=

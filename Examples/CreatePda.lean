@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.CreatePda
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,12 +12,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- 给 `"vault"` PDA 开 16 字节。 -/
-@[solana_entry]
+@[pf_entry]
 def openPda (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := createPda lamports
@@ -26,7 +26,7 @@ def openPda (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
     .error .overflow
 
 /-- 同一条 CreateAccount，bump 钉死 0。syscall 必须失败。 -/
-@[solana_entry]
+@[pf_entry]
 def openBad (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := invokeSigned 2
@@ -38,7 +38,7 @@ def openBad (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

@@ -8,9 +8,9 @@
 - S0–S5：普通 Lean Counter 竖切到 Mollusk
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
-- `@[solana_entry]` + `#solana_build`；按名 disc；Counter 同程序 decrement
+- `@[pf_entry]` + `#pf_build`；按名 disc；Counter 同程序 decrement
 - 任意 `ite`；checked mul/div/mod；`=` `≠` 比较；Counter scale/divide/modulo/nonzero
-- `IR.digestHex`（FNV-1a 64）；`#solana_build` 抽出与 fixture 必须同一 digest
+- `IR.digestHex`（FNV-1a 64）；`#pf_build` 抽出与 fixture 必须同一 digest
 - 带类型字段表：`UInt8/16/32/64` + `Option UInt64` 双叶；Flag / Maybe Mollusk
 - disc / layout marker 本机 SHA-256，不再挂名表
 - 定长 `Vector UInt64 n` 展开成连续槽；Window Mollusk；不定长 Array fail closed

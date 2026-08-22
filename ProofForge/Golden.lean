@@ -1,10 +1,10 @@
-import SolanaLean.IR
-import SolanaLean.Ops
+import ProofForge.IR
+import ProofForge.Ops
 
-namespace SolanaLean.Golden
+namespace ProofForge.Golden
 
-open SolanaLean.IR
-open SolanaLean.Ops
+open ProofForge.IR
+open ProofForge.Ops
 
 def extractedCounter : Program :=
   { name := "Counter"
@@ -993,8 +993,8 @@ def programs : Array Program := #[
   extractedEvmCtx, extractedTipJar, extractedLang, extractedVault, extractedOwnable
 ]
 
-/-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
+/-- `#pf_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
 def digestOf (name : String) : Option String :=
   (programs.find? (·.name == name)).map digestHex
 
-end SolanaLean.Golden
+end ProofForge.Golden

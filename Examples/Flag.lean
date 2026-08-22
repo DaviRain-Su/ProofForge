@@ -1,4 +1,4 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Flag
 
@@ -13,16 +13,16 @@ inductive Error where
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
-@[solana_entry]
+@[pf_entry]
 def init (count : UInt64) : State :=
   { flag := 0, count }
 
-@[solana_entry]
+@[pf_entry]
 def getFlag (s : State) : UInt64 :=
   s.flag.toUInt64
 
 /-- 把 `bit` 的低 8 位写进 `flag`。 -/
-@[solana_entry]
+@[pf_entry]
 def setFlag (s : State) (bit : UInt64) : Except Error (State × UInt64) :=
   if bit ≤ 255 then
     let next := bit.toUInt8

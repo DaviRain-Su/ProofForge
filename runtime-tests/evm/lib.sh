@@ -73,9 +73,9 @@ solana_lean_evm_init() {
     echo "$label: skip: cast not found (install foundryup, or set FOUNDRY_BIN)" >&2
     exit 0
   }
-  chain_id="${SOLANA_LEAN_EVM_CHAIN_ID:-31338}"
+  chain_id="${PF_EVM_CHAIN_ID:-31338}"
   # Anvil default account 0.
-  private_key="${SOLANA_LEAN_EVM_PRIVATE_KEY:-ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
+  private_key="${PF_EVM_PRIVATE_KEY:-ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
 }
 
 solana_lean_to_dec() {
@@ -122,8 +122,8 @@ solana_lean_ensure_bin() {
   local path="$1"
   if [[ ! -f "$path" ]]; then
     echo "assembling $path" >&2
-    lake exe evmLeanAssemble -- "$root/build/evm" >/dev/null \
-      || { echo "FAIL: lake exe evmLeanAssemble failed" >&2; exit 1; }
+    lake exe pfEvmAssemble -- "$root/build/evm" >/dev/null \
+      || { echo "FAIL: lake exe pfEvmAssemble failed" >&2; exit 1; }
   fi
   [[ -f "$path" ]] || { echo "FAIL: missing $path" >&2; exit 1; }
 }

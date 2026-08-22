@@ -9,7 +9,7 @@
 
 ## 一、结论（先看这个）
 
-**能做独立 `solana-lean`，但不能按用户原方案的那条编译链做。**
+**能做独立 `proofforge`，但不能按用户原方案的那条编译链做。**
 
 | 用户原话 | 判定 | 根因 |
 |---|---|---|
@@ -74,7 +74,7 @@ program TransferSol where
 | 档 | 表面 | 抽出 | 判定 |
 |---|---|---|---|
 | (a) 新具体语法 | `program … where` | 可以（PF 已做） | 这就是新 DSL |
-| (b) 普通 Lean + `@[solana_entry]` + 传递闭包校验 | 看起来像 Lean | 可以，前提 fail-closed | **这是「不新设计语言」的唯一诚实读法** |
+| (b) 普通 Lean + `@[pf_entry]` + 传递闭包校验 | 看起来像 Lean | 可以，前提 fail-closed | **这是「不新设计语言」的唯一诚实读法** |
 | (c) 无约束 Lean | 任意 `def`/`IO`/`partial` | 不能声称语义完整 | 不可行 |
 
 路径 (b) 在形式意义上仍是语言子集（可接受程序的集合有自己的规则）。用户不学新关键字；编译器必须拒绝递归、`sorry`、`@[extern]`、`@[implemented_by]`、无界分配、传递依赖里的 axiom。
@@ -239,7 +239,7 @@ cargo test --locked --test state_cell_shaped_product -- --nocapture
 
 ---
 
-## 六、若做独立 `solana-lean`：最小架构
+## 六、若做独立 `proofforge`：最小架构
 
 ### 两条前端，一条后端
 
@@ -254,7 +254,7 @@ program where → decoder → ValidatedSourceV1 → Check/Normalize
 **路径 B（长期 UX）**：普通 Lean 子集
 
 ```
-@[solana_entry] def increment … → elaborator → Expr 闭包
+@[pf_entry] def increment … → elaborator → Expr 闭包
   → 新 fail-closed 子集检查 → 新抽出器 → 同一语义 IR
   → 同一发射器 / sbpf
 ```

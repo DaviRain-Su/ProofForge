@@ -20,12 +20,12 @@
 
 | ID | 类型 | 输入 | 期望 |
 |---|---|---|---|
-| T-S1-01 | happy | `#solana_check` Counter 三根 | accept |
+| T-S1-01 | happy | `#pf_check` Counter 三根 | accept |
 | T-S1-02 | error | `usesNat` | `Nat in root type` |
 | T-S1-03 | error | `partial` / `sorry` / `IO` / `extern` / `implemented_by` | 对应 reject |
-| T-S2-01 | happy | `#solana_extract` Counter | 抽出；increment sketch 含 `u64Max` |
+| T-S2-01 | happy | `#pf_extract` Counter | 抽出；increment sketch 含 `u64Max` |
 | T-S2-02 | error | extract 夹带 `usesNat` | fail closed |
-| T-S3-01 | happy | `#solana_extract` 后发射 | 含 entrypoint / overflow / disc / return data |
+| T-S3-01 | happy | `#pf_extract` 后发射 | 含 entrypoint / overflow / disc / return data |
 | T-S3-03 | error | 空 ops 的 `counterProgram` | 缺 `returnState` / `checkedAddU64` |
 | T-S3-02 | error | 空 IR | `not counter shape` |
 | T-S4-01 | happy | Mollusk init(5) | 账户 count=5 |
@@ -46,8 +46,8 @@
 | T-F-06 | happy | creditLeft 5+3，right=99 | left=8，right 保持 99 |
 | T-F-07 | happy | getLeft | return left，不改账户 |
 | T-F-08 | error | creditLeft max+1 | `0x1001`，两字段保持 |
-| T-L1-01 | happy | `#solana_build Examples.Counter` | 四方法；decrement 有独立 disc |
-| T-L1-02 | error | 无 entry 的名字空间 | `extract/unsupported: no solana_entry` |
+| T-L1-01 | happy | `#pf_build Examples.Counter` | 四方法；decrement 有独立 disc |
+| T-L1-02 | error | 无 entry 的名字空间 | `extract/unsupported: no pf_entry` |
 | T-L1-03 | happy | Pair Mollusk | disc 为 creditLeft / getLeft |
 | T-L1-04 | happy | decrement 8-3 | return 5，写回 5 |
 | T-L1-05 | error | decrement 2-3 | `0x1001`，状态保持 |

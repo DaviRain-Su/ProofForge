@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Peer
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,44 +12,44 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- 无参 mutate 占入口；不写业务槽。 -/
-@[solana_entry]
+@[pf_entry]
 def touch (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 
-@[solana_entry]
+@[pf_entry]
 def lamports1 (_s : State) : UInt64 :=
   accLamports1
 
-@[solana_entry]
+@[pf_entry]
 def owner1 (_s : State) : UInt64 :=
   accOwner1
 
-@[solana_entry]
+@[pf_entry]
 def dataLen1 (_s : State) : UInt64 :=
   accDataLen1
 
 /-- 读旗，不强制入口签名。 -/
-@[solana_entry]
+@[pf_entry]
 def signer1 (_s : State) : UInt64 :=
   isSigner1
 
-@[solana_entry]
+@[pf_entry]
 def writable1 (_s : State) : UInt64 :=
   isWritable1
 
-@[solana_entry]
+@[pf_entry]
 def executable1 (_s : State) : UInt64 :=
   isExecutable1
 

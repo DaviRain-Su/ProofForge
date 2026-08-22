@@ -1,24 +1,24 @@
 import Lean
-import SolanaLean.Profile
-import SolanaLean.Extract
-import SolanaLean.IR
-import SolanaLean.Ops
-import SolanaLean.Emit
-import SolanaLean.Golden
+import ProofForge.Profile
+import ProofForge.Extract
+import ProofForge.IR
+import ProofForge.Ops
+import ProofForge.Emit
+import ProofForge.Golden
 
 open Lean Elab Command
 
-namespace SolanaLean.Commands
+namespace ProofForge.Commands
 
-elab "#solana_check " n:ident : command => do
+elab "#pf_check " n:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload n
   let env ← getEnv
   match Profile.check env name with
-  | .accept => logInfo m!"solana-lean: accept {name}"
+  | .accept => logInfo m!"proofforge: accept {name}"
   | .reject reason => throwError reason
 
-syntax "#solana_extract " ident ident ident : command
-syntax "#solana_extract " ident ident ident " with " str,+ : command
+syntax "#pf_extract " ident ident ident : command
+syntax "#pf_extract " ident ident ident " with " str,+ : command
 
 private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Array String)) :
     CommandElabM Unit := do
@@ -43,18 +43,18 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
     | .ok asm =>
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
-      logInfo m!"solana-lean: fields = {program.fields}"
-      logInfo m!"solana-lean: extracted ops = {program.methods.map (fun m => repr m.ops)}"
-      logInfo m!"solana-lean: emitted {asm.length} bytes of sBPF assembly"
+      logInfo m!"proofforge: fields = {program.fields}"
+      logInfo m!"proofforge: extracted ops = {program.methods.map (fun m => repr m.ops)}"
+      logInfo m!"proofforge: emitted {asm.length} bytes of sBPF assembly"
 
 elab_rules : command
-  | `(#solana_extract $initN:ident $mutN:ident $getN:ident) =>
+  | `(#pf_extract $initN:ident $mutN:ident $getN:ident) =>
       runExtract initN mutN getN none
-  | `(#solana_extract $initN:ident $mutN:ident $getN:ident with $fs:str,*) => do
+  | `(#pf_extract $initN:ident $mutN:ident $getN:ident with $fs:str,*) => do
       let fields := (fs.getElems.map (·.getString)).toList.toArray
       runExtract initN mutN getN (some fields)
 
-elab "#solana_build " n:ident : command => do
+elab "#pf_build " n:ident : command => do
   let ns := n.getId
   let env ← getEnv
   match Extract.extractModule env ns none with
@@ -66,17 +66,17 @@ elab "#solana_build " n:ident : command => do
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
       let digest := IR.digestHex program
-      match SolanaLean.Golden.digestOf program.name with
+      match ProofForge.Golden.digestOf program.name with
       | some want =>
         if digest != want then
           throwError s!"ir/mismatch: extracted {program.name} digest != fixture"
       | none => pure ()
-      logInfo m!"solana-lean: program {program.name} fields = {program.fields}"
-      logInfo m!"solana-lean: methods = {program.methods.map (fun m => m.ixName)}"
-      logInfo m!"solana-lean: digest = {digest}"
-      logInfo m!"solana-lean: emitted {asm.length} bytes of sBPF assembly"
+      logInfo m!"proofforge: program {program.name} fields = {program.fields}"
+      logInfo m!"proofforge: methods = {program.methods.map (fun m => m.ixName)}"
+      logInfo m!"proofforge: digest = {digest}"
+      logInfo m!"proofforge: emitted {asm.length} bytes of sBPF assembly"
 
-elab "#solana_dump " n:ident : command => do
+elab "#pf_dump " n:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload n
   let env ← getEnv
   match env.find? name with
@@ -86,4 +86,4 @@ elab "#solana_dump " n:ident : command => do
     | none => throwError "no value {name}"
     | some e => logInfo m!"{name} := {e}"
 
-end SolanaLean.Commands
+end ProofForge.Commands

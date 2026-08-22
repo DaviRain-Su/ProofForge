@@ -1,13 +1,13 @@
-import SolanaLean
+import ProofForge
 import Examples.Flag
 import Examples.Maybe
 
-#solana_build Examples.Flag
+#pf_build Examples.Flag
 
-#solana_build Examples.Maybe
+#pf_build Examples.Maybe
 
 #guard
-  match SolanaLean.IR.fieldOffset
+  match ProofForge.IR.fieldOffset
       { name := "Flag"
         slots := #[{ name := "flag", width := 1, abi := "u8-le" }, { name := "count" }]
         methods := #[] } "count" with
@@ -15,15 +15,15 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  let p : SolanaLean.IR.Program :=
+  let p : ProofForge.IR.Program :=
     { name := "Maybe"
       slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]
       methods := #[] }
-  SolanaLean.IR.fieldOffset p "slot_p0" == some 16 &&
-    SolanaLean.IR.dataLen p == 24
+  ProofForge.IR.fieldOffset p "slot_p0" == some 16 &&
+    ProofForge.IR.dataLen p == 24
 
 #guard
-  match SolanaLean.IR.layoutMarkerHex
+  match ProofForge.IR.layoutMarkerHex
       { name := "Flag"
         slots := #[{ name := "flag", width := 1, abi := "u8-le" }, { name := "count" }]
         methods := #[] } with
@@ -31,7 +31,7 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  match SolanaLean.IR.layoutMarkerHex
+  match ProofForge.IR.layoutMarkerHex
       { name := "Maybe"
         slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]
         methods := #[] } with
@@ -39,30 +39,30 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  match SolanaLean.IR.discHexOf "setFlag" 1 with
+  match ProofForge.IR.discHexOf "setFlag" 1 with
   | .ok "0xabc0ed57af4c46fe" => true
   | _ => false
 
 #guard
-  match SolanaLean.IR.discHexOf "isSome" 0 with
+  match ProofForge.IR.discHexOf "isSome" 0 with
   | .ok "0xae9916c18320fcc3" => true
   | _ => false
 
 #guard
-  match SolanaLean.IR.discHexOf "neverSeen" 2 with
+  match ProofForge.IR.discHexOf "neverSeen" 2 with
   | .ok "0xf53bae450cc55143" => true
   | _ => false
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.Golden.extractedFlag ==
-    SolanaLean.IR.digestHex SolanaLean.Golden.extractedFlag
+  ProofForge.IR.digestHex ProofForge.Golden.extractedFlag ==
+    ProofForge.IR.digestHex ProofForge.Golden.extractedFlag
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.Golden.extractedFlag !=
-    SolanaLean.IR.digestHex SolanaLean.Golden.extractedMaybe
+  ProofForge.IR.digestHex ProofForge.Golden.extractedFlag !=
+    ProofForge.IR.digestHex ProofForge.Golden.extractedMaybe
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedFlag with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedFlag with
   | .error _ => false
   | .ok asm =>
       asm.contains "stxb" &&
@@ -72,7 +72,7 @@ import Examples.Maybe
         asm.contains "call setFlag"
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedMaybe with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedMaybe with
   | .error _ => false
   | .ok asm =>
       asm.contains "0xf53e0f4e232b2e90" &&

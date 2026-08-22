@@ -3,7 +3,7 @@ import Examples.Info
 namespace Tests.InfoSpec
 
 open Examples.Info
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -16,7 +16,7 @@ open SolanaLean.Runtime
 #guard executable (init 0) == isExecutable0
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedInfo with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedInfo with
   | .error _ => false
   | .ok asm =>
       asm.contains "ACC0_LAMPORTS" &&

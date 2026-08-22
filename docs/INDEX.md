@@ -1,6 +1,6 @@
-# solana-lean 文档索引
+# ProofForge 文档索引
 
-独立仓：用**普通 Lean 4** 写 Solana 合约，复用 Lean kernel / elaborator / tactic，只自建目标剖面和 IR 胶水；sBPF 发射与汇编复用 ProofForge 已有 lowering。
+独立仓：用**普通 Lean 4** 写合约，复用 Lean kernel / elaborator / tactic，只自建目标剖面和 IR 胶水。当前目标是 Solana sBPF 和 EVM Yul。
 
 | 文档 | 作用 |
 |---|---|
@@ -22,4 +22,4 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 
-当前阶段：**L4 + EVM**。L4-034 已绿；EVM 平行剖面（到 Ownable）已并入。SVM 名不翻译。
+当前阶段：**L4 + EVM**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。L4-034 已绿；EVM 平行剖面（到 Ownable）已并入。SVM 名不翻译。

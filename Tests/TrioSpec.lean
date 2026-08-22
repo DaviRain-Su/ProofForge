@@ -3,7 +3,7 @@ import Examples.Trio
 namespace Tests.TrioSpec
 
 open Examples.Trio
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -18,12 +18,12 @@ open SolanaLean.Runtime
 #guard signerKey 1 == 0
 #guard ownerIsSelf 0 == 0
 
-#guard !SolanaLean.IR.usesCpi SolanaLean.Golden.extractedTrio
-#guard SolanaLean.IR.usesWalk SolanaLean.Golden.extractedTrio
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedTrio == 3
+#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedTrio
+#guard ProofForge.IR.usesWalk ProofForge.Golden.extractedTrio
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTrio == 3
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTrio with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTrio with
   | .error _ => false
   | .ok asm =>
       asm.contains "load walked acc2 +72" &&

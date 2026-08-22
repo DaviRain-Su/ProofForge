@@ -1,9 +1,9 @@
-import SolanaLean.Evm.IR
-import SolanaLean.Evm.Emit
+import ProofForge.Evm.IR
+import ProofForge.Evm.Emit
 
-namespace SolanaLean.Evm.Assemble
+namespace ProofForge.Evm.Assemble
 
-open SolanaLean.Evm
+open ProofForge.Evm
 
 structure Result where
   yulPath : System.FilePath
@@ -84,4 +84,4 @@ def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Resul
   IO.FS.writeFile binPath (hex ++ "\n")
   return { yulPath, abiPath, binPath, binHex := hex }
 
-end SolanaLean.Evm.Assemble
+end ProofForge.Evm.Assemble

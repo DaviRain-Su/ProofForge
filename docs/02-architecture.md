@@ -17,10 +17,10 @@
 普通 Lean def / theorem          ← 整段借 Lean
         │
         ▼
-SolanaLean.Profile 子集检查      ← 本仓自建（小）
+ProofForge.Profile 子集检查      ← 本仓自建（小）
         │
         ▼
-SolanaLean.Extract → 语义 IR     ← 本仓自建（薄胶水）
+ProofForge.Extract → 语义 IR     ← 本仓自建（薄胶水）
         │
         ▼
 PF HandlerIR / emitSbpf / sbpf   ← 搬，不重写
@@ -33,13 +33,13 @@ PF HandlerIR / emitSbpf / sbpf   ← 搬，不重写
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
-| `SolanaLean.Syntax` | 只有 attribute / 标记；无新命令语法 | `program … where` |
-| `SolanaLean.Profile` | 传递闭包准入规则 | 业务类型检查（Lean 已做） |
-| `SolanaLean.Extract` | `Expr` → 本仓语义 IR | LCNF/IR 当语义权威 |
-| `SolanaLean.IR` | 稳定、可哈希的合约 IR | sBPF 文本 |
-| `SolanaLean.Lower` | IR → PF `HandlerIR` / `emitSbpfAsmV1` | 汇编器 |
-| `SolanaLean.Assemble` | 子进程调用 locked `sbpf` | FFI |
-| `SolanaLean.Abi` | 单账户 Counter 的状态布局与 checked 算术约定 | 通用账户图 |
+| `ProofForge.Syntax` | 只有 attribute / 标记；无新命令语法 | `program … where` |
+| `ProofForge.Profile` | 传递闭包准入规则 | 业务类型检查（Lean 已做） |
+| `ProofForge.Extract` | `Expr` → 本仓语义 IR | LCNF/IR 当语义权威 |
+| `ProofForge.IR` | 稳定、可哈希的合约 IR | sBPF 文本 |
+| `ProofForge.Lower` | IR → PF `HandlerIR` / `emitSbpfAsmV1` | 汇编器 |
+| `ProofForge.Assemble` | 子进程调用 locked `sbpf` | FFI |
+| `ProofForge.Abi` | 单账户 Counter 的状态布局与 checked 算术约定 | 通用账户图 |
 
 ## 信任边界
 

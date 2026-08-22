@@ -1,4 +1,4 @@
-# SolanaLean.Attr
+# ProofForge.Attr
 
 ## Purpose
 
@@ -10,9 +10,9 @@
 
 ## API
 
-- `@[solana_entry]`
-- `solanaEntryAttr.hasTag env decl`
+- `@[pf_entry]`
+- `pfEntryAttr.hasTag env decl`
 
 ## Tests
 
-`Tests/BuildSpec.lean`：有标记则 `#solana_build` 成功；无标记 fail closed。
+`Tests/BuildSpec.lean`：有标记则 `#pf_build` 成功；无标记 fail closed。

@@ -3,7 +3,7 @@ import Examples.Memo
 namespace Tests.MemoSpec
 
 open Examples.Memo
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,11 +14,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 0
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedMemo
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedMemo == 2
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedMemo
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedMemo == 2
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedMemo with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedMemo with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=1" &&

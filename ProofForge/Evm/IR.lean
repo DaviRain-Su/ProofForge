@@ -1,8 +1,8 @@
-import SolanaLean.IR
-import SolanaLean.Ops
-import SolanaLean.Evm.Keccak
+import ProofForge.IR
+import ProofForge.Ops
+import ProofForge.Evm.Keccak
 
-namespace SolanaLean.Evm.IR
+namespace ProofForge.Evm.IR
 
 structure Slot where
   name : String
@@ -12,7 +12,7 @@ structure Slot where
   deriving BEq, Repr, Inhabited
 
 structure Method where
-  kind : SolanaLean.IR.MethodKind
+  kind : ProofForge.IR.MethodKind
   name : String
   ixName : String
   selector : String := ""
@@ -103,23 +103,23 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
 def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
   walkForbidden 16 ops
 
-private def rejectSlot (s : SolanaLean.IR.Slot) : Option String :=
+private def rejectSlot (s : ProofForge.IR.Slot) : Option String :=
   if !(s.width == 1 || s.width == 2 || s.width == 4 || s.width == 8) then
     some s!"extract/unsupported: evm slot {s.name} width {s.width}"
   else none
 
-private def isCtor (m : SolanaLean.IR.Method) : Bool :=
+private def isCtor (m : ProofForge.IR.Method) : Bool :=
   m.kind == .init
 
 /-- 从已抽出的 SVM `IR.Program` 做成 EVM 形状。不改原 IR。 -/
-def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
+def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
   if src.slots.isEmpty then
     throw "extract/unsupported: evm program has no slots"
   for s in src.slots do
     if let some reason := rejectSlot s then
       throw reason
-  let mut ctors : Array SolanaLean.IR.Method := #[]
-  let mut extras : Array SolanaLean.IR.Method := #[]
+  let mut ctors : Array ProofForge.IR.Method := #[]
+  let mut extras : Array ProofForge.IR.Method := #[]
   for m in src.methods do
     if hasSvmLeaf m.ops then
       throw s!"extract/unsupported: evm rejects svm leaf in {m.ixName}"
@@ -131,7 +131,7 @@ def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
     throw "extract/unsupported: evm wants a constructor"
   let ctorSrc :=
     match ctors.find? (fun m =>
-        m.ixName == "initialize" || SolanaLean.IR.lastName m.name == "init") with
+        m.ixName == "initialize" || ProofForge.IR.lastName m.name == "init") with
     | some m => m
     | none => ctors[0]!
   let rest :=
@@ -302,6 +302,6 @@ def canonical (p : Program) : String :=
   s!"evm|{p.name}|{slots}|{ctor}|{String.intercalate "/" entries}"
 
 def digestHex (p : Program) : String :=
-  SolanaLean.IR.u64Hex (SolanaLean.IR.fnv1a64 (canonical p))
+  ProofForge.IR.u64Hex (ProofForge.IR.fnv1a64 (canonical p))
 
-end SolanaLean.Evm.IR
+end ProofForge.Evm.IR

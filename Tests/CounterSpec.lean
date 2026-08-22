@@ -1,4 +1,4 @@
-import SolanaLean
+import ProofForge
 import Examples.Counter
 
 namespace Tests.CounterSpec
@@ -59,12 +59,12 @@ private def isOverflow (r : Except Error (State × UInt64)) : Bool :=
   | .error _ => false
 #guard nonzero (s 0) == 1
 #guard nonzero (s 7) == 0
-#guard SolanaLean.IR.isCounterShape SolanaLean.Golden.extractedCounter
-#guard SolanaLean.IR.isCounterShape SolanaLean.Golden.extractedPair
-#guard SolanaLean.IR.dataLen SolanaLean.Golden.extractedPair == 24
-#guard SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter != ""
-#guard SolanaLean.Profile.checkRootName "increment" == .accept
-#guard (match SolanaLean.Profile.checkRootName "evil" with
+#guard ProofForge.IR.isCounterShape ProofForge.Golden.extractedCounter
+#guard ProofForge.IR.isCounterShape ProofForge.Golden.extractedPair
+#guard ProofForge.IR.dataLen ProofForge.Golden.extractedPair == 24
+#guard ProofForge.IR.digestHex ProofForge.Golden.extractedCounter != ""
+#guard ProofForge.Profile.checkRootName "increment" == .accept
+#guard (match ProofForge.Profile.checkRootName "evil" with
   | .reject _ => true
   | .accept => false)
 

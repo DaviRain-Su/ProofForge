@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.SysAlloc
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,12 +12,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- 给账户 0 开 16 字节。 -/
-@[solana_entry]
+@[pf_entry]
 def alloc (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := systemAllocate 16
@@ -26,7 +26,7 @@ def alloc (_s : State) : Except Error (State × UInt64) :=
     .error .overflow
 
 /-- 把账户 0 的 owner 改成当前 program。 -/
-@[solana_entry]
+@[pf_entry]
 def assign (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := systemAssign
@@ -34,7 +34,7 @@ def assign (_s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

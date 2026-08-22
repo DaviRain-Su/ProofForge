@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.TokenNative
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,12 +12,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- Token SyncNative；账户 1 必须是 native mint 的 token 账户。 -/
-@[solana_entry]
+@[pf_entry]
 def syncNative (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := tokenSyncNative
@@ -25,7 +25,7 @@ def syncNative (_s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

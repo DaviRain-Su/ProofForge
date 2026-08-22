@@ -3,7 +3,7 @@ import Examples.TokenMint2
 namespace Tests.TokenMint2Spec
 
 open Examples.TokenMint2
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,11 +14,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 0
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedTokenMint2
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedTokenMint2 == 3
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenMint2
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenMint2 == 3
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTokenMint2 with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenMint2 with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

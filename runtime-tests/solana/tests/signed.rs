@@ -34,7 +34,7 @@ fn instruction_data(disc_hex: &str, params: &[u64]) -> Vec<u8> {
 }
 
 fn signed_so() -> PathBuf {
-    PathBuf::from(env::var("SOLANA_LEAN_SIGNED_SO").unwrap_or_else(|_| {
+    PathBuf::from(env::var("PF_SIGNED_SO").unwrap_or_else(|_| {
         format!(
             "{}/build/sbpf/Signed.so",
             env::var("CARGO_MANIFEST_DIR")
@@ -45,7 +45,7 @@ fn signed_so() -> PathBuf {
 }
 
 fn stub_so() -> PathBuf {
-    let dir = PathBuf::from(env::temp_dir()).join("solana-lean-signed-stub");
+    let dir = PathBuf::from(env::temp_dir()).join("proofforge-signed-stub");
     let src = dir.join("src/Stub/Stub.s");
     let deploy = dir.join("deploy");
     fs::create_dir_all(src.parent().unwrap()).unwrap();

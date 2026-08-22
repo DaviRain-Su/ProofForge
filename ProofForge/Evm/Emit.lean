@@ -1,11 +1,11 @@
-import SolanaLean.Ops
-import SolanaLean.Evm.IR
-import SolanaLean.Evm.Keccak
+import ProofForge.Ops
+import ProofForge.Evm.IR
+import ProofForge.Evm.Keccak
 
-namespace SolanaLean.Evm.Emit
+namespace ProofForge.Evm.Emit
 
-open SolanaLean
-open SolanaLean.Evm
+open ProofForge
+open ProofForge.Evm
 
 private def u64MaxYul : String := "0xffffffffffffffff"
 
@@ -49,7 +49,7 @@ private def nl : String := "\n"
 
 private def yulLit (n : UInt64) : String :=
   if n == 0 then "0"
-  else s!"0x{SolanaLean.IR.u64Hex n}"
+  else s!"0x{ProofForge.IR.u64Hex n}"
 
 /-- Addr20 小端三叶：word i 收 `src` 的字节 0..19 中第 8i ..。`src` 是 `caller()` / `address()`。 -/
 private def packAddrWord (src : String) (word : Nat) : String :=
@@ -770,7 +770,7 @@ def emitYul (p : IR.Program) : Except String String := do
     if anyPay then ""
     else "      if callvalue() { " ++ revert0 ++ " }" ++ nl
   let yul :=
-    "// SOLANA-LEAN-EVM-YUL v0" ++ nl ++
+    "// PROOF-FORGE-EVM-YUL v0" ++ nl ++
     "// digest=" ++ IR.digestHex p ++ nl ++
     "object " ++ q p.name ++ " {" ++ nl ++
     "  code {" ++ nl ++
@@ -826,4 +826,4 @@ def emit (p : IR.Program) : Except String (String × String) := do
   let yul ← emitYul p
   return (yul, emitAbi p)
 
-end SolanaLean.Evm.Emit
+end ProofForge.Evm.Emit

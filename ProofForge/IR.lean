@@ -1,7 +1,7 @@
-import SolanaLean.Ops
-import SolanaLean.Sha256
+import ProofForge.Ops
+import ProofForge.Sha256
 
-namespace SolanaLean.IR
+namespace ProofForge.IR
 
 inductive MethodKind where
   | init
@@ -365,4 +365,4 @@ def fnv1a64 (s : String) : UInt64 :=
 def digestHex (p : Program) : String :=
   u64Hex (fnv1a64 (canonical p))
 
-end SolanaLean.IR
+end ProofForge.IR

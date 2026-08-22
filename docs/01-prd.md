@@ -2,7 +2,7 @@
 
 ## 产品句
 
-solana-lean 是 Lean 4 的一个 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约，属性标记入口，fail-closed 子集检查，抽出到已有 sBPF lowering。
+proofforge 是 Lean 4 的一个 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约，属性标记入口，fail-closed 子集检查，抽出到已有 sBPF lowering。
 
 ## 用户
 
@@ -11,7 +11,7 @@ solana-lean 是 Lean 4 的一个 **Solana 编译剖面**：普通 `def` 写合�
 ## v0 必须有
 
 1. 用普通 Lean 写单账户 Counter（`UInt64` state，init / increment / get）。
-2. `@[solana_entry]`（或等价属性）标记可编译根。
+2. `@[pf_entry]`（或等价属性）标记可编译根。
 3. 传递闭包检查：拒绝 `IO`、`partial`、`sorry`、`@[extern]`、`@[implemented_by]`、无界递归。
 4. 抽出后的语义对象可被 Lean 定理引用；证明主语与编译主语同一 identity。
 5. 降到 sBPF `.s`，经 locked `sbpf` 得到 `.so`。

@@ -3,17 +3,17 @@ import Examples.Call
 namespace Tests.CallSpec
 
 open Examples.Call
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
 #guard invoke 1 #[] #[] == 0
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedCall
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedCall == 2
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedCall
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedCall == 2
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCall with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCall with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=1" &&

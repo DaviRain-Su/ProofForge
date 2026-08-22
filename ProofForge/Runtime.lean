@@ -1,4 +1,4 @@
-namespace SolanaLean.Runtime
+namespace ProofForge.Runtime
 
 /--
 当前 slot。抽出器认这个名字，发射 `sol_get_clock_sysvar` 后读
@@ -633,4 +633,4 @@ SVM 发射器碰到这个叶子 fail closed。
 @[irreducible] def evmTokenBalanceOfSelf (tw0 tw1 tw2 : UInt64) : UInt64 :=
   let _ := tw0; let _ := tw1; let _ := tw2; 0
 
-end SolanaLean.Runtime
+end ProofForge.Runtime

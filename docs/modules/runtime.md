@@ -1,4 +1,4 @@
-# SolanaLean.Runtime
+# ProofForge.Runtime
 
 ## Purpose
 

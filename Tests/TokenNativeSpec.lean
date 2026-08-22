@@ -3,7 +3,7 @@ import Examples.TokenNative
 namespace Tests.TokenNativeSpec
 
 open Examples.TokenNative
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,11 +14,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 0
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedTokenNative
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedTokenNative == 3
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenNative
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenNative == 3
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTokenNative with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenNative with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

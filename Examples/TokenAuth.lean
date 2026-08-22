@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.TokenAuth
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,12 +12,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- Token SetAuthority(MintTokens)；新 authority = 账户 2。 -/
-@[solana_entry]
+@[pf_entry]
 def setAuth (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := tokenSetMintAuthority
@@ -26,7 +26,7 @@ def setAuth (_s : State) : Except Error (State × UInt64) :=
     .error .overflow
 
 /-- Token Revoke；清掉 source 的 delegate。 -/
-@[solana_entry]
+@[pf_entry]
 def revoke (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := tokenRevoke
@@ -34,7 +34,7 @@ def revoke (_s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

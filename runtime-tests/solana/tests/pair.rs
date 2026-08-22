@@ -74,7 +74,7 @@ fn build_ix(
 }
 
 fn so_path() -> PathBuf {
-    PathBuf::from(env::var("SOLANA_LEAN_PAIR_SO").unwrap_or_else(|_| {
+    PathBuf::from(env::var("PF_PAIR_SO").unwrap_or_else(|_| {
         format!(
             "{}/build/sbpf/Pair.so",
             env::var("CARGO_MANIFEST_DIR")

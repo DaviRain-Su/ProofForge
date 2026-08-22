@@ -1,7 +1,7 @@
-# Lean 4 直写 EVM 合约：可行性（对照当前 solana-lean）
+# Lean 4 直写 EVM 合约：可行性（对照当前 proofforge）
 
 > Date: 2026-08-22
-> Core question: 以当前 solana-lean 的普通 Lean 4 表面（`def` / `theorem` / attribute / Profile / Extract / Ops），能否做出 EVM target？ProofForge 已有 Yul lowering，是否该搬？
+> Core question: 以当前 proofforge 的普通 Lean 4 表面（`def` / `theorem` / attribute / Profile / Extract / Ops），能否做出 EVM target？ProofForge 已有 Yul lowering，是否该搬？
 > Related: [03-feasibility.md](03-feasibility.md) · [gap-vs-proofforge.md](../plan/analysis/gap-vs-proofforge.md) · PF [01-evm.md](file:///Users/davirian/orca/projects/proof_forge/docs/targets/01-evm.md)
 
 ---
@@ -53,7 +53,7 @@ locked solc --strict-assembly    ← 子进程，不是 FFI
 用户写的是普通 Lean，不是 DSL：
 
 ```lean
-@[solana_entry]
+@[pf_entry]
 def increment (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if s.value ≤ u64Max - delta then
     let next := s.value + delta
@@ -193,7 +193,7 @@ Solana overflow = 自定义错误码 `0x1001` + 账户字节保持。EVM overflo
 | 层 | 动作 |
 |---|---|
 | 用户表面 | 共享。同一 `Examples.Counter` 可当双 target 源 |
-| `@[solana_entry]` | 先加 `@[evm_entry]`，或抽成中性 `@[onchain_entry]`。种类仍由返回类型推断 |
+| `@[pf_entry]` | 先加 `@[evm_entry]`，或抽成中性 `@[onchain_entry]`。种类仍由返回类型推断 |
 | Profile | 共享 |
 | Extract / Ops | 共享。EVM v0 不认 `clockSlot` / `signerKey0` / `systemTransfer`（抽到就 `extract/unsupported`） |
 | IR | **不要**扩现在的 `IR.Program`。新建 `Evm.IR`：storage slot、constructor、entry selector、view |
@@ -234,7 +234,7 @@ calldata：精确 4 + 32×N 字节，否则 revert。`uint64` 高 192 位必须�
 |---|---|---|
 | E0 | `Evm.IR` + keccak selector + digest | `IR.lean` + `Sha256.lean` |
 | E1 | Ops → Yul（constructor / increment / get / overflow） | `Emit.lean` 里 handler 那截 |
-| E2 | `#evm_build` + locked solc | `#solana_build` + `Assemble.lean` |
+| E2 | `#pf_evm_build` + locked solc | `#pf_build` + `Assemble.lean` |
 | E3 | Anvil 四场景 | `runtime-tests/solana` Counter |
 | E4 | Pair / Flag / 多字段连续 slot | 已有 L2 槽表，只换 slot 编号 |
 
@@ -246,8 +246,8 @@ E0–E3 是一条竖切。E4 才证明发射器不是 Counter 模板。Map / cal
 
 | 断言 | 方法 | 结果 |
 |---|---|---|
-| 本仓表面是普通 Lean `def` | 读 `Examples/Counter.lean` | `@[solana_entry]` + 普通函数 + 宿主定理 |
-| 本仓 Ops 很小 | 读 `SolanaLean/Ops.lean` | 5 Val + 11 Op |
+| 本仓表面是普通 Lean `def` | 读 `Examples/Counter.lean` | `@[pf_entry]` + 普通函数 + 宿主定理 |
+| 本仓 Ops 很小 | 读 `ProofForge/Ops.lean` | 5 Val + 11 Op |
 | 本仓 Emit 是 SVM | 读 `Emit.lean` entrypoint / ACC0_* | Loader V3，不是 Yul |
 | PF 用户表面是 DSL | 读 `Examples/StateCell.lean` | `program … where` |
 | PF EVM 已有 Yul+solc | 读 `EmitIRV1.renderYul`、`FinalizeV1` | object/constructor/switch；solc 0.8.34 |
@@ -271,6 +271,6 @@ E0–E3 是一条竖切。E4 才证明发射器不是 Counter 模板。Map / cal
 
 - 未在本机跑 PF `pf test -t evm` / Anvil（工程路径以 PF 文档与源码为准，本轮不复现）
 - 未实测把本仓抽出的 Counter Ops 手写进最小 Yul 再过 solc（架构可行，不是工期保证）
-- 未评估本仓改名/拆包（`SolanaLean` → 中性包名）的许可证与仓策略
+- 未评估本仓改名/拆包（`ProofForge` → 中性包名）的许可证与仓策略
 - 未比较 Foundry / solc 不同 minor 的 bytecode 稳定性；v0 必须 pin 0.8.34
 - 未处理 EVM 重入：v0 无外部 CALL，问题不出现

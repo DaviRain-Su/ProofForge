@@ -32,7 +32,7 @@
 | [l4-002](tasks/l4-002.md) | done | 封闭 system.transfer |
 | [evm-001](tasks/evm-001.md) | done | Evm.IR + keccak selector |
 | [evm-002](tasks/evm-002.md) | done | Ops → Yul |
-| [evm-003](tasks/evm-003.md) | done | `#evm_build` + locked solc |
+| [evm-003](tasks/evm-003.md) | done | `#pf_evm_build` + locked solc |
 | [evm-004](tasks/evm-004.md) | done | Anvil ctor / increment / get / overflow |
 | [evm-005](tasks/evm-005.md) | done | Pair 多 slot + Anvil |
 | [evm-006](tasks/evm-006.md) | done | 窄槽 + Option 双叶 |

@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Ping
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,12 +12,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- CPI 到外层账户 1。program id 来自该账户 key。 -/
-@[solana_entry]
+@[pf_entry]
 def ping (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := invokeAcc1
@@ -25,7 +25,7 @@ def ping (_s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

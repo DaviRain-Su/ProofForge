@@ -3,7 +3,7 @@ import Examples.Keys
 namespace Tests.KeysSpec
 
 open Examples.Keys
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -15,12 +15,12 @@ open SolanaLean.Runtime
 #guard accKeyWord 0 0 == 0
 #guard accOwnerWord 1 3 == 0
 
-#guard !SolanaLean.IR.usesCpi SolanaLean.Golden.extractedKeys
-#guard SolanaLean.IR.usesWalk SolanaLean.Golden.extractedKeys
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedKeys == 2
+#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedKeys
+#guard ProofForge.IR.usesWalk ProofForge.Golden.extractedKeys
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedKeys == 2
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedKeys with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedKeys with
   | .error _ => false
   | .ok asm =>
       asm.contains "load acc0 key word 0" &&

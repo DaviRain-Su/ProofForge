@@ -3,7 +3,7 @@ import Examples.Vault
 namespace Tests.VaultSpec
 
 open Examples.Vault
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -17,10 +17,10 @@ open SolanaLean.Runtime
   | .error _ => false
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedVault with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedVault with
   | .error _ => false
   | .ok p =>
-      match SolanaLean.Evm.Emit.emitYul p with
+      match ProofForge.Evm.Emit.emitYul p with
       | .error _ => false
       | .ok yul =>
           yul.contains "keccak256(0, 64)" &&
@@ -31,7 +31,7 @@ open SolanaLean.Runtime
             yul.contains "returndatasize()"
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedVault with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedVault with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

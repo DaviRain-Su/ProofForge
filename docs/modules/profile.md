@@ -1,4 +1,4 @@
-# SolanaLean.Profile
+# ProofForge.Profile
 
 ## Purpose
 
@@ -12,11 +12,11 @@
 
 - `check env root : Decision`
 - `checkAll env roots : Decision`
-- `#solana_check ident`
+- `#pf_check ident`
 
 拒绝：unknown、partial（含用户模块里落成 `opaque` 的 `partial def`）、unsafe、用户 `extern` / `implemented_by`、axiom/`sorryAx`、IO/EIO/Task/BaseIO、入口类型含 `Nat`、闭包 > 4096。
 
-用户门只打在根名为 `SolanaLean` / `Examples` / `Tests` 的声明上。Init 原语（`UInt64.add`、`Nat.pow` 等）自带 `@[extern]`，必须放行，否则连加法都过不了。`sorryAx` 无论在哪一模块都拒绝。
+用户门只打在根名为 `ProofForge` / `Examples` / `Tests` 的声明上。Init 原语（`UInt64.add`、`Nat.pow` 等）自带 `@[extern]`，必须放行，否则连加法都过不了。`sorryAx` 无论在哪一模块都拒绝。
 
 ## Tests
 

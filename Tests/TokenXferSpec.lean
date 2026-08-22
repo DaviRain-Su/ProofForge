@@ -3,7 +3,7 @@ import Examples.TokenXfer
 namespace Tests.TokenXferSpec
 
 open Examples.TokenXfer
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,11 +14,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedTokenXfer
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedTokenXfer == 5
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenXfer
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenXfer == 5
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTokenXfer with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenXfer with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=4" &&

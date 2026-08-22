@@ -35,7 +35,7 @@ fn instruction_data(disc_hex: &str, params: &[u64]) -> Vec<u8> {
 }
 
 fn ping_so() -> PathBuf {
-    PathBuf::from(env::var("SOLANA_LEAN_PING_SO").unwrap_or_else(|_| {
+    PathBuf::from(env::var("PF_PING_SO").unwrap_or_else(|_| {
         format!(
             "{}/build/sbpf/Ping.so",
             env::var("CARGO_MANIFEST_DIR")
@@ -46,7 +46,7 @@ fn ping_so() -> PathBuf {
 }
 
 fn stub_so() -> PathBuf {
-    let dir = PathBuf::from(env::temp_dir()).join("solana-lean-ping-stub");
+    let dir = PathBuf::from(env::temp_dir()).join("proofforge-ping-stub");
     let src = dir.join("src/Stub/Stub.s");
     let deploy = dir.join("deploy");
     fs::create_dir_all(src.parent().unwrap()).unwrap();

@@ -1,4 +1,4 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Maybe
 
@@ -10,22 +10,22 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { slot := none }
 
-@[solana_entry]
+@[pf_entry]
 def isSome (s : State) : UInt64 :=
   if s.slot.isSome then 1 else 0
 
-@[solana_entry]
+@[pf_entry]
 def getValue (s : State) : UInt64 :=
   match s.slot with
   | none => 0
   | some n => n
 
 /-- `0 ≠ 1` 恒真，给无参 mutate 一条比较守卫（不是 checked 算术）。 -/
-@[solana_entry]
+@[pf_entry]
 def setNone (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     .ok ({ slot := none }, 0)
@@ -34,7 +34,7 @@ def setNone (_s : State) : Except Error (State × UInt64) :=
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
-@[solana_entry]
+@[pf_entry]
 def setSome (_s : State) (n : UInt64) : Except Error (State × UInt64) :=
   if n ≤ u64Max then
     .ok ({ slot := some n }, n)

@@ -21,8 +21,8 @@ depends-on: []
 
 - lean-toolchain
 - lakefile.lean
-- SolanaLean.lean
-- SolanaLean/
+- ProofForge.lean
+- ProofForge/
 - Examples/Counter.lean
 - Tests/CounterSpec.lean
 - README.md

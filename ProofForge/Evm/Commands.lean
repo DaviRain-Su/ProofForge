@@ -1,16 +1,16 @@
 import Lean
-import SolanaLean.Extract
-import SolanaLean.Evm.IR
-import SolanaLean.Evm.Emit
-import SolanaLean.Evm.Golden
+import ProofForge.Extract
+import ProofForge.Evm.IR
+import ProofForge.Evm.Emit
+import ProofForge.Evm.Golden
 
 open Lean Elab Command
-open SolanaLean
-open SolanaLean.Evm
+open ProofForge
+open ProofForge.Evm
 
-namespace SolanaLean.Evm.Commands
+namespace ProofForge.Evm.Commands
 
-elab "#evm_build " n:ident : command => do
+elab "#pf_evm_build " n:ident : command => do
   let ns := n.getId
   let env ← getEnv
   match Extract.extractModule env ns none with
@@ -30,9 +30,9 @@ elab "#evm_build " n:ident : command => do
               if digest != want then
                 throwError s!"ir/mismatch: extracted evm {program.name} digest != fixture"
           | none => pure ()
-          logInfo m!"solana-lean-evm: program {program.name} slots = {program.slots.map (·.name)}"
-          logInfo m!"solana-lean-evm: entries = {program.entries.map (fun m => m.ixName)}"
-          logInfo m!"solana-lean-evm: digest = {digest}"
-          logInfo m!"solana-lean-evm: emitted {yul.length} bytes of Yul"
+          logInfo m!"proofforge-evm: program {program.name} slots = {program.slots.map (·.name)}"
+          logInfo m!"proofforge-evm: entries = {program.entries.map (fun m => m.ixName)}"
+          logInfo m!"proofforge-evm: digest = {digest}"
+          logInfo m!"proofforge-evm: emitted {yul.length} bytes of Yul"
 
-end SolanaLean.Evm.Commands
+end ProofForge.Evm.Commands

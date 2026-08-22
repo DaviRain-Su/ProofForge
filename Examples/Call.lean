@@ -1,8 +1,8 @@
-import SolanaLean
+import ProofForge
 
 namespace Examples.Call
 
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 structure State where
   dummy : UInt64
@@ -12,12 +12,12 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[solana_entry]
+@[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
 /-- 直接写编译期 `invoke`，不走 `invokeAcc1` 包装。 -/
-@[solana_entry]
+@[pf_entry]
 def call (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := invoke 1 #[] #[]
@@ -25,7 +25,7 @@ def call (_s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-@[solana_entry]
+@[pf_entry]
 def get (_s : State) : UInt64 :=
   0
 

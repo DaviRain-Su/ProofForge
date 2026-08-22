@@ -57,7 +57,7 @@ fn instruction_data(disc_hex: &str, params: &[u64]) -> Vec<u8> {
 }
 
 fn so_path() -> PathBuf {
-    PathBuf::from(env::var("SOLANA_LEAN_KEYS_SO").unwrap_or_else(|_| {
+    PathBuf::from(env::var("PF_KEYS_SO").unwrap_or_else(|_| {
         format!(
             "{}/build/sbpf/Keys.so",
             env::var("CARGO_MANIFEST_DIR")

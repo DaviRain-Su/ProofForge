@@ -3,7 +3,7 @@ import Examples.Clock
 namespace Tests.ClockSpec
 
 open Examples.Clock
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).stamped == 0
 #guard get (init 0) == 0
@@ -12,14 +12,14 @@ open SolanaLean.Runtime
 #guard key0 (init 0) == signerKey0
 
 #guard
-  match SolanaLean.IR.fieldOffset SolanaLean.Golden.extractedClock "stamped" with
+  match ProofForge.IR.fieldOffset ProofForge.Golden.extractedClock "stamped" with
   | some 8 => true
   | _ => false
 
-#guard SolanaLean.IR.dataLen SolanaLean.Golden.extractedClock == 16
+#guard ProofForge.IR.dataLen ProofForge.Golden.extractedClock == 16
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedClock with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedClock with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_get_clock_sysvar" &&

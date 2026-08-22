@@ -9,7 +9,7 @@ source "$here/lib.sh"
 solana_lean_evm_init evm-anvil-vault
 bin="$root/build/evm/Vault.bin"
 solana_lean_ensure_bin "$bin"
-solana_lean_start_anvil "${SOLANA_LEAN_EVM_PORT:-18554}" "$root/build/evm/anvil-vault.log"
+solana_lean_start_anvil "${PF_EVM_PORT:-18554}" "$root/build/evm/anvil-vault.log"
 
 solc_bin=""
 for c in /opt/homebrew/bin/solc /usr/local/bin/solc solc; do

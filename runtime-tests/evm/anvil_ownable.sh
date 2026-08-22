@@ -9,7 +9,7 @@ source "$here/lib.sh"
 solana_lean_evm_init evm-anvil-ownable
 bin="$root/build/evm/Ownable.bin"
 solana_lean_ensure_bin "$bin"
-solana_lean_start_anvil "${SOLANA_LEAN_EVM_PORT:-18555}" "$root/build/evm/anvil-ownable.log"
+solana_lean_start_anvil "${PF_EVM_PORT:-18555}" "$root/build/evm/anvil-ownable.log"
 
 words_of() {
   "$python" -I -S -c "

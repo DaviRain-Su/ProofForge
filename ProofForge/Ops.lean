@@ -1,4 +1,4 @@
-namespace SolanaLean.Ops
+namespace ProofForge.Ops
 
 /-- 可 load 的值。SVM 叶是 `clock*` / `acc*` / PDA / hash；EVM 叶是 `evm*`。 -/
 inductive Val where
@@ -625,4 +625,4 @@ def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmDeposit ops || hasEvmSendEth ops || hasEvmLog ops || hasEvmLeaf ops ||
     hasMapOp ops || hasTokenOp ops
 
-end SolanaLean.Ops
+end ProofForge.Ops

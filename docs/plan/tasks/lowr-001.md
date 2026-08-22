@@ -17,7 +17,7 @@ docs/02-architecture.md；PF EmitIRV1 / EmitSbpfAsmV1
 
 ## path
 
-SolanaLean/Lower.lean；lakefile 对 proof_forge 的 path/git pin
+ProofForge/Lower.lean；lakefile 对 proof_forge 的 path/git pin
 
 ## verification
 

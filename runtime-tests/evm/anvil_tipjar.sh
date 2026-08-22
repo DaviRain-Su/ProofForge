@@ -9,7 +9,7 @@ source "$here/lib.sh"
 solana_lean_evm_init evm-anvil-tipjar
 bin="$root/build/evm/TipJar.bin"
 solana_lean_ensure_bin "$bin"
-solana_lean_start_anvil "${SOLANA_LEAN_EVM_PORT:-18552}" "$root/build/evm/anvil-tipjar.log"
+solana_lean_start_anvil "${PF_EVM_PORT:-18552}" "$root/build/evm/anvil-tipjar.log"
 
 bytecode="$(tr -d '\n\r ' < "$bin")"
 [[ -n "$bytecode" ]] || { echo "FAIL: empty TipJar.bin" >&2; exit 1; }

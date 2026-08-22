@@ -1,5 +1,5 @@
-import SolanaLean
-import SolanaLean.Evm.Commands
+import ProofForge
+import ProofForge.Evm.Commands
 import Examples.Counter
 import Examples.Pair
 import Examples.Window
@@ -15,42 +15,42 @@ import Examples.Vault
 import Examples.Ownable
 import Tests.Fixtures
 
-#evm_build Examples.Counter
+#pf_evm_build Examples.Counter
 
-#evm_build Examples.Pair
+#pf_evm_build Examples.Pair
 
-#evm_build Examples.Window
+#pf_evm_build Examples.Window
 
-#evm_build Examples.Phase
+#pf_evm_build Examples.Phase
 
-#evm_build Examples.Flag
+#pf_evm_build Examples.Flag
 
-#evm_build Examples.Maybe
+#pf_evm_build Examples.Maybe
 
-#evm_build Examples.EvmCtx
+#pf_evm_build Examples.EvmCtx
 
-#evm_build Examples.TipJar
+#pf_evm_build Examples.TipJar
 
-#evm_build Examples.Lang
+#pf_evm_build Examples.Lang
 
-#evm_build Examples.Vault
+#pf_evm_build Examples.Vault
 
-#evm_build Examples.Ownable
+#pf_evm_build Examples.Ownable
 
 /--
 error: extract/unsupported: evm rejects svm leaf in stamp
 -/
 #guard_msgs (error) in
-#evm_build Examples.Clock
+#pf_evm_build Examples.Clock
 
 /--
 error: extract/unsupported: evm rejects svm leaf in transfer
 -/
 #guard_msgs (error) in
-#evm_build Examples.Transfer
+#pf_evm_build Examples.Transfer
 
 /--
-error: extract/unsupported: no solana_entry
+error: extract/unsupported: no pf_entry
 -/
 #guard_msgs (error) in
-#evm_build Tests.Fixtures
+#pf_evm_build Tests.Fixtures

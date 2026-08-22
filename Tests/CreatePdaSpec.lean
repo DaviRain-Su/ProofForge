@@ -3,7 +3,7 @@ import Examples.CreatePda
 namespace Tests.CreatePdaSpec
 
 open Examples.CreatePda
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -19,11 +19,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedCreatePda
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedCreatePda == 3
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedCreatePda
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedCreatePda == 3
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCreatePda with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCreatePda with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

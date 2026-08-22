@@ -88,7 +88,7 @@ process_instruction(program_id, accounts: &[AccountInfo], instruction_data: &[u8
 
 这不是 SDK 功能，是「普通 Lean 怎么说到官方 entrypoint」。
 
-官方 Rust 教程用 `entrypoint!` + `process_instruction`。本仓对应物是 `@[solana_entry]` + 抽出器。两边都不是「任意宿主语言」。
+官方 Rust 教程用 `entrypoint!` + `process_instruction`。本仓对应物是 `@[pf_entry]` + 抽出器。两边都不是「任意宿主语言」。
 
 [Limitations](https://solana.com/docs/programs/limitations) 是直接类比：Rust 上链禁 `std::fs` / `thread` / `rand`；Lean 上链禁 `IO` / `partial` / `sorry` / 一般递归。依据相同——确定性、单线程、计量。
 

@@ -41,7 +41,7 @@ PF 产品轨是 `solana-sbpf-cpi-elf-v1`。Mollusk 量级约 24 个 integration 
 | 定宽整数 | UInt8/16/32/64、窄 Int、UInt128/256 多字 | 仅 UInt64 | 先开 UInt8/32 + 同形 checked 四则 |
 | 控制流 | 多块 / match / for 有界 | 单层 `ite`，假支必须 overflow | 任意 if 树、match 枚举 |
 | 状态 | 多字段、Option 双叶、Array、dense Map | 全 UInt64 structure | Option/Array 单账户先；Map 后 |
-| 入口 | 任意 handler 名 + disc | 固定 init/increment/get 三个 disc | `@[solana_entry]` + 按名 disc |
+| 入口 | 任意 handler 名 + disc | 固定 init/increment/get 三个 disc | `@[pf_entry]` + 按名 disc |
 | 账户 | 单账户 + CPI 多 role | 单账户 + transfer 三账户 walk | 编译期 N；不开放 remaining accounts |
 | CPI / Token / PDA | System / Token / ATA / vault PDA 封闭目录 | `systemTransfer` 一条 | 抽出通用 `invoke`；特化仍具名 |
 | sysvar | clock.slot / epoch / unixTime 已开 | L4-001 / L4-019 / L4-034 | unix 按无符号 u64 |
@@ -62,7 +62,7 @@ PF 产品轨是 `solana-sbpf-cpi-elf-v1`。Mollusk 量级约 24 个 integration 
 
 | ID | 内容 | 完成定义 |
 |---|---|---|
-| L1-attr | `@[solana_entry kind]` 标 init / mutate / view；`#solana_build M` 收同一模块里的入口 | 不用手写三 ident；Counter / Pair 仍绿 |
+| L1-attr | `@[pf_entry kind]` 标 init / mutate / view；`#pf_build M` 收同一模块里的入口 | 不用手写三 ident；Counter / Pair 仍绿 |
 | L1-disc | disc = `sha256("proof-forge-solana-v1:" ++ name ++ "(" ++ params ++ ")")` 前 8 字节 | decrement 不再盗用 increment disc |
 | L1-if | Extract 任意 `ite` 树，假支不必是 overflow | `if a then x else y` 两支都是纯值 |
 | L1-arith | checked mul / div / mod（与 add/sub 同守卫纪律） | wrapping 入口 fail closed；Mollusk 溢出保持 |
@@ -81,7 +81,7 @@ PF 产品轨是 `solana-sbpf-cpi-elf-v1`。Mollusk 量级约 24 个 integration 
 | L2-enum | 无 payload 枚举作 tag；带 payload 后做 | match 抽成分支 |
 | L2-marker | layout marker 用本机 SHA-256 算，去掉手工登记表 | 新字段表不必改 `layoutMarkerHex` |
 
-L2-marker 已落地：`SolanaLean.Sha256` 是 kernel 可算的纯函数，不是链上 syscall。disc 与 marker 都按预镜像现算。
+L2-marker 已落地：`ProofForge.Sha256` 是 kernel 可算的纯函数，不是链上 syscall。disc 与 marker 都按预镜像现算。
 
 ### L3 程序形状
 

@@ -92,7 +92,7 @@ program where → PF decoder → ValidatedSourceV1 → Check/Normalize
 ### Path B — ordinary Lean subset
 
 ```
-@[solana_entry] def … → elaborator → Expr closure
+@[pf_entry] def … → elaborator → Expr closure
   → NEW fail-closed subset checker → NEW extractor → same Solana IR
   → emitSbpfAsmV1 → .s → locked sbpf → .so
 ```

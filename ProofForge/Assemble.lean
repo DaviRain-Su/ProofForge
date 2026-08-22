@@ -1,11 +1,13 @@
-import SolanaLean.Emit
-import SolanaLean.IR
+import ProofForge.Emit
+import ProofForge.IR
+import ProofForge.Idl
 
-namespace SolanaLean.Assemble
+namespace ProofForge.Assemble
 
 structure Result where
   asmPath : System.FilePath
   soPath : System.FilePath
+  idlPath : System.FilePath
   soBytes : ByteArray
 
 /-- ELF 64-bit LSB shared object, eBPF：前 4 字节 `\x7fELF`，EI_CLASS=2。 -/
@@ -63,12 +65,14 @@ def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Resul
     throw <| IO.userError "assemble/tool: empty ELF"
   let stagedAsm := outDir / s!"{name}.s"
   let stagedSo := outDir / soName
+  let stagedIdl := outDir / s!"{name}.idl.json"
   IO.FS.writeFile stagedAsm asm
   IO.FS.writeBinFile stagedSo soBytes
-  return { asmPath := stagedAsm, soPath := stagedSo, soBytes }
+  IO.FS.writeFile stagedIdl (Idl.emitIdl program)
+  return { asmPath := stagedAsm, soPath := stagedSo, idlPath := stagedIdl, soBytes }
 
 def assembleCounter (outDir : System.FilePath) (program : IR.Program) :
     IO Result :=
   assembleProgram outDir program
 
-end SolanaLean.Assemble
+end ProofForge.Assemble

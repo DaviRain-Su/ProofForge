@@ -1,4 +1,4 @@
-namespace SolanaLean.Evm.Keccak
+namespace ProofForge.Evm.Keccak
 
 /-- Ethereum Keccak-256（domain `0x01`）。逐字对齐 PF `Targets/Evm/Keccak.lean`。 -/
 
@@ -140,4 +140,4 @@ def selectorOfWidths (name : String) (widths : Array Nat) : String :=
   else
     selector name (widths.map abiTypeOfWidth)
 
-end SolanaLean.Evm.Keccak
+end ProofForge.Evm.Keccak

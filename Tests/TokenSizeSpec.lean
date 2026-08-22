@@ -3,7 +3,7 @@ import Examples.TokenSize
 namespace Tests.TokenSizeSpec
 
 open Examples.TokenSize
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -15,11 +15,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 0
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedTokenSize
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedTokenSize == 3
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenSize
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenSize == 3
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedTokenSize with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenSize with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

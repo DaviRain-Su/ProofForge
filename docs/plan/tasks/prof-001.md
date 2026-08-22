@@ -17,7 +17,7 @@ docs/03-technical-spec.md § Profile
 
 ## path
 
-SolanaLean/Profile.lean, Tests/ProfileSpec.lean
+ProofForge/Profile.lean, Tests/ProfileSpec.lean
 
 ## verification
 

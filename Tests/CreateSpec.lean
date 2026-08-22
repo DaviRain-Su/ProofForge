@@ -3,7 +3,7 @@ import Examples.Create
 namespace Tests.CreateSpec
 
 open Examples.Create
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,11 +14,11 @@ open SolanaLean.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
-#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedCreate
-#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedCreate == 3
+#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedCreate
+#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedCreate == 3
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCreate with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCreate with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

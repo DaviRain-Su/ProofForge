@@ -3,7 +3,7 @@ import Examples.Hash
 namespace Tests.HashSpec
 
 open Examples.Hash
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -14,11 +14,11 @@ open SolanaLean.Runtime
 #guard sha256Lit "ok" == 0
 #guard sha256Lit "" == 0
 
-#guard !SolanaLean.IR.usesCpi SolanaLean.Golden.extractedHash
-#guard !SolanaLean.IR.usesWalk SolanaLean.Golden.extractedHash
+#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedHash
+#guard !ProofForge.IR.usesWalk ProofForge.Golden.extractedHash
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedHash with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedHash with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_sha256" &&

@@ -1,10 +1,10 @@
 import Examples.EvmCtx
-import SolanaLean
+import ProofForge
 
 namespace Tests.EvmCtxSpec
 
 open Examples.EvmCtx
-open SolanaLean.Runtime
+open ProofForge.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
@@ -12,10 +12,10 @@ open SolanaLean.Runtime
 #guard height (init 0) == evmBlockNumber
 
 #guard
-  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedEvmCtx with
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedEvmCtx with
   | .error _ => false
   | .ok p =>
-      match SolanaLean.Evm.Emit.emitYul p with
+      match ProofForge.Evm.Emit.emitYul p with
       | .error _ => false
       | .ok yul =>
           yul.contains "and(caller(), 0xffffffffffffffff)" &&
@@ -25,7 +25,7 @@ open SolanaLean.Runtime
             !yul.contains "ACC0_KEY"
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedEvmCtx with
+  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedEvmCtx with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 
