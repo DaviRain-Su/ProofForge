@@ -4,6 +4,8 @@ import Examples.Counter
 import Examples.Pair
 import Examples.Window
 import Examples.Phase
+import Examples.Flag
+import Examples.Maybe
 import Examples.Clock
 import Examples.Transfer
 import Tests.Fixtures
@@ -15,6 +17,10 @@ import Tests.Fixtures
 #evm_build Examples.Window
 
 #evm_build Examples.Phase
+
+#evm_build Examples.Flag
+
+#evm_build Examples.Maybe
 
 /--
 error: extract/unsupported: evm rejects svm leaf in stamp

@@ -20,4 +20,4 @@
 | [research/03-feasibility.md](research/03-feasibility.md) | Solana 可行性调研结论 |
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 
-当前阶段：**EVM 竖切已通到 Pair Anvil**。`anvil_counter.sh` + `anvil_pair.sh`。
+当前阶段：**EVM 竖切已通到窄槽 / Option**。Counter / Pair / Flag / Maybe 都有 Anvil 门。

@@ -35,6 +35,7 @@
 | [evm-003](tasks/evm-003.md) | done | `#evm_build` + locked solc |
 | [evm-004](tasks/evm-004.md) | done | Anvil ctor / increment / get / overflow |
 | [evm-005](tasks/evm-005.md) | done | Pair 多 slot + Anvil |
+| [evm-006](tasks/evm-006.md) | done | 窄槽 + Option 双叶 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

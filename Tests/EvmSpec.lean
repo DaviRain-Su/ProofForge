@@ -5,6 +5,8 @@ import SolanaLean.Evm.Emit
 import SolanaLean.Evm.Golden
 import SolanaLean.Golden
 
+open SolanaLean.Evm
+
 #guard SolanaLean.Evm.Keccak.keccak256HexOfString "" ==
   "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
@@ -37,13 +39,18 @@ import SolanaLean.Golden
 
 #guard
   match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedMaybe with
-  | .error reason => reason.contains "option leaf"
-  | .ok _ => false
+  | .error _ => false
+  | .ok p =>
+      p.slots.size == 2 &&
+        IR.hasOptionLeaves p &&
+        (p.slots[0]?.map (·.name) == some "slot_tag")
 
 #guard
   match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedFlag with
-  | .error reason => reason.contains "not u64"
-  | .ok _ => false
+  | .error _ => false
+  | .ok p =>
+      (p.slots[0]?.map (·.width) == some 1) &&
+        (p.slots[1]?.map (·.width) == some 8)
 
 #guard
   match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedPair with
@@ -117,3 +124,26 @@ import SolanaLean.Golden
           both.contains "sstore(0, arg0)" &&
             both.contains "sstore(1, arg1)" &&
             !both.contains "return(0, 32)\n        sstore(1"
+
+#guard
+  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedFlag with
+  | .error _ => false
+  | .ok p =>
+      match SolanaLean.Evm.Emit.emitYul p with
+      | .error _ => false
+      | .ok yul =>
+          yul.contains "and(sload(0), 0xff)" &&
+            yul.contains "sstore(0, and(" &&
+            yul.contains "sstore(1, ctor_arg0)"
+
+#guard
+  match SolanaLean.Evm.IR.fromProgram SolanaLean.Golden.extractedMaybe with
+  | .error _ => false
+  | .ok p =>
+      match SolanaLean.Evm.Emit.emitYul p with
+      | .error _ => false
+      | .ok yul =>
+          yul.contains "sstore(0, 1)" &&
+            yul.contains "sstore(1, arg0)" &&
+            yul.contains "sstore(0, 0)" &&
+            yul.contains "sstore(1, 0)"

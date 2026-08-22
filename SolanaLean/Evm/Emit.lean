@@ -48,6 +48,16 @@ private def yulLit (n : UInt64) : String :=
   if n == 0 then "0"
   else s!"0x{SolanaLean.IR.u64Hex n}"
 
+private def widthMask (width : Nat) : String :=
+  match width with
+  | 1 => "0xff"
+  | 2 => "0xffff"
+  | 4 => "0xffffffff"
+  | _ => u64MaxYul
+
+private def maskExpr (width : Nat) (value : String) : String :=
+  if width == 8 then value else "and(" ++ value ++ ", " ++ widthMask width ++ ")"
+
 private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
     (v : Ops.Val) : Except String String :=
   match v with
@@ -59,7 +69,8 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
         .error "extract/unsupported: evm arg is implicit state"
   | .field _ name => do
       let slot ← slotOf p name
-      return s!"sload({slot})"
+      let w := (IR.slotWidth p name).getD 8
+      return maskExpr w s!"sload({slot})"
   | .clockSlot => .error "extract/unsupported: evm rejects clockSlot"
   | .signerKey0 => .error "extract/unsupported: evm rejects signerKey0"
 
@@ -82,6 +93,21 @@ private def returnWord (indent value : String) : String :=
 
 private def storeSlot (indent : String) (slot : Nat) (value : String) : String :=
   indent ++ "sstore(" ++ toString slot ++ ", " ++ value ++ ")" ++ nl
+
+private def storeNamed (p : IR.Program) (indent name value : String) : Except String String := do
+  let slot ← slotOf p name
+  let w := (IR.slotWidth p name).getD 8
+  return storeSlot indent slot (maskExpr w value)
+
+private def optionTagName (p : IR.Program) : String :=
+  match p.slots.find? (fun s => s.name.endsWith "_tag") with
+  | some s => s.name
+  | none => "slot_tag"
+
+private def optionPayName (p : IR.Program) : String :=
+  match p.slots.find? (fun s => s.name.endsWith "_p0") with
+  | some s => s.name
+  | none => "slot_p0"
 
 private structure Render where
   last : Option String := none
@@ -164,22 +190,41 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
     | .systemTransfer _ =>
         throw "extract/unsupported: evm rejects systemTransfer"
     | .okState v =>
-        let destName := destForOk p ops v
-        let destS ← slotOf p destName
-        let value ←
-          match st.last with
-          | some nm => pure nm
-          | none =>
-              match v with
-              | .field _ fname =>
-                  if fname.contains '_' && (IR.slotIndex p fname).isSome then
-                    loadVal p paramPrefix paramCount (.arg 0)
-                  else if Ops.hasCheckedArith ops then
-                    loadVal p paramPrefix paramCount v
-                  else
-                    loadVal p paramPrefix paramCount (.arg 0)
-              | _ => loadVal p paramPrefix paramCount v
-        acc := acc ++ storeSlot indent destS value ++ returnWord indent value
+        if IR.hasOptionLeaves p then
+          let tagN := optionTagName p
+          let payN := optionPayName p
+          match v with
+          | .lit 0 =>
+              acc := acc ++ (← storeNamed p indent tagN "0")
+              acc := acc ++ (← storeNamed p indent payN "0")
+              acc := acc ++ returnWord indent "0"
+          | .lit k =>
+              acc := acc ++ (← storeNamed p indent tagN "1")
+              acc := acc ++ (← storeNamed p indent payN (yulLit k))
+              acc := acc ++ returnWord indent (yulLit k)
+          | _ =>
+              let payload ← loadVal p paramPrefix paramCount v
+              acc := acc ++ (← storeNamed p indent tagN "1")
+              acc := acc ++ (← storeNamed p indent payN payload)
+              acc := acc ++ returnWord indent payload
+        else
+          let destName := destForOk p ops v
+          let destS ← slotOf p destName
+          let value ←
+            match st.last with
+            | some nm => pure nm
+            | none =>
+                match v with
+                | .field _ fname =>
+                    if fname.contains '_' && (IR.slotIndex p fname).isSome then
+                      loadVal p paramPrefix paramCount (.arg 0)
+                    else if Ops.hasCheckedArith ops then
+                      loadVal p paramPrefix paramCount v
+                    else
+                      loadVal p paramPrefix paramCount (.arg 0)
+                | _ => loadVal p paramPrefix paramCount v
+          let w := (IR.slotWidth p destName).getD 8
+          acc := acc ++ storeSlot indent destS (maskExpr w value) ++ returnWord indent value
         st := { st with last := none }
     | .errorOverflow =>
         -- 抽出序列在 checked 算术后仍带 overflow 叶；Yul 已在运算前 revert。
@@ -194,12 +239,14 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           match p.slots[returnStateIdx]? with
           | none => throw "extract/unsupported: returnState exceeds slots"
           | some slot =>
-              acc := acc ++ storeSlot indent slot.index value
+              acc := acc ++ storeSlot indent slot.index (maskExpr slot.width value)
               if returnStateIdx + 1 == nStates then
                 acc := acc ++ returnWord indent value
               returnStateIdx := returnStateIdx + 1
         else
-          acc := acc ++ storeSlot indent destSlot0 value ++ returnWord indent value
+          let destName := destHint p ops
+          let w := (IR.slotWidth p destName).getD 8
+          acc := acc ++ storeSlot indent destSlot0 (maskExpr w value) ++ returnWord indent value
   return (acc, st)
 
 private def q (s : String) : String :=
@@ -215,7 +262,7 @@ private def emitConstructorStores (p : IR.Program) : Except String String := do
     if h : i < vs.size then
       let v ← loadVal p "ctor_arg" p.constructor.paramCount vs[i]
       unless v == "0" do
-        body := body ++ storeSlot "    " s.index v
+        body := body ++ storeSlot "    " s.index (maskExpr s.width v)
     i := i + 1
   return body
 

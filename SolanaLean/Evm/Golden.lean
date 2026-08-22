@@ -5,12 +5,14 @@ namespace SolanaLean.Evm.Golden
 
 open SolanaLean.Evm
 
-/-- 竖切夹具：只钉无 SVM 叶子、全 UInt64 的例子。 -/
+/-- 竖切夹具：无 SVM 叶子。窄槽 / Option 双叶已开。 -/
 def sources : Array SolanaLean.IR.Program := #[
   SolanaLean.Golden.extractedCounter,
   SolanaLean.Golden.extractedPair,
   SolanaLean.Golden.extractedWindow,
-  SolanaLean.Golden.extractedPhase
+  SolanaLean.Golden.extractedPhase,
+  SolanaLean.Golden.extractedFlag,
+  SolanaLean.Golden.extractedMaybe
 ]
 
 def programs : Array IR.Program :=

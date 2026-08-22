@@ -7,6 +7,8 @@ namespace SolanaLean.Evm.IR
 structure Slot where
   name : String
   index : Nat
+  /-- 物理宽：1/2/4/8。EVM 仍占一个 storage word，窄值在低字节。 -/
+  width : Nat := 8
   deriving BEq, Repr, Inhabited
 
 structure Method where
@@ -28,6 +30,12 @@ structure Program where
 
 def slotIndex (p : Program) (name : String) : Option Nat :=
   (p.slots.find? (·.name == name)).map (·.index)
+
+def slotWidth (p : Program) (name : String) : Option Nat :=
+  (p.slots.find? (·.name == name)).map (·.width)
+
+def hasOptionLeaves (p : Program) : Bool :=
+  p.slots.any (fun s => s.name.endsWith "_tag")
 
 private def valForbidden : Ops.Val → Bool
   | .clockSlot | .signerKey0 => true
@@ -57,10 +65,8 @@ def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
   walkForbidden 16 ops
 
 private def rejectSlot (s : SolanaLean.IR.Slot) : Option String :=
-  if s.width != 8 || s.abi != "u64-le" then
-    some s!"extract/unsupported: evm v0 slot {s.name} is not u64"
-  else if s.name.endsWith "_tag" || s.name.endsWith "_p0" then
-    some s!"extract/unsupported: evm v0 rejects option leaf {s.name}"
+  if !(s.width == 1 || s.width == 2 || s.width == 4 || s.width == 8) then
+    some s!"extract/unsupported: evm slot {s.name} width {s.width}"
   else none
 
 private def isCtor (m : SolanaLean.IR.Method) : Bool :=
@@ -120,7 +126,8 @@ def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
       ops := m.ops
       view := m.kind == .get
     }
-  let slots := src.slots.mapIdx fun i s => { name := s.name, index := i }
+  let slots := src.slots.mapIdx fun i s =>
+    { name := s.name, index := i, width := s.width }
   return { name := src.name, slots, constructor := ctor, entries }
 
 private def cmpTag : Ops.Cmp → String
@@ -151,7 +158,8 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
   String.intercalate ";" (ops.toList.map one)
 
 def canonical (p : Program) : String :=
-  let slots := String.intercalate "," (p.slots.map (·.name)).toList
+  let slots := String.intercalate ","
+    (p.slots.map (fun s => s!"{s.name}:{s.width}")).toList
   let ctor := s!"ctor:{p.constructor.paramCount}:[{opsCanon p.constructor.ops}]"
   let entries :=
     (p.entries.qsort (fun a b => a.ixName < b.ixName)).toList.map fun m =>

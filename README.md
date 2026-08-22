@@ -54,7 +54,9 @@ lake exe evmLeanAssemble -- build/evm
 # 要求本机 solc 恰好 0.8.34
 FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_counter.sh
 FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_pair.sh
-# constructor / increment / get / overflow；Pair 双槽 + right 保持；缺 anvil/cast 则 skip
+FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_flag.sh
+FOUNDRY_BIN=$HOME/.foundry/bin runtime-tests/evm/anvil_maybe.sh
+# Counter / Pair / Flag(u8) / Maybe(Option)；缺 anvil/cast 则 skip
 ```
 
 ## 文档
