@@ -110,6 +110,13 @@ def systemAssignWithSeed : Op :=
       { acc := 0, signer := true, writable := false }]
     #[.u32le 10, .accKey 0, .u64le (.lit 5), .ascii "vault", .programId]
 
+def systemTransferWithSeed (lamports : Val) : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false },
+      { acc := 2, signer := false, writable := true }]
+    #[.u32le 11, .u64le lamports, .u64le (.lit 5), .ascii "vault", .programId]
+
 def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
   .invoke 4
     #[{ acc := 1, signer := false, writable := true },

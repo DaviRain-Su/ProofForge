@@ -26,6 +26,7 @@ import Tests.TokenAuthSpec
 import Tests.EpochSpec
 import Tests.TokenSizeSpec
 import Tests.SysSeedSpec
+import Tests.SysXferSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

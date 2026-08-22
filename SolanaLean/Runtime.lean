@@ -163,6 +163,19 @@ def systemAssignWithSeed : UInt64 :=
     #[.u32le 10, .accKey 0, .u64le 5, .ascii "vault", .programId]
 
 /--
+`system.transferWithSeed`：从 `create_with_seed(acc0, "vault", program)` 转 `lamports` 到账户 2。
+种子本切片钉死。from_owner = 当前 program id。
+外层：base s+w、派生付款 w、收款 w、System。
+-/
+def systemTransferWithSeed (lamports : UInt64) : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false },
+      { acc := 2, signer := false, writable := true }]
+    -- bincode：u32 tag 11 || lamports || u64le len || seed || from_owner32。
+    #[.u32le 11, .u64le lamports, .u64le 5, .ascii "vault", .programId]
+
+/--
 Token `TransferChecked`：普通包装。decimals 编译期常量。
 外层 0 必须是 authority（prelude 强制 acc0 signer）。
 内层账户按官方顺序：source / mint / dest / authority。

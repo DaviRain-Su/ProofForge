@@ -50,6 +50,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `systemAllocateWithSeed` | AllocateWithSeed；种子 `"vault"` | L4-023 |
 | `systemCreateWithSeed` | CreateAccountWithSeed；同种子，再带 lamports | L4-024 |
 | `systemAssignWithSeed` | AssignWithSeed；同种子，只改 owner | L4-025 |
+| `systemTransferWithSeed` | TransferWithSeed；派生账户付款 | L4-026 |
 | `tokenInitAccount` / `tokenCloseAccount` | Token init3 / close；owner = acc0 公钥 | L4-014 |
 | `memoWrite` | Memo 写 UTF-8 字面量；本切片 `"ok"` | L4-015 |
 | `createPda` | find + System createAccount；seeds = `"vault"` | L4-016 |
@@ -158,6 +159,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-sys-alloc-seed | `AllocateWithSeed` tag 9 | **已绿**；种子 `"vault"` |
 | L4-sys-create-seed | `CreateAccountWithSeed` tag 3 | **已绿**；同种子，再带 lamports |
 | L4-sys-assign-seed | `AssignWithSeed` tag 10 | **已绿**；同种子，只改 owner |
+| L4-sys-xfer-seed | `TransferWithSeed` tag 11 | **已绿**；派生账户付款 |
 | L4-sys-advance-nonce 等 | nonce / authorize | — | 不做，除非有合约 |
 
 已绿：`TransferChecked`（tag 12，10B packed）、ATA `CreateIdempotent`（tag 1）、`MintToChecked` / `BurnChecked`。

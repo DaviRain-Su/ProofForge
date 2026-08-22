@@ -27,3 +27,4 @@ import Examples.TokenAuth
 import Examples.Epoch
 import Examples.TokenSize
 import Examples.SysSeed
+import Examples.SysXfer

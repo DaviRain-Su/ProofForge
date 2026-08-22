@@ -439,6 +439,18 @@ def extractedSysSeed : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedSysXfer : Program :=
+  { name := "SysXfer"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.SysXfer.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.SysXfer.sendSeed", ixName := "sendSeed", paramCount := 1
+        ops := #[Ops.systemTransferWithSeed (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.SysXfer.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedTokenSize : Program :=
   { name := "TokenSize"
     slots := #[{ name := "dummy" }]
@@ -528,7 +540,7 @@ def programs : Array Program := #[
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
-  extractedEpoch, extractedTokenSize, extractedSysSeed
+  extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
