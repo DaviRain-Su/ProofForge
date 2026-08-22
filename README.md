@@ -46,7 +46,8 @@ lake exe solanaLeanAssemble -- build/sbpf
   SOLANA_LEAN_CALL_SO=../../build/sbpf/Call.so \
   SOLANA_LEAN_PDA_SO=../../build/sbpf/Pda.so \
   SOLANA_LEAN_SIGNED_SO=../../build/sbpf/Signed.so \
-  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice --test clock --test transfer --test ping --test info --test call --test pda --test signed)
+  SOLANA_LEAN_CREATE_SO=../../build/sbpf/Create.so \
+  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice --test clock --test transfer --test ping --test info --test call --test pda --test signed --test create)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。

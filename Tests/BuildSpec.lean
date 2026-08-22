@@ -13,6 +13,7 @@ import Examples.Call
 import Examples.Info
 import Examples.Pda
 import Examples.Signed
+import Examples.Create
 
 #solana_build Examples.Counter
 
@@ -41,6 +42,8 @@ import Examples.Signed
 #solana_build Examples.Pda
 
 #solana_build Examples.Signed
+
+#solana_build Examples.Create
 
 /--
 error: extract/unsupported: no solana_entry

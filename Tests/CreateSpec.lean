@@ -1,0 +1,29 @@
+import Examples.Create
+
+namespace Tests.CreateSpec
+
+open Examples.Create
+open SolanaLean.Runtime
+
+#guard (init 0).dummy == 0
+#guard get (init 0) == 0
+#guard systemCreate 7 16 == 0
+
+#guard
+  match create (init 0) 9 with
+  | .ok (st, ret) => st.dummy == 0 && ret == 9
+  | .error _ => false
+
+#guard SolanaLean.IR.usesCpi SolanaLean.Golden.extractedCreate
+#guard SolanaLean.IR.cpiAccountCount SolanaLean.Golden.extractedCreate == 3
+
+#guard
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCreate with
+  | .error _ => false
+  | .ok asm =>
+      asm.contains "invoke programIx=2" &&
+        asm.contains "dataLen=52" &&
+        asm.contains "call sol_invoke_signed_c" &&
+        asm.contains "jlt r1, 3"
+
+end Tests.CreateSpec

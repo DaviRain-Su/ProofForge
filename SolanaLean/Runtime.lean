@@ -30,6 +30,7 @@ inductive CpiWord where
   | u32le (n : UInt64)
   | u64le (v : UInt64)
   | ascii (s : String)
+  | programId
   deriving Repr, Inhabited
 
 /--
@@ -69,6 +70,17 @@ def systemTransfer (lamports : UInt64) : UInt64 :=
 /-- CPI 到外层账户 1；空 metas、空 data。普通包装。 -/
 def invokeAcc1 : UInt64 :=
   invoke 1 #[] #[]
+
+/--
+`system.createAccount`：payer / 新账户 / System。
+owner 钉死为当前 program id。space 编译期常量。
+-/
+def systemCreate (lamports space : UInt64) : UInt64 :=
+  invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := true, writable := true }]
+    -- bincode：u32 tag 0，无 pad；52 字节。
+    #[.u32le 0, .u64le lamports, .u64le space, .programId]
 
 /--
 找当前 program id 下、一条 ASCII 种子的 canonical bump。

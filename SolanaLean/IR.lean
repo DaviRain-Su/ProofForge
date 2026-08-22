@@ -240,6 +240,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         | .u32le n => s!"u32.{n.toNat}"
         | .u64le v => s!"u64.{valCanon v}"
         | .ascii s => s!"s.{s}"
+        | .programId => "pid"
       let ds := String.intercalate "," (data.toList.map word)
       let seeds :=
         match seed, bump with

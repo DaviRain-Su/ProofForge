@@ -404,25 +404,53 @@ private def emitFillAccountInfoFromHeader (tag : String) (srcStack : Nat) : Stri
   "  lddw r1, 0\n  stxb [r5 + 51], r1\n  stxb [r5 + 52], r1\n" ++
   "  stxb [r5 + 53], r1\n  stxb [r5 + 54], r1\n  stxb [r5 + 55], r1\n"
 
-private def emitCpiData (p : IR.Program) (data : Array Ops.CpiWord) : Except String (String × Nat) := do
-  let mut body := "  lddw r1, 0\n  stxdw [r9 + 0], r1\n  stxdw [r9 + 8], r1\n"
+private def emitCpiData (p : IR.Program) (base : Nat) (data : Array Ops.CpiWord) :
+    Except String (String × Nat) := do
+  -- CreateAccount 是 52B：u32+u64 不对齐。先清 64B，避免残留污染 space。
+  let mut body :=
+    s!"  lddw r1, 0\n  stxdw [r9 + {base}], r1\n  stxdw [r9 + {base + 8}], r1\n" ++
+    s!"  stxdw [r9 + {base + 16}], r1\n  stxdw [r9 + {base + 24}], r1\n" ++
+    s!"  stxdw [r9 + {base + 32}], r1\n  stxdw [r9 + {base + 40}], r1\n" ++
+    s!"  stxdw [r9 + {base + 48}], r1\n  stxdw [r9 + {base + 56}], r1\n"
   let mut off : Nat := 0
   for w in data do
     match w with
     | .u32le n =>
-      body := body ++ s!"  lddw r1, {n.toNat}\n  stxw [r9 + {off}], r1\n"
+      body := body ++ s!"  lddw r1, {n.toNat}\n  stxw [r9 + {base + off}], r1\n"
       off := off + 4
     | .u64le v =>
       let load ← loadVal p v 8
-      body := body ++ load ++ s!"  ldxdw r1, [r10 - 8]\n  stxdw [r9 + {off}], r1\n"
+      body := body ++ load ++ s!"  ldxdw r1, [r10 - 8]\n  stxdw [r9 + {base + off}], r1\n"
       off := off + 8
     | .ascii s =>
       -- 逐字节；本切片字面量很短。
       let mut i : Nat := 0
       for c in s.toList do
-        body := body ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {off + i}], r1\n"
+        body := body ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {base + off + i}], r1\n"
         i := i + 1
       off := off + s.length
+    | .programId =>
+      let copy :=
+        if IR.usesCpi p then
+          s!"\
+  ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount p)}]
+  ldxdw r2, [r1 + 0]
+  add64 r1, 8
+  add64 r1, r2
+"
+        else
+          s!"\
+  ldxdw r2, [r6 + INSTRUCTION_DATA_LEN]
+  mov64 r1, r6
+  add64 r1, INSTRUCTION_DATA
+  add64 r1, r2
+"
+      body := body ++ copy ++
+        s!"  ldxdw r2, [r1 + 0]\n  stxdw [r9 + {base + off}], r2\n" ++
+        s!"  ldxdw r2, [r1 + 8]\n  stxdw [r9 + {base + off + 8}], r2\n" ++
+        s!"  ldxdw r2, [r1 + 16]\n  stxdw [r9 + {base + off + 16}], r2\n" ++
+        s!"  ldxdw r2, [r1 + 24]\n  stxdw [r9 + {base + off + 24}], r2\n"
+      off := off + 32
   return (body, off)
 
 /-- `r5` 已是 metas 基址（`r9 + metaOff`）；第 i 条相对偏移是 `16*i`，不要再加 16。 -/
@@ -493,10 +521,11 @@ private def emitInvoke (p : IR.Program) (label : String)
     (seed : Option String) (bump : Option Ops.Val) :
     Except String String := do
   let n := IR.cpiAccountCount p
-  let (dataTxt, dataLen) ← emitCpiData p data
-  let metaOff := 16
+  let metaOff := 0
   let ixOff := metaOff + 16 * metas.size
-  let infoOff := ixOff + 40
+  let dataOff := ixOff + 40
+  let (dataTxt, dataLen) ← emitCpiData p dataOff data
+  let infoOff := dataOff + ((dataLen + 7) / 8) * 8
   let seedOff := infoOff + 56 * n
   let (seedTxt, seedRegs) ← emitSignerSeeds p seedOff seed bump
   let mut metasTxt := ""
@@ -523,7 +552,9 @@ private def emitInvoke (p : IR.Program) (label : String)
   stxdw [r8 + 8], r1
   lddw r1, {metas.size}
   stxdw [r8 + 16], r1
-  stxdw [r8 + 24], r9
+  mov64 r1, r9
+  add64 r1, {dataOff}
+  stxdw [r8 + 24], r1
   lddw r1, {dataLen}
   stxdw [r8 + 32], r1
   stxdw [r10 - 80], r8

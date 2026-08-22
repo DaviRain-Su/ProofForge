@@ -678,6 +678,8 @@ private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
       | .lit (.strVal s) => some (.ascii s)
       | _ => none
     else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.programId || endsWith e ".programId" then
+    some .programId
   else none
 
 /-- `#[a, b, …]` 展开成 `Array.mk [a, b, …]` / `List.cons`。 -/
@@ -766,27 +768,30 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       match decodeInvokeArgs env e with
       | some inv => some inv
       | none =>
-        if e.getAppFn.constName? == some ``SolanaLean.Runtime.systemTransfer ||
-            endsWith e ".systemTransfer" then
-          let amount :=
-            if e.getAppArgs.size ≥ 1 then
-              (val env e.getAppArgs[e.getAppArgs.size - 1]!).getD (.arg 0)
-            else .arg 0
-          some (2,
-            #[{ acc := 0, signer := true, writable := true },
-              { acc := 1, signer := false, writable := true }],
-            #[.u32le 2, .u64le amount], none, none)
-        else if e.getAppFn.constName? == some ``SolanaLean.Runtime.invokeAcc1 ||
-            endsWith e ".invokeAcc1" then
-          some (1, #[], #[], none, none)
-        else
+        -- 非 irreducible 的 Runtime 包装（systemTransfer / systemCreate / invokeAcc1）展开成 invoke。
+        let unfolded :=
+          match e.getAppFn.constName? with
+          | none => none
+          | some n =>
+            if n.getRoot != `SolanaLean then none
+            else
+              match env.find? n with
+              | some (.defnInfo info) =>
+                -- 空参包装（invokeAcc1）直接取体；有参包装 β 展开。
+                if e.getAppArgs.isEmpty then some info.value
+                else some (info.value.beta e.getAppArgs)
+              | _ => none
+        match unfolded with
+        | some u => go fuel' u
+        | none =>
           match e with
           | .letE _ _ value body _ => go fuel' value <|> go fuel' body
           | .lam _ _ body _ => go fuel' body
           | .app f a => go fuel' f <|> go fuel' a
           | _ => none
   if mentionsRuntime e "invoke" || mentionsRuntime e "invokeSigned" ||
-      mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" then
+      mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" ||
+      mentionsRuntime e "systemCreate" then
     go fuel e
   else none
 
@@ -796,14 +801,39 @@ private def invokeOps
   let (prog, metas, data, seed, bump) := inv
   #[.invoke prog metas data seed bump, .returnU64 ret]
 
+/-- `.ok (state, ret)` 的第二元。找不到就 none。 -/
+private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
+  let rec go (fuel : Nat) (e : Expr) : Option Ops.Val :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+        let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
+        if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
+          val env pair.getAppArgs[pair.getAppArgs.size - 1]!
+        else none
+      else
+        match e with
+        | .letE _ _ _ body _ => go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | .app f a => go fuel' f <|> go fuel' a
+        | _ => none
+  go 16 e
+
+private def invokeRet
+    (_env : Environment) (_e : Expr)
+    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
+    Ops.Val :=
+  match inv with
+  | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], none, none) => amount
+  | _ => .lit 0
+
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找 invoke：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
-    let ret :=
-      match inv with
-      | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
-      | _ => .lit 0
-    .ok (invokeOps inv ret)
+    .ok (invokeOps inv (invokeRet env e inv))
   else
   let e := peelLets (strip e)
   if let some v := asOkState env e then
@@ -847,11 +877,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
     if let some inv := findInvoke env 16 e then
-      let ret :=
-        match inv with
-        | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
-        | _ => .lit 0
-      return .ok (invokeOps inv ret)
+      return .ok (invokeOps inv (invokeRet env e inv))
     let e := strip e
     if isConstNamed e ``ite && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
@@ -861,11 +887,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
           match asCmp env condE, findInvoke env 8 t, asOkState env t with
           | some (cmp, lv, rv), some inv, _ =>
-            let ret :=
-              match inv with
-              | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
-              | _ => .lit 0
-            return .ok #[.ite cmp lv rv (invokeOps inv ret) #[.errorOverflow]]
+            return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
           | some (cmp, lv, rv), none, some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | _, _, _ => return .error "extract/unsupported: ite then"
@@ -911,11 +933,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         | .error r, _ => return .error r
         | _, .error r => return .error r
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
-      let ret :=
-        match inv with
-        | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
-        | _ => .lit 0
-      return .ok (invokeOps inv ret)
+      return .ok (invokeOps inv (invokeRet env e inv))
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs

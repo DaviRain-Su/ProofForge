@@ -33,6 +33,7 @@ inductive CpiWord where
   | u32le (n : UInt64)
   | u64le (v : Val)
   | ascii (s : String)
+  | programId
   deriving BEq, Repr, Inhabited
 
 inductive Op where
@@ -60,6 +61,12 @@ def systemTransfer (amount : Val) : Op :=
 /-- CPI 到外层账户 1；空 metas、空 data。 -/
 def invokeAcc1 : Op :=
   .invoke 1 #[] #[]
+
+def systemCreate (lamports space : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := true, writable := true }]
+    #[.u32le 0, .u64le lamports, .u64le space, .programId]
 
 private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
   match fuel with
