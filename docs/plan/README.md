@@ -40,6 +40,7 @@
 | [evm-008](tasks/evm-008.md) | done | 独立 EVM runtime 叶子 |
 | [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
+| [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

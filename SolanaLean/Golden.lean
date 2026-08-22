@@ -321,11 +321,36 @@ def extractedLang : Program :=
         ] }
     ] }
 
+def extractedVault : Program :=
+  { name := "Vault"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Vault.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Vault.credit", ixName := "credit", paramCount := 4
+        ops := #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)] },
+      { kind := .increment, name := "Examples.Vault.pull", ixName := "pull", paramCount := 7
+        ops := #[
+          .evmTokenTransfer (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
+          .returnU64 (.arg 6)
+        ] },
+      { kind := .increment, name := "Examples.Vault.setU64", ixName := "setU64", paramCount := 2
+        ops := #[.mapSetU64 (.lit 0) (.arg 0) (.arg 1), .returnU64 (.arg 1)] },
+      { kind := .get, name := "Examples.Vault.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Vault.getU64", ixName := "getU64", paramCount := 1
+        ops := #[.mapGetU64 (.lit 0) (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Vault.held", ixName := "held", paramCount := 3
+        ops := #[.evmTokenBalanceOfSelf (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Vault.shareOf", ixName := "shareOf", paramCount := 3
+        ops := #[.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedEvmCtx, extractedTipJar,
-  extractedLang
+  extractedLang, extractedVault
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

@@ -10,7 +10,7 @@
 |---|---|---|
 | `Evm.Keccak` | Ethereum Keccak-256、ABI selector | SHA-256、链上 opcode |
 | `Evm.IR` | storage slot、constructor、selector、digest | Loader V3、账户 disc |
-| `Evm.Emit` | Yul + `abi.json`；环境叶、payable、value CALL、LOG1、位运算、有界 for、运行时下标、窄 ABI、tuple return、命名 revert | Map / 任意 CALL / ERC-20 |
+| `Evm.Emit` | Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20 | 任意 CALL / approve / Token-2022 |
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
 | `Evm.Commands` | `#evm_build` | 新 DSL |
 
@@ -40,5 +40,6 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_ctx.sh`：`evmCaller` 对发送者低 8 字节；`height` 对 `block.number`
 - `runtime-tests/evm/anvil_tipjar.sh`：chainid、timestamp、Addr20 三叶、精确 deposit、错 value 保持、sendEth 改余额、Tipped log
 - `runtime-tests/evm/anvil_lang.sh`：位运算、移位越界、`uint8` ABI、tuple return、运行时下标、有界 for、`oob` revert
+- `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、ERC-20 transfer、超额保持、USDT 无返回成功
 
 入口：`runtime-tests/evm/anvil.sh`（Darwin / Linux）。工具查找：`FOUNDRY_BIN`、`~/.foundry/bin`、`PATH`。缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。

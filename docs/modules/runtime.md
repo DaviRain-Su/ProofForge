@@ -13,6 +13,10 @@
 - `evmDeposit amt` — `eq(callvalue(), amt)`，入口变 payable。
 - `evmSendEth w0 w1 w2 amt` — 组装 20B 后 value `CALL`，失败 revert。重入不进参考语义。
 - `evmLogTipped amt` — LOG1 topic = keccak(`Tipped(uint64)`)。
+- `evmMapGetU64` / `evmMapSetU64` — hashed `Map UInt64 UInt64`：`keccak256(key || base)` → occ + payload。
+- `evmMapGetAddr` / `evmMapSetAddr` — hashed `Map Addr20 UInt64`：`keccak256(w0||w1||w2||base)`。
+- `evmTokenTransfer` — 封闭 ERC-20 `transfer`；返回 0 或 32 非零。
+- `evmTokenBalanceOfSelf` — `STATICCALL balanceOf(address(this))`，超 UInt64 revert。
 
 `unixTime`、完整 32B key、独立 caller 账户、通用 CPI 本切片 fail closed。不把 SVM 名译成 EVM opcode。
 

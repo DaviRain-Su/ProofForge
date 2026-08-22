@@ -23,7 +23,7 @@
 
 ## 进行中
 
-- E-LANG 已交付（`Examples.Lang` + Anvil）。下一大切片 **E-ASSET**（hashed Map + 封闭 ERC-20）。见 [research/05-evm-coverage-slices.md](../research/05-evm-coverage-slices.md)。不做 Window。不把 SVM 名译成 EVM。
+- EVM 三大切片已交付（E-RT / E-LANG / E-ASSET）。见 [research/05-evm-coverage-slices.md](../research/05-evm-coverage-slices.md)。不做 Window。不把 SVM 名译成 EVM。
 
 ## 下一刀
 

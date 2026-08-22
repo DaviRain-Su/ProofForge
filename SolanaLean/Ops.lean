@@ -43,6 +43,12 @@ inductive Op where
   | evmLogTipped (amount : Val)
   | forAccum (n : Nat) (addend : Val)
   | indexSet (name : String) (idx value : Val) (len : Nat)
+  | mapGetU64 (base key : Val)
+  | mapSetU64 (base key value : Val)
+  | mapGetAddr (base w0 w1 w2 : Val)
+  | mapSetAddr (base w0 w1 w2 value : Val)
+  | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Val)
+  | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val)
   | okState (value : Val)
   | errorOverflow
   | errorNamed (name : String)
@@ -133,6 +139,17 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
     | .evmLogTipped v => isEvmLeaf v
     | .forAccum _ v => isEvmLeaf v
     | .indexSet _ i v _ => isEvmLeaf i || isEvmLeaf v
+    | .mapGetU64 a b => isEvmLeaf a || isEvmLeaf b
+    | .mapSetU64 a b c => isEvmLeaf a || isEvmLeaf b || isEvmLeaf c
+    | .mapGetAddr a b c d =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
+    | .mapSetAddr a b c d e =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d || isEvmLeaf e
+    | .evmTokenTransfer a b c d e f g =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
+          isEvmLeaf e || isEvmLeaf f || isEvmLeaf g
+    | .evmTokenBalanceOfSelf a b c =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c
     | .okState v => isEvmLeaf v
     | .returnU64 v => isEvmLeaf v
     | .returnState v => isEvmLeaf v
@@ -153,6 +170,17 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .evmLogTipped v => isLangLeaf v
     | .forAccum _ v => isLangLeaf v
     | .indexSet _ i v _ => isLangLeaf i || isLangLeaf v
+    | .mapGetU64 a b => isLangLeaf a || isLangLeaf b
+    | .mapSetU64 a b c => isLangLeaf a || isLangLeaf b || isLangLeaf c
+    | .mapGetAddr a b c d =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d
+    | .mapSetAddr a b c d e =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d || isLangLeaf e
+    | .evmTokenTransfer a b c d e f g =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d ||
+          isLangLeaf e || isLangLeaf f || isLangLeaf g
+    | .evmTokenBalanceOfSelf a b c =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c
     | .okState v => isLangLeaf v
     | .returnU64 v => isLangLeaf v
     | .returnState v => isLangLeaf v
@@ -167,10 +195,21 @@ def hasIndexSet (ops : Array Op) : Bool :=
 def hasErrorNamed (ops : Array Op) : Bool :=
   walk 16 ops (fun | .errorNamed _ => true | _ => false)
 
+def hasMapOp (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr .. => true
+    | _ => false
+
+def hasTokenOp (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. => true
+    | _ => false
+
 def hasLangOp (ops : Array Op) : Bool :=
   hasForAccum ops || hasIndexSet ops || hasErrorNamed ops || hasLangLeaf ops
 
 def hasEvmEffect (ops : Array Op) : Bool :=
-  hasEvmDeposit ops || hasEvmSendEth ops || hasEvmLog ops || hasEvmLeaf ops
+  hasEvmDeposit ops || hasEvmSendEth ops || hasEvmLog ops || hasEvmLeaf ops ||
+    hasMapOp ops || hasTokenOp ops
 
 end SolanaLean.Ops

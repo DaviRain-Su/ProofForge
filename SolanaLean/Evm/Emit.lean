@@ -80,6 +80,21 @@ private def packAddrMstore8 (indent w0 w1 w2 : String) : String :=
         toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
     return out
 
+/-- 把三叶 Addr20 写到 calldata 的 `off..off+19`（transfer 的 dest 从 16 起）。 -/
+private def packAddrAt (indent : String) (off : Nat) (w0 w1 w2 : String) : String :=
+  Id.run do
+    let mut out := ""
+    for i in [0:8] do
+      out := out ++ indent ++ "mstore8(" ++ toString (off + i) ++ ", and(shr(" ++
+        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
+    for i in [0:8] do
+      out := out ++ indent ++ "mstore8(" ++ toString (off + 8 + i) ++ ", and(shr(" ++
+        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
+    for i in [0:4] do
+      out := out ++ indent ++ "mstore8(" ++ toString (off + 16 + i) ++ ", and(shr(" ++
+        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
+    return out
+
 private def widthMask (width : Nat) : String :=
   match width with
   | 1 => "0xff"
@@ -405,6 +420,127 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "sstore(add(" ++ toString base ++ ", " ++ iv ++ "), " ++ vv ++ ")" ++ nl
         st := { st with last := some vv }
+    | .mapGetU64 base key =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
+        let (slot, st3) := fresh st2
+        let (tag, st4) := fresh st3
+        let (pay, st5) := fresh st4
+        st := st5
+        acc := acc ++ pb ++ pk ++
+          indent ++ "mstore(0, " ++ k ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 64)" ++ nl ++
+          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
+          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
+          indent ++ "if " ++ tag ++ " {" ++ nl ++
+          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
+          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "}" ++ nl
+        st := { st with last := some pay }
+    | .mapSetU64 base key value =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
+        let (pv, v, st3) ← materializeVal p indent paramPrefix paramCount value st2
+        let (slot, st4) := fresh st3
+        st := st4
+        acc := acc ++ pb ++ pk ++ pv ++
+          indent ++ "mstore(0, " ++ k ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 64)" ++ nl ++
+          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
+          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
+        st := { st with last := some v }
+    | .mapGetAddr base w0 w1 w2 =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount w0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount w1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount w2 st3
+        let (slot, st5) := fresh st4
+        let (tag, st6) := fresh st5
+        let (pay, st7) := fresh st6
+        st := st7
+        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++
+          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
+          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
+          indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
+          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
+          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
+          indent ++ "if " ++ tag ++ " {" ++ nl ++
+          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
+          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "}" ++ nl
+        st := { st with last := some pay }
+    | .mapSetAddr base w0 w1 w2 value =>
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount w0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount w1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount w2 st3
+        let (pv, v, st5) ← materializeVal p indent paramPrefix paramCount value st4
+        let (slot, st6) := fresh st5
+        st := st6
+        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ pv ++
+          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
+          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
+          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
+          indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
+          indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
+          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
+          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
+        st := { st with last := some v }
+    | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
+        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount tw0 st
+        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount tw1 s0
+        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount tw2 s1
+        let (q0, d0, s3) ← materializeVal p indent paramPrefix paramCount dw0 s2
+        let (q1, d1, s4) ← materializeVal p indent paramPrefix paramCount dw1 s3
+        let (q2, d2, s5) ← materializeVal p indent paramPrefix paramCount dw2 s4
+        let (pa, amt, s6) ← materializeVal p indent paramPrefix paramCount amount s5
+        let (tok, s7) := fresh s6
+        let (ok, s8) := fresh s7
+        let (rds, s9) := fresh s8
+        st := s9
+        acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ pa ++
+          indent ++ "if shr(32, " ++ a2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "if shr(32, " ++ d2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent a0 a1 a2 ++
+          indent ++ "let " ++ tok ++ " := mload(0)" ++ nl ++
+          indent ++ "mstore(0, 0xa9059cbb00000000000000000000000000000000000000000000000000000000)" ++ nl ++
+          packAddrAt indent 16 d0 d1 d2 ++
+          indent ++ "mstore(36, " ++ amt ++ ")" ++ nl ++
+          indent ++ "let " ++ ok ++ " := call(gas(), " ++ tok ++ ", 0, 0, 68, 0, 32)" ++ nl ++
+          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ rds ++ " := returndatasize()" ++ nl ++
+          indent ++ "if and(iszero(eq(" ++ rds ++ ", 0)), iszero(eq(" ++ rds ++
+            ", 32))) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "if eq(" ++ rds ++ ", 32) { if iszero(mload(0)) { " ++ revert0 ++ " } }" ++ nl
+        st := { st with last := some amt }
+    | .evmTokenBalanceOfSelf tw0 tw1 tw2 =>
+        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount tw0 st
+        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount tw1 s0
+        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount tw2 s1
+        let (tok, s3) := fresh s2
+        let (ok, s4) := fresh s3
+        let (ret, s5) := fresh s4
+        st := s5
+        acc := acc ++ p0 ++ p1 ++ p2 ++
+          indent ++ "if shr(32, " ++ a2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent a0 a1 a2 ++
+          indent ++ "let " ++ tok ++ " := mload(0)" ++ nl ++
+          indent ++ "mstore(0, 0x70a0823100000000000000000000000000000000000000000000000000000000)" ++ nl ++
+          indent ++ "mstore(4, address())" ++ nl ++
+          indent ++ "let " ++ ok ++ " := staticcall(gas(), " ++ tok ++ ", 0, 36, 0, 32)" ++ nl ++
+          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "if iszero(eq(returndatasize(), 32)) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ ret ++ " := mload(0)" ++ nl ++
+          indent ++ "if shr(64, " ++ ret ++ ") { " ++ revert0 ++ " }" ++ nl
+        st := { st with last := some ret }
     | .okState v =>
         if Ops.hasIndexSet ops then
           let value := st.last.getD "0"

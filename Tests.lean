@@ -18,4 +18,5 @@ import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
 import Tests.TipJarSpec
 import Tests.LangSpec
+import Tests.VaultSpec
 import Tests.DumpIncrement

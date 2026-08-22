@@ -66,4 +66,29 @@ SVM 发射器碰到这个叶子 fail closed。
 /-- LOG1 `Tipped(uint64)`。宿主返回 amt。 -/
 @[irreducible] def evmLogTipped (amt : UInt64) : UInt64 := amt
 
+/-- hashed `Map` 读 payload。缺席是 0。宿主返回 0。 -/
+@[irreducible] def evmMapGetU64 (_base _key : UInt64) : UInt64 := 0
+
+/-- hashed `Map` 写 payload，occ=1。宿主返回 val。 -/
+@[irreducible] def evmMapSetU64 (_base _key val : UInt64) : UInt64 := val
+
+/-- hashed `Map Addr20` 读。缺席是 0。 -/
+@[irreducible] def evmMapGetAddr (_base w0 w1 w2 : UInt64) : UInt64 :=
+  let _ := w0; let _ := w1; let _ := w2; 0
+
+/-- hashed `Map Addr20` 写。 -/
+@[irreducible] def evmMapSetAddr (_base w0 w1 w2 val : UInt64) : UInt64 :=
+  let _ := w0; let _ := w1; let _ := w2; val
+
+/-- 封闭 ERC-20 `transfer`。callee 20B；失败 / 假返回 revert。宿主返回 amt。 -/
+@[irreducible] def evmTokenTransfer
+    (tw0 tw1 tw2 dw0 dw1 dw2 amt : UInt64) : UInt64 :=
+  let _ := tw0; let _ := tw1; let _ := tw2
+  let _ := dw0; let _ := dw1; let _ := dw2
+  amt
+
+/-- 封闭 ERC-20 `balanceOf(address(this))`。超 UInt64 应 revert。宿主返回 0。 -/
+@[irreducible] def evmTokenBalanceOfSelf (tw0 tw1 tw2 : UInt64) : UInt64 :=
+  let _ := tw0; let _ := tw1; let _ := tw2; 0
+
 end SolanaLean.Runtime

@@ -72,6 +72,18 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .evmLogTipped v => valForbidden v
       | .forAccum _ v => valForbidden v
       | .indexSet _ i v _ => valForbidden i || valForbidden v
+      | .mapGetU64 a b => valForbidden a || valForbidden b
+      | .mapSetU64 a b c => valForbidden a || valForbidden b || valForbidden c
+      | .mapGetAddr a b c d =>
+          valForbidden a || valForbidden b || valForbidden c || valForbidden d
+      | .mapSetAddr a b c d e =>
+          valForbidden a || valForbidden b || valForbidden c ||
+            valForbidden d || valForbidden e
+      | .evmTokenTransfer a b c d e f g =>
+          valForbidden a || valForbidden b || valForbidden c || valForbidden d ||
+            valForbidden e || valForbidden f || valForbidden g
+      | .evmTokenBalanceOfSelf a b c =>
+          valForbidden a || valForbidden b || valForbidden c
       | .errorOverflow | .errorNamed _ => false
 
 def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
@@ -201,6 +213,16 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .evmLogTipped v => s!"elog({valCanon v})"
     | .forAccum n v => s!"for({n},{valCanon v})"
     | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
+    | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
+    | .mapSetU64 b k v => s!"mset({valCanon b},{valCanon k},{valCanon v})"
+    | .mapGetAddr b a0 a1 a2 =>
+        s!"mgeta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"
+    | .mapSetAddr b a0 a1 a2 v =>
+        s!"mseta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon v})"
+    | .evmTokenTransfer a b c d e f g =>
+        s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
+    | .evmTokenBalanceOfSelf a b c =>
+        s!"tbal({valCanon a},{valCanon b},{valCanon c})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .errorNamed n => s!"err.{n}"

@@ -194,6 +194,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | none => none
         else if endsWith e ".u64Max" then
           some (.lit (~~~(0 : UInt64)))
+        else if endsWith e ".shareBase" then
+          some (.lit 0)
         else if endsWith e ".clockSlot" || isConstNamed e ``SolanaLean.Runtime.clockSlot then
           some .clockSlot
         else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
@@ -232,7 +234,20 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             (endsWith e ".evmLogTipped" ||
             isConstNamed e ``SolanaLean.Runtime.evmLogTipped) ||
             (endsWith e ".evmSendEth" ||
-            isConstNamed e ``SolanaLean.Runtime.evmSendEth)) && e.getAppArgs.size ≥ 1 then
+            isConstNamed e ``SolanaLean.Runtime.evmSendEth) ||
+            (endsWith e ".evmMapGetU64" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapGetU64) ||
+            (endsWith e ".evmMapSetU64" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapSetU64) ||
+            (endsWith e ".evmMapGetAddr" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapGetAddr) ||
+            (endsWith e ".evmMapSetAddr" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapSetAddr) ||
+            (endsWith e ".evmTokenTransfer" ||
+            isConstNamed e ``SolanaLean.Runtime.evmTokenTransfer) ||
+            (endsWith e ".evmTokenBalanceOfSelf" ||
+            isConstNamed e ``SolanaLean.Runtime.evmTokenBalanceOfSelf)) &&
+            e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if isConstNamed e ``Bool.true || endsWith e ".true" then
           some (.lit 1)
@@ -882,6 +897,83 @@ private def findIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
         | _ => none
   go 16 e
 
+private def nthFromEnd (args : Array Expr) (n : Nat) : Option Expr :=
+  if args.size ≥ n + 1 then some args[args.size - 1 - n]! else none
+
+private def valAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val :=
+  match nthFromEnd args n with
+  | some e => (val env e).getD (.arg n)
+  | none => .arg n
+
+private def findBinaryRuntime (env : Environment) (want : Name) (suffix : String)
+    (e : Expr) : Option (Ops.Val × Ops.Val) :=
+  if mentionsRuntime e want suffix then
+    match findRuntimeApp 16 e want suffix with
+    | some app =>
+      let args := app.getAppArgs
+      if args.size ≥ 2 then
+        some (valAtEnd env args 1, valAtEnd env args 0)
+      else some (.arg 0, .arg 1)
+    | none => some (.arg 0, .arg 1)
+  else none
+
+private def findTernaryRuntime (env : Environment) (want : Name) (suffix : String)
+    (e : Expr) : Option (Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e want suffix then
+    match findRuntimeApp 16 e want suffix with
+    | some app =>
+      let args := app.getAppArgs
+      if args.size ≥ 3 then
+        some (valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+      else some (.arg 0, .arg 1, .arg 2)
+    | none => some (.arg 0, .arg 1, .arg 2)
+  else none
+
+private def findEvmMapGetU64 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val) :=
+  findBinaryRuntime env ``SolanaLean.Runtime.evmMapGetU64 ".evmMapGetU64" e
+
+private def findEvmMapSetU64 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val) :=
+  findTernaryRuntime env ``SolanaLean.Runtime.evmMapSetU64 ".evmMapSetU64" e
+
+private def findEvmMapGetAddr (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e ``SolanaLean.Runtime.evmMapGetAddr ".evmMapGetAddr" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapGetAddr ".evmMapGetAddr" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+  else none
+
+private def findEvmMapSetAddr (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e ``SolanaLean.Runtime.evmMapSetAddr ".evmMapSetAddr" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapSetAddr ".evmMapSetAddr" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 4, valAtEnd env args 3, valAtEnd env args 2,
+        valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4)
+  else none
+
+private def findEvmTokenTransfer (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e ``SolanaLean.Runtime.evmTokenTransfer ".evmTokenTransfer" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmTokenTransfer ".evmTokenTransfer" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 6, valAtEnd env args 5, valAtEnd env args 4,
+        valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+  else none
+
+private def findEvmTokenBalance (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val) :=
+  findTernaryRuntime env ``SolanaLean.Runtime.evmTokenBalanceOfSelf
+    ".evmTokenBalanceOfSelf" e
+
 private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
   if let some amount := findEvmDeposit env e then
     some #[.evmDeposit amount, .returnU64 amount]
@@ -889,6 +981,18 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.evmSendEth w0 w1 w2 amt, .returnU64 amt]
   else if let some amount := findEvmLogTipped env e then
     some #[.evmLogTipped amount, .returnU64 amount]
+  else if let some (b, k, v) := findEvmMapSetU64 env e then
+    some #[.mapSetU64 b k v, .returnU64 v]
+  else if let some (b, a0, a1, a2, v) := findEvmMapSetAddr env e then
+    some #[.mapSetAddr b a0 a1 a2 v, .returnU64 v]
+  else if let some (t0, t1, t2, d0, d1, d2, amt) := findEvmTokenTransfer env e then
+    some #[.evmTokenTransfer t0 t1 t2 d0 d1 d2 amt, .returnU64 amt]
+  else if let some (b, k) := findEvmMapGetU64 env e then
+    some #[.mapGetU64 b k, .returnU64 k]
+  else if let some (b, a0, a1, a2) := findEvmMapGetAddr env e then
+    some #[.mapGetAddr b a0 a1 a2, .returnU64 a0]
+  else if let some (t0, t1, t2) := findEvmTokenBalance env e then
+    some #[.evmTokenBalanceOfSelf t0 t1 t2, .returnU64 t0]
   else none
 
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
@@ -1209,6 +1313,19 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .evmLogTipped v => .evmLogTipped (flipVal fuel' v)
       | .forAccum n v => .forAccum n (flipVal fuel' v)
       | .indexSet n i v k => .indexSet n (flipVal fuel' i) (flipVal fuel' v) k
+      | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
+      | .mapSetU64 b k v =>
+          .mapSetU64 (flipVal fuel' b) (flipVal fuel' k) (flipVal fuel' v)
+      | .mapGetAddr b a0 a1 a2 =>
+          .mapGetAddr (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2)
+      | .mapSetAddr b a0 a1 a2 v =>
+          .mapSetAddr (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
+            (flipVal fuel' a2) (flipVal fuel' v)
+      | .evmTokenTransfer a b c d e f g =>
+          .evmTokenTransfer (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f) (flipVal fuel' g)
+      | .evmTokenBalanceOfSelf a b c =>
+          .evmTokenBalanceOfSelf (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
       | .errorOverflow => .errorOverflow
       | .errorNamed n => .errorNamed n
   let ops :=
@@ -1364,6 +1481,15 @@ private def opFields : Ops.Op → Array String
   | .evmLogTipped v => valFields v
   | .forAccum _ v => valFields v
   | .indexSet _ i v _ => valFields i ++ valFields v
+  | .mapGetU64 b k => valFields b ++ valFields k
+  | .mapSetU64 b k v => valFields b ++ valFields k ++ valFields v
+  | .mapGetAddr b a0 a1 a2 => valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2
+  | .mapSetAddr b a0 a1 a2 v =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++ valFields v
+  | .evmTokenTransfer a b c d e f g =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d ++
+        valFields e ++ valFields f ++ valFields g
+  | .evmTokenBalanceOfSelf a b c => valFields a ++ valFields b ++ valFields c
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .errorNamed _ => #[]

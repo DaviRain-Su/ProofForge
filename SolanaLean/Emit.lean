@@ -269,6 +269,18 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .evmLogTipped v => valUsesSigner v
       | .forAccum _ v => valUsesSigner v
       | .indexSet _ i v _ => valUsesSigner i || valUsesSigner v
+      | .mapGetU64 a b => valUsesSigner a || valUsesSigner b
+      | .mapSetU64 a b c => valUsesSigner a || valUsesSigner b || valUsesSigner c
+      | .mapGetAddr a b c d =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
+      | .mapSetAddr a b c d e =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c ||
+            valUsesSigner d || valUsesSigner e
+      | .evmTokenTransfer a b c d e f g =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
+            valUsesSigner e || valUsesSigner f || valUsesSigner g
+      | .evmTokenBalanceOfSelf a b c =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -499,6 +511,9 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
     | .evmDeposit _ | .evmSendEth .. | .evmLogTipped _ =>
       throw "extract/unsupported: svm rejects evm leaf"
     | .forAccum .. | .indexSet .. | .errorNamed _ =>
+      throw "extract/unsupported: svm rejects evm leaf"
+    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
+    | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. =>
       throw "extract/unsupported: svm rejects evm leaf"
     | .okState v =>
       let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
