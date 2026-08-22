@@ -306,6 +306,24 @@ def extractedTokenXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedRent : Program :=
+  { name := "Rent"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Rent.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Rent.stamp", ixName := "stamp", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.rentExemption 16)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Rent.exempt", ixName := "exempt", paramCount := 0
+        ops := #[.returnU64 (.rentExemption 16)] },
+      { kind := .get, name := "Examples.Rent.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "dummy")] }
+    ] }
+
 def extractedAta : Program :=
   { name := "Ata"
     slots := #[{ name := "dummy" }]
@@ -340,7 +358,8 @@ def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
-  extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta
+  extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
+  extractedRent
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

@@ -16,6 +16,7 @@ import Examples.Signed
 import Examples.Create
 import Examples.TokenXfer
 import Examples.Ata
+import Examples.Rent
 
 #solana_build Examples.Counter
 
@@ -50,6 +51,8 @@ import Examples.Ata
 #solana_build Examples.TokenXfer
 
 #solana_build Examples.Ata
+
+#solana_build Examples.Rent
 
 /--
 error: extract/unsupported: no solana_entry

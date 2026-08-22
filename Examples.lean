@@ -15,3 +15,4 @@ import Examples.Signed
 import Examples.Create
 import Examples.TokenXfer
 import Examples.Ata
+import Examples.Rent

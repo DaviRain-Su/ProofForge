@@ -159,7 +159,8 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
   | .lit _ | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _ =>
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+  | .rentExemption _ =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -195,6 +196,23 @@ private def emitLoadClockSlot (stackOff : Nat) : String :=
   exit
 clock_ok_{stackOff}:
   ldxdw r1, [r10 - 72]
+  stxdw [r10 - {stackOff}], r1
+"
+
+/-- Rent 是 17 字节 `repr(C)`；rate 在偏移 0。`exemption = rate * (128 + dataLen)`。 -/
+private def emitLoadRentExemption (dataLen stackOff : Nat) : String :=
+  s!"\
+  ; load rentExemption {dataLen} via sol_get_rent_sysvar
+  mov64 r1, r10
+  add64 r1, -72
+  call sol_get_rent_sysvar
+  jeq r0, 0, rent_ok_{stackOff}
+  lddw r0, 0x1
+  exit
+rent_ok_{stackOff}:
+  ldxdw r1, [r10 - 72]
+  lddw r2, {128 + dataLen}
+  mul64 r1, r2
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -300,6 +318,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadAccU8 "load account-0 is_executable" "ACC0_HEADER + 3" stackOff)
   | .findPda seed =>
     .ok (emitLoadFindPda p seed stackOff)
+  | .rentExemption n =>
+    .ok (emitLoadRentExemption n.toNat stackOff)
   | _ => do
     let mem ← memOfVal p v
     let insn ← loadInsn (widthOfVal p v)
@@ -714,7 +734,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-        | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _ => do
+        | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+        | .rentExemption _ => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)

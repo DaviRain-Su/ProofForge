@@ -28,13 +28,14 @@
 - `systemCreate` 普通包装；owner = 当前 program id；Create Mollusk
 - `tokenTransferChecked` 普通包装；Token `TransferChecked`；TokenXfer Mollusk
 - `ataCreateIdempotent` 普通包装；ATA CreateIdempotent；Ata Mollusk
+- `rentExemption` 叶子；`sol_get_rent_sysvar` × `(128+n)`；Rent Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：L4-rent。
-再后：Token mint / burn。
+建议下一条：Token mint / burn。
+再后：System assign / allocate。
 
 ## 其后（L2 / L3）
 

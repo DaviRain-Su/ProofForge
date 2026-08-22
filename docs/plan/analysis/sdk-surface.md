@@ -42,6 +42,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `systemCreate` | System createAccount；owner = 当前 program id | L4-008 |
 | `tokenTransferChecked` | Token TransferChecked；decimals 编译期常量 | L4-009 |
 | `ataCreateIdempotent` | ATA CreateIdempotent；1 字节 tag 1 | L4-010 |
+| `rentExemption n` | `sol_get_rent_sysvar` × `(128+n)` | L4-011 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -111,7 +112,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-clock-slot | `clockSlot` | `sol_get_clock_sysvar` + slot@0 | **已绿** |
 | L4-clock-unix | `unixTime` | 同缓冲 + unix_timestamp@32 | **保持 FC**（有符号 i64；PF 也 FC） |
 | L4-clock-epoch | `clockEpoch` | epoch@16 | 可开；非常量，两次 warp 证明 |
-| L4-rent | `rentExemption u64` 或 `rentLamportsPerByteYear` | `sol_get_rent_sysvar` | 开一条：exemption 计算要钉公式 |
+| L4-rent | `rentExemption n` | `sol_get_rent_sysvar` + `rate*(128+n)` | **已绿** |
 | L4-epoch-schedule | `slotsPerEpoch` 等一叶 | `sol_get_epoch_schedule_sysvar` | 有合约再用 |
 | L4-epoch-rewards | — | `sol_get_epoch_rewards_sysvar` | 默认关 |
 | L4-fees | — | `sol_get_fees_sysvar` | 已弃用，关 |

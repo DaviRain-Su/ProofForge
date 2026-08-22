@@ -15,6 +15,7 @@ inductive Val where
   | isWritable0
   | isExecutable0
   | findPda (seed : String)
+  | rentExemption (dataLen : UInt64)
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where

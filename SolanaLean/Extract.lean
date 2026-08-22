@@ -125,6 +125,12 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
           | .lit (.strVal s) => if s.isEmpty then none else some (.findPda s)
           | _ => none
+        else if (endsWith e ".rentExemption" ||
+            isConstNamed e ``SolanaLean.Runtime.rentExemption) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit n) => some (.rentExemption n)
+          | _ => none
         else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
           let proj :=
             match field.splitOn "." with
@@ -592,6 +598,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.isWritable0) => some .isWritable0
             | some (.isExecutable0) => some .isExecutable0
             | some (.findPda s) => some (.findPda s)
+            | some (.rentExemption n) => some (.rentExemption n)
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -858,7 +865,8 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
     | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-    | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _ => .ok #[.returnU64 v]
+    | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+    | .rentExemption _ => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -1045,7 +1053,8 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
       | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-      | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _ => v
+      | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+      | .rentExemption _ => v
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -1187,7 +1196,8 @@ private def valFields : Ops.Val → Array String
   | .arg _ => #[]
   | .lit _ => #[]
   | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _ => #[]
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+  | .rentExemption _ => #[]
 
 private def opFields : Ops.Op → Array String
   | .checkedAddU64 l r => valFields l ++ valFields r

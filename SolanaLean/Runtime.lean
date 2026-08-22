@@ -10,6 +10,16 @@ namespace SolanaLean.Runtime
 @[irreducible] def clockSlot : UInt64 := 0
 
 /--
+`dataLen` 字节账户的 rent-exempt 下限。
+抽出后发射 `sol_get_rent_sysvar`，读 `lamports_per_byte`，再乘 `128 + dataLen`。
+`dataLen` 必须在抽出时是常量。宿主侧是不可约 stub。
+`exemption_threshold` 当浮点用仍 fail closed。
+-/
+@[irreducible] def rentExemption (dataLen : UInt64) : UInt64 :=
+  let _ := dataLen
+  0
+
+/--
 账户 0 公钥的第一个小端 `u64`（`ACC0_KEY+0`）。
 用到这个叶子的入口会检查 `is_signer`。
 

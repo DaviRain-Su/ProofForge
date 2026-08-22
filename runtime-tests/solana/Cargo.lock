@@ -2450,6 +2450,7 @@ dependencies = [
  "solana-native-token",
  "solana-program-error",
  "solana-pubkey 4.1.0",
+ "solana-rent",
  "solana-svm-log-collector",
  "spl-associated-token-account-interface",
  "spl-token-interface",
