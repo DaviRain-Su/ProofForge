@@ -15,6 +15,7 @@ import Tests.CreateSpec
 import Tests.TokenXferSpec
 import Tests.AtaSpec
 import Tests.RentSpec
+import Tests.TokenMintSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

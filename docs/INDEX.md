@@ -18,4 +18,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L4 SDK 表面**。L4-011：`rentExemption`。下一刀 Token mint / burn。
+当前阶段：**L4 SDK 表面**。L4-012：Token mint / burn。下一刀 System assign / allocate。

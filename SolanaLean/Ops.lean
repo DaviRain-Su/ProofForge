@@ -78,6 +78,20 @@ def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
       { acc := 0, signer := true, writable := false }]
     #[.u8le 12, .u64le amount, .u8le decimals]
 
+def tokenMintToChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 14, .u64le amount, .u8le decimals]
+
+def tokenBurnChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 15, .u64le amount, .u8le decimals]
+
 def ataCreateIdempotent : Op :=
   .invoke 6
     #[{ acc := 0, signer := true, writable := true },

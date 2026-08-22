@@ -108,6 +108,28 @@ def tokenTransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
     #[.u8le 12, .u64le amount, .u8le decimals]
 
 /--
+Token `MintToChecked`：普通包装。decimals 编译期常量。
+外层 0 是 mint authority。内层：mint w / dest w / authority。
+-/
+def tokenMintToChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 14, .u64le amount, .u8le decimals]
+
+/--
+Token `BurnChecked`：普通包装。decimals 编译期常量。
+外层 0 是 token owner。内层：source w / mint w / authority。
+-/
+def tokenBurnChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 15, .u64le amount, .u8le decimals]
+
+/--
 ATA `CreateIdempotent`：普通包装。
 外层 0 是 payer（prelude 强制 acc0 signer+writable）。
 内层按官方顺序：payer / ata / wallet / mint / System / Token。

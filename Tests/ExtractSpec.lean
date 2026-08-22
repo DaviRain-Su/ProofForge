@@ -17,6 +17,7 @@ import Examples.Create
 import Examples.TokenXfer
 import Examples.Ata
 import Examples.Rent
+import Examples.TokenMint
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -100,6 +101,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Ata.init Examples.Ata.openAta Examples.Ata.get
 
 #solana_extract Examples.Rent.init Examples.Rent.stamp Examples.Rent.exempt
+
+#solana_extract Examples.TokenMint.init Examples.TokenMint.mintTo Examples.TokenMint.get
 
 /--
 error: extract/unsupported: field tag enum has payload

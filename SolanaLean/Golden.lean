@@ -306,6 +306,20 @@ def extractedTokenXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTokenMint : Program :=
+  { name := "TokenMint"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenMint.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenMint.mintTo", ixName := "mintTo", paramCount := 1
+        ops := #[Ops.tokenMintToChecked (.arg 0) 6, .returnU64 (.arg 0)] },
+      { kind := .increment, name := "Examples.TokenMint.burn", ixName := "burn", paramCount := 1
+        ops := #[Ops.tokenBurnChecked (.arg 0) 6, .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.TokenMint.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedRent : Program :=
   { name := "Rent"
     slots := #[{ name := "dummy" }]
@@ -359,7 +373,7 @@ def programs : Array Program := #[
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
-  extractedRent
+  extractedRent, extractedTokenMint
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

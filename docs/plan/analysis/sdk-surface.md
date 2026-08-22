@@ -43,6 +43,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `tokenTransferChecked` | Token TransferChecked；decimals 编译期常量 | L4-009 |
 | `ataCreateIdempotent` | ATA CreateIdempotent；1 字节 tag 1 | L4-010 |
 | `rentExemption n` | `sol_get_rent_sysvar` × `(128+n)` | L4-011 |
+| `tokenMintToChecked` / `tokenBurnChecked` | Token mint / burn；decimals 编译期常量 | L4-012 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -151,8 +152,8 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | ID | 指令 | tag | 要点 |
 |---|---|---|---|
 | L4-tok-xfer | `TransferChecked` | 12 | mint + decimals；不要开已弃用的 `Transfer`(3) |
-| L4-tok-mint | `MintToChecked` | 14 | mint authority signer |
-| L4-tok-burn | `BurnChecked` | 15 | |
+| L4-tok-mint | `MintToChecked` | 14 | **已绿**；mint authority signer |
+| L4-tok-burn | `BurnChecked` | 15 | **已绿** |
 | L4-tok-init-acc | `InitializeAccount3` | 18 | owner 走指令数据，少一个账户 |
 | L4-tok-close | `CloseAccount` | 9 |  lamports 退回 |
 | L4-tok-approve / set-auth / freeze | — | — | 有合约再开；默认关 |
