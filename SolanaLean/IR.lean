@@ -220,6 +220,7 @@ private def valCanon : Ops.Val → String
   | .isWritable0 => "wr0"
   | .isExecutable0 => "ex0"
   | .findPda s => s!"pda.{s}"
+  | .checkPda s b => s!"chk.{s}:{valCanon b}"
   | .rentExemption n => s!"rent.{n.toNat}"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=

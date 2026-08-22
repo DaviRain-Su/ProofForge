@@ -426,7 +426,11 @@ def extractedPda : Program :=
       { kind := .get, name := "Examples.Pda.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.lit 0)] },
       { kind := .get, name := "Examples.Pda.bump", ixName := "bump", paramCount := 0
-        ops := #[.returnU64 (.findPda "vault")] }
+        ops := #[.returnU64 (.findPda "vault")] },
+      { kind := .get, name := "Examples.Pda.check", ixName := "check", paramCount := 0
+        ops := #[.returnU64 (.checkPda "vault" (.findPda "vault"))] },
+      { kind := .get, name := "Examples.Pda.checkBad", ixName := "checkBad", paramCount := 0
+        ops := #[.returnU64 (.checkPda "vault" (.lit 0))] }
     ] }
 
 def programs : Array Program := #[

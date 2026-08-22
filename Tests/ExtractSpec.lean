@@ -96,6 +96,10 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 
 #solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.bump
 
+#solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.check
+
+#solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.checkBad
+
 #solana_extract Examples.Signed.init Examples.Signed.signed Examples.Signed.get
 
 #solana_extract Examples.Create.init Examples.Create.create Examples.Create.get

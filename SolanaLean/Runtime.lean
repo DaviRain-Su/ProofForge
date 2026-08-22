@@ -205,6 +205,16 @@ def ataCreateIdempotent : UInt64 :=
   0
 
 /--
+当前 program id + 一条 ASCII 种子 + bump 是否是合法 PDA。
+抽出后发射 `sol_create_program_address`。成功 0，失败 1。
+宿主侧是不可约 stub，返回 0。完整 32B 地址本剖面 fail closed。
+-/
+@[irreducible] def checkPda (seed : String) (bump : UInt64) : UInt64 :=
+  let _ := seed
+  let _ := bump
+  0
+
+/--
 给当前 program 下、种子 `"vault"` 的 PDA 开 16 字节。
 PDA 用 `findPda` 的 bump 签字。space 本切片钉死。
 -/

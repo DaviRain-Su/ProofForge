@@ -15,6 +15,7 @@
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
 - `findPda seed` — 当前 program id + 一条 ASCII 种子；链上 `sol_try_find_program_address`，返回 bump。
+- `checkPda seed bump` — 同一组种子 + bump；链上 `sol_create_program_address`，成功 0 / 失败 1。完整 32B 地址 fail closed。
 
 `unixTime`、完整 32B key、独立 caller 账户、运行时拼的 CPI（动态 program id / remaining accounts）fail closed。编译期钉死的 `invoke` 已开。
 
@@ -22,7 +23,7 @@
 
 `Examples/Clock.lean` + `runtime-tests/solana/tests/clock.rs`：两次 `warp_to_slot`、`stamp` 写回、`key0` 缺 signer → `Custom(1)`。
 `Examples/Info.lean` + `runtime-tests/solana/tests/info.rs`：余额 / owner 首 u64 / data_len / NUM_ACCOUNTS / 三旗；只读不改账户数据。
-`Examples/Pda.lean` + `runtime-tests/solana/tests/pda.rs`：`findPda "vault"` 的 bump 与宿主 `find_program_address` 一致，两次调用稳定。
+`Examples/Pda.lean` + `runtime-tests/solana/tests/pda.rs`：`findPda "vault"` 的 bump 与宿主 `find_program_address` 一致；`checkPda` 对 canonical bump 返回 0，对 bump 0 返回 1。
 `Examples/Signed.lean` + `runtime-tests/solana/tests/signed.rs`：canonical bump 签字成功；bump 0 失败。
 `Examples/SysAlloc.lean` + `runtime-tests/solana/tests/sys_alloc.rs`：allocate 把空 System 账户扩到 16 字节；assign 把 owner 改成当前 program；缺 signer → `Custom(1)`。
 `Examples/TokenAcc.lean` + `runtime-tests/solana/tests/token_acc.rs`：InitializeAccount3 写 owner/mint；CloseAccount 把 0 余额账户 lamports 退回 dest；缺 signer → `Custom(1)`。

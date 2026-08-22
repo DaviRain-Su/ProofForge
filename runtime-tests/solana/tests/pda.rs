@@ -173,3 +173,39 @@ fn bump_is_stable_across_two_calls() {
         ],
     );
 }
+
+#[test]
+fn check_accepts_canonical_bump() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("check", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = pda_state(true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, state_account(&program_id, pre.clone()))],
+        &[
+            Check::success(),
+            Check::return_data(&0u64.to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
+fn check_rejects_bump_zero() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("checkBad", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = pda_state(true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, state_account(&program_id, pre.clone()))],
+        &[
+            Check::success(),
+            Check::return_data(&1u64.to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}

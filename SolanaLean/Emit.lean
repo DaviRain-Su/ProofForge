@@ -161,7 +161,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
   | .lit _ | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
-  | .rentExemption _ =>
+  | .checkPda _ _ | .rentExemption _ =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -281,19 +281,21 @@ private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat) : 
   mov64 r5, r8
   add64 r5, 80
   call sol_try_find_program_address
-  jeq r0, 0, pda_ok_{stackOff}
+  jeq r0, 0, find_pda_ok_{stackOff}
   lddw r0, 0x1
   exit
-pda_ok_{stackOff}:
+find_pda_ok_{stackOff}:
   ldxb r1, [r8 + 80]
-  jeq r1, 0, pda_bad_{stackOff}
+  jeq r1, 0, find_pda_bad_{stackOff}
   stxdw [r10 - {stackOff}], r1
-  ja pda_done_{stackOff}
-pda_bad_{stackOff}:
+  ja find_pda_done_{stackOff}
+find_pda_bad_{stackOff}:
   lddw r0, 0x1
   exit
-pda_done_{stackOff}:
+find_pda_done_{stackOff}:
 "
+
+mutual
 
 private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
   match v with
@@ -319,12 +321,71 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadAccU8 "load account-0 is_executable" "ACC0_HEADER + 3" stackOff)
   | .findPda seed =>
     .ok (emitLoadFindPda p seed stackOff)
+  | .checkPda seed bump =>
+    emitLoadCheckPda p seed bump stackOff
   | .rentExemption n =>
     .ok (emitLoadRentExemption n.toNat stackOff)
   | _ => do
     let mem ← memOfVal p v
     let insn ← loadInsn (widthOfVal p v)
     return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+
+/--
+`sol_create_program_address`：一条 ASCII 种子 + bump 字节 + 当前 program id。
+成功写 0，失败写 1。scratch 同 findPda，用 `r8 = r10-2800`。
+-/
+private def emitLoadCheckPda (p : IR.Program) (seed : String) (bump : Ops.Val)
+    (stackOff : Nat) : Except String String := do
+  let bumpOff := stackOff + 8
+  let loadBump ← loadVal p bump bumpOff
+  -- 必须复用 findPda 那条 `s!\"…\\n…\"` 字面量；`String.push '\\n'` 在 4.31 会编成字面 `\\n`。
+  let (bytes, _) :=
+    seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
+      (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {i}], r1\n", i + 1)
+  let progId :=
+    if IR.usesCpi p then
+      s!"\
+  ldxdw r3, [r10 - {headerStack (IR.cpiAccountCount p)}]
+  ldxdw r1, [r3 + 0]
+  add64 r3, 8
+  add64 r3, r1
+"
+    else
+      s!"\
+  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
+  mov64 r3, r6
+  add64 r3, INSTRUCTION_DATA
+  add64 r3, r1
+"
+  return loadBump ++
+    s!"\
+  ; checkPda seed={seed}
+  mov64 r8, r10
+  add64 r8, -2800
+  lddw r1, 0
+  stxdw [r8 + 0], r1
+  stxdw [r8 + 8], r1
+  stxdw [r8 + 16], r1
+" ++ bytes ++
+    s!"\
+  ldxdw r1, [r10 - {bumpOff}]
+  stxb [r8 + {seed.length}], r1
+  mov64 r5, r8
+  add64 r5, 32
+  stxdw [r5 + 0], r8
+  lddw r1, {seed.length + 1}
+  stxdw [r5 + 8], r1
+" ++ progId ++
+    s!"\
+  mov64 r1, r5
+  lddw r2, 1
+  mov64 r4, r8
+  add64 r4, 64
+  call sol_create_program_address
+  stxdw [r10 - {stackOff}], r0
+"
+
+end
 
 private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Except String String :=
   match IR.fieldOffset p name, IR.fieldWidth p name with
@@ -744,7 +805,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
-        | .rentExemption _ => do
+        | .checkPda _ _ | .rentExemption _ => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)

@@ -33,4 +33,14 @@ def get (_s : State) : UInt64 :=
 def bump (_s : State) : UInt64 :=
   findPda "vault"
 
+/-- `"vault"` + canonical bump 是否合法 PDA。成功 0。 -/
+@[solana_entry]
+def check (_s : State) : UInt64 :=
+  checkPda "vault" (findPda "vault")
+
+/-- `"vault"` + bump 0。必须失败，返回 1。 -/
+@[solana_entry]
+def checkBad (_s : State) : UInt64 :=
+  checkPda "vault" 0
+
 end Examples.Pda
