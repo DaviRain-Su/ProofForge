@@ -159,7 +159,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
-  | .lit _ | .clockSlot | .clockEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .lit _ | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
   | .checkPda _ _ | .rentExemption _ =>
     .error "extract/unsupported: runtime leaf has no mem"
@@ -205,6 +205,21 @@ private def emitLoadClockSlot (stackOff : Nat) : String :=
 
 private def emitLoadClockEpoch (stackOff : Nat) : String :=
   emitLoadClockField "epoch" 16 stackOff
+
+/-- EpochSchedule 是 33 字节 `repr(C)`；`slots_per_epoch` 在偏移 0。 -/
+private def emitLoadSlotsPerEpoch (stackOff : Nat) : String :=
+  s!"\
+  ; load slotsPerEpoch via sol_get_epoch_schedule_sysvar
+  mov64 r1, r10
+  add64 r1, -72
+  call sol_get_epoch_schedule_sysvar
+  jeq r0, 0, epoch_ok_{stackOff}
+  lddw r0, 0x1
+  exit
+epoch_ok_{stackOff}:
+  ldxdw r1, [r10 - 72]
+  stxdw [r10 - {stackOff}], r1
+"
 
 /-- Rent 是 17 字节 `repr(C)`；rate 在偏移 0。`exemption = rate * (128 + dataLen)`。 -/
 private def emitLoadRentExemption (dataLen stackOff : Nat) : String :=
@@ -311,6 +326,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadClockSlot stackOff)
   | .clockEpoch =>
     .ok (emitLoadClockEpoch stackOff)
+  | .slotsPerEpoch =>
+    .ok (emitLoadSlotsPerEpoch stackOff)
   | .signerKey0 =>
     .ok (emitLoadSignerKey0 stackOff)
   | .accLamports0 =>
@@ -811,7 +828,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             let load ← loadVal p (.arg 0) 24
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .clockSlot | .clockEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+        | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
         | .checkPda _ _ | .rentExemption _ => do
           let load ← loadVal p v 24

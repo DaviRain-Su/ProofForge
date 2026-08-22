@@ -58,7 +58,8 @@ lake exe solanaLeanAssemble -- build/sbpf
   SOLANA_LEAN_TOKENAPPROVE_SO=../../build/sbpf/TokenApprove.so \
   SOLANA_LEAN_TOKENFREEZE_SO=../../build/sbpf/TokenFreeze.so \
   SOLANA_LEAN_TOKENAUTH_SO=../../build/sbpf/TokenAuth.so \
-  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice --test clock --test transfer --test ping --test info --test call --test pda --test signed --test create --test token_xfer --test ata --test rent --test token_mint --test sys_alloc --test token_acc --test memo --test create_pda --test token_approve --test token_freeze --test token_auth)
+  SOLANA_LEAN_EPOCH_SO=../../build/sbpf/Epoch.so \
+  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice --test clock --test transfer --test ping --test info --test call --test pda --test signed --test create --test token_xfer --test ata --test rent --test token_mint --test sys_alloc --test token_acc --test memo --test create_pda --test token_approve --test token_freeze --test token_auth --test epoch)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。

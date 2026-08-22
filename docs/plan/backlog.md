@@ -38,12 +38,19 @@
 - `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount`；TokenApprove / TokenFreeze Mollusk
 - `clockEpoch`；Clock Mollusk 两次 warp 跨 epoch
 - `tokenSetMintAuthority` / `tokenRevoke`；TokenAuth Mollusk
+- `slotsPerEpoch`；Epoch Mollusk 改 schedule
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：其余有具体合约再开的 recipe。
+剩余可开、仍落在现有抽出/发射器上：
+
+1. `tokenAccountSize` — Token `GetAccountDataSize` + `sol_get_return_data` 8B
+2. `systemAllocateWithSeed` — System `AllocateWithSeed`；种子字面量冻结
+3. `sol_get_return_data` 单独叶子 — 只在某条 recipe 刚 CPI 之后读 8B
+
+nonce / Token-2022 / remaining accounts / 运行时 program id 仍关。
 
 ## 其后（L2 / L3）
 

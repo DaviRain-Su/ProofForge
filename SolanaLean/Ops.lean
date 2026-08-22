@@ -7,6 +7,7 @@ inductive Val where
   | lit (n : UInt64)
   | clockSlot
   | clockEpoch
+  | slotsPerEpoch
   | signerKey0
   | accLamports0
   | accOwner0

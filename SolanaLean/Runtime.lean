@@ -27,6 +27,13 @@ namespace SolanaLean.Runtime
   0
 
 /--
+当前 `EpochSchedule.slots_per_epoch`。抽出后发射
+`sol_get_epoch_schedule_sysvar`，读偏移 0。宿主侧是不可约 stub。
+`warmup` / `first_normal_*` 本剖面 fail closed。
+-/
+@[irreducible] def slotsPerEpoch : UInt64 := 0
+
+/--
 账户 0 公钥的第一个小端 `u64`（`ACC0_KEY+0`）。
 用到这个叶子的入口会检查 `is_signer`。
 

@@ -423,6 +423,24 @@ def extractedTokenMint : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedEpoch : Program :=
+  { name := "Epoch"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Epoch.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Epoch.stamp", ixName := "stamp", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState .slotsPerEpoch]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Epoch.span", ixName := "span", paramCount := 0
+        ops := #[.returnU64 .slotsPerEpoch] },
+      { kind := .get, name := "Examples.Epoch.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "dummy")] }
+    ] }
+
 def extractedRent : Program :=
   { name := "Rent"
     slots := #[{ name := "dummy" }]
@@ -481,7 +499,8 @@ def programs : Array Program := #[
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
-  extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth
+  extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
+  extractedEpoch
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
