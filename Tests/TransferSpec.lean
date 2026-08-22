@@ -7,7 +7,7 @@ open SolanaLean.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard systemTransfer 7 == 7
+#guard systemTransfer 7 == 0
 
 #guard
   match transfer (init 0) 9 with

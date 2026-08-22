@@ -32,6 +32,7 @@
 | [l4-002](tasks/l4-002.md) | done | 封闭 system.transfer |
 | [l4-003](tasks/l4-003.md) | done | 编译期钉死的 invoke 原语 |
 | [l4-004](tasks/l4-004.md) | done | 账户 0 AccountInfo 只读叶子 |
+| [l4-005](tasks/l4-005.md) | done | 表层通用 invoke |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

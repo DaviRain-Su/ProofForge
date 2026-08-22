@@ -7,6 +7,7 @@ import Tests.ChoiceSpec
 import Tests.ClockSpec
 import Tests.TransferSpec
 import Tests.PingSpec
+import Tests.CallSpec
 import Tests.InfoSpec
 import Tests.Fixtures
 import Tests.ProfileSpec

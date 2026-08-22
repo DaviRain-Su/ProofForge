@@ -18,4 +18,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L4 SDK 表面**。L4-003 / L4-004 已绿。下一刀 PDA find / invokeSigned。
+当前阶段：**L4 SDK 表面**。L4-005：表层通用 `invoke`。下一刀 PDA find / invokeSigned。

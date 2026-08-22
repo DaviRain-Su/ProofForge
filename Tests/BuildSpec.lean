@@ -9,6 +9,7 @@ import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
 import Examples.Ping
+import Examples.Call
 import Examples.Info
 
 #solana_build Examples.Counter
@@ -30,6 +31,8 @@ import Examples.Info
 #solana_build Examples.Transfer
 
 #solana_build Examples.Ping
+
+#solana_build Examples.Call
 
 #solana_build Examples.Info
 

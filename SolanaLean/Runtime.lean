@@ -18,21 +18,43 @@ namespace SolanaLean.Runtime
 -/
 @[irreducible] def signerKey0 : UInt64 := 0
 
-/--
-封闭 `system.transfer`。抽出器认这个名字，发射固定三账户 CPI：
-payer / recipient / System Program，内层 `u32le(2) || u64le(lamports)`，
-`sol_invoke_signed_c`，无 signer seeds。
+/-- 内层 AccountMeta。编译期钉死下标和旗。 -/
+structure CpiMeta where
+  acc : UInt64
+  signer : Bool := false
+  writable : Bool := false
+  deriving Repr, DecidableEq, Inhabited
 
-宿主侧是不可约 stub，返回传入的 `lamports`，不要当链上余额用。
-这是编译期钉死的 `invoke` 特化。运行时拼 program id / remaining accounts 仍 fail closed。
--/
-@[irreducible] def systemTransfer (lamports : UInt64) : UInt64 := lamports
+/-- 内层 instruction data 的一段。长度和布局编译期钉死。 -/
+inductive CpiWord where
+  | u32le (n : UInt64)
+  | u64le (v : UInt64)
+  | ascii (s : String)
+  deriving Repr, Inhabited
 
 /--
-编译期钉死的 `invoke`：CPI 到外层账户 1，空 metas、空 data。
-program id 来自账户 1 的 key，不是写死 System。
+编译期钉死的 CPI。抽出器认这个名字，发射 `sol_invoke_signed_c`。
+`programIx`、metas、data 布局必须在抽出时已知。
+宿主侧是不可约 stub，返回 0，不要当链上结果用。
+运行时拼 program id / remaining accounts / 变长 data 仍 fail closed。
 -/
-@[irreducible] def invokeAcc1 : UInt64 := 0
+@[irreducible] def invoke (programIx : UInt64) (metas : Array CpiMeta) (data : Array CpiWord) :
+    UInt64 :=
+  let _ := programIx
+  let _ := metas
+  let _ := data
+  0
+
+/-- `system.transfer`：普通包装，不是抽出特例。 -/
+def systemTransfer (lamports : UInt64) : UInt64 :=
+  invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true }]
+    #[.u32le 2, .u64le lamports]
+
+/-- CPI 到外层账户 1；空 metas、空 data。普通包装。 -/
+def invokeAcc1 : UInt64 :=
+  invoke 1 #[] #[]
 
 /-- 账户 0 的 lamports。只读；改余额走 `systemTransfer`。 -/
 @[irreducible] def accLamports0 : UInt64 := 0

@@ -180,7 +180,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".systemTransfer" ||
             isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-        else if endsWith e ".invokeAcc1" || isConstNamed e ``SolanaLean.Runtime.invokeAcc1 then
+        else if endsWith e ".invokeAcc1" || isConstNamed e ``SolanaLean.Runtime.invokeAcc1 ||
+            endsWith e ".invoke" || isConstNamed e ``SolanaLean.Runtime.invoke then
           some (.lit 0)
         else if isConstNamed e ``Bool.true || endsWith e ".true" then
           some (.lit 1)
@@ -619,42 +620,158 @@ private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   else
     vs.map Ops.Op.returnState
 
-/-- 体里任意深度的 `systemTransfer amount`。 -/
-private def findSystemTransfer (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
-  let rec go (fuel : Nat) (e : Expr) : Option Ops.Val :=
+private def isRuntimeName (n : Name) (suf : String) : Bool :=
+  n == (`SolanaLean.Runtime).append suf.toName || n.toString.endsWith s!".{suf}"
+
+private def mentionsRuntime (e : Expr) (suf : String) : Bool :=
+  e.getUsedConstantsAsSet.toList.any (isRuntimeName · suf)
+
+private def natOfVal : Ops.Val → Option Nat
+  | .lit n => some n.toNat
+  | _ => none
+
+private def asBoolLit (e : Expr) : Option Bool :=
+  if isConstNamed e ``Bool.true || endsWith e ".true" then some true
+  else if isConstNamed e ``Bool.false || endsWith e ".false" then some false
+  else none
+
+/-- `CpiMeta.mk acc signer writable` 或具名字段。 -/
+private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
+  let e := strip e
+  if isConstNamed e ``SolanaLean.Runtime.CpiMeta.mk || endsWith e ".mk" then
+    let args := e.getAppArgs
+    if args.size ≥ 3 then
+      match val env args[args.size - 3]!, asBoolLit args[args.size - 2]!,
+          asBoolLit args[args.size - 1]! with
+      | some accV, some signer, some writable =>
+        match natOfVal accV with
+        | some acc => some { acc, signer, writable }
+        | none => none
+      | _, _, _ => none
+    else none
+  else none
+
+private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
+  let e := strip e
+  if isConstNamed e ``SolanaLean.Runtime.CpiWord.u32le || endsWith e ".u32le" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
+      | some n => some (.u32le (UInt64.ofNat n))
+      | none => none
+    else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.u64le || endsWith e ".u64le" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+      | some v => some (.u64le v)
+      | none => none
+    else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.ascii || endsWith e ".ascii" then
+    if e.getAppArgs.size ≥ 1 then
+      match e.getAppArgs[e.getAppArgs.size - 1]! with
+      | .lit (.strVal s) => some (.ascii s)
+      | _ => none
+    else none
+  else none
+
+/-- `#[a, b, …]` 展开成 `Array.mk [a, b, …]` / `List.cons`。 -/
+private def asArrayElems (e : Expr) : Option (Array Expr) :=
+  let rec fromList (fuel : Nat) (e : Expr) (acc : Array Expr) : Option (Array Expr) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``List.nil then some acc
+      else if isConstNamed e ``List.cons && e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        fromList fuel' args[args.size - 1]! (acc.push args[args.size - 2]!)
+      else none
+  let e := strip e
+  if isConstNamed e ``Array.mk && e.getAppArgs.size ≥ 1 then
+    fromList 16 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+  else if isConstNamed e ``List.toArray && e.getAppArgs.size ≥ 1 then
+    fromList 16 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+  else if isConstNamed e ``Array.empty || endsWith e ".empty" then
+    some #[]
+  else none
+
+private def decodeInvokeArgs (env : Environment) (e : Expr) :
+    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord) :=
+  let e := strip e
+  if !(isConstNamed e ``SolanaLean.Runtime.invoke || endsWith e ".invoke") then
+    none
+  else
+    let args := e.getAppArgs
+    if args.size < 3 then none
+    else
+      match val env args[args.size - 3]!, asArrayElems args[args.size - 2]!,
+          asArrayElems args[args.size - 1]! with
+      | some progV, some metaEs, some dataEs =>
+        match natOfVal progV with
+        | none => none
+        | some prog =>
+          Id.run do
+            let mut metas : Array Ops.CpiMeta := #[]
+            for me in metaEs do
+              match asCpiMeta env me with
+              | none => return none
+              | some m => metas := metas.push m
+            let mut data : Array Ops.CpiWord := #[]
+            for de in dataEs do
+              match asCpiWord env de with
+              | none => return none
+              | some w => data := data.push w
+            some (prog, metas, data)
+      | _, _, _ => none
+
+/-- 体里任意深度的编译期 `invoke`。包装会 unfold 成这条。 -/
+private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
+    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord) :=
+  let rec go (fuel : Nat) (e : Expr) :
+      Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord) :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
       let e := e.consumeMData
-      if e.getAppFn.constName? == some ``SolanaLean.Runtime.systemTransfer ||
-          endsWith e ".systemTransfer" then
-        if e.getAppArgs.size ≥ 1 then
-          match val env e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some v => some v
-          | none => some (.arg 0)
-        else some (.arg 0)
-      else
-        match e with
-        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
-        | .lam _ _ body _ => go fuel' body
-        | .app f a => go fuel' f <|> go fuel' a
-        | _ => none
-  let mentions :=
-    e.getUsedConstantsAsSet.toList.any fun n =>
-      n == ``SolanaLean.Runtime.systemTransfer || n.toString.endsWith ".systemTransfer"
-  if mentions then
-    match go fuel e with
-    | some v => some v
-    | none => some (.arg 0)
+      match decodeInvokeArgs env e with
+      | some inv => some inv
+      | none =>
+        if e.getAppFn.constName? == some ``SolanaLean.Runtime.systemTransfer ||
+            endsWith e ".systemTransfer" then
+          let amount :=
+            if e.getAppArgs.size ≥ 1 then
+              (val env e.getAppArgs[e.getAppArgs.size - 1]!).getD (.arg 0)
+            else .arg 0
+          some (2,
+            #[{ acc := 0, signer := true, writable := true },
+              { acc := 1, signer := false, writable := true }],
+            #[.u32le 2, .u64le amount])
+        else if e.getAppFn.constName? == some ``SolanaLean.Runtime.invokeAcc1 ||
+            endsWith e ".invokeAcc1" then
+          some (1, #[], #[])
+        else
+          match e with
+          | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+          | .lam _ _ body _ => go fuel' body
+          | .app f a => go fuel' f <|> go fuel' a
+          | _ => none
+  if mentionsRuntime e "invoke" || mentionsRuntime e "systemTransfer" ||
+      mentionsRuntime e "invokeAcc1" then
+    go fuel e
   else none
 
+private def invokeOps (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord) (ret : Ops.Val) :
+    Array Ops.Op :=
+  let (prog, metas, data) := inv
+  #[.invoke prog metas data, .returnU64 ret]
+
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
-  -- 必须在 peelLets 之前找 systemTransfer：剥掉 `have sent := …` 后调用就没了。
-  if let some amount := findSystemTransfer env 16 e then
-    .ok #[Ops.systemTransfer amount, .returnU64 amount]
-  else if e.getUsedConstantsAsSet.toList.any fun n =>
-      n == ``SolanaLean.Runtime.invokeAcc1 || n.toString.endsWith ".invokeAcc1" then
-    .ok #[Ops.invokeAcc1, .returnU64 (.lit 0)]
+  -- 必须在 peelLets 之前找 invoke：剥掉 `have sent := …` 后调用就没了。
+  if let some inv := findInvoke env 16 e then
+    let ret :=
+      match inv with
+      | (2, _, #[.u32le 2, .u64le amount]) => amount
+      | _ => .lit 0
+    .ok (invokeOps inv ret)
   else
   let e := peelLets (strip e)
   if let some v := asOkState env e then
@@ -697,11 +814,12 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
-    if let some amount := findSystemTransfer env 16 e then
-      return .ok #[Ops.systemTransfer amount, .returnU64 amount]
-    if e.getUsedConstantsAsSet.toList.any fun n =>
-        n == ``SolanaLean.Runtime.invokeAcc1 || n.toString.endsWith ".invokeAcc1" then
-      return .ok #[Ops.invokeAcc1, .returnU64 (.lit 0)]
+    if let some inv := findInvoke env 16 e then
+      let ret :=
+        match inv with
+        | (2, _, #[.u32le 2, .u64le amount]) => amount
+        | _ => .lit 0
+      return .ok (invokeOps inv ret)
     let e := strip e
     if isConstNamed e ``ite && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
@@ -709,9 +827,13 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let f := peelLets args[args.size - 1]!
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, findSystemTransfer env 8 t, asOkState env t with
-          | some (cmp, lv, rv), some amount, _ =>
-            return .ok #[.ite cmp lv rv #[Ops.systemTransfer amount, .returnU64 amount] #[.errorOverflow]]
+          match asCmp env condE, findInvoke env 8 t, asOkState env t with
+          | some (cmp, lv, rv), some inv, _ =>
+            let ret :=
+              match inv with
+              | (2, _, #[.u32le 2, .u64le amount]) => amount
+              | _ => .lit 0
+            return .ok #[.ite cmp lv rv (invokeOps inv ret) #[.errorOverflow]]
           | some (cmp, lv, rv), none, some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | _, _, _ => return .error "extract/unsupported: ite then"
@@ -756,11 +878,12 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ => return .error r
         | _, .error r => return .error r
-    else if (endsWith e ".systemTransfer" ||
-        isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
-      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
-      | some amount => return .ok #[Ops.systemTransfer amount, .returnU64 amount]
-      | none => return .error "extract/unsupported: systemTransfer amount"
+    else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
+      let ret :=
+        match inv with
+        | (2, _, #[.u32le 2, .u64le amount]) => amount
+        | _ => .lit 0
+      return .ok (invokeOps inv ret)
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs

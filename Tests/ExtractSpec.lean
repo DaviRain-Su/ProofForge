@@ -9,6 +9,7 @@ import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
 import Examples.Ping
+import Examples.Call
 import Examples.Info
 import Tests.Fixtures
 
@@ -77,6 +78,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Transfer.init Examples.Transfer.transfer Examples.Transfer.get
 
 #solana_extract Examples.Ping.init Examples.Ping.ping Examples.Ping.get
+
+#solana_extract Examples.Call.init Examples.Call.call Examples.Call.get
 
 #solana_extract Examples.Info.init Examples.Info.touch Examples.Info.lamports
 

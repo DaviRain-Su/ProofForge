@@ -34,7 +34,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `clockSlot` | `sol_get_clock_sysvar` → `Clock.slot` | L4-001 |
 | `signerKey0` | `ACC0_KEY+0` 首 u64；入口 `is_signer` | L4-001 |
 | `systemTransfer` | 三账户 walk + `sol_invoke_signed_c`；内层 `u32le(2)\|\|u64le` | L4-002 |
-| `invoke` / `invokeAcc1` | 编译期钉死 program/metas/data；N 账户 walk | L4-003 |
+| `invoke` / `invokeAcc1` | 编译期钉死 program/metas/data；N 账户 walk | L4-003 / L4-005 |
 | `accLamports0` / `accOwner0` / `accDataLen0` / `accN` | 账户 0 header 只读 | L4-004 |
 | `isSigner0` / `isWritable0` / `isExecutable0` | header +1/+2/+3，0 或 1 | L4-004 |
 | overflow / Custom(1) | `exit` | L1 |
