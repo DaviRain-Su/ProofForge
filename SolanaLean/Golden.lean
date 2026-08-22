@@ -266,6 +266,22 @@ def extractedInfo : Program :=
         ops := #[.returnU64 .isExecutable0] }
     ] }
 
+def extractedSigned : Program :=
+  { name := "Signed"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Signed.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Signed.signed", ixName := "signed", paramCount := 0
+        ops := #[.invoke 1 #[] #[] (some "vault") (some (.findPda "vault")),
+          .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.Signed.badBump", ixName := "badBump", paramCount := 0
+        ops := #[.invoke 1 #[] #[] (some "vault") (some (.lit 0)),
+          .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Signed.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedPda : Program :=
   { name := "Pda"
     slots := #[{ name := "dummy" }]
@@ -288,7 +304,7 @@ def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
-  extractedPda
+  extractedPda, extractedSigned
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

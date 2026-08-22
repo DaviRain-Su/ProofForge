@@ -230,7 +230,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
-    | .invoke prog metas data =>
+    | .invoke prog metas data seed bump =>
       let ms :=
         String.intercalate ","
           (metas.toList.map fun m =>
@@ -241,7 +241,11 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         | .u64le v => s!"u64.{valCanon v}"
         | .ascii s => s!"s.{s}"
       let ds := String.intercalate "," (data.toList.map word)
-      s!"inv({prog},[{ms}],[{ds}])"
+      let seeds :=
+        match seed, bump with
+        | some s, some b => s!",s.{s}:{valCanon b}"
+        | _, _ => ""
+      s!"inv({prog},[{ms}],[{ds}]{seeds})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .returnU64 v => s!"retu({valCanon v})"

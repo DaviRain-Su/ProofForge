@@ -11,3 +11,4 @@ import Examples.Ping
 import Examples.Call
 import Examples.Info
 import Examples.Pda
+import Examples.Signed

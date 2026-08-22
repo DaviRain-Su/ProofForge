@@ -186,7 +186,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if endsWith e ".invokeAcc1" || isConstNamed e ``SolanaLean.Runtime.invokeAcc1 ||
-            endsWith e ".invoke" || isConstNamed e ``SolanaLean.Runtime.invoke then
+            endsWith e ".invoke" || isConstNamed e ``SolanaLean.Runtime.invoke ||
+            endsWith e ".invokeSigned" || isConstNamed e ``SolanaLean.Runtime.invokeSigned then
           some (.lit 0)
         else if isConstNamed e ``Bool.true || endsWith e ".true" then
           some (.lit 1)
@@ -700,40 +701,64 @@ private def asArrayElems (e : Expr) : Option (Array Expr) :=
     some #[]
   else none
 
+private def decodeMetasData (env : Environment) (metaE dataE : Expr) :
+    Option (Array Ops.CpiMeta × Array Ops.CpiWord) :=
+  match asArrayElems metaE, asArrayElems dataE with
+  | some metaEs, some dataEs =>
+    Id.run do
+      let mut metas : Array Ops.CpiMeta := #[]
+      for me in metaEs do
+        match asCpiMeta env me with
+        | none => return none
+        | some m => metas := metas.push m
+      let mut data : Array Ops.CpiWord := #[]
+      for de in dataEs do
+        match asCpiWord env de with
+        | none => return none
+        | some w => data := data.push w
+      some (metas, data)
+  | _, _ => none
+
+private def asAsciiLit (e : Expr) : Option String :=
+  match strip e with
+  | .lit (.strVal s) => if s.isEmpty then none else some s
+  | _ => none
+
+/-- 抽出结果：program / metas / data / 可选 (seed, bump)。 -/
 private def decodeInvokeArgs (env : Environment) (e : Expr) :
-    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord) :=
+    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
   let e := strip e
-  if !(isConstNamed e ``SolanaLean.Runtime.invoke || endsWith e ".invoke") then
-    none
-  else
+  if isConstNamed e ``SolanaLean.Runtime.invokeSigned || endsWith e ".invokeSigned" then
+    let args := e.getAppArgs
+    if args.size < 5 then none
+    else
+      match val env args[args.size - 5]!,
+          decodeMetasData env args[args.size - 4]! args[args.size - 3]!,
+          asAsciiLit args[args.size - 2]!,
+          val env args[args.size - 1]! with
+      | some progV, some (metas, data), some seed, some bump =>
+        match natOfVal progV with
+        | some prog => some (prog, metas, data, some seed, some bump)
+        | none => none
+      | _, _, _, _ => none
+  else if isConstNamed e ``SolanaLean.Runtime.invoke || endsWith e ".invoke" then
     let args := e.getAppArgs
     if args.size < 3 then none
     else
-      match val env args[args.size - 3]!, asArrayElems args[args.size - 2]!,
-          asArrayElems args[args.size - 1]! with
-      | some progV, some metaEs, some dataEs =>
+      match val env args[args.size - 3]!,
+          decodeMetasData env args[args.size - 2]! args[args.size - 1]! with
+      | some progV, some (metas, data) =>
         match natOfVal progV with
+        | some prog => some (prog, metas, data, none, none)
         | none => none
-        | some prog =>
-          Id.run do
-            let mut metas : Array Ops.CpiMeta := #[]
-            for me in metaEs do
-              match asCpiMeta env me with
-              | none => return none
-              | some m => metas := metas.push m
-            let mut data : Array Ops.CpiWord := #[]
-            for de in dataEs do
-              match asCpiWord env de with
-              | none => return none
-              | some w => data := data.push w
-            some (prog, metas, data)
-      | _, _, _ => none
+      | _, _ => none
+  else none
 
 /-- 体里任意深度的编译期 `invoke`。包装会 unfold 成这条。 -/
 private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
-    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord) :=
+    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
   let rec go (fuel : Nat) (e : Expr) :
-      Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord) :=
+      Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
@@ -750,32 +775,33 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
           some (2,
             #[{ acc := 0, signer := true, writable := true },
               { acc := 1, signer := false, writable := true }],
-            #[.u32le 2, .u64le amount])
+            #[.u32le 2, .u64le amount], none, none)
         else if e.getAppFn.constName? == some ``SolanaLean.Runtime.invokeAcc1 ||
             endsWith e ".invokeAcc1" then
-          some (1, #[], #[])
+          some (1, #[], #[], none, none)
         else
           match e with
           | .letE _ _ value body _ => go fuel' value <|> go fuel' body
           | .lam _ _ body _ => go fuel' body
           | .app f a => go fuel' f <|> go fuel' a
           | _ => none
-  if mentionsRuntime e "invoke" || mentionsRuntime e "systemTransfer" ||
-      mentionsRuntime e "invokeAcc1" then
+  if mentionsRuntime e "invoke" || mentionsRuntime e "invokeSigned" ||
+      mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" then
     go fuel e
   else none
 
-private def invokeOps (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord) (ret : Ops.Val) :
-    Array Ops.Op :=
-  let (prog, metas, data) := inv
-  #[.invoke prog metas data, .returnU64 ret]
+private def invokeOps
+    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val)
+    (ret : Ops.Val) : Array Ops.Op :=
+  let (prog, metas, data, seed, bump) := inv
+  #[.invoke prog metas data seed bump, .returnU64 ret]
 
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找 invoke：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
     let ret :=
       match inv with
-      | (2, _, #[.u32le 2, .u64le amount]) => amount
+      | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
       | _ => .lit 0
     .ok (invokeOps inv ret)
   else
@@ -823,7 +849,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
     if let some inv := findInvoke env 16 e then
       let ret :=
         match inv with
-        | (2, _, #[.u32le 2, .u64le amount]) => amount
+        | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
         | _ => .lit 0
       return .ok (invokeOps inv ret)
     let e := strip e
@@ -837,7 +863,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | some (cmp, lv, rv), some inv, _ =>
             let ret :=
               match inv with
-              | (2, _, #[.u32le 2, .u64le amount]) => amount
+              | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
               | _ => .lit 0
             return .ok #[.ite cmp lv rv (invokeOps inv ret) #[.errorOverflow]]
           | some (cmp, lv, rv), none, some v =>
@@ -887,7 +913,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       let ret :=
         match inv with
-        | (2, _, #[.u32le 2, .u64le amount]) => amount
+        | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
         | _ => .lit 0
       return .ok (invokeOps inv ret)
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
@@ -1008,10 +1034,10 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .ite c l r t f =>
         .ite c (flipVal fuel' l) (flipVal fuel' r)
           (t.map (flipOp fuel')) (f.map (flipOp fuel'))
-      | .invoke prog metas data =>
+      | .invoke prog metas data seed bump =>
         .invoke prog metas (data.map fun
           | .u64le v => .u64le (flipVal fuel' v)
-          | w => w)
+          | w => w) seed (bump.map (flipVal fuel'))
       | .errorOverflow => .errorOverflow
   let ops :=
     if kind == .init && nLams > 1 then ops1.map (flipOp 8) else ops1
@@ -1143,10 +1169,11 @@ private def opFields : Ops.Op → Array String
   | .checkedModU64 l r => valFields l ++ valFields r
   | .ite _ l r t f =>
       valFields l ++ valFields r ++ t.flatMap opFields ++ f.flatMap opFields
-  | .invoke _ _ data =>
-      data.flatMap fun
+  | .invoke _ _ data _ bump =>
+      (data.flatMap fun
         | .u64le v => valFields v
-        | _ => #[]
+        | _ => #[]) ++
+        (match bump with | some v => valFields v | none => #[])
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .returnU64 v => valFields v

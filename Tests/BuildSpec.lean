@@ -12,6 +12,7 @@ import Examples.Ping
 import Examples.Call
 import Examples.Info
 import Examples.Pda
+import Examples.Signed
 
 #solana_build Examples.Counter
 
@@ -38,6 +39,8 @@ import Examples.Pda
 #solana_build Examples.Info
 
 #solana_build Examples.Pda
+
+#solana_build Examples.Signed
 
 /--
 error: extract/unsupported: no solana_entry

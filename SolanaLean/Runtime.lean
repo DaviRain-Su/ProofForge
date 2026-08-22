@@ -45,6 +45,20 @@ inductive CpiWord where
   let _ := data
   0
 
+/--
+一组 signer seeds：一条 ASCII 种子 + 一个 bump。
+抽出器认这个名字，发射带 `SolSignerSeeds` 的 `sol_invoke_signed_c`。
+宿主侧是不可约 stub，返回 0。多组 seeds / 运行时拼种子 fail closed。
+-/
+@[irreducible] def invokeSigned (programIx : UInt64) (metas : Array CpiMeta)
+    (data : Array CpiWord) (seed : String) (bump : UInt64) : UInt64 :=
+  let _ := programIx
+  let _ := metas
+  let _ := data
+  let _ := seed
+  let _ := bump
+  0
+
 /-- `system.transfer`：普通包装，不是抽出特例。 -/
 def systemTransfer (lamports : UInt64) : UInt64 :=
   invoke 2

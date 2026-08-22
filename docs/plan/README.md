@@ -34,6 +34,7 @@
 | [l4-004](tasks/l4-004.md) | done | 账户 0 AccountInfo 只读叶子 |
 | [l4-005](tasks/l4-005.md) | done | 表层通用 invoke |
 | [l4-006](tasks/l4-006.md) | done | findPda 返回 bump |
+| [l4-007](tasks/l4-007.md) | done | invokeSigned 一组种子 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

@@ -12,6 +12,7 @@ import Examples.Ping
 import Examples.Call
 import Examples.Info
 import Examples.Pda
+import Examples.Signed
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -85,6 +86,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Info.init Examples.Info.touch Examples.Info.lamports
 
 #solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.bump
+
+#solana_extract Examples.Signed.init Examples.Signed.signed Examples.Signed.get
 
 /--
 error: extract/unsupported: field tag enum has payload

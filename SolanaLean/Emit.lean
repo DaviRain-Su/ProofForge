@@ -221,40 +221,52 @@ private def emitLoadAccU8 (comment offset : String) (stackOff : Nat) : String :=
 
 /--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
-scratch 放在 `r10-400`，避开算术临时槽和 clock 缓冲。
+scratch 用 `r8` 基址 `r10-720`，避开 invoke 的 `r9=r10-400` 和 clock 的 `r10-72`。
+CPI 程序的 program id 在 walk 出的 ix 长度字之后。
 -/
-private def emitLoadFindPda (seed : String) (stackOff : Nat) : String :=
+private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat) : String :=
   let (bytes, _) :=
     seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
-      (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {i}], r1\n", i + 1)
-  s!"\
-  ; findPda seed={seed}
-  mov64 r9, r10
-  add64 r9, -400
-  lddw r1, 0
-  stxdw [r9 + 0], r1
-  stxdw [r9 + 8], r1
-{bytes}  mov64 r5, r9
-  add64 r5, 16
-  stxdw [r5 + 0], r9
-  lddw r1, {seed.length}
-  stxdw [r5 + 8], r1
+      (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {i}], r1\n", i + 1)
+  let progId :=
+    if IR.usesCpi p then
+      s!"\
+  ldxdw r3, [r10 - {headerStack (IR.cpiAccountCount p)}]
+  ldxdw r1, [r3 + 0]
+  add64 r3, 8
+  add64 r3, r1
+"
+    else
+      s!"\
   ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
   mov64 r3, r6
   add64 r3, INSTRUCTION_DATA
   add64 r3, r1
-  mov64 r1, r5
+"
+  s!"\
+  ; findPda seed={seed}
+  mov64 r8, r10
+  add64 r8, -720
+  lddw r1, 0
+  stxdw [r8 + 0], r1
+  stxdw [r8 + 8], r1
+{bytes}  mov64 r5, r8
+  add64 r5, 16
+  stxdw [r5 + 0], r8
+  lddw r1, {seed.length}
+  stxdw [r5 + 8], r1
+{progId}  mov64 r1, r5
   lddw r2, 1
-  mov64 r4, r9
+  mov64 r4, r8
   add64 r4, 48
-  mov64 r5, r9
+  mov64 r5, r8
   add64 r5, 80
   call sol_try_find_program_address
   jeq r0, 0, pda_ok_{stackOff}
   lddw r0, 0x1
   exit
 pda_ok_{stackOff}:
-  ldxb r1, [r9 + 80]
+  ldxb r1, [r8 + 80]
   jeq r1, 0, pda_bad_{stackOff}
   stxdw [r10 - {stackOff}], r1
   ja pda_done_{stackOff}
@@ -287,7 +299,7 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
   | .isExecutable0 =>
     .ok (emitLoadAccU8 "load account-0 is_executable" "ACC0_HEADER + 3" stackOff)
   | .findPda seed =>
-    .ok (emitLoadFindPda seed stackOff)
+    .ok (emitLoadFindPda p seed stackOff)
   | _ => do
     let mem ← memOfVal p v
     let insn ← loadInsn (widthOfVal p v)
@@ -353,9 +365,10 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .ite _ l r t f =>
           valUsesSigner l || valUsesSigner r ||
             walkUsesSigner fuel' t || walkUsesSigner fuel' f
-      | .invoke _ metas data =>
+      | .invoke _ metas data _ bump =>
           metas.any (·.signer) ||
-            data.any (fun | .u64le v => valUsesSigner v | _ => false)
+            data.any (fun | .u64le v => valUsesSigner v | _ => false) ||
+              (match bump with | some v => valUsesSigner v | none => false)
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -371,50 +384,25 @@ private def emitReturnU64 (fromStack : Nat) : String :=
   s!"  ldxdw r1, [r10 - {fromStack}]\n  stxdw [r10 - 32], r1\n  mov64 r1, r10\n  add64 r1, -32\n  lddw r2, 8\n  call sol_set_return_data\n  lddw r0, 0\n  exit\n"
 
 /-- 从 walk 出的 header* 填一个 `SolAccountInfo`（56 字节），r5 指向槽。 -/
-private def emitFillAccountInfoFromHeader (srcStack : Nat) : String :=
-  s!"\
-  ldxdw r8, [r10 - {srcStack}]
-  mov64 r1, r8
-  add64 r1, 8
-  stxdw [r5 + 0], r1
-  mov64 r1, r8
-  add64 r1, 72
-  stxdw [r5 + 8], r1
-  ldxdw r1, [r8 + 80]
-  stxdw [r5 + 16], r1
-  mov64 r1, r8
-  add64 r1, 88
-  stxdw [r5 + 24], r1
-  mov64 r1, r8
-  add64 r1, 40
-  stxdw [r5 + 32], r1
-  mov64 r1, r8
-  add64 r1, 88
-  ldxdw r4, [r8 + 80]
-  add64 r1, r4
-  add64 r1, MAX_PERMITTED_DATA_INCREASE
-  mov64 r2, r4
-  and64 r2, 7
-  jeq r2, 0, fill_rent_{srcStack}
-  lddw r3, 8
-  sub64 r3, r2
-  add64 r1, r3
-fill_rent_{srcStack}:
-  ldxdw r1, [r1 + 0]
-  stxdw [r5 + 40], r1
-  ldxb r1, [r8 + 1]
-  stxb [r5 + 48], r1
-  ldxb r1, [r8 + 2]
-  stxb [r5 + 49], r1
-  ldxb r1, [r8 + 3]
-  stxb [r5 + 50], r1
-  lddw r1, 0
-  stxb [r5 + 51], r1
-  stxb [r5 + 52], r1
-  stxb [r5 + 53], r1
-  stxb [r5 + 54], r1
-  stxb [r5 + 55], r1
-"
+private def emitFillAccountInfoFromHeader (tag : String) (srcStack : Nat) : String :=
+  let lab := "fill_rent_" ++ tag ++ "_" ++ toString srcStack
+  "  ldxdw r8, [r10 - " ++ toString srcStack ++ "]\n" ++
+  "  mov64 r1, r8\n  add64 r1, 8\n  stxdw [r5 + 0], r1\n" ++
+  "  mov64 r1, r8\n  add64 r1, 72\n  stxdw [r5 + 8], r1\n" ++
+  "  ldxdw r1, [r8 + 80]\n  stxdw [r5 + 16], r1\n" ++
+  "  mov64 r1, r8\n  add64 r1, 88\n  stxdw [r5 + 24], r1\n" ++
+  "  mov64 r1, r8\n  add64 r1, 40\n  stxdw [r5 + 32], r1\n" ++
+  "  mov64 r1, r8\n  add64 r1, 88\n  ldxdw r4, [r8 + 80]\n" ++
+  "  add64 r1, r4\n  add64 r1, MAX_PERMITTED_DATA_INCREASE\n" ++
+  "  mov64 r2, r4\n  and64 r2, 7\n  jeq r2, 0, " ++ lab ++ "\n" ++
+  "  lddw r3, 8\n  sub64 r3, r2\n  add64 r1, r3\n" ++
+  lab ++ ":\n" ++
+  "  ldxdw r1, [r1 + 0]\n  stxdw [r5 + 40], r1\n" ++
+  "  ldxb r1, [r8 + 1]\n  stxb [r5 + 48], r1\n" ++
+  "  ldxb r1, [r8 + 2]\n  stxb [r5 + 49], r1\n" ++
+  "  ldxb r1, [r8 + 3]\n  stxb [r5 + 50], r1\n" ++
+  "  lddw r1, 0\n  stxb [r5 + 51], r1\n  stxb [r5 + 52], r1\n" ++
+  "  stxb [r5 + 53], r1\n  stxb [r5 + 54], r1\n  stxb [r5 + 55], r1\n"
 
 private def emitCpiData (p : IR.Program) (data : Array Ops.CpiWord) : Except String (String × Nat) := do
   let mut body := "  lddw r1, 0\n  stxdw [r9 + 0], r1\n  stxdw [r9 + 8], r1\n"
@@ -460,20 +448,63 @@ private def emitOneMeta (i : Nat) (m : Ops.CpiMeta) : String :=
   stxb [r5 + {base + 15}], r1
 "
 
+private def emitSignerSeeds (p : IR.Program) (seedOff : Nat)
+    (seed : Option String) (bump : Option Ops.Val) : Except String (String × String) :=
+  match seed, bump with
+  | some s, some b => do
+    let load ← loadVal p b 8
+    let (bytes, _) :=
+      s.toList.foldl (init := ("", (0 : Nat))) fun (acc, i) c =>
+        (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {seedOff + i}], r1\n", i + 1)
+    let seedPtr := seedOff
+    let bumpByte := seedOff + ((s.length + 7) / 8) * 8 + 8
+    let seedsArr := bumpByte + 8
+    let groupOff := seedsArr + 32
+    let txt :=
+      load ++ bytes ++ s!"\
+  ldxdw r1, [r10 - 8]
+  stxb [r9 + {bumpByte}], r1
+  mov64 r1, r9
+  add64 r1, {seedPtr}
+  stxdw [r9 + {seedsArr}], r1
+  lddw r1, {s.length}
+  stxdw [r9 + {seedsArr + 8}], r1
+  mov64 r1, r9
+  add64 r1, {bumpByte}
+  stxdw [r9 + {seedsArr + 16}], r1
+  lddw r1, 1
+  stxdw [r9 + {seedsArr + 24}], r1
+  mov64 r1, r9
+  add64 r1, {seedsArr}
+  stxdw [r9 + {groupOff}], r1
+  lddw r1, 2
+  stxdw [r9 + {groupOff + 8}], r1
+"
+    let regs :=
+      s!"  mov64 r4, r9\n  add64 r4, {groupOff}\n  lddw r5, 1\n"
+    return (txt, regs)
+  | none, none =>
+    return ("", "  lddw r4, 0\n  lddw r5, 0\n")
+  | _, _ =>
+    .error "extract/unsupported: invoke seeds must be seed+bump or empty"
+
 private def emitInvoke (p : IR.Program) (label : String)
-    (programIx : Nat) (metas : Array Ops.CpiMeta) (data : Array Ops.CpiWord) :
+    (programIx : Nat) (metas : Array Ops.CpiMeta) (data : Array Ops.CpiWord)
+    (seed : Option String) (bump : Option Ops.Val) :
     Except String String := do
   let n := IR.cpiAccountCount p
   let (dataTxt, dataLen) ← emitCpiData p data
   let metaOff := 16
   let ixOff := metaOff + 16 * metas.size
   let infoOff := ixOff + 40
+  let seedOff := infoOff + 56 * n
+  let (seedTxt, seedRegs) ← emitSignerSeeds p seedOff seed bump
   let mut metasTxt := ""
   for i in [0:metas.size] do
     metasTxt := metasTxt ++ emitOneMeta i metas[i]!
   let mut infos := ""
   for i in [0:n] do
-    infos := infos ++ emitFillAccountInfoFromHeader (headerStack i)
+    infos := infos ++ emitFillAccountInfoFromHeader label (headerStack i)
     if i + 1 < n then
       infos := infos ++ "  add64 r5, 56\n"
   return s!"\
@@ -498,13 +529,11 @@ private def emitInvoke (p : IR.Program) (label : String)
   stxdw [r10 - 80], r8
   mov64 r5, r9
   add64 r5, {infoOff}
-{infos}  ldxdw r1, [r10 - 80]
+{infos}{seedTxt}  ldxdw r1, [r10 - 80]
   mov64 r2, r9
   add64 r2, {infoOff}
   lddw r3, {n}
-  lddw r4, 0
-  lddw r5, 0
-  call sol_invoke_signed_c
+{seedRegs}  call sol_invoke_signed_c
   jeq r0, 0, xfer_ok_{label}
   exit
 xfer_ok_{label}:
@@ -601,8 +630,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         jmpIf cmp thenLab ++
         s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
-    | .invoke prog metas data =>
-      acc := acc ++ (← emitInvoke p label prog metas data)
+    | .invoke prog metas data seed bump =>
+      acc := acc ++ (← emitInvoke p label prog metas data seed bump)
     | .okState v =>
       let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
       if hasOpt then

@@ -43,6 +43,7 @@ inductive Op where
   | checkedModU64 (lhs rhs : Val)
   | ite (cmp : Cmp) (lhs rhs : Val) (thn els : Array Op)
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array CpiWord)
+      (seed : Option String := none) (bump : Option Val := none)
   | okState (value : Val)
   | errorOverflow
   | returnU64 (value : Val)
