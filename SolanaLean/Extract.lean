@@ -42,6 +42,16 @@ private def peelLets (e : Expr) : Expr :=
       | e => e
   go 16 e
 
+/-- 无参数构造子的 inductive。构造子按声明顺序编号。 -/
+private def enumCtorIndex (env : Environment) (tyName ctor : Name) : Option Nat :=
+  match env.find? tyName with
+  | some (.inductInfo info) =>
+    if info.numParams != 0 || info.numIndices != 0 || info.ctors.isEmpty || info.isRec then
+      none
+    else
+      info.ctors.findIdx? (· == ctor)
+  | _ => none
+
 private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -58,7 +68,7 @@ private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
           if args.size ≥ 2 then asLit fuel' args[1]! else none
       else none
 
-private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
+private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
   | fuel' + 1 =>
@@ -80,7 +90,7 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
           if proj == "mk" || proj == "ok" || proj == "error" ||
               proj.startsWith "_proof" || proj == "rfl" || proj == "cells" then none
           else
-            match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+            match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
             | some b => some (.field b proj)
             | none =>
               -- 参数本身就是 state（`.bvar`），投影挂在它上面。
@@ -91,9 +101,9 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
               | _ => none
         else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8) &&
             e.getAppArgs.size ≥ 1 then
-          asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if (isConstNamed e ``Option.isSome || endsWith e ".isSome") && e.getAppArgs.size ≥ 1 then
-          match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.field b _) => some (.field b "slot_tag")
           | some b => some (.field b "slot_tag")
           | none => none
@@ -103,10 +113,20 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
           some (.lit 1)
         else if isConstNamed e ``Bool.false || endsWith e ".false" then
           some (.lit 0)
+        else if user && e.getAppArgs.isEmpty then
+          match e.getAppFn.constName? with
+          | some ctor =>
+            match env.find? ctor with
+            | some (.ctorInfo c) =>
+              match enumCtorIndex env c.induct ctor with
+              | some i => some (.lit (UInt64.ofNat i))
+              | none => none
+            | _ => none
+          | none => none
         else if isConstNamed e ``Option.none || endsWith e ".none" then
           some (.lit 0)
         else if (isConstNamed e ``Option.some || endsWith e ".some") && e.getAppArgs.size ≥ 1 then
-          asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if (isConstNamed e ``GetElem.getElem || isConstNamed e ``Vector.get ||
             endsWith e ".getElem" || endsWith e ".get") && e.getAppArgs.size ≥ 2 then
           let args := e.getAppArgs
@@ -131,46 +151,46 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
         else none
       else none
 
-private def val (e : Expr) : Option Ops.Val :=
-  asVal 16 e
+private def val (env : Environment) (e : Expr) : Option Ops.Val :=
+  asVal env 16 e
 
-private def asSubFromMax (e : Expr) : Option Ops.Val :=
+private def asSubFromMax (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``HSub.hSub then
     let args := e.getAppArgs
     if args.size ≥ 2 && endsWith (strip args[args.size - 2]!) ".u64Max" then
-      val args[args.size - 1]!
+      val env args[args.size - 1]!
     else none
   else none
 
 /-- `x ≤ u64Max - y`  →  checked add x y。单独的 `x ≤ u64Max` 不是 add。 -/
-private def asCheckedAddGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
+private def asCheckedAddGuard (env : Environment) (e : Expr) : Option (Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``LE.le then
     let args := e.getAppArgs
     if args.size ≥ 2 then
-      match val args[args.size - 2]!, asSubFromMax args[args.size - 1]! with
+      match val env args[args.size - 2]!, asSubFromMax env args[args.size - 1]! with
       | some lhs, some rhs => some (lhs, rhs)
       | _, _ => none
     else none
   else none
 
-private def asDivFromMax (e : Expr) : Option Ops.Val :=
+private def asDivFromMax (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``HDiv.hDiv then
     let args := e.getAppArgs
     if args.size ≥ 2 && endsWith (strip args[args.size - 2]!) ".u64Max" then
-      val args[args.size - 1]!
+      val env args[args.size - 1]!
     else none
   else none
 
 /-- `x ≤ u64Max / y`  →  checked mul x y -/
-private def asCheckedMulGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
+private def asCheckedMulGuard (env : Environment) (e : Expr) : Option (Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``LE.le then
     let args := e.getAppArgs
     if args.size ≥ 2 then
-      match val args[args.size - 2]!, asDivFromMax args[args.size - 1]! with
+      match val env args[args.size - 2]!, asDivFromMax env args[args.size - 1]! with
       | some lhs, some rhs => some (lhs, rhs)
       | _, _ => none
     else none
@@ -180,64 +200,64 @@ private def binArgs (e : Expr) : Option (Expr × Expr) :=
   let args := e.getAppArgs
   if args.size ≥ 2 then some (args[args.size - 2]!, args[args.size - 1]!) else none
 
-private def asCmpCore (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
+private def asCmpCore (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then
     match binArgs e with
     | some (l, r) =>
-      match val l, val r with
+      match val env l, val env r with
       | some lv, some rv => some (.eq, lv, rv)
       | _, _ => none
     | none => none
   else if isConstNamed e ``Ne then
     match binArgs e with
     | some (l, r) =>
-      match val l, val r with
+      match val env l, val env r with
       | some lv, some rv => some (.ne, lv, rv)
       | _, _ => none
     | none => none
   else if isConstNamed e ``LT.lt then
     match binArgs e with
     | some (l, r) =>
-      match val l, val r with
+      match val env l, val env r with
       | some lv, some rv => some (.lt, lv, rv)
       | _, _ => none
     | none => none
   else if isConstNamed e ``LE.le then
     match binArgs e with
     | some (l, r) =>
-      match val l, val r with
+      match val env l, val env r with
       | some lv, some rv => some (.le, lv, rv)
       | _, _ => none
     | none => none
   else if isConstNamed e ``GT.gt then
     match binArgs e with
     | some (l, r) =>
-      match val l, val r with
+      match val env l, val env r with
       | some lv, some rv => some (.gt, lv, rv)
       | _, _ => none
     | none => none
   else if isConstNamed e ``GE.ge then
     match binArgs e with
     | some (l, r) =>
-      match val l, val r with
+      match val env l, val env r with
       | some lv, some rv => some (.ge, lv, rv)
       | _, _ => none
     | none => none
   else none
 
-private def asCmp (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
+private def asCmp (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``Not then
     let args := e.getAppArgs
     if args.size ≥ 1 then
-      match asCmpCore args[args.size - 1]! with
+      match asCmpCore env args[args.size - 1]! with
       | some (.eq, l, r) => some (.ne, l, r)
       | some (.ne, l, r) => some (.eq, l, r)
       | _ => none
     else none
   else
-    match asCmpCore e with
+    match asCmpCore env e with
     | some t => some t
     | none =>
       if isConstNamed e ``Eq then
@@ -250,12 +270,20 @@ private def asCmp (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
           let noneL := isConstNamed l ``Option.none || endsWith l ".none"
           if trueR && (isConstNamed l ``Option.isSome || endsWith l ".isSome") then
             some (.ne, .field (.arg 0) "slot_tag", .lit 0)
+          else if endsWith r ".idle" || endsWith r ".live" then
+            match val env l, val env r with
+            | some lv, some rv => some (.eq, lv, rv)
+            | _, _ => none
+          else if endsWith l ".idle" || endsWith l ".live" then
+            match val env l, val env r with
+            | some lv, some rv => some (.eq, lv, rv)
+            | _, _ => none
           else if noneR then
-            match val l with
+            match val env l with
             | some lv => some (.eq, lv, .lit 0)
             | none => none
           else if noneL then
-            match val r with
+            match val env r with
             | some rv => some (.eq, rv, .lit 0)
             | none => none
           else none
@@ -263,7 +291,7 @@ private def asCmp (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
       else if isConstNamed e ``Option.isSome || endsWith e ".isSome" then
         let args := e.getAppArgs
         if args.size ≥ 1 then
-          match val args[args.size - 1]! with
+          match val env args[args.size - 1]! with
           | some (.field b _) => some (.ne, .field b "slot_tag", .lit 0)
           | some b => some (.ne, .field b "slot_tag", .lit 0)
           | none => none
@@ -271,51 +299,51 @@ private def asCmp (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
       else none
 
 /-- `x ≥ y` / `y ≤ x`  →  checked sub x y。`x ≤ lit` 是上界（255 / u64Max），不是 sub。 -/
-private def asCheckedSubGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
-  match asCmp e with
+private def asCheckedSubGuard (env : Environment) (e : Expr) : Option (Ops.Val × Ops.Val) :=
+  match asCmp env e with
   | some (.le, _, .lit _) => none
   | some (.le, rhs, lhs) => some (lhs, rhs)
   | some (.ge, lhs, rhs) => some (lhs, rhs)
   | _ => none
 
 /-- `den ≠ 0` 才是除法守卫。两边都是字面量的 `0 ≠ 1` 不算。 -/
-private def asNeZero (e : Expr) : Option Ops.Val :=
-  match asCmp e with
+private def asNeZero (env : Environment) (e : Expr) : Option Ops.Val :=
+  match asCmp env e with
   | some (.ne, .lit _, .lit _) => none
   | some (.ne, v, .lit 0) => some v
   | some (.ne, .lit 0, v) => some v
   | _ => none
 
-private def asEqZero (e : Expr) : Option Ops.Val :=
-  match asCmp e with
+private def asEqZero (env : Environment) (e : Expr) : Option Ops.Val :=
+  match asCmp env e with
   | some (.eq, v, .lit 0) => some v
   | some (.eq, .lit 0, v) => some v
   | _ => none
 
 /-- 多字段 `State.mk a b …`：init 用第一个显式参数；checked 更新用最后一个。 -/
-private def asStateMk (e : Expr) (preferLast := false) : Option Ops.Val :=
+private def asStateMk (env : Environment) (e : Expr) (preferLast := false) : Option Ops.Val :=
   let e := strip e
   if endsWith e ".State.mk" || endsWith e ".mk" then
     let args := e.getAppArgs
     if args.size = 0 then none
-    else if preferLast then val args[args.size - 1]!
+    else if preferLast then val env args[args.size - 1]!
     else
-      match args.findSome? val with
+      match args.findSome? (val env) with
       | some v => some v
-      | none => val args[args.size - 1]!
+      | none => val env args[args.size - 1]!
   else none
 
-private def asOptionPayload (e : Expr) : Option Ops.Val :=
+private def asOptionPayload (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``Option.none || endsWith e ".none" then
     some (.lit 0)
   else if isConstNamed e ``Option.some || endsWith e ".some" then
     let args := e.getAppArgs
-    if args.size ≥ 1 then val args[args.size - 1]! else none
+    if args.size ≥ 1 then val env args[args.size - 1]! else none
   else none
 
 /-- `#v[a, b, …]` = `Vector.mk (List.toArray (a :: b :: []))`。 -/
-private def collectListVals (fuel : Nat) (e : Expr) : Array Ops.Val :=
+private def collectListVals (env : Environment) (fuel : Nat) (e : Expr) : Array Ops.Val :=
   match fuel with
   | 0 => #[]
   | fuel' + 1 =>
@@ -327,38 +355,38 @@ private def collectListVals (fuel : Nat) (e : Expr) : Array Ops.Val :=
       if args.size ≥ 2 then
         let head := args[args.size - 2]!
         let tail := args[args.size - 1]!
-        match val head with
-        | some v => #[v] ++ collectListVals fuel' tail
-        | none => collectListVals fuel' tail
+        match val env head with
+        | some v => #[v] ++ collectListVals env fuel' tail
+        | none => collectListVals env fuel' tail
       else #[]
     else if isConstNamed e ``List.toArray || endsWith e ".toArray" then
       let args := e.getAppArgs
-      if args.size ≥ 1 then collectListVals fuel' args[args.size - 1]! else #[]
+      if args.size ≥ 1 then collectListVals env fuel' args[args.size - 1]! else #[]
     else
-      match val e with
+      match val env e with
       | some v => #[v]
       | none => #[]
 
-private def findListVals (fuel : Nat) (e : Expr) : Option (Array Ops.Val) :=
+private def findListVals (env : Environment) (fuel : Nat) (e : Expr) : Option (Array Ops.Val) :=
   match fuel with
   | 0 => none
   | fuel' + 1 =>
     let e := strip e
     if isConstNamed e ``List.cons || endsWith e ".cons" then
-      some (collectListVals 16 e)
+      some (collectListVals env 16 e)
     else
-      e.getAppArgs.findSome? (findListVals fuel')
+      e.getAppArgs.findSome? (findListVals env fuel')
 
-private def asVectorLits (e : Expr) : Option (Array Ops.Val) :=
+private def asVectorLits (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let e := strip e
   if isConstNamed e ``Vector.mk || endsWith e "Vector.mk" then
-    match findListVals 16 e with
+    match findListVals env 16 e with
     | some vs => if vs.isEmpty then none else some vs
     | none => none
   else none
 
 /-- `xs.set i v`：只抽出被改的那一叶。 -/
-private def asVectorSet (e : Expr) : Option Ops.Val :=
+private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``Vector.set || endsWith e ".set" then
     let args := e.getAppArgs
@@ -371,7 +399,7 @@ private def asVectorSet (e : Expr) : Option Ops.Val :=
       Id.run do
         let mut seenIdx := false
         for a in args do
-          match asLit 8 a, val a with
+          match asLit 8 a, val env a with
           | some (.lit _), _ =>
             seenIdx := true
           | none, some v =>
@@ -384,13 +412,13 @@ private def asVectorSet (e : Expr) : Option Ops.Val :=
   else none
 
 /-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
-private def asStateFields (e : Expr) : Option (Array Ops.Val) :=
+private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let e := strip e
   if endsWith e ".State.mk" || endsWith e ".mk" then
     Id.run do
       let mut acc : Array Ops.Val := #[]
       for a in e.getAppArgs do
-        match asOptionPayload a with
+        match asOptionPayload env a with
         | some (.lit 0) =>
           acc := acc.push (.lit 0) |>.push (.lit 0)
         | some v =>
@@ -399,19 +427,19 @@ private def asStateFields (e : Expr) : Option (Array Ops.Val) :=
           if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
             pure ()
           else
-            match asVectorLits a with
+            match asVectorLits env a with
             | some vs => acc := acc ++ vs
             | none =>
-              match asVectorSet a with
+              match asVectorSet env a with
               | some v => acc := acc.push v
               | none =>
-                match val a with
+                match val env a with
                 | some v => acc := acc.push v
                 | none => pure ()
       if acc.isEmpty then none else some acc
   else none
 
-private def asOkState (e : Expr) : Option Ops.Val :=
+private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := peelLets (strip e)
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
@@ -421,20 +449,20 @@ private def asOkState (e : Expr) : Option Ops.Val :=
         let pargs := pair.getAppArgs
         if pargs.size ≥ 2 then
           let st := pargs[pargs.size - 2]!
-          match asOptionPayload st with
+          match asOptionPayload env st with
           | some v => some v
           | none =>
-            match asVectorSet (strip st) <|>
-                (strip st).getAppArgs.findSome? asVectorSet with
+            match asVectorSet env (strip st) <|>
+                (strip st).getAppArgs.findSome? (asVectorSet env) with
             | some v => some v
             | none =>
-              match asStateMk st true with
+              match asStateMk env st true with
               | some v => some v
               | none =>
                 let args := (strip st).getAppArgs
-                args.findSome? asOptionPayload <|> asStateMk st true
+                args.findSome? (asOptionPayload env) <|> asStateMk env st true
         else none
-      else asStateMk pair true
+      else asStateMk env pair true
     else none
   else none
 
@@ -456,15 +484,15 @@ private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   else
     vs.map Ops.Op.returnState
 
-private def decodePlain (e : Expr) : Except String (Array Ops.Op) :=
+private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   let e := peelLets (strip e)
-  if let some v := asOkState e then
+  if let some v := asOkState env e then
     .ok #[.okState v]
-  else if let some vs := asStateFields e then
+  else if let some vs := asStateFields env e then
     .ok (returnStatesOf vs)
-  else if let some v := asStateMk e then
+  else if let some v := asStateMk env e then
     .ok #[.returnState v]
-  else if let some v := val e then
+  else if let some v := val env e then
     match v with
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnState v]
@@ -475,7 +503,7 @@ private def decodePlain (e : Expr) : Except String (Array Ops.Op) :=
 private def findBy (args : Array Expr) (p : Expr → Bool) : Option Expr :=
   args.find? p
 
-private def lastNamedBin (want : Name) (e : Expr) : Option (Ops.Val × Ops.Val) :=
+private def lastNamedBin (env : Environment) (want : Name) (e : Expr) : Option (Ops.Val × Ops.Val) :=
   let rec go (fuel : Nat) (e : Expr) : Option (Ops.Val × Ops.Val) :=
     match fuel with
     | 0 => none
@@ -484,7 +512,7 @@ private def lastNamedBin (want : Name) (e : Expr) : Option (Ops.Val × Ops.Val) 
       if isConstNamed e want then
         match binArgs e with
         | some (l, r) =>
-          match val l, val r with
+          match val env l, val env r with
           | some lv, some rv => some (lv, rv)
           | _, _ => none
         | none => none
@@ -492,7 +520,7 @@ private def lastNamedBin (want : Name) (e : Expr) : Option (Ops.Val × Ops.Val) 
         e.getAppArgs.findSome? (go fuel')
   go 8 e
 
-private def decodeExpr (fuel : Nat) (e : Expr) : Except String (Array Ops.Op) :=
+private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except String (Array Ops.Op) :=
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
@@ -502,57 +530,57 @@ private def decodeExpr (fuel : Nat) (e : Expr) : Except String (Array Ops.Op) :=
       let t := peelLets args[args.size - 2]!
       let f := peelLets args[args.size - 1]!
       if isErrorOverflow f then
-        if let some condE := findBy args (fun a => (asCmp a).isSome && (asCheckedAddGuard a).isNone && (asCheckedMulGuard a).isNone && (asCheckedSubGuard a).isNone && (asNeZero a).isNone) then
-          match asCmp condE, asOkState t with
+        if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
+          match asCmp env condE, asOkState env t with
           | some (cmp, lv, rv), some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asCheckedAddGuard a).isSome) then
-          match asCheckedAddGuard condE, asOkState t with
+        else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
+          match asCheckedAddGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
             return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
           | _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asCheckedMulGuard a).isSome) then
-          match asCheckedMulGuard condE, asOkState t with
+        else if let some condE := findBy args (fun a => (asCheckedMulGuard env a).isSome) then
+          match asCheckedMulGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
             return .ok #[.checkedMulU64 lhs rhs, .okState v, .errorOverflow]
           | _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asCheckedSubGuard a).isSome) then
-          match asCheckedSubGuard condE, asOkState t with
+        else if let some condE := findBy args (fun a => (asCheckedSubGuard env a).isSome) then
+          match asCheckedSubGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
             return .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
           | _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asNeZero a).isSome) then
-          match asNeZero condE with
+        else if let some condE := findBy args (fun a => (asNeZero env a).isSome) then
+          match asNeZero env condE with
           | none => return .error "extract/unsupported: ite then"
           | some den =>
-            let v := (asOkState t).getD (.arg 0)
-            if (lastNamedBin ``HMod.hMod t).isSome then
-              let (lhs, rhs) := (lastNamedBin ``HMod.hMod t).getD ((.field (.arg 1) "value"), den)
+            let v := (asOkState env t).getD (.arg 0)
+            if (lastNamedBin env ``HMod.hMod t).isSome then
+              let (lhs, rhs) := (lastNamedBin env ``HMod.hMod t).getD ((.field (.arg 1) "value"), den)
               return .ok #[.checkedModU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
-            else if (lastNamedBin ``UInt64.mod t).isSome then
-              let (lhs, rhs) := (lastNamedBin ``UInt64.mod t).getD ((.field (.arg 1) "value"), den)
+            else if (lastNamedBin env ``UInt64.mod t).isSome then
+              let (lhs, rhs) := (lastNamedBin env ``UInt64.mod t).getD ((.field (.arg 1) "value"), den)
               return .ok #[.checkedModU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
             else
-              let (lhs, rhs) := (lastNamedBin ``HDiv.hDiv t).getD ((.field (.arg 1) "value"), den)
+              let (lhs, rhs) := (lastNamedBin env ``HDiv.hDiv t).getD ((.field (.arg 1) "value"), den)
               return .ok #[.checkedDivU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
         else
           return .error "extract/unsupported: ite cond"
       else
-        let some condE := findBy args (fun a => (asCmp a).isSome)
+        let some condE := findBy args (fun a => (asCmp env a).isSome)
           | return .error "extract/unsupported: ite cond"
-        let some (cmp, lv, rv) := asCmp condE
+        let some (cmp, lv, rv) := asCmp env condE
           | return .error "extract/unsupported: ite cond"
-        match decodeExpr fuel' t, decodeExpr fuel' f with
+        match decodeExpr env fuel' t, decodeExpr env fuel' f with
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ => return .error r
         | _, .error r => return .error r
     else
-      return decodePlain e
+      return decodePlain env e
 
-def decodeBody (e : Expr) : Except String (Array Ops.Op) :=
+def decodeBody (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
-  decodeExpr 16 body
+  decodeExpr env 16 body
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -569,8 +597,8 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
   ops.any fun | .ite .. => true | _ => false
 
 /-- 可变入口必须有 checked 算术、Option 双叶，或比较 ite（窄宽上界）。 -/
-def decodeMutating (e : Expr) : Except String (Array Ops.Op) := do
-  let ops ← decodeBody e
+def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
+  let ops ← decodeBody env e
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops then
     return ops
   else
@@ -585,8 +613,8 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
   let sketch := sketchOfExpr e
   let ops0 ←
     match kind with
-    | .increment => decodeMutating e
-    | _ => decodeBody e
+    | .increment => decodeMutating env e
+    | _ => decodeBody env e
   let lean := IR.lastName n.toString
   let ops :=
     if lean == "modulo" then
@@ -625,7 +653,17 @@ private def fieldTypeExpr (env : Environment) (structName fieldName : Name) : Op
     | none => none
     | some info => some (peelForalls info.type)
 
-private def leafSlots (name : String) (ty : Expr) : Except String (Array IR.Slot) :=
+private def isEnumLeaf (env : Environment) (tyName : Name) : Bool :=
+  match env.find? tyName with
+  | some (.inductInfo info) =>
+    info.numParams == 0 && info.numIndices == 0 && !info.ctors.isEmpty && !info.isRec &&
+      info.ctors.all fun ctor =>
+        match env.find? ctor with
+        | some (.ctorInfo c) => c.numFields == 0
+        | _ => false
+  | _ => false
+
+private def leafSlots (env : Environment) (name : String) (ty : Expr) : Except String (Array IR.Slot) :=
   let ty := ty.consumeMData
   if ty.getAppFn.constName? == some ``UInt64 then
     .ok #[{ name, width := 8, abi := "u64-le" }]
@@ -659,6 +697,15 @@ private def leafSlots (name : String) (ty : Expr) : Except String (Array IR.Slot
       .error s!"extract/unsupported: field {name} is not Vector UInt64 n"
   else if ty.getAppFn.constName? == some ``Array then
     .error s!"extract/unsupported: field {name} Array is not fixed-length; use Vector"
+  else if ty.getAppFn.constName? == some ``Bool then
+    .error s!"extract/unsupported: field {name} is not a supported leaf"
+  else if let some tyName := ty.getAppFn.constName? then
+    if isEnumLeaf env tyName then
+      .ok #[{ name, width := 8, abi := "u64-le" }]
+    else if match env.find? tyName with | some (.inductInfo _) => true | _ => false then
+      .error s!"extract/unsupported: field {name} enum has payload"
+    else
+      .error s!"extract/unsupported: field {name} is not a supported leaf"
   else
     .error s!"extract/unsupported: field {name} is not a supported leaf"
 
@@ -688,7 +735,7 @@ def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.S
       throw "extract/unsupported: structure extends"
     let some ty := fieldTypeExpr env structName n
       | throw s!"extract/unsupported: field {n} has no type"
-    slots := slots ++ (← leafSlots n.toString ty)
+    slots := slots ++ (← leafSlots env n.toString ty)
   return slots
 
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do

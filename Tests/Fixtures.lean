@@ -67,6 +67,26 @@ def setBagHead (s : BagState) (n : UInt64) :
     Except Examples.Counter.Error (BagState × UInt64) :=
   .ok ({ items := #[n] }, n)
 
+/-- 负向：带 payload 的 inductive。 -/
+inductive Tagged where
+  | wrap (n : UInt64)
+  deriving Repr
+
+structure TaggedState where
+  tag : Tagged
+  deriving Repr
+
+def initTagged (n : UInt64) : TaggedState :=
+  { tag := .wrap n }
+
+def getTagged (s : TaggedState) : UInt64 :=
+  match s.tag with
+  | .wrap n => n
+
+def setTagged (s : TaggedState) (n : UInt64) :
+    Except Examples.Counter.Error (TaggedState × UInt64) :=
+  .ok ({ tag := .wrap n }, n)
+
 def getFlagValue (s : FlagState) : UInt64 :=
   s.value
 

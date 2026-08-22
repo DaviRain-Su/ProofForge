@@ -14,14 +14,15 @@
 - 带类型字段表：`UInt8/16/32/64` + `Option UInt64` 双叶；Flag / Maybe Mollusk
 - disc / layout marker 本机 SHA-256，不再挂名表
 - 定长 `Vector UInt64 n` 展开成连续槽；Window Mollusk；不定长 Array fail closed
+- 无 payload 枚举作 tag；Phase Mollusk；带 payload / Bool 仍 fail closed
 
 ## 下一刀
 
-L2-enum：无 payload 枚举作 tag。
+L3：`init` 写全字段；只读 view 返回任意已布局叶子。
 
 ## 其后（L2 / L3）
 
-- 无 payload 枚举
+- 带 payload 的 match
 - N 入口；`init` 写全字段；只读 view 返回任意已布局叶子
 
 ## 有具体合约再开（L4）

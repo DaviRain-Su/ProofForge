@@ -17,4 +17,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L2 字段类型**。窄整数、Option 双叶、定长 Vector、disc/marker 现算已通。下一刀无 payload 枚举。
+当前阶段：**L2 字段类型**已通（窄整数、Option、Vector、无 payload 枚举、disc/marker 现算）。下一刀 L3 程序形状。

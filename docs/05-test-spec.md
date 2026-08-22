@@ -73,3 +73,7 @@
 | T-L2-10 | error | 不定长 Array 字段 | `use Vector` |
 | T-L2-11 | happy | Window Mollusk init(7) | head=7，tail=0 |
 | T-L2-12 | happy | setTail 9 | head 保持 7，tail=9 |
+| T-L2-13 | happy | Phase slots | mode 偏移 8 |
+| T-L2-14 | error | 带 payload inductive | `enum has payload` |
+| T-L2-15 | happy | Phase Mollusk init | mode=0 |
+| T-L2-16 | happy | setLive / isLive | tag=1，view 返回 1 |

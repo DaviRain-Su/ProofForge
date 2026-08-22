@@ -4,6 +4,7 @@ import Examples.Pair
 import Examples.Flag
 import Examples.Maybe
 import Examples.Window
+import Examples.Phase
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -57,6 +58,14 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Maybe.init Examples.Maybe.setSome Examples.Maybe.isSome
 
 #solana_extract Examples.Window.init Examples.Window.setTail Examples.Window.getHead
+
+#solana_extract Examples.Phase.init Examples.Phase.setLive Examples.Phase.isLive
+
+/--
+error: extract/unsupported: field tag enum has payload
+-/
+#guard_msgs (error) in
+#solana_extract Tests.Fixtures.initTagged Tests.Fixtures.setTagged Tests.Fixtures.getTagged
 
 /--
 error: extract/unsupported: field items Array is not fixed-length; use Vector

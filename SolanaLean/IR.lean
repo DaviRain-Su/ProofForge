@@ -211,6 +211,32 @@ def extractedFlag : Program :=
         ops := #[.returnU64 (.field (.arg 0) "flag")] }
     ] }
 
+def extractedPhase : Program :=
+  { name := "Phase"
+    slots := #[{ name := "mode" }]
+    methods := #[
+      { kind := .init, name := "Examples.Phase.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Phase.setIdle", ixName := "setIdle", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Phase.setLive", ixName := "setLive", paramCount := 1
+        ops := #[
+          .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
+            #[.okState (.lit 1)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Phase.isLive", ixName := "isLive", paramCount := 0
+        ops := #[
+          .ite .eq (.field (.arg 0) "mode") (.lit 1)
+            #[.returnU64 (.lit 1)]
+            #[.returnU64 (.lit 0)]
+        ] }
+    ] }
+
 def extractedWindow : Program :=
   { name := "Window"
     slots := #[{ name := "cells_0" }, { name := "cells_1" }]
