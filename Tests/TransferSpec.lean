@@ -22,7 +22,7 @@ open ProofForge.Runtime
   l.instructionDataLen == 31016 && l.instructionData == 31024
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&

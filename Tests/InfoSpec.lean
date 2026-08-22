@@ -16,7 +16,7 @@ open ProofForge.Runtime
 #guard executable (init 0) == isExecutable0
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedInfo with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedInfo with
   | .error _ => false
   | .ok asm =>
       asm.contains "ACC0_LAMPORTS" &&

@@ -3,7 +3,7 @@ import ProofForge
 namespace Tests.IdlSpec
 
 #guard
-  let idl := ProofForge.Idl.emitIdl ProofForge.Golden.extractedCounter
+  let idl := ProofForge.Svm.Idl.emitIdl ProofForge.Golden.extractedCounter
   idl.contains "\"spec\": \"0.1.0\"" &&
     idl.contains "\"name\": \"Counter\"" &&
     idl.contains "\"name\": \"increment\"" &&
@@ -13,9 +13,9 @@ namespace Tests.IdlSpec
     !idl.contains "solana_entry"
 
 #guard
-  (ProofForge.Idl.discBytes "increment" 1).size == 8
+  (ProofForge.Svm.Idl.discBytes "increment" 1).size == 8
 
 #guard
-  (ProofForge.Idl.layoutDiscBytes ProofForge.Golden.extractedCounter).size == 8
+  (ProofForge.Svm.Idl.layoutDiscBytes ProofForge.Golden.extractedCounter).size == 8
 
 end Tests.IdlSpec

@@ -25,7 +25,7 @@ open ProofForge.Runtime
             !yul.contains "ACC0_KEY"
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedEvmCtx with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedEvmCtx with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

@@ -62,7 +62,7 @@ import Examples.Maybe
     ProofForge.IR.digestHex ProofForge.Golden.extractedMaybe
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedFlag with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedFlag with
   | .error _ => false
   | .ok asm =>
       asm.contains "stxb" &&
@@ -72,7 +72,7 @@ import Examples.Maybe
         asm.contains "call setFlag"
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedMaybe with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedMaybe with
   | .error _ => false
   | .ok asm =>
       asm.contains "0xf53e0f4e232b2e90" &&

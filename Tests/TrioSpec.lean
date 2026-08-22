@@ -23,7 +23,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTrio == 3
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTrio with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTrio with
   | .error _ => false
   | .ok asm =>
       asm.contains "load walked acc2 +72" &&

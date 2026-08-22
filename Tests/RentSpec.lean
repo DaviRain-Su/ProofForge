@@ -15,7 +15,7 @@ open ProofForge.Runtime
   | .error _ => false
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedRent with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedRent with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_get_rent_sysvar" &&

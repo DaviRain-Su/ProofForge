@@ -49,7 +49,7 @@ open ProofForge.Runtime
         (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedToken with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedToken with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

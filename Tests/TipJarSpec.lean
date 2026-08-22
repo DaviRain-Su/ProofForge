@@ -72,7 +72,7 @@ open ProofForge.Runtime
         abi.contains "\"name\":\"payout\""
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTipJar with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTipJar with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

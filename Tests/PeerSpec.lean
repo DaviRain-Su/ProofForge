@@ -19,7 +19,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedPeer == 2
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedPeer with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPeer with
   | .error _ => false
   | .ok asm =>
       asm.contains "load walked acc1 +72" &&

@@ -198,7 +198,7 @@ error: extract/unsupported: no pf_entry
   | _ => false
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
       asm.contains "0x1b92f24dfb29d300" &&
@@ -206,7 +206,7 @@ error: extract/unsupported: no pf_entry
         asm.contains "call increment"
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedPair with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPair with
   | .error _ => false
   | .ok asm =>
       asm.contains "0xca5ea3052ea3b57e" &&
@@ -232,7 +232,7 @@ error: extract/unsupported: no pf_entry
   ProofForge.IR.digestHex p != ProofForge.IR.digestHex q
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
       asm.contains s!"digest={ProofForge.IR.digestHex ProofForge.Golden.extractedCounter}"

@@ -15,7 +15,7 @@ open ProofForge.Runtime
   | .error _ => false
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedEpoch with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedEpoch with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_get_epoch_schedule_sysvar" &&

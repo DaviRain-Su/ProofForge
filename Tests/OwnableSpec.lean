@@ -50,7 +50,7 @@ open ProofForge.Runtime
         (p.entries.find? (·.ixName == "logInc")).map (·.payable) == some false
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedOwnable with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedOwnable with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

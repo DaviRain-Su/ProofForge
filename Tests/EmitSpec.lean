@@ -4,18 +4,18 @@ import Examples.Counter
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.IR.counterProgram with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.IR.counterProgram with
   | .error "extract/unsupported: init missing returnState" => true
   | .error "extract/unsupported: increment missing checked arith" => true
   | _ => false
 
 #guard
-  match ProofForge.Emit.emitCounterAsm { name := "x", methods := #[] } with
+  match ProofForge.Svm.Emit.emitCounterAsm { name := "x", methods := #[] } with
   | .error "extract/unsupported: not program shape" => true
   | _ => false
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
       let inc :=
@@ -73,7 +73,7 @@ private def pairShape : ProofForge.IR.Program :=
   l.rentEpoch == 0x2878 && l.instructionDataLen == 0x2880 && l.instructionData == 0x2888
 
 #guard
-  match ProofForge.Emit.emitCounterAsm pairShape with
+  match ProofForge.Svm.Emit.emitCounterAsm pairShape with
   | .error _ => false
   | .ok asm =>
       asm.contains "ACC0_DATA + 8" &&
@@ -105,7 +105,7 @@ private def swappedIncrement : ProofForge.IR.Program :=
     ] }
 
 #guard
-  match ProofForge.Emit.emitCounterAsm swappedIncrement with
+  match ProofForge.Svm.Emit.emitCounterAsm swappedIncrement with
   | .error _ => false
   | .ok asm =>
       let inc :=

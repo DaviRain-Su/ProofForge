@@ -1,12 +1,10 @@
-import ProofForge.Assemble
 import ProofForge.Golden
-import ProofForge.Idl
 import ProofForge.IR
 import ProofForge.Ops
+import ProofForge.Svm.Assemble
 import ProofForge.Evm.Assemble
 import ProofForge.Evm.Golden
 import ProofForge.Evm.IR
-import ProofForge.Evm.Emit
 
 namespace ProofForge.Cli
 
@@ -98,7 +96,7 @@ def run (args : List String) : IO UInt32 := do
       | .ok programs =>
         IO.FS.createDirAll opts.outDir
         for program in programs do
-          let r ← Assemble.assembleProgram opts.outDir program
+          let r ← ProofForge.Svm.Assemble.assembleProgram opts.outDir program
           IO.println s!"wrote {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
         return 0
     | .evm =>

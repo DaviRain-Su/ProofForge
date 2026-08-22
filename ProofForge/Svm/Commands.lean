@@ -3,12 +3,14 @@ import ProofForge.Profile
 import ProofForge.Extract
 import ProofForge.IR
 import ProofForge.Ops
-import ProofForge.Emit
+import ProofForge.Svm.Emit
 import ProofForge.Golden
 
 open Lean Elab Command
+open ProofForge
+open ProofForge.Svm
 
-namespace ProofForge.Commands
+namespace ProofForge.Svm.Commands
 
 elab "#pf_check " n:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload n
@@ -86,4 +88,4 @@ elab "#pf_dump " n:ident : command => do
     | none => throwError "no value {name}"
     | some e => logInfo m!"{name} := {e}"
 
-end ProofForge.Commands
+end ProofForge.Svm.Commands

@@ -13,7 +13,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedCall == 2
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCall with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCall with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=1" &&

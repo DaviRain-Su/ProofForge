@@ -2,7 +2,7 @@
 
 ## Purpose
 
-把同一套抽出 Ops 编成 EVM Yul / ABI / bytecode。平行于 sBPF 发射器，不改 `IR.Program`。
+把同一套抽出 Ops 编成 EVM Yul / ABI / bytecode。平行于 `Svm/`，不改 `IR.Program`。
 
 ## Boundary
 

@@ -1,7 +1,7 @@
 import ProofForge.IR
 import ProofForge.Ops
 
-namespace ProofForge.Emit
+namespace ProofForge.Svm.Emit
 
 def overflowCode : String := "0x1001"
 
@@ -1373,4 +1373,4 @@ entrypoint:
 {dispatchTxt}
 {handlers}"
 
-end ProofForge.Emit
+end ProofForge.Svm.Emit

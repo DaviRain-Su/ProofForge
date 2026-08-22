@@ -19,7 +19,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.dataLen ProofForge.Golden.extractedClock == 16
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedClock with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedClock with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_get_clock_sysvar" &&

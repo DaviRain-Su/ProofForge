@@ -11,7 +11,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenOwner
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenOwner with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenOwner with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&

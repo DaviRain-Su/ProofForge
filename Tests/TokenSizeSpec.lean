@@ -19,7 +19,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenSize == 3
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenSize with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenSize with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

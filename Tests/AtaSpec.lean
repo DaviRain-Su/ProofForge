@@ -18,7 +18,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedAta == 7
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedAta with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedAta with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=6" &&

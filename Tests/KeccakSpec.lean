@@ -18,7 +18,7 @@ open ProofForge.Runtime
 #guard !ProofForge.IR.usesWalk ProofForge.Golden.extractedKeccak
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedKeccak with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedKeccak with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_keccak256" &&

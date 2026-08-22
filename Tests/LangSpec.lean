@@ -42,7 +42,7 @@ open Examples.Lang
         (p.entries.find? (·.ixName == "both")).map (·.retCount) == some 2
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedLang with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedLang with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

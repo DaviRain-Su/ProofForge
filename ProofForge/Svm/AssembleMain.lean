@@ -1,4 +1,4 @@
-import ProofForge.Assemble
+import ProofForge.Svm.Assemble
 import ProofForge.Golden
 import ProofForge.Ops
 
@@ -12,6 +12,6 @@ def main (args : List String) : IO UInt32 := do
     if program.methods.any (fun m => Ops.hasEvmEffect m.ops || Ops.hasLangOp m.ops) then
       IO.println s!"skip svm assemble {program.name} (evm leaf)"
       continue
-    let r ← ProofForge.Assemble.assembleProgram out program
+    let r ← ProofForge.Svm.Assemble.assembleProgram out program
     IO.println s!"wrote {r.asmPath} {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
   return 0

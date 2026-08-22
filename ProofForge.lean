@@ -6,10 +6,10 @@ import ProofForge.Golden
 import ProofForge.Attr
 import ProofForge.Profile
 import ProofForge.Extract
-import ProofForge.Emit
-import ProofForge.Assemble
-import ProofForge.Idl
-import ProofForge.Commands
+import ProofForge.Svm.Emit
+import ProofForge.Svm.Assemble
+import ProofForge.Svm.Idl
+import ProofForge.Svm.Commands
 import ProofForge.Evm.Keccak
 import ProofForge.Evm.IR
 import ProofForge.Evm.Emit

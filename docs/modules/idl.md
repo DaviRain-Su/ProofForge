@@ -1,4 +1,4 @@
-# ProofForge.Idl
+# ProofForge.Svm.Idl
 
 ## Purpose
 

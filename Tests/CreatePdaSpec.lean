@@ -23,7 +23,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedCreatePda == 3
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedCreatePda with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCreatePda with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

@@ -13,7 +13,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedSigned == 2
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedSigned with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedSigned with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&
@@ -22,7 +22,7 @@ open ProofForge.Runtime
         asm.contains "invoke programIx=1"
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with
   | .error _ => false
   | .ok asm =>
       asm.contains "lddw r4, 0" &&

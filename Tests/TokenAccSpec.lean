@@ -24,7 +24,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenAcc == 4
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenAcc with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenAcc with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=3" &&

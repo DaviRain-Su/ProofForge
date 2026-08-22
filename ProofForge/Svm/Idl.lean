@@ -1,7 +1,7 @@
 import ProofForge.IR
 import ProofForge.Sha256
 
-namespace ProofForge.Idl
+namespace ProofForge.Svm.Idl
 
 /-- Anchor / Solana IDL spec `0.1.0`。地址占位，部署后再填。 -/
 
@@ -96,4 +96,4 @@ def emitIdl (p : IR.Program) : String :=
     "  ]\n" ++
     "}\n"
 
-end ProofForge.Idl
+end ProofForge.Svm.Idl

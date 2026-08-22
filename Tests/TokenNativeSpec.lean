@@ -18,7 +18,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenNative == 3
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenNative with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenNative with
   | .error _ => false
   | .ok asm =>
       asm.contains "invoke programIx=2" &&

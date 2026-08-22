@@ -18,7 +18,7 @@ open ProofForge.Runtime
 #guard !ProofForge.IR.usesWalk ProofForge.Golden.extractedHash
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedHash with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedHash with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_sha256" &&

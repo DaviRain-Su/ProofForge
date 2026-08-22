@@ -20,7 +20,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedKeys == 2
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedKeys with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedKeys with
   | .error _ => false
   | .ok asm =>
       asm.contains "load acc0 key word 0" &&

@@ -31,7 +31,7 @@ open ProofForge.Runtime
             yul.contains "returndatasize()"
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedVault with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedVault with
   | .error reason => reason.contains "svm rejects evm leaf"
   | .ok _ => false
 

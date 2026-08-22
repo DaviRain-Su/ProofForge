@@ -12,7 +12,7 @@ lean_lib Examples
 lean_lib Tests
 
 lean_exe pfAssemble where
-  root := `ProofForge.AssembleMain
+  root := `ProofForge.Svm.AssembleMain
 
 lean_exe pfEvmAssemble where
   root := `ProofForge.Evm.AssembleMain

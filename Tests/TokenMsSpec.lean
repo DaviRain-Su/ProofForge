@@ -12,7 +12,7 @@ open ProofForge.Runtime
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenMs == 5
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedTokenMs with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenMs with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&

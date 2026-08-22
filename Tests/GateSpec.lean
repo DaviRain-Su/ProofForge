@@ -16,7 +16,7 @@ open ProofForge.Runtime
   | _ => false
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedGate with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedGate with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_get_clock_sysvar" &&

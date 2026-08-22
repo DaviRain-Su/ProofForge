@@ -9,7 +9,7 @@
 | ProofForge.Profile | 声明名列表 | accept / reject | 无（S1 加深） |
 | ProofForge.Extract | `Expr` | `Program` | Profile, IR（S2） |
 | ProofForge.Lower | `Program` | PF HandlerIR / `.s` | PF（S3） |
-| ProofForge.Assemble | `.s` | `.so` | sbpf（S4） |
+| ProofForge.Svm.Assemble | `.s` | `.so` | sbpf（S4） |
 
 ## 集成
 

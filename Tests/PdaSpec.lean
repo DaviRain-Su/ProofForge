@@ -14,7 +14,7 @@ open ProofForge.Runtime
 #guard checkPda "vault" 0 == 0
 
 #guard
-  match ProofForge.Emit.emitCounterAsm ProofForge.Golden.extractedPda with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPda with
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_try_find_program_address" &&

@@ -1,8 +1,10 @@
-import ProofForge.Emit
+import ProofForge.Svm.Emit
 import ProofForge.IR
-import ProofForge.Idl
+import ProofForge.Svm.Idl
 
-namespace ProofForge.Assemble
+namespace ProofForge.Svm.Assemble
+
+open ProofForge.Svm
 
 structure Result where
   asmPath : System.FilePath
@@ -75,4 +77,4 @@ def assembleCounter (outDir : System.FilePath) (program : IR.Program) :
     IO Result :=
   assembleProgram outDir program
 
-end ProofForge.Assemble
+end ProofForge.Svm.Assemble
