@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**证明在本机 `def` 上；汇编按抽出的 Op 选体。** 空 ops 不能再冒充 Counter。
+当前：**证明在本机 `def` 上；汇编 load 跟抽出的 Val 走。**
 
 ## 「难的是 loading 吗？」
 

@@ -34,3 +34,5 @@
 | T-S4-04 | error | increment max+1 | `0x1001`，状态保持 |
 | T-S5-01 | happy | extract increment | ops 含 `checkedAddU64` |
 | T-S5-02 | error | `wrappingAdd` | `increment not ite` |
+| T-S5-03 | happy | 抽出 Counter | increment 先 load 账户再 load ix |
+| T-S5-04 | happy | 对调 checkedAdd 左右 | 先 load ix 再 load 账户 |

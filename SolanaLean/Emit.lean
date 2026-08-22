@@ -57,14 +57,26 @@ private def prelude (label : String) (ixLen : Nat) (needSigner needWritable need
   exit
 "
 
-private def emitInitBody : String :=
-  s!"\
+/-- `.field _ "value"` 是账户 count；`.arg _` 是 instruction 里第一个 u64。 -/
+private def memOfVal (v : Ops.Val) : Except String String :=
+  match v with
+  | .field _ "value" => .ok "[r6 + ACC0_DATA + 8]"
+  | .arg _ => .ok "[r6 + INSTRUCTION_DATA + 8]"
+  | .add .. => .error "extract/unsupported: cannot load add"
+  | .subFromMax .. => .error "extract/unsupported: cannot load subFromMax"
+  | .field _ name => .error s!"extract/unsupported: unknown field {name}"
+
+private def loadVal (v : Ops.Val) (stackOff : Nat) : Except String String := do
+  let mem ← memOfVal v
+  return s!"  ; load {repr v}\n  ldxdw r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+
+private def emitInitBody (v : Ops.Val) : Except String String := do
+  let load ← loadVal v 8
+  return s!"\
 body_initialize:
   lddw r1, 0
   stxdw [r6 + ACC0_DATA + 8], r1
-  ldxdw r1, [r6 + INSTRUCTION_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r10 - 8]
+{load}  ldxdw r1, [r10 - 8]
   stxdw [r6 + ACC0_DATA + 8], r1
   lddw r1, {layoutMarker}
   stxdw [r6 + ACC0_DATA + 0], r1
@@ -72,14 +84,12 @@ body_initialize:
   exit
 "
 
-private def emitCheckedAddBody : String :=
-  s!"\
+private def emitCheckedAddBody (lhs rhs : Ops.Val) : Except String String := do
+  let loadL ← loadVal lhs 8
+  let loadR ← loadVal rhs 16
+  return s!"\
 body_increment:
-  ldxdw r1, [r6 + ACC0_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r6 + INSTRUCTION_DATA + 8]
-  stxdw [r10 - 16], r1
-  ldxdw r1, [r10 - 8]
+{loadL}{loadR}  ldxdw r1, [r10 - 8]
   ldxdw r2, [r10 - 16]
   lddw r3, 0xffffffffffffffff
   sub64 r3, r2
@@ -106,12 +116,11 @@ ok_add_1:
   exit
 "
 
-private def emitGetBody : String :=
-  "\
+private def emitGetBody (v : Ops.Val) : Except String String := do
+  let load ← loadVal v 8
+  return s!"\
 body_get:
-  ldxdw r1, [r6 + ACC0_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r10 - 8]
+{load}  ldxdw r1, [r10 - 8]
   stxdw [r10 - 16], r1
   mov64 r1, r10
   add64 r1, -16
@@ -120,6 +129,21 @@ body_get:
   lddw r0, 0
   exit
 "
+
+private def initVal (ops : Array Ops.Op) : Except String Ops.Val :=
+  match ops.findSome? (fun | .returnState v => some v | _ => none) with
+  | some v => .ok v
+  | none => .error "extract/unsupported: init missing returnState"
+
+private def getVal (ops : Array Ops.Op) : Except String Ops.Val :=
+  match ops.findSome? (fun | .returnU64 v => some v | _ => none) with
+  | some v => .ok v
+  | none => .error "extract/unsupported: get missing returnU64"
+
+private def addArgs (ops : Array Ops.Op) : Except String (Ops.Val × Ops.Val) :=
+  match ops.findSome? (fun | .checkedAddU64 l r => some (l, r) | _ => none) with
+  | some p => .ok p
+  | none => .error "extract/unsupported: increment missing checkedAddU64"
 
 private def hasReturnState (ops : Array Ops.Op) : Bool :=
   ops.any (fun | .returnState _ => true | _ => false)
@@ -133,13 +157,12 @@ private def hasOkState (ops : Array Ops.Op) : Bool :=
 private def hasReturnU64 (ops : Array Ops.Op) : Bool :=
   ops.any (fun | .returnU64 _ => true | _ => false)
 
-private def emitHandler (m : IR.Method) : Except String String :=
+private def emitHandler (m : IR.Method) : Except String String := do
   match m.kind with
   | .init =>
-    if hasReturnState m.ops then
-      .ok s!"initialize:\n{prelude "initialize" 16 true true true}{emitInitBody}"
-    else
-      .error "extract/unsupported: init missing returnState"
+    let v ← initVal m.ops
+    let body ← emitInitBody v
+    return s!"initialize:\n{prelude "initialize" 16 true true true}{body}"
   | .increment =>
     if !Ops.hasCheckedAdd m.ops then
       .error "extract/unsupported: increment missing checkedAddU64"
@@ -147,13 +170,14 @@ private def emitHandler (m : IR.Method) : Except String String :=
       .error "extract/unsupported: increment missing errorOverflow"
     else if !hasOkState m.ops then
       .error "extract/unsupported: increment missing okState"
-    else
-      .ok s!"increment:\n{prelude "increment" 16 false true false}{emitCheckedAddBody}"
+    else do
+      let (lhs, rhs) ← addArgs m.ops
+      let body ← emitCheckedAddBody lhs rhs
+      return s!"increment:\n{prelude "increment" 16 false true false}{body}"
   | .get =>
-    if hasReturnU64 m.ops then
-      .ok s!"get:\n{prelude "get" 8 false false false}{emitGetBody}"
-    else
-      .error "extract/unsupported: get missing returnU64"
+    let v ← getVal m.ops
+    let body ← emitGetBody v
+    return s!"get:\n{prelude "get" 8 false false false}{body}"
 
 def emitCounterAsm (program : IR.Program) : Except String String := do
   unless IR.isCounterShape program do

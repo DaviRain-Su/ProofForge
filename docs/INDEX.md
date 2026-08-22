@@ -15,4 +15,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**发射已按 Op 选体**。证明仍在本机 Lean `def` 上；链上只跑抽出的计算。空 ops 不再发射 overflow。
+当前阶段：**汇编 load 跟抽出的 Val 走。** 对调 checked-add 操作数会改变 load 顺序。证明仍在本机 `def` 上。

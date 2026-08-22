@@ -6,7 +6,7 @@
 
 ## Boundary
 
-Handler 体按 `Method.ops` 选择片段：`returnState` → init 写回；`checkedAddU64`+`errorOverflow` → overflow `0x1001`；`returnU64` → `sol_set_return_data`。空 ops 失败。Loader 预检仍共享。不调用 PF `IR.mk`。
+Load 由 `Val` 决定：`.field _ "value"` → `ACC0_DATA+8`；`.arg _` → `INSTRUCTION_DATA+8`。对调 `checkedAddU64` 左右操作数会改变第一条 load。空 ops 失败。
 
 ## API
 
