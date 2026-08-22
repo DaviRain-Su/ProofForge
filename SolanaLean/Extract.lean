@@ -68,6 +68,11 @@ private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
           if args.size ≥ 2 then asLit fuel' args[1]! else none
       else none
 
+private def looksLikeOptionProj (env : Environment) (n : Name) : Bool :=
+  match env.find? n with
+  | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Option)
+  | none => false
+
 private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -88,24 +93,35 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | [] => field
             | parts => parts.getLast!
           if proj == "mk" || proj == "ok" || proj == "error" ||
-              proj.startsWith "_proof" || proj == "rfl" || proj == "cells" then none
+              proj.startsWith "_proof" || proj == "rfl" then none
           else
-            match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-            | some b => some (.field b proj)
-            | none =>
-              -- 参数本身就是 state（`.bvar`），投影挂在它上面。
-              match e.getAppArgs[e.getAppArgs.size - 1]! with
-              | .bvar i =>
-                if proj == "slot" then some (.field (.arg i) "slot_tag")
-                else some (.field (.arg i) proj)
-              | _ => none
+            -- 整个 Vector 投影本身不是叶；下标再展开成 `name_i`。
+            let skipVector :=
+              match env.find? n with
+              | some info =>
+                info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
+              | none => false
+            if skipVector then none
+            else
+              match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+              | some b =>
+                if looksLikeOptionProj env n then some (.field b s!"{proj}_tag")
+                else some (.field b proj)
+              | none =>
+                match e.getAppArgs[e.getAppArgs.size - 1]! with
+                | .bvar i =>
+                  if looksLikeOptionProj env n then some (.field (.arg i) s!"{proj}_tag")
+                  else some (.field (.arg i) proj)
+                | _ => none
         else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8) &&
             e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if (isConstNamed e ``Option.isSome || endsWith e ".isSome") && e.getAppArgs.size ≥ 1 then
           match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.field b _) => some (.field b "slot_tag")
-          | some b => some (.field b "slot_tag")
+          | some (.field b n) =>
+            if n.endsWith "_tag" then some (.field b n)
+            else some (.field b s!"{n}_tag")
+          | some b => some (.field b s!"slot_tag")
           | none => none
         else if endsWith e ".u64Max" then
           some (.lit (~~~(0 : UInt64)))
@@ -145,9 +161,30 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 match strip e with
                 | .bvar j => some j
                 | e => e.getAppArgs.findSome? (findState fuel')
-            match findState fuel' e with
-            | some j => some (.field (.arg j) s!"cells_{i}")
-            | none => none
+            match findState fuel' e, args.findSome? (asVal env fuel') with
+            | some j, some (.field _ n) =>
+              let suf := s!"_{i}"
+              let base := if n.endsWith suf then n.dropEnd suf.length |>.copy else n
+              some (.field (.arg j) s!"{base}_{i}")
+            | some j, _ =>
+              -- 投影被跳过时，从 GetElem 第一个用户结构参数收字段名。
+              let rec fieldNameOf (fuel : Nat) (e : Expr) : Option String :=
+                match fuel with
+                | 0 => none
+                | fuel' + 1 =>
+                  match e.getAppFn.constName? with
+                  | some n =>
+                    let s := n.toString
+                    let last := IR.lastName s
+                    let user := s.startsWith "Examples." || s.startsWith "Tests."
+                    if !user || last == "mk" || last == "getElem" || last.startsWith "_proof" then
+                      e.getAppArgs.findSome? (fieldNameOf fuel')
+                    else some last
+                  | none => e.getAppArgs.findSome? (fieldNameOf fuel')
+              match fieldNameOf 8 e with
+              | some n => some (.field (.arg j) s!"{n}_{i}")
+              | none => none
+            | _, _ => none
         else none
       else none
 
@@ -269,15 +306,12 @@ private def asCmp (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val ×
           let noneR := isConstNamed r ``Option.none || endsWith r ".none"
           let noneL := isConstNamed l ``Option.none || endsWith l ".none"
           if trueR && (isConstNamed l ``Option.isSome || endsWith l ".isSome") then
-            some (.ne, .field (.arg 0) "slot_tag", .lit 0)
-          else if endsWith r ".idle" || endsWith r ".live" then
-            match val env l, val env r with
-            | some lv, some rv => some (.eq, lv, rv)
-            | _, _ => none
-          else if endsWith l ".idle" || endsWith l ".live" then
-            match val env l, val env r with
-            | some lv, some rv => some (.eq, lv, rv)
-            | _, _ => none
+            match val env l with
+            | some (.field b n) =>
+              let tag := if n.endsWith "_tag" then n else s!"{n}_tag"
+              some (.ne, .field b tag, .lit 0)
+            | some b => some (.ne, .field b "slot_tag", .lit 0)
+            | none => some (.ne, .field (.arg 0) "slot_tag", .lit 0)
           else if noneR then
             match val env l with
             | some lv => some (.eq, lv, .lit 0)
@@ -292,7 +326,9 @@ private def asCmp (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val ×
         let args := e.getAppArgs
         if args.size ≥ 1 then
           match val env args[args.size - 1]! with
-          | some (.field b _) => some (.ne, .field b "slot_tag", .lit 0)
+          | some (.field b n) =>
+            let tag := if n.endsWith "_tag" then n else s!"{n}_tag"
+            some (.ne, .field b tag, .lit 0)
           | some b => some (.ne, .field b "slot_tag", .lit 0)
           | none => none
         else none
@@ -406,9 +442,23 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
             if seenIdx then return some v
           | _, _ => pure ()
         return none
-    match idx?, payload with
-    | some i, some v => some (.field v s!"cells_{i}")
-    | _, _ => none
+    let rec baseName (fuel : Nat) (e : Expr) : Option String :=
+      match fuel with
+      | 0 => none
+      | fuel' + 1 =>
+        match e.getAppFn.constName? with
+        | some n =>
+          let s := n.toString
+          let last := IR.lastName s
+          let user := s.startsWith "Examples." || s.startsWith "Tests."
+          if !user || last == "set" || last == "mk" || last.startsWith "_proof" then
+            e.getAppArgs.findSome? (baseName fuel')
+          else some last
+        | none => e.getAppArgs.findSome? (baseName fuel')
+    match idx?, payload, baseName 8 e with
+    | some i, some v, some n => some (.field v s!"{n}_{i}")
+    | some i, some v, none => some (.field v s!"cells_{i}")
+    | _, _, _ => none
   else none
 
 /-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
@@ -555,14 +605,15 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | none => return .error "extract/unsupported: ite then"
           | some den =>
             let v := (asOkState env t).getD (.arg 0)
+            let fallback := (.field (.arg 1) "value", den)
             if (lastNamedBin env ``HMod.hMod t).isSome then
-              let (lhs, rhs) := (lastNamedBin env ``HMod.hMod t).getD ((.field (.arg 1) "value"), den)
+              let (lhs, rhs) := (lastNamedBin env ``HMod.hMod t).getD fallback
               return .ok #[.checkedModU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
             else if (lastNamedBin env ``UInt64.mod t).isSome then
-              let (lhs, rhs) := (lastNamedBin env ``UInt64.mod t).getD ((.field (.arg 1) "value"), den)
+              let (lhs, rhs) := (lastNamedBin env ``UInt64.mod t).getD fallback
               return .ok #[.checkedModU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
             else
-              let (lhs, rhs) := (lastNamedBin env ``HDiv.hDiv t).getD ((.field (.arg 1) "value"), den)
+              let (lhs, rhs) := (lastNamedBin env ``HDiv.hDiv t).getD fallback
               return .ok #[.checkedDivU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
         else
           return .error "extract/unsupported: ite cond"
@@ -789,7 +840,7 @@ def extractProgram (env : Environment)
     slots
     methods := #[initM, incM, getM]
   }
-  unless IR.isCounterShape program do
+  unless IR.isProgramShape program do
     throw "extract/unsupported: not three-method shape"
   checkUsedFields program
   match IR.layoutMarkerHex program with
@@ -872,8 +923,8 @@ def extractModule (env : Environment) (ns : Name)
     slots
     methods
   }
-  unless IR.isCounterShape program do
-    throw "extract/unsupported: not counter shape"
+  unless IR.isProgramShape program do
+    throw "extract/unsupported: not program shape"
   checkUsedFields program
   match IR.layoutMarkerHex program with
   | .error reason => throw reason

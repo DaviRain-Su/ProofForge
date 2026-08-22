@@ -139,7 +139,7 @@ body_initialize:
 private def destField (p : IR.Program) (lhs : Ops.Val) : String :=
   match lhs with
   | .field _ n => n
-  | _ => (p.slots[0]?.map (·.name)).getD "value"
+  | _ => (p.slots[0]?.map (·.name)).getD "slot0"
 
 private def emitOverflowExit (label : String) : String :=
   s!"err_{label}:\n  lddw r0, {overflowCode}\n  exit\n"
@@ -187,7 +187,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       | .checkedModU64 l _ => some (destField p l)
       | _ => none) with
     | some d => d
-    | none => (p.slots[0]?.map (·.name)).getD "value"
+    | none => (p.slots[0]?.map (·.name)).getD "slot0"
   for op in ops do
     match op with
     | .checkedAddU64 l r =>
@@ -276,7 +276,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         | .field _ fname =>
           if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
-          else if fname.startsWith "cells_" && (IR.fieldOffset p fname).isSome then
+          else if fname.contains '_' && (IR.fieldOffset p fname).isSome then
             let load ← loadVal p (.arg 0) 24
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p fname 24)
@@ -299,7 +299,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       acc := acc ++ load ++ emitReturnU64 8
     | .returnState v =>
       let load ← loadVal p v 8
-      let dest := (p.slots[0]?.map (·.name)).getD "value"
+      let dest := (p.slots[0]?.map (·.name)).getD "slot0"
       acc := acc ++ load ++ (← emitStoreAndReturn p dest 8)
   return (acc, n)
 
@@ -390,8 +390,8 @@ private def emitDispatch (program : IR.Program) : Except String String := do
   return out
 
 def emitCounterAsm (program : IR.Program) : Except String String := do
-  unless IR.isCounterShape program do
-    throw "extract/unsupported: not counter shape"
+  unless IR.isProgramShape program do
+    throw "extract/unsupported: not program shape"
   let marker ← IR.layoutMarkerHex program
   let layout := IR.inputLayout program
   let dispatch ← emitDispatch program

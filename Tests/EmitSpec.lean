@@ -11,7 +11,7 @@ import Examples.Counter
 
 #guard
   match SolanaLean.Emit.emitCounterAsm { name := "x", methods := #[] } with
-  | .error "extract/unsupported: not counter shape" => true
+  | .error "extract/unsupported: not program shape" => true
   | _ => false
 
 #guard

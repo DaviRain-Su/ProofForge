@@ -40,8 +40,12 @@ def Program.fields (p : Program) : Array String :=
 def hasKind (p : Program) (k : MethodKind) : Bool :=
   p.methods.any (fun m => m.kind == k)
 
-def isCounterShape (p : Program) : Bool :=
+/-- 至少一个 init、一个 mutate、一个 view。 -/
+def isProgramShape (p : Program) : Bool :=
   hasKind p .init && hasKind p .increment && hasKind p .get
+
+def isCounterShape (p : Program) : Bool :=
+  isProgramShape p
 
 /-- Lean 声明末段 → 链上名。`init` 是 Lean 命令关键字，链上仍叫 `initialize`。 -/
 def ixNameOfLean (lean : String) : String :=
