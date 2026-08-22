@@ -4,6 +4,8 @@ import Tests.FlagSpec
 import Tests.WindowSpec
 import Tests.PhaseSpec
 import Tests.ChoiceSpec
+import Tests.ClockSpec
+import Tests.TransferSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

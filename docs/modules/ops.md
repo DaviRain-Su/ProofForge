@@ -6,11 +6,11 @@
 
 ## Types
 
-`Val`：`arg` / `field` / `lit`
+`Val`：`arg` / `field` / `lit` / `clockSlot` / `signerKey0`
 
 `Cmp`：`eq` / `ne` / `lt` / `le` / `gt` / `ge`
 
-`Op`：checked 四则、`ite`、`okState` / `errorOverflow` / `returnU64` / `returnState`
+`Op`：checked 四则、`ite`、`systemTransfer`、`okState` / `errorOverflow` / `returnU64` / `returnState`
 
 ## Tests
 

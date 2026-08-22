@@ -113,13 +113,35 @@ structure InputLayout where
   instructionData : Nat
   deriving BEq, Repr, Inhabited
 
-def inputLayout (p : Program) : InputLayout :=
-  let dataEnd := acc0Data + dataLen p + maxPermittedDataIncrease
+/-- 账户前缀到 data：header 8 + key 32 + owner 32 + lamports 8 + data_len 8 = 88。 -/
+def accountPrefix : Nat := 0x58
+
+def accountSpan (accountDataLen : Nat) : Nat :=
+  let dataEnd := accountPrefix + accountDataLen + maxPermittedDataIncrease
   let align := (8 - dataEnd % 8) % 8
-  let rent := dataEnd + align
-  { rentEpoch := rent
-    instructionDataLen := rent + 8
-    instructionData := rent + 16 }
+  dataEnd + align + 8
+
+/-- 程序是否含封闭 `system.transfer`（三账户：payer / recipient / System）。 -/
+def usesSystemTransfer (p : Program) : Bool :=
+  p.methods.any (fun m => Ops.hasSystemTransfer m.ops)
+
+def inputLayout (p : Program) : InputLayout :=
+  if usesSystemTransfer p then
+    -- 三个 data_len=0 的账户：每个 span = 0x2860，instruction 紧跟第三账户 rent。
+    let acc0 := 8
+    let acc1 := acc0 + accountSpan 0
+    let acc2 := acc1 + accountSpan 0
+    let rent2 := acc2 + accountSpan 0 - 8
+    { rentEpoch := rent2
+      instructionDataLen := rent2 + 8
+      instructionData := rent2 + 16 }
+  else
+    let dataEnd := acc0Data + dataLen p + maxPermittedDataIncrease
+    let align := (8 - dataEnd % 8) % 8
+    let rent := dataEnd + align
+    { rentEpoch := rent
+      instructionDataLen := rent + 8
+      instructionData := rent + 16 }
 
 /-- StateCell 单字段历史名是 `count`，Lean 侧叫 `value`。 -/
 def layoutSlotName (name : String) : String :=
@@ -167,6 +189,8 @@ private def valCanon : Ops.Val → String
   | .arg i => s!"a{i}"
   | .lit n => s!"l{n.toNat}"
   | .field b n => s!"f.{n}({valCanon b})"
+  | .clockSlot => "clk"
+  | .signerKey0 => "k0"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
@@ -177,6 +201,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
+    | .systemTransfer v => s!"xfer({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .returnU64 v => s!"retu({valCanon v})"

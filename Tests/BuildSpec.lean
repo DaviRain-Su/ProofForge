@@ -6,6 +6,8 @@ import Examples.Maybe
 import Examples.Window
 import Examples.Phase
 import Examples.Choice
+import Examples.Clock
+import Examples.Transfer
 
 #solana_build Examples.Counter
 
@@ -20,6 +22,10 @@ import Examples.Choice
 #solana_build Examples.Phase
 
 #solana_build Examples.Choice
+
+#solana_build Examples.Clock
+
+#solana_build Examples.Transfer
 
 /--
 error: extract/unsupported: no solana_entry

@@ -3,6 +3,7 @@ import SolanaLean.IR
 import SolanaLean.Ops
 import SolanaLean.Profile
 import SolanaLean.Attr
+import SolanaLean.Runtime
 
 open Lean
 
@@ -158,6 +159,13 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | none => none
         else if endsWith e ".u64Max" then
           some (.lit (~~~(0 : UInt64)))
+        else if endsWith e ".clockSlot" || isConstNamed e ``SolanaLean.Runtime.clockSlot then
+          some .clockSlot
+        else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
+          some .signerKey0
+        else if (endsWith e ".systemTransfer" ||
+            isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
+          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if isConstNamed e ``Bool.true || endsWith e ".true" then
           some (.lit 1)
         else if isConstNamed e ``Bool.false || endsWith e ".false" then
@@ -550,15 +558,21 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
           match asOptionPayload env st with
           | some v => some v
           | none =>
-            match asVectorSet env (strip st) <|>
-                (strip st).getAppArgs.findSome? (asVectorSet env) with
-            | some v => some v
-            | none =>
-              match asStateMk env st true with
+            match val env st with
+            | some (.clockSlot) => some .clockSlot
+            | some (.signerKey0) => some .signerKey0
+            | _ =>
+              match asVectorSet env (strip st) <|>
+                  (strip st).getAppArgs.findSome? (asVectorSet env) with
               | some v => some v
               | none =>
-                let args := (strip st).getAppArgs
-                args.findSome? (asOptionPayload env) <|> asStateMk env st true
+                match asStateMk env st true with
+                | some v => some v
+                | none =>
+                  let args := (strip st).getAppArgs
+                  args.findSome? (asOptionPayload env) <|>
+                    args.findSome? (val env) <|>
+                    asStateMk env st true
         else none
       else asStateMk env pair true
     else none
@@ -582,7 +596,40 @@ private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   else
     vs.map Ops.Op.returnState
 
+/-- 体里任意深度的 `systemTransfer amount`。 -/
+private def findSystemTransfer (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
+  let rec go (fuel : Nat) (e : Expr) : Option Ops.Val :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      if e.getAppFn.constName? == some ``SolanaLean.Runtime.systemTransfer ||
+          endsWith e ".systemTransfer" then
+        if e.getAppArgs.size ≥ 1 then
+          match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some v => some v
+          | none => some (.arg 0)
+        else some (.arg 0)
+      else
+        match e with
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | .app f a => go fuel' f <|> go fuel' a
+        | _ => none
+  let mentions :=
+    e.getUsedConstantsAsSet.toList.any fun n =>
+      n == ``SolanaLean.Runtime.systemTransfer || n.toString.endsWith ".systemTransfer"
+  if mentions then
+    match go fuel e with
+    | some v => some v
+    | none => some (.arg 0)
+  else none
+
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
+  -- 必须在 peelLets 之前找 systemTransfer：剥掉 `have sent := …` 后调用就没了。
+  if let some amount := findSystemTransfer env 16 e then
+    .ok #[.systemTransfer amount, .returnU64 amount]
+  else
   let e := peelLets (strip e)
   if let some v := asOkState env e then
     .ok #[.okState v]
@@ -595,6 +642,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
+    | .clockSlot | .signerKey0 => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -622,6 +670,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
+    if let some amount := findSystemTransfer env 16 e then
+      return .ok #[.systemTransfer amount, .returnU64 amount]
     let e := strip e
     if isConstNamed e ``ite && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
@@ -629,10 +679,12 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let f := peelLets args[args.size - 1]!
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, asOkState env t with
-          | some (cmp, lv, rv), some v =>
+          match asCmp env condE, findSystemTransfer env 8 t, asOkState env t with
+          | some (cmp, lv, rv), some amount, _ =>
+            return .ok #[.ite cmp lv rv #[.systemTransfer amount, .returnU64 amount] #[.errorOverflow]]
+          | some (cmp, lv, rv), none, some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
-          | _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
@@ -674,6 +726,11 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ => return .error r
         | _, .error r => return .error r
+    else if (endsWith e ".systemTransfer" ||
+        isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+      | some amount => return .ok #[.systemTransfer amount, .returnU64 amount]
+      | none => return .error "extract/unsupported: systemTransfer amount"
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs
@@ -740,7 +797,8 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
 /-- 可变入口必须有 checked 算术、Option 双叶，或比较 ite（窄宽上界）。 -/
 def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
   let ops ← decodeBody env e
-  if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops then
+  if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
+      Ops.hasSystemTransfer ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"
@@ -773,6 +831,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
+      | .clockSlot | .signerKey0 => v
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -789,6 +848,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .ite c l r t f =>
         .ite c (flipVal fuel' l) (flipVal fuel' r)
           (t.map (flipOp fuel')) (f.map (flipOp fuel'))
+      | .systemTransfer v => .systemTransfer (flipVal fuel' v)
       | .errorOverflow => .errorOverflow
   let ops :=
     if kind == .init && nLams > 1 then ops1.map (flipOp 8) else ops1
@@ -909,6 +969,7 @@ private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
   | .lit _ => #[]
+  | .clockSlot | .signerKey0 => #[]
 
 private def opFields : Ops.Op → Array String
   | .checkedAddU64 l r => valFields l ++ valFields r
@@ -918,6 +979,7 @@ private def opFields : Ops.Op → Array String
   | .checkedModU64 l r => valFields l ++ valFields r
   | .ite _ l r t f =>
       valFields l ++ valFields r ++ t.flatMap opFields ++ f.flatMap opFields
+  | .systemTransfer v => valFields v
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .returnU64 v => valFields v

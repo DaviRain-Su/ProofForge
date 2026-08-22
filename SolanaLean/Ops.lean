@@ -1,10 +1,12 @@
 namespace SolanaLean.Ops
 
-/-- 可 load 的值。 -/
+/-- 可 load 的值。`clockSlot` / `signerKey0` 是运行时叶子，不是账户槽。 -/
 inductive Val where
   | arg (i : Nat)
   | field (base : Val) (name : String)
   | lit (n : UInt64)
+  | clockSlot
+  | signerKey0
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where
@@ -18,6 +20,7 @@ inductive Op where
   | checkedDivU64 (lhs rhs : Val)
   | checkedModU64 (lhs rhs : Val)
   | ite (cmp : Cmp) (lhs rhs : Val) (thn els : Array Op)
+  | systemTransfer (amount : Val)
   | okState (value : Val)
   | errorOverflow
   | returnU64 (value : Val)
@@ -33,6 +36,9 @@ private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
         match op with
         | .ite _ _ _ t f => walk fuel' t p || walk fuel' f p
         | _ => false
+
+def hasSystemTransfer (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .systemTransfer _ => true | _ => false)
 
 def hasCheckedAdd (ops : Array Op) : Bool :=
   walk 16 ops (fun | .checkedAddU64 .. => true | _ => false)

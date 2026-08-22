@@ -18,10 +18,12 @@
 - 多个 init；`init` paramCount 按 λ 算；Pair `initBoth` / `getRight`
 - `Option UInt64` match 读 payload；Maybe.getValue Mollusk
 - 单字段用户 inductive 作 tag+payload；Choice Mollusk
+- `clockSlot` + 账户 0 `signerKey0`；Clock Mollusk
+- 封闭 `system.transfer`；三账户虚地址 walk + `sol_invoke_signed_c`；Transfer Mollusk
 
 ## 下一刀
 
-L4 封闭 recipe（有具体合约再开）。
+L4 下一条封闭 recipe（Token `transferChecked` / vault PDA）有具体合约再开。
 
 ## 其后（L2 / L3）
 

@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**L2 字段类型**。`UInt8/16/32/64` 与 `Option UInt64` 双叶。补全依据见 [docs/plan/analysis/authority.md](docs/plan/analysis/authority.md)。
+当前：**L4 SDK 表面**。`clockSlot` / `signerKey0` 是普通 Lean 名，抽出后走 syscall / `ACC0_KEY`。补全依据见 [docs/plan/analysis/authority.md](docs/plan/analysis/authority.md)。
 
 ## 「难的是 loading 吗？」
 
@@ -39,7 +39,9 @@ lake exe solanaLeanAssemble -- build/sbpf
   SOLANA_LEAN_WINDOW_SO=../../build/sbpf/Window.so \
   SOLANA_LEAN_PHASE_SO=../../build/sbpf/Phase.so \
   SOLANA_LEAN_CHOICE_SO=../../build/sbpf/Choice.so \
-  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice)
+  SOLANA_LEAN_CLOCK_SO=../../build/sbpf/Clock.so \
+  SOLANA_LEAN_TRANSFER_SO=../../build/sbpf/Transfer.so \
+  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice --test clock --test transfer)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。

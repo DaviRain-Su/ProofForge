@@ -180,9 +180,42 @@ def extractedChoice : Program :=
         ] }
     ] }
 
+def extractedClock : Program :=
+  { name := "Clock"
+    slots := #[{ name := "stamped" }]
+    methods := #[
+      { kind := .init, name := "Examples.Clock.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Clock.stamp", ixName := "stamp", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState .clockSlot]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Clock.height", ixName := "height", paramCount := 0
+        ops := #[.returnU64 .clockSlot] },
+      { kind := .get, name := "Examples.Clock.key0", ixName := "key0", paramCount := 0
+        ops := #[.returnU64 .signerKey0] },
+      { kind := .get, name := "Examples.Clock.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "stamped")] }
+    ] }
+
+def extractedTransfer : Program :=
+  { name := "Transfer"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Transfer.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Transfer.transfer", ixName := "transfer", paramCount := 1
+        ops := #[.systemTransfer (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Transfer.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
-  extractedMaybe, extractedWindow, extractedPhase, extractedChoice
+  extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
+  extractedClock, extractedTransfer
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

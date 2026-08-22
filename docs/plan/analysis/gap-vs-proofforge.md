@@ -44,8 +44,8 @@ PF 产品轨是 `solana-sbpf-cpi-elf-v1`。Mollusk 量级约 24 个 integration 
 | 入口 | 任意 handler 名 + disc | 固定 init/increment/get 三个 disc | `@[solana_entry]` + 按名 disc |
 | 账户 | 单账户 + CPI 多 role | 单账户 | 具名封闭 recipe，不开放 remaining accounts |
 | CPI / Token / PDA | System / Token / ATA / vault PDA 封闭目录 | 无 | 只抄封闭目录，不抄通用 CPI |
-| sysvar | clock.slot 已开；unixTime FC | 无 | 后做 `sol_get_clock_sysvar` |
-| caller | `context.caller` = 指定 outer signer | 无 | 后做，不伪装 tx.origin |
+| sysvar | clock.slot 已开；unixTime FC | L4-001 开 `clockSlot` | unixTime 仍 FC |
+| caller | `context.caller` = 指定 outer signer | L4-001 开账户 0 `signerKey0`（首 u64） | 完整 32B / 独立 caller 账户后做 |
 | 证明 | Reference / HandlerIR 有界证书；D1–D4 0/27 | 宿主 def 上的工程定理 | 继续钉用户 def；不承诺 `.so` refinement |
 | CLI | `pf test/run/verify/deploy` | `lake` + 手工 Mollusk | 本仓小 CLI 即可 |
 | 部署 | save-only；禁公网 | 无 | 保持不做 |

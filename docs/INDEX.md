@@ -17,4 +17,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L3 程序形状**。多 init、view 任意叶子、Option / 单字段 inductive match 已通。
+当前阶段：**L4 SDK 表面**。L4-001：`clockSlot` + 账户 0 `signerKey0`。

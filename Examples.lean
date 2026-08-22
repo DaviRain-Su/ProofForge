@@ -5,3 +5,5 @@ import Examples.Maybe
 import Examples.Window
 import Examples.Phase
 import Examples.Choice
+import Examples.Clock
+import Examples.Transfer

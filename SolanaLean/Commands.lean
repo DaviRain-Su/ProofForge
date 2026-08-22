@@ -32,7 +32,8 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
     let mutOps := (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.ops)
     match mutOps with
     | some ops =>
-      unless Ops.hasCheckedArith ops || ops.any (fun | .ite .. => true | _ => false) do
+      unless Ops.hasCheckedArith ops || ops.any (fun | .ite .. => true | _ => false) ||
+          Ops.hasSystemTransfer ops do
         throwError "extract/unsupported: mutating method missing checked arith"
     | none => throwError "extract/unsupported: missing mutating method"
     match Emit.emitCounterAsm program with
