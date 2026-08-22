@@ -32,3 +32,4 @@ import Examples.SysXfer
 import Examples.TokenMint2
 import Examples.TokenNative
 import Examples.Hash
+import Examples.Keys

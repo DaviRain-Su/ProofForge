@@ -607,6 +607,42 @@ def extractedHash : Program :=
         ops := #[.returnU64 (.sha256Lit "")] }
     ] }
 
+def extractedKeys : Program :=
+  { name := "Keys"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Keys.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Keys.touch", ixName := "touch", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Keys.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Keys.key00", ixName := "key00", paramCount := 0
+        ops := #[.returnU64 (.accKeyWord 0 0)] },
+      { kind := .get, name := "Examples.Keys.key01", ixName := "key01", paramCount := 0
+        ops := #[.returnU64 (.accKeyWord 0 1)] },
+      { kind := .get, name := "Examples.Keys.key02", ixName := "key02", paramCount := 0
+        ops := #[.returnU64 (.accKeyWord 0 2)] },
+      { kind := .get, name := "Examples.Keys.key03", ixName := "key03", paramCount := 0
+        ops := #[.returnU64 (.accKeyWord 0 3)] },
+      { kind := .get, name := "Examples.Keys.owner00", ixName := "owner00", paramCount := 0
+        ops := #[.returnU64 (.accOwnerWord 0 0)] },
+      { kind := .get, name := "Examples.Keys.owner03", ixName := "owner03", paramCount := 0
+        ops := #[.returnU64 (.accOwnerWord 0 3)] },
+      { kind := .get, name := "Examples.Keys.key10", ixName := "key10", paramCount := 0
+        ops := #[.returnU64 (.accKeyWord 1 0)] },
+      { kind := .get, name := "Examples.Keys.key13", ixName := "key13", paramCount := 0
+        ops := #[.returnU64 (.accKeyWord 1 3)] },
+      { kind := .get, name := "Examples.Keys.owner10", ixName := "owner10", paramCount := 0
+        ops := #[.returnU64 (.accOwnerWord 1 0)] },
+      { kind := .get, name := "Examples.Keys.owner13", ixName := "owner13", paramCount := 0
+        ops := #[.returnU64 (.accOwnerWord 1 3)] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
@@ -615,7 +651,7 @@ def programs : Array Program := #[
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
-  extractedTokenNative, extractedHash
+  extractedTokenNative, extractedHash, extractedKeys
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

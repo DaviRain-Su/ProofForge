@@ -426,4 +426,25 @@ def createPda (lamports : UInt64) : UInt64 :=
   let _ := seed
   0
 
+/--
+账户 `acc` 公钥的第 `word` 个小端 `u64`（`word` 0..=3）。
+`acc` / `word` 必须在抽出时是常量。`acc ≥ 1` 走 walk，不强制入口签名。
+这不是 `signerKey0`：读 key 字不检查 `is_signer`。
+账户 2+ / 运行时下标本剖面 fail closed。
+-/
+@[irreducible] def accKeyWord (acc word : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := word
+  0
+
+/--
+账户 `acc` owner 的第 `word` 个小端 `u64`（`word` 0..=3）。
+`acc` / `word` 必须在抽出时是常量。`acc ≥ 1` 走 walk。
+账户 2+ / 运行时下标本剖面 fail closed。
+-/
+@[irreducible] def accOwnerWord (acc word : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := word
+  0
+
 end SolanaLean.Runtime

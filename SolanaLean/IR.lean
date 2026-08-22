@@ -238,6 +238,8 @@ private def valCanon : Ops.Val → String
   | .rentExemption n => s!"rent.{n.toNat}"
   | .cpiReturn => "cret"
   | .sha256Lit s => s!"sha.{s}"
+  | .accKeyWord a w => s!"kw.{a}.{w}"
+  | .accOwnerWord a w => s!"ow.{a}.{w}"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=

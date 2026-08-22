@@ -58,6 +58,7 @@
 | [l4-028](tasks/l4-028.md) | done | tokenSyncNative |
 | [l4-029](tasks/l4-029.md) | done | 账户 1 只读叶子 |
 | [l4-030](tasks/l4-030.md) | done | sha256Lit / sol_sha256 |
+| [l4-031](tasks/l4-031.md) | done | 32B key / owner 按字读 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

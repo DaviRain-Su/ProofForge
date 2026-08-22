@@ -27,6 +27,8 @@ inductive Val where
   | rentExemption (dataLen : UInt64)
   | cpiReturn
   | sha256Lit (seed : String)
+  | accKeyWord (acc word : Nat)
+  | accOwnerWord (acc word : Nat)
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where
@@ -240,6 +242,7 @@ def hasInvoke (ops : Array Op) : Bool :=
 def valNeedsAcc1 : Val → Bool
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 => true
+  | .accKeyWord acc _ | .accOwnerWord acc _ => acc ≥ 1
   | .checkPda _ b => valNeedsAcc1 b
   | .field b _ => valNeedsAcc1 b
   | _ => false

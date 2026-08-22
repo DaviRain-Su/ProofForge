@@ -179,7 +179,8 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-  | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ =>
+  | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _
+  | .accKeyWord _ _ | .accOwnerWord _ _ =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -314,6 +315,24 @@ private def emitLoadWalkedU8 (i off stackOff : Nat) : String :=
 "
 
 /--
+账户 `acc` 的 key / owner 第 `word` 个小端 u64。
+账户 0 走固定 Loader 偏移；账户 1 走 walk header（key+8，owner+40）。
+不强制入口签名。
+-/
+private def emitLoadAccWord (kind : String) (acc word stackOff : Nat) : String :=
+  let byteOff := 8 * word
+  if acc == 0 then
+    let base := if kind == "key" then "ACC0_KEY" else "ACC0_OWNER"
+    s!"\
+  ; load acc0 {kind} word {word}
+  ldxdw r1, [r6 + {base} + {byteOff}]
+  stxdw [r10 - {stackOff}], r1
+"
+  else
+    let hdrOff := (if kind == "key" then 8 else 40) + byteOff
+    emitLoadWalkedU64 acc hdrOff stackOff
+
+/--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
 scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 clock 的 `r10-72`。
 CPI 程序的 program id 在 walk 出的 ix 长度字之后。
@@ -446,6 +465,10 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadFindPda p seed stackOff)
   | .sha256Lit seed =>
     .ok (emitLoadSha256Lit seed stackOff)
+  | .accKeyWord acc word =>
+    .ok (emitLoadAccWord "key" acc word stackOff)
+  | .accOwnerWord acc word =>
+    .ok (emitLoadAccWord "owner" acc word stackOff)
   | .checkPda seed bump =>
     emitLoadCheckPda p seed bump stackOff
   | .rentExemption n =>
@@ -932,7 +955,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0
         | .accLamports1 | .accOwner1 | .accDataLen1
         | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-        | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ => do
+        | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _
+        | .accKeyWord _ _ | .accOwnerWord _ _ => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)

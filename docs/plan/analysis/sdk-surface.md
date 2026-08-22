@@ -41,6 +41,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `isSigner0` / `isWritable0` / `isExecutable0` | header +1/+2/+3，0 或 1 | L4-004 |
 | `accLamports1` / `accOwner1` / `accDataLen1` / 三旗 | 账户 1 header；walk 不强制 signer | L4-029 |
 | `sha256Lit seed` | `sol_sha256` 一条 ASCII；返回首 u64 | L4-030 |
+| `accKeyWord` / `accOwnerWord` | 账户 0/1 的 32B 按字读 | L4-031 |
 | `findPda seed` | `sol_try_find_program_address`；返回 bump | L4-006 |
 | `invokeSigned` | 一组 ASCII 种子 + bump；`sol_invoke_signed_c` | L4-007 |
 | `systemCreate` | System createAccount；owner = 当前 program id | L4-008 |
@@ -112,7 +113,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | ID | Lean 表面（建议） | 降到 | 完成定义 |
 |---|---|---|---|
 | L4-acc-lamports | `accLamports0` | `ACC0_LAMPORTS` 的 `u64` | Mollusk 读余额；不改 lamports（改要走 System） |
-| L4-acc-key32 | `accKey0` | 四叶 `u64` 或后续 `ByteArray 32` | 声明 ≠ `tx.origin` |
+| L4-acc-key32 | `accKeyWord acc word` | 四叶 `u64`；`acc`∈{0,1} | **已绿**；≠ `signerKey0`，不强制 signer |
 | L4-acc-owner | `accOwner0` | owner 32B 的首 u64 或全 32B | 与当前 program id 比较可后做 |
 | L4-acc-data-len | `accDataLen0` | `ACC0_DATA_LEN` | 只读 |
 | L4-acc-flags | `isSigner0` / `isWritable0` / `isExecutable0` | header +1/+2/+3 | 缺 signer 负例已有，可复用 |
@@ -221,7 +222,7 @@ Multisig owner 默认关。
 按依赖，不是按「像 SDK」。
 
 1. **L4-cpi-nacc + L4-cpi-invoke** — 已绿（L4-003：Ping stub）。
-2. **L4-acc-*** — 账户 0 只读叶子已绿（L4-004）。完整 32B key / 账户 1 仍 FC。
+2. **L4-acc-*** — 账户 0/1 只读叶子 + 32B 按字读已绿。账户 2 / `ByteArray 32` 仍 FC。
 3. **L4-pda-find + L4-cpi-signed** — 找 bump，再用种子签字。
 4. **L4-sys-create / L4-tok-xfer / L4-ata-idem** — 特化，不再手写发射器。
 5. 其余 System / Token / sysvar 有具体合约再开。

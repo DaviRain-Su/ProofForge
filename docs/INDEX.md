@@ -18,4 +18,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L4 SDK 表面**。L4-030：`sha256Lit` / `sol_sha256`。
+当前阶段：**L4 SDK 表面**。L4-031：32B key / owner 按字读。
