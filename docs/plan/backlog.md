@@ -15,15 +15,15 @@
 - disc / layout marker 本机 SHA-256，不再挂名表
 - 定长 `Vector UInt64 n` 展开成连续槽；Window Mollusk；不定长 Array fail closed
 - 无 payload 枚举作 tag；Phase Mollusk；带 payload / Bool 仍 fail closed
+- 多个 init；`init` paramCount 按 λ 算；Pair `initBoth` / `getRight`
 
 ## 下一刀
 
-L3：`init` 写全字段；只读 view 返回任意已布局叶子。
+带 payload 的 match；或 L4 封闭 recipe（有具体合约再开）。
 
 ## 其后（L2 / L3）
 
 - 带 payload 的 match
-- N 入口；`init` 写全字段；只读 view 返回任意已布局叶子
 
 ## 有具体合约再开（L4）
 

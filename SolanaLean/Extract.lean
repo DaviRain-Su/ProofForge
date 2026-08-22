@@ -525,7 +525,7 @@ private def isErrorOverflow (e : Expr) : Bool :=
     else false
   else false
 
-/-- 只写第一个槽、其余清零：第二槽起全是 `lit 0` 时压成一条 `returnState`。 -/
+/-- 每个槽一条 `returnState`。第二槽起全是 `lit 0` 时仍压成一条（旧 init）。 -/
 private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   if vs.size ≤ 1 then
     vs.map Ops.Op.returnState
@@ -667,16 +667,44 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     | .increment => decodeMutating env e
     | _ => decodeBody env e
   let lean := IR.lastName n.toString
-  let ops :=
+  let (nLams, _) := peelLams e
+  let ops1 :=
     if lean == "modulo" then
       ops0.map fun
         | .checkedDivU64 l r => .checkedModU64 l r
         | op => op
     else ops0
-  let (nLams, _) := peelLams e
+  -- init 的 λ 从外到内编号；elaborated bvar 从内到外。翻过来对齐 ix 参数。
+  let rec flipVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+    match fuel with
+    | 0 => v
+    | fuel' + 1 =>
+      match v with
+      | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
+      | .field b n => .field (flipVal fuel' b) n
+      | .lit _ => v
+  let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
+    match fuel with
+    | 0 => op
+    | fuel' + 1 =>
+      match op with
+      | .returnState v => .returnState (flipVal fuel' v)
+      | .returnU64 v => .returnU64 (flipVal fuel' v)
+      | .okState v => .okState (flipVal fuel' v)
+      | .checkedAddU64 l r => .checkedAddU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .checkedSubU64 l r => .checkedSubU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .checkedMulU64 l r => .checkedMulU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .checkedDivU64 l r => .checkedDivU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .checkedModU64 l r => .checkedModU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .ite c l r t f =>
+        .ite c (flipVal fuel' l) (flipVal fuel' r)
+          (t.map (flipOp fuel')) (f.map (flipOp fuel'))
+      | .errorOverflow => .errorOverflow
+  let ops :=
+    if kind == .init && nLams > 1 then ops1.map (flipOp 8) else ops1
   let paramCount :=
     match kind with
-    | .init => 1
+    | .init => if nLams = 0 then 1 else nLams
     | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
   return {
     kind, name := n.toString, ixName := IR.ixNameOfLean lean
@@ -889,13 +917,16 @@ def extractModule (env : Environment) (ns : Name)
     | .init => inits := inits.push n
     | .increment => muts := muts.push n
     | .get => views := views.push n
-  if inits.size != 1 then
-    throw s!"extract/unsupported: need exactly one init, got {inits.size}"
+  if inits.isEmpty then
+    throw "extract/unsupported: missing init method"
   if muts.isEmpty then
     throw "extract/unsupported: missing mutating method"
   if views.isEmpty then
     throw "extract/unsupported: missing view method"
-  let initName := inits[0]!
+  let initName :=
+    match inits.find? (fun n => IR.lastName n.toString == "init") with
+    | some n => n
+    | none => inits[0]!
   let inferred ← inferSlots env initName
   let slots ←
     match fields? with
@@ -903,9 +934,14 @@ def extractModule (env : Environment) (ns : Name)
     | some fs =>
       if fs == inferred.map (·.name) then pure inferred
       else throw s!"extract/unsupported: fields {fs} != inferred {inferred.map (·.name)}"
-  let initM ← extractMethod env .init initName
-  let mut methods : Array IR.Method := #[initM]
-  let mut seen : Array String := #[initM.ixName]
+  let mut methods : Array IR.Method := #[]
+  let mut seen : Array String := #[]
+  for n in inits do
+    let m ← extractMethod env .init n
+    if seen.contains m.ixName then
+      throw s!"extract/unsupported: duplicate ixName {m.ixName}"
+    seen := seen.push m.ixName
+    methods := methods.push m
   for n in muts do
     let m ← extractMethod env .increment n
     if seen.contains m.ixName then

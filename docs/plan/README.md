@@ -25,5 +25,6 @@
 | [l2-002](tasks/l2-002.md) | done | 定长 Vector UInt64 n |
 | [l2-003](tasks/l2-003.md) | done | 本机算出 disc 与 layout marker |
 | [l2-004](tasks/l2-004.md) | done | 无 payload 枚举作 tag |
+| [l3-001](tasks/l3-001.md) | done | init 写全字段 + view 任意叶子 |
 
 积压：[backlog.md](backlog.md)

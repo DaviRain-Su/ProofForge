@@ -67,8 +67,8 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
     match IR.fieldOffset p name with
     | some off => .ok s!"[r6 + ACC0_DATA + {off}]"
     | none => .error s!"extract/unsupported: unknown field {name}"
-  | .arg _ =>
-    .ok "[r6 + INSTRUCTION_DATA + 8]"
+  | .arg i =>
+    .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
   | .lit _ => .error "extract/unsupported: lit has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -109,7 +109,8 @@ private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Exce
     let insn ← storeInsn w
     .ok s!"  ldxdw r1, [r10 - {fromStack}]\n  {insn} [r6 + ACC0_DATA + {off}], r1\n"
 
-private def emitInitBody (p : IR.Program) (marker : String) (ops : Array Ops.Op) : Except String String := do
+private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array Ops.Op) :
+    Except String String := do
   let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
   if vs.isEmpty then
     .error "extract/unsupported: init missing returnState"
@@ -129,7 +130,7 @@ private def emitInitBody (p : IR.Program) (marker : String) (ops : Array Ops.Op)
         | none => pure ()
       i := i + 1
     return s!"\
-body_initialize:
+body_{label}:
 {body}  lddw r1, {marker}
   stxdw [r6 + ACC0_DATA + 0], r1
   lddw r0, 0
@@ -355,7 +356,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   let label := handlerLabel m
   match m.kind with
   | .init =>
-    let body ← emitInitBody p marker m.ops
+    let body ← emitInitBody p marker label m.ops
     return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
     if !(Ops.hasCheckedArith m.ops || m.ops.any (fun | .ite .. => true | _ => false)) then

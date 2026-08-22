@@ -20,5 +20,9 @@ open Examples.Pair
   | .ok _ => false
 
 #guard getLeft (init 7) == 7
+#guard getRight (init 7) == 0
+#guard
+  let s := initBoth 3 9
+  s.left == 3 && s.right == 9 && getRight s == 9
 
 end Tests.PairSpec

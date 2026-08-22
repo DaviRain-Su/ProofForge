@@ -50,6 +50,8 @@ def extractedPair : Program :=
     methods := #[
       { kind := .init, name := "Examples.Pair.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
+      { kind := .init, name := "Examples.Pair.initBoth", ixName := "initBoth", paramCount := 2
+        ops := #[.returnState (.arg 0), .returnState (.arg 1)] },
       { kind := .increment, name := "Examples.Pair.creditLeft", ixName := "creditLeft", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "left") (.arg 0),
@@ -57,7 +59,9 @@ def extractedPair : Program :=
           .errorOverflow
         ] },
       { kind := .get, name := "Examples.Pair.getLeft", ixName := "getLeft", paramCount := 0
-        ops := #[.returnU64 (.field (.arg 0) "left")] }
+        ops := #[.returnU64 (.field (.arg 0) "left")] },
+      { kind := .get, name := "Examples.Pair.getRight", ixName := "getRight", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "right")] }
     ] }
 
 def extractedFlag : Program :=

@@ -77,3 +77,5 @@
 | T-L2-14 | error | 带 payload inductive | `enum has payload` |
 | T-L2-15 | happy | Phase Mollusk init | mode=0 |
 | T-L2-16 | happy | setLive / isLive | tag=1，view 返回 1 |
+| T-L3-01 | happy | Pair.initBoth 3 9 | left=3，right=9 |
+| T-L3-02 | happy | getRight | return right，不改账户 |

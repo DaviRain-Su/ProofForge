@@ -21,6 +21,15 @@ def init (left : UInt64) : State :=
 def getLeft (s : State) : UInt64 :=
   s.left
 
+@[solana_entry]
+def getRight (s : State) : UInt64 :=
+  s.right
+
+/-- 两个参数都写进账户。Lean 名避开命令关键字 `initialize`。 -/
+@[solana_entry]
+def initBoth (left right : UInt64) : State :=
+  { left, right }
+
 /-- 只改 `left`，`right` 保持。 -/
 @[solana_entry]
 def creditLeft (s : State) (delta : UInt64) : Except Error (State × UInt64) :=

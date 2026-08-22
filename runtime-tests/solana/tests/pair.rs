@@ -162,6 +162,45 @@ fn get_returns_left() {
 }
 
 #[test]
+fn init_both_writes_left_and_right() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("initBoth", 2);
+    let ix = build_ix(program_id, state_key, &disc, &[3, 9], true, true);
+    let account = state_account(&program_id, pair_state(false, 0, 0));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::account(&state_key)
+                .data(&pair_state(true, 3, 9))
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn get_returns_right() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("getRight", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let account = state_account(&program_id, pair_state(true, 8, 99));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&99u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&pair_state(true, 8, 99))
+                .build(),
+        ],
+    );
+}
+
+#[test]
 fn credit_left_overflow_holds() {
     let (program_id, mollusk) = harness();
     let state_key = Pubkey::new_unique();
