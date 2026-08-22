@@ -210,6 +210,27 @@ def tokenThawAccount : UInt64 :=
     #[.u8le 11]
 
 /--
+Token `SetAuthority`：普通包装。本切片钉死 `MintTokens`，
+新 authority = 外层账户 2 公钥。
+外层 0 是当前 mint authority。内层：mint w / current authority s。
+-/
+def tokenSetMintAuthority : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 6, .u8le 0, .u8le 1, .accKey 2]
+
+/--
+Token `Revoke`：普通包装。清掉 source 的 delegate。
+外层 0 是 owner。内层：source w / owner s。
+-/
+def tokenRevoke : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 5]
+
+/--
 Memo 写一条 UTF-8 字面量。本切片钉死 `"ok"`。
 外层 0 是 signer；callee 是外层账户 1。
 -/

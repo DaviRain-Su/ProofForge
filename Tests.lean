@@ -22,6 +22,7 @@ import Tests.MemoSpec
 import Tests.CreatePdaSpec
 import Tests.TokenApproveSpec
 import Tests.TokenFreezeSpec
+import Tests.TokenAuthSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

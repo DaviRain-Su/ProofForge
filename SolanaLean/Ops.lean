@@ -147,6 +147,18 @@ def tokenThawAccount : Op :=
       { acc := 0, signer := true, writable := false }]
     #[.u8le 11]
 
+def tokenSetMintAuthority : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 6, .u8le 0, .u8le 1, .accKey 2]
+
+def tokenRevoke : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 5]
+
 def memoWrite : Op :=
   .invoke 1
     #[{ acc := 0, signer := true, writable := false }]

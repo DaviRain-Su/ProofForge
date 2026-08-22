@@ -37,6 +37,7 @@
 - `checkPda`；Pda Mollusk 验证 bump
 - `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount`；TokenApprove / TokenFreeze Mollusk
 - `clockEpoch`；Clock Mollusk 两次 warp 跨 epoch
+- `tokenSetMintAuthority` / `tokenRevoke`；TokenAuth Mollusk
 
 ## 下一刀
 

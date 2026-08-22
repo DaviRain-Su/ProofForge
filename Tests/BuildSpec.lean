@@ -24,6 +24,7 @@ import Examples.Memo
 import Examples.CreatePda
 import Examples.TokenApprove
 import Examples.TokenFreeze
+import Examples.TokenAuth
 
 #solana_build Examples.Counter
 
@@ -74,6 +75,8 @@ import Examples.TokenFreeze
 #solana_build Examples.TokenApprove
 
 #solana_build Examples.TokenFreeze
+
+#solana_build Examples.TokenAuth
 
 /--
 error: extract/unsupported: no solana_entry

@@ -320,6 +320,20 @@ def extractedTokenApprove : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTokenAuth : Program :=
+  { name := "TokenAuth"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenAuth.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenAuth.setAuth", ixName := "setAuth", paramCount := 0
+        ops := #[Ops.tokenSetMintAuthority, .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenAuth.revoke", ixName := "revoke", paramCount := 0
+        ops := #[Ops.tokenRevoke, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TokenAuth.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedTokenFreeze : Program :=
   { name := "TokenFreeze"
     slots := #[{ name := "dummy" }]
@@ -467,7 +481,7 @@ def programs : Array Program := #[
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
-  extractedCreatePda, extractedTokenApprove, extractedTokenFreeze
+  extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

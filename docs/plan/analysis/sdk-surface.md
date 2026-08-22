@@ -51,6 +51,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `createPda` | find + System createAccount；seeds = `"vault"` | L4-016 |
 | `checkPda seed bump` | `sol_create_program_address`；成功 0 / 失败 1 | L4-017 |
 | `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount` | Token approve / freeze / thaw | L4-018 |
+| `tokenSetMintAuthority` / `tokenRevoke` | Token SetAuthority(MintTokens) / Revoke | L4-020 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -165,7 +166,8 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-tok-close | `CloseAccount` | 9 | **已绿**；lamports 退回 |
 | L4-tok-approve | `ApproveChecked` | 13 | **已绿**；decimals 编译期常量 |
 | L4-tok-freeze / thaw | `FreezeAccount` / `ThawAccount` | 10 / 11 | **已绿** |
-| L4-tok-set-auth | — | — | 有合约再开；默认关 |
+| L4-tok-set-auth | `SetAuthority` MintTokens | 6 | **已绿**；新 authority = acc2 |
+| L4-tok-revoke | `Revoke` | 5 | **已绿** |
 
 Multisig owner 默认关。
 

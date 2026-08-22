@@ -23,3 +23,4 @@ import Examples.Memo
 import Examples.CreatePda
 import Examples.TokenApprove
 import Examples.TokenFreeze
+import Examples.TokenAuth
