@@ -5,6 +5,7 @@ import Examples.Flag
 import Examples.Maybe
 import Examples.Window
 import Examples.Phase
+import Examples.Choice
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -62,6 +63,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Window.init Examples.Window.setTail Examples.Window.getHead
 
 #solana_extract Examples.Phase.init Examples.Phase.setLive Examples.Phase.isLive
+
+#solana_extract Examples.Choice.init Examples.Choice.setHold Examples.Choice.getHeld
 
 /--
 error: extract/unsupported: field tag enum has payload

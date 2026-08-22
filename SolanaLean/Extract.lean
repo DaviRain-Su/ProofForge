@@ -52,6 +52,38 @@ private def enumCtorIndex (env : Environment) (tyName ctor : Name) : Option Nat 
       info.ctors.findIdx? (· == ctor)
   | _ => none
 
+private def isEnumLeaf (env : Environment) (tyName : Name) : Bool :=
+  match env.find? tyName with
+  | some (.inductInfo info) =>
+    info.numParams == 0 && info.numIndices == 0 && !info.ctors.isEmpty && !info.isRec &&
+      info.ctors.all fun ctor =>
+        match env.find? ctor with
+        | some (.ctorInfo c) => c.numFields == 0
+        | _ => false
+  | _ => false
+
+/-- 两构造子：一个 0 字段、一个 1 个 UInt64。按 Option 双叶展开。 -/
+private def isOptionLikeInductive (env : Environment) (tyName : Name) : Bool :=
+  match env.find? tyName with
+  | some (.inductInfo info) =>
+    info.numParams == 0 && info.numIndices == 0 && info.ctors.length == 2 && !info.isRec &&
+      Id.run do
+        let mut zeros := 0
+        let mut ones := 0
+        for ctor in info.ctors do
+          match env.find? ctor with
+          | some (.ctorInfo c) =>
+            if c.numFields == 0 then zeros := zeros + 1
+            else if c.numFields == 1 then
+              match strip c.type with
+              | .forallE _ ty _ _ =>
+                if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
+                  ones := ones + 1
+              | _ => pure ()
+          | _ => pure ()
+        return zeros == 1 && ones == 1
+  | _ => false
+
 private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -94,6 +126,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | parts => parts.getLast!
           if proj == "mk" || proj == "ok" || proj == "error" ||
               proj.startsWith "_proof" || proj == "rfl" then none
+          else if match env.find? n with | some (.ctorInfo _) => true | _ => false then none
           else
             -- 整个 Vector 投影本身不是叶；下标再展开成 `name_i`。
             let skipVector :=
@@ -376,7 +409,22 @@ private def asOptionPayload (env : Environment) (e : Expr) : Option Ops.Val :=
   else if isConstNamed e ``Option.some || endsWith e ".some" then
     let args := e.getAppArgs
     if args.size ≥ 1 then val env args[args.size - 1]! else none
-  else none
+  else
+    match e.getAppFn.constName? with
+    | some ctor =>
+      match env.find? ctor with
+      | some (.ctorInfo c) =>
+        if isOptionLikeInductive env c.induct || isEnumLeaf env c.induct then
+          match enumCtorIndex env c.induct ctor with
+          | some 0 => some (.lit 0)
+          | some _ =>
+            if c.numFields == 0 then some (.lit 1)
+            else if e.getAppArgs.size ≥ 1 then val env e.getAppArgs[e.getAppArgs.size - 1]!
+            else none
+          | none => none
+        else none
+      | _ => none
+    | none => none
 
 /-- `#v[a, b, …]` = `Vector.mk (List.toArray (a :: b :: []))`。 -/
 private def collectListVals (env : Environment) (fuel : Nat) (e : Expr) : Array Ops.Val :=
@@ -774,16 +822,6 @@ private def fieldTypeExpr (env : Environment) (structName fieldName : Name) : Op
     | none => none
     | some info => some (peelForalls info.type)
 
-private def isEnumLeaf (env : Environment) (tyName : Name) : Bool :=
-  match env.find? tyName with
-  | some (.inductInfo info) =>
-    info.numParams == 0 && info.numIndices == 0 && !info.ctors.isEmpty && !info.isRec &&
-      info.ctors.all fun ctor =>
-        match env.find? ctor with
-        | some (.ctorInfo c) => c.numFields == 0
-        | _ => false
-  | _ => false
-
 private def leafSlots (env : Environment) (name : String) (ty : Expr) : Except String (Array IR.Slot) :=
   let ty := ty.consumeMData
   if ty.getAppFn.constName? == some ``UInt64 then
@@ -823,6 +861,11 @@ private def leafSlots (env : Environment) (name : String) (ty : Expr) : Except S
   else if let some tyName := ty.getAppFn.constName? then
     if isEnumLeaf env tyName then
       .ok #[{ name, width := 8, abi := "u64-le" }]
+    else if isOptionLikeInductive env tyName then
+      .ok #[
+        { name := s!"{name}_tag", width := 8, abi := "u64-le" },
+        { name := s!"{name}_p0", width := 8, abi := "u64-le" }
+      ]
     else if match env.find? tyName with | some (.inductInfo _) => true | _ => false then
       .error s!"extract/unsupported: field {name} enum has payload"
     else

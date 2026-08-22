@@ -27,5 +27,6 @@
 | [l2-004](tasks/l2-004.md) | done | 无 payload 枚举作 tag |
 | [l3-001](tasks/l3-001.md) | done | init 写全字段 + view 任意叶子 |
 | [l3-002](tasks/l3-002.md) | done | Option match 读 payload |
+| [l3-003](tasks/l3-003.md) | done | 单字段用户 inductive 作 tag+payload |
 
 积压：[backlog.md](backlog.md)

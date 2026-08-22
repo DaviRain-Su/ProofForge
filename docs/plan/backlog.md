@@ -17,14 +17,15 @@
 - 无 payload 枚举作 tag；Phase Mollusk；带 payload / Bool 仍 fail closed
 - 多个 init；`init` paramCount 按 λ 算；Pair `initBoth` / `getRight`
 - `Option UInt64` match 读 payload；Maybe.getValue Mollusk
+- 单字段用户 inductive 作 tag+payload；Choice Mollusk
 
 ## 下一刀
 
-用户 inductive 带字段的 match；或 L4 封闭 recipe（有具体合约再开）。
+L4 封闭 recipe（有具体合约再开）。
 
 ## 其后（L2 / L3）
 
-- 用户 inductive 带字段的 match
+- 多字段 / 多构造子 inductive
 
 ## 有具体合约再开（L4）
 

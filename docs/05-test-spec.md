@@ -81,3 +81,5 @@
 | T-L3-02 | happy | getRight | return right，不改账户 |
 | T-L3-03 | happy | Maybe.getValue none | return 0 |
 | T-L3-04 | happy | Maybe.getValue some 77 | return 77 |
+| T-L3-05 | happy | Choice slots | pick_tag 8、pick_p0 16 |
+| T-L3-06 | happy | getHeld empty / hold 77 | 0 / 77 |

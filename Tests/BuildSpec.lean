@@ -5,6 +5,7 @@ import Examples.Flag
 import Examples.Maybe
 import Examples.Window
 import Examples.Phase
+import Examples.Choice
 
 #solana_build Examples.Counter
 
@@ -17,6 +18,8 @@ import Examples.Phase
 #solana_build Examples.Window
 
 #solana_build Examples.Phase
+
+#solana_build Examples.Choice
 
 /--
 error: extract/unsupported: no solana_entry

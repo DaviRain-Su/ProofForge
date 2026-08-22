@@ -4,3 +4,4 @@ import Examples.Flag
 import Examples.Maybe
 import Examples.Window
 import Examples.Phase
+import Examples.Choice
