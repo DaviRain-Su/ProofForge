@@ -47,6 +47,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `rentExemption n` | `sol_get_rent_sysvar` × `(128+n)` | L4-011 |
 | `tokenMintToChecked` / `tokenBurnChecked` | Token mint / burn；decimals 编译期常量 | L4-012 |
 | `systemAssign` / `systemAllocate` | System assign / allocate；owner = 当前 program id | L4-013 |
+| `systemAllocateWithSeed` | AllocateWithSeed；种子 `"vault"` | L4-023 |
 | `tokenInitAccount` / `tokenCloseAccount` | Token init3 / close；owner = acc0 公钥 | L4-014 |
 | `memoWrite` | Memo 写 UTF-8 字面量；本切片 `"ok"` | L4-015 |
 | `createPda` | find + System createAccount；seeds = `"vault"` | L4-016 |
@@ -152,7 +153,8 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-sys-create | `CreateAccount` tag 0 | `u32le(0)\|\|lamports\|\|space\|\|owner32`（52B） | 付款人 s+w、新账户 s+w、System |
 | L4-sys-assign | `Assign` tag 1 | `u32le(1)\|\|owner32` | **已绿**；账户 s+w、System |
 | L4-sys-allocate | `Allocate` tag 8 | `u32le(8)\|\|space` | **已绿**；账户 s+w、System |
-| L4-sys-alloc-seed | `AllocateWithSeed` / `CreateAccountWithSeed` | 后做 | 与 PDA 绑定再开 |
+| L4-sys-alloc-seed | `AllocateWithSeed` tag 9 | **已绿**；种子 `"vault"` |
+| L4-sys-create-seed | `CreateAccountWithSeed` | 后做 | 同种子布局，再带 lamports |
 | L4-sys-advance-nonce 等 | nonce / authorize | — | 不做，除非有合约 |
 
 已绿：`TransferChecked`（tag 12，10B packed）、ATA `CreateIdempotent`（tag 1）、`MintToChecked` / `BurnChecked`。

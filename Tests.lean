@@ -25,6 +25,7 @@ import Tests.TokenFreezeSpec
 import Tests.TokenAuthSpec
 import Tests.EpochSpec
 import Tests.TokenSizeSpec
+import Tests.SysSeedSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

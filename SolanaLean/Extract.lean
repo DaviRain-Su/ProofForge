@@ -831,6 +831,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       mentionsRuntime e "createPda" ||
       mentionsRuntime e "systemAssign" ||
       mentionsRuntime e "systemAllocate" ||
+      mentionsRuntime e "systemAllocateWithSeed" ||
       mentionsRuntime e "tokenTransferChecked" ||
       mentionsRuntime e "tokenMintToChecked" ||
       mentionsRuntime e "tokenBurnChecked" ||
@@ -883,6 +884,7 @@ private def invokeRet
   | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], some _, some _) => amount
   | (1, _, #[.u32le 1, .programId], none, none) => .lit 0
   | (1, _, #[.u32le 8, .u64le space], none, none) => space
+  | (2, _, #[.u32le 9, .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], none, none) => space
   | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => amount
   | (3, _, #[.u8le 14, .u64le amount, .u8le _], none, none) => amount
   | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => amount

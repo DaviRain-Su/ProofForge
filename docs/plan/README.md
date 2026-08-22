@@ -50,6 +50,7 @@
 | [l4-020](tasks/l4-020.md) | done | Token SetAuthority / Revoke |
 | [l4-021](tasks/l4-021.md) | done | slotsPerEpoch |
 | [l4-022](tasks/l4-022.md) | done | tokenAccountSize / cpiReturn |
+| [l4-023](tasks/l4-023.md) | done | systemAllocateWithSeed |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

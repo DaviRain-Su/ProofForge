@@ -127,6 +127,18 @@ def systemAllocate (space : UInt64) : UInt64 :=
     #[.u32le 8, .u64le space]
 
 /--
+`system.allocateWithSeed`：给 `create_with_seed(acc0, "vault", program)` 开 `space` 字节。
+种子本切片钉死。owner = 当前 program id。
+外层：base s+w、派生账户 w、System。
+-/
+def systemAllocateWithSeed (space : UInt64) : UInt64 :=
+  invoke 2
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    -- bincode：u32 tag 9 || base32 || u64le len || seed || space || owner32。
+    #[.u32le 9, .accKey 0, .u64le 5, .ascii "vault", .u64le space, .programId]
+
+/--
 Token `TransferChecked`：普通包装。decimals 编译期常量。
 外层 0 必须是 authority（prelude 强制 acc0 signer）。
 内层账户按官方顺序：source / mint / dest / authority。

@@ -423,6 +423,18 @@ def extractedTokenMint : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedSysSeed : Program :=
+  { name := "SysSeed"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.SysSeed.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.SysSeed.openSeed", ixName := "openSeed", paramCount := 0
+        ops := #[Ops.systemAllocateWithSeed (.lit 16), .returnU64 (.lit 16)] },
+      { kind := .get, name := "Examples.SysSeed.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedTokenSize : Program :=
   { name := "TokenSize"
     slots := #[{ name := "dummy" }]
@@ -512,7 +524,7 @@ def programs : Array Program := #[
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
-  extractedEpoch, extractedTokenSize
+  extractedEpoch, extractedTokenSize, extractedSysSeed
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

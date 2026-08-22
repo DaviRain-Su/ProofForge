@@ -26,3 +26,4 @@ import Examples.TokenFreeze
 import Examples.TokenAuth
 import Examples.Epoch
 import Examples.TokenSize
+import Examples.SysSeed
