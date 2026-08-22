@@ -6,13 +6,14 @@
 
 ## Boundary
 
-子进程，不是 FFI。在工程目录里递归找 `Counter.so`（`sbpf` 会嵌套 `deploy`）。
+子进程，不是 FFI。按 `Program.name` 写 `src/Name/Name.s`，递归找 `Name.so`（`sbpf` 会嵌套 `deploy`）。
 
 ## API
 
-- `assembleCounter outDir : IO Result`
-- `lake exe solanaLeanAssemble -- build/sbpf`
+- `assembleProgram outDir program : IO Result`
+- `assembleCounter` = `assembleProgram` + `extractedCounter`
+- `lake exe solanaLeanAssemble -- build/sbpf`（写出 Counter.so 与 Pair.so）
 
 ## Tests
 
-`runtime-tests/solana` Mollusk：init / increment / get / overflow 保持。
+`runtime-tests/solana` Mollusk：Counter 4/4；Pair init / creditLeft 保 right / getLeft / overflow。

@@ -38,4 +38,24 @@ def wrappingSub (s : Examples.Counter.State) (delta : UInt64) :
   let next := s.value - delta
   .ok ({ value := next }, next)
 
+/-- 负向：state 含非 UInt64 字段。 -/
+structure FlagState where
+  value : UInt64
+  flag : Bool
+  deriving Repr, DecidableEq, Inhabited
+
+def initFlag (initial : UInt64) : FlagState :=
+  { value := initial, flag := false }
+
+def getFlagValue (s : FlagState) : UInt64 :=
+  s.value
+
+def creditFlag (s : FlagState) (delta : UInt64) :
+    Except Examples.Counter.Error (FlagState × UInt64) :=
+  if s.value ≤ Examples.Counter.u64Max - delta then
+    let next := s.value + delta
+    .ok ({ value := next, flag := s.flag }, next)
+  else
+    .error .overflow
+
 end Tests.Fixtures

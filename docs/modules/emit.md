@@ -6,7 +6,7 @@
 
 ## Boundary
 
-Load 由 `Val` 决定：`.field _ "value"` → `ACC0_DATA+8`；`.arg _` → `INSTRUCTION_DATA+8`。对调 `checkedAddU64` 左右操作数会改变第一条 load。空 ops 失败。
+Load 由 `Val` 决定：`.field _ name` → `ACC0_DATA + fieldOffset`；`.arg _` → `INSTRUCTION_DATA+8`。layout marker 与 `INSTRUCTION_DATA*` 按 `Program` 取，不再写死 Counter 的 16 字节账户。对调 `checkedAddU64` 左右操作数会改变第一条 load。空 ops 失败。
 
 ## API
 

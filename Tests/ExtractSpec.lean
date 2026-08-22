@@ -7,6 +7,8 @@ import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.decrement Examples.Counter.get
 
+#solana_extract Examples.Pair.init Examples.Pair.creditLeft Examples.Pair.getLeft
+
 #solana_extract Examples.Pair.init Examples.Pair.creditLeft Examples.Pair.getLeft with "left", "right"
 
 /--
@@ -26,3 +28,15 @@ error: extract/unsupported: mutating method missing checked arith
 -/
 #guard_msgs (error) in
 #solana_extract Examples.Counter.init Tests.Fixtures.wrappingSub Examples.Counter.get
+
+/--
+error: extract/unsupported: field flag is not UInt64
+-/
+#guard_msgs (error) in
+#solana_extract Tests.Fixtures.initFlag Tests.Fixtures.creditFlag Tests.Fixtures.getFlagValue
+
+/--
+error: extract/unsupported: fields #[value] != inferred #[left, right]
+-/
+#guard_msgs (error) in
+#solana_extract Examples.Pair.init Examples.Pair.creditLeft Examples.Pair.getLeft with "value"

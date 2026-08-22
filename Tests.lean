@@ -1,4 +1,5 @@
 import Tests.CounterSpec
+import Tests.PairSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

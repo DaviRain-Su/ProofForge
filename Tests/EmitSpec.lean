@@ -52,13 +52,41 @@ private def pairShape : SolanaLean.IR.Program :=
   | some 16 => true
   | _ => false
 
+#guard SolanaLean.IR.layoutSig pairShape == "2|0:left:0:8:8:u64-le|1:right:0:16:8:u64-le"
+
+#guard
+  match SolanaLean.IR.layoutMarkerHex pairShape with
+  | .ok "0x20d45b635e2b016f" => true
+  | _ => false
+
+#guard
+  match SolanaLean.IR.layoutMarkerHex SolanaLean.IR.extractedCounter with
+  | .ok "0xbbe897f0336e6fc" => true
+  | _ => false
+
+#guard
+  let l := SolanaLean.IR.inputLayout SolanaLean.IR.extractedCounter
+  l.rentEpoch == 0x2870 && l.instructionDataLen == 0x2878 && l.instructionData == 0x2880
+
+#guard
+  let l := SolanaLean.IR.inputLayout SolanaLean.IR.extractedPair
+  l.rentEpoch == 0x2878 && l.instructionDataLen == 0x2880 && l.instructionData == 0x2888
+
 #guard
   match SolanaLean.Emit.emitCounterAsm pairShape with
   | .error _ => false
   | .ok asm =>
       asm.contains "ACC0_DATA + 8" &&
         asm.contains "ACC0_DATA + 16" &&
-        asm.contains "jne r1, 24,"
+        asm.contains "jne r1, 24," &&
+        asm.contains "0x20d45b635e2b016f" &&
+        asm.contains ".equ INSTRUCTION_DATA, 10376"
+
+#guard
+  match SolanaLean.IR.layoutMarkerHex
+      { name := "X", fields := #["a", "b", "c"], methods := #[] } with
+  | .error reason => reason.startsWith "extract/unsupported: unregistered layout"
+  | .ok _ => false
 
 private def swappedIncrement : SolanaLean.IR.Program :=
   { name := "Counter"

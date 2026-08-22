@@ -15,4 +15,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**多字段 UInt64 state**。`Examples.Pair`（left/right）与 Counter 共用管道。
+当前阶段：**从 structure 收字段表**。`#solana_extract` 读 `init` 的返回 `structure`；Pair 有独立 `.so` / Mollusk。

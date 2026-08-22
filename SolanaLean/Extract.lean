@@ -221,24 +221,105 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     | _ => decodeBody e
   return { kind, name := n.toString, sketch, ops }
 
+private def peelForalls (e : Expr) : Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Expr :=
+    match fuel with
+    | 0 => e
+    | fuel' + 1 =>
+      match strip e with
+      | .forallE _ _ body _ => go fuel' body
+      | e => e
+  go 32 e
+
+private def isUInt64Type (e : Expr) : Bool :=
+  e.consumeMData.getAppFn.constName? == some ``UInt64
+
+private def fieldIsUInt64 (env : Environment) (structName fieldName : Name) : Bool :=
+  match getProjFnForField? env structName fieldName with
+  | none => false
+  | some proj =>
+    match env.find? proj with
+    | none => false
+    | some info => isUInt64Type (peelForalls info.type)
+
+/-- `Examples.Counter.init` → `Counter`。 -/
+def programNameOfInit (n : Name) : String :=
+  match n with
+  | .str (.str _ mod) "init" => mod
+  | .str _ "init" => "Program"
+  | _ => "Program"
+
+/-- 从 `init` 返回类型收字段。必须是无 `extends`、全 `UInt64` 的 structure。 -/
+def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
+  let some info := env.find? initName
+    | throw s!"extract/unsupported: unknown {initName}"
+  let some structName := (peelForalls info.type).getAppFn.constName?
+    | throw "extract/unsupported: init return is not a structure"
+  unless isStructure env structName do
+    throw s!"extract/unsupported: init return is not a structure {structName}"
+  unless (getStructureParentInfo env structName).isEmpty do
+    throw "extract/unsupported: structure extends"
+  let names := getStructureFields env structName
+  if names.isEmpty then
+    throw "extract/unsupported: structure has no fields"
+  let mut fields : Array String := #[]
+  for n in names do
+    if (isSubobjectField? env structName n).isSome then
+      throw "extract/unsupported: structure extends"
+    unless fieldIsUInt64 env structName n do
+      throw s!"extract/unsupported: field {n} is not UInt64"
+    fields := fields.push n.toString
+  return fields
+
+private def valFields : Ops.Val → Array String
+  | .field b n => valFields b |>.push n
+  | .arg _ => #[]
+  | .lit _ => #[]
+
+private def opFields : Ops.Op → Array String
+  | .checkedAddU64 l r => valFields l ++ valFields r
+  | .checkedSubU64 l r => valFields l ++ valFields r
+  | .okState v => valFields v
+  | .errorOverflow => #[]
+  | .returnU64 v => valFields v
+  | .returnState v => valFields v
+
+private def checkUsedFields (p : IR.Program) : Except String Unit := do
+  for m in p.methods do
+    for op in m.ops do
+      for name in opFields op do
+        if (IR.fieldOffset p name).isNone then
+          throw s!"extract/unsupported: unknown field {name}"
+
 def extractProgram (env : Environment)
     (initName incrementName getName : Name)
-    (programName : String := "Counter")
-    (fields : Array String := #["value"]) :
+    (programName : Option String := none)
+    (fields? : Option (Array String) := none) :
     Except String IR.Program := do
   match Profile.checkAll env #[initName, incrementName, getName] with
   | .reject reason => throw reason
   | .accept => pure ()
+  let inferred ← inferFields env initName
+  let fields ←
+    match fields? with
+    | none => pure inferred
+    | some fs =>
+      if fs == inferred then pure fs
+      else throw s!"extract/unsupported: fields {fs} != inferred {inferred}"
   let initM ← extractMethod env .init initName
   let incM ← extractMethod env .increment incrementName
   let getM ← extractMethod env .get getName
   let program : IR.Program := {
-    name := programName
+    name := programName.getD (programNameOfInit initName)
     fields
     methods := #[initM, incM, getM]
   }
   unless IR.isCounterShape program do
     throw "extract/unsupported: not three-method shape"
+  checkUsedFields program
+  match IR.layoutMarkerHex program with
+  | .error reason => throw reason
+  | .ok _ => pure ()
   return program
 
 def extractCounter := extractProgram

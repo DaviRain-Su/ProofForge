@@ -39,31 +39,36 @@ partial def findFileNamed (dir : System.FilePath) (name : String) : IO (Option S
         return some hit
   return none
 
-/-- 把 Counter 汇编写成 `src/Counter/Counter.s`，调用本机 `sbpf 0.2.2`。 -/
-def assembleCounter (outDir : System.FilePath) (program : IR.Program := IR.counterProgram) :
-    IO Result := do
+/-- 把 `program` 汇编写成 `src/Name/Name.s`，调用本机 `sbpf 0.2.2`。 -/
+def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Result := do
   let asm ← match Emit.emitCounterAsm program with
     | .error reason => throw <| IO.userError reason
     | .ok text => pure text
+  let name := program.name
+  let soName := s!"{name}.so"
   let project := outDir / "sbpf-project"
-  let srcDir := project / "src" / "Counter"
+  let srcDir := project / "src" / name
   let deployDir := project / "deploy"
   IO.FS.createDirAll srcDir
   IO.FS.createDirAll deployDir
-  let asmPath := srcDir / "Counter.s"
+  let asmPath := srcDir / s!"{name}.s"
   IO.FS.writeFile asmPath asm
   runSbpf project deployDir
-  let some soPath ← findFileNamed project "Counter.so"
-    | throw <| IO.userError "assemble/tool: sbpf did not produce Counter.so"
+  let some soPath ← findFileNamed project soName
+    | throw <| IO.userError s!"assemble/tool: sbpf did not produce {soName}"
   let soBytes ← IO.FS.readBinFile soPath
   unless looksLikeElf soBytes do
     throw <| IO.userError "assemble/tool: output is not ELF"
   unless soBytes.size > 0 do
     throw <| IO.userError "assemble/tool: empty ELF"
-  let stagedAsm := outDir / "Counter.s"
-  let stagedSo := outDir / "Counter.so"
+  let stagedAsm := outDir / s!"{name}.s"
+  let stagedSo := outDir / soName
   IO.FS.writeFile stagedAsm asm
   IO.FS.writeBinFile stagedSo soBytes
   return { asmPath := stagedAsm, soPath := stagedSo, soBytes }
+
+def assembleCounter (outDir : System.FilePath) (program : IR.Program := IR.extractedCounter) :
+    IO Result :=
+  assembleProgram outDir program
 
 end SolanaLean.Assemble

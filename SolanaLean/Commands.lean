@@ -19,13 +19,13 @@ elab "#solana_check " n:ident : command => do
 syntax "#solana_extract " ident ident ident : command
 syntax "#solana_extract " ident ident ident " with " str,+ : command
 
-private def runExtract (initN mutN getN : TSyntax `ident) (fields : Array String) :
+private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Array String)) :
     CommandElabM Unit := do
   let initName ← liftCoreM <| realizeGlobalConstNoOverload initN
   let mutName ← liftCoreM <| realizeGlobalConstNoOverload mutN
   let getName ← liftCoreM <| realizeGlobalConstNoOverload getN
   let env ← getEnv
-  match Extract.extractProgram env initName mutName getName "Program" fields with
+  match Extract.extractProgram env initName mutName getName none fields? with
   | .error reason => throwError reason
   | .ok program => do
     let mutOps := (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.ops)
@@ -45,10 +45,10 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields : Array String
 
 elab_rules : command
   | `(#solana_extract $initN:ident $mutN:ident $getN:ident) =>
-      runExtract initN mutN getN #["value"]
+      runExtract initN mutN getN none
   | `(#solana_extract $initN:ident $mutN:ident $getN:ident with $fs:str,*) => do
       let fields := (fs.getElems.map (·.getString)).toList.toArray
-      runExtract initN mutN getN fields
+      runExtract initN mutN getN (some fields)
 
 elab "#solana_dump " n:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload n

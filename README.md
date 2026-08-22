@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**多字段 UInt64**。合约在 `Examples/`（Counter、Pair）；编译器在 `SolanaLean/`。
+当前：**从 structure 收字段表**。合约在 `Examples/`（Counter、Pair）；编译器在 `SolanaLean/`。
 
 ## 「难的是 loading 吗？」
 
@@ -31,7 +31,10 @@ PF emitSbpf + sbpf          ← 搬（S3–S4）
 ```bash
 lake build
 lake exe solanaLeanAssemble -- build/sbpf
-(cd runtime-tests/solana && SOLANA_LEAN_COUNTER_SO=../../build/sbpf/Counter.so cargo test --test counter)
+(cd runtime-tests/solana && \
+  SOLANA_LEAN_COUNTER_SO=../../build/sbpf/Counter.so \
+  SOLANA_LEAN_PAIR_SO=../../build/sbpf/Pair.so \
+  cargo test --locked --test counter --test pair)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。

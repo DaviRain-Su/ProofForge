@@ -40,3 +40,9 @@
 | T-S5-06 | error | wrappingSub | mutating 缺 checked arith |
 | T-F-01 | happy | Pair fields left/right | right 偏移 16；data_len 24 |
 | T-F-02 | happy | extract Pair.creditLeft | ops 含 `field left` |
+| T-F-03 | happy | 无 `with` 抽 Pair | fields = left, right |
+| T-F-04 | error | structure 含 `Bool` 字段 | `extract/unsupported: field … is not UInt64` |
+| T-F-05 | happy | Pair Mollusk init(7) | left=7，right=0，data_len 24 |
+| T-F-06 | happy | creditLeft 5+3，right=99 | left=8，right 保持 99 |
+| T-F-07 | happy | getLeft | return left，不改账户 |
+| T-F-08 | error | creditLeft max+1 | `0x1001`，两字段保持 |

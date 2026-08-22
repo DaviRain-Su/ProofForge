@@ -49,8 +49,8 @@ Counter 不是产品终点，是第一条打穿的竖切：
 | 层 | Counter 现在 | 通用之后 |
 |---|---|---|
 | 用户表面 | `Examples.Counter`（init/increment/decrement/get） | 任意通过 Profile 的 `def` |
-| Extract | 递归下降；任意用户字段投影 | 从 structure 自动收字段表 |
-| Emit | 按 `fields` 算账户偏移 | CPI / 多账户 |
+| Extract | 从 `init` 返回 structure 收字段表 | 属性标记入口 / 任意 if 树 |
+| Emit | 按 `fields` 算偏移与 layout marker | CPI / 多账户 |
 
 v0 通用面仍然单账户、`UInt64`、无 CPI。多账户 / Token 不在这条竖切里。
 

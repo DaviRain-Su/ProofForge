@@ -34,6 +34,8 @@ private def isOverflow (r : Except Error (State × UInt64)) : Bool :=
 #guard isOkValue (increment (s (u64Max - 1)) 1) u64Max
 #guard get (init 7) == 7
 #guard SolanaLean.IR.isCounterShape SolanaLean.IR.extractedCounter
+#guard SolanaLean.IR.isCounterShape SolanaLean.IR.extractedPair
+#guard SolanaLean.IR.dataLen SolanaLean.IR.extractedPair == 24
 #guard SolanaLean.Profile.checkRootName "increment" == .accept
 #guard (match SolanaLean.Profile.checkRootName "evil" with
   | .reject _ => true

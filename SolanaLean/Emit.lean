@@ -6,11 +6,10 @@ namespace SolanaLean.Emit
 def discInit : String := "0x642858a76747495e"
 def discIncrement : String := "0x223edbd10397c79d"
 def discGet : String := "0x37dd90d6b076a2a4"
-def layoutMarker : String := "0xbbe897f0336e6fc"
 def overflowCode : String := "0x1001"
 
 /-- Loader V3 单账户预检。`ixLen` 是 instruction data 期望长度。 -/
-private def prelude (p : IR.Program) (label : String) (ixLen : Nat)
+private def prelude (p : IR.Program) (marker : String) (label : String) (ixLen : Nat)
     (needSigner needWritable needUninit : Bool) : String :=
   let dataLen := IR.dataLen p
   let err := s!"err_check_{label}"
@@ -26,7 +25,7 @@ private def prelude (p : IR.Program) (label : String) (ixLen : Nat)
     if needUninit then
       s!"  ldxdw r1, [r6 + ACC0_DATA + 0]\n  lddw r2, 0x0\n  jne r1, r2, {err}\n"
     else
-      s!"  ldxdw r1, [r6 + ACC0_DATA + 0]\n  lddw r2, {layoutMarker}\n  jne r1, r2, {err}\n"
+      s!"  ldxdw r1, [r6 + ACC0_DATA + 0]\n  lddw r2, {marker}\n  jne r1, r2, {err}\n"
   s!"\
   ldxdw r1, [r6 + NUM_ACCOUNTS]
   jne r1, 1, {err}
@@ -83,7 +82,7 @@ private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Exce
   | some off =>
     .ok s!"  ldxdw r1, [r10 - {fromStack}]\n  stxdw [r6 + ACC0_DATA + {off}], r1\n"
 
-private def emitInitBody (p : IR.Program) (v : Ops.Val) : Except String String := do
+private def emitInitBody (p : IR.Program) (marker : String) (v : Ops.Val) : Except String String := do
   let load ← loadVal p v 8
   let store ←
     match p.fields[0]? with
@@ -97,7 +96,7 @@ private def emitInitBody (p : IR.Program) (v : Ops.Val) : Except String String :
     | none => pure ()
   return s!"\
 body_initialize:
-{zeroOthers}{load}{store}  lddw r1, {layoutMarker}
+{zeroOthers}{load}{store}  lddw r1, {marker}
   stxdw [r6 + ACC0_DATA + 0], r1
   lddw r0, 0
   exit
@@ -181,12 +180,12 @@ private def hasOkState (ops : Array Ops.Op) : Bool :=
 private def hasReturnU64 (ops : Array Ops.Op) : Bool :=
   ops.any (fun | .returnU64 _ => true | _ => false)
 
-private def emitHandler (p : IR.Program) (m : IR.Method) : Except String String := do
+private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Except String String := do
   match m.kind with
   | .init =>
     let v ← initVal m.ops
-    let body ← emitInitBody p v
-    return s!"initialize:\n{prelude p "initialize" 16 true true true}{body}"
+    let body ← emitInitBody p marker v
+    return s!"initialize:\n{prelude p marker "initialize" 16 true true true}{body}"
   | .increment =>
     if !Ops.hasCheckedArith m.ops then
       .error "extract/unsupported: increment missing checked arith"
@@ -197,18 +196,20 @@ private def emitHandler (p : IR.Program) (m : IR.Method) : Except String String 
     else do
       let (lhs, rhs, isAdd) ← arithArgs m.ops
       let body ← emitCheckedArithBody p "increment" lhs rhs isAdd
-      return s!"increment:\n{prelude p "increment" 16 false true false}{body}"
+      return s!"increment:\n{prelude p marker "increment" 16 false true false}{body}"
   | .get =>
     let v ← getVal m.ops
     let body ← emitGetBody p v
-    return s!"get:\n{prelude p "get" 8 false false false}{body}"
+    return s!"get:\n{prelude p marker "get" 8 false false false}{body}"
 
 def emitCounterAsm (program : IR.Program) : Except String String := do
   unless IR.isCounterShape program do
     throw "extract/unsupported: not counter shape"
+  let marker ← IR.layoutMarkerHex program
+  let layout := IR.inputLayout program
   let mut handlers := ""
   for m in program.methods do
-    handlers := handlers ++ (← emitHandler program m) ++ "\n"
+    handlers := handlers ++ (← emitHandler program marker m) ++ "\n"
   return s!"\
 ; SOLANA-LEAN-SBPF-ASM v0 (ops-driven handler bodies)
 ; Layout matches ProofForge StateCell: header u64 + count u64
@@ -222,9 +223,9 @@ def emitCounterAsm (program : IR.Program) : Except String String := do
 .equ ACC0_DATA, 0x60
 .equ MAX_PERMITTED_DATA_INCREASE, 0x2800
 .equ EXACT_DATA_LEN, {IR.dataLen program}
-.equ ACC0_RENT_EPOCH, 0x2870
-.equ INSTRUCTION_DATA_LEN, 0x2878
-.equ INSTRUCTION_DATA, 0x2880
+.equ ACC0_RENT_EPOCH, {layout.rentEpoch}
+.equ INSTRUCTION_DATA_LEN, {layout.instructionDataLen}
+.equ INSTRUCTION_DATA, {layout.instructionData}
 
 .globl entrypoint
 
