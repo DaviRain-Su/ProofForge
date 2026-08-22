@@ -17,4 +17,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L1 ite / 四则已绿**。Counter 含 scale/divide/modulo/nonzero。下一刀：内容寻址 digest。
+当前阶段：**L1 收口**。属性、disc、ite/四则、digest 已绿。下一阶段：L2 布局或 L3 形状。

@@ -164,7 +164,7 @@ def extractedPair : Program :=
       { kind := .increment, name := "Examples.Pair.creditLeft", ixName := "creditLeft", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "left") (.arg 0),
-          .okState (.arg 0),
+          .okState (.field (.arg 2) "right"),
           .errorOverflow
         ] },
       { kind := .get, name := "Examples.Pair.getLeft", ixName := "getLeft", paramCount := 0
@@ -179,5 +179,68 @@ def counterProgram (name : String := "Counter") : Program :=
       { kind := .increment, name := "increment", ixName := "increment", paramCount := 1 },
       { kind := .get, name := "get", ixName := "get", paramCount := 0 }
     ] }
+
+private def kindTag : MethodKind → String
+  | .init => "init"
+  | .increment => "mut"
+  | .get => "view"
+
+private def cmpTag : Ops.Cmp → String
+  | .eq => "eq" | .ne => "ne" | .lt => "lt"
+  | .le => "le" | .gt => "gt" | .ge => "ge"
+
+private def valCanon : Ops.Val → String
+  | .arg i => s!"a{i}"
+  | .lit n => s!"l{n.toNat}"
+  | .field b n => s!"f.{n}({valCanon b})"
+
+private partial def opsCanon (ops : Array Ops.Op) : String :=
+  let rec one (op : Ops.Op) : String :=
+    match op with
+    | .checkedAddU64 l r => s!"add({valCanon l},{valCanon r})"
+    | .checkedSubU64 l r => s!"sub({valCanon l},{valCanon r})"
+    | .checkedMulU64 l r => s!"mul({valCanon l},{valCanon r})"
+    | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
+    | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
+    | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
+    | .okState v => s!"ok({valCanon v})"
+    | .errorOverflow => "ovf"
+    | .returnU64 v => s!"retu({valCanon v})"
+    | .returnState v => s!"rets({valCanon v})"
+  String.intercalate ";" (ops.toList.map one)
+
+private def methodCanon (m : Method) : String :=
+  s!"{kindTag m.kind}:{m.ixName}:{m.paramCount}:[{opsCanon m.ops}]"
+
+/-- 规范化身份：按 `ixName` 排序。不含 Lean 全名、不含 sketch。 -/
+def canonical (p : Program) : String :=
+  let fields := String.intercalate "," p.fields.toList
+  let methods :=
+    (p.methods.qsort (fun a b => a.ixName < b.ixName)).toList.map methodCanon
+  s!"{p.name}|{fields}|{String.intercalate "/" methods}"
+
+private def fnvOffset : UInt64 := 14695981039346656037
+private def fnvPrime : UInt64 := 1099511628211
+
+def fnv1a64 (s : String) : UInt64 :=
+  s.toUTF8.data.foldl (init := fnvOffset) fun h b =>
+    (h ^^^ b.toUInt64) * fnvPrime
+
+private def hexDigit (n : Nat) : Char :=
+  if n < 10 then Char.ofNat (n + 48) else Char.ofNat (n + 87)
+
+def u64Hex (n : UInt64) : String :=
+  let rec go (fuel : Nat) (v : Nat) (acc : String) : String :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      if v = 0 && acc ≠ "" then acc
+      else go fuel' (v / 16) (String.singleton (hexDigit (v % 16)) ++ acc)
+  let s := go 16 n.toNat ""
+  if s = "" then "0" else s
+
+/-- FNV-1a 64，十六进制，无 `0x` 前缀。 -/
+def digestHex (p : Program) : String :=
+  u64Hex (fnv1a64 (canonical p))
 
 end SolanaLean.IR

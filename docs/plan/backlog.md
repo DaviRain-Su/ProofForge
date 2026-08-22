@@ -10,10 +10,11 @@
 - Loader 偏移按 `dataLen` 算
 - `@[solana_entry]` + `#solana_build`；按名 disc；Counter 同程序 decrement
 - 任意 `ite`；checked mul/div/mod；`=` `≠` 比较；Counter scale/divide/modulo/nonzero
+- `IR.digestHex`（FNV-1a 64）；`#solana_build` 抽出与 fixture 必须同一 digest
 
-## 下一刀（L1）
+## 下一刀
 
-1. `Program` 内容寻址 digest（证明主语 = 编译主语）
+L1 收口。下一阶段是 L2 布局（窄整数 / Option / Array）或 L3（init 写全字段）。
 
 ## 其后（L2 / L3）
 

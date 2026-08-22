@@ -58,3 +58,6 @@
 | T-L1-10 | error | divide n/0 | `0x1001` 保持 |
 | T-L1-11 | happy | modulo 8%3 | 2 |
 | T-L1-12 | happy | nonzero 0 / 7 | return 1 / 0 |
+| T-L1-13 | happy | 同一 Program 两次 digest | 相等 |
+| T-L1-14 | happy | 改一个 op | digest 变 |
+| T-L1-15 | happy | 发射文本 | 含 `digest=` |

@@ -53,3 +53,26 @@ error: extract/unsupported: no solana_entry
         asm.contains "call creditLeft" &&
         asm.contains "call getLeft" &&
         !asm.contains "call increment"
+
+#guard
+  SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter ==
+    SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter
+
+#guard
+  SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter !=
+    SolanaLean.IR.digestHex SolanaLean.IR.extractedPair
+
+#guard
+  let p := SolanaLean.IR.extractedPair
+  let q : SolanaLean.IR.Program :=
+    { p with methods := p.methods.map fun m =>
+        if m.ixName == "getLeft" then
+          { m with ops := #[.returnU64 (.field (.arg 0) "right")] }
+        else m }
+  SolanaLean.IR.digestHex p != SolanaLean.IR.digestHex q
+
+#guard
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.extractedCounter with
+  | .error _ => false
+  | .ok asm =>
+      asm.contains s!"digest={SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter}"

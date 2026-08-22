@@ -147,6 +147,16 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
     Except String (String × Nat) := do
   let mut acc := ""
   let mut n := fresh
+  let destHint :=
+    match ops.findSome? (fun
+      | .checkedAddU64 l _ => some (destField p l)
+      | .checkedSubU64 l _ => some (destField p l)
+      | .checkedMulU64 l _ => some (destField p l)
+      | .checkedDivU64 l _ => some (destField p l)
+      | .checkedModU64 l _ => some (destField p l)
+      | _ => none) with
+    | some d => d
+    | none => p.fields[0]?.getD "value"
   for op in ops do
     match op with
     | .checkedAddU64 l r =>
@@ -200,14 +210,10 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
     | .okState v =>
       match v with
       | .lit k =>
-        let dest := p.fields[0]?.getD "value"
         acc := acc ++ s!"  lddw r1, {k.toNat}\n  stxdw [r10 - 24], r1\n"
-        acc := acc ++ (← emitStoreAndReturn p dest 24)
-      | .field _ name =>
-        acc := acc ++ (← emitStoreAndReturn p name 24)
-      | .arg _ =>
-        let dest := p.fields[0]?.getD "value"
-        acc := acc ++ (← emitStoreAndReturn p dest 24)
+        acc := acc ++ (← emitStoreAndReturn p destHint 24)
+      | _ =>
+        acc := acc ++ (← emitStoreAndReturn p destHint 24)
     | .errorOverflow =>
       acc := acc ++ emitOverflowExit label
     | .returnU64 v =>
@@ -317,6 +323,7 @@ def emitCounterAsm (program : IR.Program) : Except String String := do
     handlers := handlers ++ (← emitHandler program marker m) ++ "\n"
   return s!"\
 ; SOLANA-LEAN-SBPF-ASM v0 (ops-driven handler bodies)
+; digest={IR.digestHex program}
 ; Layout matches ProofForge StateCell: header u64 + count u64
 
 .equ NUM_ACCOUNTS, 0x0

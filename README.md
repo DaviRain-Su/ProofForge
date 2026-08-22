@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**L1 ite + checked 四则**。`#solana_build Examples.Counter` 抽出 init/increment/decrement/scale/divide/modulo/get/nonzero。补全依据见 [docs/plan/analysis/authority.md](docs/plan/analysis/authority.md)。
+当前：**L1 收口**。`#solana_build` 抽出的 Program 与发射 fixture 同一 `digestHex`。补全依据见 [docs/plan/analysis/authority.md](docs/plan/analysis/authority.md)。
 
 ## 「难的是 loading 吗？」
 

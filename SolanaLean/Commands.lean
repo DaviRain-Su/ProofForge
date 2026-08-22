@@ -61,8 +61,14 @@ elab "#solana_build " n:ident : command => do
     | .ok asm =>
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
+      let digest := IR.digestHex program
+      if program.name == "Counter" && digest != IR.digestHex IR.extractedCounter then
+        throwError "ir/mismatch: extracted Counter digest != fixture"
+      if program.name == "Pair" && digest != IR.digestHex IR.extractedPair then
+        throwError "ir/mismatch: extracted Pair digest != fixture"
       logInfo m!"solana-lean: program {program.name} fields = {program.fields}"
       logInfo m!"solana-lean: methods = {program.methods.map (fun m => m.ixName)}"
+      logInfo m!"solana-lean: digest = {digest}"
       logInfo m!"solana-lean: emitted {asm.length} bytes of sBPF assembly"
 
 elab "#solana_dump " n:ident : command => do
