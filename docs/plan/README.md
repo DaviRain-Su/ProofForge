@@ -1,6 +1,6 @@
 # 交付计划
 
-分析：[analysis/v0-slice.md](analysis/v0-slice.md)
+分析：[analysis/v0-slice.md](analysis/v0-slice.md) · [analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)
 
 任务：
 

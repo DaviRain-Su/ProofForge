@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**从 structure 收字段表**。合约在 `Examples/`（Counter、Pair）；编译器在 `SolanaLean/`。
+当前：**单账户 UInt64 剖面已通**（Counter + Pair）。缺口与后续阶段见 [docs/plan/analysis/gap-vs-proofforge.md](docs/plan/analysis/gap-vs-proofforge.md)。下一刀是 `@[solana_entry]`，不是 CPI。
 
 ## 「难的是 loading 吗？」
 
