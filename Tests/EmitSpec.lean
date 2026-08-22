@@ -4,14 +4,9 @@ import SolanaLean
 
 #guard
   match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.counterProgram with
-  | .error _ => false
-  | .ok asm =>
-      asm.contains "entrypoint:" &&
-      asm.contains "body_increment:" &&
-      asm.contains SolanaLean.Emit.overflowCode &&
-      asm.contains SolanaLean.Emit.layoutMarker &&
-      asm.contains SolanaLean.Emit.discInit &&
-      asm.contains "call sol_set_return_data"
+  | .error "extract/unsupported: init missing returnState" => true
+  | .error "extract/unsupported: increment missing checkedAddU64" => true
+  | _ => false
 
 #guard
   match SolanaLean.Emit.emitCounterAsm { name := "x", methods := #[] } with

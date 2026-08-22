@@ -33,6 +33,22 @@ def isCounterShape (p : Program) : Bool :=
 def hasSketches (p : Program) : Bool :=
   p.methods.all (fun m => !m.sketch.isEmpty)
 
+/-- 与 `Extract.extractCounter` 对 `Counter.init/increment/get` 的抽出结果对齐。 -/
+def extractedCounter : Program :=
+  { name := "Counter"
+    methods := #[
+      { kind := .init, name := "SolanaLean.Counter.init"
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "SolanaLean.Counter.increment"
+        ops := #[
+          .checkedAddU64 (.field (.arg 1) "value") (.arg 0),
+          .okState (.arg 0),
+          .errorOverflow
+        ] },
+      { kind := .get, name := "SolanaLean.Counter.get"
+        ops := #[.returnU64 (.field (.arg 0) "value")] }
+    ] }
+
 def counterProgram (name : String := "Counter") : Program :=
   { name
     methods := #[

@@ -3,27 +3,167 @@ import SolanaLean.Ops
 
 namespace SolanaLean.Emit
 
-/-- 与 ProofForge StateCell / Loader V3 单账户布局对齐的常量。 -/
 def discInit : String := "0x642858a76747495e"
 def discIncrement : String := "0x223edbd10397c79d"
 def discGet : String := "0x37dd90d6b076a2a4"
 def layoutMarker : String := "0xbbe897f0336e6fc"
 def overflowCode : String := "0x1001"
 
+/-- Loader V3 单账户预检。`ixLen` 是 instruction data 期望长度。 -/
+private def prelude (label : String) (ixLen : Nat) (needSigner needWritable needUninit : Bool) :
+    String :=
+  let err := s!"err_check_{label}"
+  let signer :=
+    if needSigner then
+      s!"  ldxb r1, [r6 + ACC0_HEADER + 1]\n  jeq r1, 0, {err}\n"
+    else ""
+  let writable :=
+    if needWritable then
+      s!"  ldxb r1, [r6 + ACC0_HEADER + 2]\n  jeq r1, 0, {err}\n"
+    else ""
+  let header :=
+    if needUninit then
+      s!"  ldxdw r1, [r6 + ACC0_DATA + 0]\n  lddw r2, 0x0\n  jne r1, r2, {err}\n"
+    else
+      s!"  ldxdw r1, [r6 + ACC0_DATA + 0]\n  lddw r2, {layoutMarker}\n  jne r1, r2, {err}\n"
+  s!"\
+  ldxdw r1, [r6 + NUM_ACCOUNTS]
+  jne r1, 1, {err}
+  ldxb r1, [r6 + ACC0_HEADER + 0]
+  jne r1, 0xff, {err}
+  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
+  jne r1, {ixLen}, {err}
+  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
+  mov64 r2, r6
+  add64 r2, INSTRUCTION_DATA
+  add64 r2, r1
+  ldxdw r1, [r6 + ACC0_OWNER]
+  ldxdw r3, [r2 + 0]
+  jne r1, r3, {err}
+  ldxdw r1, [r6 + ACC0_OWNER + 8]
+  ldxdw r3, [r2 + 8]
+  jne r1, r3, {err}
+  ldxdw r1, [r6 + ACC0_OWNER + 16]
+  ldxdw r3, [r2 + 16]
+  jne r1, r3, {err}
+  ldxdw r1, [r6 + ACC0_OWNER + 24]
+  ldxdw r3, [r2 + 24]
+  jne r1, r3, {err}
+  ldxdw r1, [r6 + ACC0_DATA_LEN]
+  jne r1, 16, {err}
+{signer}{writable}{header}  ja body_{label}
+{err}:
+  lddw r0, 0x1
+  exit
+"
+
+private def emitInitBody : String :=
+  s!"\
+body_initialize:
+  lddw r1, 0
+  stxdw [r6 + ACC0_DATA + 8], r1
+  ldxdw r1, [r6 + INSTRUCTION_DATA + 8]
+  stxdw [r10 - 8], r1
+  ldxdw r1, [r10 - 8]
+  stxdw [r6 + ACC0_DATA + 8], r1
+  lddw r1, {layoutMarker}
+  stxdw [r6 + ACC0_DATA + 0], r1
+  lddw r0, 0
+  exit
+"
+
+private def emitCheckedAddBody : String :=
+  s!"\
+body_increment:
+  ldxdw r1, [r6 + ACC0_DATA + 8]
+  stxdw [r10 - 8], r1
+  ldxdw r1, [r6 + INSTRUCTION_DATA + 8]
+  stxdw [r10 - 16], r1
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  lddw r3, 0xffffffffffffffff
+  sub64 r3, r2
+  jgt r1, r3, err_add_0
+  mov64 r4, r1
+  add64 r4, r2
+  stxdw [r10 - 24], r4
+  ja ok_add_1
+err_add_0:
+  lddw r0, {overflowCode}
+  exit
+ok_add_1:
+  ldxdw r1, [r10 - 24]
+  stxdw [r6 + ACC0_DATA + 8], r1
+  ldxdw r1, [r6 + ACC0_DATA + 8]
+  stxdw [r10 - 8], r1
+  ldxdw r1, [r10 - 8]
+  stxdw [r10 - 32], r1
+  mov64 r1, r10
+  add64 r1, -32
+  lddw r2, 8
+  call sol_set_return_data
+  lddw r0, 0
+  exit
+"
+
+private def emitGetBody : String :=
+  "\
+body_get:
+  ldxdw r1, [r6 + ACC0_DATA + 8]
+  stxdw [r10 - 8], r1
+  ldxdw r1, [r10 - 8]
+  stxdw [r10 - 16], r1
+  mov64 r1, r10
+  add64 r1, -16
+  lddw r2, 8
+  call sol_set_return_data
+  lddw r0, 0
+  exit
+"
+
+private def hasReturnState (ops : Array Ops.Op) : Bool :=
+  ops.any (fun | .returnState _ => true | _ => false)
+
+private def hasErrorOverflow (ops : Array Ops.Op) : Bool :=
+  ops.any (fun | .errorOverflow => true | _ => false)
+
+private def hasOkState (ops : Array Ops.Op) : Bool :=
+  ops.any (fun | .okState _ => true | _ => false)
+
+private def hasReturnU64 (ops : Array Ops.Op) : Bool :=
+  ops.any (fun | .returnU64 _ => true | _ => false)
+
+private def emitHandler (m : IR.Method) : Except String String :=
+  match m.kind with
+  | .init =>
+    if hasReturnState m.ops then
+      .ok s!"initialize:\n{prelude "initialize" 16 true true true}{emitInitBody}"
+    else
+      .error "extract/unsupported: init missing returnState"
+  | .increment =>
+    if !Ops.hasCheckedAdd m.ops then
+      .error "extract/unsupported: increment missing checkedAddU64"
+    else if !hasErrorOverflow m.ops then
+      .error "extract/unsupported: increment missing errorOverflow"
+    else if !hasOkState m.ops then
+      .error "extract/unsupported: increment missing okState"
+    else
+      .ok s!"increment:\n{prelude "increment" 16 false true false}{emitCheckedAddBody}"
+  | .get =>
+    if hasReturnU64 m.ops then
+      .ok s!"get:\n{prelude "get" 8 false false false}{emitGetBody}"
+    else
+      .error "extract/unsupported: get missing returnU64"
+
 def emitCounterAsm (program : IR.Program) : Except String String := do
   unless IR.isCounterShape program do
     throw "extract/unsupported: not counter shape"
-  let incrementOps :=
-    (program.methods.find? (·.kind == .increment)).map (·.ops)
-  match incrementOps with
-  | some ops =>
-    unless ops.isEmpty || Ops.hasCheckedAdd ops do
-      throw "extract/unsupported: increment missing checkedAddU64"
-  | none => throw "extract/unsupported: missing increment"
+  let mut handlers := ""
+  for m in program.methods do
+    handlers := handlers ++ (← emitHandler m) ++ "\n"
   return s!"\
-; SOLANA-LEAN-SBPF-ASM v0 (Counter / Loader V3 single account)
+; SOLANA-LEAN-SBPF-ASM v0 (ops-driven handler bodies)
 ; Layout matches ProofForge StateCell: header u64 + count u64
-; Discriminators: initialize/increment/get (PF domain proof-forge-solana-v1)
 
 .equ NUM_ACCOUNTS, 0x0
 .equ ACC0_HEADER, 0x8
@@ -72,162 +212,6 @@ dispatch_next_get:
   lddw r0, 1
   exit
 
-initialize:
-  ldxdw r1, [r6 + NUM_ACCOUNTS]
-  jne r1, 1, err_check_initialize
-  ldxb r1, [r6 + ACC0_HEADER + 0]
-  jne r1, 0xff, err_check_initialize
-  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
-  jne r1, 16, err_check_initialize
-  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
-  mov64 r2, r6
-  add64 r2, INSTRUCTION_DATA
-  add64 r2, r1
-  ldxdw r1, [r6 + ACC0_OWNER]
-  ldxdw r3, [r2 + 0]
-  jne r1, r3, err_check_initialize
-  ldxdw r1, [r6 + ACC0_OWNER + 8]
-  ldxdw r3, [r2 + 8]
-  jne r1, r3, err_check_initialize
-  ldxdw r1, [r6 + ACC0_OWNER + 16]
-  ldxdw r3, [r2 + 16]
-  jne r1, r3, err_check_initialize
-  ldxdw r1, [r6 + ACC0_OWNER + 24]
-  ldxdw r3, [r2 + 24]
-  jne r1, r3, err_check_initialize
-  ldxdw r1, [r6 + ACC0_DATA_LEN]
-  jne r1, 16, err_check_initialize
-  ldxb r1, [r6 + ACC0_HEADER + 1]
-  jeq r1, 0, err_check_initialize
-  ldxb r1, [r6 + ACC0_HEADER + 2]
-  jeq r1, 0, err_check_initialize
-  ldxdw r1, [r6 + ACC0_DATA + 0]
-  lddw r2, 0x0
-  jne r1, r2, err_check_initialize
-  ja body_initialize
-err_check_initialize:
-  lddw r0, 0x1
-  exit
-body_initialize:
-  lddw r1, 0
-  stxdw [r6 + ACC0_DATA + 8], r1
-  ldxdw r1, [r6 + INSTRUCTION_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r10 - 8]
-  stxdw [r6 + ACC0_DATA + 8], r1
-  lddw r1, {layoutMarker}
-  stxdw [r6 + ACC0_DATA + 0], r1
-  lddw r0, 0
-  exit
-
-increment:
-  ldxdw r1, [r6 + NUM_ACCOUNTS]
-  jne r1, 1, err_check_increment
-  ldxb r1, [r6 + ACC0_HEADER + 0]
-  jne r1, 0xff, err_check_increment
-  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
-  jne r1, 16, err_check_increment
-  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
-  mov64 r2, r6
-  add64 r2, INSTRUCTION_DATA
-  add64 r2, r1
-  ldxdw r1, [r6 + ACC0_OWNER]
-  ldxdw r3, [r2 + 0]
-  jne r1, r3, err_check_increment
-  ldxdw r1, [r6 + ACC0_OWNER + 8]
-  ldxdw r3, [r2 + 8]
-  jne r1, r3, err_check_increment
-  ldxdw r1, [r6 + ACC0_OWNER + 16]
-  ldxdw r3, [r2 + 16]
-  jne r1, r3, err_check_increment
-  ldxdw r1, [r6 + ACC0_OWNER + 24]
-  ldxdw r3, [r2 + 24]
-  jne r1, r3, err_check_increment
-  ldxdw r1, [r6 + ACC0_DATA_LEN]
-  jne r1, 16, err_check_increment
-  ldxb r1, [r6 + ACC0_HEADER + 2]
-  jeq r1, 0, err_check_increment
-  ldxdw r1, [r6 + ACC0_DATA + 0]
-  lddw r2, {layoutMarker}
-  jne r1, r2, err_check_increment
-  ja body_increment
-err_check_increment:
-  lddw r0, 0x1
-  exit
-body_increment:
-  ldxdw r1, [r6 + ACC0_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r6 + INSTRUCTION_DATA + 8]
-  stxdw [r10 - 16], r1
-  ldxdw r1, [r10 - 8]
-  ldxdw r2, [r10 - 16]
-  lddw r3, 0xffffffffffffffff
-  sub64 r3, r2
-  jgt r1, r3, err_add_0
-  mov64 r4, r1
-  add64 r4, r2
-  stxdw [r10 - 24], r4
-  ja ok_add_1
-err_add_0:
-  lddw r0, {overflowCode}
-  exit
-ok_add_1:
-  ldxdw r1, [r10 - 24]
-  stxdw [r6 + ACC0_DATA + 8], r1
-  ldxdw r1, [r6 + ACC0_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r10 - 8]
-  stxdw [r10 - 32], r1
-  mov64 r1, r10
-  add64 r1, -32
-  lddw r2, 8
-  call sol_set_return_data
-  lddw r0, 0
-  exit
-
-get:
-  ldxdw r1, [r6 + NUM_ACCOUNTS]
-  jne r1, 1, err_check_get
-  ldxb r1, [r6 + ACC0_HEADER + 0]
-  jne r1, 0xff, err_check_get
-  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
-  jne r1, 8, err_check_get
-  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
-  mov64 r2, r6
-  add64 r2, INSTRUCTION_DATA
-  add64 r2, r1
-  ldxdw r1, [r6 + ACC0_OWNER]
-  ldxdw r3, [r2 + 0]
-  jne r1, r3, err_check_get
-  ldxdw r1, [r6 + ACC0_OWNER + 8]
-  ldxdw r3, [r2 + 8]
-  jne r1, r3, err_check_get
-  ldxdw r1, [r6 + ACC0_OWNER + 16]
-  ldxdw r3, [r2 + 16]
-  jne r1, r3, err_check_get
-  ldxdw r1, [r6 + ACC0_OWNER + 24]
-  ldxdw r3, [r2 + 24]
-  jne r1, r3, err_check_get
-  ldxdw r1, [r6 + ACC0_DATA_LEN]
-  jne r1, 16, err_check_get
-  ldxdw r1, [r6 + ACC0_DATA + 0]
-  lddw r2, {layoutMarker}
-  jne r1, r2, err_check_get
-  ja body_get
-err_check_get:
-  lddw r0, 0x1
-  exit
-body_get:
-  ldxdw r1, [r6 + ACC0_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r10 - 8]
-  stxdw [r10 - 16], r1
-  mov64 r1, r10
-  add64 r1, -16
-  lddw r2, 8
-  call sol_set_return_data
-  lddw r0, 0
-  exit
-"
+{handlers}"
 
 end SolanaLean.Emit

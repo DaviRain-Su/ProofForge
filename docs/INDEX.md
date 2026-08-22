@@ -15,4 +15,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**S5 抽出已认出 `checkedAddU64`**。发射仍用 Counter 模板，但必须以抽出的 checked-add 为准。下一步按 ops 生成汇编。
+当前阶段：**发射已按 Op 选体**。证明仍在本机 Lean `def` 上；链上只跑抽出的计算。空 ops 不再发射 overflow。

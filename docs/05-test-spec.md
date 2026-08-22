@@ -25,7 +25,8 @@
 | T-S1-03 | error | `partial` / `sorry` / `IO` / `extern` / `implemented_by` | 对应 reject |
 | T-S2-01 | happy | `#solana_extract` Counter | 抽出；increment sketch 含 `u64Max` |
 | T-S2-02 | error | extract 夹带 `usesNat` | fail closed |
-| T-S3-01 | happy | `emitCounterAsm` Counter | 含 entrypoint / overflow / disc / return data |
+| T-S3-01 | happy | `#solana_extract` 后发射 | 含 entrypoint / overflow / disc / return data |
+| T-S3-03 | error | 空 ops 的 `counterProgram` | 缺 `returnState` / `checkedAddU64` |
 | T-S3-02 | error | 空 IR | `not counter shape` |
 | T-S4-01 | happy | Mollusk init(5) | 账户 count=5 |
 | T-S4-02 | happy | increment 5+3 | return 8，写回 8 |

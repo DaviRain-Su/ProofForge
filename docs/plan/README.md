@@ -13,5 +13,6 @@
 | [asmb-001](tasks/asmb-001.md) | done | sbpf + Mollusk 4/4 |
 
 | [gen-001](tasks/gen-001.md) | done | Expr → checkedAdd 操作序列 |
+| [gen-002](tasks/gen-002.md) | done | 按 Op 选择 handler 体 |
 
 积压：[backlog.md](backlog.md)

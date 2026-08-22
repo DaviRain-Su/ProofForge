@@ -6,7 +6,7 @@
 
 ## Boundary
 
-不调用 PF 的私有 `IR.mk`。不调用 `sbpf`（S4）。布局 / discriminator / overflow `0x1001` 与 PF StateCell 黄金文件一致，便于后续 Mollusk 复用同一夹具。
+Handler 体按 `Method.ops` 选择片段：`returnState` → init 写回；`checkedAddU64`+`errorOverflow` → overflow `0x1001`；`returnU64` → `sol_set_return_data`。空 ops 失败。Loader 预检仍共享。不调用 PF `IR.mk`。
 
 ## API
 

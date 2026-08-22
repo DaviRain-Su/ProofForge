@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**竖切已通 + S5 抽出认出 checked-add**。下一步按 ops 生成汇编，替换整段模板。
+当前：**证明在本机 `def` 上；汇编按抽出的 Op 选体。** 空 ops 不能再冒充 Counter。
 
 ## 「难的是 loading 吗？」
 

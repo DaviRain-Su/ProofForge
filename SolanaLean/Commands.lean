@@ -34,6 +34,10 @@ elab "#solana_extract " initN:ident incrementN:ident getN:ident : command => do
       unless sketch.any (· == "SolanaLean.Counter.u64Max") do
         throwError "ir/mismatch: increment sketch missing u64Max"
     | none => throwError "extract/unsupported: missing increment"
+    let extractedOps := program.methods.map (·.ops)
+    let fixtureOps := IR.extractedCounter.methods.map (·.ops)
+    unless extractedOps == fixtureOps do
+      throwError "ir/mismatch: extract != IR.extractedCounter"
     match Emit.emitCounterAsm program with
     | .error reason => throwError reason
     | .ok asm =>
