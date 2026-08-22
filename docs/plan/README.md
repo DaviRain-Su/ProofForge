@@ -41,6 +41,7 @@
 | [l4-011](tasks/l4-011.md) | done | rentExemption |
 | [l4-012](tasks/l4-012.md) | done | Token mint / burn |
 | [l4-013](tasks/l4-013.md) | done | System assign / allocate |
+| [l4-014](tasks/l4-014.md) | done | Token init / close |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

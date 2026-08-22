@@ -31,12 +31,13 @@
 - `rentExemption` 叶子；`sol_get_rent_sysvar` × `(128+n)`；Rent Mollusk
 - `tokenMintToChecked` / `tokenBurnChecked`；TokenMint Mollusk
 - `systemAssign` / `systemAllocate`；SysAlloc Mollusk
+- `tokenInitAccount` / `tokenCloseAccount`；TokenAcc Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：Token close / init account。
+建议下一条：Memo / 其余有具体合约再开的 recipe。
 
 ## 其后（L2 / L3）
 

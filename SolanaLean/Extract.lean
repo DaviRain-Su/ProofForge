@@ -693,6 +693,12 @@ private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
     else none
   else if isConstNamed e ``SolanaLean.Runtime.CpiWord.programId || endsWith e ".programId" then
     some .programId
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.accKey || endsWith e ".accKey" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
+      | some i => some (.accKey i)
+      | none => none
+    else none
   else none
 
 /-- `#[a, b, …]` 展开成 `Array.mk [a, b, …]` / `List.cons`。 -/
@@ -810,6 +816,8 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       mentionsRuntime e "tokenTransferChecked" ||
       mentionsRuntime e "tokenMintToChecked" ||
       mentionsRuntime e "tokenBurnChecked" ||
+      mentionsRuntime e "tokenInitAccount" ||
+      mentionsRuntime e "tokenCloseAccount" ||
       mentionsRuntime e "ataCreateIdempotent" then
     go fuel e
   else none
@@ -852,6 +860,8 @@ private def invokeRet
   | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => amount
   | (3, _, #[.u8le 14, .u64le amount, .u8le _], none, none) => amount
   | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => amount
+  | (3, _, #[.u8le 18, .accKey 0], none, none) => .lit 0
+  | (3, _, #[.u8le 9], none, none) => .lit 0
   | (6, _, #[.u8le 1], none, none) => .lit 0
   | _ => .lit 0
 

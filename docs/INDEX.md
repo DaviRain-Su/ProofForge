@@ -18,4 +18,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L4 SDK 表面**。L4-013：System assign / allocate。下一刀 Token close / init account。
+当前阶段：**L4 SDK 表面**。L4-014：Token init / close account。

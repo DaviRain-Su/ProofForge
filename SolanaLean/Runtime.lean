@@ -42,6 +42,7 @@ inductive CpiWord where
   | u64le (v : UInt64)
   | ascii (s : String)
   | programId
+  | accKey (i : UInt64)
   deriving Repr, Inhabited
 
 /--
@@ -146,6 +147,27 @@ def tokenBurnChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
       { acc := 2, signer := false, writable := true },
       { acc := 0, signer := true, writable := false }]
     #[.u8le 15, .u64le amount, .u8le decimals]
+
+/--
+Token `InitializeAccount3`：普通包装。owner = 外层账户 0 公钥。
+外层 0 是 owner。内层：account w / mint r。
+-/
+def tokenInitAccount : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false }]
+    #[.u8le 18, .accKey 0]
+
+/--
+Token `CloseAccount`：普通包装。
+外层 0 是 owner。内层：source w / dest w / owner s。
+-/
+def tokenCloseAccount : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 9]
 
 /--
 ATA `CreateIdempotent`：普通包装。

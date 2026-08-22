@@ -474,6 +474,14 @@ private def emitCpiData (p : IR.Program) (base : Nat) (data : Array Ops.CpiWord)
         s!"  ldxdw r2, [r1 + 16]\n  stxdw [r9 + {base + off + 16}], r2\n" ++
         s!"  ldxdw r2, [r1 + 24]\n  stxdw [r9 + {base + off + 24}], r2\n"
       off := off + 32
+    | .accKey i =>
+      body := body ++
+        s!"  ldxdw r1, [r10 - {headerStack i}]\n  add64 r1, 8\n" ++
+        s!"  ldxdw r2, [r1 + 0]\n  stxdw [r9 + {base + off}], r2\n" ++
+        s!"  ldxdw r2, [r1 + 8]\n  stxdw [r9 + {base + off + 8}], r2\n" ++
+        s!"  ldxdw r2, [r1 + 16]\n  stxdw [r9 + {base + off + 16}], r2\n" ++
+        s!"  ldxdw r2, [r1 + 24]\n  stxdw [r9 + {base + off + 24}], r2\n"
+      off := off + 32
   return (body, off)
 
 /-- `r5` 已是 metas 基址（`r9 + metaOff`）；第 i 条相对偏移是 `16*i`，不要再加 16。 -/

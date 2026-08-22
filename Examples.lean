@@ -18,3 +18,4 @@ import Examples.Ata
 import Examples.Rent
 import Examples.TokenMint
 import Examples.SysAlloc
+import Examples.TokenAcc

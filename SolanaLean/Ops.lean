@@ -36,6 +36,7 @@ inductive CpiWord where
   | u64le (v : Val)
   | ascii (s : String)
   | programId
+  | accKey (i : Nat)
   deriving BEq, Repr, Inhabited
 
 inductive Op where
@@ -101,6 +102,19 @@ def tokenBurnChecked (amount : Val) (decimals : UInt64) : Op :=
       { acc := 2, signer := false, writable := true },
       { acc := 0, signer := true, writable := false }]
     #[.u8le 15, .u64le amount, .u8le decimals]
+
+def tokenInitAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false }]
+    #[.u8le 18, .accKey 0]
+
+def tokenCloseAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 9]
 
 def ataCreateIdempotent : Op :=
   .invoke 6

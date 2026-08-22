@@ -306,6 +306,20 @@ def extractedTokenXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTokenAcc : Program :=
+  { name := "TokenAcc"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenAcc.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenAcc.openAcc", ixName := "openAcc", paramCount := 0
+        ops := #[Ops.tokenInitAccount, .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenAcc.closeAcc", ixName := "closeAcc", paramCount := 0
+        ops := #[Ops.tokenCloseAccount, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TokenAcc.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedSysAlloc : Program :=
   { name := "SysAlloc"
     slots := #[{ name := "dummy" }]
@@ -387,7 +401,7 @@ def programs : Array Program := #[
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
-  extractedRent, extractedTokenMint, extractedSysAlloc
+  extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
