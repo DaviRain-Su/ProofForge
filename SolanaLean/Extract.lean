@@ -836,6 +836,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       mentionsRuntime e "systemAssignWithSeed" ||
       mentionsRuntime e "systemTransferWithSeed" ||
       mentionsRuntime e "tokenInitMint" ||
+      mentionsRuntime e "tokenSyncNative" ||
       mentionsRuntime e "tokenTransferChecked" ||
       mentionsRuntime e "tokenMintToChecked" ||
       mentionsRuntime e "tokenBurnChecked" ||
@@ -893,6 +894,7 @@ private def invokeRet
   | (2, _, #[.u32le 10, .accKey 0, .u64le _, .ascii "vault", .programId], none, none) => .lit 0
   | (3, _, #[.u32le 11, .u64le lamports, .u64le _, .ascii "vault", .programId], none, none) => lamports
   | (2, _, #[.u8le 20, .u8le 6, .accKey 0, .u8le 0], none, none) => .lit 0
+  | (2, _, #[.u8le 17], none, none) => .lit 0
   | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => amount
   | (3, _, #[.u8le 14, .u64le amount, .u8le _], none, none) => amount
   | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => amount

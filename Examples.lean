@@ -29,3 +29,4 @@ import Examples.TokenSize
 import Examples.SysSeed
 import Examples.SysXfer
 import Examples.TokenMint2
+import Examples.TokenNative

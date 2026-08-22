@@ -122,6 +122,11 @@ def tokenInitMint : Op :=
     #[{ acc := 1, signer := false, writable := true }]
     #[.u8le 20, .u8le 6, .accKey 0, .u8le 0]
 
+def tokenSyncNative : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := true }]
+    #[.u8le 17]
+
 def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
   .invoke 4
     #[{ acc := 1, signer := false, writable := true },

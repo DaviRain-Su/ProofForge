@@ -463,6 +463,18 @@ def extractedTokenMint2 : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTokenNative : Program :=
+  { name := "TokenNative"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenNative.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenNative.syncNative", ixName := "syncNative", paramCount := 0
+        ops := #[Ops.tokenSyncNative, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TokenNative.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedTokenSize : Program :=
   { name := "TokenSize"
     slots := #[{ name := "dummy" }]
@@ -552,7 +564,8 @@ def programs : Array Program := #[
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
-  extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2
+  extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
+  extractedTokenNative
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

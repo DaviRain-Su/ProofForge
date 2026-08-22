@@ -186,6 +186,15 @@ def tokenInitMint : UInt64 :=
     #[.u8le 20, .u8le 6, .accKey 0, .u8le 0]
 
 /--
+Token `SyncNative`：把 native token 账户的 amount 同步成底层 lamports。
+外层：owner s+w、native 账户 w、Token。
+-/
+def tokenSyncNative : UInt64 :=
+  invoke 2
+    #[{ acc := 1, signer := false, writable := true }]
+    #[.u8le 17]
+
+/--
 Token `TransferChecked`：普通包装。decimals 编译期常量。
 外层 0 必须是 authority（prelude 强制 acc0 signer）。
 内层账户按官方顺序：source / mint / dest / authority。

@@ -30,6 +30,7 @@ import Examples.TokenSize
 import Examples.SysSeed
 import Examples.SysXfer
 import Examples.TokenMint2
+import Examples.TokenNative
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -159,6 +160,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.SysXfer.init Examples.SysXfer.sendSeed Examples.SysXfer.get
 
 #solana_extract Examples.TokenMint2.init Examples.TokenMint2.openMint Examples.TokenMint2.get
+
+#solana_extract Examples.TokenNative.init Examples.TokenNative.syncNative Examples.TokenNative.get
 
 /--
 error: extract/unsupported: field tag enum has payload
