@@ -71,6 +71,13 @@ def systemCreate (lamports space : Val) : Op :=
       { acc := 1, signer := true, writable := true }]
     #[.u32le 0, .u64le lamports, .u64le space, .programId]
 
+def createPda (lamports : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := true, writable := true }]
+    #[.u32le 0, .u64le lamports, .u64le (.lit 16), .programId]
+    (some "vault") (some (.findPda "vault"))
+
 def systemAssign : Op :=
   .invoke 1
     #[{ acc := 0, signer := true, writable := true }]

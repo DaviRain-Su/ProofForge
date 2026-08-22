@@ -33,12 +33,13 @@
 - `systemAssign` / `systemAllocate`；SysAlloc Mollusk
 - `tokenInitAccount` / `tokenCloseAccount`；TokenAcc Mollusk
 - `memoWrite`；Memo Mollusk
+- `createPda`；CreatePda Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：其余有具体合约再开的 recipe。
+建议下一条：`createProgramAddress` / 其余有具体合约再开的 recipe。
 
 ## 其后（L2 / L3）
 

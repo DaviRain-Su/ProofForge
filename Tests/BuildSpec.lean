@@ -21,6 +21,7 @@ import Examples.TokenMint
 import Examples.SysAlloc
 import Examples.TokenAcc
 import Examples.Memo
+import Examples.CreatePda
 
 #solana_build Examples.Counter
 
@@ -65,6 +66,8 @@ import Examples.Memo
 #solana_build Examples.TokenAcc
 
 #solana_build Examples.Memo
+
+#solana_build Examples.CreatePda
 
 /--
 error: extract/unsupported: no solana_entry

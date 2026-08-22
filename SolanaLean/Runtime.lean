@@ -204,6 +204,17 @@ def ataCreateIdempotent : UInt64 :=
   let _ := seed
   0
 
+/--
+给当前 program 下、种子 `"vault"` 的 PDA 开 16 字节。
+PDA 用 `findPda` 的 bump 签字。space 本切片钉死。
+-/
+def createPda (lamports : UInt64) : UInt64 :=
+  invokeSigned 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := true, writable := true }]
+    #[.u32le 0, .u64le lamports, .u64le 16, .programId]
+    "vault" (findPda "vault")
+
 /-- 账户 0 的 lamports。只读；改余额走 `systemTransfer`。 -/
 @[irreducible] def accLamports0 : UInt64 := 0
 

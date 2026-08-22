@@ -95,30 +95,31 @@ private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
 {emitSkipAccount s!"{i}_{tag}"}"
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
-private def walkInvokeMetas (fuel : Nat) (ops : Array Ops.Op) (acc : Array Ops.CpiMeta) :
-    Array Ops.CpiMeta :=
+private def walkInvokeMetas (fuel : Nat) (ops : Array Ops.Op)
+    (acc : Array (Ops.CpiMeta × Bool)) : Array (Ops.CpiMeta × Bool) :=
   match fuel with
   | 0 => acc
   | fuel' + 1 =>
     ops.foldl (init := acc) fun a op =>
       match op with
-      | .invoke _ metas _ => a ++ metas
+      | .invoke _ metas _ seed _ => a ++ metas.map (·, seed.isSome)
       | .ite _ _ _ t f => walkInvokeMetas fuel' f (walkInvokeMetas fuel' t a)
       | _ => a
 
-/-- acc0 必须 signer+writable；其余 meta 按编译期旗检查。 -/
+/-- acc0 必须 signer+writable；其余 writable 查外层；无 seeds 的 signer 也查外层。 -/
 private def emitCpiFlagChecks (p : IR.Program) (err : String) : String :=
   let metas := p.methods.foldl (init := #[]) fun a m => walkInvokeMetas 8 m.ops a
   let extra := Id.run do
     let mut seen : Array Nat := #[0]
     let mut out := ""
-    for m in metas do
+    for (m, seeded) in metas do
       unless seen.any (· == m.acc) do
         seen := seen.push m.acc
         if m.writable then
           out := out ++
             s!"  ldxdw r8, [r10 - {headerStack m.acc}]\n  ldxb r1, [r8 + 2]\n  jeq r1, 0, {err}\n"
-        if m.signer then
+        -- PDA 用 seeds 签内层，不能要求外层 is_signer。
+        if m.signer && !seeded then
           out := out ++
             s!"  ldxdw r8, [r10 - {headerStack m.acc}]\n  ldxb r1, [r8 + 1]\n  jeq r1, 0, {err}\n"
     return out

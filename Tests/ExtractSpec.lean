@@ -21,6 +21,7 @@ import Examples.TokenMint
 import Examples.SysAlloc
 import Examples.TokenAcc
 import Examples.Memo
+import Examples.CreatePda
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -116,6 +117,10 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.TokenAcc.init Examples.TokenAcc.closeAcc Examples.TokenAcc.get
 
 #solana_extract Examples.Memo.init Examples.Memo.write Examples.Memo.get
+
+#solana_extract Examples.CreatePda.init Examples.CreatePda.openPda Examples.CreatePda.get
+
+#solana_extract Examples.CreatePda.init Examples.CreatePda.openBad Examples.CreatePda.get
 
 /--
 error: extract/unsupported: field tag enum has payload

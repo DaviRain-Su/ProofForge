@@ -811,6 +811,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
   if mentionsRuntime e "invoke" || mentionsRuntime e "invokeSigned" ||
       mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" ||
       mentionsRuntime e "systemCreate" ||
+      mentionsRuntime e "createPda" ||
       mentionsRuntime e "systemAssign" ||
       mentionsRuntime e "systemAllocate" ||
       mentionsRuntime e "tokenTransferChecked" ||
@@ -856,6 +857,7 @@ private def invokeRet
   match inv with
   | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
   | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], none, none) => amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], some _, some _) => amount
   | (1, _, #[.u32le 1, .programId], none, none) => .lit 0
   | (1, _, #[.u32le 8, .u64le space], none, none) => space
   | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => amount

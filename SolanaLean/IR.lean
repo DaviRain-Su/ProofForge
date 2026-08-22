@@ -136,7 +136,7 @@ def cpiAccountCount (p : Program) : Nat :=
     | fuel' + 1 =>
       ops.foldl (init := acc) fun a op =>
         match op with
-        | .invoke prog metas _ =>
+        | .invoke prog metas .. =>
           let m := metas.foldl (init := prog) fun b mt => Nat.max b mt.acc
           Nat.max a m
         | .ite _ _ _ t f => Nat.max (maxIx fuel' t a) (maxIx fuel' f a)

@@ -47,6 +47,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `systemAssign` / `systemAllocate` | System assign / allocate；owner = 当前 program id | L4-013 |
 | `tokenInitAccount` / `tokenCloseAccount` | Token init3 / close；owner = acc0 公钥 | L4-014 |
 | `memoWrite` | Memo 写 UTF-8 字面量；本切片 `"ok"` | L4-015 |
+| `createPda` | find + System createAccount；seeds = `"vault"` | L4-016 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -127,7 +128,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | ID | Lean 表面 | syscall | 约束 |
 |---|---|---|---|
 | L4-pda-find | `findPda seed0 …` | `sol_try_find_program_address` | 种子字面量冻结；bump 255..1；拒绝 bump 0 |
-| L4-pda-create | `createPda …` | find + `system.createAccount` 一条 recipe | 当前 program id；signer seeds 一组 |
+| L4-pda-create | `createPda …` | find + `system.createAccount` 一条 recipe | **已绿**；当前 program id；signer seeds 一组 |
 | L4-pda-check | `createProgramAddress` | `sol_create_program_address` | 只验证，不找 bump |
 
 没有「任意种子数组」。一条 recipe 钉死种子布局。

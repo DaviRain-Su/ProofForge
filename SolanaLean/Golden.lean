@@ -306,6 +306,27 @@ def extractedTokenXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedCreatePda : Program :=
+  { name := "CreatePda"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.CreatePda.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.CreatePda.openPda", ixName := "openPda", paramCount := 1
+        ops := #[Ops.createPda (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .increment, name := "Examples.CreatePda.openBad", ixName := "openBad", paramCount := 1
+        ops := #[
+          .invoke 2
+            #[{ acc := 0, signer := true, writable := true },
+              { acc := 1, signer := true, writable := true }]
+            #[.u32le 0, .u64le (.arg 0), .u64le (.lit 16), .programId]
+            (some "vault") (some (.lit 0)),
+          .returnU64 (.arg 0)
+        ] },
+      { kind := .get, name := "Examples.CreatePda.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedMemo : Program :=
   { name := "Memo"
     slots := #[{ name := "dummy" }]
@@ -413,7 +434,8 @@ def programs : Array Program := #[
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
-  extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo
+  extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
+  extractedCreatePda
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
