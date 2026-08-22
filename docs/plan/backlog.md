@@ -21,6 +21,10 @@
 - `clockSlot` + 账户 0 `signerKey0`；Clock Mollusk
 - 封闭 `system.transfer`；三账户虚地址 walk + `sol_invoke_signed_c`；Transfer Mollusk
 
+## 进行中
+
+- EVM 竖切 E0–E3 已绿（Yul + solc 0.8.34 bytecode）。下一刀是 Anvil 四场景（constructor / increment / get / overflow），以及可选 Pair 多 slot。
+
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。

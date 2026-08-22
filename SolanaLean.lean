@@ -9,3 +9,9 @@ import SolanaLean.Extract
 import SolanaLean.Emit
 import SolanaLean.Assemble
 import SolanaLean.Commands
+import SolanaLean.Evm.Keccak
+import SolanaLean.Evm.IR
+import SolanaLean.Evm.Emit
+import SolanaLean.Evm.Golden
+import SolanaLean.Evm.Assemble
+import SolanaLean.Evm.Commands

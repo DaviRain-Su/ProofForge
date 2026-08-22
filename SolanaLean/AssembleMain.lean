@@ -2,6 +2,7 @@ import SolanaLean.Assemble
 import SolanaLean.Golden
 
 def main (args : List String) : IO UInt32 := do
+  let args := args.dropWhile (· == "--")
   let out :=
     match args with
     | outDir :: _ => System.FilePath.mk outDir

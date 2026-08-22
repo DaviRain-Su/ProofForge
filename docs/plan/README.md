@@ -30,6 +30,9 @@
 | [l3-003](tasks/l3-003.md) | done | 单字段用户 inductive 作 tag+payload |
 | [l4-001](tasks/l4-001.md) | done | clock.slot + account-0 signer key |
 | [l4-002](tasks/l4-002.md) | done | 封闭 system.transfer |
+| [evm-001](tasks/evm-001.md) | done | Evm.IR + keccak selector |
+| [evm-002](tasks/evm-002.md) | done | Ops → Yul |
+| [evm-003](tasks/evm-003.md) | done | `#evm_build` + locked solc |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

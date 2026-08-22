@@ -13,4 +13,6 @@ import Tests.EmitSpec
 import Tests.BuildSpec
 import Tests.LayoutSpec
 import Tests.Sha256Spec
+import Tests.EvmSpec
+import Tests.EvmBuildSpec
 import Tests.DumpIncrement

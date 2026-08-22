@@ -46,6 +46,14 @@ lake exe solanaLeanAssemble -- build/sbpf
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。
 
+EVM 平行剖面（同一 `Examples.Counter`，不搬 PF DSL）：
+
+```bash
+lake exe evmLeanAssemble -- build/evm
+# 写出 Counter.yul / Counter.abi.json / Counter.bin
+# 要求本机 solc 恰好 0.8.34
+```
+
 ## 文档
 
 从 [docs/INDEX.md](docs/INDEX.md) 进。可行性：[docs/research/03-feasibility.md](docs/research/03-feasibility.md)。

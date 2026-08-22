@@ -16,6 +16,8 @@
 | [plan/analysis/gap-vs-proofforge.md](plan/analysis/gap-vs-proofforge.md) | 相对 PF 的缺口与阶段 |
 | [plan/analysis/sdk-surface.md](plan/analysis/sdk-surface.md) | 剩余 SDK 表面（syscall / 封闭 CPI） |
 | [modules/README.md](modules/README.md) | 模块合同 |
-| [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
+| [modules/evm.md](modules/evm.md) | EVM 平行发射器 |
+| [research/03-feasibility.md](research/03-feasibility.md) | Solana 可行性调研结论 |
+| [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 
-当前阶段：**L4 SDK 表面**。L4-001：`clockSlot` + 账户 0 `signerKey0`。
+当前阶段：**EVM 竖切已通到 bytecode**。`#evm_build` + `lake exe evmLeanAssemble`。Anvil 运行时门未开。
