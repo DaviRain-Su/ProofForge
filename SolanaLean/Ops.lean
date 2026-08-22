@@ -27,6 +27,7 @@ inductive Val where
   | rentExemption (dataLen : UInt64)
   | cpiReturn
   | sha256Lit (seed : String)
+  | keccak256Lit (seed : String)
   | accKeyWord (acc word : Nat)
   | accOwnerWord (acc word : Nat)
   deriving BEq, Repr, Inhabited

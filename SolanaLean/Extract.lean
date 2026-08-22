@@ -130,6 +130,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
           | .lit (.strVal s) => some (.sha256Lit s)
           | _ => none
+        else if (endsWith e ".keccak256Lit" || isConstNamed e ``SolanaLean.Runtime.keccak256Lit) &&
+            e.getAppArgs.size ≥ 1 then
+          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+          | .lit (.strVal s) => some (.keccak256Lit s)
+          | _ => none
         else if (endsWith e ".accKeyWord" || isConstNamed e ``SolanaLean.Runtime.accKeyWord) &&
             e.getAppArgs.size ≥ 2 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -658,6 +663,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.checkPda s b) => some (.checkPda s b)
             | some (.rentExemption n) => some (.rentExemption n)
             | some (.sha256Lit s) => some (.sha256Lit s)
+            | some (.keccak256Lit s) => some (.keccak256Lit s)
             | some (.accKeyWord a w) => some (.accKeyWord a w)
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
             | _ =>
@@ -975,7 +981,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .accN | .isSigner0 | .isWritable0 | .isExecutable0
     | .accLamports1 | .accOwner1 | .accDataLen1
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-    | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _
+    | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
     | .accKeyWord _ _ | .accOwnerWord _ _ => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
@@ -1166,7 +1172,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .accN | .isSigner0 | .isWritable0 | .isExecutable0
       | .accLamports1 | .accOwner1 | .accDataLen1
       | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-      | .rentExemption _ | .cpiReturn | .sha256Lit _
+      | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
       | .accKeyWord _ _ | .accOwnerWord _ _ => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
@@ -1313,7 +1319,7 @@ private def valFields : Ops.Val → Array String
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-  | .rentExemption _ | .cpiReturn | .sha256Lit _
+  | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
   | .accKeyWord _ _ | .accOwnerWord _ _ => #[]
   | .checkPda _ b => valFields b
 

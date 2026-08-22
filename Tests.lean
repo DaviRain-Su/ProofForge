@@ -32,6 +32,7 @@ import Tests.TokenMint2Spec
 import Tests.TokenNativeSpec
 import Tests.HashSpec
 import Tests.KeysSpec
+import Tests.KeccakSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

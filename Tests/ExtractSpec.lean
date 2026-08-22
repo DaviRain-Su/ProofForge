@@ -34,6 +34,7 @@ import Examples.TokenMint2
 import Examples.TokenNative
 import Examples.Hash
 import Examples.Keys
+import Examples.Keccak
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -177,6 +178,10 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Keys.init Examples.Keys.touch Examples.Keys.key00
 
 #solana_extract Examples.Keys.init Examples.Keys.touch Examples.Keys.key10
+
+#solana_extract Examples.Keccak.init Examples.Keccak.touch Examples.Keccak.vault
+
+#solana_extract Examples.Keccak.init Examples.Keccak.touch Examples.Keccak.empty
 
 /--
 error: extract/unsupported: field tag enum has payload

@@ -643,6 +643,28 @@ def extractedKeys : Program :=
         ops := #[.returnU64 (.accOwnerWord 1 3)] }
     ] }
 
+def extractedKeccak : Program :=
+  { name := "Keccak"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Keccak.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Keccak.touch", ixName := "touch", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Keccak.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Keccak.vault", ixName := "vault", paramCount := 0
+        ops := #[.returnU64 (.keccak256Lit "vault")] },
+      { kind := .get, name := "Examples.Keccak.ok", ixName := "ok", paramCount := 0
+        ops := #[.returnU64 (.keccak256Lit "ok")] },
+      { kind := .get, name := "Examples.Keccak.empty", ixName := "empty", paramCount := 0
+        ops := #[.returnU64 (.keccak256Lit "")] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
@@ -651,7 +673,7 @@ def programs : Array Program := #[
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
-  extractedTokenNative, extractedHash, extractedKeys
+  extractedTokenNative, extractedHash, extractedKeys, extractedKeccak
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

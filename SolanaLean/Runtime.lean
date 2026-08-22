@@ -420,9 +420,19 @@ def createPda (lamports : UInt64) : UInt64 :=
 /--
 编译期 ASCII 字面量的 SHA-256。抽出器认这个名字，发射 `sol_sha256`。
 返回 32 字节 digest 的第一个小端 `u64`。宿主侧是不可约 stub，返回 0。
-完整 32B / 多切片 / 运行时缓冲 / keccak / blake3 本剖面 fail closed。
+完整 32B / 多切片 / 运行时缓冲 / blake3 / poseidon 本剖面 fail closed。
 -/
 @[irreducible] def sha256Lit (seed : String) : UInt64 :=
+  let _ := seed
+  0
+
+/--
+编译期 ASCII 字面量的 Keccak-256（Ethereum，不是 FIPS SHA3-256）。
+抽出器认这个名字，发射 `sol_keccak256`。
+返回 32 字节 digest 的第一个小端 `u64`。宿主侧是不可约 stub，返回 0。
+完整 32B / 多切片 / 运行时缓冲 / blake3 / poseidon 本剖面 fail closed。
+-/
+@[irreducible] def keccak256Lit (seed : String) : UInt64 :=
   let _ := seed
   0
 

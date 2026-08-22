@@ -179,7 +179,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-  | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _
+  | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
   | .accKeyWord _ _ | .accOwnerWord _ _ =>
     .error "extract/unsupported: runtime leaf has no mem"
 
@@ -390,16 +390,16 @@ find_pda_done_{stackOff}:
 "
 
 /--
-`sol_sha256`：一条 ASCII 字面量。
+一条 ASCII 字面量的哈希 syscall：`sol_sha256` / `sol_keccak256`。
 r1 = SolBytes[1]，r2 = 1，r3 = 32B dest。返回 dest 第一个小端 u64。
 scratch 同 findPda，用 `r8 = r10-2800`。空串合法（len=0）。
 -/
-private def emitLoadSha256Lit (seed : String) (stackOff : Nat) : String :=
+private def emitLoadHashLit (kind syscall seed : String) (stackOff : Nat) : String :=
   let (bytes, _) :=
     seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
       (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {i}], r1\n", i + 1)
   s!"\
-  ; sha256Lit seed={seed}
+  ; {kind} seed={seed}
   mov64 r8, r10
   add64 r8, -2800
   lddw r1, 0
@@ -414,10 +414,17 @@ private def emitLoadSha256Lit (seed : String) (stackOff : Nat) : String :=
   lddw r2, 1
   mov64 r3, r8
   add64 r3, 48
-  call sol_sha256
+  call {syscall}
   ldxdw r1, [r8 + 48]
   stxdw [r10 - {stackOff}], r1
 "
+
+private def emitLoadSha256Lit (seed : String) (stackOff : Nat) : String :=
+  emitLoadHashLit "sha256Lit" "sol_sha256" seed stackOff
+
+private def emitLoadKeccak256Lit (seed : String) (stackOff : Nat) : String :=
+  emitLoadHashLit "keccak256Lit" "sol_keccak256" seed stackOff
+
 
 mutual
 
@@ -465,6 +472,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadFindPda p seed stackOff)
   | .sha256Lit seed =>
     .ok (emitLoadSha256Lit seed stackOff)
+  | .keccak256Lit seed =>
+    .ok (emitLoadKeccak256Lit seed stackOff)
   | .accKeyWord acc word =>
     .ok (emitLoadAccWord "key" acc word stackOff)
   | .accOwnerWord acc word =>
@@ -955,7 +964,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0
         | .accLamports1 | .accOwner1 | .accDataLen1
         | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-        | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _
+        | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
         | .accKeyWord _ _ | .accOwnerWord _ _ => do
           let load ← loadVal p v 24
           acc := acc ++ load

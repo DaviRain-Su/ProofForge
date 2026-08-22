@@ -49,6 +49,7 @@
 - 账户 1 只读叶子；Peer Mollusk
 - `sha256Lit`；Hash Mollusk
 - 32B key / owner 按字读；Keys Mollusk
+- `keccak256Lit`；Keccak Mollusk
 
 ## 下一刀
 
