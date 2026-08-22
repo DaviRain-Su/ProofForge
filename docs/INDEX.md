@@ -17,4 +17,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L3 程序形状**。多个 init、`init` 写全字段、view 返回任意已布局叶子已通。
+当前阶段：**L3 程序形状**。多 init、view 任意叶子、`Option` match 读 payload 已通。

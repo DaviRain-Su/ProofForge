@@ -41,4 +41,10 @@ open Examples.Maybe
   | .ok (st, ret) => st.slot == none && ret == 0 && isSome st == 0
   | .error _ => false
 
+#guard getValue (init 0) == 0
+#guard
+  match setSome (init 0) 77 with
+  | .ok (st, _) => getValue st == 77
+  | .error _ => false
+
 end Tests.MaybeSpec

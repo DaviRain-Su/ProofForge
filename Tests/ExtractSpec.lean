@@ -57,6 +57,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 
 #solana_extract Examples.Maybe.init Examples.Maybe.setSome Examples.Maybe.isSome
 
+#solana_extract Examples.Maybe.init Examples.Maybe.setSome Examples.Maybe.getValue
+
 #solana_extract Examples.Window.init Examples.Window.setTail Examples.Window.getHead
 
 #solana_extract Examples.Phase.init Examples.Phase.setLive Examples.Phase.isLive

@@ -145,6 +145,12 @@ def extractedMaybe : Program :=
           .ite .eq (.field (.arg 0) "slot_tag") (.lit 1)
             #[.returnU64 (.lit 1)]
             #[.returnU64 (.lit 0)]
+        ] },
+      { kind := .get, name := "Examples.Maybe.getValue", ixName := "getValue", paramCount := 0
+        ops := #[
+          .ite .eq (.field (.arg 0) "slot_tag") (.lit 0)
+            #[.returnU64 (.lit 0)]
+            #[.returnU64 (.field (.arg 0) "slot_p0")]
         ] }
     ] }
 

@@ -626,6 +626,48 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ => return .error r
         | _, .error r => return .error r
+    else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
+      -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
+      let args := e.getAppArgs
+      let disc := args[args.size - 3]!
+      let noneE := peelLets args[args.size - 2]!
+      let someE := peelLets args[args.size - 1]!
+      let tag :=
+        match val env disc with
+        | some (.field b n) =>
+          if n.endsWith "_tag" then .field b n else .field b s!"{n}_tag"
+        | some b => .field b "slot_tag"
+        | none => .field (.arg 0) "slot_tag"
+      let payload :=
+        match tag with
+        | .field b n =>
+          let base := if n.endsWith "_tag" then n.dropEnd 4 |>.copy else n
+          .field b s!"{base}_p0"
+        | _ => .field (.arg 0) "slot_p0"
+      let rec peelMatcher (fuel : Nat) (e : Expr) : Expr :=
+        match fuel with
+        | 0 => e
+        | fuel' + 1 =>
+          match strip e with
+          | .lam _ _ body _ => peelMatcher fuel' body
+          | e => e
+      let noneBody := peelMatcher 8 noneE
+      let someBody := peelMatcher 8 someE
+      match decodeExpr env fuel' noneBody with
+      | .error r => return .error r
+      | .ok noneOps =>
+        let someOps :=
+          match strip someBody with
+          | .bvar _ => #[.returnU64 payload]
+          | _ =>
+            match decodeExpr env fuel' someBody with
+            | .ok ops =>
+              match ops with
+              | #[.returnU64 (.arg _)] => #[.returnU64 payload]
+              | #[.returnState (.arg _)] => #[.returnU64 payload]
+              | _ => ops
+            | .error _ => #[.returnU64 payload]
+        return .ok #[.ite .eq tag (.lit 0) noneOps someOps]
     else
       return decodePlain env e
 

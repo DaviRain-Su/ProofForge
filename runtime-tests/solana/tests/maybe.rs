@@ -160,6 +160,46 @@ fn set_none_clears_both_leaves() {
 }
 
 #[test]
+fn get_value_none_is_zero() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("getValue", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let account = state_account(&program_id, maybe_state(true, 0, 0));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&0u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&maybe_state(true, 0, 0))
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn get_value_some_returns_payload() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("getValue", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let account = state_account(&program_id, maybe_state(true, 1, 77));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&77u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&maybe_state(true, 1, 77))
+                .build(),
+        ],
+    );
+}
+
+#[test]
 fn is_some_view() {
     let (program_id, mollusk) = harness();
     let state_key = Pubkey::new_unique();
