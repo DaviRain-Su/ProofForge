@@ -51,6 +51,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `systemCreateWithSeed` | CreateAccountWithSeed；同种子，再带 lamports | L4-024 |
 | `systemAssignWithSeed` | AssignWithSeed；同种子，只改 owner | L4-025 |
 | `systemTransferWithSeed` | TransferWithSeed；派生账户付款 | L4-026 |
+| `tokenInitMint` | Token InitializeMint2；decimals 6 | L4-027 |
 | `tokenInitAccount` / `tokenCloseAccount` | Token init3 / close；owner = acc0 公钥 | L4-014 |
 | `memoWrite` | Memo 写 UTF-8 字面量；本切片 `"ok"` | L4-015 |
 | `createPda` | find + System createAccount；seeds = `"vault"` | L4-016 |
@@ -178,6 +179,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-tok-set-auth | `SetAuthority` MintTokens | 6 | **已绿**；新 authority = acc2 |
 | L4-tok-revoke | `Revoke` | 5 | **已绿** |
 | L4-tok-size | `GetAccountDataSize` | 21 | **已绿**；返回 165 |
+| L4-tok-init-mint | `InitializeMint2` | 20 | **已绿**；decimals 6，freeze None |
 
 Multisig owner 默认关。
 

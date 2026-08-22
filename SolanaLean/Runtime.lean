@@ -176,6 +176,16 @@ def systemTransferWithSeed (lamports : UInt64) : UInt64 :=
     #[.u32le 11, .u64le lamports, .u64le 5, .ascii "vault", .programId]
 
 /--
+Token `InitializeMint2`：decimals 钉死 6，mint authority = acc0，freeze = None。
+外层：authority s+w、mint w、Token。
+-/
+def tokenInitMint : UInt64 :=
+  invoke 2
+    #[{ acc := 1, signer := false, writable := true }]
+    -- packed：u8 tag 20 || u8 decimals || mint_authority32 || COption None。
+    #[.u8le 20, .u8le 6, .accKey 0, .u8le 0]
+
+/--
 Token `TransferChecked`：普通包装。decimals 编译期常量。
 外层 0 必须是 authority（prelude 强制 acc0 signer）。
 内层账户按官方顺序：source / mint / dest / authority。

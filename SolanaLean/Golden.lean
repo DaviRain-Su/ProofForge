@@ -451,6 +451,18 @@ def extractedSysXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTokenMint2 : Program :=
+  { name := "TokenMint2"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenMint2.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenMint2.openMint", ixName := "openMint", paramCount := 0
+        ops := #[Ops.tokenInitMint, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TokenMint2.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedTokenSize : Program :=
   { name := "TokenSize"
     slots := #[{ name := "dummy" }]
@@ -540,7 +552,7 @@ def programs : Array Program := #[
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
-  extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer
+  extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

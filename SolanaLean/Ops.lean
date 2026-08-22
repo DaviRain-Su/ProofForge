@@ -117,6 +117,11 @@ def systemTransferWithSeed (lamports : Val) : Op :=
       { acc := 2, signer := false, writable := true }]
     #[.u32le 11, .u64le lamports, .u64le (.lit 5), .ascii "vault", .programId]
 
+def tokenInitMint : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := true }]
+    #[.u8le 20, .u8le 6, .accKey 0, .u8le 0]
+
 def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
   .invoke 4
     #[{ acc := 1, signer := false, writable := true },

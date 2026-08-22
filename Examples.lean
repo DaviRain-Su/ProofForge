@@ -28,3 +28,4 @@ import Examples.Epoch
 import Examples.TokenSize
 import Examples.SysSeed
 import Examples.SysXfer
+import Examples.TokenMint2
