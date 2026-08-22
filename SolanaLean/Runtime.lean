@@ -10,6 +10,13 @@ namespace SolanaLean.Runtime
 @[irreducible] def clockSlot : UInt64 := 0
 
 /--
+当前 epoch。抽出器认这个名字，发射 `sol_get_clock_sysvar` 后读
+`Clock.epoch`（偏移 16）。宿主侧是不可约 stub。
+`unixTime` / `epoch_start_timestamp` 本剖面 fail closed。
+-/
+@[irreducible] def clockEpoch : UInt64 := 0
+
+/--
 `dataLen` 字节账户的 rent-exempt 下限。
 抽出后发射 `sol_get_rent_sysvar`，读 `lamports_per_byte`，再乘 `128 + dataLen`。
 `dataLen` 必须在抽出时是常量。宿主侧是不可约 stub。

@@ -6,6 +6,7 @@ inductive Val where
   | field (base : Val) (name : String)
   | lit (n : UInt64)
   | clockSlot
+  | clockEpoch
   | signerKey0
   | accLamports0
   | accOwner0

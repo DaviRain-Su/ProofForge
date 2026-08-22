@@ -194,6 +194,8 @@ def extractedClock : Program :=
         ] },
       { kind := .get, name := "Examples.Clock.height", ixName := "height", paramCount := 0
         ops := #[.returnU64 .clockSlot] },
+      { kind := .get, name := "Examples.Clock.era", ixName := "era", paramCount := 0
+        ops := #[.returnU64 .clockEpoch] },
       { kind := .get, name := "Examples.Clock.key0", ixName := "key0", paramCount := 0
         ops := #[.returnU64 .signerKey0] },
       { kind := .get, name := "Examples.Clock.get", ixName := "get", paramCount := 0

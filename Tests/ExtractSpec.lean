@@ -86,6 +86,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 
 #solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.height
 
+#solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.era
+
 #solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.key0
 
 #solana_extract Examples.Transfer.init Examples.Transfer.transfer Examples.Transfer.get

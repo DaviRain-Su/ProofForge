@@ -32,6 +32,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | Lean 名 | 降到 | 切片 |
 |---|---|---|
 | `clockSlot` | `sol_get_clock_sysvar` → `Clock.slot` | L4-001 |
+| `clockEpoch` | 同缓冲 → `Clock.epoch`@16 | L4-019 |
 | `signerKey0` | `ACC0_KEY+0` 首 u64；入口 `is_signer` | L4-001 |
 | `systemTransfer` | 三账户 walk + `sol_invoke_signed_c`；内层 `u32le(2)\|\|u64le` | L4-002 |
 | `invoke` / `invokeAcc1` | 编译期钉死 program/metas/data；N 账户 walk | L4-003 / L4-005 |
@@ -118,7 +119,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 |---|---|---|---|
 | L4-clock-slot | `clockSlot` | `sol_get_clock_sysvar` + slot@0 | **已绿** |
 | L4-clock-unix | `unixTime` | 同缓冲 + unix_timestamp@32 | **保持 FC**（有符号 i64；PF 也 FC） |
-| L4-clock-epoch | `clockEpoch` | epoch@16 | 可开；非常量，两次 warp 证明 |
+| L4-clock-epoch | `clockEpoch` | epoch@16 | **已绿**；两次 warp 跨 epoch |
 | L4-rent | `rentExemption n` | `sol_get_rent_sysvar` + `rate*(128+n)` | **已绿** |
 | L4-epoch-schedule | `slotsPerEpoch` 等一叶 | `sol_get_epoch_schedule_sysvar` | 有合约再用 |
 | L4-epoch-rewards | — | `sol_get_epoch_rewards_sysvar` | 默认关 |

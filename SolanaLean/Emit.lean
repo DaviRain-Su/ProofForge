@@ -159,7 +159,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
-  | .lit _ | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .lit _ | .clockSlot | .clockEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
   | .checkPda _ _ | .rentExemption _ =>
     .error "extract/unsupported: runtime leaf has no mem"
@@ -185,20 +185,26 @@ private def widthOfVal (p : IR.Program) (v : Ops.Val) : Nat :=
   | .field _ name => (IR.fieldWidth p name).getD 8
   | _ => 8
 
-/-- Clock 是 40 字节 `repr(C)`；`slot` 在偏移 0。缓冲放在 `r10-72`，避开算术临时槽。 -/
-private def emitLoadClockSlot (stackOff : Nat) : String :=
+/-- Clock 是 40 字节 `repr(C)`；`slot` 在 0，`epoch` 在 16。缓冲放在 `r10-72`。 -/
+private def emitLoadClockField (field : String) (off stackOff : Nat) : String :=
   s!"\
-  ; load clock.slot via sol_get_clock_sysvar
+  ; load clock.{field} via sol_get_clock_sysvar
   mov64 r1, r10
   add64 r1, -72
   call sol_get_clock_sysvar
-  jeq r0, 0, clock_ok_{stackOff}
+  jeq r0, 0, clock_{field}_ok_{stackOff}
   lddw r0, 0x1
   exit
-clock_ok_{stackOff}:
-  ldxdw r1, [r10 - 72]
+clock_{field}_ok_{stackOff}:
+  ldxdw r1, [r10 - {72 - off}]
   stxdw [r10 - {stackOff}], r1
 "
+
+private def emitLoadClockSlot (stackOff : Nat) : String :=
+  emitLoadClockField "slot" 0 stackOff
+
+private def emitLoadClockEpoch (stackOff : Nat) : String :=
+  emitLoadClockField "epoch" 16 stackOff
 
 /-- Rent 是 17 字节 `repr(C)`；rate 在偏移 0。`exemption = rate * (128 + dataLen)`。 -/
 private def emitLoadRentExemption (dataLen stackOff : Nat) : String :=
@@ -303,6 +309,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
   | .clockSlot =>
     .ok (emitLoadClockSlot stackOff)
+  | .clockEpoch =>
+    .ok (emitLoadClockEpoch stackOff)
   | .signerKey0 =>
     .ok (emitLoadSignerKey0 stackOff)
   | .accLamports0 =>
@@ -803,7 +811,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             let load ← loadVal p (.arg 0) 24
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+        | .clockSlot | .clockEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
         | .checkPda _ _ | .rentExemption _ => do
           let load ← loadVal p v 24

@@ -8,6 +8,7 @@ open SolanaLean.Runtime
 #guard (init 0).stamped == 0
 #guard get (init 0) == 0
 #guard height (init 0) == clockSlot
+#guard era (init 0) == clockEpoch
 #guard key0 (init 0) == signerKey0
 
 #guard
@@ -24,6 +25,7 @@ open SolanaLean.Runtime
       asm.contains "call sol_get_clock_sysvar" &&
         asm.contains "ACC0_KEY + 0" &&
         asm.contains "call height" &&
+        asm.contains "call era" &&
         asm.contains "call key0" &&
         asm.contains "call stamp"
 

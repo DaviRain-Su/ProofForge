@@ -104,6 +104,12 @@ fn warped(slot: u64) -> (Pubkey, Mollusk) {
     (program_id, mollusk)
 }
 
+fn warped_epoch(slot: u64) -> (Pubkey, Mollusk, u64) {
+    let (program_id, mollusk) = warped(slot);
+    let epoch = mollusk.sysvars.clock.epoch;
+    (program_id, mollusk, epoch)
+}
+
 fn state_account(program_id: &Pubkey, data: Vec<u8>) -> Account {
     let mut account = Account::new(BASE_LAMPORTS, data.len(), program_id);
     account.data = data;
@@ -169,6 +175,48 @@ fn height_tracks_second_distinct_slot() {
         &[
             Check::success(),
             Check::return_data(&slot.to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
+fn era_returns_warped_epoch() {
+    let slot = 0u64;
+    let (program_id, mollusk, epoch) = warped_epoch(slot);
+    assert_eq!(epoch, 0, "slot 0 is epoch 0");
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("era", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = clock_state(true, 7);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&epoch.to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
+fn era_tracks_second_distinct_epoch() {
+    let slot = 800_000u64;
+    let (program_id, mollusk, epoch) = warped_epoch(slot);
+    assert_ne!(epoch, 0, "slot 800_000 must leave epoch 0");
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("era", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = clock_state(true, 0);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&epoch.to_le_bytes()),
             Check::account(&state_key).data(&pre).build(),
         ],
     );

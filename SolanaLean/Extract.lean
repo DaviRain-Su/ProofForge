@@ -179,6 +179,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some (.lit (~~~(0 : UInt64)))
         else if endsWith e ".clockSlot" || isConstNamed e ``SolanaLean.Runtime.clockSlot then
           some .clockSlot
+        else if endsWith e ".clockEpoch" || isConstNamed e ``SolanaLean.Runtime.clockEpoch then
+          some .clockEpoch
         else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
           some .signerKey0
         else if endsWith e ".accLamports0" || isConstNamed e ``SolanaLean.Runtime.accLamports0 then
@@ -596,6 +598,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
           | none =>
             match val env st with
             | some (.clockSlot) => some .clockSlot
+            | some (.clockEpoch) => some .clockEpoch
             | some (.signerKey0) => some .signerKey0
             | some (.accLamports0) => some .accLamports0
             | some (.accOwner0) => some .accOwner0
@@ -900,7 +903,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
-    | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+    | .clockSlot | .clockEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
     | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
     | .checkPda _ _ | .rentExemption _ => .ok #[.returnU64 v]
   else
@@ -1088,7 +1091,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
-      | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+      | .clockSlot | .clockEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
       | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
       | .rentExemption _ => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
@@ -1232,7 +1235,7 @@ private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
   | .lit _ => #[]
-  | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .clockSlot | .clockEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
   | .rentExemption _ => #[]
   | .checkPda _ b => valFields b
