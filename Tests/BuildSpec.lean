@@ -9,6 +9,7 @@ import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
 import Examples.EvmCtx
+import Examples.TipJar
 
 #solana_build Examples.Counter
 
@@ -33,6 +34,12 @@ error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
 #solana_build Examples.EvmCtx
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.TipJar
 
 /--
 error: extract/unsupported: no solana_entry

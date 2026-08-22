@@ -19,5 +19,6 @@
 | [modules/evm.md](modules/evm.md) | EVM 平行发射器 |
 | [research/03-feasibility.md](research/03-feasibility.md) | Solana 可行性调研结论 |
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
+| [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 
-当前阶段：**EVM runtime 叶子已开**。`evmCaller` / `evmBlockNumber`；SVM 名不翻译。
+当前阶段：**E-RT 已落地**。环境 + value + Addr20 + ETH send + `Tipped` event。下一大切片是 E-LANG。SVM 名不翻译。

@@ -133,8 +133,13 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
-  | .lit _ | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber =>
+  | .lit _ | .clockSlot | .signerKey0 =>
     .error "extract/unsupported: runtime leaf has no mem"
+  | v =>
+    if Ops.isEvmLeaf v then
+      .error "extract/unsupported: runtime leaf has no mem"
+    else
+      .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
   match width with
@@ -187,12 +192,13 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadClockSlot stackOff)
   | .signerKey0 =>
     .ok (emitLoadSignerKey0 stackOff)
-  | .evmCaller | .evmBlockNumber =>
-    .error "extract/unsupported: svm rejects evm leaf"
-  | _ => do
-    let mem ← memOfVal p v
-    let insn ← loadInsn (widthOfVal p v)
-    return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+  | v =>
+    if Ops.isEvmLeaf v then
+      .error "extract/unsupported: svm rejects evm leaf"
+    else do
+      let mem ← memOfVal p v
+      let insn ← loadInsn (widthOfVal p v)
+      return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
 private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Except String String :=
   match IR.fieldOffset p name, IR.fieldWidth p name with
@@ -255,6 +261,10 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
           valUsesSigner l || valUsesSigner r ||
             walkUsesSigner fuel' t || walkUsesSigner fuel' f
       | .systemTransfer v => valUsesSigner v
+      | .evmDeposit v => valUsesSigner v
+      | .evmSendEth a b c d =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
+      | .evmLogTipped v => valUsesSigner v
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -482,6 +492,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
     | .systemTransfer amount =>
       acc := acc ++ (← emitSystemTransfer p label amount)
+    | .evmDeposit _ | .evmSendEth .. | .evmLogTipped _ =>
+      throw "extract/unsupported: svm rejects evm leaf"
     | .okState v =>
       let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
       if hasOpt then
@@ -533,10 +545,10 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .evmCaller | .evmBlockNumber =>
-          throw "extract/unsupported: svm rejects evm leaf"
-        | _ =>
-          if Ops.hasCheckedArith ops then
+        | v =>
+          if Ops.isEvmLeaf v then
+            throw "extract/unsupported: svm rejects evm leaf"
+          else if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
           else do
             let load ← loadVal p v 24
@@ -616,7 +628,9 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if Ops.hasSystemTransfer m.ops then
+    if Ops.hasEvmEffect m.ops then
+      .error "extract/unsupported: svm rejects evm leaf"
+    else if Ops.hasSystemTransfer m.ops then
       let body ← emitMutBody p label m.ops
       return s!"{label}:\n{preludeTransfer label (ixLenOf m)}{body}"
     else if !(Ops.hasCheckedArith m.ops || m.ops.any (fun | .ite .. => true | _ => false)) then

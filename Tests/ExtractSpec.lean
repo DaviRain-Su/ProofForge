@@ -8,6 +8,8 @@ import Examples.Phase
 import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
+import Examples.EvmCtx
+import Examples.TipJar
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -73,6 +75,12 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.key0
 
 #solana_extract Examples.Transfer.init Examples.Transfer.transfer Examples.Transfer.get
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_extract Examples.TipJar.init Examples.TipJar.deposit Examples.TipJar.get
 
 /--
 error: extract/unsupported: field tag enum has payload

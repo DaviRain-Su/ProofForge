@@ -193,6 +193,17 @@ private def valCanon : Ops.Val → String
   | .signerKey0 => "k0"
   | .evmCaller => "ecall"
   | .evmBlockNumber => "eblk"
+  | .evmTimestamp => "ets"
+  | .evmChainId => "echain"
+  | .evmSelf => "eself"
+  | .evmCallValue => "eval"
+  | .evmSelfBalance => "ebal"
+  | .evmCallerW0 => "ecw0"
+  | .evmCallerW1 => "ecw1"
+  | .evmCallerW2 => "ecw2"
+  | .evmSelfW0 => "esw0"
+  | .evmSelfW1 => "esw1"
+  | .evmSelfW2 => "esw2"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
@@ -204,6 +215,10 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
     | .systemTransfer v => s!"xfer({valCanon v})"
+    | .evmDeposit v => s!"edep({valCanon v})"
+    | .evmSendEth a b c d =>
+        s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
+    | .evmLogTipped v => s!"elog({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .returnU64 v => s!"retu({valCanon v})"

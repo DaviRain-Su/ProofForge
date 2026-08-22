@@ -232,10 +232,48 @@ def extractedTransfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTipJar : Program :=
+  { name := "TipJar"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TipJar.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TipJar.deposit", ixName := "deposit", paramCount := 1
+        ops := #[.evmDeposit (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .increment, name := "Examples.TipJar.logTip", ixName := "logTip", paramCount := 1
+        ops := #[.evmLogTipped (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .increment, name := "Examples.TipJar.payout", ixName := "payout", paramCount := 4
+        ops := #[.evmSendEth (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)] },
+      { kind := .get, name := "Examples.TipJar.callValue", ixName := "callValue", paramCount := 0
+        ops := #[.returnU64 .evmCallValue] },
+      { kind := .get, name := "Examples.TipJar.callerW0", ixName := "callerW0", paramCount := 0
+        ops := #[.returnU64 .evmCallerW0] },
+      { kind := .get, name := "Examples.TipJar.callerW1", ixName := "callerW1", paramCount := 0
+        ops := #[.returnU64 .evmCallerW1] },
+      { kind := .get, name := "Examples.TipJar.callerW2", ixName := "callerW2", paramCount := 0
+        ops := #[.returnU64 .evmCallerW2] },
+      { kind := .get, name := "Examples.TipJar.chainId", ixName := "chainId", paramCount := 0
+        ops := #[.returnU64 .evmChainId] },
+      { kind := .get, name := "Examples.TipJar.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TipJar.selfBal", ixName := "selfBal", paramCount := 0
+        ops := #[.returnU64 .evmSelfBalance] },
+      { kind := .get, name := "Examples.TipJar.selfLow", ixName := "selfLow", paramCount := 0
+        ops := #[.returnU64 .evmSelf] },
+      { kind := .get, name := "Examples.TipJar.selfW0", ixName := "selfW0", paramCount := 0
+        ops := #[.returnU64 .evmSelfW0] },
+      { kind := .get, name := "Examples.TipJar.selfW1", ixName := "selfW1", paramCount := 0
+        ops := #[.returnU64 .evmSelfW1] },
+      { kind := .get, name := "Examples.TipJar.selfW2", ixName := "selfW2", paramCount := 0
+        ops := #[.returnU64 .evmSelfW2] },
+      { kind := .get, name := "Examples.TipJar.timestamp", ixName := "timestamp", paramCount := 0
+        ops := #[.returnU64 .evmTimestamp] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
-  extractedClock, extractedTransfer, extractedEvmCtx
+  extractedClock, extractedTransfer, extractedEvmCtx, extractedTipJar
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

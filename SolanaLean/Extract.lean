@@ -167,8 +167,37 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .evmCaller
         else if endsWith e ".evmBlockNumber" || isConstNamed e ``SolanaLean.Runtime.evmBlockNumber then
           some .evmBlockNumber
+        else if endsWith e ".evmTimestamp" || isConstNamed e ``SolanaLean.Runtime.evmTimestamp then
+          some .evmTimestamp
+        else if endsWith e ".evmChainId" || isConstNamed e ``SolanaLean.Runtime.evmChainId then
+          some .evmChainId
+        else if endsWith e ".evmSelf" || isConstNamed e ``SolanaLean.Runtime.evmSelf then
+          some .evmSelf
+        else if endsWith e ".evmCallValue" || isConstNamed e ``SolanaLean.Runtime.evmCallValue then
+          some .evmCallValue
+        else if endsWith e ".evmSelfBalance" || isConstNamed e ``SolanaLean.Runtime.evmSelfBalance then
+          some .evmSelfBalance
+        else if endsWith e ".evmCallerW0" || isConstNamed e ``SolanaLean.Runtime.evmCallerW0 then
+          some .evmCallerW0
+        else if endsWith e ".evmCallerW1" || isConstNamed e ``SolanaLean.Runtime.evmCallerW1 then
+          some .evmCallerW1
+        else if endsWith e ".evmCallerW2" || isConstNamed e ``SolanaLean.Runtime.evmCallerW2 then
+          some .evmCallerW2
+        else if endsWith e ".evmSelfW0" || isConstNamed e ``SolanaLean.Runtime.evmSelfW0 then
+          some .evmSelfW0
+        else if endsWith e ".evmSelfW1" || isConstNamed e ``SolanaLean.Runtime.evmSelfW1 then
+          some .evmSelfW1
+        else if endsWith e ".evmSelfW2" || isConstNamed e ``SolanaLean.Runtime.evmSelfW2 then
+          some .evmSelfW2
         else if (endsWith e ".systemTransfer" ||
             isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
+          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else if ((endsWith e ".evmDeposit" ||
+            isConstNamed e ``SolanaLean.Runtime.evmDeposit) ||
+            (endsWith e ".evmLogTipped" ||
+            isConstNamed e ``SolanaLean.Runtime.evmLogTipped) ||
+            (endsWith e ".evmSendEth" ||
+            isConstNamed e ``SolanaLean.Runtime.evmSendEth)) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if isConstNamed e ``Bool.true || endsWith e ".true" then
           some (.lit 1)
@@ -563,10 +592,11 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
           | some v => some v
           | none =>
             match val env st with
-            | some (.clockSlot) => some .clockSlot
-            | some (.signerKey0) => some .signerKey0
-            | some (.evmCaller) => some .evmCaller
-            | some (.evmBlockNumber) => some .evmBlockNumber
+            | some v =>
+              if Ops.hasEvmLeaf #[.returnU64 v] ||
+                  match v with | .clockSlot | .signerKey0 => true | _ => false then
+                some v
+              else none
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -602,39 +632,82 @@ private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   else
     vs.map Ops.Op.returnState
 
-/-- 体里任意深度的 `systemTransfer amount`。 -/
-private def findSystemTransfer (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
-  let rec go (fuel : Nat) (e : Expr) : Option Ops.Val :=
+/-- 体里任意深度的具名 Runtime 应用。 -/
+private def mentionsRuntime (e : Expr) (want : Name) (suffix : String) : Bool :=
+  e.getUsedConstantsAsSet.toList.any fun n =>
+    n == want || n.toString.endsWith suffix
+
+private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : String) :
+    Option Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Option Expr :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
       let e := e.consumeMData
-      if e.getAppFn.constName? == some ``SolanaLean.Runtime.systemTransfer ||
-          endsWith e ".systemTransfer" then
-        if e.getAppArgs.size ≥ 1 then
-          match val env e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some v => some v
-          | none => some (.arg 0)
-        else some (.arg 0)
+      if e.getAppFn.constName? == some want || endsWith e suffix then
+        some e
       else
         match e with
         | .letE _ _ value body _ => go fuel' value <|> go fuel' body
         | .lam _ _ body _ => go fuel' body
         | .app f a => go fuel' f <|> go fuel' a
         | _ => none
-  let mentions :=
-    e.getUsedConstantsAsSet.toList.any fun n =>
-      n == ``SolanaLean.Runtime.systemTransfer || n.toString.endsWith ".systemTransfer"
-  if mentions then
-    match go fuel e with
-    | some v => some v
+  go fuel e
+
+private def findUnaryRuntime (env : Environment) (want : Name) (suffix : String)
+    (e : Expr) : Option Ops.Val :=
+  if mentionsRuntime e want suffix then
+    match findRuntimeApp 16 e want suffix with
+    | some app =>
+      if app.getAppArgs.size ≥ 1 then
+        match val env app.getAppArgs[app.getAppArgs.size - 1]! with
+        | some v => some v
+        | none => some (.arg 0)
+      else some (.arg 0)
     | none => some (.arg 0)
   else none
 
+/-- 体里任意深度的 `systemTransfer amount`。 -/
+private def findSystemTransfer (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.systemTransfer ".systemTransfer" e
+
+private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmDeposit ".evmDeposit" e
+
+private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmLogTipped ".evmLogTipped" e
+
+private def findEvmSendEth (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e ``SolanaLean.Runtime.evmSendEth ".evmSendEth" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmSendEth ".evmSendEth" with
+    | some app =>
+      let args := app.getAppArgs
+      if args.size ≥ 4 then
+        let w0 := (val env args[args.size - 4]!).getD (.arg 0)
+        let w1 := (val env args[args.size - 3]!).getD (.arg 1)
+        let w2 := (val env args[args.size - 2]!).getD (.arg 2)
+        let amt := (val env args[args.size - 1]!).getD (.arg 3)
+        some (w0, w1, w2, amt)
+      else some (.arg 0, .arg 1, .arg 2, .arg 3)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+  else none
+
+private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  if let some amount := findEvmDeposit env e then
+    some #[.evmDeposit amount, .returnU64 amount]
+  else if let some (w0, w1, w2, amt) := findEvmSendEth env e then
+    some #[.evmSendEth w0 w1 w2 amt, .returnU64 amt]
+  else if let some amount := findEvmLogTipped env e then
+    some #[.evmLogTipped amount, .returnU64 amount]
+  else none
+
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
-  -- 必须在 peelLets 之前找 systemTransfer：剥掉 `have sent := …` 后调用就没了。
-  if let some amount := findSystemTransfer env 16 e then
+  -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
+  if let some amount := findSystemTransfer env e then
     .ok #[.systemTransfer amount, .returnU64 amount]
+  else if let some ops := decodeEvmEffect env e then
+    .ok ops
   else
   let e := peelLets (strip e)
   if let some v := asOkState env e then
@@ -648,7 +721,10 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
-    | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber => .ok #[.returnU64 v]
+    | .clockSlot | .signerKey0 => .ok #[.returnU64 v]
+    | v =>
+      if Ops.hasEvmLeaf #[.returnU64 v] then .ok #[.returnU64 v]
+      else .error "extract/unsupported: body"
   else
     .error "extract/unsupported: body"
 
@@ -676,8 +752,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
-    if let some amount := findSystemTransfer env 16 e then
+    if let some amount := findSystemTransfer env e then
       return .ok #[.systemTransfer amount, .returnU64 amount]
+    if let some ops := decodeEvmEffect env e then
+      return .ok ops
     let e := strip e
     if isConstNamed e ``ite && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
@@ -685,12 +763,14 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let f := peelLets args[args.size - 1]!
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, findSystemTransfer env 8 t, asOkState env t with
-          | some (cmp, lv, rv), some amount, _ =>
+          match asCmp env condE, findSystemTransfer env t, decodeEvmEffect env t, asOkState env t with
+          | some (cmp, lv, rv), some amount, _, _ =>
             return .ok #[.ite cmp lv rv #[.systemTransfer amount, .returnU64 amount] #[.errorOverflow]]
-          | some (cmp, lv, rv), none, some v =>
+          | some (cmp, lv, rv), none, some evmOps, _ =>
+            return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
+          | some (cmp, lv, rv), none, none, some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
-          | _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
@@ -737,6 +817,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       match val env e.getAppArgs[e.getAppArgs.size - 1]! with
       | some amount => return .ok #[.systemTransfer amount, .returnU64 amount]
       | none => return .error "extract/unsupported: systemTransfer amount"
+    else if let some ops := decodeEvmEffect env e then
+      return .ok ops
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs
@@ -804,7 +886,7 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
 def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
   let ops ← decodeBody env e
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
-      Ops.hasSystemTransfer ops then
+      Ops.hasSystemTransfer ops || Ops.hasEvmEffect ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"
@@ -834,10 +916,15 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     | 0 => v
     | fuel' + 1 =>
       match v with
-      | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
+      | .arg i =>
+        if kind == .init && i < nLams then .arg (nLams - 1 - i)
+        else if kind == .increment && nLams > 1 && i + 1 < nLams then
+          .arg (nLams - 2 - i)
+        else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
-      | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber => v
+      | .clockSlot | .signerKey0 => v
+      | v => v
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -855,9 +942,15 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
         .ite c (flipVal fuel' l) (flipVal fuel' r)
           (t.map (flipOp fuel')) (f.map (flipOp fuel'))
       | .systemTransfer v => .systemTransfer (flipVal fuel' v)
+      | .evmDeposit v => .evmDeposit (flipVal fuel' v)
+      | .evmSendEth a b c d =>
+          .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
+      | .evmLogTipped v => .evmLogTipped (flipVal fuel' v)
       | .errorOverflow => .errorOverflow
   let ops :=
-    if kind == .init && nLams > 1 then ops1.map (flipOp 8) else ops1
+    if (kind == .init && nLams > 1) || (kind == .increment && nLams > 2) then
+      ops1.map (flipOp 8)
+    else ops1
   let paramCount :=
     match kind with
     | .init => if nLams = 0 then 1 else nLams
@@ -975,7 +1068,8 @@ private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
   | .lit _ => #[]
-  | .clockSlot | .signerKey0 | .evmCaller | .evmBlockNumber => #[]
+  | .clockSlot | .signerKey0 => #[]
+  | v => if Ops.hasEvmLeaf #[.returnU64 v] then #[] else #[]
 
 private def opFields : Ops.Op → Array String
   | .checkedAddU64 l r => valFields l ++ valFields r
@@ -986,6 +1080,9 @@ private def opFields : Ops.Op → Array String
   | .ite _ l r t f =>
       valFields l ++ valFields r ++ t.flatMap opFields ++ f.flatMap opFields
   | .systemTransfer v => valFields v
+  | .evmDeposit v => valFields v
+  | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
+  | .evmLogTipped v => valFields v
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .returnU64 v => valFields v

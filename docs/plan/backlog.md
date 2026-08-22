@@ -23,7 +23,7 @@
 
 ## 进行中
 
-- `evmCaller` / `evmBlockNumber` 已开。下一刀：`evmTimestamp` / 完整 20B caller，或 payable。不做 Window。不把 `clockSlot` 译成 `NUMBER`。
+- E-RT 已交付（`Examples.TipJar` + Anvil）。下一大切片 **E-LANG**（位运算 / 有界 for / Vector[i] / 真 ABI / 多叶 return / 命名 revert）。见 [research/05-evm-coverage-slices.md](../research/05-evm-coverage-slices.md)。不做 Window。不把 SVM 名译成 EVM。
 
 ## 下一刀
 

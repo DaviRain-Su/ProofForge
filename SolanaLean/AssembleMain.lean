@@ -9,7 +9,7 @@ def main (args : List String) : IO UInt32 := do
     | outDir :: _ => System.FilePath.mk outDir
     | [] => System.FilePath.mk "build/sbpf"
   for program in SolanaLean.Golden.programs do
-    if program.methods.any (fun m => Ops.hasEvmLeaf m.ops) then
+    if program.methods.any (fun m => Ops.hasEvmEffect m.ops) then
       IO.println s!"skip svm assemble {program.name} (evm leaf)"
       continue
     let r ← SolanaLean.Assemble.assembleProgram out program

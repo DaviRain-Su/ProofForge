@@ -19,6 +19,7 @@ structure Method where
   paramCount : Nat := 0
   ops : Array Ops.Op := #[]
   view : Bool := false
+  payable : Bool := false
   deriving BEq, Repr, Inhabited
 
 structure Program where
@@ -40,7 +41,7 @@ def hasOptionLeaves (p : Program) : Bool :=
 private def valForbidden : Ops.Val → Bool
   | .clockSlot | .signerKey0 => true
   | .field b _ => valForbidden b
-  | .arg _ | .lit _ | .evmCaller | .evmBlockNumber => false
+  | _ => false
 
 private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -59,6 +60,10 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .okState v => valForbidden v
       | .returnU64 v => valForbidden v
       | .returnState v => valForbidden v
+      | .evmDeposit v => valForbidden v
+      | .evmSendEth a b c d =>
+          valForbidden a || valForbidden b || valForbidden c || valForbidden d
+      | .evmLogTipped v => valForbidden v
       | .errorOverflow => false
 
 def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
@@ -111,12 +116,14 @@ def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
     paramCount := ctorSrc.paramCount
     ops := ctorSrc.ops
     view := false
+    payable := false
   }
   let mut entries : Array Method := #[]
   for m in rest do
     if m.ops.isEmpty then
       throw s!"extract/unsupported: empty ops {m.ixName}"
     let sel := Keccak.selectorU64 m.ixName m.paramCount
+    let view := m.kind == .get
     entries := entries.push {
       kind := m.kind
       name := m.name
@@ -124,7 +131,8 @@ def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
       selector := sel
       paramCount := m.paramCount
       ops := m.ops
-      view := m.kind == .get
+      view
+      payable := !view && Ops.hasEvmDeposit m.ops
     }
   let slots := src.slots.mapIdx fun i s =>
     { name := s.name, index := i, width := s.width }
@@ -142,6 +150,17 @@ private def valCanon : Ops.Val → String
   | .signerKey0 => "k0"
   | .evmCaller => "ecall"
   | .evmBlockNumber => "eblk"
+  | .evmTimestamp => "ets"
+  | .evmChainId => "echain"
+  | .evmSelf => "eself"
+  | .evmCallValue => "eval"
+  | .evmSelfBalance => "ebal"
+  | .evmCallerW0 => "ecw0"
+  | .evmCallerW1 => "ecw1"
+  | .evmCallerW2 => "ecw2"
+  | .evmSelfW0 => "esw0"
+  | .evmSelfW1 => "esw1"
+  | .evmSelfW2 => "esw2"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
@@ -153,6 +172,10 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
     | .systemTransfer v => s!"xfer({valCanon v})"
+    | .evmDeposit v => s!"edep({valCanon v})"
+    | .evmSendEth a b c d =>
+        s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
+    | .evmLogTipped v => s!"elog({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .returnU64 v => s!"retu({valCanon v})"
@@ -165,7 +188,7 @@ def canonical (p : Program) : String :=
   let ctor := s!"ctor:{p.constructor.paramCount}:[{opsCanon p.constructor.ops}]"
   let entries :=
     (p.entries.qsort (fun a b => a.ixName < b.ixName)).toList.map fun m =>
-      let tag := if m.view then "view" else "mut"
+      let tag := if m.view then "view" else if m.payable then "pay" else "mut"
       s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:[{opsCanon m.ops}]"
   s!"evm|{p.name}|{slots}|{ctor}|{String.intercalate "/" entries}"
 

@@ -8,3 +8,4 @@ import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
 import Examples.EvmCtx
+import Examples.TipJar

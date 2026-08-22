@@ -14,6 +14,11 @@ open SolanaLean.Evm
 
 #guard SolanaLean.Evm.Keccak.selectorU64 "get" 0 == "6d4ce63c"
 
+#guard SolanaLean.Evm.Keccak.keccak256HexOfString "Tipped(uint64)" ==
+  "a20b303e80124ead462817f3d5ce5513d6d36a9ea8085f2cf523499b54a820c3"
+
+#guard SolanaLean.Evm.Keccak.selectorU64 "deposit" 1 == "13765838"
+
 #guard SolanaLean.Evm.Keccak.selectorU64 "decrement" 1 == "f2df7647"
 
 #guard

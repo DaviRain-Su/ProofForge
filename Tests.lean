@@ -16,4 +16,5 @@ import Tests.Sha256Spec
 import Tests.EvmSpec
 import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
+import Tests.TipJarSpec
 import Tests.DumpIncrement

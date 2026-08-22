@@ -1,5 +1,6 @@
 import SolanaLean.Ops
 import SolanaLean.Evm.IR
+import SolanaLean.Evm.Keccak
 
 namespace SolanaLean.Evm.Emit
 
@@ -44,9 +45,40 @@ private def slotOf (p : IR.Program) (name : String) : Except String Nat :=
   | some i => .ok i
   | none => .error s!"extract/unsupported: unknown field {name}"
 
+private def nl : String := "\n"
+
 private def yulLit (n : UInt64) : String :=
   if n == 0 then "0"
   else s!"0x{SolanaLean.IR.u64Hex n}"
+
+/-- Addr20 小端三叶：word i 收 `src` 的字节 0..19 中第 8i ..。`src` 是 `caller()` / `address()`。 -/
+private def packAddrWord (src : String) (word : Nat) : String :=
+  let rec orBytes (i : Nat) (n : Nat) (acc : String) : String :=
+    match n with
+    | 0 => acc
+    | n' + 1 =>
+      let b := "byte(" ++ toString (12 + 8 * word + i) ++ ", " ++ src ++ ")"
+      let next :=
+        if i == 0 then b
+        else "or(" ++ acc ++ ", shl(" ++ toString (8 * i) ++ ", " ++ b ++ "))"
+      orBytes (i + 1) n' next
+  let count := if word == 2 then 4 else 8
+  orBytes 0 count "0"
+
+/-- 把三叶小端 Addr20 写到 memory[12..31]，高 12 字节已清零。 -/
+private def packAddrMstore8 (indent w0 w1 w2 : String) : String :=
+  Id.run do
+    let mut out := ""
+    for i in [0:8] do
+      out := out ++ indent ++ "mstore8(" ++ toString (12 + i) ++ ", and(shr(" ++
+        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
+    for i in [0:8] do
+      out := out ++ indent ++ "mstore8(" ++ toString (20 + i) ++ ", and(shr(" ++
+        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
+    for i in [0:4] do
+      out := out ++ indent ++ "mstore8(" ++ toString (28 + i) ++ ", and(shr(" ++
+        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
+    return out
 
 private def widthMask (width : Nat) : String :=
   match width with
@@ -75,6 +107,17 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .signerKey0 => .error "extract/unsupported: evm rejects signerKey0"
   | .evmCaller => .ok "and(caller(), 0xffffffffffffffff)"
   | .evmBlockNumber => .ok "number()"
+  | .evmTimestamp => .ok "timestamp()"
+  | .evmChainId => .ok "chainid()"
+  | .evmSelf => .ok "and(address(), 0xffffffffffffffff)"
+  | .evmCallValue => .ok "callvalue()"
+  | .evmSelfBalance => .ok "selfbalance()"
+  | .evmCallerW0 => .ok (packAddrWord "caller()" 0)
+  | .evmCallerW1 => .ok (packAddrWord "caller()" 1)
+  | .evmCallerW2 => .ok (packAddrWord "caller()" 2)
+  | .evmSelfW0 => .ok (packAddrWord "address()" 0)
+  | .evmSelfW1 => .ok (packAddrWord "address()" 1)
+  | .evmSelfW2 => .ok (packAddrWord "address()" 2)
 
 private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
   match c with
@@ -84,8 +127,6 @@ private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
   | .le => s!"iszero(gt({l}, {r}))"
   | .gt => s!"gt({l}, {r})"
   | .ge => s!"iszero(lt({l}, {r}))"
-
-private def nl : String := "\n"
 
 private def revert0 : String := "revert(0, 0)"
 
@@ -118,19 +159,27 @@ private structure Render where
 private def fresh (r : Render) : String × Render :=
   (s!"v{r.next}", { r with next := r.next + 1 })
 
-private def bindNumber (indent name : String) : String :=
-  indent ++ "let " ++ name ++ " := number()" ++ nl ++
+private def bindChecked (indent name expr : String) : String :=
+  indent ++ "let " ++ name ++ " := " ++ expr ++ nl ++
     indent ++ "if gt(" ++ name ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl
 
-/-- `number()` 必须先 range-check 再当值用。 -/
+/-- 环境 opcode 必须先 range-check 再当值用。 -/
 private def materializeVal (p : IR.Program) (indent paramPrefix : String)
     (paramCount : Nat) (v : Ops.Val) (st : Render) :
     Except String (String × String × Render) := do
-  match v with
-  | .evmBlockNumber =>
+  let checked? : Option String :=
+    match v with
+    | .evmBlockNumber => some "number()"
+    | .evmTimestamp => some "timestamp()"
+    | .evmChainId => some "chainid()"
+    | .evmCallValue => some "callvalue()"
+    | .evmSelfBalance => some "selfbalance()"
+    | _ => none
+  match checked? with
+  | some expr =>
       let (nm, st') := fresh st
-      return (bindNumber indent nm, nm, st')
-  | _ =>
+      return (bindChecked indent nm expr, nm, st')
+  | none =>
       let e ← loadVal p paramPrefix paramCount v
       return ("", e, st)
 
@@ -207,6 +256,35 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if iszero(" ++ nm ++ ") " ++ brace elseTxt ++ nl
     | .systemTransfer _ =>
         throw "extract/unsupported: evm rejects systemTransfer"
+    | .evmDeposit amount =>
+        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount amount st
+        st := st'
+        acc := acc ++ pre ++
+          indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
+        st := { st with last := some amt }
+    | .evmSendEth w0 w1 w2 amount =>
+        let (p0, a0, st0) ← materializeVal p indent paramPrefix paramCount w0 st
+        let (p1, a1, st1) ← materializeVal p indent paramPrefix paramCount w1 st0
+        let (p2, a2, st2) ← materializeVal p indent paramPrefix paramCount w2 st1
+        let (p3, amt, st3) ← materializeVal p indent paramPrefix paramCount amount st2
+        st := st3
+        let (ok, st') := fresh st
+        st := st'
+        acc := acc ++ p0 ++ p1 ++ p2 ++ p3 ++
+          indent ++ "if shr(32, " ++ a2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent a0 a1 a2 ++
+          indent ++ "let " ++ ok ++ " := call(gas(), mload(0), " ++ amt ++
+            ", 0, 0, 0, 0)" ++ nl ++
+          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
+        st := { st with last := some amt }
+    | .evmLogTipped amount =>
+        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount amount st
+        st := st'
+        acc := acc ++ pre ++
+          indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
+          indent ++ "log1(0, 32, 0x" ++ Keccak.keccak256HexOfString "Tipped(uint64)" ++ ")" ++ nl
+        st := { st with last := some amt }
     | .okState v =>
         if IR.hasOptionLeaves p then
           let tagN := optionTagName p
@@ -314,12 +392,18 @@ private def renderRuntimeCopy (runtimeName : String) : String :=
   "    datacopy(0, dataoffset(" ++ q runtimeName ++ "), datasize(" ++ q runtimeName ++ "))" ++ nl ++
   "    return(0, datasize(" ++ q runtimeName ++ "))" ++ nl
 
-private def renderEntry (p : IR.Program) (m : IR.Method) : Except String String := do
+private def hasPayableEntry (p : IR.Program) : Bool :=
+  p.entries.any (·.payable)
+
+private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool) :
+    Except String String := do
   let calldataBytes := 4 + m.paramCount * 32
   let mut head :=
     "      case 0x" ++ m.selector ++ " {" ++ nl ++
     "        if iszero(eq(calldatasize(), " ++ toString calldataBytes ++ ")) { " ++
       revert0 ++ " }" ++ nl
+  if localValueGuard && !m.payable then
+    head := head ++ "        if callvalue() { " ++ revert0 ++ " }" ++ nl
   for i in [0:m.paramCount] do
     let off := 4 + i * 32
     head := head ++
@@ -337,9 +421,13 @@ def emitYul (p : IR.Program) : Except String String := do
   let runtimeName := p.name ++ "_runtime"
   let ctorHead := renderCtorPrelude p.name p.constructor.paramCount
   let ctorStores ← emitConstructorStores p
+  let anyPay := hasPayableEntry p
   let mut entries := ""
   for m in p.entries do
-    entries := entries ++ (← renderEntry p m)
+    entries := entries ++ (← renderEntry p m anyPay)
+  let globalGuard :=
+    if anyPay then ""
+    else "      if callvalue() { " ++ revert0 ++ " }" ++ nl
   let yul :=
     "// SOLANA-LEAN-EVM-YUL v0" ++ nl ++
     "// digest=" ++ IR.digestHex p ++ nl ++
@@ -349,7 +437,7 @@ def emitYul (p : IR.Program) : Except String String := do
     "  }" ++ nl ++
     "  object " ++ q runtimeName ++ " {" ++ nl ++
     "    code {" ++ nl ++
-    "      if callvalue() { " ++ revert0 ++ " }" ++ nl ++
+    globalGuard ++
     "      if lt(calldatasize(), 4) { " ++ revert0 ++ " }" ++ nl ++
     "      switch shr(224, calldataload(0))" ++ nl ++
     entries ++
@@ -373,7 +461,7 @@ private def ctorAbi (p : IR.Program) : String :=
     paramsJson p.constructor.paramCount ++ "]}"
 
 private def entryAbi (m : IR.Method) : String :=
-  let mutab := if m.view then "view" else "nonpayable"
+  let mutab := if m.view then "view" else if m.payable then "payable" else "nonpayable"
   "{\"type\":\"function\",\"name\":\"" ++ escapeJson m.ixName ++
     "\",\"stateMutability\":\"" ++ mutab ++ "\",\"inputs\":[" ++
     paramsJson m.paramCount ++

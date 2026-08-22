@@ -41,4 +41,29 @@ SVM 发射器碰到这个叶子 fail closed。
 -/
 @[irreducible] def evmBlockNumber : UInt64 := 0
 
+@[irreducible] def evmTimestamp : UInt64 := 0
+@[irreducible] def evmChainId : UInt64 := 0
+/-- `ADDRESS` 低 8 字节。完整 20B 用 `evmSelfW*`。 -/
+@[irreducible] def evmSelf : UInt64 := 0
+@[irreducible] def evmCallValue : UInt64 := 0
+@[irreducible] def evmSelfBalance : UInt64 := 0
+
+/-- `CALLER` 20 字节拆成三叶：w0、w1 各 8 字节，w2 低 4 字节。小端装地址字节 0..19。 -/
+@[irreducible] def evmCallerW0 : UInt64 := 0
+@[irreducible] def evmCallerW1 : UInt64 := 0
+@[irreducible] def evmCallerW2 : UInt64 := 0
+@[irreducible] def evmSelfW0 : UInt64 := 0
+@[irreducible] def evmSelfW1 : UInt64 := 0
+@[irreducible] def evmSelfW2 : UInt64 := 0
+
+/-- `eq(callvalue(), amt)`。入口因此 payable。宿主返回 amt。 -/
+@[irreducible] def evmDeposit (amt : UInt64) : UInt64 := amt
+
+/-- value CALL 到 20B 地址。失败应 revert。重入不进参考语义。宿主返回 amt。 -/
+@[irreducible] def evmSendEth (w0 w1 w2 amt : UInt64) : UInt64 :=
+  let _ := w0; let _ := w1; let _ := w2; amt
+
+/-- LOG1 `Tipped(uint64)`。宿主返回 amt。 -/
+@[irreducible] def evmLogTipped (amt : UInt64) : UInt64 := amt
+
 end SolanaLean.Runtime
