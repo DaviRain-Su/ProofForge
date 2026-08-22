@@ -35,6 +35,7 @@ import Examples.TokenNative
 import Examples.Hash
 import Examples.Keys
 import Examples.Keccak
+import Examples.Trio
 
 #solana_build Examples.Counter
 
@@ -107,6 +108,8 @@ import Examples.Keccak
 #solana_build Examples.Keys
 
 #solana_build Examples.Keccak
+
+#solana_build Examples.Trio
 
 /--
 error: extract/unsupported: no solana_entry

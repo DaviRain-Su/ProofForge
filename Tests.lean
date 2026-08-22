@@ -33,6 +33,7 @@ import Tests.TokenNativeSpec
 import Tests.HashSpec
 import Tests.KeysSpec
 import Tests.KeccakSpec
+import Tests.TrioSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

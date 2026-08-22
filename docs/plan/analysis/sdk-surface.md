@@ -42,7 +42,8 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `accLamports1` / `accOwner1` / `accDataLen1` / 三旗 | 账户 1 header；walk 不强制 signer | L4-029 |
 | `sha256Lit seed` | `sol_sha256` 一条 ASCII；返回首 u64 | L4-030 |
 | `keccak256Lit seed` | `sol_keccak256` 同形；Ethereum Keccak | L4-032 |
-| `accKeyWord` / `accOwnerWord` | 账户 0/1 的 32B 按字读 | L4-031 |
+| `accKeyWord` / `accOwnerWord` | 账户 0/1/2 的 32B 按字读 | L4-031 / L4-033 |
+| `accLamports` / `signerKey` / `ownerIsSelf` | 下标叶子；`acc`∈{0,1,2} | L4-033 |
 | `findPda seed` | `sol_try_find_program_address`；返回 bump | L4-006 |
 | `invokeSigned` | 一组 ASCII 种子 + bump；`sol_invoke_signed_c` | L4-007 |
 | `systemCreate` | System createAccount；owner = 当前 program id | L4-008 |

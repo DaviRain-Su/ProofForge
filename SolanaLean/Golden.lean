@@ -665,6 +665,40 @@ def extractedKeccak : Program :=
         ops := #[.returnU64 (.keccak256Lit "")] }
     ] }
 
+def extractedTrio : Program :=
+  { name := "Trio"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Trio.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Trio.touch", ixName := "touch", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Trio.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Trio.lamports2", ixName := "lamports2", paramCount := 0
+        ops := #[.returnU64 (.accLamportsN 2)] },
+      { kind := .get, name := "Examples.Trio.dataLen2", ixName := "dataLen2", paramCount := 0
+        ops := #[.returnU64 (.accDataLenN 2)] },
+      { kind := .get, name := "Examples.Trio.signer2", ixName := "signer2", paramCount := 0
+        ops := #[.returnU64 (.isSignerN 2)] },
+      { kind := .get, name := "Examples.Trio.writable2", ixName := "writable2", paramCount := 0
+        ops := #[.returnU64 (.isWritableN 2)] },
+      { kind := .get, name := "Examples.Trio.executable2", ixName := "executable2", paramCount := 0
+        ops := #[.returnU64 (.isExecutableN 2)] },
+      { kind := .get, name := "Examples.Trio.key20", ixName := "key20", paramCount := 0
+        ops := #[.returnU64 (.accKeyWord 2 0)] },
+      { kind := .get, name := "Examples.Trio.needSig1", ixName := "needSig1", paramCount := 0
+        ops := #[.returnU64 (.signerKeyN 1)] },
+      { kind := .get, name := "Examples.Trio.self0", ixName := "self0", paramCount := 0
+        ops := #[.returnU64 (.ownerIsSelf 0)] },
+      { kind := .get, name := "Examples.Trio.self2", ixName := "self2", paramCount := 0
+        ops := #[.returnU64 (.ownerIsSelf 2)] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
@@ -673,7 +707,7 @@ def programs : Array Program := #[
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
-  extractedTokenNative, extractedHash, extractedKeys, extractedKeccak
+  extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

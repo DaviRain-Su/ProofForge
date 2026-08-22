@@ -131,8 +131,50 @@ private def emitCpiFlagChecks (p : IR.Program) (err : String) : String :=
   jeq r1, 0, {err}
 {extra}"
 
-/-- 只 walk：N 账户虚地址；查 ix 长度。不强制 acc0 signer。 -/
-private def preludeWalk (p : IR.Program) (label : String) (ixLen : Nat) : String :=
+/-- walk 入口要查 `is_signer` 的账户下标。 -/
+private def valSignerAccs : Ops.Val → Array Nat
+  | .signerKey0 => #[0]
+  | .signerKeyN a => #[a]
+  | .field b _ => valSignerAccs b
+  | .checkPda _ b => valSignerAccs b
+  | _ => #[]
+
+private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
+  match fuel with
+  | 0 => #[]
+  | fuel' + 1 =>
+    ops.foldl (init := #[]) fun acc op =>
+      let here :=
+        match op with
+        | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
+        | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
+            valSignerAccs l ++ valSignerAccs r
+        | .invoke _ _ data _ bump =>
+            (data.flatMap fun | .u64le v => valSignerAccs v | _ => #[]) ++
+              (match bump with | some v => valSignerAccs v | none => #[])
+        | .okState v | .returnU64 v | .returnState v => valSignerAccs v
+        | .errorOverflow => #[]
+      let nested :=
+        match op with
+        | .ite _ _ _ t f => walkSignerAccs fuel' t ++ walkSignerAccs fuel' f
+        | _ => #[]
+      acc ++ here ++ nested
+
+private def emitWalkSignerChecks (ops : Array Ops.Op) (err : String) : String :=
+  let accs := walkSignerAccs 16 ops
+  Id.run do
+    let mut seen : Array Nat := #[]
+    let mut out := ""
+    for a in accs do
+      unless seen.any (· == a) do
+        seen := seen.push a
+        out := out ++
+          s!"  ldxdw r8, [r10 - {headerStack a}]\n  ldxb r1, [r8 + 1]\n  jeq r1, 0, {err}\n"
+    return out
+
+/-- 只 walk：N 账户虚地址；查 ix 长度。不强制 acc0 signer；`signerKey acc` 才查该账户。 -/
+private def preludeWalk (p : IR.Program) (label : String) (ixLen : Nat)
+    (ops : Array Ops.Op := #[]) : String :=
   let err := s!"err_check_{label}"
   let n := IR.cpiAccountCount p
   s!"\
@@ -141,7 +183,7 @@ private def preludeWalk (p : IR.Program) (label : String) (ixLen : Nat) : String
 {emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
   ldxdw r1, [r1 + 0]
   jne r1, {ixLen}, {err}
-  ja body_{label}
+{emitWalkSignerChecks ops err}  ja body_{label}
 {err}:
   lddw r0, 0x1
   exit
@@ -180,7 +222,9 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
   | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-  | .accKeyWord _ _ | .accOwnerWord _ _ =>
+  | .accKeyWord _ _ | .accOwnerWord _ _
+  | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
+  | .signerKeyN _ | .ownerIsSelf _ =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -333,6 +377,90 @@ private def emitLoadAccWord (kind : String) (acc word stackOff : Nat) : String :
     emitLoadWalkedU64 acc hdrOff stackOff
 
 /--
+账户 `acc` 的 header 字段。账户 0 走固定 Loader 偏移；≥1 走 walk。
+`kind`：lamports / dataLen / signer / writable / executable / key0。
+-/
+private def emitLoadAccN (kind : String) (acc stackOff : Nat) : String :=
+  if acc == 0 then
+    match kind with
+    | "lamports" => emitLoadAccU64 "load acc0 lamports" "ACC0_LAMPORTS" stackOff
+    | "dataLen" => emitLoadAccU64 "load acc0 data_len" "ACC0_DATA_LEN" stackOff
+    | "signer" => emitLoadAccU8 "load acc0 is_signer" "ACC0_HEADER + 1" stackOff
+    | "writable" => emitLoadAccU8 "load acc0 is_writable" "ACC0_HEADER + 2" stackOff
+    | "executable" => emitLoadAccU8 "load acc0 is_executable" "ACC0_HEADER + 3" stackOff
+    | _ => emitLoadAccU64 "load acc0 key first u64" "ACC0_KEY + 0" stackOff
+  else
+    let (off, u8) :=
+      match kind with
+      | "lamports" => (72, false)
+      | "dataLen" => (80, false)
+      | "signer" => (1, true)
+      | "writable" => (2, true)
+      | "executable" => (3, true)
+      | _ => (8, false)
+    if u8 then emitLoadWalkedU8 acc off stackOff
+    else emitLoadWalkedU64 acc off stackOff
+
+/--
+owner 32B 是否等于当前 program id。相等写 0，不等写 1。
+program id 在 instruction data 之后（单账户）或 walk 出的 ix 长度字之后。
+-/
+private def emitLoadOwnerIsSelf (p : IR.Program) (acc stackOff : Nat) : String :=
+  let progId :=
+    if IR.usesWalk p then
+      s!"\
+  ldxdw r3, [r10 - {headerStack (IR.cpiAccountCount p)}]
+  ldxdw r1, [r3 + 0]
+  add64 r3, 8
+  add64 r3, r1
+"
+    else
+      s!"\
+  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
+  mov64 r3, r6
+  add64 r3, INSTRUCTION_DATA
+  add64 r3, r1
+"
+  let owner :=
+    if acc == 0 && !IR.usesWalk p then
+      s!"\
+  mov64 r2, r6
+  add64 r2, ACC0_OWNER
+"
+    else if acc == 0 then
+      s!"\
+  ldxdw r2, [r10 - {headerStack 0}]
+  add64 r2, 40
+"
+    else
+      s!"\
+  ldxdw r2, [r10 - {headerStack acc}]
+  add64 r2, 40
+"
+  s!"\
+  ; ownerIsSelf acc={acc}
+{progId}{owner}  ldxdw r1, [r2 + 0]
+  ldxdw r4, [r3 + 0]
+  jne r1, r4, ois_no_{acc}_{stackOff}
+  ldxdw r1, [r2 + 8]
+  ldxdw r4, [r3 + 8]
+  jne r1, r4, ois_no_{acc}_{stackOff}
+  ldxdw r1, [r2 + 16]
+  ldxdw r4, [r3 + 16]
+  jne r1, r4, ois_no_{acc}_{stackOff}
+  ldxdw r1, [r2 + 24]
+  ldxdw r4, [r3 + 24]
+  jne r1, r4, ois_no_{acc}_{stackOff}
+  lddw r1, 0
+  stxdw [r10 - {stackOff}], r1
+  ja ois_done_{acc}_{stackOff}
+ois_no_{acc}_{stackOff}:
+  lddw r1, 1
+  stxdw [r10 - {stackOff}], r1
+ois_done_{acc}_{stackOff}:
+"
+
+/--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
 scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 clock 的 `r10-72`。
 CPI 程序的 program id 在 walk 出的 ix 长度字之后。
@@ -478,6 +606,20 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadAccWord "key" acc word stackOff)
   | .accOwnerWord acc word =>
     .ok (emitLoadAccWord "owner" acc word stackOff)
+  | .accLamportsN acc =>
+    .ok (emitLoadAccN "lamports" acc stackOff)
+  | .accDataLenN acc =>
+    .ok (emitLoadAccN "dataLen" acc stackOff)
+  | .isSignerN acc =>
+    .ok (emitLoadAccN "signer" acc stackOff)
+  | .isWritableN acc =>
+    .ok (emitLoadAccN "writable" acc stackOff)
+  | .isExecutableN acc =>
+    .ok (emitLoadAccN "executable" acc stackOff)
+  | .signerKeyN acc =>
+    .ok (emitLoadAccN "key0" acc stackOff)
+  | .ownerIsSelf acc =>
+    .ok (emitLoadOwnerIsSelf p acc stackOff)
   | .checkPda seed bump =>
     emitLoadCheckPda p seed bump stackOff
   | .rentExemption n =>
@@ -587,7 +729,7 @@ private def destField (p : IR.Program) (lhs : Ops.Val) : String :=
 
 private def valUsesSigner (v : Ops.Val) : Bool :=
   match v with
-  | .signerKey0 => true
+  | .signerKey0 | .signerKeyN _ => true
   | .field b _ => valUsesSigner b
   | _ => false
 
@@ -965,7 +1107,9 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         | .accLamports1 | .accOwner1 | .accDataLen1
         | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
         | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-        | .accKeyWord _ _ | .accOwnerWord _ _ => do
+        | .accKeyWord _ _ | .accOwnerWord _ _
+        | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
+        | .signerKeyN _ | .ownerIsSelf _ => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
@@ -1046,7 +1190,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
     if IR.usesCpi p then
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}body_{label}:\n  lddw r0, 0\n  exit\n"
     else if IR.usesWalk p then
-      return s!"{label}:\n{preludeWalk p label (ixLenOf m)}body_{label}:\n  lddw r0, 0\n  exit\n"
+      return s!"{label}:\n{preludeWalk p label (ixLenOf m) m.ops}body_{label}:\n  lddw r0, 0\n  exit\n"
     else
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
@@ -1059,21 +1203,21 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
     else do
       let body ← emitMutBody p label m.ops
       let head :=
-        if IR.usesWalk p then preludeWalk p label (ixLenOf m)
+        if IR.usesWalk p then preludeWalk p label (ixLenOf m) m.ops
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) true false
       return s!"{label}:\n{head}{body}"
   | .get =>
     if m.ops.any (fun | .ite .. => true | _ => false) then
       let body ← emitMutBody p label m.ops
       let head :=
-        if IR.usesWalk p then preludeWalk p label (ixLenOf m)
+        if IR.usesWalk p then preludeWalk p label (ixLenOf m) m.ops
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
       return s!"{label}:\n{head}{body}"
     else
       let v ← getVal m.ops
       let body ← emitGetBody p label v
       let head :=
-        if IR.usesWalk p then preludeWalk p label (ixLenOf m)
+        if IR.usesWalk p then preludeWalk p label (ixLenOf m) m.ops
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
       return s!"{label}:\n{head}{body}"
 

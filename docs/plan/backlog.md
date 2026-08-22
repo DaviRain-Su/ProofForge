@@ -50,15 +50,15 @@
 - `sha256Lit`；Hash Mollusk
 - 32B key / owner 按字读；Keys Mollusk
 - `keccak256Lit`；Keccak Mollusk
+- 账户下标叶子收口；Trio Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-剩余可开、仍落在现有抽出/发射器上：
+第 1/2 层能 fail-closed 抽出的格子已收口（L4-033）。
 
-1. 账户 0/1 的 32B 按字读已绿；账户 2 / `ByteArray 32` 仍 FC
-2. Token classic 常用指令已绿；Multisig / Token-2022 仍关
+仍关、且不是延期：账户 3+、`ByteArray 32`、Multisig / Token-2022 / nonce、feature-gated 哈希与曲线。
 
 nonce / Token-2022 / remaining accounts / 运行时 program id 仍关。
 

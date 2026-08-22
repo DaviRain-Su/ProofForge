@@ -125,14 +125,14 @@ def accountSpan (accountDataLen : Nat) : Nat :=
 def usesCpi (p : Program) : Bool :=
   p.methods.any (fun m => Ops.hasInvoke m.ops)
 
-/-- 要走多账户虚地址 walk：有 CPI，或读账户 1 叶子。 -/
+/-- 要走多账户虚地址 walk：有 CPI，或读账户 ≥1 叶子。 -/
 def usesWalk (p : Program) : Bool :=
   usesCpi p || p.methods.any (fun m => Ops.hasAcc1 m.ops)
 
 def usesSystemTransfer (p : Program) : Bool :=
   usesCpi p
 
-/-- 外层账户数：invoke 下标最大值 + 1；有账户 1 叶子则至少 2。 -/
+/-- 外层账户数：invoke 下标最大值 + 1；叶子下标最大值 + 1。 -/
 def cpiAccountCount (p : Program) : Nat :=
   let rec maxIx (fuel : Nat) (ops : Array Ops.Op) (acc : Nat) : Nat :=
     match fuel with
@@ -147,8 +147,8 @@ def cpiAccountCount (p : Program) : Nat :=
         | _ => a
   let n := p.methods.foldl (init := 0) fun a m => Nat.max a (maxIx 8 m.ops 0)
   let fromInvoke := if usesCpi p then Nat.max 2 (n + 1) else 0
-  let fromAcc1 := if p.methods.any (fun m => Ops.hasAcc1 m.ops) then 2 else 0
-  Nat.max fromInvoke fromAcc1
+  let fromLeaves := p.methods.foldl (init := 0) fun a m => Nat.max a (Ops.opsMinAccounts m.ops)
+  Nat.max fromInvoke fromLeaves
 
 def inputLayout (p : Program) : InputLayout :=
   if usesWalk p then
@@ -241,6 +241,13 @@ private def valCanon : Ops.Val → String
   | .keccak256Lit s => s!"kec.{s}"
   | .accKeyWord a w => s!"kw.{a}.{w}"
   | .accOwnerWord a w => s!"ow.{a}.{w}"
+  | .accLamportsN a => s!"lpN.{a}"
+  | .accDataLenN a => s!"dlN.{a}"
+  | .isSignerN a => s!"sgN.{a}"
+  | .isWritableN a => s!"wrN.{a}"
+  | .isExecutableN a => s!"exN.{a}"
+  | .signerKeyN a => s!"sk.{a}"
+  | .ownerIsSelf a => s!"ois.{a}"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=

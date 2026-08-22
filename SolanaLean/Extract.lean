@@ -142,7 +142,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if a ≤ 1 && w ≤ 3 then some (.accKeyWord a w) else none
+            if a ≤ 2 && w ≤ 3 then some (.accKeyWord a w) else none
           | _, _ => none
         else if (endsWith e ".accOwnerWord" || isConstNamed e ``SolanaLean.Runtime.accOwnerWord) &&
             e.getAppArgs.size ≥ 2 then
@@ -151,7 +151,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if a ≤ 1 && w ≤ 3 then some (.accOwnerWord a w) else none
+            if a ≤ 2 && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``SolanaLean.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
@@ -165,6 +165,55 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit n) => some (.rentExemption n)
+          | _ => none
+        else if (endsWith e ".accLamports" || isConstNamed e ``SolanaLean.Runtime.accLamports) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc) =>
+            let a := acc.toNat
+            if a ≤ 2 then some (.accLamportsN a) else none
+          | _ => none
+        else if (endsWith e ".accDataLen" || isConstNamed e ``SolanaLean.Runtime.accDataLen) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc) =>
+            let a := acc.toNat
+            if a ≤ 2 then some (.accDataLenN a) else none
+          | _ => none
+        else if (endsWith e ".isSigner" || isConstNamed e ``SolanaLean.Runtime.isSigner) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc) =>
+            let a := acc.toNat
+            if a ≤ 2 then some (.isSignerN a) else none
+          | _ => none
+        else if (endsWith e ".isWritable" || isConstNamed e ``SolanaLean.Runtime.isWritable) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc) =>
+            let a := acc.toNat
+            if a ≤ 2 then some (.isWritableN a) else none
+          | _ => none
+        else if (endsWith e ".isExecutable" || isConstNamed e ``SolanaLean.Runtime.isExecutable) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc) =>
+            let a := acc.toNat
+            if a ≤ 2 then some (.isExecutableN a) else none
+          | _ => none
+        else if (endsWith e ".signerKey" || isConstNamed e ``SolanaLean.Runtime.signerKey) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc) =>
+            let a := acc.toNat
+            if a ≤ 2 then some (.signerKeyN a) else none
+          | _ => none
+        else if (endsWith e ".ownerIsSelf" || isConstNamed e ``SolanaLean.Runtime.ownerIsSelf) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc) =>
+            let a := acc.toNat
+            if a ≤ 2 then some (.ownerIsSelf a) else none
           | _ => none
         else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
           let proj :=
@@ -666,6 +715,13 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.keccak256Lit s) => some (.keccak256Lit s)
             | some (.accKeyWord a w) => some (.accKeyWord a w)
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
+            | some (.accLamportsN a) => some (.accLamportsN a)
+            | some (.accDataLenN a) => some (.accDataLenN a)
+            | some (.isSignerN a) => some (.isSignerN a)
+            | some (.isWritableN a) => some (.isWritableN a)
+            | some (.isExecutableN a) => some (.isExecutableN a)
+            | some (.signerKeyN a) => some (.signerKeyN a)
+            | some (.ownerIsSelf a) => some (.ownerIsSelf a)
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -982,7 +1038,9 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .accLamports1 | .accOwner1 | .accDataLen1
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-    | .accKeyWord _ _ | .accOwnerWord _ _ => .ok #[.returnU64 v]
+    | .accKeyWord _ _ | .accOwnerWord _ _
+    | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
+    | .signerKeyN _ | .ownerIsSelf _ => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -1173,7 +1231,9 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .accLamports1 | .accOwner1 | .accDataLen1
       | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
       | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-      | .accKeyWord _ _ | .accOwnerWord _ _ => v
+      | .accKeyWord _ _ | .accOwnerWord _ _
+      | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
+      | .signerKeyN _ | .ownerIsSelf _ => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
@@ -1320,7 +1380,9 @@ private def valFields : Ops.Val → Array String
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
   | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-  | .accKeyWord _ _ | .accOwnerWord _ _ => #[]
+  | .accKeyWord _ _ | .accOwnerWord _ _
+  | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
+  | .signerKeyN _ | .ownerIsSelf _ => #[]
   | .checkPda _ b => valFields b
 
 private def opFields : Ops.Op → Array String

@@ -457,4 +457,48 @@ def createPda (lamports : UInt64) : UInt64 :=
   let _ := word
   0
 
+/--
+账户 `acc` 的 lamports。`acc` 必须在抽出时是常量，且 `acc ≤ 2`。
+`acc ≥ 1` 走 walk。旧名 `accLamports0` / `accLamports1` 仍独立。
+-/
+@[irreducible] def accLamports (acc : UInt64) : UInt64 :=
+  let _ := acc
+  0
+
+/-- 账户 `acc` 的 `data_len`。`acc ≤ 2`，抽出时常量。 -/
+@[irreducible] def accDataLen (acc : UInt64) : UInt64 :=
+  let _ := acc
+  0
+
+/-- 账户 `acc` 的 `is_signer`，0 或 1。不因此强制入口签名。 -/
+@[irreducible] def isSigner (acc : UInt64) : UInt64 :=
+  let _ := acc
+  0
+
+/-- 账户 `acc` 的 `is_writable`，0 或 1。 -/
+@[irreducible] def isWritable (acc : UInt64) : UInt64 :=
+  let _ := acc
+  0
+
+/-- 账户 `acc` 的 `is_executable`，0 或 1。 -/
+@[irreducible] def isExecutable (acc : UInt64) : UInt64 :=
+  let _ := acc
+  0
+
+/--
+账户 `acc` 公钥的第一个小端 `u64`。用到这个叶子的入口会检查该账户 `is_signer`。
+`acc ≤ 2`。这不是 `tx.origin`。旧名 `signerKey0` 仍独立。
+-/
+@[irreducible] def signerKey (acc : UInt64) : UInt64 :=
+  let _ := acc
+  0
+
+/--
+账户 `acc` 的 owner 是否是当前 program id。
+抽出后比 32B。相等返回 0，不等返回 1。`acc ≤ 2`。
+-/
+@[irreducible] def ownerIsSelf (acc : UInt64) : UInt64 :=
+  let _ := acc
+  0
+
 end SolanaLean.Runtime

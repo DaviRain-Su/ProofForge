@@ -34,3 +34,4 @@ import Examples.TokenNative
 import Examples.Hash
 import Examples.Keys
 import Examples.Keccak
+import Examples.Trio

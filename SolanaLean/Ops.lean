@@ -30,6 +30,13 @@ inductive Val where
   | keccak256Lit (seed : String)
   | accKeyWord (acc word : Nat)
   | accOwnerWord (acc word : Nat)
+  | accLamportsN (acc : Nat)
+  | accDataLenN (acc : Nat)
+  | isSignerN (acc : Nat)
+  | isWritableN (acc : Nat)
+  | isExecutableN (acc : Nat)
+  | signerKeyN (acc : Nat)
+  | ownerIsSelf (acc : Nat)
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where
@@ -239,14 +246,32 @@ private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
 def hasInvoke (ops : Array Op) : Bool :=
   walk 16 ops (fun | .invoke .. => true | _ => false)
 
-/-- 读账户 1 header 的叶子；要 walk，但不等于 CPI。 -/
-def valNeedsAcc1 : Val → Bool
+/-- 读账户 ≥1 header 的叶子；要 walk，但不等于 CPI。 -/
+def valNeedsWalk : Val → Bool
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 => true
   | .accKeyWord acc _ | .accOwnerWord acc _ => acc ≥ 1
-  | .checkPda _ b => valNeedsAcc1 b
-  | .field b _ => valNeedsAcc1 b
+  | .accLamportsN acc | .accDataLenN acc
+  | .isSignerN acc | .isWritableN acc | .isExecutableN acc
+  | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
+  | .checkPda _ b => valNeedsWalk b
+  | .field b _ => valNeedsWalk b
   | _ => false
+
+/-- 兼容旧名：账户 1+ 就要 walk。 -/
+def valNeedsAcc1 : Val → Bool := valNeedsWalk
+
+/-- 这个叶子要求的最小外层账户数。 -/
+def valMinAccounts : Val → Nat
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1 => 2
+  | .accKeyWord acc _ | .accOwnerWord acc _ => acc + 1
+  | .accLamportsN acc | .accDataLenN acc
+  | .isSignerN acc | .isWritableN acc | .isExecutableN acc
+  | .signerKeyN acc | .ownerIsSelf acc => acc + 1
+  | .checkPda _ b => valMinAccounts b
+  | .field b _ => valMinAccounts b
+  | _ => 0
 
 def hasAcc1 (ops : Array Op) : Bool :=
   walk 16 ops fun
@@ -261,6 +286,35 @@ def hasAcc1 (ops : Array Op) : Bool :=
           (match bump with | some v => valNeedsAcc1 v | none => false)
     | .okState v | .returnU64 v | .returnState v => valNeedsAcc1 v
     | .errorOverflow => false
+
+private def maxValAccounts (l r : Val) : Nat :=
+  Nat.max (valMinAccounts l) (valMinAccounts r)
+
+def opMinAccounts : Op → Nat
+  | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
+  | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ => maxValAccounts l r
+  | .invoke _ _ data _ bump =>
+      let fromData :=
+        data.foldl (init := 0) fun a w =>
+          match w with
+          | .u64le v => Nat.max a (valMinAccounts v)
+          | _ => a
+      let fromBump := match bump with | some v => valMinAccounts v | none => 0
+      Nat.max fromData fromBump
+  | .okState v | .returnU64 v | .returnState v => valMinAccounts v
+  | .errorOverflow => 0
+
+def opsMinAccounts (ops : Array Op) : Nat :=
+  let rec go (fuel : Nat) (ops : Array Op) (acc : Nat) : Nat :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      ops.foldl (init := acc) fun a op =>
+        let here := Nat.max a (opMinAccounts op)
+        match op with
+        | .ite _ _ _ t f => Nat.max (go fuel' t here) (go fuel' f here)
+        | _ => here
+  go 16 ops 0
 
 def hasSystemTransfer (ops : Array Op) : Bool :=
   hasInvoke ops

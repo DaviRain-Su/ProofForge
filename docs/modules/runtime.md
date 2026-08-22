@@ -20,7 +20,10 @@
 - `findPda seed` — 当前 program id + 一条 ASCII 种子；链上 `sol_try_find_program_address`，返回 bump。
 - `sha256Lit seed` — 编译期 ASCII 字面量；链上 `sol_sha256`，返回 digest 第一个小端 u64。完整 32B / 多切片 / blake3 fail closed。
 - `keccak256Lit seed` — 同形；链上 `sol_keccak256`（Ethereum Keccak，不是 FIPS SHA3-256）。blake3 / poseidon 仍 FC。
-- `accKeyWord acc word` / `accOwnerWord acc word` — 账户 `acc`∈{0,1} 的 32B key / owner 第 `word`∈{0..=3} 个小端 u64。抽出时必须是常量。`acc≥1` 走 walk，不强制入口签名。不是 `signerKey0`。
+- `accKeyWord acc word` / `accOwnerWord acc word` — 账户 `acc`∈{0,1,2} 的 32B key / owner 第 `word`∈{0..=3} 个小端 u64。抽出时必须是常量。`acc≥1` 走 walk，不强制入口签名。不是 `signerKey0`。
+- `accLamports` / `accDataLen` / `isSigner` / `isWritable` / `isExecutable` `acc` — 账户 `acc`∈{0,1,2} header。旧名 `accLamports0` 等仍独立。
+- `signerKey acc` — 该账户 key 首 u64；入口强制该账户 `is_signer`。旧名 `signerKey0` 仍独立。
+- `ownerIsSelf acc` — owner 32B 是否等于当前 program id；相等 0 / 不等 1。
 - `checkPda seed bump` — 同一组种子 + bump；链上 `sol_create_program_address`，成功 0 / 失败 1。完整 32B 地址 fail closed。
 - `cpiReturn` — 最近一次 CPI 的 8 字节返回；`sol_get_return_data`。长度不是 8 → Custom(1)。
 - `tokenAccountSize` — Token GetAccountDataSize；返回值走 `cpiReturn`。
@@ -35,6 +38,7 @@
 `Examples/Hash.lean` + `runtime-tests/solana/tests/hash.rs`：`sha256Lit "vault"` / `"ok"` / `""` 的首 u64 与宿主 `sha2` 一致。
 `Examples/Keccak.lean` + `runtime-tests/solana/tests/keccak.rs`：`keccak256Lit "vault"` / `"ok"` / `""` 的首 u64 与宿主 `sha3::Keccak256` 一致。
 `Examples/Keys.lean` + `runtime-tests/solana/tests/keys.rs`：账户 0/1 的 key / owner 按字读与宿主 `Pubkey` 一致；读 key 字不强制 signer；缺第二账户 → `Custom(1)`。
+`Examples/Trio.lean` + `runtime-tests/solana/tests/trio.rs`：账户 2 header / key 字；`signerKey 1` 缺签名 Custom(1)；`ownerIsSelf 0` = 0、异 owner = 1。
 `Examples/Pda.lean` + `runtime-tests/solana/tests/pda.rs`：`findPda "vault"` 的 bump 与宿主 `find_program_address` 一致；`checkPda` 对 canonical bump 返回 0，对 bump 0 返回 1。
 `Examples/Signed.lean` + `runtime-tests/solana/tests/signed.rs`：canonical bump 签字成功；bump 0 失败。
 `Examples/SysAlloc.lean` + `runtime-tests/solana/tests/sys_alloc.rs`：allocate 把空 System 账户扩到 16 字节；assign 把 owner 改成当前 program；缺 signer → `Custom(1)`。
