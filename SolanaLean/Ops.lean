@@ -14,6 +14,7 @@ inductive Val where
   | isSigner0
   | isWritable0
   | isExecutable0
+  | findPda (seed : String)
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where

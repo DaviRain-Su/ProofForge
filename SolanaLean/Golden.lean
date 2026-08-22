@@ -266,10 +266,29 @@ def extractedInfo : Program :=
         ops := #[.returnU64 .isExecutable0] }
     ] }
 
+def extractedPda : Program :=
+  { name := "Pda"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Pda.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Pda.touch", ixName := "touch", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Pda.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Pda.bump", ixName := "bump", paramCount := 0
+        ops := #[.returnU64 (.findPda "vault")] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
-  extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo
+  extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
+  extractedPda
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

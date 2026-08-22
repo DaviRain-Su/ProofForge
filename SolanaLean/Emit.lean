@@ -159,7 +159,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
   | .lit _ | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 =>
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _ =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -219,6 +219,51 @@ private def emitLoadAccU8 (comment offset : String) (stackOff : Nat) : String :=
   stxdw [r10 - {stackOff}], r1
 "
 
+/--
+`sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
+scratch 放在 `r10-400`，避开算术临时槽和 clock 缓冲。
+-/
+private def emitLoadFindPda (seed : String) (stackOff : Nat) : String :=
+  let (bytes, _) :=
+    seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
+      (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {i}], r1\n", i + 1)
+  s!"\
+  ; findPda seed={seed}
+  mov64 r9, r10
+  add64 r9, -400
+  lddw r1, 0
+  stxdw [r9 + 0], r1
+  stxdw [r9 + 8], r1
+{bytes}  mov64 r5, r9
+  add64 r5, 16
+  stxdw [r5 + 0], r9
+  lddw r1, {seed.length}
+  stxdw [r5 + 8], r1
+  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
+  mov64 r3, r6
+  add64 r3, INSTRUCTION_DATA
+  add64 r3, r1
+  mov64 r1, r5
+  lddw r2, 1
+  mov64 r4, r9
+  add64 r4, 48
+  mov64 r5, r9
+  add64 r5, 80
+  call sol_try_find_program_address
+  jeq r0, 0, pda_ok_{stackOff}
+  lddw r0, 0x1
+  exit
+pda_ok_{stackOff}:
+  ldxb r1, [r9 + 80]
+  jeq r1, 0, pda_bad_{stackOff}
+  stxdw [r10 - {stackOff}], r1
+  ja pda_done_{stackOff}
+pda_bad_{stackOff}:
+  lddw r0, 0x1
+  exit
+pda_done_{stackOff}:
+"
+
 private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
   match v with
   | .lit n =>
@@ -241,6 +286,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadAccU8 "load account-0 is_writable" "ACC0_HEADER + 2" stackOff)
   | .isExecutable0 =>
     .ok (emitLoadAccU8 "load account-0 is_executable" "ACC0_HEADER + 3" stackOff)
+  | .findPda seed =>
+    .ok (emitLoadFindPda seed stackOff)
   | _ => do
     let mem ← memOfVal p v
     let insn ← loadInsn (widthOfVal p v)
@@ -604,7 +651,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .clockSlot | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-        | .accN | .isSigner0 | .isWritable0 | .isExecutable0 => do
+        | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _ => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)

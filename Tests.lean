@@ -9,6 +9,7 @@ import Tests.TransferSpec
 import Tests.PingSpec
 import Tests.CallSpec
 import Tests.InfoSpec
+import Tests.PdaSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

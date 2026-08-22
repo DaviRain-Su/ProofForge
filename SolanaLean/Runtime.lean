@@ -56,6 +56,16 @@ def systemTransfer (lamports : UInt64) : UInt64 :=
 def invokeAcc1 : UInt64 :=
   invoke 1 #[] #[]
 
+/--
+找当前 program id 下、一条 ASCII 种子的 canonical bump。
+抽出器认这个名字，发射 `sol_try_find_program_address`。
+宿主侧是不可约 stub，返回 0，不要当链上 bump 用。
+完整 32B key / 多种子 / 指定 program id 本剖面 fail closed。
+-/
+@[irreducible] def findPda (seed : String) : UInt64 :=
+  let _ := seed
+  0
+
 /-- 账户 0 的 lamports。只读；改余额走 `systemTransfer`。 -/
 @[irreducible] def accLamports0 : UInt64 := 0
 

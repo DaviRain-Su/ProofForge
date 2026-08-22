@@ -219,6 +219,7 @@ private def valCanon : Ops.Val → String
   | .isSigner0 => "sg0"
   | .isWritable0 => "wr0"
   | .isExecutable0 => "ex0"
+  | .findPda s => s!"pda.{s}"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=

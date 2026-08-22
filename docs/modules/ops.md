@@ -6,7 +6,7 @@
 
 ## Types
 
-`Val`：`arg` / `field` / `lit` / `clockSlot` / `signerKey0` / `accLamports0` / `accOwner0` / `accDataLen0` / `accN` / `isSigner0` / `isWritable0` / `isExecutable0`
+`Val`：`arg` / `field` / `lit` / `clockSlot` / `signerKey0` / `accLamports0` / `accOwner0` / `accDataLen0` / `accN` / `isSigner0` / `isWritable0` / `isExecutable0` / `findPda seed`
 
 `Cmp`：`eq` / `ne` / `lt` / `le` / `gt` / `ge`
 

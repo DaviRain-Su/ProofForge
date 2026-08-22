@@ -23,12 +23,13 @@
 - 编译期钉死的 `invoke`；`systemTransfer` / `invokeAcc1` 共用发射器；Ping Mollusk
 - 账户 0 AccountInfo 只读叶子（lamports / owner 首 u64 / data_len / NUM_ACCOUNTS / 三旗）；Info Mollusk
 - 表层通用 `invoke`；`systemTransfer` / `invokeAcc1` 是普通包装；Call Mollusk
+- `findPda` 一条 ASCII 种子 + 当前 program id；返回 bump；Pda Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-建议下一条：L4-pda-find + L4-cpi-signed。
+建议下一条：L4-cpi-signed（`invokeSigned` 一组种子）。
 再后：System create / Token+ATA。
 
 ## 其后（L2 / L3）

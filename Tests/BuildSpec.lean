@@ -11,6 +11,7 @@ import Examples.Transfer
 import Examples.Ping
 import Examples.Call
 import Examples.Info
+import Examples.Pda
 
 #solana_build Examples.Counter
 
@@ -35,6 +36,8 @@ import Examples.Info
 #solana_build Examples.Call
 
 #solana_build Examples.Info
+
+#solana_build Examples.Pda
 
 /--
 error: extract/unsupported: no solana_entry

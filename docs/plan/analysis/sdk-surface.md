@@ -37,6 +37,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `invoke` / `invokeAcc1` | 编译期钉死 program/metas/data；N 账户 walk | L4-003 / L4-005 |
 | `accLamports0` / `accOwner0` / `accDataLen0` / `accN` | 账户 0 header 只读 | L4-004 |
 | `isSigner0` / `isWritable0` / `isExecutable0` | header +1/+2/+3，0 或 1 | L4-004 |
+| `findPda seed` | `sol_try_find_program_address`；返回 bump | L4-006 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
