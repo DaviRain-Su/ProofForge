@@ -1,5 +1,6 @@
 import SolanaLean
+import Examples.Counter
 
-#solana_dump SolanaLean.Counter.increment
-#solana_dump SolanaLean.Counter.init
-#solana_dump SolanaLean.Counter.get
+#solana_dump Examples.Counter.increment
+#solana_dump Examples.Counter.init
+#solana_dump Examples.Counter.get

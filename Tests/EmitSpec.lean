@@ -1,6 +1,7 @@
 import SolanaLean
+import Examples.Counter
 
-#solana_extract SolanaLean.Counter.init SolanaLean.Counter.increment SolanaLean.Counter.get
+#solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
 
 #guard
   match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.counterProgram with

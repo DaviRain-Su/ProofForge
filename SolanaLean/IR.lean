@@ -37,15 +37,15 @@ def hasSketches (p : Program) : Bool :=
 def extractedCounter : Program :=
   { name := "Counter"
     methods := #[
-      { kind := .init, name := "SolanaLean.Counter.init"
+      { kind := .init, name := "Examples.Counter.init"
         ops := #[.returnState (.arg 0)] },
-      { kind := .increment, name := "SolanaLean.Counter.increment"
+      { kind := .increment, name := "Examples.Counter.increment"
         ops := #[
           .checkedAddU64 (.field (.arg 1) "value") (.arg 0),
           .okState (.arg 0),
           .errorOverflow
         ] },
-      { kind := .get, name := "SolanaLean.Counter.get"
+      { kind := .get, name := "Examples.Counter.get"
         ops := #[.returnU64 (.field (.arg 0) "value")] }
     ] }
 

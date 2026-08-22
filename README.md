@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**单账户 UInt64 剖面**。`increment` / `decrement` 共用抽出与发射。证明在本机 `def` 上。
+当前：**单账户 UInt64 剖面**。合约在 `Examples/Counter.lean`；编译器在 `SolanaLean/`。
 
 ## 「难的是 loading 吗？」
 

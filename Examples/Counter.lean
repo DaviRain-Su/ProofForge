@@ -1,4 +1,6 @@
-namespace SolanaLean.Counter
+import SolanaLean
+
+namespace Examples.Counter
 
 structure State where
   value : UInt64
@@ -34,7 +36,7 @@ theorem increment_overflow_not_ok
   have : Except.error Error.overflow = Except.ok (t, r) := h.symm.trans hok
   cases this
 
-/-- `delta ≤ s.value` 才减，否则 overflow。与 increment 共用抽出/发射。 -/
+/-- `delta ≤ s.value` 才减，否则 overflow。 -/
 def decrement (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if delta ≤ s.value then
     let next := s.value - delta
@@ -50,4 +52,4 @@ theorem decrement_underflow_not_ok
   have : Except.error Error.overflow = Except.ok (t, r) := h.symm.trans hok
   cases this
 
-end SolanaLean.Counter
+end Examples.Counter

@@ -1,8 +1,9 @@
 import SolanaLean
+import Examples.Counter
 
 namespace Tests.CounterSpec
 
-open SolanaLean.Counter
+open Examples.Counter
 
 def s (n : UInt64) : State := { value := n }
 
