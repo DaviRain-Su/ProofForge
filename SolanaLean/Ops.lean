@@ -70,6 +70,16 @@ def systemCreate (lamports space : Val) : Op :=
       { acc := 1, signer := true, writable := true }]
     #[.u32le 0, .u64le lamports, .u64le space, .programId]
 
+def systemAssign : Op :=
+  .invoke 1
+    #[{ acc := 0, signer := true, writable := true }]
+    #[.u32le 1, .programId]
+
+def systemAllocate (space : Val) : Op :=
+  .invoke 1
+    #[{ acc := 0, signer := true, writable := true }]
+    #[.u32le 8, .u64le space]
+
 def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
   .invoke 4
     #[{ acc := 1, signer := false, writable := true },

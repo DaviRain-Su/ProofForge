@@ -94,6 +94,24 @@ def systemCreate (lamports space : UInt64) : UInt64 :=
     #[.u32le 0, .u64le lamports, .u64le space, .programId]
 
 /--
+`system.assign`：把账户 0 的 owner 改成当前 program id。
+外层：账户 0 s+w、System。
+-/
+def systemAssign : UInt64 :=
+  invoke 1
+    #[{ acc := 0, signer := true, writable := true }]
+    #[.u32le 1, .programId]
+
+/--
+`system.allocate`：给账户 0 开 `space` 字节。space 编译期常量。
+外层：账户 0 s+w、System。
+-/
+def systemAllocate (space : UInt64) : UInt64 :=
+  invoke 1
+    #[{ acc := 0, signer := true, writable := true }]
+    #[.u32le 8, .u64le space]
+
+/--
 Token `TransferChecked`：普通包装。decimals 编译期常量。
 外层 0 必须是 authority（prelude 强制 acc0 signer）。
 内层账户按官方顺序：source / mint / dest / authority。

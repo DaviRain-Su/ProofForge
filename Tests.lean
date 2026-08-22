@@ -16,6 +16,7 @@ import Tests.TokenXferSpec
 import Tests.AtaSpec
 import Tests.RentSpec
 import Tests.TokenMintSpec
+import Tests.SysAllocSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

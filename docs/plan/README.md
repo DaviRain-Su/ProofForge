@@ -40,6 +40,7 @@
 | [l4-010](tasks/l4-010.md) | done | ATA CreateIdempotent |
 | [l4-011](tasks/l4-011.md) | done | rentExemption |
 | [l4-012](tasks/l4-012.md) | done | Token mint / burn |
+| [l4-013](tasks/l4-013.md) | done | System assign / allocate |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

@@ -44,6 +44,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `ataCreateIdempotent` | ATA CreateIdempotent；1 字节 tag 1 | L4-010 |
 | `rentExemption n` | `sol_get_rent_sysvar` × `(128+n)` | L4-011 |
 | `tokenMintToChecked` / `tokenBurnChecked` | Token mint / burn；decimals 编译期常量 | L4-012 |
+| `systemAssign` / `systemAllocate` | System assign / allocate；owner = 当前 program id | L4-013 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -135,17 +136,17 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 
 ### System（`solana-system-interface`）
 
-已绿：`Transfer`（tag 2）、`CreateAccount`（tag 0，52B 无 pad）。
+已绿：`Transfer`（tag 2）、`CreateAccount`（tag 0，52B 无 pad）、`Assign`（tag 1）、`Allocate`（tag 8）。
 
 | ID | 指令 | 内层数据 | 账户（外层） |
 |---|---|---|---|
 | L4-sys-create | `CreateAccount` tag 0 | `u32le(0)\|\|lamports\|\|space\|\|owner32`（52B） | 付款人 s+w、新账户 s+w、System |
-| L4-sys-assign | `Assign` tag 1 | `u32le(1)\|\|owner32` | 账户 s+w、System |
-| L4-sys-allocate | `Allocate` tag 8 | `u32le(8)\|\|space` | 账户 s+w、System |
+| L4-sys-assign | `Assign` tag 1 | `u32le(1)\|\|owner32` | **已绿**；账户 s+w、System |
+| L4-sys-allocate | `Allocate` tag 8 | `u32le(8)\|\|space` | **已绿**；账户 s+w、System |
 | L4-sys-alloc-seed | `AllocateWithSeed` / `CreateAccountWithSeed` | 后做 | 与 PDA 绑定再开 |
 | L4-sys-advance-nonce 等 | nonce / authorize | — | 不做，除非有合约 |
 
-已绿：`TransferChecked`（tag 12，10B packed）、ATA `CreateIdempotent`（tag 1）。下一条优先 Rent。
+已绿：`TransferChecked`（tag 12，10B packed）、ATA `CreateIdempotent`（tag 1）、`MintToChecked` / `BurnChecked`。
 
 ### Token classic（`spl-token-interface`，**不是** Token-2022）
 

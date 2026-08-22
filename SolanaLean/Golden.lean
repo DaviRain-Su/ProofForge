@@ -306,6 +306,20 @@ def extractedTokenXfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedSysAlloc : Program :=
+  { name := "SysAlloc"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.SysAlloc.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.SysAlloc.alloc", ixName := "alloc", paramCount := 0
+        ops := #[Ops.systemAllocate (.lit 16), .returnU64 (.lit 16)] },
+      { kind := .increment, name := "Examples.SysAlloc.assign", ixName := "assign", paramCount := 0
+        ops := #[Ops.systemAssign, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.SysAlloc.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedTokenMint : Program :=
   { name := "TokenMint"
     slots := #[{ name := "dummy" }]
@@ -373,7 +387,7 @@ def programs : Array Program := #[
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
-  extractedRent, extractedTokenMint
+  extractedRent, extractedTokenMint, extractedSysAlloc
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

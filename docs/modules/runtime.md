@@ -11,7 +11,7 @@
 - `signerKey0 : UInt64` — 链上 `ACC0_KEY+0` 第一个小端 u64。用到该叶子的入口检查 `is_signer`。不是 `tx.origin`。
 - `invoke programIx metas data` — 编译期钉死的 CPI。抽出认这个名字。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
-- `systemTransfer` / `invokeAcc1` / `systemCreate` / `tokenTransferChecked` / `tokenMintToChecked` / `tokenBurnChecked` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一条 `invoke`。
+- `systemTransfer` / `invokeAcc1` / `systemCreate` / `systemAssign` / `systemAllocate` / `tokenTransferChecked` / `tokenMintToChecked` / `tokenBurnChecked` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一条 `invoke`。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
 - `findPda seed` — 当前 program id + 一条 ASCII 种子；链上 `sol_try_find_program_address`，返回 bump。
@@ -24,3 +24,4 @@
 `Examples/Info.lean` + `runtime-tests/solana/tests/info.rs`：余额 / owner 首 u64 / data_len / NUM_ACCOUNTS / 三旗；只读不改账户数据。
 `Examples/Pda.lean` + `runtime-tests/solana/tests/pda.rs`：`findPda "vault"` 的 bump 与宿主 `find_program_address` 一致，两次调用稳定。
 `Examples/Signed.lean` + `runtime-tests/solana/tests/signed.rs`：canonical bump 签字成功；bump 0 失败。
+`Examples/SysAlloc.lean` + `runtime-tests/solana/tests/sys_alloc.rs`：allocate 把空 System 账户扩到 16 字节；assign 把 owner 改成当前 program；缺 signer → `Custom(1)`。
