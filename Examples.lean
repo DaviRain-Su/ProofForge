@@ -31,3 +31,4 @@ import Examples.SysSeed
 import Examples.SysXfer
 import Examples.TokenMint2
 import Examples.TokenNative
+import Examples.Hash

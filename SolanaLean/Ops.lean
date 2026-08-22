@@ -26,6 +26,7 @@ inductive Val where
   | checkPda (seed : String) (bump : Val)
   | rentExemption (dataLen : UInt64)
   | cpiReturn
+  | sha256Lit (seed : String)
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where

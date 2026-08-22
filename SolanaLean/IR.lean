@@ -237,6 +237,7 @@ private def valCanon : Ops.Val → String
   | .checkPda s b => s!"chk.{s}:{valCanon b}"
   | .rentExemption n => s!"rent.{n.toNat}"
   | .cpiReturn => "cret"
+  | .sha256Lit s => s!"sha.{s}"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=

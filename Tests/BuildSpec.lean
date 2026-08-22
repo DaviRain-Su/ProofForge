@@ -32,6 +32,7 @@ import Examples.SysSeed
 import Examples.SysXfer
 import Examples.TokenMint2
 import Examples.TokenNative
+import Examples.Hash
 
 #solana_build Examples.Counter
 
@@ -98,6 +99,8 @@ import Examples.TokenNative
 #solana_build Examples.TokenMint2
 
 #solana_build Examples.TokenNative
+
+#solana_build Examples.Hash
 
 /--
 error: extract/unsupported: no solana_entry

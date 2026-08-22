@@ -179,7 +179,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-  | .checkPda _ _ | .rentExemption _ | .cpiReturn =>
+  | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -370,6 +370,36 @@ find_pda_bad_{stackOff}:
 find_pda_done_{stackOff}:
 "
 
+/--
+`sol_sha256`：一条 ASCII 字面量。
+r1 = SolBytes[1]，r2 = 1，r3 = 32B dest。返回 dest 第一个小端 u64。
+scratch 同 findPda，用 `r8 = r10-2800`。空串合法（len=0）。
+-/
+private def emitLoadSha256Lit (seed : String) (stackOff : Nat) : String :=
+  let (bytes, _) :=
+    seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
+      (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {i}], r1\n", i + 1)
+  s!"\
+  ; sha256Lit seed={seed}
+  mov64 r8, r10
+  add64 r8, -2800
+  lddw r1, 0
+  stxdw [r8 + 0], r1
+  stxdw [r8 + 8], r1
+{bytes}  mov64 r5, r8
+  add64 r5, 16
+  stxdw [r5 + 0], r8
+  lddw r1, {seed.length}
+  stxdw [r5 + 8], r1
+  mov64 r1, r5
+  lddw r2, 1
+  mov64 r3, r8
+  add64 r3, 48
+  call sol_sha256
+  ldxdw r1, [r8 + 48]
+  stxdw [r10 - {stackOff}], r1
+"
+
 mutual
 
 private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
@@ -414,6 +444,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadWalkedU8 1 3 stackOff)
   | .findPda seed =>
     .ok (emitLoadFindPda p seed stackOff)
+  | .sha256Lit seed =>
+    .ok (emitLoadSha256Lit seed stackOff)
   | .checkPda seed bump =>
     emitLoadCheckPda p seed bump stackOff
   | .rentExemption n =>
@@ -900,7 +932,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0
         | .accLamports1 | .accOwner1 | .accDataLen1
         | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-        | .checkPda _ _ | .rentExemption _ | .cpiReturn => do
+        | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)

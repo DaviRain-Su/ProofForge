@@ -64,7 +64,7 @@ process_instruction(program_id, accounts: &[AccountInfo], instruction_data: &[u8
 | 停机 | `sol_panic_` | 已有：overflow / Custom(1) `exit` |
 | 日志 | `sol_log_*` | 不做产品语义；调试可后加 |
 | 返回 | `sol_set_return_data` / `sol_get_return_data` | set 已有；get 在 CPI 后才需要 |
-| 哈希 | `sol_sha256` / keccak / blake3 / poseidon | L2 以后按需；poseidon feature-gated |
+| 哈希 | `sol_sha256` / keccak / blake3 / poseidon | `sol_sha256` 已绿（首 u64）；keccak / blake3 / poseidon 仍 FC |
 | 曲线 / 配对 | curve25519 / alt_bn128 / big_mod_exp | 默认关 |
 | CPI | `sol_invoke_signed_c` / rust | L4 封闭 recipe 才开 |
 | PDA | `sol_try_find_program_address` / create | L4 |

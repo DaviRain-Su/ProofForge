@@ -125,6 +125,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
           | .lit (.strVal s) => if s.isEmpty then none else some (.findPda s)
           | _ => none
+        else if (endsWith e ".sha256Lit" || isConstNamed e ``SolanaLean.Runtime.sha256Lit) &&
+            e.getAppArgs.size ≥ 1 then
+          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+          | .lit (.strVal s) => some (.sha256Lit s)
+          | _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``SolanaLean.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
           match strip e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -634,6 +639,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.findPda s) => some (.findPda s)
             | some (.checkPda s b) => some (.checkPda s b)
             | some (.rentExemption n) => some (.rentExemption n)
+            | some (.sha256Lit s) => some (.sha256Lit s)
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -949,7 +955,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .accN | .isSigner0 | .isWritable0 | .isExecutable0
     | .accLamports1 | .accOwner1 | .accDataLen1
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-    | .checkPda _ _ | .rentExemption _ | .cpiReturn => .ok #[.returnU64 v]
+    | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -1139,7 +1145,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .accN | .isSigner0 | .isWritable0 | .isExecutable0
       | .accLamports1 | .accOwner1 | .accDataLen1
       | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-      | .rentExemption _ | .cpiReturn => v
+      | .rentExemption _ | .cpiReturn | .sha256Lit _ => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
@@ -1285,7 +1291,7 @@ private def valFields : Ops.Val → Array String
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-  | .rentExemption _ | .cpiReturn => #[]
+  | .rentExemption _ | .cpiReturn | .sha256Lit _ => #[]
   | .checkPda _ b => valFields b
 
 private def opFields : Ops.Op → Array String
