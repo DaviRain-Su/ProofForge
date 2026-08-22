@@ -98,6 +98,12 @@ def systemAllocateWithSeed (space : Val) : Op :=
       { acc := 0, signer := true, writable := false }]
     #[.u32le 9, .accKey 0, .u64le (.lit 5), .ascii "vault", .u64le space, .programId]
 
+def systemCreateWithSeed (lamports space : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true }]
+    #[.u32le 3, .accKey 0, .u64le (.lit 5), .ascii "vault", .u64le lamports, .u64le space, .programId]
+
 def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
   .invoke 4
     #[{ acc := 1, signer := false, writable := true },

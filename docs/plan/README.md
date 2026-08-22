@@ -51,6 +51,7 @@
 | [l4-021](tasks/l4-021.md) | done | slotsPerEpoch |
 | [l4-022](tasks/l4-022.md) | done | tokenAccountSize / cpiReturn |
 | [l4-023](tasks/l4-023.md) | done | systemAllocateWithSeed |
+| [l4-024](tasks/l4-024.md) | done | systemCreateWithSeed |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

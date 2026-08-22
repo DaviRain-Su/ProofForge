@@ -11,6 +11,7 @@ use {
 
 const DISCRIMINATOR_DOMAIN: &str = "proof-forge-solana-v1:";
 const BASE_LAMPORTS: u64 = 10 * LAMPORTS_PER_SOL;
+const CREATE_LAMPORTS: u64 = LAMPORTS_PER_SOL;
 const SPACE: usize = 16;
 const SEED: &str = "vault";
 
@@ -154,6 +155,98 @@ fn allocate_with_seed_wrong_address_fails() {
             // System AddressWithSeedMismatch = custom 5
             Check::err(ProgramError::Custom(5)),
             Check::account(&wrong).space(0).build(),
+        ],
+    );
+}
+
+fn build_create_ix(
+    program_id: Pubkey,
+    base: Pubkey,
+    derived_key: Pubkey,
+    system: Pubkey,
+    base_signer: bool,
+) -> Instruction {
+    let disc = instruction_discriminator("createSeed", 1);
+    Instruction::new_with_bytes(
+        program_id,
+        &instruction_data(&disc, &[CREATE_LAMPORTS]),
+        vec![
+            AccountMeta::new(base, base_signer),
+            AccountMeta::new(derived_key, false),
+            AccountMeta::new_readonly(system, false),
+        ],
+    )
+}
+
+#[test]
+fn create_with_seed_funds_derived_account() {
+    let (program_id, mollusk) = harness();
+    let base = Pubkey::new_unique();
+    let derived_key = derived(&base, &program_id);
+    let (system, system_acc) = system_program_keyed();
+    let ix = build_create_ix(program_id, base, derived_key, system, true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (base, funded(BASE_LAMPORTS)),
+            (derived_key, funded(0)),
+            (system, system_acc),
+        ],
+        &[
+            Check::success(),
+            Check::return_data(&CREATE_LAMPORTS.to_le_bytes()),
+            Check::account(&base)
+                .lamports(BASE_LAMPORTS - CREATE_LAMPORTS)
+                .build(),
+            Check::account(&derived_key)
+                .lamports(CREATE_LAMPORTS)
+                .space(SPACE)
+                .owner(&program_id)
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn create_with_seed_missing_signer_fails() {
+    let (program_id, mollusk) = harness();
+    let base = Pubkey::new_unique();
+    let derived_key = derived(&base, &program_id);
+    let (system, system_acc) = system_program_keyed();
+    let ix = build_create_ix(program_id, base, derived_key, system, false);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (base, funded(BASE_LAMPORTS)),
+            (derived_key, funded(0)),
+            (system, system_acc),
+        ],
+        &[
+            Check::err(ProgramError::Custom(1)),
+            Check::account(&base).lamports(BASE_LAMPORTS).build(),
+            Check::account(&derived_key).lamports(0).space(0).build(),
+        ],
+    );
+}
+
+#[test]
+fn create_with_seed_wrong_address_fails() {
+    let (program_id, mollusk) = harness();
+    let base = Pubkey::new_unique();
+    let wrong = Pubkey::new_unique();
+    let (system, system_acc) = system_program_keyed();
+    let ix = build_create_ix(program_id, base, wrong, system, true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (base, funded(BASE_LAMPORTS)),
+            (wrong, funded(0)),
+            (system, system_acc),
+        ],
+        &[
+            Check::err(ProgramError::Custom(5)),
+            Check::account(&base).lamports(BASE_LAMPORTS).build(),
+            Check::account(&wrong).lamports(0).space(0).build(),
         ],
     );
 }
