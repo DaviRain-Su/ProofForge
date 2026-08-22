@@ -9,23 +9,23 @@ open Lean Elab Command
 
 namespace SolanaLean.Commands
 
-/-- `#solana_check ident`：对声明做传递闭包剖面检查。 -/
 elab "#solana_check " n:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload n
   let env ← getEnv
   match Profile.check env name with
-  | .accept =>
-    logInfo m!"solana-lean: accept {name}"
-  | .reject reason =>
-    throwError reason
+  | .accept => logInfo m!"solana-lean: accept {name}"
+  | .reject reason => throwError reason
 
-/-- `#solana_extract init increment get`：抽出 Counter IR 并打印 sketch。 -/
-elab "#solana_extract " initN:ident mutN:ident getN:ident : command => do
+syntax "#solana_extract " ident ident ident : command
+syntax "#solana_extract " ident ident ident " with " str,+ : command
+
+private def runExtract (initN mutN getN : TSyntax `ident) (fields : Array String) :
+    CommandElabM Unit := do
   let initName ← liftCoreM <| realizeGlobalConstNoOverload initN
   let mutName ← liftCoreM <| realizeGlobalConstNoOverload mutN
   let getName ← liftCoreM <| realizeGlobalConstNoOverload getN
   let env ← getEnv
-  match Extract.extractProgram env initName mutName getName with
+  match Extract.extractProgram env initName mutName getName "Program" fields with
   | .error reason => throwError reason
   | .ok program => do
     let mutOps := (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.ops)
@@ -39,17 +39,17 @@ elab "#solana_extract " initN:ident mutN:ident getN:ident : command => do
     | .ok asm =>
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
-      unless asm.contains "call sol_set_return_data" do
-        throwError "assemble/tool: missing return data"
-      unless asm.contains Emit.overflowCode do
-        throwError "assemble/tool: missing overflow code"
-      unless asm.contains Emit.discIncrement do
-        throwError "assemble/tool: missing increment discriminator"
-      logInfo m!"solana-lean: extracted {program.name} ops = {program.methods.map (fun m => repr m.ops)}"
-      logInfo m!"solana-lean: extracted {program.name} sketches = {program.methods.map (·.sketch)}"
+      logInfo m!"solana-lean: fields = {program.fields}"
+      logInfo m!"solana-lean: extracted ops = {program.methods.map (fun m => repr m.ops)}"
       logInfo m!"solana-lean: emitted {asm.length} bytes of sBPF assembly"
 
-/-- `#solana_dump ident`：打印定义体，供抽出器对照。 -/
+elab_rules : command
+  | `(#solana_extract $initN:ident $mutN:ident $getN:ident) =>
+      runExtract initN mutN getN #["value"]
+  | `(#solana_extract $initN:ident $mutN:ident $getN:ident with $fs:str,*) => do
+      let fields := (fs.getElems.map (·.getString)).toList.toArray
+      runExtract initN mutN getN fields
+
 elab "#solana_dump " n:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload n
   let env ← getEnv

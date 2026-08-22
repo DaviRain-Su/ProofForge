@@ -1,10 +1,13 @@
 import SolanaLean
 import Examples.Counter
+import Examples.Pair
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
 
 #solana_extract Examples.Counter.init Examples.Counter.decrement Examples.Counter.get
+
+#solana_extract Examples.Pair.init Examples.Pair.creditLeft Examples.Pair.getLeft with "left", "right"
 
 /--
 error: profile/rejected: Nat in root type Tests.Fixtures.usesNat

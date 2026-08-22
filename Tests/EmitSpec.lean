@@ -26,8 +26,43 @@ import Examples.Counter
       | _ :: after :: _ => after.contains "INSTRUCTION_DATA + 8"
       | _ => false
 
+#guard
+  match SolanaLean.IR.fieldOffset SolanaLean.IR.extractedCounter "value" with
+  | some 8 => true
+  | _ => false
+
+private def pairShape : SolanaLean.IR.Program :=
+  { name := "Pair"
+    fields := #["left", "right"]
+    methods := #[
+      { kind := .init, name := "init"
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "creditLeft"
+        ops := #[
+          .checkedAddU64 (.field (.arg 1) "left") (.arg 0),
+          .okState (.arg 0),
+          .errorOverflow
+        ] },
+      { kind := .get, name := "getLeft"
+        ops := #[.returnU64 (.field (.arg 0) "left")] }
+    ] }
+
+#guard
+  match SolanaLean.IR.fieldOffset pairShape "right" with
+  | some 16 => true
+  | _ => false
+
+#guard
+  match SolanaLean.Emit.emitCounterAsm pairShape with
+  | .error _ => false
+  | .ok asm =>
+      asm.contains "ACC0_DATA + 8" &&
+        asm.contains "ACC0_DATA + 16" &&
+        asm.contains "jne r1, 24,"
+
 private def swappedIncrement : SolanaLean.IR.Program :=
   { name := "Counter"
+    fields := #["value"]
     methods := #[
       { kind := .init, name := "init"
         ops := #[.returnState (.arg 0)] },

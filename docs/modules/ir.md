@@ -6,7 +6,7 @@
 
 ## Boundary
 
-只记录方法名与 kind。不记录 sBPF、账户字节。
+记录 `fields`（声明顺序 = 账户槽顺序）和方法。偏移 = `8 + index * 8`。
 
 ## Types
 

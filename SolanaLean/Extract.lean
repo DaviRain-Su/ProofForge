@@ -63,10 +63,22 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
     | .bvar i => some (.arg i)
     | _ =>
       if let some v := asLit fuel' e then some v
-      else if endsWith e ".value" && e.getAppArgs.size ≥ 1 then
-        match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-        | some b => some (.field b "value")
-        | none => none
+      else if let some n := e.getAppFn.constName? then
+        let field := n.toString
+        let user :=
+          field.startsWith "Examples." || field.startsWith "SolanaLean." ||
+            field.startsWith "Tests."
+        if user && field.contains "." && e.getAppArgs.size ≥ 1 then
+          let proj :=
+            match field.splitOn "." with
+            | [] => field
+            | parts => parts.getLast!
+          if proj == "mk" || proj == "ok" || proj == "error" then none
+          else
+            match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+            | some b => some (.field b proj)
+            | none => none
+        else none
       else none
 
 private def val (e : Expr) : Option Ops.Val :=
@@ -113,11 +125,17 @@ private def asCheckedSubGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
     else none
   else none
 
-private def asStateMk (e : Expr) : Option Ops.Val :=
+/-- 多字段 `State.mk a b …`：init 用第一个显式参数；checked 更新用最后一个。 -/
+private def asStateMk (e : Expr) (preferLast := false) : Option Ops.Val :=
   let e := strip e
   if endsWith e ".State.mk" || endsWith e ".mk" then
     let args := e.getAppArgs
-    if args.size ≥ 1 then val args[args.size - 1]! else none
+    if args.size = 0 then none
+    else if preferLast then val args[args.size - 1]!
+    else
+      match args.findSome? val with
+      | some v => some v
+      | none => val args[args.size - 1]!
   else none
 
 private def asOkState (e : Expr) : Option Ops.Val :=
@@ -128,8 +146,8 @@ private def asOkState (e : Expr) : Option Ops.Val :=
       let pair := strip args[args.size - 1]!
       if isConstNamed pair ``Prod.mk then
         let pargs := pair.getAppArgs
-        if pargs.size ≥ 2 then asStateMk pargs[pargs.size - 2]! else none
-      else asStateMk pair
+        if pargs.size ≥ 2 then asStateMk pargs[pargs.size - 2]! true else none
+      else asStateMk pair true
     else none
   else none
 
@@ -149,10 +167,10 @@ private def decodePlain (e : Expr) : Except String (Array Ops.Op) :=
   else if let some v := asStateMk e then
     .ok #[.returnState v]
   else if let some v := val e then
-    if match v with | .field _ "value" => true | _ => false then
-      .ok #[.returnU64 v]
-    else
-      .ok #[.returnState v]
+    match v with
+    | .field _ _ => .ok #[.returnU64 v]
+    | .arg _ => .ok #[.returnState v]
+    | .lit _ => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -205,7 +223,8 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
 
 def extractProgram (env : Environment)
     (initName incrementName getName : Name)
-    (programName : String := "Counter") :
+    (programName : String := "Counter")
+    (fields : Array String := #["value"]) :
     Except String IR.Program := do
   match Profile.checkAll env #[initName, incrementName, getName] with
   | .reject reason => throw reason
@@ -213,7 +232,11 @@ def extractProgram (env : Environment)
   let initM ← extractMethod env .init initName
   let incM ← extractMethod env .increment incrementName
   let getM ← extractMethod env .get getName
-  let program : IR.Program := { name := programName, methods := #[initM, incM, getM] }
+  let program : IR.Program := {
+    name := programName
+    fields
+    methods := #[initM, incM, getM]
+  }
   unless IR.isCounterShape program do
     throw "extract/unsupported: not three-method shape"
   return program

@@ -15,4 +15,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**单账户 UInt64 剖面**。同一套 Extract/Emit 编 increment 和 decrement。证明在本机 `def` 上。
+当前阶段：**多字段 UInt64 state**。`Examples.Pair`（left/right）与 Counter 共用管道。

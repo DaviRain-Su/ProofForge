@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**单账户 UInt64 剖面**。合约在 `Examples/Counter.lean`；编译器在 `SolanaLean/`。
+当前：**多字段 UInt64**。合约在 `Examples/`（Counter、Pair）；编译器在 `SolanaLean/`。
 
 ## 「难的是 loading 吗？」
 

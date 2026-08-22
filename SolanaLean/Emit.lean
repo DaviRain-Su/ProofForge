@@ -10,8 +10,9 @@ def layoutMarker : String := "0xbbe897f0336e6fc"
 def overflowCode : String := "0x1001"
 
 /-- Loader V3 单账户预检。`ixLen` 是 instruction data 期望长度。 -/
-private def prelude (label : String) (ixLen : Nat) (needSigner needWritable needUninit : Bool) :
-    String :=
+private def prelude (p : IR.Program) (label : String) (ixLen : Nat)
+    (needSigner needWritable needUninit : Bool) : String :=
+  let dataLen := IR.dataLen p
   let err := s!"err_check_{label}"
   let signer :=
     if needSigner then
@@ -50,47 +51,67 @@ private def prelude (label : String) (ixLen : Nat) (needSigner needWritable need
   ldxdw r3, [r2 + 24]
   jne r1, r3, {err}
   ldxdw r1, [r6 + ACC0_DATA_LEN]
-  jne r1, 16, {err}
+  jne r1, {dataLen}, {err}
 {signer}{writable}{header}  ja body_{label}
 {err}:
   lddw r0, 0x1
   exit
 "
 
-/-- `.field _ "value"` 是账户 count；`.arg _` 是 instruction 里第一个 u64。 -/
-private def memOfVal (v : Ops.Val) : Except String String :=
+/-- `.field _ name` 按 `Program.fields` 顺序映射到 header 之后的槽。 -/
+private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
   match v with
-  | .field _ "value" => .ok "[r6 + ACC0_DATA + 8]"
-  | .arg _ => .ok "[r6 + INSTRUCTION_DATA + 8]"
+  | .field _ name =>
+    match IR.fieldOffset p name with
+    | some off => .ok s!"[r6 + ACC0_DATA + {off}]"
+    | none => .error s!"extract/unsupported: unknown field {name}"
+  | .arg _ =>
+    .ok "[r6 + INSTRUCTION_DATA + 8]"
   | .lit _ => .error "extract/unsupported: lit has no mem"
-  | .field _ name => .error s!"extract/unsupported: unknown field {name}"
 
-private def loadVal (v : Ops.Val) (stackOff : Nat) : Except String String :=
+private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
   match v with
   | .lit n =>
     .ok s!"  ; load lit {n}\n  lddw r1, {n.toNat}\n  stxdw [r10 - {stackOff}], r1\n"
   | _ => do
-    let mem ← memOfVal v
+    let mem ← memOfVal p v
     return s!"  ; load {repr v}\n  ldxdw r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
-private def emitInitBody (v : Ops.Val) : Except String String := do
-  let load ← loadVal v 8
+private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Except String String :=
+  match IR.fieldOffset p name with
+  | none => .error s!"extract/unsupported: unknown field {name}"
+  | some off =>
+    .ok s!"  ldxdw r1, [r10 - {fromStack}]\n  stxdw [r6 + ACC0_DATA + {off}], r1\n"
+
+private def emitInitBody (p : IR.Program) (v : Ops.Val) : Except String String := do
+  let load ← loadVal p v 8
+  let store ←
+    match p.fields[0]? with
+    | some name => storeField p name 8
+    | none => .error "extract/unsupported: no fields"
+  let mut zeroOthers := ""
+  for name in p.fields[1:] do
+    match IR.fieldOffset p name with
+    | some off =>
+      zeroOthers := zeroOthers ++ s!"  lddw r1, 0\n  stxdw [r6 + ACC0_DATA + {off}], r1\n"
+    | none => pure ()
   return s!"\
 body_initialize:
-  lddw r1, 0
-  stxdw [r6 + ACC0_DATA + 8], r1
-{load}  ldxdw r1, [r10 - 8]
-  stxdw [r6 + ACC0_DATA + 8], r1
-  lddw r1, {layoutMarker}
+{zeroOthers}{load}{store}  lddw r1, {layoutMarker}
   stxdw [r6 + ACC0_DATA + 0], r1
   lddw r0, 0
   exit
 "
 
-private def emitCheckedArithBody (label : String) (lhs rhs : Ops.Val) (isAdd : Bool) :
+private def emitCheckedArithBody (p : IR.Program) (label : String) (lhs rhs : Ops.Val) (isAdd : Bool) :
     Except String String := do
-  let loadL ← loadVal lhs 8
-  let loadR ← loadVal rhs 16
+  let loadL ← loadVal p lhs 8
+  let loadR ← loadVal p rhs 16
+  let destName :=
+    match lhs with
+    | .field _ n => n
+    | _ => p.fields[0]?.getD "value"
+  let store ← storeField p destName 24
   let arith :=
     if isAdd then
       s!"  lddw r3, 0xffffffffffffffff\n  sub64 r3, r2\n  jgt r1, r3, err_{label}\n  mov64 r4, r1\n  add64 r4, r2\n"
@@ -106,11 +127,7 @@ err_{label}:
   lddw r0, {overflowCode}
   exit
 ok_{label}:
-  ldxdw r1, [r10 - 24]
-  stxdw [r6 + ACC0_DATA + 8], r1
-  ldxdw r1, [r6 + ACC0_DATA + 8]
-  stxdw [r10 - 8], r1
-  ldxdw r1, [r10 - 8]
+{store}  ldxdw r1, [r10 - 24]
   stxdw [r10 - 32], r1
   mov64 r1, r10
   add64 r1, -32
@@ -120,8 +137,8 @@ ok_{label}:
   exit
 "
 
-private def emitGetBody (v : Ops.Val) : Except String String := do
-  let load ← loadVal v 8
+private def emitGetBody (p : IR.Program) (v : Ops.Val) : Except String String := do
+  let load ← loadVal p v 8
   return s!"\
 body_get:
 {load}  ldxdw r1, [r10 - 8]
@@ -164,12 +181,12 @@ private def hasOkState (ops : Array Ops.Op) : Bool :=
 private def hasReturnU64 (ops : Array Ops.Op) : Bool :=
   ops.any (fun | .returnU64 _ => true | _ => false)
 
-private def emitHandler (m : IR.Method) : Except String String := do
+private def emitHandler (p : IR.Program) (m : IR.Method) : Except String String := do
   match m.kind with
   | .init =>
     let v ← initVal m.ops
-    let body ← emitInitBody v
-    return s!"initialize:\n{prelude "initialize" 16 true true true}{body}"
+    let body ← emitInitBody p v
+    return s!"initialize:\n{prelude p "initialize" 16 true true true}{body}"
   | .increment =>
     if !Ops.hasCheckedArith m.ops then
       .error "extract/unsupported: increment missing checked arith"
@@ -179,19 +196,19 @@ private def emitHandler (m : IR.Method) : Except String String := do
       .error "extract/unsupported: increment missing okState"
     else do
       let (lhs, rhs, isAdd) ← arithArgs m.ops
-      let body ← emitCheckedArithBody "increment" lhs rhs isAdd
-      return s!"increment:\n{prelude "increment" 16 false true false}{body}"
+      let body ← emitCheckedArithBody p "increment" lhs rhs isAdd
+      return s!"increment:\n{prelude p "increment" 16 false true false}{body}"
   | .get =>
     let v ← getVal m.ops
-    let body ← emitGetBody v
-    return s!"get:\n{prelude "get" 8 false false false}{body}"
+    let body ← emitGetBody p v
+    return s!"get:\n{prelude p "get" 8 false false false}{body}"
 
 def emitCounterAsm (program : IR.Program) : Except String String := do
   unless IR.isCounterShape program do
     throw "extract/unsupported: not counter shape"
   let mut handlers := ""
   for m in program.methods do
-    handlers := handlers ++ (← emitHandler m) ++ "\n"
+    handlers := handlers ++ (← emitHandler program m) ++ "\n"
   return s!"\
 ; SOLANA-LEAN-SBPF-ASM v0 (ops-driven handler bodies)
 ; Layout matches ProofForge StateCell: header u64 + count u64
@@ -204,7 +221,7 @@ def emitCounterAsm (program : IR.Program) : Except String String := do
 .equ ACC0_DATA_LEN, 0x58
 .equ ACC0_DATA, 0x60
 .equ MAX_PERMITTED_DATA_INCREASE, 0x2800
-.equ EXACT_DATA_LEN, 0x10
+.equ EXACT_DATA_LEN, {IR.dataLen program}
 .equ ACC0_RENT_EPOCH, 0x2870
 .equ INSTRUCTION_DATA_LEN, 0x2878
 .equ INSTRUCTION_DATA, 0x2880

@@ -16,5 +16,6 @@
 | [gen-002](tasks/gen-002.md) | done | 按 Op 选择 handler 体 |
 | [gen-003](tasks/gen-003.md) | done | 按 Val 生成 load |
 | [gen-004](tasks/gen-004.md) | done | 单账户 UInt64 表达式编译器 + decrement |
+| [fld-001](tasks/fld-001.md) | done | 多字段 UInt64 布局 + Pair |
 
 积压：[backlog.md](backlog.md)

@@ -38,3 +38,5 @@
 | T-S5-04 | happy | 对调 checkedAdd 左右 | 先 load ix 再 load 账户 |
 | T-S5-05 | happy | extract decrement | ops 含 `checkedSubU64` |
 | T-S5-06 | error | wrappingSub | mutating 缺 checked arith |
+| T-F-01 | happy | Pair fields left/right | right 偏移 16；data_len 24 |
+| T-F-02 | happy | extract Pair.creditLeft | ops 含 `field left` |
