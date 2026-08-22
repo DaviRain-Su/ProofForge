@@ -17,4 +17,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L1 语言剖面之前**。竖切与多字段已绿。缺口清单：[plan/analysis/gap-vs-proofforge.md](plan/analysis/gap-vs-proofforge.md)。下一刀：`@[solana_entry]` + 按名 discriminator。
+当前阶段：**L1 属性入口已绿**。`#solana_build` 收 `@[solana_entry]`；Counter 含独立 decrement disc。下一刀：任意 `ite` / checked 四则。

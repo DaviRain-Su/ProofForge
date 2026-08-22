@@ -3,10 +3,15 @@ import SolanaLean.Ops
 
 namespace SolanaLean.Emit
 
-def discInit : String := "0x642858a76747495e"
-def discIncrement : String := "0x223edbd10397c79d"
-def discGet : String := "0x37dd90d6b076a2a4"
 def overflowCode : String := "0x1001"
+
+private def handlerLabel (m : IR.Method) : String :=
+  if m.ixName != "" then m.ixName else IR.ixNameOfLean (IR.lastName m.name)
+
+private def ixLenOf (m : IR.Method) : Nat :=
+  match m.kind with
+  | .get => 8
+  | _ => 16
 
 /-- Loader V3 单账户预检。`ixLen` 是 instruction data 期望长度。 -/
 private def prelude (p : IR.Program) (marker : String) (label : String) (ixLen : Nat)
@@ -136,10 +141,10 @@ ok_{label}:
   exit
 "
 
-private def emitGetBody (p : IR.Program) (v : Ops.Val) : Except String String := do
+private def emitGetBody (p : IR.Program) (label : String) (v : Ops.Val) : Except String String := do
   let load ← loadVal p v 8
   return s!"\
-body_get:
+body_{label}:
 {load}  ldxdw r1, [r10 - 8]
   stxdw [r10 - 16], r1
   mov64 r1, r10
@@ -181,11 +186,12 @@ private def hasReturnU64 (ops : Array Ops.Op) : Bool :=
   ops.any (fun | .returnU64 _ => true | _ => false)
 
 private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Except String String := do
+  let label := handlerLabel m
   match m.kind with
   | .init =>
     let v ← initVal m.ops
     let body ← emitInitBody p marker v
-    return s!"initialize:\n{prelude p marker "initialize" 16 true true true}{body}"
+    return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
     if !Ops.hasCheckedArith m.ops then
       .error "extract/unsupported: increment missing checked arith"
@@ -195,18 +201,36 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       .error "extract/unsupported: increment missing okState"
     else do
       let (lhs, rhs, isAdd) ← arithArgs m.ops
-      let body ← emitCheckedArithBody p "increment" lhs rhs isAdd
-      return s!"increment:\n{prelude p marker "increment" 16 false true false}{body}"
+      let body ← emitCheckedArithBody p label lhs rhs isAdd
+      return s!"{label}:\n{prelude p marker label (ixLenOf m) false true false}{body}"
   | .get =>
     let v ← getVal m.ops
-    let body ← emitGetBody p v
-    return s!"get:\n{prelude p marker "get" 8 false false false}{body}"
+    let body ← emitGetBody p label v
+    return s!"{label}:\n{prelude p marker label (ixLenOf m) false false false}{body}"
+
+private def emitDispatch (program : IR.Program) : Except String String := do
+  if program.methods.isEmpty then
+    throw "extract/unsupported: no methods"
+  let mut out := "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n"
+  for i in [0:program.methods.size] do
+    let m := program.methods[i]!
+    let label := handlerLabel m
+    let disc ← IR.discHex label m.kind
+    let next :=
+      if i + 1 == program.methods.size then "err_unknown_disc"
+      else s!"dispatch_next_{label}"
+    if i == 0 then
+      out := out ++ s!"  lddw r2, {disc}\n  jne r1, r2, {next}\n  call {label}\n  exit\n"
+    else
+      out := out ++ s!"dispatch_next_{handlerLabel program.methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n  call {label}\n  exit\n"
+  return out
 
 def emitCounterAsm (program : IR.Program) : Except String String := do
   unless IR.isCounterShape program do
     throw "extract/unsupported: not counter shape"
   let marker ← IR.layoutMarkerHex program
   let layout := IR.inputLayout program
+  let dispatch ← emitDispatch program
   let mut handlers := ""
   for m in program.methods do
     handlers := handlers ++ (← emitHandler program marker m) ++ "\n"
@@ -241,26 +265,7 @@ entrypoint:
 err_unknown_disc:
   lddw r0, 1
   exit
-dispatch_begin:
-  ldxdw r1, [r6 + INSTRUCTION_DATA]
-  lddw r2, {discInit}
-  jne r1, r2, dispatch_next_initialize
-  call initialize
-  exit
-dispatch_next_initialize:
-  lddw r2, {discIncrement}
-  jne r1, r2, dispatch_next_increment
-  call increment
-  exit
-dispatch_next_increment:
-  lddw r2, {discGet}
-  jne r1, r2, dispatch_next_get
-  call get
-  exit
-dispatch_next_get:
-  lddw r0, 1
-  exit
-
+{dispatch}
 {handlers}"
 
 end SolanaLean.Emit

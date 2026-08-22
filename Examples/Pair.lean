@@ -13,13 +13,16 @@ inductive Error where
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
+@[solana_entry]
 def init (left : UInt64) : State :=
   { left, right := 0 }
 
+@[solana_entry]
 def getLeft (s : State) : UInt64 :=
   s.left
 
 /-- 只改 `left`，`right` 保持。 -/
+@[solana_entry]
 def creditLeft (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if s.left ≤ u64Max - delta then
     let next := s.left + delta

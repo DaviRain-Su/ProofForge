@@ -2,6 +2,7 @@ import Lean
 import SolanaLean.IR
 import SolanaLean.Ops
 import SolanaLean.Profile
+import SolanaLean.Attr
 
 open Lean
 
@@ -219,7 +220,8 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     match kind with
     | .increment => decodeMutating e
     | _ => decodeBody e
-  return { kind, name := n.toString, sketch, ops }
+  let lean := IR.lastName n.toString
+  return { kind, name := n.toString, ixName := IR.ixNameOfLean lean, sketch, ops }
 
 private def peelForalls (e : Expr) : Expr :=
   let rec go (fuel : Nat) (e : Expr) : Expr :=
@@ -323,5 +325,90 @@ def extractProgram (env : Environment)
   return program
 
 def extractCounter := extractProgram
+
+private def isExceptType (e : Expr) : Bool :=
+  e.consumeMData.getAppFn.constName? == some ``Except
+
+/-- `Except` → mutate；`UInt64` → view；其它用户 structure → init。
+`UInt64` 本身也是 structure，必须先判。 -/
+def inferKind (env : Environment) (n : Name) : Except String IR.MethodKind := do
+  let some info := env.find? n
+    | throw s!"extract/unsupported: unknown {n}"
+  let ret := peelForalls info.type
+  if isExceptType ret then
+    return .increment
+  if isUInt64Type ret then
+    return .get
+  if let some structName := ret.getAppFn.constName? then
+    if isStructure env structName && structName != ``UInt64 then
+      return .init
+  throw s!"extract/unsupported: cannot classify {n}"
+
+private def sortNames (ns : Array Name) : Array Name :=
+  ns.qsort (·.toString < ·.toString)
+
+/-- 收同一名字空间下 `@[solana_entry]` 的根。须恰好一个 init、至少一个 mutate、至少一个 view。 -/
+def extractModule (env : Environment) (ns : Name)
+    (fields? : Option (Array String) := none) :
+    Except String IR.Program := do
+  let tagged := sortNames (Attr.entriesIn env ns)
+  if tagged.isEmpty then
+    throw "extract/unsupported: no solana_entry"
+  let mut inits : Array Name := #[]
+  let mut muts : Array Name := #[]
+  let mut views : Array Name := #[]
+  for n in tagged do
+    match Profile.check env n with
+    | .reject reason => throw reason
+    | .accept => pure ()
+    match ← inferKind env n with
+    | .init => inits := inits.push n
+    | .increment => muts := muts.push n
+    | .get => views := views.push n
+  if inits.size != 1 then
+    throw s!"extract/unsupported: need exactly one init, got {inits.size}"
+  if muts.isEmpty then
+    throw "extract/unsupported: missing mutating method"
+  if views.isEmpty then
+    throw "extract/unsupported: missing view method"
+  let initName := inits[0]!
+  let inferred ← inferFields env initName
+  let fields ←
+    match fields? with
+    | none => pure inferred
+    | some fs =>
+      if fs == inferred then pure fs
+      else throw s!"extract/unsupported: fields {fs} != inferred {inferred}"
+  let initM ← extractMethod env .init initName
+  let mut methods : Array IR.Method := #[initM]
+  let mut seen : Array String := #[initM.ixName]
+  for n in muts do
+    let m ← extractMethod env .increment n
+    if seen.contains m.ixName then
+      throw s!"extract/unsupported: duplicate ixName {m.ixName}"
+    seen := seen.push m.ixName
+    methods := methods.push m
+  for n in views do
+    let m ← extractMethod env .get n
+    if seen.contains m.ixName then
+      throw s!"extract/unsupported: duplicate ixName {m.ixName}"
+    seen := seen.push m.ixName
+    methods := methods.push m
+  let program : IR.Program := {
+    name := programNameOfInit initName
+    fields
+    methods
+  }
+  unless IR.isCounterShape program do
+    throw "extract/unsupported: not counter shape"
+  checkUsedFields program
+  match IR.layoutMarkerHex program with
+  | .error reason => throw reason
+  | .ok _ => pure ()
+  for m in program.methods do
+    match IR.discHex m.ixName m.kind with
+    | .error reason => throw reason
+    | .ok _ => pure ()
+  return program
 
 end SolanaLean.Extract

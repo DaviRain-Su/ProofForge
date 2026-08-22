@@ -160,6 +160,44 @@ fn get_returns_count() {
 }
 
 #[test]
+fn decrement_updates_and_returns() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("decrement", 1);
+    let ix = build_ix(program_id, state_key, &disc, &[3], true, false);
+    let account = state_account(&program_id, count_state(true, 8));
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&5u64.to_le_bytes()),
+            Check::account(&state_key)
+                .data(&count_state(true, 5))
+                .build(),
+        ],
+    );
+}
+
+#[test]
+fn decrement_underflow_holds() {
+    let (program_id, mollusk) = harness();
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("decrement", 1);
+    let pre = count_state(true, 2);
+    let ix = build_ix(program_id, state_key, &disc, &[3], true, false);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::err(ProgramError::Custom(ARITHMETIC_OVERFLOW)),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
 fn increment_overflow_holds() {
     let (program_id, mollusk) = harness();
     let state_key = Pubkey::new_unique();

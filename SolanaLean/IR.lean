@@ -11,6 +11,8 @@ inductive MethodKind where
 structure Method where
   kind : MethodKind
   name : String
+  /-- 链上 instruction 名。Lean `init` 映射为 `initialize`。 -/
+  ixName : String := ""
   sketch : Array String := #[]
   ops : Array Ops.Op := #[]
   deriving BEq, Repr, Inhabited
@@ -27,6 +29,31 @@ def hasKind (p : Program) (k : MethodKind) : Bool :=
 
 def isCounterShape (p : Program) : Bool :=
   hasKind p .init && hasKind p .increment && hasKind p .get
+
+/-- Lean 声明末段 → 链上名。`init` 是 Lean 命令关键字，链上仍叫 `initialize`。 -/
+def ixNameOfLean (lean : String) : String :=
+  if lean == "init" then "initialize" else lean
+
+def lastName (n : String) : String :=
+  match n.splitOn "." with
+  | [] => n
+  | parts => parts.getLast!
+
+def ixParamSig (kind : MethodKind) : String :=
+  match kind with
+  | .get => ""
+  | _ => "u64"
+
+/-- 已登记的 PF disc 立即数（SHA-256 前 8 字节按 LE 读）。 -/
+def discHex (ixName : String) (kind : MethodKind) : Except String String :=
+  match ixName, ixParamSig kind with
+  | "initialize", "u64" => .ok "0x642858a76747495e"
+  | "increment", "u64" => .ok "0x223edbd10397c79d"
+  | "decrement", "u64" => .ok "0x1b92f24dfb29d300"
+  | "get", "" => .ok "0x37dd90d6b076a2a4"
+  | "getLeft", "" => .ok "0xe391a39d1496f393"
+  | "creditLeft", "u64" => .ok "0xca5ea3052ea3b57e"
+  | name, sig => .error s!"extract/unsupported: unregistered disc {name}({sig})"
 
 def fieldOffset (p : Program) (name : String) : Option Nat :=
   match p.fields.findIdx? (· == name) with
@@ -83,15 +110,21 @@ def extractedCounter : Program :=
   { name := "Counter"
     fields := #["value"]
     methods := #[
-      { kind := .init, name := "Examples.Counter.init"
+      { kind := .init, name := "Examples.Counter.init", ixName := "initialize"
         ops := #[.returnState (.arg 0)] },
-      { kind := .increment, name := "Examples.Counter.increment"
+      { kind := .increment, name := "Examples.Counter.increment", ixName := "increment"
         ops := #[
           .checkedAddU64 (.field (.arg 1) "value") (.arg 0),
           .okState (.arg 0),
           .errorOverflow
         ] },
-      { kind := .get, name := "Examples.Counter.get"
+      { kind := .increment, name := "Examples.Counter.decrement", ixName := "decrement"
+        ops := #[
+          .checkedSubU64 (.field (.arg 1) "value") (.arg 0),
+          .okState (.arg 0),
+          .errorOverflow
+        ] },
+      { kind := .get, name := "Examples.Counter.get", ixName := "get"
         ops := #[.returnU64 (.field (.arg 0) "value")] }
     ] }
 
@@ -99,15 +132,15 @@ def extractedPair : Program :=
   { name := "Pair"
     fields := #["left", "right"]
     methods := #[
-      { kind := .init, name := "Examples.Pair.init"
+      { kind := .init, name := "Examples.Pair.init", ixName := "initialize"
         ops := #[.returnState (.arg 0)] },
-      { kind := .increment, name := "Examples.Pair.creditLeft"
+      { kind := .increment, name := "Examples.Pair.creditLeft", ixName := "creditLeft"
         ops := #[
           .checkedAddU64 (.field (.arg 1) "left") (.arg 0),
           .okState (.arg 0),
           .errorOverflow
         ] },
-      { kind := .get, name := "Examples.Pair.getLeft"
+      { kind := .get, name := "Examples.Pair.getLeft", ixName := "getLeft"
         ops := #[.returnU64 (.field (.arg 0) "left")] }
     ] }
 
@@ -115,9 +148,9 @@ def counterProgram (name : String := "Counter") : Program :=
   { name
     fields := #["value"]
     methods := #[
-      { kind := .init, name := "init" },
-      { kind := .increment, name := "increment" },
-      { kind := .get, name := "get" }
+      { kind := .init, name := "init", ixName := "initialize" },
+      { kind := .increment, name := "increment", ixName := "increment" },
+      { kind := .get, name := "get", ixName := "get" }
     ] }
 
 end SolanaLean.IR

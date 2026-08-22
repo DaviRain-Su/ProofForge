@@ -125,7 +125,7 @@ fn initialize_sets_left_and_zero_right() {
 fn credit_left_keeps_right() {
     let (program_id, mollusk) = harness();
     let state_key = Pubkey::new_unique();
-    let disc = instruction_discriminator("increment", 1);
+    let disc = instruction_discriminator("creditLeft", 1);
     let ix = build_ix(program_id, state_key, &disc, &[3], true, false);
     let account = state_account(&program_id, pair_state(true, 5, 99));
     mollusk.process_and_validate_instruction(
@@ -145,7 +145,7 @@ fn credit_left_keeps_right() {
 fn get_returns_left() {
     let (program_id, mollusk) = harness();
     let state_key = Pubkey::new_unique();
-    let disc = instruction_discriminator("get", 0);
+    let disc = instruction_discriminator("getLeft", 0);
     let ix = build_ix(program_id, state_key, &disc, &[], false, false);
     let account = state_account(&program_id, pair_state(true, 8, 99));
     mollusk.process_and_validate_instruction(
@@ -165,7 +165,7 @@ fn get_returns_left() {
 fn credit_left_overflow_holds() {
     let (program_id, mollusk) = harness();
     let state_key = Pubkey::new_unique();
-    let disc = instruction_discriminator("increment", 1);
+    let disc = instruction_discriminator("creditLeft", 1);
     let pre = pair_state(true, u64::MAX, 99);
     let ix = build_ix(program_id, state_key, &disc, &[1], true, false);
     let account = state_account(&program_id, pre.clone());

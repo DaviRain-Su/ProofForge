@@ -50,6 +50,21 @@ elab_rules : command
       let fields := (fs.getElems.map (·.getString)).toList.toArray
       runExtract initN mutN getN (some fields)
 
+elab "#solana_build " n:ident : command => do
+  let ns := n.getId
+  let env ← getEnv
+  match Extract.extractModule env ns none with
+  | .error reason => throwError reason
+  | .ok program => do
+    match Emit.emitCounterAsm program with
+    | .error reason => throwError reason
+    | .ok asm =>
+      unless asm.contains "entrypoint:" do
+        throwError "assemble/tool: missing entrypoint"
+      logInfo m!"solana-lean: program {program.name} fields = {program.fields}"
+      logInfo m!"solana-lean: methods = {program.methods.map (fun m => m.ixName)}"
+      logInfo m!"solana-lean: emitted {asm.length} bytes of sBPF assembly"
+
 elab "#solana_dump " n:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload n
   let env ← getEnv

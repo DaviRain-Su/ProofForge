@@ -8,13 +8,12 @@
 - S0–S5：普通 Lean Counter 竖切到 Mollusk
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
+- `@[solana_entry]` + `#solana_build`；按名 disc；Counter 同程序 decrement
 
-## 下一刀（L1，按这个顺序开任务）
+## 下一刀（L1）
 
-1. `@[solana_entry]` + `#solana_build`（不必手写三 ident）
-2. 按方法名算 discriminator；同一程序可编 increment 与 decrement
-3. 任意 `ite` 树；checked mul/div/mod；更多比较
-4. `Program` 内容寻址 digest（证明主语 = 编译主语）
+1. 任意 `ite` 树；checked mul/div/mod；更多比较
+2. `Program` 内容寻址 digest（证明主语 = 编译主语）
 
 ## 其后（L2 / L3）
 

@@ -4,6 +4,7 @@
 
 | 模块 | 合同 |
 |---|---|
+| [Attr](attr.md) | `@[solana_entry]` 标记 |
 | [IR](ir.md) | 可哈希程序形状 + body sketch |
 | [Profile](profile.md) | 传递闭包剖面 |
 | [Ops](ops.md) | Expr 操作序列 |

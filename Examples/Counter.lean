@@ -14,13 +14,16 @@ inductive Error where
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
 /-- 不用 `initialize`：那是 Lean 的命令关键字。 -/
+@[solana_entry]
 def init (initial : UInt64) : State :=
   { value := initial }
 
+@[solana_entry]
 def get (s : State) : UInt64 :=
   s.value
 
 /-- checked add：溢出则失败，不更新状态。 -/
+@[solana_entry]
 def increment (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if s.value ≤ u64Max - delta then
     let next := s.value + delta
@@ -37,6 +40,7 @@ theorem increment_overflow_not_ok
   cases this
 
 /-- `delta ≤ s.value` 才减，否则 overflow。 -/
+@[solana_entry]
 def decrement (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if delta ≤ s.value then
     let next := s.value - delta

@@ -46,3 +46,8 @@
 | T-F-06 | happy | creditLeft 5+3，right=99 | left=8，right 保持 99 |
 | T-F-07 | happy | getLeft | return left，不改账户 |
 | T-F-08 | error | creditLeft max+1 | `0x1001`，两字段保持 |
+| T-L1-01 | happy | `#solana_build Examples.Counter` | 四方法；decrement 有独立 disc |
+| T-L1-02 | error | 无 entry 的名字空间 | `extract/unsupported: no solana_entry` |
+| T-L1-03 | happy | Pair Mollusk | disc 为 creditLeft / getLeft |
+| T-L1-04 | happy | decrement 8-3 | return 5，写回 5 |
+| T-L1-05 | error | decrement 2-3 | `0x1001`，状态保持 |
