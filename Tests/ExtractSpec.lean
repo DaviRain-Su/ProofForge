@@ -8,6 +8,8 @@ import Examples.Phase
 import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
+import Examples.EvmCtx
+import Examples.TipJar
 import Examples.Ping
 import Examples.Call
 import Examples.Info
@@ -201,6 +203,12 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.TokenOwner.init Examples.TokenOwner.setOwner Examples.TokenOwner.get
 
 #solana_extract Examples.TokenMs.init Examples.TokenMs.openMs Examples.TokenMs.get
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_extract Examples.TipJar.init Examples.TipJar.deposit Examples.TipJar.get
 
 /--
 error: extract/unsupported: field tag enum has payload

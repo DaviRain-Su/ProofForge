@@ -53,8 +53,15 @@
 - 账户下标叶子收口；Trio Mollusk
 - Bool / `unixTime` / nonce prelude / SetAuthority owner / Approve / Multisig2；Gate / Nonce / TokenOwner / TokenMs Mollusk
 
+## 进行中
+
+- EVM 三大切片已交付（E-RT / E-LANG / E-ASSET）。见 [research/05-evm-coverage-slices.md](../research/05-evm-coverage-slices.md)。不做 Window。不把 SVM 名译成 EVM。
+- E-OWN 已交付：Ownable + 通用 event + pair-key allowance。
+
 ## 下一刀
 
+SVM 回 L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原语）。
+再后：AccountInfo 叶子 → PDA find / invokeSigned → System create / Token+ATA。
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
 能 fail-closed 抽出的格子已收口（L4-034）。
@@ -62,6 +69,9 @@
 仍关、且不是延期：账户 3+ 成功路径、`ByteArray 32`、Token-2022、feature-gated 哈希与曲线、nonce 成功路径（要现成 nonce 账户）。
 
 Token-2022 / remaining accounts / 运行时 program id 仍关。
+
+
+完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
 ## 其后（L2 / L3）
 

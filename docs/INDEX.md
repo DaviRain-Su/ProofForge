@@ -17,6 +17,9 @@
 | [plan/analysis/sdk-surface.md](plan/analysis/sdk-surface.md) | 剩余 SDK 表面（syscall / 封闭 CPI） |
 | [plan/analysis/remaining-surface.md](plan/analysis/remaining-surface.md) | 第 1/2 层收口清单 |
 | [modules/README.md](modules/README.md) | 模块合同 |
-| [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
+| [modules/evm.md](modules/evm.md) | EVM 平行发射器 |
+| [research/03-feasibility.md](research/03-feasibility.md) | Solana 可行性调研结论 |
+| [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
+| [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 
-当前阶段：**L4 SDK 表面**。L4-034 已绿：Bool / `unixTime` / nonce prelude / SetAuthority owner / Approve / Multisig2。
+当前阶段：**L4 + EVM**。L4-034 已绿；EVM 平行剖面（到 Ownable）已并入。SVM 名不翻译。

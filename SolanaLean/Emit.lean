@@ -153,7 +153,29 @@ private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
             (data.flatMap fun | .u64le v => valSignerAccs v | _ => #[]) ++
               (match bump with | some v => valSignerAccs v | none => #[])
         | .okState v | .returnU64 v | .returnState v => valSignerAccs v
-        | .errorOverflow => #[]
+        | .errorOverflow | .errorNamed _ => #[]
+        | .evmDeposit v | .evmLog _ v | .forAccum _ v => valSignerAccs v
+        | .evmSendEth a b c d =>
+            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
+        | .indexSet _ i v _ => valSignerAccs i ++ valSignerAccs v
+        | .mapGetU64 a b => valSignerAccs a ++ valSignerAccs b
+        | .mapSetU64 a b c => valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c
+        | .mapGetAddr a b c d =>
+            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
+        | .mapSetAddr a b c d e =>
+            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++
+              valSignerAccs d ++ valSignerAccs e
+        | .mapGetPair a b c d e f g =>
+            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
+              valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g
+        | .mapSetPair a b c d e f g h =>
+            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
+              valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g ++ valSignerAccs h
+        | .evmTokenTransfer a b c d e f g =>
+            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
+              valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g
+        | .evmTokenBalanceOfSelf a b c =>
+            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c
       let nested :=
         match op with
         | .ite _ _ _ t f => walkSignerAccs fuel' t ++ walkSignerAccs fuel' f
@@ -226,6 +248,11 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
   | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
   | .signerKeyN _ | .ownerIsSelf _ =>
     .error "extract/unsupported: runtime leaf has no mem"
+  | v =>
+    if Ops.isEvmLeaf v then
+      .error "extract/unsupported: runtime leaf has no mem"
+    else
+      .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
   match width with
@@ -629,10 +656,15 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     emitLoadCheckPda p seed bump stackOff
   | .rentExemption n =>
     .ok (emitLoadRentExemption n.toNat stackOff)
-  | _ => do
-    let mem ← memOfVal p v
-    let insn ← loadInsn (widthOfVal p v)
-    return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+  | v =>
+    if Ops.isEvmLeaf v then
+      .error "extract/unsupported: svm rejects evm leaf"
+    else if Ops.isLangVal v then
+      .error "extract/unsupported: svm rejects evm leaf"
+    else do
+      let mem ← memOfVal p v
+      let insn ← loadInsn (widthOfVal p v)
+      return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
 /--
 `sol_create_program_address`：一条 ASCII 种子 + bump 字节 + 当前 program id。
@@ -751,6 +783,30 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .ite _ l r t f =>
           valUsesSigner l || valUsesSigner r ||
             walkUsesSigner fuel' t || walkUsesSigner fuel' f
+      | .evmDeposit v => valUsesSigner v
+      | .evmSendEth a b c d =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
+      | .evmLog _ v => valUsesSigner v
+      | .forAccum _ v => valUsesSigner v
+      | .indexSet _ i v _ => valUsesSigner i || valUsesSigner v
+      | .mapGetU64 a b => valUsesSigner a || valUsesSigner b
+      | .mapSetU64 a b c => valUsesSigner a || valUsesSigner b || valUsesSigner c
+      | .mapGetAddr a b c d =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
+      | .mapSetAddr a b c d e =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c ||
+            valUsesSigner d || valUsesSigner e
+      | .mapGetPair a b c d e f g =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
+            valUsesSigner e || valUsesSigner f || valUsesSigner g
+      | .mapSetPair a b c d e f g h =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
+            valUsesSigner e || valUsesSigner f || valUsesSigner g || valUsesSigner h
+      | .evmTokenTransfer a b c d e f g =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
+            valUsesSigner e || valUsesSigner f || valUsesSigner g
+      | .evmTokenBalanceOfSelf a b c =>
+          valUsesSigner a || valUsesSigner b || valUsesSigner c
       | .invoke _ metas data _ bump =>
           metas.any (·.signer) ||
             data.any (fun | .u64le v => valUsesSigner v | _ => false) ||
@@ -758,7 +814,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
-      | .errorOverflow => false
+      | .errorOverflow | .errorNamed _ => false
 
 private def usesSignerKey (ops : Array Ops.Op) : Bool :=
   walkUsesSigner 16 ops
@@ -1060,6 +1116,14 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
     | .invoke prog metas data seed bump =>
       acc := acc ++ (← emitInvoke p label prog metas data seed bump)
+    | .evmDeposit _ | .evmSendEth .. | .evmLog .. =>
+      throw "extract/unsupported: svm rejects evm leaf"
+    | .forAccum .. | .indexSet .. | .errorNamed _ =>
+      throw "extract/unsupported: svm rejects evm leaf"
+    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
+    | .mapGetPair .. | .mapSetPair ..
+    | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. =>
+      throw "extract/unsupported: svm rejects evm leaf"
     | .okState v =>
       let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
       if hasOpt then
@@ -1118,8 +1182,10 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | _ =>
-          if Ops.hasCheckedArith ops then
+        | v =>
+          if Ops.isEvmLeaf v || Ops.isLangVal v then
+            throw "extract/unsupported: svm rejects evm leaf"
+          else if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
           else do
             let load ← loadVal p v 24
@@ -1200,7 +1266,9 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if Ops.hasInvoke m.ops then
+    if Ops.hasEvmEffect m.ops || Ops.hasLangOp m.ops then
+      .error "extract/unsupported: svm rejects evm leaf"
+    else if Ops.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
     else if !(Ops.hasCheckedArith m.ops || m.ops.any (fun | .ite .. => true | _ => false)) then

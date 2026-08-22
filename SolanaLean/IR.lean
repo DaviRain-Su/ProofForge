@@ -14,8 +14,12 @@ structure Method where
   name : String
   /-- 链上 instruction 名。Lean `init` 映射为 `initialize`。 -/
   ixName : String := ""
-  /-- instruction data 里 u64 参数个数（不含 8 字节 disc）。 -/
+  /-- instruction data 里参数个数（不含 8 字节 disc）。 -/
   paramCount : Nat := 0
+  /-- 每个参数的物理宽：1/2/4/8。默认全 8。 -/
+  paramWidths : Array Nat := #[]
+  /-- view 返回叶数。1 = 单 `uint*`；2 = `(uint64,uint64)`。 -/
+  retCount : Nat := 1
   sketch : Array String := #[]
   ops : Array Ops.Op := #[]
   deriving BEq, Repr, Inhabited
@@ -221,6 +225,34 @@ private def valCanon : Ops.Val → String
   | .unixTime => "unix"
   | .slotsPerEpoch => "spe"
   | .signerKey0 => "k0"
+  | .evmCaller => "ecall"
+  | .evmBlockNumber => "eblk"
+  | .evmTimestamp => "ets"
+  | .evmChainId => "echain"
+  | .evmSelf => "eself"
+  | .evmCallValue => "eval"
+  | .evmSelfBalance => "ebal"
+  | .evmCallerW0 => "ecw0"
+  | .evmCallerW1 => "ecw1"
+  | .evmCallerW2 => "ecw2"
+  | .evmSelfW0 => "esw0"
+  | .evmSelfW1 => "esw1"
+  | .evmSelfW2 => "esw2"
+  | .bitAnd l r => s!"and({valCanon l},{valCanon r})"
+  | .bitOr l r => s!"or({valCanon l},{valCanon r})"
+  | .bitXor l r => s!"xor({valCanon l},{valCanon r})"
+  | .bitNot v => s!"not({valCanon v})"
+  | .shiftL l r => s!"shl({valCanon l},{valCanon r})"
+  | .shiftR l r => s!"shr({valCanon l},{valCanon r})"
+  | .indexGet b n i k => s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
+  | .loopIx => "ix"
+  | .addU64 l r => s!"uadd({valCanon l},{valCanon r})"
+  | .subU64 l r => s!"usub({valCanon l},{valCanon r})"
+  | .mapGetU64 b k => s!"vg({valCanon b},{valCanon k})"
+  | .mapGetAddr b a0 a1 a2 =>
+      s!"vga({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"
+  | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+      s!"vgp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2})"
   | .accLamports0 => "lp0"
   | .accOwner0 => "ow0"
   | .accDataLen0 => "dl0"
@@ -250,6 +282,7 @@ private def valCanon : Ops.Val → String
   | .signerKeyN a => s!"sk.{a}"
   | .ownerIsSelf a => s!"ois.{a}"
 
+
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
     match op with
@@ -259,6 +292,26 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
+    | .evmDeposit v => s!"edep({valCanon v})"
+    | .evmSendEth a b c d =>
+        s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
+    | .evmLog n v => s!"elog.{n}({valCanon v})"
+    | .forAccum n v => s!"for({n},{valCanon v})"
+    | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
+    | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
+    | .mapSetU64 b k v => s!"mset({valCanon b},{valCanon k},{valCanon v})"
+    | .mapGetAddr b a0 a1 a2 =>
+        s!"mgeta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"
+    | .mapSetAddr b a0 a1 a2 v =>
+        s!"mseta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon v})"
+    | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+        s!"mgetp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2})"
+    | .mapSetPair b a0 a1 a2 c0 c1 c2 v =>
+        s!"msetp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2},{valCanon v})"
+    | .evmTokenTransfer a b c d e f g =>
+        s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
+    | .evmTokenBalanceOfSelf a b c =>
+        s!"tbal({valCanon a},{valCanon b},{valCanon c})"
     | .invoke prog metas data seed bump =>
       let ms :=
         String.intercalate ","
@@ -278,14 +331,21 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         | some s, some b => s!",s.{s}:{valCanon b}"
         | _, _ => ""
       s!"inv({prog},[{ms}],[{ds}]{seeds})"
+
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
+    | .errorNamed n => s!"err.{n}"
     | .returnU64 v => s!"retu({valCanon v})"
     | .returnState v => s!"rets({valCanon v})"
   String.intercalate ";" (ops.toList.map one)
 
 private def methodCanon (m : Method) : String :=
-  s!"{kindTag m.kind}:{m.ixName}:{m.paramCount}:[{opsCanon m.ops}]"
+  let base := s!"{kindTag m.kind}:{m.ixName}:{m.paramCount}:[{opsCanon m.ops}]"
+  if (m.paramWidths.isEmpty || m.paramWidths.all (· == 8)) && m.retCount == 1 then
+    base
+  else
+    let widths := String.intercalate "," (m.paramWidths.map toString).toList
+    s!"{kindTag m.kind}:{m.ixName}:{m.paramCount}:{widths}:r{m.retCount}:[{opsCanon m.ops}]"
 
 /-- 规范化身份：按 `ixName` 排序。不含 Lean 全名、不含 sketch。 -/
 def canonical (p : Program) : String :=

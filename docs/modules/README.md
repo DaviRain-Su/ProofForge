@@ -12,3 +12,4 @@
 | [Emit](emit.md) | Counter → sBPF 文本（S3） |
 | [Assemble](assemble.md) | `sbpf` 子进程 → `.so` |
 | [Runtime](runtime.md) | `clockSlot` / `signerKey0` / `acc*` 宿主 stub；抽出按名认 |
+| [Evm](evm.md) | Ops → Yul / ABI / locked solc |

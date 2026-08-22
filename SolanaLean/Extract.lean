@@ -242,9 +242,44 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   if looksLikeOptionProj env n then some (.field (.arg i) s!"{proj}_tag")
                   else some (.field (.arg i) proj)
                 | _ => none
-        else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8) &&
+        else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8 ||
+            isConstNamed e ``UInt16.toUInt64 || isConstNamed e ``UInt64.toUInt16 ||
+            isConstNamed e ``UInt32.toUInt64 || isConstNamed e ``UInt64.toUInt32 ||
+            isConstNamed e ``UInt64.toNat) &&
             e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else if (isConstNamed e ``HAnd.hAnd || endsWith e ".hAnd") && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.bitAnd l r)
+          | _, _ => none
+        else if (isConstNamed e ``HOr.hOr || endsWith e ".hOr") && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.bitOr l r)
+          | _, _ => none
+        else if (isConstNamed e ``HXor.hXor || endsWith e ".hXor") && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.bitXor l r)
+          | _, _ => none
+        else if (isConstNamed e ``Complement.complement || endsWith e ".complement") &&
+            e.getAppArgs.size ≥ 1 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some v => some (.bitNot v)
+          | none => none
+        else if (isConstNamed e ``HShiftLeft.hShiftLeft || endsWith e ".hShiftLeft") &&
+            e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.shiftL l r)
+          | _, _ => none
+        else if (isConstNamed e ``HShiftRight.hShiftRight || endsWith e ".hShiftRight") &&
+            e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.shiftR l r)
+          | _, _ => none
         else if (isConstNamed e ``Option.isSome || endsWith e ".isSome") && e.getAppArgs.size ≥ 1 then
           match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.field b n) =>
@@ -254,6 +289,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | none => none
         else if endsWith e ".u64Max" then
           some (.lit (~~~(0 : UInt64)))
+        else if endsWith e ".shareBase" || endsWith e ".allowBase" then
+          some (.lit 0)
         else if endsWith e ".clockSlot" || isConstNamed e ``SolanaLean.Runtime.clockSlot then
           some .clockSlot
         else if endsWith e ".clockEpoch" || isConstNamed e ``SolanaLean.Runtime.clockEpoch then
@@ -266,6 +303,32 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .cpiReturn
         else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
           some .signerKey0
+        else if endsWith e ".evmCaller" || isConstNamed e ``SolanaLean.Runtime.evmCaller then
+          some .evmCaller
+        else if endsWith e ".evmBlockNumber" || isConstNamed e ``SolanaLean.Runtime.evmBlockNumber then
+          some .evmBlockNumber
+        else if endsWith e ".evmTimestamp" || isConstNamed e ``SolanaLean.Runtime.evmTimestamp then
+          some .evmTimestamp
+        else if endsWith e ".evmChainId" || isConstNamed e ``SolanaLean.Runtime.evmChainId then
+          some .evmChainId
+        else if endsWith e ".evmSelf" || isConstNamed e ``SolanaLean.Runtime.evmSelf then
+          some .evmSelf
+        else if endsWith e ".evmCallValue" || isConstNamed e ``SolanaLean.Runtime.evmCallValue then
+          some .evmCallValue
+        else if endsWith e ".evmSelfBalance" || isConstNamed e ``SolanaLean.Runtime.evmSelfBalance then
+          some .evmSelfBalance
+        else if endsWith e ".evmCallerW0" || isConstNamed e ``SolanaLean.Runtime.evmCallerW0 then
+          some .evmCallerW0
+        else if endsWith e ".evmCallerW1" || isConstNamed e ``SolanaLean.Runtime.evmCallerW1 then
+          some .evmCallerW1
+        else if endsWith e ".evmCallerW2" || isConstNamed e ``SolanaLean.Runtime.evmCallerW2 then
+          some .evmCallerW2
+        else if endsWith e ".evmSelfW0" || isConstNamed e ``SolanaLean.Runtime.evmSelfW0 then
+          some .evmSelfW0
+        else if endsWith e ".evmSelfW1" || isConstNamed e ``SolanaLean.Runtime.evmSelfW1 then
+          some .evmSelfW1
+        else if endsWith e ".evmSelfW2" || isConstNamed e ``SolanaLean.Runtime.evmSelfW2 then
+          some .evmSelfW2
         else if endsWith e ".accLamports0" || isConstNamed e ``SolanaLean.Runtime.accLamports0 then
           some .accLamports0
         else if endsWith e ".accOwner0" || isConstNamed e ``SolanaLean.Runtime.accOwner0 then
@@ -299,6 +362,32 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             endsWith e ".invoke" || isConstNamed e ``SolanaLean.Runtime.invoke ||
             endsWith e ".invokeSigned" || isConstNamed e ``SolanaLean.Runtime.invokeSigned then
           some (.lit 0)
+        else if ((endsWith e ".evmDeposit" ||
+            isConstNamed e ``SolanaLean.Runtime.evmDeposit) ||
+            (endsWith e ".evmLogTipped" ||
+            isConstNamed e ``SolanaLean.Runtime.evmLogTipped) ||
+            (endsWith e ".evmLogIncremented" ||
+            isConstNamed e ``SolanaLean.Runtime.evmLogIncremented) ||
+            (endsWith e ".evmSendEth" ||
+            isConstNamed e ``SolanaLean.Runtime.evmSendEth) ||
+            (endsWith e ".evmMapGetU64" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapGetU64) ||
+            (endsWith e ".evmMapSetU64" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapSetU64) ||
+            (endsWith e ".evmMapGetAddr" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapGetAddr) ||
+            (endsWith e ".evmMapSetAddr" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapSetAddr) ||
+            (endsWith e ".evmMapGetPair" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapGetPair) ||
+            (endsWith e ".evmMapSetPair" ||
+            isConstNamed e ``SolanaLean.Runtime.evmMapSetPair) ||
+            (endsWith e ".evmTokenTransfer" ||
+            isConstNamed e ``SolanaLean.Runtime.evmTokenTransfer) ||
+            (endsWith e ".evmTokenBalanceOfSelf" ||
+            isConstNamed e ``SolanaLean.Runtime.evmTokenBalanceOfSelf)) &&
+            e.getAppArgs.size ≥ 1 then
+          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if isConstNamed e ``Bool.true || endsWith e ".true" then
           some (.lit 1)
         else if isConstNamed e ``Bool.false || endsWith e ".false" then
@@ -317,48 +406,61 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some (.lit 0)
         else if (isConstNamed e ``Option.some || endsWith e ".some") && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-        else if (isConstNamed e ``GetElem.getElem || isConstNamed e ``Vector.get ||
-            endsWith e ".getElem" || endsWith e ".get") && e.getAppArgs.size ≥ 2 then
+        else if (isConstNamed e ``GetElem.getElem || isConstNamed e ``GetElem?.getElem! ||
+            isConstNamed e ``Vector.get ||
+            endsWith e ".getElem" || endsWith e ".getElem!" || endsWith e ".get") &&
+            e.getAppArgs.size ≥ 2 then
           let args := e.getAppArgs
-          -- 最后一个字面量才是下标；前面的 `OfNat n` 是 Vector 长度。
-          let idx? :=
-            match (args.filterMap (asLit fuel')).back? with
-            | some (.lit n) => some n.toNat
-            | _ => none
-          match idx? with
-          | none => none
-          | some i =>
-            let rec findState (fuel : Nat) (e : Expr) : Option Nat :=
-              match fuel with
-              | 0 => none
-              | fuel' + 1 =>
-                match strip e with
-                | .bvar j => some j
-                | e => e.getAppArgs.findSome? (findState fuel')
+          let lastVal? : Option Ops.Val :=
+            args.foldr (init := none) fun a acc =>
+              match acc with
+              | some v => some v
+              | none => asVal env fuel' a
+          let rec findState (fuel : Nat) (e : Expr) : Option Nat :=
+            match fuel with
+            | 0 => none
+            | fuel' + 1 =>
+              match strip e with
+              | .bvar j => some j
+              | e => e.getAppArgs.findSome? (findState fuel')
+          let rec fieldNameOf (fuel : Nat) (e : Expr) : Option String :=
+            match fuel with
+            | 0 => none
+            | fuel' + 1 =>
+              match e.getAppFn.constName? with
+              | some n =>
+                let s := n.toString
+                let last := IR.lastName s
+                let user := s.startsWith "Examples." || s.startsWith "Tests."
+                if !user || last == "mk" || last == "getElem" || last == "getElem!" ||
+                    last.startsWith "_proof" then
+                  e.getAppArgs.findSome? (fieldNameOf fuel')
+                else some last
+              | none => e.getAppArgs.findSome? (fieldNameOf fuel')
+          match lastVal? with
+          | some (.lit n) =>
+            let i := n.toNat
             match findState fuel' e, args.findSome? (asVal env fuel') with
-            | some j, some (.field _ n) =>
+            | some j, some (.field _ fname) =>
               let suf := s!"_{i}"
-              let base := if n.endsWith suf then n.dropEnd suf.length |>.copy else n
+              let base := if fname.endsWith suf then fname.dropEnd suf.length |>.copy else fname
               some (.field (.arg j) s!"{base}_{i}")
             | some j, _ =>
-              -- 投影被跳过时，从 GetElem 第一个用户结构参数收字段名。
-              let rec fieldNameOf (fuel : Nat) (e : Expr) : Option String :=
-                match fuel with
-                | 0 => none
-                | fuel' + 1 =>
-                  match e.getAppFn.constName? with
-                  | some n =>
-                    let s := n.toString
-                    let last := IR.lastName s
-                    let user := s.startsWith "Examples." || s.startsWith "Tests."
-                    if !user || last == "mk" || last == "getElem" || last.startsWith "_proof" then
-                      e.getAppArgs.findSome? (fieldNameOf fuel')
-                    else some last
-                  | none => e.getAppArgs.findSome? (fieldNameOf fuel')
               match fieldNameOf 8 e with
-              | some n => some (.field (.arg j) s!"{n}_{i}")
+              | some fname => some (.field (.arg j) s!"{fname}_{i}")
               | none => none
             | _, _ => none
+          | some idx =>
+            let len :=
+              match args.findSome? (asLit fuel') with
+              | some (.lit n) => n.toNat
+              | _ => 0
+            match findState fuel' e, fieldNameOf 8 e with
+            | some j, some fname => some (.indexGet (.arg j) fname idx len)
+            | some j, none => some (.indexGet (.arg j) "cells" idx len)
+            | _, _ => none
+          | none => none
+
         else none
       else none
 
@@ -533,7 +635,8 @@ private def asEqZero (env : Environment) (e : Expr) : Option Ops.Val :=
 /-- 多字段 `State.mk a b …`：init 用第一个显式参数；checked 更新用最后一个。 -/
 private def asStateMk (env : Environment) (e : Expr) (preferLast := false) : Option Ops.Val :=
   let e := strip e
-  if endsWith e ".State.mk" || endsWith e ".mk" then
+  if isConstNamed e ``Prod.mk || endsWith e ".Prod.mk" then none
+  else if endsWith e ".State.mk" || endsWith e ".mk" then
     let args := e.getAppArgs
     if args.size = 0 then none
     else if preferLast then val env args[args.size - 1]!
@@ -651,9 +754,44 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   else none
 
 /-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
+private def asIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
+  let e := strip e
+  if isConstNamed e ``Vector.set || endsWith e ".set" then
+    let args := e.getAppArgs
+    let rec baseName (fuel : Nat) (e : Expr) : Option String :=
+      match fuel with
+      | 0 => none
+      | fuel' + 1 =>
+        match e.getAppFn.constName? with
+        | some n =>
+          let s := n.toString
+          let last := IR.lastName s
+          let user := s.startsWith "Examples." || s.startsWith "Tests."
+          if !user || last == "set" || last == "mk" || last.startsWith "_proof" then
+            e.getAppArgs.findSome? (baseName fuel')
+          else some last
+        | none => e.getAppArgs.findSome? (baseName fuel')
+    let len :=
+      match args.findSome? (asLit 8) with
+      | some (.lit n) => n.toNat
+      | _ => 0
+    let vals := args.filterMap (val env)
+    if vals.size ≥ 3 then
+      let idx := vals[vals.size - 2]!
+      let payload := vals[vals.size - 1]!
+      match idx with
+      | .lit _ => none
+      | _ =>
+        match baseName 8 e with
+        | some n => some (.indexSet n idx payload len)
+        | none => some (.indexSet "cells" idx payload len)
+    else none
+  else none
+
 private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let e := strip e
-  if endsWith e ".State.mk" || endsWith e ".mk" then
+  if (endsWith e ".State.mk" || endsWith e ".mk") &&
+      !(isConstNamed e ``Prod.mk || endsWith e ".Prod.mk") then
     Id.run do
       let mut acc : Array Ops.Val := #[]
       for a in e.getAppArgs do
@@ -733,6 +871,8 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.isExecutableN a) => some (.isExecutableN a)
             | some (.signerKeyN a) => some (.signerKeyN a)
             | some (.ownerIsSelf a) => some (.ownerIsSelf a)
+            | some v =>
+              if Ops.hasEvmLeaf #[.returnU64 v] || Ops.isLangLeaf v then some v else none
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -747,6 +887,20 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
                     asStateMk env st true
         else none
       else asStateMk env pair true
+    else none
+  else none
+
+private def errorCtorName (e : Expr) : Option String :=
+  let e := strip e
+  if isConstNamed e ``Except.error then
+    let args := e.getAppArgs
+    if h : args.size > 0 then
+      let ctor := strip args[args.size - 1]
+      match ctor.getAppFn.constName? with
+      | some n =>
+        let last := IR.lastName n.toString
+        if last == "overflow" then none else some last
+      | none => none
     else none
   else none
 
@@ -772,6 +926,7 @@ private def isRuntimeName (n : Name) (suf : String) : Bool :=
   n == (`SolanaLean.Runtime).append suf.toName || n.toString.endsWith s!".{suf}"
 
 private def mentionsRuntime (e : Expr) (suf : String) : Bool :=
+  let suf := if suf.front == '.' then String.ofList (suf.toList.drop 1) else suf
   e.getUsedConstantsAsSet.toList.any (isRuntimeName · suf)
 
 private def natOfVal : Ops.Val → Option Nat
@@ -1031,22 +1186,295 @@ private def invokeRet
   | (6, _, #[.u8le 1], none, none) => .lit 0
   | _ => .lit 0
 
+private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :=
+  let rec go (fuel : Nat) (e : Expr) : Option (Nat × Ops.Val) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      if e.getAppFn.constName? == some ``Id.run || endsWith e ".run" then
+        if e.getAppArgs.size ≥ 1 then go fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else none
+      else if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then
+        let args := e.getAppArgs
+        let rec rangeEnd (fuel : Nat) (e : Expr) : Option Nat :=
+          match fuel with
+          | 0 => none
+          | fuel' + 1 =>
+            let e := strip e
+            if endsWith e ".mk" || e.getAppFn.constName?.isSome then
+              let rargs := e.getAppArgs
+              if rargs.size ≥ 2 then
+                match asLit 8 rargs[1]! with
+                | some (.lit n) => some n.toNat
+                | _ => rargs.findSome? (rangeEnd fuel')
+              else rargs.findSome? (rangeEnd fuel')
+            else e.getAppArgs.findSome? (rangeEnd fuel')
+        let n? := args.findSome? (rangeEnd 8)
+        let rec rewriteIx (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+          match fuel with
+          | 0 => v
+          | fuel' + 1 =>
+            match v with
+            | .arg _ => .loopIx
+            | .field b n => .field (rewriteIx fuel' b) n
+            | .indexGet b n i k =>
+                let b' := match b with | .arg _ => .arg 0 | _ => b
+                .indexGet b' n (rewriteIx fuel' i) k
+            | .bitAnd l r => .bitAnd (rewriteIx fuel' l) (rewriteIx fuel' r)
+            | .bitOr l r => .bitOr (rewriteIx fuel' l) (rewriteIx fuel' r)
+            | .bitXor l r => .bitXor (rewriteIx fuel' l) (rewriteIx fuel' r)
+            | .bitNot v => .bitNot (rewriteIx fuel' v)
+            | .shiftL l r => .shiftL (rewriteIx fuel' l) (rewriteIx fuel' r)
+            | .shiftR l r => .shiftR (rewriteIx fuel' l) (rewriteIx fuel' r)
+            | v => v
+        let rec findAdd (fuel : Nat) (e : Expr) : Option Ops.Val :=
+          match fuel with
+          | 0 => none
+          | fuel' + 1 =>
+            let e := strip e
+            if isConstNamed e ``HAdd.hAdd && e.getAppArgs.size ≥ 2 then
+              (asVal env 8 e.getAppArgs[e.getAppArgs.size - 1]!).map (rewriteIx 8)
+            else
+              match e with
+              | .lam _ _ body _ => findAdd fuel' body
+              | .letE _ _ value body _ => findAdd fuel' value <|> findAdd fuel' body
+              | _ => e.getAppArgs.findSome? (findAdd fuel')
+        let addend? := args.findSome? (findAdd 16)
+        match n?, addend? with
+        | some n, some v =>
+          if n = 0 || n > 64 then none else some (n, v)
+        | _, _ => none
+      else
+        match e with
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | .app f a => go fuel' f <|> go fuel' a
+        | _ => none
+  go 16 e
+
+private def findIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
+  let rec go (fuel : Nat) (e : Expr) : Option Ops.Op :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      match asIndexSet env e with
+      | some op => some op
+      | none =>
+        match e with
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | .app f a => go fuel' f <|> go fuel' a
+        | _ => none
+  go 16 e
+
+private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : String) :
+    Option Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      if e.getAppFn.constName? == some want || endsWith e suffix then
+        some e
+      else
+        match e with
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | .app f a => go fuel' f <|> go fuel' a
+        | _ => none
+  go fuel e
+
+private def findUnaryRuntime (env : Environment) (want : Name) (suffix : String)
+    (e : Expr) : Option Ops.Val :=
+  if mentionsRuntime e suffix then
+    match findRuntimeApp 16 e want suffix with
+    | some app =>
+      if app.getAppArgs.size ≥ 1 then
+        match val env app.getAppArgs[app.getAppArgs.size - 1]! with
+        | some v => some v
+        | none => some (.arg 0)
+      else some (.arg 0)
+    | none => some (.arg 0)
+  else none
+
+private def nthFromEnd (args : Array Expr) (n : Nat) : Option Expr :=
+  if args.size ≥ n + 1 then some args[args.size - 1 - n]! else none
+
+private def valAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val :=
+  match nthFromEnd args n with
+  | some e => (val env e).getD (.arg n)
+  | none => .arg n
+
+private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmDeposit ".evmDeposit" e
+
+private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmLogTipped ".evmLogTipped" e
+
+private def findEvmLogIncremented (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmLogIncremented ".evmLogIncremented" e
+
+private def findEvmSendEth (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmSendEth" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmSendEth ".evmSendEth" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+  else none
+
+private def findBinaryRuntime (env : Environment) (want : Name) (suffix : String)
+    (e : Expr) : Option (Ops.Val × Ops.Val) :=
+  if mentionsRuntime e suffix then
+    match findRuntimeApp 16 e want suffix with
+    | some app =>
+      let args := app.getAppArgs
+      if args.size ≥ 2 then some (valAtEnd env args 1, valAtEnd env args 0)
+      else some (.arg 0, .arg 1)
+    | none => some (.arg 0, .arg 1)
+  else none
+
+private def findTernaryRuntime (env : Environment) (want : Name) (suffix : String)
+    (e : Expr) : Option (Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e suffix then
+    match findRuntimeApp 16 e want suffix with
+    | some app =>
+      let args := app.getAppArgs
+      if args.size ≥ 3 then
+        some (valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+      else some (.arg 0, .arg 1, .arg 2)
+    | none => some (.arg 0, .arg 1, .arg 2)
+  else none
+
+private def findEvmMapGetU64 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val) :=
+  findBinaryRuntime env ``SolanaLean.Runtime.evmMapGetU64 ".evmMapGetU64" e
+
+private def findEvmMapSetU64 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val) :=
+  findTernaryRuntime env ``SolanaLean.Runtime.evmMapSetU64 ".evmMapSetU64" e
+
+private def findEvmMapGetAddr (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapGetAddr" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapGetAddr ".evmMapGetAddr" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+  else none
+
+private def findEvmMapSetAddr (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapSetAddr" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapSetAddr ".evmMapSetAddr" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 4, valAtEnd env args 3, valAtEnd env args 2,
+        valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4)
+  else none
+
+private def findEvmMapGetPair (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapGetPair" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapGetPair ".evmMapGetPair" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 6, valAtEnd env args 5, valAtEnd env args 4,
+        valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+  else none
+
+private def findEvmMapSetPair (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapSetPair" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapSetPair ".evmMapSetPair" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 7, valAtEnd env args 6, valAtEnd env args 5,
+        valAtEnd env args 4, valAtEnd env args 3, valAtEnd env args 2,
+        valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7)
+  else none
+
+private def findEvmTokenTransfer (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmTokenTransfer" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmTokenTransfer ".evmTokenTransfer" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 6, valAtEnd env args 5, valAtEnd env args 4,
+        valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+  else none
+
+private def findEvmTokenBalance (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val) :=
+  findTernaryRuntime env ``SolanaLean.Runtime.evmTokenBalanceOfSelf
+    ".evmTokenBalanceOfSelf" e
+
+private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  if let some amount := findEvmDeposit env e then
+    some #[.evmDeposit amount, .returnU64 amount]
+  else if let some (w0, w1, w2, amt) := findEvmSendEth env e then
+    some #[.evmSendEth w0 w1 w2 amt, .returnU64 amt]
+  else if let some amount := findEvmLogTipped env e then
+    some #[.evmLog "Tipped" amount, .returnU64 amount]
+  else if let some amount := findEvmLogIncremented env e then
+    some #[.evmLog "Incremented" amount, .returnU64 amount]
+  else if let some (b, k, v) := findEvmMapSetU64 env e then
+    some #[.mapSetU64 b k v, .returnU64 v]
+  else if let some (b, a0, a1, a2, v) := findEvmMapSetAddr env e then
+    some #[.mapSetAddr b a0 a1 a2 v, .returnU64 v]
+  else if let some (b, o0, o1, o2, s0, s1, s2, v) := findEvmMapSetPair env e then
+    some #[.mapSetPair b o0 o1 o2 s0 s1 s2 v, .returnU64 v]
+  else if let some (t0, t1, t2, d0, d1, d2, amt) := findEvmTokenTransfer env e then
+    some #[.evmTokenTransfer t0 t1 t2 d0 d1 d2 amt, .returnU64 amt]
+  else if let some (b, k) := findEvmMapGetU64 env e then
+    some #[.mapGetU64 b k, .returnU64 k]
+  else if let some (b, a0, a1, a2) := findEvmMapGetAddr env e then
+    some #[.mapGetAddr b a0 a1 a2, .returnU64 a0]
+  else if let some (b, o0, o1, o2, s0, s1, s2) := findEvmMapGetPair env e then
+    some #[.mapGetPair b o0 o1 o2 s0 s1 s2, .returnU64 o0]
+  else if let some (t0, t1, t2) := findEvmTokenBalance env e then
+    some #[.evmTokenBalanceOfSelf t0 t1 t2, .returnU64 t0]
+  else none
+
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
-  -- 必须在 peelLets 之前找 invoke：剥掉 `have sent := …` 后调用就没了。
+  -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
     .ok (invokeOps inv (invokeRet env e inv))
+  else if let some ops := decodeEvmEffect env e then
+    .ok ops
+  else if let some (n, addend) := findForIn env e then
+    .ok #[.forAccum n addend, .returnU64 addend]
+  else if let some op := findIndexSet env e then
+    match op with
+    | .indexSet _ _ v _ => .ok #[op, .okState v]
+    | _ => .ok #[op]
   else
   let e := peelLets (strip e)
-  if let some v := asOkState env e then
+  if let some name := errorCtorName e then
+    .ok #[.errorNamed name]
+  else if let some v := asOkState env e then
     .ok #[.okState v]
   else if let some vs := asStateFields env e then
     .ok (returnStatesOf vs)
   else if let some v := asStateMk env e then
     .ok #[.returnState v]
+  else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
+    match val env e.getAppArgs[e.getAppArgs.size - 2]!,
+          val env e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some a, some b => .ok #[.returnU64 a, .returnU64 b]
+    | _, _ => .error "extract/unsupported: pair return"
   else if let some v := val env e then
     match v with
     | .field _ _ => .ok #[.returnU64 v]
-    | .arg _ => .ok #[.returnState v]
+    | .arg _ => .ok #[.returnU64 v]
     | .lit _ => .ok #[.returnU64 v]
     | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
     | .accN | .isSigner0 | .isWritable0 | .isExecutable0
@@ -1056,6 +1484,12 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .accKeyWord _ _ | .accOwnerWord _ _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ => .ok #[.returnU64 v]
+    | .indexGet .. => .ok #[.returnU64 v]
+    | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. =>
+        .ok #[.returnU64 v]
+    | v =>
+      if Ops.hasEvmLeaf #[.returnU64 v] || Ops.isLangLeaf v then .ok #[.returnU64 v]
+      else .error "extract/unsupported: body"
   else
     .error "extract/unsupported: body"
 
@@ -1085,19 +1519,35 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   | fuel' + 1 => Id.run do
     if let some inv := findInvoke env 16 e then
       return .ok (invokeOps inv (invokeRet env e inv))
+    let e0 := strip e
+    if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
+      pure ()
+    else if let some ops := decodeEvmEffect env e then
+      return .ok ops
+    if let some (n, addend) := findForIn env e then
+      return .ok #[.forAccum n addend, .returnU64 addend]
     let e := strip e
-    if isConstNamed e ``ite && e.getAppArgs.size ≥ 5 then
+    if (isConstNamed e ``ite || isConstNamed e ``dite) && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
-      let t := peelLets args[args.size - 2]!
-      let f := peelLets args[args.size - 1]!
+      let rec peelProofLam (fuel : Nat) (e : Expr) : Expr :=
+        match fuel with
+        | 0 => e
+        | fuel' + 1 =>
+          match strip e with
+          | .lam _ _ body _ => peelProofLam fuel' body
+          | e => e
+      let t := peelProofLam 4 (peelLets args[args.size - 2]!)
+      let f := peelProofLam 4 (peelLets args[args.size - 1]!)
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, findInvoke env 8 t, asOkState env t with
-          | some (cmp, lv, rv), some inv, _ =>
+          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asOkState env t with
+          | some (cmp, lv, rv), some inv, _, _ =>
             return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
-          | some (cmp, lv, rv), none, some v =>
+          | some (cmp, lv, rv), none, some evmOps, _ =>
+            return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
+          | some (cmp, lv, rv), none, none, some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
-          | _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
@@ -1139,6 +1589,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ => return .error r
         | _, .error r => return .error r
+    else if let some ops := decodeEvmEffect env e then
+      return .ok ops
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       return .ok (invokeOps inv (invokeRet env e inv))
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
@@ -1208,10 +1660,35 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
 def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
   let ops ← decodeBody env e
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
-      Ops.hasInvoke ops then
+      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"
+
+private def widthOfType (e : Expr) : Option Nat :=
+  match e.consumeMData.getAppFn.constName? with
+  | some ``UInt8 => some 1
+  | some ``UInt16 => some 2
+  | some ``UInt32 => some 4
+  | some ``UInt64 => some 8
+  | _ => none
+
+/-- 用户参数宽。init 全算；mutate/view 丢掉第一个 state。 -/
+private def inferParamWidths (_env : Environment) (e : Expr) (kind : IR.MethodKind) :
+    Array Nat :=
+  let rec collect (fuel : Nat) (e : Expr) (acc : Array Nat) : Array Nat :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      match strip e with
+      | .lam _ ty body _ =>
+        collect fuel' body (acc.push ((widthOfType ty).getD 8))
+      | .letE _ _ _ body _ => collect fuel' body acc
+      | _ => acc
+  let widths := collect 32 e #[]
+  match kind with
+  | .init => widths
+  | .increment | .get => if widths.isEmpty then #[] else widths.extract 1 widths.size
 
 def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     Except String IR.Method := do
@@ -1238,7 +1715,13 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     | 0 => v
     | fuel' + 1 =>
       match v with
-      | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
+      | .arg i =>
+        if kind == .init && i < nLams then .arg (nLams - 1 - i)
+        else if kind == .increment && nLams > 1 && i + 1 < nLams then
+          .arg (nLams - 2 - i)
+        else if kind == .get && nLams > 1 && i + 1 < nLams then
+          .arg (nLams - 2 - i)
+        else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
       | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
@@ -1250,6 +1733,15 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
       | .signerKeyN _ | .ownerIsSelf _ => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
+      | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
+      | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
+      | .bitXor l r => .bitXor (flipVal fuel' l) (flipVal fuel' r)
+      | .bitNot v => .bitNot (flipVal fuel' v)
+      | .shiftL l r => .shiftL (flipVal fuel' l) (flipVal fuel' r)
+      | .shiftR l r => .shiftR (flipVal fuel' l) (flipVal fuel' r)
+      | .indexGet b n i k => .indexGet (flipVal fuel' b) n (flipVal fuel' i) k
+      | .loopIx => v
+      | v => v
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -1270,16 +1762,55 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
         .invoke prog metas (data.map fun
           | .u64le v => .u64le (flipVal fuel' v)
           | w => w) seed (bump.map (flipVal fuel'))
+      | .evmDeposit v => .evmDeposit (flipVal fuel' v)
+      | .evmSendEth a b c d =>
+          .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
+      | .evmLog n v => .evmLog n (flipVal fuel' v)
+      | .forAccum n v => .forAccum n (flipVal fuel' v)
+      | .indexSet n i v k => .indexSet n (flipVal fuel' i) (flipVal fuel' v) k
+      | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
+      | .mapSetU64 b k v =>
+          .mapSetU64 (flipVal fuel' b) (flipVal fuel' k) (flipVal fuel' v)
+      | .mapGetAddr b a0 a1 a2 =>
+          .mapGetAddr (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2)
+      | .mapSetAddr b a0 a1 a2 v =>
+          .mapSetAddr (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
+            (flipVal fuel' a2) (flipVal fuel' v)
+      | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+          .mapGetPair (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
+            (flipVal fuel' a2) (flipVal fuel' c0) (flipVal fuel' c1) (flipVal fuel' c2)
+      | .mapSetPair b a0 a1 a2 c0 c1 c2 v =>
+          .mapSetPair (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
+            (flipVal fuel' a2) (flipVal fuel' c0) (flipVal fuel' c1)
+            (flipVal fuel' c2) (flipVal fuel' v)
+      | .evmTokenTransfer a b c d e f g =>
+          .evmTokenTransfer (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f) (flipVal fuel' g)
+      | .evmTokenBalanceOfSelf a b c =>
+          .evmTokenBalanceOfSelf (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
       | .errorOverflow => .errorOverflow
+      | .errorNamed n => .errorNamed n
   let ops :=
-    if kind == .init && nLams > 1 then ops1.map (flipOp 8) else ops1
+    if (kind == .init && nLams > 1) ||
+        (kind == .increment && nLams > 2) ||
+        (kind == .get && nLams > 2) then
+      ops1.map (flipOp 8)
+    else ops1
   let paramCount :=
     match kind with
     | .init => if nLams = 0 then 1 else nLams
     | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
+  let paramWidths := inferParamWidths env e kind
+  let retCount :=
+    match kind with
+    | .get =>
+      let nRet := ops.foldl (init := 0) fun acc op =>
+        match op with | .returnU64 _ => acc + 1 | _ => acc
+      if nRet = 0 then 1 else nRet
+    | _ => 1
   return {
     kind, name := n.toString, ixName := IR.ixNameOfLean lean
-    paramCount, sketch, ops
+    paramCount, paramWidths, retCount, sketch, ops
   }
 
 private def peelForalls (e : Expr) : Expr :=
@@ -1399,6 +1930,12 @@ private def valFields : Ops.Val → Array String
   | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
   | .signerKeyN _ | .ownerIsSelf _ => #[]
   | .checkPda _ b => valFields b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
+      valFields l ++ valFields r
+  | .bitNot v => valFields v
+  | .indexGet b _ i _ => valFields b ++ valFields i
+  | .loopIx => #[]
+  | v => if Ops.hasEvmLeaf #[.returnU64 v] then #[] else #[]
 
 private def opFields : Ops.Op → Array String
   | .checkedAddU64 l r => valFields l ++ valFields r
@@ -1413,8 +1950,29 @@ private def opFields : Ops.Op → Array String
         | .u64le v => valFields v
         | _ => #[]) ++
         (match bump with | some v => valFields v | none => #[])
+  | .evmDeposit v => valFields v
+  | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
+  | .evmLog _ v => valFields v
+  | .forAccum _ v => valFields v
+  | .indexSet _ i v _ => valFields i ++ valFields v
+  | .mapGetU64 b k => valFields b ++ valFields k
+  | .mapSetU64 b k v => valFields b ++ valFields k ++ valFields v
+  | .mapGetAddr b a0 a1 a2 => valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2
+  | .mapSetAddr b a0 a1 a2 v =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++ valFields v
+  | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++
+        valFields c0 ++ valFields c1 ++ valFields c2
+  | .mapSetPair b a0 a1 a2 c0 c1 c2 v =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++
+        valFields c0 ++ valFields c1 ++ valFields c2 ++ valFields v
+  | .evmTokenTransfer a b c d e f g =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d ++
+        valFields e ++ valFields f ++ valFields g
+  | .evmTokenBalanceOfSelf a b c => valFields a ++ valFields b ++ valFields c
   | .okState v => valFields v
   | .errorOverflow => #[]
+  | .errorNamed _ => #[]
   | .returnU64 v => valFields v
   | .returnState v => valFields v
 
@@ -1469,10 +2027,13 @@ def inferKind (env : Environment) (n : Name) : Except String IR.MethodKind := do
   let ret := peelForalls info.type
   if isExceptType ret then
     return .increment
-  if isUInt64Type ret then
+  if isUInt64Type ret || (widthOfType ret).isSome then
+    return .get
+  if ret.getAppFn.constName? == some ``Prod then
     return .get
   if let some structName := ret.getAppFn.constName? then
-    if isStructure env structName && structName != ``UInt64 then
+    if isStructure env structName && structName != ``UInt64 &&
+        structName != ``Prod then
       return .init
   throw s!"extract/unsupported: cannot classify {n}"
 

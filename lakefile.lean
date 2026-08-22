@@ -13,3 +13,6 @@ lean_lib Tests
 
 lean_exe solanaLeanAssemble where
   root := `SolanaLean.AssembleMain
+
+lean_exe evmLeanAssemble where
+  root := `SolanaLean.Evm.AssembleMain

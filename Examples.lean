@@ -39,3 +39,8 @@ import Examples.Gate
 import Examples.Nonce
 import Examples.TokenOwner
 import Examples.TokenMs
+import Examples.EvmCtx
+import Examples.TipJar
+import Examples.Lang
+import Examples.Vault
+import Examples.Ownable

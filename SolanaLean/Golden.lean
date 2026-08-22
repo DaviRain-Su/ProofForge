@@ -202,6 +202,26 @@ def extractedClock : Program :=
         ops := #[.returnU64 (.field (.arg 0) "stamped")] }
     ] }
 
+def extractedEvmCtx : Program :=
+  { name := "EvmCtx"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.EvmCtx.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.EvmCtx.stamp", ixName := "stamp", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState .evmBlockNumber]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.EvmCtx.caller", ixName := "caller", paramCount := 0
+        ops := #[.returnU64 .evmCaller] },
+      { kind := .get, name := "Examples.EvmCtx.height", ixName := "height", paramCount := 0
+        ops := #[.returnU64 .evmBlockNumber] },
+      { kind := .get, name := "Examples.EvmCtx.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "dummy")] }
+    ] }
+
 def extractedTransfer : Program :=
   { name := "Transfer"
     slots := #[{ name := "dummy" }]
@@ -214,7 +234,201 @@ def extractedTransfer : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
-def extractedPing : Program :=
+def extractedTipJar : Program :=
+  { name := "TipJar"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TipJar.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TipJar.deposit", ixName := "deposit", paramCount := 1
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmDeposit (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.TipJar.logTip", ixName := "logTip", paramCount := 1
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmLog "Tipped" (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.TipJar.payout", ixName := "payout", paramCount := 4
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmSendEth (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.TipJar.callValue", ixName := "callValue", paramCount := 0
+        ops := #[.returnU64 .evmCallValue] },
+      { kind := .get, name := "Examples.TipJar.callerW0", ixName := "callerW0", paramCount := 0
+        ops := #[.returnU64 .evmCallerW0] },
+      { kind := .get, name := "Examples.TipJar.callerW1", ixName := "callerW1", paramCount := 0
+        ops := #[.returnU64 .evmCallerW1] },
+      { kind := .get, name := "Examples.TipJar.callerW2", ixName := "callerW2", paramCount := 0
+        ops := #[.returnU64 .evmCallerW2] },
+      { kind := .get, name := "Examples.TipJar.chainId", ixName := "chainId", paramCount := 0
+        ops := #[.returnU64 .evmChainId] },
+      { kind := .get, name := "Examples.TipJar.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TipJar.selfBal", ixName := "selfBal", paramCount := 0
+        ops := #[.returnU64 .evmSelfBalance] },
+      { kind := .get, name := "Examples.TipJar.selfLow", ixName := "selfLow", paramCount := 0
+        ops := #[.returnU64 .evmSelf] },
+      { kind := .get, name := "Examples.TipJar.selfW0", ixName := "selfW0", paramCount := 0
+        ops := #[.returnU64 .evmSelfW0] },
+      { kind := .get, name := "Examples.TipJar.selfW1", ixName := "selfW1", paramCount := 0
+        ops := #[.returnU64 .evmSelfW1] },
+      { kind := .get, name := "Examples.TipJar.selfW2", ixName := "selfW2", paramCount := 0
+        ops := #[.returnU64 .evmSelfW2] },
+      { kind := .get, name := "Examples.TipJar.timestamp", ixName := "timestamp", paramCount := 0
+        ops := #[.returnU64 .evmTimestamp] }
+    ] }
+
+def extractedLang : Program :=
+  { name := "Lang"
+    slots := #[
+      { name := "cells_0" }, { name := "cells_1" },
+      { name := "cells_2" }, { name := "cells_3" }
+    ]
+    methods := #[
+      { kind := .init, name := "Examples.Lang.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "Examples.Lang.setAt", ixName := "setAt", paramCount := 2
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.indexSet "cells" (.arg 0) (.arg 1) 4, .okState (.arg 1)]
+            #[.errorNamed "oob"]
+        ] },
+      { kind := .get, name := "Examples.Lang.band", ixName := "band", paramCount := 2
+        ops := #[.returnU64 (.bitAnd (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.bor", ixName := "bor", paramCount := 2
+        ops := #[.returnU64 (.bitOr (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.both", ixName := "both", paramCount := 0
+        retCount := 2
+        ops := #[
+          .returnU64 (.field (.arg 0) "cells_0"),
+          .returnU64 (.field (.arg 0) "cells_1")
+        ] },
+      { kind := .get, name := "Examples.Lang.bnot", ixName := "bnot", paramCount := 1
+        ops := #[.returnU64 (.bitNot (.arg 0))] },
+      { kind := .get, name := "Examples.Lang.bxor", ixName := "bxor", paramCount := 2
+        ops := #[.returnU64 (.bitXor (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "cells_0")] },
+      { kind := .get, name := "Examples.Lang.getAt", ixName := "getAt", paramCount := 1
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.returnU64 (.indexGet (.arg 1) "cells" (.arg 0) 0)]
+            #[.returnU64 (.lit 0)]
+        ] },
+      { kind := .get, name := "Examples.Lang.mask8", ixName := "mask8", paramCount := 1
+        paramWidths := #[1]
+        ops := #[.returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Lang.shl", ixName := "shl", paramCount := 2
+        ops := #[.returnU64 (.shiftL (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.shr", ixName := "shr", paramCount := 2
+        ops := #[.returnU64 (.shiftR (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.sum4", ixName := "sum4", paramCount := 0
+        ops := #[
+          .forAccum 4 (.indexGet (.arg 0) "cells" .loopIx 0),
+          .returnU64 (.indexGet (.arg 0) "cells" .loopIx 0)
+        ] }
+    ] }
+
+def extractedVault : Program :=
+  { name := "Vault"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Vault.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Vault.credit", ixName := "credit", paramCount := 4
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Vault.pull", ixName := "pull", paramCount := 7
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmTokenTransfer (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
+              .returnU64 (.arg 6)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Vault.setU64", ixName := "setU64", paramCount := 2
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetU64 (.lit 0) (.arg 0) (.arg 1), .returnU64 (.arg 1)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Vault.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Vault.getU64", ixName := "getU64", paramCount := 1
+        ops := #[.mapGetU64 (.lit 0) (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Vault.held", ixName := "held", paramCount := 3
+        ops := #[.evmTokenBalanceOfSelf (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Vault.shareOf", ixName := "shareOf", paramCount := 3
+        ops := #[.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] }
+    ] }
+
+def extractedOwnable : Program :=
+  { name := "Ownable"
+    slots := #[
+      { name := "owner0" }, { name := "owner1" },
+      { name := "owner2" }, { name := "value" }
+    ]
+    methods := #[
+      { kind := .init, name := "Examples.Ownable.init", ixName := "initialize", paramCount := 3
+        ops := #[
+          .returnState (.arg 0), .returnState (.arg 1),
+          .returnState (.arg 2), .returnState (.lit 0)
+        ] },
+      { kind := .increment, name := "Examples.Ownable.approve", ixName := "approve", paramCount := 7
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
+              .returnU64 (.arg 6)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Ownable.bump", ixName := "bump", paramCount := 1
+        ops := #[
+          .ite .eq .evmCallerW0 (.field (.arg 1) "owner0")
+            #[.ite .eq .evmCallerW1 (.field (.arg 1) "owner1")
+              #[.ite .eq .evmCallerW2 (.field (.arg 1) "owner2")
+                #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
+                  .okState (.arg 0), .errorOverflow]
+                #[.errorNamed "unauthorized"]]
+              #[.errorNamed "unauthorized"]]
+            #[.errorNamed "unauthorized"]
+        ] },
+      { kind := .increment, name := "Examples.Ownable.logInc", ixName := "logInc", paramCount := 1
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.evmLog "Incremented" (.arg 0), .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Ownable.spend", ixName := "spend", paramCount := 7
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.mapSetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
+              .returnU64 (.arg 6)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Ownable.allowance", ixName := "allowance", paramCount := 6
+        ops := #[
+          .mapGetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5),
+          .returnU64 (.arg 0)
+        ] },
+      { kind := .get, name := "Examples.Ownable.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "value")] },
+      { kind := .get, name := "Examples.Ownable.ownerW0", ixName := "ownerW0", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "owner0")] },
+      { kind := .get, name := "Examples.Ownable.ownerW1", ixName := "ownerW1", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "owner1")] },
+      { kind := .get, name := "Examples.Ownable.ownerW2", ixName := "ownerW2", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "owner2")] }
+      ] }
+
+      def extractedPing : Program :=
   { name := "Ping"
     slots := #[{ name := "dummy" }]
     methods := #[
@@ -663,6 +877,7 @@ def extractedKeccak : Program :=
         ops := #[.returnU64 (.keccak256Lit "ok")] },
       { kind := .get, name := "Examples.Keccak.empty", ixName := "empty", paramCount := 0
         ops := #[.returnU64 (.keccak256Lit "")] }
+
     ] }
 
 def extractedTrio : Program :=
@@ -774,7 +989,8 @@ def programs : Array Program := #[
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
   extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio,
-  extractedGate, extractedNonce, extractedTokenOwner, extractedTokenMs
+  extractedGate, extractedNonce, extractedTokenOwner, extractedTokenMs,
+  extractedEvmCtx, extractedTipJar, extractedLang, extractedVault, extractedOwnable
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

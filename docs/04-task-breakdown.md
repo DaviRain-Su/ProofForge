@@ -22,6 +22,7 @@
 | L2 布局 | 窄整数 / Option / Vector / 无 payload 枚举已绿 | L1 绿 |
 | L3 形状 | 多 init / view 任意叶子已绿 | L1 绿 |
 | L4 recipe | caller / clock / 封闭 CPI | 有具体第二合约 |
+| EVM E0–E8 | 加 `evmCaller` / `evmBlockNumber` | 已绿 |
 
 ## L1 完成定义
 

@@ -30,6 +30,18 @@
 | [l3-003](tasks/l3-003.md) | done | 单字段用户 inductive 作 tag+payload |
 | [l4-001](tasks/l4-001.md) | done | clock.slot + account-0 signer key |
 | [l4-002](tasks/l4-002.md) | done | 封闭 system.transfer |
+| [evm-001](tasks/evm-001.md) | done | Evm.IR + keccak selector |
+| [evm-002](tasks/evm-002.md) | done | Ops → Yul |
+| [evm-003](tasks/evm-003.md) | done | `#evm_build` + locked solc |
+| [evm-004](tasks/evm-004.md) | done | Anvil ctor / increment / get / overflow |
+| [evm-005](tasks/evm-005.md) | done | Pair 多 slot + Anvil |
+| [evm-006](tasks/evm-006.md) | done | 窄槽 + Option 双叶 |
+| [evm-007](tasks/evm-007.md) | done | Darwin / Linux 共用 Anvil 入口 |
+| [evm-008](tasks/evm-008.md) | done | 独立 EVM runtime 叶子 |
+| [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
+| [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
+| [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |
+| [e-own-001](tasks/e-own-001.md) | done | Ownable + 通用 event + allowance |
 | [l4-003](tasks/l4-003.md) | done | 编译期钉死的 invoke 原语 |
 | [l4-004](tasks/l4-004.md) | done | 账户 0 AccountInfo 只读叶子 |
 | [l4-005](tasks/l4-005.md) | done | 表层通用 invoke |
@@ -62,6 +74,7 @@
 | [l4-032](tasks/l4-032.md) | done | keccak256Lit / sol_keccak256 |
 | [l4-033](tasks/l4-033.md) | done | 账户下标叶子收口 |
 | [l4-034](tasks/l4-034.md) | done | 关着的格子一次开完 |
+
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

@@ -1,6 +1,6 @@
 namespace SolanaLean.Ops
 
-/-- 可 load 的值。`clockSlot` / `signerKey0` / `acc*` 是运行时叶子，不是账户槽。 -/
+/-- 可 load 的值。SVM 叶是 `clock*` / `acc*` / PDA / hash；EVM 叶是 `evm*`。 -/
 inductive Val where
   | arg (i : Nat)
   | field (base : Val) (name : String)
@@ -38,6 +38,28 @@ inductive Val where
   | isExecutableN (acc : Nat)
   | signerKeyN (acc : Nat)
   | ownerIsSelf (acc : Nat)
+  | evmCaller
+  | evmBlockNumber
+  | evmTimestamp
+  | evmChainId
+  | evmSelf
+  | evmCallValue
+  | evmSelfBalance
+  | evmCallerW0 | evmCallerW1 | evmCallerW2
+  | evmSelfW0 | evmSelfW1 | evmSelfW2
+  | bitAnd (lhs rhs : Val)
+  | bitOr (lhs rhs : Val)
+  | bitXor (lhs rhs : Val)
+  | bitNot (v : Val)
+  | shiftL (lhs rhs : Val)
+  | shiftR (lhs rhs : Val)
+  | indexGet (base : Val) (name : String) (idx : Val) (len : Nat)
+  | loopIx
+  | addU64 (lhs rhs : Val)
+  | subU64 (lhs rhs : Val)
+  | mapGetU64 (base key : Val)
+  | mapGetAddr (base w0 w1 w2 : Val)
+  | mapGetPair (base o0 o1 o2 s0 s1 s2 : Val)
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where
@@ -70,8 +92,22 @@ inductive Op where
   | ite (cmp : Cmp) (lhs rhs : Val) (thn els : Array Op)
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array CpiWord)
       (seed : Option String := none) (bump : Option Val := none)
+  | evmDeposit (amount : Val)
+  | evmSendEth (w0 w1 w2 amount : Val)
+  | evmLog (name : String) (amount : Val)
+  | forAccum (n : Nat) (addend : Val)
+  | indexSet (name : String) (idx value : Val) (len : Nat)
+  | mapGetU64 (base key : Val)
+  | mapSetU64 (base key value : Val)
+  | mapGetAddr (base w0 w1 w2 : Val)
+  | mapSetAddr (base w0 w1 w2 value : Val)
+  | mapGetPair (base o0 o1 o2 s0 s1 s2 : Val)
+  | mapSetPair (base o0 o1 o2 s0 s1 s2 value : Val)
+  | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Val)
+  | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val)
   | okState (value : Val)
   | errorOverflow
+  | errorNamed (name : String)
   | returnU64 (value : Val)
   | returnState (value : Val)
   deriving BEq, Repr, Inhabited
@@ -288,6 +324,17 @@ def valNeedsWalk : Val → Bool
   | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
   | .checkPda _ b => valNeedsWalk b
   | .field b _ => valNeedsWalk b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
+      valNeedsWalk l || valNeedsWalk r
+  | .bitNot v => valNeedsWalk v
+  | .indexGet b _ i _ => valNeedsWalk b || valNeedsWalk i
+  | .addU64 l r | .subU64 l r => valNeedsWalk l || valNeedsWalk r
+  | .mapGetU64 b k => valNeedsWalk b || valNeedsWalk k
+  | .mapGetAddr b a0 a1 a2 =>
+      valNeedsWalk b || valNeedsWalk a0 || valNeedsWalk a1 || valNeedsWalk a2
+  | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+      valNeedsWalk b || valNeedsWalk a0 || valNeedsWalk a1 || valNeedsWalk a2 ||
+        valNeedsWalk c0 || valNeedsWalk c1 || valNeedsWalk c2
   | _ => false
 
 /-- 兼容旧名：账户 1+ 就要 walk。 -/
@@ -316,8 +363,41 @@ def hasAcc1 (ops : Array Op) : Bool :=
     | .invoke _ _ data _ bump =>
         data.any (fun | .u64le v => valNeedsAcc1 v | _ => false) ||
           (match bump with | some v => valNeedsAcc1 v | none => false)
+    | .evmDeposit v => valNeedsAcc1 v
+    | .evmSendEth a b c d =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d
+    | .evmLog _ v => valNeedsAcc1 v
+    | .forAccum _ v => valNeedsAcc1 v
+    | .indexSet _ i v _ => valNeedsAcc1 i || valNeedsAcc1 v
+    | .mapGetU64 a b => valNeedsAcc1 a || valNeedsAcc1 b
+    | .mapSetU64 a b c => valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c
+    | .mapGetAddr a b c d =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d
+    | .mapSetAddr a b c d e =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c ||
+          valNeedsAcc1 d || valNeedsAcc1 e
+    | .mapGetPair a b c d e f g =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d ||
+          valNeedsAcc1 e || valNeedsAcc1 f || valNeedsAcc1 g
+    | .mapSetPair a b c d e f g h =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d ||
+          valNeedsAcc1 e || valNeedsAcc1 f || valNeedsAcc1 g || valNeedsAcc1 h
+    | .evmTokenTransfer a b c d e f g =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d ||
+          valNeedsAcc1 e || valNeedsAcc1 f || valNeedsAcc1 g
+    | .evmTokenBalanceOfSelf a b c =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c
     | .okState v | .returnU64 v | .returnState v => valNeedsAcc1 v
-    | .errorOverflow => false
+    | .errorOverflow | .errorNamed _ => false
+
+def hasEvmDeposit (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .evmDeposit _ => true | _ => false)
+
+def hasEvmSendEth (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .evmSendEth .. => true | _ => false)
+
+def hasEvmLog (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .evmLog .. => true | _ => false)
 
 private def maxValAccounts (l r : Val) : Nat :=
   Nat.max (valMinAccounts l) (valMinAccounts r)
@@ -334,7 +414,42 @@ def opMinAccounts : Op → Nat
       let fromBump := match bump with | some v => valMinAccounts v | none => 0
       Nat.max fromData fromBump
   | .okState v | .returnU64 v | .returnState v => valMinAccounts v
-  | .errorOverflow => 0
+  | .errorOverflow | .errorNamed _ => 0
+  | .evmDeposit v | .evmLog _ v | .forAccum _ v => valMinAccounts v
+  | .evmSendEth a b c d =>
+      Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+        (Nat.max (valMinAccounts c) (valMinAccounts d))
+  | .indexSet _ i v _ => Nat.max (valMinAccounts i) (valMinAccounts v)
+  | .mapGetU64 a b => Nat.max (valMinAccounts a) (valMinAccounts b)
+  | .mapSetU64 a b c =>
+      Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b)) (valMinAccounts c)
+  | .mapGetAddr a b c d =>
+      Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+        (Nat.max (valMinAccounts c) (valMinAccounts d))
+  | .mapSetAddr a b c d e =>
+      Nat.max
+        (Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+          (Nat.max (valMinAccounts c) (valMinAccounts d)))
+        (valMinAccounts e)
+  | .mapGetPair a b c d e f g =>
+      Nat.max
+        (Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+          (Nat.max (valMinAccounts c) (valMinAccounts d)))
+        (Nat.max (Nat.max (valMinAccounts e) (valMinAccounts f)) (valMinAccounts g))
+  | .mapSetPair a b c d e f g h =>
+      Nat.max
+        (Nat.max
+          (Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+            (Nat.max (valMinAccounts c) (valMinAccounts d)))
+          (Nat.max (Nat.max (valMinAccounts e) (valMinAccounts f)) (valMinAccounts g)))
+        (valMinAccounts h)
+  | .evmTokenTransfer a b c d e f g =>
+      Nat.max
+        (Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+          (Nat.max (valMinAccounts c) (valMinAccounts d)))
+        (Nat.max (Nat.max (valMinAccounts e) (valMinAccounts f)) (valMinAccounts g))
+  | .evmTokenBalanceOfSelf a b c =>
+      Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b)) (valMinAccounts c)
 
 def opsMinAccounts (ops : Array Op) : Nat :=
   let rec go (fuel : Nat) (ops : Array Op) (acc : Nat) : Nat :=
@@ -369,5 +484,145 @@ def hasCheckedMod (ops : Array Op) : Bool :=
 def hasCheckedArith (ops : Array Op) : Bool :=
   hasCheckedAdd ops || hasCheckedSub ops ||
     hasCheckedMul ops || hasCheckedDiv ops || hasCheckedMod ops
+
+def isLangVal : Val → Bool
+  | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR ..
+  | .indexGet .. | .loopIx => true
+  | .field b _ => isLangVal b
+  | _ => false
+
+def isLangLeaf : Val → Bool
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
+      isLangLeaf l || isLangLeaf r
+  | .bitNot v => isLangLeaf v
+  | .indexGet b _ i _ => isLangLeaf b || isLangLeaf i
+  | .loopIx => true
+  | .field b _ => isLangLeaf b
+  | _ => false
+
+def isEvmLeaf : Val → Bool
+  | .evmCaller | .evmBlockNumber | .evmTimestamp | .evmChainId
+  | .evmSelf | .evmCallValue | .evmSelfBalance
+  | .evmCallerW0 | .evmCallerW1 | .evmCallerW2
+  | .evmSelfW0 | .evmSelfW1 | .evmSelfW2 => true
+  | .field b _ => isEvmLeaf b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
+      isEvmLeaf l || isEvmLeaf r
+  | .bitNot v => isEvmLeaf v
+  | .indexGet b _ i _ => isEvmLeaf b || isEvmLeaf i
+  | _ => false
+
+private def cpiWordEvm : CpiWord → Bool
+  | .u64le v => isEvmLeaf v
+  | _ => false
+
+def hasEvmLeaf (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .checkedAddU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedSubU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedMulU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedDivU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .checkedModU64 l r => isEvmLeaf l || isEvmLeaf r
+    | .ite _ l r _ _ => isEvmLeaf l || isEvmLeaf r
+    | .invoke _ _ data _ bump =>
+        data.any cpiWordEvm ||
+          (match bump with | some v => isEvmLeaf v | none => false)
+    | .evmDeposit v => isEvmLeaf v
+    | .evmSendEth a b c d =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
+    | .evmLog _ v => isEvmLeaf v
+    | .forAccum _ v => isEvmLeaf v
+    | .indexSet _ i v _ => isEvmLeaf i || isEvmLeaf v
+    | .mapGetU64 a b => isEvmLeaf a || isEvmLeaf b
+    | .mapSetU64 a b c => isEvmLeaf a || isEvmLeaf b || isEvmLeaf c
+    | .mapGetAddr a b c d =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
+    | .mapSetAddr a b c d e =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d || isEvmLeaf e
+    | .mapGetPair a b c d e f g =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
+          isEvmLeaf e || isEvmLeaf f || isEvmLeaf g
+    | .mapSetPair a b c d e f g h =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
+          isEvmLeaf e || isEvmLeaf f || isEvmLeaf g || isEvmLeaf h
+    | .evmTokenTransfer a b c d e f g =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
+          isEvmLeaf e || isEvmLeaf f || isEvmLeaf g
+    | .evmTokenBalanceOfSelf a b c =>
+        isEvmLeaf a || isEvmLeaf b || isEvmLeaf c
+    | .okState v => isEvmLeaf v
+    | .returnU64 v => isEvmLeaf v
+    | .returnState v => isEvmLeaf v
+    | .errorOverflow | .errorNamed _ => false
+
+private def cpiWordLang : CpiWord → Bool
+  | .u64le v => isLangLeaf v
+  | _ => false
+
+def hasLangLeaf (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .checkedAddU64 l r => isLangLeaf l || isLangLeaf r
+    | .checkedSubU64 l r => isLangLeaf l || isLangLeaf r
+    | .checkedMulU64 l r => isLangLeaf l || isLangLeaf r
+    | .checkedDivU64 l r => isLangLeaf l || isLangLeaf r
+    | .checkedModU64 l r => isLangLeaf l || isLangLeaf r
+    | .ite _ l r _ _ => isLangLeaf l || isLangLeaf r
+    | .invoke _ _ data _ bump =>
+        data.any cpiWordLang ||
+          (match bump with | some v => isLangLeaf v | none => false)
+    | .evmDeposit v => isLangLeaf v
+    | .evmSendEth a b c d =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d
+    | .evmLog _ v => isLangLeaf v
+    | .forAccum _ v => isLangLeaf v
+    | .indexSet _ i v _ => isLangLeaf i || isLangLeaf v
+    | .mapGetU64 a b => isLangLeaf a || isLangLeaf b
+    | .mapSetU64 a b c => isLangLeaf a || isLangLeaf b || isLangLeaf c
+    | .mapGetAddr a b c d =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d
+    | .mapSetAddr a b c d e =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d || isLangLeaf e
+    | .mapGetPair a b c d e f g =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d ||
+          isLangLeaf e || isLangLeaf f || isLangLeaf g
+    | .mapSetPair a b c d e f g h =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d ||
+          isLangLeaf e || isLangLeaf f || isLangLeaf g || isLangLeaf h
+    | .evmTokenTransfer a b c d e f g =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d ||
+          isLangLeaf e || isLangLeaf f || isLangLeaf g
+    | .evmTokenBalanceOfSelf a b c =>
+        isLangLeaf a || isLangLeaf b || isLangLeaf c
+    | .okState v => isLangLeaf v
+    | .returnU64 v => isLangLeaf v
+    | .returnState v => isLangLeaf v
+    | .errorOverflow | .errorNamed _ => false
+
+def hasForAccum (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .forAccum .. => true | _ => false)
+
+def hasIndexSet (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .indexSet .. => true | _ => false)
+
+def hasErrorNamed (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .errorNamed _ => true | _ => false)
+
+def hasMapOp (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
+    | .mapGetPair .. | .mapSetPair .. => true
+    | _ => false
+
+def hasTokenOp (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. => true
+    | _ => false
+
+def hasLangOp (ops : Array Op) : Bool :=
+  hasForAccum ops || hasIndexSet ops || hasErrorNamed ops || hasLangLeaf ops
+
+def hasEvmEffect (ops : Array Op) : Bool :=
+  hasEvmDeposit ops || hasEvmSendEth ops || hasEvmLog ops || hasEvmLeaf ops ||
+    hasMapOp ops || hasTokenOp ops
 
 end SolanaLean.Ops

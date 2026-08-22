@@ -8,6 +8,11 @@ import Examples.Phase
 import Examples.Choice
 import Examples.Clock
 import Examples.Transfer
+import Examples.EvmCtx
+import Examples.TipJar
+import Examples.Lang
+import Examples.Vault
+import Examples.Ownable
 import Examples.Ping
 import Examples.Call
 import Examples.Info
@@ -40,6 +45,7 @@ import Examples.Gate
 import Examples.Nonce
 import Examples.TokenOwner
 import Examples.TokenMs
+
 
 #solana_build Examples.Counter
 
@@ -122,6 +128,36 @@ import Examples.TokenMs
 #solana_build Examples.TokenOwner
 
 #solana_build Examples.TokenMs
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.EvmCtx
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.TipJar
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.Lang
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.Vault
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#solana_build Examples.Ownable
 
 /--
 error: extract/unsupported: no solana_entry
