@@ -8,7 +8,7 @@
 
 递归下降 `Expr`。`x ≤ u64Max - y` → `checkedAddU64`；`y ≤ x` → `checkedSubU64`；`y = 0 ∨ x ≤ u64Max / y` → `checkedMulU64`；`y ≠ 0` 后 `/` `%` → `checkedDivU64` / `checkedModU64`。比较认 `=` `≠` `<` `≤` `>` `≥`。假支不必是 overflow。可变方法无 checked 算术则 fail closed。
 
-`fields` 默认从 `init` 返回类型收：必须是已注册 `structure`、无 `extends`、每个直接字段 `UInt64`。声明顺序 = 账户槽顺序。`#solana_extract … with "a","b"` 仍可覆盖。ops 里出现的字段名必须在表内。
+`slots` 默认从 `init` 返回类型收：必须是已注册 `structure`、无 `extends`。叶子只接受 `UInt8/16/32/64` 与 `Option UInt64`（展开双叶）。`#solana_extract … with "a","b"` 仍可覆盖槽名，且必须与推断表一致。ops 里出现的字段名必须在表内。
 
 `@[solana_entry]` 只是标记。种类从返回类型推断：structure → init；`Except` → mutate；`UInt64` → view。Lean `init` 的链上名是 `initialize`。同一名字空间允许多个 mutate。重复链上名 fail closed。
 
@@ -23,5 +23,6 @@
 
 ## Tests
 
-`Tests/ExtractSpec.lean`：Counter / Pair（无 `with`）抽出；非 `UInt64` 字段拒绝。
+`Tests/ExtractSpec.lean`：Counter / Pair / Flag / Maybe 抽出；非支持叶子拒绝。
 `Tests/BuildSpec.lean`：`#solana_build` 收入口；无标记 fail closed。
+`Tests/LayoutSpec.lean`：窄字段偏移、Option 双叶、layout marker。

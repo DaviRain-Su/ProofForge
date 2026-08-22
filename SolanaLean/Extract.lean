@@ -81,7 +81,31 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
           else
             match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
             | some b => some (.field b proj)
-            | none => none
+            | none =>
+              -- 参数本身就是 state（`.bvar`），投影挂在它上面。
+              match e.getAppArgs[e.getAppArgs.size - 1]! with
+              | .bvar i =>
+                if proj == "slot" then some (.field (.arg i) "slot_tag")
+                else some (.field (.arg i) proj)
+              | _ => none
+        else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8) &&
+            e.getAppArgs.size ≥ 1 then
+          asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else if (isConstNamed e ``Option.isSome || endsWith e ".isSome") && e.getAppArgs.size ≥ 1 then
+          match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.field b _) => some (.field b "slot_tag")
+          | some b => some (.field b "slot_tag")
+          | none => none
+        else if endsWith e ".u64Max" then
+          some (.lit (~~~(0 : UInt64)))
+        else if isConstNamed e ``Bool.true || endsWith e ".true" then
+          some (.lit 1)
+        else if isConstNamed e ``Bool.false || endsWith e ".false" then
+          some (.lit 0)
+        else if isConstNamed e ``Option.none || endsWith e ".none" then
+          some (.lit 0)
+        else if (isConstNamed e ``Option.some || endsWith e ".some") && e.getAppArgs.size ≥ 1 then
+          asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else none
       else none
 
@@ -97,7 +121,7 @@ private def asSubFromMax (e : Expr) : Option Ops.Val :=
     else none
   else none
 
-/-- `x ≤ u64Max - y`  →  checked add x y -/
+/-- `x ≤ u64Max - y`  →  checked add x y。单独的 `x ≤ u64Max` 不是 add。 -/
 private def asCheckedAddGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``LE.le then
@@ -190,17 +214,52 @@ private def asCmp (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
       | some (.ne, l, r) => some (.eq, l, r)
       | _ => none
     else none
-  else asCmpCore e
+  else
+    match asCmpCore e with
+    | some t => some t
+    | none =>
+      if isConstNamed e ``Eq then
+        match binArgs e with
+        | some (l, r) =>
+          let l := strip l
+          let r := strip r
+          let trueR := isConstNamed r ``Bool.true || endsWith r ".true"
+          let noneR := isConstNamed r ``Option.none || endsWith r ".none"
+          let noneL := isConstNamed l ``Option.none || endsWith l ".none"
+          if trueR && (isConstNamed l ``Option.isSome || endsWith l ".isSome") then
+            some (.ne, .field (.arg 0) "slot_tag", .lit 0)
+          else if noneR then
+            match val l with
+            | some lv => some (.eq, lv, .lit 0)
+            | none => none
+          else if noneL then
+            match val r with
+            | some rv => some (.eq, rv, .lit 0)
+            | none => none
+          else none
+        | none => none
+      else if isConstNamed e ``Option.isSome || endsWith e ".isSome" then
+        let args := e.getAppArgs
+        if args.size ≥ 1 then
+          match val args[args.size - 1]! with
+          | some (.field b _) => some (.ne, .field b "slot_tag", .lit 0)
+          | some b => some (.ne, .field b "slot_tag", .lit 0)
+          | none => none
+        else none
+      else none
 
-/-- `x ≥ y` / `y ≤ x`  →  checked sub x y -/
+/-- `x ≥ y` / `y ≤ x`  →  checked sub x y。`x ≤ lit` 是上界（255 / u64Max），不是 sub。 -/
 private def asCheckedSubGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
   match asCmp e with
+  | some (.le, _, .lit _) => none
   | some (.le, rhs, lhs) => some (lhs, rhs)
   | some (.ge, lhs, rhs) => some (lhs, rhs)
   | _ => none
 
+/-- `den ≠ 0` 才是除法守卫。两边都是字面量的 `0 ≠ 1` 不算。 -/
 private def asNeZero (e : Expr) : Option Ops.Val :=
   match asCmp e with
+  | some (.ne, .lit _, .lit _) => none
   | some (.ne, v, .lit 0) => some v
   | some (.ne, .lit 0, v) => some v
   | _ => none
@@ -224,6 +283,34 @@ private def asStateMk (e : Expr) (preferLast := false) : Option Ops.Val :=
       | none => val args[args.size - 1]!
   else none
 
+private def asOptionPayload (e : Expr) : Option Ops.Val :=
+  let e := strip e
+  if isConstNamed e ``Option.none || endsWith e ".none" then
+    some (.lit 0)
+  else if isConstNamed e ``Option.some || endsWith e ".some" then
+    let args := e.getAppArgs
+    if args.size ≥ 1 then val args[args.size - 1]! else none
+  else none
+
+/-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload。 -/
+private def asStateFields (e : Expr) : Option (Array Ops.Val) :=
+  let e := strip e
+  if endsWith e ".State.mk" || endsWith e ".mk" then
+    Id.run do
+      let mut acc : Array Ops.Val := #[]
+      for a in e.getAppArgs do
+        match asOptionPayload a with
+        | some (.lit 0) =>
+          acc := acc.push (.lit 0) |>.push (.lit 0)
+        | some v =>
+          acc := acc.push (.lit 1) |>.push v
+        | none =>
+          match val a with
+          | some v => acc := acc.push v
+          | none => pure ()
+      if acc.isEmpty then none else some acc
+  else none
+
 private def asOkState (e : Expr) : Option Ops.Val :=
   let e := peelLets (strip e)
   if isConstNamed e ``Except.ok then
@@ -232,7 +319,18 @@ private def asOkState (e : Expr) : Option Ops.Val :=
       let pair := strip args[args.size - 1]!
       if isConstNamed pair ``Prod.mk then
         let pargs := pair.getAppArgs
-        if pargs.size ≥ 2 then asStateMk pargs[pargs.size - 2]! true else none
+        if pargs.size ≥ 2 then
+          let st := pargs[pargs.size - 2]!
+          match asOptionPayload st with
+          | some v => some v
+          | none =>
+            match asStateMk st true with
+            | some v => some v
+            | none =>
+              -- `{ slot := none/some n }` 的 ctor 参数
+              let args := (strip st).getAppArgs
+              args.findSome? asOptionPayload <|> asStateMk st true
+        else none
       else asStateMk pair true
     else none
   else none
@@ -246,10 +344,21 @@ private def isErrorOverflow (e : Expr) : Bool :=
     else false
   else false
 
+/-- 只写第一个槽、其余清零：第二槽起全是 `lit 0` 时压成一条 `returnState`。 -/
+private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
+  if vs.size ≤ 1 then
+    vs.map Ops.Op.returnState
+  else if vs[1:].all (fun | .lit 0 => true | _ => false) then
+    #[.returnState vs[0]!]
+  else
+    vs.map Ops.Op.returnState
+
 private def decodePlain (e : Expr) : Except String (Array Ops.Op) :=
   let e := peelLets (strip e)
   if let some v := asOkState e then
     .ok #[.okState v]
+  else if let some vs := asStateFields e then
+    .ok (returnStatesOf vs)
   else if let some v := asStateMk e then
     .ok #[.returnState v]
   else if let some v := val e then
@@ -290,7 +399,12 @@ private def decodeExpr (fuel : Nat) (e : Expr) : Except String (Array Ops.Op) :=
       let t := peelLets args[args.size - 2]!
       let f := peelLets args[args.size - 1]!
       if isErrorOverflow f then
-        if let some condE := findBy args (fun a => (asCheckedAddGuard a).isSome) then
+        if let some condE := findBy args (fun a => (asCmp a).isSome && (asCheckedAddGuard a).isNone && (asCheckedMulGuard a).isNone && (asCheckedSubGuard a).isNone && (asNeZero a).isNone) then
+          match asCmp condE, asOkState t with
+          | some (cmp, lv, rv), some v =>
+            return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
+          | _, _ => return .error "extract/unsupported: ite then"
+        else if let some condE := findBy args (fun a => (asCheckedAddGuard a).isSome) then
           match asCheckedAddGuard condE, asOkState t with
           | some (lhs, rhs), some v =>
             return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
@@ -337,10 +451,24 @@ def decodeBody (e : Expr) : Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
   decodeExpr 16 body
 
-/-- 可变入口必须是带 overflow 假支的 checked ite。 -/
+private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel' + 1 =>
+    ops.any fun
+      | .okState (.field _ n) => n.endsWith "_tag" || n.endsWith "_p0"
+      | .okState (.lit _) => true
+      | .okState (.arg _) => true
+      | .ite _ _ _ t f => writesOptionLeaf fuel' t || writesOptionLeaf fuel' f
+      | _ => false
+
+private def hasIte (ops : Array Ops.Op) : Bool :=
+  ops.any fun | .ite .. => true | _ => false
+
+/-- 可变入口必须有 checked 算术、Option 双叶，或比较 ite（窄宽上界）。 -/
 def decodeMutating (e : Expr) : Except String (Array Ops.Op) := do
   let ops ← decodeBody e
-  if Ops.hasCheckedArith ops then
+  if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"
@@ -366,8 +494,8 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
   let (nLams, _) := peelLams e
   let paramCount :=
     match kind with
-    | .init | .increment => 1
-    | .get => if nLams ≤ 1 then 0 else nLams - 1
+    | .init => 1
+    | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
   return {
     kind, name := n.toString, ixName := IR.ixNameOfLean lean
     paramCount, sketch, ops
@@ -386,13 +514,35 @@ private def peelForalls (e : Expr) : Expr :=
 private def isUInt64Type (e : Expr) : Bool :=
   e.consumeMData.getAppFn.constName? == some ``UInt64
 
-private def fieldIsUInt64 (env : Environment) (structName fieldName : Name) : Bool :=
+private def fieldTypeExpr (env : Environment) (structName fieldName : Name) : Option Expr :=
   match getProjFnForField? env structName fieldName with
-  | none => false
+  | none => none
   | some proj =>
     match env.find? proj with
-    | none => false
-    | some info => isUInt64Type (peelForalls info.type)
+    | none => none
+    | some info => some (peelForalls info.type)
+
+private def leafSlots (name : String) (ty : Expr) : Except String (Array IR.Slot) :=
+  let ty := ty.consumeMData
+  if ty.getAppFn.constName? == some ``UInt64 then
+    .ok #[{ name, width := 8, abi := "u64-le" }]
+  else if ty.getAppFn.constName? == some ``UInt32 then
+    .ok #[{ name, width := 4, abi := "u32-le" }]
+  else if ty.getAppFn.constName? == some ``UInt16 then
+    .ok #[{ name, width := 2, abi := "u16-le" }]
+  else if ty.getAppFn.constName? == some ``UInt8 then
+    .ok #[{ name, width := 1, abi := "u8-le" }]
+  else if ty.getAppFn.constName? == some ``Option then
+    let args := ty.getAppArgs
+    if args.size ≥ 1 && args[args.size - 1]!.consumeMData.getAppFn.constName? == some ``UInt64 then
+      .ok #[
+        { name := s!"{name}_tag", width := 8, abi := "u64-le" },
+        { name := s!"{name}_p0", width := 8, abi := "u64-le" }
+      ]
+    else
+      .error s!"extract/unsupported: field {name} is not Option UInt64"
+  else
+    .error s!"extract/unsupported: field {name} is not a supported leaf"
 
 /-- `Examples.Counter.init` → `Counter`。 -/
 def programNameOfInit (n : Name) : String :=
@@ -401,8 +551,8 @@ def programNameOfInit (n : Name) : String :=
   | .str _ "init" => "Program"
   | _ => "Program"
 
-/-- 从 `init` 返回类型收字段。必须是无 `extends`、全 `UInt64` 的 structure。 -/
-def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
+/-- 从 `init` 返回类型收槽。无 `extends`。叶子：UInt8/16/32/64 与 Option UInt64。 -/
+def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.Slot) := do
   let some info := env.find? initName
     | throw s!"extract/unsupported: unknown {initName}"
   let some structName := (peelForalls info.type).getAppFn.constName?
@@ -414,14 +564,17 @@ def inferFields (env : Environment) (initName : Name) : Except String (Array Str
   let names := getStructureFields env structName
   if names.isEmpty then
     throw "extract/unsupported: structure has no fields"
-  let mut fields : Array String := #[]
+  let mut slots : Array IR.Slot := #[]
   for n in names do
     if (isSubobjectField? env structName n).isSome then
       throw "extract/unsupported: structure extends"
-    unless fieldIsUInt64 env structName n do
-      throw s!"extract/unsupported: field {n} is not UInt64"
-    fields := fields.push n.toString
-  return fields
+    let some ty := fieldTypeExpr env structName n
+      | throw s!"extract/unsupported: field {n} has no type"
+    slots := slots ++ (← leafSlots n.toString ty)
+  return slots
+
+def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
+  return (← inferSlots env initName).map (·.name)
 
 private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
@@ -456,19 +609,19 @@ def extractProgram (env : Environment)
   match Profile.checkAll env #[initName, incrementName, getName] with
   | .reject reason => throw reason
   | .accept => pure ()
-  let inferred ← inferFields env initName
-  let fields ←
+  let inferred ← inferSlots env initName
+  let slots ←
     match fields? with
     | none => pure inferred
     | some fs =>
-      if fs == inferred then pure fs
-      else throw s!"extract/unsupported: fields {fs} != inferred {inferred}"
+      if fs == inferred.map (·.name) then pure inferred
+      else throw s!"extract/unsupported: fields {fs} != inferred {inferred.map (·.name)}"
   let initM ← extractMethod env .init initName
   let incM ← extractMethod env .increment incrementName
   let getM ← extractMethod env .get getName
   let program : IR.Program := {
     name := programName.getD (programNameOfInit initName)
-    fields
+    slots
     methods := #[initM, incM, getM]
   }
   unless IR.isCounterShape program do
@@ -527,13 +680,13 @@ def extractModule (env : Environment) (ns : Name)
   if views.isEmpty then
     throw "extract/unsupported: missing view method"
   let initName := inits[0]!
-  let inferred ← inferFields env initName
-  let fields ←
+  let inferred ← inferSlots env initName
+  let slots ←
     match fields? with
     | none => pure inferred
     | some fs =>
-      if fs == inferred then pure fs
-      else throw s!"extract/unsupported: fields {fs} != inferred {inferred}"
+      if fs == inferred.map (·.name) then pure inferred
+      else throw s!"extract/unsupported: fields {fs} != inferred {inferred.map (·.name)}"
   let initM ← extractMethod env .init initName
   let mut methods : Array IR.Method := #[initM]
   let mut seen : Array String := #[initM.ixName]
@@ -551,7 +704,7 @@ def extractModule (env : Environment) (ns : Name)
     methods := methods.push m
   let program : IR.Program := {
     name := programNameOfInit initName
-    fields
+    slots
     methods
   }
   unless IR.isCounterShape program do

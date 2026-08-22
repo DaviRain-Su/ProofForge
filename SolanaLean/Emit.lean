@@ -71,35 +71,66 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
     .ok "[r6 + INSTRUCTION_DATA + 8]"
   | .lit _ => .error "extract/unsupported: lit has no mem"
 
+private def loadInsn (width : Nat) : Except String String :=
+  match width with
+  | 1 => .ok "ldxb"
+  | 2 => .ok "ldxh"
+  | 4 => .ok "ldxw"
+  | 8 => .ok "ldxdw"
+  | n => .error s!"extract/unsupported: load width {n}"
+
+private def storeInsn (width : Nat) : Except String String :=
+  match width with
+  | 1 => .ok "stxb"
+  | 2 => .ok "stxh"
+  | 4 => .ok "stxw"
+  | 8 => .ok "stxdw"
+  | n => .error s!"extract/unsupported: store width {n}"
+
+private def widthOfVal (p : IR.Program) (v : Ops.Val) : Nat :=
+  match v with
+  | .field _ name => (IR.fieldWidth p name).getD 8
+  | _ => 8
+
 private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
   match v with
   | .lit n =>
-    .ok s!"  ; load lit {n}\n  lddw r1, {n.toNat}\n  stxdw [r10 - {stackOff}], r1\n"
+    .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
   | _ => do
     let mem ← memOfVal p v
-    return s!"  ; load {repr v}\n  ldxdw r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+    let insn ← loadInsn (widthOfVal p v)
+    return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
 private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Except String String :=
-  match IR.fieldOffset p name with
-  | none => .error s!"extract/unsupported: unknown field {name}"
-  | some off =>
-    .ok s!"  ldxdw r1, [r10 - {fromStack}]\n  stxdw [r6 + ACC0_DATA + {off}], r1\n"
+  match IR.fieldOffset p name, IR.fieldWidth p name with
+  | none, _ => .error s!"extract/unsupported: unknown field {name}"
+  | _, none => .error s!"extract/unsupported: unknown field {name}"
+  | some off, some w => do
+    let insn ← storeInsn w
+    .ok s!"  ldxdw r1, [r10 - {fromStack}]\n  {insn} [r6 + ACC0_DATA + {off}], r1\n"
 
-private def emitInitBody (p : IR.Program) (marker : String) (v : Ops.Val) : Except String String := do
-  let load ← loadVal p v 8
-  let store ←
-    match p.fields[0]? with
-    | some name => storeField p name 8
-    | none => .error "extract/unsupported: no fields"
-  let mut zeroOthers := ""
-  for name in p.fields[1:] do
-    match IR.fieldOffset p name with
-    | some off =>
-      zeroOthers := zeroOthers ++ s!"  lddw r1, 0\n  stxdw [r6 + ACC0_DATA + {off}], r1\n"
-    | none => pure ()
-  return s!"\
+private def emitInitBody (p : IR.Program) (marker : String) (ops : Array Ops.Op) : Except String String := do
+  let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
+  if vs.isEmpty then
+    .error "extract/unsupported: init missing returnState"
+  else do
+    let mut body := ""
+    let mut i : Nat := 0
+    for s in p.slots do
+      if h : i < vs.size then
+        let load ← loadVal p vs[i] 8
+        let store ← storeField p s.name 8
+        body := body ++ load ++ store
+      else
+        match IR.fieldOffset p s.name with
+        | some off =>
+          let insn ← storeInsn s.width
+          body := body ++ s!"  lddw r1, 0\n  {insn} [r6 + ACC0_DATA + {off}], r1\n"
+        | none => pure ()
+      i := i + 1
+    return s!"\
 body_initialize:
-{zeroOthers}{load}{store}  lddw r1, {marker}
+{body}  lddw r1, {marker}
   stxdw [r6 + ACC0_DATA + 0], r1
   lddw r0, 0
   exit
@@ -108,7 +139,7 @@ body_initialize:
 private def destField (p : IR.Program) (lhs : Ops.Val) : String :=
   match lhs with
   | .field _ n => n
-  | _ => p.fields[0]?.getD "value"
+  | _ => (p.slots[0]?.map (·.name)).getD "value"
 
 private def emitOverflowExit (label : String) : String :=
   s!"err_{label}:\n  lddw r0, {overflowCode}\n  exit\n"
@@ -156,7 +187,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       | .checkedModU64 l _ => some (destField p l)
       | _ => none) with
     | some d => d
-    | none => p.fields[0]?.getD "value"
+    | none => (p.slots[0]?.map (·.name)).getD "value"
   for op in ops do
     match op with
     | .checkedAddU64 l r =>
@@ -208,12 +239,55 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         jmpIf cmp thenLab ++
         s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
     | .okState v =>
-      match v with
-      | .lit k =>
-        acc := acc ++ s!"  lddw r1, {k.toNat}\n  stxdw [r10 - 24], r1\n"
-        acc := acc ++ (← emitStoreAndReturn p destHint 24)
-      | _ =>
-        acc := acc ++ (← emitStoreAndReturn p destHint 24)
+      let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
+      if hasOpt then
+        let tagName :=
+          match p.slots.find? (fun s => s.name.endsWith "_tag") with
+          | some s => s.name
+          | none => destHint
+        let payName :=
+          match p.slots.find? (fun s => s.name.endsWith "_p0") with
+          | some s => s.name
+          | none => destHint
+        match v with
+        | .lit 0 =>
+          acc := acc ++ "  lddw r1, 0\n  stxdw [r10 - 24], r1\n"
+          acc := acc ++ (← storeField p tagName 24)
+          acc := acc ++ (← storeField p payName 24)
+          acc := acc ++ emitReturnU64 24
+        | .lit k =>
+          acc := acc ++ "  lddw r1, 1\n  stxdw [r10 - 16], r1\n"
+          acc := acc ++ (← storeField p tagName 16)
+          acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
+          acc := acc ++ (← storeField p payName 24)
+          acc := acc ++ emitReturnU64 24
+        | _ =>
+          let load ← loadVal p v 24
+          acc := acc ++ "  lddw r1, 1\n  stxdw [r10 - 16], r1\n"
+          acc := acc ++ (← storeField p tagName 16)
+          acc := acc ++ load
+          acc := acc ++ (← storeField p payName 24)
+          acc := acc ++ emitReturnU64 24
+      else
+        match v with
+        | .lit k =>
+          acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
+          acc := acc ++ (← emitStoreAndReturn p destHint 24)
+        | .field _ fname =>
+          if Ops.hasCheckedArith ops || fname == destHint then
+            acc := acc ++ (← emitStoreAndReturn p destHint 24)
+          else do
+            -- 窄字段赋值：okState 抽出的是未改槽，写回指令参数到 dest。
+            let load ← loadVal p (.arg 0) 24
+            acc := acc ++ load
+            acc := acc ++ (← emitStoreAndReturn p destHint 24)
+        | _ =>
+          if Ops.hasCheckedArith ops then
+            acc := acc ++ (← emitStoreAndReturn p destHint 24)
+          else do
+            let load ← loadVal p v 24
+            acc := acc ++ load
+            acc := acc ++ (← emitStoreAndReturn p destHint 24)
     | .errorOverflow =>
       acc := acc ++ emitOverflowExit label
     | .returnU64 v =>
@@ -221,7 +295,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       acc := acc ++ load ++ emitReturnU64 8
     | .returnState v =>
       let load ← loadVal p v 8
-      let dest := p.fields[0]?.getD "value"
+      let dest := (p.slots[0]?.map (·.name)).getD "value"
       acc := acc ++ load ++ (← emitStoreAndReturn p dest 8)
   return (acc, n)
 
@@ -277,11 +351,10 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   let label := handlerLabel m
   match m.kind with
   | .init =>
-    let v ← initVal m.ops
-    let body ← emitInitBody p marker v
+    let body ← emitInitBody p marker m.ops
     return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if !Ops.hasCheckedArith m.ops then
+    if !(Ops.hasCheckedArith m.ops || m.ops.any (fun | .ite .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
       let body ← emitMutBody p label m.ops

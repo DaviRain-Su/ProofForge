@@ -1,6 +1,8 @@
 import SolanaLean
 import Examples.Counter
 import Examples.Pair
+import Examples.Flag
+import Examples.Maybe
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -30,7 +32,7 @@ error: extract/unsupported: mutating method missing checked arith
 #solana_extract Examples.Counter.init Tests.Fixtures.wrappingSub Examples.Counter.get
 
 /--
-error: extract/unsupported: field flag is not UInt64
+error: extract/unsupported: field flag is not a supported leaf
 -/
 #guard_msgs (error) in
 #solana_extract Tests.Fixtures.initFlag Tests.Fixtures.creditFlag Tests.Fixtures.getFlagValue
@@ -48,6 +50,10 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Counter.init Examples.Counter.modulo Examples.Counter.get
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
+
+#solana_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag
+
+#solana_extract Examples.Maybe.init Examples.Maybe.setSome Examples.Maybe.isSome
 
 /--
 error: extract/unsupported: mutating method missing checked arith

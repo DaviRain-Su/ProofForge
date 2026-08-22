@@ -61,3 +61,9 @@
 | T-L1-13 | happy | 同一 Program 两次 digest | 相等 |
 | T-L1-14 | happy | 改一个 op | digest 变 |
 | T-L1-15 | happy | 发射文本 | 含 `digest=` |
+| T-L2-01 | happy | Flag slots | flag 偏移 8 宽 1；count 偏移 9 宽 8 |
+| T-L2-02 | happy | Maybe slots | slot_tag 8、slot_p0 16 |
+| T-L2-03 | error | 嵌套 Option / Bool | `extract/unsupported` |
+| T-L2-04 | happy | Flag Mollusk init | flag=0，count=7 |
+| T-L2-05 | happy | Maybe none | 两叶清零 |
+| T-L2-06 | happy | Maybe some 77 | tag=1，payload=77 |

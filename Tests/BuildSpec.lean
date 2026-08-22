@@ -1,10 +1,16 @@
 import SolanaLean
 import Examples.Counter
 import Examples.Pair
+import Examples.Flag
+import Examples.Maybe
 
 #solana_build Examples.Counter
 
 #solana_build Examples.Pair
+
+#solana_build Examples.Flag
+
+#solana_build Examples.Maybe
 
 /--
 error: extract/unsupported: no solana_entry

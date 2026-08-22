@@ -43,7 +43,7 @@ def wrappingMul (s : Examples.Counter.State) (factor : UInt64) :
   let next := s.value * factor
   .ok ({ value := next }, next)
 
-/-- 负向：state 含非 UInt64 字段。 -/
+/-- 负向：state 含 Bool，不是支持的叶子。 -/
 structure FlagState where
   value : UInt64
   flag : Bool

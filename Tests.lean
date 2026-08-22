@@ -1,8 +1,10 @@
 import Tests.CounterSpec
 import Tests.PairSpec
+import Tests.FlagSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec
 import Tests.EmitSpec
 import Tests.BuildSpec
+import Tests.LayoutSpec
 import Tests.DumpIncrement

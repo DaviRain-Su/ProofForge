@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**L1 收口**。`#solana_build` 抽出的 Program 与发射 fixture 同一 `digestHex`。补全依据见 [docs/plan/analysis/authority.md](docs/plan/analysis/authority.md)。
+当前：**L2 字段类型**。`UInt8/16/32/64` 与 `Option UInt64` 双叶。补全依据见 [docs/plan/analysis/authority.md](docs/plan/analysis/authority.md)。
 
 ## 「难的是 loading 吗？」
 
@@ -34,7 +34,9 @@ lake exe solanaLeanAssemble -- build/sbpf
 (cd runtime-tests/solana && \
   SOLANA_LEAN_COUNTER_SO=../../build/sbpf/Counter.so \
   SOLANA_LEAN_PAIR_SO=../../build/sbpf/Pair.so \
-  cargo test --locked --test counter --test pair)
+  SOLANA_LEAN_FLAG_SO=../../build/sbpf/Flag.so \
+  SOLANA_LEAN_MAYBE_SO=../../build/sbpf/Maybe.so \
+  cargo test --locked --test counter --test pair --test flag --test maybe)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。

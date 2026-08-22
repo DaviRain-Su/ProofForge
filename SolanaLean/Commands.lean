@@ -31,7 +31,7 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
     let mutOps := (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.ops)
     match mutOps with
     | some ops =>
-      unless Ops.hasCheckedArith ops do
+      unless Ops.hasCheckedArith ops || ops.any (fun | .ite .. => true | _ => false) do
         throwError "extract/unsupported: mutating method missing checked arith"
     | none => throwError "extract/unsupported: missing mutating method"
     match Emit.emitCounterAsm program with
@@ -66,6 +66,10 @@ elab "#solana_build " n:ident : command => do
         throwError "ir/mismatch: extracted Counter digest != fixture"
       if program.name == "Pair" && digest != IR.digestHex IR.extractedPair then
         throwError "ir/mismatch: extracted Pair digest != fixture"
+      if program.name == "Flag" && digest != IR.digestHex IR.extractedFlag then
+        throwError "ir/mismatch: extracted Flag digest != fixture"
+      if program.name == "Maybe" && digest != IR.digestHex IR.extractedMaybe then
+        throwError "ir/mismatch: extracted Maybe digest != fixture"
       logInfo m!"solana-lean: program {program.name} fields = {program.fields}"
       logInfo m!"solana-lean: methods = {program.methods.map (fun m => m.ixName)}"
       logInfo m!"solana-lean: digest = {digest}"

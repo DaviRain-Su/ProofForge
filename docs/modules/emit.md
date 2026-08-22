@@ -6,7 +6,7 @@
 
 ## Boundary
 
-Load 由 `Val` 决定：`.field _ name` → `ACC0_DATA + fieldOffset`；`.arg _` → `INSTRUCTION_DATA+8`。layout marker 与 `INSTRUCTION_DATA*` 按 `Program` 取。dispatch 按每个 method 的 `ixName` 取已登记 discriminator。`okState` 写回目标取同序列 checked 算术的 lhs（Pair.creditLeft 抽出的 `okState (field right)` 仍写 left）。空 ops 失败。
+Load 由 `Val` 决定：`.field _ name` → `ACC0_DATA + fieldOffset`；`.arg _` → `INSTRUCTION_DATA+8`。按槽宽用 `ldxb`/`ldxh`/`ldxw`/`ldxdw` 与对应 `stx*`。layout marker 与 `INSTRUCTION_DATA*` 按 `Program` 取。dispatch 按每个 method 的 `ixName` 取已登记 discriminator。`okState` 写回目标取同序列 checked 算术的 lhs（Pair.creditLeft 抽出的 `okState (field right)` 仍写 left）。有 `_tag` 槽时 `okState (lit 0)` 清零两叶，其它值写 tag=1 + payload。字面量用十六进制，避免 `sbpf` 拒 `2^64-1`。空 ops 失败。
 
 ## API
 

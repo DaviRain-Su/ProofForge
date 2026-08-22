@@ -19,12 +19,22 @@ structure Method where
   ops : Array Ops.Op := #[]
   deriving BEq, Repr, Inhabited
 
-/-- 单账户程序。`fields` 声明顺序 = 账户里 header 之后的 UInt64 槽顺序。 -/
+/-- 账户槽。偏移从 header 后累加。 -/
+structure Slot where
+  name : String
+  width : Nat := 8
+  abi : String := "u64-le"
+  deriving BEq, Repr, Inhabited
+
+/-- 单账户程序。`slots` 声明顺序 = 账户槽顺序。`fields` 是槽名，兼容旧调用。 -/
 structure Program where
   name : String
-  fields : Array String := #["value"]
+  slots : Array Slot := #[{ name := "value" }]
   methods : Array Method
   deriving BEq, Repr, Inhabited
+
+def Program.fields (p : Program) : Array String :=
+  p.slots.map (·.name)
 
 def hasKind (p : Program) (k : MethodKind) : Bool :=
   p.methods.any (fun m => m.kind == k)
@@ -56,6 +66,11 @@ def discHexOf (ixName : String) (paramCount : Nat) : Except String String :=
   | "divide", "u64" => .ok "0xce4d196aeed8c55a"
   | "modulo", "u64" => .ok "0x91e8366e145e1e14"
   | "nonzero", "" => .ok "0x9d4170637dda8281"
+  | "setFlag", "u64" => .ok "0xabc0ed57af4c46fe"
+  | "getFlag", "" => .ok "0x2fdfe4bd023e4273"
+  | "setNone", "" => .ok "0x97ba9bf1423e17d0"
+  | "setSome", "u64" => .ok "0x74f3e7a0ccb621e2"
+  | "isSome", "" => .ok "0xae9916c18320fcc3"
   | name, sig => .error s!"extract/unsupported: unregistered disc {name}({sig})"
 
 def discHex (m : Method) : Except String String :=
@@ -67,12 +82,20 @@ def defaultParamCount (kind : MethodKind) : Nat :=
   | _ => 1
 
 def fieldOffset (p : Program) (name : String) : Option Nat :=
-  match p.fields.findIdx? (· == name) with
-  | some i => some (8 + i * 8)
-  | none => none
+  Id.run do
+    let mut off : Nat := 8
+    for s in p.slots do
+      if s.name == name then return some off
+      off := off + s.width
+    return none
+
+def fieldWidth (p : Program) (name : String) : Option Nat :=
+  (p.slots.find? (·.name == name)).map (·.width)
 
 def dataLen (p : Program) : Nat :=
-  8 + p.fields.size * 8
+  let raw := 8 + p.slots.foldl (init := 0) fun acc s => acc + s.width
+  let pad := (8 - raw % 8) % 8
+  raw + pad
 
 /-- Loader V3 单账户：`ACC0_DATA=0x60`，后接 `10240` 再对齐到 8。 -/
 def acc0Data : Nat := 0x60
@@ -101,12 +124,13 @@ def layoutSig (p : Program) : String :=
   let parts := Id.run do
     let mut acc : Array String := #[]
     let mut i : Nat := 0
-    for name in p.fields do
-      let off := 8 + i * 8
-      acc := acc.push s!"{i}:{layoutSlotName name}:0:{off}:8:u64-le"
+    let mut off : Nat := 8
+    for s in p.slots do
+      acc := acc.push s!"{i}:{layoutSlotName s.name}:0:{off}:{s.width}:{s.abi}"
+      off := off + s.width
       i := i + 1
     return acc
-  s!"{p.fields.size}|{String.intercalate "|" parts.toList}"
+  s!"{p.slots.size}|{String.intercalate "|" parts.toList}"
 
 /-- 只登记已对齐 PF 的字段表。新布局先算 SHA-256 再挂进来。 -/
 def layoutMarkerHex (p : Program) : Except String String :=
@@ -115,11 +139,15 @@ def layoutMarkerHex (p : Program) : Except String String :=
     .ok "0xbbe897f0336e6fc"
   | "2|0:left:0:8:8:u64-le|1:right:0:16:8:u64-le" =>
     .ok "0x20d45b635e2b016f"
+  | "2|0:flag:0:8:1:u8-le|1:count:0:9:8:u64-le" =>
+    .ok "0x2ac58f7fa0191d14"
+  | "2|0:slot_tag:0:8:8:u64-le|1:slot_p0:0:16:8:u64-le" =>
+    .ok "0xf53e0f4e232b2e90"
   | sig => .error s!"extract/unsupported: unregistered layout {sig}"
 
 def extractedCounter : Program :=
   { name := "Counter"
-    fields := #["value"]
+    slots := #[{ name := "value" }]
     methods := #[
       { kind := .init, name := "Examples.Counter.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
@@ -157,7 +185,7 @@ def extractedCounter : Program :=
 
 def extractedPair : Program :=
   { name := "Pair"
-    fields := #["left", "right"]
+    slots := #[{ name := "left" }, { name := "right" }]
     methods := #[
       { kind := .init, name := "Examples.Pair.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
@@ -171,9 +199,51 @@ def extractedPair : Program :=
         ops := #[.returnU64 (.field (.arg 0) "left")] }
     ] }
 
+def extractedFlag : Program :=
+  { name := "Flag"
+    slots := #[{ name := "flag", width := 1, abi := "u8-le" }, { name := "count" }]
+    methods := #[
+      { kind := .init, name := "Examples.Flag.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0), .returnState (.arg 0)] },
+      { kind := .increment, name := "Examples.Flag.setFlag", ixName := "setFlag", paramCount := 1
+        ops := #[
+          .ite .le (.arg 0) (.lit 255)
+            #[.okState (.field (.arg 2) "count")]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Flag.getFlag", ixName := "getFlag", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "flag")] }
+    ] }
+
+def extractedMaybe : Program :=
+  { name := "Maybe"
+    slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]
+    methods := #[
+      { kind := .init, name := "Examples.Maybe.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Maybe.setNone", ixName := "setNone", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Maybe.setSome", ixName := "setSome", paramCount := 1
+        ops := #[
+          .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
+            #[.okState (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Maybe.isSome", ixName := "isSome", paramCount := 0
+        ops := #[
+          .ite .eq (.field (.arg 0) "slot_tag") (.lit 1)
+            #[.returnU64 (.lit 1)]
+            #[.returnU64 (.lit 0)]
+        ] }
+    ] }
+
 def counterProgram (name : String := "Counter") : Program :=
   { name
-    fields := #["value"]
+    slots := #[{ name := "value" }]
     methods := #[
       { kind := .init, name := "init", ixName := "initialize", paramCount := 1 },
       { kind := .increment, name := "increment", ixName := "increment", paramCount := 1 },
@@ -236,7 +306,7 @@ def u64Hex (n : UInt64) : String :=
     | fuel' + 1 =>
       if v = 0 && acc ≠ "" then acc
       else go fuel' (v / 16) (String.singleton (hexDigit (v % 16)) ++ acc)
-  let s := go 16 n.toNat ""
+  let s := go 17 n.toNat ""
   if s = "" then "0" else s
 
 /-- FNV-1a 64，十六进制，无 `0x` 前缀。 -/

@@ -17,4 +17,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**L1 收口**。属性、disc、ite/四则、digest 已绿。下一阶段：L2 布局或 L3 形状。
+当前阶段：**L2 字段类型**。`UInt8/16/32/64` 与 `Option UInt64` 双叶已通。下一刀定长 Array。

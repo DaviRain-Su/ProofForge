@@ -11,14 +11,15 @@
 - `@[solana_entry]` + `#solana_build`；按名 disc；Counter 同程序 decrement
 - 任意 `ite`；checked mul/div/mod；`=` `≠` 比较；Counter scale/divide/modulo/nonzero
 - `IR.digestHex`（FNV-1a 64）；`#solana_build` 抽出与 fixture 必须同一 digest
+- 带类型字段表：`UInt8/16/32/64` + `Option UInt64` 双叶；Flag / Maybe Mollusk
 
 ## 下一刀
 
-L1 收口。下一阶段是 L2 布局（窄整数 / Option / Array）或 L3（init 写全字段）。
+L2-002：定长 `Array UInt64 n`。其后 layout marker 改本机 SHA-256。
 
 ## 其后（L2 / L3）
 
-- 窄整数叶子；Option / 定长 Array；layout marker 改本机 SHA-256
+- 定长 Array；layout marker 改本机 SHA-256
 - N 入口；`init` 写全字段；只读 view 返回任意已布局叶子
 
 ## 有具体合约再开（L4）

@@ -33,7 +33,7 @@ import Examples.Counter
 
 private def pairShape : SolanaLean.IR.Program :=
   { name := "Pair"
-    fields := #["left", "right"]
+    slots := #[{ name := "left" }, { name := "right" }]
     methods := #[
       { kind := .init, name := "init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
@@ -84,13 +84,13 @@ private def pairShape : SolanaLean.IR.Program :=
 
 #guard
   match SolanaLean.IR.layoutMarkerHex
-      { name := "X", fields := #["a", "b", "c"], methods := #[] } with
+      { name := "X", slots := #[{ name := "a" }, { name := "b" }, { name := "c" }], methods := #[] } with
   | .error reason => reason.startsWith "extract/unsupported: unregistered layout"
   | .ok _ => false
 
 private def swappedIncrement : SolanaLean.IR.Program :=
   { name := "Counter"
-    fields := #["value"]
+    slots := #[{ name := "value" }]
     methods := #[
       { kind := .init, name := "init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
