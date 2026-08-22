@@ -53,6 +53,7 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `checkPda seed bump` | `sol_create_program_address`；成功 0 / 失败 1 | L4-017 |
 | `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount` | Token approve / freeze / thaw | L4-018 |
 | `tokenSetMintAuthority` / `tokenRevoke` | Token SetAuthority(MintTokens) / Revoke | L4-020 |
+| `tokenAccountSize` / `cpiReturn` | GetAccountDataSize + `sol_get_return_data` 8B | L4-022 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -85,7 +86,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 |---|---|---|
 | L4-cpi-invoke | 无 seeds 的 `invoke`；N 账户 walk 复用 transfer | 一条非 System 的固定 callee Mollusk（可用 Memo 或 mock） |
 | L4-cpi-signed | `invokeSigned` 一组种子 | PDA 付款 / vault 负例：错 bump、缺 signer |
-| L4-cpi-ret | `sol_get_return_data` 8 字节 | callee 写回 u64；无 CPI 则 FC |
+| L4-cpi-ret | `sol_get_return_data` 8 字节 | **已绿**；`cpiReturn`；长度不是 8 → Custom(1) |
 | L4-cpi-nacc | walk N 个账户（N 编译期常量，先 2..8） | 不再为每个 recipe 手写 ACC1/ACC2 |
 
 仍 FC（这才是当初说「不做通用 CPI」的那截）：
@@ -169,6 +170,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-tok-freeze / thaw | `FreezeAccount` / `ThawAccount` | 10 / 11 | **已绿** |
 | L4-tok-set-auth | `SetAuthority` MintTokens | 6 | **已绿**；新 authority = acc2 |
 | L4-tok-revoke | `Revoke` | 5 | **已绿** |
+| L4-tok-size | `GetAccountDataSize` | 21 | **已绿**；返回 165 |
 
 Multisig owner 默认关。
 
@@ -186,7 +188,7 @@ Multisig owner 默认关。
 | `sol_memcpy_` / `memset_` | 打包 CPI 缓冲 |
 | `sol_memcmp_` | 比 32B key / program id |
 | `sol_set_return_data` | 已有 view 返回 |
-| `sol_get_return_data` | 仅当某条 recipe 要读 callee 返回时 |
+| `sol_get_return_data` | `cpiReturn`；只读 8 字节 |
 
 ## 明确不做（不是延期）
 

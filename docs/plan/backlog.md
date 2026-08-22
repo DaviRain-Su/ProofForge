@@ -39,6 +39,7 @@
 - `clockEpoch`；Clock Mollusk 两次 warp 跨 epoch
 - `tokenSetMintAuthority` / `tokenRevoke`；TokenAuth Mollusk
 - `slotsPerEpoch`；Epoch Mollusk 改 schedule
+- `tokenAccountSize` / `cpiReturn`；TokenSize Mollusk 返回 165
 
 ## 下一刀
 
@@ -46,9 +47,8 @@
 
 剩余可开、仍落在现有抽出/发射器上：
 
-1. `tokenAccountSize` — Token `GetAccountDataSize` + `sol_get_return_data` 8B
-2. `systemAllocateWithSeed` — System `AllocateWithSeed`；种子字面量冻结
-3. `sol_get_return_data` 单独叶子 — 只在某条 recipe 刚 CPI 之后读 8B
+1. `systemAllocateWithSeed` — System `AllocateWithSeed`；种子字面量冻结
+2. `sol_get_return_data` 单独叶子已随 L4-022 开出；无 CPI 仍 Custom(1)
 
 nonce / Token-2022 / remaining accounts / 运行时 program id 仍关。
 

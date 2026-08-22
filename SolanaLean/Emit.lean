@@ -161,7 +161,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
   | .lit _ | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
-  | .checkPda _ _ | .rentExemption _ =>
+  | .checkPda _ _ | .rentExemption _ | .cpiReturn =>
     .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
@@ -217,6 +217,24 @@ private def emitLoadSlotsPerEpoch (stackOff : Nat) : String :=
   lddw r0, 0x1
   exit
 epoch_ok_{stackOff}:
+  ldxdw r1, [r10 - 72]
+  stxdw [r10 - {stackOff}], r1
+"
+
+/-- 最近一次 CPI 的 8 字节返回。长度不是 8 则 Custom(1)。 -/
+private def emitLoadCpiReturn (stackOff : Nat) : String :=
+  s!"\
+  ; load cpiReturn via sol_get_return_data
+  mov64 r1, r10
+  add64 r1, -72
+  lddw r2, 8
+  mov64 r3, r10
+  add64 r3, -104
+  call sol_get_return_data
+  jeq r0, 8, cpi_ret_ok_{stackOff}
+  lddw r0, 0x1
+  exit
+cpi_ret_ok_{stackOff}:
   ldxdw r1, [r10 - 72]
   stxdw [r10 - {stackOff}], r1
 "
@@ -328,6 +346,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadClockEpoch stackOff)
   | .slotsPerEpoch =>
     .ok (emitLoadSlotsPerEpoch stackOff)
+  | .cpiReturn =>
+    .ok (emitLoadCpiReturn stackOff)
   | .signerKey0 =>
     .ok (emitLoadSignerKey0 stackOff)
   | .accLamports0 =>
@@ -830,7 +850,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
-        | .checkPda _ _ | .rentExemption _ => do
+        | .checkPda _ _ | .rentExemption _ | .cpiReturn => do
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)

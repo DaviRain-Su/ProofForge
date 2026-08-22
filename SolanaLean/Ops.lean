@@ -19,6 +19,7 @@ inductive Val where
   | findPda (seed : String)
   | checkPda (seed : String) (bump : Val)
   | rentExemption (dataLen : UInt64)
+  | cpiReturn
   deriving BEq, Repr, Inhabited
 
 inductive Cmp where
@@ -159,6 +160,11 @@ def tokenRevoke : Op :=
     #[{ acc := 1, signer := false, writable := true },
       { acc := 0, signer := true, writable := false }]
     #[.u8le 5]
+
+def tokenAccountSize : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := false }]
+    #[.u8le 21]
 
 def memoWrite : Op :=
   .invoke 1

@@ -25,3 +25,4 @@ import Examples.TokenApprove
 import Examples.TokenFreeze
 import Examples.TokenAuth
 import Examples.Epoch
+import Examples.TokenSize

@@ -183,6 +183,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .clockEpoch
         else if endsWith e ".slotsPerEpoch" || isConstNamed e ``SolanaLean.Runtime.slotsPerEpoch then
           some .slotsPerEpoch
+        else if endsWith e ".cpiReturn" || isConstNamed e ``SolanaLean.Runtime.cpiReturn then
+          some .cpiReturn
         else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
           some .signerKey0
         else if endsWith e ".accLamports0" || isConstNamed e ``SolanaLean.Runtime.accLamports0 then
@@ -602,6 +604,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.clockSlot) => some .clockSlot
             | some (.clockEpoch) => some .clockEpoch
             | some (.slotsPerEpoch) => some .slotsPerEpoch
+            | some (.cpiReturn) => some .cpiReturn
             | some (.signerKey0) => some .signerKey0
             | some (.accLamports0) => some .accLamports0
             | some (.accOwner0) => some .accOwner0
@@ -838,6 +841,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       mentionsRuntime e "tokenThawAccount" ||
       mentionsRuntime e "tokenSetMintAuthority" ||
       mentionsRuntime e "tokenRevoke" ||
+      mentionsRuntime e "tokenAccountSize" ||
       mentionsRuntime e "memoWrite" ||
       mentionsRuntime e "ataCreateIdempotent" then
     go fuel e
@@ -889,6 +893,7 @@ private def invokeRet
   | (3, _, #[.u8le 11], none, none) => .lit 0
   | (3, _, #[.u8le 6, .u8le 0, .u8le 1, .accKey 2], none, none) => .lit 0
   | (3, _, #[.u8le 5], none, none) => .lit 0
+  | (2, _, #[.u8le 21], none, none) => .cpiReturn
   | (1, _, #[.ascii "ok"], none, none) => .lit 0
   | (6, _, #[.u8le 1], none, none) => .lit 0
   | _ => .lit 0
@@ -912,7 +917,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .lit _ => .ok #[.returnU64 v]
     | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
     | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
-    | .checkPda _ _ | .rentExemption _ => .ok #[.returnU64 v]
+    | .checkPda _ _ | .rentExemption _ | .cpiReturn => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
 
@@ -1100,7 +1105,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .lit _ => v
       | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
       | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
-      | .rentExemption _ => v
+      | .rentExemption _ | .cpiReturn => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
@@ -1244,7 +1249,7 @@ private def valFields : Ops.Val → Array String
   | .lit _ => #[]
   | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
-  | .rentExemption _ => #[]
+  | .rentExemption _ | .cpiReturn => #[]
   | .checkPda _ b => valFields b
 
 private def opFields : Ops.Op → Array String

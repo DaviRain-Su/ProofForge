@@ -24,6 +24,7 @@ import Tests.TokenApproveSpec
 import Tests.TokenFreezeSpec
 import Tests.TokenAuthSpec
 import Tests.EpochSpec
+import Tests.TokenSizeSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

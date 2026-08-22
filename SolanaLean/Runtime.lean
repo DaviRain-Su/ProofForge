@@ -238,6 +238,23 @@ def tokenRevoke : UInt64 :=
     #[.u8le 5]
 
 /--
+最近一次 CPI 的 8 字节返回。抽出后发射 `sol_get_return_data`。
+宿主侧是不可约 stub。无 CPI / 长度不是 8 链上 Custom(1)。
+完整 program id / 变长缓冲本剖面 fail closed。
+-/
+@[irreducible] def cpiReturn : UInt64 := 0
+
+/--
+Token `GetAccountDataSize`：普通包装。
+外层 1 是 mint，callee 是外层账户 2。返回值走 `cpiReturn`。
+-/
+def tokenAccountSize : UInt64 :=
+  let _ := invoke 2
+    #[{ acc := 1, signer := false, writable := false }]
+    #[.u8le 21]
+  cpiReturn
+
+/--
 Memo 写一条 UTF-8 字面量。本切片钉死 `"ok"`。
 外层 0 是 signer；callee 是外层账户 1。
 -/

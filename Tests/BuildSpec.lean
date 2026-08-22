@@ -26,6 +26,7 @@ import Examples.TokenApprove
 import Examples.TokenFreeze
 import Examples.TokenAuth
 import Examples.Epoch
+import Examples.TokenSize
 
 #solana_build Examples.Counter
 
@@ -80,6 +81,8 @@ import Examples.Epoch
 #solana_build Examples.TokenAuth
 
 #solana_build Examples.Epoch
+
+#solana_build Examples.TokenSize
 
 /--
 error: extract/unsupported: no solana_entry

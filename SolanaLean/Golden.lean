@@ -423,6 +423,18 @@ def extractedTokenMint : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedTokenSize : Program :=
+  { name := "TokenSize"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenSize.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenSize.size", ixName := "size", paramCount := 0
+        ops := #[Ops.tokenAccountSize, .returnU64 .cpiReturn] },
+      { kind := .get, name := "Examples.TokenSize.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def extractedEpoch : Program :=
   { name := "Epoch"
     slots := #[{ name := "dummy" }]
@@ -500,7 +512,7 @@ def programs : Array Program := #[
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
-  extractedEpoch
+  extractedEpoch, extractedTokenSize
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
