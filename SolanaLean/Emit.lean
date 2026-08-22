@@ -217,7 +217,7 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
-  | .lit _ | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .lit _ | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
@@ -268,6 +268,9 @@ private def emitLoadClockSlot (stackOff : Nat) : String :=
 
 private def emitLoadClockEpoch (stackOff : Nat) : String :=
   emitLoadClockField "epoch" 16 stackOff
+
+private def emitLoadUnixTime (stackOff : Nat) : String :=
+  emitLoadClockField "unix" 32 stackOff
 
 /-- EpochSchedule 是 33 字节 `repr(C)`；`slots_per_epoch` 在偏移 0。 -/
 private def emitLoadSlotsPerEpoch (stackOff : Nat) : String :=
@@ -564,6 +567,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadClockSlot stackOff)
   | .clockEpoch =>
     .ok (emitLoadClockEpoch stackOff)
+  | .unixTime =>
+    .ok (emitLoadUnixTime stackOff)
   | .slotsPerEpoch =>
     .ok (emitLoadSlotsPerEpoch stackOff)
   | .cpiReturn =>
@@ -1102,7 +1107,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             let load ← loadVal p (.arg 0) 24
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+        | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
         | .accN | .isSigner0 | .isWritable0 | .isExecutable0
         | .accLamports1 | .accOwner1 | .accDataLen1
         | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _

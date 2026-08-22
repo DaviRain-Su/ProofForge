@@ -5,16 +5,23 @@ namespace SolanaLean.Runtime
 `Clock.slot`（偏移 0）。这是物理 slot，不是逻辑 block。
 
 宿主侧是不可约 stub：定理把它当未指定的 `UInt64`，不要unfold成 0。
-`unixTime` / 其余 Clock 字段本剖面 fail closed。
+其余 Clock 字段本剖面 fail closed。
 -/
 @[irreducible] def clockSlot : UInt64 := 0
 
 /--
 当前 epoch。抽出器认这个名字，发射 `sol_get_clock_sysvar` 后读
 `Clock.epoch`（偏移 16）。宿主侧是不可约 stub。
-`unixTime` / `epoch_start_timestamp` 本剖面 fail closed。
+`epoch_start_timestamp` 本剖面 fail closed。
 -/
 @[irreducible] def clockEpoch : UInt64 := 0
+
+/--
+当前 unix 时间戳。抽出后发射 `sol_get_clock_sysvar`，读
+`Clock.unix_timestamp`（偏移 32）为无符号 `u64`。
+宿主侧是不可约 stub。有符号语义本剖面不建模。
+-/
+@[irreducible] def unixTime : UInt64 := 0
 
 /--
 `dataLen` 字节账户的 rent-exempt 下限。
@@ -294,6 +301,51 @@ def tokenSetMintAuthority : UInt64 :=
     #[{ acc := 1, signer := false, writable := true },
       { acc := 0, signer := true, writable := false }]
     #[.u8le 6, .u8le 0, .u8le 1, .accKey 2]
+
+/--
+Token `SetAuthority`：`AccountOwner`。新 owner = 外层账户 2。
+外层 0 是当前 owner。内层：account w / current owner s。
+-/
+def tokenSetAccountAuthority : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 6, .u8le 2, .u8le 1, .accKey 2]
+
+/--
+Token 未检查 `Approve`（tag 4）。decimals 不进 data。
+外层 0 是 owner。内层：source w / delegate r / owner s。
+-/
+def tokenApprove (amount : UInt64) : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 4, .u64le amount]
+
+/--
+Token `InitializeMultisig2`（tag 19，不吃 Rent sysvar）。
+本切片钉死 m=2，两个 signer = acc2 / acc3。
+内层：multisig w / signer0 r / signer1 r。callee 是外层账户 4。
+-/
+def tokenInitMultisig : UInt64 :=
+  invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false }]
+    #[.u8le 19, .u8le 2]
+
+/--
+System `AdvanceNonceAccount`（tag 4）。
+外层 0 是 nonce authority。内层：nonce w / recent blockhashes r / authority s。
+callee 是外层账户 3（System）。
+-/
+def systemAdvanceNonce : UInt64 :=
+  invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u32le 4]
 
 /--
 Token `Revoke`：普通包装。清掉 source 的 delegate。

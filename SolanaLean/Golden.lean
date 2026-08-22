@@ -699,6 +699,72 @@ def extractedTrio : Program :=
         ops := #[.returnU64 (.ownerIsSelf 2)] }
     ] }
 
+def extractedGate : Program :=
+  { name := "Gate"
+    slots := #[{ name := "open_", width := 1, abi := "u8-le" }, { name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Gate.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Gate.openGate", ixName := "openGate", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 1)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Examples.Gate.closeGate", ixName := "closeGate", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Gate.isOpen", ixName := "isOpen", paramCount := 0
+        ops := #[
+          .ite .eq (.field (.arg 0) "open_") (.lit 1)
+            #[.returnU64 (.lit 1)]
+            #[.returnU64 (.lit 0)]
+        ] },
+      { kind := .get, name := "Examples.Gate.now", ixName := "now", paramCount := 0
+        ops := #[.returnU64 .unixTime] }
+    ] }
+
+def extractedNonce : Program :=
+  { name := "Nonce"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Nonce.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Nonce.advance", ixName := "advance", paramCount := 0
+        ops := #[Ops.systemAdvanceNonce, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Nonce.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
+def extractedTokenOwner : Program :=
+  { name := "TokenOwner"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenOwner.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenOwner.setOwner", ixName := "setOwner", paramCount := 0
+        ops := #[Ops.tokenSetAccountAuthority, .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenOwner.approve", ixName := "approve", paramCount := 1
+        ops := #[Ops.tokenApprove (.arg 0), .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TokenOwner.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
+def extractedTokenMs : Program :=
+  { name := "TokenMs"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.TokenMs.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.TokenMs.openMs", ixName := "openMs", paramCount := 0
+        ops := #[Ops.tokenInitMultisig, .returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TokenMs.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
@@ -707,7 +773,8 @@ def programs : Array Program := #[
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
-  extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio
+  extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio,
+  extractedGate, extractedNonce, extractedTokenOwner, extractedTokenMs
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

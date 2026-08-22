@@ -43,14 +43,14 @@ def wrappingMul (s : Examples.Counter.State) (factor : UInt64) :
   let next := s.value * factor
   .ok ({ value := next }, next)
 
-/-- 负向：state 含 Bool，不是支持的叶子。 -/
+/-- 负向：state 含 Float，不是支持的叶子。 -/
 structure FlagState where
   value : UInt64
-  flag : Bool
-  deriving Repr, DecidableEq, Inhabited
+  flag : Float
+  deriving Repr, Inhabited
 
 def initFlag (initial : UInt64) : FlagState :=
-  { value := initial, flag := false }
+  { value := initial, flag := 0 }
 
 /-- 负向：不定长 Array，不是 Vector。 -/
 structure BagState where

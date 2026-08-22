@@ -64,11 +64,14 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | `checkPda seed bump` | `sol_create_program_address`；成功 0 / 失败 1 | L4-017 |
 | `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount` | Token approve / freeze / thaw | L4-018 |
 | `tokenSetMintAuthority` / `tokenRevoke` | Token SetAuthority(MintTokens) / Revoke | L4-020 |
+| `tokenSetAccountAuthority` / `tokenApprove` | SetAuthority(AccountOwner) / 未检查 Approve tag 4 | L4-034 |
+| `tokenInitMultisig` | InitializeMultisig2 tag 19；m=2 | L4-034 |
+| `systemAdvanceNonce` | System AdvanceNonceAccount tag 4 | L4-034 |
 | `tokenAccountSize` / `cpiReturn` | GetAccountDataSize + `sol_get_return_data` 8B | L4-022 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
-宿主定理仍钉用户 `def`。`unixTime`、完整 32B key、独立 caller 账户仍 FC。
+宿主定理仍钉用户 `def`。完整 32B key、独立 caller 账户仍 FC。`unixTime` 已绿（按无符号 u64）。
 
 ## 还该做：通用 CPI 原语
 
@@ -133,7 +136,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | ID | Lean 表面 | syscall / 字段 | 态度 |
 |---|---|---|---|
 | L4-clock-slot | `clockSlot` | `sol_get_clock_sysvar` + slot@0 | **已绿** |
-| L4-clock-unix | `unixTime` | 同缓冲 + unix_timestamp@32 | **保持 FC**（有符号 i64；PF 也 FC） |
+| L4-clock-unix | `unixTime` | 同缓冲 + unix_timestamp@32 | **已绿**；按无符号 u64 |
 | L4-clock-epoch | `clockEpoch` | epoch@16 | **已绿**；两次 warp 跨 epoch |
 | L4-rent | `rentExemption n` | `sol_get_rent_sysvar` + `rate*(128+n)` | **已绿** |
 | L4-epoch-schedule | `slotsPerEpoch` | `sol_get_epoch_schedule_sysvar` + 首 u64 | **已绿** |
@@ -168,7 +171,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-sys-create-seed | `CreateAccountWithSeed` tag 3 | **已绿**；同种子，再带 lamports |
 | L4-sys-assign-seed | `AssignWithSeed` tag 10 | **已绿**；同种子，只改 owner |
 | L4-sys-xfer-seed | `TransferWithSeed` tag 11 | **已绿**；派生账户付款 |
-| L4-sys-advance-nonce 等 | nonce / authorize | — | 不做，除非有合约 |
+| L4-sys-advance-nonce | `AdvanceNonceAccount` tag 4 | **已绿** prelude；成功路径要现成 nonce 账户 |
 
 已绿：`TransferChecked`（tag 12，10B packed）、ATA `CreateIdempotent`（tag 1）、`MintToChecked` / `BurnChecked`。
 
@@ -188,8 +191,11 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | L4-tok-size | `GetAccountDataSize` | 21 | **已绿**；返回 165 |
 | L4-tok-init-mint | `InitializeMint2` | 20 | **已绿**；decimals 6，freeze None |
 | L4-tok-sync-native | `SyncNative` | 17 | **已绿**；native mint 账户 |
+| L4-tok-set-acc-auth | `SetAuthority` AccountOwner | 6 | **已绿**；新 owner = acc2 |
+| L4-tok-approve | `Approve` | 4 | **已绿**；decimals 不进 data |
+| L4-tok-init-ms | `InitializeMultisig2` | 19 | **已绿**；m=2，不吃 Rent |
 
-Multisig owner 默认关。
+Multisig 当 *owner*（M-of-N 签字转账）仍关。
 
 ### ATA / Memo
 
@@ -215,7 +221,7 @@ Multisig owner 默认关。
 - feature-gated：blake3 / poseidon / curve25519 / alt_bn128 / big_mod_exp / `sol_get_sysvar` / `sol_remaining_compute_units` / `sol_get_epoch_stake`
 - `sol_alloc_free_`（新部署已禁用）
 - `sol_log_*` 当产品语义（调试可后加，不进 digest）
-- `unixTime`（有符号；PF 也 FC）
+- `unixTime` 有符号语义（本仓按无符号 u64 读，已绿）
 - 指令内省 `sol_get_processed_sibling_instruction` / `sol_get_stack_height`（除非有具体检查合约）
 - 公网、`.so` refinement、Lean FFI → sBPF
 
@@ -224,7 +230,7 @@ Multisig owner 默认关。
 按依赖，不是按「像 SDK」。
 
 1. **L4-cpi-nacc + L4-cpi-invoke** — 已绿（L4-003：Ping stub）。
-2. **L4-acc-*** — 账户 0/1 只读叶子 + 32B 按字读已绿。账户 2 / `ByteArray 32` 仍 FC。
+2. **L4-acc-*** — 账户 0/1/2 只读叶子 + 32B 按字读已绿。`ByteArray 32` 仍 FC。
 3. **L4-pda-find + L4-cpi-signed** — 找 bump，再用种子签字。
 4. **L4-sys-create / L4-tok-xfer / L4-ata-idem** — 特化，不再手写发射器。
 5. 其余 System / Token / sysvar 有具体合约再开。

@@ -218,6 +218,7 @@ private def valCanon : Ops.Val → String
   | .field b n => s!"f.{n}({valCanon b})"
   | .clockSlot => "clk"
   | .clockEpoch => "epo"
+  | .unixTime => "unix"
   | .slotsPerEpoch => "spe"
   | .signerKey0 => "k0"
   | .accLamports0 => "lp0"

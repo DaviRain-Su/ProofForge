@@ -36,6 +36,10 @@ import Examples.Hash
 import Examples.Keys
 import Examples.Keccak
 import Examples.Trio
+import Examples.Gate
+import Examples.Nonce
+import Examples.TokenOwner
+import Examples.TokenMs
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -65,7 +69,7 @@ error: extract/unsupported: mutating method missing checked arith
 #solana_extract Examples.Counter.init Tests.Fixtures.wrappingSub Examples.Counter.get
 
 /--
-error: extract/unsupported: field flag is not a supported leaf
+error: extract/unsupported: field flag enum has payload
 -/
 #guard_msgs (error) in
 #solana_extract Tests.Fixtures.initFlag Tests.Fixtures.creditFlag Tests.Fixtures.getFlagValue
@@ -189,6 +193,14 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Trio.init Examples.Trio.touch Examples.Trio.needSig1
 
 #solana_extract Examples.Trio.init Examples.Trio.touch Examples.Trio.self2
+
+#solana_extract Examples.Gate.init Examples.Gate.openGate Examples.Gate.now
+
+#solana_extract Examples.Nonce.init Examples.Nonce.advance Examples.Nonce.get
+
+#solana_extract Examples.TokenOwner.init Examples.TokenOwner.setOwner Examples.TokenOwner.get
+
+#solana_extract Examples.TokenMs.init Examples.TokenMs.openMs Examples.TokenMs.get
 
 /--
 error: extract/unsupported: field tag enum has payload

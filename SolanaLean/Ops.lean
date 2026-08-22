@@ -7,6 +7,7 @@ inductive Val where
   | lit (n : UInt64)
   | clockSlot
   | clockEpoch
+  | unixTime
   | slotsPerEpoch
   | signerKey0
   | accLamports0
@@ -200,6 +201,37 @@ def tokenThawAccount : Op :=
       { acc := 2, signer := false, writable := false },
       { acc := 0, signer := true, writable := false }]
     #[.u8le 11]
+
+def tokenSetAccountAuthority : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 6, .u8le 2, .u8le 1, .accKey 2]
+    none none
+
+def tokenApprove (amount : Val) : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 4, .u64le amount]
+    none none
+
+def tokenInitMultisig : Op :=
+  .invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false }]
+    #[.u8le 19, .u8le 2]
+    none none
+
+def systemAdvanceNonce : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u32le 4]
+    none none
 
 def tokenSetMintAuthority : Op :=
   .invoke 3

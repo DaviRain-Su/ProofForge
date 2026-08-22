@@ -34,6 +34,10 @@ import Tests.HashSpec
 import Tests.KeysSpec
 import Tests.KeccakSpec
 import Tests.TrioSpec
+import Tests.GateSpec
+import Tests.NonceSpec
+import Tests.TokenOwnerSpec
+import Tests.TokenMsSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

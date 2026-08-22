@@ -142,7 +142,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if a ≤ 2 && w ≤ 3 then some (.accKeyWord a w) else none
+            if a ≤ 3 && w ≤ 3 then some (.accKeyWord a w) else none
           | _, _ => none
         else if (endsWith e ".accOwnerWord" || isConstNamed e ``SolanaLean.Runtime.accOwnerWord) &&
             e.getAppArgs.size ≥ 2 then
@@ -151,7 +151,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if a ≤ 2 && w ≤ 3 then some (.accOwnerWord a w) else none
+            if a ≤ 3 && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``SolanaLean.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
@@ -171,49 +171,49 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 2 then some (.accLamportsN a) else none
+            if a ≤ 3 then some (.accLamportsN a) else none
           | _ => none
         else if (endsWith e ".accDataLen" || isConstNamed e ``SolanaLean.Runtime.accDataLen) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 2 then some (.accDataLenN a) else none
+            if a ≤ 3 then some (.accDataLenN a) else none
           | _ => none
         else if (endsWith e ".isSigner" || isConstNamed e ``SolanaLean.Runtime.isSigner) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 2 then some (.isSignerN a) else none
+            if a ≤ 3 then some (.isSignerN a) else none
           | _ => none
         else if (endsWith e ".isWritable" || isConstNamed e ``SolanaLean.Runtime.isWritable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 2 then some (.isWritableN a) else none
+            if a ≤ 3 then some (.isWritableN a) else none
           | _ => none
         else if (endsWith e ".isExecutable" || isConstNamed e ``SolanaLean.Runtime.isExecutable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 2 then some (.isExecutableN a) else none
+            if a ≤ 3 then some (.isExecutableN a) else none
           | _ => none
         else if (endsWith e ".signerKey" || isConstNamed e ``SolanaLean.Runtime.signerKey) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 2 then some (.signerKeyN a) else none
+            if a ≤ 3 then some (.signerKeyN a) else none
           | _ => none
         else if (endsWith e ".ownerIsSelf" || isConstNamed e ``SolanaLean.Runtime.ownerIsSelf) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 2 then some (.ownerIsSelf a) else none
+            if a ≤ 3 then some (.ownerIsSelf a) else none
           | _ => none
         else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
           let proj :=
@@ -258,6 +258,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .clockSlot
         else if endsWith e ".clockEpoch" || isConstNamed e ``SolanaLean.Runtime.clockEpoch then
           some .clockEpoch
+        else if endsWith e ".unixTime" || isConstNamed e ``SolanaLean.Runtime.unixTime then
+          some .unixTime
         else if endsWith e ".slotsPerEpoch" || isConstNamed e ``SolanaLean.Runtime.slotsPerEpoch then
           some .slotsPerEpoch
         else if endsWith e ".cpiReturn" || isConstNamed e ``SolanaLean.Runtime.cpiReturn then
@@ -686,12 +688,21 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
         let pargs := pair.getAppArgs
         if pargs.size ≥ 2 then
           let st := pargs[pargs.size - 2]!
+          let boolLit :=
+            (strip st).getAppArgs.findSome? fun a =>
+              if isConstNamed a ``Bool.true || endsWith a ".true" then some (.lit 1)
+              else if isConstNamed a ``Bool.false || endsWith a ".false" then some (.lit 0)
+              else none
+          match boolLit with
+          | some v => some v
+          | none =>
           match asOptionPayload env st with
           | some v => some v
           | none =>
             match val env st with
             | some (.clockSlot) => some .clockSlot
             | some (.clockEpoch) => some .clockEpoch
+            | some (.unixTime) => some .unixTime
             | some (.slotsPerEpoch) => some .slotsPerEpoch
             | some (.cpiReturn) => some .cpiReturn
             | some (.signerKey0) => some .signerKey0
@@ -952,6 +963,10 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       mentionsRuntime e "tokenFreezeAccount" ||
       mentionsRuntime e "tokenThawAccount" ||
       mentionsRuntime e "tokenSetMintAuthority" ||
+      mentionsRuntime e "tokenSetAccountAuthority" ||
+      mentionsRuntime e "tokenApprove" ||
+      mentionsRuntime e "tokenInitMultisig" ||
+      mentionsRuntime e "systemAdvanceNonce" ||
       mentionsRuntime e "tokenRevoke" ||
       mentionsRuntime e "tokenAccountSize" ||
       mentionsRuntime e "memoWrite" ||
@@ -1033,7 +1048,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
-    | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+    | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
     | .accN | .isSigner0 | .isWritable0 | .isExecutable0
     | .accLamports1 | .accOwner1 | .accDataLen1
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
@@ -1226,7 +1241,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .arg i => if i < nLams then .arg (nLams - 1 - i) else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
-      | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+      | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
       | .accN | .isSigner0 | .isWritable0 | .isExecutable0
       | .accLamports1 | .accOwner1 | .accDataLen1
       | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
@@ -1323,7 +1338,7 @@ private def leafSlots (env : Environment) (name : String) (ty : Expr) : Except S
   else if ty.getAppFn.constName? == some ``Array then
     .error s!"extract/unsupported: field {name} Array is not fixed-length; use Vector"
   else if ty.getAppFn.constName? == some ``Bool then
-    .error s!"extract/unsupported: field {name} is not a supported leaf"
+    .ok #[{ name, width := 1, abi := "u8-le" }]
   else if let some tyName := ty.getAppFn.constName? then
     if isEnumLeaf env tyName then
       .ok #[{ name, width := 8, abi := "u64-le" }]
@@ -1375,7 +1390,7 @@ private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
   | .lit _ => #[]
-  | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _

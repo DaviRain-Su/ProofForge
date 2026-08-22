@@ -68,7 +68,7 @@ process_instruction(program_id, accounts: &[AccountInfo], instruction_data: &[u8
 | 曲线 / 配对 | curve25519 / alt_bn128 / big_mod_exp | 默认关 |
 | CPI | `sol_invoke_signed_c` / rust | L4 封闭 recipe 才开 |
 | PDA | `sol_try_find_program_address` / create | L4 |
-| sysvar | `sol_get_clock_sysvar` 等 | L4；unixTime 仍 FC（PF 也 FC） |
+| sysvar | `sol_get_clock_sysvar` 等 | L4；slot / epoch / unixTime（无符号）已绿 |
 | 内存 | memcpy / memcmp / alloc_free | memcpy 由发射器自用；`alloc_free` 新部署已禁用 |
 | 计算 | `sol_remaining_compute_units` | 不做业务语义 |
 

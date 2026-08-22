@@ -14,7 +14,7 @@
 - 带类型字段表：`UInt8/16/32/64` + `Option UInt64` 双叶；Flag / Maybe Mollusk
 - disc / layout marker 本机 SHA-256，不再挂名表
 - 定长 `Vector UInt64 n` 展开成连续槽；Window Mollusk；不定长 Array fail closed
-- 无 payload 枚举作 tag；Phase Mollusk；带 payload / Bool 仍 fail closed
+- 无 payload 枚举作 tag；Phase Mollusk；带 payload 仍 fail closed。Bool 已在 L4-034 开成 1 字节 u8-le
 - 多个 init；`init` paramCount 按 λ 算；Pair `initBoth` / `getRight`
 - `Option UInt64` match 读 payload；Maybe.getValue Mollusk
 - 单字段用户 inductive 作 tag+payload；Choice Mollusk
@@ -51,16 +51,17 @@
 - 32B key / owner 按字读；Keys Mollusk
 - `keccak256Lit`；Keccak Mollusk
 - 账户下标叶子收口；Trio Mollusk
+- Bool / `unixTime` / nonce prelude / SetAuthority owner / Approve / Multisig2；Gate / Nonce / TokenOwner / TokenMs Mollusk
 
 ## 下一刀
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
-第 1/2 层能 fail-closed 抽出的格子已收口（L4-033）。
+能 fail-closed 抽出的格子已收口（L4-034）。
 
-仍关、且不是延期：账户 3+、`ByteArray 32`、Multisig / Token-2022 / nonce、feature-gated 哈希与曲线。
+仍关、且不是延期：账户 3+ 成功路径、`ByteArray 32`、Token-2022、feature-gated 哈希与曲线、nonce 成功路径（要现成 nonce 账户）。
 
-nonce / Token-2022 / remaining accounts / 运行时 program id 仍关。
+Token-2022 / remaining accounts / 运行时 program id 仍关。
 
 ## 其后（L2 / L3）
 

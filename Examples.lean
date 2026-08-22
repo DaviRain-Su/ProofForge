@@ -35,3 +35,7 @@ import Examples.Hash
 import Examples.Keys
 import Examples.Keccak
 import Examples.Trio
+import Examples.Gate
+import Examples.Nonce
+import Examples.TokenOwner
+import Examples.TokenMs

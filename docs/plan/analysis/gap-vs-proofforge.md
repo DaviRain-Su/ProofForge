@@ -44,7 +44,7 @@ PF 产品轨是 `solana-sbpf-cpi-elf-v1`。Mollusk 量级约 24 个 integration 
 | 入口 | 任意 handler 名 + disc | 固定 init/increment/get 三个 disc | `@[solana_entry]` + 按名 disc |
 | 账户 | 单账户 + CPI 多 role | 单账户 + transfer 三账户 walk | 编译期 N；不开放 remaining accounts |
 | CPI / Token / PDA | System / Token / ATA / vault PDA 封闭目录 | `systemTransfer` 一条 | 抽出通用 `invoke`；特化仍具名 |
-| sysvar | clock.slot 已开；unixTime FC | L4-001 开 `clockSlot` | unixTime 仍 FC |
+| sysvar | clock.slot / epoch / unixTime 已开 | L4-001 / L4-019 / L4-034 | unix 按无符号 u64 |
 | caller | `context.caller` = 指定 outer signer | L4-001 开账户 0 `signerKey0`（首 u64） | 完整 32B / 独立 caller 账户后做 |
 | 证明 | Reference / HandlerIR 有界证书；D1–D4 0/27 | 宿主 def 上的工程定理 | 继续钉用户 def；不承诺 `.so` refinement |
 | CLI | `pf test/run/verify/deploy` | `lake` + 手工 Mollusk | 本仓小 CLI 即可 |
@@ -98,7 +98,7 @@ L1–L3 已绿。CPI 先收成编译期钉死的 `invoke`，再往上叠具名�
 | ID | 内容 | 完成定义 |
 |---|---|---|
 | L4-caller | 读指定 signer 的 32B key | 对齐 PF CallerIsMe 行为，声明 ≠ tx.origin |
-| L4-clock | `sol_get_clock_sysvar` → slot | 非常量；unixTime 仍 FC |
+| L4-clock | `sol_get_clock_sysvar` → slot / epoch / unix | unix 按无符号 u64 |
 | L4-system | 封闭 `system.transfer` recipe | TransferSol 形 Mollusk |
 | L4-token | 封闭 Token `transferChecked` + ATA ensure | 只抄 PF catalog，不接 Token-2022 |
 | L4-pda | 封闭 vault PDA find / bump | 种子字面量冻结 |

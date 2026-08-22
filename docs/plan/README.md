@@ -61,6 +61,7 @@
 | [l4-031](tasks/l4-031.md) | done | 32B key / owner 按字读 |
 | [l4-032](tasks/l4-032.md) | done | keccak256Lit / sol_keccak256 |
 | [l4-033](tasks/l4-033.md) | done | 账户下标叶子收口 |
+| [l4-034](tasks/l4-034.md) | done | 关着的格子一次开完 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

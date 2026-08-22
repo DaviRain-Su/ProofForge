@@ -36,6 +36,10 @@ import Examples.Hash
 import Examples.Keys
 import Examples.Keccak
 import Examples.Trio
+import Examples.Gate
+import Examples.Nonce
+import Examples.TokenOwner
+import Examples.TokenMs
 
 #solana_build Examples.Counter
 
@@ -110,6 +114,14 @@ import Examples.Trio
 #solana_build Examples.Keccak
 
 #solana_build Examples.Trio
+
+#solana_build Examples.Gate
+
+#solana_build Examples.Nonce
+
+#solana_build Examples.TokenOwner
+
+#solana_build Examples.TokenMs
 
 /--
 error: extract/unsupported: no solana_entry
