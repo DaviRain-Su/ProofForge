@@ -33,6 +33,7 @@
 | [evm-001](tasks/evm-001.md) | done | Evm.IR + keccak selector |
 | [evm-002](tasks/evm-002.md) | done | Ops → Yul |
 | [evm-003](tasks/evm-003.md) | done | `#evm_build` + locked solc |
+| [evm-004](tasks/evm-004.md) | done | Anvil ctor / increment / get / overflow |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

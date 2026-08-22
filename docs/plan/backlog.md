@@ -23,7 +23,7 @@
 
 ## 进行中
 
-- EVM 竖切 E0–E3 已绿（Yul + solc 0.8.34 bytecode）。下一刀是 Anvil 四场景（constructor / increment / get / overflow），以及可选 Pair 多 slot。
+- EVM 竖切 E0–E4 已绿（Yul + solc 0.8.34 + Anvil Counter 四条）。下一刀可选 Pair 多 slot Anvil，或窄槽 / Option。
 
 ## 下一刀
 

@@ -22,7 +22,7 @@
 | L2 布局 | 窄整数 / Option / Vector / 无 payload 枚举已绿 | L1 绿 |
 | L3 形状 | 多 init / view 任意叶子已绿 | L1 绿 |
 | L4 recipe | caller / clock / 封闭 CPI | 有具体第二合约 |
-| EVM E0–E3 | 同一 Counter → Yul → solc 0.8.34 | 已绿；Anvil 未开 |
+| EVM E0–E4 | 同一 Counter → Yul → solc 0.8.34 → Anvil | 已绿 |
 
 ## L1 完成定义
 
