@@ -14,8 +14,12 @@ structure Method where
   name : String
   /-- 链上 instruction 名。Lean `init` 映射为 `initialize`。 -/
   ixName : String := ""
-  /-- instruction data 里 u64 参数个数（不含 8 字节 disc）。 -/
+  /-- instruction data 里参数个数（不含 8 字节 disc）。 -/
   paramCount : Nat := 0
+  /-- 每个参数的物理宽：1/2/4/8。默认全 8。 -/
+  paramWidths : Array Nat := #[]
+  /-- view 返回叶数。1 = 单 `uint*`；2 = `(uint64,uint64)`。 -/
+  retCount : Nat := 1
   sketch : Array String := #[]
   ops : Array Ops.Op := #[]
   deriving BEq, Repr, Inhabited
@@ -204,6 +208,14 @@ private def valCanon : Ops.Val → String
   | .evmSelfW0 => "esw0"
   | .evmSelfW1 => "esw1"
   | .evmSelfW2 => "esw2"
+  | .bitAnd l r => s!"and({valCanon l},{valCanon r})"
+  | .bitOr l r => s!"or({valCanon l},{valCanon r})"
+  | .bitXor l r => s!"xor({valCanon l},{valCanon r})"
+  | .bitNot v => s!"not({valCanon v})"
+  | .shiftL l r => s!"shl({valCanon l},{valCanon r})"
+  | .shiftR l r => s!"shr({valCanon l},{valCanon r})"
+  | .indexGet b n i k => s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
+  | .loopIx => "ix"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
@@ -219,14 +231,22 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
     | .evmLogTipped v => s!"elog({valCanon v})"
+    | .forAccum n v => s!"for({n},{valCanon v})"
+    | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
+    | .errorNamed n => s!"err.{n}"
     | .returnU64 v => s!"retu({valCanon v})"
     | .returnState v => s!"rets({valCanon v})"
   String.intercalate ";" (ops.toList.map one)
 
 private def methodCanon (m : Method) : String :=
-  s!"{kindTag m.kind}:{m.ixName}:{m.paramCount}:[{opsCanon m.ops}]"
+  let base := s!"{kindTag m.kind}:{m.ixName}:{m.paramCount}:[{opsCanon m.ops}]"
+  if (m.paramWidths.isEmpty || m.paramWidths.all (· == 8)) && m.retCount == 1 then
+    base
+  else
+    let widths := String.intercalate "," (m.paramWidths.map toString).toList
+    s!"{kindTag m.kind}:{m.ixName}:{m.paramCount}:{widths}:r{m.retCount}:[{opsCanon m.ops}]"
 
 /-- 规范化身份：按 `ixName` 排序。不含 Lean 全名、不含 sketch。 -/
 def canonical (p : Program) : String :=

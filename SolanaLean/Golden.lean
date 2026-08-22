@@ -270,10 +270,62 @@ def extractedTipJar : Program :=
         ops := #[.returnU64 .evmTimestamp] }
     ] }
 
+def extractedLang : Program :=
+  { name := "Lang"
+    slots := #[
+      { name := "cells_0" }, { name := "cells_1" },
+      { name := "cells_2" }, { name := "cells_3" }
+    ]
+    methods := #[
+      { kind := .init, name := "Examples.Lang.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "Examples.Lang.setAt", ixName := "setAt", paramCount := 2
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.indexSet "cells" (.arg 0) (.arg 1) 4, .okState (.arg 1)]
+            #[.errorNamed "oob"]
+        ] },
+      { kind := .get, name := "Examples.Lang.band", ixName := "band", paramCount := 2
+        ops := #[.returnU64 (.bitAnd (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.bor", ixName := "bor", paramCount := 2
+        ops := #[.returnU64 (.bitOr (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.both", ixName := "both", paramCount := 0
+        retCount := 2
+        ops := #[
+          .returnU64 (.field (.arg 0) "cells_0"),
+          .returnU64 (.field (.arg 0) "cells_1")
+        ] },
+      { kind := .get, name := "Examples.Lang.bnot", ixName := "bnot", paramCount := 1
+        ops := #[.returnU64 (.bitNot (.arg 0))] },
+      { kind := .get, name := "Examples.Lang.bxor", ixName := "bxor", paramCount := 2
+        ops := #[.returnU64 (.bitXor (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "cells_0")] },
+      { kind := .get, name := "Examples.Lang.getAt", ixName := "getAt", paramCount := 1
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.returnU64 (.indexGet (.arg 1) "cells" (.arg 0) 0)]
+            #[.returnU64 (.lit 0)]
+        ] },
+      { kind := .get, name := "Examples.Lang.mask8", ixName := "mask8", paramCount := 1
+        paramWidths := #[1]
+        ops := #[.returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Lang.shl", ixName := "shl", paramCount := 2
+        ops := #[.returnU64 (.shiftL (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.shr", ixName := "shr", paramCount := 2
+        ops := #[.returnU64 (.shiftR (.arg 0) (.arg 1))] },
+      { kind := .get, name := "Examples.Lang.sum4", ixName := "sum4", paramCount := 0
+        ops := #[
+          .forAccum 4 (.indexGet (.arg 0) "cells" .loopIx 0),
+          .returnU64 (.indexGet (.arg 0) "cells" .loopIx 0)
+        ] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
-  extractedClock, extractedTransfer, extractedEvmCtx, extractedTipJar
+  extractedClock, extractedTransfer, extractedEvmCtx, extractedTipJar,
+  extractedLang
 ]
 
 /-- `#solana_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/

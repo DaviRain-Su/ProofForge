@@ -6,11 +6,11 @@
 
 ## Types
 
-`Val`：`arg` / `field` / `lit` / SVM 叶 `clockSlot` `signerKey0` / EVM 叶 `evmCaller` `evmBlockNumber` `evmTimestamp` `evmChainId` `evmSelf` `evmCallValue` `evmSelfBalance` / Addr20 三叶 `evmCallerW*` `evmSelfW*`
+`Val`：`arg` / `field` / `lit` / SVM 叶 `clockSlot` `signerKey0` / EVM 叶 `evmCaller` `evmBlockNumber` `evmTimestamp` `evmChainId` `evmSelf` `evmCallValue` `evmSelfBalance` / Addr20 三叶 `evmCallerW*` `evmSelfW*` / 位运算 `bitAnd` `bitOr` `bitXor` `bitNot` `shiftL` `shiftR` / `indexGet` / `loopIx`
 
 `Cmp`：`eq` / `ne` / `lt` / `le` / `gt` / `ge`
 
-`Op`：checked 四则、`ite`、`systemTransfer`、`evmDeposit` / `evmSendEth` / `evmLogTipped`、`okState` / `errorOverflow` / `returnU64` / `returnState`
+`Op`：checked 四则、`ite`、`systemTransfer`、`evmDeposit` / `evmSendEth` / `evmLogTipped`、`forAccum` / `indexSet`、`okState` / `errorOverflow` / `errorNamed` / `returnU64` / `returnState`
 
 ## Tests
 

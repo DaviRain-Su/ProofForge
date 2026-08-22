@@ -10,6 +10,7 @@ import Examples.Clock
 import Examples.Transfer
 import Examples.EvmCtx
 import Examples.TipJar
+import Examples.Lang
 import Tests.Fixtures
 
 #evm_build Examples.Counter
@@ -27,6 +28,8 @@ import Tests.Fixtures
 #evm_build Examples.EvmCtx
 
 #evm_build Examples.TipJar
+
+#evm_build Examples.Lang
 
 /--
 error: extract/unsupported: evm rejects svm leaf in stamp

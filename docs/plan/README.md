@@ -38,6 +38,8 @@
 | [evm-006](tasks/evm-006.md) | done | 窄槽 + Option 双叶 |
 | [evm-007](tasks/evm-007.md) | done | Darwin / Linux 共用 Anvil 入口 |
 | [evm-008](tasks/evm-008.md) | done | 独立 EVM runtime 叶子 |
+| [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
+| [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

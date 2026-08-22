@@ -17,6 +17,8 @@ structure Method where
   ixName : String
   selector : String := ""
   paramCount : Nat := 0
+  paramWidths : Array Nat := #[]
+  retCount : Nat := 1
   ops : Array Ops.Op := #[]
   view : Bool := false
   payable : Bool := false
@@ -41,6 +43,10 @@ def hasOptionLeaves (p : Program) : Bool :=
 private def valForbidden : Ops.Val → Bool
   | .clockSlot | .signerKey0 => true
   | .field b _ => valForbidden b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
+      valForbidden l || valForbidden r
+  | .bitNot v => valForbidden v
+  | .indexGet b _ i _ => valForbidden b || valForbidden i
   | _ => false
 
 private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
@@ -64,7 +70,9 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .evmSendEth a b c d =>
           valForbidden a || valForbidden b || valForbidden c || valForbidden d
       | .evmLogTipped v => valForbidden v
-      | .errorOverflow => false
+      | .forAccum _ v => valForbidden v
+      | .indexSet _ i v _ => valForbidden i || valForbidden v
+      | .errorOverflow | .errorNamed _ => false
 
 def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
   walkForbidden 16 ops
@@ -114,6 +122,8 @@ def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
     ixName := ctorSrc.ixName
     selector := ""
     paramCount := ctorSrc.paramCount
+    paramWidths := ctorSrc.paramWidths
+    retCount := 1
     ops := ctorSrc.ops
     view := false
     payable := false
@@ -122,7 +132,10 @@ def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
   for m in rest do
     if m.ops.isEmpty then
       throw s!"extract/unsupported: empty ops {m.ixName}"
-    let sel := Keccak.selectorU64 m.ixName m.paramCount
+    let widths :=
+      if m.paramWidths.size == m.paramCount then m.paramWidths
+      else Array.replicate m.paramCount 8
+    let sel := Keccak.selectorOfWidths m.ixName widths
     let view := m.kind == .get
     entries := entries.push {
       kind := m.kind
@@ -130,6 +143,8 @@ def fromProgram (src : SolanaLean.IR.Program) : Except String Program := do
       ixName := m.ixName
       selector := sel
       paramCount := m.paramCount
+      paramWidths := widths
+      retCount := m.retCount
       ops := m.ops
       view
       payable := !view && Ops.hasEvmDeposit m.ops
@@ -161,6 +176,14 @@ private def valCanon : Ops.Val → String
   | .evmSelfW0 => "esw0"
   | .evmSelfW1 => "esw1"
   | .evmSelfW2 => "esw2"
+  | .bitAnd l r => s!"and({valCanon l},{valCanon r})"
+  | .bitOr l r => s!"or({valCanon l},{valCanon r})"
+  | .bitXor l r => s!"xor({valCanon l},{valCanon r})"
+  | .bitNot v => s!"not({valCanon v})"
+  | .shiftL l r => s!"shl({valCanon l},{valCanon r})"
+  | .shiftR l r => s!"shr({valCanon l},{valCanon r})"
+  | .indexGet b n i k => s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
+  | .loopIx => "ix"
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
@@ -176,8 +199,11 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
     | .evmLogTipped v => s!"elog({valCanon v})"
+    | .forAccum n v => s!"for({n},{valCanon v})"
+    | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
+    | .errorNamed n => s!"err.{n}"
     | .returnU64 v => s!"retu({valCanon v})"
     | .returnState v => s!"rets({valCanon v})"
   String.intercalate ";" (ops.toList.map one)
@@ -189,7 +215,12 @@ def canonical (p : Program) : String :=
   let entries :=
     (p.entries.qsort (fun a b => a.ixName < b.ixName)).toList.map fun m =>
       let tag := if m.view then "view" else if m.payable then "pay" else "mut"
-      s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:[{opsCanon m.ops}]"
+      let base := s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:[{opsCanon m.ops}]"
+      if (m.paramWidths.isEmpty || m.paramWidths.all (· == 8)) && m.retCount == 1 then
+        base
+      else
+        let widths := String.intercalate "," (m.paramWidths.map toString).toList
+        s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:{widths}:r{m.retCount}:[{opsCanon m.ops}]"
   s!"evm|{p.name}|{slots}|{ctor}|{String.intercalate "/" entries}"
 
 def digestHex (p : Program) : String :=

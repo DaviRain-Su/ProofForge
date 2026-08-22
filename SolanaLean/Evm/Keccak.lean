@@ -128,4 +128,16 @@ def selector (name : String) (paramTypes : Array String) : String :=
 def selectorU64 (name : String) (paramCount : Nat) : String :=
   selector name (Array.replicate paramCount "uint64")
 
+def abiTypeOfWidth : Nat → String
+  | 1 => "uint8"
+  | 2 => "uint16"
+  | 4 => "uint32"
+  | _ => "uint64"
+
+def selectorOfWidths (name : String) (widths : Array Nat) : String :=
+  if widths.isEmpty then
+    selector name #[]
+  else
+    selector name (widths.map abiTypeOfWidth)
+
 end SolanaLean.Evm.Keccak

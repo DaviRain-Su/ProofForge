@@ -195,6 +195,8 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
   | v =>
     if Ops.isEvmLeaf v then
       .error "extract/unsupported: svm rejects evm leaf"
+    else if Ops.isLangVal v then
+      .error "extract/unsupported: svm rejects evm leaf"
     else do
       let mem ← memOfVal p v
       let insn ← loadInsn (widthOfVal p v)
@@ -265,10 +267,12 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .evmSendEth a b c d =>
           valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
       | .evmLogTipped v => valUsesSigner v
+      | .forAccum _ v => valUsesSigner v
+      | .indexSet _ i v _ => valUsesSigner i || valUsesSigner v
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
-      | .errorOverflow => false
+      | .errorOverflow | .errorNamed _ => false
 
 private def usesSignerKey (ops : Array Ops.Op) : Bool :=
   walkUsesSigner 16 ops
@@ -494,6 +498,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       acc := acc ++ (← emitSystemTransfer p label amount)
     | .evmDeposit _ | .evmSendEth .. | .evmLogTipped _ =>
       throw "extract/unsupported: svm rejects evm leaf"
+    | .forAccum .. | .indexSet .. | .errorNamed _ =>
+      throw "extract/unsupported: svm rejects evm leaf"
     | .okState v =>
       let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
       if hasOpt then
@@ -546,7 +552,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | v =>
-          if Ops.isEvmLeaf v then
+          if Ops.isEvmLeaf v || Ops.isLangVal v then
             throw "extract/unsupported: svm rejects evm leaf"
           else if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
@@ -628,7 +634,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if Ops.hasEvmEffect m.ops then
+    if Ops.hasEvmEffect m.ops || Ops.hasLangOp m.ops then
       .error "extract/unsupported: svm rejects evm leaf"
     else if Ops.hasSystemTransfer m.ops then
       let body ← emitMutBody p label m.ops

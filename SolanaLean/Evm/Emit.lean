@@ -118,6 +118,40 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .evmSelfW0 => .ok (packAddrWord "address()" 0)
   | .evmSelfW1 => .ok (packAddrWord "address()" 1)
   | .evmSelfW2 => .ok (packAddrWord "address()" 2)
+  | .bitAnd l r => do
+      let lv ← loadVal p paramPrefix paramCount l
+      let rv ← loadVal p paramPrefix paramCount r
+      return "and(" ++ lv ++ ", " ++ rv ++ ")"
+  | .bitOr l r => do
+      let lv ← loadVal p paramPrefix paramCount l
+      let rv ← loadVal p paramPrefix paramCount r
+      return "or(" ++ lv ++ ", " ++ rv ++ ")"
+  | .bitXor l r => do
+      let lv ← loadVal p paramPrefix paramCount l
+      let rv ← loadVal p paramPrefix paramCount r
+      return "xor(" ++ lv ++ ", " ++ rv ++ ")"
+  | .bitNot v => do
+      let ev ← loadVal p paramPrefix paramCount v
+      return "and(not(" ++ ev ++ "), " ++ u64MaxYul ++ ")"
+  | .shiftL l r => do
+      let lv ← loadVal p paramPrefix paramCount l
+      let rv ← loadVal p paramPrefix paramCount r
+      return "shl(" ++ rv ++ ", " ++ lv ++ ")"
+  | .shiftR l r => do
+      let lv ← loadVal p paramPrefix paramCount l
+      let rv ← loadVal p paramPrefix paramCount r
+      return "shr(" ++ rv ++ ", " ++ lv ++ ")"
+  | .indexGet _ name idx _len => do
+      let iv ← loadVal p paramPrefix paramCount idx
+      let base ←
+        match p.slots.find? (fun s => s.name == name ++ "_0" || s.name == name) with
+        | some s => pure s.index
+        | none =>
+          match p.slots.find? (fun s => s.name.endsWith "_0") with
+          | some s => pure s.index
+          | none => throw s!"extract/unsupported: unknown vector {name}"
+      return "sload(add(" ++ toString base ++ ", " ++ iv ++ "))"
+  | .loopIx => .ok "i"
 
 private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
   match c with
@@ -133,6 +167,17 @@ private def revert0 : String := "revert(0, 0)"
 private def returnWord (indent value : String) : String :=
   indent ++ "mstore(0, " ++ value ++ ")" ++ nl ++
     indent ++ "return(0, 32)" ++ nl
+
+private def revertNamed (indent name : String) : String :=
+  let sel := Keccak.selector name #[]
+  indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
+    indent ++ "revert(0, 4)" ++ nl
+
+private def returnU64Count (ops : Array Ops.Op) : Nat :=
+  ops.foldl (init := 0) fun acc op =>
+    match op with
+    | .returnU64 _ => acc + 1
+    | _ => acc
 
 private def storeSlot (indent : String) (slot : Nat) (value : String) : String :=
   indent ++ "sstore(" ++ toString slot ++ ", " ++ value ++ ")" ++ nl
@@ -155,6 +200,14 @@ private def optionPayName (p : IR.Program) : String :=
 private structure Render where
   last : Option String := none
   next : Nat := 0
+  loopIx : Option String := none
+
+private def vectorLen (p : IR.Program) (name : String) (given : Nat) : Nat :=
+  if given ≠ 0 then given
+  else
+    let pre := name ++ "_"
+    p.slots.foldl (init := 0) fun acc s =>
+      if s.name.startsWith pre then acc + 1 else acc
 
 private def fresh (r : Render) : String × Render :=
   (s!"v{r.next}", { r with next := r.next + 1 })
@@ -163,7 +216,7 @@ private def bindChecked (indent name expr : String) : String :=
   indent ++ "let " ++ name ++ " := " ++ expr ++ nl ++
     indent ++ "if gt(" ++ name ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl
 
-/-- 环境 opcode 必须先 range-check 再当值用。 -/
+/-- 环境 opcode / 移位 / 下标必须先检查再当值用。 -/
 private def materializeVal (p : IR.Program) (indent paramPrefix : String)
     (paramCount : Nat) (v : Ops.Val) (st : Render) :
     Except String (String × String × Render) := do
@@ -180,8 +233,40 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
       let (nm, st') := fresh st
       return (bindChecked indent nm expr, nm, st')
   | none =>
-      let e ← loadVal p paramPrefix paramCount v
-      return ("", e, st)
+    match v with
+    | .shiftL l r | .shiftR l r =>
+        let (preR, rv, st1) ← materializeVal p indent paramPrefix paramCount r st
+        let (preL, lv, st2) ← materializeVal p indent paramPrefix paramCount l st1
+        let (nm, st3) := fresh st2
+        let op := if match v with | .shiftL .. => true | _ => false then "shl" else "shr"
+        let txt := preR ++ preL ++
+          indent ++ "if gt(" ++ rv ++ ", 63) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := " ++ op ++ "(" ++ rv ++ ", " ++ lv ++ ")" ++ nl
+        return (txt, nm, st3)
+    | .indexGet _ name idx len =>
+        let (pre, iv, st1) ←
+          match idx with
+          | .loopIx =>
+              pure ("", st.loopIx.getD "i", st)
+          | _ => materializeVal p indent paramPrefix paramCount idx st
+        let base ←
+          match p.slots.find? (fun s => s.name == name ++ "_0" || s.name == name) with
+          | some s => pure s.index
+          | none =>
+            match p.slots.find? (fun s => s.name.endsWith "_0") with
+            | some s => pure s.index
+            | none => throw s!"extract/unsupported: unknown vector {name}"
+        let (nm, st2) := fresh st1
+        let bound := toString (vectorLen p name len)
+        let txt := pre ++
+          indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := sload(add(" ++ toString base ++ ", " ++ iv ++ "))" ++ nl
+        return (txt, nm, st2)
+    | .loopIx =>
+        return ("", st.loopIx.getD "i", st)
+    | _ =>
+        let e ← loadVal p paramPrefix paramCount v
+        return ("", e, st)
 
 private def brace (inner : String) : String :=
   "{" ++ nl ++ inner ++ "}"
@@ -191,9 +276,11 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
     Except String (String × Render) := do
   let destSlot0 ← slotOf p (destHint p ops)
   let nStates := returnStateCount ops
+  let nRets := returnU64Count ops
   let mut acc := ""
   let mut st := st
   let mut returnStateIdx : Nat := 0
+  let mut returnU64Idx : Nat := 0
   for op in ops do
     match op with
     | .checkedAddU64 l r =>
@@ -285,8 +372,44 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
           indent ++ "log1(0, 32, 0x" ++ Keccak.keccak256HexOfString "Tipped(uint64)" ++ ")" ++ nl
         st := { st with last := some amt }
+    | .forAccum n addend =>
+        let (accN, st1) := fresh st
+        let (iN, st2) := fresh st1
+        let innerSt := { st2 with loopIx := some iN }
+        let (pre, addE, st3) ←
+          materializeVal p (indent ++ "  ") paramPrefix paramCount addend innerSt
+        st := { st3 with loopIx := none }
+        acc := acc ++
+          indent ++ "let " ++ accN ++ " := 0" ++ nl ++
+          indent ++ "for { let " ++ iN ++ " := 0 } lt(" ++ iN ++ ", " ++ toString n ++
+            ") { " ++ iN ++ " := add(" ++ iN ++ ", 1) } {" ++ nl ++
+          pre ++
+          indent ++ "  if gt(" ++ accN ++ ", sub(" ++ u64MaxYul ++ ", " ++ addE ++
+            ")) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "  " ++ accN ++ " := add(" ++ accN ++ ", " ++ addE ++ ")" ++ nl ++
+          indent ++ "}" ++ nl
+        st := { st with last := some accN }
+    | .indexSet name idx value len =>
+        let (preI, iv, st1) ← materializeVal p indent paramPrefix paramCount idx st
+        let (preV, vv, st2) ← materializeVal p indent paramPrefix paramCount value st1
+        st := st2
+        let base ←
+          match p.slots.find? (fun s => s.name == name ++ "_0" || s.name == name) with
+          | some s => pure s.index
+          | none =>
+            match p.slots.find? (fun s => s.name.endsWith "_0") with
+            | some s => pure s.index
+            | none => throw s!"extract/unsupported: unknown vector {name}"
+        let bound := toString (vectorLen p name len)
+        acc := acc ++ preI ++ preV ++
+          indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "sstore(add(" ++ toString base ++ ", " ++ iv ++ "), " ++ vv ++ ")" ++ nl
+        st := { st with last := some vv }
     | .okState v =>
-        if IR.hasOptionLeaves p then
+        if Ops.hasIndexSet ops then
+          let value := st.last.getD "0"
+          acc := acc ++ returnWord indent value
+        else if IR.hasOptionLeaves p then
           let tagN := optionTagName p
           let payN := optionPayName p
           match v with
@@ -332,10 +455,23 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         -- 抽出序列在 checked 算术后仍带 overflow 叶；Yul 已在运算前 revert。
         unless Ops.hasCheckedArith ops do
           acc := acc ++ indent ++ revert0 ++ nl
+    | .errorNamed name =>
+        acc := acc ++ revertNamed indent name
     | .returnU64 v =>
-        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount v st
+        let (pre, value, st') ←
+          match st.last with
+          | some nm => pure ("", nm, { st with last := none })
+          | none => materializeVal p indent paramPrefix paramCount v st
         st := st'
-        acc := acc ++ pre ++ returnWord indent value
+        acc := acc ++ pre
+        if nRets > 1 then
+          acc := acc ++ indent ++ "mstore(" ++ toString (returnU64Idx * 32) ++ ", " ++
+            value ++ ")" ++ nl
+          if returnU64Idx + 1 == nRets then
+            acc := acc ++ indent ++ "return(0, " ++ toString (nRets * 32) ++ ")" ++ nl
+          returnU64Idx := returnU64Idx + 1
+        else
+          acc := acc ++ returnWord indent value
     | .returnState v =>
         let (pre, value, st') ← materializeVal p indent paramPrefix paramCount v st
         st := st'
@@ -406,11 +542,16 @@ private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool
     head := head ++ "        if callvalue() { " ++ revert0 ++ " }" ++ nl
   for i in [0:m.paramCount] do
     let off := 4 + i * 32
+    let w := (m.paramWidths[i]?).getD 8
+    let max := widthMask w
     head := head ++
       "        let arg" ++ toString i ++ " := calldataload(" ++ toString off ++ ")" ++ nl ++
-      "        if gt(arg" ++ toString i ++ ", " ++ u64MaxYul ++ ") { " ++
+      "        if gt(arg" ++ toString i ++ ", " ++ max ++ ") { " ++
         revert0 ++ " }" ++ nl
-  let (body, _) ← emitOps p "        " "arg" m.paramCount m.ops {}
+  let (body, _) ←
+    match emitOps p "        " "arg" m.paramCount m.ops {} with
+    | .ok pair => pure pair
+    | .error reason => throw s!"{reason} in {m.ixName}"
   if body == "" then
     throw s!"extract/unsupported: empty ops {m.ixName}"
   return head ++ body ++ "      }" ++ nl
@@ -450,22 +591,32 @@ def emitYul (p : IR.Program) : Except String String := do
 private def escapeJson (s : String) : String :=
   s.replace "\\" "\\\\" |>.replace "\"" "\\\""
 
-private def paramJson (i : Nat) : String :=
-  "{\"name\":\"arg" ++ toString i ++ "\",\"type\":\"uint64\"}"
+private def paramJsonAt (i width : Nat) : String :=
+  "{\"name\":\"arg" ++ toString i ++ "\",\"type\":\"" ++
+    Keccak.abiTypeOfWidth width ++ "\"}"
 
-private def paramsJson (n : Nat) : String :=
-  String.intercalate "," ((List.range n).map paramJson)
+private def paramsJsonOf (widths : Array Nat) (fallback : Nat) : String :=
+  let ws := if widths.size == fallback then widths else Array.replicate fallback 8
+  String.intercalate "," ((List.range fallback).map fun i =>
+    paramJsonAt i ((ws[i]?).getD 8))
 
 private def ctorAbi (p : IR.Program) : String :=
   "{\"type\":\"constructor\",\"stateMutability\":\"nonpayable\",\"inputs\":[" ++
-    paramsJson p.constructor.paramCount ++ "]}"
+    paramsJsonOf p.constructor.paramWidths p.constructor.paramCount ++ "]}"
+
+private def outputsJson (m : IR.Method) : String :=
+  if m.retCount ≤ 1 then
+    "[{\"name\":\"\",\"type\":\"uint64\"}]"
+  else
+    "[" ++ String.intercalate "," ((List.range m.retCount).map fun _ =>
+      "{\"name\":\"\",\"type\":\"uint64\"}") ++ "]"
 
 private def entryAbi (m : IR.Method) : String :=
   let mutab := if m.view then "view" else if m.payable then "payable" else "nonpayable"
   "{\"type\":\"function\",\"name\":\"" ++ escapeJson m.ixName ++
     "\",\"stateMutability\":\"" ++ mutab ++ "\",\"inputs\":[" ++
-    paramsJson m.paramCount ++
-    "],\"outputs\":[{\"name\":\"\",\"type\":\"uint64\"}]}"
+    paramsJsonOf m.paramWidths m.paramCount ++
+    "],\"outputs\":" ++ outputsJson m ++ "}"
 
 def emitAbi (p : IR.Program) : String :=
   let items := #[ctorAbi p] ++ p.entries.map entryAbi

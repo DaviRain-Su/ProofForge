@@ -14,7 +14,8 @@ def sources : Array SolanaLean.IR.Program := #[
   SolanaLean.Golden.extractedFlag,
   SolanaLean.Golden.extractedMaybe,
   SolanaLean.Golden.extractedEvmCtx,
-  SolanaLean.Golden.extractedTipJar
+  SolanaLean.Golden.extractedTipJar,
+  SolanaLean.Golden.extractedLang
 ]
 
 def programs : Array IR.Program :=
