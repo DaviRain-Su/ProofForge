@@ -1,11 +1,12 @@
 import ProofForge.Ops
 import ProofForge.Evm.IR
-import ProofForge.Evm.Keccak
+import ProofForge.Crypto.Keccak
 
 namespace ProofForge.Evm.Emit
 
 open ProofForge
 open ProofForge.Evm
+open ProofForge.Crypto
 
 private def u64MaxYul : String := "0xffffffffffffffff"
 

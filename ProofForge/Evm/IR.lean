@@ -1,8 +1,10 @@
 import ProofForge.IR
 import ProofForge.Ops
-import ProofForge.Evm.Keccak
+import ProofForge.Crypto.Keccak
 
 namespace ProofForge.Evm.IR
+
+open ProofForge.Crypto
 
 structure Slot where
   name : String

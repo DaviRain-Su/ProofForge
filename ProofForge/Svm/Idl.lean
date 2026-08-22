@@ -1,7 +1,9 @@
 import ProofForge.IR
-import ProofForge.Sha256
+import ProofForge.Crypto.Sha256
 
 namespace ProofForge.Svm.Idl
+
+open ProofForge.Crypto
 
 /-- Anchor / Solana IDL spec `0.1.0`。地址占位，部署后再填。 -/
 

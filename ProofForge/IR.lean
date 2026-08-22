@@ -1,7 +1,9 @@
 import ProofForge.Ops
-import ProofForge.Sha256
+import ProofForge.Crypto.Sha256
 
 namespace ProofForge.IR
+
+open ProofForge.Crypto
 
 inductive MethodKind where
   | init

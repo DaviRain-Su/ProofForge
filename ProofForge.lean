@@ -1,4 +1,6 @@
 import ProofForge.Ops
+import ProofForge.Crypto.Sha256
+import ProofForge.Crypto.Keccak
 import ProofForge.Sha256
 import ProofForge.IR
 import ProofForge.Svm.Runtime

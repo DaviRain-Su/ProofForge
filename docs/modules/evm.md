@@ -9,7 +9,7 @@
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
 | `Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
-| `Evm.Keccak` | Ethereum Keccak-256、ABI selector | SHA-256、链上 opcode |
+| `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | storage slot、constructor、selector、digest | Loader V3、账户 disc |
 | `Evm.Emit` | Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance、event ABI、本合约 transfer/transferFrom | 任意 CALL / Token-2022 |
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
