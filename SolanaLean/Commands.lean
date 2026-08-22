@@ -70,6 +70,8 @@ elab "#solana_build " n:ident : command => do
         throwError "ir/mismatch: extracted Flag digest != fixture"
       if program.name == "Maybe" && digest != IR.digestHex IR.extractedMaybe then
         throwError "ir/mismatch: extracted Maybe digest != fixture"
+      if program.name == "Window" && digest != IR.digestHex IR.extractedWindow then
+        throwError "ir/mismatch: extracted Window digest != fixture"
       logInfo m!"solana-lean: program {program.name} fields = {program.fields}"
       logInfo m!"solana-lean: methods = {program.methods.map (fun m => m.ixName)}"
       logInfo m!"solana-lean: digest = {digest}"

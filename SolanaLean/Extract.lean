@@ -77,7 +77,8 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
             match field.splitOn "." with
             | [] => field
             | parts => parts.getLast!
-          if proj == "mk" || proj == "ok" || proj == "error" then none
+          if proj == "mk" || proj == "ok" || proj == "error" ||
+              proj.startsWith "_proof" || proj == "rfl" || proj == "cells" then none
           else
             match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
             | some b => some (.field b proj)
@@ -106,6 +107,27 @@ private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
           some (.lit 0)
         else if (isConstNamed e ``Option.some || endsWith e ".some") && e.getAppArgs.size ≥ 1 then
           asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else if (isConstNamed e ``GetElem.getElem || isConstNamed e ``Vector.get ||
+            endsWith e ".getElem" || endsWith e ".get") && e.getAppArgs.size ≥ 2 then
+          let args := e.getAppArgs
+          -- 最后一个字面量才是下标；前面的 `OfNat n` 是 Vector 长度。
+          let idx? :=
+            match (args.filterMap (asLit fuel')).back? with
+            | some (.lit n) => some n.toNat
+            | _ => none
+          match idx? with
+          | none => none
+          | some i =>
+            let rec findState (fuel : Nat) (e : Expr) : Option Nat :=
+              match fuel with
+              | 0 => none
+              | fuel' + 1 =>
+                match strip e with
+                | .bvar j => some j
+                | e => e.getAppArgs.findSome? (findState fuel')
+            match findState fuel' e with
+            | some j => some (.field (.arg j) s!"cells_{i}")
+            | none => none
         else none
       else none
 
@@ -292,7 +314,76 @@ private def asOptionPayload (e : Expr) : Option Ops.Val :=
     if args.size ≥ 1 then val args[args.size - 1]! else none
   else none
 
-/-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload。 -/
+/-- `#v[a, b, …]` = `Vector.mk (List.toArray (a :: b :: []))`。 -/
+private def collectListVals (fuel : Nat) (e : Expr) : Array Ops.Val :=
+  match fuel with
+  | 0 => #[]
+  | fuel' + 1 =>
+    let e := strip e
+    if isConstNamed e ``List.nil || endsWith e ".nil" then
+      #[]
+    else if isConstNamed e ``List.cons || endsWith e ".cons" then
+      let args := e.getAppArgs
+      if args.size ≥ 2 then
+        let head := args[args.size - 2]!
+        let tail := args[args.size - 1]!
+        match val head with
+        | some v => #[v] ++ collectListVals fuel' tail
+        | none => collectListVals fuel' tail
+      else #[]
+    else if isConstNamed e ``List.toArray || endsWith e ".toArray" then
+      let args := e.getAppArgs
+      if args.size ≥ 1 then collectListVals fuel' args[args.size - 1]! else #[]
+    else
+      match val e with
+      | some v => #[v]
+      | none => #[]
+
+private def findListVals (fuel : Nat) (e : Expr) : Option (Array Ops.Val) :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    if isConstNamed e ``List.cons || endsWith e ".cons" then
+      some (collectListVals 16 e)
+    else
+      e.getAppArgs.findSome? (findListVals fuel')
+
+private def asVectorLits (e : Expr) : Option (Array Ops.Val) :=
+  let e := strip e
+  if isConstNamed e ``Vector.mk || endsWith e "Vector.mk" then
+    match findListVals 16 e with
+    | some vs => if vs.isEmpty then none else some vs
+    | none => none
+  else none
+
+/-- `xs.set i v`：只抽出被改的那一叶。 -/
+private def asVectorSet (e : Expr) : Option Ops.Val :=
+  let e := strip e
+  if isConstNamed e ``Vector.set || endsWith e ".set" then
+    let args := e.getAppArgs
+    let idx? :=
+      match (args.filterMap (asLit 8)).back? with
+      | some (.lit n) => some n.toNat
+      | _ => none
+    -- `Vector.set xs i v h`：值在字面量下标之后。
+    let payload :=
+      Id.run do
+        let mut seenIdx := false
+        for a in args do
+          match asLit 8 a, val a with
+          | some (.lit _), _ =>
+            seenIdx := true
+          | none, some v =>
+            if seenIdx then return some v
+          | _, _ => pure ()
+        return none
+    match idx?, payload with
+    | some i, some v => some (.field v s!"cells_{i}")
+    | _, _ => none
+  else none
+
+/-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
 private def asStateFields (e : Expr) : Option (Array Ops.Val) :=
   let e := strip e
   if endsWith e ".State.mk" || endsWith e ".mk" then
@@ -305,9 +396,18 @@ private def asStateFields (e : Expr) : Option (Array Ops.Val) :=
         | some v =>
           acc := acc.push (.lit 1) |>.push v
         | none =>
-          match val a with
-          | some v => acc := acc.push v
-          | none => pure ()
+          if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
+            pure ()
+          else
+            match asVectorLits a with
+            | some vs => acc := acc ++ vs
+            | none =>
+              match asVectorSet a with
+              | some v => acc := acc.push v
+              | none =>
+                match val a with
+                | some v => acc := acc.push v
+                | none => pure ()
       if acc.isEmpty then none else some acc
   else none
 
@@ -324,12 +424,15 @@ private def asOkState (e : Expr) : Option Ops.Val :=
           match asOptionPayload st with
           | some v => some v
           | none =>
-            match asStateMk st true with
+            match asVectorSet (strip st) <|>
+                (strip st).getAppArgs.findSome? asVectorSet with
             | some v => some v
             | none =>
-              -- `{ slot := none/some n }` 的 ctor 参数
-              let args := (strip st).getAppArgs
-              args.findSome? asOptionPayload <|> asStateMk st true
+              match asStateMk st true with
+              | some v => some v
+              | none =>
+                let args := (strip st).getAppArgs
+                args.findSome? asOptionPayload <|> asStateMk st true
         else none
       else asStateMk pair true
     else none
@@ -541,6 +644,21 @@ private def leafSlots (name : String) (ty : Expr) : Except String (Array IR.Slot
       ]
     else
       .error s!"extract/unsupported: field {name} is not Option UInt64"
+  else if ty.getAppFn.constName? == some ``Vector then
+    let args := ty.getAppArgs
+    if args.size ≥ 2 && args[args.size - 2]!.consumeMData.getAppFn.constName? == some ``UInt64 then
+      match asLit 8 args[args.size - 1]! with
+      | some (.lit n) =>
+        if n.toNat = 0 then
+          .error s!"extract/unsupported: field {name} Vector length 0"
+        else
+          .ok ((List.range n.toNat).toArray.map fun i =>
+            { name := s!"{name}_{i}", width := 8, abi := "u64-le" })
+      | _ => .error s!"extract/unsupported: field {name} Vector length is not a literal"
+    else
+      .error s!"extract/unsupported: field {name} is not Vector UInt64 n"
+  else if ty.getAppFn.constName? == some ``Array then
+    .error s!"extract/unsupported: field {name} Array is not fixed-length; use Vector"
   else
     .error s!"extract/unsupported: field {name} is not a supported leaf"
 
@@ -551,7 +669,7 @@ def programNameOfInit (n : Name) : String :=
   | .str _ "init" => "Program"
   | _ => "Program"
 
-/-- 从 `init` 返回类型收槽。无 `extends`。叶子：UInt8/16/32/64 与 Option UInt64。 -/
+/-- 从 `init` 返回类型收槽。无 `extends`。叶子：UInt8/16/32/64、Option UInt64、Vector UInt64 n。 -/
 def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.Slot) := do
   let some info := env.find? initName
     | throw s!"extract/unsupported: unknown {initName}"

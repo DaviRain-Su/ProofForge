@@ -69,3 +69,7 @@
 | T-L2-06 | happy | Maybe some 77 | tag=1，payload=77 |
 | T-L2-07 | happy | SHA-256 `""` / `abc` | FIPS 向量 |
 | T-L2-08 | happy | 未挂过的 `neverSeen(u64,u64)` | 算出 disc，不必改表 |
+| T-L2-09 | happy | Window slots | cells_0=8、cells_1=16；data_len 24 |
+| T-L2-10 | error | 不定长 Array 字段 | `use Vector` |
+| T-L2-11 | happy | Window Mollusk init(7) | head=7，tail=0 |
+| T-L2-12 | happy | setTail 9 | head 保持 7，tail=9 |

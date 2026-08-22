@@ -3,6 +3,7 @@ import Examples.Counter
 import Examples.Pair
 import Examples.Flag
 import Examples.Maybe
+import Examples.Window
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -54,6 +55,14 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag
 
 #solana_extract Examples.Maybe.init Examples.Maybe.setSome Examples.Maybe.isSome
+
+#solana_extract Examples.Window.init Examples.Window.setTail Examples.Window.getHead
+
+/--
+error: extract/unsupported: field items Array is not fixed-length; use Vector
+-/
+#guard_msgs (error) in
+#solana_extract Tests.Fixtures.initBag Tests.Fixtures.setBagHead Tests.Fixtures.getBagHead
 
 /--
 error: extract/unsupported: mutating method missing checked arith

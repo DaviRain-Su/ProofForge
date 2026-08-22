@@ -211,6 +211,22 @@ def extractedFlag : Program :=
         ops := #[.returnU64 (.field (.arg 0) "flag")] }
     ] }
 
+def extractedWindow : Program :=
+  { name := "Window"
+    slots := #[{ name := "cells_0" }, { name := "cells_1" }]
+    methods := #[
+      { kind := .init, name := "Examples.Window.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "Examples.Window.setTail", ixName := "setTail", paramCount := 1
+        ops := #[
+          .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
+            #[.okState (.field (.arg 0) "cells_1")]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Window.getHead", ixName := "getHead", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "cells_0")] }
+    ] }
+
 def extractedMaybe : Program :=
   { name := "Maybe"
     slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]

@@ -36,7 +36,8 @@ lake exe solanaLeanAssemble -- build/sbpf
   SOLANA_LEAN_PAIR_SO=../../build/sbpf/Pair.so \
   SOLANA_LEAN_FLAG_SO=../../build/sbpf/Flag.so \
   SOLANA_LEAN_MAYBE_SO=../../build/sbpf/Maybe.so \
-  cargo test --locked --test counter --test pair --test flag --test maybe)
+  SOLANA_LEAN_WINDOW_SO=../../build/sbpf/Window.so \
+  cargo test --locked --test counter --test pair --test flag --test maybe --test window)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。

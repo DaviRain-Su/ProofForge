@@ -14,4 +14,6 @@ def main (args : List String) : IO UInt32 := do
   IO.println s!"wrote {flag.asmPath} and {flag.soPath} ({flag.soBytes.size} bytes)"
   let maybe ← SolanaLean.Assemble.assembleProgram out SolanaLean.IR.extractedMaybe
   IO.println s!"wrote {maybe.asmPath} and {maybe.soPath} ({maybe.soBytes.size} bytes)"
+  let window ← SolanaLean.Assemble.assembleProgram out SolanaLean.IR.extractedWindow
+  IO.println s!"wrote {window.asmPath} and {window.soPath} ({window.soBytes.size} bytes)"
   return 0

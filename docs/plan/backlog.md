@@ -13,14 +13,15 @@
 - `IR.digestHex`（FNV-1a 64）；`#solana_build` 抽出与 fixture 必须同一 digest
 - 带类型字段表：`UInt8/16/32/64` + `Option UInt64` 双叶；Flag / Maybe Mollusk
 - disc / layout marker 本机 SHA-256，不再挂名表
+- 定长 `Vector UInt64 n` 展开成连续槽；Window Mollusk；不定长 Array fail closed
 
 ## 下一刀
 
-L2-002：定长 `Array UInt64 n`。
+L2-enum：无 payload 枚举作 tag。
 
 ## 其后（L2 / L3）
 
-- 定长 Array
+- 无 payload 枚举
 - N 入口；`init` 写全字段；只读 view 返回任意已布局叶子
 
 ## 有具体合约再开（L4）

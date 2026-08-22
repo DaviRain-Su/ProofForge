@@ -52,6 +52,21 @@ structure FlagState where
 def initFlag (initial : UInt64) : FlagState :=
   { value := initial, flag := false }
 
+/-- 负向：不定长 Array，不是 Vector。 -/
+structure BagState where
+  items : Array UInt64
+  deriving Repr
+
+def initBag (_seed : UInt64) : BagState :=
+  { items := #[] }
+
+def getBagHead (_s : BagState) : UInt64 :=
+  0
+
+def setBagHead (s : BagState) (n : UInt64) :
+    Except Examples.Counter.Error (BagState × UInt64) :=
+  .ok ({ items := #[n] }, n)
+
 def getFlagValue (s : FlagState) : UInt64 :=
   s.value
 

@@ -274,8 +274,12 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .field _ fname =>
-          if Ops.hasCheckedArith ops || fname == destHint then
+          if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
+          else if fname.startsWith "cells_" && (IR.fieldOffset p fname).isSome then
+            let load ← loadVal p (.arg 0) 24
+            acc := acc ++ load
+            acc := acc ++ (← emitStoreAndReturn p fname 24)
           else do
             -- 窄字段赋值：okState 抽出的是未改槽，写回指令参数到 dest。
             let load ← loadVal p (.arg 0) 24

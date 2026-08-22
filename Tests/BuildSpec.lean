@@ -3,6 +3,7 @@ import Examples.Counter
 import Examples.Pair
 import Examples.Flag
 import Examples.Maybe
+import Examples.Window
 
 #solana_build Examples.Counter
 
@@ -11,6 +12,8 @@ import Examples.Maybe
 #solana_build Examples.Flag
 
 #solana_build Examples.Maybe
+
+#solana_build Examples.Window
 
 /--
 error: extract/unsupported: no solana_entry
