@@ -106,6 +106,49 @@ private def looksLikeOptionProj (env : Environment) (n : Name) : Bool :=
   | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Option)
   | none => false
 
+/-- 工具自己的模块。用户项目可以叫任何名字。 -/
+private def isToolName (n : Name) : Bool :=
+  let head := n.getRoot
+  head == `ProofForge || head == `Lean || head == `Std || head == `Init ||
+    head == `IO || head == `System || head == `Lake ||
+    head == `HAdd || head == `HSub || head == `HMul || head == `HDiv ||
+    head == `HMod || head == `HAnd || head == `HOr || head == `HXor ||
+    head == `HShiftLeft || head == `HShiftRight || head == `Complement ||
+    head == `LE || head == `LT || head == `GE || head == `GT ||
+    head == `UInt8 || head == `UInt16 || head == `UInt32 || head == `UInt64 ||
+    head == `Bool || head == `Nat || head == `Option || head == `Except ||
+    head == `Prod || head == `Vector || head == `Array || head == `List ||
+    head == `BitVec || head == `OfNat || head == `BEq || head == `Decidable
+
+private def isReservedProj (last : String) : Bool :=
+  last == "mk" || last == "set" || last == "ok" || last == "error" ||
+    last == "getElem" || last == "getElem!" || last == "rfl" ||
+    last.startsWith "_proof"
+
+/-- 用户 datatype：structure 或 inductive，且不在工具模块里。 -/
+private def isUserType (env : Environment) (n : Name) : Bool :=
+  !isToolName n &&
+    (isStructure env n ||
+      match env.find? n with
+      | some (.inductInfo _) => true
+      | _ => false)
+
+/-- 用户 structure / inductive 的投影 / 构造子。`UInt64.toNat`、`HSub.hSub` 不是。 -/
+private def isUserName (env : Environment) (n : Name) : Bool :=
+  if isToolName n || isReservedProj (IR.lastName n.toString) then
+    false
+  else if isUserType env n then
+    true
+  else
+    match env.find? n with
+    | some (.ctorInfo info) => isUserType env info.induct
+    | some _ =>
+      match n with
+      | .str p last =>
+        last != "toNat" && last != "toUInt64" && isUserType env p
+      | _ => false
+    | none => false
+
 private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -117,9 +160,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
       if let some v := asLit fuel' e then some v
       else if let some n := e.getAppFn.constName? then
         let field := n.toString
-        let user :=
-          field.startsWith "Examples." || field.startsWith "ProofForge." ||
-            field.startsWith "Tests."
+        let user := isUserName env n
         if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Svm.Runtime.findPda) &&
             e.getAppArgs.size ≥ 1 then
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -487,9 +528,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               | some n =>
                 let s := n.toString
                 let last := IR.lastName s
-                let user := s.startsWith "Examples." || s.startsWith "Tests."
-                if !user || last == "mk" || last == "getElem" || last == "getElem!" ||
-                    last.startsWith "_proof" then
+                let user := isUserName env n
+                if !user || isReservedProj last then
                   e.getAppArgs.findSome? (fieldNameOf fuel')
                 else some last
               | none => e.getAppArgs.findSome? (fieldNameOf fuel')
@@ -798,12 +838,12 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
         | some n =>
           let s := n.toString
           let last := IR.lastName s
-          let user := s.startsWith "Examples." || s.startsWith "Tests."
-          if !user || last == "set" || last == "mk" || last.startsWith "_proof" then
+          let user := isUserName env n
+          if !user || isReservedProj last then
             e.getAppArgs.findSome? (baseName fuel')
           else some last
-        | none => e.getAppArgs.findSome? (baseName fuel')
-    match idx?, payload, baseName 8 e with
+          | none => e.getAppArgs.findSome? (baseName fuel')
+          match idx?, payload, baseName 8 e with
     | some i, some v, some n => some (.field v s!"{n}_{i}")
     | some i, some v, none => some (.field v s!"cells_{i}")
     | _, _, _ => none
@@ -822,12 +862,12 @@ private def asIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
         | some n =>
           let s := n.toString
           let last := IR.lastName s
-          let user := s.startsWith "Examples." || s.startsWith "Tests."
-          if !user || last == "set" || last == "mk" || last.startsWith "_proof" then
+          let user := isUserName env n
+          if !user || isReservedProj last then
             e.getAppArgs.findSome? (baseName fuel')
           else some last
-        | none => e.getAppArgs.findSome? (baseName fuel')
-    let len :=
+          | none => e.getAppArgs.findSome? (baseName fuel')
+          let len :=
       match args.findSome? (asLit 8) with
       | some (.lit n) => n.toNat
       | _ => 0
@@ -1664,11 +1704,11 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
-    if let some inv := findInvoke env 16 e then
-      return .ok (invokeOps inv (invokeRet env e inv))
     let e0 := strip e
     if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
       pure ()
+    else if let some inv := findInvoke env 16 e then
+      return .ok (invokeOps inv (invokeRet env e inv))
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
     if let some (n, addend) := findForIn env e then
@@ -1688,26 +1728,37 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let f := peelProofLam 4 args[args.size - 1]!
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asOkState env t with
-          | some (cmp, lv, rv), some inv, _, _ =>
+          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asOkState env t,
+              decodeExpr env fuel' t with
+          | some (.ne, .lit 0, .lit 1), some inv, _, _, _ =>
+            return .ok (invokeOps inv (invokeRet env t inv))
+          | some (.ne, .lit 1, .lit 0), some inv, _, _, _ =>
+            return .ok (invokeOps inv (invokeRet env t inv))
+          | some (cmp, lv, rv), some inv, _, _, _ =>
             return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
-          | some (cmp, lv, rv), none, some evmOps, _ =>
+          | some (cmp, lv, rv), none, some evmOps, _, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some (cmp, lv, rv), none, none, some v =>
+          | some (cmp, lv, rv), none, none, some v, _ =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
-          | _, _, _, _ => return .error "extract/unsupported: ite then"
+          | some (cmp, lv, rv), none, none, none, .ok thn =>
+            return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+          | _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
-          match asCheckedAddGuard env condE, asOkState env t, decodeEvmEffect env t, decodeExpr env fuel' t with
-          | some (lhs, rhs), some v, _, _ =>
-            return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
-          | some _, none, some evmOps, _ =>
+          match asCheckedAddGuard env condE, decodeEvmEffect env t, decodeExpr env fuel' t, asOkState env t with
+          | some _, some evmOps, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some _, none, none, .ok thn =>
-            let some (cmp, lv, rv) := asCmp env condE
-              | return .error "extract/unsupported: ite then"
-            return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+          | some (lhs, rhs), none, .ok thn, _ =>
+            -- then 支可以再套比较 / CPI。先做 checked-add，再跑内层。
+            -- 内层若只是 okState，仍压成旧的三连。
+            match thn.toList with
+            | [.okState v] =>
+              return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
+            | _ =>
+              return .ok (#[.checkedAddU64 lhs rhs] ++ thn)
+          | some (lhs, rhs), none, .error _, some v =>
+            return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
           | _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedMulGuard env a).isSome) then
           match asCheckedMulGuard env condE, asOkState env t with
@@ -1715,18 +1766,23 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             return .ok #[.checkedMulU64 lhs rhs, .okState v, .errorOverflow]
           | _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedSubGuard env a).isSome) then
-          match asCheckedSubGuard env condE, asOkState env t, decodeEvmEffect env t, decodeExpr env fuel' t, decodeExpr env fuel' f with
-          | some (lhs, rhs), some v, _, _, _ =>
-            return .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
-          | some _, none, some evmOps, _, _ =>
+          match asCheckedSubGuard env condE, findInvoke env 8 t, decodeEvmEffect env t,
+              decodeExpr env fuel' t, decodeExpr env fuel' f, asOkState env t with
+          | some _, some inv, _, _, _, _ =>
+            let some (cmp, lv, rv) := asCmp env condE
+              | return .error "extract/unsupported: ite then"
+            return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
+          | some _, none, some evmOps, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some _, none, none, .ok thn, .ok els =>
+          | some _, none, none, .ok thn, .ok els, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv thn els]
-          | _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | some (lhs, rhs), none, none, _, _, some v =>
+            return .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
+          | _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asNeZero env a).isSome) then
           match asNeZero env condE with
           | none => return .error "extract/unsupported: ite then"

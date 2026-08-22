@@ -1055,6 +1055,37 @@ def extractedTokenMs : Program :=
         ops := #[.returnU64 (.lit 0)] }
     ] }
 
+def extractedPhoenix : Program :=
+  { name := "Phoenix"
+    slots := #[{ name := "askPrice" }, { name := "askSize" }, { name := "baseFree" }]
+    methods := #[
+      { kind := .init, name := "Projects.Phoenix.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "Projects.Phoenix.postAsk", ixName := "postAsk", paramCount := 1
+        ops := #[
+          .ite .eq (.field (.arg 1) "askSize") (.lit 0)
+            #[
+              .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
+                #[.okState (.field (.arg 1) "baseFree")]
+                #[.errorOverflow]
+            ]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Projects.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 1
+        ops := #[
+          .checkedAddU64 (.field (.arg 1) "baseFree") (.arg 0),
+          .ite .le (.arg 0) (.field (.arg 1) "askSize")
+            #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Projects.Phoenix.askQty", ixName := "askQty", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "askSize")] },
+      { kind := .get, name := "Projects.Phoenix.bestAsk", ixName := "bestAsk", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "askPrice")] },
+      { kind := .get, name := "Projects.Phoenix.makerBase", ixName := "makerBase", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "baseFree")] }
+    ] }
+
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
@@ -1065,6 +1096,7 @@ def programs : Array Program := #[
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
   extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio,
   extractedGate, extractedNonce, extractedTokenOwner, extractedTokenMs,
+  extractedPhoenix,
   extractedEvmCtx, extractedTipJar, extractedLang, extractedVault, extractedOwnable,
   extractedToken
 ]

@@ -28,10 +28,35 @@ private def forbiddenTypeConst : Name → Option String
   | ``BaseIO => some "BaseIO"
   | _ => none
 
-/-- 用户模块声明才施加 extern/opaque/implemented_by 门。Init 原语自带 extern。 -/
+/-- 用户模块声明才施加 extern/opaque/implemented_by 门。
+Lean/Std/Init 以及 prelude 类型（`UInt64.ofNat`）不算用户代码。
+任意 Lake 包里的合约（`Examples`、`Projects`、外面的包）都算。 -/
+private def isFrameworkRoot (n : Name) : Bool :=
+  n == `Lean || n == `Std || n == `Init || n == `IO || n == `System ||
+    n == `Lake || n == `UInt8 || n == `UInt16 || n == `UInt32 || n == `UInt64 ||
+    n == `Bool || n == `Nat || n == `String || n == `Char || n == `ByteArray ||
+    n == `Array || n == `List || n == `Option || n == `Except || n == `Prod ||
+    n == `Vector || n == `BitVec || n == `Int || n == `Fin || n == `Name ||
+    n == `Unit || n == `True || n == `False || n == `Eq || n == `HAdd ||
+    n == `HSub || n == `HMul || n == `HDiv || n == `HMod || n == `HAnd ||
+    n == `HOr || n == `HXor || n == `HShiftLeft || n == `HShiftRight ||
+    n == `Complement || n == `LE || n == `LT || n == `GE || n == `GT ||
+    n == `BEq || n == `Decidable || n == `DecidableEq || n == `Inhabited ||
+    n == `Repr || n == `OfNat || n == `ForIn || n == `Id ||
+    n == `panicCore || n == `panicWithPos || n == `outOfBounds ||
+    n == `Float || n == `Float32 || n == `USize
+
 private def isUserDecl (n : Name) : Bool :=
-  let head := n.getRoot
-  head == `ProofForge || head == `Examples || head == `Tests
+  match n with
+  | .str p _ =>
+    let head := n.getRoot
+    -- `floatSpec` / `UInt64.ofNat`：父匿名，或根是 prelude 类型。
+    -- `Examples.Counter.init`、`Acme.Swap.buy`：有模块路径。
+    !head.isAnonymous && !isFrameworkRoot head && !p.isAnonymous
+  | .num p _ =>
+    let head := n.getRoot
+    !head.isAnonymous && !isFrameworkRoot head && !p.isAnonymous
+  | .anonymous => false
 
 private def enqueueUsed (used : NameSet) (queue : Array Name) (seen : NameSet) :
     Array Name × NameSet :=
@@ -87,7 +112,7 @@ def check (env : Environment) (root : Name) : Decision :=
           | return .reject s!"profile/rejected: unknown {n}"
         if info.isPartial then
           return .reject s!"profile/rejected: partial {n}"
-        if isUserDecl n then
+        if isUserDecl n && n != ``sorryAx then
           if info.isUnsafe then
             return .reject s!"profile/rejected: unsafe {n}"
           if (getExternAttrData? env n).isSome then
@@ -101,7 +126,9 @@ def check (env : Environment) (root : Name) : Decision :=
           | .opaqueInfo _ =>
             return .reject s!"profile/rejected: partial {n}"
           | .axiomInfo v =>
-            return .reject s!"profile/rejected: axiom {v.name}"
+            -- kernel 公理（propext / Quot.sound）放行；用户 sorry 走 sorryAx。
+            if v.name == ``sorryAx then
+              return .reject s!"profile/rejected: axiom {v.name}"
           | _ => pure ()
         if n == ``sorryAx then
           return .reject s!"profile/rejected: axiom sorryAx"

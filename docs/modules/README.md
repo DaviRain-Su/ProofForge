@@ -9,7 +9,8 @@
 | [IR](ir.md) | 可哈希程序形状 + body sketch |
 | [Profile](profile.md) | 传递闭包剖面 |
 | [Ops](ops.md) | Expr 操作序列 |
-| [Extract](extract.md) | Expr → IR + ops |
+| [Extract](extract.md) | Expr → IR + ops；任意用户项目 |
+| [Phoenix](phoenix.md) | 独立项目：单档 FIFO 切片 |
 | [Svm](svm.md) | Ops → sBPF / IDL / locked sbpf |
 | [Emit](emit.md) | `Svm.Emit`：Counter → sBPF 文本 |
 | [Assemble](assemble.md) | `Svm.Assemble`：`sbpf` 子进程 → `.so` + IDL |

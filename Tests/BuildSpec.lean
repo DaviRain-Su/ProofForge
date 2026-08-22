@@ -46,6 +46,7 @@ import Examples.Gate
 import Examples.Nonce
 import Examples.TokenOwner
 import Examples.TokenMs
+import Projects.Phoenix
 
 
 #pf_build Examples.Counter
@@ -129,6 +130,8 @@ import Examples.TokenMs
 #pf_build Examples.TokenOwner
 
 #pf_build Examples.TokenMs
+
+#pf_build Projects.Phoenix
 
 /--
 error: extract/unsupported: svm rejects evm leaf
