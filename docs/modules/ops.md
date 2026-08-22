@@ -6,8 +6,8 @@
 
 ## Types
 
-`Val`：`arg` / `field` / `add` / `subFromMax`  
-`Op`：`checkedAddU64` / `okState` / `errorOverflow` / `returnU64` / `returnState`
+`Val`：`arg` / `field` / `lit`  
+`Op`：`checkedAddU64` / `checkedSubU64` / `okState` / `errorOverflow` / `returnU64` / `returnState`
 
 ## Tests
 

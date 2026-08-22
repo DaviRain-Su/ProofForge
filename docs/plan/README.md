@@ -15,5 +15,6 @@
 | [gen-001](tasks/gen-001.md) | done | Expr → checkedAdd 操作序列 |
 | [gen-002](tasks/gen-002.md) | done | 按 Op 选择 handler 体 |
 | [gen-003](tasks/gen-003.md) | done | 按 Val 生成 load |
+| [gen-004](tasks/gen-004.md) | done | 单账户 UInt64 表达式编译器 + decrement |
 
 积压：[backlog.md](backlog.md)

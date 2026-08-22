@@ -33,4 +33,9 @@ def wrappingAdd (s : SolanaLean.Counter.State) (delta : UInt64) :
   let next := s.value + delta
   .ok ({ value := next }, next)
 
+def wrappingSub (s : SolanaLean.Counter.State) (delta : UInt64) :
+    Except SolanaLean.Counter.Error (SolanaLean.Counter.State × UInt64) :=
+  let next := s.value - delta
+  .ok ({ value := next }, next)
+
 end Tests.Fixtures

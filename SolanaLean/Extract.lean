@@ -11,72 +11,103 @@ def sketchOfExpr (e : Expr) : Array String :=
   let names := e.getUsedConstantsAsSet.toList.toArray.qsort (·.toString < ·.toString)
   names.map (·.toString)
 
-def sketchOfDecl (env : Environment) (n : Name) : Except String (Array String) :=
-  match env.find? n with
-  | none => .error s!"extract/unsupported: unknown {n}"
-  | some info =>
-    match info.value? with
-    | none => .error s!"extract/unsupported: no value {n}"
-    | some e => .ok (sketchOfExpr e)
-
 private def isConstNamed (e : Expr) (n : Name) : Bool :=
-  e.getAppFn.constName? == some n
+  e.consumeMData.getAppFn.constName? == some n
 
 private def strip (e : Expr) : Expr :=
   e.consumeMData
 
-/-- `s.value` / `State.value s` -/
-private def asFieldValue (e : Expr) : Option Ops.Val :=
-  let e := strip e
-  let fn := e.getAppFn
-  let args := e.getAppArgs
-  match fn.constName? with
-  | some n =>
-    if n.toString.endsWith ".value" && args.size ≥ 1 then
-      match args[args.size - 1]! with
-      | .bvar i => some (.field (.arg i) "value")
-      | _ => none
-    else none
-  | none => none
+private def endsWith (e : Expr) (suf : String) : Bool :=
+  (e.getAppFn.constName?.map (·.toString.endsWith suf)).getD false
 
-private def asArg (e : Expr) : Option Ops.Val :=
-  match strip e with
-  | .bvar i => some (.arg i)
-  | _ => asFieldValue e
+private def peelLams (e : Expr) : Nat × Expr :=
+  let rec go (fuel : Nat) (n : Nat) (e : Expr) : Nat × Expr :=
+    match fuel with
+    | 0 => (n, e)
+    | fuel' + 1 =>
+      match strip e with
+      | .lam _ _ body _ => go fuel' (n + 1) body
+      | .letE _ _ _ body _ => go fuel' n body
+      | e => (n, e)
+  go 32 0 e
 
-/-- `x + y` via `HAdd.hAdd`. -/
-private def asAdd (e : Expr) : Option (Ops.Val × Ops.Val) :=
-  let e := strip e
-  if isConstNamed e ``HAdd.hAdd then
-    let args := e.getAppArgs
-    if args.size ≥ 2 then
-      match asArg args[args.size - 2]!, asArg args[args.size - 1]! with
-      | some x, some y => some (x, y)
-      | _, _ => none
-    else none
-  else none
+private def peelLets (e : Expr) : Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Expr :=
+    match fuel with
+    | 0 => e
+    | fuel' + 1 =>
+      match strip e with
+      | .letE _ _ _ body _ => go fuel' body
+      | e => e
+  go 16 e
 
-/-- `u64Max - x` -/
+private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    match strip e with
+    | .lit (.natVal n) =>
+      if n < UInt64.size then some (.lit (UInt64.ofNat n)) else none
+    | e =>
+      if isConstNamed e ``OfNat.ofNat then
+        let args := e.getAppArgs
+        if args.size ≥ 1 then asLit fuel' args[args.size - 1]! else none
+      else none
+
+private def asVal (fuel : Nat) (e : Expr) : Option Ops.Val :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    match e with
+    | .bvar i => some (.arg i)
+    | _ =>
+      if let some v := asLit fuel' e then some v
+      else if endsWith e ".value" && e.getAppArgs.size ≥ 1 then
+        match asVal fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+        | some b => some (.field b "value")
+        | none => none
+      else none
+
+private def val (e : Expr) : Option Ops.Val :=
+  asVal 16 e
+
 private def asSubFromMax (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``HSub.hSub then
     let args := e.getAppArgs
-    if args.size ≥ 2 then
-      let left := strip args[args.size - 2]!
-      let right := args[args.size - 1]!
-      if (left.getAppFn.constName?.map (·.toString.endsWith ".u64Max")).getD false then
-        asArg right
-      else none
+    if args.size ≥ 2 && endsWith (strip args[args.size - 2]!) ".u64Max" then
+      val args[args.size - 1]!
     else none
   else none
 
-/-- `s.value ≤ u64Max - delta` -/
-private def asLeChecked (e : Expr) : Option (Ops.Val × Ops.Val) :=
+/-- `x ≤ u64Max - y`  →  checked add x y -/
+private def asCheckedAddGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``LE.le then
     let args := e.getAppArgs
     if args.size ≥ 2 then
-      match asFieldValue args[args.size - 2]!, asSubFromMax args[args.size - 1]! with
+      match val args[args.size - 2]!, asSubFromMax args[args.size - 1]! with
+      | some lhs, some rhs => some (lhs, rhs)
+      | _, _ => none
+    else none
+  else none
+
+/-- `x ≥ y` / `y ≤ x`  →  checked sub x y -/
+private def asCheckedSubGuard (e : Expr) : Option (Ops.Val × Ops.Val) :=
+  let e := strip e
+  if isConstNamed e ``LE.le then
+    let args := e.getAppArgs
+    if args.size ≥ 2 then
+      match val args[args.size - 2]!, val args[args.size - 1]! with
+      | some rhs, some lhs =>
+        some (lhs, rhs)
+      | _, _ => none
+    else none
+  else if isConstNamed e ``GE.ge then
+    let args := e.getAppArgs
+    if args.size ≥ 2 then
+      match val args[args.size - 2]!, val args[args.size - 1]! with
       | some lhs, some rhs => some (lhs, rhs)
       | _, _ => none
     else none
@@ -84,14 +115,13 @@ private def asLeChecked (e : Expr) : Option (Ops.Val × Ops.Val) :=
 
 private def asStateMk (e : Expr) : Option Ops.Val :=
   let e := strip e
-  let n? := e.getAppFn.constName?
-  if (n?.map (fun n => n.toString.endsWith ".State.mk" || n.toString.endsWith ".mk")).getD false then
+  if endsWith e ".State.mk" || endsWith e ".mk" then
     let args := e.getAppArgs
-    if args.size ≥ 1 then asArg args[args.size - 1]! else none
+    if args.size ≥ 1 then val args[args.size - 1]! else none
   else none
 
 private def asOkState (e : Expr) : Option Ops.Val :=
-  let e := strip e
+  let e := peelLets (strip e)
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
     if args.size ≥ 1 then
@@ -108,66 +138,57 @@ private def isErrorOverflow (e : Expr) : Bool :=
   if isConstNamed e ``Except.error then
     let args := e.getAppArgs
     if h : args.size > 0 then
-      let last := strip args[args.size - 1]
-      (last.getAppFn.constName?.map (·.toString.endsWith ".overflow")).getD false
+      endsWith (strip args[args.size - 1]) ".overflow"
     else false
   else false
 
-/-- `fun a b => body`，返回 binder 数和体。 -/
-private partial def peelLams (e : Expr) : Nat × Expr :=
-  let rec go (n : Nat) (e : Expr) : Nat × Expr :=
-    match strip e with
-    | .lam _ _ body _ => go (n + 1) body
-    | .letE _ _ _ body _ => go n body
-    | e => (n, e)
-  go 0 e
+private def decodePlain (e : Expr) : Except String (Array Ops.Op) :=
+  let e := peelLets (strip e)
+  if let some v := asOkState e then
+    .ok #[.okState v]
+  else if let some v := asStateMk e then
+    .ok #[.returnState v]
+  else if let some v := val e then
+    if match v with | .field _ "value" => true | _ => false then
+      .ok #[.returnU64 v]
+    else
+      .ok #[.returnState v]
+  else
+    .error "extract/unsupported: body"
 
-private def decodeInit (e : Expr) : Except String (Array Ops.Op) :=
-  let (_, body) := peelLams e
-  match asStateMk body with
-  | some v => .ok #[.returnState v]
-  | none => .error "extract/unsupported: init body"
-
-private def decodeGet (e : Expr) : Except String (Array Ops.Op) :=
-  let (_, body) := peelLams e
-  match asFieldValue body with
-  | some v => .ok #[.returnU64 v]
-  | none => .error "extract/unsupported: get body"
-
-private def peelLets (e : Expr) : Expr :=
-  let rec go (fuel : Nat) (e : Expr) : Expr :=
-    match fuel with
-    | 0 => e
-    | fuel' + 1 =>
-      match strip e with
-      | .letE _ _ _ body _ => go fuel' body
-      | e => e
-  go 16 e
-
-private def decodeIncrement (e : Expr) : Except String (Array Ops.Op) :=
-  let (_, body) := peelLams e
-  let body := strip body
-  if isConstNamed body ``ite && body.getAppArgs.size ≥ 5 then
-    let args := body.getAppArgs
-    let cond? := args.find? (fun a => isConstNamed a ``LE.le)
+private def decodeIte (e : Expr) : Except String (Array Ops.Op) :=
+  let e := strip e
+  if !(isConstNamed e ``ite) || e.getAppArgs.size < 5 then
+    decodePlain e
+  else
+    let args := e.getAppArgs
+    let cond? := args.find? (fun a => isConstNamed a ``LE.le || isConstNamed a ``GE.ge)
     let t := peelLets args[args.size - 2]!
     let f := args[args.size - 1]!
-    match cond?.bind asLeChecked, asOkState t with
-    | some (lhs, rhs), some v =>
-      if isErrorOverflow f then
+    if !isErrorOverflow f then
+      .error "extract/unsupported: false branch not overflow"
+    else
+      match cond?.bind asCheckedAddGuard, asOkState t with
+      | some (lhs, rhs), some v =>
         .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
-      else
-        .error "extract/unsupported: increment false branch"
-    | none, _ => .error "extract/unsupported: increment cond"
-    | _, none => .error "extract/unsupported: increment then"
-  else
-    .error "extract/unsupported: increment not ite"
+      | none, some v =>
+        match cond?.bind asCheckedSubGuard with
+        | some (lhs, rhs) =>
+          .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
+        | none => .error "extract/unsupported: ite cond"
+      | _, none => .error "extract/unsupported: ite then"
 
-def decodeMethod (kind : IR.MethodKind) (e : Expr) : Except String (Array Ops.Op) :=
-  match kind with
-  | .init => decodeInit e
-  | .get => decodeGet e
-  | .increment => decodeIncrement e
+def decodeBody (e : Expr) : Except String (Array Ops.Op) :=
+  let (_, body) := peelLams e
+  decodeIte body
+
+/-- 可变入口必须是带 overflow 假支的 checked ite。 -/
+def decodeMutating (e : Expr) : Except String (Array Ops.Op) := do
+  let ops ← decodeBody e
+  if Ops.hasCheckedArith ops then
+    return ops
+  else
+    throw "extract/unsupported: mutating method missing checked arith"
 
 def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     Except String IR.Method := do
@@ -176,10 +197,13 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
   let some e := info.value?
     | throw s!"extract/unsupported: no value {n}"
   let sketch := sketchOfExpr e
-  let ops ← decodeMethod kind e
+  let ops ←
+    match kind with
+    | .increment => decodeMutating e
+    | _ => decodeBody e
   return { kind, name := n.toString, sketch, ops }
 
-def extractCounter (env : Environment)
+def extractProgram (env : Environment)
     (initName incrementName getName : Name)
     (programName : String := "Counter") :
     Except String IR.Program := do
@@ -189,11 +213,11 @@ def extractCounter (env : Environment)
   let initM ← extractMethod env .init initName
   let incM ← extractMethod env .increment incrementName
   let getM ← extractMethod env .get getName
-  unless Ops.hasCheckedAdd incM.ops do
-    throw "extract/unsupported: increment missing checkedAddU64"
   let program : IR.Program := { name := programName, methods := #[initM, incM, getM] }
   unless IR.isCounterShape program do
-    throw "extract/unsupported: not counter shape"
+    throw "extract/unsupported: not three-method shape"
   return program
+
+def extractCounter := extractProgram
 
 end SolanaLean.Extract

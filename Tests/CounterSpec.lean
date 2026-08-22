@@ -1,5 +1,6 @@
 import SolanaLean
 import Examples.Counter
+import Examples.Decrement
 
 namespace Tests.CounterSpec
 
@@ -22,6 +23,15 @@ private def isOverflow (r : Except Error (State × UInt64)) : Bool :=
 #guard isOkValue (increment (s u64Max) 0) u64Max
 #guard isOverflow (increment (s u64Max) 1)
 #guard isOverflow (increment (s (u64Max - 1)) 2)
+
+#guard
+  match Examples.Decrement.decrement (s 5) 3 with
+  | .ok (st, ret) => st.value == 2 && ret == 2
+  | .error _ => false
+#guard
+  match Examples.Decrement.decrement (s 2) 3 with
+  | .error .overflow => true
+  | .ok _ => false
 #guard isOkValue (increment (s (u64Max - 1)) 1) u64Max
 #guard get (init 7) == 7
 #guard SolanaLean.IR.isCounterShape Examples.Counter.program

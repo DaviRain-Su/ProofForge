@@ -62,13 +62,16 @@ private def memOfVal (v : Ops.Val) : Except String String :=
   match v with
   | .field _ "value" => .ok "[r6 + ACC0_DATA + 8]"
   | .arg _ => .ok "[r6 + INSTRUCTION_DATA + 8]"
-  | .add .. => .error "extract/unsupported: cannot load add"
-  | .subFromMax .. => .error "extract/unsupported: cannot load subFromMax"
+  | .lit _ => .error "extract/unsupported: lit has no mem"
   | .field _ name => .error s!"extract/unsupported: unknown field {name}"
 
-private def loadVal (v : Ops.Val) (stackOff : Nat) : Except String String := do
-  let mem ← memOfVal v
-  return s!"  ; load {repr v}\n  ldxdw r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+private def loadVal (v : Ops.Val) (stackOff : Nat) : Except String String :=
+  match v with
+  | .lit n =>
+    .ok s!"  ; load lit {n}\n  lddw r1, {n.toNat}\n  stxdw [r10 - {stackOff}], r1\n"
+  | _ => do
+    let mem ← memOfVal v
+    return s!"  ; load {repr v}\n  ldxdw r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
 private def emitInitBody (v : Ops.Val) : Except String String := do
   let load ← loadVal v 8
@@ -84,24 +87,25 @@ body_initialize:
   exit
 "
 
-private def emitCheckedAddBody (lhs rhs : Ops.Val) : Except String String := do
+private def emitCheckedArithBody (label : String) (lhs rhs : Ops.Val) (isAdd : Bool) :
+    Except String String := do
   let loadL ← loadVal lhs 8
   let loadR ← loadVal rhs 16
+  let arith :=
+    if isAdd then
+      s!"  lddw r3, 0xffffffffffffffff\n  sub64 r3, r2\n  jgt r1, r3, err_{label}\n  mov64 r4, r1\n  add64 r4, r2\n"
+    else
+      s!"  jlt r1, r2, err_{label}\n  mov64 r4, r1\n  sub64 r4, r2\n"
   return s!"\
-body_increment:
+body_{label}:
 {loadL}{loadR}  ldxdw r1, [r10 - 8]
   ldxdw r2, [r10 - 16]
-  lddw r3, 0xffffffffffffffff
-  sub64 r3, r2
-  jgt r1, r3, err_add_0
-  mov64 r4, r1
-  add64 r4, r2
-  stxdw [r10 - 24], r4
-  ja ok_add_1
-err_add_0:
+{arith}  stxdw [r10 - 24], r4
+  ja ok_{label}
+err_{label}:
   lddw r0, {overflowCode}
   exit
-ok_add_1:
+ok_{label}:
   ldxdw r1, [r10 - 24]
   stxdw [r6 + ACC0_DATA + 8], r1
   ldxdw r1, [r6 + ACC0_DATA + 8]
@@ -140,10 +144,13 @@ private def getVal (ops : Array Ops.Op) : Except String Ops.Val :=
   | some v => .ok v
   | none => .error "extract/unsupported: get missing returnU64"
 
-private def addArgs (ops : Array Ops.Op) : Except String (Ops.Val × Ops.Val) :=
-  match ops.findSome? (fun | .checkedAddU64 l r => some (l, r) | _ => none) with
+private def arithArgs (ops : Array Ops.Op) : Except String (Ops.Val × Ops.Val × Bool) :=
+  match ops.findSome? (fun
+    | .checkedAddU64 l r => some (l, r, true)
+    | .checkedSubU64 l r => some (l, r, false)
+    | _ => none) with
   | some p => .ok p
-  | none => .error "extract/unsupported: increment missing checkedAddU64"
+  | none => .error "extract/unsupported: increment missing checked arith"
 
 private def hasReturnState (ops : Array Ops.Op) : Bool :=
   ops.any (fun | .returnState _ => true | _ => false)
@@ -164,15 +171,15 @@ private def emitHandler (m : IR.Method) : Except String String := do
     let body ← emitInitBody v
     return s!"initialize:\n{prelude "initialize" 16 true true true}{body}"
   | .increment =>
-    if !Ops.hasCheckedAdd m.ops then
-      .error "extract/unsupported: increment missing checkedAddU64"
+    if !Ops.hasCheckedArith m.ops then
+      .error "extract/unsupported: increment missing checked arith"
     else if !hasErrorOverflow m.ops then
       .error "extract/unsupported: increment missing errorOverflow"
     else if !hasOkState m.ops then
       .error "extract/unsupported: increment missing okState"
     else do
-      let (lhs, rhs) ← addArgs m.ops
-      let body ← emitCheckedAddBody lhs rhs
+      let (lhs, rhs, isAdd) ← arithArgs m.ops
+      let body ← emitCheckedArithBody "increment" lhs rhs isAdd
       return s!"increment:\n{prelude "increment" 16 false true false}{body}"
   | .get =>
     let v ← getVal m.ops

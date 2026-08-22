@@ -15,4 +15,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**汇编 load 跟抽出的 Val 走。** 对调 checked-add 操作数会改变 load 顺序。证明仍在本机 `def` 上。
+当前阶段：**单账户 UInt64 剖面**。同一套 Extract/Emit 编 increment 和 decrement。证明在本机 `def` 上。

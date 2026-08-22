@@ -2,6 +2,7 @@ import Lean
 import SolanaLean.Profile
 import SolanaLean.Extract
 import SolanaLean.IR
+import SolanaLean.Ops
 import SolanaLean.Emit
 
 open Lean Elab Command
@@ -19,25 +20,20 @@ elab "#solana_check " n:ident : command => do
     throwError reason
 
 /-- `#solana_extract init increment get`：抽出 Counter IR 并打印 sketch。 -/
-elab "#solana_extract " initN:ident incrementN:ident getN:ident : command => do
+elab "#solana_extract " initN:ident mutN:ident getN:ident : command => do
   let initName ← liftCoreM <| realizeGlobalConstNoOverload initN
-  let incrementName ← liftCoreM <| realizeGlobalConstNoOverload incrementN
+  let mutName ← liftCoreM <| realizeGlobalConstNoOverload mutN
   let getName ← liftCoreM <| realizeGlobalConstNoOverload getN
   let env ← getEnv
-  match Extract.extractCounter env initName incrementName getName with
+  match Extract.extractProgram env initName mutName getName with
   | .error reason => throwError reason
   | .ok program => do
-    let incSketch :=
-      (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.sketch)
-    match incSketch with
-    | some sketch =>
-      unless sketch.any (· == "SolanaLean.Counter.u64Max") do
-        throwError "ir/mismatch: increment sketch missing u64Max"
-    | none => throwError "extract/unsupported: missing increment"
-    let extractedOps := program.methods.map (·.ops)
-    let fixtureOps := IR.extractedCounter.methods.map (·.ops)
-    unless extractedOps == fixtureOps do
-      throwError "ir/mismatch: extract != IR.extractedCounter"
+    let mutOps := (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.ops)
+    match mutOps with
+    | some ops =>
+      unless Ops.hasCheckedArith ops do
+        throwError "extract/unsupported: mutating method missing checked arith"
+    | none => throwError "extract/unsupported: missing mutating method"
     match Emit.emitCounterAsm program with
     | .error reason => throwError reason
     | .ok asm =>

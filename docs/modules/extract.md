@@ -6,7 +6,7 @@
 
 ## Boundary
 
-先 `Profile.checkAll`。认出 `ite` + `LE.le` + `u64Max -` 为 `checkedAddU64`。无保护加法 fail closed。
+递归下降 `Expr`。`x ≤ u64Max - y` → `checkedAddU64`；`y ≤ x` → `checkedSubU64`。可变方法无守卫则 fail closed。
 
 ## API
 

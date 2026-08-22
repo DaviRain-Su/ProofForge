@@ -5,7 +5,7 @@ import SolanaLean
 #guard
   match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.counterProgram with
   | .error "extract/unsupported: init missing returnState" => true
-  | .error "extract/unsupported: increment missing checkedAddU64" => true
+  | .error "extract/unsupported: increment missing checked arith" => true
   | _ => false
 
 #guard
