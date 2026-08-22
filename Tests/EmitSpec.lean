@@ -85,8 +85,8 @@ private def pairShape : SolanaLean.IR.Program :=
 #guard
   match SolanaLean.IR.layoutMarkerHex
       { name := "X", slots := #[{ name := "a" }, { name := "b" }, { name := "c" }], methods := #[] } with
-  | .error reason => reason.startsWith "extract/unsupported: unregistered layout"
-  | .ok _ => false
+  | .ok "0xa2e4c31e74585ac3" => true
+  | _ => false
 
 private def swappedIncrement : SolanaLean.IR.Program :=
   { name := "Counter"

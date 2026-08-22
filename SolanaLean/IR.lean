@@ -1,4 +1,5 @@
 import SolanaLean.Ops
+import SolanaLean.Sha256
 
 namespace SolanaLean.IR
 
@@ -54,24 +55,25 @@ def lastName (n : String) : String :=
 def ixParamSig (paramCount : Nat) : String :=
   String.intercalate "," (List.replicate paramCount "u64")
 
+private def hexDigit (n : Nat) : Char :=
+  if n < 10 then Char.ofNat (n + 48) else Char.ofNat (n + 87)
+
+def u64Hex (n : UInt64) : String :=
+  let rec go (fuel : Nat) (v : Nat) (acc : String) : String :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      if v = 0 && acc ≠ "" then acc
+      else go fuel' (v / 16) (String.singleton (hexDigit (v % 16)) ++ acc)
+  let s := go 17 n.toNat ""
+  if s = "" then "0" else s
+
+/-- `sha256("proof-forge-solana-v1:" ++ name ++ "(" ++ sig ++ ")")` 前 8 字节，小端。 -/
+def discPreimage (ixName : String) (paramCount : Nat) : String :=
+  s!"proof-forge-solana-v1:{ixName}({ixParamSig paramCount})"
+
 def discHexOf (ixName : String) (paramCount : Nat) : Except String String :=
-  match ixName, ixParamSig paramCount with
-  | "initialize", "u64" => .ok "0x642858a76747495e"
-  | "increment", "u64" => .ok "0x223edbd10397c79d"
-  | "decrement", "u64" => .ok "0x1b92f24dfb29d300"
-  | "get", "" => .ok "0x37dd90d6b076a2a4"
-  | "getLeft", "" => .ok "0xe391a39d1496f393"
-  | "creditLeft", "u64" => .ok "0xca5ea3052ea3b57e"
-  | "scale", "u64" => .ok "0x5f760731ac44bf15"
-  | "divide", "u64" => .ok "0xce4d196aeed8c55a"
-  | "modulo", "u64" => .ok "0x91e8366e145e1e14"
-  | "nonzero", "" => .ok "0x9d4170637dda8281"
-  | "setFlag", "u64" => .ok "0xabc0ed57af4c46fe"
-  | "getFlag", "" => .ok "0x2fdfe4bd023e4273"
-  | "setNone", "" => .ok "0x97ba9bf1423e17d0"
-  | "setSome", "u64" => .ok "0x74f3e7a0ccb621e2"
-  | "isSome", "" => .ok "0xae9916c18320fcc3"
-  | name, sig => .error s!"extract/unsupported: unregistered disc {name}({sig})"
+  .ok s!"0x{u64Hex (Sha256.first8Le (discPreimage ixName paramCount))}"
 
 def discHex (m : Method) : Except String String :=
   discHexOf m.ixName m.paramCount
@@ -132,18 +134,12 @@ def layoutSig (p : Program) : String :=
     return acc
   s!"{p.slots.size}|{String.intercalate "|" parts.toList}"
 
-/-- 只登记已对齐 PF 的字段表。新布局先算 SHA-256 再挂进来。 -/
+/-- `sha256("proof-forge-solana-layout-v1:" ++ layoutSig)` 前 8 字节，大端。 -/
+def layoutPreimage (p : Program) : String :=
+  s!"proof-forge-solana-layout-v1:{layoutSig p}"
+
 def layoutMarkerHex (p : Program) : Except String String :=
-  match layoutSig p with
-  | "1|0:count:0:8:8:u64-le" =>
-    .ok "0xbbe897f0336e6fc"
-  | "2|0:left:0:8:8:u64-le|1:right:0:16:8:u64-le" =>
-    .ok "0x20d45b635e2b016f"
-  | "2|0:flag:0:8:1:u8-le|1:count:0:9:8:u64-le" =>
-    .ok "0x2ac58f7fa0191d14"
-  | "2|0:slot_tag:0:8:8:u64-le|1:slot_p0:0:16:8:u64-le" =>
-    .ok "0xf53e0f4e232b2e90"
-  | sig => .error s!"extract/unsupported: unregistered layout {sig}"
+  .ok s!"0x{u64Hex (Sha256.first8Be (layoutPreimage p))}"
 
 def extractedCounter : Program :=
   { name := "Counter"
@@ -295,19 +291,6 @@ private def fnvPrime : UInt64 := 1099511628211
 def fnv1a64 (s : String) : UInt64 :=
   s.toUTF8.data.foldl (init := fnvOffset) fun h b =>
     (h ^^^ b.toUInt64) * fnvPrime
-
-private def hexDigit (n : Nat) : Char :=
-  if n < 10 then Char.ofNat (n + 48) else Char.ofNat (n + 87)
-
-def u64Hex (n : UInt64) : String :=
-  let rec go (fuel : Nat) (v : Nat) (acc : String) : String :=
-    match fuel with
-    | 0 => acc
-    | fuel' + 1 =>
-      if v = 0 && acc ≠ "" then acc
-      else go fuel' (v / 16) (String.singleton (hexDigit (v % 16)) ++ acc)
-  let s := go 17 n.toNat ""
-  if s = "" then "0" else s
 
 /-- FNV-1a 64，十六进制，无 `0x` 前缀。 -/
 def digestHex (p : Program) : String :=

@@ -49,6 +49,11 @@ import Examples.Maybe
   | _ => false
 
 #guard
+  match SolanaLean.IR.discHexOf "neverSeen" 2 with
+  | .ok "0xf53bae450cc55143" => true
+  | _ => false
+
+#guard
   SolanaLean.IR.digestHex SolanaLean.IR.extractedFlag ==
     SolanaLean.IR.digestHex SolanaLean.IR.extractedFlag
 

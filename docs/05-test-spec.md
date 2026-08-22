@@ -67,3 +67,5 @@
 | T-L2-04 | happy | Flag Mollusk init | flag=0，count=7 |
 | T-L2-05 | happy | Maybe none | 两叶清零 |
 | T-L2-06 | happy | Maybe some 77 | tag=1，payload=77 |
+| T-L2-07 | happy | SHA-256 `""` / `abc` | FIPS 向量 |
+| T-L2-08 | happy | 未挂过的 `neverSeen(u64,u64)` | 算出 disc，不必改表 |

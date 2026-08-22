@@ -81,7 +81,7 @@ PF 产品轨是 `solana-sbpf-cpi-elf-v1`。Mollusk 量级约 24 个 integration 
 | L2-enum | 无 payload 枚举作 tag；带 payload 后做 | match 抽成分支 |
 | L2-marker | layout marker 用本机 SHA-256 算，去掉手工登记表 | 新字段表不必改 `layoutMarkerHex` |
 
-L2-marker 依赖本机哈希（Lean 4.31 无内建 SHA-256；用 FFI 只允许**本机**工具，禁止当链上后端）。在哈希落地前，新布局继续手工挂表。
+L2-marker 已落地：`SolanaLean.Sha256` 是 kernel 可算的纯函数，不是链上 syscall。disc 与 marker 都按预镜像现算。
 
 ### L3 程序形状
 

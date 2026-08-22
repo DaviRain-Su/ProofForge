@@ -23,5 +23,6 @@
 | [l1-003](tasks/l1-003.md) | done | Program 内容寻址 digest |
 | [l2-001](tasks/l2-001.md) | done | 带类型字段表 + Option 双叶 |
 | [l2-002](tasks/l2-002.md) | todo | 定长 Array UInt64 n |
+| [l2-003](tasks/l2-003.md) | done | 本机算出 disc 与 layout marker |
 
 积压：[backlog.md](backlog.md)

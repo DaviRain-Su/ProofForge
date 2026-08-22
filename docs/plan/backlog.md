@@ -12,14 +12,15 @@
 - 任意 `ite`；checked mul/div/mod；`=` `≠` 比较；Counter scale/divide/modulo/nonzero
 - `IR.digestHex`（FNV-1a 64）；`#solana_build` 抽出与 fixture 必须同一 digest
 - 带类型字段表：`UInt8/16/32/64` + `Option UInt64` 双叶；Flag / Maybe Mollusk
+- disc / layout marker 本机 SHA-256，不再挂名表
 
 ## 下一刀
 
-L2-002：定长 `Array UInt64 n`。其后 layout marker 改本机 SHA-256。
+L2-002：定长 `Array UInt64 n`。
 
 ## 其后（L2 / L3）
 
-- 定长 Array；layout marker 改本机 SHA-256
+- 定长 Array
 - N 入口；`init` 写全字段；只读 view 返回任意已布局叶子
 
 ## 有具体合约再开（L4）

@@ -1,4 +1,5 @@
 import SolanaLean.Ops
+import SolanaLean.Sha256
 import SolanaLean.IR
 import SolanaLean.Attr
 import SolanaLean.Profile
