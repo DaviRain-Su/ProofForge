@@ -45,7 +45,19 @@ elab "#solana_extract " initN:ident incrementN:ident getN:ident : command => do
         throwError "assemble/tool: missing overflow code"
       unless asm.contains Emit.discIncrement do
         throwError "assemble/tool: missing increment discriminator"
+      logInfo m!"solana-lean: extracted {program.name} ops = {program.methods.map (fun m => repr m.ops)}"
       logInfo m!"solana-lean: extracted {program.name} sketches = {program.methods.map (·.sketch)}"
       logInfo m!"solana-lean: emitted {asm.length} bytes of sBPF assembly"
+
+/-- `#solana_dump ident`：打印定义体，供抽出器对照。 -/
+elab "#solana_dump " n:ident : command => do
+  let name ← liftCoreM <| realizeGlobalConstNoOverload n
+  let env ← getEnv
+  match env.find? name with
+  | none => throwError "unknown {name}"
+  | some info =>
+    match info.value? with
+    | none => throwError "no value {name}"
+    | some e => logInfo m!"{name} := {e}"
 
 end SolanaLean.Commands

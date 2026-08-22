@@ -31,3 +31,5 @@
 | T-S4-02 | happy | increment 5+3 | return 8，写回 8 |
 | T-S4-03 | happy | get | return 8，不改账户 |
 | T-S4-04 | error | increment max+1 | `0x1001`，状态保持 |
+| T-S5-01 | happy | extract increment | ops 含 `checkedAddU64` |
+| T-S5-02 | error | `wrappingAdd` | `increment not ite` |

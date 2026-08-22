@@ -6,6 +6,7 @@
 |---|---|
 | [IR](ir.md) | 可哈希程序形状 + body sketch |
 | [Profile](profile.md) | 传递闭包剖面 |
-| [Extract](extract.md) | Expr → IR |
+| [Ops](ops.md) | Expr 操作序列 |
+| [Extract](extract.md) | Expr → IR + ops |
 | [Emit](emit.md) | Counter → sBPF 文本（S3） |
 | [Assemble](assemble.md) | `sbpf` 子进程 → `.so` |

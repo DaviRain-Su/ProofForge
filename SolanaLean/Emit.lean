@@ -1,4 +1,5 @@
 import SolanaLean.IR
+import SolanaLean.Ops
 
 namespace SolanaLean.Emit
 
@@ -12,6 +13,13 @@ def overflowCode : String := "0x1001"
 def emitCounterAsm (program : IR.Program) : Except String String := do
   unless IR.isCounterShape program do
     throw "extract/unsupported: not counter shape"
+  let incrementOps :=
+    (program.methods.find? (·.kind == .increment)).map (·.ops)
+  match incrementOps with
+  | some ops =>
+    unless ops.isEmpty || Ops.hasCheckedAdd ops do
+      throw "extract/unsupported: increment missing checkedAddU64"
+  | none => throw "extract/unsupported: missing increment"
   return s!"\
 ; SOLANA-LEAN-SBPF-ASM v0 (Counter / Loader V3 single account)
 ; Layout matches ProofForge StateCell: header u64 + count u64

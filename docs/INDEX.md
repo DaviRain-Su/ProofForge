@@ -15,4 +15,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**Counter 竖切已通**（Lean → `.s` → `.so` → Mollusk 4/4）。下一步 S5：通用 `Expr` 抽出，替换模板发射。
+当前阶段：**S5 抽出已认出 `checkedAddU64`**。发射仍用 Counter 模板，但必须以抽出的 checked-add 为准。下一步按 ops 生成汇编。

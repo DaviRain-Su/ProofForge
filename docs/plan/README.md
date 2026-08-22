@@ -12,4 +12,6 @@
 | [lowr-001](tasks/lowr-001.md) | done | 本仓 Counter sBPF 发射（对齐 PF StateCell） |
 | [asmb-001](tasks/asmb-001.md) | done | sbpf + Mollusk 4/4 |
 
+| [gen-001](tasks/gen-001.md) | done | Expr → checkedAdd 操作序列 |
+
 积压：[backlog.md](backlog.md)

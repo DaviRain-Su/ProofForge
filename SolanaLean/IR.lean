@@ -1,3 +1,5 @@
+import SolanaLean.Ops
+
 namespace SolanaLean.IR
 
 /-- v0 可编译方法。语义由对应的普通 Lean 函数定义，不由本结构解释。 -/
@@ -12,6 +14,8 @@ structure Method where
   name : String
   /-- 定义体用到的常量名，已排序。空数组表示「只声明形状、尚未抽出」。 -/
   sketch : Array String := #[]
+  /-- 从 `Expr` 抽出的操作。空数组表示尚未抽出或仅形状。 -/
+  ops : Array Ops.Op := #[]
   deriving BEq, Repr, Inhabited
 
 /-- 惰性程序形状。禁止在构造过程中跑 IO 或任意元程序。 -/

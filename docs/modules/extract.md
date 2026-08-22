@@ -6,7 +6,7 @@
 
 ## Boundary
 
-先 `Profile.checkAll`。不解释运算语义。改函数体（增减引用的常量）必须改变 sketch。
+先 `Profile.checkAll`。认出 `ite` + `LE.le` + `u64Max -` 为 `checkedAddU64`。无保护加法 fail closed。
 
 ## API
 
