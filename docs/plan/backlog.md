@@ -46,6 +46,7 @@
 - `systemTransferWithSeed`；SysXfer Mollusk
 - `tokenInitMint`；TokenMint2 Mollusk
 - `tokenSyncNative`；TokenNative Mollusk
+- 账户 1 只读叶子；Peer Mollusk
 
 ## 下一刀
 
@@ -53,8 +54,8 @@
 
 剩余可开、仍落在现有抽出/发射器上：
 
-1. Token classic 常用指令已绿；Multisig / Token-2022 仍关
-2. `sol_get_return_data` 单独叶子已随 L4-022 开出；无 CPI 仍 Custom(1)
+1. 账户 1 只读叶子已绿；完整 32B key / 账户 2 仍 FC
+2. Token classic 常用指令已绿；Multisig / Token-2022 仍关
 
 nonce / Token-2022 / remaining accounts / 运行时 program id 仍关。
 

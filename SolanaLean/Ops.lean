@@ -16,6 +16,12 @@ inductive Val where
   | isSigner0
   | isWritable0
   | isExecutable0
+  | accLamports1
+  | accOwner1
+  | accDataLen1
+  | isSigner1
+  | isWritable1
+  | isExecutable1
   | findPda (seed : String)
   | checkPda (seed : String) (bump : Val)
   | rentExemption (dataLen : UInt64)
@@ -228,6 +234,28 @@ private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
 
 def hasInvoke (ops : Array Op) : Bool :=
   walk 16 ops (fun | .invoke .. => true | _ => false)
+
+/-- 读账户 1 header 的叶子；要 walk，但不等于 CPI。 -/
+def valNeedsAcc1 : Val → Bool
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1 => true
+  | .checkPda _ b => valNeedsAcc1 b
+  | .field b _ => valNeedsAcc1 b
+  | _ => false
+
+def hasAcc1 (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .checkedAddU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedSubU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedMulU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedDivU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedModU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .ite _ l r _ _ => valNeedsAcc1 l || valNeedsAcc1 r
+    | .invoke _ _ data _ bump =>
+        data.any (fun | .u64le v => valNeedsAcc1 v | _ => false) ||
+          (match bump with | some v => valNeedsAcc1 v | none => false)
+    | .okState v | .returnU64 v | .returnState v => valNeedsAcc1 v
+    | .errorOverflow => false
 
 def hasSystemTransfer (ops : Array Op) : Bool :=
   hasInvoke ops

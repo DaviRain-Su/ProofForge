@@ -11,6 +11,7 @@ import Examples.Transfer
 import Examples.Ping
 import Examples.Call
 import Examples.Info
+import Examples.Peer
 import Examples.Pda
 import Examples.Signed
 import Examples.Create
@@ -104,6 +105,8 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #solana_extract Examples.Call.init Examples.Call.call Examples.Call.get
 
 #solana_extract Examples.Info.init Examples.Info.touch Examples.Info.lamports
+
+#solana_extract Examples.Peer.init Examples.Peer.touch Examples.Peer.lamports1
 
 #solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.bump
 

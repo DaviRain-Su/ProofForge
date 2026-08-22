@@ -10,6 +10,7 @@ import Examples.Transfer
 import Examples.Ping
 import Examples.Call
 import Examples.Info
+import Examples.Peer
 import Examples.Pda
 import Examples.Signed
 import Examples.Create

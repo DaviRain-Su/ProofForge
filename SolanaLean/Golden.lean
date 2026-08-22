@@ -268,6 +268,34 @@ def extractedInfo : Program :=
         ops := #[.returnU64 .isExecutable0] }
     ] }
 
+def extractedPeer : Program :=
+  { name := "Peer"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Peer.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Peer.touch", ixName := "touch", paramCount := 0
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.lit 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Peer.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.Peer.lamports1", ixName := "lamports1", paramCount := 0
+        ops := #[.returnU64 .accLamports1] },
+      { kind := .get, name := "Examples.Peer.owner1", ixName := "owner1", paramCount := 0
+        ops := #[.returnU64 .accOwner1] },
+      { kind := .get, name := "Examples.Peer.dataLen1", ixName := "dataLen1", paramCount := 0
+        ops := #[.returnU64 .accDataLen1] },
+      { kind := .get, name := "Examples.Peer.signer1", ixName := "signer1", paramCount := 0
+        ops := #[.returnU64 .isSigner1] },
+      { kind := .get, name := "Examples.Peer.writable1", ixName := "writable1", paramCount := 0
+        ops := #[.returnU64 .isWritable1] },
+      { kind := .get, name := "Examples.Peer.executable1", ixName := "executable1", paramCount := 0
+        ops := #[.returnU64 .isExecutable1] }
+    ] }
+
 def extractedSigned : Program :=
   { name := "Signed"
     slots := #[{ name := "dummy" }]
@@ -560,7 +588,7 @@ def extractedPda : Program :=
 def programs : Array Program := #[
   extractedCounter, extractedPair, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
-  extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo,
+  extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo, extractedPeer,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
   extractedRent, extractedTokenMint, extractedSysAlloc, extractedTokenAcc, extractedMemo,
   extractedCreatePda, extractedTokenApprove, extractedTokenFreeze, extractedTokenAuth,

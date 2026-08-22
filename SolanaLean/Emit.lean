@@ -131,7 +131,23 @@ private def emitCpiFlagChecks (p : IR.Program) (err : String) : String :=
   jeq r1, 0, {err}
 {extra}"
 
-/-- CPI 预检：N 账户虚地址 walk；acc0 signer+writable；其余按 meta 旗。 -/
+/-- 只 walk：N 账户虚地址；查 ix 长度。不强制 acc0 signer。 -/
+private def preludeWalk (p : IR.Program) (label : String) (ixLen : Nat) : String :=
+  let err := s!"err_check_{label}"
+  let n := IR.cpiAccountCount p
+  s!"\
+  ldxdw r1, [r6 + NUM_ACCOUNTS]
+  jlt r1, {n}, {err}
+{emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
+  ldxdw r1, [r1 + 0]
+  jne r1, {ixLen}, {err}
+  ja body_{label}
+{err}:
+  lddw r0, 0x1
+  exit
+"
+
+/-- CPI 预检：walk + acc0 signer+writable + meta 旗。 -/
 private def preludeCpi (p : IR.Program) (label : String) (ixLen : Nat) : String :=
   let err := s!"err_check_{label}"
   let n := IR.cpiAccountCount p
@@ -155,12 +171,14 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
     | some off => .ok s!"[r6 + ACC0_DATA + {off}]"
     | none => .error s!"extract/unsupported: unknown field {name}"
   | .arg i =>
-    if IR.usesCpi p then
+    if IR.usesWalk p then
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
   | .lit _ | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
   | .checkPda _ _ | .rentExemption _ | .cpiReturn =>
     .error "extract/unsupported: runtime leaf has no mem"
 
@@ -277,6 +295,24 @@ private def emitLoadAccU8 (comment offset : String) (stackOff : Nat) : String :=
   stxdw [r10 - {stackOff}], r1
 "
 
+/-- 从 walk 出的 header* 读账户 i 的 u64 字段。 -/
+private def emitLoadWalkedU64 (i off stackOff : Nat) : String :=
+  s!"\
+  ; load walked acc{i} +{off}
+  ldxdw r1, [r10 - {headerStack i}]
+  ldxdw r1, [r1 + {off}]
+  stxdw [r10 - {stackOff}], r1
+"
+
+/-- 从 walk 出的 header* 读账户 i 的 u8 旗。 -/
+private def emitLoadWalkedU8 (i off stackOff : Nat) : String :=
+  s!"\
+  ; load walked acc{i} flag +{off}
+  ldxdw r1, [r10 - {headerStack i}]
+  ldxb r1, [r1 + {off}]
+  stxdw [r10 - {stackOff}], r1
+"
+
 /--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
 scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 clock 的 `r10-72`。
@@ -287,7 +323,7 @@ private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat) : 
     seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
       (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {i}], r1\n", i + 1)
   let progId :=
-    if IR.usesCpi p then
+    if IR.usesWalk p then
       s!"\
   ldxdw r3, [r10 - {headerStack (IR.cpiAccountCount p)}]
   ldxdw r1, [r3 + 0]
@@ -364,6 +400,18 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok (emitLoadAccU8 "load account-0 is_writable" "ACC0_HEADER + 2" stackOff)
   | .isExecutable0 =>
     .ok (emitLoadAccU8 "load account-0 is_executable" "ACC0_HEADER + 3" stackOff)
+  | .accLamports1 =>
+    .ok (emitLoadWalkedU64 1 72 stackOff)
+  | .accOwner1 =>
+    .ok (emitLoadWalkedU64 1 40 stackOff)
+  | .accDataLen1 =>
+    .ok (emitLoadWalkedU64 1 80 stackOff)
+  | .isSigner1 =>
+    .ok (emitLoadWalkedU8 1 1 stackOff)
+  | .isWritable1 =>
+    .ok (emitLoadWalkedU8 1 2 stackOff)
+  | .isExecutable1 =>
+    .ok (emitLoadWalkedU8 1 3 stackOff)
   | .findPda seed =>
     .ok (emitLoadFindPda p seed stackOff)
   | .checkPda seed bump =>
@@ -388,7 +436,7 @@ private def emitLoadCheckPda (p : IR.Program) (seed : String) (bump : Ops.Val)
     seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
       (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {i}], r1\n", i + 1)
   let progId :=
-    if IR.usesCpi p then
+    if IR.usesWalk p then
       s!"\
   ldxdw r3, [r10 - {headerStack (IR.cpiAccountCount p)}]
   ldxdw r1, [r3 + 0]
@@ -561,7 +609,7 @@ private def emitCpiData (p : IR.Program) (base : Nat) (data : Array Ops.CpiWord)
       off := off + s.length
     | .programId =>
       let copy :=
-        if IR.usesCpi p then
+        if IR.usesWalk p then
           s!"\
   ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount p)}]
   ldxdw r2, [r1 + 0]
@@ -849,7 +897,9 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-        | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+        | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+        | .accLamports1 | .accOwner1 | .accDataLen1
+        | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
         | .checkPda _ _ | .rentExemption _ | .cpiReturn => do
           let load ← loadVal p v 24
           acc := acc ++ load
@@ -875,7 +925,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
 private def emitMutBody (p : IR.Program) (label : String) (ops : Array Ops.Op) : Except String String := do
   let (body, _) ← emitOps p label ops 0
   let ix :=
-    if IR.usesCpi p then
+    if IR.usesWalk p then
       s!"  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]\n  add64 r7, 8\n"
     else ""
   return s!"body_{label}:\n{ix}{body}"
@@ -930,6 +980,8 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   | .init =>
     if IR.usesCpi p then
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}body_{label}:\n  lddw r0, 0\n  exit\n"
+    else if IR.usesWalk p then
+      return s!"{label}:\n{preludeWalk p label (ixLenOf m)}body_{label}:\n  lddw r0, 0\n  exit\n"
     else
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
@@ -941,15 +993,24 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       .error "extract/unsupported: increment missing checked arith"
     else do
       let body ← emitMutBody p label m.ops
-      return s!"{label}:\n{prelude p marker label (ixLenOf m) (usesSignerKey m.ops) true false}{body}"
+      let head :=
+        if IR.usesWalk p then preludeWalk p label (ixLenOf m)
+        else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) true false
+      return s!"{label}:\n{head}{body}"
   | .get =>
     if m.ops.any (fun | .ite .. => true | _ => false) then
       let body ← emitMutBody p label m.ops
-      return s!"{label}:\n{prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false}{body}"
+      let head :=
+        if IR.usesWalk p then preludeWalk p label (ixLenOf m)
+        else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
+      return s!"{label}:\n{head}{body}"
     else
       let v ← getVal m.ops
       let body ← emitGetBody p label v
-      return s!"{label}:\n{prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false}{body}"
+      let head :=
+        if IR.usesWalk p then preludeWalk p label (ixLenOf m)
+        else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
+      return s!"{label}:\n{head}{body}"
 
 private def emitDispatch (program : IR.Program) : Except String String := do
   if program.methods.isEmpty then
@@ -979,7 +1040,7 @@ def emitCounterAsm (program : IR.Program) : Except String String := do
   for m in program.methods do
     handlers := handlers ++ (← emitHandler program marker m) ++ "\n"
   let entryIx :=
-    if IR.usesCpi program then
+    if IR.usesWalk program then
       let n := IR.cpiAccountCount program
       emitWalkAccounts n "entry" "err_unknown_disc" ++
         s!"  ldxdw r1, [r10 - {headerStack n}]\n  ldxdw r1, [r1 + 0]\n  jlt r1, 8, err_unknown_disc\n  ja dispatch_begin\n"
@@ -992,13 +1053,13 @@ def emitCounterAsm (program : IR.Program) : Except String String := do
   ja dispatch_begin
 "
   let dispatchHead :=
-    if IR.usesCpi program then
+    if IR.usesWalk program then
       s!"dispatch_begin:\n  ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount program)}]\n  add64 r1, 8\n  ldxdw r1, [r1 + 0]\n"
     else
       "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n"
   -- emitDispatch 自己写了 dispatch_begin 头；transfer 要换掉。
   let dispatchTxt :=
-    if IR.usesCpi program then
+    if IR.usesWalk program then
       dispatch.replace "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n" dispatchHead
     else dispatch
   return s!"\

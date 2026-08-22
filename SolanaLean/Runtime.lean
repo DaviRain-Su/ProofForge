@@ -399,4 +399,22 @@ def createPda (lamports : UInt64) : UInt64 :=
 /-- 账户 0 `is_executable`，0 或 1。 -/
 @[irreducible] def isExecutable0 : UInt64 := 0
 
+/-- 账户 1 的 lamports。只读。 -/
+@[irreducible] def accLamports1 : UInt64 := 0
+
+/-- 账户 1 owner 的第一个小端 `u64`。不是完整 32B。 -/
+@[irreducible] def accOwner1 : UInt64 := 0
+
+/-- 账户 1 `data_len`。只读。 -/
+@[irreducible] def accDataLen1 : UInt64 := 0
+
+/-- 账户 1 `is_signer`，0 或 1。不因此强制入口签名。 -/
+@[irreducible] def isSigner1 : UInt64 := 0
+
+/-- 账户 1 `is_writable`，0 或 1。 -/
+@[irreducible] def isWritable1 : UInt64 := 0
+
+/-- 账户 1 `is_executable`，0 或 1。 -/
+@[irreducible] def isExecutable1 : UInt64 := 0
+
 end SolanaLean.Runtime

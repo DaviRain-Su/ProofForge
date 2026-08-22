@@ -121,14 +121,18 @@ def accountSpan (accountDataLen : Nat) : Nat :=
   let align := (8 - dataEnd % 8) % 8
   dataEnd + align + 8
 
-/-- 程序是否含 CPI（要走多账户虚地址 walk）。 -/
+/-- 程序是否含 CPI。 -/
 def usesCpi (p : Program) : Bool :=
   p.methods.any (fun m => Ops.hasInvoke m.ops)
+
+/-- 要走多账户虚地址 walk：有 CPI，或读账户 1 叶子。 -/
+def usesWalk (p : Program) : Bool :=
+  usesCpi p || p.methods.any (fun m => Ops.hasAcc1 m.ops)
 
 def usesSystemTransfer (p : Program) : Bool :=
   usesCpi p
 
-/-- CPI 外层账户数：所有 `invoke.programIx` / meta 下标的最大值 + 1，至少 2。 -/
+/-- 外层账户数：invoke 下标最大值 + 1；有账户 1 叶子则至少 2。 -/
 def cpiAccountCount (p : Program) : Nat :=
   let rec maxIx (fuel : Nat) (ops : Array Ops.Op) (acc : Nat) : Nat :=
     match fuel with
@@ -142,10 +146,12 @@ def cpiAccountCount (p : Program) : Nat :=
         | .ite _ _ _ t f => Nat.max (maxIx fuel' t a) (maxIx fuel' f a)
         | _ => a
   let n := p.methods.foldl (init := 0) fun a m => Nat.max a (maxIx 8 m.ops 0)
-  Nat.max 2 (n + 1)
+  let fromInvoke := if usesCpi p then Nat.max 2 (n + 1) else 0
+  let fromAcc1 := if p.methods.any (fun m => Ops.hasAcc1 m.ops) then 2 else 0
+  Nat.max fromInvoke fromAcc1
 
 def inputLayout (p : Program) : InputLayout :=
-  if usesCpi p then
+  if usesWalk p then
     -- N 个 data_len=0 的账户：每个 span = 0x2860，instruction 紧跟最后账户 rent。
     let n := cpiAccountCount p
     let rec lastRent (i : Nat) (off : Nat) : Nat :=
@@ -221,6 +227,12 @@ private def valCanon : Ops.Val → String
   | .isSigner0 => "sg0"
   | .isWritable0 => "wr0"
   | .isExecutable0 => "ex0"
+  | .accLamports1 => "lp1"
+  | .accOwner1 => "ow1"
+  | .accDataLen1 => "dl1"
+  | .isSigner1 => "sg1"
+  | .isWritable1 => "wr1"
+  | .isExecutable1 => "ex1"
   | .findPda s => s!"pda.{s}"
   | .checkPda s b => s!"chk.{s}:{valCanon b}"
   | .rentExemption n => s!"rent.{n.toNat}"

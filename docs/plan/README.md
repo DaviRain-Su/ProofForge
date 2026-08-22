@@ -56,6 +56,7 @@
 | [l4-026](tasks/l4-026.md) | done | systemTransferWithSeed |
 | [l4-027](tasks/l4-027.md) | done | tokenInitMint |
 | [l4-028](tasks/l4-028.md) | done | tokenSyncNative |
+| [l4-029](tasks/l4-029.md) | done | 账户 1 只读叶子 |
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

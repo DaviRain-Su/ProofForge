@@ -201,6 +201,18 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .isWritable0
         else if endsWith e ".isExecutable0" || isConstNamed e ``SolanaLean.Runtime.isExecutable0 then
           some .isExecutable0
+        else if endsWith e ".accLamports1" || isConstNamed e ``SolanaLean.Runtime.accLamports1 then
+          some .accLamports1
+        else if endsWith e ".accOwner1" || isConstNamed e ``SolanaLean.Runtime.accOwner1 then
+          some .accOwner1
+        else if endsWith e ".accDataLen1" || isConstNamed e ``SolanaLean.Runtime.accDataLen1 then
+          some .accDataLen1
+        else if endsWith e ".isSigner1" || isConstNamed e ``SolanaLean.Runtime.isSigner1 then
+          some .isSigner1
+        else if endsWith e ".isWritable1" || isConstNamed e ``SolanaLean.Runtime.isWritable1 then
+          some .isWritable1
+        else if endsWith e ".isExecutable1" || isConstNamed e ``SolanaLean.Runtime.isExecutable1 then
+          some .isExecutable1
         else if (endsWith e ".systemTransfer" ||
             isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
@@ -613,6 +625,12 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.isSigner0) => some .isSigner0
             | some (.isWritable0) => some .isWritable0
             | some (.isExecutable0) => some .isExecutable0
+            | some (.accLamports1) => some .accLamports1
+            | some (.accOwner1) => some .accOwner1
+            | some (.accDataLen1) => some .accDataLen1
+            | some (.isSigner1) => some .isSigner1
+            | some (.isWritable1) => some .isWritable1
+            | some (.isExecutable1) => some .isExecutable1
             | some (.findPda s) => some (.findPda s)
             | some (.checkPda s b) => some (.checkPda s b)
             | some (.rentExemption n) => some (.rentExemption n)
@@ -928,7 +946,9 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .arg _ => .ok #[.returnState v]
     | .lit _ => .ok #[.returnU64 v]
     | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-    | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+    | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+    | .accLamports1 | .accOwner1 | .accDataLen1
+    | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
     | .checkPda _ _ | .rentExemption _ | .cpiReturn => .ok #[.returnU64 v]
   else
     .error "extract/unsupported: body"
@@ -1116,7 +1136,9 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
       | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-      | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+      | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+      | .accLamports1 | .accOwner1 | .accDataLen1
+      | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
       | .rentExemption _ | .cpiReturn => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
@@ -1260,7 +1282,9 @@ private def valFields : Ops.Val → Array String
   | .arg _ => #[]
   | .lit _ => #[]
   | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-  | .accN | .isSigner0 | .isWritable0 | .isExecutable0 | .findPda _
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
   | .rentExemption _ | .cpiReturn => #[]
   | .checkPda _ b => valFields b
 

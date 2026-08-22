@@ -9,6 +9,7 @@ import Tests.TransferSpec
 import Tests.PingSpec
 import Tests.CallSpec
 import Tests.InfoSpec
+import Tests.PeerSpec
 import Tests.PdaSpec
 import Tests.SignedSpec
 import Tests.CreateSpec

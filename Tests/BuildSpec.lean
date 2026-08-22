@@ -11,6 +11,7 @@ import Examples.Transfer
 import Examples.Ping
 import Examples.Call
 import Examples.Info
+import Examples.Peer
 import Examples.Pda
 import Examples.Signed
 import Examples.Create
@@ -55,6 +56,8 @@ import Examples.TokenNative
 #solana_build Examples.Call
 
 #solana_build Examples.Info
+
+#solana_build Examples.Peer
 
 #solana_build Examples.Pda
 

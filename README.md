@@ -43,6 +43,7 @@ lake exe solanaLeanAssemble -- build/sbpf
   SOLANA_LEAN_TRANSFER_SO=../../build/sbpf/Transfer.so \
   SOLANA_LEAN_PING_SO=../../build/sbpf/Ping.so \
   SOLANA_LEAN_INFO_SO=../../build/sbpf/Info.so \
+  SOLANA_LEAN_PEER_SO=../../build/sbpf/Peer.so \
   SOLANA_LEAN_CALL_SO=../../build/sbpf/Call.so \
   SOLANA_LEAN_PDA_SO=../../build/sbpf/Pda.so \
   SOLANA_LEAN_SIGNED_SO=../../build/sbpf/Signed.so \
@@ -64,7 +65,7 @@ lake exe solanaLeanAssemble -- build/sbpf
   SOLANA_LEAN_SYSXFER_SO=../../build/sbpf/SysXfer.so \
   SOLANA_LEAN_TOKENMINT2_SO=../../build/sbpf/TokenMint2.so \
   SOLANA_LEAN_TOKENNATIVE_SO=../../build/sbpf/TokenNative.so \
-  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice --test clock --test transfer --test ping --test info --test call --test pda --test signed --test create --test token_xfer --test ata --test rent --test token_mint --test sys_alloc --test token_acc --test memo --test create_pda --test token_approve --test token_freeze --test token_auth --test epoch --test token_size --test sys_seed --test sys_xfer --test token_mint2 --test token_native)
+  cargo test --locked --test counter --test pair --test flag --test maybe --test window --test phase --test choice --test clock --test transfer --test ping --test info --test peer --test call --test pda --test signed --test create --test token_xfer --test ata --test rent --test token_mint --test sys_alloc --test token_acc --test memo --test create_pda --test token_approve --test token_freeze --test token_auth --test epoch --test token_size --test sys_seed --test sys_xfer --test token_mint2 --test token_native)
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`（与 ProofForge 对齐）。
