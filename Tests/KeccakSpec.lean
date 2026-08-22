@@ -1,0 +1,34 @@
+import Examples.Keccak
+
+namespace Tests.KeccakSpec
+
+open Examples.Keccak
+open SolanaLean.Runtime
+
+#guard (init 0).dummy == 0
+#guard get (init 0) == 0
+#guard vault (init 0) == keccak256Lit "vault"
+#guard ok (init 0) == keccak256Lit "ok"
+#guard empty (init 0) == keccak256Lit ""
+#guard keccak256Lit "vault" == 0
+#guard keccak256Lit "ok" == 0
+#guard keccak256Lit "" == 0
+
+#guard !SolanaLean.IR.usesCpi SolanaLean.Golden.extractedKeccak
+#guard !SolanaLean.IR.usesWalk SolanaLean.Golden.extractedKeccak
+
+#guard
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedKeccak with
+  | .error _ => false
+  | .ok asm =>
+      asm.contains "call sol_keccak256" &&
+        asm.contains "keccak256Lit seed=vault" &&
+        asm.contains "keccak256Lit seed=ok" &&
+        asm.contains "keccak256Lit seed=" &&
+        asm.contains "call vault" &&
+        asm.contains "call ok" &&
+        asm.contains "call empty" &&
+        !asm.contains "call sol_sha256" &&
+        !asm.contains "call sol_invoke_signed_c"
+
+end Tests.KeccakSpec

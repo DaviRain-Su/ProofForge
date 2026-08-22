@@ -1,12 +1,35 @@
 namespace SolanaLean.Ops
 
-/-- 可 load 的值。`clockSlot` / `signerKey0` 是 SVM 叶子；`evmCaller` / `evmBlockNumber` 是 EVM 叶子。 -/
+/-- 可 load 的值。SVM 叶是 `clock*` / `acc*` / PDA / hash；EVM 叶是 `evm*`。 -/
 inductive Val where
   | arg (i : Nat)
   | field (base : Val) (name : String)
   | lit (n : UInt64)
   | clockSlot
+  | clockEpoch
+  | slotsPerEpoch
   | signerKey0
+  | accLamports0
+  | accOwner0
+  | accDataLen0
+  | accN
+  | isSigner0
+  | isWritable0
+  | isExecutable0
+  | accLamports1
+  | accOwner1
+  | accDataLen1
+  | isSigner1
+  | isWritable1
+  | isExecutable1
+  | findPda (seed : String)
+  | checkPda (seed : String) (bump : Val)
+  | rentExemption (dataLen : UInt64)
+  | cpiReturn
+  | sha256Lit (seed : String)
+  | keccak256Lit (seed : String)
+  | accKeyWord (acc word : Nat)
+  | accOwnerWord (acc word : Nat)
   | evmCaller
   | evmBlockNumber
   | evmTimestamp
@@ -30,6 +53,23 @@ inductive Cmp where
   | eq | ne | lt | le | gt | ge
   deriving BEq, Repr, Inhabited, DecidableEq
 
+/-- 内层 AccountMeta：外层账户下标 + 旗。编译期钉死。 -/
+structure CpiMeta where
+  acc : Nat
+  signer : Bool := false
+  writable : Bool := false
+  deriving BEq, Repr, Inhabited
+
+/-- 内层 instruction data 的一段。 -/
+inductive CpiWord where
+  | u8le (n : UInt64)
+  | u32le (n : UInt64)
+  | u64le (v : Val)
+  | ascii (s : String)
+  | programId
+  | accKey (i : Nat)
+  deriving BEq, Repr, Inhabited
+
 inductive Op where
   | checkedAddU64 (lhs rhs : Val)
   | checkedSubU64 (lhs rhs : Val)
@@ -37,7 +77,8 @@ inductive Op where
   | checkedDivU64 (lhs rhs : Val)
   | checkedModU64 (lhs rhs : Val)
   | ite (cmp : Cmp) (lhs rhs : Val) (thn els : Array Op)
-  | systemTransfer (amount : Val)
+  | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array CpiWord)
+      (seed : Option String := none) (bump : Option Val := none)
   | evmDeposit (amount : Val)
   | evmSendEth (w0 w1 w2 amount : Val)
   | evmLog (name : String) (amount : Val)
@@ -58,6 +99,164 @@ inductive Op where
   | returnState (value : Val)
   deriving BEq, Repr, Inhabited
 
+/-- `system.transfer` 特化。 -/
+def systemTransfer (amount : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true }]
+    #[.u32le 2, .u64le amount]
+
+/-- CPI 到外层账户 1；空 metas、空 data。 -/
+def invokeAcc1 : Op :=
+  .invoke 1 #[] #[]
+
+def systemCreate (lamports space : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := true, writable := true }]
+    #[.u32le 0, .u64le lamports, .u64le space, .programId]
+
+def createPda (lamports : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := true, writable := true }]
+    #[.u32le 0, .u64le lamports, .u64le (.lit 16), .programId]
+    (some "vault") (some (.findPda "vault"))
+
+def systemAssign : Op :=
+  .invoke 1
+    #[{ acc := 0, signer := true, writable := true }]
+    #[.u32le 1, .programId]
+
+def systemAllocate (space : Val) : Op :=
+  .invoke 1
+    #[{ acc := 0, signer := true, writable := true }]
+    #[.u32le 8, .u64le space]
+
+def systemAllocateWithSeed (space : Val) : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u32le 9, .accKey 0, .u64le (.lit 5), .ascii "vault", .u64le space, .programId]
+
+def systemCreateWithSeed (lamports space : Val) : Op :=
+  .invoke 2
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true }]
+    #[.u32le 3, .accKey 0, .u64le (.lit 5), .ascii "vault", .u64le lamports, .u64le space, .programId]
+
+def systemAssignWithSeed : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u32le 10, .accKey 0, .u64le (.lit 5), .ascii "vault", .programId]
+
+def systemTransferWithSeed (lamports : Val) : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false },
+      { acc := 2, signer := false, writable := true }]
+    #[.u32le 11, .u64le lamports, .u64le (.lit 5), .ascii "vault", .programId]
+
+def tokenInitMint : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := true }]
+    #[.u8le 20, .u8le 6, .accKey 0, .u8le 0]
+
+def tokenSyncNative : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := true }]
+    #[.u8le 17]
+
+def tokenTransferChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 12, .u64le amount, .u8le decimals]
+
+def tokenMintToChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 14, .u64le amount, .u8le decimals]
+
+def tokenBurnChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 15, .u64le amount, .u8le decimals]
+
+def tokenInitAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false }]
+    #[.u8le 18, .accKey 0]
+
+def tokenCloseAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 9]
+
+def tokenApproveChecked (amount : Val) (decimals : UInt64) : Op :=
+  .invoke 4
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 13, .u64le amount, .u8le decimals]
+
+def tokenFreezeAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 10]
+
+def tokenThawAccount : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 11]
+
+def tokenSetMintAuthority : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 6, .u8le 0, .u8le 1, .accKey 2]
+
+def tokenRevoke : Op :=
+  .invoke 3
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 5]
+
+def tokenAccountSize : Op :=
+  .invoke 2
+    #[{ acc := 1, signer := false, writable := false }]
+    #[.u8le 21]
+
+def memoWrite : Op :=
+  .invoke 1
+    #[{ acc := 0, signer := true, writable := false }]
+    #[.ascii "ok"]
+
+def ataCreateIdempotent : Op :=
+  .invoke 6
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true },
+      { acc := 2, signer := false, writable := false },
+      { acc := 3, signer := false, writable := false },
+      { acc := 4, signer := false, writable := false },
+      { acc := 5, signer := false, writable := false }]
+    #[.u8le 1]
+
 private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
   match fuel with
   | 0 => false
@@ -67,6 +266,60 @@ private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
         match op with
         | .ite _ _ _ t f => walk fuel' t p || walk fuel' f p
         | _ => false
+
+def hasInvoke (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .invoke .. => true | _ => false)
+
+/-- 读账户 1 header 的叶子；要 walk，但不等于 CPI。 -/
+def valNeedsAcc1 : Val → Bool
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1 => true
+  | .accKeyWord acc _ | .accOwnerWord acc _ => acc ≥ 1
+  | .checkPda _ b => valNeedsAcc1 b
+  | .field b _ => valNeedsAcc1 b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
+      valNeedsAcc1 l || valNeedsAcc1 r
+  | .bitNot v => valNeedsAcc1 v
+  | .indexGet b _ i _ => valNeedsAcc1 b || valNeedsAcc1 i
+  | _ => false
+
+def hasAcc1 (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .checkedAddU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedSubU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedMulU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedDivU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .checkedModU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
+    | .ite _ l r _ _ => valNeedsAcc1 l || valNeedsAcc1 r
+    | .invoke _ _ data _ bump =>
+        data.any (fun | .u64le v => valNeedsAcc1 v | _ => false) ||
+          (match bump with | some v => valNeedsAcc1 v | none => false)
+    | .evmDeposit v => valNeedsAcc1 v
+    | .evmSendEth a b c d =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d
+    | .evmLog _ v => valNeedsAcc1 v
+    | .forAccum _ v => valNeedsAcc1 v
+    | .indexSet _ i v _ => valNeedsAcc1 i || valNeedsAcc1 v
+    | .mapGetU64 a b => valNeedsAcc1 a || valNeedsAcc1 b
+    | .mapSetU64 a b c => valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c
+    | .mapGetAddr a b c d =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d
+    | .mapSetAddr a b c d e =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c ||
+          valNeedsAcc1 d || valNeedsAcc1 e
+    | .mapGetPair a b c d e f g =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d ||
+          valNeedsAcc1 e || valNeedsAcc1 f || valNeedsAcc1 g
+    | .mapSetPair a b c d e f g h =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d ||
+          valNeedsAcc1 e || valNeedsAcc1 f || valNeedsAcc1 g || valNeedsAcc1 h
+    | .evmTokenTransfer a b c d e f g =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d ||
+          valNeedsAcc1 e || valNeedsAcc1 f || valNeedsAcc1 g
+    | .evmTokenBalanceOfSelf a b c =>
+        valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c
+    | .okState v | .returnU64 v | .returnState v => valNeedsAcc1 v
+    | .errorOverflow | .errorNamed _ => false
 
 def hasEvmDeposit (ops : Array Op) : Bool :=
   walk 16 ops (fun | .evmDeposit _ => true | _ => false)
@@ -78,7 +331,7 @@ def hasEvmLog (ops : Array Op) : Bool :=
   walk 16 ops (fun | .evmLog .. => true | _ => false)
 
 def hasSystemTransfer (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .systemTransfer _ => true | _ => false)
+  hasInvoke ops
 
 def hasCheckedAdd (ops : Array Op) : Bool :=
   walk 16 ops (fun | .checkedAddU64 .. => true | _ => false)
@@ -126,6 +379,10 @@ def isEvmLeaf : Val → Bool
   | .indexGet b _ i _ => isEvmLeaf b || isEvmLeaf i
   | _ => false
 
+private def cpiWordEvm : CpiWord → Bool
+  | .u64le v => isEvmLeaf v
+  | _ => false
+
 def hasEvmLeaf (ops : Array Op) : Bool :=
   walk 16 ops fun
     | .checkedAddU64 l r => isEvmLeaf l || isEvmLeaf r
@@ -134,7 +391,9 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
     | .checkedDivU64 l r => isEvmLeaf l || isEvmLeaf r
     | .checkedModU64 l r => isEvmLeaf l || isEvmLeaf r
     | .ite _ l r _ _ => isEvmLeaf l || isEvmLeaf r
-    | .systemTransfer v => isEvmLeaf v
+    | .invoke _ _ data _ bump =>
+        data.any cpiWordEvm ||
+          (match bump with | some v => isEvmLeaf v | none => false)
     | .evmDeposit v => isEvmLeaf v
     | .evmSendEth a b c d =>
         isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
@@ -163,6 +422,10 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
     | .returnState v => isEvmLeaf v
     | .errorOverflow | .errorNamed _ => false
 
+private def cpiWordLang : CpiWord → Bool
+  | .u64le v => isLangLeaf v
+  | _ => false
+
 def hasLangLeaf (ops : Array Op) : Bool :=
   walk 16 ops fun
     | .checkedAddU64 l r => isLangLeaf l || isLangLeaf r
@@ -171,7 +434,9 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .checkedDivU64 l r => isLangLeaf l || isLangLeaf r
     | .checkedModU64 l r => isLangLeaf l || isLangLeaf r
     | .ite _ l r _ _ => isLangLeaf l || isLangLeaf r
-    | .systemTransfer v => isLangLeaf v
+    | .invoke _ _ data _ bump =>
+        data.any cpiWordLang ||
+          (match bump with | some v => isLangLeaf v | none => false)
     | .evmDeposit v => isLangLeaf v
     | .evmSendEth a b c d =>
         isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d

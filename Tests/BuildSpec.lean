@@ -13,6 +13,34 @@ import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
 import Examples.Ownable
+import Examples.Ping
+import Examples.Call
+import Examples.Info
+import Examples.Peer
+import Examples.Pda
+import Examples.Signed
+import Examples.Create
+import Examples.TokenXfer
+import Examples.Ata
+import Examples.Rent
+import Examples.TokenMint
+import Examples.SysAlloc
+import Examples.TokenAcc
+import Examples.Memo
+import Examples.CreatePda
+import Examples.TokenApprove
+import Examples.TokenFreeze
+import Examples.TokenAuth
+import Examples.Epoch
+import Examples.TokenSize
+import Examples.SysSeed
+import Examples.SysXfer
+import Examples.TokenMint2
+import Examples.TokenNative
+import Examples.Hash
+import Examples.Keys
+import Examples.Keccak
+
 
 #solana_build Examples.Counter
 
@@ -31,6 +59,60 @@ import Examples.Ownable
 #solana_build Examples.Clock
 
 #solana_build Examples.Transfer
+
+#solana_build Examples.Ping
+
+#solana_build Examples.Call
+
+#solana_build Examples.Info
+
+#solana_build Examples.Peer
+
+#solana_build Examples.Pda
+
+#solana_build Examples.Signed
+
+#solana_build Examples.Create
+
+#solana_build Examples.TokenXfer
+
+#solana_build Examples.Ata
+
+#solana_build Examples.Rent
+
+#solana_build Examples.TokenMint
+
+#solana_build Examples.SysAlloc
+
+#solana_build Examples.TokenAcc
+
+#solana_build Examples.Memo
+
+#solana_build Examples.CreatePda
+
+#solana_build Examples.TokenApprove
+
+#solana_build Examples.TokenFreeze
+
+#solana_build Examples.TokenAuth
+
+#solana_build Examples.Epoch
+
+#solana_build Examples.TokenSize
+
+#solana_build Examples.SysSeed
+
+#solana_build Examples.SysXfer
+
+#solana_build Examples.TokenMint2
+
+#solana_build Examples.TokenNative
+
+#solana_build Examples.Hash
+
+#solana_build Examples.Keys
+
+#solana_build Examples.Keccak
 
 /--
 error: extract/unsupported: svm rejects evm leaf

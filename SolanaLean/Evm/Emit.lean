@@ -120,6 +120,13 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       return maskExpr w s!"sload({slot})"
   | .clockSlot => .error "extract/unsupported: evm rejects clockSlot"
   | .signerKey0 => .error "extract/unsupported: evm rejects signerKey0"
+  | .clockEpoch | .slotsPerEpoch | .accLamports0 | .accOwner0 | .accDataLen0
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1
+  | .findPda _ | .checkPda .. | .rentExemption _ | .cpiReturn
+  | .sha256Lit _ | .keccak256Lit _ | .accKeyWord .. | .accOwnerWord .. =>
+      .error "extract/unsupported: evm rejects svm leaf"
   | .evmCaller => .ok "and(caller(), 0xffffffffffffffff)"
   | .evmBlockNumber => .ok "number()"
   | .evmTimestamp => .ok "timestamp()"
@@ -356,8 +363,8 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := " ++ cmpYul c lv rv ++ nl ++
           indent ++ "if " ++ nm ++ " " ++ brace thenTxt ++ nl ++
           indent ++ "if iszero(" ++ nm ++ ") " ++ brace elseTxt ++ nl
-    | .systemTransfer _ =>
-        throw "extract/unsupported: evm rejects systemTransfer"
+    | .invoke .. =>
+        throw "extract/unsupported: evm rejects svm leaf"
     | .evmDeposit amount =>
         let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount amount st
         st := st'

@@ -21,4 +21,4 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 
-当前阶段：**E-OWN 已落地**。Ownable 三槽 + 通用 LOG + pair-key allowance。SVM 名不翻译。
+当前阶段：**E-OWN 已落地**，并已并入 `main` 的 L4 SDK 表面（到 `keccak256Lit`）。SVM 名不翻译。

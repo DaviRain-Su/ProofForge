@@ -20,6 +20,36 @@
 - 单字段用户 inductive 作 tag+payload；Choice Mollusk
 - `clockSlot` + 账户 0 `signerKey0`；Clock Mollusk
 - 封闭 `system.transfer`；三账户虚地址 walk + `sol_invoke_signed_c`；Transfer Mollusk
+- 编译期钉死的 `invoke`；`systemTransfer` / `invokeAcc1` 共用发射器；Ping Mollusk
+- 账户 0 AccountInfo 只读叶子（lamports / owner 首 u64 / data_len / NUM_ACCOUNTS / 三旗）；Info Mollusk
+- 表层通用 `invoke`；`systemTransfer` / `invokeAcc1` 是普通包装；Call Mollusk
+- `findPda` 一条 ASCII 种子 + 当前 program id；返回 bump；Pda Mollusk
+- `invokeSigned` 一组 ASCII 种子 + bump；Signed Mollusk（错 bump 失败）
+- `systemCreate` 普通包装；owner = 当前 program id；Create Mollusk
+- `tokenTransferChecked` 普通包装；Token `TransferChecked`；TokenXfer Mollusk
+- `ataCreateIdempotent` 普通包装；ATA CreateIdempotent；Ata Mollusk
+- `rentExemption` 叶子；`sol_get_rent_sysvar` × `(128+n)`；Rent Mollusk
+- `tokenMintToChecked` / `tokenBurnChecked`；TokenMint Mollusk
+- `systemAssign` / `systemAllocate`；SysAlloc Mollusk
+- `tokenInitAccount` / `tokenCloseAccount`；TokenAcc Mollusk
+- `memoWrite`；Memo Mollusk
+- `createPda`；CreatePda Mollusk
+- `checkPda`；Pda Mollusk 验证 bump
+- `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount`；TokenApprove / TokenFreeze Mollusk
+- `clockEpoch`；Clock Mollusk 两次 warp 跨 epoch
+- `tokenSetMintAuthority` / `tokenRevoke`；TokenAuth Mollusk
+- `slotsPerEpoch`；Epoch Mollusk 改 schedule
+- `tokenAccountSize` / `cpiReturn`；TokenSize Mollusk 返回 165
+- `systemAllocateWithSeed`；SysSeed Mollusk
+- `systemCreateWithSeed`；SysSeed Mollusk 转 lamports
+- `systemAssignWithSeed`；SysSeed Mollusk 改 owner
+- `systemTransferWithSeed`；SysXfer Mollusk
+- `tokenInitMint`；TokenMint2 Mollusk
+- `tokenSyncNative`；TokenNative Mollusk
+- 账户 1 只读叶子；Peer Mollusk
+- `sha256Lit`；Hash Mollusk
+- 32B key / owner 按字读；Keys Mollusk
+- `keccak256Lit`；Keccak Mollusk
 
 ## 进行中
 
@@ -30,6 +60,15 @@
 
 SVM 回 L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原语）。
 再后：AccountInfo 叶子 → PDA find / invokeSigned → System create / Token+ATA。
+完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
+
+剩余可开、仍落在现有抽出/发射器上：
+
+1. 账户 0/1 的 32B 按字读已绿；账户 2 / `ByteArray 32` 仍 FC
+2. Token classic 常用指令已绿；Multisig / Token-2022 仍关
+
+nonce / Token-2022 / remaining accounts / 运行时 program id 仍关。
+
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 

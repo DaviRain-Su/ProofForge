@@ -120,7 +120,53 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         let user :=
           field.startsWith "Examples." || field.startsWith "SolanaLean." ||
             field.startsWith "Tests."
-        if user && field.contains "." && e.getAppArgs.size ≥ 1 then
+        if (endsWith e ".findPda" || isConstNamed e ``SolanaLean.Runtime.findPda) &&
+            e.getAppArgs.size ≥ 1 then
+          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+          | .lit (.strVal s) => if s.isEmpty then none else some (.findPda s)
+          | _ => none
+        else if (endsWith e ".sha256Lit" || isConstNamed e ``SolanaLean.Runtime.sha256Lit) &&
+            e.getAppArgs.size ≥ 1 then
+          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+          | .lit (.strVal s) => some (.sha256Lit s)
+          | _ => none
+        else if (endsWith e ".keccak256Lit" || isConstNamed e ``SolanaLean.Runtime.keccak256Lit) &&
+            e.getAppArgs.size ≥ 1 then
+          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+          | .lit (.strVal s) => some (.keccak256Lit s)
+          | _ => none
+        else if (endsWith e ".accKeyWord" || isConstNamed e ``SolanaLean.Runtime.accKeyWord) &&
+            e.getAppArgs.size ≥ 2 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit word) =>
+            let a := acc.toNat
+            let w := word.toNat
+            if a ≤ 1 && w ≤ 3 then some (.accKeyWord a w) else none
+          | _, _ => none
+        else if (endsWith e ".accOwnerWord" || isConstNamed e ``SolanaLean.Runtime.accOwnerWord) &&
+            e.getAppArgs.size ≥ 2 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit word) =>
+            let a := acc.toNat
+            let w := word.toNat
+            if a ≤ 1 && w ≤ 3 then some (.accOwnerWord a w) else none
+          | _, _ => none
+        else if (endsWith e ".checkPda" || isConstNamed e ``SolanaLean.Runtime.checkPda) &&
+            e.getAppArgs.size ≥ 2 then
+          match strip e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | .lit (.strVal s), some bump =>
+            if s.isEmpty then none else some (.checkPda s bump)
+          | _, _ => none
+        else if (endsWith e ".rentExemption" ||
+            isConstNamed e ``SolanaLean.Runtime.rentExemption) &&
+            e.getAppArgs.size ≥ 1 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit n) => some (.rentExemption n)
+          | _ => none
+        else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
           let proj :=
             match field.splitOn "." with
             | [] => field
@@ -198,6 +244,12 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some (.lit 0)
         else if endsWith e ".clockSlot" || isConstNamed e ``SolanaLean.Runtime.clockSlot then
           some .clockSlot
+        else if endsWith e ".clockEpoch" || isConstNamed e ``SolanaLean.Runtime.clockEpoch then
+          some .clockEpoch
+        else if endsWith e ".slotsPerEpoch" || isConstNamed e ``SolanaLean.Runtime.slotsPerEpoch then
+          some .slotsPerEpoch
+        else if endsWith e ".cpiReturn" || isConstNamed e ``SolanaLean.Runtime.cpiReturn then
+          some .cpiReturn
         else if endsWith e ".signerKey0" || isConstNamed e ``SolanaLean.Runtime.signerKey0 then
           some .signerKey0
         else if endsWith e ".evmCaller" || isConstNamed e ``SolanaLean.Runtime.evmCaller then
@@ -226,9 +278,39 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .evmSelfW1
         else if endsWith e ".evmSelfW2" || isConstNamed e ``SolanaLean.Runtime.evmSelfW2 then
           some .evmSelfW2
+        else if endsWith e ".accLamports0" || isConstNamed e ``SolanaLean.Runtime.accLamports0 then
+          some .accLamports0
+        else if endsWith e ".accOwner0" || isConstNamed e ``SolanaLean.Runtime.accOwner0 then
+          some .accOwner0
+        else if endsWith e ".accDataLen0" || isConstNamed e ``SolanaLean.Runtime.accDataLen0 then
+          some .accDataLen0
+        else if endsWith e ".accN" || isConstNamed e ``SolanaLean.Runtime.accN then
+          some .accN
+        else if endsWith e ".isSigner0" || isConstNamed e ``SolanaLean.Runtime.isSigner0 then
+          some .isSigner0
+        else if endsWith e ".isWritable0" || isConstNamed e ``SolanaLean.Runtime.isWritable0 then
+          some .isWritable0
+        else if endsWith e ".isExecutable0" || isConstNamed e ``SolanaLean.Runtime.isExecutable0 then
+          some .isExecutable0
+        else if endsWith e ".accLamports1" || isConstNamed e ``SolanaLean.Runtime.accLamports1 then
+          some .accLamports1
+        else if endsWith e ".accOwner1" || isConstNamed e ``SolanaLean.Runtime.accOwner1 then
+          some .accOwner1
+        else if endsWith e ".accDataLen1" || isConstNamed e ``SolanaLean.Runtime.accDataLen1 then
+          some .accDataLen1
+        else if endsWith e ".isSigner1" || isConstNamed e ``SolanaLean.Runtime.isSigner1 then
+          some .isSigner1
+        else if endsWith e ".isWritable1" || isConstNamed e ``SolanaLean.Runtime.isWritable1 then
+          some .isWritable1
+        else if endsWith e ".isExecutable1" || isConstNamed e ``SolanaLean.Runtime.isExecutable1 then
+          some .isExecutable1
         else if (endsWith e ".systemTransfer" ||
             isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else if endsWith e ".invokeAcc1" || isConstNamed e ``SolanaLean.Runtime.invokeAcc1 ||
+            endsWith e ".invoke" || isConstNamed e ``SolanaLean.Runtime.invoke ||
+            endsWith e ".invokeSigned" || isConstNamed e ``SolanaLean.Runtime.invokeSigned then
+          some (.lit 0)
         else if ((endsWith e ".evmDeposit" ||
             isConstNamed e ``SolanaLean.Runtime.evmDeposit) ||
             (endsWith e ".evmLogTipped" ||
@@ -278,7 +360,6 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             endsWith e ".getElem" || endsWith e ".getElem!" || endsWith e ".get") &&
             e.getAppArgs.size ≥ 2 then
           let args := e.getAppArgs
-          -- 从后往前第一个抽得出的值才是下标；证明参数抽不出。
           let lastVal? : Option Ops.Val :=
             args.foldr (init := none) fun a acc =>
               match acc with
@@ -328,6 +409,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | some j, none => some (.indexGet (.arg j) "cells" idx len)
             | _, _ => none
           | none => none
+
         else none
       else none
 
@@ -382,13 +464,6 @@ private def binArgs (e : Expr) : Option (Expr × Expr) :=
 
 private def asCmpCore (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
   let e := strip e
-  if (isConstNamed e ``LT.lt || isConstNamed e ``Nat.lt) && e.getAppArgs.size ≥ 2 then
-    let l := e.getAppArgs[e.getAppArgs.size - 2]!
-    let r := e.getAppArgs[e.getAppArgs.size - 1]!
-    match val env l, val env r with
-    | some lv, some rv => some (.lt, lv, rv)
-    | _, _ => none
-  else
   if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then
     match binArgs e with
     | some (l, r) =>
@@ -509,7 +584,7 @@ private def asEqZero (env : Environment) (e : Expr) : Option Ops.Val :=
 /-- 多字段 `State.mk a b …`：init 用第一个显式参数；checked 更新用最后一个。 -/
 private def asStateMk (env : Environment) (e : Expr) (preferLast := false) : Option Ops.Val :=
   let e := strip e
-  if isConstNamed e ``Prod.mk then none
+  if isConstNamed e ``Prod.mk || endsWith e ".Prod.mk" then none
   else if endsWith e ".State.mk" || endsWith e ".mk" then
     let args := e.getAppArgs
     if args.size = 0 then none
@@ -587,7 +662,7 @@ private def asVectorLits (env : Environment) (e : Expr) : Option (Array Ops.Val)
     | none => none
   else none
 
-/-- `xs.set i v`：字面量下标抽出被改的那一叶；运行时下标走 `asIndexSet`。 -/
+/-- `xs.set i v`：只抽出被改的那一叶。 -/
 private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``Vector.set || endsWith e ".set" then
@@ -627,11 +702,11 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
     | _, _, _ => none
   else none
 
+/-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
 private def asIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
   let e := strip e
   if isConstNamed e ``Vector.set || endsWith e ".set" then
     let args := e.getAppArgs
-    -- `Vector.set xs i v`：值参数是 xs / i / v。类型里的 `OfNat n` 不是下标。
     let rec baseName (fuel : Nat) (e : Expr) : Option String :=
       match fuel with
       | 0 => none
@@ -662,10 +737,10 @@ private def asIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
     else none
   else none
 
-/-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
 private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let e := strip e
-  if (endsWith e ".State.mk" || endsWith e ".mk") && !(isConstNamed e ``Prod.mk) then
+  if (endsWith e ".State.mk" || endsWith e ".mk") &&
+      !(isConstNamed e ``Prod.mk || endsWith e ".Prod.mk") then
     Id.run do
       let mut acc : Array Ops.Val := #[]
       for a in e.getAppArgs do
@@ -704,11 +779,33 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
           | some v => some v
           | none =>
             match val env st with
+            | some (.clockSlot) => some .clockSlot
+            | some (.clockEpoch) => some .clockEpoch
+            | some (.slotsPerEpoch) => some .slotsPerEpoch
+            | some (.cpiReturn) => some .cpiReturn
+            | some (.signerKey0) => some .signerKey0
+            | some (.accLamports0) => some .accLamports0
+            | some (.accOwner0) => some .accOwner0
+            | some (.accDataLen0) => some .accDataLen0
+            | some (.accN) => some .accN
+            | some (.isSigner0) => some .isSigner0
+            | some (.isWritable0) => some .isWritable0
+            | some (.isExecutable0) => some .isExecutable0
+            | some (.accLamports1) => some .accLamports1
+            | some (.accOwner1) => some .accOwner1
+            | some (.accDataLen1) => some .accDataLen1
+            | some (.isSigner1) => some .isSigner1
+            | some (.isWritable1) => some .isWritable1
+            | some (.isExecutable1) => some .isExecutable1
+            | some (.findPda s) => some (.findPda s)
+            | some (.checkPda s b) => some (.checkPda s b)
+            | some (.rentExemption n) => some (.rentExemption n)
+            | some (.sha256Lit s) => some (.sha256Lit s)
+            | some (.keccak256Lit s) => some (.keccak256Lit s)
+            | some (.accKeyWord a w) => some (.accKeyWord a w)
+            | some (.accOwnerWord a w) => some (.accOwnerWord a w)
             | some v =>
-              if Ops.hasEvmLeaf #[.returnU64 v] ||
-                  match v with | .clockSlot | .signerKey0 => true | _ => false then
-                some v
-              else none
+              if Ops.hasEvmLeaf #[.returnU64 v] then some v else none
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -726,15 +823,6 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
     else none
   else none
 
-private def isErrorOverflow (e : Expr) : Bool :=
-  let e := strip e
-  if isConstNamed e ``Except.error then
-    let args := e.getAppArgs
-    if h : args.size > 0 then
-      endsWith (strip args[args.size - 1]) ".overflow"
-    else false
-  else false
-
 private def errorCtorName (e : Expr) : Option String :=
   let e := strip e
   if isConstNamed e ``Except.error then
@@ -749,6 +837,15 @@ private def errorCtorName (e : Expr) : Option String :=
     else none
   else none
 
+private def isErrorOverflow (e : Expr) : Bool :=
+  let e := strip e
+  if isConstNamed e ``Except.error then
+    let args := e.getAppArgs
+    if h : args.size > 0 then
+      endsWith (strip args[args.size - 1]) ".overflow"
+    else false
+  else false
+
 /-- 每个槽一条 `returnState`。第二槽起全是 `lit 0` 时仍压成一条（旧 init）。 -/
 private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   if vs.size ≤ 1 then
@@ -758,71 +855,266 @@ private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   else
     vs.map Ops.Op.returnState
 
-/-- 体里任意深度的具名 Runtime 应用。 -/
-private def mentionsRuntime (e : Expr) (want : Name) (suffix : String) : Bool :=
-  e.getUsedConstantsAsSet.toList.any fun n =>
-    n == want || n.toString.endsWith suffix
+private def isRuntimeName (n : Name) (suf : String) : Bool :=
+  n == (`SolanaLean.Runtime).append suf.toName || n.toString.endsWith s!".{suf}"
 
-private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : String) :
-    Option Expr :=
-  let rec go (fuel : Nat) (e : Expr) : Option Expr :=
+private def mentionsRuntime (e : Expr) (suf : String) : Bool :=
+  let suf := if suf.front == '.' then String.ofList (suf.toList.drop 1) else suf
+  e.getUsedConstantsAsSet.toList.any (isRuntimeName · suf)
+
+private def natOfVal : Ops.Val → Option Nat
+  | .lit n => some n.toNat
+  | _ => none
+
+private def asBoolLit (e : Expr) : Option Bool :=
+  if isConstNamed e ``Bool.true || endsWith e ".true" then some true
+  else if isConstNamed e ``Bool.false || endsWith e ".false" then some false
+  else none
+
+/-- `CpiMeta.mk acc signer writable` 或具名字段。 -/
+private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
+  let e := strip e
+  if isConstNamed e ``SolanaLean.Runtime.CpiMeta.mk || endsWith e ".mk" then
+    let args := e.getAppArgs
+    if args.size ≥ 3 then
+      match val env args[args.size - 3]!, asBoolLit args[args.size - 2]!,
+          asBoolLit args[args.size - 1]! with
+      | some accV, some signer, some writable =>
+        match natOfVal accV with
+        | some acc => some { acc, signer, writable }
+        | none => none
+      | _, _, _ => none
+    else none
+  else none
+
+private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
+  let e := strip e
+  if isConstNamed e ``SolanaLean.Runtime.CpiWord.u8le || endsWith e ".u8le" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
+      | some n => some (.u8le (UInt64.ofNat n))
+      | none => none
+    else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.u32le || endsWith e ".u32le" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
+      | some n => some (.u32le (UInt64.ofNat n))
+      | none => none
+    else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.u64le || endsWith e ".u64le" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+      | some v => some (.u64le v)
+      | none => none
+    else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.ascii || endsWith e ".ascii" then
+    if e.getAppArgs.size ≥ 1 then
+      match e.getAppArgs[e.getAppArgs.size - 1]! with
+      | .lit (.strVal s) => some (.ascii s)
+      | _ => none
+    else none
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.programId || endsWith e ".programId" then
+    some .programId
+  else if isConstNamed e ``SolanaLean.Runtime.CpiWord.accKey || endsWith e ".accKey" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
+      | some i => some (.accKey i)
+      | none => none
+    else none
+  else none
+
+/-- `#[a, b, …]` 展开成 `Array.mk [a, b, …]` / `List.cons`。 -/
+private def asArrayElems (e : Expr) : Option (Array Expr) :=
+  let rec fromList (fuel : Nat) (e : Expr) (acc : Array Expr) : Option (Array Expr) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``List.nil then some acc
+      else if isConstNamed e ``List.cons && e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        fromList fuel' args[args.size - 1]! (acc.push args[args.size - 2]!)
+      else none
+  let e := strip e
+  if isConstNamed e ``Array.mk && e.getAppArgs.size ≥ 1 then
+    fromList 16 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+  else if isConstNamed e ``List.toArray && e.getAppArgs.size ≥ 1 then
+    fromList 16 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+  else if isConstNamed e ``Array.empty || endsWith e ".empty" then
+    some #[]
+  else none
+
+private def decodeMetasData (env : Environment) (metaE dataE : Expr) :
+    Option (Array Ops.CpiMeta × Array Ops.CpiWord) :=
+  match asArrayElems metaE, asArrayElems dataE with
+  | some metaEs, some dataEs =>
+    Id.run do
+      let mut metas : Array Ops.CpiMeta := #[]
+      for me in metaEs do
+        match asCpiMeta env me with
+        | none => return none
+        | some m => metas := metas.push m
+      let mut data : Array Ops.CpiWord := #[]
+      for de in dataEs do
+        match asCpiWord env de with
+        | none => return none
+        | some w => data := data.push w
+      some (metas, data)
+  | _, _ => none
+
+private def asAsciiLit (e : Expr) : Option String :=
+  match strip e with
+  | .lit (.strVal s) => if s.isEmpty then none else some s
+  | _ => none
+
+/-- 抽出结果：program / metas / data / 可选 (seed, bump)。 -/
+private def decodeInvokeArgs (env : Environment) (e : Expr) :
+    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
+  let e := strip e
+  if isConstNamed e ``SolanaLean.Runtime.invokeSigned || endsWith e ".invokeSigned" then
+    let args := e.getAppArgs
+    if args.size < 5 then none
+    else
+      match val env args[args.size - 5]!,
+          decodeMetasData env args[args.size - 4]! args[args.size - 3]!,
+          asAsciiLit args[args.size - 2]!,
+          val env args[args.size - 1]! with
+      | some progV, some (metas, data), some seed, some bump =>
+        match natOfVal progV with
+        | some prog => some (prog, metas, data, some seed, some bump)
+        | none => none
+      | _, _, _, _ => none
+  else if isConstNamed e ``SolanaLean.Runtime.invoke || endsWith e ".invoke" then
+    let args := e.getAppArgs
+    if args.size < 3 then none
+    else
+      match val env args[args.size - 3]!,
+          decodeMetasData env args[args.size - 2]! args[args.size - 1]! with
+      | some progV, some (metas, data) =>
+        match natOfVal progV with
+        | some prog => some (prog, metas, data, none, none)
+        | none => none
+      | _, _ => none
+  else none
+
+/-- 体里任意深度的编译期 `invoke`。包装会 unfold 成这条。 -/
+private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
+    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
+  let rec go (fuel : Nat) (e : Expr) :
+      Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
       let e := e.consumeMData
-      if e.getAppFn.constName? == some want || endsWith e suffix then
-        some e
+      match decodeInvokeArgs env e with
+      | some inv => some inv
+      | none =>
+        -- 非 irreducible 的 Runtime 包装展开成 invoke。
+        let unfolded :=
+          match e.getAppFn.constName? with
+          | none => none
+          | some n =>
+            if n.getRoot != `SolanaLean then none
+            else
+              match env.find? n with
+              | some (.defnInfo info) =>
+                -- 空参包装（invokeAcc1）直接取体；有参包装 β 展开。
+                if e.getAppArgs.isEmpty then some info.value
+                else some (info.value.beta e.getAppArgs)
+              | _ => none
+        match unfolded with
+        | some u => go fuel' u
+        | none =>
+          match e with
+          | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+          | .lam _ _ body _ => go fuel' body
+          | .app f a => go fuel' f <|> go fuel' a
+          | _ => none
+  if mentionsRuntime e "invoke" || mentionsRuntime e "invokeSigned" ||
+      mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" ||
+      mentionsRuntime e "systemCreate" ||
+      mentionsRuntime e "createPda" ||
+      mentionsRuntime e "systemAssign" ||
+      mentionsRuntime e "systemAllocate" ||
+      mentionsRuntime e "systemAllocateWithSeed" ||
+      mentionsRuntime e "systemCreateWithSeed" ||
+      mentionsRuntime e "systemAssignWithSeed" ||
+      mentionsRuntime e "systemTransferWithSeed" ||
+      mentionsRuntime e "tokenInitMint" ||
+      mentionsRuntime e "tokenSyncNative" ||
+      mentionsRuntime e "tokenTransferChecked" ||
+      mentionsRuntime e "tokenMintToChecked" ||
+      mentionsRuntime e "tokenBurnChecked" ||
+      mentionsRuntime e "tokenInitAccount" ||
+      mentionsRuntime e "tokenCloseAccount" ||
+      mentionsRuntime e "tokenApproveChecked" ||
+      mentionsRuntime e "tokenFreezeAccount" ||
+      mentionsRuntime e "tokenThawAccount" ||
+      mentionsRuntime e "tokenSetMintAuthority" ||
+      mentionsRuntime e "tokenRevoke" ||
+      mentionsRuntime e "tokenAccountSize" ||
+      mentionsRuntime e "memoWrite" ||
+      mentionsRuntime e "ataCreateIdempotent" then
+    go fuel e
+  else none
+
+private def invokeOps
+    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val)
+    (ret : Ops.Val) : Array Ops.Op :=
+  let (prog, metas, data, seed, bump) := inv
+  #[.invoke prog metas data seed bump, .returnU64 ret]
+
+/-- `.ok (state, ret)` 的第二元。找不到就 none。 -/
+private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
+  let rec go (fuel : Nat) (e : Expr) : Option Ops.Val :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+        let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
+        if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
+          val env pair.getAppArgs[pair.getAppArgs.size - 1]!
+        else none
       else
         match e with
-        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .letE _ _ _ body _ => go fuel' body
         | .lam _ _ body _ => go fuel' body
         | .app f a => go fuel' f <|> go fuel' a
         | _ => none
-  go fuel e
+  go 16 e
 
-private def findUnaryRuntime (env : Environment) (want : Name) (suffix : String)
-    (e : Expr) : Option Ops.Val :=
-  if mentionsRuntime e want suffix then
-    match findRuntimeApp 16 e want suffix with
-    | some app =>
-      if app.getAppArgs.size ≥ 1 then
-        match val env app.getAppArgs[app.getAppArgs.size - 1]! with
-        | some v => some v
-        | none => some (.arg 0)
-      else some (.arg 0)
-    | none => some (.arg 0)
-  else none
+private def invokeRet
+    (_env : Environment) (_e : Expr)
+    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
+    Ops.Val :=
+  match inv with
+  | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], none, none) => amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], some _, some _) => amount
+  | (1, _, #[.u32le 1, .programId], none, none) => .lit 0
+  | (1, _, #[.u32le 8, .u64le space], none, none) => space
+  | (2, _, #[.u32le 9, .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], none, none) => space
+  | (2, _, #[.u32le 3, .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], none, none) => lamports
+  | (2, _, #[.u32le 10, .accKey 0, .u64le _, .ascii "vault", .programId], none, none) => .lit 0
+  | (3, _, #[.u32le 11, .u64le lamports, .u64le _, .ascii "vault", .programId], none, none) => lamports
+  | (2, _, #[.u8le 20, .u8le 6, .accKey 0, .u8le 0], none, none) => .lit 0
+  | (2, _, #[.u8le 17], none, none) => .lit 0
+  | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => amount
+  | (3, _, #[.u8le 14, .u64le amount, .u8le _], none, none) => amount
+  | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => amount
+  | (3, _, #[.u8le 18, .accKey 0], none, none) => .lit 0
+  | (3, _, #[.u8le 9], none, none) => .lit 0
+  | (4, _, #[.u8le 13, .u64le amount, .u8le _], none, none) => amount
+  | (3, _, #[.u8le 10], none, none) => .lit 0
+  | (3, _, #[.u8le 11], none, none) => .lit 0
+  | (3, _, #[.u8le 6, .u8le 0, .u8le 1, .accKey 2], none, none) => .lit 0
+  | (3, _, #[.u8le 5], none, none) => .lit 0
+  | (2, _, #[.u8le 21], none, none) => .cpiReturn
+  | (1, _, #[.ascii "ok"], none, none) => .lit 0
+  | (6, _, #[.u8le 1], none, none) => .lit 0
+  | _ => .lit 0
 
-/-- 体里任意深度的 `systemTransfer amount`。 -/
-private def findSystemTransfer (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``SolanaLean.Runtime.systemTransfer ".systemTransfer" e
-
-private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``SolanaLean.Runtime.evmDeposit ".evmDeposit" e
-
-private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``SolanaLean.Runtime.evmLogTipped ".evmLogTipped" e
-
-private def findEvmLogIncremented (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``SolanaLean.Runtime.evmLogIncremented ".evmLogIncremented" e
-
-private def findEvmSendEth (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e ``SolanaLean.Runtime.evmSendEth ".evmSendEth" then
-    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmSendEth ".evmSendEth" with
-    | some app =>
-      let args := app.getAppArgs
-      if args.size ≥ 4 then
-        let w0 := (val env args[args.size - 4]!).getD (.arg 0)
-        let w1 := (val env args[args.size - 3]!).getD (.arg 1)
-        let w2 := (val env args[args.size - 2]!).getD (.arg 2)
-        let amt := (val env args[args.size - 1]!).getD (.arg 3)
-        some (w0, w1, w2, amt)
-      else some (.arg 0, .arg 1, .arg 2, .arg 3)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
-  else none
-
-/-- `forIn [:N] acc fun i r => … yield (r + xs[i])`。N 必须是字面量。 -/
 private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :=
   let rec go (fuel : Nat) (e : Expr) : Option (Nat × Ops.Val) :=
     match fuel with
@@ -906,6 +1198,36 @@ private def findIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
         | _ => none
   go 16 e
 
+private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : String) :
+    Option Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      if e.getAppFn.constName? == some want || endsWith e suffix then
+        some e
+      else
+        match e with
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | .app f a => go fuel' f <|> go fuel' a
+        | _ => none
+  go fuel e
+
+private def findUnaryRuntime (env : Environment) (want : Name) (suffix : String)
+    (e : Expr) : Option Ops.Val :=
+  if mentionsRuntime e suffix then
+    match findRuntimeApp 16 e want suffix with
+    | some app =>
+      if app.getAppArgs.size ≥ 1 then
+        match val env app.getAppArgs[app.getAppArgs.size - 1]! with
+        | some v => some v
+        | none => some (.arg 0)
+      else some (.arg 0)
+    | none => some (.arg 0)
+  else none
+
 private def nthFromEnd (args : Array Expr) (n : Nat) : Option Expr :=
   if args.size ≥ n + 1 then some args[args.size - 1 - n]! else none
 
@@ -914,21 +1236,39 @@ private def valAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val
   | some e => (val env e).getD (.arg n)
   | none => .arg n
 
+private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmDeposit ".evmDeposit" e
+
+private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmLogTipped ".evmLogTipped" e
+
+private def findEvmLogIncremented (env : Environment) (e : Expr) : Option Ops.Val :=
+  findUnaryRuntime env ``SolanaLean.Runtime.evmLogIncremented ".evmLogIncremented" e
+
+private def findEvmSendEth (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmSendEth" then
+    match findRuntimeApp 16 e ``SolanaLean.Runtime.evmSendEth ".evmSendEth" with
+    | some app =>
+      let args := app.getAppArgs
+      some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+  else none
+
 private def findBinaryRuntime (env : Environment) (want : Name) (suffix : String)
     (e : Expr) : Option (Ops.Val × Ops.Val) :=
-  if mentionsRuntime e want suffix then
+  if mentionsRuntime e suffix then
     match findRuntimeApp 16 e want suffix with
     | some app =>
       let args := app.getAppArgs
-      if args.size ≥ 2 then
-        some (valAtEnd env args 1, valAtEnd env args 0)
+      if args.size ≥ 2 then some (valAtEnd env args 1, valAtEnd env args 0)
       else some (.arg 0, .arg 1)
     | none => some (.arg 0, .arg 1)
   else none
 
 private def findTernaryRuntime (env : Environment) (want : Name) (suffix : String)
     (e : Expr) : Option (Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e want suffix then
+  if mentionsRuntime e suffix then
     match findRuntimeApp 16 e want suffix with
     | some app =>
       let args := app.getAppArgs
@@ -948,7 +1288,7 @@ private def findEvmMapSetU64 (env : Environment) (e : Expr) :
 
 private def findEvmMapGetAddr (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e ``SolanaLean.Runtime.evmMapGetAddr ".evmMapGetAddr" then
+  if mentionsRuntime e "evmMapGetAddr" then
     match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapGetAddr ".evmMapGetAddr" with
     | some app =>
       let args := app.getAppArgs
@@ -958,7 +1298,7 @@ private def findEvmMapGetAddr (env : Environment) (e : Expr) :
 
 private def findEvmMapSetAddr (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e ``SolanaLean.Runtime.evmMapSetAddr ".evmMapSetAddr" then
+  if mentionsRuntime e "evmMapSetAddr" then
     match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapSetAddr ".evmMapSetAddr" with
     | some app =>
       let args := app.getAppArgs
@@ -969,7 +1309,7 @@ private def findEvmMapSetAddr (env : Environment) (e : Expr) :
 
 private def findEvmMapGetPair (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e ``SolanaLean.Runtime.evmMapGetPair ".evmMapGetPair" then
+  if mentionsRuntime e "evmMapGetPair" then
     match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapGetPair ".evmMapGetPair" with
     | some app =>
       let args := app.getAppArgs
@@ -980,7 +1320,7 @@ private def findEvmMapGetPair (env : Environment) (e : Expr) :
 
 private def findEvmMapSetPair (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e ``SolanaLean.Runtime.evmMapSetPair ".evmMapSetPair" then
+  if mentionsRuntime e "evmMapSetPair" then
     match findRuntimeApp 16 e ``SolanaLean.Runtime.evmMapSetPair ".evmMapSetPair" with
     | some app =>
       let args := app.getAppArgs
@@ -992,7 +1332,7 @@ private def findEvmMapSetPair (env : Environment) (e : Expr) :
 
 private def findEvmTokenTransfer (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e ``SolanaLean.Runtime.evmTokenTransfer ".evmTokenTransfer" then
+  if mentionsRuntime e "evmTokenTransfer" then
     match findRuntimeApp 16 e ``SolanaLean.Runtime.evmTokenTransfer ".evmTokenTransfer" with
     | some app =>
       let args := app.getAppArgs
@@ -1013,7 +1353,7 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.evmSendEth w0 w1 w2 amt, .returnU64 amt]
   else if let some amount := findEvmLogTipped env e then
     some #[.evmLog "Tipped" amount, .returnU64 amount]
-    else if let some amount := findEvmLogIncremented env e then
+  else if let some amount := findEvmLogIncremented env e then
     some #[.evmLog "Incremented" amount, .returnU64 amount]
   else if let some (b, k, v) := findEvmMapSetU64 env e then
     some #[.mapSetU64 b k v, .returnU64 v]
@@ -1035,8 +1375,8 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
 
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
-  if let some amount := findSystemTransfer env e then
-    .ok #[.systemTransfer amount, .returnU64 amount]
+  if let some inv := findInvoke env 16 e then
+    .ok (invokeOps inv (invokeRet env e inv))
   else if let some ops := decodeEvmEffect env e then
     .ok ops
   else if let some (n, addend) := findForIn env e then
@@ -1065,7 +1405,12 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnU64 v]
     | .lit _ => .ok #[.returnU64 v]
-    | .clockSlot | .signerKey0 => .ok #[.returnU64 v]
+    | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+    | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+    | .accLamports1 | .accOwner1 | .accDataLen1
+    | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
+    | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
+    | .accKeyWord _ _ | .accOwnerWord _ _ => .ok #[.returnU64 v]
     | .indexGet .. => .ok #[.returnU64 v]
     | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. =>
         .ok #[.returnU64 v]
@@ -1099,11 +1444,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
-    if let some amount := findSystemTransfer env e then
-      return .ok #[.systemTransfer amount, .returnU64 amount]
+    if let some inv := findInvoke env 16 e then
+      return .ok (invokeOps inv (invokeRet env e inv))
     let e0 := strip e
     if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
-      -- 先尝试一般比较 ite（含 owner / allowance 守卫），再退回效应整段。
       pure ()
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
@@ -1123,23 +1467,13 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let f := peelProofLam 4 (peelLets args[args.size - 1]!)
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, findSystemTransfer env t, decodeEvmEffect env t, asOkState env t with
-          | some (cmp, lv, rv), some amount, _, _ =>
-            return .ok #[.ite cmp lv rv #[.systemTransfer amount, .returnU64 amount] #[.errorOverflow]]
+          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asOkState env t with
+          | some (cmp, lv, rv), some inv, _, _ =>
+            return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
           | some (cmp, lv, rv), none, some evmOps, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some v =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
-          | some (cmp, lv, rv), none, none, none =>
-            match errorCtorName f, findIndexSet env t, decodePlain env t with
-            | some name, some op, _ =>
-              match op with
-              | .indexSet _ _ v _ =>
-                return .ok #[.ite cmp lv rv #[op, .okState v] #[.errorNamed name]]
-              | _ => return .ok #[.ite cmp lv rv #[op] #[.errorNamed name]]
-            | some name, none, .ok thn =>
-              return .ok #[.ite cmp lv rv thn #[.errorNamed name]]
-            | _, _, _ => return .error "extract/unsupported: ite then"
           | _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, asOkState env t with
@@ -1182,17 +1516,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ => return .error r
         | _, .error r => return .error r
-        -- `spend` 一类：比较守卫 + pair-set。必须先于 decodeEvmEffect，
-        -- 否则 set 会把整段 ite 吃掉。
-    else if (endsWith e ".systemTransfer" ||
-        isConstNamed e ``SolanaLean.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
-      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
-      | some amount => return .ok #[.systemTransfer amount, .returnU64 amount]
-      | none => return .error "extract/unsupported: systemTransfer amount"
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
-    else if let some name := errorCtorName e then
-      return .ok #[.errorNamed name]
+    else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
+      return .ok (invokeOps inv (invokeRet env e inv))
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs
@@ -1260,7 +1587,7 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
 def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
   let ops ← decodeBody env e
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
-      Ops.hasSystemTransfer ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops then
+      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"
@@ -1324,7 +1651,13 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
         else v
       | .field b n => .field (flipVal fuel' b) n
       | .lit _ => v
-      | .clockSlot | .signerKey0 => v
+      | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+      | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+      | .accLamports1 | .accOwner1 | .accDataLen1
+      | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
+      | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
+      | .accKeyWord _ _ | .accOwnerWord _ _ => v
+      | .checkPda s b => .checkPda s (flipVal fuel' b)
       | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
       | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
       | .bitXor l r => .bitXor (flipVal fuel' l) (flipVal fuel' r)
@@ -1350,7 +1683,10 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .ite c l r t f =>
         .ite c (flipVal fuel' l) (flipVal fuel' r)
           (t.map (flipOp fuel')) (f.map (flipOp fuel'))
-      | .systemTransfer v => .systemTransfer (flipVal fuel' v)
+      | .invoke prog metas data seed bump =>
+        .invoke prog metas (data.map fun
+          | .u64le v => .u64le (flipVal fuel' v)
+          | w => w) seed (bump.map (flipVal fuel'))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
@@ -1510,7 +1846,13 @@ private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
   | .lit _ => #[]
-  | .clockSlot | .signerKey0 => #[]
+  | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
+  | .accN | .isSigner0 | .isWritable0 | .isExecutable0
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
+  | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
+  | .accKeyWord _ _ | .accOwnerWord _ _ => #[]
+  | .checkPda _ b => valFields b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valFields l ++ valFields r
   | .bitNot v => valFields v
@@ -1526,7 +1868,11 @@ private def opFields : Ops.Op → Array String
   | .checkedModU64 l r => valFields l ++ valFields r
   | .ite _ l r t f =>
       valFields l ++ valFields r ++ t.flatMap opFields ++ f.flatMap opFields
-  | .systemTransfer v => valFields v
+  | .invoke _ _ data _ bump =>
+      (data.flatMap fun
+        | .u64le v => valFields v
+        | _ => #[]) ++
+        (match bump with | some v => valFields v | none => #[])
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v

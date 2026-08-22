@@ -21,6 +21,11 @@ def init (_seed : UInt64) : State :=
 def height (_s : State) : UInt64 :=
   clockSlot
 
+/-- view：当前 epoch。同一条 Clock sysvar，读偏移 16。 -/
+@[solana_entry]
+def era (_s : State) : UInt64 :=
+  clockEpoch
+
 /-- view：账户 0 公钥的第一个小端 u64。入口会要求 signer。 -/
 @[solana_entry]
 def key0 (_s : State) : UInt64 :=

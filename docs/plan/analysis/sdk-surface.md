@@ -32,8 +32,38 @@ SDK 在本仓的意思：普通 Lean 名，抽出后变成 syscall / `AccountInf
 | Lean 名 | 降到 | 切片 |
 |---|---|---|
 | `clockSlot` | `sol_get_clock_sysvar` → `Clock.slot` | L4-001 |
+| `clockEpoch` | 同缓冲 → `Clock.epoch`@16 | L4-019 |
+| `slotsPerEpoch` | `sol_get_epoch_schedule_sysvar` → 首 u64 | L4-021 |
 | `signerKey0` | `ACC0_KEY+0` 首 u64；入口 `is_signer` | L4-001 |
 | `systemTransfer` | 三账户 walk + `sol_invoke_signed_c`；内层 `u32le(2)\|\|u64le` | L4-002 |
+| `invoke` / `invokeAcc1` | 编译期钉死 program/metas/data；N 账户 walk | L4-003 / L4-005 |
+| `accLamports0` / `accOwner0` / `accDataLen0` / `accN` | 账户 0 header 只读 | L4-004 |
+| `isSigner0` / `isWritable0` / `isExecutable0` | header +1/+2/+3，0 或 1 | L4-004 |
+| `accLamports1` / `accOwner1` / `accDataLen1` / 三旗 | 账户 1 header；walk 不强制 signer | L4-029 |
+| `sha256Lit seed` | `sol_sha256` 一条 ASCII；返回首 u64 | L4-030 |
+| `keccak256Lit seed` | `sol_keccak256` 同形；Ethereum Keccak | L4-032 |
+| `accKeyWord` / `accOwnerWord` | 账户 0/1 的 32B 按字读 | L4-031 |
+| `findPda seed` | `sol_try_find_program_address`；返回 bump | L4-006 |
+| `invokeSigned` | 一组 ASCII 种子 + bump；`sol_invoke_signed_c` | L4-007 |
+| `systemCreate` | System createAccount；owner = 当前 program id | L4-008 |
+| `tokenTransferChecked` | Token TransferChecked；decimals 编译期常量 | L4-009 |
+| `ataCreateIdempotent` | ATA CreateIdempotent；1 字节 tag 1 | L4-010 |
+| `rentExemption n` | `sol_get_rent_sysvar` × `(128+n)` | L4-011 |
+| `tokenMintToChecked` / `tokenBurnChecked` | Token mint / burn；decimals 编译期常量 | L4-012 |
+| `systemAssign` / `systemAllocate` | System assign / allocate；owner = 当前 program id | L4-013 |
+| `systemAllocateWithSeed` | AllocateWithSeed；种子 `"vault"` | L4-023 |
+| `systemCreateWithSeed` | CreateAccountWithSeed；同种子，再带 lamports | L4-024 |
+| `systemAssignWithSeed` | AssignWithSeed；同种子，只改 owner | L4-025 |
+| `systemTransferWithSeed` | TransferWithSeed；派生账户付款 | L4-026 |
+| `tokenInitMint` | Token InitializeMint2；decimals 6 | L4-027 |
+| `tokenSyncNative` | Token SyncNative；native mint 账户 | L4-028 |
+| `tokenInitAccount` / `tokenCloseAccount` | Token init3 / close；owner = acc0 公钥 | L4-014 |
+| `memoWrite` | Memo 写 UTF-8 字面量；本切片 `"ok"` | L4-015 |
+| `createPda` | find + System createAccount；seeds = `"vault"` | L4-016 |
+| `checkPda seed bump` | `sol_create_program_address`；成功 0 / 失败 1 | L4-017 |
+| `tokenApproveChecked` / `tokenFreezeAccount` / `tokenThawAccount` | Token approve / freeze / thaw | L4-018 |
+| `tokenSetMintAuthority` / `tokenRevoke` | Token SetAuthority(MintTokens) / Revoke | L4-020 |
+| `tokenAccountSize` / `cpiReturn` | GetAccountDataSize + `sol_get_return_data` 8B | L4-022 |
 | overflow / Custom(1) | `exit` | L1 |
 | view 返回 | `sol_set_return_data` 8 字节 | S3 |
 
@@ -66,7 +96,7 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 |---|---|---|
 | L4-cpi-invoke | 无 seeds 的 `invoke`；N 账户 walk 复用 transfer | 一条非 System 的固定 callee Mollusk（可用 Memo 或 mock） |
 | L4-cpi-signed | `invokeSigned` 一组种子 | PDA 付款 / vault 负例：错 bump、缺 signer |
-| L4-cpi-ret | `sol_get_return_data` 8 字节 | callee 写回 u64；无 CPI 则 FC |
+| L4-cpi-ret | `sol_get_return_data` 8 字节 | **已绿**；`cpiReturn`；长度不是 8 → Custom(1) |
 | L4-cpi-nacc | walk N 个账户（N 编译期常量，先 2..8） | 不再为每个 recipe 手写 ACC1/ACC2 |
 
 仍 FC（这才是当初说「不做通用 CPI」的那截）：
@@ -84,10 +114,11 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | ID | Lean 表面（建议） | 降到 | 完成定义 |
 |---|---|---|---|
 | L4-acc-lamports | `accLamports0` | `ACC0_LAMPORTS` 的 `u64` | Mollusk 读余额；不改 lamports（改要走 System） |
-| L4-acc-key32 | `accKey0` | 四叶 `u64` 或后续 `ByteArray 32` | 声明 ≠ `tx.origin` |
+| L4-acc-key32 | `accKeyWord acc word` | 四叶 `u64`；`acc`∈{0,1} | **已绿**；≠ `signerKey0`，不强制 signer |
 | L4-acc-owner | `accOwner0` | owner 32B 的首 u64 或全 32B | 与当前 program id 比较可后做 |
 | L4-acc-data-len | `accDataLen0` | `ACC0_DATA_LEN` | 只读 |
 | L4-acc-flags | `isSigner0` / `isWritable0` / `isExecutable0` | header +1/+2/+3 | 缺 signer 负例已有，可复用 |
+| L4-acc-1 | `accLamports1` 等 | walk 账户 1 | **已绿**；不强制 acc0 signer |
 | L4-acc-n | `accN` | `NUM_ACCOUNTS` | 只读；不开放 remaining accounts |
 | L4-signer-req | 用到 `signerKey*` 的入口强制 `is_signer` | 已有账户 0 | 扩到账户 1（独立 caller） |
 
@@ -102,9 +133,9 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 |---|---|---|---|
 | L4-clock-slot | `clockSlot` | `sol_get_clock_sysvar` + slot@0 | **已绿** |
 | L4-clock-unix | `unixTime` | 同缓冲 + unix_timestamp@32 | **保持 FC**（有符号 i64；PF 也 FC） |
-| L4-clock-epoch | `clockEpoch` | epoch@16 | 可开；非常量，两次 warp 证明 |
-| L4-rent | `rentExemption u64` 或 `rentLamportsPerByteYear` | `sol_get_rent_sysvar` | 开一条：exemption 计算要钉公式 |
-| L4-epoch-schedule | `slotsPerEpoch` 等一叶 | `sol_get_epoch_schedule_sysvar` | 有合约再用 |
+| L4-clock-epoch | `clockEpoch` | epoch@16 | **已绿**；两次 warp 跨 epoch |
+| L4-rent | `rentExemption n` | `sol_get_rent_sysvar` + `rate*(128+n)` | **已绿** |
+| L4-epoch-schedule | `slotsPerEpoch` | `sol_get_epoch_schedule_sysvar` + 首 u64 | **已绿** |
 | L4-epoch-rewards | — | `sol_get_epoch_rewards_sysvar` | 默认关 |
 | L4-fees | — | `sol_get_fees_sysvar` | 已弃用，关 |
 | L4-last-restart | — | `sol_get_last_restart_slot` | feature-gated，关 |
@@ -114,8 +145,8 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 | ID | Lean 表面 | syscall | 约束 |
 |---|---|---|---|
 | L4-pda-find | `findPda seed0 …` | `sol_try_find_program_address` | 种子字面量冻结；bump 255..1；拒绝 bump 0 |
-| L4-pda-create | `createPda …` | find + `system.createAccount` 一条 recipe | 当前 program id；signer seeds 一组 |
-| L4-pda-check | `createProgramAddress` | `sol_create_program_address` | 只验证，不找 bump |
+| L4-pda-create | `createPda …` | find + `system.createAccount` 一条 recipe | **已绿**；当前 program id；signer seeds 一组 |
+| L4-pda-check | `checkPda seed bump` | `sol_create_program_address` | **已绿**；只验证，返回 0/1 |
 
 没有「任意种子数组」。一条 recipe 钉死种子布局。
 
@@ -125,28 +156,37 @@ invokeSigned (programIx : Nat) (data : …) (seed0 : …) : UInt64
 
 ### System（`solana-system-interface`）
 
-已绿：`Transfer`（tag 2）。
+已绿：`Transfer`（tag 2）、`CreateAccount`（tag 0，52B 无 pad）、`Assign`（tag 1）、`Allocate`（tag 8）。
 
 | ID | 指令 | 内层数据 | 账户（外层） |
 |---|---|---|---|
-| L4-sys-create | `CreateAccount` tag 0 | `u32le(0)\|\|lamports\|\|space\|\|owner32`（52B） | 付款人 s+w、新账户 w、System |
-| L4-sys-assign | `Assign` tag 1 | `u32le(1)\|\|owner32` | 账户 s+w、System |
-| L4-sys-allocate | `Allocate` tag 8 | `u32le(8)\|\|space` | 账户 s+w、System |
-| L4-sys-alloc-seed | `AllocateWithSeed` / `CreateAccountWithSeed` | 后做 | 与 PDA 绑定再开 |
+| L4-sys-create | `CreateAccount` tag 0 | `u32le(0)\|\|lamports\|\|space\|\|owner32`（52B） | 付款人 s+w、新账户 s+w、System |
+| L4-sys-assign | `Assign` tag 1 | `u32le(1)\|\|owner32` | **已绿**；账户 s+w、System |
+| L4-sys-allocate | `Allocate` tag 8 | `u32le(8)\|\|space` | **已绿**；账户 s+w、System |
+| L4-sys-alloc-seed | `AllocateWithSeed` tag 9 | **已绿**；种子 `"vault"` |
+| L4-sys-create-seed | `CreateAccountWithSeed` tag 3 | **已绿**；同种子，再带 lamports |
+| L4-sys-assign-seed | `AssignWithSeed` tag 10 | **已绿**；同种子，只改 owner |
+| L4-sys-xfer-seed | `TransferWithSeed` tag 11 | **已绿**；派生账户付款 |
 | L4-sys-advance-nonce 等 | nonce / authorize | — | 不做，除非有合约 |
 
-`Transfer` 已证明三账户 walk + C ABI。下一条优先 `CreateAccount`（PDA vault 需要）。
+已绿：`TransferChecked`（tag 12，10B packed）、ATA `CreateIdempotent`（tag 1）、`MintToChecked` / `BurnChecked`。
 
 ### Token classic（`spl-token-interface`，**不是** Token-2022）
 
 | ID | 指令 | tag | 要点 |
 |---|---|---|---|
 | L4-tok-xfer | `TransferChecked` | 12 | mint + decimals；不要开已弃用的 `Transfer`(3) |
-| L4-tok-mint | `MintToChecked` | 14 | mint authority signer |
-| L4-tok-burn | `BurnChecked` | 15 | |
-| L4-tok-init-acc | `InitializeAccount3` | 18 | owner 走指令数据，少一个账户 |
-| L4-tok-close | `CloseAccount` | 9 |  lamports 退回 |
-| L4-tok-approve / set-auth / freeze | — | — | 有合约再开；默认关 |
+| L4-tok-mint | `MintToChecked` | 14 | **已绿**；mint authority signer |
+| L4-tok-burn | `BurnChecked` | 15 | **已绿** |
+| L4-tok-init-acc | `InitializeAccount3` | 18 | **已绿**；owner = acc0 公钥 |
+| L4-tok-close | `CloseAccount` | 9 | **已绿**；lamports 退回 |
+| L4-tok-approve | `ApproveChecked` | 13 | **已绿**；decimals 编译期常量 |
+| L4-tok-freeze / thaw | `FreezeAccount` / `ThawAccount` | 10 / 11 | **已绿** |
+| L4-tok-set-auth | `SetAuthority` MintTokens | 6 | **已绿**；新 authority = acc2 |
+| L4-tok-revoke | `Revoke` | 5 | **已绿** |
+| L4-tok-size | `GetAccountDataSize` | 21 | **已绿**；返回 165 |
+| L4-tok-init-mint | `InitializeMint2` | 20 | **已绿**；decimals 6，freeze None |
+| L4-tok-sync-native | `SyncNative` | 17 | **已绿**；native mint 账户 |
 
 Multisig owner 默认关。
 
@@ -155,7 +195,7 @@ Multisig owner 默认关。
 | ID | callee | 要点 |
 |---|---|---|
 | L4-ata-idem | ATA `CreateIdempotent` | tag 1；账户表冻结；常跟 Token transfer 绑一条 |
-| L4-memo | Memo 程序写一条 | 只做 UTF-8 字面量；不做动态字符串 |
+| L4-memo | Memo 程序写一条 | **已绿**；只做 UTF-8 字面量；不做动态字符串 |
 
 ## 发射器自用、不暴露成 Lean 名
 
@@ -164,7 +204,7 @@ Multisig owner 默认关。
 | `sol_memcpy_` / `memset_` | 打包 CPI 缓冲 |
 | `sol_memcmp_` | 比 32B key / program id |
 | `sol_set_return_data` | 已有 view 返回 |
-| `sol_get_return_data` | 仅当某条 recipe 要读 callee 返回时 |
+| `sol_get_return_data` | `cpiReturn`；只读 8 字节 |
 
 ## 明确不做（不是延期）
 
@@ -182,8 +222,8 @@ Multisig owner 默认关。
 
 按依赖，不是按「像 SDK」。
 
-1. **L4-cpi-nacc + L4-cpi-invoke** — 把 transfer 的 walk/`sol_invoke_signed_c` 收成原语；Memo 或 mock 证第二条 callee。
-2. **L4-acc-*** — AccountInfo 叶子（lamports / key32 / flags）。
+1. **L4-cpi-nacc + L4-cpi-invoke** — 已绿（L4-003：Ping stub）。
+2. **L4-acc-*** — 账户 0/1 只读叶子 + 32B 按字读已绿。账户 2 / `ByteArray 32` 仍 FC。
 3. **L4-pda-find + L4-cpi-signed** — 找 bump，再用种子签字。
 4. **L4-sys-create / L4-tok-xfer / L4-ata-idem** — 特化，不再手写发射器。
 5. 其余 System / Token / sysvar 有具体合约再开。

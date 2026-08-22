@@ -41,7 +41,13 @@ def hasOptionLeaves (p : Program) : Bool :=
   p.slots.any (fun s => s.name.endsWith "_tag")
 
 private def valForbidden : Ops.Val → Bool
-  | .clockSlot | .signerKey0 => true
+  | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0
+  | .accLamports0 | .accOwner0 | .accDataLen0 | .accN
+  | .isSigner0 | .isWritable0 | .isExecutable0
+  | .accLamports1 | .accOwner1 | .accDataLen1
+  | .isSigner1 | .isWritable1 | .isExecutable1
+  | .findPda _ | .checkPda .. | .rentExemption _ | .cpiReturn
+  | .sha256Lit _ | .keccak256Lit _ | .accKeyWord .. | .accOwnerWord .. => true
   | .field b _ => valForbidden b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valForbidden l || valForbidden r
@@ -54,7 +60,7 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   | 0 => true
   | fuel' + 1 =>
     ops.any fun
-      | .systemTransfer _ => true
+      | .invoke .. => true
       | .checkedAddU64 l r => valForbidden l || valForbidden r
       | .checkedSubU64 l r => valForbidden l || valForbidden r
       | .checkedMulU64 l r => valForbidden l || valForbidden r
@@ -180,7 +186,30 @@ private def valCanon : Ops.Val → String
   | .lit n => s!"l{n.toNat}"
   | .field b n => s!"f.{n}({valCanon b})"
   | .clockSlot => "clk"
+  | .clockEpoch => "epo"
+  | .slotsPerEpoch => "spe"
   | .signerKey0 => "k0"
+  | .accLamports0 => "lp0"
+  | .accOwner0 => "ow0"
+  | .accDataLen0 => "dl0"
+  | .accN => "nacc"
+  | .isSigner0 => "sg0"
+  | .isWritable0 => "wr0"
+  | .isExecutable0 => "ex0"
+  | .accLamports1 => "lp1"
+  | .accOwner1 => "ow1"
+  | .accDataLen1 => "dl1"
+  | .isSigner1 => "sg1"
+  | .isWritable1 => "wr1"
+  | .isExecutable1 => "ex1"
+  | .findPda s => s!"pda.{s}"
+  | .checkPda s b => s!"chk.{s}:{valCanon b}"
+  | .rentExemption n => s!"rent.{n.toNat}"
+  | .cpiReturn => "cret"
+  | .sha256Lit s => s!"sha.{s}"
+  | .keccak256Lit s => s!"kec.{s}"
+  | .accKeyWord a w => s!"kw.{a}.{w}"
+  | .accOwnerWord a w => s!"ow.{a}.{w}"
   | .evmCaller => "ecall"
   | .evmBlockNumber => "eblk"
   | .evmTimestamp => "ets"
@@ -212,7 +241,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
-    | .systemTransfer v => s!"xfer({valCanon v})"
+    | .invoke .. => "inv"
     | .evmDeposit v => s!"edep({valCanon v})"
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"

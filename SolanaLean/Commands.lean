@@ -35,7 +35,7 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
       if Ops.hasEvmEffect ops || Ops.hasLangOp ops then
         throwError "extract/unsupported: svm rejects evm leaf"
       unless Ops.hasCheckedArith ops || ops.any (fun | .ite .. => true | _ => false) ||
-          Ops.hasSystemTransfer ops do
+          Ops.hasInvoke ops do
         throwError "extract/unsupported: mutating method missing checked arith"
     | none => throwError "extract/unsupported: missing mutating method"
     match Emit.emitCounterAsm program with

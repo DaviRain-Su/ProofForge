@@ -125,20 +125,47 @@ def accountSpan (accountDataLen : Nat) : Nat :=
   let align := (8 - dataEnd % 8) % 8
   dataEnd + align + 8
 
-/-- 程序是否含封闭 `system.transfer`（三账户：payer / recipient / System）。 -/
+/-- 程序是否含 CPI。 -/
+def usesCpi (p : Program) : Bool :=
+  p.methods.any (fun m => Ops.hasInvoke m.ops)
+
+/-- 要走多账户虚地址 walk：有 CPI，或读账户 1 叶子。 -/
+def usesWalk (p : Program) : Bool :=
+  usesCpi p || p.methods.any (fun m => Ops.hasAcc1 m.ops)
+
 def usesSystemTransfer (p : Program) : Bool :=
-  p.methods.any (fun m => Ops.hasSystemTransfer m.ops)
+  usesCpi p
+
+/-- 外层账户数：invoke 下标最大值 + 1；有账户 1 叶子则至少 2。 -/
+def cpiAccountCount (p : Program) : Nat :=
+  let rec maxIx (fuel : Nat) (ops : Array Ops.Op) (acc : Nat) : Nat :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      ops.foldl (init := acc) fun a op =>
+        match op with
+        | .invoke prog metas .. =>
+          let m := metas.foldl (init := prog) fun b mt => Nat.max b mt.acc
+          Nat.max a m
+        | .ite _ _ _ t f => Nat.max (maxIx fuel' t a) (maxIx fuel' f a)
+        | _ => a
+  let n := p.methods.foldl (init := 0) fun a m => Nat.max a (maxIx 8 m.ops 0)
+  let fromInvoke := if usesCpi p then Nat.max 2 (n + 1) else 0
+  let fromAcc1 := if p.methods.any (fun m => Ops.hasAcc1 m.ops) then 2 else 0
+  Nat.max fromInvoke fromAcc1
 
 def inputLayout (p : Program) : InputLayout :=
-  if usesSystemTransfer p then
-    -- 三个 data_len=0 的账户：每个 span = 0x2860，instruction 紧跟第三账户 rent。
-    let acc0 := 8
-    let acc1 := acc0 + accountSpan 0
-    let acc2 := acc1 + accountSpan 0
-    let rent2 := acc2 + accountSpan 0 - 8
-    { rentEpoch := rent2
-      instructionDataLen := rent2 + 8
-      instructionData := rent2 + 16 }
+  if usesWalk p then
+    -- N 个 data_len=0 的账户：每个 span = 0x2860，instruction 紧跟最后账户 rent。
+    let n := cpiAccountCount p
+    let rec lastRent (i : Nat) (off : Nat) : Nat :=
+      match i with
+      | 0 => off - 8
+      | i' + 1 => lastRent i' (off + accountSpan 0)
+    let rent := lastRent n 8
+    { rentEpoch := rent
+      instructionDataLen := rent + 8
+      instructionData := rent + 16 }
   else
     let dataEnd := acc0Data + dataLen p + maxPermittedDataIncrease
     let align := (8 - dataEnd % 8) % 8
@@ -194,6 +221,8 @@ private def valCanon : Ops.Val → String
   | .lit n => s!"l{n.toNat}"
   | .field b n => s!"f.{n}({valCanon b})"
   | .clockSlot => "clk"
+  | .clockEpoch => "epo"
+  | .slotsPerEpoch => "spe"
   | .signerKey0 => "k0"
   | .evmCaller => "ecall"
   | .evmBlockNumber => "eblk"
@@ -216,6 +245,28 @@ private def valCanon : Ops.Val → String
   | .shiftR l r => s!"shr({valCanon l},{valCanon r})"
   | .indexGet b n i k => s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
   | .loopIx => "ix"
+  | .accLamports0 => "lp0"
+  | .accOwner0 => "ow0"
+  | .accDataLen0 => "dl0"
+  | .accN => "nacc"
+  | .isSigner0 => "sg0"
+  | .isWritable0 => "wr0"
+  | .isExecutable0 => "ex0"
+  | .accLamports1 => "lp1"
+  | .accOwner1 => "ow1"
+  | .accDataLen1 => "dl1"
+  | .isSigner1 => "sg1"
+  | .isWritable1 => "wr1"
+  | .isExecutable1 => "ex1"
+  | .findPda s => s!"pda.{s}"
+  | .checkPda s b => s!"chk.{s}:{valCanon b}"
+  | .rentExemption n => s!"rent.{n.toNat}"
+  | .cpiReturn => "cret"
+  | .sha256Lit s => s!"sha.{s}"
+  | .keccak256Lit s => s!"kec.{s}"
+  | .accKeyWord a w => s!"kw.{a}.{w}"
+  | .accOwnerWord a w => s!"ow.{a}.{w}"
+
 
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
@@ -226,7 +277,6 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
-    | .systemTransfer v => s!"xfer({valCanon v})"
     | .evmDeposit v => s!"edep({valCanon v})"
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
@@ -247,6 +297,26 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
     | .evmTokenBalanceOfSelf a b c =>
         s!"tbal({valCanon a},{valCanon b},{valCanon c})"
+    | .invoke prog metas data seed bump =>
+      let ms :=
+        String.intercalate ","
+          (metas.toList.map fun m =>
+            s!"{m.acc}{if m.signer then "s" else ""}{if m.writable then "w" else ""}")
+      let rec word (w : Ops.CpiWord) : String :=
+        match w with
+        | .u8le n => s!"u8.{n.toNat}"
+        | .u32le n => s!"u32.{n.toNat}"
+        | .u64le v => s!"u64.{valCanon v}"
+        | .ascii s => s!"s.{s}"
+        | .programId => "pid"
+        | .accKey i => s!"k.{i}"
+      let ds := String.intercalate "," (data.toList.map word)
+      let seeds :=
+        match seed, bump with
+        | some s, some b => s!",s.{s}:{valCanon b}"
+        | _, _ => ""
+      s!"inv({prog},[{ms}],[{ds}]{seeds})"
+
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .errorNamed n => s!"err.{n}"

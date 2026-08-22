@@ -42,6 +42,37 @@
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |
 | [e-own-001](tasks/e-own-001.md) | done | Ownable + 通用 event + allowance |
+| [l4-003](tasks/l4-003.md) | done | 编译期钉死的 invoke 原语 |
+| [l4-004](tasks/l4-004.md) | done | 账户 0 AccountInfo 只读叶子 |
+| [l4-005](tasks/l4-005.md) | done | 表层通用 invoke |
+| [l4-006](tasks/l4-006.md) | done | findPda 返回 bump |
+| [l4-007](tasks/l4-007.md) | done | invokeSigned 一组种子 |
+| [l4-008](tasks/l4-008.md) | done | System createAccount |
+| [l4-009](tasks/l4-009.md) | done | Token TransferChecked |
+| [l4-010](tasks/l4-010.md) | done | ATA CreateIdempotent |
+| [l4-011](tasks/l4-011.md) | done | rentExemption |
+| [l4-012](tasks/l4-012.md) | done | Token mint / burn |
+| [l4-013](tasks/l4-013.md) | done | System assign / allocate |
+| [l4-014](tasks/l4-014.md) | done | Token init / close |
+| [l4-015](tasks/l4-015.md) | done | Memo write |
+| [l4-016](tasks/l4-016.md) | done | createPda |
+| [l4-017](tasks/l4-017.md) | done | checkPda |
+| [l4-018](tasks/l4-018.md) | done | Token approve / freeze / thaw |
+| [l4-019](tasks/l4-019.md) | done | clockEpoch |
+| [l4-020](tasks/l4-020.md) | done | Token SetAuthority / Revoke |
+| [l4-021](tasks/l4-021.md) | done | slotsPerEpoch |
+| [l4-022](tasks/l4-022.md) | done | tokenAccountSize / cpiReturn |
+| [l4-023](tasks/l4-023.md) | done | systemAllocateWithSeed |
+| [l4-024](tasks/l4-024.md) | done | systemCreateWithSeed |
+| [l4-025](tasks/l4-025.md) | done | systemAssignWithSeed |
+| [l4-026](tasks/l4-026.md) | done | systemTransferWithSeed |
+| [l4-027](tasks/l4-027.md) | done | tokenInitMint |
+| [l4-028](tasks/l4-028.md) | done | tokenSyncNative |
+| [l4-029](tasks/l4-029.md) | done | 账户 1 只读叶子 |
+| [l4-030](tasks/l4-030.md) | done | sha256Lit / sol_sha256 |
+| [l4-031](tasks/l4-031.md) | done | 32B key / owner 按字读 |
+| [l4-032](tasks/l4-032.md) | done | keccak256Lit / sol_keccak256 |
+
 
 积压：[backlog.md](backlog.md)
 SDK 剩余面：[analysis/sdk-surface.md](analysis/sdk-surface.md)

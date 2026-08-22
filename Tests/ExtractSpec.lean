@@ -10,6 +10,34 @@ import Examples.Clock
 import Examples.Transfer
 import Examples.EvmCtx
 import Examples.TipJar
+import Examples.Ping
+import Examples.Call
+import Examples.Info
+import Examples.Peer
+import Examples.Pda
+import Examples.Signed
+import Examples.Create
+import Examples.TokenXfer
+import Examples.Ata
+import Examples.Rent
+import Examples.TokenMint
+import Examples.SysAlloc
+import Examples.TokenAcc
+import Examples.Memo
+import Examples.CreatePda
+import Examples.TokenApprove
+import Examples.TokenFreeze
+import Examples.TokenAuth
+import Examples.Epoch
+import Examples.TokenSize
+import Examples.SysSeed
+import Examples.SysXfer
+import Examples.TokenMint2
+import Examples.TokenNative
+import Examples.Hash
+import Examples.Keys
+import Examples.Keccak
+
 import Tests.Fixtures
 
 #solana_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
@@ -72,9 +100,91 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 
 #solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.height
 
+#solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.era
+
 #solana_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.key0
 
 #solana_extract Examples.Transfer.init Examples.Transfer.transfer Examples.Transfer.get
+
+#solana_extract Examples.Ping.init Examples.Ping.ping Examples.Ping.get
+
+#solana_extract Examples.Call.init Examples.Call.call Examples.Call.get
+
+#solana_extract Examples.Info.init Examples.Info.touch Examples.Info.lamports
+
+#solana_extract Examples.Peer.init Examples.Peer.touch Examples.Peer.lamports1
+
+#solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.bump
+
+#solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.check
+
+#solana_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.checkBad
+
+#solana_extract Examples.Signed.init Examples.Signed.signed Examples.Signed.get
+
+#solana_extract Examples.Create.init Examples.Create.create Examples.Create.get
+
+#solana_extract Examples.TokenXfer.init Examples.TokenXfer.send Examples.TokenXfer.get
+
+#solana_extract Examples.Ata.init Examples.Ata.openAta Examples.Ata.get
+
+#solana_extract Examples.Rent.init Examples.Rent.stamp Examples.Rent.exempt
+
+#solana_extract Examples.TokenMint.init Examples.TokenMint.mintTo Examples.TokenMint.get
+
+#solana_extract Examples.SysAlloc.init Examples.SysAlloc.alloc Examples.SysAlloc.get
+
+#solana_extract Examples.SysAlloc.init Examples.SysAlloc.assign Examples.SysAlloc.get
+
+#solana_extract Examples.TokenAcc.init Examples.TokenAcc.openAcc Examples.TokenAcc.get
+
+#solana_extract Examples.TokenAcc.init Examples.TokenAcc.closeAcc Examples.TokenAcc.get
+
+#solana_extract Examples.Memo.init Examples.Memo.write Examples.Memo.get
+
+#solana_extract Examples.CreatePda.init Examples.CreatePda.openPda Examples.CreatePda.get
+
+#solana_extract Examples.CreatePda.init Examples.CreatePda.openBad Examples.CreatePda.get
+
+#solana_extract Examples.TokenApprove.init Examples.TokenApprove.approve Examples.TokenApprove.get
+
+#solana_extract Examples.TokenFreeze.init Examples.TokenFreeze.freeze Examples.TokenFreeze.get
+
+#solana_extract Examples.TokenFreeze.init Examples.TokenFreeze.thaw Examples.TokenFreeze.get
+
+#solana_extract Examples.TokenAuth.init Examples.TokenAuth.setAuth Examples.TokenAuth.get
+
+#solana_extract Examples.TokenAuth.init Examples.TokenAuth.revoke Examples.TokenAuth.get
+
+#solana_extract Examples.Epoch.init Examples.Epoch.stamp Examples.Epoch.span
+
+#solana_extract Examples.TokenSize.init Examples.TokenSize.size Examples.TokenSize.get
+
+#solana_extract Examples.SysSeed.init Examples.SysSeed.openSeed Examples.SysSeed.get
+
+#solana_extract Examples.SysSeed.init Examples.SysSeed.createSeed Examples.SysSeed.get
+
+#solana_extract Examples.SysSeed.init Examples.SysSeed.assignSeed Examples.SysSeed.get
+
+#solana_extract Examples.SysXfer.init Examples.SysXfer.sendSeed Examples.SysXfer.get
+
+#solana_extract Examples.TokenMint2.init Examples.TokenMint2.openMint Examples.TokenMint2.get
+
+#solana_extract Examples.TokenNative.init Examples.TokenNative.syncNative Examples.TokenNative.get
+
+#solana_extract Examples.Hash.init Examples.Hash.touch Examples.Hash.vault
+
+#solana_extract Examples.Hash.init Examples.Hash.touch Examples.Hash.ok
+
+#solana_extract Examples.Hash.init Examples.Hash.touch Examples.Hash.empty
+
+#solana_extract Examples.Keys.init Examples.Keys.touch Examples.Keys.key00
+
+#solana_extract Examples.Keys.init Examples.Keys.touch Examples.Keys.key10
+
+#solana_extract Examples.Keccak.init Examples.Keccak.touch Examples.Keccak.vault
+
+#solana_extract Examples.Keccak.init Examples.Keccak.touch Examples.Keccak.empty
 
 /--
 error: extract/unsupported: svm rejects evm leaf

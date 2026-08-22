@@ -17,11 +17,12 @@ inductive Error where
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
-/-- 封闭 system.transfer。账户表由发射器钉死，不进 Lean 参数。 -/
+/-- 封闭 system.transfer。账户表由 `invoke` 钉死，不进 Lean 参数。 -/
 @[solana_entry]
 def transfer (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, systemTransfer lamports)
+    let _ := systemTransfer lamports
+    .ok ({ dummy := 0 }, lamports)
   else
     .error .overflow
 
