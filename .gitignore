@@ -1,0 +1,11 @@
+.lake/
+build/
+dist/
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+/runtime-tests/**/target/

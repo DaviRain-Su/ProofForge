@@ -1,0 +1,42 @@
+import SolanaLean
+import Tests.Fixtures
+
+#solana_check SolanaLean.Counter.init
+#solana_check SolanaLean.Counter.increment
+#solana_check SolanaLean.Counter.get
+
+/--
+error: profile/rejected: Nat in root type Tests.Fixtures.usesNat
+-/
+#guard_msgs (error) in
+#solana_check Tests.Fixtures.usesNat
+
+/--
+error: profile/rejected: partial Tests.Fixtures.loops
+-/
+#guard_msgs (error) in
+#solana_check Tests.Fixtures.loops
+
+/--
+error: profile/rejected: axiom sorryAx
+-/
+#guard_msgs (error) in
+#solana_check Tests.Fixtures.usesSorry
+
+/--
+error: profile/rejected: IO in Tests.Fixtures.usesIO
+-/
+#guard_msgs (error) in
+#solana_check Tests.Fixtures.usesIO
+
+/--
+error: profile/rejected: extern Tests.Fixtures.usesExtern
+-/
+#guard_msgs (error) in
+#solana_check Tests.Fixtures.usesExtern
+
+/--
+error: profile/rejected: implemented_by Tests.Fixtures.usesImplBy
+-/
+#guard_msgs (error) in
+#solana_check Tests.Fixtures.usesImplBy
