@@ -2,6 +2,7 @@ import Lean
 import SolanaLean.Profile
 import SolanaLean.Extract
 import SolanaLean.IR
+import SolanaLean.Emit
 
 open Lean Elab Command
 
@@ -33,6 +34,18 @@ elab "#solana_extract " initN:ident incrementN:ident getN:ident : command => do
       unless sketch.any (· == "SolanaLean.Counter.u64Max") do
         throwError "ir/mismatch: increment sketch missing u64Max"
     | none => throwError "extract/unsupported: missing increment"
-    logInfo m!"solana-lean: extracted {program.name} sketches = {program.methods.map (·.sketch)}"
+    match Emit.emitCounterAsm program with
+    | .error reason => throwError reason
+    | .ok asm =>
+      unless asm.contains "entrypoint:" do
+        throwError "assemble/tool: missing entrypoint"
+      unless asm.contains "call sol_set_return_data" do
+        throwError "assemble/tool: missing return data"
+      unless asm.contains Emit.overflowCode do
+        throwError "assemble/tool: missing overflow code"
+      unless asm.contains Emit.discIncrement do
+        throwError "assemble/tool: missing increment discriminator"
+      logInfo m!"solana-lean: extracted {program.name} sketches = {program.methods.map (·.sketch)}"
+      logInfo m!"solana-lean: emitted {asm.length} bytes of sBPF assembly"
 
 end SolanaLean.Commands

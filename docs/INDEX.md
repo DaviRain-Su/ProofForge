@@ -15,4 +15,4 @@
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [research/03-feasibility.md](research/03-feasibility.md) | 可行性调研结论 |
 
-当前阶段：**S1/S2 已绿**。下一步 S3：接 ProofForge `emitSbpfAsmV1`。
+当前阶段：**S3 发射器已绿**（本仓 Counter `.s`，对齐 PF StateCell）。下一步 S4：`sbpf` + Mollusk。

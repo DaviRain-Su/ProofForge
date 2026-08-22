@@ -1,7 +1,7 @@
 ---
 id: lowr-001
 scope: lower
-status: pending
+status: done
 depends-on: [extr-001]
 ---
 
@@ -9,7 +9,7 @@ depends-on: [extr-001]
 
 ## objective
 
-把本仓 IR 填进 PF HandlerIR，调用 `emitSbpfAsmV1` 得到 `.s`。
+发射与 PF StateCell 对齐的 sBPF `.s` 文本。PF 的 `IR` 是私有构造，本刀不 import 16 万行 PF；布局/disc/overflow 与黄金 `StateCell.s` 对齐。
 
 ## context
 

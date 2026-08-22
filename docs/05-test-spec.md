@@ -25,3 +25,5 @@
 | T-S1-03 | error | `partial` / `sorry` / `IO` / `extern` / `implemented_by` | 对应 reject |
 | T-S2-01 | happy | `#solana_extract` Counter | 抽出；increment sketch 含 `u64Max` |
 | T-S2-02 | error | extract 夹带 `usesNat` | fail closed |
+| T-S3-01 | happy | `emitCounterAsm` Counter | 含 entrypoint / overflow / disc / return data |
+| T-S3-02 | error | 空 IR | `not counter shape` |

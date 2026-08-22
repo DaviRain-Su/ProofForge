@@ -53,7 +53,8 @@ PF HandlerIR / emitSbpf / sbpf   ← 搬，不重写
 
 - 本仓**不**把 PF 当用户前端。
 - 本仓 **vendor / path 依赖** PF 的 Solana lowering 与 locked tool，版本冻结。
-- 第一刀可以先不链 PF：只把 Profile + 手写 IR + 定理形状做绿。第二刀再接 `emitSbpfAsmV1`。
+- S3 不 import PF：`IR.mk` 私有，接 capability 会拖进整仓。本仓自写 Counter 发射器，布局与 PF StateCell 黄金文件对齐。
+- S4 再调 locked `sbpf`。以后若 PF 抽出公共 `HandlerIR` 构造，再换后端，不改用户 `def`。
 
 ## 决策
 

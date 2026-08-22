@@ -2,7 +2,7 @@
 
 Lean 4 的 **Solana 编译剖面**：普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：**S1/S2**。普通 Lean Counter 可检查、可抽出。尚未接 sBPF。
+当前：**S3**。普通 Lean Counter 可检查、可抽出、可发射 sBPF 文本。尚未调 `sbpf`。
 
 ## 「难的是 loading 吗？」
 
