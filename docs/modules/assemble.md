@@ -11,7 +11,8 @@
 ## API
 
 - `assembleProgram outDir program : IO Result`
-- `assembleCounter` = `assembleProgram` + `extractedCounter`
+- `assembleCounter` = `assembleProgram` 的别名
+- `solanaLeanAssemble` 遍历 `Golden.programs`
 - `lake exe solanaLeanAssemble -- build/sbpf`（写出 Counter.so 与 Pair.so）
 
 ## Tests

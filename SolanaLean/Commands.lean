@@ -4,6 +4,7 @@ import SolanaLean.Extract
 import SolanaLean.IR
 import SolanaLean.Ops
 import SolanaLean.Emit
+import SolanaLean.Golden
 
 open Lean Elab Command
 
@@ -62,18 +63,11 @@ elab "#solana_build " n:ident : command => do
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
       let digest := IR.digestHex program
-      if program.name == "Counter" && digest != IR.digestHex IR.extractedCounter then
-        throwError "ir/mismatch: extracted Counter digest != fixture"
-      if program.name == "Pair" && digest != IR.digestHex IR.extractedPair then
-        throwError "ir/mismatch: extracted Pair digest != fixture"
-      if program.name == "Flag" && digest != IR.digestHex IR.extractedFlag then
-        throwError "ir/mismatch: extracted Flag digest != fixture"
-      if program.name == "Maybe" && digest != IR.digestHex IR.extractedMaybe then
-        throwError "ir/mismatch: extracted Maybe digest != fixture"
-      if program.name == "Window" && digest != IR.digestHex IR.extractedWindow then
-        throwError "ir/mismatch: extracted Window digest != fixture"
-      if program.name == "Phase" && digest != IR.digestHex IR.extractedPhase then
-        throwError "ir/mismatch: extracted Phase digest != fixture"
+      match SolanaLean.Golden.digestOf program.name with
+      | some want =>
+        if digest != want then
+          throwError s!"ir/mismatch: extracted {program.name} digest != fixture"
+      | none => pure ()
       logInfo m!"solana-lean: program {program.name} fields = {program.fields}"
       logInfo m!"solana-lean: methods = {program.methods.map (fun m => m.ixName)}"
       logInfo m!"solana-lean: digest = {digest}"

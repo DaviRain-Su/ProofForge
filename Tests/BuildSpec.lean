@@ -50,7 +50,7 @@ error: extract/unsupported: no solana_entry
   | _ => false
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.extractedCounter with
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
       asm.contains "0x1b92f24dfb29d300" &&
@@ -58,7 +58,7 @@ error: extract/unsupported: no solana_entry
         asm.contains "call increment"
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.extractedPair with
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedPair with
   | .error _ => false
   | .ok asm =>
       asm.contains "0xca5ea3052ea3b57e" &&
@@ -67,15 +67,15 @@ error: extract/unsupported: no solana_entry
         !asm.contains "call increment"
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter ==
-    SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter
+  SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter ==
+    SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter !=
-    SolanaLean.IR.digestHex SolanaLean.IR.extractedPair
+  SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter !=
+    SolanaLean.IR.digestHex SolanaLean.Golden.extractedPair
 
 #guard
-  let p := SolanaLean.IR.extractedPair
+  let p := SolanaLean.Golden.extractedPair
   let q : SolanaLean.IR.Program :=
     { p with methods := p.methods.map fun m =>
         if m.ixName == "getLeft" then
@@ -84,7 +84,7 @@ error: extract/unsupported: no solana_entry
   SolanaLean.IR.digestHex p != SolanaLean.IR.digestHex q
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.extractedCounter with
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
-      asm.contains s!"digest={SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter}"
+      asm.contains s!"digest={SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter}"

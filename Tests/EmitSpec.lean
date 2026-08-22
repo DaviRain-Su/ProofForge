@@ -15,7 +15,7 @@ import Examples.Counter
   | _ => false
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.extractedCounter with
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
       let inc :=
@@ -27,7 +27,7 @@ import Examples.Counter
       | _ => false
 
 #guard
-  match SolanaLean.IR.fieldOffset SolanaLean.IR.extractedCounter "value" with
+  match SolanaLean.IR.fieldOffset SolanaLean.Golden.extractedCounter "value" with
   | some 8 => true
   | _ => false
 
@@ -60,16 +60,16 @@ private def pairShape : SolanaLean.IR.Program :=
   | _ => false
 
 #guard
-  match SolanaLean.IR.layoutMarkerHex SolanaLean.IR.extractedCounter with
+  match SolanaLean.IR.layoutMarkerHex SolanaLean.Golden.extractedCounter with
   | .ok "0xbbe897f0336e6fc" => true
   | _ => false
 
 #guard
-  let l := SolanaLean.IR.inputLayout SolanaLean.IR.extractedCounter
+  let l := SolanaLean.IR.inputLayout SolanaLean.Golden.extractedCounter
   l.rentEpoch == 0x2870 && l.instructionDataLen == 0x2878 && l.instructionData == 0x2880
 
 #guard
-  let l := SolanaLean.IR.inputLayout SolanaLean.IR.extractedPair
+  let l := SolanaLean.IR.inputLayout SolanaLean.Golden.extractedPair
   l.rentEpoch == 0x2878 && l.instructionDataLen == 0x2880 && l.instructionData == 0x2888
 
 #guard

@@ -18,10 +18,10 @@ open Examples.Phase
   | .error _ => false
 
 #guard
-  match SolanaLean.IR.fieldOffset SolanaLean.IR.extractedPhase "mode" with
+  match SolanaLean.IR.fieldOffset SolanaLean.Golden.extractedPhase "mode" with
   | some 8 => true
   | _ => false
 
-#guard SolanaLean.IR.dataLen SolanaLean.IR.extractedPhase == 16
+#guard SolanaLean.IR.dataLen SolanaLean.Golden.extractedPhase == 16
 
 end Tests.PhaseSpec

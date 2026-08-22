@@ -67,7 +67,7 @@ def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Resul
   IO.FS.writeBinFile stagedSo soBytes
   return { asmPath := stagedAsm, soPath := stagedSo, soBytes }
 
-def assembleCounter (outDir : System.FilePath) (program : IR.Program := IR.extractedCounter) :
+def assembleCounter (outDir : System.FilePath) (program : IR.Program) :
     IO Result :=
   assembleProgram outDir program
 

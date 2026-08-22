@@ -59,10 +59,10 @@ private def isOverflow (r : Except Error (State × UInt64)) : Bool :=
   | .error _ => false
 #guard nonzero (s 0) == 1
 #guard nonzero (s 7) == 0
-#guard SolanaLean.IR.isCounterShape SolanaLean.IR.extractedCounter
-#guard SolanaLean.IR.isCounterShape SolanaLean.IR.extractedPair
-#guard SolanaLean.IR.dataLen SolanaLean.IR.extractedPair == 24
-#guard SolanaLean.IR.digestHex SolanaLean.IR.extractedCounter != ""
+#guard SolanaLean.IR.isCounterShape SolanaLean.Golden.extractedCounter
+#guard SolanaLean.IR.isCounterShape SolanaLean.Golden.extractedPair
+#guard SolanaLean.IR.dataLen SolanaLean.Golden.extractedPair == 24
+#guard SolanaLean.IR.digestHex SolanaLean.Golden.extractedCounter != ""
 #guard SolanaLean.Profile.checkRootName "increment" == .accept
 #guard (match SolanaLean.Profile.checkRootName "evil" with
   | .reject _ => true

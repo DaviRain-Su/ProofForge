@@ -54,15 +54,15 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.IR.extractedFlag ==
-    SolanaLean.IR.digestHex SolanaLean.IR.extractedFlag
+  SolanaLean.IR.digestHex SolanaLean.Golden.extractedFlag ==
+    SolanaLean.IR.digestHex SolanaLean.Golden.extractedFlag
 
 #guard
-  SolanaLean.IR.digestHex SolanaLean.IR.extractedFlag !=
-    SolanaLean.IR.digestHex SolanaLean.IR.extractedMaybe
+  SolanaLean.IR.digestHex SolanaLean.Golden.extractedFlag !=
+    SolanaLean.IR.digestHex SolanaLean.Golden.extractedMaybe
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.extractedFlag with
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedFlag with
   | .error _ => false
   | .ok asm =>
       asm.contains "stxb" &&
@@ -72,7 +72,7 @@ import Examples.Maybe
         asm.contains "call setFlag"
 
 #guard
-  match SolanaLean.Emit.emitCounterAsm SolanaLean.IR.extractedMaybe with
+  match SolanaLean.Emit.emitCounterAsm SolanaLean.Golden.extractedMaybe with
   | .error _ => false
   | .ok asm =>
       asm.contains "0xf53e0f4e232b2e90" &&

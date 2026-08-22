@@ -100,7 +100,7 @@ structure Program where
   -- v0: 语义由对应 Lean 函数定义；IR 只记录可编译形状
 ```
 
-digest = `IR.digestHex`：规范化文本（name / fields / kind / ixName / paramCount / ops，按 ixName 排序）的 FNV-1a 64。Lean 4.31 无内建 SHA-256；digest 必须能进 `#guard`。`#solana_build` 抽出的 Counter/Pair 必须与 `extractedCounter` / `extractedPair` 同一 digest，否则 `ir/mismatch`。
+digest = `IR.digestHex`：规范化文本（name / fields / kind / ixName / paramCount / ops，按 ixName 排序）的 FNV-1a 64。Lean 4.31 无内建 SHA-256；digest 必须能进 `#guard`。`#solana_build` 抽出的已知例子必须与 `SolanaLean.Golden` 同一 digest，否则 `ir/mismatch`。新例子加进 `Golden.programs`。
 
 ## Lower / Assemble
 
