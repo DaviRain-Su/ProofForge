@@ -1,4 +1,4 @@
-import ProofForge.Svm.IR
+import ProofForge.Svm.IRCompat
 
 namespace ProofForge.Svm.Emit
 

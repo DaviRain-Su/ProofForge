@@ -1,5 +1,5 @@
 import ProofForge.Golden
-import ProofForge.Evm.IR
+import ProofForge.Evm.IRCompat
 
 namespace ProofForge.Evm.Golden
 

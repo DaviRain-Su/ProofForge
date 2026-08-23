@@ -1,5 +1,4 @@
 import ProofForge.Extract.IR
-import ProofForge.Extract.LegacyAdapter
 import ProofForge.Svm.ABI
 
 namespace ProofForge.Svm.IR
@@ -213,10 +212,6 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     schema := src.schema
     methods := ← src.methods.mapM (lowerMethod src.schema)
   }
-
-/-- Compatibility adapter for callers that still own the old closed-union program. -/
-def fromProgram (src : Extract.Legacy.Program) : Except String Program :=
-  Extract.IR.ofLegacyProgram src >>= fromExtracted
 
 def Program.fields (p : Program) : Array String :=
   p.slots.map (·.name)

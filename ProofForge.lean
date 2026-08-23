@@ -21,6 +21,7 @@ import ProofForge.Extract
 import ProofForge.Extract.Compat
 import ProofForge.Svm.ABI
 import ProofForge.Svm.IR
+import ProofForge.Svm.IRCompat
 import ProofForge.Svm.Solanalib
 import ProofForge.Svm.Emit
 import ProofForge.Svm.Assemble
@@ -28,6 +29,7 @@ import ProofForge.Svm.Idl
 import ProofForge.Svm.Commands
 import ProofForge.Evm.Keccak
 import ProofForge.Evm.IR
+import ProofForge.Evm.IRCompat
 import ProofForge.Evm.Emit
 import ProofForge.Evm.Golden
 import ProofForge.Evm.Assemble

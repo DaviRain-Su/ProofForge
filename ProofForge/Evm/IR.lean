@@ -1,5 +1,4 @@
 import ProofForge.Extract.IR
-import ProofForge.Extract.LegacyAdapter
 import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 
@@ -340,10 +339,6 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     constructor := ctor
     entries
   }
-
-/-- Compatibility adapter for callers that still own the old closed-union program. -/
-def fromProgram (src : Extract.Legacy.Program) : Except String Program :=
-  Extract.IR.ofLegacyProgram src >>= fromExtracted
 
 private def cmpTag : Ops.Cmp → String
   | .eq => "eq" | .ne => "ne" | .lt => "lt"
