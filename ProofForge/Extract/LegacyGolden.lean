@@ -1407,7 +1407,7 @@ def programs : Array Program := #[
 allocator / insertion IR 直接钉 canonical digest；对应手写 fixture 继续作为布局/发射 smoke。
 -/
 def digestOf (name : String) : Option String :=
-  if name == "Phoenix" then some "ce87e4ffbed91357"
+  if name == "Phoenix" then some "7146d6395dfe626a"
   else if name == "Tree" then some "1d4a472be13bbdbd"
   else (programs.find? (·.name == name)).map digestHex
 

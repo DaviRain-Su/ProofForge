@@ -17,7 +17,10 @@ elab "#pf_guard_phoenix_artifact" : command => do
   | .ok _ => pure ()
   | .error reason => throwError reason
   unless source.schema.leaves.any (·.name == "lastEvent_tag") &&
-      source.schema.leaves.any (·.name == "lastEvent_p4") do
+      source.schema.leaves.any (·.name == "lastEvent_p4") &&
+      source.schema.leaves.any (·.name == "events_0_tag") &&
+      source.schema.leaves.any (·.name == "events_4_p4") &&
+      source.schema.leaves.any (·.name == "eventCount") do
     throwError "Phoenix bounded MarketEvent layout is missing"
   let program ←
     match ProofForge.Extract.IR.toLegacyProgram source with
@@ -37,7 +40,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless labels.length == labels.eraseDups.length do
     let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
-  unless ProofForge.Svm.ABI.dataLen program == 592 do
+  unless ProofForge.Svm.ABI.dataLen program == 840 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
   let some post := program.methods.find? (·.ixName == "postAsk")
     | throwError "missing postAsk"
@@ -57,10 +60,12 @@ elab "#pf_guard_phoenix_artifact" : command => do
     | throwError "missing lastEventKind"
   let some eventAmount := program.methods.find? (·.ixName == "lastEventAmount")
     | throwError "missing lastEventAmount"
+  let some eventCount := program.methods.find? (·.ixName == "eventCountOf")
+    | throwError "missing eventCountOf"
   unless post.paramCount == 5 && reduce.paramCount == 4 &&
       postBid.paramCount == 5 && reduceBid.paramCount == 4 &&
       swap.paramCount == 4 && swapSell.paramCount == 4 && collect.paramCount == 0 &&
-      eventKind.paramCount == 0 && eventAmount.paramCount == 0 do
+      eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
   unless asm.contains "; forBody 14" && asm.contains "; forBody 17" &&
       asm.contains "; forBody 4" do
@@ -137,6 +142,8 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard (init 100).bidPriceTicks[0]! == 0
 #guard (init 100).baseLocked == 0
 #guard (init 100).baseFree == 0
+#guard (init 100).eventCount == 0
+#guard (init 100).events[0]! == MarketEvent.uninitialized
 #guard (init 100).lastEvent == MarketEvent.uninitialized
 #guard bestAsk (init 100) == 0
 #guard askQty (init 100) == 0
@@ -176,6 +183,7 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.sizes[0]! == 8 && st.priceTicks[0]! == 50 && st.traders[0]! == 7 &&
         st.sequences[0]! == 1 && st.sequence == 2 &&
         st.baseLocked == 8 && st.baseFree == 0 && ret == 8 &&
+        st.eventCount == 1 && st.events[0]! == .place 1 0 50 8 &&
         st.lastEvent == .place 1 0 50 8
   | .error _ => false
 
@@ -305,6 +313,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.quoteLocked == 957 && st.quoteFree == 42 &&
         st.baseLocked == 6 && st.baseFree == 4 &&
         st.unclaimedFees == 1 && st.collectedFees == 0 &&
+        st.eventCount == 1 && st.events[0]! == .fillSummary 0 4 42 1 &&
         st.lastEvent == .fillSummary 0 4 42 1
   | .error _ => false
 
@@ -548,7 +557,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       7 10 1 3 with
   | .ok (st, ret) =>
       st.sizes == #v[5, 1, 0, 0] && st.baseLocked == 6 && st.baseFree == 4 &&
-        st.matchFilled == 0 && ret == 3 && st.lastEvent == .reduce 1 10 3 5
+        st.matchFilled == 0 && ret == 3 && st.eventCount == 1 &&
+        st.events[0]! == .reduce 1 10 3 5 && st.lastEvent == .reduce 1 10 3 5
   | .error _ => false
 
 #guard
@@ -624,6 +634,7 @@ private def sellSamples : List Projects.Phoenix.State := [
   match collectFees { (init 100) with collectedFees := 9, unclaimedFees := 3 } with
   | .ok (st, ret) =>
       st.collectedFees == 12 && st.unclaimedFees == 0 && ret == 3 &&
+        st.eventCount == 1 && st.events[0]! == .fee 3 &&
         st.lastEvent == .fee 3 && lastEventKind st == 6 && lastEventAmount st == 3
   | .error _ => false
 

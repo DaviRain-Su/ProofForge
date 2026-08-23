@@ -10,8 +10,8 @@ Phoenix v1 `src/state` 在本仓剖面下的摊平。
   FIFORestingOrder     → traders / sizes / lastSlots / lastTimes
   TraderState          → quoteLocked / quoteFree / baseLocked / baseFree
   MatchingEngineResponse → match*（bounded fold scratch）
-  MarketEvent          → lastEvent（bounded UInt64 payload）
-  OrderPacket.client_order_id u128、动态树分配器、event batch 仍关
+  MarketEvent          → events（固定容量 batch）+ lastEvent（兼容投影）
+  OrderPacket.client_order_id u128、动态树分配器仍关
 
 每边 N=4。档 0 是最优价；ask 价格升序、bid 价格降序，同价均为 FIFO。
 `RBTree4` 给出四档对应的红黑树拓扑见证；撮合只依赖中序次序，
@@ -91,7 +91,10 @@ structure State where
   matchLevel : UInt64
   matchWant : UInt64
   matchLimit : UInt64
-  /-- 最近一个 bounded market event；后续 event batch 会把它提升为固定容量序列。 -/
+  /-- 当前 instruction 的 fixed-capacity event batch；`eventCount` 之前的元素有效。 -/
+  events : Vector MarketEvent 5
+  eventCount : UInt64
+  /-- 最近一个 bounded market event，保留为事件 batch 的兼容投影。 -/
   lastEvent : MarketEvent
   deriving Repr, DecidableEq
 
@@ -102,6 +105,25 @@ inductive Error where
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
 def empty4 : Vector UInt64 4 := #v[0, 0, 0, 0]
+
+def emptyEvents : Vector MarketEvent 5 :=
+  #v[.uninitialized, .uninitialized, .uninitialized, .uninitialized, .uninitialized]
+
+/-- 每个 instruction 覆盖上一批事件；旧 payload 无需清零，`eventCount` 决定有效前缀。 -/
+private def beginEvents (s : State) : State :=
+  { s with eventCount := 0, lastEvent := .uninitialized }
+
+/-- 写满后 fail-closed 地丢弃额外事件；N=4 撮合至多四个逐档事件加一个 summary。 -/
+private def appendEvent (s : State) (event : MarketEvent) : State :=
+  if h : s.eventCount.toNat < 5 then
+    { s with
+      events := s.events.set s.eventCount.toNat event
+      eventCount := s.eventCount + 1
+      lastEvent := event }
+  else
+    s
+
+attribute [pf_inline] beginEvents appendEvent
 
 /-- 固定容量 ask 树的节点地址；0 是 Phoenix 的 sentinel。 -/
 structure RBNode where
@@ -221,6 +243,8 @@ def init (tick : UInt64) : State :=
     matchLevel := 0
     matchWant := 0
     matchLimit := 0
+    events := emptyEvents
+    eventCount := 0
     lastEvent := .uninitialized }
 
 /-- 官方 FIFORestingOrder 是否过期。0 是哨兵。 -/
@@ -262,9 +286,11 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
   if price = 0 || size = 0 || maxOrderSequence ≤ s.sequence then
     .error .overflow
   else if expired lastSlot lastTime nowSlot nowTime then
-    .ok (s, 0)
+    .ok (beginEvents s, 0)
   else Id.run do
-    let mut st := { s with matchStopped := 0, matchError := 0 }
+    let mut st := { s with
+      matchStopped := 0, matchError := 0
+      eventCount := 0, lastEvent := .uninitialized }
     for i in [0:14] do
       if i < 4 then
         if st.matchStopped = (0 : UInt64) then
@@ -342,9 +368,8 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
     if st.matchError ≠ 0 || st.matchStopped = 0 then
       .error .overflow
     else
-      .ok ({ st with
-              matchStopped := 0, matchError := 0
-              lastEvent := .place s.sequence 0 price size }, size)
+      let finalState := { st with matchStopped := 0, matchError := 0 }
+      .ok (appendEvent finalState (.place s.sequence 0 price size), size)
 
 attribute [pf_inline] postAskAt
 
@@ -399,16 +424,18 @@ attribute [pf_inline] swapBidAdjacent
 quoteLocked，驱逐则按原价准确解锁旧订单。
 -/
 def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime : UInt64) :
-    Except Error (State × UInt64) := do
+    Except Error (State × UInt64) :=
   if price = 0 || size = 0 || maxOrderSequence ≤ s.sequence then
     .error .overflow
   else if expired lastSlot lastTime nowSlot nowTime then
-    .ok (s, 0)
-  else
+    .ok (beginEvents s, 0)
+  else do
     let newLock ← bidCollateral s price size
     let oldLock ← bidCollateral s s.bidPriceTicks[3]! s.bidSizes[3]!
     Id.run do
-      let mut st := { s with matchStopped := 0, matchError := 0 }
+      let mut st := { s with
+        matchStopped := 0, matchError := 0
+        eventCount := 0, lastEvent := .uninitialized }
       for i in [0:14] do
         if i < 4 then
           if st.matchStopped = (0 : UInt64) then
@@ -485,9 +512,8 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
       if st.matchError ≠ 0 || st.matchStopped = 0 then
         .error .overflow
       else
-        .ok ({ st with
-                matchStopped := 0, matchError := 0
-                lastEvent := .place s.sequence 0 price size }, size)
+        let finalState := { st with matchStopped := 0, matchError := 0 }
+        .ok (appendEvent finalState (.place s.sequence 0 price size), size)
 
 attribute [pf_inline] postBidAt
 
@@ -621,15 +647,17 @@ private def settleBuy (s : State) (acc : MatchAcc) : Except Error (State × UInt
             let _ :=
               if acc.filledBase = 0 then 0
               else tokenTransferChecked acc.filledBase 6
-            .ok ({ s with
-                    sizes := acc.sizes
-                    quoteLocked := s.quoteLocked - quoteDebit
-                    quoteFree := s.quoteFree + quoteLots
-                    baseLocked := s.baseLocked - makerBaseDebit
-                    baseFree := s.baseFree + baseCredit
-                    unclaimedFees := s.unclaimedFees + feeLots
-                    lastEvent := .fillSummary 0 acc.filledBase quoteLots feeLots },
-                  acc.filledBase)
+            let settled := { s with
+              sizes := acc.sizes
+              quoteLocked := s.quoteLocked - quoteDebit
+              quoteFree := s.quoteFree + quoteLots
+              baseLocked := s.baseLocked - makerBaseDebit
+              baseFree := s.baseFree + baseCredit
+              unclaimedFees := s.unclaimedFees + feeLots
+              events := s.events.set 0 (.fillSummary 0 acc.filledBase quoteLots feeLots)
+              eventCount := 1
+              lastEvent := .fillSummary 0 acc.filledBase quoteLots feeLots }
+            .ok (settled, acc.filledBase)
 
 /--
 可测试的完整 N=4 IOC：红黑树中序跨档、严格 slot/time TIF、聚合费用和余额记账。
@@ -638,6 +666,7 @@ private def settleBuy (s : State) (acc : MatchAcc) : Except Error (State × UInt
 def swapBuyForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
     (behavior : SelfTradeBehavior) :
     Except Error (State × UInt64) := do
+  let s := beginEvents s
   let acc ← scanAsks s taker limit nowSlot nowTime behavior 4 0
     { sizes := s.sizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
       expiredBase := 0, stopped := false }
@@ -756,17 +785,20 @@ private def settleSell (s : State) (acc : SellAcc) : Except Error (State × UInt
           let _ :=
             if acc.filledBase = 0 then 0
             else tokenTransferChecked acc.filledBase 6
-          .ok ({ s with
-                  bidSizes := acc.sizes
-                  quoteLocked := s.quoteLocked - quoteDebit
-                  quoteFree := s.quoteFree + quoteCredit
-                  unclaimedFees := s.unclaimedFees + feeLots
-                  lastEvent := .fillSummary 0 acc.filledBase grossQuote feeLots },
-                acc.filledBase)
+          let settled := { s with
+            bidSizes := acc.sizes
+            quoteLocked := s.quoteLocked - quoteDebit
+            quoteFree := s.quoteFree + quoteCredit
+            unclaimedFees := s.unclaimedFees + feeLots
+            events := s.events.set 0 (.fillSummary 0 acc.filledBase grossQuote feeLots)
+            eventCount := 1
+            lastEvent := .fillSummary 0 acc.filledBase grossQuote feeLots }
+          .ok (settled, acc.filledBase)
 
 /-- 可测试的 N=4 sell IOC 宿主语义。 -/
 def swapSellForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
     (behavior : SelfTradeBehavior) : Except Error (State × UInt64) := do
+  let s := beginEvents s
   let acc ← scanBids s taker limit nowSlot nowTime behavior 4 0
     { sizes := s.bidSizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
       makerQuote := 0, unlockedQuote := 0, stopped := false }
@@ -788,24 +820,28 @@ private def finishFold (s : State) (quoteLots feeLots : UInt64) :
             if s.quoteFree ≤ u64Max - quoteLots then
               if s.unclaimedFees ≤ u64Max - feeLots then
                 if s.matchFilled = 0 then
-                  .ok ({ s with
-                          quoteLocked := s.quoteLocked - quoteDebit
-                          quoteFree := s.quoteFree + quoteLots
-                          baseLocked := s.baseLocked - baseDebit
-                          baseFree := s.baseFree + baseDebit
-                          unclaimedFees := s.unclaimedFees + feeLots
-                          lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots },
-                        s.matchFilled)
+                  let settled := { s with
+                    quoteLocked := s.quoteLocked - quoteDebit
+                    quoteFree := s.quoteFree + quoteLots
+                    baseLocked := s.baseLocked - baseDebit
+                    baseFree := s.baseFree + baseDebit
+                    unclaimedFees := s.unclaimedFees + feeLots
+                    events := s.events.set 0 (.fillSummary 0 s.matchFilled quoteLots feeLots)
+                    eventCount := 1
+                    lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots }
+                  .ok (settled, s.matchFilled)
                 else
                   let _ := tokenTransferChecked s.matchFilled 6
-                  .ok ({ s with
-                          quoteLocked := s.quoteLocked - quoteDebit
-                          quoteFree := s.quoteFree + quoteLots
-                          baseLocked := s.baseLocked - baseDebit
-                          baseFree := s.baseFree + baseDebit
-                          unclaimedFees := s.unclaimedFees + feeLots
-                          lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots },
-                        s.matchFilled)
+                  let settled := { s with
+                    quoteLocked := s.quoteLocked - quoteDebit
+                    quoteFree := s.quoteFree + quoteLots
+                    baseLocked := s.baseLocked - baseDebit
+                    baseFree := s.baseFree + baseDebit
+                    unclaimedFees := s.unclaimedFees + feeLots
+                    events := s.events.set 0 (.fillSummary 0 s.matchFilled quoteLots feeLots)
+                    eventCount := 1
+                    lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots }
+                  .ok (settled, s.matchFilled)
               else .error .overflow
             else .error .overflow
           else .error .overflow
@@ -841,7 +877,7 @@ phase，避免 Lean 的可变 `do` 把公共 continuation 复制进每个分支�
 @[pf_entry]
 def swapBuy (s : State) (taker behavior want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
-  let mut st := s
+  let mut st := beginEvents s
   for i in [0:17] do
     if i = 0 then
       st := { st with
@@ -1047,20 +1083,24 @@ private def commitSellFold (s : State) (grossQuote feeLots : UInt64) :
       if s.quoteFree > u64Max - quoteCredit then .error .overflow
       else if s.unclaimedFees > u64Max - feeLots then .error .overflow
       else if s.matchFilled = 0 then
-        .ok ({ s with
-                quoteLocked := s.quoteLocked - quoteDebit
-                quoteFree := s.quoteFree + quoteCredit
-                unclaimedFees := s.unclaimedFees + feeLots
-                lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots },
-              s.matchFilled)
+        let settled := { s with
+          quoteLocked := s.quoteLocked - quoteDebit
+          quoteFree := s.quoteFree + quoteCredit
+          unclaimedFees := s.unclaimedFees + feeLots
+          events := s.events.set 0 (.fillSummary 0 s.matchFilled grossQuote feeLots)
+          eventCount := 1
+          lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots }
+        .ok (settled, s.matchFilled)
       else
         let _ := tokenTransferChecked s.matchFilled 6
-        .ok ({ s with
-                quoteLocked := s.quoteLocked - quoteDebit
-                quoteFree := s.quoteFree + quoteCredit
-                unclaimedFees := s.unclaimedFees + feeLots
-                lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots },
-              s.matchFilled)
+        let settled := { s with
+          quoteLocked := s.quoteLocked - quoteDebit
+          quoteFree := s.quoteFree + quoteCredit
+          unclaimedFees := s.unclaimedFees + feeLots
+          events := s.events.set 0 (.fillSummary 0 s.matchFilled grossQuote feeLots)
+          eventCount := 1
+          lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots }
+        .ok (settled, s.matchFilled)
 
 private def settleSellFold (s : State) : Except Error (State × UInt64) :=
   if s.matchError ≠ 0 then .error .overflow
@@ -1087,7 +1127,7 @@ attribute [pf_inline] commitSellFold settleSellFold
 @[pf_entry]
 def swapSell (s : State) (taker behavior want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
-  let mut st := s
+  let mut st := beginEvents s
   for i in [0:17] do
     if i = 0 then
       st := { st with
@@ -1147,6 +1187,7 @@ def swapSell (s : State) (taker behavior want limit : UInt64) :
 @[pf_entry]
 def reduceAsk (s : State) (trader price sequence qty : UInt64) :
     Except Error (State × UInt64) := Id.run do
+  let s := beginEvents s
   if qty = 0 then
     .ok (s, 0)
   else
@@ -1162,13 +1203,13 @@ def reduceAsk (s : State) (trader price sequence qty : UInt64) :
                 if qty ≤ size then
                   if qty ≤ st.baseLocked then
                     if st.baseFree ≤ u64Max - qty then
-                      st := { st with
+                      let reduced := { st with
                         sizes := st.sizes.set (j % 4) (size - qty)
                         baseLocked := st.baseLocked - qty
                         baseFree := st.baseFree + qty
                         matchFilled := qty
-                        matchStopped := 1
-                        lastEvent := .reduce sequence price qty (size - qty) }
+                        matchStopped := 1 }
+                      st := appendEvent reduced (.reduce sequence price qty (size - qty))
                     else
                       st := { st with matchStopped := 1, matchError := 1 }
                   else
@@ -1176,13 +1217,13 @@ def reduceAsk (s : State) (trader price sequence qty : UInt64) :
                 else
                   if size ≤ st.baseLocked then
                     if st.baseFree ≤ u64Max - size then
-                      st := { st with
+                      let reduced := { st with
                         sizes := st.sizes.set (j % 4) 0
                         baseLocked := st.baseLocked - size
                         baseFree := st.baseFree + size
                         matchFilled := size
-                        matchStopped := 1
-                        lastEvent := .reduce sequence price size 0 }
+                        matchStopped := 1 }
+                      st := appendEvent reduced (.reduce sequence price size 0)
                     else
                       st := { st with matchStopped := 1, matchError := 1 }
                   else
@@ -1199,6 +1240,7 @@ def reduceAsk (s : State) (trader price sequence qty : UInt64) :
 @[pf_entry]
 def reduceBid (s : State) (trader price sequence qty : UInt64) :
     Except Error (State × UInt64) := Id.run do
+  let s := beginEvents s
   if qty = 0 then
     .ok (s, 0)
   else
@@ -1214,9 +1256,8 @@ def reduceBid (s : State) (trader price sequence qty : UInt64) :
               if st.bidTraders[j]! = trader then
                 let removed := if qty ≤ size then qty else size
                 st := unlockBidFold st j removed
-                st := { st with
-                  matchFilled := removed, matchStopped := 1
-                  lastEvent := .reduce sequence price removed (size - removed) }
+                let reduced := { st with matchFilled := removed, matchStopped := 1 }
+                st := appendEvent reduced (.reduce sequence price removed (size - removed))
               else
                 st := { st with matchStopped := 1, matchError := 1 }
     if st.matchError ≠ 0 then
@@ -1262,10 +1303,11 @@ def cancelBid (s : State) (trader price sequence : UInt64) :
 @[pf_entry]
 def collectFees (s : State) : Except Error (State × UInt64) :=
   if s.collectedFees ≤ u64Max - s.unclaimedFees then
-    .ok ({ s with
-            collectedFees := s.collectedFees + s.unclaimedFees
-            unclaimedFees := 0
-            lastEvent := .fee s.unclaimedFees }, s.unclaimedFees)
+    let s := beginEvents s
+    let settled := { s with
+      collectedFees := s.collectedFees + s.unclaimedFees
+      unclaimedFees := 0 }
+    .ok (appendEvent settled (.fee s.unclaimedFees), s.unclaimedFees)
   else
     .error .overflow
 
@@ -1321,6 +1363,10 @@ def feeBpsOf (s : State) : UInt64 :=
 @[pf_entry]
 def level0 (s : State) : UInt64 :=
   s.sizes[0]!
+
+@[pf_entry]
+def eventCountOf (s : State) : UInt64 :=
+  s.eventCount
 
 @[pf_entry]
 def lastEventKind (s : State) : UInt64 :=
