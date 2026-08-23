@@ -111,6 +111,33 @@ def getEvent (s : EventState) : UInt64 :=
   | .fill n => n
   | .cancel n => n
 
+/-- Bounded analogue of Phoenix's internal event union, with a shared five-word payload. -/
+inductive MarketEvent where
+  | uninitialized
+  | fill (maker sequence price filled remaining : UInt64)
+  | place (sequence client price size : UInt64)
+  | fee (amount : UInt64)
+  deriving Repr
+
+structure MarketEventState where
+  marketEvent : MarketEvent
+  deriving Repr
+
+def initMarketEvent (maker sequence price filled remaining : UInt64) : MarketEventState :=
+  { marketEvent := .fill maker sequence price filled remaining }
+
+def setMarketFee (_s : MarketEventState) (amount : UInt64) :
+    Except Examples.Counter.Error (MarketEventState × UInt64) :=
+  .ok ({ marketEvent := .fee amount }, amount)
+
+def marketEventValue (s : MarketEventState) : UInt64 :=
+  match s.marketEvent with
+  | .uninitialized => 0
+  | .fill maker sequence price filled remaining =>
+      maker + sequence + price + filled + remaining
+  | .place sequence client price size => sequence + client + price + size
+  | .fee amount => amount
+
 def getFlagValue (s : FlagState) : UInt64 :=
   s.value
 

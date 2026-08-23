@@ -218,24 +218,6 @@ private def isUInt64Newtype (env : Environment) (tyName : Name) : Bool :=
         | _ => false
     | _ => false
 
-/-- Three or more constructors, each empty or carrying one `UInt64`, sharing tag + payload slots. -/
-private def isUInt64Variant (env : Environment) (tyName : Name) : Bool :=
-  if isStructure env tyName then false
-  else
-    match env.find? tyName with
-    | some (.inductInfo info) =>
-      info.numParams == 0 && info.numIndices == 0 && info.ctors.length >= 3 && !info.isRec &&
-        info.ctors.all fun ctorName =>
-          match env.find? ctorName with
-          | some (.ctorInfo ctor) =>
-            ctor.numFields == 0 ||
-              (ctor.numFields == 1 &&
-                match strip ctor.type with
-                | .forallE _ ty _ _ => ty.consumeMData.getAppFn.constName? == some ``UInt64
-                | _ => false)
-          | _ => false
-    | _ => false
-
 private def forallDomainAt? (fuel index : Nat) (type : Expr) : Option Expr :=
   match fuel with
   | 0 => none
@@ -244,6 +226,36 @@ private def forallDomainAt? (fuel index : Nat) (type : Expr) : Option Expr :=
     | .forallE _ domain body _ =>
       if index == 0 then some domain else forallDomainAt? fuel' (index - 1) body
     | _ => none
+
+private def uint64CtorPayloadWidth? (env : Environment) (ctorName : Name) : Option Nat := do
+  let .ctorInfo ctor ← env.find? ctorName | none
+  for index in [:ctor.numFields] do
+    let fieldTy ← forallDomainAt? 32 index ctor.type
+    if fieldTy.consumeMData.getAppFn.constName? != some ``UInt64 then none else pure ()
+  return ctor.numFields
+
+/--
+Three or more constructors with only `UInt64` fields. Their fixed representation is one tag plus
+the largest constructor payload; shorter alternatives receive canonical zero padding.
+-/
+private def uint64VariantPayloadWidth? (env : Environment) (tyName : Name) : Option Nat :=
+  if isStructure env tyName then none
+  else
+    match env.find? tyName with
+    | some (.inductInfo info) =>
+      if info.numParams != 0 || info.numIndices != 0 || info.ctors.length < 3 || info.isRec then
+        none
+      else Id.run do
+        let mut payloadWidth := 0
+        for ctorName in info.ctors do
+          let some ctorWidth := uint64CtorPayloadWidth? env ctorName | return none
+          payloadWidth := max payloadWidth ctorWidth
+        if payloadWidth == 0 then return none
+        return some payloadWidth
+    | _ => none
+
+private def isUInt64Variant (env : Environment) (tyName : Name) : Bool :=
+  (uint64VariantPayloadWidth? env tyName).isSome
 
 private def uint64NewtypeCtorPayload? (env : Environment) (e : Expr) : Option Expr := do
   let ctorName ← e.getAppFn.constName?
@@ -915,17 +927,19 @@ private def val (env : Environment) (e : Expr) : Option Ops.Val :=
   asVal env 32 e
 
 private def asUInt64VariantCtor (env : Environment) (e : Expr) :
-    Option (UInt64 × Ops.Val) := do
+    Option (UInt64 × Array Ops.Val × Nat) := do
   let ctorName ← e.getAppFn.constName?
   let .ctorInfo ctor ← env.find? ctorName | none
-  if !isUInt64Variant env ctor.induct then none else pure ()
+  let payloadWidth ← uint64VariantPayloadWidth? env ctor.induct
   let index ← enumCtorIndex env ctor.induct ctorName
-  if ctor.numFields == 0 then
-    some (UInt64.ofNat index, .lit 0)
-  else do
-    let payloadExpr ← e.getAppArgs[e.getAppArgs.size - 1]?
+  let args := e.getAppArgs
+  if args.size < ctor.numFields then none else pure ()
+  let mut payloads : Array Ops.Val := #[]
+  for offset in [:ctor.numFields] do
+    let payloadExpr ← args[args.size - ctor.numFields + offset]?
     let payload ← val env payloadExpr
-    return (UInt64.ofNat index, payload)
+    payloads := payloads.push payload
+  return (UInt64.ofNat index, payloads, payloadWidth)
 
 private def asSubFromMax (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
@@ -1454,8 +1468,10 @@ private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val
           let mut acc : Array Ops.Val := #[]
           for a in e.getAppArgs do
             match asUInt64VariantCtor env a with
-            | some (tag, payload) =>
-              acc := acc.push (.lit tag) |>.push payload
+            | some (tag, payloads, payloadWidth) =>
+              acc := acc.push (.lit tag)
+              for index in [:payloadWidth] do
+                acc := acc.push (payloads[index]?.getD (.lit 0))
             | none =>
               match asOptionPayload env a with
               | some (.lit 0) =>
@@ -1585,9 +1601,11 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                 pure ()
               else
                 match asUInt64VariantCtor env arg with
-                | some (tag, payload) =>
+                | some (tag, payloads, payloadWidth) =>
                   acc := acc.push (s!"{child}_tag", .lit tag)
-                    |>.push (s!"{child}_p0", payload)
+                  for index in [:payloadWidth] do
+                    acc := acc.push
+                      (s!"{child}_p{index}", payloads[index]?.getD (.lit 0))
                 | none =>
                   match asOptionPayload env arg with
                   | some (.lit 0) =>
@@ -2797,6 +2815,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
     match v with
     | .field _ _ => .ok #[.returnU64 v]
     | .arg _ => .ok #[.returnU64 v]
+    | .local _ => .ok #[.returnU64 v]
     | .lit _ => .ok #[.returnU64 v]
     | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
     | .accN | .isSigner0 | .isWritable0 | .isExecutable0
@@ -3259,6 +3278,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         | return .error "extract/unsupported: variant matcher name"
       let some info := Lean.Meta.getMatcherInfoCore? env matcherName
         | return .error "extract/unsupported: variant matcher metadata"
+      let some variantName := matcherDiscrTypeName? env e
+        | return .error "extract/unsupported: variant discriminant type"
+      let some payloadWidth := uint64VariantPayloadWidth? env variantName
+        | return .error "extract/unsupported: variant payload layout"
       let some disc := args[info.getFirstDiscrPos]?
         | return .error "extract/unsupported: variant discriminant"
       let tag :=
@@ -3267,12 +3290,17 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           if name.endsWith "_tag" then .field base name else .field base s!"{name}_tag"
         | some base => .field base "variant_tag"
         | none => .field (.arg 0) "variant_tag"
-      let payload :=
-        match tag with
-        | .field base name =>
-          let root := if name.endsWith "_tag" then name.dropEnd 4 |>.copy else name
-          .field base s!"{root}_p0"
-        | _ => .field (.arg 0) "variant_p0"
+      let payloads : Array Ops.Val := Id.run do
+        let mut payloads : Array Ops.Val := #[]
+        for index in [:payloadWidth] do
+          let payload :=
+            match tag with
+            | .field base name =>
+              let root := if name.endsWith "_tag" then name.dropEnd 4 |>.copy else name
+              .field base s!"{root}_p{index}"
+            | _ => .field (.arg 0) s!"variant_p{index}"
+          payloads := payloads.push payload
+        return payloads
       let alternativesResult : Except String (Array (Array Ops.Op)) := Id.run do
         let mut alternatives : Array (Array Ops.Op) := #[]
         for index in [:info.numAlts] do
@@ -3280,16 +3308,31 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             | return .error "extract/unsupported: variant alternative metadata"
           let some altExpr := args[info.getFirstAltPos + index]?
             | return .error "extract/unsupported: variant alternative"
-          let altBody := peelMatcherLams 8 altExpr
-          let altOps :=
-            if altInfo.numFields == 1 then
-              match strip altBody with
-              | .bvar _ => .ok #[.returnU64 payload]
-              | _ => .error "extract/unsupported: variant payload expression"
-            else
-              decodePlain env altBody stateful
-          match altOps with
-          | .ok ops => alternatives := alternatives.push ops
+          if altInfo.numFields > payloads.size then
+            return .error "extract/unsupported: variant alternative exceeds payload layout"
+          let altBody? : Option Expr := Id.run do
+            let mut body := altExpr
+            for fieldIndex in [:altInfo.numFields] do
+              match strip body with
+              | .lam _ _ lamBody _ =>
+                let marker := mkApp (mkConst ``localRef) (mkNatLit (localDepth + fieldIndex))
+                body := lamBody.instantiate1 marker
+              | _ => return none
+            return some body
+          let some altBody := altBody?
+            | return .error "extract/unsupported: variant alternative binders"
+          -- Lean represents a nullary matcher branch as `Unit → result`; payload alternatives
+          -- have already consumed their source-field binders above.
+          let altBody := peelMatcherLams 8 altBody
+          match decodeExpr env fuel' altBody (stateful := stateful)
+              (preserveLocals := preserveLocals)
+              (localDepth := localDepth + altInfo.numFields) with
+          | .ok ops =>
+            let mut withPayloads : Array Ops.Op := #[]
+            for fieldIndex in [:altInfo.numFields] do
+              withPayloads := withPayloads.push
+                (.letLocal (localDepth + fieldIndex) payloads[fieldIndex]!)
+            alternatives := alternatives.push (withPayloads ++ ops)
           | .error reason => return .error reason
         return .ok alternatives
       match alternativesResult with
@@ -3670,11 +3713,17 @@ private def optionFragment (name : String) (place : Core.Place) : SchemaFragment
       { place := place.push .optionPayload, name := s!"{name}_p0", ty := .uint 64 }
     ] }
 
-private def variantFragment (typeName name : String) (place : Core.Place) : SchemaFragment :=
-  { leaves := #[
-      { place := place.push .variantTag, name := s!"{name}_tag", ty := .variantTag typeName },
-      { place := place.push (.variantPayload 0), name := s!"{name}_p0", ty := .uint 64 }
-    ] }
+private def variantFragment (typeName name : String) (place : Core.Place)
+    (payloadWidth : Nat) : SchemaFragment := Id.run do
+  let mut leaves : Array Core.Leaf :=
+    #[{ place := place.push .variantTag, name := s!"{name}_tag", ty := .variantTag typeName }]
+  for index in [:payloadWidth] do
+    leaves := leaves.push {
+      place := place.push (.variantPayload index)
+      name := s!"{name}_p{index}"
+      ty := .uint 64
+    }
+  return { leaves }
 
 private def leafSchema (env : Environment) (fuel : Nat) (name : String)
     (place : Core.Place) (ty : Expr) : Except String SchemaFragment :=
@@ -3737,8 +3786,8 @@ private def leafSchema (env : Environment) (fuel : Nat) (name : String)
         .ok (scalarFragment name place (.newtype tyName.toString 64))
       else if isOptionLikeInductive env tyName then
         .ok (optionFragment name place)
-      else if isUInt64Variant env tyName then
-        .ok (variantFragment tyName.toString name place)
+      else if let some payloadWidth := uint64VariantPayloadWidth? env tyName then
+        .ok (variantFragment tyName.toString name place payloadWidth)
       else if isUserName env tyName && isStructure env tyName &&
           !(isEnumLeaf env tyName) && !(isOptionLikeInductive env tyName) then
         if !(getStructureParentInfo env tyName).isEmpty then

@@ -349,6 +349,58 @@ elab "#pf_guard_variant_lowering" : command => do
 
 #pf_guard_variant_lowering
 
+elab "#pf_guard_wide_variant_lowering" : command => do
+  let env ← getEnv
+  let extracted ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initMarketEvent
+        ``Tests.Fixtures.setMarketFee ``Tests.Fixtures.marketEventValue with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  unless extracted.schema.leaves.size == 6 &&
+      extracted.schema.leaves[0]!.name == "marketEvent_tag" &&
+      extracted.schema.leaves[5]!.name == "marketEvent_p4" do
+    throwError s!"unexpected wide variant schema: {repr extracted.schema}"
+  let some setter := extracted.methods.find? (·.ixName == "setMarketFee")
+    | throwError "missing wide variant setter"
+  unless setter.ops.any (fun | .storeField "marketEvent_tag" (.lit 3) => true | _ => false) &&
+      setter.ops.any (fun | .storeField "marketEvent_p0" (.arg 0) => true | _ => false) &&
+      setter.ops.any (fun | .storeField "marketEvent_p4" (.lit 0) => true | _ => false) do
+    throwError "short variant assignment did not write canonical payload padding"
+  let some getter := extracted.methods.find? (·.ixName == "marketEventValue")
+    | throwError "missing wide variant getter"
+  let hasFifthPayloadLocal := getter.ops.any fun
+    | .ite .eq (.field (.arg 0) "marketEvent_tag") (.lit 0) _ afterUninitialized =>
+      afterUninitialized.any fun
+        | .ite .eq (.field (.arg 0) "marketEvent_tag") (.lit 1) fillOps _ =>
+          fillOps.any fun
+            | .letLocal 4 (.field (.arg 0) "marketEvent_p4") => true
+            | _ => false
+        | _ => false
+    | _ => false
+  unless hasFifthPayloadLocal do
+    throwError "wide variant matcher did not bind all payload fields"
+  let svm ←
+    match ProofForge.Svm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmAsm ←
+    match ProofForge.Svm.Emit.emitAsm svm with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmYul ←
+    match ProofForge.Evm.Emit.emitYul evm with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless svm.slots.size == 6 && evm.slots.size == 6 &&
+      !svmAsm.isEmpty && !evmYul.isEmpty do
+    throwError "wide variant did not survive both target lowerings and emitters"
+
+#pf_guard_wide_variant_lowering
+
 private def firstStringDiff (left right : String) : Nat := Id.run do
   let mut index := 0
   for pair in left.toList.zip right.toList do
