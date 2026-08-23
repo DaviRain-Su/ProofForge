@@ -708,7 +708,19 @@ structure SellAcc where
   makerQuote : UInt64
   unlockedQuote : UInt64
   stopped : Bool
+  events : Vector MarketEvent 5
+  eventCount : UInt64
+  lastEvent : MarketEvent
   deriving Repr, DecidableEq
+
+private def SellAcc.pushEvent (acc : SellAcc) (event : MarketEvent) : SellAcc :=
+  if h : acc.eventCount.toNat < 5 then
+    { acc with
+      events := acc.events.set acc.eventCount.toNat event
+      eventCount := acc.eventCount + 1
+      lastEvent := event }
+  else
+    acc
 
 private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
     (behavior : SelfTradeBehavior)
@@ -725,8 +737,10 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
       else if expired s.bidLastSlots[i] s.bidLastTimes[i] nowSlot nowTime then
         let unlocked ← bidCollateral s s.bidPriceTicks[i] size
         if acc.unlockedQuote ≤ u64Max - unlocked then
+          let next := acc.pushEvent
+            (.expiredOrder s.bidTraders[i] (~~~s.bidSequences[i]) s.bidPriceTicks[i] size)
           scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
-            { acc with
+            { next with
               sizes := acc.sizes.set i 0
               unlockedQuote := acc.unlockedQuote + unlocked }
         else
@@ -739,8 +753,10 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
         | .cancelProvide =>
           let unlocked ← bidCollateral s s.bidPriceTicks[i] size
           if acc.unlockedQuote ≤ u64Max - unlocked then
+            let next := acc.pushEvent
+              (.reduce (~~~s.bidSequences[i]) s.bidPriceTicks[i] size 0)
             scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
-              { acc with
+              { next with
                 sizes := acc.sizes.set i 0
                 unlockedQuote := acc.unlockedQuote + unlocked }
           else
@@ -750,8 +766,10 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
           let reduced := if remaining ≤ size then remaining else size
           let unlocked ← bidCollateral s s.bidPriceTicks[i] reduced
           if acc.unlockedQuote ≤ u64Max - unlocked then
+            let next := acc.pushEvent
+              (.reduce (~~~s.bidSequences[i]) s.bidPriceTicks[i] reduced (size - reduced))
             scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
-              { acc with
+              { next with
                 sizes := acc.sizes.set i (size - reduced)
                 targetBase := acc.targetBase - reduced
                 unlockedQuote := acc.unlockedQuote + unlocked
@@ -766,8 +784,11 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
         if acc.adjustedQuote > u64Max - adjusted || acc.makerQuote > u64Max - makerQuote then
           .error .overflow
         else
+          let next := acc.pushEvent
+            (.fill s.bidTraders[i] (~~~s.bidSequences[i]) s.bidPriceTicks[i] fill (size - fill))
           scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
-            { sizes := acc.sizes.set i (size - fill)
+            { next with
+              sizes := acc.sizes.set i (size - fill)
               targetBase := acc.targetBase
               filledBase := acc.filledBase + fill
               adjustedQuote := acc.adjustedQuote + adjusted
@@ -812,10 +833,11 @@ private def settleSell (s : State) (acc : SellAcc) : Except Error (State × UInt
             quoteLocked := s.quoteLocked - quoteDebit
             quoteFree := s.quoteFree + quoteCredit
             unclaimedFees := s.unclaimedFees + feeLots
-            events := s.events.set 0 (.fillSummary 0 acc.filledBase grossQuote feeLots)
-            eventCount := 1
-            lastEvent := .fillSummary 0 acc.filledBase grossQuote feeLots }
-          .ok (settled, acc.filledBase)
+            events := acc.events
+            eventCount := acc.eventCount
+            lastEvent := acc.lastEvent }
+          .ok (appendEvent settled (.fillSummary 0 acc.filledBase grossQuote feeLots),
+            acc.filledBase)
 
 /-- 可测试的 N=4 sell IOC 宿主语义。 -/
 def swapSellForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
@@ -823,7 +845,8 @@ def swapSellForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
   let s := beginEvents s
   let acc ← scanBids s taker limit nowSlot nowTime behavior 4 0
     { sizes := s.bidSizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
-      makerQuote := 0, unlockedQuote := 0, stopped := false }
+      makerQuote := 0, unlockedQuote := 0, stopped := false, events := s.events,
+      eventCount := s.eventCount, lastEvent := s.lastEvent }
   settleSell s acc
 
 def swapSellAt (s : State) (want limit nowSlot nowTime : UInt64) :
@@ -950,28 +973,34 @@ def swapBuy (s : State) (taker behavior want limit : UInt64) :
               st := { st with matchStopped := 1, matchError := 1 }
             else if behavior = 1 then
               if st.matchExpired ≤ u64Max - size then
-                st := { st with
+                let reducedState := { st with
                   sizes := st.sizes.set (j % 4) 0
                   matchExpired := st.matchExpired + size }
+                st := appendEvent reducedState
+                  (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
               else
                 st := { st with matchStopped := 1, matchError := 1 }
             else if behavior = 2 then
               let remaining := st.matchWant - st.matchFilled
               if remaining ≤ size then
                 if st.matchExpired ≤ u64Max - remaining then
-                  st := { st with
+                  let reducedState := { st with
                     sizes := st.sizes.set (j % 4) (size - remaining)
                     matchExpired := st.matchExpired + remaining
                     matchWant := st.matchWant - remaining
                     matchStopped := 1 }
+                  st := appendEvent reducedState
+                    (.reduce st.sequences[j]! st.priceTicks[j]! remaining (size - remaining))
                 else
                   st := { st with matchStopped := 1, matchError := 1 }
               else
                 if st.matchExpired ≤ u64Max - size then
-                  st := { st with
+                  let reducedState := { st with
                     sizes := st.sizes.set (j % 4) 0
                     matchExpired := st.matchExpired + size
                     matchWant := st.matchWant - size }
+                  st := appendEvent reducedState
+                    (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
                 else
                   st := { st with matchStopped := 1, matchError := 1 }
             else
@@ -1128,97 +1157,134 @@ private def commitSellFold (s : State) (grossQuote feeLots : UInt64) :
         let settled := { s with
           quoteLocked := s.quoteLocked - quoteDebit
           quoteFree := s.quoteFree + quoteCredit
-          unclaimedFees := s.unclaimedFees + feeLots
-          events := s.events.set 0 (.fillSummary 0 s.matchFilled grossQuote feeLots)
-          eventCount := 1
-          lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots }
+          unclaimedFees := s.unclaimedFees + feeLots }
         .ok (settled, s.matchFilled)
       else
         let _ := tokenTransferChecked s.matchFilled 6
         let settled := { s with
           quoteLocked := s.quoteLocked - quoteDebit
           quoteFree := s.quoteFree + quoteCredit
-          unclaimedFees := s.unclaimedFees + feeLots
-          events := s.events.set 0 (.fillSummary 0 s.matchFilled grossQuote feeLots)
-          eventCount := 1
-          lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots }
+          unclaimedFees := s.unclaimedFees + feeLots }
         .ok (settled, s.matchFilled)
 
 private def settleSellFold (s : State) : Except Error (State × UInt64) :=
   if s.matchError ≠ 0 then .error .overflow
-  else if s.baseLotsPerBaseUnit = 0 then .error .overflow
-  else
-    let grossQuote := s.matchQuote / s.baseLotsPerBaseUnit
-    if s.matchQuote = 0 then
-      commitSellFold s grossQuote 0
-    else if s.takerFeeBps = 0 then
-      commitSellFold s grossQuote 0
-    else if s.takerFeeBps ≤ u64Max / s.matchQuote then
-      let feeProduct := s.matchQuote * s.takerFeeBps
-      let adjustedFee := (feeProduct - 1) / 10000 + 1
-      let feeLots := (adjustedFee - 1) / s.baseLotsPerBaseUnit + 1
-      commitSellFold s grossQuote feeLots
-    else .error .overflow
+  else commitSellFold s s.matchLimit s.matchWant
 
 attribute [pf_inline] commitSellFold settleSellFold
 
 /--
-链上 N=4 sell IOC。与 buy 共用 17-phase fold 和 scratch schema，但访问 bid 向量，
-价格方向反转；`matchExpired` 在本入口累计取消 bid 解锁的 quote lots。
+链上 N=4 sell IOC。每档拆为 slot TIF、time TIF、撮合、event flush、advance
+五个 phase；随后计算并追加 summary。`matchStopped` 的 2/3 临时表示“待发事件后
+继续/停止”，flush 后归一为 0/1。这样 helper 结果先跨迭代物化，再做动态写。
 -/
 @[pf_entry]
 def swapSell (s : State) (taker behavior want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
   let mut st := beginEvents s
-  for i in [0:17] do
+  for i in [0:23] do
     if i = 0 then
       st := { st with
         matchFilled := 0, matchQuote := 0, matchMakerQuote := 0, matchExpired := 0,
         matchStopped := 0, matchError := 0, matchLevel := 0,
         matchWant := want, matchLimit := limit }
-    else if st.matchStopped = 0 then
+    else if i = 21 then
+      if st.matchError = 0 then
+        if st.baseLotsPerBaseUnit = 0 then
+          st := { st with matchError := 1 }
+        else
+          let grossQuote := st.matchQuote / st.baseLotsPerBaseUnit
+          if st.matchQuote = 0 then
+            st := { st with matchLimit := grossQuote, matchWant := 0 }
+          else if st.takerFeeBps = 0 then
+            st := { st with matchLimit := grossQuote, matchWant := 0 }
+          else if st.takerFeeBps ≤ u64Max / st.matchQuote then
+            let feeProduct := st.matchQuote * st.takerFeeBps
+            let adjustedFee := (feeProduct - 1) / 10000 + 1
+            let feeLots := (adjustedFee - 1) / st.baseLotsPerBaseUnit + 1
+            st := { st with matchLimit := grossQuote, matchWant := feeLots }
+          else
+            st := { st with matchError := 1 }
+    else if i = 22 then
+      if st.matchError = 0 then
+        st := appendEvent st (.fillSummary 0 st.matchFilled st.matchLimit st.matchWant)
+    else
       let k := i - 1
-      let phase := k % 4
+      let phase := k % 5
       let j := st.matchLevel.toNat
       let size := st.bidSizes[j]!
-      if st.matchFilled = st.matchWant then
-        st := { st with matchStopped := 1 }
-      else if phase = 3 then
-        st := { st with matchLevel := st.matchLevel + 1 }
-      else if size ≠ 0 then
-        if phase = 0 then
-          if st.bidLastSlots[j]! ≠ 0 then
-            if st.bidLastSlots[j]! < clockSlot then
-              st := unlockBidFold st j size
-        else if phase = 1 then
-          if st.bidLastTimes[j]! ≠ 0 then
-            if st.bidLastTimes[j]! < unixTime then
-              st := unlockBidFold st j size
-        else if phase = 2 then
-          if st.bidPriceTicks[j]! < st.matchLimit then
-            st := { st with matchStopped := 1 }
-          else if st.bidTraders[j]! = taker then
-            if behavior = 0 then
-              st := { st with matchStopped := 1, matchError := 1 }
-            else if behavior = 1 then
-              st := unlockBidFold st j size
-            else if behavior = 2 then
+      if phase = 3 then
+        if st.matchError = 0 then
+          if st.matchStopped = 2 then
+            let event := st.lastEvent
+            st := appendEvent { st with matchStopped := 0 } event
+          else if st.matchStopped = 3 then
+            let event := st.lastEvent
+            st := appendEvent { st with matchStopped := 1 } event
+      else if st.matchStopped = 0 then
+        if st.matchFilled = st.matchWant then
+          st := { st with matchStopped := 1 }
+        else if phase = 4 then
+          st := { st with matchLevel := st.matchLevel + 1 }
+        else if size ≠ 0 then
+          if phase = 0 then
+            if st.bidLastSlots[j]! ≠ 0 then
+              if st.bidLastSlots[j]! < clockSlot then
+                let unlocked := unlockBidFold st j size
+                st := { unlocked with
+                  matchStopped := 2
+                  lastEvent := .expiredOrder st.bidTraders[j]! (~~~st.bidSequences[j]!)
+                    st.bidPriceTicks[j]! size }
+          else if phase = 1 then
+            if st.bidLastTimes[j]! ≠ 0 then
+              if st.bidLastTimes[j]! < unixTime then
+                let unlocked := unlockBidFold st j size
+                st := { unlocked with
+                  matchStopped := 2
+                  lastEvent := .expiredOrder st.bidTraders[j]! (~~~st.bidSequences[j]!)
+                    st.bidPriceTicks[j]! size }
+          else if phase = 2 then
+            if st.bidPriceTicks[j]! < st.matchLimit then
+              st := { st with matchStopped := 1 }
+            else if st.bidTraders[j]! = taker then
+              if behavior = 0 then
+                st := { st with matchStopped := 1, matchError := 1 }
+              else if behavior = 1 then
+                let unlocked := unlockBidFold st j size
+                st := { unlocked with
+                  matchStopped := 2
+                  lastEvent := .reduce (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0 }
+              else if behavior = 2 then
+                let remaining := st.matchWant - st.matchFilled
+                if remaining ≤ size then
+                  let unlocked := unlockBidFold st j remaining
+                  st := { unlocked with
+                    matchWant := st.matchWant - remaining
+                    matchStopped := 3
+                    lastEvent := .reduce (~~~st.bidSequences[j]!) st.bidPriceTicks[j]!
+                      remaining (size - remaining) }
+                else
+                  let unlocked := unlockBidFold st j size
+                  st := { unlocked with
+                    matchWant := st.matchWant - size
+                    matchStopped := 2
+                    lastEvent := .reduce (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0 }
+              else
+                st := { st with matchStopped := 1, matchError := 1 }
+            else
               let remaining := st.matchWant - st.matchFilled
               if remaining ≤ size then
-                st := unlockBidFold st j remaining
-                st := { st with matchWant := st.matchWant - remaining, matchStopped := 1 }
+                let filled := fillBidFold st j remaining
+                st := { filled with
+                  matchStopped := 3
+                  lastEvent := .fill st.bidTraders[j]! (~~~st.bidSequences[j]!)
+                    st.bidPriceTicks[j]! remaining (size - remaining) }
               else
-                st := unlockBidFold st j size
-                st := { st with matchWant := st.matchWant - size }
-            else
-              st := { st with matchStopped := 1, matchError := 1 }
-          else
-            let remaining := st.matchWant - st.matchFilled
-            if remaining ≤ size then
-              st := fillBidFold st j remaining
-              st := { st with matchStopped := 1 }
-            else
-              st := fillBidFold st j size
+                let filled := fillBidFold st j size
+                st := { filled with
+                  matchStopped := 2
+                  lastEvent := .fill st.bidTraders[j]! (~~~st.bidSequences[j]!)
+                    st.bidPriceTicks[j]! size 0 }
   settleSellFold st
 
 /--

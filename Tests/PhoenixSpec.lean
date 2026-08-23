@@ -67,8 +67,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
       swap.paramCount == 4 && swapSell.paramCount == 4 && collect.paramCount == 0 &&
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
-  unless asm.contains "; forBody 14" && asm.contains "; forBody 17" &&
-      asm.contains "; forBody 19" && asm.contains "; forBody 4" do
+  unless asm.contains "; forBody 14" && asm.contains "; forBody 19" &&
+      asm.contains "; forBody 23" && asm.contains "; forBody 4" do
     throwError "Phoenix bounded loops missing from assembly"
 
 #pf_guard_phoenix_artifact
@@ -81,7 +81,8 @@ private def sameBusinessResult :
       ar == br && a.sizes == b.sizes &&
         a.quoteLocked == b.quoteLocked && a.quoteFree == b.quoteFree &&
         a.baseLocked == b.baseLocked && a.baseFree == b.baseFree &&
-        a.unclaimedFees == b.unclaimedFees && a.collectedFees == b.collectedFees
+        a.unclaimedFees == b.unclaimedFees && a.collectedFees == b.collectedFees &&
+        a.events == b.events && a.eventCount == b.eventCount && a.lastEvent == b.lastEvent
   | _, _ => false
 
 private def sameSellResult :
@@ -92,7 +93,8 @@ private def sameSellResult :
       ar == br && a.bidSizes == b.bidSizes &&
         a.quoteLocked == b.quoteLocked && a.quoteFree == b.quoteFree &&
         a.baseLocked == b.baseLocked && a.baseFree == b.baseFree &&
-        a.unclaimedFees == b.unclaimedFees && a.collectedFees == b.collectedFees
+        a.unclaimedFees == b.unclaimedFees && a.collectedFees == b.collectedFees &&
+        a.events == b.events && a.eventCount == b.eventCount && a.lastEvent == b.lastEvent
   | _, _ => false
 
 private def matchingSamples : List Projects.Phoenix.State := [
@@ -441,42 +443,54 @@ private def sellSamples : List Projects.Phoenix.State := [
   match swapBuyForAt
       { (init 1) with
         sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
-        traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+        sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+        quoteLocked := 1000, baseLocked := 5 }
       7 2 11 0 0 .cancelProvide with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
         st.quoteLocked == 977 && st.quoteFree == 22 &&
-        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1
+        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
+        st.eventCount == 3 && st.events[0]! == .reduce 1 10 2 0 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 2 22 1
   | .error _ => false
 
 #guard
   match swapBuyForAt
       { (init 1) with
         sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
-        traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+        sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+        quoteLocked := 1000, baseLocked := 5 }
       7 1 11 0 0 .decrementTake with
   | .ok (st, ret) =>
       st.sizes == #v[1, 3, 0, 0] && ret == 0 &&
         st.quoteLocked == 1000 && st.quoteFree == 0 &&
-        st.baseLocked == 4 && st.baseFree == 1 && st.unclaimedFees == 0
+        st.baseLocked == 4 && st.baseFree == 1 && st.unclaimedFees == 0 &&
+        st.eventCount == 2 && st.events[0]! == .reduce 1 10 1 1 &&
+        st.events[1]! == .fillSummary 0 0 0 0
   | .error _ => false
 
 #guard
   match swapBuy
       { (init 1) with
         sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
-        traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+        sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+        quoteLocked := 1000, baseLocked := 5 }
       7 1 2 11 with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
-        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1
+        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
+        st.eventCount == 3 && st.events[0]! == .reduce 1 10 2 0 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 2 22 1
   | .error _ => false
 
 #guard
   let s :=
     { (init 1) with
       sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
-      traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+      sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+      quoteLocked := 1000, baseLocked := 5 }
   sameBusinessResult
     (swapBuyForAt s 7 1 11 0 0 .decrementTake)
     (swapBuy s 7 2 1 11)
@@ -485,23 +499,50 @@ private def sellSamples : List Projects.Phoenix.State := [
   match swapSellAt
       { (init 1) with
         bidSizes := #v[2, 3, 5, 0], bidPriceTicks := #v[12, 11, 10, 0],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), ~~~(3 : UInt64), 0],
+        bidTraders := #v[7, 8, 9, 0],
         quoteLocked := 107, baseFree := 4 }
       4 11 0 0 with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 5, 0] && ret == 4 &&
         st.quoteLocked == 61 && st.quoteFree == 45 && st.baseFree == 4 &&
-        st.unclaimedFees == 1
+        st.unclaimedFees == 1 && st.eventCount == 3 &&
+        st.events[0]! == .fill 7 1 12 2 0 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 4 46 1
+  | .error _ => false
+
+#guard
+  match swapSell
+      { (init 1) with
+        bidSizes := #v[2, 3, 5, 0], bidPriceTicks := #v[12, 11, 10, 0],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), ~~~(3 : UInt64), 0],
+        bidTraders := #v[7, 8, 9, 0],
+        quoteLocked := 107, baseFree := 4 }
+      u64Max 0 4 11 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[0, 1, 5, 0] && ret == 4 &&
+        st.quoteLocked == 61 && st.quoteFree == 45 && st.baseFree == 4 &&
+        st.unclaimedFees == 1 && st.eventCount == 3 &&
+        st.events[0]! == .fill 7 1 12 2 0 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 4 46 1
   | .error _ => false
 
 #guard
   match swapSellAt
       { (init 1) with
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
-        bidLastSlots := #v[9, 0, 0, 0], quoteLocked := 57, baseFree := 2 }
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
+        bidTraders := #v[7, 8, 0, 0], bidLastSlots := #v[9, 0, 0, 0],
+        quoteLocked := 57, baseFree := 2 }
       2 11 10 0 with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
-        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1
+        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1 &&
+        st.eventCount == 3 && st.events[0]! == .expiredOrder 7 1 12 2 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 2 22 1
   | .error _ => false
 
 #guard
@@ -526,29 +567,37 @@ private def sellSamples : List Projects.Phoenix.State := [
   match swapSellForAt
       { (init 1) with
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
         bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
       7 2 11 0 0 .cancelProvide with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
-        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1
+        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1 &&
+        st.eventCount == 3 && st.events[0]! == .reduce 1 12 2 0 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 2 22 1
   | .error _ => false
 
 #guard
   match swapSellForAt
       { (init 1) with
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
         bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 1 }
       7 1 11 0 0 .decrementTake with
   | .ok (st, ret) =>
       st.bidSizes == #v[1, 3, 0, 0] && ret == 0 &&
         st.quoteLocked == 45 && st.quoteFree == 12 && st.baseFree == 1 &&
-        st.unclaimedFees == 0
+        st.unclaimedFees == 0 && st.eventCount == 2 &&
+        st.events[0]! == .reduce 1 12 1 1 &&
+        st.events[1]! == .fillSummary 0 0 0 0
   | .error _ => false
 
 #guard
   let s :=
     { (init 1) with
       bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+      bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
       bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
   sameSellResult
     (swapSellForAt s 7 2 11 0 0 .cancelProvide)
