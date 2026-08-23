@@ -1,22 +1,59 @@
 import ProofForge
 
 /-!
-Phoenix v1 在本仓剖面下的第四刀：4 档 ask + 官方吃单顺序。
+Phoenix v1 `src/state` 在本仓剖面下的摊平。
 
-官方 FIFO 吃单从最优档开始，允许部分成交，不会跳档。
-这里档 0 是最优 ask。`swapBuy` 只打档 0：`want ≤ size` 整档减，
-否则吃光档 0。跨档、限价进链上入口、u128 费用仍关。
+官方 `FIFOMarket` 是三棵红黑树 + 泛型 trader key。抽出器不认嵌套
+structure / 不定长树，所以这里把官方 *记录* 摊成平行 `UInt64` 向量：
 
-官方还有 ReduceOrder / CancelOrder。这里用 `reduceAsk` / `cancelAsk`
-钉同一语义：减档 0，减到 0 就是撤。
+  FIFOOrderId          → priceTicks / sequences
+  FIFORestingOrder     → traders / sizes / lastSlots / lastTimes
+  TraderState          → quoteLocked / quoteFree / baseLocked / baseFree
+  MatchingEngineResponse 不作账户槽（瞬时）
+  OrderPacket.client_order_id u128、红黑树、MarketEvent 仍关
+
+N=4。档 0 是最优 ask。没有 bid 书。
 -/
 namespace Projects.Phoenix
 
 open ProofForge.Runtime
 
+/-- 官方 `Side`。本切片只做 Ask。 -/
+inductive Side where
+  | bid
+  | ask
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+/-- 官方 `SelfTradeBehavior`。本切片不跑自成交。 -/
+inductive SelfTradeBehavior where
+  | abort
+  | cancelProvide
+  | decrementTake
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+/--
+摊平后的账户状态。字段名跟官方记录对齐，不是自己发明的 6 槽。
+
+`_padding` 官方 32×u64，这里不存。
+`collectedQuoteLotFees` / `unclaimedQuoteLotFees` 官方是 QuoteLots。
+TIF 哨兵：`lastSlots[i] = 0` / `lastTimes[i] = 0` 表示不过期。
+-/
 structure State where
-  askPrice : UInt64
+  baseLotsPerBaseUnit : UInt64
+  tickSize : UInt64
+  sequence : UInt64
+  takerFeeBps : UInt64
+  collectedFees : UInt64
+  unclaimedFees : UInt64
+  priceTicks : Vector UInt64 4
+  sequences : Vector UInt64 4
+  traders : Vector UInt64 4
   sizes : Vector UInt64 4
+  lastSlots : Vector UInt64 4
+  lastTimes : Vector UInt64 4
+  quoteLocked : UInt64
+  quoteFree : UInt64
+  baseLocked : UInt64
   baseFree : UInt64
   deriving Repr, DecidableEq
 
@@ -26,17 +63,39 @@ inductive Error where
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
-/-- 费用按 bps 收。不是官方 u128 四舍五入。 -/
-def feeBps : UInt64 := 5
+def empty4 : Vector UInt64 4 := #v[0, 0, 0, 0]
+
+/-- 官方 taker fee 默认常用 5 bps。不是 u128 上取整。 -/
+def defaultFeeBps : UInt64 := 5
 
 def feeOf (qty : UInt64) : UInt64 :=
-  qty * feeBps / 10000
+  qty * defaultFeeBps / 10000
 
 @[pf_entry]
-def init (price : UInt64) : State :=
-  { askPrice := price, sizes := #v[0, 0, 0, 0], baseFree := 0 }
+def init (tick : UInt64) : State :=
+  { baseLotsPerBaseUnit := 1
+    tickSize := tick
+    sequence := 1
+    takerFeeBps := defaultFeeBps
+    collectedFees := 0
+    unclaimedFees := 0
+    priceTicks := empty4
+    sequences := empty4
+    traders := empty4
+    sizes := empty4
+    lastSlots := empty4
+    lastTimes := empty4
+    quoteLocked := 0
+    quoteFree := 0
+    baseLocked := 0
+    baseFree := 0 }
 
-/-- 挂到第一档空位。四档都满则 overflow。 -/
+/-- 官方 FIFORestingOrder 是否过期。0 是哨兵。 -/
+def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
+  (lastSlot ≠ 0 && lastSlot < nowSlot) ||
+    (lastTime ≠ 0 && lastTime < nowTime)
+
+/-- 挂到第一档空位。链上只改 `sizes`；价/序号/锁仓是宿主语义。 -/
 @[pf_entry]
 def postAsk (s : State) (size : UInt64) : Except Error (State × UInt64) :=
   if s.sizes[0]! = 0 then
@@ -50,10 +109,42 @@ def postAsk (s : State) (size : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+/-- 宿主：写 FIFOOrderId + 锁 base。抽出一次改多叶还不行。 -/
+def postAskFull (s : State) (price size : UInt64) : Except Error (State × UInt64) :=
+  match postAsk s size with
+  | .error e => .error e
+  | .ok (st, ret) =>
+    if st.baseLocked ≤ u64Max - size then
+      if st.sizes[0]! = size && s.sizes[0]! = 0 then
+        .ok ({ st with
+                priceTicks := st.priceTicks.set 0 price
+                sequences := st.sequences.set 0 st.sequence
+                sequence := st.sequence + 1
+                baseLocked := st.baseLocked + size }, ret)
+      else if st.sizes[1]! = size && s.sizes[1]! = 0 then
+        .ok ({ st with
+                priceTicks := st.priceTicks.set 1 price
+                sequences := st.sequences.set 1 st.sequence
+                sequence := st.sequence + 1
+                baseLocked := st.baseLocked + size }, ret)
+      else if st.sizes[2]! = size && s.sizes[2]! = 0 then
+        .ok ({ st with
+                priceTicks := st.priceTicks.set 2 price
+                sequences := st.sequences.set 2 st.sequence
+                sequence := st.sequence + 1
+                baseLocked := st.baseLocked + size }, ret)
+      else
+        .ok ({ st with
+                priceTicks := st.priceTicks.set 3 price
+                sequences := st.sequences.set 3 st.sequence
+                sequence := st.sequence + 1
+                baseLocked := st.baseLocked + size }, ret)
+    else
+      .error .overflow
+
 /--
-IOC 买，官方顺序：只打最优档（档 0），且 `want ≤ sizes[0]`。
-装不下或档 0 空则 overflow，不会跳到档 1。
-部分成交 / 撤单是宿主函数。成交走 Token TransferChecked。
+IOC 买：只打档 0。官方不会跳档。
+`want ≤ sizes[0]` 才成交。成交把 maker 的 `baseLocked` 转成 taker `baseFree`。
 -/
 @[pf_entry]
 def swapBuy (s : State) (want : UInt64) : Except Error (State × UInt64) :=
@@ -68,19 +159,7 @@ def swapBuy (s : State) (want : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-/-- 官方部分成交：吃光档 0。档 0 空则 overflow。 -/
-def sweepAsk (s : State) : Except Error (State × UInt64) :=
-  if s.sizes[0]! = 0 then
-    .error .overflow
-  else if s.baseFree ≤ u64Max - s.sizes[0]! then
-    let _ := tokenTransferChecked s.sizes[0]! 6
-    .ok ({ s with
-            sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!)
-            baseFree := s.baseFree + s.sizes[0]! }, s.sizes[0]!)
-  else
-    .error .overflow
-
-/-- 官方 ReduceOrder：只减档 0，且 `qty ≤ sizes[0]`。超额 overflow。 -/
+/-- 官方 ReduceOrder：减档 0。锁仓调整在宿主。 -/
 @[pf_entry]
 def reduceAsk (s : State) (qty : UInt64) : Except Error (State × UInt64) :=
   if qty ≤ s.sizes[0]! then
@@ -88,28 +167,45 @@ def reduceAsk (s : State) (qty : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-/-- 官方 CancelOrder：撤档 0。空档 overflow。抽出还认不了 `size - size`。 -/
+/-- 官方部分成交：吃光档 0。抽出还认不了 `set 0 0`。 -/
+def sweepAsk (s : State) : Except Error (State × UInt64) :=
+  if s.sizes[0]! = 0 then
+    .error .overflow
+  else if s.baseFree ≤ u64Max - s.sizes[0]! then
+    if s.sizes[0]! ≤ s.baseLocked then
+      let _ := tokenTransferChecked s.sizes[0]! 6
+      .ok ({ s with
+              sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!)
+              baseLocked := s.baseLocked - s.sizes[0]!
+              baseFree := s.baseFree + s.sizes[0]! }, s.sizes[0]!)
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+/-- 官方 CancelOrder。抽出还认不了 `size - size`。 -/
 def cancelAsk (s : State) : Except Error (State × UInt64) :=
   if s.sizes[0]! = 0 then
     .error .overflow
+  else if s.sizes[0]! ≤ s.baseLocked then
+    .ok ({ s with
+            sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!)
+            baseLocked := s.baseLocked - s.sizes[0]! }, s.sizes[0]!)
   else
-    .ok ({ s with sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!) }, s.sizes[0]!)
+    .error .overflow
 
-/-- UInt64 bps 费用。宿主侧可算；抽出还认不了 `qty * 5 / 10000`。 -/
 def takeFee (qty : UInt64) : UInt64 :=
-  if qty = 0 then 0 else qty * feeBps / 10000
+  if qty = 0 then 0 else qty * defaultFeeBps / 10000
 
-/-- 限价：`limit < askPrice` 不成交。宿主侧可算。 -/
 def checkLimit (s : State) (limit : UInt64) : Bool :=
-  limit ≥ s.askPrice
+  limit ≥ s.priceTicks[0]!
 
-/-- TIF：`deadline = 0` 不过期。宿主侧可算。 -/
 def checkTif (deadline : UInt64) : Bool :=
   deadline = 0 || unixTime < deadline
 
 @[pf_entry]
 def bestAsk (s : State) : UInt64 :=
-  s.askPrice
+  s.priceTicks[0]!
 
 @[pf_entry]
 def askQty (s : State) : UInt64 :=
@@ -117,7 +213,19 @@ def askQty (s : State) : UInt64 :=
 
 @[pf_entry]
 def makerBase (s : State) : UInt64 :=
+  s.baseLocked
+
+@[pf_entry]
+def takerBase (s : State) : UInt64 :=
   s.baseFree
+
+@[pf_entry]
+def nextSeq (s : State) : UInt64 :=
+  s.sequence
+
+@[pf_entry]
+def feeBpsOf (s : State) : UInt64 :=
+  s.takerFeeBps
 
 @[pf_entry]
 def level0 (s : State) : UInt64 :=

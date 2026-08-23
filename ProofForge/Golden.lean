@@ -1102,14 +1102,31 @@ def extractedSeat : Program :=
 def extractedPhoenix : Program :=
   { name := "Phoenix"
     slots := #[
-      { name := "askPrice" },
+      { name := "baseLotsPerBaseUnit" }, { name := "tickSize" },
+      { name := "sequence" }, { name := "takerFeeBps" },
+      { name := "collectedFees" }, { name := "unclaimedFees" },
+      { name := "priceTicks_0" }, { name := "priceTicks_1" },
+      { name := "priceTicks_2" }, { name := "priceTicks_3" },
+      { name := "sequences_0" }, { name := "sequences_1" },
+      { name := "sequences_2" }, { name := "sequences_3" },
+      { name := "traders_0" }, { name := "traders_1" },
+      { name := "traders_2" }, { name := "traders_3" },
       { name := "sizes_0" }, { name := "sizes_1" },
       { name := "sizes_2" }, { name := "sizes_3" },
-      { name := "baseFree" }
+      { name := "lastSlots_0" }, { name := "lastSlots_1" },
+      { name := "lastSlots_2" }, { name := "lastSlots_3" },
+      { name := "lastTimes_0" }, { name := "lastTimes_1" },
+      { name := "lastTimes_2" }, { name := "lastTimes_3" },
+      { name := "quoteLocked" }, { name := "quoteFree" },
+      { name := "baseLocked" }, { name := "baseFree" }
     ]
     methods := #[
       { kind := .init, name := "Projects.Phoenix.init", ixName := "initialize", paramCount := 1
-        ops := #[.returnState (.arg 0)] },
+        ops := #[
+          .returnState (.lit 1), .returnState (.arg 0), .returnState (.lit 1),
+          .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0),
+          .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0)
+        ] },
       { kind := .increment, name := "Projects.Phoenix.postAsk", ixName := "postAsk", paramCount := 1
         ops := #[
           .ite .eq (.field (.arg 1) "sizes_0") (.lit 0)
@@ -1149,10 +1166,16 @@ def extractedPhoenix : Program :=
               (.field (.arg 0) "sizes_2"))
             (.field (.arg 0) "sizes_3"))] },
       { kind := .get, name := "Projects.Phoenix.bestAsk", ixName := "bestAsk", paramCount := 0
-        ops := #[.returnU64 (.field (.arg 0) "askPrice")] },
+        ops := #[.returnU64 (.field (.arg 0) "priceTicks_0")] },
+      { kind := .get, name := "Projects.Phoenix.feeBpsOf", ixName := "feeBpsOf", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "takerFeeBps")] },
       { kind := .get, name := "Projects.Phoenix.level0", ixName := "level0", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "sizes_0")] },
       { kind := .get, name := "Projects.Phoenix.makerBase", ixName := "makerBase", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "baseLocked")] },
+      { kind := .get, name := "Projects.Phoenix.nextSeq", ixName := "nextSeq", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "sequence")] },
+      { kind := .get, name := "Projects.Phoenix.takerBase", ixName := "takerBase", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "baseFree")] }
     ] }
 
