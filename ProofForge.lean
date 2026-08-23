@@ -20,6 +20,7 @@ import ProofForge.Extract.LegacyAdapter
 import ProofForge.Extract
 import ProofForge.Extract.Compat
 import ProofForge.Svm.ABI
+import ProofForge.Svm.ABICompat
 import ProofForge.Svm.IR
 import ProofForge.Svm.IRCompat
 import ProofForge.Svm.Solanalib

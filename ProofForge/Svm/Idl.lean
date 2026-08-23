@@ -1,5 +1,5 @@
 import ProofForge.Crypto.Sha256
-import ProofForge.Svm.ABI
+import ProofForge.Svm.ABICompat
 import ProofForge.Svm.IR
 
 namespace ProofForge.Svm.Idl

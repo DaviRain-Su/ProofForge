@@ -182,14 +182,14 @@ elab "#pf_guard_tree_schema" : command => do
 elab "#pf_guard_target_lowering" : command => do
   let env ← getEnv
   let counter ←
-    match ProofForge.Extract.extractProgram env ``initDirect ``incrementDirect ``getDirect with
+    match ProofForge.Extract.extractProgramIR env ``initDirect ``incrementDirect ``getDirect with
     | .ok program => pure program
     | .error reason => throwError reason
   let svmCounter ←
-    match ProofForge.Svm.IR.fromProgram counter with
+    match ProofForge.Svm.IR.fromExtracted counter with
     | .ok program => pure program
     | .error reason => throwError reason
-  let some increment := counter.methods.find? (·.kind == .increment)
+  let some increment := svmCounter.methods.find? (·.kind == .increment)
     | throwError "missing normalized increment"
   let some checkedWrite := increment.evaluation.commits[0]? >>= (·.writes[0]?)
     | throwError s!"missing normalized checked write: {repr increment.evaluation}"

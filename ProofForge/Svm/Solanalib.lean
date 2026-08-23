@@ -65,7 +65,7 @@ structure CheckedWriteFragment where
 Bounded Core-to-ISA bridge: one checked calculation followed by one statically addressed write.
 The checked guard and operand loads remain outside this fragment.
 -/
-def checkedWriteFragment? (program : IR.Program) (write : Extract.Legacy.StateWrite) :
+def checkedWriteFragment? {ValExt : Type} (program : IR.Program) (write : Core.StateWrite ValExt) :
     Option CheckedWriteFragment := do
   let kind ← match write.value with | .checked kind _ _ => some kind | _ => none
   let store ← staticStoreAt? program write.place .br4
