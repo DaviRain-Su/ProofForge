@@ -324,6 +324,9 @@ error: extract/unsupported: svm rejects evm leaf
 
 #pf_extract Tests.Fixtures.initMarketEvent Tests.Fixtures.setMarketFee Tests.Fixtures.marketEventValue
 
+#pf_extract Tests.Fixtures.initMarketEventBatch Tests.Fixtures.setMarketEventAt
+  Tests.Fixtures.firstMarketEventValue
+
 /--
 error: extract/unsupported: field items Array is not fixed-length; use Vector
 -/

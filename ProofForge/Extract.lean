@@ -1425,23 +1425,32 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
       match idx with
       | .lit _ => none
       | _ =>
-        let leaves := changedLeaves (some idx) 8 payloadE
-        let leaves :=
-          if leaves.isEmpty then
-            match val env payloadE with
-            | some v => #[("", v)]
-            | none => #[]
-          else leaves
-        if leaves.isEmpty then none
-        else
-          let name := (vectorBaseName env 16 e).getD "cells"
-          some (leaves.map fun p =>
-            let hint :=
-              match p.1 with
-              | "left" => 0 | "right" => 8 | "parent" => 16
-              | "color" => 24 | "key" => 32 | "value" => 40
-              | _ => 0
-            (.indexSet name idx p.2 len hint : Ops.Op))
+        let name := (vectorBaseName env 16 e).getD "cells"
+        match asUInt64VariantCtor env payloadE with
+        | some (tag, payloads, payloadWidth) =>
+          some (Id.run do
+            let mut ops : Array Ops.Op := #[.indexSet name idx (.lit tag) len 0]
+            for offset in [:payloadWidth] do
+              ops := ops.push (.indexSet name idx
+                (payloads[offset]?.getD (.lit 0)) len ((offset + 1) * 8))
+            return ops)
+        | none =>
+          let leaves := changedLeaves (some idx) 8 payloadE
+          let leaves :=
+            if leaves.isEmpty then
+              match val env payloadE with
+              | some v => #[("", v)]
+              | none => #[]
+            else leaves
+          if leaves.isEmpty then none
+          else
+            some (leaves.map fun p =>
+              let hint :=
+                match p.1 with
+                | "left" => 0 | "right" => 8 | "parent" => 16
+                | "color" => 24 | "key" => 32 | "value" => 40
+                | _ => 0
+              (.indexSet name idx p.2 len hint : Ops.Op))
     | (false, some idx, none, some payload) =>
       match idx with
       | .lit _ => none

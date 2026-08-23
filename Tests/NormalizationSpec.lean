@@ -401,6 +401,50 @@ elab "#pf_guard_wide_variant_lowering" : command => do
 
 #pf_guard_wide_variant_lowering
 
+elab "#pf_guard_variant_vector_lowering" : command => do
+  let env ← getEnv
+  let extracted ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initMarketEventBatch
+        ``Tests.Fixtures.setMarketEventAt ``Tests.Fixtures.firstMarketEventValue with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some vector := extracted.schema.vector? "events"
+    | throwError "variant vector schema has no vector layout"
+  unless vector.length == 4 && vector.elementBytes == 48 && vector.elementLeaves == 6 &&
+      extracted.schema.leaves.size == 24 do
+    throwError s!"unexpected variant vector schema: {repr extracted.schema}"
+  let some setter := extracted.methods.find? (·.ixName == "setMarketEventAt")
+    | throwError "missing variant vector setter"
+  let writes := setter.ops.flatMap fun
+    | .ite _ _ _ thenOps _ => thenOps.filter fun | .indexSet "events" .. => true | _ => false
+    | _ => #[]
+  unless writes.size == 6 &&
+      writes.any (fun | .indexSet "events" (.arg 0) (.lit 1) 4 0 => true | _ => false) &&
+      writes.any (fun | .indexSet "events" (.arg 0) (.arg 1) 4 8 => true | _ => false) &&
+      writes.any (fun | .indexSet "events" (.arg 0) (.arg 5) 4 40 => true | _ => false) do
+    throwError "variant vector assignment was not split into canonical leaves"
+  let svm ←
+    match ProofForge.Svm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmAsm ←
+    match ProofForge.Svm.Emit.emitAsm svm with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmYul ←
+    match ProofForge.Evm.Emit.emitYul evm with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless svm.slots.size == 24 && evm.slots.size == 24 &&
+      !svmAsm.isEmpty && !evmYul.isEmpty do
+    throwError "variant vector did not survive both target lowerings and emitters"
+
+#pf_guard_variant_vector_lowering
+
 private def firstStringDiff (left right : String) : Nat := Id.run do
   let mut index := 0
   for pair in left.toList.zip right.toList do

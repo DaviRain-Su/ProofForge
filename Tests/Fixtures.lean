@@ -117,7 +117,7 @@ inductive MarketEvent where
   | fill (maker sequence price filled remaining : UInt64)
   | place (sequence client price size : UInt64)
   | fee (amount : UInt64)
-  deriving Repr
+  deriving Repr, Inhabited
 
 structure MarketEventState where
   marketEvent : MarketEvent
@@ -132,6 +132,30 @@ def setMarketFee (_s : MarketEventState) (amount : UInt64) :
 
 def marketEventValue (s : MarketEventState) : UInt64 :=
   match s.marketEvent with
+  | .uninitialized => 0
+  | .fill maker sequence price filled remaining =>
+      maker + sequence + price + filled + remaining
+  | .place sequence client price size => sequence + client + price + size
+  | .fee amount => amount
+
+/-- Fixed-capacity event storage exercises dynamic writes of a multi-leaf variant element. -/
+structure MarketEventBatchState where
+  events : Vector MarketEvent 4
+  deriving Repr
+
+def initMarketEventBatch (_seed : UInt64) : MarketEventBatchState :=
+  { events := #v[.uninitialized, .uninitialized, .uninitialized, .uninitialized] }
+
+def setMarketEventAt (s : MarketEventBatchState)
+    (i maker sequence price filled remaining : UInt64) :
+    Except Examples.Counter.Error (MarketEventBatchState × UInt64) :=
+  if h : i.toNat < 4 then
+    .ok ({ events := s.events.set i.toNat (.fill maker sequence price filled remaining) }, filled)
+  else
+    .error .overflow
+
+def firstMarketEventValue (s : MarketEventBatchState) : UInt64 :=
+  match s.events[0]! with
   | .uninitialized => 0
   | .fill maker sequence price filled remaining =>
       maker + sequence + price + filled + remaining
