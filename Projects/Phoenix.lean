@@ -29,24 +29,22 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 def init (price : UInt64) : State :=
   { askPrice := price, sizes := #v[0, 0, 0, 0], baseFree := 0 }
 
-/-- 挂到档 0。已有挂单则拒绝。多档扫描下一刀补循环改状态。 -/
+/-- 挂到第一档空位。四档都满则 overflow。 -/
 @[pf_entry]
 def postAsk (s : State) (size : UInt64) : Except Error (State × UInt64) :=
   if s.sizes[0]! = 0 then
     .ok ({ s with sizes := s.sizes.set 0 size }, size)
-  else
-    .error .overflow
-
-/-- 挂到档 1。档 1 必须空。 -/
-@[pf_entry]
-def postAsk1 (s : State) (size : UInt64) : Except Error (State × UInt64) :=
-  if s.sizes[1]! = 0 then
+  else if s.sizes[1]! = 0 then
     .ok ({ s with sizes := s.sizes.set 1 size }, size)
+  else if s.sizes[2]! = 0 then
+    .ok ({ s with sizes := s.sizes.set 2 size }, size)
+  else if s.sizes[3]! = 0 then
+    .ok ({ s with sizes := s.sizes.set 3 size }, size)
   else
     .error .overflow
 
 /--
-IOC 买档 0：`want ≤ sizes[0]` 且 `baseFree` 不溢出。
+IOC 买：从档 0 扫到 3。第一档 `want ≤ size` 且 `baseFree` 不溢出才成交。
 成交走 Token TransferChecked（decimals=6）。
 -/
 @[pf_entry]
@@ -57,19 +55,20 @@ def swapBuy (s : State) (want : UInt64) : Except Error (State × UInt64) :=
       .ok ({ s with
               sizes := s.sizes.set 0 (s.sizes[0]! - want)
               baseFree := s.baseFree + want }, want)
-    else
-      .error .overflow
-  else
-    .error .overflow
-
-/-- IOC 买档 1。 -/
-@[pf_entry]
-def swapBuy1 (s : State) (want : UInt64) : Except Error (State × UInt64) :=
-  if s.baseFree ≤ u64Max - want then
-    if want ≤ s.sizes[1]! then
+    else if want ≤ s.sizes[1]! then
       let _ := tokenTransferChecked want 6
       .ok ({ s with
               sizes := s.sizes.set 1 (s.sizes[1]! - want)
+              baseFree := s.baseFree + want }, want)
+    else if want ≤ s.sizes[2]! then
+      let _ := tokenTransferChecked want 6
+      .ok ({ s with
+              sizes := s.sizes.set 2 (s.sizes[2]! - want)
+              baseFree := s.baseFree + want }, want)
+    else if want ≤ s.sizes[3]! then
+      let _ := tokenTransferChecked want 6
+      .ok ({ s with
+              sizes := s.sizes.set 3 (s.sizes[3]! - want)
               baseFree := s.baseFree + want }, want)
     else
       .error .overflow

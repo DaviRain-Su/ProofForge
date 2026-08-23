@@ -1757,7 +1757,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | some (cmp, lv, rv), none, none, some v, _ =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, .ok thn =>
-            return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+            match decodeExpr env fuel' f with
+            | .ok els => return .ok #[.ite cmp lv rv thn els]
+            | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
           | _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, decodeEvmEffect env t, decodeExpr env fuel' t, asOkState env t with

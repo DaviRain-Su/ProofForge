@@ -24,5 +24,6 @@
 - `sol_secp256k1_recover`（要 32B+64B 运行时缓冲）
 - `ByteArray 32` 一次返回（改 8B return_data ABI）
 - 有界 `for` / `Vector` 下标：SVM 已开（`Examples.Book`）。位运算 / 命名错误仍拒
+- 4 路嵌套 `else if`：抽出器已开（Phoenix `postAsk` / `swapBuy`）
 - 多构造子 inductive 带 payload
 - `sol_alloc_free_`、`sol_log_*` 当产品语义

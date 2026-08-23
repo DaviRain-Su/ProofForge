@@ -7,11 +7,11 @@
 ## 本切片有
 
 - 4 档 ask 书：`askPrice` + `sizes : Vector UInt64 4` + `baseFree`
-- `postAsk` / `postAsk1`：分别挂档 0 / 档 1（空档才挂）
-- `swapBuy` / `swapBuy1`：checked-add `baseFree`，再吃对应档，Token TransferChecked
+- `postAsk`：一个入口扫到第一档空位
+- `swapBuy`：一个入口从档 0 扫到 3，第一档装得下就成交 + Token TransferChecked
 - `#pf_build Projects.Phoenix`
 
-循环里改状态、四元加法 view 抽出器还不认，所以挂单/吃单按档拆入口，不在一个 `for` 里扫。
+四元加法 view、循环里改状态仍关。挂单/吃单用展开的 4 路 `ite`。
 
 ## 本切片没有（官方有，剖面关着）
 
