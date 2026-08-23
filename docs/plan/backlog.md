@@ -75,9 +75,9 @@ Token-2022 规划见 [analysis/token-2022.md](analysis/token-2022.md)。没有 T
 fee collection 已进真实源构建。bid book 的 free-funds collateral、驱逐、
 reduce/cancel 和 sell IOC 也复用同一 fold 落地。四 seat trader registry 已按完整
 四-limb Pubkey 做 lookup/bump allocation/deposit，并保存 per-seat TraderState；base/quote
-partial withdraw、zero-state eviction 和 LIFO address reuse 已完成。下一步把
-post/match/reduce 结算接到这些余额，再接双 vault CPI。动态树旋转和删除 fixup 仍是
-后续独立范围。
+partial withdraw、zero-state eviction 和 LIFO address reuse 已完成。post/reduce/match
+已逐 seat 结算，swap 的 self-trade identity 也由 signer 推导。下一步 resolve event
+中的 maker Pubkey，并接双 vault CPI；动态树拓扑和删除 fixup 仍是后续独立范围。
 
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。

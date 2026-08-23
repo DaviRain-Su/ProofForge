@@ -299,6 +299,21 @@ private def traderAddressFor (s : State) (key0 key1 key2 key3 : UInt64) : UInt64
 
 attribute [pf_inline] traderAddressFor
 
+/-- Signer lookup for take-only paths: unlike free-funds entries, a missing seat maps to sentinel max. -/
+private def optionalTraderAddress (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error UInt64 :=
+  if s.traderUsed[0]! ≠ 0 && s.traderKey0[0]! = key0 && s.traderKey1[0]! = key1 &&
+      s.traderKey2[0]! = key2 && s.traderKey3[0]! = key3 then .ok 1
+  else if s.traderUsed[1]! ≠ 0 && s.traderKey0[1]! = key0 && s.traderKey1[1]! = key1 &&
+      s.traderKey2[1]! = key2 && s.traderKey3[1]! = key3 then .ok 2
+  else if s.traderUsed[2]! ≠ 0 && s.traderKey0[2]! = key0 && s.traderKey1[2]! = key1 &&
+      s.traderKey2[2]! = key2 && s.traderKey3[2]! = key3 then .ok 3
+  else if s.traderUsed[3]! ≠ 0 && s.traderKey0[3]! = key0 && s.traderKey1[3]! = key1 &&
+      s.traderKey2[3]! = key2 && s.traderKey3[3]! = key3 then .ok 4
+  else .ok u64Max
+
+attribute [pf_inline] optionalTraderAddress
+
 /-- Stateful callers use an `Except` producer so the bounded lookup joins into a CFG local. -/
 private def requireTraderAddress (s : State) (key0 key1 key2 key3 : UInt64) :
     Except Error UInt64 :=
@@ -948,6 +963,78 @@ def postBid (s : State)
   postBidWithClientAt s trader price size clientOrderIdLo clientOrderIdHi
     lastSlot lastTime clockSlot unixTime
 
+/-- Unlock canceled or expired ask inventory in its maker's authoritative TraderState. -/
+private def unlockAskTrader (s : State) (maker amount : UInt64) : State :=
+  if registeredSeat s maker then
+    let i := maker.toNat - 1
+    if amount > s.traderBaseLocked[i]! then
+      { s with matchStopped := 1, matchError := 1 }
+    else if s.traderBaseFree[i]! > u64Max - amount then
+      { s with matchStopped := 1, matchError := 1 }
+    else
+      { s with
+        traderBaseLocked := s.traderBaseLocked.set (i % 4)
+          (s.traderBaseLocked[i]! - amount)
+        traderBaseFree := s.traderBaseFree.set (i % 4)
+          (s.traderBaseFree[i]! + amount) }
+  else
+    s
+
+/-- Settle one ask fill to its maker: base leaves locked and quote becomes free. -/
+private def fillAskTrader
+    (s : State) (maker baseAmount quoteAmount : UInt64) : State :=
+  if registeredSeat s maker then
+    let i := maker.toNat - 1
+    if baseAmount > s.traderBaseLocked[i]! then
+      { s with matchStopped := 1, matchError := 1 }
+    else if s.traderQuoteFree[i]! > u64Max - quoteAmount then
+      { s with matchStopped := 1, matchError := 1 }
+    else
+      { s with
+        traderBaseLocked := s.traderBaseLocked.set (i % 4)
+          (s.traderBaseLocked[i]! - baseAmount)
+        traderQuoteFree := s.traderQuoteFree.set (i % 4)
+          (s.traderQuoteFree[i]! + quoteAmount) }
+  else
+    s
+
+/-- Unlock canceled or expired bid collateral in its maker's TraderState. -/
+private def unlockBidTrader (s : State) (maker quoteAmount : UInt64) : State :=
+  if registeredSeat s maker then
+    let i := maker.toNat - 1
+    if quoteAmount > s.traderQuoteLocked[i]! then
+      { s with matchStopped := 1, matchError := 1 }
+    else if s.traderQuoteFree[i]! > u64Max - quoteAmount then
+      { s with matchStopped := 1, matchError := 1 }
+    else
+      { s with
+        traderQuoteLocked := s.traderQuoteLocked.set (i % 4)
+          (s.traderQuoteLocked[i]! - quoteAmount)
+        traderQuoteFree := s.traderQuoteFree.set (i % 4)
+          (s.traderQuoteFree[i]! + quoteAmount) }
+  else
+    s
+
+/-- Settle one bid fill to its maker: quote leaves locked and base becomes free. -/
+private def fillBidTrader
+    (s : State) (maker quoteAmount baseAmount : UInt64) : State :=
+  if registeredSeat s maker then
+    let i := maker.toNat - 1
+    if quoteAmount > s.traderQuoteLocked[i]! then
+      { s with matchStopped := 1, matchError := 1 }
+    else if s.traderBaseFree[i]! > u64Max - baseAmount then
+      { s with matchStopped := 1, matchError := 1 }
+    else
+      { s with
+        traderQuoteLocked := s.traderQuoteLocked.set (i % 4)
+          (s.traderQuoteLocked[i]! - quoteAmount)
+        traderBaseFree := s.traderBaseFree.set (i % 4)
+          (s.traderBaseFree[i]! + baseAmount) }
+  else
+    s
+
+attribute [pf_inline] unlockAskTrader fillAskTrader unlockBidTrader fillBidTrader
+
 /-- 扫书期间的瞬时 `MatchingEngineResponse`。不进入账户 schema。 -/
 structure MatchAcc where
   sizes : Vector UInt64 4
@@ -1052,15 +1139,111 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
     else
       .ok acc
 
-/--
-把聚合撮合结果结算到摊平 TraderState。
+/-- Replay the bounded host event prefix into authoritative ask-maker seat balances. -/
+private def applyAskEvents
+    (s : State) (taker count : UInt64) (fuel i : Nat) : State :=
+  match fuel with
+  | 0 => s
+  | fuel' + 1 =>
+    if s.matchError ≠ 0 || count.toNat ≤ i then s
+    else if h : i < 5 then
+      let next :=
+        match s.events[i] with
+        | .expiredOrder maker _ _ removed => unlockAskTrader s maker removed
+        | .reduce _ _ removed _ => unlockAskTrader s taker removed
+        | .fill maker _ price filled _ =>
+          if s.baseLotsPerBaseUnit = 0 then
+            { s with matchStopped := 1, matchError := 1 }
+          else if price = 0 || s.tickSize = 0 then
+            fillAskTrader s maker filled 0
+          else
+            match adjustedQuoteFor s price filled with
+            | .error _ => { s with matchStopped := 1, matchError := 1 }
+            | .ok adjusted =>
+              let makerQuote := adjusted / s.baseLotsPerBaseUnit
+              if s.matchMakerQuote > u64Max - makerQuote then
+                { s with matchStopped := 1, matchError := 1 }
+              else
+                let ledger := fillAskTrader s maker filled makerQuote
+                { ledger with matchMakerQuote := s.matchMakerQuote + makerQuote }
+        | _ => s
+      applyAskEvents next taker count fuel' (i + 1)
+    else
+      s
 
-本 N=4 模型把四个 maker 和一个 taker 聚合在一个账户里：`quoteLocked` 是
-taker 预算，`quoteFree` 是 maker 收益，`baseLocked` 是 maker 锁仓，
-`baseFree` 同时承载 taker 输出和过期单解锁。撮合只增加
-`unclaimedFees`；`collectedFees` 留给独立收取动作。
+/-- Debit a registered free-funds buy taker's quote and credit received base, then project totals. -/
+private def commitBuy
+    (s : State) (taker filled expired quoteLots feeLots : UInt64) :
+    Except Error (State × UInt64) :=
+  if quoteLots > u64Max - feeLots then
+    .error .overflow
+  else
+    let quoteDebit := quoteLots + feeLots
+    if filled > u64Max - expired then
+      .error .overflow
+    else
+      let baseDebit := filled + expired
+      if baseDebit > s.baseLocked then
+        .error .overflow
+      else if s.baseFree > u64Max - baseDebit then
+        .error .overflow
+      else if s.unclaimedFees > u64Max - feeLots then
+        .error .overflow
+      else if registeredSeat s taker then
+        let i := taker.toNat - 1
+        if quoteDebit > s.traderQuoteFree[i]! then
+          .error .overflow
+        else if s.traderBaseFree[i]! > u64Max - filled then
+          .error .overflow
+        else if quoteDebit > s.quoteFree then
+          .error .overflow
+        else
+          let remainingQuoteFree := s.quoteFree - quoteDebit
+          if remainingQuoteFree > u64Max - s.matchMakerQuote then
+            .error .overflow
+          else
+            .ok ({ s with
+              traderQuoteFree := s.traderQuoteFree.set (i % 4)
+                (s.traderQuoteFree[i]! - quoteDebit)
+              traderBaseFree := s.traderBaseFree.set (i % 4)
+                (s.traderBaseFree[i]! + filled)
+              quoteFree := remainingQuoteFree + s.matchMakerQuote
+              baseLocked := s.baseLocked - baseDebit
+              baseFree := s.baseFree + baseDebit
+              unclaimedFees := s.unclaimedFees + feeLots }, filled)
+      else
+        if quoteDebit > s.quoteLocked then
+          .error .overflow
+        else if s.quoteFree > u64Max - quoteLots then
+          .error .overflow
+        else if filled = 0 then
+          .ok ({ s with
+            quoteLocked := s.quoteLocked - quoteDebit
+            quoteFree := s.quoteFree + quoteLots
+            baseLocked := s.baseLocked - baseDebit
+            baseFree := s.baseFree + baseDebit
+            unclaimedFees := s.unclaimedFees + feeLots }, filled)
+        else
+          let _ := tokenTransferChecked filled 6
+          .ok ({ s with
+            quoteLocked := s.quoteLocked - quoteDebit
+            quoteFree := s.quoteFree + quoteLots
+            baseLocked := s.baseLocked - baseDebit
+            baseFree := s.baseFree + baseDebit
+            unclaimedFees := s.unclaimedFees + feeLots }, filled)
+
+attribute [pf_inline] commitBuy
+
+/--
+把聚合撮合结果结算到摊平 TraderState。注册 maker 的逐档余额先按 event replay
+更新，注册 taker 的 quote-free / base-free 在 commit 中原子更新。
+
+registered free-funds buy 从 taker 的 `quoteFree` 扣成交额和费用，并把成交 base
+加进该 seat 的 `baseFree`。未注册 take-only 暂走 aggregate compatibility 分支，
+其双 vault 输入/输出仍由 adapter 后续补齐。四个 aggregate 余额始终同步投影所有
+seat；撮合只增加 `unclaimedFees`，`collectedFees` 留给独立收取动作。
 -/
-private def settleBuy (s : State) (clientOrderIdLo clientOrderIdHi : UInt64)
+private def settleBuy (s : State) (taker clientOrderIdLo clientOrderIdHi : UInt64)
     (acc : MatchAcc) : Except Error (State × UInt64) :=
   if s.baseLotsPerBaseUnit = 0 then
     .error .overflow
@@ -1070,43 +1253,22 @@ private def settleBuy (s : State) (clientOrderIdLo clientOrderIdHi : UInt64)
     let quoteLots := ceilDiv acc.adjustedQuote s.baseLotsPerBaseUnit
     let adjustedFee := ceilDiv (acc.adjustedQuote * s.takerFeeBps) 10000
     let feeLots := ceilDiv adjustedFee s.baseLotsPerBaseUnit
-    if quoteLots > u64Max - feeLots then
+    let ledgerStart := { s with
+      sizes := acc.sizes
+      events := acc.events
+      eventCount := acc.eventCount
+      lastEvent := acc.lastEvent
+      matchMakerQuote := 0
+      matchStopped := 0
+      matchError := 0 }
+    let ledger := applyAskEvents ledgerStart taker acc.eventCount 5 0
+    if ledger.matchError ≠ 0 then
       .error .overflow
-    else
-      let quoteDebit := quoteLots + feeLots
-      if quoteDebit > s.quoteLocked then
-        .error .overflow
-      else if acc.filledBase > u64Max - acc.expiredBase then
-        .error .overflow
-      else
-        let makerBaseDebit := acc.filledBase + acc.expiredBase
-        if makerBaseDebit > s.baseLocked then
-          .error .overflow
-        else
-          let baseCredit := acc.filledBase + acc.expiredBase
-          if s.baseFree > u64Max - baseCredit then
-            .error .overflow
-          else if s.quoteFree > u64Max - quoteLots then
-            .error .overflow
-          else if s.unclaimedFees > u64Max - feeLots then
-            .error .overflow
-          else
-            let _ :=
-              if acc.filledBase = 0 then 0
-              else tokenTransferChecked acc.filledBase 6
-            let settled := { s with
-              sizes := acc.sizes
-              quoteLocked := s.quoteLocked - quoteDebit
-              quoteFree := s.quoteFree + quoteLots
-              baseLocked := s.baseLocked - makerBaseDebit
-              baseFree := s.baseFree + baseCredit
-              unclaimedFees := s.unclaimedFees + feeLots
-              events := acc.events
-              eventCount := acc.eventCount
-              lastEvent := acc.lastEvent }
-            .ok (appendEvent settled
-                (.fillSummary clientOrderIdLo clientOrderIdHi acc.filledBase quoteLots feeLots),
-              acc.filledBase)
+    else do
+      let (settled, filled) ←
+        commitBuy ledger taker acc.filledBase acc.expiredBase quoteLots feeLots
+      .ok (appendEvent settled
+          (.fillSummary clientOrderIdLo clientOrderIdHi filled quoteLots feeLots), filled)
 
 /--
 可测试的完整 N=4 IOC：红黑树中序跨档、严格 slot/time TIF、聚合费用和余额记账。
@@ -1121,7 +1283,7 @@ def swapBuyForClientAt (s : State)
     { sizes := s.sizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
       expiredBase := 0, stopped := false, events := s.events,
       eventCount := s.eventCount, lastEvent := s.lastEvent }
-  settleBuy s clientOrderIdLo clientOrderIdHi acc
+  settleBuy s taker clientOrderIdLo clientOrderIdHi acc
 
 /-- 兼容宿主调用：client order id 为零。 -/
 def swapBuyForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
@@ -1232,7 +1394,84 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
     else
       .ok acc
 
-private def settleSell (s : State) (clientOrderIdLo clientOrderIdHi : UInt64)
+/-- Replay the bounded host event prefix into authoritative bid-maker seat balances. -/
+private def applySellEvents
+    (s : State) (taker count : UInt64) (fuel i : Nat) : State :=
+  match fuel with
+  | 0 => s
+  | fuel' + 1 =>
+    if s.matchError ≠ 0 || count.toNat ≤ i then s
+    else if h : i < 5 then
+      let next :=
+        match s.events[i] with
+        | .expiredOrder maker _ price removed =>
+          match bidCollateral s price removed with
+          | .ok quote => unlockBidTrader s maker quote
+          | .error _ => { s with matchStopped := 1, matchError := 1 }
+        | .reduce _ price removed _ =>
+          match bidCollateral s price removed with
+          | .ok quote => unlockBidTrader s taker quote
+          | .error _ => { s with matchStopped := 1, matchError := 1 }
+        | .fill maker _ price filled _ =>
+          match bidCollateral s price filled with
+          | .ok quote => fillBidTrader s maker quote filled
+          | .error _ => { s with matchStopped := 1, matchError := 1 }
+        | _ => s
+      applySellEvents next taker count fuel' (i + 1)
+    else
+      s
+
+/-- Debit the registered sell taker's free base and credit net quote, then project totals. -/
+private def commitSell
+    (s : State) (taker filled unlocked makerQuote grossQuote feeLots : UInt64) :
+    Except Error (State × UInt64) :=
+  if grossQuote < feeLots then
+    .error .overflow
+  else if makerQuote > u64Max - unlocked then
+    .error .overflow
+  else
+    let quoteDebit := makerQuote + unlocked
+    let takerQuote := grossQuote - feeLots
+    if quoteDebit > s.quoteLocked || filled > s.baseFree then
+      .error .overflow
+    else if takerQuote > u64Max - unlocked then
+      .error .overflow
+    else
+      let quoteCredit := takerQuote + unlocked
+      if s.quoteFree > u64Max - quoteCredit then
+        .error .overflow
+      else if s.unclaimedFees > u64Max - feeLots then
+        .error .overflow
+      else if registeredSeat s taker then
+        let i := taker.toNat - 1
+        if filled > s.traderBaseFree[i]! then
+          .error .overflow
+        else if s.traderQuoteFree[i]! > u64Max - takerQuote then
+          .error .overflow
+        else
+          .ok ({ s with
+            traderBaseFree := s.traderBaseFree.set (i % 4)
+              (s.traderBaseFree[i]! - filled)
+            traderQuoteFree := s.traderQuoteFree.set (i % 4)
+              (s.traderQuoteFree[i]! + takerQuote)
+            quoteLocked := s.quoteLocked - quoteDebit
+            quoteFree := s.quoteFree + quoteCredit
+            unclaimedFees := s.unclaimedFees + feeLots }, filled)
+      else if filled = 0 then
+        .ok ({ s with
+          quoteLocked := s.quoteLocked - quoteDebit
+          quoteFree := s.quoteFree + quoteCredit
+          unclaimedFees := s.unclaimedFees + feeLots }, filled)
+      else
+        let _ := tokenTransferChecked filled 6
+        .ok ({ s with
+          quoteLocked := s.quoteLocked - quoteDebit
+          quoteFree := s.quoteFree + quoteCredit
+          unclaimedFees := s.unclaimedFees + feeLots }, filled)
+
+attribute [pf_inline] commitSell
+
+private def settleSell (s : State) (taker clientOrderIdLo clientOrderIdHi : UInt64)
     (acc : SellAcc) : Except Error (State × UInt64) :=
   if s.baseLotsPerBaseUnit = 0 then
     .error .overflow
@@ -1242,38 +1481,21 @@ private def settleSell (s : State) (clientOrderIdLo clientOrderIdHi : UInt64)
     let grossQuote := acc.adjustedQuote / s.baseLotsPerBaseUnit
     let adjustedFee := ceilDiv (acc.adjustedQuote * s.takerFeeBps) 10000
     let feeLots := ceilDiv adjustedFee s.baseLotsPerBaseUnit
-    if grossQuote < feeLots then
+    let ledgerStart := { s with
+      bidSizes := acc.sizes
+      events := acc.events
+      eventCount := acc.eventCount
+      lastEvent := acc.lastEvent
+      matchStopped := 0
+      matchError := 0 }
+    let ledger := applySellEvents ledgerStart taker acc.eventCount 5 0
+    if ledger.matchError ≠ 0 then
       .error .overflow
-    else if acc.makerQuote > u64Max - acc.unlockedQuote then
-      .error .overflow
-    else
-      let quoteDebit := acc.makerQuote + acc.unlockedQuote
-      let takerQuote := grossQuote - feeLots
-      if quoteDebit > s.quoteLocked || acc.filledBase > s.baseFree then
-        .error .overflow
-      else if takerQuote > u64Max - acc.unlockedQuote then
-        .error .overflow
-      else
-        let quoteCredit := takerQuote + acc.unlockedQuote
-        if s.quoteFree > u64Max - quoteCredit then
-          .error .overflow
-        else if s.unclaimedFees > u64Max - feeLots then
-          .error .overflow
-        else
-          let _ :=
-            if acc.filledBase = 0 then 0
-            else tokenTransferChecked acc.filledBase 6
-          let settled := { s with
-            bidSizes := acc.sizes
-            quoteLocked := s.quoteLocked - quoteDebit
-            quoteFree := s.quoteFree + quoteCredit
-            unclaimedFees := s.unclaimedFees + feeLots
-            events := acc.events
-            eventCount := acc.eventCount
-            lastEvent := acc.lastEvent }
-          .ok (appendEvent settled
-              (.fillSummary clientOrderIdLo clientOrderIdHi acc.filledBase grossQuote feeLots),
-            acc.filledBase)
+    else do
+      let (settled, filled) ← commitSell ledger taker acc.filledBase acc.unlockedQuote
+        acc.makerQuote grossQuote feeLots
+      .ok (appendEvent settled
+          (.fillSummary clientOrderIdLo clientOrderIdHi filled grossQuote feeLots), filled)
 
 /-- 可测试的 N=4 sell IOC 宿主语义。 -/
 def swapSellForClientAt (s : State)
@@ -1284,7 +1506,7 @@ def swapSellForClientAt (s : State)
     { sizes := s.bidSizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
       makerQuote := 0, unlockedQuote := 0, stopped := false, events := s.events,
       eventCount := s.eventCount, lastEvent := s.lastEvent }
-  settleSell s clientOrderIdLo clientOrderIdHi acc
+  settleSell s taker clientOrderIdLo clientOrderIdHi acc
 
 /-- 兼容宿主调用：client order id 为零。 -/
 def swapSellForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
@@ -1295,47 +1517,59 @@ def swapSellAt (s : State) (want limit nowSlot nowTime : UInt64) :
     Except Error (State × UInt64) :=
   swapSellForAt s u64Max want limit nowSlot nowTime .abort
 
-private def finishFold (s : State) (quoteLots feeLots : UInt64) :
+/-- Ask-fold cancellation/expiry: update the book accumulator and its maker seat together. -/
+private def unlockAskFold (s : State) (j : Nat) (amount : UInt64) : State :=
+  let size := s.sizes[j]!
+  if size < amount then
+    { s with matchStopped := 1, matchError := 1 }
+  else if s.matchExpired > u64Max - amount then
+    { s with matchStopped := 1, matchError := 1 }
+  else
+    let ledger := unlockAskTrader s s.traders[j]! amount
+    { ledger with
+      sizes := s.sizes.set (j % 4) (size - amount)
+      matchExpired := s.matchExpired + amount }
+
+/-- Ask-fold fill: update its maker seat and all quote/base accumulators in one transition. -/
+private def fillAskFold (s : State) (j : Nat) (fill : UInt64) : State :=
+  let size := s.sizes[j]!
+  let price := s.priceTicks[j]!
+  if size < fill then
+    { s with matchStopped := 1, matchError := 1 }
+  else if s.baseLotsPerBaseUnit = 0 then
+    { s with matchStopped := 1, matchError := 1 }
+  else if price ≠ 0 && s.tickSize > u64Max / price then
+    { s with matchStopped := 1, matchError := 1 }
+  else
+    let quotePerBase := price * s.tickSize
+    if quotePerBase ≠ 0 && fill > u64Max / quotePerBase then
+      { s with matchStopped := 1, matchError := 1 }
+    else
+      let adjusted := quotePerBase * fill
+      let makerQuote := adjusted / s.baseLotsPerBaseUnit
+      if s.matchQuote > u64Max - adjusted then
+        { s with matchStopped := 1, matchError := 1 }
+      else if s.matchMakerQuote > u64Max - makerQuote then
+        { s with matchStopped := 1, matchError := 1 }
+      else if s.matchFilled > u64Max - fill then
+        { s with matchStopped := 1, matchError := 1 }
+      else
+        let ledger := fillAskTrader s s.traders[j]! fill makerQuote
+        { ledger with
+          sizes := s.sizes.set (j % 4) (size - fill)
+          matchFilled := s.matchFilled + fill
+          matchQuote := s.matchQuote + adjusted
+          matchMakerQuote := s.matchMakerQuote + makerQuote }
+
+private def finishFold (s : State) (taker quoteLots feeLots : UInt64) :
     Except Error (State × UInt64) :=
-  if quoteLots ≤ u64Max - feeLots then
-    let quoteDebit := quoteLots + feeLots
-    if quoteDebit ≤ s.quoteLocked then
-      if s.matchFilled ≤ u64Max - s.matchExpired then
-        let baseDebit := s.matchFilled + s.matchExpired
-        if baseDebit ≤ s.baseLocked then
-          if s.baseFree ≤ u64Max - baseDebit then
-            if s.quoteFree ≤ u64Max - quoteLots then
-              if s.unclaimedFees ≤ u64Max - feeLots then
-                if s.matchFilled = 0 then
-                  let settled := { s with
-                    quoteLocked := s.quoteLocked - quoteDebit
-                    quoteFree := s.quoteFree + quoteLots
-                    baseLocked := s.baseLocked - baseDebit
-                    baseFree := s.baseFree + baseDebit
-                    unclaimedFees := s.unclaimedFees + feeLots }
-                  .ok (settled, s.matchFilled)
-                else
-                  let _ := tokenTransferChecked s.matchFilled 6
-                  let settled := { s with
-                    quoteLocked := s.quoteLocked - quoteDebit
-                    quoteFree := s.quoteFree + quoteLots
-                    baseLocked := s.baseLocked - baseDebit
-                    baseFree := s.baseFree + baseDebit
-                    unclaimedFees := s.unclaimedFees + feeLots }
-                  .ok (settled, s.matchFilled)
-              else .error .overflow
-            else .error .overflow
-          else .error .overflow
-        else .error .overflow
-      else .error .overflow
-    else .error .overflow
-  else .error .overflow
+  commitBuy s taker s.matchFilled s.matchExpired quoteLots feeLots
 
-private def settleFold (s : State) : Except Error (State × UInt64) :=
+private def settleFold (s : State) (taker : UInt64) : Except Error (State × UInt64) :=
   if s.matchError ≠ 0 then .error .overflow
-  else finishFold s s.matchMakerQuote s.matchLimit
+  else finishFold s taker s.matchQuote s.matchLimit
 
-attribute [pf_inline] finishFold settleFold
+attribute [pf_inline] unlockAskFold fillAskFold finishFold settleFold
 
 /--
 链上 N=4 IOC。`behavior`：0=Abort、1=CancelProvide、2=DecrementTake。
@@ -1344,8 +1578,7 @@ attribute [pf_inline] finishFold settleFold
 summary。把算术和动态 event write 分 phase，避免 checked-arithmetic continuation
 复制动态 variant-vector write；循环 store 会继续下一次，不再静态复制后续档位。
 -/
-@[pf_entry]
-def swapBuy (s : State)
+private def swapBuyFold (s : State)
     (taker behavior clientOrderIdLo clientOrderIdHi want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
   let mut st := beginEvents s
@@ -1360,23 +1593,23 @@ def swapBuy (s : State)
         if st.baseLotsPerBaseUnit = 0 then
           st := { st with matchError := 1 }
         else if st.matchQuote = 0 then
-          st := { st with matchMakerQuote := 0, matchLimit := 0 }
+          st := { st with matchQuote := 0, matchLimit := 0 }
         else
           let quoteLots := (st.matchQuote - 1) / st.baseLotsPerBaseUnit + 1
           if st.takerFeeBps = 0 then
-            st := { st with matchMakerQuote := quoteLots, matchLimit := 0 }
+            st := { st with matchQuote := quoteLots, matchLimit := 0 }
           else if st.takerFeeBps ≤ u64Max / st.matchQuote then
             let feeProduct := st.matchQuote * st.takerFeeBps
             let adjustedFee := (feeProduct - 1) / 10000 + 1
             let feeLots := (adjustedFee - 1) / st.baseLotsPerBaseUnit + 1
-            st := { st with matchMakerQuote := quoteLots, matchLimit := feeLots }
+            st := { st with matchQuote := quoteLots, matchLimit := feeLots }
           else
             st := { st with matchError := 1 }
     else if i = 18 then
       if st.matchError = 0 then
         st := appendEvent st
           (.fillSummary clientOrderIdLo clientOrderIdHi
-            st.matchFilled st.matchMakerQuote st.matchLimit)
+            st.matchFilled st.matchQuote st.matchLimit)
     else if st.matchStopped = 0 then
       let k := i - 1
       let phase := k % 4
@@ -1390,25 +1623,15 @@ def swapBuy (s : State)
         if phase = 0 then
           if st.lastSlots[j]! ≠ 0 then
             if st.lastSlots[j]! < clockSlot then
-              if st.matchExpired ≤ u64Max - size then
-                let expiredState := { st with
-                  sizes := st.sizes.set (j % 4) 0
-                  matchExpired := st.matchExpired + size }
-                st := appendEvent expiredState
-                  (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
+              let unlocked := unlockAskFold st j size
+              st := appendEvent unlocked
+                (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
         else if phase = 1 then
           if st.lastTimes[j]! ≠ 0 then
             if st.lastTimes[j]! < unixTime then
-              if st.matchExpired ≤ u64Max - size then
-                let expiredState := { st with
-                  sizes := st.sizes.set (j % 4) 0
-                  matchExpired := st.matchExpired + size }
-                st := appendEvent expiredState
-                  (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
+              let unlocked := unlockAskFold st j size
+              st := appendEvent unlocked
+                (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
         else if phase = 2 then
           if st.matchLimit < st.priceTicks[j]! then
             st := { st with matchStopped := 1 }
@@ -1416,109 +1639,47 @@ def swapBuy (s : State)
             if behavior = 0 then
               st := { st with matchStopped := 1, matchError := 1 }
             else if behavior = 1 then
-              if st.matchExpired ≤ u64Max - size then
-                let reducedState := { st with
-                  sizes := st.sizes.set (j % 4) 0
-                  matchExpired := st.matchExpired + size }
-                st := appendEvent reducedState
-                  (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
+              let unlocked := unlockAskFold st j size
+              st := appendEvent unlocked
+                (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
             else if behavior = 2 then
               let remaining := st.matchWant - st.matchFilled
               if remaining ≤ size then
-                if st.matchExpired ≤ u64Max - remaining then
-                  let reducedState := { st with
-                    sizes := st.sizes.set (j % 4) (size - remaining)
-                    matchExpired := st.matchExpired + remaining
+                let unlocked := unlockAskFold st j remaining
+                st := appendEvent
+                  { unlocked with
                     matchWant := st.matchWant - remaining
                     matchStopped := 1 }
-                  st := appendEvent reducedState
-                    (.reduce st.sequences[j]! st.priceTicks[j]! remaining (size - remaining))
-                else
-                  st := { st with matchStopped := 1, matchError := 1 }
+                  (.reduce st.sequences[j]! st.priceTicks[j]! remaining (size - remaining))
               else
-                if st.matchExpired ≤ u64Max - size then
-                  let reducedState := { st with
-                    sizes := st.sizes.set (j % 4) 0
-                    matchExpired := st.matchExpired + size
-                    matchWant := st.matchWant - size }
-                  st := appendEvent reducedState
-                    (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
-                else
-                  st := { st with matchStopped := 1, matchError := 1 }
+                let unlocked := unlockAskFold st j size
+                st := appendEvent { unlocked with matchWant := st.matchWant - size }
+                  (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
             else
               st := { st with matchStopped := 1, matchError := 1 }
           else
             let remaining := st.matchWant - st.matchFilled
             if remaining ≤ size then
-              let fill := remaining
-              let price := st.priceTicks[j]!
-              if price = 0 then
-                let filledState := { st with
-                  sizes := st.sizes.set (j % 4) (size - fill)
-                  matchFilled := st.matchFilled + fill
-                  matchStopped := 1 }
-                st := appendEvent filledState
-                  (.fill st.traders[j]! st.sequences[j]! price fill (size - fill))
-              else if st.tickSize ≤ u64Max / price then
-                let quotePerBase := price * st.tickSize
-                if quotePerBase = 0 then
-                  let filledState := { st with
-                    sizes := st.sizes.set (j % 4) (size - fill)
-                    matchFilled := st.matchFilled + fill
-                    matchStopped := 1 }
-                  st := appendEvent filledState
-                    (.fill st.traders[j]! st.sequences[j]! price fill (size - fill))
-                else if fill ≤ u64Max / quotePerBase then
-                  let quote := quotePerBase * fill
-                  if st.matchQuote ≤ u64Max - quote then
-                    let filledState := { st with
-                      sizes := st.sizes.set (j % 4) (size - fill)
-                      matchFilled := st.matchFilled + fill
-                      matchQuote := st.matchQuote + quote
-                      matchStopped := 1 }
-                    st := appendEvent filledState
-                      (.fill st.traders[j]! st.sequences[j]! price fill (size - fill))
-                  else
-                    st := { st with matchStopped := 1, matchError := 1 }
-                else
-                  st := { st with matchStopped := 1, matchError := 1 }
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
+              let filled := fillAskFold st j remaining
+              st := appendEvent { filled with matchStopped := 1 }
+                (.fill st.traders[j]! st.sequences[j]! st.priceTicks[j]!
+                  remaining (size - remaining))
             else
-              let fill := size
-              let price := st.priceTicks[j]!
-              if price = 0 then
-                let filledState := { st with
-                  sizes := st.sizes.set (j % 4) 0
-                  matchFilled := st.matchFilled + fill }
-                st := appendEvent filledState
-                  (.fill st.traders[j]! st.sequences[j]! price fill 0)
-              else if st.tickSize ≤ u64Max / price then
-                let quotePerBase := price * st.tickSize
-                if quotePerBase = 0 then
-                  let filledState := { st with
-                    sizes := st.sizes.set (j % 4) 0
-                    matchFilled := st.matchFilled + fill }
-                  st := appendEvent filledState
-                    (.fill st.traders[j]! st.sequences[j]! price fill 0)
-                else if fill ≤ u64Max / quotePerBase then
-                  let quote := quotePerBase * fill
-                  if st.matchQuote ≤ u64Max - quote then
-                    let filledState := { st with
-                      sizes := st.sizes.set (j % 4) 0
-                      matchFilled := st.matchFilled + fill
-                      matchQuote := st.matchQuote + quote }
-                    st := appendEvent filledState
-                      (.fill st.traders[j]! st.sequences[j]! price fill 0)
-                  else
-                    st := { st with matchStopped := 1, matchError := 1 }
-                else
-                  st := { st with matchStopped := 1, matchError := 1 }
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
-  settleFold st
+              let filled := fillAskFold st j size
+              st := appendEvent filled
+                (.fill st.traders[j]! st.sequences[j]! st.priceTicks[j]! size 0)
+  settleFold st taker
+
+attribute [pf_inline] swapBuyFold
+
+/-- SVM take-only/free-funds adapter; self-trade identity always comes from account 1 signer. -/
+@[pf_entry]
+def swapBuy (s : State)
+    (behavior clientOrderIdLo clientOrderIdHi want limit : UInt64) :
+    Except Error (State × UInt64) := do
+  let taker ← optionalTraderAddress s (signerKey 1) (accKeyWord 1 1)
+    (accKeyWord 1 2) (accKeyWord 1 3)
+  swapBuyFold s taker behavior clientOrderIdLo clientOrderIdHi want limit
 
 /-- sell fold 中减少 resting bid，并累计要解锁的 quote collateral。 -/
 private def unlockBidFold (s : State) (j : Nat) (amount : UInt64) : State :=
@@ -1539,7 +1700,8 @@ private def unlockBidFold (s : State) (j : Nat) (amount : UInt64) : State :=
     else
       let unlocked := (quotePerBase * amount) / s.baseLotsPerBaseUnit
       if s.matchExpired ≤ u64Max - unlocked then
-        { s with
+        let ledger := unlockBidTrader s s.bidTraders[j]! unlocked
+        { ledger with
           bidSizes := s.bidSizes.set (j % 4) (size - amount)
           matchExpired := s.matchExpired + unlocked }
       else
@@ -1573,7 +1735,8 @@ private def fillBidFold (s : State) (j : Nat) (fill : UInt64) : State :=
       else if s.matchFilled > u64Max - fill then
         { s with matchStopped := 1, matchError := 1 }
       else
-        { s with
+        let ledger := fillBidTrader s s.bidTraders[j]! makerQuote fill
+        { ledger with
           bidSizes := s.bidSizes.set (j % 4) (size - fill)
           matchFilled := s.matchFilled + fill
           matchQuote := s.matchQuote + adjusted
@@ -1583,37 +1746,13 @@ private def fillBidFold (s : State) (j : Nat) (fill : UInt64) : State :=
 
 attribute [pf_inline] unlockBidFold fillBidFold
 
-private def commitSellFold (s : State) (grossQuote feeLots : UInt64) :
+private def commitSellFold (s : State) (taker grossQuote feeLots : UInt64) :
     Except Error (State × UInt64) :=
-  if grossQuote < feeLots then .error .overflow
-  else if s.matchMakerQuote > u64Max - s.matchExpired then .error .overflow
-  else
-    let quoteDebit := s.matchMakerQuote + s.matchExpired
-    let takerQuote := grossQuote - feeLots
-    if quoteDebit > s.quoteLocked then .error .overflow
-    else if s.matchFilled > s.baseFree then .error .overflow
-    else if takerQuote > u64Max - s.matchExpired then .error .overflow
-    else
-      let quoteCredit := takerQuote + s.matchExpired
-      if s.quoteFree > u64Max - quoteCredit then .error .overflow
-      else if s.unclaimedFees > u64Max - feeLots then .error .overflow
-      else if s.matchFilled = 0 then
-        let settled := { s with
-          quoteLocked := s.quoteLocked - quoteDebit
-          quoteFree := s.quoteFree + quoteCredit
-          unclaimedFees := s.unclaimedFees + feeLots }
-        .ok (settled, s.matchFilled)
-      else
-        let _ := tokenTransferChecked s.matchFilled 6
-        let settled := { s with
-          quoteLocked := s.quoteLocked - quoteDebit
-          quoteFree := s.quoteFree + quoteCredit
-          unclaimedFees := s.unclaimedFees + feeLots }
-        .ok (settled, s.matchFilled)
+  commitSell s taker s.matchFilled s.matchExpired s.matchMakerQuote grossQuote feeLots
 
-private def settleSellFold (s : State) : Except Error (State × UInt64) :=
+private def settleSellFold (s : State) (taker : UInt64) : Except Error (State × UInt64) :=
   if s.matchError ≠ 0 then .error .overflow
-  else commitSellFold s s.matchLimit s.matchWant
+  else commitSellFold s taker s.matchLimit s.matchWant
 
 attribute [pf_inline] commitSellFold settleSellFold
 
@@ -1622,8 +1761,7 @@ attribute [pf_inline] commitSellFold settleSellFold
 五个 phase；随后计算并追加 summary。`matchStopped` 的 2/3 临时表示“待发事件后
 继续/停止”，flush 后归一为 0/1。这样 helper 结果先跨迭代物化，再做动态写。
 -/
-@[pf_entry]
-def swapSell (s : State)
+private def swapSellFold (s : State)
     (taker behavior clientOrderIdLo clientOrderIdHi want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
   let mut st := beginEvents s
@@ -1732,7 +1870,18 @@ def swapSell (s : State)
                   matchStopped := 2
                   lastEvent := .fill st.bidTraders[j]! (~~~st.bidSequences[j]!)
                     st.bidPriceTicks[j]! size 0 }
-  settleSellFold st
+  settleSellFold st taker
+
+attribute [pf_inline] swapSellFold
+
+/-- Bid-side SVM adapter with signer-derived self-trade identity. -/
+@[pf_entry]
+def swapSell (s : State)
+    (behavior clientOrderIdLo clientOrderIdHi want limit : UInt64) :
+    Except Error (State × UInt64) := do
+  let taker ← optionalTraderAddress s (signerKey 1) (accKeyWord 1 1)
+    (accKeyWord 1 2) (accKeyWord 1 3)
+  swapSellFold s taker behavior clientOrderIdLo clientOrderIdHi want limit
 
 /--
 官方 `reduce_order_inner` 的 ask-side bounded 版本：按 `(price, sequence)` 找订单，
@@ -1827,10 +1976,6 @@ def reduceBidAt (s : State) (trader price sequence qty : UInt64) :
                     st := { st with matchStopped := 1, matchError := 1 }
         if st.matchError ≠ 0 then
           .error .overflow
-        else if st.matchExpired > st.traderQuoteLocked[traderIndex]! then
-          .error .overflow
-        else if st.traderQuoteFree[traderIndex]! > u64Max - st.matchExpired then
-          .error .overflow
         else if st.matchExpired > st.quoteLocked then
           .error .overflow
         else if st.quoteFree > u64Max - st.matchExpired then
@@ -1838,10 +1983,6 @@ def reduceBidAt (s : State) (trader price sequence qty : UInt64) :
         else
           let reduced := st.matchFilled
           .ok ({ st with
-                  traderQuoteLocked := st.traderQuoteLocked.set (traderIndex % 4)
-                    (st.traderQuoteLocked[traderIndex]! - st.matchExpired)
-                  traderQuoteFree := st.traderQuoteFree.set (traderIndex % 4)
-                    (st.traderQuoteFree[traderIndex]! + st.matchExpired)
                   quoteLocked := st.quoteLocked - st.matchExpired
                   quoteFree := st.quoteFree + st.matchExpired
                   matchFilled := 0, matchExpired := 0,

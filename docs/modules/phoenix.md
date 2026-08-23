@@ -26,7 +26,7 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 147 个 8-byte 叶，账户含 discriminator 共 1,184 bytes。`#pf_build Projects.Phoenix`
-digest `5671f0efa4f7195d`。
+digest `6993b240f63a9cb7`。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -39,10 +39,11 @@ free-list。释放 2 再释放 1 时，后续注册按 1、2 复用且 bump inde
 承载。`postAsk` / `postBid` / `reduceAsk` / `reduceBid` 的链上入口不再接受可伪造的
 trader 参数，而是按 account 1 signer 完整 Pubkey 解析内部 seat；reduce/cancel 同时
 解锁该 seat 的 base/quote 余额。post 的普通锁仓和满书 eviction 也会原子更新 taker
-与被驱逐 maker 的 TraderState；同 owner replacement 先解锁再重新锁仓。旧的四个
-聚合槽暂时作为尚未迁移的 matching path 兼容投影同步更新；下一步是把 match 结算
-切到 per-seat 余额，再删除兼容槽。deposit/withdraw 的 vault Token CPI 仍属于 adapter
-缺口。
+与被驱逐 maker 的 TraderState；同 owner replacement 先解锁再重新锁仓。matching
+现在也逐 event 更新 maker seat，并在 commit 原子更新 registered taker seat。旧的四个
+聚合槽继续作为所有 seat 和未注册 take-only fallback 的 compatibility projection；
+等双 vault adapter 完成后才能删除 fallback。deposit/withdraw 的 vault Token CPI 仍
+属于 adapter 缺口。
 
 `postAsk` 是 signer-authenticated 链上 free-funds 挂单：检查 incoming TIF 和 sequence
 上界，把 owner seat 的 `baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；
@@ -54,23 +55,30 @@ aggregate fallback，真实 instruction 先经过完整 Pubkey lookup，不能�
 state-carrying fold 实现相同扫描：reset 后，每档依次检查 slot TIF、time TIF、
 撮合并推进档位。过期单清零、解锁 base 并继续；第一个超限有效价格停止；整档
 成交继续，部分成交停止。无流动性或超限 IOC 成功返回 0，不伪装成 overflow。
-`swapBuy` 还按 trader id 执行 Abort / CancelProvide / DecrementTake；自成交量不产生
-fill、手续费或 transfer。
+`swapBuy` / `swapSell` 不再接受可伪造的 taker seat：都从 account 1 signer 的完整
+Pubkey 查找 seat，未注册 signer 映射到 take-only sentinel，再按该身份执行 Abort /
+CancelProvide / DecrementTake。自成交量不产生 fill、手续费或 transfer，ABI 也从
+六个参数缩到五个。
 
-quote 和费用先按整次撮合聚合再向上取整。结算扣 `quoteLocked`、增加
-`quoteFree`，扣 maker `baseLocked`，把成交和过期解锁量加到 `baseFree`，并增加
-`unclaimedFees`；`collectFees` 原子地把它转进 lifetime `collectedFees`。非零成交保留
-Token `TransferChecked` CPI。`reduceAsk` 按 signer seat + `(price, sequence)` 验 owner，
-减少 `min(requested, resting)`，同时更新 trader base ledger 和 aggregate compatibility
-projection；缺失订单成功返回 0。
+quote 和费用先按整次撮合聚合再向上取整。每个 ask fill 执行 maker
+`baseLocked → quoteFree`；过期和 self-cancel 执行 maker `baseLocked → baseFree`。
+registered free-funds buy 从 taker `quoteFree` 扣成交额和费用，再把成交量加进
+`baseFree`。这些 seat transition 和 aggregate compatibility projection 同步提交，
+并增加 `unclaimedFees`；`collectFees` 原子地把它转进 lifetime `collectedFees`。
+registered 路径不做 vault CPI；未注册 take-only 暂保留旧 aggregate 结算和单边
+`TransferChecked` 占位，真正的双 vault 输入/输出 adapter 尚未完成。`reduceAsk` 按
+signer seat + `(price, sequence)` 验 owner，减少 `min(requested, resting)`；缺失订单
+成功返回 0。
 
 bid-side 对称地按价格降序排列，订单 ID 保存官方的 `~~~sequence` 编码，同价时编码
 降序即时间 FIFO。`postBid` 同样按 signer seat 授权，按原价把 quote 从 free 锁入
 locked，满书只允许更高价驱逐最差 bid，并在不同 maker/taker seat 间原子移动 collateral；
 `reduceBid` / `cancelBid` 按原价解锁 owner seat 的 quote collateral。
 `swapSell` 扫过期和跨档 bid，
-按总成交 adjusted quote 收 taker fee，并覆盖三种 self-trade 行为。宿主递归规范和
-链上 structured fold 对样本空间逐项一致。挂单记录 `Evict` / `Place` / `TimeInForce`；
+按总成交 adjusted quote 收 taker fee；maker fill 执行 `quoteLocked → baseFree`，
+registered taker 执行 `baseFree → quoteFree`，过期和 self-cancel 解锁 maker quote。
+宿主递归规范和链上 structured fold 对逐 seat 余额及 aggregate 投影逐项一致。挂单
+记录 `Evict` / `Place` / `TimeInForce`；
 撮合逐档记录 `Fill` / `ExpiredOrder` / self-trade `Reduce`，最后记录
 `FillSummary`；reduce 和收取费用分别记录 `Reduce` / `Fee`。事件 batch 的动态
 variant-vector 写入通过 target-neutral typed layout 降到两个 target，不需要 emitter
@@ -78,12 +86,11 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 `(lo, hi)` 两个 `UInt64` limb 完整保留；这正好仍落在五 payload 的最大布局内，
 所以 event layout 未再增大。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 1,033,080-byte assembly、
-205,752-byte eBPF ELF 和 13,469-byte IDL。assembly 是中间文本，不部署；当前 ELF
-约 200.9 KiB。per-seat post 账本分支在 ask/bid 入口内联，而且抽取器现在完整保留
-“State helper 后继续 record update”的前后两段写入；相对此前切片，assembly 增加
-443,361 bytes，ELF 增加 67,480 bytes。测试把 assembly budget 钉在 1.1 MB，并拒绝
-重复 label，同时断言 ledger index writes 与 sequence/book writes 都存在。
+真实源模块经 `pf build --target svm Phoenix` 生成 1,483,588-byte assembly、
+253,432-byte eBPF ELF 和 12,086-byte IDL。assembly 是中间文本，不部署；当前 ELF
+约 247.5 KiB。per-seat matching 分支在 ask/bid fold 内联，相对此前 post-only 切片，
+assembly 增加 450,508 bytes，ELF 增加 47,680 bytes。测试把 assembly budget 钉在
+1.52 MB，并拒绝重复 label，同时断言 maker/taker 六类动态 ledger index writes 都存在。
 链上 buy / sell 分别是 19 / 23 phase，挂单是 17 phase；代码体积按 bounded loop
 增长，不按四档静态展开。
 
@@ -96,7 +103,7 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 | `Ladder` / `Vec` | 不定长 |
 | trader tree 的动态 RB 拓扑 | 已有 bounded Pubkey registry、allocator 和 per-seat 值；key 查找暂用四槽扫描 |
 | vault-backed seat lifecycle | bounded deposit/withdraw/zero-state eviction/LIFO reuse 已完成；双 vault Token CPI 尚未接这些入口 |
-| per-seat 撮合结算 / maker Pubkey event | post/reduce 已接 TraderState；现有 match 仍写聚合兼容余额，event 尚未 resolve 四 limb key |
+| maker Pubkey event | per-seat post/reduce/match 已接 TraderState；`Fill` event 仍保存内部 seat，尚未 resolve 四 limb Pubkey |
 | Seat + 双 vault 同一入口 | state transition 已有；CPI 账户表会抬高 |
 | Borsh wire event / `Log` self-CPI | 当前只存 typed fixed-capacity batch，尚未编码成官方一字节 tag 并发给 event recorder |
 

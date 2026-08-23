@@ -91,3 +91,4 @@
 | T-L5-06 | happy / fail | Phoenix seat lifecycle | base/quote partial withdraw、非空拒绝 eviction、LIFO address reuse |
 | T-L5-07 | happy / fail | Phoenix authenticated order lifecycle | post/reduce 由完整 signer Pubkey 解析 owner；ask/base 与 bid/quote per-seat reduce 同步解锁；伪造 seat 参数已从 ABI 删除 |
 | T-L5-08 | happy / fail | Phoenix per-seat posting | 普通 ask/bid 锁仓及跨 owner 满书 eviction 原子更新两边 TraderState；抽取 IR 保留动态 index writes |
+| T-L5-09 | happy / fail | Phoenix per-seat matching | signer-derived self-trade；ask/bid fill、TIF expiry、self-cancel 原子更新 maker/taker 四类余额；host/fold 逐 seat 一致；不足 maker ledger fail closed |
