@@ -1529,7 +1529,8 @@ private def emitDispatch (program : IR.Program) : Except String String := do
       out := out ++ s!"dispatch_next_{handlerLabel program.methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
   return out
 
-private def emitProgram (program : IR.Program) : Except String String := do
+/-- Emit assembly from the fully lowered, target-owned SVM IR. -/
+def emitAsm (program : IR.Program) : Except String String := do
   unless IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
   let marker ← IR.layoutMarkerHex program
@@ -1592,10 +1593,10 @@ entrypoint:
 
 /-- Native SVM entry point from the combined extractor dialect. -/
 def emitProgramAsm (program : Extract.IR.Program) : Except String String := do
-  emitProgram (← IR.fromExtracted program)
+  emitAsm (← IR.fromExtracted program)
 
 /-- Compatibility entry point for legacy fixtures and callers. -/
 def emitCounterAsm (program : Extract.Legacy.Program) : Except String String := do
-  emitProgram (← IR.fromProgram program)
+  emitAsm (← IR.fromProgram program)
 
 end ProofForge.Svm.Emit

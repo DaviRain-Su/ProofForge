@@ -31,23 +31,19 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
   | .error reason => throwError reason
   | .ok source => do
     let program ←
-      match source.validateSvm *> Extract.IR.toLegacyProgram source with
+      match IR.fromExtracted source with
       | .ok program => pure program
       | .error reason => throwError reason
     let mutOps :=
-      (source.methods.find? (·.kind == Core.IR.MethodKind.increment)).map (·.ops)
+      (program.methods.find? (·.kind == Core.IR.MethodKind.increment)).map (·.ops)
     match mutOps with
-    | some sourceOps =>
-      let ops ←
-        match Extract.IR.toSvmOps sourceOps with
-        | .ok ops => pure ops
-        | .error reason => throwError reason
-      unless Ops.hasCheckedArith ops || Ops.hasSelect ops ||
+    | some ops =>
+      unless IR.hasCheckedArith ops || IR.hasSelect ops ||
           ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false) ||
-          Ops.hasInvoke ops do
+          IR.hasInvoke ops do
         throwError "extract/unsupported: mutating method missing checked arith"
     | none => throwError "extract/unsupported: missing mutating method"
-    match Emit.emitProgramAsm source with
+    match Emit.emitAsm program with
     | .error reason => throwError reason
     | .ok asm =>
       unless asm.contains "entrypoint:" do
@@ -70,15 +66,15 @@ elab "#pf_build " n:ident : command => do
   | .error reason => throwError reason
   | .ok source => do
     let program ←
-      match source.validateSvm *> Extract.IR.toLegacyProgram source with
+      match IR.fromExtracted source with
       | .ok program => pure program
       | .error reason => throwError reason
-    match Emit.emitProgramAsm source with
+    match Emit.emitAsm program with
     | .error reason => throwError reason
     | .ok asm =>
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
-      let digest := Extract.Legacy.digestHex program
+      let digest := IR.digestHex program
       match ProofForge.Golden.digestOf program.name with
       | some want =>
         if digest != want then
