@@ -6,6 +6,57 @@ namespace Tests.TreeSpec
 open Examples.Tree
 open Lean Elab Command
 
+private def nodeAt (s : Examples.Tree.State) (address : UInt64) : Node :=
+  s.nodes[(address.toNat - 1) % 4]!
+
+private def insertMany (s : Examples.Tree.State) :
+    List (UInt64 × UInt64) → Except Error Examples.Tree.State
+  | [] => .ok s
+  | (k, v) :: rest =>
+      match insertNode s k v with
+      | .ok (s', _) => insertMany s' rest
+      | .error e => .error e
+
+private def checkSubtree (s : Examples.Tree.State) (address parent : UInt64)
+    (lower upper : Option UInt64) : Nat → Option (Nat × Nat)
+  | 0 => if address = 0 then some (1, 0) else none
+  | fuel + 1 =>
+      if address = 0 then
+        some (1, 0)
+      else if address > 4 then
+        none
+      else
+        let node := nodeAt s address
+        if node.parent ≠ parent || node.color > 1 then
+          none
+        else if lower.any (fun bound => decide (node.key ≤ bound)) then
+          none
+        else if upper.any (fun bound => decide (node.key ≥ bound)) then
+          none
+        else if node.color == 1 &&
+            ((node.left != 0 && (nodeAt s node.left).color == 1) ||
+              (node.right != 0 && (nodeAt s node.right).color == 1)) then
+          none
+        else
+          match checkSubtree s node.left address lower (some node.key) fuel,
+              checkSubtree s node.right address (some node.key) upper fuel with
+          | some (leftBlackHeight, leftCount), some (rightBlackHeight, rightCount) =>
+              if leftBlackHeight = rightBlackHeight then
+                some (leftBlackHeight + (if node.color = 0 then 1 else 0),
+                  leftCount + rightCount + 1)
+              else
+                none
+          | _, _ => none
+
+private def validRedBlackTree (s : Examples.Tree.State) : Bool :=
+  if s.root = 0 then
+    s.size == 0
+  else
+    (nodeAt s s.root).color == 0 &&
+      match checkSubtree s s.root 0 none none 5 with
+      | some (_, count) => s.size == UInt64.ofNat count
+      | none => false
+
 private partial def maxIndexWrites (ops : Array ProofForge.Ops.Op) : Nat :=
   ops.foldl (init := 0) fun count op =>
     count +
@@ -32,6 +83,15 @@ private partial def storeValues (want : String)
     | .forBody _ body => storeValues want body
     | _ => #[]
 
+private partial def localValues (want : Nat)
+    (ops : Array ProofForge.Ops.Op) : Array ProofForge.Ops.Val :=
+  ops.flatMap fun op =>
+    match op with
+    | .letLocal i value => if i == want then #[value] else #[]
+    | .ite _ _ _ thn els => localValues want thn ++ localValues want els
+    | .forBody _ body => localValues want body
+    | _ => #[]
+
 elab "#pf_guard_tree_allocator" : command => do
   let env ← getEnv
   let program ←
@@ -52,8 +112,10 @@ elab "#pf_guard_tree_allocator" : command => do
     | throwError "missing rotateLeft"
   let some rotateRight := program.methods.find? (·.ixName == "rotateRight")
     | throwError "missing rotateRight"
+  let some insert := program.methods.find? (·.ixName == "insertNode")
+    | throwError "missing insertNode"
   unless alloc.paramCount == 2 && release.paramCount == 1 &&
-      rotateLeft.paramCount == 1 && rotateRight.paramCount == 1 do
+      rotateLeft.paramCount == 1 && rotateRight.paramCount == 1 && insert.paramCount == 2 do
     throwError "Tree storage ABI changed"
   let allocStores := storeNames alloc.ops
   let releaseStores := storeNames release.ops
@@ -69,18 +131,22 @@ elab "#pf_guard_tree_allocator" : command => do
       ((storeNames rotateLeft.ops).filter (· == "root")).size == 2 &&
       ((storeNames rotateRight.ops).filter (· == "root")).size == 2 do
     throwError "Tree rotation writeback is incomplete or duplicated"
+  unless maxIndexWrites insert.ops == 34 && insert.evaluation.dynamicWrites.size == 238 do
+    throwError "Tree insertion writeback changed or expanded"
   let xi := ProofForge.Ops.Val.subU64 (.arg 0) (.lit 1)
   let leftY := ProofForge.Ops.Val.indexGet (.arg 1) "nodes" xi 0 8
   let rightY := ProofForge.Ops.Val.indexGet (.arg 1) "nodes" xi 0 0
-  unless (storeValues "root" rotateLeft.ops).all (· == leftY) &&
-      (storeValues "root" rotateRight.ops).all (· == rightY) do
+  unless (storeValues "root" rotateLeft.ops).all (· == .local 0) &&
+      (storeValues "root" rotateRight.ops).all (· == .local 0) &&
+      (localValues 0 rotateLeft.ops).contains leftY &&
+      (localValues 0 rotateRight.ops).contains rightY do
     throwError "Tree rotation helper arguments escaped into source IR"
   let labels := (asm.splitOn "\n").filterMap fun line =>
     let line := line.trimAscii.toString
     if line.endsWith ":" then some line else none
   unless labels.length == labels.eraseDups.length do
     throwError "Tree allocator assembly contains duplicate labels"
-  unless asm.toUTF8.size < 300000 do
+  unless asm.toUTF8.size < 450000 do
     throwError s!"Tree assembly expanded unexpectedly: {asm.toUTF8.size} bytes"
 
 #pf_guard_tree_allocator
@@ -294,6 +360,74 @@ elab "#pf_guard_tree_allocator" : command => do
         st.nodes[2]!.parent == 1 && st.nodes[2]!.right == 2 &&
         st.nodes[1]!.parent == 3 && st.nodes[1]!.left == 4 &&
         st.nodes[3]!.parent == 2
+  | .error _ => false
+
+-- Bounded Sokoban insertion, including all four rotation shapes and red-uncle recoloring.
+#guard
+  match insertNode (init 0) 30 300 with
+  | .ok (s, address) =>
+      address == 1 && s.root == 1 && s.size == 1 && (nodeAt s 1).color == 0 &&
+        (nodeAt s 1).key == 30 && (nodeAt s 1).value == 300 && validRedBlackTree s
+  | .error _ => false
+
+#guard
+  match insertMany (init 0) [(30, 300), (20, 200), (10, 100)] with
+  | .ok s =>
+      s.root == 2 && (nodeAt s 2).key == 20 && (nodeAt s 2).left == 3 &&
+        (nodeAt s 2).right == 1 && validRedBlackTree s
+  | .error _ => false
+
+#guard
+  match insertMany (init 0) [(10, 100), (20, 200), (30, 300)] with
+  | .ok s =>
+      s.root == 2 && (nodeAt s 2).key == 20 && (nodeAt s 2).left == 1 &&
+        (nodeAt s 2).right == 3 && validRedBlackTree s
+  | .error _ => false
+
+#guard
+  match insertMany (init 0) [(30, 300), (10, 100), (20, 200)] with
+  | .ok s =>
+      s.root == 3 && (nodeAt s 3).key == 20 && (nodeAt s 3).left == 2 &&
+        (nodeAt s 3).right == 1 && validRedBlackTree s
+  | .error _ => false
+
+#guard
+  match insertMany (init 0) [(10, 100), (30, 300), (20, 200)] with
+  | .ok s =>
+      s.root == 3 && (nodeAt s 3).key == 20 && (nodeAt s 3).left == 1 &&
+        (nodeAt s 3).right == 2 && validRedBlackTree s
+  | .error _ => false
+
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (5, 50)] with
+  | .ok s =>
+      s.root == 1 && s.size == 4 && s.bumpIndex == 5 && s.freeHead == 5 &&
+        (nodeAt s 1).color == 0 && (nodeAt s 2).color == 0 &&
+        (nodeAt s 3).color == 0 && (nodeAt s 4).color == 1 && validRedBlackTree s
+  | .error _ => false
+
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (5, 50)] with
+  | .ok full =>
+      match insertNode full 10 999, insertNode full 40 400 with
+      | .ok (updated, address), .error .overflow =>
+          address == 2 && updated.size == 4 && updated.bumpIndex == 5 &&
+            (nodeAt updated 2).value == 999 && validRedBlackTree updated
+      | _, _ => false
+  | .error _ => false
+
+#guard
+  match insertNode (init 0) 10 100 with
+  | .ok (one, _) =>
+      match releaseNode one 1 with
+      | .ok (freed, _) =>
+          match insertNode { freed with root := 0 } 50 500 with
+          | .ok (reused, address) =>
+              address == 1 && reused.root == 1 && reused.size == 1 &&
+                reused.bumpIndex == 2 && reused.freeHead == 2 &&
+                (nodeAt reused 1).key == 50 && validRedBlackTree reused
+          | .error _ => false
+      | .error _ => false
   | .error _ => false
 
 #guard

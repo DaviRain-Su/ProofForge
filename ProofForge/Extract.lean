@@ -9,6 +9,8 @@ open Lean
 
 namespace ProofForge.Extract
 
+private opaque localRef (i : Nat) : UInt64
+
 def sketchOfExpr (e : Expr) : Array String :=
   let names := e.getUsedConstantsAsSet.toList.toArray.qsort (·.toString < ·.toString)
   names.map (·.toString)
@@ -82,8 +84,8 @@ private def dropUnusedHeadLets (fuel : Nat) (e : Expr) : Expr :=
 private def isIteExpr (e : Expr) : Bool :=
   isConstNamed (peelLets (strip e)) ``ite || isConstNamed (peelLets (strip e)) ``dite
 
-/-- 只代包着 `ite` 的 `have y := …; if y ≠ 0`。
-`have next := mul; ok` 要留 bvar，给 `asOkState`。 -/
+/-- Preserve `UInt64` lets for lexical lowering. Zeta-reduce narrow scalar aliases and
+aliases around `ite`; retain control/state lets for their dedicated decoders. -/
 private def substIteLets (fuel : Nat) (e : Expr) : Expr :=
   match fuel with
   | 0 => e
@@ -92,7 +94,11 @@ private def substIteLets (fuel : Nat) (e : Expr) : Expr :=
     | .letE n ty value body nd =>
       let value := substIteLets fuel' value
       let body := substIteLets fuel' body
-      if isIteExpr body then
+      let tyName := ty.consumeMData.getAppFn.constName?
+      if tyName == some ``UInt64 then
+        .letE n ty value body nd
+      else if tyName == some ``UInt8 || tyName == some ``UInt16 ||
+          tyName == some ``UInt32 || isIteExpr body then
         substIteLets fuel' (body.instantiate1 value)
       else
         .letE n ty value body nd
@@ -102,6 +108,29 @@ private def substIteLets (fuel : Nat) (e : Expr) : Expr :=
         match n, strip e with
         | n + 1, .app f a => .app (goApp n f) (substIteLets fuel' a)
         | _, e => substIteLets fuel' e
+      goApp 32 e
+    | e => e
+
+/-- Substitute scalar captures while retaining mutable state/control lets needed to recognize a
+state-carrying `for` loop. -/
+private def substUInt64Lets (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    match strip e with
+    | .letE n ty value body nd =>
+      let value := substUInt64Lets fuel' value
+      let body := substUInt64Lets fuel' body
+      if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
+        substUInt64Lets fuel' (body.instantiate1 value)
+      else
+        .letE n ty value body nd
+    | .lam n ty body bi => .lam n ty (substUInt64Lets fuel' body) bi
+    | .app _ _ =>
+      let rec goApp (n : Nat) (e : Expr) : Expr :=
+        match n, strip e with
+        | n + 1, .app fn arg => .app (goApp n fn) (substUInt64Lets fuel' arg)
+        | _, e => substUInt64Lets fuel' e
       goApp 32 e
     | e => e
 
@@ -283,6 +312,45 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
     | .bvar i => some (.arg i)
     | _ =>
       if let some v := asLit fuel' e then some v
+      else if isConstNamed e ``localRef && e.getAppArgs.size ≥ 1 then
+        match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+        | some (.lit i) => some (.local i.toNat)
+        | _ => none
+      else if isConstNamed e ``ite && e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let rawCond := strip args[args.size - 4]!
+        let (cond, negate) :=
+          if isConstNamed rawCond ``Not && rawCond.getAppArgs.size ≥ 1 then
+            (strip rawCond.getAppArgs[rawCond.getAppArgs.size - 1]!, true)
+          else
+            (rawCond, false)
+        let cmp? : Option Ops.Cmp :=
+          if isConstNamed cond ``Eq || isConstNamed cond ``BEq.beq then some .eq
+          else if isConstNamed cond ``Ne then some .ne
+          else if isConstNamed cond ``LT.lt then some .lt
+          else if isConstNamed cond ``LE.le then some .le
+          else if isConstNamed cond ``GT.gt then some .gt
+          else if isConstNamed cond ``GE.ge || endsWith cond ".ge" || endsWith cond ".hGe" then
+            some .ge
+          else none
+        let invert : Ops.Cmp → Option Ops.Cmp
+          | .eq => some .ne | .ne => some .eq
+          | .lt => some .ge | .le => some .gt
+          | .gt => some .le | .ge => some .lt
+        let condArgs := cond.getAppArgs
+        match cmp? with
+        | some cmp =>
+          if h : condArgs.size ≥ 2 then
+            let lhs := condArgs[condArgs.size - 2]
+            let rhs := condArgs[condArgs.size - 1]
+            let cmp? := if negate then invert cmp else some cmp
+            match cmp?, asVal env fuel' lhs, asVal env fuel' rhs,
+                asVal env fuel' args[args.size - 2]!, asVal env fuel' args[args.size - 1]! with
+            | some cmp, some lv, some rv, some thn, some els =>
+                some (.select cmp lv rv thn els)
+            | _, _, _, _, _ => none
+          else none
+        | none => none
       else if let some n := e.getAppFn.constName? then
         let field := n.toString
         let user := isUserName env n
@@ -730,7 +798,9 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
       else none
 
 private def val (env : Environment) (e : Expr) : Option Ops.Val :=
-  asVal env 16 e
+  -- Bounded tree algorithms naturally compose several parent/child projections. Their elaborated
+  -- `GetElem`/`toNat` wrappers are deeper than ordinary scalar expressions, but still finite.
+  asVal env 32 e
 
 private def asSubFromMax (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
@@ -1805,11 +1875,39 @@ private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
       | .bitNot v => .bitNot (go fuel' v)
       | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
       | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
+      | .select c l r t f =>
+          .select c (go fuel' l) (go fuel' r) (go fuel' t) (go fuel' f)
       | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
       | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
       | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
       | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
       | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
+      | v => v
+  go 8 v
+
+/-- Dynamic write indices live in callback scope. Depending on whether Lean retained the mutable
+state alias, the source loop index can elaborate as binder 0 or 1; both are callback-local and
+must not escape as instruction arguments. -/
+private def rewriteLoopIndex (v : Ops.Val) : Ops.Val :=
+  let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+    match fuel with
+    | 0 => v
+    | fuel' + 1 =>
+      match v with
+      | .arg 0 | .arg 1 => .loopIx
+      | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
+      | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
+      | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
+      | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
+      | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
+      | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
+      | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
+      | .bitXor l r => .bitXor (go fuel' l) (go fuel' r)
+      | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
+      | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
+      | .bitNot x => .bitNot (go fuel' x)
+      | .select c l r t f =>
+          .select c (go fuel' l) (go fuel' r) (go fuel' t) (go fuel' f)
       | v => v
   go 8 v
 
@@ -1819,6 +1917,7 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
     | 0 => op
     | fuel' + 1 =>
       match op with
+      | .letLocal i v => .letLocal i (rewriteLoopIx v)
       | .checkedAddU64 l r => .checkedAddU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .checkedSubU64 l r => .checkedSubU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .checkedMulU64 l r => .checkedMulU64 (rewriteLoopIx l) (rewriteLoopIx r)
@@ -1831,7 +1930,7 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
             | .u64le v => .u64le (rewriteLoopIx v)
             | w => w) seed (bump.map rewriteLoopIx)
       | .indexSet n i v k off =>
-          .indexSet n (rewriteLoopIx i) (rewriteLoopIx v) k off
+          .indexSet n (rewriteLoopIndex i) (rewriteLoopIx v) k off
       | .storeField n v => .storeField n (rewriteLoopIx v)
       | .okState v => .okState (rewriteLoopIx v)
       | .returnU64 v => .returnU64 (rewriteLoopIx v)
@@ -1863,6 +1962,8 @@ private def rewritePlainLoopIx (v : Ops.Val) : Ops.Val :=
       | .bitNot x => .bitNot (go fuel' x)
       | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
       | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
+      | .select c l r t f =>
+          .select c (go fuel' l) (go fuel' r) (go fuel' t) (go fuel' f)
       | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
       | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
       | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
@@ -1878,6 +1979,7 @@ private def rewritePlainLoopOp (op : Ops.Op) : Ops.Op :=
     | fuel' + 1 =>
       let rv := rewritePlainLoopIx
       match op with
+      | .letLocal i v => .letLocal i (rv v)
       | .checkedAddU64 l r => .checkedAddU64 (rv l) (rv r)
       | .checkedSubU64 l r => .checkedSubU64 (rv l) (rv r)
       | .checkedMulU64 l r => .checkedMulU64 (rv l) (rv r)
@@ -2504,11 +2606,47 @@ private def lastNamedBin (env : Environment) (want : Name) (e : Expr) : Option (
         e.getAppArgs.findSome? (go fuel')
   go 8 e
 
+/-- Materialize only source values whose repeated expansion grows bounded tree control flow.
+Plain scalar arithmetic remains canonicalized by substitution, preserving checked-arithmetic IR. -/
+private def shouldMaterializeLocal : Ops.Val → Bool
+  | .field .. | .indexGet .. | .select .. => true
+  | _ => false
+
 private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
-    (stateful : Bool := false) : Except String (Array Ops.Op) :=
+    (stateful : Bool := false) (preserveLocals : Bool := false)
+    (localDepth : Nat := 0) : Except String (Array Ops.Op) :=
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
+    match strip e with
+    | .letE _ ty value body _ =>
+      let effectful :=
+        (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
+          (findForIn env value).isSome || (findForBodyExpr env value).isSome
+      if !effectful then
+        if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
+          match val env value with
+          | some localValue =>
+            if preserveLocals && shouldMaterializeLocal localValue then
+              let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
+              match decodeExpr env fuel' (body.instantiate1 marker)
+                  (stateful := stateful) (preserveLocals := preserveLocals)
+                  (localDepth := localDepth + 1) with
+              | .ok ops => return .ok (#[.letLocal localDepth localValue] ++ ops)
+              | .error reason => return .error reason
+            else
+              return decodeExpr env fuel' (body.instantiate1 value)
+                (stateful := stateful) (preserveLocals := preserveLocals)
+                (localDepth := localDepth)
+          | _ =>
+            return decodeExpr env fuel' (body.instantiate1 value)
+              (stateful := stateful) (preserveLocals := preserveLocals)
+              (localDepth := localDepth)
+        else
+          return decodeExpr env fuel' (body.instantiate1 value)
+            (stateful := stateful) (preserveLocals := preserveLocals)
+            (localDepth := localDepth)
+    | _ => pure ()
     let fullySubstituted := substLets 256 e
     let controlled := peelControl 16 fullySubstituted
     let e :=
@@ -2517,14 +2655,18 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       else e
     let e0 := strip e
     let stateLoop? : Option (Except String (Array Ops.Op)) :=
-      match findForStateExpr env e with
+      -- State-loop callbacks capture scalar outer lets by value, while their mutable state binder
+      -- must remain visible so `findForStateExpr` can distinguish them from ordinary loops.
+      match findForStateExpr env (substUInt64Lets 256 e) with
       | none => none
       | some (n, bodyE, continuation) =>
-        match decodeExpr env fuel' bodyE (stateful := true) with
+        match decodeExpr env fuel' bodyE (stateful := true)
+            (preserveLocals := preserveLocals) (localDepth := localDepth) with
         | .error reason => some (.error s!"extract/unsupported: state loop body: {reason}")
         | .ok bodyOps =>
           if Ops.hasStoreField bodyOps || Ops.hasIndexSet bodyOps then
-            match decodeExpr env fuel' continuation with
+            match decodeExpr env fuel' continuation (preserveLocals := preserveLocals)
+                (localDepth := localDepth) with
             | .error reason =>
               match findOkRet env continuation with
               | some ret =>
@@ -2545,7 +2687,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if let some (n, addend) := findForIn env e then
       return .ok #[.forAccum n addend, .returnU64 addend]
     else if let some (n, bodyE) := findForBodyExpr env e then
-      match decodeExpr env fuel' bodyE with
+      match decodeExpr env fuel' bodyE (preserveLocals := preserveLocals)
+          (localDepth := localDepth) with
       | .ok ops => return .ok #[.forBody n (ops.map rewritePlainLoopOp), .errorOverflow]
       | .error r => return .error r
     let e := strip e
@@ -2558,7 +2701,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           match strip e with
           -- 先代入 `have __src`，再降 proof λ。反过来会把 `h` 叠到 `__src` 上。
           | .lam _ _ body _ =>
-            let body := substLets 16 body
+            let body := substIteLets 16 body
             let body := if lower then body.lowerLooseBVars 1 1 else body
             peelProofLam fuel' lower body
           | e => e
@@ -2617,6 +2760,13 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
                 isConstNamed (peelLets (strip t)) ``ite ||
                   isConstNamed (peelLets (strip t)) ``dite)) then
           let decodedThen := decodeExpr env fuel' t (stateful := stateful)
+            (preserveLocals := preserveLocals) (localDepth := localDepth)
+          if let .ok thn := decodedThen then
+            if thn.any fun | .letLocal .. => true | _ => false then
+              match asCmp env condE with
+              | some (cmp, lv, rv) =>
+                return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+              | none => pure ()
           match asCmp env condE, directInvoke, decodeEvmEffect env t, asIndexSet env t,
               asStoreFields env t, asOkState env t, decodedThen with
           | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _, _ =>
@@ -2629,7 +2779,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
             if hasNestedIte 64 t then
-              match decodeExpr env fuel' t (stateful := stateful) with
+              match decodeExpr env fuel' t (stateful := stateful)
+                  (preserveLocals := preserveLocals) (localDepth := localDepth) with
               | .ok thn => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
               | .error r => return .error r
             else
@@ -2652,7 +2803,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | some (cmp, lv, rv), none, none, none, none, some v, _ =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, none, none, .ok thn =>
-            match decodeExpr env fuel' f (stateful := stateful) with
+            match decodeExpr env fuel' f (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth) with
             | .ok els => return .ok #[.ite cmp lv rv thn els]
             | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
           | some _, none, none, none, none, none, .error reason =>
@@ -2660,7 +2812,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then/cmp"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, directInvoke, decodeEvmEffect env t,
-              decodeExpr env fuel' t (stateful := stateful), asStoreFields env t,
+              decodeExpr env fuel' t (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth), asStoreFields env t,
               asOkState env t with
           | some (lhs, rhs), some inv, _, _, some stores, _ =>
             return .ok (#[.checkedAddU64 lhs rhs, invokeOp inv] ++ stores)
@@ -2688,7 +2841,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         else if let some condE := findBy args (fun a =>
             (asCheckedMulGuard env a).isSome && (collectIndexSets env t).isEmpty) then
           match asCheckedMulGuard env condE,
-              decodeExpr env fuel' t (stateful := stateful),
+              decodeExpr env fuel' t (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth),
               asStoreFields env t, asOkState env t with
           | some (lhs, rhs), _, some stores, _ =>
             match stores.toList with
@@ -2711,8 +2865,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         else if let some condE := findBy args (fun a =>
             checkedSubMatches a && (collectIndexSets env t).isEmpty) then
           match asCheckedSubGuard env condE, directInvoke, decodeEvmEffect env t,
-              decodeExpr env fuel' t (stateful := stateful),
-              decodeExpr env fuel' f (stateful := stateful), asStoreFields env t,
+              decodeExpr env fuel' t (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth),
+              decodeExpr env fuel' f (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth), asStoreFields env t,
               asOkState env t with
           | some _, some inv, _, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
@@ -2761,18 +2917,21 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             !checkedSubMatches a
         if isForInYield f && !stateful then
           let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
-            | return .error "extract/unsupported: ite cond"
+            | return .error s!"extract/unsupported: ite cond: {args[args.size - 4]!}"
           let some (cmp, lv, rv) := asCmp env condE
-            | return .error "extract/unsupported: ite cond"
-          match decodeExpr env fuel' t (stateful := stateful) with
+            | return .error s!"extract/unsupported: ite cond: {condE}"
+          match decodeExpr env fuel' t (stateful := stateful)
+              (preserveLocals := preserveLocals) (localDepth := localDepth) with
           | .ok thn => return .ok #[.ite cmp lv rv thn #[]]
           | .error r => return .error s!"extract/unsupported: forBody then {r}"
         let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
-          | return .error "extract/unsupported: ite cond"
+          | return .error s!"extract/unsupported: ite cond: {args[args.size - 4]!}"
         let some (cmp, lv, rv) := asCmp env condE
-          | return .error "extract/unsupported: ite cond"
-        match decodeExpr env fuel' t (stateful := stateful),
-            decodeExpr env fuel' f (stateful := stateful) with
+          | return .error s!"extract/unsupported: ite cond: {condE}"
+        match decodeExpr env fuel' t (stateful := stateful)
+              (preserveLocals := preserveLocals) (localDepth := localDepth),
+            decodeExpr env fuel' f (stateful := stateful)
+              (preserveLocals := preserveLocals) (localDepth := localDepth) with
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ =>
           return .error (if stateful then s!"state loop then: {r}" else r)
@@ -2783,7 +2942,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       return .ok (invokeOps inv (invokeRet env e inv))
     else if let some (name, unfolded) := unfoldUserHelper env e then
-      match decodeExpr env fuel' (substIteLets 256 unfolded) (stateful := stateful) with
+      match decodeExpr env fuel' (substIteLets 256 unfolded) (stateful := stateful)
+          (preserveLocals := preserveLocals) (localDepth := localDepth) with
       | .ok ops => return .ok ops
       | .error reason => return .error s!"extract/unsupported: inline {name}: {reason}"
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
@@ -2813,14 +2973,16 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | e => e
       let noneBody := peelMatcher 8 noneE
       let someBody := peelMatcher 8 someE
-      match decodeExpr env fuel' noneBody (stateful := stateful) with
+      match decodeExpr env fuel' noneBody (stateful := stateful)
+          (preserveLocals := preserveLocals) (localDepth := localDepth) with
       | .error r => return .error r
       | .ok noneOps =>
         let someOps :=
           match strip someBody with
           | .bvar _ => #[.returnU64 payload]
           | _ =>
-            match decodeExpr env fuel' someBody (stateful := stateful) with
+            match decodeExpr env fuel' someBody (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth) with
             | .ok ops =>
               match ops with
               | #[.returnU64 (.arg _)] => #[.returnU64 payload]
@@ -2831,7 +2993,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else
       return decodePlain env e
 
-def decodeBody (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
+def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false) :
+    Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
   -- Canonicalize syntax-only aliases around control flow before shape decoding.
   -- Effectful lets remain visible to the dedicated intrinsic decoders.
@@ -2839,7 +3002,7 @@ def decodeBody (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   let body :=
     if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
     else zetaPureHeadLets env 32 body
-  decodeExpr env 128 (substIteLets 256 body)
+  decodeExpr env 128 (substIteLets 256 body) (preserveLocals := preserveLocals)
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -2858,7 +3021,7 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
 
 /-- 可变入口必须有 checked 算术、Option 双叶，或比较 ite（窄宽上界）。 -/
 def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
-  let ops ← decodeBody env e
+  let ops ← decodeBody env e true
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
       Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops ||
         Ops.hasForAccum ops || Ops.hasIndexSet ops || Ops.hasStoreField ops then
@@ -2903,41 +3066,66 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     | .increment => decodeMutating env e
     | _ => decodeBody env e
   let lean := IR.lastName n.toString
-  let (nLams, methodBody) := peelLams e
-  let stateLoop := (findForStateExpr env methodBody).isSome && ops0.any fun
+  let (nLams, _) := peelLams e
+  -- Inline entry helpers can own the source loop, so the entry body itself need not expose
+  -- `ForIn.forIn`. Explicit stores in the decoded loop distinguish state-carrying loops from
+  -- accumulator/early-return loops and are the authoritative post-inline signal.
+  let stateLoop := ops0.any fun
     | .forBody _ body => Ops.hasStoreField body || Ops.hasIndexSet body
     | _ => false
-  let rec normalizeStateLoopVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+  let rec capturedStateArg (fuel : Nat) (v : Ops.Val) : Nat :=
     match fuel with
-    | 0 => v
+    | 0 => 0
     | fuel' + 1 =>
-      let state := .arg (nLams - 1)
+      let max2 l r := max (capturedStateArg fuel' l) (capturedStateArg fuel' r)
       match v with
-      -- Loop body binders are accumulator 0 and index 1. `rewriteLoopIx` has already
-      -- canonicalized index 1; shift the remaining outer method arguments back by two.
-      | .arg i => if i ≥ 2 then .arg (i - 2) else v
-      | .field _ name => .field state name
-      | .indexGet _ name index len off =>
-          .indexGet state name (normalizeStateLoopVal fuel' index) len off
-      | .checkPda seed bump => .checkPda seed (normalizeStateLoopVal fuel' bump)
-      | .bitAnd l r => .bitAnd (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .bitOr l r => .bitOr (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .bitXor l r => .bitXor (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .bitNot x => .bitNot (normalizeStateLoopVal fuel' x)
-      | .shiftL l r => .shiftL (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .shiftR l r => .shiftR (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .addU64 l r => .addU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .subU64 l r => .subU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .mulU64 l r => .mulU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .divU64 l r => .divU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | .modU64 l r => .modU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
-      | v => v
+      | .field (.arg i) _ => i
+      | .field base _ | .bitNot base | .checkPda _ base => capturedStateArg fuel' base
+      | .indexGet base _ index _ _ => max2 base index
+      | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
+      | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
+      | .mapGetU64 l r => max2 l r
+      | .select _ l r t f => max (max2 l r) (max2 t f)
+      | _ => 0
+  let normalizeStateLoopVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+    let expectedStateArg := nLams + 1
+    let captured := capturedStateArg fuel v
+    let binderShift := if captured > expectedStateArg then captured - expectedStateArg else 0
+    let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+      match fuel with
+      | 0 => v
+      | fuel' + 1 =>
+        let state := .arg (nLams - 1)
+        match v with
+        -- Loop body binders are accumulator 0 and index 1. A dependent branch can insert
+        -- additional proof binders; a captured source-state projection witnesses that shift.
+        | .arg i =>
+            let i := if i ≥ binderShift then i - binderShift else i
+            if i ≥ 2 then .arg (i - 2) else .arg i
+        | .field _ name => .field state name
+        | .indexGet _ name index len off => .indexGet state name (go fuel' index) len off
+        | .checkPda seed bump => .checkPda seed (go fuel' bump)
+        | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
+        | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
+        | .bitXor l r => .bitXor (go fuel' l) (go fuel' r)
+        | .bitNot x => .bitNot (go fuel' x)
+        | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
+        | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
+        | .select c l r t f => .select c (go fuel' l) (go fuel' r) (go fuel' t) (go fuel' f)
+        | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
+        | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
+        | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
+        | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
+        | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
+        | v => v
+    go fuel v
   let rec normalizeStateLoopOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
     | fuel' + 1 =>
       let nv := normalizeStateLoopVal fuel'
       match op with
+      | .letLocal i v => .letLocal i (nv v)
       | .checkedAddU64 l r => .checkedAddU64 (nv l) (nv r)
       | .checkedSubU64 l r => .checkedSubU64 (nv l) (nv r)
       | .checkedMulU64 l r => .checkedMulU64 (nv l) (nv r)
@@ -2997,6 +3185,8 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .indexGet b n i k off =>
           .indexGet (flipVal fuel' b) n (flipVal fuel' i) k off
       | .loopIx => v
+      | .select c l r t f =>
+          .select c (flipVal fuel' l) (flipVal fuel' r) (flipVal fuel' t) (flipVal fuel' f)
       | .addU64 l r => .addU64 (flipVal fuel' l) (flipVal fuel' r)
       | .subU64 l r => .subU64 (flipVal fuel' l) (flipVal fuel' r)
       | .mulU64 l r => .mulU64 (flipVal fuel' l) (flipVal fuel' r)
@@ -3014,6 +3204,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     | 0 => op
     | fuel' + 1 =>
       match op with
+      | .letLocal i v => .letLocal i (flipVal fuel' v)
       | .returnState v => .returnState (flipVal fuel' v)
       | .returnU64 v => .returnU64 (flipVal fuel' v)
       | .storeField n v => .storeField n (flipVal fuel' v)
@@ -3261,6 +3452,7 @@ def inferFields (env : Environment) (initName : Name) : Except String (Array Str
 private def valFields : Ops.Val → Array String
   | .field b n => valFields b |>.push n
   | .arg _ => #[]
+  | .local _ => #[]
   | .lit _ => #[]
   | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
   | .accN | .isSigner0 | .isWritable0 | .isExecutable0
@@ -3276,6 +3468,7 @@ private def valFields : Ops.Val → Array String
   | .bitNot v => valFields v
   | .indexGet b _ i _ => valFields b ++ valFields i
   | .loopIx => #[]
+  | .select _ l r t f => valFields l ++ valFields r ++ valFields t ++ valFields f
   | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
       valFields l ++ valFields r
   | .mapGetU64 b k => valFields b ++ valFields k
@@ -3287,6 +3480,7 @@ private def valFields : Ops.Val → Array String
   | v => if Ops.hasEvmLeaf #[.returnU64 v] then #[] else #[]
 
 private def opFields : Ops.Op → Array String
+  | .letLocal _ v => valFields v
   | .checkedAddU64 l r => valFields l ++ valFields r
   | .checkedSubU64 l r => valFields l ++ valFields r
   | .checkedMulU64 l r => valFields l ++ valFields r
@@ -3339,6 +3533,8 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
             if leaf.isEmpty then off else IR.vectorLeafOff p n leaf
           .indexGet (goVal fuel' b) n (goVal fuel' i) k off'
       | .field b n => .field (goVal fuel' b) n
+      | .select c l r t f =>
+          .select c (goVal fuel' l) (goVal fuel' r) (goVal fuel' t) (goVal fuel' f)
       | .addU64 l r => .addU64 (goVal fuel' l) (goVal fuel' r)
       | .subU64 l r => .subU64 (goVal fuel' l) (goVal fuel' r)
       | .mulU64 l r => .mulU64 (goVal fuel' l) (goVal fuel' r)
@@ -3350,6 +3546,7 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
     | 0 => op
     | fuel' + 1 =>
       match op with
+      | .letLocal i v => .letLocal i (goVal 8 v)
       | .indexSet n i v k off =>
           let leaf := IR.vectorLeafName p n off
           let off' :=
@@ -3381,6 +3578,59 @@ private def checkUsedFields (p : IR.Program) : Except String Unit := do
         if (IR.fieldOffset p name).isNone then
           throw s!"extract/unsupported: unknown field {name}"
 
+private partial def valEscapedArg (limit : Nat) : Ops.Val → Option Nat
+  | .arg i => if i < limit then none else some i
+  | .field b _ | .bitNot b | .checkPda _ b => valEscapedArg limit b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
+  | .mapGetU64 l r => #[l, r].findSome? (valEscapedArg limit)
+  | .indexGet b _ i _ => #[b, i].findSome? (valEscapedArg limit)
+  | .select _ l r t f => #[l, r, t, f].findSome? (valEscapedArg limit)
+  | .mapGetAddr a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
+  | .mapGetPair a b c d e f g =>
+      #[a, b, c, d, e, f, g].findSome? (valEscapedArg limit)
+  | _ => none
+
+private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
+  | .letLocal _ v => valEscapedArg limit v
+  | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
+  | .checkedDivU64 l r | .checkedModU64 l r =>
+      #[l, r].findSome? (valEscapedArg limit)
+  | .ite _ l r t f =>
+      #[l, r].findSome? (valEscapedArg limit) <|>
+        t.findSome? (opEscapedArg limit) <|> f.findSome? (opEscapedArg limit)
+  | .invoke _ _ data _ bump =>
+      (data.findSome? fun | .u64le v => valEscapedArg limit v | _ => none) <|>
+        bump.bind (valEscapedArg limit)
+  | .evmDeposit v | .evmLog _ v | .forAccum _ v => valEscapedArg limit v
+  | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
+  | .forBody _ body => body.findSome? (opEscapedArg limit)
+  | .indexSet _ i v _ _ | .mapGetU64 i v =>
+      #[i, v].findSome? (valEscapedArg limit)
+  | .mapSetU64 a b c => #[a, b, c].findSome? (valEscapedArg limit)
+  | .mapGetAddr a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
+  | .mapSetAddr a b c d e => #[a, b, c, d, e].findSome? (valEscapedArg limit)
+  | .mapGetPair a b c d e f g =>
+      #[a, b, c, d, e, f, g].findSome? (valEscapedArg limit)
+  | .mapSetPair a b c d e f g h =>
+      #[a, b, c, d, e, f, g, h].findSome? (valEscapedArg limit)
+  | .evmTokenTransfer a b c d e f g =>
+      #[a, b, c, d, e, f, g].findSome? (valEscapedArg limit)
+  | .evmTokenBalanceOfSelf a b c =>
+      #[a, b, c].findSome? (valEscapedArg limit)
+  | .storeField _ v | .okState v | .returnU64 v | .returnState v => valEscapedArg limit v
+  | .errorOverflow | .errorNamed _ => none
+
+/-- Reject decoder binder leaks before a backend can mistake one for calldata or state. -/
+private def checkArgBounds (p : IR.Program) : Except String Unit := do
+  for method in p.methods do
+    let limit := method.paramCount + if method.kind == .init then 0 else 1
+    for op in method.ops do
+      if let some i := opEscapedArg limit op then
+        (throw (s!"extract/unsupported: {method.ixName} escaped arg {i} " ++
+          s!"(paramCount {method.paramCount})") : Except String Unit)
+  return ()
+
 def extractProgram (env : Environment)
     (initName incrementName getName : Name)
     (programName : Option String := none)
@@ -3411,6 +3661,7 @@ def extractProgram (env : Environment)
   unless IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
+  checkArgBounds program
   let program ← evaluateProgram program
   checkUsedFields program
   match IR.layoutMarkerHex program with
@@ -3511,6 +3762,7 @@ def extractModule (env : Environment) (ns : Name)
   unless IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
+  checkArgBounds program
   let program ← evaluateProgram program
   checkUsedFields program
   match IR.layoutMarkerHex program with

@@ -4,6 +4,7 @@ namespace ProofForge.Svm.IR
 
 /-- SVM instructions are lowered separately from the frontend compatibility Ops. -/
 inductive Op where
+  | letLocal (i : Nat) (value : Ops.Val)
   | checkedAddU64 (lhs rhs : Ops.Val)
   | checkedSubU64 (lhs rhs : Ops.Val)
   | checkedMulU64 (lhs rhs : Ops.Val)
@@ -24,6 +25,7 @@ inductive Op where
   deriving BEq, Repr, Inhabited
 
 private partial def lowerOp : Ops.Op → Except String Op
+  | .letLocal i value => pure (.letLocal i value)
   | .checkedAddU64 lhs rhs => pure (.checkedAddU64 lhs rhs)
   | .checkedSubU64 lhs rhs => pure (.checkedSubU64 lhs rhs)
   | .checkedMulU64 lhs rhs => pure (.checkedMulU64 lhs rhs)
@@ -55,6 +57,7 @@ def ofSourceOps (ops : Array Ops.Op) : Except String (Array Op) :=
   ops.mapM lowerOp
 
 private partial def Op.toSource : Op → Ops.Op
+  | .letLocal i value => .letLocal i value
   | .checkedAddU64 lhs rhs => .checkedAddU64 lhs rhs
   | .checkedSubU64 lhs rhs => .checkedSubU64 lhs rhs
   | .checkedMulU64 lhs rhs => .checkedMulU64 lhs rhs
@@ -87,6 +90,9 @@ def hasIndexSet (ops : Array Op) : Bool :=
 
 def hasCheckedArith (ops : Array Op) : Bool :=
   Ops.hasCheckedArith (toSourceOps ops)
+
+def hasSelect (ops : Array Op) : Bool :=
+  Ops.hasSelect (toSourceOps ops)
 
 def hasInvoke (ops : Array Op) : Bool :=
   Ops.hasInvoke (toSourceOps ops)

@@ -351,7 +351,16 @@ private def bidCollateral (s : State) (price size : UInt64) : Except Error UInt6
   if s.baseLotsPerBaseUnit = 0 then .error .overflow
   else .ok ((← adjustedQuoteFor s price size) / s.baseLotsPerBaseUnit)
 
-attribute [pf_inline] adjustedQuoteFor bidCollateral
+/-- Pure guard equivalent to successful `bidCollateral`; used where a bounded state loop must
+capture the collateral without leaving an `Except.bind` binder in the loop callback. -/
+private def bidCollateralFits (s : State) (price size : UInt64) : Bool :=
+  s.baseLotsPerBaseUnit ≠ 0 &&
+    (size = 0 ||
+      (price ≠ 0 && s.tickSize ≤ u64Max / price &&
+        let quotePerBase := s.tickSize * price
+        quotePerBase ≠ 0 && size ≤ u64Max / quotePerBase))
+
+attribute [pf_inline] adjustedQuoteFor bidCollateral bidCollateralFits
 
 private def swapBidAdjacent (s : State) (j : Nat) : State :=
   let r := j + 1
@@ -382,9 +391,13 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
     .error .overflow
   else if expired lastSlot lastTime nowSlot nowTime then
     .ok (s, 0)
+  else if !bidCollateralFits s price size ||
+      !bidCollateralFits s s.bidPriceTicks[3]! s.bidSizes[3]! then
+    .error .overflow
   else
-    let newLock ← bidCollateral s price size
-    let oldLock ← bidCollateral s s.bidPriceTicks[3]! s.bidSizes[3]!
+    let newLock := ((s.tickSize * price) * size) / s.baseLotsPerBaseUnit
+    let oldLock :=
+      ((s.tickSize * s.bidPriceTicks[3]!) * s.bidSizes[3]!) / s.baseLotsPerBaseUnit
     Id.run do
       let mut st := { s with matchStopped := 0, matchError := 0 }
       for i in [0:14] do

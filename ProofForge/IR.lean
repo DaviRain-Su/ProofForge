@@ -384,6 +384,7 @@ private def cmpTag : Ops.Cmp → String
 
 private def valCanon : Ops.Val → String
   | .arg i => s!"a{i}"
+  | .local i => s!"v{i}"
   | .lit n => s!"l{n.toNat}"
   | .field b n => s!"f.{n}({valCanon b})"
   | .clockSlot => "clk"
@@ -414,6 +415,8 @@ private def valCanon : Ops.Val → String
       if off == 0 then s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
       else s!"idx.{n}+{off}[{valCanon i}/{k}]({valCanon b})"
   | .loopIx => "ix"
+  | .select c l r t f =>
+      s!"sel.{repr c}({valCanon l},{valCanon r},{valCanon t},{valCanon f})"
   | .addU64 l r => s!"uadd({valCanon l},{valCanon r})"
   | .subU64 l r => s!"usub({valCanon l},{valCanon r})"
   | .mulU64 l r => s!"umul({valCanon l},{valCanon r})"
@@ -457,6 +460,7 @@ private def valCanon : Ops.Val → String
 private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
     match op with
+    | .letLocal i v => s!"let.{i}({valCanon v})"
     | .checkedAddU64 l r => s!"add({valCanon l},{valCanon r})"
     | .checkedSubU64 l r => s!"sub({valCanon l},{valCanon r})"
     | .checkedMulU64 l r => s!"mul({valCanon l},{valCanon r})"

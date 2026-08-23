@@ -57,7 +57,7 @@ assembly budget 钉在 450 KB，并拒绝重复 label。当前体积仍很小，
 
 | 官方 | 为什么关 |
 |---|---|
-| 动态 `RedBlackTree` 插入 / 删除 fixup | allocator/free-list 和完整左右旋已在独立 Tree refinement 实现；Phoenix 仍用有序投影 |
+| 动态 `RedBlackTree` 删除 fixup | allocator/free-list、完整左右旋和 N=4 insertion fixup 已在独立 Tree refinement 实现；Phoenix 仍用有序投影 |
 | `_padding: [u64; 32]` | 不进账户 |
 | `OrderPacket.client_order_id: u128` | 只有 `UInt64` |
 | `MarketEvent` 带 payload | 多构造子 inductive |

@@ -337,4 +337,234 @@ def rotateRight (s : State) (xAddress : UInt64) : Except Error (State × UInt64)
   else
     .error .overflow
 
+/-!
+N=4 的合法树在新插入前最多 3 个节点，因此 insertion fixup 最多执行一轮，且发生
+红父冲突时 grandparent 必为 root。下面仍完整区分 red-uncle、LL/RR 和 LR/RL；
+结果与 Sokoban `_fix_insert` 在该有界可达状态空间上一致。
+-/
+
+private def fixInserted (before s : State) (nodeAddress parentAddress direction : UInt64) :
+    Except Error (State × UInt64) :=
+  let parentIndex := (parentAddress.toNat - 1) % 4
+  if before.nodes[parentIndex]!.color = 1 then
+    let grandAddress := before.nodes[parentIndex]!.parent
+    if grandAddress = 0 then
+      let nodes :=
+        s.nodes.set parentIndex { s.nodes[parentIndex]! with color := 0 }
+      .ok ({ s with nodes }, nodeAddress)
+    else
+      let grandIndex := (grandAddress.toNat - 1) % 4
+      if before.nodes[grandIndex]!.left = parentAddress then
+        let uncleAddress := before.nodes[grandIndex]!.right
+        let uncleIndex := (uncleAddress.toNat - 1) % 4
+        let uncleColor : UInt64 :=
+          if uncleAddress = 0 then 0 else before.nodes[uncleIndex]!.color
+        if uncleColor = 1 then
+          let nodes :=
+            ((s.nodes.set parentIndex { s.nodes[parentIndex]! with color := 0 }).set
+              uncleIndex { s.nodes[uncleIndex]! with color := 0 }).set grandIndex
+              { s.nodes[grandIndex]! with color := 0 }
+          .ok ({ s with nodes }, nodeAddress)
+        else if direction = 1 then
+          let nodeIndex := (nodeAddress.toNat - 1) % 4
+          let nodes :=
+            (((s.nodes.set parentIndex
+                { s.nodes[parentIndex]! with
+                  right := 0
+                  parent := nodeAddress
+                  color := 1 }).set
+              grandIndex
+                { s.nodes[grandIndex]! with
+                  left := 0
+                  parent := nodeAddress
+                  color := 1 }).set
+              nodeIndex
+                { s.nodes[nodeIndex]! with
+                  left := parentAddress
+                  right := grandAddress
+                  parent := 0
+                  color := 0 })
+          .ok ({ s with root := nodeAddress, nodes := nodes }, nodeAddress)
+        else
+          let nodes :=
+            (s.nodes.set grandIndex
+                { s.nodes[grandIndex]! with
+                  left := 0
+                  parent := parentAddress
+                  color := 1 }).set
+              parentIndex
+                { s.nodes[parentIndex]! with
+                  right := grandAddress
+                  parent := 0
+                  color := 0 }
+          .ok ({ s with root := parentAddress, nodes := nodes }, nodeAddress)
+      else
+        let uncleAddress := before.nodes[grandIndex]!.left
+        let uncleIndex := (uncleAddress.toNat - 1) % 4
+        let uncleColor : UInt64 :=
+          if uncleAddress = 0 then 0 else before.nodes[uncleIndex]!.color
+        if uncleColor = 1 then
+          let nodes :=
+            ((s.nodes.set parentIndex { s.nodes[parentIndex]! with color := 0 }).set
+              uncleIndex { s.nodes[uncleIndex]! with color := 0 }).set grandIndex
+              { s.nodes[grandIndex]! with color := 0 }
+          .ok ({ s with nodes }, nodeAddress)
+        else if direction = 0 then
+          let nodeIndex := (nodeAddress.toNat - 1) % 4
+          let nodes :=
+            (((s.nodes.set parentIndex
+                { s.nodes[parentIndex]! with
+                  left := 0
+                  parent := nodeAddress
+                  color := 1 }).set
+              grandIndex
+                { s.nodes[grandIndex]! with
+                  right := 0
+                  parent := nodeAddress
+                  color := 1 }).set
+              nodeIndex
+                { s.nodes[nodeIndex]! with
+                  left := grandAddress
+                  right := parentAddress
+                  parent := 0
+                  color := 0 })
+          .ok ({ s with root := nodeAddress, nodes := nodes }, nodeAddress)
+        else
+          let nodes :=
+            (s.nodes.set grandIndex
+                { s.nodes[grandIndex]! with
+                  right := 0
+                  parent := parentAddress
+                  color := 1 }).set
+              parentIndex
+                { s.nodes[parentIndex]! with
+                  left := grandAddress
+                  parent := 0
+                  color := 0 }
+          .ok ({ s with root := parentAddress, nodes := nodes }, nodeAddress)
+  else
+    .ok (s, nodeAddress)
+
+attribute [pf_inline] fixInserted
+
+private def insertAt (s : State) (parentAddress direction k v : UInt64) :
+    Except Error (State × UInt64) :=
+  if s.size < 4 then
+    let parentIndex := (parentAddress.toNat - 1) % 4
+    let fresh : UInt64 := if s.freeHead = s.bumpIndex then 1 else 0
+    let valid : UInt64 :=
+      if fresh = 1 then
+        if s.bumpIndex = 0 then 0 else if s.bumpIndex < 5 then 1 else 0
+      else
+        if s.freeHead = 0 then 0 else if s.freeHead < 5 then 1 else 0
+    if valid = 1 then
+      let address := if fresh = 1 then s.bumpIndex else s.freeHead
+      let i := (address.toNat - 1) % 4
+      let freeNext := s.nodes[i]!.left
+      let nextBump := if fresh = 1 then s.bumpIndex + 1 else s.bumpIndex
+      let nextFree := if fresh = 1 then s.bumpIndex + 1 else freeNext
+      let parent := s.nodes[parentIndex]!
+      let linkedParent :=
+        if direction = 0 then { parent with left := address }
+        else { parent with right := address }
+      let nodes :=
+        (s.nodes.set parentIndex linkedParent).set i
+          { left := 0
+            right := 0
+            parent := parentAddress
+            color := 1
+            key := k
+            value := v }
+      let linked :=
+        { s with
+          size := s.size + 1
+          bumpIndex := nextBump
+          freeHead := nextFree
+          nodes := nodes }
+      fixInserted s linked address parentAddress direction
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+attribute [pf_inline] insertAt
+
+private def insertRoot (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
+  if s.size < 4 then
+    let fresh : UInt64 := if s.freeHead = s.bumpIndex then 1 else 0
+    let valid : UInt64 :=
+      if fresh = 1 then
+        if s.bumpIndex = 0 then 0 else if s.bumpIndex < 5 then 1 else 0
+      else
+        if s.freeHead = 0 then 0 else if s.freeHead < 5 then 1 else 0
+    if valid = 1 then
+      let address := if fresh = 1 then s.bumpIndex else s.freeHead
+      let i := (address.toNat - 1) % 4
+      let freeNext := s.nodes[i]!.left
+      let nextBump := if fresh = 1 then s.bumpIndex + 1 else s.bumpIndex
+      let nextFree := if fresh = 1 then s.bumpIndex + 1 else freeNext
+      .ok ({ s with
+              root := address
+              size := s.size + 1
+              bumpIndex := nextBump
+              freeHead := nextFree
+              nodes := s.nodes.set i
+                { left := 0
+                  right := 0
+                  parent := 0
+                  color := 0
+                  key := k
+                  value := v } },
+        address)
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+attribute [pf_inline] insertRoot
+
+/-- Sokoban `insert` 的 N=4 特化：duplicate 覆盖 value，否则分配红叶并执行 fixup。 -/
+@[pf_entry]
+def insertNode (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
+  if s.root = 0 then
+    insertRoot s k v
+  else
+    -- Keep bounded search as a linear chain of conditional values. Expanding each comparison as
+    -- control flow would duplicate the allocator/fixup at every leaf.
+    let a0 := s.root
+    let i0 := (a0.toNat - 1) % 4
+    let n0 := s.nodes[i0]!
+    let a1 := if k = n0.key then 0 else if k < n0.key then n0.left else n0.right
+    let i1 := (a1.toNat - 1) % 4
+    let n1 := s.nodes[i1]!
+    let a2 :=
+      if a1 = 0 then 0
+      else if k = n1.key then 0
+      else if k < n1.key then n1.left else n1.right
+    let i2 := (a2.toNat - 1) % 4
+    let n2 := s.nodes[i2]!
+    let a3 :=
+      if a2 = 0 then 0
+      else if k = n2.key then 0
+      else if k < n2.key then n2.left else n2.right
+    let i3 := (a3.toNat - 1) % 4
+    let n3 := s.nodes[i3]!
+    let found :=
+      if k = n0.key then a0
+      else if a1 = 0 then 0
+      else if k = n1.key then a1
+      else if a2 = 0 then 0
+      else if k = n2.key then a2
+      else if a3 = 0 then 0
+      else if k = n3.key then a3 else 0
+    if found ≠ 0 then
+      let foundIndex := (found.toNat - 1) % 4
+      .ok ({ s with nodes := s.nodes.set foundIndex { s.nodes[foundIndex]! with value := v } },
+        found)
+    else
+      let parent := if a3 ≠ 0 then a3 else if a2 ≠ 0 then a2 else if a1 ≠ 0 then a1 else a0
+      let parentIndex := (parent.toNat - 1) % 4
+      let direction : UInt64 := if k < s.nodes[parentIndex]!.key then 0 else 1
+      insertAt s parent direction k v
+
 end Examples.Tree

@@ -117,6 +117,41 @@ elab "#pf_guard_state_fold_ir" : command => do
 
 #pf_guard_state_fold_ir
 
+elab "#pf_guard_conditional_local" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initChoice
+        ``Tests.Fixtures.choose ``Tests.Fixtures.getChosen with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some choose := program.methods.find? (·.ixName == "choose")
+    | throwError "missing conditional-local method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .letLocal 0 (.select .lt (.arg 0) (.arg 1) (.arg 0) (.arg 1)),
+    .okState (.local 0)
+  ]
+  unless choose.ops == expected do
+    throwError s!"conditional-local IR mismatch: {repr choose.ops}"
+  let svm ←
+    match ProofForge.Svm.Emit.emitCounterAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmProgram ←
+    match ProofForge.Evm.IR.fromProgram program with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.Emit.emitYul evmProgram with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless svm.contains "then_select_" && svm.contains "load local 0" do
+    throwError "SVM conditional-local lowering is missing"
+  unless evm.contains "let v0 := 0" && evm.contains "v0 := arg0" &&
+      evm.contains "v0 := arg1" && evm.contains "let l0 := v0" do
+    throwError "EVM conditional-local lowering is missing"
+
+#pf_guard_conditional_local
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 
 #pf_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag

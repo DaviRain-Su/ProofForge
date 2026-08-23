@@ -121,4 +121,20 @@ def runFold (s : FoldState) (lhs rhs : UInt64) :
 def foldProduct (s : FoldState) : UInt64 :=
   s.product
 
+/-- Pure conditional values stay shared instead of duplicating the mutation continuation. -/
+structure ChoiceState where
+  chosen : UInt64
+  deriving Repr, DecidableEq
+
+def initChoice (_seed : UInt64) : ChoiceState :=
+  { chosen := 0 }
+
+def choose (s : ChoiceState) (lhs rhs : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let chosen : UInt64 := if lhs < rhs then lhs else rhs
+  .ok ({ s with chosen }, chosen)
+
+def getChosen (s : ChoiceState) : UInt64 :=
+  s.chosen
+
 end Tests.Fixtures

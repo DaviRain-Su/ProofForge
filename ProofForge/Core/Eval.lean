@@ -40,6 +40,7 @@ structure Commit where
 
 /-- Target-neutral state effects retain source control structure rather than emitter traversal order. -/
 inductive StateEvent where
+  | letValue (i : Nat) (value : Ops.Val)
   | write (write : StateWrite)
   | dynamicWrite (write : DynamicWrite)
   | commit (commit : Commit)
@@ -61,7 +62,7 @@ private partial def StateEvent.collectCommits (event : StateEvent) : Array Commi
       thenEvents.flatMap StateEvent.collectCommits ++
         elseEvents.flatMap StateEvent.collectCommits
   | StateEvent.loop _ body => body.flatMap StateEvent.collectCommits
-  | StateEvent.write _ | StateEvent.dynamicWrite _ => #[]
+  | StateEvent.letValue .. | StateEvent.write _ | StateEvent.dynamicWrite _ => #[]
 
 def Evaluation.commits (evaluation : Evaluation) : Array Commit :=
   evaluation.events.flatMap StateEvent.collectCommits
@@ -73,7 +74,7 @@ private partial def StateEvent.collectDynamicWrites (event : StateEvent) : Array
       thenEvents.flatMap StateEvent.collectDynamicWrites ++
         elseEvents.flatMap StateEvent.collectDynamicWrites
   | StateEvent.loop _ body => body.flatMap StateEvent.collectDynamicWrites
-  | StateEvent.write _ | StateEvent.commit _ => #[]
+  | StateEvent.letValue .. | StateEvent.write _ | StateEvent.commit _ => #[]
 
 def Evaluation.dynamicWrites (evaluation : Evaluation) : Array DynamicWrite :=
   evaluation.events.flatMap StateEvent.collectDynamicWrites
@@ -167,6 +168,8 @@ private partial def eventsFor (schema : Schema) (ops : Array Ops.Op) :
   let mut events := #[]
   for op in ops do
     match op with
+    | .letLocal i value =>
+        events := events.push (.letValue i value)
     | .ite cmp lhs rhs thenOps elseOps =>
         let thenEvents ← eventsFor schema thenOps
         let elseEvents ← eventsFor schema elseOps

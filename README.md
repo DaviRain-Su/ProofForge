@@ -13,12 +13,15 @@ Lean 4 多目标合约编译器。普通 `def` 写合约，普通 `theorem` 证�
 Profile 子集检查
         │
         ▼
-Extract Expr → IR
+Extract Expr → typed Core + target-neutral Ops
         │
    ┌────┴────┐
    ▼         ▼
-sBPF/.so   Yul/.bin
+SVM IR     EVM IR
 + IDL      + ABI
+   │         │
+   ▼         ▼
+sBPF/.so   Yul/.bin
 ```
 
 ## 构建

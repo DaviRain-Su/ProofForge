@@ -106,6 +106,15 @@ private def widthMask (width : Nat) : String :=
 private def maskExpr (width : Nat) (value : String) : String :=
   if width == 8 then value else "and(" ++ value ++ ", " ++ widthMask width ++ ")"
 
+private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
+  match c with
+  | .eq => s!"eq({l}, {r})"
+  | .ne => s!"iszero(eq({l}, {r}))"
+  | .lt => s!"lt({l}, {r})"
+  | .le => s!"iszero(gt({l}, {r}))"
+  | .gt => s!"gt({l}, {r})"
+  | .ge => s!"iszero(lt({l}, {r}))"
+
 private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
     (v : Ops.Val) : Except String String :=
   match v with
@@ -115,6 +124,7 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
         .ok s!"{paramPrefix}{i}"
       else
         .error "extract/unsupported: evm arg is implicit state"
+  | .local i => .ok s!"l{i}"
   | .field _ name => do
       let slot ← slotOf p name
       let w := (IR.slotWidth p name).getD 8
@@ -175,18 +185,10 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       return "sload(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
         toString stride ++ ")))"
   | .loopIx => .ok "i"
+  | .select .. => .error "extract/unsupported: evm select needs materialize"
   | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. |
     .mapGetU64 .. | .mapGetAddr .. | .mapGetPair .. =>
       .error "extract/unsupported: evm map/arith val needs materialize"
-
-private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
-  match c with
-  | .eq => s!"eq({l}, {r})"
-  | .ne => s!"iszero(eq({l}, {r}))"
-  | .lt => s!"lt({l}, {r})"
-  | .le => s!"iszero(gt({l}, {r}))"
-  | .gt => s!"gt({l}, {r})"
-  | .ge => s!"iszero(lt({l}, {r}))"
 
 private def revert0 : String := "revert(0, 0)"
 
@@ -252,6 +254,20 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if gt(" ++ rv ++ ", 63) { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := " ++ op ++ "(" ++ rv ++ ", " ++ lv ++ ")" ++ nl
         return (txt, nm, st3)
+    | .select c l r t f =>
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (nm, st3) := fresh st2
+        let (preT, tv, st4) ← materializeVal p (indent ++ "  ") paramPrefix paramCount t st3
+        let (preF, fv, st5) ← materializeVal p (indent ++ "  ") paramPrefix paramCount f st4
+        let cond := cmpYul c lv rv
+        let txt := preL ++ preR ++
+          indent ++ "let " ++ nm ++ " := 0" ++ nl ++
+          indent ++ "if " ++ cond ++ " {" ++ nl ++ preT ++
+          indent ++ "  " ++ nm ++ " := " ++ tv ++ nl ++ indent ++ "}" ++ nl ++
+          indent ++ "if iszero(" ++ cond ++ ") {" ++ nl ++ preF ++
+          indent ++ "  " ++ nm ++ " := " ++ fv ++ nl ++ indent ++ "}" ++ nl
+        return (txt, nm, { st5 with last := some nm })
     | .indexGet _ name idx len off =>
         let (pre, iv, st1) ←
           match idx with
@@ -400,6 +416,10 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
   let mut returnU64Idx : Nat := 0
   for op in ops do
     match op with
+    | .letLocal i value =>
+        let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount value st
+        st := { st' with last := some s!"l{i}" }
+        acc := acc ++ pre ++ indent ++ s!"let l{i} := {valueExpr}" ++ nl
     | .checkedAddU64 l r =>
         let lv ← loadVal p paramPrefix paramCount l
         let rv ← loadVal p paramPrefix paramCount r

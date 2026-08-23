@@ -215,7 +215,7 @@ def extractedFlag : Program :=
       { kind := .increment, name := "Examples.Flag.setFlag", ixName := "setFlag", paramCount := 1
         ops := #[
           .ite .le (.arg 0) (.lit 255)
-            #[.okState (.field (.arg 2) "count")]
+            #[.okState (.field (.arg 1) "count")]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Examples.Flag.getFlag", ixName := "getFlag", paramCount := 0
@@ -1221,7 +1221,7 @@ def extractedBook : Program :=
       { kind := .increment, name := "Examples.Book.fillFirst", ixName := "fillFirst", paramCount := 1
         ops := #[
           .forBody 4 #[
-            .ite .eq (.indexGet (.arg 0) "cells" .loopIx 0) (.lit 0)
+            .ite .eq (.indexGet (.arg 1) "cells" .loopIx 0) (.lit 0)
               #[
                 .ite .lt .loopIx (.lit 4)
                   #[.indexSet "cells" .loopIx (.arg 0) 4, .okState (.arg 0)]
@@ -1403,11 +1403,11 @@ def programs : Array Program := #[
 
 /--
 `#pf_build` 抽出的 digest 必须钉住。Phoenix 的 bounded-fold IR 和 Tree 的动态
-allocator IR 直接钉 canonical digest；对应手写 fixture 继续作为布局/发射 smoke。
+allocator / insertion IR 直接钉 canonical digest；对应手写 fixture 继续作为布局/发射 smoke。
 -/
 def digestOf (name : String) : Option String :=
-  if name == "Phoenix" then some "13a349638aa8c993"
-  else if name == "Tree" then some "7ceb86b437610514"
+  if name == "Phoenix" then some "fcd3ffc8a5fb000c"
+  else if name == "Tree" then some "1d4a472be13bbdbd"
   else (programs.find? (·.name == name)).map digestHex
 
 end ProofForge.Golden

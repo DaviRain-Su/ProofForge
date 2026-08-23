@@ -1,8 +1,14 @@
 namespace ProofForge.Ops
 
+inductive Cmp where
+  | eq | ne | lt | le | gt | ge
+  deriving BEq, Repr, Inhabited, DecidableEq
+
 /-- 可 load 的值。SVM 叶是 `clock*` / `acc*` / PDA / hash；EVM 叶是 `evm*`。 -/
 inductive Val where
   | arg (i : Nat)
+  /-- Lexically scoped pure `UInt64` let binding, numbered by nesting depth. -/
+  | local (i : Nat)
   | field (base : Val) (name : String)
   | lit (n : UInt64)
   | clockSlot
@@ -55,6 +61,8 @@ inductive Val where
   | shiftR (lhs rhs : Val)
   | indexGet (base : Val) (name : String) (idx : Val) (len : Nat) (elemOff : Nat := 0)
   | loopIx
+  /-- Pure conditional value. Unlike `Op.ite`, both arms produce a value and no state effects. -/
+  | select (cmp : Cmp) (lhs rhs thn els : Val)
   | addU64 (lhs rhs : Val)
   | subU64 (lhs rhs : Val)
   | mulU64 (lhs rhs : Val)
@@ -64,10 +72,6 @@ inductive Val where
   | mapGetAddr (base w0 w1 w2 : Val)
   | mapGetPair (base o0 o1 o2 s0 s1 s2 : Val)
   deriving BEq, Repr, Inhabited
-
-inductive Cmp where
-  | eq | ne | lt | le | gt | ge
-  deriving BEq, Repr, Inhabited, DecidableEq
 
 /-- 内层 AccountMeta：外层账户下标 + 旗。编译期钉死。 -/
 structure CpiMeta where
@@ -87,6 +91,7 @@ inductive CpiWord where
   deriving BEq, Repr, Inhabited
 
 inductive Op where
+  | letLocal (i : Nat) (value : Val)
   | checkedAddU64 (lhs rhs : Val)
   | checkedSubU64 (lhs rhs : Val)
   | checkedMulU64 (lhs rhs : Val)
@@ -336,6 +341,8 @@ def valNeedsWalk : Val → Bool
       valNeedsWalk l || valNeedsWalk r
   | .bitNot v => valNeedsWalk v
   | .indexGet b _ i _ => valNeedsWalk b || valNeedsWalk i
+  | .select _ l r t f =>
+      valNeedsWalk l || valNeedsWalk r || valNeedsWalk t || valNeedsWalk f
   | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
       valNeedsWalk l || valNeedsWalk r
   | .mapGetU64 b k => valNeedsWalk b || valNeedsWalk k
@@ -359,10 +366,27 @@ def valMinAccounts : Val → Nat
   | .signerKeyN acc | .ownerIsSelf acc => acc + 1
   | .checkPda _ b => valMinAccounts b
   | .field b _ => valMinAccounts b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
+  | .mapGetU64 l r => Nat.max (valMinAccounts l) (valMinAccounts r)
+  | .bitNot v => valMinAccounts v
+  | .indexGet b _ i _ => Nat.max (valMinAccounts b) (valMinAccounts i)
+  | .select _ l r t f =>
+      Nat.max (Nat.max (valMinAccounts l) (valMinAccounts r))
+        (Nat.max (valMinAccounts t) (valMinAccounts f))
+  | .mapGetAddr a b c d =>
+      Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+        (Nat.max (valMinAccounts c) (valMinAccounts d))
+  | .mapGetPair a b c d e f g =>
+      Nat.max
+        (Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
+          (Nat.max (valMinAccounts c) (valMinAccounts d)))
+        (Nat.max (Nat.max (valMinAccounts e) (valMinAccounts f)) (valMinAccounts g))
   | _ => 0
 
 def hasAcc1 (ops : Array Op) : Bool :=
   walk 16 ops fun
+    | .letLocal _ v => valNeedsAcc1 v
     | .checkedAddU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
     | .checkedSubU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
     | .checkedMulU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
@@ -413,6 +437,7 @@ private def maxValAccounts (l r : Val) : Nat :=
   Nat.max (valMinAccounts l) (valMinAccounts r)
 
 def opMinAccounts : Op → Nat
+  | .letLocal _ v => valMinAccounts v
   | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
   | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ => maxValAccounts l r
   | .invoke _ _ data _ bump =>
@@ -500,21 +525,39 @@ def hasCheckedArith (ops : Array Op) : Bool :=
 def isBitVal : Val → Bool
   | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. => true
   | .field b _ => isBitVal b
+  | .select _ l r t f => isBitVal l || isBitVal r || isBitVal t || isBitVal f
   | _ => false
 
 def isLangVal : Val → Bool
   | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR ..
-  | .indexGet .. | .loopIx => true
+  | .local _ | .indexGet .. | .loopIx | .select .. => true
   | .field b _ => isLangVal b
   | _ => false
 
 def isLangLeaf : Val → Bool
+  | .local _ => true
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       isLangLeaf l || isLangLeaf r
   | .bitNot v => isLangLeaf v
   | .indexGet b _ i _ => isLangLeaf b || isLangLeaf i
   | .loopIx => true
+  | .select _ l r t f =>
+      isLangLeaf l || isLangLeaf r || isLangLeaf t || isLangLeaf f
   | .field b _ => isLangLeaf b
+  | _ => false
+
+def hasSelectVal : Val → Bool
+  | .select .. => true
+  | .field b _ | .bitNot b | .checkPda _ b => hasSelectVal b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
+  | .mapGetU64 l r => hasSelectVal l || hasSelectVal r
+  | .indexGet b _ i _ => hasSelectVal b || hasSelectVal i
+  | .mapGetAddr a b c d =>
+      hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d
+  | .mapGetPair a b c d e f g =>
+      hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d ||
+        hasSelectVal e || hasSelectVal f || hasSelectVal g
   | _ => false
 
 def isEvmLeaf : Val → Bool
@@ -527,6 +570,15 @@ def isEvmLeaf : Val → Bool
       isEvmLeaf l || isEvmLeaf r
   | .bitNot v => isEvmLeaf v
   | .indexGet b _ i _ => isEvmLeaf b || isEvmLeaf i
+  | .select _ l r t f =>
+      isEvmLeaf l || isEvmLeaf r || isEvmLeaf t || isEvmLeaf f
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
+  | .mapGetU64 l r => isEvmLeaf l || isEvmLeaf r
+  | .mapGetAddr a b c d =>
+      isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
+  | .mapGetPair a b c d e f g =>
+      isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d ||
+        isEvmLeaf e || isEvmLeaf f || isEvmLeaf g
   | _ => false
 
 private def cpiWordEvm : CpiWord → Bool
@@ -535,6 +587,7 @@ private def cpiWordEvm : CpiWord → Bool
 
 def hasEvmLeaf (ops : Array Op) : Bool :=
   walk 16 ops fun
+    | .letLocal _ v => isEvmLeaf v
     | .checkedAddU64 l r => isEvmLeaf l || isEvmLeaf r
     | .checkedSubU64 l r => isEvmLeaf l || isEvmLeaf r
     | .checkedMulU64 l r => isEvmLeaf l || isEvmLeaf r
@@ -580,6 +633,7 @@ private def cpiWordLang : CpiWord → Bool
 
 def hasLangLeaf (ops : Array Op) : Bool :=
   walk 16 ops fun
+    | .letLocal _ v => isLangLeaf v
     | .checkedAddU64 l r => isLangLeaf l || isLangLeaf r
     | .checkedSubU64 l r => isLangLeaf l || isLangLeaf r
     | .checkedMulU64 l r => isLangLeaf l || isLangLeaf r
@@ -619,6 +673,39 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .storeField _ v => isLangLeaf v
     | .errorOverflow | .errorNamed _ => false
 
+def hasSelect (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .letLocal _ v => hasSelectVal v
+    | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
+    | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
+        hasSelectVal l || hasSelectVal r
+    | .invoke _ _ data _ bump =>
+        (data.any fun | .u64le v => hasSelectVal v | _ => false) ||
+          (match bump with | some v => hasSelectVal v | none => false)
+    | .evmDeposit v | .evmLog _ v | .forAccum _ v => hasSelectVal v
+    | .forBody _ _ => false
+    | .evmSendEth a b c d =>
+        hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d
+    | .indexSet _ i v _ _ | .mapGetU64 i v => hasSelectVal i || hasSelectVal v
+    | .mapSetU64 a b c => hasSelectVal a || hasSelectVal b || hasSelectVal c
+    | .mapGetAddr a b c d =>
+        hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d
+    | .mapSetAddr a b c d e =>
+        hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d || hasSelectVal e
+    | .mapGetPair a b c d e f g =>
+        hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d ||
+          hasSelectVal e || hasSelectVal f || hasSelectVal g
+    | .mapSetPair a b c d e f g h =>
+        hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d ||
+          hasSelectVal e || hasSelectVal f || hasSelectVal g || hasSelectVal h
+    | .evmTokenTransfer a b c d e f g =>
+        hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d ||
+          hasSelectVal e || hasSelectVal f || hasSelectVal g
+    | .evmTokenBalanceOfSelf a b c =>
+        hasSelectVal a || hasSelectVal b || hasSelectVal c
+    | .okState v | .returnU64 v | .returnState v | .storeField _ v => hasSelectVal v
+    | .errorOverflow | .errorNamed _ => false
+
 def hasForAccum (ops : Array Op) : Bool :=
   walk 16 ops (fun | .forAccum .. => true | _ => false)
 
@@ -645,13 +732,11 @@ def hasTokenOp (ops : Array Op) : Bool :=
     | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. => true
     | _ => false
 
-def hasLangOp (ops : Array Op) : Bool :=
-  hasForAccum ops || hasForBody ops || hasIndexSet ops || hasErrorNamed ops || hasLangLeaf ops
-
 /-- SVM 还不能发的语言叶：位运算、命名错误。for / index 不算。 -/
 def hasSvmRejectedLang (ops : Array Op) : Bool :=
   hasErrorNamed ops ||
     walk 16 ops (fun
+      | .letLocal _ v => isBitVal v
       | .returnU64 v | .okState v | .returnState v | .storeField _ v => isBitVal v
       | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
       | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
@@ -660,6 +745,10 @@ def hasSvmRejectedLang (ops : Array Op) : Bool :=
           (data.any fun | .u64le v => isBitVal v | _ => false) ||
             (match bump with | some v => isBitVal v | none => false)
       | _ => false)
+
+def hasLangOp (ops : Array Op) : Bool :=
+  hasForAccum ops || hasForBody ops || hasIndexSet ops || hasSelect ops ||
+    hasSvmRejectedLang ops
 
 def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmDeposit ops || hasEvmSendEth ops || hasEvmLog ops || hasEvmLeaf ops ||

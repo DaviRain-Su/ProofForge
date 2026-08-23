@@ -136,6 +136,18 @@ private def valSignerAccs : Ops.Val → Array Nat
   | .signerKeyN a => #[a]
   | .field b _ => valSignerAccs b
   | .checkPda _ b => valSignerAccs b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
+  | .mapGetU64 l r => valSignerAccs l ++ valSignerAccs r
+  | .bitNot v => valSignerAccs v
+  | .indexGet b _ i _ => valSignerAccs b ++ valSignerAccs i
+  | .select _ l r t f =>
+      valSignerAccs l ++ valSignerAccs r ++ valSignerAccs t ++ valSignerAccs f
+  | .mapGetAddr a b c d =>
+      valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
+  | .mapGetPair a b c d e f g =>
+      valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
+        valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g
   | _ => #[]
 
 private def walkSignerAccs (fuel : Nat) (ops : Array IR.Op) : Array Nat :=
@@ -145,6 +157,7 @@ private def walkSignerAccs (fuel : Nat) (ops : Array IR.Op) : Array Nat :=
     ops.foldl (init := #[]) fun acc op =>
       let here :=
         match op with
+        | .letLocal _ v => valSignerAccs v
         | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
         | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
             valSignerAccs l ++ valSignerAccs r
@@ -612,10 +625,36 @@ private partial def emitLoadShift (p : IR.Program) (op : String) (l r : Ops.Val)
   stxdw [r10 - {stackOff}], r1
 "
 
+private partial def emitLoadSelect (p : IR.Program) (cmp : Ops.Cmp) (l r t f : Ops.Val)
+    (stackOff nonce : Nat) (scope : String) : Except String String := do
+  let loadL ← loadVal p l (stackOff + 8) (nonce + 1) (scope ++ "_l")
+  let loadR ← loadVal p r (stackOff + 16) (nonce + 2) (scope ++ "_r")
+  let loadT ← loadVal p t stackOff (nonce + 3) (scope ++ "_t")
+  let loadF ← loadVal p f stackOff (nonce + 4) (scope ++ "_f")
+  let thenLab := s!"then_select_{scope}_{stackOff}_{nonce}"
+  let doneLab := s!"done_select_{scope}_{stackOff}_{nonce}"
+  let jump :=
+    match cmp with
+    | .eq => s!"  jeq r1, r2, {thenLab}\n"
+    | .ne => s!"  jne r1, r2, {thenLab}\n"
+    | .lt => s!"  jlt r1, r2, {thenLab}\n"
+    | .le => s!"  jle r1, r2, {thenLab}\n"
+    | .gt => s!"  jgt r1, r2, {thenLab}\n"
+    | .ge => s!"  jge r1, r2, {thenLab}\n"
+  return loadL ++ loadR ++
+    s!"  ldxdw r1, [r10 - {stackOff + 8}]\n  ldxdw r2, [r10 - {stackOff + 16}]\n" ++
+    jump ++ loadF ++ s!"  ja {doneLab}\n{thenLab}:\n" ++ loadT ++ s!"{doneLab}:\n"
+
 
 private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (nonce : Nat := 0)
     (scope : String := "value") : Except String String :=
   match v with
+  | .local i =>
+    let localOff := 320 + i * 8
+    if localOff > 504 then
+      .error "extract/unsupported: too many scalar locals"
+    else
+      .ok s!"  ; load local {i}\n  ldxdw r1, [r10 - {localOff}]\n  stxdw [r10 - {stackOff}], r1\n"
   | .lit n =>
     .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
   | .clockSlot =>
@@ -686,6 +725,7 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadRentExemption n.toNat stackOff scope)
   | .loopIx =>
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
+  | .select cmp l r t f => emitLoadSelect p cmp l r t f stackOff nonce scope
   | .indexGet _ name idx len off =>
     emitLoadIndexGet p name idx len off stackOff nonce scope
   | .bitAnd l r => emitLoadBitBin p "and64" l r stackOff nonce scope
@@ -839,6 +879,18 @@ private def valUsesSigner (v : Ops.Val) : Bool :=
   match v with
   | .signerKey0 | .signerKeyN _ => true
   | .field b _ => valUsesSigner b
+  | .checkPda _ b | .bitNot b => valUsesSigner b
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
+  | .mapGetU64 l r => valUsesSigner l || valUsesSigner r
+  | .indexGet b _ i _ => valUsesSigner b || valUsesSigner i
+  | .select _ l r t f =>
+      valUsesSigner l || valUsesSigner r || valUsesSigner t || valUsesSigner f
+  | .mapGetAddr a b c d =>
+      valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
+  | .mapGetPair a b c d e f g =>
+      valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
+        valUsesSigner e || valUsesSigner f || valUsesSigner g
   | _ => false
 
 private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
@@ -846,6 +898,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
   | 0 => false
   | fuel' + 1 =>
     ops.any fun
+      | .letLocal _ v => valUsesSigner v
       | .checkedAddU64 l r => valUsesSigner l || valUsesSigner r
       | .checkedSubU64 l r => valUsesSigner l || valUsesSigner r
       | .checkedMulU64 l r => valUsesSigner l || valUsesSigner r
@@ -1120,6 +1173,14 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
     | none => match p.slots[0]? with | some slot => slot.name | none => "slot0"
   for op in ops do
     match op with
+    | .letLocal i value =>
+      let localOff := 320 + i * 8
+      if localOff > 504 then
+        throw "extract/unsupported: too many scalar locals"
+      let load ← loadVal p value 8 n s!"{label}_{n}_local_{i}"
+      n := n + 1
+      acc := acc ++ load ++
+        s!"  ldxdw r1, [r10 - 8]\n  stxdw [r10 - {localOff}], r1\n"
     | .checkedAddU64 l r =>
       let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
       let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
@@ -1424,7 +1485,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
     if IR.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
-    else if !(IR.hasCheckedArith m.ops ||
+    else if !(IR.hasCheckedArith m.ops || IR.hasSelect m.ops ||
         m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
