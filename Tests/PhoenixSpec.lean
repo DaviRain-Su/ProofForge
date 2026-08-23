@@ -20,8 +20,10 @@ elab "#pf_guard_phoenix_artifact" : command => do
       source.schema.leaves.any (·.name == "lastEvent_p4") &&
       source.schema.leaves.any (·.name == "events_0_tag") &&
       source.schema.leaves.any (·.name == "events_4_p4") &&
+      source.schema.leaves.any (·.name == "traderKey3_3") &&
+      source.schema.leaves.any (·.name == "traderBaseFree_3") &&
       source.schema.leaves.any (·.name == "eventCount") do
-    throwError "Phoenix bounded MarketEvent layout is missing"
+    throwError "Phoenix bounded event/trader layout is missing"
   let program ←
     match ProofForge.Extract.IR.toLegacyProgram source with
     | .ok program => pure program
@@ -40,8 +42,12 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless labels.length == labels.eraseDups.length do
     let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
-  unless ProofForge.Svm.ABI.dataLen program == 840 do
+  unless ProofForge.Svm.ABI.dataLen program == 1184 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
+  let some deposit := program.methods.find? (·.ixName == "depositFunds")
+    | throwError "missing depositFunds"
+  let some traderIndex := program.methods.find? (·.ixName == "traderIndexOf")
+    | throwError "missing traderIndexOf"
   let some post := program.methods.find? (·.ixName == "postAsk")
     | throwError "missing postAsk"
   let some reduce := program.methods.find? (·.ixName == "reduceAsk")
@@ -62,7 +68,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
     | throwError "missing lastEventAmount"
   let some eventCount := program.methods.find? (·.ixName == "eventCountOf")
     | throwError "missing eventCountOf"
-  unless post.paramCount == 7 && reduce.paramCount == 4 &&
+  unless deposit.paramCount == 2 && traderIndex.paramCount == 4 &&
+      post.paramCount == 7 && reduce.paramCount == 4 &&
       postBid.paramCount == 7 && reduceBid.paramCount == 4 &&
       swap.paramCount == 6 && swapSell.paramCount == 6 && collect.paramCount == 0 &&
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
@@ -142,6 +149,11 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard (init 100).sizes[0]! == 0
 #guard (init 100).priceTicks[0]! == 0
 #guard (init 100).bidPriceTicks[0]! == 0
+#guard (init 100).traderCount == 0
+#guard (init 100).traderBumpIndex == 1
+#guard (init 100).traderFreeHead == 1
+#guard (init 100).traderUsed == empty4
+#guard (init 100).traderBaseFree == empty4
 #guard (init 100).baseLocked == 0
 #guard (init 100).baseFree == 0
 #guard (init 100).eventCount == 0
@@ -178,6 +190,71 @@ private def sellSamples : List Projects.Phoenix.State := [
   bidSequences := #v[~~~(1 : UInt64), 0, ~~~(2 : UInt64), 0] }
 #guard Side.ask != Side.bid
 #guard SelfTradeBehavior.abort != SelfTradeBehavior.cancelProvide
+
+#guard
+  match depositFundsFor (init 1) 11 12 13 14 7 9 with
+  | .ok (st, address) =>
+      address == 1 && st.traderCount == 1 && st.traderBumpIndex == 2 &&
+        st.traderFreeHead == 2 && st.traderUsed == #v[1, 0, 0, 0] &&
+        st.traderKey0[0]! == 11 && st.traderKey1[0]! == 12 &&
+        st.traderKey2[0]! == 13 && st.traderKey3[0]! == 14 &&
+        st.traderBaseFree[0]! == 7 && st.traderQuoteFree[0]! == 9 &&
+        traderIndexOf st 11 12 13 14 == 1 && traderBaseFreeAt st 1 == 7
+  | .error _ => false
+
+#guard
+  match depositFundsFor (init 1) 0 0 0 0 0 0 with
+  | .ok (st, address) =>
+      address == 1 && st.traderUsed[0]! == 1 && traderIndexOf st 0 0 0 0 == 1
+  | .error _ => false
+
+#guard
+  match depositFundsFor (init 1) 11 12 13 14 7 9 with
+  | .error _ => false
+  | .ok (s1, _) =>
+    match depositFundsFor s1 11 12 13 14 5 6 with
+    | .ok (s2, address) =>
+        address == 1 && s2.traderCount == 1 && s2.traderBumpIndex == 2 &&
+          s2.traderBaseFree[0]! == 12 && s2.traderQuoteFree[0]! == 15
+    | .error _ => false
+
+#guard
+  match depositFundsFor (init 1) 1 10 20 30 1 2 with
+  | .error _ => false
+  | .ok (s1, a1) =>
+    match depositFundsFor s1 1 10 20 31 3 4 with
+    | .ok (s2, a2) =>
+        a1 == 1 && a2 == 2 && s2.traderCount == 2 &&
+          traderIndexOf s2 1 10 20 30 == 1 && traderIndexOf s2 1 10 20 31 == 2
+    | .error _ => false
+
+#guard
+  match depositFundsFor (init 1) 1 0 0 0 1 0 with
+  | .error _ => false
+  | .ok (s1, _) =>
+    match depositFundsFor s1 2 0 0 0 1 0 with
+    | .error _ => false
+    | .ok (s2, _) =>
+      match depositFundsFor s2 3 0 0 0 1 0 with
+      | .error _ => false
+      | .ok (s3, _) =>
+        match depositFundsFor s3 4 0 0 0 1 0 with
+        | .error _ => false
+        | .ok (s4, a4) =>
+          a4 == 4 && s4.traderCount == 4 && s4.traderBumpIndex == 5 &&
+            s4.traderFreeHead == 5 &&
+            match depositFundsFor s4 5 0 0 0 1 0 with
+            | .error .overflow => true
+            | _ => false
+
+#guard
+  let s := { (init 1) with
+    traderCount := 1, traderBumpIndex := 2, traderFreeHead := 2,
+    traderUsed := #v[1, 0, 0, 0], traderKey0 := #v[9, 0, 0, 0],
+    traderBaseFree := #v[u64Max, 0, 0, 0] }
+  match depositFundsFor s 9 0 0 0 1 0 with
+  | .error .overflow => true
+  | _ => false
 
 #guard
   match postAskAt { (init 100) with baseFree := 8 } 7 50 8 0 0 0 0 with

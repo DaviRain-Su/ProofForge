@@ -154,6 +154,15 @@ def setMarketEventAt (s : MarketEventBatchState)
   else
     .error .overflow
 
+/-- Dynamic vector writes must preserve an explicit return distinct from every payload leaf. -/
+def setMarketEventReturningIndex (s : MarketEventBatchState)
+    (i maker sequence price filled remaining : UInt64) :
+    Except Examples.Counter.Error (MarketEventBatchState × UInt64) :=
+  if h : i.toNat < 4 then
+    .ok ({ events := s.events.set i.toNat (.fill maker sequence price filled remaining) }, i)
+  else
+    .error .overflow
+
 def firstMarketEventValue (s : MarketEventBatchState) : UInt64 :=
   match s.events[0]! with
   | .uninitialized => 0

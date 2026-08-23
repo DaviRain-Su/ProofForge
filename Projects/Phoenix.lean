@@ -8,15 +8,17 @@ Phoenix v1 `src/state` 在本仓剖面下的摊平。
 
   FIFOOrderId          → priceTicks / sequences
   FIFORestingOrder     → traders / sizes / lastSlots / lastTimes
-  TraderState          → quoteLocked / quoteFree / baseLocked / baseFree
+  TraderState          → traderQuoteLocked / traderQuoteFree / traderBaseLocked / traderBaseFree
   MatchingEngineResponse → match*（bounded fold scratch）
   MarketEvent          → events（固定容量 batch）+ lastEvent（兼容投影）
-  OrderPacket.client_order_id u128、动态树分配器仍关
+  OrderPacket.client_order_id → little-endian UInt64 × UInt64
+  traders tree         → 4×Pubkey limbs + allocator metadata + per-seat TraderState
 
 每边 N=4。档 0 是最优价；ask 价格升序、bid 价格降序，同价均为 FIFO。
 `RBTree4` 给出四档对应的红黑树拓扑见证；撮合只依赖中序次序，
 不把颜色和指针复制进链上状态。free-funds 挂单、驱逐、按 ID reduce/cancel、
-三种 self-trade 和 fee collection 已进入 bounded 模型。
+三种 self-trade 和 fee collection 已进入 bounded 模型。trader registry 保留
+Sokoban 的 1-based address、bump 分配与 LIFO free-list；订单仍只存内部 address。
 -/
 namespace Projects.Phoenix
 
@@ -36,8 +38,9 @@ inductive SelfTradeBehavior where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 /--
-官方内部 `MarketEvent` 的 bounded 形状。trader/client id 在当前账户剖面仍是 `UInt64`；
-完整 Pubkey、u128 和 Borsh event batch 属于 wire/event-recorder 层，不在这里伪装。
+官方内部 `MarketEvent` 的 bounded 形状。maker 暂存 trader tree 的内部 address；
+client id 已是 u128 的两个 little-endian limbs。把 maker address resolve 为 Pubkey，
+以及 Borsh event batch，属于后续 wire/event-recorder adapter。
 -/
 inductive MarketEvent where
   | uninitialized
@@ -78,6 +81,26 @@ structure State where
   bidSizes : Vector UInt64 4
   bidLastSlots : Vector UInt64 4
   bidLastTimes : Vector UInt64 4
+  /--
+  官方 traders 红黑树的 bounded allocator。address 0 是 sentinel，1..4 是 seat；
+  `traderFreeHead = traderBumpIndex` 表示从 bump 区分配，否则弹 LIFO free-list。
+  -/
+  traderCount : UInt64
+  traderBumpIndex : UInt64
+  traderFreeHead : UInt64
+  traderNextFree : Vector UInt64 4
+  traderUsed : Vector UInt64 4
+  /-- Solana Pubkey 的四个 little-endian UInt64 limbs，按 seat 平行存放。 -/
+  traderKey0 : Vector UInt64 4
+  traderKey1 : Vector UInt64 4
+  traderKey2 : Vector UInt64 4
+  traderKey3 : Vector UInt64 4
+  /-- 官方 `TraderState`；每个余额都按内部 seat address 索引。 -/
+  traderQuoteLocked : Vector UInt64 4
+  traderQuoteFree : Vector UInt64 4
+  traderBaseLocked : Vector UInt64 4
+  traderBaseFree : Vector UInt64 4
+  /-- 旧撮合路径保留的 market-wide 兼容投影；接入 per-seat 结算后再删。 -/
   quoteLocked : UInt64
   quoteFree : UInt64
   baseLocked : UInt64
@@ -231,6 +254,19 @@ def init (tick : UInt64) : State :=
     bidSizes := empty4
     bidLastSlots := empty4
     bidLastTimes := empty4
+    traderCount := 0
+    traderBumpIndex := 1
+    traderFreeHead := 1
+    traderNextFree := empty4
+    traderUsed := empty4
+    traderKey0 := empty4
+    traderKey1 := empty4
+    traderKey2 := empty4
+    traderKey3 := empty4
+    traderQuoteLocked := empty4
+    traderQuoteFree := empty4
+    traderBaseLocked := empty4
+    traderBaseFree := empty4
     quoteLocked := 0
     quoteFree := 0
     baseLocked := 0
@@ -247,6 +283,130 @@ def init (tick : UInt64) : State :=
     events := emptyEvents
     eventCount := 0
     lastEvent := .uninitialized }
+
+/-- 完整四 limb Pubkey 相等；`traderUsed` 单独区分合法的全零 Pubkey 与空 seat。 -/
+private def traderKeyEq (s : State) (i : Nat)
+    (key0 key1 key2 key3 : UInt64) : Bool :=
+  s.traderUsed[i]! ≠ 0 &&
+    s.traderKey0[i]! = key0 && s.traderKey1[i]! = key1 &&
+    s.traderKey2[i]! = key2 && s.traderKey3[i]! = key3
+
+/-- Host/view lookup；返回官方 1-based trader index，0 表示未注册。 -/
+@[pf_entry]
+def traderIndexOf (s : State) (key0 key1 key2 key3 : UInt64) : UInt64 :=
+  if traderKeyEq s 0 key0 key1 key2 key3 then 1
+  else if traderKeyEq s 1 key0 key1 key2 key3 then 2
+  else if traderKeyEq s 2 key0 key1 key2 key3 then 3
+  else if traderKeyEq s 3 key0 key1 key2 key3 then 4
+  else 0
+
+/-- 读取某 seat 的 base-free；无效或未分配 address fail-closed 为 0。 -/
+@[pf_entry]
+def traderBaseFreeAt (s : State) (address : UInt64) : UInt64 :=
+  if address = 0 || 4 < address then 0
+  else
+    let i := address.toNat - 1
+    if s.traderUsed[i]! = 0 then 0 else s.traderBaseFree[i]!
+
+/--
+官方 deposit 的 bounded state transition：先按完整 Pubkey 查 seat；缺失时走
+Sokoban allocator 注册，再分别增加该 seat 的 base/quote free。重复注册幂等，
+容量满和余额溢出都 fail closed。返回 1-based trader index。
+
+循环中的 address 用字面量 select，而不是 `i + 1`：这样它保持 state-carrying
+`forBody`，不会被纯加法的 `forAccum` 识别规则误收。
+-/
+def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64) :
+    Except Error (State × UInt64) := Id.run do
+  let mut st := { s with matchStopped := 0 }
+  for i in [0:4] do
+    if st.matchStopped = (0 : UInt64) then
+      let j : Nat := i
+      if st.traderUsed[j]! ≠ (0 : UInt64) then
+        if st.traderKey0[j]! = key0 then
+          if st.traderKey1[j]! = key1 then
+            if st.traderKey2[j]! = key2 then
+              if st.traderKey3[j]! = key3 then
+                let address : UInt64 :=
+                  if i = 0 then 1 else if i = 1 then 2 else if i = 2 then 3 else 4
+                st := { st with matchStopped := address }
+  if st.matchStopped ≠ (0 : UInt64) then
+    let address := st.matchStopped
+    let i := address.toNat - 1
+    if h : i < 4 then
+      if st.traderBaseFree[i]! ≤ u64Max - baseLots then
+        if st.traderQuoteFree[i]! ≤ u64Max - quoteLots then
+          .ok ({ st with
+                  traderBaseFree := st.traderBaseFree.set i (st.traderBaseFree[i]! + baseLots)
+                  traderQuoteFree :=
+                    st.traderQuoteFree.set i (st.traderQuoteFree[i]! + quoteLots) },
+            st.matchStopped)
+        else
+          .error .overflow
+      else
+        .error .overflow
+    else
+      .error .overflow
+  else if st.traderCount < (4 : UInt64) then
+    if st.traderFreeHead = st.traderBumpIndex then
+      if st.traderBumpIndex = (0 : UInt64) then
+        .error .overflow
+      else if st.traderBumpIndex < (5 : UInt64) then
+        let address := st.traderBumpIndex
+        let i := address.toNat - 1
+        .ok ({ st with
+                traderCount := st.traderCount + 1
+                traderBumpIndex := st.traderBumpIndex + 1
+                traderFreeHead := st.traderBumpIndex + 1
+                traderNextFree := st.traderNextFree.set (i % 4) 0
+                traderUsed := st.traderUsed.set (i % 4) 1
+                traderKey0 := st.traderKey0.set (i % 4) key0
+                traderKey1 := st.traderKey1.set (i % 4) key1
+                traderKey2 := st.traderKey2.set (i % 4) key2
+                traderKey3 := st.traderKey3.set (i % 4) key3
+                traderQuoteLocked := st.traderQuoteLocked.set (i % 4) 0
+                traderQuoteFree := st.traderQuoteFree.set (i % 4) quoteLots
+                traderBaseLocked := st.traderBaseLocked.set (i % 4) 0
+                traderBaseFree := st.traderBaseFree.set (i % 4) baseLots
+                matchStopped := address }, address)
+      else
+        .error .overflow
+    else if st.traderFreeHead = (0 : UInt64) then
+      .error .overflow
+    else if st.traderFreeHead < (5 : UInt64) then
+      let address := st.traderFreeHead
+      let i := address.toNat - 1
+      let next := st.traderNextFree[i]!
+      .ok ({ st with
+              traderCount := st.traderCount + 1
+              traderFreeHead := next
+              traderNextFree := st.traderNextFree.set (i % 4) 0
+              traderUsed := st.traderUsed.set (i % 4) 1
+              traderKey0 := st.traderKey0.set (i % 4) key0
+              traderKey1 := st.traderKey1.set (i % 4) key1
+              traderKey2 := st.traderKey2.set (i % 4) key2
+              traderKey3 := st.traderKey3.set (i % 4) key3
+              traderQuoteLocked := st.traderQuoteLocked.set (i % 4) 0
+              traderQuoteFree := st.traderQuoteFree.set (i % 4) quoteLots
+              traderBaseLocked := st.traderBaseLocked.set (i % 4) 0
+              traderBaseFree := st.traderBaseFree.set (i % 4) baseLots
+              matchStopped := address }, address)
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+attribute [pf_inline] depositFundsFor
+
+/--
+SVM adapter：market 是 account 0，trader signer 是 account 1。`signerKey 1`
+同时验证签名并返回 Pubkey 的第 0 limb；其余 limbs 走同一 account-header view。
+-/
+@[pf_entry]
+def depositFunds (s : State) (baseLots quoteLots : UInt64) :
+    Except Error (State × UInt64) :=
+  depositFundsFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
+    baseLots quoteLots
 
 /-- 官方 FIFORestingOrder 是否过期。0 是哨兵。 -/
 def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=

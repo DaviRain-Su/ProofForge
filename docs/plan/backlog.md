@@ -73,7 +73,10 @@ Token-2022 规划见 [analysis/token-2022.md](analysis/token-2022.md)。没有 T
 `forBody` 已支持显式 state-carrying bounded fold 和外层参数。Phoenix N=4 扫书用
 17-phase loop；free-funds ask 插入、驱逐、按 ID reduce/cancel、三种 self-trade 和
 fee collection 已进真实源构建。bid book 的 free-funds collateral、驱逐、
-reduce/cancel 和 sell IOC 也复用同一 fold 落地；动态树 allocator/旋转仍是后续独立范围。
+reduce/cancel 和 sell IOC 也复用同一 fold 落地。四 seat trader registry 已按完整
+四-limb Pubkey 做 lookup/bump allocation/deposit，并保存 per-seat TraderState；下一步把
+post/match/reduce 结算接到这些余额，再补 withdraw/seat eviction。动态树旋转和删除
+fixup 仍是后续独立范围。
 
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。

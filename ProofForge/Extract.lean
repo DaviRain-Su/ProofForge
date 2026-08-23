@@ -2791,11 +2791,18 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
     | some stores => .ok (isets ++ dropVectorRootStores isets stores)
     | none =>
       match isets[isets.size - 1]! with
-      | .indexSet _ _ v _ _ => .ok (isets.push (.okState v))
+      | .indexSet _ _ v _ _ =>
+        -- `.ok ({ state with xs := xs.set i value }, ret)` returns its explicit second
+        -- component, which need not be `value`. Loop yields have no public return and keep
+        -- the written value as their internal fallback.
+        let ret := if isForInStep e then v else (findOkRet env e).getD v
+        .ok (isets.push (.okState ret))
       | _ => .ok isets
   else if let some op := findIndexSet env e then
     match op with
-    | .indexSet _ _ v _ _ => .ok #[op, .okState v]
+    | .indexSet _ _ v _ _ =>
+      let ret := if isForInStep e then v else (findOkRet env e).getD v
+      .ok #[op, .okState ret]
     | _ => .ok #[op]
   else
   let e := peelControl 8 e

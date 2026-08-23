@@ -117,6 +117,31 @@ elab "#pf_guard_state_fold_ir" : command => do
 
 #pf_guard_state_fold_ir
 
+elab "#pf_guard_dynamic_write_return" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initMarketEventBatch
+        ``Tests.Fixtures.setMarketEventReturningIndex
+        ``Tests.Fixtures.firstMarketEventValue with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some setEvent := program.methods.find? (·.ixName == "setMarketEventReturningIndex")
+    | throwError "missing dynamic-write return fixture"
+  let rec terminalReturns (fuel : Nat) (ops : Array ProofForge.Ops.Op) :
+      Array ProofForge.Ops.Val :=
+    match fuel with
+    | 0 => #[]
+    | fuel' + 1 =>
+      ops.flatMap fun
+        | .okState value => #[value]
+        | .ite _ _ _ thn els => terminalReturns fuel' thn ++ terminalReturns fuel' els
+        | .forBody _ body => terminalReturns fuel' body
+        | _ => #[]
+  unless terminalReturns 8 setEvent.ops == #[.arg 0] do
+    throwError s!"dynamic vector write lost its explicit return: {repr setEvent.ops}"
+
+#pf_guard_dynamic_write_return
+
 elab "#pf_guard_conditional_local" : command => do
   let env ← getEnv
   let program ←
