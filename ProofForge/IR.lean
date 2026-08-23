@@ -169,6 +169,20 @@ def vectorLeafOff (p : Program) (name leaf : String) : Nat :=
         off := off + s.width
     return off
 
+/-- 叶内偏移 → 字段名。`0` 对叶子向量仍是整元素。 -/
+def vectorLeafName (p : Program) (name : String) (off : Nat) : String :=
+  let pre0 := name ++ "_0"
+  Id.run do
+    let mut acc : Nat := 0
+    for s in p.slots do
+      if s.name == pre0 || s.name.startsWith (pre0 ++ "_") then
+        if acc == off then
+          let suf := pre0 ++ "_"
+          if s.name.startsWith suf then return (s.name.drop suf.length |>.copy)
+          else return ""
+        acc := acc + s.width
+    return "value"
+
 def dataLen (p : Program) : Nat :=
   let raw := 8 + p.slots.foldl (init := 0) fun acc s => acc + s.width
   let pad := (8 - raw % 8) % 8

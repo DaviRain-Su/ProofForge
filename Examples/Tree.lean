@@ -5,7 +5,7 @@ Sokoban 红黑树节点 + 定长 `Vector`。
 
 官方 `Node` 物理顺序：left / right / parent / color / key / value。
 `SENTINEL = 0`，已分配地址从 1 起。本切片容量 4：空树写根，
-非空且根右孩空时 bump 到槽 1。旋转 / 染色仍关。
+非空且根右孩空时 bump 到槽 1。按地址写 right / parent 已开；旋转 / 染色仍关。
 -/
 namespace Examples.Tree
 
@@ -69,6 +69,27 @@ def setHead (s : State) (v : UInt64) : Except Error (State × UInt64) :=
 def setAt (s : State) (i v : UInt64) : Except Error (State × UInt64) :=
   if h : i.toNat < 4 then
     .ok ({ s with nodes := s.nodes.set i.toNat { s.nodes[i.toNat]! with value := v } }, v)
+  else
+    .error .overflow
+
+/-- 运行时下标读 right。 -/
+@[pf_entry]
+def getRight (s : State) (i : UInt64) : UInt64 :=
+  if i < 4 then s.nodes[i.toNat]!.right else 0
+
+/-- 运行时下标写 right。旋转会用。 -/
+@[pf_entry]
+def setRight (s : State) (i child : UInt64) : Except Error (State × UInt64) :=
+  if h : i.toNat < 4 then
+    .ok ({ s with nodes := s.nodes.set i.toNat { s.nodes[i.toNat]! with right := child } }, child)
+  else
+    .error .overflow
+
+/-- 运行时下标写 parent。 -/
+@[pf_entry]
+def setParent (s : State) (i p : UInt64) : Except Error (State × UInt64) :=
+  if h : i.toNat < 4 then
+    .ok ({ s with nodes := s.nodes.set i.toNat { s.nodes[i.toNat]! with parent := p } }, p)
   else
     .error .overflow
 

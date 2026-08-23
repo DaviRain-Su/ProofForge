@@ -998,8 +998,24 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
           | some (.ctorInfo c) =>
             if isUserType env c.induct && isStructure env c.induct then
               let names := getStructureFields env c.induct
-              if names.isEmpty then none
-              else some names[names.size - 1]!.toString
+              let args := e.getAppArgs
+              let nF := names.size
+              if nF == 0 || args.size < nF then none
+              else
+                -- `{ src with right := v }`：被改的那一叶不是 `src.right`。
+                Id.run do
+                  let mut hit : Option String := none
+                  for i in [0:nF] do
+                    if h : i < nF ∧ i < args.size then
+                      let fname := names[i].toString
+                      let arg := peelLets (strip args[args.size - nF + i])
+                      let looksSame :=
+                        match val env arg with
+                        | some (.field _ n) =>
+                          n == fname || n.endsWith ("_" ++ fname)
+                        | _ => false
+                      unless looksSame do hit := some fname
+                  return hit
             else e.getAppArgs.findSome? (lastFieldName fuel')
           | _ => e.getAppArgs.findSome? (lastFieldName fuel')
         | none => e.getAppArgs.findSome? (lastFieldName fuel')
@@ -1064,7 +1080,12 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
       | .lit _ => none
       | _ =>
         let leaf := (args.findSome? (lastFieldName 8)).getD ""
-        let hint := if leaf.isEmpty then 0 else 40
+        -- 先按官方 Node 物理顺序估偏移；`fillElemOff` 再用槽表改写。
+        let hint :=
+          match leaf with
+          | "left" => 0 | "right" => 8 | "parent" => 16
+          | "color" => 24 | "key" => 32 | "value" => 40
+          | _ => 0
         match baseName 8 e with
         | some n => some (.indexSet n idx payload len hint)
         | none => some (.indexSet "cells" idx payload len hint)
@@ -2753,7 +2774,9 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
     | fuel' + 1 =>
       match v with
       | .indexGet b n i k off =>
-          let off' := if off == 0 then 0 else IR.vectorLeafOff p n "value"
+          let leaf := IR.vectorLeafName p n off
+          let off' :=
+            if leaf.isEmpty then off else IR.vectorLeafOff p n leaf
           .indexGet (goVal fuel' b) n (goVal fuel' i) k off'
       | .field b n => .field (goVal fuel' b) n
       | .addU64 l r => .addU64 (goVal fuel' l) (goVal fuel' r)
@@ -2765,7 +2788,9 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
     | fuel' + 1 =>
       match op with
       | .indexSet n i v k off =>
-          let off' := if off == 0 then 0 else IR.vectorLeafOff p n "value"
+          let leaf := IR.vectorLeafName p n off
+          let off' :=
+            if leaf.isEmpty then off else IR.vectorLeafOff p n leaf
           .indexSet n (goVal 8 i) (goVal 8 v) k off'
       | .ite c l r t f =>
           .ite c (goVal 8 l) (goVal 8 r) (t.map (goOp fuel')) (f.map (goOp fuel'))

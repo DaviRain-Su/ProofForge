@@ -31,6 +31,18 @@ open Examples.Tree
   | .error .overflow => true
   | _ => false
 
+#guard getRight (init 0) 0 == 0
+
+#guard
+  match setRight (init 0) 0 2 with
+  | .ok (st, ret) => st.nodes[0]!.right == 2 && ret == 2 && st.nodes[0]!.value == 0
+  | .error _ => false
+
+#guard
+  match setParent (init 0) 1 1 with
+  | .ok (st, ret) => st.nodes[1]!.parent == 1 && ret == 1 && st.nodes[0]!.parent == 0
+  | .error _ => false
+
 #guard
   match bumpInsert (init 0) 3 7 with
   | .ok (st, ret) =>
