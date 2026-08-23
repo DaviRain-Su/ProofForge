@@ -2210,6 +2210,22 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.evmTokenBalanceOfSelf t0 t1 t2, .returnU64 t0]
   else none
 
+/-- Zeta-reduce syntax-only aliases at the head of an expression.
+Compiler intrinsics and loops stay explicit so later effect/control decoding still sees them. -/
+private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    match strip e with
+    | .letE _ _ value body _ =>
+        let effectful :=
+          (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
+            (findForIn env value).isSome || (findForBodyExpr env value).isSome
+        let directAlias := match strip body with | .bvar 0 => true | _ => false
+        if effectful || (!directAlias && !isIteExpr body) then e
+        else zetaPureHeadLets env fuel' (body.instantiate1 value)
+    | e => e
+
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
@@ -2529,7 +2545,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
 
 def decodeBody (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
-  decodeExpr env 16 body
+  -- Canonicalize syntax-only aliases around control flow before shape decoding.
+  -- Effectful lets remain visible to the dedicated intrinsic decoders.
+  let body := zetaPureHeadLets env 32 body
+  decodeExpr env 16 (substIteLets 64 body)
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -2737,69 +2756,82 @@ private def fieldTypeExpr (env : Environment) (structName fieldName : Name) : Op
     | none => none
     | some info => some (peelForalls info.type)
 
-private def leafSlots (env : Environment) (fuel : Nat) (name : String) (ty : Expr) :
-    Except String (Array IR.Slot) :=
+private structure SchemaFragment where
+  leaves : Array Core.Leaf := #[]
+  vectors : Array Core.VectorLayout := #[]
+
+private def SchemaFragment.byteWidth (fragment : SchemaFragment) : Nat :=
+  fragment.leaves.foldl (init := 0) fun width leaf => width + leaf.width
+
+private def scalarFragment (name : String) (place : Core.Place)
+    (ty : Core.ScalarTy) : SchemaFragment :=
+  { leaves := #[{ place, name, ty }] }
+
+private def optionFragment (name : String) (place : Core.Place) : SchemaFragment :=
+  { leaves := #[
+      { place := place.push .optionTag, name := s!"{name}_tag", ty := .optionTag },
+      { place := place.push .optionPayload, name := s!"{name}_p0", ty := .uint 64 }
+    ] }
+
+private def leafSchema (env : Environment) (fuel : Nat) (name : String)
+    (place : Core.Place) (ty : Expr) : Except String SchemaFragment :=
   match fuel with
   | 0 => .error s!"extract/unsupported: field {name} nest depth"
   | fuel' + 1 =>
     let ty := ty.consumeMData
     if ty.getAppFn.constName? == some ``UInt64 then
-      .ok #[{ name, width := 8, abi := "u64-le" }]
+      .ok (scalarFragment name place (.uint 64))
     else if ty.getAppFn.constName? == some ``UInt32 then
-      .ok #[{ name, width := 4, abi := "u32-le" }]
+      .ok (scalarFragment name place (.uint 32))
     else if ty.getAppFn.constName? == some ``UInt16 then
-      .ok #[{ name, width := 2, abi := "u16-le" }]
+      .ok (scalarFragment name place (.uint 16))
     else if ty.getAppFn.constName? == some ``UInt8 then
-      .ok #[{ name, width := 1, abi := "u8-le" }]
+      .ok (scalarFragment name place (.uint 8))
     else if ty.getAppFn.constName? == some ``Option then
       let args := ty.getAppArgs
       if args.size ≥ 1 && args[args.size - 1]!.consumeMData.getAppFn.constName? == some ``UInt64 then
-        .ok #[
-          { name := s!"{name}_tag", width := 8, abi := "u64-le" },
-          { name := s!"{name}_p0", width := 8, abi := "u64-le" }
-        ]
+        .ok (optionFragment name place)
       else
         .error s!"extract/unsupported: field {name} is not Option UInt64"
     else if ty.getAppFn.constName? == some ``Vector then
       let args := ty.getAppArgs
-      if args.size ≥ 2 && args[args.size - 2]!.consumeMData.getAppFn.constName? == some ``UInt64 then
-        match asLit 8 args[args.size - 1]! with
-        | some (.lit n) =>
-          if n.toNat = 0 then
-            .error s!"extract/unsupported: field {name} Vector length 0"
-          else
-            .ok ((List.range n.toNat).toArray.map fun i =>
-              { name := s!"{name}_{i}", width := 8, abi := "u64-le" })
-        | _ => .error s!"extract/unsupported: field {name} Vector length is not a literal"
-      else if args.size ≥ 2 then
-        -- `Vector Nested n`：每个元素再摊平。
+      if args.size ≥ 2 then
         match asLit 8 args[args.size - 1]! with
         | some (.lit n) =>
           if n.toNat = 0 then
             .error s!"extract/unsupported: field {name} Vector length 0"
           else
             Id.run do
-              let mut acc : Array IR.Slot := #[]
+              let mut leaves : Array Core.Leaf := #[]
+              let mut vectors : Array Core.VectorLayout := #[]
+              let mut elementBytes : Nat := 0
+              let mut elementLeaves : Nat := 0
               for i in List.range n.toNat do
-                match leafSlots env fuel' s!"{name}_{i}" args[args.size - 2]! with
-                | .error r => return .error r
-                | .ok ss => acc := acc ++ ss
-              return .ok acc
+                let itemPlace := place.push (.index i)
+                match leafSchema env fuel' s!"{name}_{i}" itemPlace args[args.size - 2]! with
+                | .error reason => return .error reason
+                | .ok item =>
+                    if i == 0 then
+                      elementBytes := item.byteWidth
+                      elementLeaves := item.leaves.size
+                    leaves := leaves ++ item.leaves
+                    vectors := vectors ++ item.vectors
+              let vector : Core.VectorLayout := {
+                place, name, length := n.toNat, elementBytes, elementLeaves
+              }
+              return .ok { leaves, vectors := #[vector] ++ vectors }
         | _ => .error s!"extract/unsupported: field {name} Vector length is not a literal"
       else
         .error s!"extract/unsupported: field {name} is not Vector UInt64 n"
     else if ty.getAppFn.constName? == some ``Array then
       .error s!"extract/unsupported: field {name} Array is not fixed-length; use Vector"
     else if ty.getAppFn.constName? == some ``Bool then
-      .ok #[{ name, width := 1, abi := "u8-le" }]
+      .ok (scalarFragment name place .bool)
     else if let some tyName := ty.getAppFn.constName? then
       if isEnumLeaf env tyName then
-        .ok #[{ name, width := 8, abi := "u64-le" }]
+        .ok (scalarFragment name place (.enum tyName.toString))
       else if isOptionLikeInductive env tyName then
-        .ok #[
-          { name := s!"{name}_tag", width := 8, abi := "u64-le" },
-          { name := s!"{name}_p0", width := 8, abi := "u64-le" }
-        ]
+        .ok (optionFragment name place)
       else if isUserName env tyName && isStructure env tyName &&
           !(isEnumLeaf env tyName) && !(isOptionLikeInductive env tyName) then
         if !(getStructureParentInfo env tyName).isEmpty then
@@ -2810,15 +2842,22 @@ private def leafSlots (env : Environment) (fuel : Nat) (name : String) (ty : Exp
             .error s!"extract/unsupported: field {name} record has no fields"
           else
             Id.run do
-              let mut acc : Array IR.Slot := #[]
+              let mut acc : SchemaFragment := {}
+              let mut ordinal : Nat := 0
               for f in fields do
                 if (isSubobjectField? env tyName f).isSome then
                   return .error s!"extract/unsupported: field {name} record inheritance"
                 let some fty := fieldTypeExpr env tyName f
                   | return .error s!"extract/unsupported: field {name}.{f} has no type"
-                match leafSlots env fuel' s!"{name}_{f}" fty with
+                let childPlace := place.push (.field tyName.toString ordinal f.toString)
+                match leafSchema env fuel' s!"{name}_{f}" childPlace fty with
                 | .error r => return .error r
-                | .ok ss => acc := acc ++ ss
+                | .ok fragment =>
+                    acc := {
+                      leaves := acc.leaves ++ fragment.leaves
+                      vectors := acc.vectors ++ fragment.vectors
+                    }
+                ordinal := ordinal + 1
               return .ok acc
       else if match env.find? tyName with | some (.inductInfo _) => true | _ => false then
         .error s!"extract/unsupported: field {name} enum has payload"
@@ -2834,8 +2873,8 @@ def programNameOfInit (n : Name) : String :=
   | .str _ "init" => "Program"
   | _ => "Program"
 
-/-- 从 `init` 返回类型收槽。无 `extends`。叶子：UInt8/16/32/64、Option UInt64、Vector、嵌套 structure。 -/
-def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.Slot) := do
+/-- 从 `init` 返回类型收 typed state schema。无 `extends`。 -/
+def inferSchema (env : Environment) (initName : Name) : Except String Core.Schema := do
   let some info := env.find? initName
     | throw s!"extract/unsupported: unknown {initName}"
   let some structName := (peelForalls info.type).getAppFn.constName?
@@ -2847,14 +2886,26 @@ def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.S
   let names := getStructureFields env structName
   if names.isEmpty then
     throw "extract/unsupported: structure has no fields"
-  let mut slots : Array IR.Slot := #[]
+  let mut leaves : Array Core.Leaf := #[]
+  let mut vectors : Array Core.VectorLayout := #[]
+  let mut ordinal : Nat := 0
   for n in names do
     if (isSubobjectField? env structName n).isSome then
       throw "extract/unsupported: record inheritance"
     let some ty := fieldTypeExpr env structName n
       | throw s!"extract/unsupported: field {n} has no type"
-    slots := slots ++ (← leafSlots env 8 n.toString ty)
-  return slots
+    let place : Core.Place := {
+      steps := #[.field structName.toString ordinal n.toString]
+    }
+    let fragment ← leafSchema env 8 n.toString place ty
+    leaves := leaves ++ fragment.leaves
+    vectors := vectors ++ fragment.vectors
+    ordinal := ordinal + 1
+  return { rootType := structName.toString, leaves, vectors }
+
+/-- Compatibility physical slots are now a derived view of the typed schema. -/
+def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.Slot) := do
+  return IR.slotsOfSchema (← inferSchema env initName)
 
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
   return (← inferSlots env initName).map (·.name)
@@ -2960,6 +3011,14 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
       | op => op
   { p with methods := p.methods.map fun m => { m with ops := m.ops.map (goOp 8) } }
 
+/-- Make state writeback explicit once, after source schema and normalized Ops are both available. -/
+private def evaluateProgram (p : IR.Program) : Except String IR.Program := do
+  let mut methods := #[]
+  for method in p.methods do
+    let evaluation ← Core.evaluate p.schema method.ops
+    methods := methods.push { method with evaluation }
+  return { p with methods }
+
 private def checkUsedFields (p : IR.Program) : Except String Unit := do
   for m in p.methods do
     for op in m.ops do
@@ -2975,7 +3034,8 @@ def extractProgram (env : Environment)
   match Profile.checkAll env #[initName, incrementName, getName] with
   | .reject reason => throw reason
   | .accept => pure ()
-  let inferred ← inferSlots env initName
+  let schema ← inferSchema env initName
+  let inferred := IR.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
@@ -2988,11 +3048,15 @@ def extractProgram (env : Environment)
   let program : IR.Program := {
     name := programName.getD (programNameOfInit initName)
     slots
+    schema
     methods := #[initM, incM, getM]
   }
   unless IR.isProgramShape program do
     throw "extract/unsupported: not three-method shape"
+  unless IR.schemaMatchesSlots program do
+    throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
+  let program ← evaluateProgram program
   checkUsedFields program
   match IR.layoutMarkerHex program with
   | .error reason => throw reason
@@ -3053,7 +3117,8 @@ def extractModule (env : Environment) (ns : Name)
     match inits.find? (fun n => IR.lastName n.toString == "init") with
     | some n => n
     | none => inits[0]!
-  let inferred ← inferSlots env initName
+  let schema ← inferSchema env initName
+  let inferred := IR.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
@@ -3083,11 +3148,15 @@ def extractModule (env : Environment) (ns : Name)
   let program : IR.Program := {
     name := programNameOfInit initName
     slots
+    schema
     methods
   }
   unless IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
+  unless IR.schemaMatchesSlots program do
+    throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
+  let program ← evaluateProgram program
   checkUsedFields program
   match IR.layoutMarkerHex program with
   | .error reason => throw reason

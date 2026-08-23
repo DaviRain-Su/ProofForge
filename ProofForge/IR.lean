@@ -1,4 +1,6 @@
 import ProofForge.Ops
+import ProofForge.Core.Schema
+import ProofForge.Core.Eval
 import ProofForge.Crypto.Sha256
 
 namespace ProofForge.IR
@@ -43,6 +45,8 @@ structure Method where
   retCount : Nat := 1
   sketch : Array String := #[]
   ops : Array Ops.Op := #[]
+  /-- Target-neutral state semantics. Empty/default only for legacy hand-authored fixtures. -/
+  evaluation : Core.Evaluation := {}
   deriving BEq, Repr, Inhabited
 
 /-- 账户槽。偏移从 header 后累加。 -/
@@ -56,11 +60,21 @@ structure Slot where
 structure Program where
   name : String
   slots : Array Slot := #[{ name := "value" }]
+  /-- Source-level typed identity for each flattened slot. Empty only for legacy hand-written fixtures. -/
+  schema : Core.Schema := {}
   methods : Array Method
   deriving BEq, Repr, Inhabited
 
 def Program.fields (p : Program) : Array String :=
   p.slots.map (·.name)
+
+def slotsOfSchema (schema : Core.Schema) : Array Slot :=
+  schema.leaves.map fun leaf =>
+    { name := leaf.name, width := leaf.width, abi := leaf.abi }
+
+/-- Extracted programs must keep the compatibility slots as a lossless physical view of the typed schema. -/
+def schemaMatchesSlots (p : Program) : Bool :=
+  p.schema.isEmpty || slotsOfSchema p.schema == p.slots
 
 def hasKind (p : Program) (k : MethodKind) : Bool :=
   p.methods.any (fun m => m.kind == k)
@@ -123,8 +137,14 @@ def fieldOffset (p : Program) (name : String) : Option Nat :=
 def fieldWidth (p : Program) (name : String) : Option Nat :=
   (p.slots.find? (·.name == name)).map (·.width)
 
-/-- `cells` / `nodes` 这类定长向量：按 `name_0*` 一组算元素个数和每元素字节。 -/
-def vectorElem (p : Program) (name : String) : Option (Nat × Nat) :=
+structure VectorStorage where
+  baseSlot : Nat
+  length : Nat
+  strideBytes : Nat
+  strideSlots : Nat
+  deriving BEq, Repr, Inhabited
+
+private def legacyVectorStorage (p : Program) (name : String) : Option VectorStorage :=
   let pre0 := name ++ "_0"
   let group :=
     p.slots.filter fun s => s.name == pre0 || s.name.startsWith (pre0 ++ "_")
@@ -146,7 +166,26 @@ def vectorElem (p : Program) (name : String) : Option (Nat × Nat) :=
         match rest.toNat? with
         | some i => Nat.max acc (i + 1)
         | none => acc
-    if n = 0 || width = 0 then none else some (n, width)
+    let baseSlot := p.slots.findIdx fun s => s.name == pre0 || s.name.startsWith (pre0 ++ "_")
+    if n = 0 || width = 0 then none
+    else some { baseSlot, length := n, strideBytes := width, strideSlots := group.size }
+
+/-- Typed vector layout for extracted programs; the string parser is isolated here for old Golden fixtures. -/
+def vectorStorage (p : Program) (name : String) : Option VectorStorage :=
+  match p.schema.vector? name with
+  | some vector => do
+      let baseSlot ← p.schema.vectorBaseLeafIndex? vector
+      return {
+        baseSlot
+        length := vector.length
+        strideBytes := vector.elementBytes
+        strideSlots := vector.elementLeaves
+      }
+  | none => legacyVectorStorage p name
+
+/-- `cells` / `nodes` 这类定长向量的元素个数和每元素字节数。 -/
+def vectorElem (p : Program) (name : String) : Option (Nat × Nat) :=
+  (vectorStorage p name).map fun layout => (layout.length, layout.strideBytes)
 
 def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
   if given ≠ 0 then given
@@ -157,8 +196,20 @@ def vectorStride (p : Program) (name : String) : Nat :=
   | some (_, w) => w
   | none => 8
 
-/-- `nodes[i].value` 相对 `nodes_0_left` 的叶内偏移。 -/
-def vectorLeafOff (p : Program) (name leaf : String) : Nat :=
+private def slotOffsetAt (p : Program) (index : Nat) : Option Nat :=
+  if index ≥ p.slots.size then none
+  else
+    let before := p.slots.extract 0 index
+    some (8 + before.foldl (init := 0) fun acc slot => acc + slot.width)
+
+def vectorBaseOffset (p : Program) (name : String) : Option Nat := do
+  let layout ← vectorStorage p name
+  slotOffsetAt p layout.baseSlot
+
+def vectorBaseSlot (p : Program) (name : String) : Option Nat :=
+  (vectorStorage p name).map (·.baseSlot)
+
+private def legacyVectorLeafOff (p : Program) (name leaf : String) : Nat :=
   let pre0 := name ++ "_0"
   Id.run do
     let mut off : Nat := 0
@@ -169,8 +220,18 @@ def vectorLeafOff (p : Program) (name leaf : String) : Nat :=
         off := off + s.width
     return off
 
-/-- 叶内偏移 → 字段名。`0` 对叶子向量仍是整元素。 -/
-def vectorLeafName (p : Program) (name : String) (off : Nat) : String :=
+/-- `nodes[i].value` 相对 `nodes_0_left` 的叶内偏移。 -/
+def vectorLeafOff (p : Program) (name leaf : String) : Nat :=
+  match p.schema.vector? name with
+  | some vector => Id.run do
+      let mut off : Nat := 0
+      for item in p.schema.vectorElementLeaves vector do
+        if vector.relativeLeafName item == leaf then return off
+        off := off + item.width
+      return off
+  | none => legacyVectorLeafOff p name leaf
+
+private def legacyVectorLeafName (p : Program) (name : String) (off : Nat) : String :=
   let pre0 := name ++ "_0"
   Id.run do
     let mut acc : Nat := 0
@@ -182,6 +243,29 @@ def vectorLeafName (p : Program) (name : String) (off : Nat) : String :=
           else return ""
         acc := acc + s.width
     return "value"
+
+/-- 叶内偏移 → 字段名。`0` 对叶子向量仍是整元素。 -/
+def vectorLeafName (p : Program) (name : String) (off : Nat) : String :=
+  match p.schema.vector? name with
+  | some vector => Id.run do
+      let mut acc : Nat := 0
+      for item in p.schema.vectorElementLeaves vector do
+        if acc == off then return vector.relativeLeafName item
+        acc := acc + item.width
+      return "value"
+  | none => legacyVectorLeafName p name off
+
+/-- First Option tag/payload names. Typed paths are authoritative for extracted programs. -/
+def optionLeafNames? (p : Program) : Option (String × String) :=
+  match p.schema.firstOption? with
+  | some (tag, payload) => some (tag.name, payload.name)
+  | none => do
+      let tag ← p.slots.find? (fun slot => slot.name.endsWith "_tag")
+      let payload ← p.slots.find? (fun slot => slot.name.endsWith "_p0")
+      return (tag.name, payload.name)
+
+def hasOptionLeaves (p : Program) : Bool :=
+  (optionLeafNames? p).isSome
 
 def dataLen (p : Program) : Nat :=
   let raw := 8 + p.slots.foldl (init := 0) fun acc s => acc + s.width

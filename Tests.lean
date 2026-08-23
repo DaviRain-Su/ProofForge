@@ -57,3 +57,4 @@ import Tests.OwnableSpec
 import Tests.TokenSpec
 import Tests.IdlSpec
 import Tests.DumpIncrement
+import Tests.NormalizationSpec

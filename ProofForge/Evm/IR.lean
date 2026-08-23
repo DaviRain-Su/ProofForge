@@ -22,6 +22,7 @@ structure Method where
   paramWidths : Array Nat := #[]
   retCount : Nat := 1
   ops : Array Ops.Op := #[]
+  evaluation : Core.Evaluation := {}
   view : Bool := false
   payable : Bool := false
   deriving BEq, Repr, Inhabited
@@ -29,6 +30,8 @@ structure Method where
 structure Program where
   name : String
   slots : Array Slot
+  /-- Target-neutral source identity retained across EVM lowering. -/
+  schema : Core.Schema := {}
   constructor : Method
   entries : Array Method
   deriving BEq, Repr, Inhabited
@@ -39,8 +42,77 @@ def slotIndex (p : Program) (name : String) : Option Nat :=
 def slotWidth (p : Program) (name : String) : Option Nat :=
   (p.slots.find? (·.name == name)).map (·.width)
 
+def optionLeafNames? (p : Program) : Option (String × String) :=
+  match p.schema.firstOption? with
+  | some (tag, payload) => some (tag.name, payload.name)
+  | none => do
+      let tag ← p.slots.find? (fun slot => slot.name.endsWith "_tag")
+      let payload ← p.slots.find? (fun slot => slot.name.endsWith "_p0")
+      return (tag.name, payload.name)
+
 def hasOptionLeaves (p : Program) : Bool :=
-  p.slots.any (fun s => s.name.endsWith "_tag")
+  (optionLeafNames? p).isSome
+
+private def legacyVectorStorage (p : Program) (name : String) :
+    Option ProofForge.IR.VectorStorage :=
+  let pre0 := name ++ "_0"
+  let group :=
+    p.slots.filter fun slot => slot.name == pre0 || slot.name.startsWith (pre0 ++ "_")
+  if group.isEmpty then none
+  else
+    let digitPrefix (value : String) : String :=
+      Id.run do
+        let mut out := ""
+        for c in value.toList do
+          if c.isDigit then out := out.push c else return out
+        return out
+    let length :=
+      p.slots.foldl (init := 0) fun acc slot =>
+        let rest :=
+          if slot.name.startsWith (name ++ "_") then
+            digitPrefix (slot.name.drop (name.length + 1) |>.copy)
+          else ""
+        match rest.toNat? with
+        | some i => Nat.max acc (i + 1)
+        | none => acc
+    let width := group.foldl (init := 0) fun acc slot => acc + slot.width
+    let baseSlot := group[0]!.index
+    if length == 0 then none
+    else some { baseSlot, length, strideBytes := width, strideSlots := group.size }
+
+def vectorStorage (p : Program) (name : String) : Option ProofForge.IR.VectorStorage :=
+  match p.schema.vector? name with
+  | some vector => do
+      let baseSlot ← p.schema.vectorBaseLeafIndex? vector
+      return {
+        baseSlot
+        length := vector.length
+        strideBytes := vector.elementBytes
+        strideSlots := vector.elementLeaves
+      }
+  | none => legacyVectorStorage p name
+
+def vectorBaseSlot (p : Program) (name : String) : Option Nat :=
+  (vectorStorage p name).map (·.baseSlot)
+
+def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
+  if given != 0 then given else (vectorStorage p name).map (·.length) |>.getD 0
+
+def vectorStrideSlots (p : Program) (name : String) : Nat :=
+  (vectorStorage p name).map (·.strideSlots) |>.getD 1
+
+/-- Convert a byte offset within one source vector element to its EVM leaf-slot offset. -/
+def vectorLeafSlotOffset (p : Program) (name : String) (byteOffset : Nat) : Nat :=
+  match p.schema.vector? name with
+  | some vector => Id.run do
+      let mut bytes : Nat := 0
+      let mut slot : Nat := 0
+      for leaf in p.schema.vectorElementLeaves vector do
+        if bytes == byteOffset then return slot
+        bytes := bytes + leaf.width
+        slot := slot + 1
+      return slot
+  | none => byteOffset / 8
 
 private def valForbidden : Ops.Val → Bool
   | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0
@@ -155,6 +227,7 @@ def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
     paramWidths := ctorSrc.paramWidths
     retCount := 1
     ops := ctorSrc.ops
+    evaluation := ctorSrc.evaluation
     view := false
     payable := false
   }
@@ -176,12 +249,13 @@ def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
       paramWidths := widths
       retCount := m.retCount
       ops := m.ops
+      evaluation := m.evaluation
       view
       payable := !view && Ops.hasEvmDeposit m.ops
     }
   let slots := src.slots.mapIdx fun i s =>
     { name := s.name, index := i, width := s.width }
-  return { name := src.name, slots, constructor := ctor, entries }
+  return { name := src.name, slots, schema := src.schema, constructor := ctor, entries }
 
 private def cmpTag : Ops.Cmp → String
   | .eq => "eq" | .ne => "ne" | .lt => "lt"

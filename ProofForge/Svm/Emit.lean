@@ -727,11 +727,7 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
 /-- `cells_0` / `nodes_0_*` 起的定长向量。`idx ≥ len` → Custom(1)。 -/
 private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops.Val)
     (len elemOff stackOff nonce : Nat) : Except String String := do
-  let baseName :=
-    if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0"
-    else if (IR.fieldOffset p (name ++ "_0_left")).isSome then name ++ "_0_left"
-    else name
-  let some baseOff := IR.fieldOffset p baseName
+  let some baseOff := IR.vectorBaseOffset p name
     | .error s!"extract/unsupported: unknown vector {name}"
   let loadIdx ← loadVal p idx (stackOff + 8) (nonce + 1)
   let bound := IR.vectorLenOf p name len
@@ -1270,11 +1266,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
   {doneLab}:
   "
     | .indexSet name idx value len elemOff =>
-      let baseName :=
-        if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0"
-        else if (IR.fieldOffset p (name ++ "_0_left")).isSome then name ++ "_0_left"
-        else name
-      let some baseOff := IR.fieldOffset p baseName
+      let some baseOff := IR.vectorBaseOffset p name
         | throw s!"extract/unsupported: unknown vector {name}"
       let loadI ← loadVal p idx 8 n
       let loadV ← loadVal p value 16 (n + 1)
@@ -1314,7 +1306,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       acc := acc ++ load
       acc := acc ++ (← storeField p name 24)
     | .okState v =>
-      let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
+      let optionNames := IR.optionLeafNames? p
       if Ops.hasStoreField ops then
         match v with
         | .lit k =>
@@ -1324,15 +1316,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           let load ← loadVal p v 24
           acc := acc ++ load
           acc := acc ++ emitReturnU64 24
-      else if hasOpt then
-        let tagName :=
-          match p.slots.find? (fun s => s.name.endsWith "_tag") with
-          | some s => s.name
-          | none => destHint
-        let payName :=
-          match p.slots.find? (fun s => s.name.endsWith "_p0") with
-          | some s => s.name
-          | none => destHint
+      else if optionNames.isSome then
+        let (tagName, payName) := optionNames.getD (destHint, destHint)
         match v with
         | .lit 0 =>
           acc := acc ++ "  lddw r1, 0\n  stxdw [r10 - 24], r1\n"

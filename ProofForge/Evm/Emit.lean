@@ -106,13 +106,6 @@ private def widthMask (width : Nat) : String :=
 private def maskExpr (width : Nat) (value : String) : String :=
   if width == 8 then value else "and(" ++ value ++ ", " ++ widthMask width ++ ")"
 
-private def vectorStrideSlots (p : IR.Program) (name : String) : Nat :=
-  let pre0 := name ++ "_0"
-  let n :=
-    p.slots.foldl (init := 0) fun acc s =>
-      if s.name == pre0 || s.name.startsWith (pre0 ++ "_") then acc + 1 else acc
-  if n == 0 then 1 else n
-
 private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
     (v : Ops.Val) : Except String String :=
   match v with
@@ -175,16 +168,10 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       return "shr(" ++ rv ++ ", " ++ lv ++ ")"
   | .indexGet _ name idx _len off => do
       let iv ← loadVal p paramPrefix paramCount idx
-      let base ←
-        match p.slots.find? (fun s =>
-            s.name == name ++ "_0" || s.name == name ++ "_0_left" || s.name == name) with
-        | some s => pure s.index
-        | none =>
-          match p.slots.find? (fun s => s.name.startsWith (name ++ "_0")) with
-          | some s => pure s.index
-          | none => throw s!"extract/unsupported: unknown vector {name}"
-      let stride := vectorStrideSlots p name
-      let leaf := off / 8
+      let some base := IR.vectorBaseSlot p name
+        | throw s!"extract/unsupported: unknown vector {name}"
+      let stride := IR.vectorStrideSlots p name
+      let leaf := IR.vectorLeafSlotOffset p name off
       return "sload(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
         toString stride ++ ")))"
   | .loopIx => .ok "i"
@@ -225,27 +212,10 @@ private def storeNamed (p : IR.Program) (indent name value : String) : Except St
   let w := (IR.slotWidth p name).getD 8
   return storeSlot indent slot (maskExpr w value)
 
-private def optionTagName (p : IR.Program) : String :=
-  match p.slots.find? (fun s => s.name.endsWith "_tag") with
-  | some s => s.name
-  | none => "slot_tag"
-
-private def optionPayName (p : IR.Program) : String :=
-  match p.slots.find? (fun s => s.name.endsWith "_p0") with
-  | some s => s.name
-  | none => "slot_p0"
-
 private structure Render where
   last : Option String := none
   next : Nat := 0
   loopIx : Option String := none
-
-private def vectorLen (p : IR.Program) (name : String) (given : Nat) : Nat :=
-  if given ≠ 0 then given
-  else
-    let pre := name ++ "_"
-    p.slots.foldl (init := 0) fun acc s =>
-      if s.name.startsWith pre then acc + 1 else acc
 
 private def fresh (r : Render) : String × Render :=
   (s!"v{r.next}", { r with next := r.next + 1 })
@@ -287,18 +257,12 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           | .loopIx =>
               pure ("", st.loopIx.getD "i", st)
           | _ => materializeVal p indent paramPrefix paramCount idx st
-        let base ←
-          match p.slots.find? (fun s =>
-              s.name == name ++ "_0" || s.name == name ++ "_0_left" || s.name == name) with
-          | some s => pure s.index
-          | none =>
-            match p.slots.find? (fun s => s.name.startsWith (name ++ "_0")) with
-            | some s => pure s.index
-            | none => throw s!"extract/unsupported: unknown vector {name}"
+        let some base := IR.vectorBaseSlot p name
+          | throw s!"extract/unsupported: unknown vector {name}"
         let (nm, st2) := fresh st1
-        let bound := toString (vectorLen p name len)
-        let stride := vectorStrideSlots p name
-        let leaf := off / 8
+        let bound := toString (IR.vectorLenOf p name len)
+        let stride := IR.vectorStrideSlots p name
+        let leaf := IR.vectorLeafSlotOffset p name off
         let txt := pre ++
           indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := sload(add(" ++ toString (base + leaf) ++
@@ -532,17 +496,11 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         let (preI, iv, st1) ← materializeVal p indent paramPrefix paramCount idx st
         let (preV, vv, st2) ← materializeVal p indent paramPrefix paramCount value st1
         st := st2
-        let base ←
-          match p.slots.find? (fun s =>
-              s.name == name ++ "_0" || s.name == name ++ "_0_left" || s.name == name) with
-          | some s => pure s.index
-          | none =>
-            match p.slots.find? (fun s => s.name.startsWith (name ++ "_0")) with
-            | some s => pure s.index
-            | none => throw s!"extract/unsupported: unknown vector {name}"
-        let bound := toString (vectorLen p name len)
-        let stride := vectorStrideSlots p name
-        let leaf := elemOff / 8
+        let some base := IR.vectorBaseSlot p name
+          | throw s!"extract/unsupported: unknown vector {name}"
+        let bound := toString (IR.vectorLenOf p name len)
+        let stride := IR.vectorStrideSlots p name
+        let leaf := IR.vectorLeafSlotOffset p name elemOff
         acc := acc ++ preI ++ preV ++
           indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "sstore(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
@@ -740,8 +698,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           let value := st.last.getD "0"
           acc := acc ++ returnWord indent value
         else if IR.hasOptionLeaves p then
-          let tagN := optionTagName p
-          let payN := optionPayName p
+          let (tagN, payN) := (IR.optionLeafNames? p).getD ("slot_tag", "slot_p0")
           match v with
           | .lit 0 =>
               acc := acc ++ (← storeNamed p indent tagN "0")
