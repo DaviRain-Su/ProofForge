@@ -36,10 +36,12 @@ SVM / EVM emitter 不再扫描 `_0_left`、`_tag`、`_p0` 来猜 Vector / Option
   明确没有虚构的静态首槽写入。
 - `Evaluation.explicit = false` 只用于没有 schema 的旧手写 fixture。
 
-当前 `Ops` 仍是保持已有 SVM/EVM 字节输出的 compatibility lowering，emitters 在下一阶段
-拆成独立 target IR 前继续发射它。这里刻意不让 emitter 直接消费 Core evaluation：旧 SVM
-对 `indexSet + okState` 会额外覆写首槽，而 EVM 不会；把任一旧行为塞回 Core 都会污染
-target-neutral 语义。target IR 拆分时应以 evaluation 为输入，并删除这组后端猜测。
+当前 `Ops` 仍是前端 compatibility lowering，但 emitter 不再直接消费它：
+`Svm.IR.fromProgram` / `Evm.IR.fromProgram` 分别把它降到两个互不共享 constructor 的 target
+`Op`，并把 typed `Place` 物化成 SVM account-data byte offset 或 EVM storage slot。
+`Core.Evaluation` 随 target method 保留，下一步用它替换 target `okState` 的兼容写回规则。这里刻意
+不让旧规则进入 Core：旧 SVM 对 `indexSet + okState` 会额外覆写首槽，而 EVM 不会；把任一旧
+行为塞回 Core 都会污染 target-neutral 语义。
 
 ## Source-form normalization
 
@@ -77,5 +79,7 @@ schema 默认从 `init` 返回类型收：必须是已注册 `structure`、无 `
 `Tests/LayoutSpec.lean`：窄字段偏移、Option 双叶、layout marker。
 `Tests/NormalizationSpec.lean`：等价 Lean 表面形式抽成同一 Core；Tree 的 typed Vector schema
 固定为 4 个元素、每元素 48 字节 / 6 叶；checked result、Option 双叶和动态 Vector
-writeback 的 Core evaluation 是显式且 typed 的；Maybe / Tree / Window 的 typed 与 legacy
-schema 路径生成逐字节相同的 SVM 输出，适用程序的 EVM 输出也相同。
+writeback 的 Core evaluation 是显式且 typed 的；同一 Tree `Place` 在 SVM target IR 中变成
+byte offset/stride，在 EVM target IR 中变成 slot/slot-stride；Maybe 的 Option tag/payload
+也保持同一 typed identity；Maybe / Tree / Window 的 typed 与 legacy schema 路径生成逐字节
+相同的 SVM 输出，适用程序的 EVM 输出也相同。

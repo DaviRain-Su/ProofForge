@@ -179,6 +179,64 @@ elab "#pf_guard_tree_schema" : command => do
 
 #pf_guard_tree_schema
 
+elab "#pf_guard_target_lowering" : command => do
+  let env ← getEnv
+  let tree ←
+    match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmTree ←
+    match ProofForge.Svm.IR.fromProgram tree with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let evmTree ←
+    match ProofForge.Evm.IR.fromProgram tree with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some sourceNodes := tree.schema.vector? "nodes"
+    | throwError "missing source Tree.nodes"
+  let some svmNodes := svmTree.vectors.find? (·.place == some sourceNodes.place)
+    | throwError s!"SVM target IR lost Tree.nodes identity: {repr svmTree.vectors}"
+  let some evmNodes := evmTree.vectors.find? (·.place == some sourceNodes.place)
+    | throwError s!"EVM target IR lost Tree.nodes identity: {repr evmTree.vectors}"
+  let some svmValue := svmNodes.leaves.find? (·.offset == 40)
+    | throwError s!"SVM target IR lost nodes[i].value: {repr svmNodes}"
+  let some evmValue := evmNodes.leaves.find? (·.byteOffset == 40)
+    | throwError s!"EVM target IR lost nodes[i].value: {repr evmNodes}"
+  let some rotate := tree.methods.find? (·.ixName == "rotateLeft")
+    | throwError "missing Tree.rotateLeft"
+  unless svmNodes.baseOffset == 24 && svmNodes.length == 4 && svmNodes.strideBytes == 48 &&
+      evmNodes.baseSlot == 2 && evmNodes.length == 4 && evmNodes.strideSlots == 6 &&
+      evmValue.slotOffset == 5 && svmValue.elementPath == evmValue.elementPath &&
+      !rotate.evaluation.dynamicWrites.isEmpty &&
+      rotate.evaluation.dynamicWrites.all fun write =>
+        svmNodes.leaves.any (·.elementPath == write.place.elementPath) do
+    throwError s!"target vector layout mismatch:\nsvm={repr svmNodes}\nevm={repr evmNodes}"
+
+  let maybe ←
+    match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Maybe") none with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmMaybe ←
+    match ProofForge.Svm.IR.fromProgram maybe with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let evmMaybe ←
+    match ProofForge.Evm.IR.fromProgram maybe with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some (tag, payload) := maybe.schema.firstOption?
+    | throwError "missing Maybe Option leaves"
+  let svmTag := svmMaybe.slots.find? (·.place == some tag.place)
+  let svmPayload := svmMaybe.slots.find? (·.place == some payload.place)
+  let evmTag := evmMaybe.slots.find? (·.place == some tag.place)
+  let evmPayload := evmMaybe.slots.find? (·.place == some payload.place)
+  unless svmTag.map (·.offset) == some 8 && svmPayload.map (·.offset) == some 16 &&
+      evmTag.map (·.index) == some 0 && evmPayload.map (·.index) == some 1 do
+    throwError s!"target Option layout mismatch:\nsvm={repr svmMaybe.slots}\nevm={repr evmMaybe.slots}"
+
+#pf_guard_target_lowering
+
 private def firstStringDiff (left right : String) : Nat := Id.run do
   let mut index := 0
   for pair in left.toList.zip right.toList do

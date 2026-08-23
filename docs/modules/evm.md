@@ -2,7 +2,8 @@
 
 ## Purpose
 
-把同一套抽出 Ops 编成 EVM Yul / ABI / bytecode。平行于 `Svm/`，不改 `IR.Program`。
+把 frontend `IR.Program` 降成独立 EVM target IR，再编成 Yul / ABI / bytecode。
+平行于 `Svm/`，不改 frontend `IR.Program`。
 
 ## Boundary
 
@@ -10,12 +11,18 @@
 |---|---|---|
 | `Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
-| `Evm.IR` | storage slot、constructor、selector、digest | Loader V3、账户 disc |
+| `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
 | `Evm.Emit` | Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance、event ABI、本合约 transfer/transferFrom | 任意 CALL / Token-2022 |
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
 | `Evm.Commands` | `#pf_evm_build` | 新 DSL |
 
-输入是已通过 Profile 的 `IR.Program`。拒绝 SVM 叶子（`clockSlot` / `signerKey0` / `systemTransfer`）。承认独立 EVM 叶子：环境 opcode（超 UInt64 revert）、8 字节 `evmCaller`/`evmSelf`、Addr20 三叶。`evmDeposit` 让该 entry payable；程序若有任一 payable 入口，去掉全局 `callvalue()` 守卫，非 payable 入口本地守卫。`evmSendEth` 是封闭 value CALL。`evmLogTipped` 是 LOG1。窄槽 `UInt8/16/32` 各占一个 storage word。`Option UInt64` 是 tag+payload 两槽。
+输入是已通过 Profile 的 frontend `IR.Program`。`Evm.IR.fromProgram` 物化 storage slot 并把
+compatibility Ops 降成 EVM-only `Op`；SVM 叶子（`clockSlot` / `signerKey0` /
+`systemTransfer`）在这个边界 fail closed，Yul emitter 不再承担跨 target 过滤。承认独立 EVM
+叶子：环境 opcode（超 UInt64 revert）、8 字节 `evmCaller`/`evmSelf`、Addr20 三叶。
+`evmDeposit` 让该 entry payable；程序若有任一 payable 入口，去掉全局 `callvalue()` 守卫，
+非 payable 入口本地守卫。`evmSendEth` 是封闭 value CALL。`evmLogTipped` 是 LOG1。窄槽
+`UInt8/16/32` 各占一个 storage word。`Option UInt64` 是 tag+payload 两槽。
 
 `init` / `initialize` → constructor。其它方法 → `uint64` ABI entry；`kind.get` 标 `view`；含 `evmDeposit` 的 mutate 标 `payable`。`evmLog name amt` 是 LOG1，topic = `keccak("name(uint64)")`。pair-key Map 是 `keccak256(owner||spender||base)`。
 

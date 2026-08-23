@@ -1,5 +1,4 @@
-import ProofForge.IR
-import ProofForge.Ops
+import ProofForge.Svm.IR
 
 namespace ProofForge.Svm.Emit
 
@@ -95,7 +94,7 @@ private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
 {emitSkipAccount s!"{i}_{tag}"}"
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
-private def walkInvokeMetas (fuel : Nat) (ops : Array Ops.Op)
+private def walkInvokeMetas (fuel : Nat) (ops : Array IR.Op)
     (acc : Array (Ops.CpiMeta × Bool)) : Array (Ops.CpiMeta × Bool) :=
   match fuel with
   | 0 => acc
@@ -139,7 +138,7 @@ private def valSignerAccs : Ops.Val → Array Nat
   | .checkPda _ b => valSignerAccs b
   | _ => #[]
 
-private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
+private def walkSignerAccs (fuel : Nat) (ops : Array IR.Op) : Array Nat :=
   match fuel with
   | 0 => #[]
   | fuel' + 1 =>
@@ -154,29 +153,9 @@ private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
               (match bump with | some v => valSignerAccs v | none => #[])
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
-        | .evmDeposit v | .evmLog _ v | .forAccum _ v => valSignerAccs v
+        | .forAccum _ v => valSignerAccs v
         | .forBody _ _ => #[]
-        | .evmSendEth a b c d =>
-            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
         | .indexSet _ i v _ _ => valSignerAccs i ++ valSignerAccs v
-        | .mapGetU64 a b => valSignerAccs a ++ valSignerAccs b
-        | .mapSetU64 a b c => valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c
-        | .mapGetAddr a b c d =>
-            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
-        | .mapSetAddr a b c d e =>
-            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++
-              valSignerAccs d ++ valSignerAccs e
-        | .mapGetPair a b c d e f g =>
-            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
-              valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g
-        | .mapSetPair a b c d e f g h =>
-            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
-              valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g ++ valSignerAccs h
-        | .evmTokenTransfer a b c d e f g =>
-            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
-              valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g
-        | .evmTokenBalanceOfSelf a b c =>
-            valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c
       let nested :=
         match op with
         | .ite _ _ _ t f => walkSignerAccs fuel' t ++ walkSignerAccs fuel' f
@@ -184,7 +163,7 @@ private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
         | _ => #[]
       acc ++ here ++ nested
 
-private def emitWalkSignerChecks (ops : Array Ops.Op) (err : String) : String :=
+private def emitWalkSignerChecks (ops : Array IR.Op) (err : String) : String :=
   let accs := walkSignerAccs 16 ops
   Id.run do
     let mut seen : Array Nat := #[]
@@ -198,7 +177,7 @@ private def emitWalkSignerChecks (ops : Array Ops.Op) (err : String) : String :=
 
 /-- 只 walk：N 账户虚地址；查 ix 长度。不强制 acc0 signer；`signerKey acc` 才查该账户。 -/
 private def preludeWalk (p : IR.Program) (label : String) (ixLen : Nat)
-    (ops : Array Ops.Op := #[]) : String :=
+    (ops : Array IR.Op := #[]) : String :=
   let err := s!"err_check_{label}"
   let n := IR.cpiAccountCount p
   s!"\
@@ -819,7 +798,7 @@ private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Exce
     let insn ← storeInsn w
     .ok s!"  ldxdw r1, [r10 - {fromStack}]\n  {insn} [r6 + ACC0_DATA + {off}], r1\n"
 
-private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array Ops.Op) :
+private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
     Except String String := do
   let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
   if vs.isEmpty then
@@ -858,7 +837,7 @@ private def valUsesSigner (v : Ops.Val) : Bool :=
   | .field b _ => valUsesSigner b
   | _ => false
 
-private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
+private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
   match fuel with
   | 0 => false
   | fuel' + 1 =>
@@ -871,31 +850,9 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .ite _ l r t f =>
           valUsesSigner l || valUsesSigner r ||
             walkUsesSigner fuel' t || walkUsesSigner fuel' f
-      | .evmDeposit v => valUsesSigner v
-      | .evmSendEth a b c d =>
-          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
-      | .evmLog _ v => valUsesSigner v
       | .forAccum _ v => valUsesSigner v
       | .forBody _ body => walkUsesSigner fuel' body
       | .indexSet _ i v _ _ => valUsesSigner i || valUsesSigner v
-      | .mapGetU64 a b => valUsesSigner a || valUsesSigner b
-      | .mapSetU64 a b c => valUsesSigner a || valUsesSigner b || valUsesSigner c
-      | .mapGetAddr a b c d =>
-          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
-      | .mapSetAddr a b c d e =>
-          valUsesSigner a || valUsesSigner b || valUsesSigner c ||
-            valUsesSigner d || valUsesSigner e
-      | .mapGetPair a b c d e f g =>
-          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
-            valUsesSigner e || valUsesSigner f || valUsesSigner g
-      | .mapSetPair a b c d e f g h =>
-          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
-            valUsesSigner e || valUsesSigner f || valUsesSigner g || valUsesSigner h
-      | .evmTokenTransfer a b c d e f g =>
-          valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
-            valUsesSigner e || valUsesSigner f || valUsesSigner g
-      | .evmTokenBalanceOfSelf a b c =>
-          valUsesSigner a || valUsesSigner b || valUsesSigner c
       | .invoke _ metas data _ bump =>
           metas.any (·.signer) ||
             data.any (fun | .u64le v => valUsesSigner v | _ => false) ||
@@ -906,7 +863,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .storeField _ v => valUsesSigner v
       | .errorOverflow | .errorNamed _ => false
 
-private def usesSignerKey (ops : Array Ops.Op) : Bool :=
+private def usesSignerKey (ops : Array IR.Op) : Bool :=
   walkUsesSigner 16 ops
 
 private def emitOverflowExit (label : String) : String :=
@@ -1140,7 +1097,7 @@ private def emitArithOp (label : String) (kind : String) : String :=
       s!"  jeq r2, 0, err_{label}\n  mov64 r4, r1\n  mod64 r4, r2\n"
   | _ => ""
 
-private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.Op) (fresh : Nat) :
+private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op) (fresh : Nat) :
     Except String (String × Nat) := do
   let mut acc := ""
   let mut n := fresh
@@ -1153,7 +1110,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       | .checkedModU64 l _ => some (destField p l)
       | _ => none) with
     | some d => d
-    | none => (p.slots[0]?.map (·.name)).getD "slot0"
+    | none => match p.slots[0]? with | some slot => slot.name | none => "slot0"
   for op in ops do
     match op with
     | .checkedAddU64 l r =>
@@ -1212,8 +1169,6 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
     | .invoke prog metas data seed bump =>
       acc := acc ++ (← emitInvoke p label prog metas data seed bump)
-    | .evmDeposit _ | .evmSendEth .. | .evmLog .. =>
-      throw "extract/unsupported: svm rejects evm leaf"
     | .errorNamed _ =>
       acc := acc ++ s!"  ; named error\n  lddw r0, 0x1\n  exit\n"
     | .forAccum bound addend =>
@@ -1297,17 +1252,13 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
   exit
 {ok}:
 "
-    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
-    | .mapGetPair .. | .mapSetPair ..
-    | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. =>
-      throw "extract/unsupported: svm rejects evm leaf"
     | .storeField name v =>
       let load ← loadVal p v 24
       acc := acc ++ load
       acc := acc ++ (← storeField p name 24)
     | .okState v =>
       let optionNames := IR.optionLeafNames? p
-      if Ops.hasStoreField ops then
+      if IR.hasStoreField ops then
         match v with
         | .lit k =>
           acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
@@ -1343,7 +1294,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .field _ fname =>
-          if Ops.hasCheckedArith ops then
+          if IR.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
           else if fname.contains '_' && (IR.fieldOffset p fname).isSome then
             let load ← loadVal p (.arg 0) 24
@@ -1368,7 +1319,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
         | v =>
           if Ops.isEvmLeaf v then
             throw "extract/unsupported: svm rejects evm leaf"
-          else if Ops.hasCheckedArith ops then
+          else if IR.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
           else do
             let load ← loadVal p v 24
@@ -1385,7 +1336,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
       acc := acc ++ load ++ (← emitStoreAndReturn p dest 8)
   return (acc, n)
 
-private def emitMutBody (p : IR.Program) (label : String) (ops : Array Ops.Op) : Except String String := do
+private def emitMutBody (p : IR.Program) (label : String) (ops : Array IR.Op) : Except String String := do
   let (body, _) ← emitOps p label ops 0
   let ix :=
     if IR.usesWalk p then
@@ -1407,17 +1358,17 @@ body_{label}:
   exit
 "
 
-private def initVal (ops : Array Ops.Op) : Except String Ops.Val :=
+private def initVal (ops : Array IR.Op) : Except String Ops.Val :=
   match ops.findSome? (fun | .returnState v => some v | _ => none) with
   | some v => .ok v
   | none => .error "extract/unsupported: init missing returnState"
 
-private def getVal (ops : Array Ops.Op) : Except String Ops.Val :=
+private def getVal (ops : Array IR.Op) : Except String Ops.Val :=
   match ops.findSome? (fun | .returnU64 v => some v | _ => none) with
   | some v => .ok v
   | none => .error "extract/unsupported: get missing returnU64"
 
-private def arithArgs (ops : Array Ops.Op) : Except String (Ops.Val × Ops.Val × Bool) :=
+private def arithArgs (ops : Array IR.Op) : Except String (Ops.Val × Ops.Val × Bool) :=
   match ops.findSome? (fun
     | .checkedAddU64 l r => some (l, r, true)
     | .checkedSubU64 l r => some (l, r, false)
@@ -1425,16 +1376,16 @@ private def arithArgs (ops : Array Ops.Op) : Except String (Ops.Val × Ops.Val �
   | some p => .ok p
   | none => .error "extract/unsupported: increment missing checked arith"
 
-private def hasReturnState (ops : Array Ops.Op) : Bool :=
+private def hasReturnState (ops : Array IR.Op) : Bool :=
   ops.any (fun | .returnState _ => true | _ => false)
 
-private def hasErrorOverflow (ops : Array Ops.Op) : Bool :=
+private def hasErrorOverflow (ops : Array IR.Op) : Bool :=
   ops.any (fun | .errorOverflow => true | _ => false)
 
-private def hasOkState (ops : Array Ops.Op) : Bool :=
+private def hasOkState (ops : Array IR.Op) : Bool :=
   ops.any (fun | .okState _ => true | _ => false)
 
-private def hasReturnU64 (ops : Array Ops.Op) : Bool :=
+private def hasReturnU64 (ops : Array IR.Op) : Bool :=
   ops.any (fun | .returnU64 _ => true | _ => false)
 
 private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Except String String := do
@@ -1449,12 +1400,10 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if Ops.hasEvmEffect m.ops then
-      .error "extract/unsupported: svm rejects evm leaf"
-    else if Ops.hasInvoke m.ops then
+    if IR.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
-    else if !(Ops.hasCheckedArith m.ops ||
+    else if !(IR.hasCheckedArith m.ops ||
         m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
@@ -1500,7 +1449,7 @@ private def emitDispatch (program : IR.Program) : Except String String := do
       out := out ++ s!"dispatch_next_{handlerLabel program.methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
   return out
 
-def emitCounterAsm (program : IR.Program) : Except String String := do
+private def emitProgram (program : IR.Program) : Except String String := do
   unless IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
   let marker ← IR.layoutMarkerHex program
@@ -1560,5 +1509,9 @@ entrypoint:
   exit
 {dispatchTxt}
 {handlers}"
+
+/-- Stable public entry point: lower the frontend IR before rendering target instructions. -/
+def emitCounterAsm (program : ProofForge.IR.Program) : Except String String := do
+  emitProgram (← IR.fromProgram program)
 
 end ProofForge.Svm.Emit

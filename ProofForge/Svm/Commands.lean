@@ -31,7 +31,8 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
   match Extract.extractProgram env initName mutName getName none fields? with
   | .error reason => throwError reason
   | .ok program => do
-    let mutOps := (program.methods.find? (·.kind == IR.MethodKind.increment)).map (·.ops)
+    let mutOps :=
+      (program.methods.find? (·.kind == ProofForge.IR.MethodKind.increment)).map (·.ops)
     match mutOps with
     | some ops =>
       if Ops.hasEvmEffect ops then
@@ -68,7 +69,7 @@ elab "#pf_build " n:ident : command => do
     | .ok asm =>
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
-      let digest := IR.digestHex program
+      let digest := ProofForge.IR.digestHex program
       match ProofForge.Golden.digestOf program.name with
       | some want =>
         if digest != want then

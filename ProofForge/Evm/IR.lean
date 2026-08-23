@@ -6,11 +6,124 @@ namespace ProofForge.Evm.IR
 
 open ProofForge.Crypto
 
+/-- EVM instructions are owned by the EVM lowering boundary, not by the frontend Ops enum. -/
+inductive Op where
+  | checkedAddU64 (lhs rhs : Ops.Val)
+  | checkedSubU64 (lhs rhs : Ops.Val)
+  | checkedMulU64 (lhs rhs : Ops.Val)
+  | checkedDivU64 (lhs rhs : Ops.Val)
+  | checkedModU64 (lhs rhs : Ops.Val)
+  | ite (cmp : Ops.Cmp) (lhs rhs : Ops.Val) (thn els : Array Op)
+  | evmDeposit (amount : Ops.Val)
+  | evmSendEth (w0 w1 w2 amount : Ops.Val)
+  | evmLog (name : String) (amount : Ops.Val)
+  | forAccum (n : Nat) (addend : Ops.Val)
+  | forBody (n : Nat) (body : Array Op)
+  | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
+  | mapGetU64 (base key : Ops.Val)
+  | mapSetU64 (base key value : Ops.Val)
+  | mapGetAddr (base w0 w1 w2 : Ops.Val)
+  | mapSetAddr (base w0 w1 w2 value : Ops.Val)
+  | mapGetPair (base o0 o1 o2 s0 s1 s2 : Ops.Val)
+  | mapSetPair (base o0 o1 o2 s0 s1 s2 value : Ops.Val)
+  | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Ops.Val)
+  | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Ops.Val)
+  | storeField (name : String) (value : Ops.Val)
+  | okState (value : Ops.Val)
+  | errorOverflow
+  | errorNamed (name : String)
+  | returnU64 (value : Ops.Val)
+  | returnState (value : Ops.Val)
+  deriving BEq, Repr, Inhabited
+
+private partial def lowerOp : Ops.Op → Except String Op
+  | .checkedAddU64 lhs rhs => pure (.checkedAddU64 lhs rhs)
+  | .checkedSubU64 lhs rhs => pure (.checkedSubU64 lhs rhs)
+  | .checkedMulU64 lhs rhs => pure (.checkedMulU64 lhs rhs)
+  | .checkedDivU64 lhs rhs => pure (.checkedDivU64 lhs rhs)
+  | .checkedModU64 lhs rhs => pure (.checkedModU64 lhs rhs)
+  | .ite cmp lhs rhs thn els =>
+      return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
+  | .evmDeposit amount => pure (.evmDeposit amount)
+  | .evmSendEth w0 w1 w2 amount => pure (.evmSendEth w0 w1 w2 amount)
+  | .evmLog name amount => pure (.evmLog name amount)
+  | .forAccum n addend => pure (.forAccum n addend)
+  | .forBody n body => return .forBody n (← lowerOps body)
+  | .indexSet name idx value len elemOff => pure (.indexSet name idx value len elemOff)
+  | .mapGetU64 base key => pure (.mapGetU64 base key)
+  | .mapSetU64 base key value => pure (.mapSetU64 base key value)
+  | .mapGetAddr base w0 w1 w2 => pure (.mapGetAddr base w0 w1 w2)
+  | .mapSetAddr base w0 w1 w2 value => pure (.mapSetAddr base w0 w1 w2 value)
+  | .mapGetPair base o0 o1 o2 s0 s1 s2 => pure (.mapGetPair base o0 o1 o2 s0 s1 s2)
+  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
+      pure (.mapSetPair base o0 o1 o2 s0 s1 s2 value)
+  | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
+      pure (.evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
+  | .evmTokenBalanceOfSelf tw0 tw1 tw2 => pure (.evmTokenBalanceOfSelf tw0 tw1 tw2)
+  | .storeField name value => pure (.storeField name value)
+  | .okState value => pure (.okState value)
+  | .errorOverflow => pure .errorOverflow
+  | .errorNamed name => pure (.errorNamed name)
+  | .returnU64 value => pure (.returnU64 value)
+  | .returnState value => pure (.returnState value)
+  | .invoke .. => throw "extract/unsupported: evm rejects svm leaf"
+
+where
+  lowerOps (ops : Array Ops.Op) : Except String (Array Op) :=
+    ops.mapM lowerOp
+
+def ofSourceOps (ops : Array Ops.Op) : Except String (Array Op) :=
+  ops.mapM lowerOp
+
+private partial def walk (fuel : Nat) (ops : Array Op) (predicate : Op → Bool) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel' + 1 =>
+      ops.any fun op =>
+        predicate op ||
+          match op with
+          | .ite _ _ _ thn els => walk fuel' thn predicate || walk fuel' els predicate
+          | .forBody _ body => walk fuel' body predicate
+          | _ => false
+
+def hasStoreField (ops : Array Op) : Bool :=
+  walk 16 ops fun | .storeField .. => true | _ => false
+
+def hasIndexSet (ops : Array Op) : Bool :=
+  walk 16 ops fun | .indexSet .. => true | _ => false
+
+def hasCheckedArith (ops : Array Op) : Bool :=
+  walk 16 ops fun
+    | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
+    | .checkedDivU64 .. | .checkedModU64 .. => true
+    | _ => false
+
+def hasEvmDeposit (ops : Array Op) : Bool :=
+  walk 16 ops fun | .evmDeposit _ => true | _ => false
+
 structure Slot where
+  place : Option Core.Place := none
   name : String
   index : Nat
   /-- 物理宽：1/2/4/8。EVM 仍占一个 storage word，窄值在低字节。 -/
   width : Nat := 8
+  deriving BEq, Repr, Inhabited
+
+structure VectorLeaf where
+  elementPath : Array Core.PathStep := #[]
+  byteOffset : Nat
+  slotOffset : Nat
+  width : Nat
+  deriving BEq, Repr, Inhabited
+
+/-- Physical EVM storage layout for a fixed-length source vector. -/
+structure Vector where
+  place : Option Core.Place := none
+  name : String
+  baseSlot : Nat
+  length : Nat
+  strideSlots : Nat
+  leaves : Array VectorLeaf := #[]
   deriving BEq, Repr, Inhabited
 
 structure Method where
@@ -21,7 +134,7 @@ structure Method where
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
   retCount : Nat := 1
-  ops : Array Ops.Op := #[]
+  ops : Array Op := #[]
   evaluation : Core.Evaluation := {}
   view : Bool := false
   payable : Bool := false
@@ -30,6 +143,7 @@ structure Method where
 structure Program where
   name : String
   slots : Array Slot
+  vectors : Array Vector := #[]
   /-- Target-neutral source identity retained across EVM lowering. -/
   schema : Core.Schema := {}
   constructor : Method
@@ -53,8 +167,7 @@ def optionLeafNames? (p : Program) : Option (String × String) :=
 def hasOptionLeaves (p : Program) : Bool :=
   (optionLeafNames? p).isSome
 
-private def legacyVectorStorage (p : Program) (name : String) :
-    Option ProofForge.IR.VectorStorage :=
+private def legacyVector (p : Program) (name : String) : Option Vector :=
   let pre0 := name ++ "_0"
   let group :=
     p.slots.filter fun slot => slot.name == pre0 || slot.name.startsWith (pre0 ++ "_")
@@ -75,43 +188,30 @@ private def legacyVectorStorage (p : Program) (name : String) :
         match rest.toNat? with
         | some i => Nat.max acc (i + 1)
         | none => acc
-    let width := group.foldl (init := 0) fun acc slot => acc + slot.width
     let baseSlot := group[0]!.index
     if length == 0 then none
-    else some { baseSlot, length, strideBytes := width, strideSlots := group.size }
+    else some { name, baseSlot, length, strideSlots := group.size }
 
-def vectorStorage (p : Program) (name : String) : Option ProofForge.IR.VectorStorage :=
-  match p.schema.vector? name with
-  | some vector => do
-      let baseSlot ← p.schema.vectorBaseLeafIndex? vector
-      return {
-        baseSlot
-        length := vector.length
-        strideBytes := vector.elementBytes
-        strideSlots := vector.elementLeaves
-      }
-  | none => legacyVectorStorage p name
+def vector? (p : Program) (name : String) : Option Vector :=
+  match p.vectors.find? (·.name == name) with
+  | some vector => some vector
+  | none => legacyVector p name
 
 def vectorBaseSlot (p : Program) (name : String) : Option Nat :=
-  (vectorStorage p name).map (·.baseSlot)
+  (vector? p name).map (·.baseSlot)
 
 def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
-  if given != 0 then given else (vectorStorage p name).map (·.length) |>.getD 0
+  if given != 0 then given else (vector? p name).map (·.length) |>.getD 0
 
 def vectorStrideSlots (p : Program) (name : String) : Nat :=
-  (vectorStorage p name).map (·.strideSlots) |>.getD 1
+  (vector? p name).map (·.strideSlots) |>.getD 1
 
 /-- Convert a byte offset within one source vector element to its EVM leaf-slot offset. -/
 def vectorLeafSlotOffset (p : Program) (name : String) (byteOffset : Nat) : Nat :=
-  match p.schema.vector? name with
-  | some vector => Id.run do
-      let mut bytes : Nat := 0
-      let mut slot : Nat := 0
-      for leaf in p.schema.vectorElementLeaves vector do
-        if bytes == byteOffset then return slot
-        bytes := bytes + leaf.width
-        slot := slot + 1
-      return slot
+  match p.vectors.find? (·.name == name) with
+  | some vector =>
+      (vector.leaves.find? (·.byteOffset == byteOffset)).map (·.slotOffset)
+        |>.getD vector.leaves.size
   | none => byteOffset / 8
 
 private def valForbidden : Ops.Val → Bool
@@ -187,6 +287,29 @@ private def rejectSlot (s : ProofForge.IR.Slot) : Option String :=
 private def isCtor (m : ProofForge.IR.Method) : Bool :=
   m.kind == .init
 
+private def lowerVectors (src : ProofForge.IR.Program) (slots : Array Slot) : Array Vector :=
+  src.schema.vectors.filterMap fun vector => do
+    let baseSlot ← src.schema.vectorBaseLeafIndex? vector
+    let _ ← slots[baseSlot]?
+    let sourceLeaves := src.schema.vectorElementLeaves vector
+    let leaves := sourceLeaves.mapIdx fun slotOffset leaf =>
+      let byteOffset := (sourceLeaves.extract 0 slotOffset).foldl (init := 0) fun n item =>
+        n + item.width
+      ({
+        elementPath := leaf.place.steps.extract (vector.place.steps.size + 1)
+        byteOffset
+        slotOffset
+        width := leaf.width
+      } : VectorLeaf)
+    return {
+      place := some vector.place
+      name := vector.name
+      baseSlot
+      length := vector.length
+      strideSlots := vector.elementLeaves
+      leaves
+    }
+
 /-- 从已抽出的 SVM `IR.Program` 做成 EVM 形状。不改原 IR。 -/
 def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
   if src.slots.isEmpty then
@@ -218,6 +341,7 @@ def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
     throw "extract/unsupported: init missing returnState"
   unless ctorSrc.ops.any (fun | .returnState _ => true | _ => false) do
     throw "extract/unsupported: init missing returnState"
+  let ctorOps ← ofSourceOps ctorSrc.ops
   let ctor : Method := {
     kind := ctorSrc.kind
     name := ctorSrc.name
@@ -226,7 +350,7 @@ def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
     paramCount := ctorSrc.paramCount
     paramWidths := ctorSrc.paramWidths
     retCount := 1
-    ops := ctorSrc.ops
+    ops := ctorOps
     evaluation := ctorSrc.evaluation
     view := false
     payable := false
@@ -240,6 +364,7 @@ def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
       else Array.replicate m.paramCount 8
     let sel := Keccak.selectorOfWidths m.ixName widths
     let view := m.kind == .get
+    let ops ← ofSourceOps m.ops
     entries := entries.push {
       kind := m.kind
       name := m.name
@@ -248,14 +373,21 @@ def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
       paramCount := m.paramCount
       paramWidths := widths
       retCount := m.retCount
-      ops := m.ops
+      ops
       evaluation := m.evaluation
       view
-      payable := !view && Ops.hasEvmDeposit m.ops
+      payable := !view && hasEvmDeposit ops
     }
   let slots := src.slots.mapIdx fun i s =>
-    { name := s.name, index := i, width := s.width }
-  return { name := src.name, slots, schema := src.schema, constructor := ctor, entries }
+    { place := (src.schema.leaves[i]?).map (·.place), name := s.name, index := i, width := s.width }
+  return {
+    name := src.name
+    slots
+    vectors := lowerVectors src slots
+    schema := src.schema
+    constructor := ctor
+    entries
+  }
 
 private def cmpTag : Ops.Cmp → String
   | .eq => "eq" | .ne => "ne" | .lt => "lt"
@@ -329,8 +461,8 @@ private def valCanon : Ops.Val → String
   | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
       s!"vgp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2})"
 
-private partial def opsCanon (ops : Array Ops.Op) : String :=
-  let rec one (op : Ops.Op) : String :=
+private partial def opsCanon (ops : Array Op) : String :=
+  let rec one (op : Op) : String :=
     match op with
     | .checkedAddU64 l r => s!"add({valCanon l},{valCanon r})"
     | .checkedSubU64 l r => s!"sub({valCanon l},{valCanon r})"
@@ -338,7 +470,6 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
-    | .invoke .. => "inv"
     | .evmDeposit v => s!"edep({valCanon v})"
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"

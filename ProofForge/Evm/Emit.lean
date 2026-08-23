@@ -10,13 +10,13 @@ open ProofForge.Crypto
 
 private def u64MaxYul : String := "0xffffffffffffffff"
 
-private def returnStateCount (ops : Array Ops.Op) : Nat :=
+private def returnStateCount (ops : Array IR.Op) : Nat :=
   ops.foldl (init := 0) fun acc op =>
     match op with
     | .returnState _ => acc + 1
     | _ => acc
 
-private def destHint (p : IR.Program) (ops : Array Ops.Op) : String :=
+private def destHint (p : IR.Program) (ops : Array IR.Op) : String :=
   match ops.findSome? (fun
     | .checkedAddU64 l _ =>
         match l with | .field _ n => some n | _ => none
@@ -33,10 +33,10 @@ private def destHint (p : IR.Program) (ops : Array Ops.Op) : String :=
   | none => (p.slots[0]?.map (·.name)).getD "slot0"
 
 /-- 与 sBPF 发射器同一 dest：算术结果写 lhs 槽；无算术的 `field name_i` 写该槽。 -/
-private def destForOk (p : IR.Program) (ops : Array Ops.Op) (v : Ops.Val) : String :=
+private def destForOk (p : IR.Program) (ops : Array IR.Op) (v : Ops.Val) : String :=
   match v with
   | .field _ fname =>
-      if Ops.hasCheckedArith ops then destHint p ops
+      if IR.hasCheckedArith ops then destHint p ops
       else if fname.contains '_' && (IR.slotIndex p fname).isSome then fname
       else destHint p ops
   | _ => destHint p ops
@@ -198,7 +198,7 @@ private def revertNamed (indent name : String) : String :=
   indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
     indent ++ "revert(0, 4)" ++ nl
 
-private def returnU64Count (ops : Array Ops.Op) : Nat :=
+private def returnU64Count (ops : Array IR.Op) : Nat :=
   ops.foldl (init := 0) fun acc op =>
     match op with
     | .returnU64 _ => acc + 1
@@ -363,7 +363,7 @@ private def brace (inner : String) : String :=
   "{" ++ nl ++ inner ++ "}"
 
 private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (ops : Array Ops.Op) (st : Render) :
+    (paramCount : Nat) (ops : Array IR.Op) (st : Render) :
     Except String (String × Render) := do
   let destSlot0 ← slotOf p (destHint p ops)
   let nStates := returnStateCount ops
@@ -432,8 +432,6 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := " ++ cmpYul c lv rv ++ nl ++
           indent ++ "if " ++ nm ++ " " ++ brace thenTxt ++ nl ++
           indent ++ "if iszero(" ++ nm ++ ") " ++ brace elseTxt ++ nl
-    | .invoke .. =>
-        throw "extract/unsupported: evm rejects svm leaf"
     | .evmDeposit amount =>
         let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount amount st
         st := st'
@@ -687,14 +685,14 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         acc := acc ++ pre ++ storeSlot indent destS (maskExpr w value)
         st := { st with last := some value }
     | .okState v =>
-        if Ops.hasStoreField ops then
+        if IR.hasStoreField ops then
           let (pre, value, st') ←
             match st.last with
             | some nm => pure ("", nm, { st with last := none })
             | none => materializeVal p indent paramPrefix paramCount v st
           st := st'
           acc := acc ++ pre ++ returnWord indent value
-        else if Ops.hasIndexSet ops then
+        else if IR.hasIndexSet ops then
           let value := st.last.getD "0"
           acc := acc ++ returnWord indent value
         else if IR.hasOptionLeaves p then
@@ -726,7 +724,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
                 | .field _ fname =>
                     if fname.contains '_' && (IR.slotIndex p fname).isSome then
                       loadVal p paramPrefix paramCount (.arg 0)
-                    else if Ops.hasCheckedArith ops then
+                    else if IR.hasCheckedArith ops then
                       loadVal p paramPrefix paramCount v
                     else
                       loadVal p paramPrefix paramCount (.arg 0)
@@ -740,7 +738,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         st := { st with last := none }
     | .errorOverflow =>
         -- 抽出序列在 checked 算术后仍带 overflow 叶；Yul 已在运算前 revert。
-        unless Ops.hasCheckedArith ops do
+        unless IR.hasCheckedArith ops do
           acc := acc ++ indent ++ revert0 ++ nl
     | .errorNamed name =>
         acc := acc ++ revertNamed indent name
@@ -909,7 +907,7 @@ private def eventAbi (name : String) : String :=
   "{\"type\":\"event\",\"name\":\"" ++ escapeJson name ++
     "\",\"inputs\":[{\"name\":\"amt\",\"type\":\"uint64\",\"indexed\":false}],\"anonymous\":false}"
 
-private def collectLogNames (fuel : Nat) (ops : Array Ops.Op) : Array String :=
+private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
   match fuel with
   | 0 => #[]
   | fuel' + 1 =>
