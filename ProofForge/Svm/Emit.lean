@@ -257,46 +257,46 @@ private def widthOfVal (p : IR.Program) (v : Ops.Val) : Nat :=
   | _ => 8
 
 /-- Clock 是 40 字节 `repr(C)`；`slot` 在 0，`epoch` 在 16。缓冲放在 `r10-72`。 -/
-private def emitLoadClockField (field : String) (off stackOff : Nat) : String :=
+private def emitLoadClockField (field : String) (off stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load clock.{field} via sol_get_clock_sysvar
   mov64 r1, r10
   add64 r1, -72
   call sol_get_clock_sysvar
-  jeq r0, 0, clock_{field}_ok_{stackOff}
+  jeq r0, 0, clock_{field}_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
-clock_{field}_ok_{stackOff}:
+clock_{field}_ok_{scope}_{stackOff}:
   ldxdw r1, [r10 - {72 - off}]
   stxdw [r10 - {stackOff}], r1
 "
 
-private def emitLoadClockSlot (stackOff : Nat) : String :=
-  emitLoadClockField "slot" 0 stackOff
+private def emitLoadClockSlot (stackOff : Nat) (scope : String) : String :=
+  emitLoadClockField "slot" 0 stackOff scope
 
-private def emitLoadClockEpoch (stackOff : Nat) : String :=
-  emitLoadClockField "epoch" 16 stackOff
+private def emitLoadClockEpoch (stackOff : Nat) (scope : String) : String :=
+  emitLoadClockField "epoch" 16 stackOff scope
 
-private def emitLoadUnixTime (stackOff : Nat) : String :=
-  emitLoadClockField "unix" 32 stackOff
+private def emitLoadUnixTime (stackOff : Nat) (scope : String) : String :=
+  emitLoadClockField "unix" 32 stackOff scope
 
 /-- EpochSchedule 是 33 字节 `repr(C)`；`slots_per_epoch` 在偏移 0。 -/
-private def emitLoadSlotsPerEpoch (stackOff : Nat) : String :=
+private def emitLoadSlotsPerEpoch (stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load slotsPerEpoch via sol_get_epoch_schedule_sysvar
   mov64 r1, r10
   add64 r1, -72
   call sol_get_epoch_schedule_sysvar
-  jeq r0, 0, epoch_ok_{stackOff}
+  jeq r0, 0, epoch_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
-epoch_ok_{stackOff}:
+epoch_ok_{scope}_{stackOff}:
   ldxdw r1, [r10 - 72]
   stxdw [r10 - {stackOff}], r1
 "
 
 /-- 最近一次 CPI 的 8 字节返回。长度不是 8 则 Custom(1)。 -/
-private def emitLoadCpiReturn (stackOff : Nat) : String :=
+private def emitLoadCpiReturn (stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load cpiReturn via sol_get_return_data
   mov64 r1, r10
@@ -305,25 +305,25 @@ private def emitLoadCpiReturn (stackOff : Nat) : String :=
   mov64 r3, r10
   add64 r3, -104
   call sol_get_return_data
-  jeq r0, 8, cpi_ret_ok_{stackOff}
+  jeq r0, 8, cpi_ret_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
-cpi_ret_ok_{stackOff}:
+cpi_ret_ok_{scope}_{stackOff}:
   ldxdw r1, [r10 - 72]
   stxdw [r10 - {stackOff}], r1
 "
 
 /-- Rent 是 17 字节 `repr(C)`；rate 在偏移 0。`exemption = rate * (128 + dataLen)`。 -/
-private def emitLoadRentExemption (dataLen stackOff : Nat) : String :=
+private def emitLoadRentExemption (dataLen stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load rentExemption {dataLen} via sol_get_rent_sysvar
   mov64 r1, r10
   add64 r1, -72
   call sol_get_rent_sysvar
-  jeq r0, 0, rent_ok_{stackOff}
+  jeq r0, 0, rent_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
-rent_ok_{stackOff}:
+rent_ok_{scope}_{stackOff}:
   ldxdw r1, [r10 - 72]
   lddw r2, {128 + dataLen}
   mul64 r1, r2
@@ -416,7 +416,7 @@ private def emitLoadAccN (kind : String) (acc stackOff : Nat) : String :=
 owner 32B 是否等于当前 program id。相等写 0，不等写 1。
 program id 在 instruction data 之后（单账户）或 walk 出的 ix 长度字之后。
 -/
-private def emitLoadOwnerIsSelf (p : IR.Program) (acc stackOff : Nat) : String :=
+private def emitLoadOwnerIsSelf (p : IR.Program) (acc stackOff : Nat) (scope : String) : String :=
   let progId :=
     if IR.usesWalk p then
       s!"\
@@ -452,23 +452,23 @@ private def emitLoadOwnerIsSelf (p : IR.Program) (acc stackOff : Nat) : String :
   ; ownerIsSelf acc={acc}
 {progId}{owner}  ldxdw r1, [r2 + 0]
   ldxdw r4, [r3 + 0]
-  jne r1, r4, ois_no_{acc}_{stackOff}
+  jne r1, r4, ois_no_{scope}_{acc}_{stackOff}
   ldxdw r1, [r2 + 8]
   ldxdw r4, [r3 + 8]
-  jne r1, r4, ois_no_{acc}_{stackOff}
+  jne r1, r4, ois_no_{scope}_{acc}_{stackOff}
   ldxdw r1, [r2 + 16]
   ldxdw r4, [r3 + 16]
-  jne r1, r4, ois_no_{acc}_{stackOff}
+  jne r1, r4, ois_no_{scope}_{acc}_{stackOff}
   ldxdw r1, [r2 + 24]
   ldxdw r4, [r3 + 24]
-  jne r1, r4, ois_no_{acc}_{stackOff}
+  jne r1, r4, ois_no_{scope}_{acc}_{stackOff}
   lddw r1, 0
   stxdw [r10 - {stackOff}], r1
-  ja ois_done_{acc}_{stackOff}
-ois_no_{acc}_{stackOff}:
+  ja ois_done_{scope}_{acc}_{stackOff}
+ois_no_{scope}_{acc}_{stackOff}:
   lddw r1, 1
   stxdw [r10 - {stackOff}], r1
-ois_done_{acc}_{stackOff}:
+ois_done_{scope}_{acc}_{stackOff}:
 "
 
 /--
@@ -476,7 +476,8 @@ ois_done_{acc}_{stackOff}:
 scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 clock 的 `r10-72`。
 CPI 程序的 program id 在 walk 出的 ix 长度字之后。
 -/
-private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat) : String :=
+private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat)
+    (scope : String) : String :=
   let (bytes, _) :=
     seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>
       (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {i}], r1\n", i + 1)
@@ -514,18 +515,18 @@ private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat) : 
   mov64 r5, r8
   add64 r5, 80
   call sol_try_find_program_address
-  jeq r0, 0, find_pda_ok_{stackOff}
+  jeq r0, 0, find_pda_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
-find_pda_ok_{stackOff}:
+find_pda_ok_{scope}_{stackOff}:
   ldxb r1, [r8 + 80]
-  jeq r1, 0, find_pda_bad_{stackOff}
+  jeq r1, 0, find_pda_bad_{scope}_{stackOff}
   stxdw [r10 - {stackOff}], r1
-  ja find_pda_done_{stackOff}
-find_pda_bad_{stackOff}:
+  ja find_pda_done_{scope}_{stackOff}
+find_pda_bad_{scope}_{stackOff}:
   lddw r0, 0x1
   exit
-find_pda_done_{stackOff}:
+find_pda_done_{scope}_{stackOff}:
 "
 
 /--
@@ -618,15 +619,15 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .lit n =>
     .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
   | .clockSlot =>
-    .ok (emitLoadClockSlot stackOff)
+    .ok (emitLoadClockSlot stackOff scope)
   | .clockEpoch =>
-    .ok (emitLoadClockEpoch stackOff)
+    .ok (emitLoadClockEpoch stackOff scope)
   | .unixTime =>
-    .ok (emitLoadUnixTime stackOff)
+    .ok (emitLoadUnixTime stackOff scope)
   | .slotsPerEpoch =>
-    .ok (emitLoadSlotsPerEpoch stackOff)
+    .ok (emitLoadSlotsPerEpoch stackOff scope)
   | .cpiReturn =>
-    .ok (emitLoadCpiReturn stackOff)
+    .ok (emitLoadCpiReturn stackOff scope)
   | .signerKey0 =>
     .ok (emitLoadSignerKey0 stackOff)
   | .accLamports0 =>
@@ -656,7 +657,7 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .isExecutable1 =>
     .ok (emitLoadWalkedU8 1 3 stackOff)
   | .findPda seed =>
-    .ok (emitLoadFindPda p seed stackOff)
+    .ok (emitLoadFindPda p seed stackOff scope)
   | .sha256Lit seed =>
     .ok (emitLoadSha256Lit seed stackOff)
   | .keccak256Lit seed =>
@@ -678,11 +679,11 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .signerKeyN acc =>
     .ok (emitLoadAccN "key0" acc stackOff)
   | .ownerIsSelf acc =>
-    .ok (emitLoadOwnerIsSelf p acc stackOff)
+    .ok (emitLoadOwnerIsSelf p acc stackOff scope)
   | .checkPda seed bump =>
-    emitLoadCheckPda p seed bump stackOff
+    emitLoadCheckPda p seed bump stackOff nonce scope
   | .rentExemption n =>
-    .ok (emitLoadRentExemption n.toNat stackOff)
+    .ok (emitLoadRentExemption n.toNat stackOff scope)
   | .loopIx =>
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
   | .indexGet _ name idx len off =>
@@ -741,9 +742,9 @@ private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops
 成功写 0，失败写 1。scratch 同 findPda，用 `r8 = r10-2800`。
 -/
 private partial def emitLoadCheckPda (p : IR.Program) (seed : String) (bump : Ops.Val)
-    (stackOff : Nat) : Except String String := do
+    (stackOff nonce : Nat) (scope : String) : Except String String := do
   let bumpOff := stackOff + 8
-  let loadBump ← loadVal p bump bumpOff
+  let loadBump ← loadVal p bump bumpOff (nonce + 1) (scope ++ "_bump")
   -- 必须复用 findPda 那条 `s!\"…\\n…\"` 字面量；`String.push '\\n'` 在 4.31 会编成字面 `\\n`。
   let (bytes, _) :=
     seed.toList.foldl (init := ("", 0)) fun (acc, i) c =>

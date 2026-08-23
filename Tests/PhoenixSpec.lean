@@ -17,7 +17,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Svm.Emit.emitCounterAsm program with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.toUTF8.size < 300000 do
+  unless asm.toUTF8.size < 450000 do
     throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
   unless !asm.contains "\n\\\n" do
     throwError "Phoenix assembly contains a standalone backslash"
@@ -25,17 +25,27 @@ elab "#pf_guard_phoenix_artifact" : command => do
     let line := line.trimAscii.toString
     if line.endsWith ":" then some line else none
   unless labels.length == labels.eraseDups.length do
-    throwError "Phoenix assembly contains duplicate labels"
+    let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
+    throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
+  unless ProofForge.IR.dataLen program == 544 do
+    throwError s!"Phoenix source account layout changed: {ProofForge.IR.dataLen program} bytes"
   let some post := program.methods.find? (·.ixName == "postAsk")
     | throwError "missing postAsk"
   let some reduce := program.methods.find? (·.ixName == "reduceAsk")
     | throwError "missing reduceAsk"
+  let some postBid := program.methods.find? (·.ixName == "postBid")
+    | throwError "missing postBid"
+  let some reduceBid := program.methods.find? (·.ixName == "reduceBid")
+    | throwError "missing reduceBid"
   let some swap := program.methods.find? (·.ixName == "swapBuy")
     | throwError "missing swapBuy"
+  let some swapSell := program.methods.find? (·.ixName == "swapSell")
+    | throwError "missing swapSell"
   let some collect := program.methods.find? (·.ixName == "collectFees")
     | throwError "missing collectFees"
-  unless post.paramCount == 5 && reduce.paramCount == 4 && swap.paramCount == 4 &&
-      collect.paramCount == 0 do
+  unless post.paramCount == 5 && reduce.paramCount == 4 &&
+      postBid.paramCount == 5 && reduceBid.paramCount == 4 &&
+      swap.paramCount == 4 && swapSell.paramCount == 4 && collect.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
   unless asm.contains "; forBody 14" && asm.contains "; forBody 17" &&
       asm.contains "; forBody 4" do
@@ -49,6 +59,17 @@ private def sameBusinessResult :
   | .error a, .error b => a == b
   | .ok (a, ar), .ok (b, br) =>
       ar == br && a.sizes == b.sizes &&
+        a.quoteLocked == b.quoteLocked && a.quoteFree == b.quoteFree &&
+        a.baseLocked == b.baseLocked && a.baseFree == b.baseFree &&
+        a.unclaimedFees == b.unclaimedFees && a.collectedFees == b.collectedFees
+  | _, _ => false
+
+private def sameSellResult :
+    Except Error (Projects.Phoenix.State × UInt64) →
+      Except Error (Projects.Phoenix.State × UInt64) → Bool
+  | .error a, .error b => a == b
+  | .ok (a, ar), .ok (b, br) =>
+      ar == br && a.bidSizes == b.bidSizes &&
         a.quoteLocked == b.quoteLocked && a.quoteFree == b.quoteFree &&
         a.baseLocked == b.baseLocked && a.baseFree == b.baseFree &&
         a.unclaimedFees == b.unclaimedFees && a.collectedFees == b.collectedFees
@@ -73,11 +94,32 @@ private def matchingSamples : List Projects.Phoenix.State := [
         (swapBuyAt s want.toUInt64 limit.toUInt64 0 0)
         (swapBuy s u64Max 0 want.toUInt64 limit.toUInt64)
 
+private def sellSamples : List Projects.Phoenix.State := [
+  { (init 1) with
+    bidSizes := #v[2, 3, 1, 0], bidPriceTicks := #v[12, 11, 10, 0],
+    quoteLocked := 67, baseFree := 6 },
+  { (init 2) with
+    bidSizes := #v[0, 2, 0, 1], bidPriceTicks := #v[0, 13, 0, 10],
+    quoteLocked := 72, baseFree := 3, takerFeeBps := 25 },
+  { (init 2) with
+    baseLotsPerBaseUnit := 2,
+    bidSizes := #v[1, 1, 1, 1], bidPriceTicks := #v[4, 3, 2, 1],
+    quoteLocked := 10, baseFree := 4 }
+]
+
+#guard sellSamples.all fun s =>
+  (List.range 7).all fun want =>
+    (List.range 15).all fun limit =>
+      sameSellResult
+        (swapSellAt s want.toUInt64 limit.toUInt64 0 0)
+        (swapSell s u64Max 0 want.toUInt64 limit.toUInt64)
+
 #guard (init 100).tickSize == 100
 #guard (init 100).sequence == 1
 #guard (init 100).takerFeeBps == 5
 #guard (init 100).sizes[0]! == 0
 #guard (init 100).priceTicks[0]! == 0
+#guard (init 100).bidPriceTicks[0]! == 0
 #guard (init 100).baseLocked == 0
 #guard (init 100).baseFree == 0
 #guard bestAsk (init 100) == 0
@@ -103,6 +145,12 @@ private def matchingSamples : List Projects.Phoenix.State := [
 #guard !orderedAsks { (init 1) with
   sizes := #v[1, 0, 1, 0], priceTicks := #v[11, 0, 10, 0],
   sequences := #v[1, 0, 2, 0] }
+#guard orderedBids { (init 1) with
+  bidSizes := #v[1, 1, 1, 0], bidPriceTicks := #v[11, 10, 10, 0],
+  bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), ~~~(3 : UInt64), 0] }
+#guard !orderedBids { (init 1) with
+  bidSizes := #v[1, 0, 1, 0], bidPriceTicks := #v[10, 0, 11, 0],
+  bidSequences := #v[~~~(1 : UInt64), 0, ~~~(2 : UInt64), 0] }
 #guard Side.ask != Side.bid
 #guard SelfTradeBehavior.abort != SelfTradeBehavior.cancelProvide
 
@@ -176,6 +224,56 @@ private def matchingSamples : List Projects.Phoenix.State := [
       { (init 100) with baseFree := 8 }
       7 50 8 9 0 10 0 with
   | .ok (st, ret) => st == { (init 100) with baseFree := 8 } && ret == 0
+  | .error _ => false
+
+#guard
+  match postBidAt { (init 1) with quoteFree := 100 } 7 50 2 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[2, 0, 0, 0] && st.bidPriceTicks == #v[50, 0, 0, 0] &&
+        st.bidTraders[0]! == 7 && st.bidSequences[0]! == ~~~(1 : UInt64) &&
+        st.sequence == 2 && st.quoteLocked == 100 && st.quoteFree == 0 && ret == 2
+  | .error _ => false
+
+#guard
+  match postBidAt
+      { (init 1) with
+        bidSizes := #v[1, 1, 0, 0], bidPriceTicks := #v[50, 40, 0, 0],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
+        sequence := 3, quoteLocked := 90, quoteFree := 60 }
+      9 60 1 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[1, 1, 1, 0] && st.bidPriceTicks == #v[60, 50, 40, 0] &&
+        st.bidSequences == #v[~~~(3 : UInt64), ~~~(1 : UInt64), ~~~(2 : UInt64), 0] &&
+        st.quoteLocked == 150 && st.quoteFree == 0 && orderedBids st && ret == 1
+  | .error _ => false
+
+#guard
+  match postBidAt
+      { (init 1) with
+        bidSizes := #v[1, 1, 1, 1], bidPriceTicks := #v[40, 30, 20, 10],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64),
+          ~~~(3 : UInt64), ~~~(4 : UInt64)],
+        sequence := 5, quoteLocked := 100, quoteFree := 100 }
+      9 25 1 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[1, 1, 1, 1] && st.bidPriceTicks == #v[40, 30, 25, 20] &&
+        st.quoteLocked == 115 && st.quoteFree == 85 && orderedBids st && ret == 1
+  | .error _ => false
+
+#guard
+  match postBidAt
+      { (init 1) with
+        bidSizes := #v[1, 1, 1, 1], bidPriceTicks := #v[40, 30, 20, 10],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64),
+          ~~~(3 : UInt64), ~~~(4 : UInt64)],
+        sequence := 5, quoteLocked := 100, quoteFree := 100 }
+      9 10 1 0 0 0 0 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match postBidAt { (init 1) with quoteFree := 100 } 7 50 2 9 0 10 0 with
+  | .ok (st, ret) => st == { (init 1) with quoteFree := 100 } && ret == 0
   | .error _ => false
 
 #guard
@@ -342,6 +440,79 @@ private def matchingSamples : List Projects.Phoenix.State := [
     (swapBuy s 7 2 1 11)
 
 #guard
+  match swapSellAt
+      { (init 1) with
+        bidSizes := #v[2, 3, 5, 0], bidPriceTicks := #v[12, 11, 10, 0],
+        quoteLocked := 107, baseFree := 4 }
+      4 11 0 0 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[0, 1, 5, 0] && ret == 4 &&
+        st.quoteLocked == 61 && st.quoteFree == 45 && st.baseFree == 4 &&
+        st.unclaimedFees == 1
+  | .error _ => false
+
+#guard
+  match swapSellAt
+      { (init 1) with
+        bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidLastSlots := #v[9, 0, 0, 0], quoteLocked := 57, baseFree := 2 }
+      2 11 10 0 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
+        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1
+  | .error _ => false
+
+#guard
+  match swapSellAt
+      { (init 1) with
+        bidSizes := #v[2, 0, 0, 0], bidPriceTicks := #v[10, 0, 0, 0],
+        quoteLocked := 20, baseFree := 1 }
+      1 11 0 0 with
+  | .ok (st, ret) => st.bidSizes[0]! == 2 && st.quoteLocked == 20 && ret == 0
+  | .error _ => false
+
+#guard
+  match swapSellForAt
+      { (init 1) with
+        bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
+      7 2 11 0 0 .abort with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match swapSellForAt
+      { (init 1) with
+        bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
+      7 2 11 0 0 .cancelProvide with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
+        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1
+  | .error _ => false
+
+#guard
+  match swapSellForAt
+      { (init 1) with
+        bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 1 }
+      7 1 11 0 0 .decrementTake with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[1, 3, 0, 0] && ret == 0 &&
+        st.quoteLocked == 45 && st.quoteFree == 12 && st.baseFree == 1 &&
+        st.unclaimedFees == 0
+  | .error _ => false
+
+#guard
+  let s :=
+    { (init 1) with
+      bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+      bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
+  sameSellResult
+    (swapSellForAt s 7 2 11 0 0 .cancelProvide)
+    (swapSell s 7 1 2 11)
+
+#guard
   match sweepAsk { (init 100) with
       sizes := #v[2, 8, 0, 0], baseLocked := 10, baseFree := 0 } with
   | .ok (st, ret) =>
@@ -382,6 +553,40 @@ private def matchingSamples : List Projects.Phoenix.State := [
   | _ => false
 
 #guard
+  match reduceBid
+      { (init 1) with
+        bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
+        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57 }
+      8 11 (~~~(2 : UInt64)) 2 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[2, 1, 0, 0] && st.quoteLocked == 35 &&
+        st.quoteFree == 22 && ret == 2
+  | .error _ => false
+
+#guard
+  match cancelBid
+      { (init 1) with
+        bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
+        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57 }
+      7 12 (~~~(1 : UInt64)) with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[0, 3, 0, 0] && st.quoteLocked == 33 &&
+        st.quoteFree == 24 && ret == 2
+  | .error _ => false
+
+#guard
+  match reduceBid
+      { (init 1) with
+        bidSizes := #v[2, 0, 0, 0], bidPriceTicks := #v[12, 0, 0, 0],
+        bidSequences := #v[~~~(1 : UInt64), 0, 0, 0],
+        bidTraders := #v[7, 0, 0, 0], quoteLocked := 24 }
+      8 12 (~~~(1 : UInt64)) 1 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
   match cancelAsk { (init 100) with
       sizes := #v[8, 1, 0, 0], priceTicks := #v[10, 20, 0, 0],
       sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
@@ -407,6 +612,9 @@ private def matchingSamples : List Projects.Phoenix.State := [
 
 #guard bestAsk { (init 100) with
   sizes := #v[0, 0, 2, 1], priceTicks := #v[0, 0, 30, 40] } == 30
+#guard bestBid { (init 100) with
+  bidSizes := #v[0, 0, 2, 1], bidPriceTicks := #v[0, 0, 30, 20] } == 30
+#guard bidQty { (init 100) with bidSizes := #v[1, 2, 3, 4] } == 10
 
 #guard checkLimit { (init 100) with priceTicks := #v[100, 0, 0, 0] } 50 == false
 #guard checkLimit { (init 100) with priceTicks := #v[100, 0, 0, 0] } 100 == true

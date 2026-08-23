@@ -23,7 +23,8 @@ writable/signer 的账户在 prelude 里检查。按槽宽用 `ldxb`/`ldxh`/`ldx
 （Pair.creditLeft 抽出的 `okState (field right)` 仍写 left）。同序列已有 `storeField` 时
 `okState` 只回传、不再猜 dest。`storeField name v` 把 `v` 写进名为 `name` 的槽。有 `_tag`
 槽时 `okState (lit 0)` 清零两叶，其它值写 tag=1 + payload。字面量用十六进制，避免 `sbpf`
-拒 `2^64-1`。空 ops 失败。
+拒 `2^64-1`。所有会生成分支 label 的递归 `loadVal` 叶子都带 method / branch scope，
+同一入口多次读取 clock、PDA、rent 等叶子不会产生重名 label。空 ops 失败。
 
 ## API
 
