@@ -20,16 +20,17 @@
 | `TraderState` | `quoteLocked` / `quoteFree` / `baseLocked` / `baseFree` |
 | `Side` / `SelfTradeBehavior` | 无 payload 枚举（宿主） |
 | `MatchingEngineResponse` | `match*` bounded-fold scratch |
+| `MarketEvent` | tag + 五个规范 payload 槽；instruction 内固定容量 5 的 batch |
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
-67 个 u64 槽，账户含 discriminator 共 544 bytes。`#pf_build Projects.Phoenix`
-digest `13a349638aa8c993`。
+104 个 8-byte 叶，账户含 discriminator 共 840 bytes。`#pf_build Projects.Phoenix`
+digest `1532010d80923c58`。
 
 `postAsk` 是链上 free-funds 挂单：检查 incoming TIF 和 sequence 上界，锁定
 `baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；书满时只有更低价
 ask 能驱逐最差订单。物理空洞通过 bounded compare/swap 收到尾部。
 
-`swapBuyAt` 是完整的 bounded N=4 宿主语义；链上 `swapBuy` 用 17-phase
+`swapBuyAt` 是完整的 bounded N=4 宿主语义；链上 `swapBuy` 用 19-phase
 state-carrying fold 实现相同扫描：reset 后，每档依次检查 slot TIF、time TIF、
 撮合并推进档位。过期单清零、解锁 base 并继续；第一个超限有效价格停止；整档
 成交继续，部分成交停止。无流动性或超限 IOC 成功返回 0，不伪装成 overflow。
@@ -46,12 +47,16 @@ bid-side 对称地按价格降序排列，订单 ID 保存官方的 `~~~sequence
 降序即时间 FIFO。`postBid` 按原价把 quote 从 free 锁入 locked，满书只允许更高价
 驱逐最差 bid；`reduceBid` / `cancelBid` 按原价解锁。`swapSell` 扫过期和跨档 bid，
 按总成交 adjusted quote 收 taker fee，并覆盖三种 self-trade 行为。宿主递归规范和
-链上 17-phase fold 对样本空间逐项一致。
+链上 structured fold 对样本空间逐项一致。挂单记录 `Evict` / `Place` / `TimeInForce`；
+撮合逐档记录 `Fill` / `ExpiredOrder` / self-trade `Reduce`，最后记录
+`FillSummary`；reduce 和收取费用分别记录 `Reduce` / `Fee`。事件 batch 的动态
+variant-vector 写入通过 target-neutral typed layout 降到两个 target，不需要 emitter
+认识 Phoenix。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 356,713-byte assembly 和
-90,504-byte eBPF ELF。增加完整 bid-side 后 ELF 只增加 34,536 bytes；测试把
-assembly budget 钉在 450 KB，并拒绝重复 label。当前体积仍很小，两个方向都按
-独立 bounded loop 增长，不按四档静态展开。
+真实源模块经 `pf build --target svm Phoenix` 生成 374,405-byte assembly 和
+85,120-byte eBPF ELF。测试把 assembly budget 钉在 450 KB，并拒绝重复 label。
+链上 buy / sell 分别是 19 / 23 phase，挂单是 17 phase；代码体积按 bounded loop
+增长，不按四档静态展开。
 
 ## 官方有、本仓没有
 
@@ -60,11 +65,10 @@ assembly budget 钉在 450 KB，并拒绝重复 label。当前体积仍很小，
 | 动态 `RedBlackTree` 删除 fixup | allocator/free-list、完整左右旋和 N=4 insertion fixup 已在独立 Tree refinement 实现；Phoenix 仍用有序投影 |
 | `_padding: [u64; 32]` | 不进账户 |
 | `OrderPacket.client_order_id: u128` | 只有 `UInt64` |
-| `MarketEvent` 带 payload | 多构造子 inductive |
 | `Ladder` / `Vec` | 不定长 |
 | trader tree / 动态 maker 身份 | 当前双边书仍聚合到一个 bounded TraderState |
-| seat lifecycle / event batch | 需要更完整账户与事件模型 |
+| seat lifecycle / 动态 trader registry | 需要更完整账户与身份模型 |
 | Seat + 双 vault 同一入口 | CPI 账户表会抬高 |
-| `Log` self-CPI | 变长 event batch |
+| Borsh wire event / `Log` self-CPI | 当前只存 typed fixed-capacity batch，尚未编码成官方一字节 tag 并发给 event recorder |
 
 这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。

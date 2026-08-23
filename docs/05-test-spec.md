@@ -41,7 +41,7 @@
 | T-F-01 | happy | Pair fields left/right | right 偏移 16；data_len 24 |
 | T-F-02 | happy | extract Pair.creditLeft | ops 含 `field left` |
 | T-F-03 | happy | 无 `with` 抽 Pair | fields = left, right |
-| T-F-04 | error | structure 含 `Bool` 字段 | `extract/unsupported: field … is not UInt64` |
+| T-F-04 | happy | structure 含 `Bool` 字段 | 一字节 u8-le 叶，false/true 为 0/1 |
 | T-F-05 | happy | Pair Mollusk init(7) | left=7，right=0，data_len 24 |
 | T-F-06 | happy | creditLeft 5+3，right=99 | left=8，right 保持 99 |
 | T-F-07 | happy | getLeft | return left，不改账户 |
@@ -63,7 +63,7 @@
 | T-L1-15 | happy | 发射文本 | 含 `digest=` |
 | T-L2-01 | happy | Flag slots | flag 偏移 8 宽 1；count 偏移 9 宽 8 |
 | T-L2-02 | happy | Maybe slots | slot_tag 8、slot_p0 16 |
-| T-L2-03 | error | 嵌套 Option / Bool | `extract/unsupported` |
+| T-L2-03 | happy | 嵌套 structure / Bool | 递归摊平；Bool 为一字节 u8-le |
 | T-L2-04 | happy | Flag Mollusk init | flag=0，count=7 |
 | T-L2-05 | happy | Maybe none | 两叶清零 |
 | T-L2-06 | happy | Maybe some 77 | tag=1，payload=77 |
@@ -74,7 +74,7 @@
 | T-L2-11 | happy | Window Mollusk init(7) | head=7，tail=0 |
 | T-L2-12 | happy | setTail 9 | head 保持 7，tail=9 |
 | T-L2-13 | happy | Phase slots | mode 偏移 8 |
-| T-L2-14 | error | 带 payload inductive | `enum has payload` |
+| T-L2-14 | happy | 固定布局多构造子 UInt64 variant | tag + 最大 payload；短构造子补零 |
 | T-L2-15 | happy | Phase Mollusk init | mode=0 |
 | T-L2-16 | happy | setLive / isLive | tag=1，view 返回 1 |
 | T-L3-01 | happy | Pair.initBoth 3 9 | left=3，right=9 |
@@ -83,3 +83,7 @@
 | T-L3-04 | happy | Maybe.getValue some 77 | return 77 |
 | T-L3-05 | happy | Choice slots | pick_tag 8、pick_p0 16 |
 | T-L3-06 | happy | getHeld empty / hold 77 | 0 / 77 |
+| T-L5-01 | happy | state-carrying bounded `forBody` | loop index 与外层 payload 身份不混淆 |
+| T-L5-02 | happy | `Vector MarketEvent 4` 动态写 | tag + 五 payload 同时写入；SVM/EVM 都可发射 |
+| T-L5-03 | happy | Phoenix 跨四档 buy/sell | host reference 与链上 structured fold 逐样本一致 |
+| T-L5-04 | happy | Phoenix event batch | Fill/Expired/Reduce/Evict/Place/TIF/Fee/Summary 顺序正确 |
