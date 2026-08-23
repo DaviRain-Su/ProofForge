@@ -1407,7 +1407,7 @@ allocator IR 直接钉 canonical digest；对应手写 fixture 继续作为布�
 -/
 def digestOf (name : String) : Option String :=
   if name == "Phoenix" then some "13a349638aa8c993"
-  else if name == "Tree" then some "fdfdc7238fa82803"
+  else if name == "Tree" then some "7ceb86b437610514"
   else (programs.find? (·.name == name)).map digestHex
 
 end ProofForge.Golden

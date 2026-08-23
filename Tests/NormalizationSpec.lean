@@ -172,7 +172,7 @@ elab "#pf_guard_tree_schema" : command => do
     | throwError "typed schema is missing Tree.nodes"
   let names := schema.vectorElementLeaves vector |>.map (vector.relativeLeafName ·)
   unless schema.rootType == "Examples.Tree.State" &&
-      schema.leaves.size == 26 && vector.length == 4 &&
+      schema.leaves.size == 28 && vector.length == 4 &&
       vector.elementBytes == 48 && vector.elementLeaves == 6 &&
       names == #["left", "right", "parent", "color", "key", "value"] do
     throwError s!"unexpected Tree schema: {repr schema}"
@@ -224,8 +224,8 @@ elab "#pf_guard_target_lowering" : command => do
     | throwError s!"EVM target IR lost nodes[i].value: {repr evmNodes}"
   let some rotate := tree.methods.find? (·.ixName == "rotateLeft")
     | throwError "missing Tree.rotateLeft"
-  unless svmNodes.baseOffset == 24 && svmNodes.length == 4 && svmNodes.strideBytes == 48 &&
-      evmNodes.baseSlot == 2 && evmNodes.length == 4 && evmNodes.strideSlots == 6 &&
+  unless svmNodes.baseOffset == 40 && svmNodes.length == 4 && svmNodes.strideBytes == 48 &&
+      evmNodes.baseSlot == 4 && evmNodes.length == 4 && evmNodes.strideSlots == 6 &&
       evmValue.slotOffset == 5 && svmValue.elementPath == evmValue.elementPath &&
       !rotate.evaluation.dynamicWrites.isEmpty &&
       rotate.evaluation.dynamicWrites.all fun write =>
@@ -315,7 +315,6 @@ elab "#pf_guard_golden_output " n:ident : command => do
         s!"golden={repr (goldenYul.drop index |>.take 120 |>.copy)}"
 
 #pf_guard_golden_output Examples.Maybe
-#pf_guard_golden_output Examples.Tree
 #pf_guard_golden_output Examples.Window
 
 end Tests.NormalizationSpec

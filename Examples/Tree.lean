@@ -174,7 +174,7 @@ def releaseNode (s : State) (address : UInt64) : Except Error (State × UInt64) 
 有界 bump 分配。
 空树：地址 1（槽 0）写成红根。
 非空且根右孩是 SENTINEL、还有空槽：把地址 2（槽 1）挂到根右边。
-满树 / 右孩已占走 overflow。左旋已开；染色仍关。
+满树 / 右孩已占走 overflow。旋转已开；染色仍关。
 -/
 @[pf_entry]
 def bumpInsert (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
@@ -209,25 +209,129 @@ def bumpInsert (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-/--
-左旋：`x` 的右孩 `y` 上来。
-改三处：`x.right := y.left`，`y.left := x+1`（地址），`y.parent := x.parent`。
-容量 4，地址是槽下标 + 1。`x` / `y` 都是 0-based 槽。
--/
+/-- 完整左旋。参数和返回值都是 1-based 地址，0 只作 sentinel。 -/
 @[pf_entry]
-def rotateLeft (s : State) (x : UInt64) : Except Error (State × UInt64) :=
-  if hx : x.toNat < 4 then
-    let y := s.nodes[x.toNat]!.right
-    if y ≠ 0 then
-      if hy : y.toNat - 1 < 4 then
-        let yl := s.nodes[y.toNat - 1]!.left
-        let xp := s.nodes[x.toNat]!.parent
-        let nodes :=
-          (s.nodes.set x.toNat { s.nodes[x.toNat]! with right := yl }).set (y.toNat - 1)
-            { s.nodes[y.toNat - 1]! with left := x + 1, parent := xp }
-        .ok ({ s with nodes }, y)
-      else
+def rotateLeft (s : State) (xAddress : UInt64) : Except Error (State × UInt64) :=
+  if xAddress = 0 then
+    .error .overflow
+  else if hx : xAddress.toNat - 1 < 4 then
+    let xi := xAddress.toNat - 1
+    let x := s.nodes[xi]!
+    let yAddress := x.right
+    if yAddress = 0 then
+      .error .overflow
+    else if hy : yAddress.toNat - 1 < 4 then
+      let yi := yAddress.toNat - 1
+      let y := s.nodes[yi]!
+      let innerAddress := y.left
+      let parentAddress := x.parent
+      if 4 < innerAddress then
         .error .overflow
+      else if 4 < parentAddress then
+        .error .overflow
+      else
+        let nodes1 := s.nodes.set xi { x with right := innerAddress, parent := yAddress }
+        if innerAddress = 0 then
+          if parentAddress = 0 then
+            let rotated :=
+              nodes1.set yi { nodes1[yi]! with left := xAddress, parent := 0 }
+            .ok ({ s with root := yAddress, nodes := rotated }, yAddress)
+          else
+            let parentIndex := (parentAddress.toNat - 1) % 4
+            if nodes1[parentIndex]!.left = xAddress then
+              let rotated :=
+                (nodes1.set parentIndex { nodes1[parentIndex]! with left := yAddress }).set yi
+                  { nodes1[yi]! with left := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
+            else
+              let rotated :=
+                (nodes1.set parentIndex { nodes1[parentIndex]! with right := yAddress }).set yi
+                  { nodes1[yi]! with left := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
+        else
+          let innerIndex := (innerAddress.toNat - 1) % 4
+          let nodes2 :=
+            nodes1.set innerIndex { nodes1[innerIndex]! with parent := xAddress }
+          if parentAddress = 0 then
+            let rotated :=
+              nodes2.set yi { nodes2[yi]! with left := xAddress, parent := 0 }
+            .ok ({ s with root := yAddress, nodes := rotated }, yAddress)
+          else
+            let parentIndex := (parentAddress.toNat - 1) % 4
+            if nodes2[parentIndex]!.left = xAddress then
+              let rotated :=
+                (nodes2.set parentIndex { nodes2[parentIndex]! with left := yAddress }).set yi
+                  { nodes2[yi]! with left := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
+            else
+              let rotated :=
+                (nodes2.set parentIndex { nodes2[parentIndex]! with right := yAddress }).set yi
+                  { nodes2[yi]! with left := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+/-- 完整右旋。参数和返回值都是 1-based 地址，0 只作 sentinel。 -/
+@[pf_entry]
+def rotateRight (s : State) (xAddress : UInt64) : Except Error (State × UInt64) :=
+  if xAddress = 0 then
+    .error .overflow
+  else if hx : xAddress.toNat - 1 < 4 then
+    let xi := xAddress.toNat - 1
+    let x := s.nodes[xi]!
+    let yAddress := x.left
+    if yAddress = 0 then
+      .error .overflow
+    else if hy : yAddress.toNat - 1 < 4 then
+      let yi := yAddress.toNat - 1
+      let y := s.nodes[yi]!
+      let innerAddress := y.right
+      let parentAddress := x.parent
+      if 4 < innerAddress then
+        .error .overflow
+      else if 4 < parentAddress then
+        .error .overflow
+      else
+        let nodes1 := s.nodes.set xi { x with left := innerAddress, parent := yAddress }
+        if innerAddress = 0 then
+          if parentAddress = 0 then
+            let rotated :=
+              nodes1.set yi { nodes1[yi]! with right := xAddress, parent := 0 }
+            .ok ({ s with root := yAddress, nodes := rotated }, yAddress)
+          else
+            let parentIndex := (parentAddress.toNat - 1) % 4
+            if nodes1[parentIndex]!.left = xAddress then
+              let rotated :=
+                (nodes1.set parentIndex { nodes1[parentIndex]! with left := yAddress }).set yi
+                  { nodes1[yi]! with right := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
+            else
+              let rotated :=
+                (nodes1.set parentIndex { nodes1[parentIndex]! with right := yAddress }).set yi
+                  { nodes1[yi]! with right := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
+        else
+          let innerIndex := (innerAddress.toNat - 1) % 4
+          let nodes2 :=
+            nodes1.set innerIndex { nodes1[innerIndex]! with parent := xAddress }
+          if parentAddress = 0 then
+            let rotated :=
+              nodes2.set yi { nodes2[yi]! with right := xAddress, parent := 0 }
+            .ok ({ s with root := yAddress, nodes := rotated }, yAddress)
+          else
+            let parentIndex := (parentAddress.toNat - 1) % 4
+            if nodes2[parentIndex]!.left = xAddress then
+              let rotated :=
+                (nodes2.set parentIndex { nodes2[parentIndex]! with left := yAddress }).set yi
+                  { nodes2[yi]! with right := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
+            else
+              let rotated :=
+                (nodes2.set parentIndex { nodes2[parentIndex]! with right := yAddress }).set yi
+                  { nodes2[yi]! with right := xAddress, parent := parentAddress }
+              .ok ({ s with nodes := rotated }, yAddress)
     else
       .error .overflow
   else

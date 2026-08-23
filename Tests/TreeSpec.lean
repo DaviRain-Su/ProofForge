@@ -6,6 +6,32 @@ namespace Tests.TreeSpec
 open Examples.Tree
 open Lean Elab Command
 
+private partial def maxIndexWrites (ops : Array ProofForge.Ops.Op) : Nat :=
+  ops.foldl (init := 0) fun count op =>
+    count +
+      match op with
+      | .indexSet .. => 1
+      | .ite _ _ _ thn els => max (maxIndexWrites thn) (maxIndexWrites els)
+      | .forBody bound body => bound * maxIndexWrites body
+      | _ => 0
+
+private partial def storeNames (ops : Array ProofForge.Ops.Op) : Array String :=
+  ops.flatMap fun op =>
+    match op with
+    | .storeField name _ => #[name]
+    | .ite _ _ _ thn els => storeNames thn ++ storeNames els
+    | .forBody _ body => storeNames body
+    | _ => #[]
+
+private partial def storeValues (want : String)
+    (ops : Array ProofForge.Ops.Op) : Array ProofForge.Ops.Val :=
+  ops.flatMap fun op =>
+    match op with
+    | .storeField name value => if name == want then #[value] else #[]
+    | .ite _ _ _ thn els => storeValues want thn ++ storeValues want els
+    | .forBody _ body => storeValues want body
+    | _ => #[]
+
 elab "#pf_guard_tree_allocator" : command => do
   let env ← getEnv
   let program ←
@@ -22,13 +48,40 @@ elab "#pf_guard_tree_allocator" : command => do
     | throwError "missing allocNode"
   let some release := program.methods.find? (·.ixName == "releaseNode")
     | throwError "missing releaseNode"
-  unless alloc.paramCount == 2 && release.paramCount == 1 do
-    throwError "Tree allocator ABI changed"
+  let some rotateLeft := program.methods.find? (·.ixName == "rotateLeft")
+    | throwError "missing rotateLeft"
+  let some rotateRight := program.methods.find? (·.ixName == "rotateRight")
+    | throwError "missing rotateRight"
+  unless alloc.paramCount == 2 && release.paramCount == 1 &&
+      rotateLeft.paramCount == 1 && rotateRight.paramCount == 1 do
+    throwError "Tree storage ABI changed"
+  let allocStores := storeNames alloc.ops
+  let releaseStores := storeNames release.ops
+  unless #["size", "bumpIndex", "freeHead"].all allocStores.contains &&
+      #["size", "freeHead"].all releaseStores.contains do
+    throwError s!"Tree allocator metadata writeback changed: {allocStores}, {releaseStores}"
+  unless alloc.evaluation.dynamicWrites.size == 12 &&
+      release.evaluation.dynamicWrites.size == 4 do
+    throwError "Tree allocator dynamic writeback changed"
+  unless maxIndexWrites rotateLeft.ops == 6 && maxIndexWrites rotateRight.ops == 6 &&
+      rotateLeft.evaluation.dynamicWrites.size == 31 &&
+      rotateRight.evaluation.dynamicWrites.size == 31 &&
+      ((storeNames rotateLeft.ops).filter (· == "root")).size == 2 &&
+      ((storeNames rotateRight.ops).filter (· == "root")).size == 2 do
+    throwError "Tree rotation writeback is incomplete or duplicated"
+  let xi := ProofForge.Ops.Val.subU64 (.arg 0) (.lit 1)
+  let leftY := ProofForge.Ops.Val.indexGet (.arg 1) "nodes" xi 0 8
+  let rightY := ProofForge.Ops.Val.indexGet (.arg 1) "nodes" xi 0 0
+  unless (storeValues "root" rotateLeft.ops).all (· == leftY) &&
+      (storeValues "root" rotateRight.ops).all (· == rightY) do
+    throwError "Tree rotation helper arguments escaped into source IR"
   let labels := (asm.splitOn "\n").filterMap fun line =>
     let line := line.trimAscii.toString
     if line.endsWith ":" then some line else none
   unless labels.length == labels.eraseDups.length do
     throwError "Tree allocator assembly contains duplicate labels"
+  unless asm.toUTF8.size < 300000 do
+    throwError s!"Tree assembly expanded unexpectedly: {asm.toUTF8.size} bytes"
 
 #pf_guard_tree_allocator
 
@@ -165,10 +218,82 @@ elab "#pf_guard_tree_allocator" : command => do
         nodes :=
           ((init 0).nodes.set 0 { left := 0, right := 2, parent := 0, color := 1, key := 3, value := 7 }).set 1
             { left := 0, right := 0, parent := 1, color := 1, key := 2, value := 9 } }
-    rotateLeft s0 0 with
+    rotateLeft s0 1 with
   | .ok (st, y) =>
-      y == 2 && st.nodes[0]!.right == 0 &&
+      y == 2 && st.root == 2 &&
+        st.nodes[0]!.right == 0 && st.nodes[0]!.parent == 2 &&
         st.nodes[1]!.left == 1 && st.nodes[1]!.parent == 0
+  | .error _ => false
+
+#guard
+  match
+    let s0 :=
+      { (init 0) with
+        root := 1, size := 2
+        nodes :=
+          ((init 0).nodes.set 0 { left := 2, right := 0, parent := 0, color := 1, key := 3, value := 7 }).set 1
+            { left := 0, right := 0, parent := 1, color := 1, key := 2, value := 9 } }
+    rotateRight s0 1 with
+  | .ok (st, y) =>
+      y == 2 && st.root == 2 &&
+        st.nodes[0]!.left == 0 && st.nodes[0]!.parent == 2 &&
+        st.nodes[1]!.right == 1 && st.nodes[1]!.parent == 0
+  | .error _ => false
+
+#guard
+  match
+    let s0 :=
+      { (init 0) with
+        root := 1, size := 3
+        nodes :=
+          (((init 0).nodes.set 0
+              { left := 0, right := 3, parent := 0, color := 1, key := 10, value := 1 }).set 1
+              { left := 0, right := 0, parent := 3, color := 0, key := 15, value := 2 }).set 2
+              { left := 2, right := 0, parent := 1, color := 1, key := 20, value := 3 } }
+    rotateLeft s0 1 with
+  | .ok (st, y) =>
+      y == 3 && st.root == 3 &&
+        st.nodes[0]!.right == 2 && st.nodes[0]!.parent == 3 &&
+        st.nodes[1]!.parent == 1 &&
+        st.nodes[2]!.left == 1 && st.nodes[2]!.parent == 0
+  | .error _ => false
+
+#guard
+  match
+    let s0 :=
+      { (init 0) with
+        root := 1, size := 4
+        nodes :=
+          ((((init 0).nodes.set 0
+              { left := 2, right := 0, parent := 0, color := 0, key := 40, value := 1 }).set 1
+              { left := 0, right := 3, parent := 1, color := 1, key := 20, value := 2 }).set 2
+              { left := 4, right := 0, parent := 2, color := 0, key := 30, value := 3 }).set 3
+              { left := 0, right := 0, parent := 3, color := 1, key := 25, value := 4 } }
+    rotateLeft s0 2 with
+  | .ok (st, y) =>
+      y == 3 && st.root == 1 && st.nodes[0]!.left == 3 &&
+        st.nodes[2]!.parent == 1 && st.nodes[2]!.left == 2 &&
+        st.nodes[1]!.parent == 3 && st.nodes[1]!.right == 4 &&
+        st.nodes[3]!.parent == 2
+  | .error _ => false
+
+#guard
+  match
+    let s0 :=
+      { (init 0) with
+        root := 1, size := 4
+        nodes :=
+          ((((init 0).nodes.set 0
+              { left := 0, right := 2, parent := 0, color := 0, key := 10, value := 1 }).set 1
+              { left := 3, right := 0, parent := 1, color := 1, key := 30, value := 2 }).set 2
+              { left := 0, right := 4, parent := 2, color := 0, key := 20, value := 3 }).set 3
+              { left := 0, right := 0, parent := 3, color := 1, key := 25, value := 4 } }
+    rotateRight s0 2 with
+  | .ok (st, y) =>
+      y == 3 && st.root == 1 && st.nodes[0]!.right == 3 &&
+        st.nodes[2]!.parent == 1 && st.nodes[2]!.right == 2 &&
+        st.nodes[1]!.parent == 3 && st.nodes[1]!.left == 4 &&
+        st.nodes[3]!.parent == 2
   | .error _ => false
 
 #guard

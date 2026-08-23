@@ -80,7 +80,14 @@ schema 默认从 `init` 返回类型收：必须是已注册 `structure`、无 `
 `Tests/NormalizationSpec.lean`：等价 Lean 表面形式抽成同一 Core；Tree 的 typed Vector schema
 固定为 4 个元素、每元素 48 字节 / 6 叶；checked result、Option 双叶和动态 Vector
 writeback 的 Core evaluation 是显式且 typed 的；Tree allocator 已覆盖同一动态元素一次
-改写六个叶子以及 LIFO free-list 复用。同一 Tree `Place` 在 SVM target IR 中变成
-byte offset/stride，在 EVM target IR 中变成 slot/slot-stride；Maybe 的 Option tag/payload
-也保持同一 typed identity；Maybe / Tree / Window 的 typed 与 legacy schema 路径生成逐字节
-相同的 SVM 输出，适用程序的 EVM 输出也相同。
+改写六个叶子、静态 allocator 元数据 writeback 以及 LIFO free-list 复用。完整左右旋
+进一步覆盖条件分支、同一返回中的静态 root + 动态 Vector 写，以及只沿
+`Vector.set` base 追溯旧写，避免把 payload read 指数级复制成写。同一 Tree `Place`
+在 SVM target IR 中变成 byte offset/stride，在 EVM target IR 中变成
+slot/slot-stride；Maybe 的 Option tag/payload 也保持同一 typed identity。Maybe / Window
+的 typed 与 legacy schema 路径生成逐字节相同的 SVM 输出，适用程序的 EVM 输出也相同；
+真实 Tree 已超出旧手写 fixture，只钉 source digest 和 typed target identity。
+
+旋转目前保留在 entry 的 branch-normal form。`pf_inline` helper 若同时携带 Vector
+状态并嵌在 dependent `if` 证明 λ 下，参数 lowering 仍可能偏移；该形态暂不属于支持
+剖面，不能用“可汇编”替代源参数 identity 检查。

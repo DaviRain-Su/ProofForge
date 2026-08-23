@@ -978,6 +978,32 @@ private def asVectorLits (env : Environment) (e : Expr) : Option (Array Ops.Val)
     | none => none
   else none
 
+/--
+Trace a nested `Vector.set` chain back to the user structure projection that owns the vector.
+Element projections such as `Node.left` can occur in an intervening branch condition; only a
+projection whose result type mentions `Vector` is a valid storage base.
+-/
+private def vectorBaseName (env : Environment) (fuel : Nat) (e : Expr) : Option String :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    match e.getAppFn.constName? with
+    | some n =>
+      let last := IR.lastName n.toString
+      let skipTy :=
+        match env.find? n with
+        | some (.inductInfo _) => true
+        | some (.ctorInfo _) => true
+        | _ => false
+      let returnsVector :=
+        match env.find? n with
+        | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
+        | none => false
+      if !isUserName env n || isReservedProj last || skipTy || !returnsVector then
+        e.getAppArgs.findSome? (vectorBaseName env fuel')
+      else some last
+    | none => e.getAppArgs.findSome? (vectorBaseName env fuel')
+
 /-- `xs.set i v`：只抽出被改的那一叶。 -/
 private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
@@ -1017,25 +1043,7 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
                 | some v => return some (false, v)
                 | none => pure ()
         return none
-    let rec baseName (fuel : Nat) (e : Expr) : Option String :=
-      match fuel with
-      | 0 => none
-      | fuel' + 1 =>
-        match e.getAppFn.constName? with
-        | some n =>
-          let s := n.toString
-          let last := IR.lastName s
-          let user := isUserName env n
-          let skipTy :=
-            match env.find? n with
-            | some (.inductInfo _) => true
-            | some (.ctorInfo _) => true
-            | _ => false
-          if !user || isReservedProj last || skipTy then
-            e.getAppArgs.findSome? (baseName fuel')
-          else some last
-        | none => e.getAppArgs.findSome? (baseName fuel')
-    match idx?, payload, baseName 8 e with
+    match idx?, payload, vectorBaseName env 16 e with
     | some i, some (true, v), some n => some (.field v s!"{n}_{i}_value")
     | some i, some (false, v), some n => some (.field v s!"{n}_{i}")
     | some i, some (_, v), none => some (.field v s!"cells_{i}")
@@ -1066,24 +1074,6 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
   | some e =>
   if isVectorSet e then
     let args := e.getAppArgs
-    let rec baseName (fuel : Nat) (e : Expr) : Option String :=
-      match fuel with
-      | 0 => none
-      | fuel' + 1 =>
-        match e.getAppFn.constName? with
-        | some n =>
-          let s := n.toString
-          let last := IR.lastName s
-          let user := isUserName env n
-          let skipTy :=
-            match env.find? n with
-            | some (.inductInfo _) => true
-            | some (.ctorInfo _) => true
-            | _ => false
-          if !user || isReservedProj last || skipTy then
-            e.getAppArgs.findSome? (baseName fuel')
-          else some last
-        | none => e.getAppArgs.findSome? (baseName fuel')
     let lits := args.filterMap (asLit 8)
     let len :=
       if h : lits.size > 0 then
@@ -1177,7 +1167,7 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
           else leaves
         if leaves.isEmpty then none
         else
-          let name := (baseName 8 e).getD "cells"
+          let name := (vectorBaseName env 16 e).getD "cells"
           some (leaves.map fun p =>
             let hint :=
               match p.1 with
@@ -1189,7 +1179,7 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
       match idx with
       | .lit _ => none
       | _ =>
-        let name := (baseName 8 e).getD "cells"
+        let name := (vectorBaseName env 16 e).getD "cells"
         some #[.indexSet name idx payload len 0]
     | _ => none
   else none
@@ -1326,8 +1316,16 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
               let child := if base.isEmpty then fname else s!"{base}_{fname}"
               let arg := fields[i]
               let nested := flattenLeaves env child arg
+              let isVectorField :=
+                match env.find? (c.induct.str fname) with
+                | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
+                | none => false
               if !nested.isEmpty then
                 acc := acc ++ nested.filter fun p => !looksUnchangedField p.2 p.1
+              else if isVectorField then
+                -- A runtime-indexed vector is represented only by typed indexSet writes.
+                -- Its root projection is not a scalar account leaf.
+                pure ()
               else
                 match asOptionPayload env arg with
                 | some (.lit 0) =>
@@ -1366,7 +1364,8 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
     | none => #[]
 
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
-private def asStoreFields (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+private def asStoreFields (env : Environment) (e : Expr)
+    (includeSingle : Bool := false) : Option (Array Ops.Op) :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
@@ -1375,8 +1374,9 @@ private def asStoreFields (env : Environment) (e : Expr) : Option (Array Ops.Op)
       if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
         let st := pair.getAppArgs[pair.getAppArgs.size - 2]!
         let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
-        let leaves := flattenLeaves env "" st
-        if leaves.size ≤ 1 then none
+        let vectorBase := vectorBaseName env 32 st
+        let leaves := (flattenLeaves env "" st).filter fun p => some p.1 != vectorBase
+        if leaves.isEmpty || (!includeSingle && leaves.size == 1) then none
         else
           match val env ret with
           | none => none
@@ -2060,7 +2060,7 @@ private def collectIndexSets (env : Environment) (e : Expr) : Array Ops.Op :=
     | fuel' + 1 =>
       let e := strip e
       match e with
-      | .letE _ _ value body _ => go fuel' body (go fuel' value acc)
+      | .letE _ _ value body _ => go fuel' (body.instantiate1 value) acc
       | .lam _ _ body _ => go fuel' body acc
       | _ =>
         if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
@@ -2068,12 +2068,11 @@ private def collectIndexSets (env : Environment) (e : Expr) : Array Ops.Op :=
         else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 2]! acc
         else if isVectorSet e then
-          -- 先收旧向量上的 set，再收这一层。
+          -- `Vector.set α n xs i v h`：只沿 xs 追溯旧写。payload/下标里的
+          -- vector reads 不是写；遍历全部参数会把旧链指数级重复收集。
           let args := e.getAppArgs
           let acc :=
-            args.foldl (init := acc) fun a x =>
-              if endsWith x "._proof_1" || endsWith x "._proof_2" || endsWith x ".rfl" then a
-              else go fuel' x a
+            if h : args.size ≥ 4 then go fuel' args[args.size - 4] acc else acc
           match asIndexSets env e with
           | some ops => acc ++ ops
           | none => acc
@@ -2347,6 +2346,16 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.evmTokenBalanceOfSelf t0 t1 t2, .returnU64 t0]
   else none
 
+/-- A vector root is not a scalar slot. Mixed static/dynamic writeback can see an inline
+helper's vector parameter as a changed structure field; discard that synthetic root store. -/
+private def dropVectorRootStores (dynamic stores : Array Ops.Op) : Array Ops.Op :=
+  let vectorNames := dynamic.filterMap fun
+    | .indexSet name _ _ _ _ => some name
+    | _ => none
+  stores.filter fun
+    | .storeField name _ => !vectorNames.contains name
+    | _ => true
+
 /-- Zeta-reduce syntax-only aliases at the head of an expression.
 Compiler intrinsics and loops stay explicit so later effect/control decoding still sees them. -/
 private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr :=
@@ -2422,9 +2431,12 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
   else
   let isets := collectIndexSets env e
   if isets.size ≥ 1 then
-    match isets[isets.size - 1]! with
-    | .indexSet _ _ v _ _ => .ok (isets.push (.okState v))
-    | _ => .ok isets
+    match asStoreFields env e true with
+    | some stores => .ok (isets ++ dropVectorRootStores isets stores)
+    | none =>
+      match isets[isets.size - 1]! with
+      | .indexSet _ _ v _ _ => .ok (isets.push (.okState v))
+      | _ => .ok isets
   else if let some op := findIndexSet env e then
     match op with
     | .indexSet _ _ v _ _ => .ok #[op, .okState v]
@@ -2623,13 +2635,18 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             else
               let isets := collectIndexSets env t
               let ops := if isets.size ≥ 1 then isets else #[iset]
-              match ops[ops.size - 1]! with
-              | .indexSet _ _ v _ _ =>
-                -- 多叶 set 的返回值是 `.ok (_, y)`。循环体不要用 findOkRet。
-                let ret :=
-                  if isForInStep t then v else (findOkRet env t).getD v
-                return .ok #[.ite cmp lv rv (ops.push (.okState ret)) #[.errorOverflow]]
-              | _ => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
+              match asStoreFields env t true with
+              | some stores =>
+                return .ok #[.ite cmp lv rv
+                  (ops ++ dropVectorRootStores ops stores) #[.errorOverflow]]
+              | none =>
+                match ops[ops.size - 1]! with
+                | .indexSet _ _ v _ _ =>
+                  -- 多叶 set 的返回值是 `.ok (_, y)`。循环体不要用 findOkRet。
+                  let ret :=
+                    if isForInStep t then v else (findOkRet env t).getD v
+                  return .ok #[.ite cmp lv rv (ops.push (.okState ret)) #[.errorOverflow]]
+                | _ => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, some stores, _, _ =>
             return .ok #[.ite cmp lv rv stores #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, none, some v, _ =>
@@ -3350,7 +3367,10 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
 private def evaluateProgram (p : IR.Program) : Except String IR.Program := do
   let mut methods := #[]
   for method in p.methods do
-    let evaluation ← Core.evaluate p.schema method.ops
+    let evaluation ←
+      match Core.evaluate p.schema method.ops with
+      | .ok evaluation => pure evaluation
+      | .error reason => throw s!"{method.ixName}: {reason}"
     methods := methods.push { method with evaluation }
   return { p with methods }
 
