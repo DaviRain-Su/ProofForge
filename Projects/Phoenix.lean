@@ -290,8 +290,9 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
   else Id.run do
     let mut st := { s with
       matchStopped := 0, matchError := 0
+      matchLevel := 0
       eventCount := 0, lastEvent := .uninitialized }
-    for i in [0:14] do
+    for i in [0:17] do
       if i < 4 then
         if st.matchStopped = (0 : UInt64) then
           let j : Nat := i
@@ -335,7 +336,8 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
                         sequence := st.sequence + 1
                         baseLocked := remainingLocked + size
                         baseFree := unlocked - size
-                        matchStopped := 1 }
+                        matchStopped := 1
+                        matchLevel := 1 }
                     else
                       st := { st with matchError := 1 }
                   else
@@ -346,7 +348,7 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
                 st := { st with matchError := 1 }
             else
               st := { st with matchError := 1 }
-      else
+      else if i < 14 then
         if st.matchStopped ≠ (0 : UInt64) then
           if st.matchError = (0 : UInt64) then
             let j : Nat := (i - 5) % 3
@@ -365,11 +367,25 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
               else if rightPrice = leftPrice then
                 if rightSequence < leftSequence then
                   st := swapAskAdjacent st j
+      else if i = 14 then
+        if st.matchStopped ≠ (0 : UInt64) then
+          if st.matchError = (0 : UInt64) then
+            if st.matchLevel = (1 : UInt64) then
+              st := appendEvent st
+                (.evict s.traders[3]! s.sequences[3]! s.priceTicks[3]! s.sizes[3]!)
+      else if i = 15 then
+        if st.matchStopped ≠ (0 : UInt64) then
+          if st.matchError = (0 : UInt64) then
+            st := appendEvent st (.place s.sequence 0 price size)
+      else if i = 16 then
+        if st.matchStopped ≠ (0 : UInt64) then
+          if st.matchError = (0 : UInt64) then
+            if lastSlot ≠ 0 || lastTime ≠ 0 then
+              st := appendEvent st (.timeInForce s.sequence lastSlot lastTime)
     if st.matchError ≠ 0 || st.matchStopped = 0 then
       .error .overflow
     else
-      let finalState := { st with matchStopped := 0, matchError := 0 }
-      .ok (appendEvent finalState (.place s.sequence 0 price size), size)
+      .ok ({ st with matchStopped := 0, matchError := 0, matchLevel := 0 }, size)
 
 attribute [pf_inline] postAskAt
 
@@ -435,8 +451,9 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
     Id.run do
       let mut st := { s with
         matchStopped := 0, matchError := 0
+        matchLevel := 0
         eventCount := 0, lastEvent := .uninitialized }
-      for i in [0:14] do
+      for i in [0:17] do
         if i < 4 then
           if st.matchStopped = (0 : UInt64) then
             let j : Nat := i
@@ -479,7 +496,8 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
                           sequence := st.sequence + 1
                           quoteLocked := remainingLocked + newLock
                           quoteFree := unlocked - newLock
-                          matchStopped := 1 }
+                          matchStopped := 1
+                          matchLevel := 1 }
                       else
                         st := { st with matchError := 1 }
                     else
@@ -490,7 +508,7 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
                   st := { st with matchError := 1 }
               else
                 st := { st with matchError := 1 }
-        else
+        else if i < 14 then
           if st.matchStopped ≠ (0 : UInt64) then
             if st.matchError = (0 : UInt64) then
               let j : Nat := (i - 5) % 3
@@ -509,11 +527,26 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
                 else if rightPrice = leftPrice then
                   if leftSequence < rightSequence then
                     st := swapBidAdjacent st j
+        else if i = 14 then
+          if st.matchStopped ≠ (0 : UInt64) then
+            if st.matchError = (0 : UInt64) then
+              if st.matchLevel = (1 : UInt64) then
+                st := appendEvent st
+                  (.evict s.bidTraders[3]! (~~~s.bidSequences[3]!)
+                    s.bidPriceTicks[3]! s.bidSizes[3]!)
+        else if i = 15 then
+          if st.matchStopped ≠ (0 : UInt64) then
+            if st.matchError = (0 : UInt64) then
+              st := appendEvent st (.place s.sequence 0 price size)
+        else if i = 16 then
+          if st.matchStopped ≠ (0 : UInt64) then
+            if st.matchError = (0 : UInt64) then
+              if lastSlot ≠ 0 || lastTime ≠ 0 then
+                st := appendEvent st (.timeInForce s.sequence lastSlot lastTime)
       if st.matchError ≠ 0 || st.matchStopped = 0 then
         .error .overflow
       else
-        let finalState := { st with matchStopped := 0, matchError := 0 }
-        .ok (appendEvent finalState (.place s.sequence 0 price size), size)
+        .ok ({ st with matchStopped := 0, matchError := 0, matchLevel := 0 }, size)
 
 attribute [pf_inline] postBidAt
 

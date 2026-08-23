@@ -67,7 +67,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
       swap.paramCount == 4 && swapSell.paramCount == 4 && collect.paramCount == 0 &&
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
-  unless asm.contains "; forBody 14" && asm.contains "; forBody 19" &&
+  unless asm.contains "; forBody 17" && asm.contains "; forBody 19" &&
       asm.contains "; forBody 23" && asm.contains "; forBody 4" do
     throwError "Phoenix bounded loops missing from assembly"
 
@@ -243,7 +243,9 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .ok (st, ret) =>
       st.sizes == #v[1, 1, 2, 3] && st.priceTicks == #v[10, 15, 20, 30] &&
         st.traders == #v[1, 9, 2, 3] && st.sequences == #v[1, 5, 2, 3] &&
-        st.baseLocked == 7 && st.baseFree == 4 && orderedAsks st && ret == 1
+        st.baseLocked == 7 && st.baseFree == 4 && orderedAsks st && ret == 1 &&
+        st.eventCount == 2 && st.events[0]! == .evict 4 4 40 4 &&
+        st.events[1]! == .place 5 0 15 1
   | .error _ => false
 
 #guard
@@ -251,6 +253,17 @@ private def sellSamples : List Projects.Phoenix.State := [
       { (init 100) with baseFree := 8 }
       7 50 8 9 0 10 0 with
   | .ok (st, ret) => st == { (init 100) with baseFree := 8 } && ret == 0
+  | .error _ => false
+
+#guard
+  match postAskAt
+      { (init 100) with baseFree := 8 }
+      7 50 8 10 20 10 19 with
+  | .ok (st, ret) =>
+      ret == 8 && st.eventCount == 2 &&
+        st.events[0]! == .place 1 0 50 8 &&
+        st.events[1]! == .timeInForce 1 10 20 &&
+        st.lastEvent == .timeInForce 1 10 20
   | .error _ => false
 
 #guard
@@ -281,11 +294,14 @@ private def sellSamples : List Projects.Phoenix.State := [
         bidSizes := #v[1, 1, 1, 1], bidPriceTicks := #v[40, 30, 20, 10],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64),
           ~~~(3 : UInt64), ~~~(4 : UInt64)],
+        bidTraders := #v[1, 2, 3, 4],
         sequence := 5, quoteLocked := 100, quoteFree := 100 }
       9 25 1 0 0 0 0 with
   | .ok (st, ret) =>
       st.bidSizes == #v[1, 1, 1, 1] && st.bidPriceTicks == #v[40, 30, 25, 20] &&
-        st.quoteLocked == 115 && st.quoteFree == 85 && orderedBids st && ret == 1
+        st.quoteLocked == 115 && st.quoteFree == 85 && orderedBids st && ret == 1 &&
+        st.eventCount == 2 && st.events[0]! == .evict 4 4 10 1 &&
+        st.events[1]! == .place 5 0 25 1
   | .error _ => false
 
 #guard
@@ -302,6 +318,17 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard
   match postBidAt { (init 1) with quoteFree := 100 } 7 50 2 9 0 10 0 with
   | .ok (st, ret) => st == { (init 1) with quoteFree := 100 } && ret == 0
+  | .error _ => false
+
+#guard
+  match postBidAt
+      { (init 1) with quoteFree := 100 }
+      7 50 2 10 20 10 19 with
+  | .ok (st, ret) =>
+      ret == 2 && st.eventCount == 2 &&
+        st.events[0]! == .place 1 0 50 2 &&
+        st.events[1]! == .timeInForce 1 10 20 &&
+        st.lastEvent == .timeInForce 1 10 20
   | .error _ => false
 
 #guard
