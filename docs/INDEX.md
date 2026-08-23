@@ -19,6 +19,7 @@
 | [plan/analysis/token-2022.md](plan/analysis/token-2022.md) | Token-2022；没有 Token v3 |
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [modules/evm.md](modules/evm.md) | EVM 平行发射器 |
+| [modules/solanalib.md](modules/solanalib.md) | bounded typed sBPF semantics bridge |
 | [research/03-feasibility.md](research/03-feasibility.md) | Solana 可行性调研结论 |
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |

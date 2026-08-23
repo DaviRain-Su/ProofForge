@@ -13,6 +13,7 @@ import ProofForge.Attr
 import ProofForge.Profile
 import ProofForge.Extract
 import ProofForge.Svm.IR
+import ProofForge.Svm.Solanalib
 import ProofForge.Svm.Emit
 import ProofForge.Svm.Assemble
 import ProofForge.Svm.Idl

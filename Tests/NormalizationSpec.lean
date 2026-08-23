@@ -181,6 +181,25 @@ elab "#pf_guard_tree_schema" : command => do
 
 elab "#pf_guard_target_lowering" : command => do
   let env ← getEnv
+  let counter ←
+    match ProofForge.Extract.extractProgram env ``initDirect ``incrementDirect ``getDirect with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmCounter ←
+    match ProofForge.Svm.IR.fromProgram counter with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some increment := counter.methods.find? (·.kind == .increment)
+    | throwError "missing normalized increment"
+  let some checkedWrite := increment.evaluation.commits[0]? >>= (·.writes[0]?)
+    | throwError s!"missing normalized checked write: {repr increment.evaluation}"
+  let some fragment :=
+      ProofForge.Svm.Solanalib.checkedWriteFragment? svmCounter checkedWrite
+    | throwError "Solanalib bridge rejected normalized checked write"
+  unless fragment.compute == ProofForge.Svm.Solanalib.checkedArithBody .add &&
+      fragment.store == .st .m64 .br6 (.reg .br4) (BitVec.ofNat 16 104) do
+    throwError s!"unexpected Solanalib checked-write fragment: {repr fragment}"
+
   let tree ←
     match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with
     | .ok program => pure program

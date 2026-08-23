@@ -12,6 +12,7 @@
 | [Extract](extract.md) | Expr → IR + ops；任意用户项目 |
 | [Phoenix](phoenix.md) | 独立项目：单档 FIFO 切片 |
 | [Svm](svm.md) | Ops → sBPF / IDL / locked sbpf |
+| [Solanalib](solanalib.md) | Core/SVM target IR → bounded typed sBPF semantics |
 | [Emit](emit.md) | `Svm.Emit`：Counter → sBPF 文本 |
 | [Assemble](assemble.md) | `Svm.Assemble`：`sbpf` 子进程 → `.so` + IDL |
 | [Idl](idl.md) | `Svm.Idl`：Solana IDL spec 0.1.0 |

@@ -10,4 +10,6 @@ for tool in lake cargo sbpf solc anvil cast; do
   command -v "$tool" >/dev/null
 done
 
+test -d .lake/packages/solanalib
+
 echo "ProofForge toolchains are ready; no services or authentication need resuming."
