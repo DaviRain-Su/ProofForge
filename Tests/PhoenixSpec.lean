@@ -68,7 +68,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
   unless asm.contains "; forBody 14" && asm.contains "; forBody 17" &&
-      asm.contains "; forBody 4" do
+      asm.contains "; forBody 19" && asm.contains "; forBody 4" do
     throwError "Phoenix bounded loops missing from assembly"
 
 #pf_guard_phoenix_artifact
@@ -306,6 +306,7 @@ private def sellSamples : List Projects.Phoenix.State := [
   match swapBuyAt
       { (init 1) with
         sizes := #v[2, 3, 5, 0], priceTicks := #v[10, 11, 12, 0],
+        sequences := #v[1, 2, 3, 0], traders := #v[7, 8, 9, 0],
         quoteLocked := 1000, baseLocked := 10 }
       4 11 0 0 with
   | .ok (st, ret) =>
@@ -313,7 +314,10 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.quoteLocked == 957 && st.quoteFree == 42 &&
         st.baseLocked == 6 && st.baseFree == 4 &&
         st.unclaimedFees == 1 && st.collectedFees == 0 &&
-        st.eventCount == 1 && st.events[0]! == .fillSummary 0 4 42 1 &&
+        st.eventCount == 3 &&
+        st.events[0]! == .fill 7 1 10 2 0 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 4 42 1 &&
         st.lastEvent == .fillSummary 0 4 42 1
   | .error _ => false
 
@@ -326,7 +330,11 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
         st.quoteLocked == 77 && st.quoteFree == 22 &&
-        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1
+        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
+        st.eventCount == 3 &&
+        st.events[0]! == .expiredOrder 0 0 10 2 &&
+        st.events[1]! == .fill 0 0 11 2 1 &&
+        st.events[2]! == .fillSummary 0 2 22 1
   | .error _ => false
 
 #guard
@@ -386,12 +394,18 @@ private def sellSamples : List Projects.Phoenix.State := [
   match swapBuy
       { (init 1) with
         sizes := #v[2, 3, 5, 0], priceTicks := #v[10, 11, 12, 0],
+        sequences := #v[1, 2, 3, 0], traders := #v[7, 8, 9, 0],
         quoteLocked := 1000, baseLocked := 10 }
       u64Max 0 4 11 with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 5, 0] && ret == 4 &&
         st.quoteLocked == 957 && st.quoteFree == 42 &&
-        st.baseLocked == 6 && st.baseFree == 4 && st.unclaimedFees == 1
+        st.baseLocked == 6 && st.baseFree == 4 && st.unclaimedFees == 1 &&
+        st.eventCount == 3 &&
+        st.events[0]! == .fill 7 1 10 2 0 &&
+        st.events[1]! == .fill 8 2 11 2 1 &&
+        st.events[2]! == .fillSummary 0 4 42 1 &&
+        st.lastEvent == .fillSummary 0 4 42 1
   | .error _ => false
 
 #guard

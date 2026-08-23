@@ -530,7 +530,19 @@ structure MatchAcc where
   adjustedQuote : UInt64
   expiredBase : UInt64
   stopped : Bool
+  events : Vector MarketEvent 5
+  eventCount : UInt64
+  lastEvent : MarketEvent
   deriving Repr, DecidableEq
+
+private def MatchAcc.pushEvent (acc : MatchAcc) (event : MarketEvent) : MatchAcc :=
+  if h : acc.eventCount.toNat < 5 then
+    { acc with
+      events := acc.events.set acc.eventCount.toNat event
+      eventCount := acc.eventCount + 1
+      lastEvent := event }
+  else
+    acc
 
 /--
 沿 ask 树中序投影做至多四档的 IOC。过期单取消并继续；第一档超限即停止；
@@ -550,8 +562,10 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
         scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1) acc
       else if expired s.lastSlots[i] s.lastTimes[i] nowSlot nowTime then
         if acc.expiredBase ≤ u64Max - size then
+          let next := acc.pushEvent
+            (.expiredOrder s.traders[i] s.sequences[i] s.priceTicks[i] size)
           scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
-            { acc with
+            { next with
               sizes := acc.sizes.set i 0
               expiredBase := acc.expiredBase + size }
         else
@@ -563,8 +577,9 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
         | .abort => .error .overflow
         | .cancelProvide =>
           if acc.expiredBase ≤ u64Max - size then
+            let next := acc.pushEvent (.reduce s.sequences[i] s.priceTicks[i] size 0)
             scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
-              { acc with
+              { next with
                 sizes := acc.sizes.set i 0
                 expiredBase := acc.expiredBase + size }
           else
@@ -573,8 +588,10 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
           let remaining := acc.targetBase - acc.filledBase
           let reduced := if remaining ≤ size then remaining else size
           if acc.expiredBase ≤ u64Max - reduced then
+            let next := acc.pushEvent
+              (.reduce s.sequences[i] s.priceTicks[i] reduced (size - reduced))
             scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
-              { acc with
+              { next with
                 sizes := acc.sizes.set i (size - reduced)
                 targetBase := acc.targetBase - reduced
                 expiredBase := acc.expiredBase + reduced
@@ -590,8 +607,11 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
           if quotePerBase = 0 || fill ≤ u64Max / quotePerBase then
             let quote := quotePerBase * fill
             if acc.adjustedQuote ≤ u64Max - quote then
+              let next := acc.pushEvent
+                (.fill s.traders[i] s.sequences[i] price fill (size - fill))
               scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
-                { sizes := acc.sizes.set i (size - fill)
+                { next with
+                  sizes := acc.sizes.set i (size - fill)
                   targetBase := acc.targetBase
                   filledBase := acc.filledBase + fill
                   adjustedQuote := acc.adjustedQuote + quote
@@ -654,10 +674,11 @@ private def settleBuy (s : State) (acc : MatchAcc) : Except Error (State × UInt
               baseLocked := s.baseLocked - makerBaseDebit
               baseFree := s.baseFree + baseCredit
               unclaimedFees := s.unclaimedFees + feeLots
-              events := s.events.set 0 (.fillSummary 0 acc.filledBase quoteLots feeLots)
-              eventCount := 1
-              lastEvent := .fillSummary 0 acc.filledBase quoteLots feeLots }
-            .ok (settled, acc.filledBase)
+              events := acc.events
+              eventCount := acc.eventCount
+              lastEvent := acc.lastEvent }
+            .ok (appendEvent settled (.fillSummary 0 acc.filledBase quoteLots feeLots),
+              acc.filledBase)
 
 /--
 可测试的完整 N=4 IOC：红黑树中序跨档、严格 slot/time TIF、聚合费用和余额记账。
@@ -669,7 +690,8 @@ def swapBuyForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
   let s := beginEvents s
   let acc ← scanAsks s taker limit nowSlot nowTime behavior 4 0
     { sizes := s.sizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
-      expiredBase := 0, stopped := false }
+      expiredBase := 0, stopped := false, events := s.events,
+      eventCount := s.eventCount, lastEvent := s.lastEvent }
   settleBuy s acc
 
 /-- 无自成交身份的兼容入口。 -/
@@ -825,10 +847,7 @@ private def finishFold (s : State) (quoteLots feeLots : UInt64) :
                     quoteFree := s.quoteFree + quoteLots
                     baseLocked := s.baseLocked - baseDebit
                     baseFree := s.baseFree + baseDebit
-                    unclaimedFees := s.unclaimedFees + feeLots
-                    events := s.events.set 0 (.fillSummary 0 s.matchFilled quoteLots feeLots)
-                    eventCount := 1
-                    lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots }
+                    unclaimedFees := s.unclaimedFees + feeLots }
                   .ok (settled, s.matchFilled)
                 else
                   let _ := tokenTransferChecked s.matchFilled 6
@@ -837,10 +856,7 @@ private def finishFold (s : State) (quoteLots feeLots : UInt64) :
                     quoteFree := s.quoteFree + quoteLots
                     baseLocked := s.baseLocked - baseDebit
                     baseFree := s.baseFree + baseDebit
-                    unclaimedFees := s.unclaimedFees + feeLots
-                    events := s.events.set 0 (.fillSummary 0 s.matchFilled quoteLots feeLots)
-                    eventCount := 1
-                    lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots }
+                    unclaimedFees := s.unclaimedFees + feeLots }
                   .ok (settled, s.matchFilled)
               else .error .overflow
             else .error .overflow
@@ -852,38 +868,48 @@ private def finishFold (s : State) (quoteLots feeLots : UInt64) :
 
 private def settleFold (s : State) : Except Error (State × UInt64) :=
   if s.matchError ≠ 0 then .error .overflow
-  else if s.baseLotsPerBaseUnit = 0 then .error .overflow
-  else if s.matchQuote = 0 then finishFold s 0 0
-  else
-    let quoteLots := (s.matchQuote - 1) / s.baseLotsPerBaseUnit + 1
-    if s.takerFeeBps = 0 then
-      finishFold s quoteLots 0
-    else if s.takerFeeBps ≤ u64Max / s.matchQuote then
-      let feeProduct := s.matchQuote * s.takerFeeBps
-      let adjustedFee := (feeProduct - 1) / 10000 + 1
-      let feeLots := (adjustedFee - 1) / s.baseLotsPerBaseUnit + 1
-      finishFold s quoteLots feeLots
-    else .error .overflow
+  else finishFold s s.matchMakerQuote s.matchLimit
 
 attribute [pf_inline] finishFold settleFold
 
 /--
 链上 N=4 IOC。`behavior`：0=Abort、1=CancelProvide、2=DecrementTake。
-十七次 state-carrying bounded fold：第 0 次清瞬时响应，
-其余十六次按四档 ×（slot TIF、time TIF、撮合、advance）推进。把每档拆成显式
-phase，避免 Lean 的可变 `do` 把公共 continuation 复制进每个分支；循环 store
-会继续下一次，不再静态复制后续档位。
+十九次 state-carrying bounded fold：第 0 次清瞬时响应，接着十六次按四档 ×
+（slot TIF、time TIF、撮合、advance）推进，第 17 次计算结算数值，第 18 次追加
+summary。把算术和动态 event write 分 phase，避免 checked-arithmetic continuation
+复制动态 variant-vector write；循环 store 会继续下一次，不再静态复制后续档位。
 -/
 @[pf_entry]
 def swapBuy (s : State) (taker behavior want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
   let mut st := beginEvents s
-  for i in [0:17] do
+  for i in [0:19] do
     if i = 0 then
       st := { st with
         matchFilled := 0, matchQuote := 0, matchMakerQuote := 0, matchExpired := 0,
         matchStopped := 0, matchError := 0, matchLevel := 0,
         matchWant := want, matchLimit := limit }
+    else if i = 17 then
+      if st.matchError = 0 then
+        if st.baseLotsPerBaseUnit = 0 then
+          st := { st with matchError := 1 }
+        else if st.matchQuote = 0 then
+          st := { st with matchMakerQuote := 0, matchLimit := 0 }
+        else
+          let quoteLots := (st.matchQuote - 1) / st.baseLotsPerBaseUnit + 1
+          if st.takerFeeBps = 0 then
+            st := { st with matchMakerQuote := quoteLots, matchLimit := 0 }
+          else if st.takerFeeBps ≤ u64Max / st.matchQuote then
+            let feeProduct := st.matchQuote * st.takerFeeBps
+            let adjustedFee := (feeProduct - 1) / 10000 + 1
+            let feeLots := (adjustedFee - 1) / st.baseLotsPerBaseUnit + 1
+            st := { st with matchMakerQuote := quoteLots, matchLimit := feeLots }
+          else
+            st := { st with matchError := 1 }
+    else if i = 18 then
+      if st.matchError = 0 then
+        st := appendEvent st
+          (.fillSummary 0 st.matchFilled st.matchMakerQuote st.matchLimit)
     else if st.matchStopped = 0 then
       let k := i - 1
       let phase := k % 4
@@ -898,18 +924,22 @@ def swapBuy (s : State) (taker behavior want limit : UInt64) :
           if st.lastSlots[j]! ≠ 0 then
             if st.lastSlots[j]! < clockSlot then
               if st.matchExpired ≤ u64Max - size then
-                st := { st with
+                let expiredState := { st with
                   sizes := st.sizes.set (j % 4) 0
                   matchExpired := st.matchExpired + size }
+                st := appendEvent expiredState
+                  (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
               else
                 st := { st with matchStopped := 1, matchError := 1 }
         else if phase = 1 then
           if st.lastTimes[j]! ≠ 0 then
             if st.lastTimes[j]! < unixTime then
               if st.matchExpired ≤ u64Max - size then
-                st := { st with
+                let expiredState := { st with
                   sizes := st.sizes.set (j % 4) 0
                   matchExpired := st.matchExpired + size }
+                st := appendEvent expiredState
+                  (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
               else
                 st := { st with matchStopped := 1, matchError := 1 }
         else if phase = 2 then
@@ -952,25 +982,31 @@ def swapBuy (s : State) (taker behavior want limit : UInt64) :
               let fill := remaining
               let price := st.priceTicks[j]!
               if price = 0 then
-                st := { st with
+                let filledState := { st with
                   sizes := st.sizes.set (j % 4) (size - fill)
                   matchFilled := st.matchFilled + fill
                   matchStopped := 1 }
+                st := appendEvent filledState
+                  (.fill st.traders[j]! st.sequences[j]! price fill (size - fill))
               else if st.tickSize ≤ u64Max / price then
                 let quotePerBase := price * st.tickSize
                 if quotePerBase = 0 then
-                  st := { st with
+                  let filledState := { st with
                     sizes := st.sizes.set (j % 4) (size - fill)
                     matchFilled := st.matchFilled + fill
                     matchStopped := 1 }
+                  st := appendEvent filledState
+                    (.fill st.traders[j]! st.sequences[j]! price fill (size - fill))
                 else if fill ≤ u64Max / quotePerBase then
                   let quote := quotePerBase * fill
                   if st.matchQuote ≤ u64Max - quote then
-                    st := { st with
+                    let filledState := { st with
                       sizes := st.sizes.set (j % 4) (size - fill)
                       matchFilled := st.matchFilled + fill
                       matchQuote := st.matchQuote + quote
                       matchStopped := 1 }
+                    st := appendEvent filledState
+                      (.fill st.traders[j]! st.sequences[j]! price fill (size - fill))
                   else
                     st := { st with matchStopped := 1, matchError := 1 }
                 else
@@ -981,22 +1017,28 @@ def swapBuy (s : State) (taker behavior want limit : UInt64) :
               let fill := size
               let price := st.priceTicks[j]!
               if price = 0 then
-                st := { st with
+                let filledState := { st with
                   sizes := st.sizes.set (j % 4) 0
                   matchFilled := st.matchFilled + fill }
+                st := appendEvent filledState
+                  (.fill st.traders[j]! st.sequences[j]! price fill 0)
               else if st.tickSize ≤ u64Max / price then
                 let quotePerBase := price * st.tickSize
                 if quotePerBase = 0 then
-                  st := { st with
+                  let filledState := { st with
                     sizes := st.sizes.set (j % 4) 0
                     matchFilled := st.matchFilled + fill }
+                  st := appendEvent filledState
+                    (.fill st.traders[j]! st.sequences[j]! price fill 0)
                 else if fill ≤ u64Max / quotePerBase then
                   let quote := quotePerBase * fill
                   if st.matchQuote ≤ u64Max - quote then
-                    st := { st with
+                    let filledState := { st with
                       sizes := st.sizes.set (j % 4) 0
                       matchFilled := st.matchFilled + fill
                       matchQuote := st.matchQuote + quote }
+                    st := appendEvent filledState
+                      (.fill st.traders[j]! st.sequences[j]! price fill 0)
                   else
                     st := { st with matchStopped := 1, matchError := 1 }
                 else
