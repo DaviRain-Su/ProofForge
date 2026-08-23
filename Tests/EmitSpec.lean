@@ -73,6 +73,36 @@ private def pairShape : ProofForge.Extract.Legacy.Program :=
   l.rentEpoch == 0x2878 && l.instructionDataLen == 0x2880 && l.instructionData == 0x2888
 
 #guard
+  match ProofForge.Svm.IR.fromProgram ProofForge.Golden.extractedCounter with
+  | .error _ => false
+  | .ok program =>
+      ProofForge.Svm.IR.digestHex program ==
+          ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedCounter &&
+        ProofForge.Svm.IR.dataLen program ==
+          ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedCounter &&
+        ProofForge.Svm.IR.inputLayout program ==
+          ProofForge.Svm.ABI.inputLayout ProofForge.Golden.extractedCounter &&
+        match ProofForge.Svm.IR.layoutMarkerHex program,
+            ProofForge.Svm.ABI.layoutMarkerHex ProofForge.Golden.extractedCounter with
+        | .ok actual, .ok expected => actual == expected
+        | _, _ => false
+
+#guard
+  match ProofForge.Svm.IR.fromProgram ProofForge.Golden.extractedTree with
+  | .error _ => false
+  | .ok program =>
+      ProofForge.Svm.IR.vectorBaseOffset program "nodes" == some 24 &&
+        ProofForge.Svm.IR.vectorLenOf program "nodes" 0 == 4 &&
+        ProofForge.Svm.IR.vectorStride program "nodes" == 48
+
+#guard
+  match ProofForge.Svm.IR.fromProgram ProofForge.Golden.extractedPhoenix with
+  | .error _ => false
+  | .ok program =>
+      ProofForge.Svm.IR.digestHex program ==
+        ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedPhoenix
+
+#guard
   match ProofForge.Svm.Emit.emitCounterAsm pairShape with
   | .error _ => false
   | .ok asm =>

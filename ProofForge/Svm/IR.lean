@@ -143,8 +143,6 @@ structure Program where
   vectors : Array Vector := #[]
   schema : Core.Schema := {}
   methods : Array Method
-  /-- Retained only for protocol metadata and stable pre-existing digests. -/
-  source : Extract.Legacy.Program
   deriving BEq, Repr, Inhabited
 
 private def lowerSlots (src : Extract.IR.Program) : Array Slot := Id.run do
@@ -206,7 +204,6 @@ private def lowerMethod (schema : Core.Schema) (method : Extract.IR.Method) :
 /-- Project the combined extractor dialect and lower it into an SVM-owned physical program. -/
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
   src.validateSvm
-  let legacy ← Extract.IR.toLegacyProgram src
   let slots := lowerSlots src
   return {
     name := src.name
@@ -214,7 +211,6 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     vectors := lowerVectors src slots
     schema := src.schema
     methods := ← src.methods.mapM (lowerMethod src.schema)
-    source := legacy
   }
 
 /-- Compatibility adapter for callers that still own the old closed-union program. -/
@@ -230,25 +226,46 @@ def fieldOffset (p : Program) (name : String) : Option Nat :=
 def fieldWidth (p : Program) (name : String) : Option Nat :=
   (p.slots.find? (·.name == name)).map (·.width)
 
+private def inferredVector? (p : Program) (name : String) : Option Vector :=
+  let prefix0 := name ++ "_0"
+  let group := p.slots.filter fun slot =>
+    slot.name == prefix0 || slot.name.startsWith (prefix0 ++ "_")
+  if group.isEmpty then none
+  else
+    let digitPrefix (value : String) : String := Id.run do
+      let mut result := ""
+      for char in value.toList do
+        if char.isDigit then result := result.push char else return result
+      return result
+    let length := p.slots.foldl (init := 0) fun current slot =>
+      let rest :=
+        if slot.name.startsWith (name ++ "_") then
+          digitPrefix (slot.name.drop (name.length + 1) |>.copy)
+        else ""
+      match rest.toNat? with
+      | some index => Nat.max current (index + 1)
+      | none => current
+    let stride := group.foldl (init := 0) fun width slot => width + slot.width
+    let base := p.slots.find? fun slot =>
+      slot.name == prefix0 || slot.name.startsWith (prefix0 ++ "_")
+    if length == 0 || stride == 0 then none
+    else base.map fun slot =>
+      { name, baseOffset := slot.offset, length, strideBytes := stride }
+
 private def vector? (p : Program) (name : String) : Option Vector :=
-  p.vectors.find? (·.name == name)
+  match p.vectors.find? (·.name == name) with
+  | some vector => some vector
+  | none => inferredVector? p name
 
 def vectorBaseOffset (p : Program) (name : String) : Option Nat :=
-  match vector? p name with
-  | some vector => some vector.baseOffset
-  | none => ABI.vectorBaseOffset p.source name
+  (vector? p name).map (·.baseOffset)
 
 def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
   if given != 0 then given
-  else
-    match vector? p name with
-    | some vector => vector.length
-    | none => ABI.vectorLenOf p.source name given
+  else (vector? p name).map (·.length) |>.getD 0
 
 def vectorStride (p : Program) (name : String) : Nat :=
-  match vector? p name with
-  | some vector => vector.strideBytes
-  | none => ABI.vectorStride p.source name
+  (vector? p name).map (·.strideBytes) |>.getD 8
 
 def optionLeafNames? (p : Program) : Option (String × String) :=
   match p.schema.firstOption? with
@@ -290,17 +307,149 @@ def cpiAccountCount (p : Program) : Nat :=
     Nat.max current (Ops.opsMinAccounts (toSourceOps method.ops))
   Nat.max fromInvoke fromValues
 
+private def sourceSlots (p : Program) : Array Core.IR.Slot :=
+  p.slots.map fun slot =>
+    { name := slot.name, width := slot.width, abi := slot.abi }
+
 def dataLen (p : Program) : Nat :=
-  ABI.dataLen p.source
+  ABI.dataLenOf (sourceSlots p)
 
 def inputLayout (p : Program) : ABI.InputLayout :=
-  ABI.inputLayout p.source
+  ABI.inputLayoutOf (dataLen p) (usesWalk p) (cpiAccountCount p)
 
 def layoutMarkerHex (p : Program) : Except String String :=
-  ABI.layoutMarkerHex p.source
+  ABI.layoutMarkerHexOf (sourceSlots p)
+
+private def kindTag : Core.IR.MethodKind → String
+  | .init => "init"
+  | .increment => "mut"
+  | .get => "view"
+
+private def cmpTag : Ops.Cmp → String
+  | .eq => "eq" | .ne => "ne" | .lt => "lt"
+  | .le => "le" | .gt => "gt" | .ge => "ge"
+
+/-- Preserve the old closed-union spelling in canonical digests during the IR migration. -/
+private def legacyCmpRepr (cmp : Ops.Cmp) : String :=
+  "ProofForge.Ops.Cmp." ++ cmpTag cmp
+
+private partial def valCanon : Ops.Val → String
+  | .arg i => s!"a{i}"
+  | .local i => s!"v{i}"
+  | .lit n => s!"l{n.toNat}"
+  | .field base name => s!"f.{name}({valCanon base})"
+  | .ext .clockSlot #[] => "clk"
+  | .ext .clockEpoch #[] => "epo"
+  | .ext .unixTime #[] => "unix"
+  | .ext .slotsPerEpoch #[] => "spe"
+  | .ext .signerKey0 #[] => "k0"
+  | .ext .accLamports0 #[] => "lp0"
+  | .ext .accOwner0 #[] => "ow0"
+  | .ext .accDataLen0 #[] => "dl0"
+  | .ext .accN #[] => "nacc"
+  | .ext .isSigner0 #[] => "sg0"
+  | .ext .isWritable0 #[] => "wr0"
+  | .ext .isExecutable0 #[] => "ex0"
+  | .ext .accLamports1 #[] => "lp1"
+  | .ext .accOwner1 #[] => "ow1"
+  | .ext .accDataLen1 #[] => "dl1"
+  | .ext .isSigner1 #[] => "sg1"
+  | .ext .isWritable1 #[] => "wr1"
+  | .ext .isExecutable1 #[] => "ex1"
+  | .ext (.findPda seed) #[] => s!"pda.{seed}"
+  | .ext (.checkPda seed) #[bump] => s!"chk.{seed}:{valCanon bump}"
+  | .ext (.rentExemption len) #[] => s!"rent.{len.toNat}"
+  | .ext .cpiReturn #[] => "cret"
+  | .ext (.sha256Lit seed) #[] => s!"sha.{seed}"
+  | .ext (.keccak256Lit seed) #[] => s!"kec.{seed}"
+  | .ext (.accKeyWord acc word) #[] => s!"kw.{acc}.{word}"
+  | .ext (.accOwnerWord acc word) #[] => s!"ow.{acc}.{word}"
+  | .ext (.accLamportsN acc) #[] => s!"lpN.{acc}"
+  | .ext (.accDataLenN acc) #[] => s!"dlN.{acc}"
+  | .ext (.isSignerN acc) #[] => s!"sgN.{acc}"
+  | .ext (.isWritableN acc) #[] => s!"wrN.{acc}"
+  | .ext (.isExecutableN acc) #[] => s!"exN.{acc}"
+  | .ext (.signerKeyN acc) #[] => s!"sk.{acc}"
+  | .ext (.ownerIsSelf acc) #[] => s!"ois.{acc}"
+  | .bitAnd lhs rhs => s!"and({valCanon lhs},{valCanon rhs})"
+  | .bitOr lhs rhs => s!"or({valCanon lhs},{valCanon rhs})"
+  | .bitXor lhs rhs => s!"xor({valCanon lhs},{valCanon rhs})"
+  | .bitNot value => s!"not({valCanon value})"
+  | .shiftL lhs rhs => s!"shl({valCanon lhs},{valCanon rhs})"
+  | .shiftR lhs rhs => s!"shr({valCanon lhs},{valCanon rhs})"
+  | .indexGet base name index len offset =>
+      if offset == 0 then s!"idx.{name}[{valCanon index}/{len}]({valCanon base})"
+      else s!"idx.{name}+{offset}[{valCanon index}/{len}]({valCanon base})"
+  | .loopIx => "ix"
+  | .select cmp lhs rhs thn els =>
+      s!"sel.{legacyCmpRepr cmp}({valCanon lhs},{valCanon rhs},{valCanon thn},{valCanon els})"
+  | .addU64 lhs rhs => s!"uadd({valCanon lhs},{valCanon rhs})"
+  | .subU64 lhs rhs => s!"usub({valCanon lhs},{valCanon rhs})"
+  | .mulU64 lhs rhs => s!"umul({valCanon lhs},{valCanon rhs})"
+  | .divU64 lhs rhs => s!"udiv({valCanon lhs},{valCanon rhs})"
+  | .modU64 lhs rhs => s!"umod({valCanon lhs},{valCanon rhs})"
+  | .ext kind operands =>
+      s!"ext.{repr kind}({String.intercalate "," (operands.map valCanon).toList})"
+
+private partial def opsCanon (ops : Array Op) : String :=
+  let one (op : Op) : String :=
+    match op with
+    | .letLocal i value => s!"let.{i}({valCanon value})"
+    | .joinLocal i => s!"join.{i}"
+    | .setLocal i value => s!"set.{i}({valCanon value})"
+    | .checkedAddU64 lhs rhs => s!"add({valCanon lhs},{valCanon rhs})"
+    | .checkedSubU64 lhs rhs => s!"sub({valCanon lhs},{valCanon rhs})"
+    | .checkedMulU64 lhs rhs => s!"mul({valCanon lhs},{valCanon rhs})"
+    | .checkedDivU64 lhs rhs => s!"div({valCanon lhs},{valCanon rhs})"
+    | .checkedModU64 lhs rhs => s!"mod({valCanon lhs},{valCanon rhs})"
+    | .ite cmp lhs rhs thn els =>
+        s!"ite.{cmpTag cmp}({valCanon lhs},{valCanon rhs},[{opsCanon thn}],[{opsCanon els}])"
+    | .invoke programIx metas data seed bump =>
+        let metaCanon := String.intercalate "," <| metas.toList.map fun entry =>
+          s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}"
+        let wordCanon (word : Ops.CpiWord Ops.Val) : String :=
+          match word with
+          | .u8le n => s!"u8.{n.toNat}"
+          | .u32le n => s!"u32.{n.toNat}"
+          | .u64le value => s!"u64.{valCanon value}"
+          | .ascii value => s!"s.{value}"
+          | .programId => "pid"
+          | .accKey i => s!"k.{i}"
+        let dataCanon := String.intercalate "," (data.toList.map wordCanon)
+        let seeds :=
+          match seed, bump with
+          | some value, some valueBump => s!",s.{value}:{valCanon valueBump}"
+          | _, _ => ""
+        s!"inv({programIx},[{metaCanon}],[{dataCanon}]{seeds})"
+    | .forAccum n addend => s!"for({n},{valCanon addend})"
+    | .forBody n body => s!"forb({n},[{opsCanon body}])"
+    | .indexSet name index value len offset =>
+        if offset == 0 then s!"iset.{name}[{valCanon index}/{len}]({valCanon value})"
+        else s!"iset.{name}+{offset}[{valCanon index}/{len}]({valCanon value})"
+    | .storeField name value => s!"st.{name}({valCanon value})"
+    | .okState value => s!"ok({valCanon value})"
+    | .errorOverflow => "ovf"
+    | .errorNamed name => s!"err.{name}"
+    | .returnU64 value => s!"retu({valCanon value})"
+    | .returnState value => s!"rets({valCanon value})"
+  String.intercalate ";" (ops.toList.map one)
+
+/-- Stable source identity, computed from SVM-owned Ops without rebuilding the mixed legacy IR. -/
+def canonical (p : Program) : String :=
+  let fields := String.intercalate "," p.fields.toList
+  let methods :=
+    (p.methods.qsort (fun lhs rhs => lhs.ixName < rhs.ixName)).toList.map fun method =>
+      let base :=
+        s!"{kindTag method.kind}:{method.ixName}:{method.paramCount}:[{opsCanon method.ops}]"
+      if (method.paramWidths.isEmpty || method.paramWidths.all (· == 8)) && method.retCount == 1 then
+        base
+      else
+        let widths := String.intercalate "," (method.paramWidths.map toString).toList
+        s!"{kindTag method.kind}:{method.ixName}:{method.paramCount}:{widths}:r{method.retCount}:[{opsCanon method.ops}]"
+  s!"{p.name}|{fields}|{String.intercalate "/" methods}"
 
 def digestHex (p : Program) : String :=
-  Extract.Legacy.digestHex p.source
+  Core.IR.u64Hex (Core.IR.fnv1a64 (canonical p))
 
 def discHex (m : Method) : Except String String :=
   ABI.discHexOf m.ixName m.paramCount

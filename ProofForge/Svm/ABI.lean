@@ -27,13 +27,22 @@ def discHexOf (ixName : String) (paramCount : Nat) : Except String String :=
 def discHex (method : Extract.Legacy.Method) : Except String String :=
   discHexOf method.ixName method.paramCount
 
-def fieldOffset (program : Extract.Legacy.Program) (name : String) : Option Nat :=
+private def sourceSlots (program : Extract.Legacy.Program) : Array Core.IR.Slot :=
+  program.slots.map fun slot =>
+    { name := slot.name, width := slot.width, abi := slot.abi }
+
+/-- Physical SVM field offset for target-neutral source slots. -/
+def fieldOffsetOf (slots : Array Core.IR.Slot) (name : String) : Option Nat :=
   Id.run do
     let mut offset : Nat := 8
-    for slot in program.slots do
+    for slot in slots do
       if slot.name == name then return some offset
       offset := offset + slot.width
     return none
+
+/-- Compatibility wrapper for callers that still own the old extraction IR. -/
+def fieldOffset (program : Extract.Legacy.Program) (name : String) : Option Nat :=
+  fieldOffsetOf (sourceSlots program) name
 
 structure VectorStorage where
   baseSlot : Nat
@@ -150,9 +159,13 @@ def vectorLeafName (program : Extract.Legacy.Program) (name : String) (offset : 
       return "value"
   | none => legacyVectorLeafName program name offset
 
-def dataLen (program : Extract.Legacy.Program) : Nat :=
-  let raw := 8 + program.slots.foldl (init := 0) fun acc slot => acc + slot.width
+def dataLenOf (slots : Array Core.IR.Slot) : Nat :=
+  let raw := 8 + slots.foldl (init := 0) fun acc slot => acc + slot.width
   raw + (8 - raw % 8) % 8
+
+/-- Compatibility wrapper for callers that still own the old extraction IR. -/
+def dataLen (program : Extract.Legacy.Program) : Nat :=
+  dataLenOf (sourceSlots program)
 
 /-- Loader V3 single-account data begins at `0x60`. -/
 def acc0Data : Nat := 0x60
@@ -201,9 +214,8 @@ def cpiAccountCount (program : Extract.Legacy.Program) : Nat :=
     Nat.max acc (Ops.opsMinAccounts method.ops)
   Nat.max fromInvoke fromLeaves
 
-def inputLayout (program : Extract.Legacy.Program) : InputLayout :=
-  if usesWalk program then
-    let accountCount := cpiAccountCount program
+def inputLayoutOf (accountDataLen : Nat) (walk : Bool) (accountCount : Nat) : InputLayout :=
+  if walk then
     let rec lastRent (remaining : Nat) (offset : Nat) : Nat :=
       match remaining with
       | 0 => offset - 8
@@ -211,30 +223,44 @@ def inputLayout (program : Extract.Legacy.Program) : InputLayout :=
     let rent := lastRent accountCount 8
     { rentEpoch := rent, instructionDataLen := rent + 8, instructionData := rent + 16 }
   else
-    let dataEnd := acc0Data + dataLen program + maxPermittedDataIncrease
+    let dataEnd := acc0Data + accountDataLen + maxPermittedDataIncrease
     let rent := dataEnd + (8 - dataEnd % 8) % 8
     { rentEpoch := rent, instructionDataLen := rent + 8, instructionData := rent + 16 }
+
+/-- Compatibility wrapper for callers that still own the old extraction IR. -/
+def inputLayout (program : Extract.Legacy.Program) : InputLayout :=
+  inputLayoutOf (dataLen program) (usesWalk program) (cpiAccountCount program)
 
 def layoutSlotName (name : String) : String :=
   if name == "value" then "count" else name
 
-def layoutSig (program : Extract.Legacy.Program) : String :=
+def layoutSigOf (slots : Array Core.IR.Slot) : String :=
   let parts := Id.run do
     let mut result : Array String := #[]
     let mut index : Nat := 0
     let mut offset : Nat := 8
-    for slot in program.slots do
+    for slot in slots do
       result := result.push
         s!"{index}:{layoutSlotName slot.name}:0:{offset}:{slot.width}:{slot.abi}"
       offset := offset + slot.width
       index := index + 1
     return result
-  s!"{program.slots.size}|{String.intercalate "|" parts.toList}"
+  s!"{slots.size}|{String.intercalate "|" parts.toList}"
+
+/-- Compatibility wrapper for callers that still own the old extraction IR. -/
+def layoutSig (program : Extract.Legacy.Program) : String :=
+  layoutSigOf (sourceSlots program)
+
+def layoutPreimageOf (slots : Array Core.IR.Slot) : String :=
+  s!"proof-forge-solana-layout-v1:{layoutSigOf slots}"
 
 def layoutPreimage (program : Extract.Legacy.Program) : String :=
-  s!"proof-forge-solana-layout-v1:{layoutSig program}"
+  layoutPreimageOf (sourceSlots program)
+
+def layoutMarkerHexOf (slots : Array Core.IR.Slot) : Except String String :=
+  .ok s!"0x{Core.IR.u64Hex (Sha256.first8Be (layoutPreimageOf slots))}"
 
 def layoutMarkerHex (program : Extract.Legacy.Program) : Except String String :=
-  .ok s!"0x{Core.IR.u64Hex (Sha256.first8Be (layoutPreimage program))}"
+  layoutMarkerHexOf (sourceSlots program)
 
 end ProofForge.Svm.ABI
