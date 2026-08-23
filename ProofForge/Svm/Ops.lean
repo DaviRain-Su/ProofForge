@@ -2,6 +2,12 @@ import ProofForge.Core.Ops
 
 namespace ProofForge.Svm.Ops
 
+/-- Agave's currently enforced transaction account-lock limit. -/
+def maxTxAccountLocks : Nat := 64
+
+def accInRange (acc : Nat) : Bool :=
+  acc < maxTxAccountLocks
+
 /-- SVM-only source value intrinsics. Recursive operands live in `Core.Ops.Val.ext`. -/
 inductive ValKind where
   | clockSlot

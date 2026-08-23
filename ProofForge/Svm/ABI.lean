@@ -1,18 +1,19 @@
 import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256
+import ProofForge.Svm.Ops
 
 namespace ProofForge.Svm.ABI
 
 open ProofForge.Crypto
 
 /-- Agave's currently enforced transaction account-lock limit. -/
-def maxTxAccountLocks : Nat := 64
+def maxTxAccountLocks : Nat := ProofForge.Svm.Ops.maxTxAccountLocks
 
 /-- One slot is reserved from the 256 transaction-account entries for `NON_DUP_MARKER`. -/
 def maxAccountsPerInstruction : Nat := 255
 
 def accInRange (acc : Nat) : Bool :=
-  acc < maxTxAccountLocks
+  ProofForge.Svm.Ops.accInRange acc
 
 def ixParamSig (paramCount : Nat) : String :=
   String.intercalate "," (List.replicate paramCount "u64")
@@ -184,16 +185,16 @@ def accountSpan (accountDataLen : Nat) : Nat :=
   dataEnd + (8 - dataEnd % 8) % 8 + 8
 
 def usesCpi (program : Extract.Legacy.Program) : Bool :=
-  program.methods.any fun method => Ops.hasInvoke method.ops
+  program.methods.any fun method => ProofForge.Ops.hasInvoke method.ops
 
 def usesWalk (program : Extract.Legacy.Program) : Bool :=
-  usesCpi program || program.methods.any fun method => Ops.hasAcc1 method.ops
+  usesCpi program || program.methods.any fun method => ProofForge.Ops.hasAcc1 method.ops
 
 def usesSystemTransfer (program : Extract.Legacy.Program) : Bool :=
   usesCpi program
 
 def cpiAccountCount (program : Extract.Legacy.Program) : Nat :=
-  let rec maxIndex (fuel : Nat) (ops : Array Ops.Op) (acc : Nat) : Nat :=
+  let rec maxIndex (fuel : Nat) (ops : Array ProofForge.Ops.Op) (acc : Nat) : Nat :=
     match fuel with
     | 0 => acc
     | fuel' + 1 =>
@@ -211,7 +212,7 @@ def cpiAccountCount (program : Extract.Legacy.Program) : Nat :=
     Nat.max acc (maxIndex 8 method.ops 0)
   let fromInvoke := if usesCpi program then Nat.max 2 (highest + 1) else 0
   let fromLeaves := program.methods.foldl (init := 0) fun acc method =>
-    Nat.max acc (Ops.opsMinAccounts method.ops)
+    Nat.max acc (ProofForge.Ops.opsMinAccounts method.ops)
   Nat.max fromInvoke fromLeaves
 
 def inputLayoutOf (accountDataLen : Nat) (walk : Bool) (accountCount : Nat) : InputLayout :=

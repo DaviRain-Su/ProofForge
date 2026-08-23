@@ -1,9 +1,7 @@
 import Lean
-import ProofForge.Extract.LegacyAdapter
 import ProofForge.Extract.Ops
 import ProofForge.Profile
 import ProofForge.Attr
-import ProofForge.Svm.ABI
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 
@@ -378,7 +376,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if Svm.ABI.accInRange a && w ≤ 3 then some (.accKeyWord a w) else none
+            if Svm.Ops.accInRange a && w ≤ 3 then some (.accKeyWord a w) else none
           | _, _ => none
         else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Svm.Runtime.accOwnerWord) &&
             e.getAppArgs.size ≥ 2 then
@@ -387,7 +385,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if Svm.ABI.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
+            if Svm.Ops.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
@@ -407,49 +405,49 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if Svm.ABI.accInRange a then some (.accLamportsN a) else none
+            if Svm.Ops.accInRange a then some (.accLamportsN a) else none
           | _ => none
         else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if Svm.ABI.accInRange a then some (.accDataLenN a) else none
+            if Svm.Ops.accInRange a then some (.accDataLenN a) else none
           | _ => none
         else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if Svm.ABI.accInRange a then some (.isSignerN a) else none
+            if Svm.Ops.accInRange a then some (.isSignerN a) else none
           | _ => none
         else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if Svm.ABI.accInRange a then some (.isWritableN a) else none
+            if Svm.Ops.accInRange a then some (.isWritableN a) else none
           | _ => none
         else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if Svm.ABI.accInRange a then some (.isExecutableN a) else none
+            if Svm.Ops.accInRange a then some (.isExecutableN a) else none
           | _ => none
         else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if Svm.ABI.accInRange a then some (.signerKeyN a) else none
+            if Svm.Ops.accInRange a then some (.signerKeyN a) else none
           | _ => none
         else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Svm.Runtime.ownerIsSelf) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if Svm.ABI.accInRange a then some (.ownerIsSelf a) else none
+            if Svm.Ops.accInRange a then some (.ownerIsSelf a) else none
           | _ => none
         else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
           let args := e.getAppArgs
@@ -3631,9 +3629,9 @@ def inferSchema (env : Environment) (initName : Name) : Except String Core.Schem
     ordinal := ordinal + 1
   return { rootType := structName.toString, leaves, vectors }
 
-/-- Compatibility physical slots are now a derived view of the typed schema. -/
-def inferSlots (env : Environment) (initName : Name) : Except String (Array Legacy.Slot) := do
-  return Legacy.slotsOfSchema (← inferSchema env initName)
+/-- Target-neutral physical slots are a derived view of the typed schema. -/
+def inferSlots (env : Environment) (initName : Name) : Except String (Array Core.IR.Slot) := do
+  return Core.IR.slotsOfSchema (← inferSchema env initName)
 
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
   return (← inferSlots env initName).map (·.name)
@@ -3884,16 +3882,6 @@ def extractProgramIR (env : Environment)
 
 def extractCounterIR := extractProgramIR
 
-/-- Compatibility adapter for callers that still consume the old closed-union program. -/
-def extractProgram (env : Environment)
-    (initName incrementName getName : Name)
-    (programName : Option String := none)
-    (fields? : Option (Array String) := none) :
-    Except String Legacy.Program := do
-  IR.toLegacyProgram (← extractProgramIR env initName incrementName getName programName fields?)
-
-def extractCounter := extractProgram
-
 private def isExceptType (e : Expr) : Bool :=
   e.consumeMData.getAppFn.constName? == some ``Except
 
@@ -3989,11 +3977,5 @@ def extractModuleIR (env : Environment) (ns : Name)
   let program ← evaluateProgram program
   checkUsedFields program
   return program
-
-/-- Compatibility adapter for callers that still consume the old closed-union program. -/
-def extractModule (env : Environment) (ns : Name)
-    (fields? : Option (Array String) := none) :
-    Except String Legacy.Program := do
-  IR.toLegacyProgram (← extractModuleIR env ns fields?)
 
 end ProofForge.Extract
