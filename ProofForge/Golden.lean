@@ -64,6 +64,24 @@ def extractedPair : Program :=
         ops := #[.returnU64 (.field (.arg 0) "right")] }
     ] }
 
+def extractedNested : Program :=
+  { name := "Nested"
+    slots := #[{ name := "book_price" }, { name := "book_size" }, { name := "baseFree" }]
+    methods := #[
+      { kind := .init, name := "Examples.Nested.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "Examples.Nested.postAsk", ixName := "postAsk", paramCount := 1
+        ops := #[
+          .checkedAddU64 (.field (.arg 1) "book_size") (.arg 0),
+          .okState (.field (.arg 1) "baseFree"),
+          .errorOverflow
+        ] },
+      { kind := .get, name := "Examples.Nested.askSize", ixName := "askSize", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "book_size")] },
+      { kind := .get, name := "Examples.Nested.bestAsk", ixName := "bestAsk", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "book_price")] }
+    ] }
+
 def extractedFlag : Program :=
   { name := "Flag"
     slots := #[{ name := "flag", width := 1, abi := "u8-le" }, { name := "count" }]
@@ -1180,7 +1198,7 @@ def extractedPhoenix : Program :=
     ] }
 
 def programs : Array Program := #[
-  extractedCounter, extractedPair, extractedFlag,
+  extractedCounter, extractedPair, extractedNested, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo, extractedPeer,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,

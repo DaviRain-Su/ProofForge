@@ -79,6 +79,7 @@
 | [l5-002](tasks/l5-002.md) | doing | Phoenix 限价 / TIF / 费用（宿主侧已开） |
 | [l5-003](tasks/l5-003.md) | doing | 席位 PDA + vault 初始化 |
 | [l5-004](tasks/l5-004.md) | planned | Token-2022 program id 切片 |
+| [l5-005](tasks/l5-005.md) | doing | 嵌套 structure 摊平 |
 
 
 积压：[backlog.md](backlog.md)

@@ -106,6 +106,12 @@ private def looksLikeOptionProj (env : Environment) (n : Name) : Bool :=
   | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Option)
   | none => false
 
+/-- `s.book.price` → 槽 `book_price`。嵌套投影拼进一个 field 名。 -/
+private def flattenField (base : Ops.Val) (leaf : String) : Ops.Val :=
+  match base with
+  | .field b parent => .field b s!"{parent}_{leaf}"
+  | b => .field b leaf
+
 /-- 工具自己的模块。用户项目可以叫任何名字。 -/
 private def isToolName (n : Name) : Bool :=
   let head := n.getRoot
@@ -118,7 +124,8 @@ private def isToolName (n : Name) : Bool :=
     head == `UInt8 || head == `UInt16 || head == `UInt32 || head == `UInt64 ||
     head == `Bool || head == `Nat || head == `Option || head == `Except ||
     head == `Prod || head == `Vector || head == `Array || head == `List ||
-    head == `BitVec || head == `OfNat || head == `BEq || head == `Decidable
+    head == `BitVec || head == `OfNat || head == `BEq || head == `Decidable ||
+    head == `Float || head == `Float32 || head == `String || head == `Char
 
 private def isReservedProj (last : String) : Bool :=
   last == "mk" || last == "set" || last == "ok" || last == "error" ||
@@ -294,13 +301,13 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             else
               match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
               | some b =>
-                if looksLikeOptionProj env n then some (.field b s!"{proj}_tag")
-                else some (.field b proj)
+                let leaf := if looksLikeOptionProj env n then s!"{proj}_tag" else proj
+                some (flattenField b leaf)
               | none =>
                 match e.getAppArgs[e.getAppArgs.size - 1]! with
                 | .bvar i =>
-                  if looksLikeOptionProj env n then some (.field (.arg i) s!"{proj}_tag")
-                  else some (.field (.arg i) proj)
+                  let leaf := if looksLikeOptionProj env n then s!"{proj}_tag" else proj
+                  some (flattenField (.arg i) leaf)
                 | _ => none
         else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8 ||
             isConstNamed e ``UInt16.toUInt64 || isConstNamed e ``UInt64.toUInt16 ||
@@ -920,32 +927,43 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
   else none
 
 private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
-  let e := strip e
-  if (endsWith e ".State.mk" || endsWith e ".mk") &&
-      !(isConstNamed e ``Prod.mk || endsWith e ".Prod.mk") then
-    Id.run do
-      let mut acc : Array Ops.Val := #[]
-      for a in e.getAppArgs do
-        match asOptionPayload env a with
-        | some (.lit 0) =>
-          acc := acc.push (.lit 0) |>.push (.lit 0)
-        | some v =>
-          acc := acc.push (.lit 1) |>.push v
-        | none =>
-          if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
-            pure ()
-          else
-            match asVectorLits env a with
-            | some vs => acc := acc ++ vs
+  let rec collect (fuel : Nat) (e : Expr) : Array Ops.Val :=
+    match fuel with
+    | 0 => #[]
+    | fuel' + 1 =>
+      let e := strip e
+      if (endsWith e ".State.mk" || endsWith e ".mk") &&
+          !(isConstNamed e ``Prod.mk || endsWith e ".Prod.mk") then
+        Id.run do
+          let mut acc : Array Ops.Val := #[]
+          for a in e.getAppArgs do
+            match asOptionPayload env a with
+            | some (.lit 0) =>
+              acc := acc.push (.lit 0) |>.push (.lit 0)
+            | some v =>
+              acc := acc.push (.lit 1) |>.push v
             | none =>
-              match asVectorSet env a with
-              | some v => acc := acc.push v
-              | none =>
-                match val env a with
-                | some v => acc := acc.push v
+              if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
+                pure ()
+              else if endsWith a "Vector.mk" || isConstNamed a ``Vector.mk then
+                match asVectorLits env a with
+                | some vs => acc := acc ++ vs
                 | none => pure ()
-      if acc.isEmpty then none else some acc
-  else none
+              else
+                let nested := collect fuel' a
+                if !nested.isEmpty then
+                  acc := acc ++ nested
+                else
+                  match asVectorSet env a with
+                  | some v => acc := acc.push v
+                  | none =>
+                    match val env a with
+                    | some v => acc := acc.push v
+                    | none => pure ()
+          acc
+      else #[]
+  let acc := collect 8 e
+  if acc.isEmpty then none else some acc
 
 private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := peelLets (strip e)
@@ -2188,56 +2206,95 @@ private def fieldTypeExpr (env : Environment) (structName fieldName : Name) : Op
     | none => none
     | some info => some (peelForalls info.type)
 
-private def leafSlots (env : Environment) (name : String) (ty : Expr) : Except String (Array IR.Slot) :=
-  let ty := ty.consumeMData
-  if ty.getAppFn.constName? == some ``UInt64 then
-    .ok #[{ name, width := 8, abi := "u64-le" }]
-  else if ty.getAppFn.constName? == some ``UInt32 then
-    .ok #[{ name, width := 4, abi := "u32-le" }]
-  else if ty.getAppFn.constName? == some ``UInt16 then
-    .ok #[{ name, width := 2, abi := "u16-le" }]
-  else if ty.getAppFn.constName? == some ``UInt8 then
-    .ok #[{ name, width := 1, abi := "u8-le" }]
-  else if ty.getAppFn.constName? == some ``Option then
-    let args := ty.getAppArgs
-    if args.size ≥ 1 && args[args.size - 1]!.consumeMData.getAppFn.constName? == some ``UInt64 then
-      .ok #[
-        { name := s!"{name}_tag", width := 8, abi := "u64-le" },
-        { name := s!"{name}_p0", width := 8, abi := "u64-le" }
-      ]
-    else
-      .error s!"extract/unsupported: field {name} is not Option UInt64"
-  else if ty.getAppFn.constName? == some ``Vector then
-    let args := ty.getAppArgs
-    if args.size ≥ 2 && args[args.size - 2]!.consumeMData.getAppFn.constName? == some ``UInt64 then
-      match asLit 8 args[args.size - 1]! with
-      | some (.lit n) =>
-        if n.toNat = 0 then
-          .error s!"extract/unsupported: field {name} Vector length 0"
-        else
-          .ok ((List.range n.toNat).toArray.map fun i =>
-            { name := s!"{name}_{i}", width := 8, abi := "u64-le" })
-      | _ => .error s!"extract/unsupported: field {name} Vector length is not a literal"
-    else
-      .error s!"extract/unsupported: field {name} is not Vector UInt64 n"
-  else if ty.getAppFn.constName? == some ``Array then
-    .error s!"extract/unsupported: field {name} Array is not fixed-length; use Vector"
-  else if ty.getAppFn.constName? == some ``Bool then
-    .ok #[{ name, width := 1, abi := "u8-le" }]
-  else if let some tyName := ty.getAppFn.constName? then
-    if isEnumLeaf env tyName then
+private def leafSlots (env : Environment) (fuel : Nat) (name : String) (ty : Expr) :
+    Except String (Array IR.Slot) :=
+  match fuel with
+  | 0 => .error s!"extract/unsupported: field {name} nest depth"
+  | fuel' + 1 =>
+    let ty := ty.consumeMData
+    if ty.getAppFn.constName? == some ``UInt64 then
       .ok #[{ name, width := 8, abi := "u64-le" }]
-    else if isOptionLikeInductive env tyName then
-      .ok #[
-        { name := s!"{name}_tag", width := 8, abi := "u64-le" },
-        { name := s!"{name}_p0", width := 8, abi := "u64-le" }
-      ]
-    else if match env.find? tyName with | some (.inductInfo _) => true | _ => false then
-      .error s!"extract/unsupported: field {name} enum has payload"
+    else if ty.getAppFn.constName? == some ``UInt32 then
+      .ok #[{ name, width := 4, abi := "u32-le" }]
+    else if ty.getAppFn.constName? == some ``UInt16 then
+      .ok #[{ name, width := 2, abi := "u16-le" }]
+    else if ty.getAppFn.constName? == some ``UInt8 then
+      .ok #[{ name, width := 1, abi := "u8-le" }]
+    else if ty.getAppFn.constName? == some ``Option then
+      let args := ty.getAppArgs
+      if args.size ≥ 1 && args[args.size - 1]!.consumeMData.getAppFn.constName? == some ``UInt64 then
+        .ok #[
+          { name := s!"{name}_tag", width := 8, abi := "u64-le" },
+          { name := s!"{name}_p0", width := 8, abi := "u64-le" }
+        ]
+      else
+        .error s!"extract/unsupported: field {name} is not Option UInt64"
+    else if ty.getAppFn.constName? == some ``Vector then
+      let args := ty.getAppArgs
+      if args.size ≥ 2 && args[args.size - 2]!.consumeMData.getAppFn.constName? == some ``UInt64 then
+        match asLit 8 args[args.size - 1]! with
+        | some (.lit n) =>
+          if n.toNat = 0 then
+            .error s!"extract/unsupported: field {name} Vector length 0"
+          else
+            .ok ((List.range n.toNat).toArray.map fun i =>
+              { name := s!"{name}_{i}", width := 8, abi := "u64-le" })
+        | _ => .error s!"extract/unsupported: field {name} Vector length is not a literal"
+      else if args.size ≥ 2 then
+        -- `Vector Nested n`：每个元素再摊平。
+        match asLit 8 args[args.size - 1]! with
+        | some (.lit n) =>
+          if n.toNat = 0 then
+            .error s!"extract/unsupported: field {name} Vector length 0"
+          else
+            Id.run do
+              let mut acc : Array IR.Slot := #[]
+              for i in List.range n.toNat do
+                match leafSlots env fuel' s!"{name}_{i}" args[args.size - 2]! with
+                | .error r => return .error r
+                | .ok ss => acc := acc ++ ss
+              return .ok acc
+        | _ => .error s!"extract/unsupported: field {name} Vector length is not a literal"
+      else
+        .error s!"extract/unsupported: field {name} is not Vector UInt64 n"
+    else if ty.getAppFn.constName? == some ``Array then
+      .error s!"extract/unsupported: field {name} Array is not fixed-length; use Vector"
+    else if ty.getAppFn.constName? == some ``Bool then
+      .ok #[{ name, width := 1, abi := "u8-le" }]
+    else if let some tyName := ty.getAppFn.constName? then
+      if isEnumLeaf env tyName then
+        .ok #[{ name, width := 8, abi := "u64-le" }]
+      else if isOptionLikeInductive env tyName then
+        .ok #[
+          { name := s!"{name}_tag", width := 8, abi := "u64-le" },
+          { name := s!"{name}_p0", width := 8, abi := "u64-le" }
+        ]
+      else if isUserName env tyName && isStructure env tyName &&
+          !(isEnumLeaf env tyName) && !(isOptionLikeInductive env tyName) then
+        if !(getStructureParentInfo env tyName).isEmpty then
+          .error s!"extract/unsupported: field {name} record inheritance"
+        else
+          let fields := getStructureFields env tyName
+          if fields.isEmpty then
+            .error s!"extract/unsupported: field {name} record has no fields"
+          else
+            Id.run do
+              let mut acc : Array IR.Slot := #[]
+              for f in fields do
+                if (isSubobjectField? env tyName f).isSome then
+                  return .error s!"extract/unsupported: field {name} record inheritance"
+                let some fty := fieldTypeExpr env tyName f
+                  | return .error s!"extract/unsupported: field {name}.{f} has no type"
+                match leafSlots env fuel' s!"{name}_{f}" fty with
+                | .error r => return .error r
+                | .ok ss => acc := acc ++ ss
+              return .ok acc
+      else if match env.find? tyName with | some (.inductInfo _) => true | _ => false then
+        .error s!"extract/unsupported: field {name} enum has payload"
+      else
+        .error s!"extract/unsupported: field {name} is not a supported leaf"
     else
       .error s!"extract/unsupported: field {name} is not a supported leaf"
-  else
-    .error s!"extract/unsupported: field {name} is not a supported leaf"
 
 /-- `Examples.Counter.init` → `Counter`。 -/
 def programNameOfInit (n : Name) : String :=
@@ -2246,7 +2303,7 @@ def programNameOfInit (n : Name) : String :=
   | .str _ "init" => "Program"
   | _ => "Program"
 
-/-- 从 `init` 返回类型收槽。无 `extends`。叶子：UInt8/16/32/64、Option UInt64、Vector UInt64 n。 -/
+/-- 从 `init` 返回类型收槽。无 `extends`。叶子：UInt8/16/32/64、Option UInt64、Vector、嵌套 structure。 -/
 def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.Slot) := do
   let some info := env.find? initName
     | throw s!"extract/unsupported: unknown {initName}"
@@ -2255,17 +2312,17 @@ def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.S
   unless isStructure env structName do
     throw s!"extract/unsupported: init return is not a structure {structName}"
   unless (getStructureParentInfo env structName).isEmpty do
-    throw "extract/unsupported: structure extends"
+    throw "extract/unsupported: record inheritance"
   let names := getStructureFields env structName
   if names.isEmpty then
     throw "extract/unsupported: structure has no fields"
   let mut slots : Array IR.Slot := #[]
   for n in names do
     if (isSubobjectField? env structName n).isSome then
-      throw "extract/unsupported: structure extends"
+      throw "extract/unsupported: record inheritance"
     let some ty := fieldTypeExpr env structName n
       | throw s!"extract/unsupported: field {n} has no type"
-    slots := slots ++ (← leafSlots env n.toString ty)
+    slots := slots ++ (← leafSlots env 8 n.toString ty)
   return slots
 
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
