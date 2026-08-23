@@ -2,8 +2,8 @@
 
 ## Purpose
 
-`pf`：把源模块抽出后编成目标链制品。SVM 的 Golden 只登记模块名并钉 digest，
-不能替代源模块 IR；EVM 目前仍消费 target Golden。
+`pf`：把源模块抽出后编成目标链制品。`Svm.Registry` / `Evm.Registry` 只登记
+源码模块名并钉 target IR digest，不能替代源模块 IR，也不依赖旧 mixed Golden。
 
 ## Surface
 

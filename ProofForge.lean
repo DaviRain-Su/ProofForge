@@ -10,8 +10,10 @@ import ProofForge.Crypto.Keccak
 import ProofForge.Crypto.Sha256Compat
 import ProofForge.Svm.Ops
 import ProofForge.Svm.Runtime
+import ProofForge.Svm.Registry
 import ProofForge.Evm.Ops
 import ProofForge.Evm.Runtime
+import ProofForge.Evm.Registry
 import ProofForge.Extract.LegacyGolden
 import ProofForge.Attr
 import ProofForge.Profile

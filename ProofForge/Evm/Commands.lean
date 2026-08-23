@@ -2,7 +2,7 @@ import Lean
 import ProofForge.Extract
 import ProofForge.Evm.IR
 import ProofForge.Evm.Emit
-import ProofForge.Evm.Golden
+import ProofForge.Evm.Registry
 
 open Lean Elab Command
 open ProofForge
@@ -22,7 +22,7 @@ elab "#pf_evm_build " n:ident : command => do
         unless yul.contains "object \"" do
           throwError "assemble/tool: missing yul object"
         let digest := IR.digestHex program
-        match Golden.digestOf program.name with
+        match Registry.digestOf program.name with
         | some want =>
             if digest != want then
               throwError s!"ir/mismatch: extracted evm {program.name} digest != fixture"

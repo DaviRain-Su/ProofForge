@@ -3,7 +3,7 @@ import ProofForge.Profile
 import ProofForge.Extract
 import ProofForge.Core.IR
 import ProofForge.Svm.Emit
-import ProofForge.Extract.LegacyGolden
+import ProofForge.Svm.Registry
 
 open Lean Elab Command
 open ProofForge
@@ -75,7 +75,7 @@ elab "#pf_build " n:ident : command => do
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
       let digest := IR.digestHex program
-      match ProofForge.Golden.digestOf program.name with
+      match Registry.digestOf program.name with
       | some want =>
         if digest != want then
           throwError s!"ir/mismatch: extracted {program.name} digest != fixture"

@@ -1,12 +1,11 @@
 import Lean
-import ProofForge.Extract.LegacyGolden
 import ProofForge.Extract
 import ProofForge.Core.IR
 import ProofForge.Svm.Assemble
-import ProofForge.Svm.IRCompat
+import ProofForge.Svm.Registry
 import ProofForge.Evm.Assemble
-import ProofForge.Evm.Golden
 import ProofForge.Evm.IR
+import ProofForge.Evm.Registry
 
 namespace ProofForge.Cli
 
@@ -59,17 +58,14 @@ private def parseArgs (args : List String) : Except String Options :=
     | rest => rest
   go args {}
 
-private def svmFixtureNames : Array String :=
-  Golden.programs.filterMap fun program =>
-    match Svm.IR.fromProgram program with
-    | .ok _ => some program.name
-    | .error _ => none
+private def svmProgramNames : Array String :=
+  Svm.Registry.names
 
 private def selectSvmNames (names : Array String) : Except String (Array String) :=
-  if names.isEmpty then .ok svmFixtureNames
+  if names.isEmpty then .ok svmProgramNames
   else
     names.mapM fun n =>
-      match svmFixtureNames.find? (· == n) with
+      match svmProgramNames.find? (· == n) with
       | some _ => .ok n
       | none => .error s!"unknown svm program {n}"
 
@@ -78,8 +74,8 @@ private def svmModuleName (name : String) : Lean.Name :=
   else Lean.Name.str `Examples name
 
 /--
-CLI 构建必须重新从用户模块抽 IR，不能组装 `Golden` smoke fixture。Golden 只负责
-列出可构建模块并钉 canonical digest。
+CLI 构建必须重新从用户模块抽 IR，不能组装 legacy Golden smoke fixture。target registry
+只负责列出可构建模块并钉 canonical digest。
 -/
 private unsafe def extractSvmPrograms (names : Array String) :
     IO (Except String (Array Svm.IR.Program)) :=
@@ -94,7 +90,7 @@ private unsafe def extractSvmPrograms (names : Array String) :
       | .error reason => .error s!"{name}: {reason}"
       | .ok program =>
         let digest := Svm.IR.digestHex program
-        match Golden.digestOf name with
+        match Svm.Registry.digestOf name with
         | some expected =>
           if digest == expected then .ok program
           else .error s!"{name}: ir/mismatch: extracted digest != fixture"
@@ -102,14 +98,14 @@ private unsafe def extractSvmPrograms (names : Array String) :
   catch e =>
     return .error s!"source import failed: {e}"
 
-private def evmFixtureNames : Array String :=
-  ProofForge.Evm.Golden.programs.map (·.name)
+private def evmProgramNames : Array String :=
+  Evm.Registry.names
 
 private def selectEvmNames (names : Array String) : Except String (Array String) :=
-  if names.isEmpty then .ok evmFixtureNames
+  if names.isEmpty then .ok evmProgramNames
   else
     names.mapM fun n =>
-      match evmFixtureNames.find? (· == n) with
+      match evmProgramNames.find? (· == n) with
       | some _ => .ok n
       | none => .error s!"unknown evm program {n}"
 
@@ -126,7 +122,7 @@ private unsafe def extractEvmPrograms (names : Array String) :
       | .error reason => .error s!"{name}: {reason}"
       | .ok program =>
         let digest := Evm.IR.digestHex program
-        match Evm.Golden.digestOf name with
+        match Evm.Registry.digestOf name with
         | some expected =>
           if digest == expected then .ok program
           else .error s!"{name}: ir/mismatch: extracted evm digest != fixture"
