@@ -142,6 +142,14 @@ private def looksLikeOptionProj (env : Environment) (n : Name) : Bool :=
 private def flattenField (base : Ops.Val) (leaf : String) : Ops.Val :=
   match base with
   | .field b parent => .field b s!"{parent}_{leaf}"
+  | .indexGet b n i k _ =>
+      -- 运行时下标上的元素投影：先估叶内偏移，`fillElemOff` 再用槽表改写。
+      let off :=
+        match leaf with
+        | "left" => 0 | "right" => 8 | "parent" => 16
+        | "color" => 24 | "key" => 32 | "value" => 40
+        | _ => 0
+      .indexGet b n i k off
   | b => .field b leaf
 
 /-- 工具自己的模块。用户项目可以叫任何名字。 -/
@@ -995,31 +1003,72 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
             else e.getAppArgs.findSome? (lastFieldName fuel')
           | _ => e.getAppArgs.findSome? (lastFieldName fuel')
         | none => e.getAppArgs.findSome? (lastFieldName fuel')
-    let rec asIdxVal (e : Expr) : Option Ops.Val :=
-      let e := peelLets (strip e)
-      if endsWith e "._proof_1" || endsWith e "._proof_2" || endsWith e ".rfl" then
-        none
-      else if (isConstNamed e ``UInt64.toNat || endsWith e ".toNat") && e.getAppArgs.size ≥ 1 then
-        val env e.getAppArgs[e.getAppArgs.size - 1]!
-      else val env e
-    let vals := args.filterMap asIdxVal
-    -- 长度字面量丢掉。最后两个运行时值是下标和 payload。
-    let runtime := vals.filter fun | .lit _ => false | _ => true
-    if runtime.size ≥ 2 then
-      let last := runtime[runtime.size - 1]!
-      let prev := runtime[runtime.size - 2]!
-      let (idx, payload) := (prev, last)
+    -- `Vector.set α n xs i v h`：长度字面量之后，xs、下标、新元素按出现顺序。
+    let parsed :=
+      Id.run do
+        let mut nLits : Nat := 0
+        let mut litIdx := false
+        let mut idx? : Option Ops.Val := none
+        let mut payload? : Option Ops.Val := none
+        for a in args do
+          if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
+            pure ()
+          else
+            match asLit 8 a with
+            | some (.lit _) =>
+              if nLits ≥ 1 then litIdx := true
+              nLits := nLits + 1
+            | some _ =>
+              pure ()
+            | none =>
+              if nLits == 0 then
+                pure ()
+              else
+                let a := peelLets (strip a)
+                if (isConstNamed a ``UInt64.toNat || endsWith a ".toNat") &&
+                    a.getAppArgs.size ≥ 1 then
+                  if idx?.isNone then
+                    idx? := val env a.getAppArgs[a.getAppArgs.size - 1]!
+                else
+                  match val env a with
+                  | some (.field ..) =>
+                    -- `s.nodes` / `s.cells`：向量本身，不是下标。
+                    pure ()
+                  | some v =>
+                    if idx?.isNone then idx? := some v
+                    else payload? := some v
+                  | none =>
+                    -- 嵌套 `Node.mk`：新值是最后一个标量参数。
+                    match val env a with
+                    | some v => payload? := some v
+                    | none =>
+                      let rec lastScalar (fuel : Nat) (e : Expr) : Option Ops.Val :=
+                        match fuel with
+                        | 0 => none
+                        | fuel' + 1 =>
+                          let e := peelLets (strip e)
+                          match e.getAppArgs.foldr (init := none) fun x acc =>
+                            match acc with
+                            | some v => some v
+                            | none => val env x with
+                          | some v => some v
+                          | none => e.getAppArgs.findSome? (lastScalar fuel')
+                      match lastScalar 8 a with
+                      | some v => payload? := some v
+                      | none => pure ()
+        return (litIdx, idx?, payload?)
+    match parsed with
+    | (true, _, _) => none
+    | (false, some idx, some payload) =>
       match idx with
       | .lit _ => none
       | _ =>
         let leaf := (args.findSome? (lastFieldName 8)).getD ""
-        -- 叶内偏移先按字段序估：Sokoban Node 最后一叶是 value = 5*8。
-        -- `fillElemOff` 再用真实槽表改写。
         let hint := if leaf.isEmpty then 0 else 40
         match baseName 8 e with
         | some n => some (.indexSet n idx payload len hint)
         | none => some (.indexSet "cells" idx payload len hint)
-    else none
+    | _ => none
   else none
 
 private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
@@ -2388,7 +2437,14 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .bitNot v => .bitNot (flipVal fuel' v)
       | .shiftL l r => .shiftL (flipVal fuel' l) (flipVal fuel' r)
       | .shiftR l r => .shiftR (flipVal fuel' l) (flipVal fuel' r)
-      | .indexGet b n i k off => .indexGet (flipVal fuel' b) n (flipVal fuel' i) k off
+      | .indexGet b n i k off =>
+          let i' :=
+            match i with
+            | .arg j =>
+              if kind != .init && nLams > 1 && j + 1 ≥ nLams then .arg 0
+              else flipVal fuel' i
+            | _ => flipVal fuel' i
+          .indexGet (flipVal fuel' b) n i' k off
       | .loopIx => v
       | .addU64 l r => .addU64 (flipVal fuel' l) (flipVal fuel' r)
       | .subU64 l r => .subU64 (flipVal fuel' l) (flipVal fuel' r)
@@ -2426,7 +2482,14 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .evmLog n v => .evmLog n (flipVal fuel' v)
       | .forAccum n v => .forAccum n (flipVal fuel' v)
       | .forBody n body => .forBody n (body.map (flipOp fuel'))
-      | .indexSet n i v k off => .indexSet n (flipVal fuel' i) (flipVal fuel' v) k off
+      | .indexSet n i v k off =>
+          let i' :=
+            match i with
+            | .arg j =>
+              if kind != .init && nLams > 1 && j + 1 ≥ nLams then .arg 0
+              else flipVal fuel' i
+            | _ => flipVal fuel' i
+          .indexSet n i' (flipVal fuel' v) k off
       | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
       | .mapSetU64 b k v =>
           .mapSetU64 (flipVal fuel' b) (flipVal fuel' k) (flipVal fuel' v)
@@ -2684,6 +2747,18 @@ private def opFields : Ops.Op → Array String
   | .returnState v => valFields v
 
 private def fillElemOff (p : IR.Program) : IR.Program :=
+  let rec goVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+    match fuel with
+    | 0 => v
+    | fuel' + 1 =>
+      match v with
+      | .indexGet b n i k off =>
+          let off' := if off == 0 then 0 else IR.vectorLeafOff p n "value"
+          .indexGet (goVal fuel' b) n (goVal fuel' i) k off'
+      | .field b n => .field (goVal fuel' b) n
+      | .addU64 l r => .addU64 (goVal fuel' l) (goVal fuel' r)
+      | .subU64 l r => .subU64 (goVal fuel' l) (goVal fuel' r)
+      | v => v
   let rec goOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -2691,10 +2766,12 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
       match op with
       | .indexSet n i v k off =>
           let off' := if off == 0 then 0 else IR.vectorLeafOff p n "value"
-          .indexSet n i v k off'
+          .indexSet n (goVal 8 i) (goVal 8 v) k off'
       | .ite c l r t f =>
-          .ite c l r (t.map (goOp fuel')) (f.map (goOp fuel'))
+          .ite c (goVal 8 l) (goVal 8 r) (t.map (goOp fuel')) (f.map (goOp fuel'))
       | .forBody n body => .forBody n (body.map (goOp fuel'))
+      | .okState v => .okState (goVal 8 v)
+      | .returnU64 v => .returnU64 (goVal 8 v)
       | op => op
   { p with methods := p.methods.map fun m => { m with ops := m.ops.map (goOp 8) } }
 

@@ -51,6 +51,11 @@ def getSize (s : State) : UInt64 :=
 def getHead (s : State) : UInt64 :=
   s.nodes[0]!.value
 
+/-- 运行时下标读节点 value。 -/
+@[pf_entry]
+def getAt (s : State) (i : UInt64) : UInt64 :=
+  if i < 4 then s.nodes[i.toNat]!.value else 0
+
 /-- 写节点 0 的 value。 -/
 @[pf_entry]
 def setHead (s : State) (v : UInt64) : Except Error (State × UInt64) :=

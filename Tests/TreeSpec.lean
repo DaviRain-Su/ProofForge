@@ -10,6 +10,8 @@ open Examples.Tree
 #guard getRoot (init 0) == 0
 #guard getSize (init 0) == 0
 #guard getHead (init 0) == 0
+#guard getAt (init 0) 0 == 0
+#guard getAt (init 0) 9 == 0
 #guard sentinel == 0
 #guard emptyNode.left == 0
 #guard emptyNode.color == 0

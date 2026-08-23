@@ -137,7 +137,7 @@ def extractedTree : Program :=
       { kind := .increment, name := "Examples.Tree.setAt", ixName := "setAt", paramCount := 2
         ops := #[
           .ite .lt (.arg 0) (.lit 4)
-            #[.indexSet "nodes" (.arg 2) (.arg 1) 4 40, .okState (.arg 1)]
+            #[.indexSet "nodes" (.arg 0) (.arg 1) 4 40, .okState (.arg 1)]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Tree.setHead", ixName := "setHead", paramCount := 1
@@ -145,6 +145,12 @@ def extractedTree : Program :=
           .ite .ne (.lit 0) (.lit 1)
             #[.okState (.field (.arg 1) "nodes_0_value")]
             #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Tree.getAt", ixName := "getAt", paramCount := 1
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.returnU64 (.indexGet (.arg 1) "nodes" (.arg 0) 0 40)]
+            #[.returnU64 (.lit 0)]
         ] },
       { kind := .get, name := "Examples.Tree.getHead", ixName := "getHead", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "nodes_0_value")] },
