@@ -5,6 +5,7 @@ import Examples.Flag
 import Examples.Maybe
 import Examples.Window
 import Examples.Book
+import Examples.Seat
 import Examples.Phase
 import Examples.Choice
 import Examples.Clock
@@ -61,6 +62,8 @@ import Projects.Phoenix
 #pf_build Examples.Window
 
 #pf_build Examples.Book
+
+#pf_build Examples.Seat
 
 #pf_build Examples.Phase
 

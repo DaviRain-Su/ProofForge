@@ -502,6 +502,17 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "  " ++ accN ++ " := add(" ++ accN ++ ", " ++ addE ++ ")" ++ nl ++
           indent ++ "}" ++ nl
         st := { st with last := some accN }
+    | .forBody n body =>
+        let (iN, st1) := fresh st
+        let innerSt := { st1 with loopIx := some iN }
+        let (bodyTxt, st2) ←
+          emitOps p (indent ++ "  ") paramPrefix paramCount body innerSt
+        st := { st2 with loopIx := none }
+        acc := acc ++
+          indent ++ "for { let " ++ iN ++ " := 0 } lt(" ++ iN ++ ", " ++ toString n ++
+            ") { " ++ iN ++ " := add(" ++ iN ++ ", 1) } {" ++ nl ++
+          bodyTxt ++
+          indent ++ "}" ++ nl
     | .indexSet name idx value len =>
         let (preI, iv, st1) ← materializeVal p indent paramPrefix paramCount idx st
         let (preV, vv, st2) ← materializeVal p indent paramPrefix paramCount value st1

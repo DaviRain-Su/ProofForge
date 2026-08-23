@@ -20,6 +20,16 @@ open Examples.Book
   | .error .overflow => true
   | _ => false
 
+#guard
+  match fillFirst (init 7) 3 with
+  | .ok (st, ret) => st.cells[1]! == 3 && ret == 3 && st.cells[0]! == 7
+  | .error _ => false
+
+#guard
+  match fillFirst { cells := #v[1, 1, 1, 1] } 3 with
+  | .error .overflow => true
+  | _ => false
+
 #guard ProofForge.IR.dataLen ProofForge.Golden.extractedBook == 40
 
 end Tests.BookSpec

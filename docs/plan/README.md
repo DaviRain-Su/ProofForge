@@ -75,6 +75,10 @@
 | [l4-032](tasks/l4-032.md) | done | keccak256Lit / sol_keccak256 |
 | [l4-033](tasks/l4-033.md) | done | 账户下标叶子收口 |
 | [l4-034](tasks/l4-034.md) | done | 关着的格子一次开完 |
+| [l5-001](tasks/l5-001.md) | doing | 有界 for 改状态（`forBody` IR + 发射已开，抽出未绿） |
+| [l5-002](tasks/l5-002.md) | doing | Phoenix 限价 / TIF / 费用（宿主侧已开） |
+| [l5-003](tasks/l5-003.md) | doing | 席位 PDA + vault 初始化 |
+| [l5-004](tasks/l5-004.md) | planned | Token-2022 program id 切片 |
 
 
 积压：[backlog.md](backlog.md)

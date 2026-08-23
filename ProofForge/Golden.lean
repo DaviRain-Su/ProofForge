@@ -1085,6 +1085,20 @@ def extractedBook : Program :=
         ] }
     ] }
 
+def extractedSeat : Program :=
+  { name := "Seat"
+    slots := #[{ name := "dummy" }]
+    methods := #[
+      { kind := .init, name := "Examples.Seat.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Seat.openBase", ixName := "openBase", paramCount := 0
+        ops := #[Ops.tokenInitAccount, .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.Seat.openSeat", ixName := "openSeat", paramCount := 1
+        ops := #[Ops.createPda (.arg 0), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Seat.get", ixName := "get", paramCount := 0
+        ops := #[.returnU64 (.findPda "vault")] }
+    ] }
+
 def extractedPhoenix : Program :=
   { name := "Phoenix"
     slots := #[
@@ -1158,7 +1172,7 @@ def programs : Array Program := #[
   extractedEpoch, extractedTokenSize, extractedSysSeed, extractedSysXfer, extractedTokenMint2,
   extractedTokenNative, extractedHash, extractedKeys, extractedKeccak, extractedTrio,
   extractedGate, extractedNonce, extractedTokenOwner, extractedTokenMs,
-  extractedPhoenix, extractedBook,
+  extractedPhoenix, extractedBook, extractedSeat,
   extractedEvmCtx, extractedTipJar, extractedLang, extractedVault, extractedOwnable,
   extractedToken
 ]

@@ -863,8 +863,22 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   else none
 
 /-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
-private def asIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
-  let e := strip e
+private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
+  let rec go (fuel : Nat) (e : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+        go fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+      else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
+        go fuel' e.getAppArgs[e.getAppArgs.size - 2]!
+      else if isConstNamed e ``Vector.set || endsWith e ".set" then
+        some e
+      else none
+  match go 8 e0 with
+  | none => none
+  | some e =>
   if isConstNamed e ``Vector.set || endsWith e ".set" then
     let args := e.getAppArgs
     let rec baseName (fuel : Nat) (e : Expr) : Option String :=
@@ -887,10 +901,15 @@ private def asIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
               | .lit n => n.toNat
               | _ => 0
             else 0
-    let vals := args.filterMap (val env)
-    if vals.size ≥ 3 then
-      let idx := vals[vals.size - 2]!
-      let payload := vals[vals.size - 1]!
+    let vals := args.filterMap fun a =>
+      if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
+        none
+      else val env a
+    -- 不去掉字面量：长度字面量已经单独算过，剩下的运行时值按出现顺序取最后两个。
+    if vals.size ≥ 2 then
+      let last := vals[vals.size - 1]!
+      let prev := vals[vals.size - 2]!
+      let (idx, payload) := (prev, last)
       match idx with
       | .lit _ => none
       | _ =>
@@ -1301,6 +1320,72 @@ private def invokeRet
   | (6, _, #[.u8le 1], none, none) => .lit 0
   | _ => .lit 0
 
+private def forRangeEnd (e : Expr) : Option Nat :=
+  let rec rangeEnd (fuel : Nat) (e : Expr) : Option Nat :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if endsWith e ".mk" || e.getAppFn.constName?.isSome then
+        let rargs := e.getAppArgs
+        if rargs.size ≥ 2 then
+          match asLit 8 rargs[1]! with
+          | some (.lit n) => some n.toNat
+          | _ => rargs.findSome? (rangeEnd fuel')
+        else rargs.findSome? (rangeEnd fuel')
+      else e.getAppArgs.findSome? (rangeEnd fuel')
+  rangeEnd 8 e
+
+/-- `forAccum`：下标位的 `.arg` 是循环变量。不要改 payload。 -/
+private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
+  let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+    match fuel with
+    | 0 => v
+    | fuel' + 1 =>
+      match v with
+      | .indexGet b n i k =>
+          let b' := match b with | .arg _ => .arg 0 | _ => b
+          let i' := match i with | .arg _ => .loopIx | _ => go fuel' i
+          .indexGet b' n i' k
+      | .field b n => .field (go fuel' b) n
+      | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
+      | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
+      | .bitXor l r => .bitXor (go fuel' l) (go fuel' r)
+      | .bitNot v => .bitNot (go fuel' v)
+      | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
+      | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
+      | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
+      | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
+      | v => v
+  go 8 v
+
+private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
+  let rec go (fuel : Nat) (op : Ops.Op) : Ops.Op :=
+    match fuel with
+    | 0 => op
+    | fuel' + 1 =>
+      match op with
+      | .checkedAddU64 l r => .checkedAddU64 (rewriteLoopIx l) (rewriteLoopIx r)
+      | .checkedSubU64 l r => .checkedSubU64 (rewriteLoopIx l) (rewriteLoopIx r)
+      | .checkedMulU64 l r => .checkedMulU64 (rewriteLoopIx l) (rewriteLoopIx r)
+      | .checkedDivU64 l r => .checkedDivU64 (rewriteLoopIx l) (rewriteLoopIx r)
+      | .checkedModU64 l r => .checkedModU64 (rewriteLoopIx l) (rewriteLoopIx r)
+      | .ite c l r t f =>
+          .ite c (rewriteLoopIx l) (rewriteLoopIx r)
+            (t.map (go fuel')) (f.map (go fuel'))
+      | .invoke prog metas data seed bump =>
+          .invoke prog metas (data.map fun
+            | .u64le v => .u64le (rewriteLoopIx v)
+            | w => w) seed (bump.map rewriteLoopIx)
+      | .indexSet n i v k => .indexSet n (rewriteLoopIx i) (rewriteLoopIx v) k
+      | .okState v => .okState (rewriteLoopIx v)
+      | .returnU64 v => .returnU64 (rewriteLoopIx v)
+      | .returnState v => .returnState (rewriteLoopIx v)
+      | .forAccum n v => .forAccum n (rewriteLoopIx v)
+      | .forBody n body => .forBody n (body.map (go fuel'))
+      | op => op
+  go 8 op
+
 private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :=
   let rec go (fuel : Nat) (e : Expr) : Option (Nat × Ops.Val) :=
     match fuel with
@@ -1312,44 +1397,14 @@ private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :
         else none
       else if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then
         let args := e.getAppArgs
-        let rec rangeEnd (fuel : Nat) (e : Expr) : Option Nat :=
-          match fuel with
-          | 0 => none
-          | fuel' + 1 =>
-            let e := strip e
-            if endsWith e ".mk" || e.getAppFn.constName?.isSome then
-              let rargs := e.getAppArgs
-              if rargs.size ≥ 2 then
-                match asLit 8 rargs[1]! with
-                | some (.lit n) => some n.toNat
-                | _ => rargs.findSome? (rangeEnd fuel')
-              else rargs.findSome? (rangeEnd fuel')
-            else e.getAppArgs.findSome? (rangeEnd fuel')
-        let n? := args.findSome? (rangeEnd 8)
-        let rec rewriteIx (fuel : Nat) (v : Ops.Val) : Ops.Val :=
-          match fuel with
-          | 0 => v
-          | fuel' + 1 =>
-            match v with
-            | .arg _ => .loopIx
-            | .field b n => .field (rewriteIx fuel' b) n
-            | .indexGet b n i k =>
-                let b' := match b with | .arg _ => .arg 0 | _ => b
-                .indexGet b' n (rewriteIx fuel' i) k
-            | .bitAnd l r => .bitAnd (rewriteIx fuel' l) (rewriteIx fuel' r)
-            | .bitOr l r => .bitOr (rewriteIx fuel' l) (rewriteIx fuel' r)
-            | .bitXor l r => .bitXor (rewriteIx fuel' l) (rewriteIx fuel' r)
-            | .bitNot v => .bitNot (rewriteIx fuel' v)
-            | .shiftL l r => .shiftL (rewriteIx fuel' l) (rewriteIx fuel' r)
-            | .shiftR l r => .shiftR (rewriteIx fuel' l) (rewriteIx fuel' r)
-            | v => v
+        let n? := args.findSome? forRangeEnd
         let rec findAdd (fuel : Nat) (e : Expr) : Option Ops.Val :=
           match fuel with
           | 0 => none
           | fuel' + 1 =>
             let e := strip e
             if isConstNamed e ``HAdd.hAdd && e.getAppArgs.size ≥ 2 then
-              (asVal env 8 e.getAppArgs[e.getAppArgs.size - 1]!).map (rewriteIx 8)
+              (asVal env 8 e.getAppArgs[e.getAppArgs.size - 1]!).map rewriteLoopIx
             else
               match e with
               | .lam _ _ body _ => findAdd fuel' body
@@ -1360,6 +1415,47 @@ private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :
         | some n, some v =>
           if n = 0 || n > 64 then none else some (n, v)
         | _, _ => none
+      else
+        match e with
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | .app f a => go fuel' f <|> go fuel' a
+        | _ => none
+  go 16 e
+
+/-- `for i in [:n]` 里 `ForInStep.done` 提前返回。累加仍走 `findForIn`。 -/
+private def findForBodyExpr (env : Environment) (e : Expr) : Option (Nat × Expr) :=
+  let rec go (fuel : Nat) (e : Expr) : Option (Nat × Expr) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      if e.getAppFn.constName? == some ``Id.run || endsWith e ".run" then
+        if e.getAppArgs.size ≥ 1 then go fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else none
+      else if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then
+        if (findForIn env e).isSome then none
+        else
+          let args := e.getAppArgs
+          let n? := args.findSome? forRangeEnd
+          -- `forIn xs init (fun i r => body)`：最后一个 λ 是循环体。
+          let rec lastLam (fuel : Nat) (e : Expr) : Option Expr :=
+            match fuel with
+            | 0 => none
+            | fuel' + 1 =>
+              match strip e with
+              | .lam _ _ body _ =>
+                match strip body with
+                | .lam _ _ body2 _ => some (peelLets body2)
+                | _ => some (peelLets body)
+              | .letE _ _ _ body _ => lastLam fuel' body
+              | e => e.getAppArgs.findSome? (lastLam fuel')
+          let bodyE? :=
+            if args.size > 0 then lastLam 8 args[args.size - 1]! else none
+          match n?, bodyE? with
+          | some n, some bodyE =>
+            if n = 0 || n > 64 then none else some (n, bodyE)
+          | _, _ => none
       else
         match e with
         | .letE _ _ value body _ => go fuel' value <|> go fuel' body
@@ -1730,6 +1826,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       return .ok ops
     if let some (n, addend) := findForIn env e then
       return .ok #[.forAccum n addend, .returnU64 addend]
+    if let some (n, bodyE) := findForBodyExpr env e then
+      match decodeExpr env fuel' bodyE with
+      | .ok ops => return .ok #[.forBody n (ops.map rewriteLoopOp), .errorOverflow]
+      | .error r => return .error r
     let e := strip e
     if (isConstNamed e ``ite || isConstNamed e ``dite) && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
@@ -2020,6 +2120,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
       | .evmLog n v => .evmLog n (flipVal fuel' v)
       | .forAccum n v => .forAccum n (flipVal fuel' v)
+      | .forBody n body => .forBody n (body.map (flipOp fuel'))
       | .indexSet n i v k => .indexSet n (flipVal fuel' i) (flipVal fuel' v) k
       | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
       | .mapSetU64 b k v =>
@@ -2214,6 +2315,7 @@ private def opFields : Ops.Op → Array String
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v
   | .forAccum _ v => valFields v
+  | .forBody _ body => body.flatMap opFields
   | .indexSet _ i v _ => valFields i ++ valFields v
   | .mapGetU64 b k => valFields b ++ valFields k
   | .mapSetU64 b k v => valFields b ++ valFields k ++ valFields v

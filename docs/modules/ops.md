@@ -10,7 +10,9 @@
 
 `Cmp`：`eq` / `ne` / `lt` / `le` / `gt` / `ge`
 
-`Op`：checked 四则、`ite`、`invoke`（编译期 program/metas/data；`systemTransfer` 是特化）、EVM 效应、`forAccum` / `indexSet`、hashed Map / pair-key Map / 封闭 ERC-20、`evmLog`、`okState` / `errorOverflow` / `errorNamed` / `returnU64` / `returnState`
+`Op`：checked 四则、`ite`、`invoke`（编译期 program/metas/data；`systemTransfer` 是特化）、EVM 效应、`forAccum` / `forBody` / `indexSet`、hashed Map / pair-key Map / 封闭 ERC-20、`evmLog`、`okState` / `errorOverflow` / `errorNamed` / `returnU64` / `returnState`
+
+`forBody n body`：有界 `for i in [:n]`，体里可用 `loopIx`。体里 `exit` 的 op 提前结束。抽出器还不能正确区分循环 binder 和外层参数。
 
 ## Tests
 

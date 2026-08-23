@@ -16,6 +16,7 @@
 | [plan/analysis/gap-vs-proofforge.md](plan/analysis/gap-vs-proofforge.md) | 相对 PF 的缺口与阶段 |
 | [plan/analysis/sdk-surface.md](plan/analysis/sdk-surface.md) | 剩余 SDK 表面（syscall / 封闭 CPI） |
 | [plan/analysis/remaining-surface.md](plan/analysis/remaining-surface.md) | 第 1/2 层收口清单 |
+| [plan/analysis/token-2022.md](plan/analysis/token-2022.md) | Token-2022；没有 Token v3 |
 | [modules/README.md](modules/README.md) | 模块合同 |
 | [modules/evm.md](modules/evm.md) | EVM 平行发射器 |
 | [research/03-feasibility.md](research/03-feasibility.md) | Solana 可行性调研结论 |

@@ -13,6 +13,7 @@ open ProofForge.Runtime
 #guard
   askQty { askPrice := 100, sizes := #v[1, 2, 3, 4], baseFree := 0 } == 10
 #guard level0 (init 100) == 0
+#guard feeOf 10000 == 5
 
 #guard
   match postAsk (init 100) 8 with
@@ -45,6 +46,11 @@ open ProofForge.Runtime
   match swapBuy { askPrice := 100, sizes := #v[2, 0, 0, 0], baseFree := 0 } 3 with
   | .error .overflow => true
   | _ => false
+
+#guard checkLimit (init 100) 50 == false
+#guard checkLimit (init 100) 100 == true
+#guard checkTif 0 == true
+#guard takeFee 10000 == 5
 
 #guard ProofForge.IR.usesCpi ProofForge.Golden.extractedPhoenix
 #guard ProofForge.IR.dataLen ProofForge.Golden.extractedPhoenix == 56

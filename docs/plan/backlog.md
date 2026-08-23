@@ -66,9 +66,11 @@ SVM 回 L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原�
 
 能 fail-closed 抽出的格子已收口（L4-034）。
 
-仍关、且不是延期：账户 3+ 成功路径、`ByteArray 32`、Token-2022、feature-gated 哈希与曲线、nonce 成功路径（要现成 nonce 账户）。
+仍关、且不是延期：账户 3+ 成功路径、`ByteArray 32`、feature-gated 哈希与曲线、nonce 成功路径（要现成 nonce 账户）。
 
-Token-2022 / remaining accounts / 运行时 program id 仍关。
+Token-2022 规划见 [analysis/token-2022.md](analysis/token-2022.md)。没有 Token v3。切片 A（换 program id）是 l5-004。hook / fee / remaining accounts 仍关。
+
+`forBody` IR 已开。抽出器还把循环 binder 和外层参数搅在一起，Phoenix 扫书仍用 4 路 `ite`。
 
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。

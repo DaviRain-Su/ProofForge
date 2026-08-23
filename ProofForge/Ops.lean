@@ -96,6 +96,8 @@ inductive Op where
   | evmSendEth (w0 w1 w2 amount : Val)
   | evmLog (name : String) (amount : Val)
   | forAccum (n : Nat) (addend : Val)
+  /-- 有界 `for i in [:n]`，体里可用 `loopIx`。体里 `exit` 的 op 提前结束；否则落到循环后。 -/
+  | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Val) (len : Nat)
   | mapGetU64 (base key : Val)
   | mapSetU64 (base key value : Val)
@@ -309,6 +311,7 @@ private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
       p op ||
         match op with
         | .ite _ _ _ t f => walk fuel' t p || walk fuel' f p
+        | .forBody _ body => walk fuel' body p
         | _ => false
 
 def hasInvoke (ops : Array Op) : Bool :=
@@ -368,6 +371,7 @@ def hasAcc1 (ops : Array Op) : Bool :=
         valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d
     | .evmLog _ v => valNeedsAcc1 v
     | .forAccum _ v => valNeedsAcc1 v
+    | .forBody _ _ => false
     | .indexSet _ i v _ => valNeedsAcc1 i || valNeedsAcc1 v
     | .mapGetU64 a b => valNeedsAcc1 a || valNeedsAcc1 b
     | .mapSetU64 a b c => valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c
@@ -416,6 +420,7 @@ def opMinAccounts : Op → Nat
   | .okState v | .returnU64 v | .returnState v => valMinAccounts v
   | .errorOverflow | .errorNamed _ => 0
   | .evmDeposit v | .evmLog _ v | .forAccum _ v => valMinAccounts v
+  | .forBody _ _ => 0
   | .evmSendEth a b c d =>
       Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
         (Nat.max (valMinAccounts c) (valMinAccounts d))
@@ -460,6 +465,7 @@ def opsMinAccounts (ops : Array Op) : Nat :=
         let here := Nat.max a (opMinAccounts op)
         match op with
         | .ite _ _ _ t f => Nat.max (go fuel' t here) (go fuel' f here)
+        | .forBody _ body => go fuel' body here
         | _ => here
   go 16 ops 0
 
@@ -537,6 +543,7 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
         isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
     | .evmLog _ v => isEvmLeaf v
     | .forAccum _ v => isEvmLeaf v
+    | .forBody _ _ => false
     | .indexSet _ i v _ => isEvmLeaf i || isEvmLeaf v
     | .mapGetU64 a b => isEvmLeaf a || isEvmLeaf b
     | .mapSetU64 a b c => isEvmLeaf a || isEvmLeaf b || isEvmLeaf c
@@ -580,6 +587,7 @@ def hasLangLeaf (ops : Array Op) : Bool :=
         isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d
     | .evmLog _ v => isLangLeaf v
     | .forAccum _ v => isLangLeaf v
+    | .forBody _ _ => false
     | .indexSet _ i v _ => isLangLeaf i || isLangLeaf v
     | .mapGetU64 a b => isLangLeaf a || isLangLeaf b
     | .mapSetU64 a b c => isLangLeaf a || isLangLeaf b || isLangLeaf c
@@ -606,6 +614,9 @@ def hasLangLeaf (ops : Array Op) : Bool :=
 def hasForAccum (ops : Array Op) : Bool :=
   walk 16 ops (fun | .forAccum .. => true | _ => false)
 
+def hasForBody (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .forBody .. => true | _ => false)
+
 def hasIndexSet (ops : Array Op) : Bool :=
   walk 16 ops (fun | .indexSet .. => true | _ => false)
 
@@ -624,7 +635,7 @@ def hasTokenOp (ops : Array Op) : Bool :=
     | _ => false
 
 def hasLangOp (ops : Array Op) : Bool :=
-  hasForAccum ops || hasIndexSet ops || hasErrorNamed ops || hasLangLeaf ops
+  hasForAccum ops || hasForBody ops || hasIndexSet ops || hasErrorNamed ops || hasLangLeaf ops
 
 /-- SVM 还不能发的语言叶：位运算、命名错误。for / index 不算。 -/
 def hasSvmRejectedLang (ops : Array Op) : Bool :=

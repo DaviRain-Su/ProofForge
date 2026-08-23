@@ -155,6 +155,7 @@ private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
         | .okState v | .returnU64 v | .returnState v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .evmDeposit v | .evmLog _ v | .forAccum _ v => valSignerAccs v
+        | .forBody _ _ => #[]
         | .evmSendEth a b c d =>
             valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
         | .indexSet _ i v _ => valSignerAccs i ++ valSignerAccs v
@@ -179,6 +180,7 @@ private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
       let nested :=
         match op with
         | .ite _ _ _ t f => walkSignerAccs fuel' t ++ walkSignerAccs fuel' f
+        | .forBody _ body => walkSignerAccs fuel' body
         | _ => #[]
       acc ++ here ++ nested
 
@@ -875,6 +877,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
           valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
       | .evmLog _ v => valUsesSigner v
       | .forAccum _ v => valUsesSigner v
+      | .forBody _ body => walkUsesSigner fuel' body
       | .indexSet _ i v _ => valUsesSigner i || valUsesSigner v
       | .mapGetU64 a b => valUsesSigner a || valUsesSigner b
       | .mapSetU64 a b c => valUsesSigner a || valUsesSigner b || valUsesSigner c
@@ -1233,8 +1236,29 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
   add64 r1, 1
   stxdw [r10 - 40], r1
   ja {loopLab}
-{doneLab}:
-"
+  {doneLab}:
+  "
+    | .forBody bound body =>
+      let loopLab := s!"loop_{label}_{n}"
+      let doneLab := s!"done_{label}_{n}"
+      n := n + 1
+      let (bodyTxt, n1) ← emitOps p loopLab body n
+      n := n1
+      acc := acc ++
+        s!"\\
+  ; forBody {bound}
+  lddw r1, 0
+  stxdw [r10 - 40], r1
+  {loopLab}:
+  ldxdw r1, [r10 - 40]
+  lddw r2, {bound}
+  jge r1, r2, {doneLab}
+  {bodyTxt}  ldxdw r1, [r10 - 40]
+  add64 r1, 1
+  stxdw [r10 - 40], r1
+  ja {loopLab}
+  {doneLab}:
+  "
     | .indexSet name idx value len =>
       let baseName :=
         if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0" else name
@@ -1421,7 +1445,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitMutBody p label m.ops
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
     else if !(Ops.hasCheckedArith m.ops ||
-        m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | _ => false)) then
+        m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
       let body ← emitMutBody p label m.ops
@@ -1432,7 +1456,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   | .get =>
     if m.ops.any (fun
         | .ite .. => true
-        | .forAccum .. => true
+        | .forAccum .. | .forBody .. => true
         | .returnU64 v => Ops.isLangVal v || match v with | .addU64 .. | .subU64 .. => true | _ => false
         | _ => false) || m.ops.size > 1 then
       let body ← emitMutBody p label m.ops

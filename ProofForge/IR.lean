@@ -169,6 +169,7 @@ def cpiAccountCount (p : Program) : Nat :=
           let m := metas.foldl (init := prog) fun b mt => Nat.max b mt.acc
           Nat.max a m
         | .ite _ _ _ t f => Nat.max (maxIx fuel' t a) (maxIx fuel' f a)
+        | .forBody _ body => maxIx fuel' body a
         | _ => a
   let n := p.methods.foldl (init := 0) fun a m => Nat.max a (maxIx 8 m.ops 0)
   let fromInvoke := if usesCpi p then Nat.max 2 (n + 1) else 0
@@ -318,6 +319,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
     | .evmLog n v => s!"elog.{n}({valCanon v})"
     | .forAccum n v => s!"for({n},{valCanon v})"
+    | .forBody n body => s!"forb({n},[{opsCanon body}])"
     | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
     | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
     | .mapSetU64 b k v => s!"mset({valCanon b},{valCanon k},{valCanon v})"

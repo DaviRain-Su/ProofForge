@@ -81,6 +81,7 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
           valForbidden a || valForbidden b || valForbidden c || valForbidden d
       | .evmLog _ v => valForbidden v
       | .forAccum _ v => valForbidden v
+      | .forBody _ body => walkForbidden fuel' body
       | .indexSet _ i v _ => valForbidden i || valForbidden v
       | .mapGetU64 a b => valForbidden a || valForbidden b
       | .mapSetU64 a b c => valForbidden a || valForbidden b || valForbidden c
@@ -266,6 +267,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
     | .evmLog n v => s!"elog.{n}({valCanon v})"
     | .forAccum n v => s!"for({n},{valCanon v})"
+    | .forBody n body => s!"forb({n},[{opsCanon body}])"
     | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
     | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
     | .mapSetU64 b k v => s!"mset({valCanon b},{valCanon k},{valCanon v})"
