@@ -797,6 +797,13 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | _, _ => none
           | none => none
 
+        else if e.getAppArgs.isEmpty then
+          match env.find? n with
+          | some (.defnInfo info) =>
+            if info.type.consumeMData.getAppFn.constName? == some ``UInt64 then
+              asVal env fuel' info.value
+            else none
+          | _ => none
         else none
       else none
 
@@ -947,6 +954,64 @@ private def asCmp (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val ×
           | none => none
         else none
       else none
+
+/-- Normalize pure Boolean syntax to a 0/1 value so compound guards do not duplicate branches. -/
+private def asBoolVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    let args := e.getAppArgs
+    let last? := if h : args.size > 0 then some args[args.size - 1] else none
+    if isConstNamed e ``Bool.true then some (.lit 1)
+    else if isConstNamed e ``Bool.false then some (.lit 0)
+    else if isConstNamed e ``Bool.or && args.size ≥ 2 then
+      match asBoolVal env fuel' args[args.size - 2]!, asBoolVal env fuel' args[args.size - 1]! with
+      | some lhs, some rhs => some (.bitOr lhs rhs)
+      | _, _ => none
+    else if isConstNamed e ``Bool.and && args.size ≥ 2 then
+      match asBoolVal env fuel' args[args.size - 2]!, asBoolVal env fuel' args[args.size - 1]! with
+      | some lhs, some rhs => some (.bitAnd lhs rhs)
+      | _, _ => none
+    else if isConstNamed e ``Bool.not then
+      last?.bind fun value =>
+        (asBoolVal env fuel' value).map fun v => .select .eq v (.lit 0) (.lit 1) (.lit 0)
+    else if isConstNamed e ``Decidable.decide && args.size ≥ 2 then
+      asBoolVal env fuel' args[args.size - 2]!
+    else if isConstNamed e ``Eq && args.size ≥ 2 then
+      let lhs := strip args[args.size - 2]!
+      let rhs := strip args[args.size - 1]!
+      if isConstNamed rhs ``Bool.true then asBoolVal env fuel' lhs
+      else if isConstNamed lhs ``Bool.true then asBoolVal env fuel' rhs
+      else if isConstNamed rhs ``Bool.false then
+        (asBoolVal env fuel' lhs).map fun v => .select .eq v (.lit 0) (.lit 1) (.lit 0)
+      else if isConstNamed lhs ``Bool.false then
+        (asBoolVal env fuel' rhs).map fun v => .select .eq v (.lit 0) (.lit 1) (.lit 0)
+      else
+        (asCmp env e).map fun (cmp, lhs, rhs) => .select cmp lhs rhs (.lit 1) (.lit 0)
+    else
+      match asCmp env e with
+      | some (cmp, lhs, rhs) => some (.select cmp lhs rhs (.lit 1) (.lit 0))
+      | none =>
+        match e.getAppFn.constName? with
+        | some name =>
+          match env.find? name with
+          | some (.defnInfo info) =>
+            let rec resultType (fuel : Nat) (type : Expr) : Expr :=
+              match fuel with
+              | 0 => type
+              | fuel' + 1 =>
+                match strip type with
+                | .forallE _ _ body _ => resultType fuel' body
+                | type => type
+            if (resultType 16 info.type).getAppFn.constName? == some ``Bool then
+              asBoolVal env fuel' (info.value.beta args)
+            else none
+          | _ => none
+        | none => none
+
+private def asCondition (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
+  asCmp env e <|> (asBoolVal env 16 e).map fun value => (.ne, value, .lit 0)
 
 /-- `x ≥ y` / `y ≤ x`  →  checked sub x y。`x ≤ lit` 是上界（255 / u64Max），不是 sub。 -/
 private def asCheckedSubGuard (env : Environment) (e : Expr) : Option (Ops.Val × Ops.Val) :=
@@ -1540,6 +1605,35 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
     else none
   else none
 
+/-- Scalar `Except.ok` is an intermediate value producer, not a state commit. -/
+private def asOkScalar (env : Environment) (e : Expr) : Option Ops.Val :=
+  let e := peelControl 8 (dropUnusedHeadLets 32 e)
+  if isConstNamed e ``Except.ok then
+    let args := e.getAppArgs
+    if h : args.size > 0 then
+      let payload := strip args[args.size - 1]
+      if isConstNamed payload ``Prod.mk then none else val env payload
+    else none
+  else none
+
+/-- `.ok (s, value)` with the original state is a successful no-op, not an implicit write. -/
+private def asOkNoop (env : Environment) (e : Expr) : Option Ops.Val :=
+  let e := peelControl 8 (dropUnusedHeadLets 32 e)
+  if isConstNamed e ``Except.ok then
+    let args := e.getAppArgs
+    if h : args.size > 0 then
+      let pair := strip args[args.size - 1]
+      if isConstNamed pair ``Prod.mk then
+        let pairArgs := pair.getAppArgs
+        if h : pairArgs.size ≥ 2 then
+          match strip pairArgs[pairArgs.size - 2] with
+          | .bvar _ => val env pairArgs[pairArgs.size - 1]
+          | _ => none
+        else none
+      else none
+    else none
+  else none
+
 private def errorCtorName (e : Expr) : Option String :=
   let e := peelControl 8 e
   if isConstNamed e ``Except.error then
@@ -1920,6 +2014,8 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
     | fuel' + 1 =>
       match op with
       | .letLocal i v => .letLocal i (rewriteLoopIx v)
+      | .joinLocal i => .joinLocal i
+      | .setLocal i v => .setLocal i (rewriteLoopIx v)
       | .checkedAddU64 l r => .checkedAddU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .checkedSubU64 l r => .checkedSubU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .checkedMulU64 l r => .checkedMulU64 (rewriteLoopIx l) (rewriteLoopIx r)
@@ -1982,6 +2078,8 @@ private def rewritePlainLoopOp (op : Ops.Op) : Ops.Op :=
       let rv := rewritePlainLoopIx
       match op with
       | .letLocal i v => .letLocal i (rv v)
+      | .joinLocal i => .joinLocal i
+      | .setLocal i v => .setLocal i (rv v)
       | .checkedAddU64 l r => .checkedAddU64 (rv l) (rv r)
       | .checkedSubU64 l r => .checkedSubU64 (rv l) (rv r)
       | .checkedMulU64 l r => .checkedMulU64 (rv l) (rv r)
@@ -2522,7 +2620,8 @@ private def asYieldStores (env : Environment) (e : Expr) : Option (Array Ops.Op)
     let static := (flattenLeaves env "" state).map fun p => Ops.Op.storeField p.1 p.2
     some (dynamic ++ static)
 
-private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
+private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
+    Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
     .ok (invokeOps inv (invokeRet env e inv))
@@ -2551,9 +2650,13 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     .ok #[.errorOverflow]
   else if let some name := errorCtorName e then
     .ok #[.errorNamed name]
+  else if let some v := (if stateful then none else asOkNoop env e) then
+    .ok #[.returnU64 v]
   else if let some ops := asStoreFields env e then
     .ok ops
   else if let some v := asOkState env e then
+    .ok #[.okState v]
+  else if let some v := asOkScalar env e then
     .ok #[.okState v]
   else if let some vs := asStateFields env e then
     .ok (returnStatesOf vs)
@@ -2614,6 +2717,41 @@ private def shouldMaterializeLocal : Ops.Val → Bool
   | .field .. | .indexGet .. | .select .. => true
   | _ => false
 
+/--
+Turn the terminal successes of a scalar `Except` producer into assignments to one join slot.
+Checked arithmetic already branches to the enclosing error exit, so operations after a terminal
+success are unreachable and must not be copied into the joined path.
+-/
+private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
+    Option (Array Ops.Op × Bool) := Id.run do
+  let mut lowered := #[]
+  let mut hadSuccess := false
+  for op in ops do
+    match op with
+    | .okState value | .returnU64 value =>
+        return some (lowered.push (.setLocal slot value), true)
+    | .errorOverflow | .errorNamed _ =>
+        return some (lowered.push op, false)
+    | .ite cmp lhs rhs thn els =>
+        let some (thn', thnSuccess) := lowerBindProducer slot thn | return none
+        let some (els', elsSuccess) := lowerBindProducer slot els | return none
+        lowered := lowered.push (.ite cmp lhs rhs thn' els')
+        hadSuccess := hadSuccess || thnSuccess || elsSuccess
+    | .letLocal .. | .joinLocal .. | .setLocal ..
+    | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
+    | .checkedDivU64 .. | .checkedModU64 .. =>
+        lowered := lowered.push op
+    | _ => return none
+  return some (lowered, hadSuccess)
+
+private def containsBind (fuel : Nat) (e : Expr) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``Bind.bind || endsWith e ".bind" then true
+      else e.getAppArgs.any (containsBind fuel')
+
 private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     (stateful : Bool := false) (preserveLocals : Bool := false)
     (localDepth : Nat := 0) : Except String (Array Ops.Op) :=
@@ -2656,10 +2794,36 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       else if (unfoldUserHelper env controlled).isSome then controlled
       else e
     let e0 := strip e
+    if (isConstNamed e0 ``Bind.bind || endsWith e0 ".bind") && e0.getAppArgs.size ≥ 2 then
+      let args := e0.getAppArgs
+      let producer := args[args.size - 2]!
+      let continuation := args[args.size - 1]!
+      match strip continuation with
+      | .lam _ ty body _ =>
+        if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
+          match decodeExpr env fuel' producer (preserveLocals := preserveLocals)
+              (localDepth := localDepth + 1) with
+          | .error reason =>
+              return .error s!"extract/unsupported: bind producer: {reason}"
+          | .ok producerOps =>
+            match lowerBindProducer localDepth producerOps with
+            | some (joinedProducer, true) =>
+              let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
+              match decodeExpr env fuel' (body.instantiate1 marker) (stateful := stateful)
+                  (preserveLocals := preserveLocals) (localDepth := localDepth + 1) with
+              | .ok continuationOps =>
+                  return .ok (#[.joinLocal localDepth] ++ joinedProducer ++ continuationOps)
+              | .error reason =>
+                  return .error s!"extract/unsupported: bind continuation: {reason}"
+            | _ =>
+                return .error "extract/unsupported: bind producer is not a scalar control value"
+        else
+          pure ()
+      | _ => pure ()
     let stateLoop? : Option (Except String (Array Ops.Op)) :=
       -- State-loop callbacks capture scalar outer lets by value, while their mutable state binder
       -- must remain visible so `findForStateExpr` can distinguish them from ordinary loops.
-      match findForStateExpr env (substUInt64Lets 256 e) with
+      if containsBind 64 e then none else match findForStateExpr env (substUInt64Lets 256 e) with
       | none => none
       | some (n, bodyE, continuation) =>
         match decodeExpr env fuel' bodyE (stateful := true)
@@ -2667,7 +2831,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         | .error reason => some (.error s!"extract/unsupported: state loop body: {reason}")
         | .ok bodyOps =>
           if Ops.hasStoreField bodyOps || Ops.hasIndexSet bodyOps then
-            match decodeExpr env fuel' continuation (preserveLocals := preserveLocals)
+            match decodeExpr env fuel' continuation (stateful := true)
+                (preserveLocals := preserveLocals)
                 (localDepth := localDepth) with
             | .error reason =>
               match findOkRet env continuation with
@@ -2927,7 +3092,18 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | .ok thn => return .ok #[.ite cmp lv rv thn #[]]
           | .error r => return .error s!"extract/unsupported: forBody then {r}"
         let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
-          | return .error s!"extract/unsupported: ite cond: {args[args.size - 4]!}"
+          | match asCondition env args[args.size - 4]! with
+            | some condition =>
+              match decodeExpr env fuel' t (stateful := stateful)
+                    (preserveLocals := preserveLocals) (localDepth := localDepth),
+                  decodeExpr env fuel' f (stateful := stateful)
+                    (preserveLocals := preserveLocals) (localDepth := localDepth) with
+              | .ok thn, .ok els => return .ok #[.ite condition.1 condition.2.1 condition.2.2 thn els]
+              | .error r, _ =>
+                return .error (if stateful then s!"state loop then: {r}" else s!"ite then: {r}")
+              | _, .error r =>
+                return .error (if stateful then s!"state loop else: {r}" else s!"ite else: {r}")
+            | none => return .error s!"extract/unsupported: ite cond: {args[args.size - 4]!}"
         let some (cmp, lv, rv) := asCmp env condE
           | return .error s!"extract/unsupported: ite cond: {condE}"
         match decodeExpr env fuel' t (stateful := stateful)
@@ -2936,9 +3112,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               (preserveLocals := preserveLocals) (localDepth := localDepth) with
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ =>
-          return .error (if stateful then s!"state loop then: {r}" else r)
+          return .error (if stateful then s!"state loop then: {r}" else s!"ite then: {r}")
         | _, .error r =>
-          return .error (if stateful then s!"state loop else: {r}" else r)
+          return .error (if stateful then s!"state loop else: {r}" else s!"ite else: {r}")
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
@@ -2993,7 +3169,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             | .error _ => #[.returnU64 payload]
         return .ok #[.ite .eq tag (.lit 0) noneOps someOps]
     else
-      return decodePlain env e
+      return decodePlain env e stateful
 
 def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false) :
     Except String (Array Ops.Op) :=
@@ -3072,9 +3248,16 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
   -- Inline entry helpers can own the source loop, so the entry body itself need not expose
   -- `ForIn.forIn`. Explicit stores in the decoded loop distinguish state-carrying loops from
   -- accumulator/early-return loops and are the authoritative post-inline signal.
-  let stateLoop := ops0.any fun
-    | .forBody _ body => Ops.hasStoreField body || Ops.hasIndexSet body
-    | _ => false
+  let rec hasStateLoop (fuel : Nat) (ops : Array Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      ops.any fun
+        | .forBody _ body =>
+            Ops.hasStoreField body || Ops.hasIndexSet body || hasStateLoop fuel' body
+        | .ite _ _ _ thn els => hasStateLoop fuel' thn || hasStateLoop fuel' els
+        | _ => false
+  let stateLoop := hasStateLoop 16 ops0
   let rec capturedStateArg (fuel : Nat) (v : Ops.Val) : Nat :=
     match fuel with
     | 0 => 0
@@ -3128,6 +3311,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       let nv := normalizeStateLoopVal fuel'
       match op with
       | .letLocal i v => .letLocal i (nv v)
+      | .joinLocal i => .joinLocal i
+      | .setLocal i v => .setLocal i (nv v)
       | .checkedAddU64 l r => .checkedAddU64 (nv l) (nv r)
       | .checkedSubU64 l r => .checkedSubU64 (nv l) (nv r)
       | .checkedMulU64 l r => .checkedMulU64 (nv l) (nv r)
@@ -3207,6 +3392,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | fuel' + 1 =>
       match op with
       | .letLocal i v => .letLocal i (flipVal fuel' v)
+      | .joinLocal i => .joinLocal i
+      | .setLocal i v => .setLocal i (flipVal fuel' v)
       | .returnState v => .returnState (flipVal fuel' v)
       | .returnU64 v => .returnU64 (flipVal fuel' v)
       | .storeField n v => .storeField n (flipVal fuel' v)
@@ -3483,6 +3670,8 @@ private def valFields : Ops.Val → Array String
 
 private def opFields : Ops.Op → Array String
   | .letLocal _ v => valFields v
+  | .joinLocal _ => #[]
+  | .setLocal _ v => valFields v
   | .checkedAddU64 l r => valFields l ++ valFields r
   | .checkedSubU64 l r => valFields l ++ valFields r
   | .checkedMulU64 l r => valFields l ++ valFields r
@@ -3549,6 +3738,8 @@ private def fillElemOff (p : Core.IR.Program) : Core.IR.Program :=
     | fuel' + 1 =>
       match op with
       | .letLocal i v => .letLocal i (goVal 8 v)
+      | .joinLocal i => .joinLocal i
+      | .setLocal i v => .setLocal i (goVal 8 v)
       | .indexSet n i v k off =>
           let leaf := Svm.ABI.vectorLeafName p n off
           let off' :=
@@ -3595,6 +3786,8 @@ private partial def valEscapedArg (limit : Nat) : Ops.Val → Option Nat
 
 private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .letLocal _ v => valEscapedArg limit v
+  | .joinLocal _ => none
+  | .setLocal _ v => valEscapedArg limit v
   | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
   | .checkedDivU64 l r | .checkedModU64 l r =>
       #[l, r].findSome? (valEscapedArg limit)

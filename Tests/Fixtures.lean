@@ -137,4 +137,22 @@ def choose (s : ChoiceState) (lhs rhs : UInt64) :
 def getChosen (s : ChoiceState) : UInt64 :=
   s.chosen
 
+/-- A fallible scalar producer with two successful paths and one terminal error. -/
+private def chooseBelow (lhs rhs limit : UInt64) : Except Examples.Counter.Error UInt64 :=
+  if lhs < limit then .ok lhs
+  else if rhs < limit then .ok rhs
+  else .error .overflow
+
+attribute [pf_inline] chooseBelow
+
+/-- The successful producer value must join before this mutation continuation. -/
+def bindChoice (s : ChoiceState) (lhs rhs limit delta : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) := do
+  let chosen ← chooseBelow lhs rhs limit
+  if chosen ≤ Examples.Counter.u64Max - delta then
+    let total := chosen + delta
+    .ok ({ s with chosen := total }, total)
+  else
+    .error .overflow
+
 end Tests.Fixtures

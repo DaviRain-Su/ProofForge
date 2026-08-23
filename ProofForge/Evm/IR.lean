@@ -9,6 +9,8 @@ open ProofForge.Crypto
 /-- EVM instructions are owned by the EVM lowering boundary, not by the frontend Ops enum. -/
 inductive Op where
   | letLocal (i : Nat) (value : Ops.Val)
+  | joinLocal (i : Nat)
+  | setLocal (i : Nat) (value : Ops.Val)
   | checkedAddU64 (lhs rhs : Ops.Val)
   | checkedSubU64 (lhs rhs : Ops.Val)
   | checkedMulU64 (lhs rhs : Ops.Val)
@@ -39,6 +41,8 @@ inductive Op where
 
 private partial def lowerOp : Ops.Op → Except String Op
   | .letLocal i value => pure (.letLocal i value)
+  | .joinLocal i => pure (.joinLocal i)
+  | .setLocal i value => pure (.setLocal i value)
   | .checkedAddU64 lhs rhs => pure (.checkedAddU64 lhs rhs)
   | .checkedSubU64 lhs rhs => pure (.checkedSubU64 lhs rhs)
   | .checkedMulU64 lhs rhs => pure (.checkedMulU64 lhs rhs)
@@ -249,6 +253,8 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
     ops.any fun
       | .invoke .. => true
       | .letLocal _ v => valForbidden v
+      | .joinLocal _ => false
+      | .setLocal _ v => valForbidden v
       | .checkedAddU64 l r => valForbidden l || valForbidden r
       | .checkedSubU64 l r => valForbidden l || valForbidden r
       | .checkedMulU64 l r => valForbidden l || valForbidden r
@@ -483,6 +489,8 @@ private partial def opsCanon (ops : Array Op) : String :=
   let rec one (op : Op) : String :=
     match op with
     | .letLocal i v => s!"let.{i}({valCanon v})"
+    | .joinLocal i => s!"join.{i}"
+    | .setLocal i v => s!"set.{i}({valCanon v})"
     | .checkedAddU64 l r => s!"add({valCanon l},{valCanon r})"
     | .checkedSubU64 l r => s!"sub({valCanon l},{valCanon r})"
     | .checkedMulU64 l r => s!"mul({valCanon l},{valCanon r})"

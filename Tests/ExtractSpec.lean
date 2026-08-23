@@ -152,6 +152,50 @@ elab "#pf_guard_conditional_local" : command => do
 
 #pf_guard_conditional_local
 
+elab "#pf_guard_except_bind_join" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initChoice
+        ``Tests.Fixtures.bindChoice ``Tests.Fixtures.getChosen with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some bindChoice := program.methods.find? (·.ixName == "bindChoice")
+    | throwError "missing bind-join method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .joinLocal 0,
+    .ite .lt (.arg 0) (.arg 2)
+      #[.setLocal 0 (.arg 0)]
+      #[.ite .lt (.arg 1) (.arg 2)
+          #[.setLocal 0 (.arg 1)]
+          #[.errorOverflow]],
+    .checkedAddU64 (.local 0) (.arg 3),
+    .okState (.addU64 (.local 0) (.arg 3)),
+    .errorOverflow
+  ]
+  unless bindChoice.ops == expected do
+    throwError s!"Except.bind join IR mismatch: {repr bindChoice.ops}"
+  let svm ←
+    match ProofForge.Svm.Emit.emitCounterAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmProgram ←
+    match ProofForge.Evm.IR.fromProgram program with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.Emit.emitYul evmProgram with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless svm.contains "; declare join local 0" &&
+      svm.contains "; set join local 0" && svm.contains "; load local 0" do
+    throwError "SVM Except.bind join lowering is missing"
+  unless evm.contains "let l0 := 0" && evm.contains "l0 := arg0" &&
+      evm.contains "l0 := arg1" &&
+      evm.contains "if gt(l0, sub(0xffffffffffffffff, arg3))" do
+    throwError "EVM Except.bind join lowering is missing"
+
+#pf_guard_except_bind_join
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 
 #pf_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag

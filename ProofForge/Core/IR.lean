@@ -203,6 +203,8 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
   let rec one (op : Ops.Op) : String :=
     match op with
     | .letLocal i v => s!"let.{i}({valCanon v})"
+    | .joinLocal i => s!"join.{i}"
+    | .setLocal i v => s!"set.{i}({valCanon v})"
     | .checkedAddU64 l r => s!"add({valCanon l},{valCanon r})"
     | .checkedSubU64 l r => s!"sub({valCanon l},{valCanon r})"
     | .checkedMulU64 l r => s!"mul({valCanon l},{valCanon r})"

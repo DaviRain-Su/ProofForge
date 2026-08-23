@@ -92,6 +92,10 @@ inductive CpiWord where
 
 inductive Op where
   | letLocal (i : Nat) (value : Val)
+  /-- Declare a scalar slot before control flow whose successful paths assign it. -/
+  | joinLocal (i : Nat)
+  /-- Assign a previously declared join slot without introducing branch-local scope. -/
+  | setLocal (i : Nat) (value : Val)
   | checkedAddU64 (lhs rhs : Val)
   | checkedSubU64 (lhs rhs : Val)
   | checkedMulU64 (lhs rhs : Val)
@@ -387,6 +391,8 @@ def valMinAccounts : Val → Nat
 def hasAcc1 (ops : Array Op) : Bool :=
   walk 16 ops fun
     | .letLocal _ v => valNeedsAcc1 v
+    | .joinLocal _ => false
+    | .setLocal _ v => valNeedsAcc1 v
     | .checkedAddU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
     | .checkedSubU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
     | .checkedMulU64 l r => valNeedsAcc1 l || valNeedsAcc1 r
@@ -438,6 +444,8 @@ private def maxValAccounts (l r : Val) : Nat :=
 
 def opMinAccounts : Op → Nat
   | .letLocal _ v => valMinAccounts v
+  | .joinLocal _ => 0
+  | .setLocal _ v => valMinAccounts v
   | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
   | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ => maxValAccounts l r
   | .invoke _ _ data _ bump =>
@@ -588,6 +596,8 @@ private def cpiWordEvm : CpiWord → Bool
 def hasEvmLeaf (ops : Array Op) : Bool :=
   walk 16 ops fun
     | .letLocal _ v => isEvmLeaf v
+    | .joinLocal _ => false
+    | .setLocal _ v => isEvmLeaf v
     | .checkedAddU64 l r => isEvmLeaf l || isEvmLeaf r
     | .checkedSubU64 l r => isEvmLeaf l || isEvmLeaf r
     | .checkedMulU64 l r => isEvmLeaf l || isEvmLeaf r
@@ -634,6 +644,8 @@ private def cpiWordLang : CpiWord → Bool
 def hasLangLeaf (ops : Array Op) : Bool :=
   walk 16 ops fun
     | .letLocal _ v => isLangLeaf v
+    | .joinLocal _ => false
+    | .setLocal _ v => isLangLeaf v
     | .checkedAddU64 l r => isLangLeaf l || isLangLeaf r
     | .checkedSubU64 l r => isLangLeaf l || isLangLeaf r
     | .checkedMulU64 l r => isLangLeaf l || isLangLeaf r
@@ -676,6 +688,8 @@ def hasLangLeaf (ops : Array Op) : Bool :=
 def hasSelect (ops : Array Op) : Bool :=
   walk 16 ops fun
     | .letLocal _ v => hasSelectVal v
+    | .joinLocal _ => false
+    | .setLocal _ v => hasSelectVal v
     | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
     | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
         hasSelectVal l || hasSelectVal r
@@ -737,6 +751,8 @@ def hasSvmRejectedLang (ops : Array Op) : Bool :=
   hasErrorNamed ops ||
     walk 16 ops (fun
       | .letLocal _ v => isBitVal v
+      | .joinLocal _ => false
+      | .setLocal _ v => isBitVal v
       | .returnU64 v | .okState v | .returnState v | .storeField _ v => isBitVal v
       | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
       | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>

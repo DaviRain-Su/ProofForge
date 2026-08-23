@@ -170,6 +170,9 @@ private partial def eventsFor (schema : Schema) (ops : Array Ops.Op) :
     match op with
     | .letLocal i value =>
         events := events.push (.letValue i value)
+    | .joinLocal _ => pure ()
+    | .setLocal i value =>
+        events := events.push (.letValue i value)
     | .ite cmp lhs rhs thenOps elseOps =>
         let thenEvents ← eventsFor schema thenOps
         let elseEvents ← eventsFor schema elseOps

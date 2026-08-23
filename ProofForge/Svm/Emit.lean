@@ -158,6 +158,8 @@ private def walkSignerAccs (fuel : Nat) (ops : Array IR.Op) : Array Nat :=
       let here :=
         match op with
         | .letLocal _ v => valSignerAccs v
+        | .joinLocal _ => #[]
+        | .setLocal _ v => valSignerAccs v
         | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
         | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
             valSignerAccs l ++ valSignerAccs r
@@ -899,6 +901,8 @@ private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
   | fuel' + 1 =>
     ops.any fun
       | .letLocal _ v => valUsesSigner v
+      | .joinLocal _ => false
+      | .setLocal _ v => valUsesSigner v
       | .checkedAddU64 l r => valUsesSigner l || valUsesSigner r
       | .checkedSubU64 l r => valUsesSigner l || valUsesSigner r
       | .checkedMulU64 l r => valUsesSigner l || valUsesSigner r
@@ -1143,18 +1147,18 @@ private def jmpIf (cmp : Ops.Cmp) (thenLab : String) : String :=
   | .gt => s!"  jgt r1, r2, {thenLab}\n"
   | .ge => s!"  jge r1, r2, {thenLab}\n"
 
-private def emitArithOp (label : String) (kind : String) : String :=
+private def emitArithOp (errorLabel opLabel : String) (kind : String) : String :=
   match kind with
   | "add" =>
-      s!"  lddw r3, 0xffffffffffffffff\n  sub64 r3, r2\n  jgt r1, r3, err_{label}\n  mov64 r4, r1\n  add64 r4, r2\n"
+      s!"  lddw r3, 0xffffffffffffffff\n  sub64 r3, r2\n  jgt r1, r3, err_{errorLabel}\n  mov64 r4, r1\n  add64 r4, r2\n"
   | "sub" =>
-      s!"  jlt r1, r2, err_{label}\n  mov64 r4, r1\n  sub64 r4, r2\n"
+      s!"  jlt r1, r2, err_{errorLabel}\n  mov64 r4, r1\n  sub64 r4, r2\n"
   | "mul" =>
-      s!"  lddw r3, 0xffffffffffffffff\n  jeq r2, 0, mul_ok_{label}\n  div64 r3, r2\n  jgt r1, r3, err_{label}\nmul_ok_{label}:\n  mov64 r4, r1\n  mul64 r4, r2\n"
+      s!"  lddw r3, 0xffffffffffffffff\n  jeq r2, 0, mul_ok_{opLabel}\n  div64 r3, r2\n  jgt r1, r3, err_{errorLabel}\nmul_ok_{opLabel}:\n  mov64 r4, r1\n  mul64 r4, r2\n"
   | "div" =>
-      s!"  jeq r2, 0, err_{label}\n  mov64 r4, r1\n  div64 r4, r2\n"
+      s!"  jeq r2, 0, err_{errorLabel}\n  mov64 r4, r1\n  div64 r4, r2\n"
   | "mod" =>
-      s!"  jeq r2, 0, err_{label}\n  mov64 r4, r1\n  mod64 r4, r2\n"
+      s!"  jeq r2, 0, err_{errorLabel}\n  mov64 r4, r1\n  mod64 r4, r2\n"
   | _ => ""
 
 private partial def emitOps (p : IR.Program) (label errorLabel : String)
@@ -1181,45 +1185,63 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       n := n + 1
       acc := acc ++ load ++
         s!"  ldxdw r1, [r10 - 8]\n  stxdw [r10 - {localOff}], r1\n"
+    | .joinLocal i =>
+      let localOff := 320 + i * 8
+      if localOff > 504 then
+        throw "extract/unsupported: too many scalar locals"
+      acc := acc ++ s!"  ; declare join local {i}\n  lddw r1, 0\n  stxdw [r10 - {localOff}], r1\n"
+    | .setLocal i value =>
+      let localOff := 320 + i * 8
+      if localOff > 504 then
+        throw "extract/unsupported: too many scalar locals"
+      let load ← loadVal p value 8 n s!"{label}_{n}_join_{i}"
+      n := n + 1
+      acc := acc ++ load ++
+        s!"  ; set join local {i}\n  ldxdw r1, [r10 - 8]\n  stxdw [r10 - {localOff}], r1\n"
     | .checkedAddU64 l r =>
+      let arithLabel := s!"{label}_{n}"
       let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
       let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp errorLabel "add" ++
+        emitArithOp errorLabel arithLabel "add" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedSubU64 l r =>
+      let arithLabel := s!"{label}_{n}"
       let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
       let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp errorLabel "sub" ++
+        emitArithOp errorLabel arithLabel "sub" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedMulU64 l r =>
+      let arithLabel := s!"{label}_{n}"
       let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
       let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp errorLabel "mul" ++
+        emitArithOp errorLabel arithLabel "mul" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedDivU64 l r =>
+      let arithLabel := s!"{label}_{n}"
       let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
       let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp errorLabel "div" ++
+        emitArithOp errorLabel arithLabel "div" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedModU64 l r =>
+      let arithLabel := s!"{label}_{n}"
       let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
       let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp errorLabel "mod" ++
+        emitArithOp errorLabel arithLabel "mod" ++
         "  stxdw [r10 - 24], r4\n"
     | .ite cmp l r thn els =>
       let loadL ← loadVal p l 8 n s!"{label}_{n}_l"

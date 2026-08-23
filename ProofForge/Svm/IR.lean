@@ -6,6 +6,8 @@ namespace ProofForge.Svm.IR
 /-- SVM instructions are lowered separately from the frontend compatibility Ops. -/
 inductive Op where
   | letLocal (i : Nat) (value : Ops.Val)
+  | joinLocal (i : Nat)
+  | setLocal (i : Nat) (value : Ops.Val)
   | checkedAddU64 (lhs rhs : Ops.Val)
   | checkedSubU64 (lhs rhs : Ops.Val)
   | checkedMulU64 (lhs rhs : Ops.Val)
@@ -27,6 +29,8 @@ inductive Op where
 
 private partial def lowerOp : Ops.Op → Except String Op
   | .letLocal i value => pure (.letLocal i value)
+  | .joinLocal i => pure (.joinLocal i)
+  | .setLocal i value => pure (.setLocal i value)
   | .checkedAddU64 lhs rhs => pure (.checkedAddU64 lhs rhs)
   | .checkedSubU64 lhs rhs => pure (.checkedSubU64 lhs rhs)
   | .checkedMulU64 lhs rhs => pure (.checkedMulU64 lhs rhs)
@@ -59,6 +63,8 @@ def ofSourceOps (ops : Array Ops.Op) : Except String (Array Op) :=
 
 private partial def Op.toSource : Op → Ops.Op
   | .letLocal i value => .letLocal i value
+  | .joinLocal i => .joinLocal i
+  | .setLocal i value => .setLocal i value
   | .checkedAddU64 lhs rhs => .checkedAddU64 lhs rhs
   | .checkedSubU64 lhs rhs => .checkedSubU64 lhs rhs
   | .checkedMulU64 lhs rhs => .checkedMulU64 lhs rhs

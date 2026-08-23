@@ -420,6 +420,13 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount value st
         st := { st' with last := some s!"l{i}" }
         acc := acc ++ pre ++ indent ++ s!"let l{i} := {valueExpr}" ++ nl
+    | .joinLocal i =>
+        st := { st with last := none }
+        acc := acc ++ indent ++ s!"let l{i} := 0" ++ nl
+    | .setLocal i value =>
+        let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount value st
+        st := { st' with last := some s!"l{i}" }
+        acc := acc ++ pre ++ indent ++ s!"l{i} := {valueExpr}" ++ nl
     | .checkedAddU64 l r =>
         let lv ← loadVal p paramPrefix paramCount l
         let rv ← loadVal p paramPrefix paramCount r
