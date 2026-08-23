@@ -33,7 +33,7 @@ private def usage : String :=
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
-    "No program names means every registered source module (svm) or Golden fixture (evm).\n"
+    "No program names means every registered source module for the selected target.\n"
 
 private def parseArgs (args : List String) : Except String Options :=
   let rec go (rest : List String) (o : Options) : Except String Options :=
@@ -101,13 +101,37 @@ private unsafe def extractSvmPrograms (names : Array String) :
   catch e =>
     return .error s!"source import failed: {e}"
 
-private def selectEvm (names : Array String) : Except String (Array ProofForge.Evm.IR.Program) :=
-  if names.isEmpty then .ok ProofForge.Evm.Golden.programs
+private def evmFixtureNames : Array String :=
+  ProofForge.Evm.Golden.programs.map (·.name)
+
+private def selectEvmNames (names : Array String) : Except String (Array String) :=
+  if names.isEmpty then .ok evmFixtureNames
   else
     names.mapM fun n =>
-      match ProofForge.Evm.Golden.programs.find? (·.name == n) with
-      | some p => .ok p
+      match evmFixtureNames.find? (· == n) with
+      | some _ => .ok n
       | none => .error s!"unknown evm program {n}"
+
+private unsafe def extractEvmPrograms (names : Array String) :
+    IO (Except String (Array ProofForge.Evm.IR.Program)) :=
+  try
+    Lean.initSearchPath (← Lean.findSysroot)
+    Lean.enableInitializersExecution
+    let moduleName (name : String) := Lean.Name.str `Examples name
+    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let env ← Lean.importModules modules {} (loadExts := true)
+    return names.mapM fun name =>
+      match Extract.extractModuleIR env (moduleName name) none >>= Evm.IR.fromExtracted with
+      | .error reason => .error s!"{name}: {reason}"
+      | .ok program =>
+        let digest := Evm.IR.digestHex program
+        match Evm.Golden.digestOf name with
+        | some expected =>
+          if digest == expected then .ok program
+          else .error s!"{name}: ir/mismatch: extracted evm digest != fixture"
+        | none => .ok program
+  catch e =>
+    return .error s!"source import failed: {e}"
 
 unsafe def run (args : List String) : IO UInt32 := do
   match parseArgs args with
@@ -137,16 +161,21 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
           return 0
     | .evm =>
-      match selectEvm opts.names with
+      match selectEvmNames opts.names with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok programs =>
-        IO.FS.createDirAll opts.outDir
-        for program in programs do
-          let r ← ProofForge.Evm.Assemble.assembleProgram opts.outDir program
-          IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes)"
-        return 0
+      | .ok names =>
+        match ← extractEvmPrograms names with
+        | .error reason =>
+          IO.eprintln s!"pf: {reason}"
+          return 1
+        | .ok programs =>
+          IO.FS.createDirAll opts.outDir
+          for program in programs do
+            let r ← ProofForge.Evm.Assemble.assembleProgram opts.outDir program
+            IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes)"
+          return 0
 
 end ProofForge.Cli
 
