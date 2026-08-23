@@ -998,6 +998,154 @@ private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val
   let acc := collect 8 e
   if acc.isEmpty then none else some acc
 
+/-- 用户记录构造子的显式字段（丢掉类型参数 / 证明）。 -/
+private def userCtorFields (env : Environment) (e : Expr) : Option (Array Expr) :=
+  let e := peelLets (strip e)
+  match e.getAppFn.constName? with
+  | none => none
+  | some n =>
+    match env.find? n with
+    | some (.ctorInfo c) =>
+      if isUserType env c.induct && isStructure env c.induct then
+        let args := e.getAppArgs
+        if args.size ≥ c.numFields then
+          some (args.extract (args.size - c.numFields) args.size)
+        else none
+      else none
+    | _ => none
+
+private def looksUnchangedField (v : Ops.Val) (leaf : String) : Bool :=
+  match v with
+  | .field _ n =>
+    n == leaf || n.endsWith ("_" ++ leaf) || leaf.endsWith ("_" ++ n)
+  | _ => false
+
+/-- 把一个值摊成账户叶。`Vector.set` / 嵌套 `with` 只展开被改的那些。 -/
+private partial def flattenLeaves (env : Environment) (base : String) (e : Expr) :
+    Array (String × Ops.Val) :=
+  let e := peelLets (strip e)
+  if isConstNamed e ``Vector.set || endsWith e ".set" then
+    let args := e.getAppArgs
+    -- `Vector.set α n xs i v h`：第一个字面量是长度，第二个是下标。
+    -- 长度之后的第一个非字面量是旧向量，两下标之后才是新元素。
+    let parsed :=
+      Id.run do
+        let mut nLits : Nat := 0
+        let mut xs? : Option Expr := none
+        let mut idx? : Option Nat := none
+        let mut payload? : Option Expr := none
+        for a in args do
+          if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
+            pure ()
+          else
+            match asLit 8 a with
+            | some (.lit n) =>
+              if nLits == 0 then
+                nLits := 1
+              else if nLits == 1 then
+                nLits := 2
+                idx? := some n.toNat
+              else
+                pure ()
+            | some _ =>
+              pure ()
+            | none =>
+              if nLits == 1 && xs?.isNone then
+                xs? := some (peelLets (strip a))
+              else if nLits ≥ 2 && payload?.isNone then
+                payload? := some (peelLets (strip a))
+        return (idx?, xs?, payload?)
+    match parsed with
+    | (some i, xs?, some payload) =>
+      let pre := if base.isEmpty then s!"{i}" else s!"{base}_{i}"
+      let here := flattenLeaves env pre payload
+      let here :=
+        if here.isEmpty then
+          match val env payload with
+          | some v => #[(pre, v)]
+          | none => #[]
+        else here
+      let prev :=
+        match xs? with
+        | some xs => flattenLeaves env base xs
+        | none => #[]
+      prev ++ here
+    | _ => #[]
+  else if let some fields := userCtorFields env e then
+    match e.getAppFn.constName? with
+    | none => #[]
+    | some n =>
+      match env.find? n with
+      | some (.ctorInfo c) =>
+        let names := getStructureFields env c.induct
+        Id.run do
+          let mut acc : Array (String × Ops.Val) := #[]
+          for i in [0:fields.size] do
+            if h : i < names.size ∧ i < fields.size then
+              let fname := names[i].toString
+              let child := if base.isEmpty then fname else s!"{base}_{fname}"
+              let arg := fields[i]
+              let nested := flattenLeaves env child arg
+              if !nested.isEmpty then
+                acc := acc ++ nested.filter fun p => !looksUnchangedField p.2 p.1
+              else
+                match asOptionPayload env arg with
+                | some (.lit 0) =>
+                  acc := acc.push (s!"{child}_tag", .lit 0) |>.push (s!"{child}_p0", .lit 0)
+                | some v =>
+                  acc := acc.push (s!"{child}_tag", .lit 1) |>.push (s!"{child}_p0", v)
+                | none =>
+                  match val env arg with
+                  | some v =>
+                    unless looksUnchangedField v child || looksUnchangedField v fname do
+                      acc := acc.push (child, v)
+                  | none =>
+                    if isConstNamed arg ``Bool.true || endsWith arg ".true" then
+                      acc := acc.push (child, .lit 1)
+                    else if isConstNamed arg ``Bool.false || endsWith arg ".false" then
+                      acc := acc.push (child, .lit 0)
+                    else
+                      match arg.getAppFn.constName? with
+                      | some ctor =>
+                        match env.find? ctor with
+                        | some (.ctorInfo info) =>
+                          match enumCtorIndex env info.induct ctor with
+                          | some k => acc := acc.push (child, .lit (UInt64.ofNat k))
+                          | none => pure ()
+                        | _ => pure ()
+                      | none =>
+                        match asLit 8 arg with
+                        | some v => acc := acc.push (child, v)
+                        | none => pure ()
+          acc
+      | _ => #[]
+  else
+    match val env e with
+    | some v =>
+      if base.isEmpty || looksUnchangedField v base then #[] else #[(base, v)]
+    | none => #[]
+
+/-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
+private def asStoreFields (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  let e := peelLets (strip e)
+  if isConstNamed e ``Except.ok then
+    let args := e.getAppArgs
+    if args.size ≥ 1 then
+      let pair := strip args[args.size - 1]!
+      if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
+        let st := pair.getAppArgs[pair.getAppArgs.size - 2]!
+        let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
+        let leaves := flattenLeaves env "" st
+        if leaves.size ≤ 1 then none
+        else
+          match val env ret with
+          | none => none
+          | some rv =>
+            some ((leaves.map fun p => Ops.Op.storeField p.1 p.2).push (.okState rv))
+      else none
+    else none
+  else none
+
 private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := peelLets (strip e)
   if isConstNamed e ``Except.ok then
@@ -1436,6 +1584,7 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
             | .u64le v => .u64le (rewriteLoopIx v)
             | w => w) seed (bump.map rewriteLoopIx)
       | .indexSet n i v k => .indexSet n (rewriteLoopIx i) (rewriteLoopIx v) k
+      | .storeField n v => .storeField n (rewriteLoopIx v)
       | .okState v => .okState (rewriteLoopIx v)
       | .returnU64 v => .returnU64 (rewriteLoopIx v)
       | .returnState v => .returnState (rewriteLoopIx v)
@@ -1817,6 +1966,8 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
   let e := peelLets (strip e)
   if let some name := errorCtorName e then
     .ok #[.errorNamed name]
+  else if let some ops := asStoreFields env e then
+    .ok ops
   else if let some v := asOkState env e then
     .ok #[.okState v]
   else if let some vs := asStateFields env e then
@@ -1903,30 +2054,33 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let f := peelProofLam 4 args[args.size - 1]!
       if isErrorOverflow f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asOkState env t,
-              decodeExpr env fuel' t with
-          | some (.ne, .lit 0, .lit 1), some inv, _, _, _ =>
+          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asStoreFields env t,
+              asOkState env t, decodeExpr env fuel' t with
+          | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _ =>
             return .ok (invokeOps inv (invokeRet env t inv))
-          | some (.ne, .lit 1, .lit 0), some inv, _, _, _ =>
+          | some (.ne, .lit 1, .lit 0), some inv, _, _, _, _ =>
             return .ok (invokeOps inv (invokeRet env t inv))
-          | some (cmp, lv, rv), some inv, _, _, _ =>
+          | some (cmp, lv, rv), some inv, _, _, _, _ =>
             return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
-          | some (cmp, lv, rv), none, some evmOps, _, _ =>
+          | some (cmp, lv, rv), none, some evmOps, _, _, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some (cmp, lv, rv), none, none, some v, _ =>
+          | some (cmp, lv, rv), none, none, some stores, _, _ =>
+            return .ok #[.ite cmp lv rv stores #[.errorOverflow]]
+          | some (cmp, lv, rv), none, none, none, some v, _ =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
-          | some (cmp, lv, rv), none, none, none, .ok thn =>
+          | some (cmp, lv, rv), none, none, none, none, .ok thn =>
             match decodeExpr env fuel' f with
             | .ok els => return .ok #[.ite cmp lv rv thn els]
             | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
-          | _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
-          match asCheckedAddGuard env condE, decodeEvmEffect env t, decodeExpr env fuel' t, asOkState env t with
-          | some _, some evmOps, _, _ =>
+          match asCheckedAddGuard env condE, decodeEvmEffect env t, decodeExpr env fuel' t,
+              asStoreFields env t, asOkState env t with
+          | some _, some evmOps, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some (lhs, rhs), none, .ok thn, _ =>
+          | some (lhs, rhs), none, .ok thn, _, _ =>
             -- then 支可以再套比较 / CPI。先做 checked-add，再跑内层。
             -- 内层若只是 okState，仍压成旧的三连。
             match thn.toList with
@@ -1935,35 +2089,41 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
               return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
             | _ =>
               return .ok (#[.checkedAddU64 lhs rhs] ++ thn)
-          | some (lhs, rhs), none, .error _, some v =>
+          | some (lhs, rhs), none, .error _, some stores, _ =>
+            return .ok (#[.checkedAddU64 lhs rhs] ++ stores)
+          | some (lhs, rhs), none, .error _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
-          | _, _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedMulGuard env a).isSome) then
-          match asCheckedMulGuard env condE, asOkState env t with
-          | some (lhs, rhs), some v =>
+          match asCheckedMulGuard env condE, asStoreFields env t, asOkState env t with
+          | some (lhs, rhs), some stores, _ =>
+            return .ok (#[.checkedMulU64 lhs rhs] ++ stores)
+          | some (lhs, rhs), none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
-          | _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedSubGuard env a).isSome) then
           match asCheckedSubGuard env condE, findInvoke env 8 t, decodeEvmEffect env t,
-              decodeExpr env fuel' t, decodeExpr env fuel' f, asOkState env t with
-          | some _, some inv, _, _, _, _ =>
+              decodeExpr env fuel' t, decodeExpr env fuel' f, asStoreFields env t, asOkState env t with
+          | some _, some inv, _, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
-          | some _, none, some evmOps, _, _, _ =>
+          | some _, none, some evmOps, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some _, none, none, .ok thn, .ok els, _ =>
+          | some _, none, none, .ok thn, .ok els, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv thn els]
-          | some (lhs, rhs), none, none, _, _, some v =>
+          | some (lhs, rhs), none, none, _, _, some stores, _ =>
+            return .ok (#[.checkedSubU64 lhs rhs] ++ stores)
+          | some (lhs, rhs), none, none, _, _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedSubU64 lhs rhs, .okState dest, .errorOverflow]
-          | _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asNeZero env a).isSome) then
           match asNeZero env condE with
           | none => return .error "extract/unsupported: ite then"
@@ -2056,6 +2216,7 @@ private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .okState (.field _ n) => n.endsWith "_tag" || n.endsWith "_p0"
       | .okState (.lit _) => true
       | .okState (.arg _) => true
+      | .storeField n _ => n.endsWith "_tag" || n.endsWith "_p0"
       | .ite _ _ _ t f => writesOptionLeaf fuel' t || writesOptionLeaf fuel' f
       | _ => false
 
@@ -2067,7 +2228,7 @@ def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op)
   let ops ← decodeBody env e
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
       Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops ||
-        Ops.hasForAccum ops || Ops.hasIndexSet ops then
+        Ops.hasForAccum ops || Ops.hasIndexSet ops || Ops.hasStoreField ops then
     return ops
   else
     throw "extract/unsupported: mutating method missing checked arith"
@@ -2164,6 +2325,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       match op with
       | .returnState v => .returnState (flipVal fuel' v)
       | .returnU64 v => .returnU64 (flipVal fuel' v)
+      | .storeField n v => .storeField n (flipVal fuel' v)
       | .okState v => .okState (flipVal fuel' v)
       | .checkedAddU64 l r => .checkedAddU64 (flipVal fuel' l) (flipVal fuel' r)
       | .checkedSubU64 l r => .checkedSubU64 (flipVal fuel' l) (flipVal fuel' r)
@@ -2418,6 +2580,7 @@ private def opFields : Ops.Op → Array String
   | .forAccum _ v => valFields v
   | .forBody _ body => body.flatMap opFields
   | .indexSet _ i v _ => valFields i ++ valFields v
+  | .storeField n v => #[n] ++ valFields v
   | .mapGetU64 b k => valFields b ++ valFields k
   | .mapSetU64 b k v => valFields b ++ valFields k ++ valFields v
   | .mapGetAddr b a0 a1 a2 => valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2

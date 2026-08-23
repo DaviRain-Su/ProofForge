@@ -106,11 +106,31 @@ def extractedTree : Program :=
         ops := #[
           .ite .eq (.field (.arg 2) "root") (.lit 0)
             #[.ite .eq (.field (.arg 2) "size") (.lit 0)
-              #[.okState (.field (.arg 1) "nodes_0_value")]
+              #[
+                .storeField "root" (.lit 1),
+                .storeField "size" (.lit 1),
+                .storeField "nodes_0_left" (.lit 0),
+                .storeField "nodes_0_right" (.lit 0),
+                .storeField "nodes_0_parent" (.lit 0),
+                .storeField "nodes_0_color" (.lit 1),
+                .storeField "nodes_0_key" (.arg 0),
+                .storeField "nodes_0_value" (.arg 1),
+                .okState (.arg 0)
+              ]
               #[.errorOverflow]]
             #[.ite .eq (.field (.arg 2) "nodes_0_right") (.lit 0)
               #[.ite .lt (.field (.arg 2) "size") (.lit 4)
-                #[.okState (.field (.arg 1) "nodes_1_value")]
+                #[
+                  .storeField "size" (.addU64 (.field (.arg 2) "size") (.lit 1)),
+                  .storeField "nodes_0_right" (.lit 2),
+                  .storeField "nodes_1_left" (.lit 0),
+                  .storeField "nodes_1_right" (.lit 0),
+                  .storeField "nodes_1_parent" (.lit 1),
+                  .storeField "nodes_1_color" (.lit 1),
+                  .storeField "nodes_1_key" (.arg 0),
+                  .storeField "nodes_1_value" (.arg 1),
+                  .okState (.arg 0)
+                ]
                 #[.errorOverflow]]
               #[.errorOverflow]]
         ] },
@@ -233,7 +253,11 @@ def extractedChoice : Program :=
       { kind := .increment, name := "Examples.Choice.setHold", ixName := "setHold", paramCount := 1
         ops := #[
           .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
-            #[.okState (.arg 0)]
+            #[
+              .storeField "pick_tag" (.lit 1),
+              .storeField "pick_p0" (.arg 0),
+              .okState (.arg 0)
+            ]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Examples.Choice.getHeld", ixName := "getHeld", paramCount := 0
@@ -1062,13 +1086,21 @@ def extractedGate : Program :=
       { kind := .increment, name := "Examples.Gate.openGate", ixName := "openGate", paramCount := 0
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.okState (.lit 1)]
+            #[
+              .storeField "open_" (.lit 1),
+              .storeField "dummy" (.lit 0),
+              .okState (.lit 1)
+            ]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Gate.closeGate", ixName := "closeGate", paramCount := 0
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.okState (.lit 0)]
+            #[
+              .storeField "open_" (.lit 0),
+              .storeField "dummy" (.lit 0),
+              .okState (.lit 0)
+            ]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Examples.Gate.isOpen", ixName := "isOpen", paramCount := 0

@@ -107,6 +107,8 @@ inductive Op where
   | mapSetPair (base o0 o1 o2 s0 s1 s2 value : Val)
   | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Val)
   | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val)
+  /-- 写一个已摊平的账户叶。mutate 槽 diff 一次可发多条。 -/
+  | storeField (name : String) (value : Val)
   | okState (value : Val)
   | errorOverflow
   | errorNamed (name : String)
@@ -391,7 +393,7 @@ def hasAcc1 (ops : Array Op) : Bool :=
           valNeedsAcc1 e || valNeedsAcc1 f || valNeedsAcc1 g
     | .evmTokenBalanceOfSelf a b c =>
         valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c
-    | .okState v | .returnU64 v | .returnState v => valNeedsAcc1 v
+    | .okState v | .returnU64 v | .returnState v | .storeField _ v => valNeedsAcc1 v
     | .errorOverflow | .errorNamed _ => false
 
 def hasEvmDeposit (ops : Array Op) : Bool :=
@@ -417,7 +419,7 @@ def opMinAccounts : Op → Nat
           | _ => a
       let fromBump := match bump with | some v => valMinAccounts v | none => 0
       Nat.max fromData fromBump
-  | .okState v | .returnU64 v | .returnState v => valMinAccounts v
+  | .okState v | .returnU64 v | .returnState v | .storeField _ v => valMinAccounts v
   | .errorOverflow | .errorNamed _ => 0
   | .evmDeposit v | .evmLog _ v | .forAccum _ v => valMinAccounts v
   | .forBody _ _ => 0
@@ -565,6 +567,7 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
     | .okState v => isEvmLeaf v
     | .returnU64 v => isEvmLeaf v
     | .returnState v => isEvmLeaf v
+    | .storeField _ v => isEvmLeaf v
     | .errorOverflow | .errorNamed _ => false
 
 private def cpiWordLang : CpiWord → Bool
@@ -609,6 +612,7 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .okState v => isLangLeaf v
     | .returnU64 v => isLangLeaf v
     | .returnState v => isLangLeaf v
+    | .storeField _ v => isLangLeaf v
     | .errorOverflow | .errorNamed _ => false
 
 def hasForAccum (ops : Array Op) : Bool :=
@@ -619,6 +623,9 @@ def hasForBody (ops : Array Op) : Bool :=
 
 def hasIndexSet (ops : Array Op) : Bool :=
   walk 16 ops (fun | .indexSet .. => true | _ => false)
+
+def hasStoreField (ops : Array Op) : Bool :=
+  walk 16 ops (fun | .storeField .. => true | _ => false)
 
 def hasErrorNamed (ops : Array Op) : Bool :=
   walk 16 ops (fun | .errorNamed _ => true | _ => false)
@@ -641,7 +648,7 @@ def hasLangOp (ops : Array Op) : Bool :=
 def hasSvmRejectedLang (ops : Array Op) : Bool :=
   hasErrorNamed ops ||
     walk 16 ops (fun
-      | .returnU64 v | .okState v | .returnState v => isBitVal v
+      | .returnU64 v | .okState v | .returnState v | .storeField _ v => isBitVal v
       | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
       | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
           isBitVal l || isBitVal r

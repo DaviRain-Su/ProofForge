@@ -73,6 +73,7 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .ite _ l r t f =>
           valForbidden l || valForbidden r ||
             walkForbidden fuel' t || walkForbidden fuel' f
+      | .storeField _ v => valForbidden v
       | .okState v => valForbidden v
       | .returnU64 v => valForbidden v
       | .returnState v => valForbidden v
@@ -283,6 +284,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
     | .evmTokenBalanceOfSelf a b c =>
         s!"tbal({valCanon a},{valCanon b},{valCanon c})"
+    | .storeField n v => s!"st.{n}({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .errorNamed n => s!"err.{n}"

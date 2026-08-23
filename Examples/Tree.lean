@@ -80,8 +80,9 @@ def bumpInsert (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
     if s.size < 4 then
       .ok ({ s with
               size := s.size + 1
-              nodes := s.nodes.set 1
-                { left := 0, right := 0, parent := 1, color := 1, key := k, value := v } }, k)
+              nodes :=
+                (s.nodes.set 0 { s.nodes[0]! with right := 2 }).set 1
+                  { left := 0, right := 0, parent := 1, color := 1, key := k, value := v } }, k)
     else
       .error .overflow
   else

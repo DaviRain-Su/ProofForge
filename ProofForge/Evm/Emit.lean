@@ -702,8 +702,22 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ ret ++ " := mload(0)" ++ nl ++
           indent ++ "if shr(64, " ++ ret ++ ") { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some ret }
+    | .storeField name v =>
+        let destS ← slotOf p name
+        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount v st
+        st := st'
+        let w := (IR.slotWidth p name).getD 8
+        acc := acc ++ pre ++ storeSlot indent destS (maskExpr w value)
+        st := { st with last := some value }
     | .okState v =>
-        if Ops.hasIndexSet ops then
+        if Ops.hasStoreField ops then
+          let (pre, value, st') ←
+            match st.last with
+            | some nm => pure ("", nm, { st with last := none })
+            | none => materializeVal p indent paramPrefix paramCount v st
+          st := st'
+          acc := acc ++ pre ++ returnWord indent value
+        else if Ops.hasIndexSet ops then
           let value := st.last.getD "0"
           acc := acc ++ returnWord indent value
         else if IR.hasOptionLeaves p then

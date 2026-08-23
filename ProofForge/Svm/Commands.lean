@@ -37,7 +37,7 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
       if Ops.hasEvmEffect ops then
         throwError "extract/unsupported: svm rejects evm leaf"
       unless Ops.hasCheckedArith ops ||
-          ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | _ => false) ||
+          ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false) ||
           Ops.hasInvoke ops do
         throwError "extract/unsupported: mutating method missing checked arith"
     | none => throwError "extract/unsupported: missing mutating method"

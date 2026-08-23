@@ -355,6 +355,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
         | _, _ => ""
       s!"inv({prog},[{ms}],[{ds}]{seeds})"
 
+    | .storeField n v => s!"st.{n}({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .errorNamed n => s!"err.{n}"

@@ -34,7 +34,8 @@ open Examples.Tree
     | .ok (st2, ret) =>
         st2.size == 2 && ret == 2 &&
           st2.nodes[1]!.key == 2 && st2.nodes[1]!.value == 9 &&
-          st2.nodes[1]!.parent == 1 && st2.nodes[0]!.value == 7
+          st2.nodes[1]!.parent == 1 && st2.nodes[0]!.value == 7 &&
+          st2.nodes[0]!.right == 2
     | .error _ => false
   | .error _ => false
 

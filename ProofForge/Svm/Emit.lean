@@ -152,7 +152,7 @@ private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
         | .invoke _ _ data _ bump =>
             (data.flatMap fun | .u64le v => valSignerAccs v | _ => #[]) ++
               (match bump with | some v => valSignerAccs v | none => #[])
-        | .okState v | .returnU64 v | .returnState v => valSignerAccs v
+        | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .evmDeposit v | .evmLog _ v | .forAccum _ v => valSignerAccs v
         | .forBody _ _ => #[]
@@ -904,6 +904,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
+      | .storeField _ v => valUsesSigner v
       | .errorOverflow | .errorNamed _ => false
 
 private def usesSignerKey (ops : Array Ops.Op) : Bool :=
@@ -1297,9 +1298,22 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
     | .mapGetPair .. | .mapSetPair ..
     | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. =>
       throw "extract/unsupported: svm rejects evm leaf"
+    | .storeField name v =>
+      let load ← loadVal p v 24
+      acc := acc ++ load
+      acc := acc ++ (← storeField p name 24)
     | .okState v =>
       let hasOpt := p.slots.any (fun s => s.name.endsWith "_tag")
-      if hasOpt then
+      if Ops.hasStoreField ops then
+        match v with
+        | .lit k =>
+          acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
+          acc := acc ++ emitReturnU64 24
+        | _ =>
+          let load ← loadVal p v 24
+          acc := acc ++ load
+          acc := acc ++ emitReturnU64 24
+      else if hasOpt then
         let tagName :=
           match p.slots.find? (fun s => s.name.endsWith "_tag") with
           | some s => s.name
@@ -1445,7 +1459,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitMutBody p label m.ops
       return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
     else if !(Ops.hasCheckedArith m.ops ||
-        m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | _ => false)) then
+        m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
       let body ← emitMutBody p label m.ops
