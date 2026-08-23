@@ -42,10 +42,8 @@ def sum4 (s : State) : UInt64 :=
       acc := acc + s.cells[i]!
     return acc
 
-/--
-扫到第一格 0 就写入。宿主语义已钉。
-抽出器还分不清循环 binder 和外层参数，所以先不要 `@[pf_entry]`。
--/
+/-- 扫到第一格 0 就写入。循环下标走 `loopIx`。 -/
+@[pf_entry]
 def fillFirst (s : State) (v : UInt64) : Except Error (State × UInt64) :=
   Id.run do
     for i in [0:4] do

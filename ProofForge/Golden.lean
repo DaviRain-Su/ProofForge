@@ -1160,6 +1160,19 @@ def extractedBook : Program :=
     methods := #[
       { kind := .init, name := "Examples.Book.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
+      { kind := .increment, name := "Examples.Book.fillFirst", ixName := "fillFirst", paramCount := 1
+        ops := #[
+          .forBody 4 #[
+            .ite .eq (.indexGet (.arg 0) "cells" .loopIx 0) (.lit 0)
+              #[
+                .ite .lt .loopIx (.lit 4)
+                  #[.indexSet "cells" .loopIx (.arg 0) 4, .okState (.arg 0)]
+                  #[.errorOverflow]
+              ]
+              #[]
+          ],
+          .errorOverflow
+        ] },
       { kind := .increment, name := "Examples.Book.setAt", ixName := "setAt", paramCount := 2
         ops := #[
           .ite .lt (.arg 0) (.lit 4)

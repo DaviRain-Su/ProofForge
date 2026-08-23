@@ -43,6 +43,38 @@ private def peelLets (e : Expr) : Expr :=
       | e => e
   go 16 e
 
+/-- 剥 `pure` / `ForInStep.done` / `Option.some`；`Prod.mk` 只在末字段是 `PUnit` 时剥。 -/
+private def peelControl (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => peelLets (strip e)
+  | fuel' + 1 =>
+    let e := peelLets (strip e)
+    if (isConstNamed e ``Pure.pure || endsWith e ".pure" ||
+          isConstNamed e ``ForInStep.done || endsWith e ".done" ||
+          isConstNamed e ``Option.some || endsWith e ".some") &&
+        e.getAppArgs.size ≥ 1 then
+      peelControl fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+    else if (isConstNamed e ``Prod.mk || endsWith e ".Prod.mk") && e.getAppArgs.size ≥ 2 then
+      let last := strip e.getAppArgs[e.getAppArgs.size - 1]!
+      if endsWith last ".unit" || isConstNamed last ``PUnit.unit then
+        peelControl fuel' e.getAppArgs[e.getAppArgs.size - 2]!
+      else e
+    else e
+
+private def isForInYield (e : Expr) : Bool :=
+  let rec go (fuel : Nat) (e : Expr) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      let e := peelLets (strip e)
+      if isConstNamed e ``ForInStep.yield || endsWith e ".yield" then true
+      else
+        match e with
+        | .lam _ _ body _ => go fuel' body
+        | .letE _ _ value body _ => go fuel' value || go fuel' body
+        | _ => e.getAppArgs.any (go fuel')
+  go 8 e
+
 /-- 无参数构造子的 inductive。构造子按声明顺序编号。 -/
 private def enumCtorIndex (env : Environment) (tyName ctor : Name) : Option Nat :=
   match env.find? tyName with
@@ -915,7 +947,8 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
         go fuel' e.getAppArgs[e.getAppArgs.size - 2]!
       else if isConstNamed e ``Vector.set || endsWith e ".set" then
         some e
-      else none
+      else
+        e.getAppArgs.findSome? (go fuel')
   match go 8 e0 with
   | none => none
   | some e =>
@@ -1127,7 +1160,7 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
 
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
 private def asStoreFields (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
-  let e := peelLets (strip e)
+  let e := peelControl 8 e
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
     if args.size ≥ 1 then
@@ -1147,7 +1180,7 @@ private def asStoreFields (env : Environment) (e : Expr) : Option (Array Ops.Op)
   else none
 
 private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
-  let e := peelLets (strip e)
+  let e := peelControl 8 e
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
     if args.size ≥ 1 then
@@ -1228,7 +1261,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
   else none
 
 private def errorCtorName (e : Expr) : Option String :=
-  let e := peelLets (strip e)
+  let e := peelControl 8 e
   if isConstNamed e ``Except.error then
     let args := e.getAppArgs
     if h : args.size > 0 then
@@ -1242,7 +1275,7 @@ private def errorCtorName (e : Expr) : Option String :=
   else none
 
 private def isErrorOverflow (e : Expr) : Bool :=
-  let e := peelLets (strip e)
+  let e := peelControl 8 e
   if isConstNamed e ``Except.error then
     let args := e.getAppArgs
     if h : args.size > 0 then
@@ -1542,7 +1575,7 @@ private def forRangeEnd (e : Expr) : Option Nat :=
       else e.getAppArgs.findSome? (rangeEnd fuel')
   rangeEnd 8 e
 
-/-- `forAccum`：下标位的 `.arg` 是循环变量。不要改 payload。 -/
+/-- `forAccum` / `forBody`：下标位的 `.arg` 是循环变量。不要改 payload。 -/
 private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
   let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
     match fuel with
@@ -1550,8 +1583,9 @@ private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
     | fuel' + 1 =>
       match v with
       | .indexGet b n i k =>
-          let b' := match b with | .arg _ => .arg 0 | _ => b
-          let i' := match i with | .arg _ => .loopIx | _ => go fuel' i
+          let b' := match b with | .arg _ => .arg 0 | _ => go fuel' b
+          -- 循环体里下标几乎总是 binder；字面量才是常量槽。
+          let i' := match i with | .lit _ => i | _ => .loopIx
           .indexGet b' n i' k
       | .field b n => .field (go fuel' b) n
       | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
@@ -1577,17 +1611,20 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
       | .checkedDivU64 l r => .checkedDivU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .checkedModU64 l r => .checkedModU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .ite c l r t f =>
-          .ite c (rewriteLoopIx l) (rewriteLoopIx r)
-            (t.map (go fuel')) (f.map (go fuel'))
+          let l' := match l with | .arg _ => .loopIx | _ => rewriteLoopIx l
+          let r' := match r with | .arg _ => .loopIx | _ => rewriteLoopIx r
+          .ite c l' r' (t.map (go fuel')) (f.map (go fuel'))
       | .invoke prog metas data seed bump =>
           .invoke prog metas (data.map fun
             | .u64le v => .u64le (rewriteLoopIx v)
             | w => w) seed (bump.map rewriteLoopIx)
-      | .indexSet n i v k => .indexSet n (rewriteLoopIx i) (rewriteLoopIx v) k
-      | .storeField n v => .storeField n (rewriteLoopIx v)
-      | .okState v => .okState (rewriteLoopIx v)
+      | .indexSet n i v k =>
+          let i' := match i with | .lit _ => i | _ => .loopIx
+          .indexSet n i' v k
+      | .storeField n v => .storeField n v
+      | .okState v => .okState v
       | .returnU64 v => .returnU64 (rewriteLoopIx v)
-      | .returnState v => .returnState (rewriteLoopIx v)
+      | .returnState _ => .errorOverflow
       | .forAccum n v => .forAccum n (rewriteLoopIx v)
       | .forBody n body => .forBody n (body.map (go fuel'))
       | op => op
@@ -1963,7 +2000,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .indexSet _ _ v _ => .ok #[op, .okState v]
     | _ => .ok #[op]
   else
-  let e := peelLets (strip e)
+  let e := peelControl 8 e
   if let some name := errorCtorName e then
     .ok #[.errorNamed name]
   else if let some ops := asStoreFields env e then
@@ -2028,14 +2065,15 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
   | fuel' + 1 => Id.run do
     let e0 := strip e
     if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
+      -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
     else if let some inv := findInvoke env 16 e then
       return .ok (invokeOps inv (invokeRet env e inv))
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
-    if let some (n, addend) := findForIn env e then
+    else if let some (n, addend) := findForIn env e then
       return .ok #[.forAccum n addend, .returnU64 addend]
-    if let some (n, bodyE) := findForBodyExpr env e then
+    else if let some (n, bodyE) := findForBodyExpr env e then
       match decodeExpr env fuel' bodyE with
       | .ok ops => return .ok #[.forBody n (ops.map rewriteLoopOp), .errorOverflow]
       | .error r => return .error r
@@ -2052,7 +2090,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       -- 不在这里 peelLets：`let debit := evmMapSetAddr …` 必须留给 decodeEvmEffect。
       let t := peelProofLam 4 args[args.size - 2]!
       let f := peelProofLam 4 args[args.size - 1]!
-      if isErrorOverflow f then
+      if isErrorOverflow f && !isForInYield f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
           match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asStoreFields env t,
               asOkState env t, decodeExpr env fuel' t with
@@ -2147,6 +2185,14 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             (asCheckedAddGuard env a).isNone &&
             (asCheckedMulGuard env a).isNone &&
             (asCheckedSubGuard env a).isNone
+        if isForInYield f then
+          let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
+            | return .error "extract/unsupported: ite cond"
+          let some (cmp, lv, rv) := asCmp env condE
+            | return .error "extract/unsupported: ite cond"
+          match decodeExpr env fuel' t with
+          | .ok thn => return .ok #[.ite cmp lv rv thn #[]]
+          | .error r => return .error s!"extract/unsupported: forBody then {r}"
         let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
           | return .error "extract/unsupported: ite cond"
         let some (cmp, lv, rv) := asCmp env condE
