@@ -16,6 +16,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
   match source.validateSvm with
   | .ok _ => pure ()
   | .error reason => throwError reason
+  unless source.schema.leaves.any (·.name == "lastEvent_tag") &&
+      source.schema.leaves.any (·.name == "lastEvent_p4") do
+    throwError "Phoenix bounded MarketEvent layout is missing"
   let program ←
     match ProofForge.Extract.IR.toLegacyProgram source with
     | .ok program => pure program
@@ -34,7 +37,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless labels.length == labels.eraseDups.length do
     let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
-  unless ProofForge.Svm.ABI.dataLen program == 544 do
+  unless ProofForge.Svm.ABI.dataLen program == 592 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
   let some post := program.methods.find? (·.ixName == "postAsk")
     | throwError "missing postAsk"
@@ -50,9 +53,14 @@ elab "#pf_guard_phoenix_artifact" : command => do
     | throwError "missing swapSell"
   let some collect := program.methods.find? (·.ixName == "collectFees")
     | throwError "missing collectFees"
+  let some eventKind := program.methods.find? (·.ixName == "lastEventKind")
+    | throwError "missing lastEventKind"
+  let some eventAmount := program.methods.find? (·.ixName == "lastEventAmount")
+    | throwError "missing lastEventAmount"
   unless post.paramCount == 5 && reduce.paramCount == 4 &&
       postBid.paramCount == 5 && reduceBid.paramCount == 4 &&
-      swap.paramCount == 4 && swapSell.paramCount == 4 && collect.paramCount == 0 do
+      swap.paramCount == 4 && swapSell.paramCount == 4 && collect.paramCount == 0 &&
+      eventKind.paramCount == 0 && eventAmount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
   unless asm.contains "; forBody 14" && asm.contains "; forBody 17" &&
       asm.contains "; forBody 4" do
@@ -129,6 +137,7 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard (init 100).bidPriceTicks[0]! == 0
 #guard (init 100).baseLocked == 0
 #guard (init 100).baseFree == 0
+#guard (init 100).lastEvent == MarketEvent.uninitialized
 #guard bestAsk (init 100) == 0
 #guard askQty (init 100) == 0
 #guard nextSeq (init 100) == 1
@@ -609,7 +618,9 @@ private def sellSamples : List Projects.Phoenix.State := [
 
 #guard
   match collectFees { (init 100) with collectedFees := 9, unclaimedFees := 3 } with
-  | .ok (st, ret) => st.collectedFees == 12 && st.unclaimedFees == 0 && ret == 3
+  | .ok (st, ret) =>
+      st.collectedFees == 12 && st.unclaimedFees == 0 && ret == 3 &&
+        st.lastEvent == .fee 3 && lastEventKind st == 6 && lastEventAmount st == 3
   | .error _ => false
 
 #guard

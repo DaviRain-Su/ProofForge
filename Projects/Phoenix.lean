@@ -10,7 +10,8 @@ Phoenix v1 `src/state` 在本仓剖面下的摊平。
   FIFORestingOrder     → traders / sizes / lastSlots / lastTimes
   TraderState          → quoteLocked / quoteFree / baseLocked / baseFree
   MatchingEngineResponse → match*（bounded fold scratch）
-  OrderPacket.client_order_id u128、动态树分配器、MarketEvent 仍关
+  MarketEvent          → lastEvent（bounded UInt64 payload）
+  OrderPacket.client_order_id u128、动态树分配器、event batch 仍关
 
 每边 N=4。档 0 是最优价；ask 价格升序、bid 价格降序，同价均为 FIFO。
 `RBTree4` 给出四档对应的红黑树拓扑见证；撮合只依赖中序次序，
@@ -33,6 +34,22 @@ inductive SelfTradeBehavior where
   | cancelProvide
   | decrementTake
   deriving Repr, DecidableEq, Inhabited, BEq
+
+/--
+官方内部 `MarketEvent` 的 bounded 形状。trader/client id 在当前账户剖面仍是 `UInt64`；
+完整 Pubkey、u128 和 Borsh event batch 属于 wire/event-recorder 层，不在这里伪装。
+-/
+inductive MarketEvent where
+  | uninitialized
+  | fill (maker orderSequence price filled remaining : UInt64)
+  | place (orderSequence clientOrderId price placed : UInt64)
+  | reduce (orderSequence price removed remaining : UInt64)
+  | evict (maker orderSequence price evicted : UInt64)
+  | fillSummary (clientOrderId totalBase totalQuote totalFee : UInt64)
+  | fee (feesCollected : UInt64)
+  | timeInForce (orderSequence lastValidSlot lastValidTime : UInt64)
+  | expiredOrder (maker orderSequence price removed : UInt64)
+  deriving Repr, DecidableEq, Inhabited
 
 /--
 摊平后的账户状态。字段名跟官方记录对齐，不是自己发明的 6 槽。
@@ -74,6 +91,8 @@ structure State where
   matchLevel : UInt64
   matchWant : UInt64
   matchLimit : UInt64
+  /-- 最近一个 bounded market event；后续 event batch 会把它提升为固定容量序列。 -/
+  lastEvent : MarketEvent
   deriving Repr, DecidableEq
 
 inductive Error where
@@ -201,7 +220,8 @@ def init (tick : UInt64) : State :=
     matchError := 0
     matchLevel := 0
     matchWant := 0
-    matchLimit := 0 }
+    matchLimit := 0
+    lastEvent := .uninitialized }
 
 /-- 官方 FIFORestingOrder 是否过期。0 是哨兵。 -/
 def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
@@ -1224,7 +1244,8 @@ def collectFees (s : State) : Except Error (State × UInt64) :=
   if s.collectedFees ≤ u64Max - s.unclaimedFees then
     .ok ({ s with
             collectedFees := s.collectedFees + s.unclaimedFees
-            unclaimedFees := 0 }, s.unclaimedFees)
+            unclaimedFees := 0
+            lastEvent := .fee s.unclaimedFees }, s.unclaimedFees)
   else
     .error .overflow
 
@@ -1280,5 +1301,31 @@ def feeBpsOf (s : State) : UInt64 :=
 @[pf_entry]
 def level0 (s : State) : UInt64 :=
   s.sizes[0]!
+
+@[pf_entry]
+def lastEventKind (s : State) : UInt64 :=
+  match s.lastEvent with
+  | .uninitialized => 0
+  | .fill _ _ _ _ _ => 1
+  | .place _ _ _ _ => 2
+  | .reduce _ _ _ _ => 3
+  | .evict _ _ _ _ => 4
+  | .fillSummary _ _ _ _ => 5
+  | .fee _ => 6
+  | .timeInForce _ _ _ => 7
+  | .expiredOrder _ _ _ _ => 8
+
+@[pf_entry]
+def lastEventAmount (s : State) : UInt64 :=
+  match s.lastEvent with
+  | .uninitialized => 0
+  | .fill _ _ _ filled _ => filled
+  | .place _ _ _ placed => placed
+  | .reduce _ _ removed _ => removed
+  | .evict _ _ _ evicted => evicted
+  | .fillSummary _ totalBase _ _ => totalBase
+  | .fee fees => fees
+  | .timeInForce _ lastValidSlot _ => lastValidSlot
+  | .expiredOrder _ _ _ removed => removed
 
 end Projects.Phoenix
