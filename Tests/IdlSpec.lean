@@ -18,4 +18,13 @@ namespace Tests.IdlSpec
 #guard
   (ProofForge.Svm.Idl.layoutDiscBytes ProofForge.Golden.extractedCounter).size == 8
 
+#guard
+  match ProofForge.Svm.IR.fromProgram ProofForge.Golden.extractedCounter with
+  | .error _ => false
+  | .ok program =>
+      ProofForge.Svm.Idl.emitProgramIdl program ==
+          ProofForge.Svm.Idl.emitIdl ProofForge.Golden.extractedCounter &&
+        ProofForge.Svm.Idl.layoutDiscBytesProgram program ==
+          ProofForge.Svm.Idl.layoutDiscBytes ProofForge.Golden.extractedCounter
+
 end Tests.IdlSpec

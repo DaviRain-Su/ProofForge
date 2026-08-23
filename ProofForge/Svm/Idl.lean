@@ -1,6 +1,6 @@
-import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256
 import ProofForge.Svm.ABI
+import ProofForge.Svm.IR
 
 namespace ProofForge.Svm.Idl
 
@@ -25,6 +25,17 @@ private def bytesJson (bs : Array Nat) : String :=
 def discBytes (ixName : String) (paramCount : Nat) : Array Nat :=
   u64LeBytes (Sha256.first8Le (ABI.discPreimage ixName paramCount))
 
+private def sourceSlots (p : IR.Program) : Array Core.IR.Slot :=
+  p.slots.map fun slot =>
+    { name := slot.name, width := slot.width, abi := slot.abi }
+
+def layoutDiscBytesOf (slots : Array Core.IR.Slot) : Array Nat :=
+  u64BeBytes (Sha256.first8Be (ABI.layoutPreimageOf slots))
+
+def layoutDiscBytesProgram (p : IR.Program) : Array Nat :=
+  layoutDiscBytesOf (sourceSlots p)
+
+/-- Compatibility wrapper for callers that still own the old extraction IR. -/
 def layoutDiscBytes (p : Extract.Legacy.Program) : Array Nat :=
   u64BeBytes (Sha256.first8Be (ABI.layoutPreimage p))
 
@@ -46,28 +57,28 @@ private def accJson (name : String) (writable signer : Bool) : String :=
   "{\"name\":\"" ++ escapeJson name ++ "\"" ++ w ++ s ++ "}"
 
 /-- 外层账户：acc0 是 state。CPI 程序再列 acc1…。旗是保守默认，不是每条 recipe 的 metas。 -/
-private def ixAccounts (p : Extract.Legacy.Program) (m : Extract.Legacy.Method) : String :=
-  let n := Nat.max 1 (ABI.cpiAccountCount p)
-  let view := m.kind == .get
+private def ixAccounts (accountCount : Nat) (kind : Core.IR.MethodKind) : String :=
+  let n := Nat.max 1 accountCount
+  let view := kind == .get
   let items :=
     (List.range n).map fun i =>
       let name := if i == 0 then "state" else s!"acc{i}"
       accJson name (!view && i == 0) (!view && i == 0)
   "[" ++ String.intercalate ", " items ++ "]"
 
-private def instructionJson (p : Extract.Legacy.Program) (m : Extract.Legacy.Method) : String :=
+private def instructionJson (accountCount : Nat) (kind : Core.IR.MethodKind)
+    (ixName : String) (paramCount : Nat) : String :=
   "    {\n" ++
-    "      \"name\": \"" ++ escapeJson m.ixName ++ "\",\n" ++
-    "      \"discriminator\": " ++ bytesJson (discBytes m.ixName m.paramCount) ++ ",\n" ++
-    "      \"accounts\": " ++ ixAccounts p m ++ ",\n" ++
-    "      \"args\": " ++ argsJson m.paramCount ++ "\n" ++
+    "      \"name\": \"" ++ escapeJson ixName ++ "\",\n" ++
+    "      \"discriminator\": " ++ bytesJson (discBytes ixName paramCount) ++ ",\n" ++
+    "      \"accounts\": " ++ ixAccounts accountCount kind ++ ",\n" ++
+    "      \"args\": " ++ argsJson paramCount ++ "\n" ++
     "    }"
 
-private def fieldJson (s : Extract.Legacy.Slot) : String :=
-  "{\"name\":\"" ++ escapeJson s.name ++ "\",\"type\":\"" ++ idlTypeOfAbi s.abi ++ "\"}"
+private def fieldJson (name abi : String) : String :=
+  "{\"name\":\"" ++ escapeJson name ++ "\",\"type\":\"" ++ idlTypeOfAbi abi ++ "\"}"
 
-private def typesJson (p : Extract.Legacy.Program) : String :=
-  let fields := String.intercalate ", " (p.slots.map fieldJson).toList
+private def typesJson (fields : String) : String :=
   "    {\n" ++
     "      \"name\": \"State\",\n" ++
     "      \"type\": {\n" ++
@@ -76,27 +87,43 @@ private def typesJson (p : Extract.Legacy.Program) : String :=
     "      }\n" ++
     "    }"
 
-/-- Solana IDL spec 0.1.0。`address` 是 32 个 1，部署后替换。 -/
-def emitIdl (p : Extract.Legacy.Program) : String :=
-  let ixs := String.intercalate ",\n" (p.methods.map (instructionJson p)).toList
+private def render (name instructions fields : String) (layoutDisc : Array Nat) : String :=
   "{\n" ++
     "  \"address\": \"11111111111111111111111111111111\",\n" ++
     "  \"metadata\": {\n" ++
-    "    \"name\": \"" ++ escapeJson p.name ++ "\",\n" ++
+    "    \"name\": \"" ++ escapeJson name ++ "\",\n" ++
     "    \"version\": \"0.0.1\",\n" ++
     "    \"spec\": \"0.1.0\",\n" ++
     "    \"description\": \"Created with ProofForge\"\n" ++
     "  },\n" ++
-    "  \"instructions\": [\n" ++ ixs ++ "\n" ++
+    "  \"instructions\": [\n" ++ instructions ++ "\n" ++
     "  ],\n" ++
     "  \"accounts\": [\n" ++
     "    {\n" ++
     "      \"name\": \"State\",\n" ++
-    "      \"discriminator\": " ++ bytesJson (layoutDiscBytes p) ++ "\n" ++
+    "      \"discriminator\": " ++ bytesJson layoutDisc ++ "\n" ++
     "    }\n" ++
     "  ],\n" ++
-    "  \"types\": [\n" ++ typesJson p ++ "\n" ++
+    "  \"types\": [\n" ++ typesJson fields ++ "\n" ++
     "  ]\n" ++
     "}\n"
+
+/-- Solana IDL spec 0.1.0 from the target-owned SVM program. -/
+def emitProgramIdl (p : IR.Program) : String :=
+  let accountCount := IR.cpiAccountCount p
+  let instructions := String.intercalate ",\n" <| p.methods.toList.map fun method =>
+    instructionJson accountCount method.kind method.ixName method.paramCount
+  let fields := String.intercalate ", " <| p.slots.toList.map fun slot =>
+    fieldJson slot.name slot.abi
+  render p.name instructions fields (layoutDiscBytesProgram p)
+
+/-- Compatibility entry point for the old extraction IR. -/
+def emitIdl (p : Extract.Legacy.Program) : String :=
+  let accountCount := ABI.cpiAccountCount p
+  let instructions := String.intercalate ",\n" <| p.methods.toList.map fun method =>
+    instructionJson accountCount method.kind method.ixName method.paramCount
+  let fields := String.intercalate ", " <| p.slots.toList.map fun slot =>
+    fieldJson slot.name slot.abi
+  render p.name instructions fields (layoutDiscBytes p)
 
 end ProofForge.Svm.Idl

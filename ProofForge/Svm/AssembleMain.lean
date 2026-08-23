@@ -1,6 +1,5 @@
 import ProofForge.Svm.Assemble
 import ProofForge.Golden
-import ProofForge.Ops
 
 def main (args : List String) : IO UInt32 := do
   let args := args.dropWhile (· == "--")
@@ -9,9 +8,11 @@ def main (args : List String) : IO UInt32 := do
     | outDir :: _ => System.FilePath.mk outDir
     | [] => System.FilePath.mk "build/sbpf"
   for program in ProofForge.Golden.programs do
-    if program.methods.any (fun m => ProofForge.Ops.hasEvmEffect m.ops) then
+    let lowered ← match ProofForge.Svm.IR.fromProgram program with
+    | .ok lowered => pure lowered
+    | .error _ =>
       IO.println s!"skip svm assemble {program.name} (evm leaf)"
       continue
-    let r ← ProofForge.Svm.Assemble.assembleProgram out program
+    let r ← ProofForge.Svm.Assemble.assembleIRProgram out lowered
     IO.println s!"wrote {r.asmPath} {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
   return 0

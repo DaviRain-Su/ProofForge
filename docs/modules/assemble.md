@@ -10,8 +10,8 @@
 
 ## API
 
-- `assembleProgram outDir program : IO Result`
-- `assembleCounter` = `assembleProgram` 的别名
+- `assembleIRProgram outDir program : IO Result`（正常 target IR 路径）
+- `assembleProgram` / `assembleCounter`（旧 extraction IR 兼容入口）
 - `pfAssemble` 遍历 `Golden.programs`
 - `lake exe pfAssemble -- build/sbpf`（写出 Counter.so 与 Pair.so）
 

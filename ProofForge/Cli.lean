@@ -2,7 +2,6 @@ import Lean
 import ProofForge.Golden
 import ProofForge.Extract
 import ProofForge.Core.IR
-import ProofForge.Ops
 import ProofForge.Svm.Assemble
 import ProofForge.Evm.Assemble
 import ProofForge.Evm.Golden
@@ -46,7 +45,7 @@ private def parseArgs (args : List String) : Except String Options :=
       | some tgt => go rest { o with target := tgt }
       | none => .error s!"unknown target {t}"
     | "--out" :: d :: rest => go rest { o with outDir := d }
-    | flag :: _ =>
+    | flag :: rest =>
       if flag.startsWith "-" then .error s!"unknown flag {flag}"
       else
         let names := rest.foldl (init := #[flag]) fun acc a =>
@@ -59,15 +58,17 @@ private def parseArgs (args : List String) : Except String Options :=
     | rest => rest
   go args {}
 
-private def svmFixtures : Array Extract.Legacy.Program :=
-  Golden.programs.filter fun p =>
-    !p.methods.any (fun m => Ops.hasEvmEffect m.ops)
+private def svmFixtureNames : Array String :=
+  Golden.programs.filterMap fun program =>
+    match Svm.IR.fromProgram program with
+    | .ok _ => some program.name
+    | .error _ => none
 
 private def selectSvmNames (names : Array String) : Except String (Array String) :=
-  if names.isEmpty then .ok (svmFixtures.map (·.name))
+  if names.isEmpty then .ok svmFixtureNames
   else
     names.mapM fun n =>
-      match svmFixtures.find? (·.name == n) with
+      match svmFixtureNames.find? (· == n) with
       | some _ => .ok n
       | none => .error s!"unknown svm program {n}"
 
@@ -80,7 +81,7 @@ CLI 构建必须重新从用户模块抽 IR，不能组装 `Golden` smoke fixtur
 列出可构建模块并钉 canonical digest。
 -/
 private unsafe def extractSvmPrograms (names : Array String) :
-    IO (Except String (Array Extract.Legacy.Program)) :=
+    IO (Except String (Array Svm.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
@@ -88,12 +89,10 @@ private unsafe def extractSvmPrograms (names : Array String) :
     let env ← Lean.importModules modules {} (loadExts := true)
     return names.mapM fun name =>
       let ns := svmModuleName name
-      match Extract.extractModuleIR env ns none >>= fun source => do
-          source.validateSvm
-          Extract.IR.toLegacyProgram source with
+      match Extract.extractModuleIR env ns none >>= Svm.IR.fromExtracted with
       | .error reason => .error s!"{name}: {reason}"
       | .ok program =>
-        let digest := Extract.Legacy.digestHex program
+        let digest := Svm.IR.digestHex program
         match Golden.digestOf name with
         | some expected =>
           if digest == expected then .ok program
@@ -134,7 +133,7 @@ unsafe def run (args : List String) : IO UInt32 := do
         | .ok programs =>
           IO.FS.createDirAll opts.outDir
           for program in programs do
-            let r ← ProofForge.Svm.Assemble.assembleProgram opts.outDir program
+            let r ← ProofForge.Svm.Assemble.assembleIRProgram opts.outDir program
             IO.println s!"wrote {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
           return 0
     | .evm =>

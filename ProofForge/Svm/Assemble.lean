@@ -1,5 +1,4 @@
 import ProofForge.Svm.Emit
-import ProofForge.Extract.LegacyIR
 import ProofForge.Svm.Idl
 
 namespace ProofForge.Svm.Assemble
@@ -43,12 +42,7 @@ partial def findFileNamed (dir : System.FilePath) (name : String) : IO (Option S
         return some hit
   return none
 
-/-- 把 `program` 汇编写成 `src/Name/Name.s`，调用本机 `sbpf 0.2.2`。 -/
-def assembleProgram (outDir : System.FilePath) (program : Extract.Legacy.Program) : IO Result := do
-  let asm ← match Emit.emitCounterAsm program with
-    | .error reason => throw <| IO.userError reason
-    | .ok text => pure text
-  let name := program.name
+private def assembleOutput (outDir : System.FilePath) (name asm idl : String) : IO Result := do
   let soName := s!"{name}.so"
   let project := outDir / "sbpf-project"
   let srcDir := project / "src" / name
@@ -70,8 +64,22 @@ def assembleProgram (outDir : System.FilePath) (program : Extract.Legacy.Program
   let stagedIdl := outDir / s!"{name}.idl.json"
   IO.FS.writeFile stagedAsm asm
   IO.FS.writeBinFile stagedSo soBytes
-  IO.FS.writeFile stagedIdl (Idl.emitIdl program)
+  IO.FS.writeFile stagedIdl idl
   return { asmPath := stagedAsm, soPath := stagedSo, idlPath := stagedIdl, soBytes }
+
+/-- Assemble a fully lowered SVM target program with the local `sbpf` toolchain. -/
+def assembleIRProgram (outDir : System.FilePath) (program : IR.Program) : IO Result := do
+  let asm ← match Emit.emitAsm program with
+    | .error reason => throw <| IO.userError reason
+    | .ok text => pure text
+  assembleOutput outDir program.name asm (Idl.emitProgramIdl program)
+
+/-- Compatibility entry point for callers that still own the old extraction IR. -/
+def assembleProgram (outDir : System.FilePath) (program : Extract.Legacy.Program) : IO Result := do
+  let lowered ← match IR.fromProgram program with
+    | .error reason => throw <| IO.userError reason
+    | .ok lowered => pure lowered
+  assembleIRProgram outDir lowered
 
 def assembleCounter (outDir : System.FilePath) (program : Extract.Legacy.Program) :
     IO Result :=
