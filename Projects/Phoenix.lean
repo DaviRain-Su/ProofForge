@@ -1612,98 +1612,134 @@ def swapSell (s : State)
 
 /--
 官方 `reduce_order_inner` 的 ask-side bounded 版本：按 `(price, sequence)` 找订单，
-校验 trader，减少 `min(qty, restingSize)`，并把对应 base 从 locked 解到 free。
-缺失订单成功返回 0；错误 owner 和账本不一致 fail closed。
+校验内部 seat address，减少 `min(qty, restingSize)`，并把对应 trader 的 base
+从 locked 解到 free。aggregate balance 暂时同步维护，供尚未迁移的 matching path
+使用；它是 per-seat ledger 的兼容投影，不再是 owner 授权来源。
+缺失订单成功返回 0；错误 owner、无效 seat 和账本不一致 fail closed。
 -/
-@[pf_entry]
-def reduceAsk (s : State) (trader price sequence qty : UInt64) :
-    Except Error (State × UInt64) := Id.run do
-  let s := beginEvents s
-  if qty = 0 then
-    .ok (s, 0)
+def reduceAskAt (s : State) (trader price sequence qty : UInt64) :
+    Except Error (State × UInt64) :=
+  if trader = 0 || 4 < trader then
+    .error .overflow
   else
-    let mut st := { s with matchFilled := 0, matchStopped := 0, matchError := 0 }
-    for i in [0:4] do
-      if st.matchStopped = (0 : UInt64) then
-        let j : Nat := i
-        let size : UInt64 := st.sizes[j]!
-        if size ≠ (0 : UInt64) then
-          if st.priceTicks[j]! = price then
-            if st.sequences[j]! = sequence then
-              if st.traders[j]! = trader then
-                if qty ≤ size then
-                  if qty ≤ st.baseLocked then
-                    if st.baseFree ≤ u64Max - qty then
-                      let reduced := { st with
-                        sizes := st.sizes.set (j % 4) (size - qty)
-                        baseLocked := st.baseLocked - qty
-                        baseFree := st.baseFree + qty
-                        matchFilled := qty
-                        matchStopped := 1 }
-                      st := appendEvent reduced (.reduce sequence price qty (size - qty))
-                    else
-                      st := { st with matchStopped := 1, matchError := 1 }
-                  else
-                    st := { st with matchStopped := 1, matchError := 1 }
-                else
-                  if size ≤ st.baseLocked then
-                    if st.baseFree ≤ u64Max - size then
-                      let reduced := { st with
-                        sizes := st.sizes.set (j % 4) 0
-                        baseLocked := st.baseLocked - size
-                        baseFree := st.baseFree + size
-                        matchFilled := size
-                        matchStopped := 1 }
-                      st := appendEvent reduced (.reduce sequence price size 0)
-                    else
-                      st := { st with matchStopped := 1, matchError := 1 }
-                  else
-                    st := { st with matchStopped := 1, matchError := 1 }
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
-    if st.matchError ≠ 0 then
+    let traderIndex := trader.toNat - 1
+    if s.traderUsed[traderIndex]! = 0 then
       .error .overflow
-    else
-      let reduced := st.matchFilled
-      .ok ({ st with matchFilled := 0, matchStopped := 0, matchError := 0 }, reduced)
+    else Id.run do
+      let s := beginEvents s
+      if qty = 0 then
+        .ok (s, 0)
+      else
+        let mut st := { s with matchFilled := 0, matchStopped := 0, matchError := 0 }
+        for i in [0:4] do
+          if st.matchStopped = (0 : UInt64) then
+            let j : Nat := i
+            let size : UInt64 := st.sizes[j]!
+            if size ≠ (0 : UInt64) then
+              if st.priceTicks[j]! = price then
+                if st.sequences[j]! = sequence then
+                  if st.traders[j]! = trader then
+                    let removed := if qty ≤ size then qty else size
+                    if removed ≤ st.traderBaseLocked[traderIndex]! then
+                      if st.traderBaseFree[traderIndex]! ≤ u64Max - removed then
+                        if removed ≤ st.baseLocked then
+                          if st.baseFree ≤ u64Max - removed then
+                            let reduced := { st with
+                              sizes := st.sizes.set (j % 4) (size - removed)
+                              traderBaseLocked := st.traderBaseLocked.set
+                                (traderIndex % 4) (st.traderBaseLocked[traderIndex]! - removed)
+                              traderBaseFree := st.traderBaseFree.set
+                                (traderIndex % 4) (st.traderBaseFree[traderIndex]! + removed)
+                              baseLocked := st.baseLocked - removed
+                              baseFree := st.baseFree + removed
+                              matchFilled := removed
+                              matchStopped := 1 }
+                            st := appendEvent reduced (.reduce sequence price removed (size - removed))
+                          else
+                            st := { st with matchStopped := 1, matchError := 1 }
+                        else
+                          st := { st with matchStopped := 1, matchError := 1 }
+                      else
+                        st := { st with matchStopped := 1, matchError := 1 }
+                    else
+                      st := { st with matchStopped := 1, matchError := 1 }
+                  else
+                    st := { st with matchStopped := 1, matchError := 1 }
+        if st.matchError ≠ 0 then
+          .error .overflow
+        else
+          let reduced := st.matchFilled
+          .ok ({ st with matchFilled := 0, matchStopped := 0, matchError := 0 }, reduced)
 
 /-- bid reduce/cancel 按 encoded order id 查找，并按原价解锁 quote collateral。 -/
-@[pf_entry]
-def reduceBid (s : State) (trader price sequence qty : UInt64) :
-    Except Error (State × UInt64) := Id.run do
-  let s := beginEvents s
-  if qty = 0 then
-    .ok (s, 0)
+def reduceBidAt (s : State) (trader price sequence qty : UInt64) :
+    Except Error (State × UInt64) :=
+  if trader = 0 || 4 < trader then
+    .error .overflow
   else
-    let mut st := { s with
-      matchFilled := 0, matchExpired := 0, matchStopped := 0, matchError := 0 }
-    for i in [0:4] do
-      if st.matchStopped = (0 : UInt64) then
-        let j : Nat := i
-        let size : UInt64 := st.bidSizes[j]!
-        if size ≠ (0 : UInt64) then
-          if st.bidPriceTicks[j]! = price then
-            if st.bidSequences[j]! = sequence then
-              if st.bidTraders[j]! = trader then
-                let removed := if qty ≤ size then qty else size
-                st := unlockBidFold st j removed
-                let reduced := { st with matchFilled := removed, matchStopped := 1 }
-                st := appendEvent reduced (.reduce sequence price removed (size - removed))
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
-    if st.matchError ≠ 0 then
+    let traderIndex := trader.toNat - 1
+    if s.traderUsed[traderIndex]! = 0 then
       .error .overflow
-    else if st.matchExpired > st.quoteLocked then
-      .error .overflow
-    else if st.quoteFree > u64Max - st.matchExpired then
-      .error .overflow
-    else
-      let reduced := st.matchFilled
-      .ok ({ st with
-              quoteLocked := st.quoteLocked - st.matchExpired
-              quoteFree := st.quoteFree + st.matchExpired
-              matchFilled := 0, matchExpired := 0,
-              matchStopped := 0, matchError := 0 }, reduced)
+    else Id.run do
+      let s := beginEvents s
+      if qty = 0 then
+        .ok (s, 0)
+      else
+        let mut st := { s with
+          matchFilled := 0, matchExpired := 0, matchStopped := 0, matchError := 0 }
+        for i in [0:4] do
+          if st.matchStopped = (0 : UInt64) then
+            let j : Nat := i
+            let size : UInt64 := st.bidSizes[j]!
+            if size ≠ (0 : UInt64) then
+              if st.bidPriceTicks[j]! = price then
+                if st.bidSequences[j]! = sequence then
+                  if st.bidTraders[j]! = trader then
+                    let removed := if qty ≤ size then qty else size
+                    st := unlockBidFold st j removed
+                    let reduced := { st with matchFilled := removed, matchStopped := 1 }
+                    st := appendEvent reduced (.reduce sequence price removed (size - removed))
+                  else
+                    st := { st with matchStopped := 1, matchError := 1 }
+        if st.matchError ≠ 0 then
+          .error .overflow
+        else if st.matchExpired > st.traderQuoteLocked[traderIndex]! then
+          .error .overflow
+        else if st.traderQuoteFree[traderIndex]! > u64Max - st.matchExpired then
+          .error .overflow
+        else if st.matchExpired > st.quoteLocked then
+          .error .overflow
+        else if st.quoteFree > u64Max - st.matchExpired then
+          .error .overflow
+        else
+          let reduced := st.matchFilled
+          .ok ({ st with
+                  traderQuoteLocked := st.traderQuoteLocked.set (traderIndex % 4)
+                    (st.traderQuoteLocked[traderIndex]! - st.matchExpired)
+                  traderQuoteFree := st.traderQuoteFree.set (traderIndex % 4)
+                    (st.traderQuoteFree[traderIndex]! + st.matchExpired)
+                  quoteLocked := st.quoteLocked - st.matchExpired
+                  quoteFree := st.quoteFree + st.matchExpired
+                  matchFilled := 0, matchExpired := 0,
+                  matchStopped := 0, matchError := 0 }, reduced)
+
+attribute [pf_inline] reduceAskAt reduceBidAt
+
+/-- SVM adapter：由 account 1 signer 的完整 Pubkey 解析 seat，不能伪造其他 owner。 -/
+@[pf_entry]
+def reduceAsk (s : State) (price sequence qty : UInt64) :
+    Except Error (State × UInt64) := do
+  let trader ← requireTraderAddress s (signerKey 1) (accKeyWord 1 1)
+    (accKeyWord 1 2) (accKeyWord 1 3)
+  reduceAskAt s trader price sequence qty
+
+/-- Bid-side signer adapter；encoded sequence 仍原样传给 bounded order lookup。 -/
+@[pf_entry]
+def reduceBid (s : State) (price sequence qty : UInt64) :
+    Except Error (State × UInt64) := do
+  let trader ← requireTraderAddress s (signerKey 1) (accKeyWord 1 1)
+    (accKeyWord 1 2) (accKeyWord 1 3)
+  reduceBidAt s trader price sequence qty
 
 /-- 官方部分成交：吃光档 0。抽出还认不了 `set 0 0`。 -/
 def sweepAsk (s : State) : Except Error (State × UInt64) :=
@@ -1724,11 +1760,11 @@ def sweepAsk (s : State) : Except Error (State × UInt64) :=
 /-- `CancelOrder` 是把指定订单 reduce 到 0。 -/
 def cancelAsk (s : State) (trader price sequence : UInt64) :
     Except Error (State × UInt64) :=
-  reduceAsk s trader price sequence u64Max
+  reduceAskAt s trader price sequence u64Max
 
 def cancelBid (s : State) (trader price sequence : UInt64) :
     Except Error (State × UInt64) :=
-  reduceBid s trader price sequence u64Max
+  reduceBidAt s trader price sequence u64Max
 
 /-- 收取当前全部未领取费用；返回本次转移的 quote lots。 -/
 @[pf_entry]

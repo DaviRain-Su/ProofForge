@@ -32,7 +32,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Svm.Emit.emitProgramAsm source with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.toUTF8.size < 525000 do
+  unless asm.toUTF8.size < 575000 do
     throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
   unless !asm.contains "\n\\\n" do
     throwError "Phoenix assembly contains a standalone backslash"
@@ -77,8 +77,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless deposit.paramCount == 2 && withdrawBase.paramCount == 1 &&
       withdrawQuote.paramCount == 1 && evictSeat.paramCount == 0 &&
       traderIndex.paramCount == 4 &&
-      post.paramCount == 7 && reduce.paramCount == 4 &&
-      postBid.paramCount == 7 && reduceBid.paramCount == 4 &&
+      post.paramCount == 7 && reduce.paramCount == 3 &&
+      postBid.paramCount == 7 && reduceBid.paramCount == 3 &&
       swap.paramCount == 6 && swapSell.paramCount == 6 && collect.paramCount == 0 &&
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
@@ -87,6 +87,13 @@ elab "#pf_guard_phoenix_artifact" : command => do
     throwError "Phoenix bounded loops missing from assembly"
 
 #pf_guard_phoenix_artifact
+
+private def withSeats12 (s : Projects.Phoenix.State) : Projects.Phoenix.State :=
+  { s with
+    traderCount := 2
+    traderBumpIndex := 3
+    traderFreeHead := 3
+    traderUsed := #v[1, 1, 0, 0] }
 
 private def sameBusinessResult :
     Except Error (Projects.Phoenix.State × UInt64) →
@@ -783,85 +790,99 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .error _ => false
 
 #guard
-  match reduceAsk
-      { (init 100) with
+  match reduceAskAt
+      { (withSeats12 (init 100)) with
         sizes := #v[8, 1, 0, 0], priceTicks := #v[10, 20, 0, 0],
-        sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+        sequences := #v[1, 2, 0, 0], traders := #v[1, 2, 0, 0],
+        traderBaseLocked := #v[8, 1, 0, 0], traderBaseFree := #v[1, 0, 0, 0],
         baseLocked := 9, baseFree := 1 }
-      7 10 1 3 with
+      1 10 1 3 with
   | .ok (st, ret) =>
       st.sizes == #v[5, 1, 0, 0] && st.baseLocked == 6 && st.baseFree == 4 &&
+        st.traderBaseLocked == #v[5, 1, 0, 0] &&
+        st.traderBaseFree == #v[4, 0, 0, 0] &&
         st.matchFilled == 0 && ret == 3 && st.eventCount == 1 &&
         st.events[0]! == .reduce 1 10 3 5 && st.lastEvent == .reduce 1 10 3 5
   | .error _ => false
 
 #guard
-  match reduceAsk
-      { (init 100) with
+  match reduceAskAt
+      { (withSeats12 (init 100)) with
         sizes := #v[2, 1, 0, 0], priceTicks := #v[10, 20, 0, 0],
-        sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+        sequences := #v[1, 2, 0, 0], traders := #v[1, 2, 0, 0],
+        traderBaseLocked := #v[2, 1, 0, 0],
         baseLocked := 3 }
-      7 10 1 9 with
+      1 10 1 9 with
   | .ok (st, ret) =>
-      st.sizes == #v[0, 1, 0, 0] && st.baseLocked == 1 && st.baseFree == 2 && ret == 2
+      st.sizes == #v[0, 1, 0, 0] && st.baseLocked == 1 && st.baseFree == 2 &&
+        st.traderBaseLocked == #v[0, 1, 0, 0] &&
+        st.traderBaseFree == #v[2, 0, 0, 0] && ret == 2
   | .error _ => false
 
 #guard
-  match reduceAsk
-      { (init 100) with
+  match reduceAskAt
+      { (withSeats12 (init 100)) with
         sizes := #v[2, 0, 0, 0], priceTicks := #v[10, 0, 0, 0],
-        sequences := #v[1, 0, 0, 0], traders := #v[7, 0, 0, 0], baseLocked := 2 }
-      8 10 1 1 with
+        sequences := #v[1, 0, 0, 0], traders := #v[1, 0, 0, 0],
+        traderBaseLocked := #v[2, 0, 0, 0], baseLocked := 2 }
+      2 10 1 1 with
   | .error .overflow => true
   | _ => false
 
 #guard
-  match reduceBid
-      { (init 1) with
+  match reduceBidAt
+      { (withSeats12 (init 1)) with
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
-        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57 }
-      8 11 (~~~(2 : UInt64)) 2 with
+        bidTraders := #v[1, 2, 0, 0], traderQuoteLocked := #v[24, 33, 0, 0],
+        quoteLocked := 57 }
+      2 11 (~~~(2 : UInt64)) 2 with
   | .ok (st, ret) =>
       st.bidSizes == #v[2, 1, 0, 0] && st.quoteLocked == 35 &&
-        st.quoteFree == 22 && ret == 2 &&
+        st.quoteFree == 22 && st.traderQuoteLocked == #v[24, 11, 0, 0] &&
+        st.traderQuoteFree == #v[0, 22, 0, 0] && ret == 2 &&
         st.lastEvent == .reduce (~~~(2 : UInt64)) 11 2 1
   | .error _ => false
 
 #guard
   match cancelBid
-      { (init 1) with
+      { (withSeats12 (init 1)) with
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
-        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57 }
-      7 12 (~~~(1 : UInt64)) with
+        bidTraders := #v[1, 2, 0, 0], traderQuoteLocked := #v[24, 33, 0, 0],
+        quoteLocked := 57 }
+      1 12 (~~~(1 : UInt64)) with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 3, 0, 0] && st.quoteLocked == 33 &&
-        st.quoteFree == 24 && ret == 2
+        st.quoteFree == 24 && st.traderQuoteLocked == #v[0, 33, 0, 0] &&
+        st.traderQuoteFree == #v[24, 0, 0, 0] && ret == 2
   | .error _ => false
 
 #guard
-  match reduceBid
-      { (init 1) with
+  match reduceBidAt
+      { (withSeats12 (init 1)) with
         bidSizes := #v[2, 0, 0, 0], bidPriceTicks := #v[12, 0, 0, 0],
         bidSequences := #v[~~~(1 : UInt64), 0, 0, 0],
-        bidTraders := #v[7, 0, 0, 0], quoteLocked := 24 }
-      8 12 (~~~(1 : UInt64)) 1 with
+        bidTraders := #v[1, 0, 0, 0], traderQuoteLocked := #v[24, 0, 0, 0],
+        quoteLocked := 24 }
+      2 12 (~~~(1 : UInt64)) 1 with
   | .error .overflow => true
   | _ => false
 
 #guard
-  match cancelAsk { (init 100) with
+  match cancelAsk { (withSeats12 (init 100)) with
       sizes := #v[8, 1, 0, 0], priceTicks := #v[10, 20, 0, 0],
-      sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
-      baseLocked := 9 } 7 10 1 with
+      sequences := #v[1, 2, 0, 0], traders := #v[1, 2, 0, 0],
+      traderBaseLocked := #v[8, 1, 0, 0], baseLocked := 9 } 1 10 1 with
   | .ok (st, ret) => st.sizes[0]! == 0 && st.sizes[1]! == 1 &&
-      st.baseLocked == 1 && st.baseFree == 8 && ret == 8
+      st.baseLocked == 1 && st.baseFree == 8 &&
+      st.traderBaseLocked == #v[0, 1, 0, 0] &&
+      st.traderBaseFree == #v[8, 0, 0, 0] && ret == 8
   | .error _ => false
 
 #guard
-  match cancelAsk (init 100) 7 10 1 with
-  | .ok (st, ret) => st == init 100 && ret == 0
+  match cancelAsk (withSeats12 (init 100)) 1 10 1 with
+  | .ok (st, ret) => st == withSeats12 (init 100) && ret == 0
   | .error _ => false
 
 #guard

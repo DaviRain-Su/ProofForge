@@ -26,7 +26,7 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 147 个 8-byte 叶，账户含 discriminator 共 1,184 bytes。`#pf_build Projects.Phoenix`
-digest `c1ef1654d339a4d1`。
+digest `f110e8e186ca251b`。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -36,8 +36,11 @@ IR 或 emitter 分支。`withdrawBase` / `withdrawQuote` 分别返回 `min(reque
 不混淆两种 lot 单位；`evictSeat` 只释放四类余额全零的 seat，并把 address 压回 LIFO
 free-list。释放 2 再释放 1 时，后续注册按 1、2 复用且 bump index 不回退。lookup 用
 `Except UInt64` producer 汇合到 CFG join local，复合 key guard 由统一 Extract lowering
-承载。当前撮合仍维护旧的四个聚合兼容槽；下一步是把 post/match/reduce 结算逐项切到
-这些 per-seat 余额，再删除兼容槽。deposit/withdraw 的 vault Token CPI 仍属于 adapter 缺口。
+承载。`reduceAsk` / `reduceBid` 的链上入口不再接受可伪造的 trader 参数，而是按 account 1
+signer 完整 Pubkey 解析内部 seat；reduce/cancel 同时解锁该 seat 的 base/quote 余额。
+旧的四个聚合槽暂时作为尚未迁移的 matching path 兼容投影同步更新；下一步是把
+post/match 结算切到 per-seat 余额，再删除兼容槽。deposit/withdraw 的 vault Token CPI
+仍属于 adapter 缺口。
 
 `postAsk` 是链上 free-funds 挂单：检查 incoming TIF 和 sequence 上界，锁定
 `baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；书满时只有更低价
@@ -53,12 +56,14 @@ fill、手续费或 transfer。
 quote 和费用先按整次撮合聚合再向上取整。结算扣 `quoteLocked`、增加
 `quoteFree`，扣 maker `baseLocked`，把成交和过期解锁量加到 `baseFree`，并增加
 `unclaimedFees`；`collectFees` 原子地把它转进 lifetime `collectedFees`。非零成交保留
-Token `TransferChecked` CPI。`reduceAsk` 按 trader + `(price, sequence)` 验 owner，
-减少 `min(requested, resting)` 并正确解锁 base；缺失订单成功返回 0。
+Token `TransferChecked` CPI。`reduceAsk` 按 signer seat + `(price, sequence)` 验 owner，
+减少 `min(requested, resting)`，同时更新 trader base ledger 和 aggregate compatibility
+projection；缺失订单成功返回 0。
 
 bid-side 对称地按价格降序排列，订单 ID 保存官方的 `~~~sequence` 编码，同价时编码
 降序即时间 FIFO。`postBid` 按原价把 quote 从 free 锁入 locked，满书只允许更高价
-驱逐最差 bid；`reduceBid` / `cancelBid` 按原价解锁。`swapSell` 扫过期和跨档 bid，
+驱逐最差 bid；`reduceBid` / `cancelBid` 按原价解锁 owner seat 的 quote collateral。
+`swapSell` 扫过期和跨档 bid，
 按总成交 adjusted quote 收 taker fee，并覆盖三种 self-trade 行为。宿主递归规范和
 链上 structured fold 对样本空间逐项一致。挂单记录 `Evict` / `Place` / `TimeInForce`；
 撮合逐档记录 `Fill` / `ExpiredOrder` / self-trade `Reduce`，最后记录
@@ -68,9 +73,10 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 `(lo, hi)` 两个 `UInt64` limb 完整保留；这正好仍落在五 payload 的最大布局内，
 所以 event layout 未再增大。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 507,074-byte assembly、
-120,288-byte eBPF ELF 和 13,584-byte IDL。assembly 是中间文本，不部署；当前 ELF
-约 117.5 KiB。测试把 assembly budget 钉在 525 KB，并拒绝重复 label。
+真实源模块经 `pf build --target svm Phoenix` 生成 559,613-byte assembly、
+131,536-byte eBPF ELF 和 13,529-byte IDL。assembly 是中间文本，不部署；当前 ELF
+约 128.5 KiB。两个 authenticated reduce 入口各自内联 bounded Pubkey lookup 后，ELF
+比上一切片增加 11,248 bytes。测试把 assembly budget 钉在 575 KB，并拒绝重复 label。
 链上 buy / sell 分别是 19 / 23 phase，挂单是 17 phase；代码体积按 bounded loop
 增长，不按四档静态展开。
 

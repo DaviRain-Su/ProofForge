@@ -89,3 +89,4 @@
 | T-L5-04 | happy | Phoenix event batch | Fill/Expired/Reduce/Evict/Place/TIF/Fee/Summary 顺序正确 |
 | T-L5-05 | happy / fail | Phoenix trader registry | 四-limb Pubkey、幂等注册、容量上限、per-seat deposit 与溢出 |
 | T-L5-06 | happy / fail | Phoenix seat lifecycle | base/quote partial withdraw、非空拒绝 eviction、LIFO address reuse |
+| T-L5-07 | happy / fail | Phoenix authenticated reduce/cancel | 完整 signer Pubkey 解析 owner；ask/base 与 bid/quote per-seat 余额同步解锁；伪造 seat 拒绝 |
