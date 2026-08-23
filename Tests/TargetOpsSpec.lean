@@ -47,4 +47,39 @@ private def legacyOpsRoundTrip (ops : Array ProofForge.Ops.Op) : Bool :=
 #guard ProofForge.Golden.programs.all fun program =>
   program.methods.all fun method => legacyOpsRoundTrip method.ops
 
+private def coreSchema : ProofForge.Core.Schema :=
+  { rootType := "CoreCounter.State"
+    leaves := #[{
+      place := { steps := #[.field "CoreCounter.State" 0 "value"] }
+      name := "value"
+      ty := .uint 64
+    }] }
+
+private def coreProgram : ProofForge.Extract.IR.Program :=
+  let schema := coreSchema
+  { name := "CoreCounter"
+    slots := ProofForge.Core.IR.slotsOfSchema schema
+    schema
+    methods := #[
+      { kind := .init, name := "init", ixName := "initialize" },
+      { kind := .increment, name := "tick", ixName := "tick" },
+      { kind := .get, name := "get", ixName := "get" }
+    ] }
+
+#guard ProofForge.Core.IR.schemaMatchesSlots coreProgram
+#guard ProofForge.Core.IR.isProgramShape coreProgram
+
+private def genericEvaluation : Except String ProofForge.Extract.IR.Evaluation :=
+  let slot : ProofForge.Extract.IR.Val := .ext (.svm .clockSlot) #[]
+  let ops : Array ProofForge.Extract.IR.Op :=
+    #[.storeField "value" slot, .okState slot]
+  ProofForge.Core.evaluate coreSchema ops
+
+#guard
+  match genericEvaluation with
+  | .ok evaluation =>
+      evaluation.explicit && evaluation.events.size == 2 &&
+        evaluation.commits.size == 1 && evaluation.commits[0]!.writes.isEmpty
+  | .error _ => false
+
 end Tests.TargetOpsSpec

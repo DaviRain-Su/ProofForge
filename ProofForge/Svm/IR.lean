@@ -1,4 +1,4 @@
-import ProofForge.Core.IR
+import ProofForge.Extract.LegacyIR
 import ProofForge.Svm.ABI
 
 namespace ProofForge.Svm.IR
@@ -112,7 +112,7 @@ structure Method where
   paramWidths : Array Nat := #[]
   retCount : Nat := 1
   ops : Array Op := #[]
-  evaluation : Core.Evaluation := {}
+  evaluation : Extract.Legacy.Evaluation := {}
   deriving BEq, Repr, Inhabited
 
 /-- A statically addressed SVM account-data cell. Offsets include the eight-byte layout marker. -/
@@ -147,10 +147,10 @@ structure Program where
   schema : Core.Schema := {}
   methods : Array Method
   /-- Retained only for protocol metadata and stable pre-existing digests. -/
-  source : Core.IR.Program
+  source : Extract.Legacy.Program
   deriving BEq, Repr, Inhabited
 
-private def lowerSlots (src : Core.IR.Program) : Array Slot := Id.run do
+private def lowerSlots (src : Extract.Legacy.Program) : Array Slot := Id.run do
   let mut result := #[]
   let mut offset := 8
   for i in [0:src.slots.size] do
@@ -165,7 +165,7 @@ private def lowerSlots (src : Core.IR.Program) : Array Slot := Id.run do
     offset := offset + slot.width
   return result
 
-private def lowerVectors (src : Core.IR.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Extract.Legacy.Program) (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseIndex ← src.schema.vectorBaseLeafIndex? vector
     let base ← slots[baseIndex]?
@@ -187,7 +187,7 @@ private def lowerVectors (src : Core.IR.Program) (slots : Array Slot) : Array Ve
       leaves
     }
 
-private def lowerMethod (method : Core.IR.Method) : Except String Method := do
+private def lowerMethod (method : Extract.Legacy.Method) : Except String Method := do
   if Ops.hasEvmEffect method.ops then
     throw "extract/unsupported: svm rejects evm leaf"
   return {
@@ -202,7 +202,7 @@ private def lowerMethod (method : Core.IR.Method) : Except String Method := do
   }
 
 /-- Lower source metadata and compatibility Ops into an SVM-owned physical program. -/
-def fromProgram (src : Core.IR.Program) : Except String Program := do
+def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
   let slots := lowerSlots src
   return {
     name := src.name
@@ -245,10 +245,10 @@ def vectorStride (p : Program) (name : String) : Nat :=
 def optionLeafNames? (p : Program) : Option (String × String) :=
   match p.schema.firstOption? with
   | some (tag, payload) => some (tag.name, payload.name)
-  | none => Core.IR.optionLeafNames? p.source
+  | none => Extract.Legacy.optionLeafNames? p.source
 
 def isProgramShape (p : Program) : Bool :=
-  Core.IR.isProgramShape p.source
+  Extract.Legacy.isProgramShape p.source
 
 def usesCpi (p : Program) : Bool :=
   p.methods.any (hasInvoke ·.ops)
@@ -269,7 +269,7 @@ def layoutMarkerHex (p : Program) : Except String String :=
   ABI.layoutMarkerHex p.source
 
 def digestHex (p : Program) : String :=
-  Core.IR.digestHex p.source
+  Extract.Legacy.digestHex p.source
 
 def discHex (m : Method) : Except String String :=
   ABI.discHex {

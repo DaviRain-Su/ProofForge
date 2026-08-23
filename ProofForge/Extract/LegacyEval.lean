@@ -1,78 +1,66 @@
-import ProofForge.Core.Ops
-import ProofForge.Core.Schema
+import ProofForge.Ops
+import ProofForge.Core.Eval
 
-namespace ProofForge.Core
+namespace ProofForge.Extract.Legacy
 
-inductive CheckedArith where
-  | add | sub | mul | div | mod
-  deriving BEq, Repr, Inhabited
+/--
+Temporary semantic view for the closed-union extractor output. It is intentionally outside Core;
+new source dialects use `ProofForge.Core.Evaluation` through `ProofForge.Extract.IR`.
+-/
+abbrev Place := Core.Place
+abbrev PathStep := Core.PathStep
+abbrev Schema := Core.Schema
+abbrev CheckedArith := Core.CheckedArith
 
 /-- A source value or an explicitly named checked calculation; no backend accumulator is observable. -/
-inductive ValueRef (ValExt : Type) where
-  | source (value : Ops.Val ValExt)
-  | checked (kind : CheckedArith) (lhs rhs : Ops.Val ValExt)
-  deriving BEq, Repr
-
-instance : Inhabited (ValueRef ValExt) := ⟨.source (.lit 0)⟩
-
-/-- A target-neutral write to one statically known source-level state leaf. -/
-structure StateWrite (ValExt : Type) where
-  place : Place
-  value : ValueRef ValExt
-  deriving BEq, Repr
-
-instance : Inhabited (StateWrite ValExt) where
-  default := { place := default, value := default }
-
-/-- A runtime vector index plus a typed path inside one element. -/
-structure DynamicPlace (ValExt : Type) where
-  vector : Place
-  index : Ops.Val ValExt
-  /-- Relative to the element root; empty for a vector of scalar leaves. -/
-  elementPath : Array PathStep := #[]
-  deriving BEq, Repr
-
-instance : Inhabited (DynamicPlace ValExt) where
-  default := { vector := default, index := default }
-
-structure DynamicWrite (ValExt : Type) where
-  place : DynamicPlace ValExt
-  value : ValueRef ValExt
-  deriving BEq, Repr
-
-instance : Inhabited (DynamicWrite ValExt) where
-  default := { place := default, value := default }
-
-/-- Successful completion of a mutating source expression and any accompanying static writes. -/
-structure Commit (ValExt : Type) where
-  writes : Array (StateWrite ValExt) := #[]
-  result : ValueRef ValExt
-  deriving BEq, Repr
-
-instance : Inhabited (Commit ValExt) where
-  default := { result := default }
-
-/-- Target-neutral state effects retain source control structure rather than emitter traversal order. -/
-inductive StateEvent (ValExt : Type) where
-  | letValue (i : Nat) (value : Ops.Val ValExt)
-  | write (write : StateWrite ValExt)
-  | dynamicWrite (write : DynamicWrite ValExt)
-  | commit (commit : Commit ValExt)
-  | branch (cmp : Ops.Cmp) (lhs rhs : Ops.Val ValExt)
-      (thenEvents elseEvents : Array (StateEvent ValExt))
-  | loop (bound : Nat) (body : Array (StateEvent ValExt))
-  deriving BEq, Repr
-
-instance : Inhabited (StateEvent ValExt) := ⟨.loop 0 #[]⟩
-
-structure Evaluation (ValExt : Type) where
-  /-- False only for hand-authored legacy fixtures that predate Core evaluation. -/
-  explicit : Bool := false
-  events : Array (StateEvent ValExt) := #[]
+inductive ValueRef where
+  | source (value : Ops.Val)
+  | checked (kind : CheckedArith) (lhs rhs : Ops.Val)
   deriving BEq, Repr, Inhabited
 
-private partial def StateEvent.collectCommits (event : StateEvent ValExt) :
-    Array (Commit ValExt) :=
+/-- A target-neutral write to one statically known source-level state leaf. -/
+structure StateWrite where
+  place : Place
+  value : ValueRef
+  deriving BEq, Repr, Inhabited
+
+/-- A runtime vector index plus a typed path inside one element. -/
+structure DynamicPlace where
+  vector : Place
+  index : Ops.Val
+  /-- Relative to the element root; empty for a vector of scalar leaves. -/
+  elementPath : Array PathStep := #[]
+  deriving BEq, Repr, Inhabited
+
+structure DynamicWrite where
+  place : DynamicPlace
+  value : ValueRef
+  deriving BEq, Repr, Inhabited
+
+/-- Successful completion of a mutating source expression and any accompanying static writes. -/
+structure Commit where
+  writes : Array StateWrite := #[]
+  result : ValueRef
+  deriving BEq, Repr, Inhabited
+
+/-- Target-neutral state effects retain source control structure rather than emitter traversal order. -/
+inductive StateEvent where
+  | letValue (i : Nat) (value : Ops.Val)
+  | write (write : StateWrite)
+  | dynamicWrite (write : DynamicWrite)
+  | commit (commit : Commit)
+  | branch (cmp : Ops.Cmp) (lhs rhs : Ops.Val)
+      (thenEvents elseEvents : Array StateEvent)
+  | loop (bound : Nat) (body : Array StateEvent)
+  deriving BEq, Repr, Inhabited
+
+structure Evaluation where
+  /-- False only for hand-authored legacy fixtures that predate Core evaluation. -/
+  explicit : Bool := false
+  events : Array StateEvent := #[]
+  deriving BEq, Repr, Inhabited
+
+private partial def StateEvent.collectCommits (event : StateEvent) : Array Commit :=
   match event with
   | StateEvent.commit item => #[item]
   | StateEvent.branch _ _ _ thenEvents elseEvents =>
@@ -81,11 +69,10 @@ private partial def StateEvent.collectCommits (event : StateEvent ValExt) :
   | StateEvent.loop _ body => body.flatMap StateEvent.collectCommits
   | StateEvent.letValue .. | StateEvent.write _ | StateEvent.dynamicWrite _ => #[]
 
-def Evaluation.commits (evaluation : Evaluation ValExt) : Array (Commit ValExt) :=
+def Evaluation.commits (evaluation : Evaluation) : Array Commit :=
   evaluation.events.flatMap StateEvent.collectCommits
 
-private partial def StateEvent.collectDynamicWrites (event : StateEvent ValExt) :
-    Array (DynamicWrite ValExt) :=
+private partial def StateEvent.collectDynamicWrites (event : StateEvent) : Array DynamicWrite :=
   match event with
   | StateEvent.dynamicWrite item => #[item]
   | StateEvent.branch _ _ _ thenEvents elseEvents =>
@@ -94,7 +81,7 @@ private partial def StateEvent.collectDynamicWrites (event : StateEvent ValExt) 
   | StateEvent.loop _ body => body.flatMap StateEvent.collectDynamicWrites
   | StateEvent.letValue .. | StateEvent.write _ | StateEvent.commit _ => #[]
 
-def Evaluation.dynamicWrites (evaluation : Evaluation ValExt) : Array (DynamicWrite ValExt) :=
+def Evaluation.dynamicWrites (evaluation : Evaluation) : Array DynamicWrite :=
   evaluation.events.flatMap StateEvent.collectDynamicWrites
 
 private def firstPlace (schema : Schema) : Except String Place :=
@@ -107,8 +94,7 @@ private def placeByName (schema : Schema) (name : String) : Except String Place 
   | some leaf => .ok leaf.place
   | none => .error s!"extract/unsupported: unknown state leaf {name}"
 
-private def checkedValue? (ops : Array (Ops.Op ValExt OpExt)) :
-    Option (Option String × ValueRef ValExt) :=
+private def checkedValue? (ops : Array Ops.Op) : Option (Option String × ValueRef) :=
   ops.findSome? fun
     | .checkedAddU64 lhs rhs =>
         some ((match lhs with | .field _ name => some name | _ => none), .checked .add lhs rhs)
@@ -122,22 +108,8 @@ private def checkedValue? (ops : Array (Ops.Op ValExt OpExt)) :
         some ((match lhs with | .field _ name => some name | _ => none), .checked .mod lhs rhs)
     | _ => none
 
-private partial def hasStoreField (ops : Array (Ops.Op ValExt OpExt)) : Bool :=
-  ops.any fun
-    | .storeField .. => true
-    | .ite _ _ _ thn els => hasStoreField thn || hasStoreField els
-    | .forBody _ body => hasStoreField body
-    | _ => false
-
-private partial def hasIndexSet (ops : Array (Ops.Op ValExt OpExt)) : Bool :=
-  ops.any fun
-    | .indexSet .. => true
-    | .ite _ _ _ thn els => hasIndexSet thn || hasIndexSet els
-    | .forBody _ body => hasIndexSet body
-    | _ => false
-
-private def implicitDestination (schema : Schema) (ops : Array (Ops.Op ValExt OpExt))
-    (value : Ops.Val ValExt) : Except String Place := do
+private def implicitDestination (schema : Schema) (ops : Array Ops.Op)
+    (value : Ops.Val) : Except String Place := do
   if let some (name?, _) := checkedValue? ops then
     match name? with
     | some name => return ← placeByName schema name
@@ -150,8 +122,7 @@ private def implicitDestination (schema : Schema) (ops : Array (Ops.Op ValExt Op
         firstPlace schema
   | _ => firstPlace schema
 
-private def implicitValue (ops : Array (Ops.Op ValExt OpExt))
-    (value : Ops.Val ValExt) : ValueRef ValExt :=
+private def implicitValue (ops : Array Ops.Op) (value : Ops.Val) : ValueRef :=
   match checkedValue? ops with
   | some (_, checked) => checked
   | none =>
@@ -159,12 +130,15 @@ private def implicitValue (ops : Array (Ops.Op ValExt OpExt))
       | .field _ _ => .source (.arg 0)
       | _ => .source value
 
-private def commitFor (schema : Schema) (ops : Array (Ops.Op ValExt OpExt))
-    (value : Ops.Val ValExt) : Except String (Commit ValExt) := do
-  if hasStoreField ops then
+private def commitFor (schema : Schema) (ops : Array Ops.Op)
+    (value : Ops.Val) : Except String Commit := do
+  -- Explicit stores have their own events. This completion only returns the source result.
+  if Ops.hasStoreField ops then
     return { result := .source value }
-  if hasIndexSet ops then
+  -- `indexSet` already carries its dynamic state write; completion returns its decoded source value.
+  if Ops.hasIndexSet ops then
     return { result := .source value }
+  -- Option construction is a source-level two-leaf write, independent of either target layout.
   if let some (tag, payload) := schema.firstOption? then
     let (tagValue, payloadValue) :=
       match value with
@@ -182,8 +156,8 @@ private def commitFor (schema : Schema) (ops : Array (Ops.Op ValExt OpExt))
   let stored := implicitValue ops value
   return { writes := #[{ place, value := stored }], result := stored }
 
-private def dynamicPlace (schema : Schema) (name : String) (index : Ops.Val ValExt)
-    (byteOffset : Nat) : Except String (DynamicPlace ValExt) := do
+private def dynamicPlace (schema : Schema) (name : String) (index : Ops.Val)
+    (byteOffset : Nat) : Except String DynamicPlace := do
   let some vector := schema.vector? name
     | throw s!"extract/unsupported: unknown vector {name}"
   let mut offset := 0
@@ -194,8 +168,8 @@ private def dynamicPlace (schema : Schema) (name : String) (index : Ops.Val ValE
     offset := offset + leaf.width
   throw s!"extract/unsupported: vector {name} has no leaf at byte offset {byteOffset}"
 
-private partial def eventsFor (schema : Schema) (ops : Array (Ops.Op ValExt OpExt)) :
-    Except String (Array (StateEvent ValExt)) := do
+private partial def eventsFor (schema : Schema) (ops : Array Ops.Op) :
+    Except String (Array StateEvent) := do
   let mut events := #[]
   for op in ops do
     match op with
@@ -224,11 +198,10 @@ private partial def eventsFor (schema : Schema) (ops : Array (Ops.Op ValExt OpEx
     | _ => pure ()
   return events
 
-/-- Resolve implicit mutation conventions without inspecting or naming any target extension. -/
-def evaluate (schema : Schema) (ops : Array (Ops.Op ValExt OpExt)) :
-    Except String (Evaluation ValExt) := do
+/-- Resolve legacy implicit mutation conventions once, before either target backend sees the method. -/
+def evaluate (schema : Schema) (ops : Array Ops.Op) : Except String Evaluation := do
   if schema.isEmpty then
     throw "extract/unsupported: Core evaluation requires a typed state schema"
   return { explicit := true, events := ← eventsFor schema ops }
 
-end ProofForge.Core
+end ProofForge.Extract.Legacy

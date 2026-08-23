@@ -30,7 +30,7 @@ inductive Val (Ext : Type) where
   | divU64 (lhs rhs : Val Ext)
   | modU64 (lhs rhs : Val Ext)
   | ext (kind : Ext) (operands : Array (Val Ext))
-  deriving Repr
+  deriving BEq, Repr
 
 instance : Inhabited (Val Ext) := ⟨.lit 0⟩
 

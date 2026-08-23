@@ -1,4 +1,4 @@
-import ProofForge.Core.IR
+import ProofForge.Extract.LegacyIR
 import ProofForge.Ops
 import ProofForge.Crypto.Keccak
 
@@ -141,7 +141,7 @@ structure Method where
   paramWidths : Array Nat := #[]
   retCount : Nat := 1
   ops : Array Op := #[]
-  evaluation : Core.Evaluation := {}
+  evaluation : Extract.Legacy.Evaluation := {}
   view : Bool := false
   payable : Bool := false
   deriving BEq, Repr, Inhabited
@@ -297,15 +297,15 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
 def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
   walkForbidden 16 ops
 
-private def rejectSlot (s : Core.IR.Slot) : Option String :=
+private def rejectSlot (s : Extract.Legacy.Slot) : Option String :=
   if !(s.width == 1 || s.width == 2 || s.width == 4 || s.width == 8) then
     some s!"extract/unsupported: evm slot {s.name} width {s.width}"
   else none
 
-private def isCtor (m : Core.IR.Method) : Bool :=
+private def isCtor (m : Extract.Legacy.Method) : Bool :=
   m.kind == .init
 
-private def lowerVectors (src : Core.IR.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Extract.Legacy.Program) (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseSlot ← src.schema.vectorBaseLeafIndex? vector
     let _ ← slots[baseSlot]?
@@ -329,14 +329,14 @@ private def lowerVectors (src : Core.IR.Program) (slots : Array Slot) : Array Ve
     }
 
 /-- 从已抽出的 SVM `IR.Program` 做成 EVM 形状。不改原 IR。 -/
-def fromProgram (src : Core.IR.Program) : Except String Program := do
+def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
   if src.slots.isEmpty then
     throw "extract/unsupported: evm program has no slots"
   for s in src.slots do
     if let some reason := rejectSlot s then
       throw reason
-  let mut ctors : Array Core.IR.Method := #[]
-  let mut extras : Array Core.IR.Method := #[]
+  let mut ctors : Array Extract.Legacy.Method := #[]
+  let mut extras : Array Extract.Legacy.Method := #[]
   for m in src.methods do
     if hasSvmLeaf m.ops then
       throw s!"extract/unsupported: evm rejects svm leaf in {m.ixName}"

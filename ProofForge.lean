@@ -3,6 +3,8 @@ import ProofForge.Core.Ops
 import ProofForge.Core.Schema
 import ProofForge.Core.Eval
 import ProofForge.Core.IR
+import ProofForge.Extract.LegacyEval
+import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256
 import ProofForge.Crypto.Keccak
 import ProofForge.Sha256

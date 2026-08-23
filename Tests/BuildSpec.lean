@@ -226,24 +226,24 @@ error: extract/unsupported: no pf_entry
         !asm.contains "call increment"
 
 #guard
-  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter ==
-    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter
+  ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedCounter ==
+    ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedCounter
 
 #guard
-  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter !=
-    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedPair
+  ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedCounter !=
+    ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedPair
 
 #guard
   let p := ProofForge.Golden.extractedPair
-  let q : ProofForge.Core.IR.Program :=
+  let q : ProofForge.Extract.Legacy.Program :=
     { p with methods := p.methods.map fun m =>
         if m.ixName == "getLeft" then
           { m with ops := #[.returnU64 (.field (.arg 0) "right")] }
         else m }
-  ProofForge.Core.IR.digestHex p != ProofForge.Core.IR.digestHex q
+  ProofForge.Extract.Legacy.digestHex p != ProofForge.Extract.Legacy.digestHex q
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
-      asm.contains s!"digest={ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter}"
+      asm.contains s!"digest={ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedCounter}"

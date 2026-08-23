@@ -4,7 +4,7 @@ import Examples.Counter
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
 
 #guard
-  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Core.IR.counterProgram with
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Extract.Legacy.counterProgram with
   | .error "extract/unsupported: init missing returnState" => true
   | .error "extract/unsupported: increment missing checked arith" => true
   | _ => false
@@ -31,7 +31,7 @@ import Examples.Counter
   | some 8 => true
   | _ => false
 
-private def pairShape : ProofForge.Core.IR.Program :=
+private def pairShape : ProofForge.Extract.Legacy.Program :=
   { name := "Pair"
     slots := #[{ name := "left" }, { name := "right" }]
     methods := #[
@@ -88,7 +88,7 @@ private def pairShape : ProofForge.Core.IR.Program :=
   | .ok "0xa2e4c31e74585ac3" => true
   | _ => false
 
-private def swappedIncrement : ProofForge.Core.IR.Program :=
+private def swappedIncrement : ProofForge.Extract.Legacy.Program :=
   { name := "Counter"
     slots := #[{ name := "value" }]
     methods := #[

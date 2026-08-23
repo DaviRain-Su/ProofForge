@@ -1,5 +1,5 @@
 import Lean
-import ProofForge.Core.IR
+import ProofForge.Extract.LegacyIR
 import ProofForge.Ops
 import ProofForge.Profile
 import ProofForge.Attr
@@ -3233,7 +3233,7 @@ private def inferParamWidths (_env : Environment) (e : Expr) (kind : Core.IR.Met
   | .increment | .get => if widths.isEmpty then #[] else widths.extract 1 widths.size
 
 def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
-    Except String Core.IR.Method := do
+    Except String Legacy.Method := do
   let some info := env.find? n
     | throw s!"extract/unsupported: unknown {n}"
   let some e := info.value?
@@ -3632,8 +3632,8 @@ def inferSchema (env : Environment) (initName : Name) : Except String Core.Schem
   return { rootType := structName.toString, leaves, vectors }
 
 /-- Compatibility physical slots are now a derived view of the typed schema. -/
-def inferSlots (env : Environment) (initName : Name) : Except String (Array Core.IR.Slot) := do
-  return Core.IR.slotsOfSchema (← inferSchema env initName)
+def inferSlots (env : Environment) (initName : Name) : Except String (Array Legacy.Slot) := do
+  return Legacy.slotsOfSchema (← inferSchema env initName)
 
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
   return (← inferSlots env initName).map (·.name)
@@ -3712,7 +3712,7 @@ private def opFields : Ops.Op → Array String
   | .returnU64 v => valFields v
   | .returnState v => valFields v
 
-private def fillElemOff (p : Core.IR.Program) : Core.IR.Program :=
+private def fillElemOff (p : Legacy.Program) : Legacy.Program :=
   let rec goVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
     match fuel with
     | 0 => v
@@ -3754,21 +3754,21 @@ private def fillElemOff (p : Core.IR.Program) : Core.IR.Program :=
   { p with methods := p.methods.map fun m => { m with ops := m.ops.map (goOp 8) } }
 
 /-- Make state writeback explicit once, after source schema and normalized Ops are both available. -/
-private def evaluateProgram (p : Core.IR.Program) : Except String Core.IR.Program := do
+private def evaluateProgram (p : Legacy.Program) : Except String Legacy.Program := do
   let mut methods := #[]
   for method in p.methods do
     let evaluation ←
-      match Core.evaluate p.schema method.ops with
+      match Legacy.evaluate p.schema method.ops with
       | .ok evaluation => pure evaluation
       | .error reason => throw s!"{method.ixName}: {reason}"
     methods := methods.push { method with evaluation }
   return { p with methods }
 
-private def checkUsedFields (p : Core.IR.Program) : Except String Unit := do
+private def checkUsedFields (p : Legacy.Program) : Except String Unit := do
   for m in p.methods do
     for op in m.ops do
       for name in opFields op do
-        if (Core.IR.fieldWidth p name).isNone then
+        if (Legacy.fieldWidth p name).isNone then
           throw s!"extract/unsupported: unknown field {name}"
 
 private partial def valEscapedArg (limit : Nat) : Ops.Val → Option Nat
@@ -3817,7 +3817,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .errorOverflow | .errorNamed _ => none
 
 /-- Reject decoder binder leaks before a backend can mistake one for calldata or state. -/
-private def checkArgBounds (p : Core.IR.Program) : Except String Unit := do
+private def checkArgBounds (p : Legacy.Program) : Except String Unit := do
   for method in p.methods do
     let limit := method.paramCount + if method.kind == .init then 0 else 1
     for op in method.ops do
@@ -3830,12 +3830,12 @@ def extractProgram (env : Environment)
     (initName incrementName getName : Name)
     (programName : Option String := none)
     (fields? : Option (Array String) := none) :
-    Except String Core.IR.Program := do
+    Except String Legacy.Program := do
   match Profile.checkAll env #[initName, incrementName, getName] with
   | .reject reason => throw reason
   | .accept => pure ()
   let schema ← inferSchema env initName
-  let inferred := Core.IR.slotsOfSchema schema
+  let inferred := Legacy.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
@@ -3845,15 +3845,15 @@ def extractProgram (env : Environment)
   let initM ← extractMethod env .init initName
   let incM ← extractMethod env .increment incrementName
   let getM ← extractMethod env .get getName
-  let program : Core.IR.Program := {
+  let program : Legacy.Program := {
     name := programName.getD (programNameOfInit initName)
     slots
     schema
     methods := #[initM, incM, getM]
   }
-  unless Core.IR.isProgramShape program do
+  unless Legacy.isProgramShape program do
     throw "extract/unsupported: not three-method shape"
-  unless Core.IR.schemaMatchesSlots program do
+  unless Legacy.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
   checkArgBounds program
@@ -3890,7 +3890,7 @@ private def sortNames (ns : Array Name) : Array Name :=
 /-- 收同一名字空间下 `@[pf_entry]` 的根。须恰好一个 init、至少一个 mutate、至少一个 view。 -/
 def extractModule (env : Environment) (ns : Name)
     (fields? : Option (Array String) := none) :
-    Except String Core.IR.Program := do
+    Except String Legacy.Program := do
   let tagged := sortNames (Attr.entriesIn env ns)
   if tagged.isEmpty then
     throw "extract/unsupported: no pf_entry"
@@ -3916,14 +3916,14 @@ def extractModule (env : Environment) (ns : Name)
     | some n => n
     | none => inits[0]!
   let schema ← inferSchema env initName
-  let inferred := Core.IR.slotsOfSchema schema
+  let inferred := Legacy.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
     | some fs =>
       if fs == inferred.map (·.name) then pure inferred
       else throw s!"extract/unsupported: fields {fs} != inferred {inferred.map (·.name)}"
-  let mut methods : Array Core.IR.Method := #[]
+  let mut methods : Array Legacy.Method := #[]
   let mut seen : Array String := #[]
   for n in inits do
     let m ← extractMethod env .init n
@@ -3943,15 +3943,15 @@ def extractModule (env : Environment) (ns : Name)
       throw s!"extract/unsupported: duplicate ixName {m.ixName}"
     seen := seen.push m.ixName
     methods := methods.push m
-  let program : Core.IR.Program := {
+  let program : Legacy.Program := {
     name := programNameOfInit initName
     slots
     schema
     methods
   }
-  unless Core.IR.isProgramShape program do
+  unless Legacy.isProgramShape program do
     throw "extract/unsupported: not program shape"
-  unless Core.IR.schemaMatchesSlots program do
+  unless Legacy.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
   checkArgBounds program

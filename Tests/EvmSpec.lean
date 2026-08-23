@@ -74,7 +74,7 @@ open ProofForge.Evm
   | .ok p =>
       ProofForge.Evm.IR.digestHex p == ProofForge.Evm.IR.digestHex p &&
         ProofForge.Evm.IR.digestHex p !=
-          ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter
+          ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedCounter
 
 #guard
   match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedCounter,
@@ -110,7 +110,7 @@ open ProofForge.Evm
             yul.contains s!"digest={ProofForge.Evm.IR.digestHex p}"
 
 #guard
-  let source : ProofForge.Core.IR.Program :=
+  let source : ProofForge.Extract.Legacy.Program :=
     { ProofForge.Golden.extractedCounter with
       name := "ValueArith"
       methods := ProofForge.Golden.extractedCounter.methods.map fun m =>

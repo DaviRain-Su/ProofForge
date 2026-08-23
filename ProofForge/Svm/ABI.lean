@@ -1,4 +1,4 @@
-import ProofForge.Core.IR
+import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256
 
 namespace ProofForge.Svm.ABI
@@ -24,10 +24,10 @@ def discPreimage (ixName : String) (paramCount : Nat) : String :=
 def discHexOf (ixName : String) (paramCount : Nat) : Except String String :=
   .ok s!"0x{Core.IR.u64Hex (Sha256.first8Le (discPreimage ixName paramCount))}"
 
-def discHex (method : Core.IR.Method) : Except String String :=
+def discHex (method : Extract.Legacy.Method) : Except String String :=
   discHexOf method.ixName method.paramCount
 
-def fieldOffset (program : Core.IR.Program) (name : String) : Option Nat :=
+def fieldOffset (program : Extract.Legacy.Program) (name : String) : Option Nat :=
   Id.run do
     let mut offset : Nat := 8
     for slot in program.slots do
@@ -42,7 +42,7 @@ structure VectorStorage where
   strideSlots : Nat
   deriving BEq, Repr, Inhabited
 
-private def legacyVectorStorage (program : Core.IR.Program) (name : String) :
+private def legacyVectorStorage (program : Extract.Legacy.Program) (name : String) :
     Option VectorStorage :=
   let prefix0 := name ++ "_0"
   let group :=
@@ -69,7 +69,7 @@ private def legacyVectorStorage (program : Core.IR.Program) (name : String) :
     if length == 0 || width == 0 then none
     else some { baseSlot, length, strideBytes := width, strideSlots := group.size }
 
-def vectorStorage (program : Core.IR.Program) (name : String) : Option VectorStorage :=
+def vectorStorage (program : Extract.Legacy.Program) (name : String) : Option VectorStorage :=
   match program.schema.vector? name with
   | some vector => do
       let baseSlot ← program.schema.vectorBaseLeafIndex? vector
@@ -81,30 +81,30 @@ def vectorStorage (program : Core.IR.Program) (name : String) : Option VectorSto
       }
   | none => legacyVectorStorage program name
 
-def vectorElem (program : Core.IR.Program) (name : String) : Option (Nat × Nat) :=
+def vectorElem (program : Extract.Legacy.Program) (name : String) : Option (Nat × Nat) :=
   (vectorStorage program name).map fun layout => (layout.length, layout.strideBytes)
 
-def vectorLenOf (program : Core.IR.Program) (name : String) (given : Nat) : Nat :=
+def vectorLenOf (program : Extract.Legacy.Program) (name : String) (given : Nat) : Nat :=
   if given != 0 then given
   else (vectorElem program name).map (·.1) |>.getD 0
 
-def vectorStride (program : Core.IR.Program) (name : String) : Nat :=
+def vectorStride (program : Extract.Legacy.Program) (name : String) : Nat :=
   (vectorElem program name).map (·.2) |>.getD 8
 
-private def slotOffsetAt (program : Core.IR.Program) (index : Nat) : Option Nat :=
+private def slotOffsetAt (program : Extract.Legacy.Program) (index : Nat) : Option Nat :=
   if index >= program.slots.size then none
   else
     let before := program.slots.extract 0 index
     some (8 + before.foldl (init := 0) fun acc slot => acc + slot.width)
 
-def vectorBaseOffset (program : Core.IR.Program) (name : String) : Option Nat := do
+def vectorBaseOffset (program : Extract.Legacy.Program) (name : String) : Option Nat := do
   let layout ← vectorStorage program name
   slotOffsetAt program layout.baseSlot
 
-def vectorBaseSlot (program : Core.IR.Program) (name : String) : Option Nat :=
+def vectorBaseSlot (program : Extract.Legacy.Program) (name : String) : Option Nat :=
   (vectorStorage program name).map (·.baseSlot)
 
-private def legacyVectorLeafOff (program : Core.IR.Program) (name leaf : String) : Nat :=
+private def legacyVectorLeafOff (program : Extract.Legacy.Program) (name leaf : String) : Nat :=
   let prefix0 := name ++ "_0"
   Id.run do
     let mut offset : Nat := 0
@@ -115,7 +115,7 @@ private def legacyVectorLeafOff (program : Core.IR.Program) (name leaf : String)
         offset := offset + slot.width
     return offset
 
-def vectorLeafOff (program : Core.IR.Program) (name leaf : String) : Nat :=
+def vectorLeafOff (program : Extract.Legacy.Program) (name leaf : String) : Nat :=
   match program.schema.vector? name with
   | some vector => Id.run do
       let mut offset : Nat := 0
@@ -125,7 +125,7 @@ def vectorLeafOff (program : Core.IR.Program) (name leaf : String) : Nat :=
       return offset
   | none => legacyVectorLeafOff program name leaf
 
-private def legacyVectorLeafName (program : Core.IR.Program) (name : String)
+private def legacyVectorLeafName (program : Extract.Legacy.Program) (name : String)
     (offset : Nat) : String :=
   let prefix0 := name ++ "_0"
   Id.run do
@@ -140,7 +140,7 @@ private def legacyVectorLeafName (program : Core.IR.Program) (name : String)
         current := current + slot.width
     return "value"
 
-def vectorLeafName (program : Core.IR.Program) (name : String) (offset : Nat) : String :=
+def vectorLeafName (program : Extract.Legacy.Program) (name : String) (offset : Nat) : String :=
   match program.schema.vector? name with
   | some vector => Id.run do
       let mut current : Nat := 0
@@ -150,7 +150,7 @@ def vectorLeafName (program : Core.IR.Program) (name : String) (offset : Nat) : 
       return "value"
   | none => legacyVectorLeafName program name offset
 
-def dataLen (program : Core.IR.Program) : Nat :=
+def dataLen (program : Extract.Legacy.Program) : Nat :=
   let raw := 8 + program.slots.foldl (init := 0) fun acc slot => acc + slot.width
   raw + (8 - raw % 8) % 8
 
@@ -170,16 +170,16 @@ def accountSpan (accountDataLen : Nat) : Nat :=
   let dataEnd := accountPrefix + accountDataLen + maxPermittedDataIncrease
   dataEnd + (8 - dataEnd % 8) % 8 + 8
 
-def usesCpi (program : Core.IR.Program) : Bool :=
+def usesCpi (program : Extract.Legacy.Program) : Bool :=
   program.methods.any fun method => Ops.hasInvoke method.ops
 
-def usesWalk (program : Core.IR.Program) : Bool :=
+def usesWalk (program : Extract.Legacy.Program) : Bool :=
   usesCpi program || program.methods.any fun method => Ops.hasAcc1 method.ops
 
-def usesSystemTransfer (program : Core.IR.Program) : Bool :=
+def usesSystemTransfer (program : Extract.Legacy.Program) : Bool :=
   usesCpi program
 
-def cpiAccountCount (program : Core.IR.Program) : Nat :=
+def cpiAccountCount (program : Extract.Legacy.Program) : Nat :=
   let rec maxIndex (fuel : Nat) (ops : Array Ops.Op) (acc : Nat) : Nat :=
     match fuel with
     | 0 => acc
@@ -201,7 +201,7 @@ def cpiAccountCount (program : Core.IR.Program) : Nat :=
     Nat.max acc (Ops.opsMinAccounts method.ops)
   Nat.max fromInvoke fromLeaves
 
-def inputLayout (program : Core.IR.Program) : InputLayout :=
+def inputLayout (program : Extract.Legacy.Program) : InputLayout :=
   if usesWalk program then
     let accountCount := cpiAccountCount program
     let rec lastRent (remaining : Nat) (offset : Nat) : Nat :=
@@ -218,7 +218,7 @@ def inputLayout (program : Core.IR.Program) : InputLayout :=
 def layoutSlotName (name : String) : String :=
   if name == "value" then "count" else name
 
-def layoutSig (program : Core.IR.Program) : String :=
+def layoutSig (program : Extract.Legacy.Program) : String :=
   let parts := Id.run do
     let mut result : Array String := #[]
     let mut index : Nat := 0
@@ -231,10 +231,10 @@ def layoutSig (program : Core.IR.Program) : String :=
     return result
   s!"{program.slots.size}|{String.intercalate "|" parts.toList}"
 
-def layoutPreimage (program : Core.IR.Program) : String :=
+def layoutPreimage (program : Extract.Legacy.Program) : String :=
   s!"proof-forge-solana-layout-v1:{layoutSig program}"
 
-def layoutMarkerHex (program : Core.IR.Program) : Except String String :=
+def layoutMarkerHex (program : Extract.Legacy.Program) : Except String String :=
   .ok s!"0x{Core.IR.u64Hex (Sha256.first8Be (layoutPreimage program))}"
 
 end ProofForge.Svm.ABI

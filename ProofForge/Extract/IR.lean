@@ -1,5 +1,6 @@
 import ProofForge.Ops
 import ProofForge.Core.Ops
+import ProofForge.Core.IR
 import ProofForge.Svm.Ops
 import ProofForge.Evm.Ops
 
@@ -24,6 +25,9 @@ inductive OpExt (V : Type) where
 abbrev Cmp := Core.Ops.Cmp
 abbrev Val := Core.Ops.Val ValKind
 abbrev Op := Core.Ops.Op ValKind OpExt
+abbrev Evaluation := Core.Evaluation ValKind
+abbrev Method := Core.IR.Method ValKind OpExt
+abbrev Program := Core.IR.Program ValKind OpExt
 
 private def cmpOfLegacy : ProofForge.Ops.Cmp → Cmp
   | .eq => .eq

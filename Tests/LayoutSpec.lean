@@ -15,7 +15,7 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  let p : ProofForge.Core.IR.Program :=
+  let p : ProofForge.Extract.Legacy.Program :=
     { name := "Maybe"
       slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]
       methods := #[] }
@@ -54,12 +54,12 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedFlag ==
-    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedFlag
+  ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedFlag ==
+    ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedFlag
 
 #guard
-  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedFlag !=
-    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedMaybe
+  ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedFlag !=
+    ProofForge.Extract.Legacy.digestHex ProofForge.Golden.extractedMaybe
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedFlag with

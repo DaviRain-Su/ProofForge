@@ -1,4 +1,4 @@
-import ProofForge.Core.IR
+import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256
 import ProofForge.Svm.ABI
 
@@ -25,7 +25,7 @@ private def bytesJson (bs : Array Nat) : String :=
 def discBytes (ixName : String) (paramCount : Nat) : Array Nat :=
   u64LeBytes (Sha256.first8Le (ABI.discPreimage ixName paramCount))
 
-def layoutDiscBytes (p : Core.IR.Program) : Array Nat :=
+def layoutDiscBytes (p : Extract.Legacy.Program) : Array Nat :=
   u64BeBytes (Sha256.first8Be (ABI.layoutPreimage p))
 
 private def idlTypeOfAbi (abi : String) : String :=
@@ -46,7 +46,7 @@ private def accJson (name : String) (writable signer : Bool) : String :=
   "{\"name\":\"" ++ escapeJson name ++ "\"" ++ w ++ s ++ "}"
 
 /-- 外层账户：acc0 是 state。CPI 程序再列 acc1…。旗是保守默认，不是每条 recipe 的 metas。 -/
-private def ixAccounts (p : Core.IR.Program) (m : Core.IR.Method) : String :=
+private def ixAccounts (p : Extract.Legacy.Program) (m : Extract.Legacy.Method) : String :=
   let n := Nat.max 1 (ABI.cpiAccountCount p)
   let view := m.kind == .get
   let items :=
@@ -55,7 +55,7 @@ private def ixAccounts (p : Core.IR.Program) (m : Core.IR.Method) : String :=
       accJson name (!view && i == 0) (!view && i == 0)
   "[" ++ String.intercalate ", " items ++ "]"
 
-private def instructionJson (p : Core.IR.Program) (m : Core.IR.Method) : String :=
+private def instructionJson (p : Extract.Legacy.Program) (m : Extract.Legacy.Method) : String :=
   "    {\n" ++
     "      \"name\": \"" ++ escapeJson m.ixName ++ "\",\n" ++
     "      \"discriminator\": " ++ bytesJson (discBytes m.ixName m.paramCount) ++ ",\n" ++
@@ -63,10 +63,10 @@ private def instructionJson (p : Core.IR.Program) (m : Core.IR.Method) : String 
     "      \"args\": " ++ argsJson m.paramCount ++ "\n" ++
     "    }"
 
-private def fieldJson (s : Core.IR.Slot) : String :=
+private def fieldJson (s : Extract.Legacy.Slot) : String :=
   "{\"name\":\"" ++ escapeJson s.name ++ "\",\"type\":\"" ++ idlTypeOfAbi s.abi ++ "\"}"
 
-private def typesJson (p : Core.IR.Program) : String :=
+private def typesJson (p : Extract.Legacy.Program) : String :=
   let fields := String.intercalate ", " (p.slots.map fieldJson).toList
   "    {\n" ++
     "      \"name\": \"State\",\n" ++
@@ -77,7 +77,7 @@ private def typesJson (p : Core.IR.Program) : String :=
     "    }"
 
 /-- Solana IDL spec 0.1.0。`address` 是 32 个 1，部署后替换。 -/
-def emitIdl (p : Core.IR.Program) : String :=
+def emitIdl (p : Extract.Legacy.Program) : String :=
   let ixs := String.intercalate ",\n" (p.methods.map (instructionJson p)).toList
   "{\n" ++
     "  \"address\": \"11111111111111111111111111111111\",\n" ++

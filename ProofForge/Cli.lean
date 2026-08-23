@@ -59,7 +59,7 @@ private def parseArgs (args : List String) : Except String Options :=
     | rest => rest
   go args {}
 
-private def svmFixtures : Array Core.IR.Program :=
+private def svmFixtures : Array Extract.Legacy.Program :=
   Golden.programs.filter fun p =>
     !p.methods.any (fun m => Ops.hasEvmEffect m.ops)
 
@@ -80,7 +80,7 @@ CLI 构建必须重新从用户模块抽 IR，不能组装 `Golden` smoke fixtur
 列出可构建模块并钉 canonical digest。
 -/
 private unsafe def extractSvmPrograms (names : Array String) :
-    IO (Except String (Array Core.IR.Program)) :=
+    IO (Except String (Array Extract.Legacy.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
@@ -91,7 +91,7 @@ private unsafe def extractSvmPrograms (names : Array String) :
       match Extract.extractModule env ns none with
       | .error reason => .error s!"{name}: {reason}"
       | .ok program =>
-        let digest := Core.IR.digestHex program
+        let digest := Extract.Legacy.digestHex program
         match Golden.digestOf name with
         | some expected =>
           if digest == expected then .ok program

@@ -1,9 +1,9 @@
-import ProofForge.Core.IR
+import ProofForge.Extract.LegacyIR
 import ProofForge.Ops
 
 namespace ProofForge.Golden
 
-open ProofForge.Core.IR
+open ProofForge.Extract.Legacy
 open ProofForge.Ops
 
 def extractedCounter : Program :=

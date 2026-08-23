@@ -69,7 +69,7 @@ elab "#pf_build " n:ident : command => do
     | .ok asm =>
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
-      let digest := Core.IR.digestHex program
+      let digest := Extract.Legacy.digestHex program
       match ProofForge.Golden.digestOf program.name with
       | some want =>
         if digest != want then

@@ -53,7 +53,7 @@ def getWithLet (s : State) : UInt64 :=
   let value := s.value
   value
 
-private def sameMethodCore (left right : ProofForge.Core.IR.Method) : Bool :=
+private def sameMethodCore (left right : ProofForge.Extract.Legacy.Method) : Bool :=
   left.kind == right.kind &&
     left.paramCount == right.paramCount &&
     left.paramWidths == right.paramWidths &&
@@ -61,7 +61,7 @@ private def sameMethodCore (left right : ProofForge.Core.IR.Method) : Bool :=
     left.ops == right.ops &&
     left.evaluation == right.evaluation
 
-private def sameProgramCore (left right : ProofForge.Core.IR.Program) : Bool :=
+private def sameProgramCore (left right : ProofForge.Extract.Legacy.Program) : Bool :=
   left.slots == right.slots &&
     left.schema == right.schema &&
     left.methods.size == right.methods.size &&
