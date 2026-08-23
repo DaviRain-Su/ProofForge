@@ -1,9 +1,9 @@
-import ProofForge.Extract.LegacyIR
+import ProofForge.Extract.IR
 import ProofForge.Svm.ABI
 
 namespace ProofForge.Svm.IR
 
-/-- SVM instructions are lowered separately from the frontend compatibility Ops. -/
+/-- SVM instructions are lowered separately from the target-owned source Ops. -/
 inductive Op where
   | letLocal (i : Nat) (value : Ops.Val)
   | joinLocal (i : Nat)
@@ -14,7 +14,8 @@ inductive Op where
   | checkedDivU64 (lhs rhs : Ops.Val)
   | checkedModU64 (lhs rhs : Ops.Val)
   | ite (cmp : Ops.Cmp) (lhs rhs : Ops.Val) (thn els : Array Op)
-  | invoke (programIx : Nat) (metas : Array Ops.CpiMeta) (data : Array Ops.CpiWord)
+  | invoke (programIx : Nat) (metas : Array Ops.CpiMeta)
+      (data : Array (Ops.CpiWord Ops.Val))
       (seed : Option String := none) (bump : Option Ops.Val := none)
   | forAccum (n : Nat) (addend : Ops.Val)
   | forBody (n : Nat) (body : Array Op)
@@ -38,7 +39,8 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .checkedModU64 lhs rhs => pure (.checkedModU64 lhs rhs)
   | .ite cmp lhs rhs thn els =>
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
-  | .invoke programIx metas data seed bump => pure (.invoke programIx metas data seed bump)
+  | .ext (.invoke programIx metas data seed bump) =>
+      pure (.invoke programIx metas data seed bump)
   | .forAccum n addend => pure (.forAccum n addend)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSet name idx value len elemOff => pure (.indexSet name idx value len elemOff)
@@ -48,11 +50,6 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .errorNamed name => pure (.errorNamed name)
   | .returnU64 value => pure (.returnU64 value)
   | .returnState value => pure (.returnState value)
-  | .evmDeposit _ | .evmSendEth .. | .evmLog ..
-  | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
-  | .mapGetPair .. | .mapSetPair ..
-  | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. =>
-      throw "extract/unsupported: svm rejects evm leaf"
 
 where
   lowerOps (ops : Array Ops.Op) : Except String (Array Op) :=
@@ -71,7 +68,7 @@ private partial def Op.toSource : Op → Ops.Op
   | .checkedDivU64 lhs rhs => .checkedDivU64 lhs rhs
   | .checkedModU64 lhs rhs => .checkedModU64 lhs rhs
   | .ite cmp lhs rhs thn els => .ite cmp lhs rhs (toSourceOps thn) (toSourceOps els)
-  | .invoke programIx metas data seed bump => .invoke programIx metas data seed bump
+  | .invoke programIx metas data seed bump => .ext (.invoke programIx metas data seed bump)
   | .forAccum n addend => .forAccum n addend
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
@@ -112,7 +109,7 @@ structure Method where
   paramWidths : Array Nat := #[]
   retCount : Nat := 1
   ops : Array Op := #[]
-  evaluation : Extract.Legacy.Evaluation := {}
+  evaluation : Core.Evaluation Ops.ValKind := {}
   deriving BEq, Repr, Inhabited
 
 /-- A statically addressed SVM account-data cell. Offsets include the eight-byte layout marker. -/
@@ -150,7 +147,7 @@ structure Program where
   source : Extract.Legacy.Program
   deriving BEq, Repr, Inhabited
 
-private def lowerSlots (src : Extract.Legacy.Program) : Array Slot := Id.run do
+private def lowerSlots (src : Extract.IR.Program) : Array Slot := Id.run do
   let mut result := #[]
   let mut offset := 8
   for i in [0:src.slots.size] do
@@ -165,7 +162,7 @@ private def lowerSlots (src : Extract.Legacy.Program) : Array Slot := Id.run do
     offset := offset + slot.width
   return result
 
-private def lowerVectors (src : Extract.Legacy.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Extract.IR.Program) (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseIndex ← src.schema.vectorBaseLeafIndex? vector
     let base ← slots[baseIndex]?
@@ -187,9 +184,14 @@ private def lowerVectors (src : Extract.Legacy.Program) (slots : Array Slot) : A
       leaves
     }
 
-private def lowerMethod (method : Extract.Legacy.Method) : Except String Method := do
-  if Ops.hasEvmEffect method.ops then
-    throw "extract/unsupported: svm rejects evm leaf"
+private def lowerMethod (schema : Core.Schema) (method : Extract.IR.Method) :
+    Except String Method := do
+  let sourceOps ← Extract.IR.toSvmOps method.ops
+  unless sourceOps.all Ops.Op.wellFormed do
+    throw s!"extract/ir: malformed SVM Ops in {method.ixName}"
+  let evaluation ←
+    if schema.isEmpty then pure {}
+    else Core.evaluate schema sourceOps
   return {
     kind := method.kind
     name := method.name
@@ -197,21 +199,27 @@ private def lowerMethod (method : Extract.Legacy.Method) : Except String Method 
     paramCount := method.paramCount
     paramWidths := method.paramWidths
     retCount := method.retCount
-    ops := ← ofSourceOps method.ops
-    evaluation := method.evaluation
+    ops := ← ofSourceOps sourceOps
+    evaluation
   }
 
-/-- Lower source metadata and compatibility Ops into an SVM-owned physical program. -/
-def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
+/-- Project the combined extractor dialect and lower it into an SVM-owned physical program. -/
+def fromExtracted (src : Extract.IR.Program) : Except String Program := do
+  src.validateSvm
+  let legacy ← Extract.IR.toLegacyProgram src
   let slots := lowerSlots src
   return {
     name := src.name
     slots
     vectors := lowerVectors src slots
     schema := src.schema
-    methods := ← src.methods.mapM lowerMethod
-    source := src
+    methods := ← src.methods.mapM (lowerMethod src.schema)
+    source := legacy
   }
+
+/-- Compatibility adapter for callers that still own the old closed-union program. -/
+def fromProgram (src : Extract.Legacy.Program) : Except String Program :=
+  Extract.IR.ofLegacyProgram src >>= fromExtracted
 
 def Program.fields (p : Program) : Array String :=
   p.slots.map (·.name)
@@ -245,10 +253,15 @@ def vectorStride (p : Program) (name : String) : Nat :=
 def optionLeafNames? (p : Program) : Option (String × String) :=
   match p.schema.firstOption? with
   | some (tag, payload) => some (tag.name, payload.name)
-  | none => Extract.Legacy.optionLeafNames? p.source
+  | none => do
+      let tag ← p.slots.find? (fun slot => slot.name.endsWith "_tag")
+      let payload ← p.slots.find? (fun slot => slot.name.endsWith "_p0")
+      return (tag.name, payload.name)
 
 def isProgramShape (p : Program) : Bool :=
-  Extract.Legacy.isProgramShape p.source
+  p.methods.any (·.kind == .init) &&
+    p.methods.any (·.kind == .increment) &&
+    p.methods.any (·.kind == .get)
 
 def usesCpi (p : Program) : Bool :=
   p.methods.any (hasInvoke ·.ops)
@@ -257,7 +270,25 @@ def usesWalk (p : Program) : Bool :=
   usesCpi p || p.methods.any fun method => Ops.hasAcc1 (toSourceOps method.ops)
 
 def cpiAccountCount (p : Program) : Nat :=
-  ABI.cpiAccountCount p.source
+  let rec highestInvoke (fuel : Nat) (ops : Array Op) (current : Nat) : Nat :=
+    match fuel with
+    | 0 => current
+    | fuel' + 1 =>
+        ops.foldl (init := current) fun result op =>
+          match op with
+          | .invoke programIndex metas .. =>
+              metas.foldl (init := Nat.max result programIndex) fun value entry =>
+                Nat.max value entry.acc
+          | .ite _ _ _ thn els =>
+              Nat.max (highestInvoke fuel' thn result) (highestInvoke fuel' els result)
+          | .forBody _ body => highestInvoke fuel' body result
+          | _ => result
+  let highest := p.methods.foldl (init := 0) fun current method =>
+    Nat.max current (highestInvoke 8 method.ops 0)
+  let fromInvoke := if usesCpi p then Nat.max 2 (highest + 1) else 0
+  let fromValues := p.methods.foldl (init := 0) fun current method =>
+    Nat.max current (Ops.opsMinAccounts (toSourceOps method.ops))
+  Nat.max fromInvoke fromValues
 
 def dataLen (p : Program) : Nat :=
   ABI.dataLen p.source
@@ -272,16 +303,7 @@ def digestHex (p : Program) : String :=
   Extract.Legacy.digestHex p.source
 
 def discHex (m : Method) : Except String String :=
-  ABI.discHex {
-    kind := m.kind
-    name := m.name
-    ixName := m.ixName
-    paramCount := m.paramCount
-    paramWidths := m.paramWidths
-    retCount := m.retCount
-    ops := toSourceOps m.ops
-    evaluation := m.evaluation
-  }
+  ABI.discHexOf m.ixName m.paramCount
 
 def lastName := Core.IR.lastName
 def ixNameOfLean := Core.IR.ixNameOfLean

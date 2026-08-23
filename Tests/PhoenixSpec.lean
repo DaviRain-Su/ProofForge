@@ -21,7 +21,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     | .ok program => pure program
     | .error reason => throwError reason
   let asm ←
-    match ProofForge.Svm.Emit.emitCounterAsm program with
+    match ProofForge.Svm.Emit.emitProgramAsm source with
     | .ok asm => pure asm
     | .error reason => throwError reason
   unless asm.toUTF8.size < 450000 do

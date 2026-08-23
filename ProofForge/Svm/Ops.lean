@@ -44,6 +44,7 @@ def ValKind.arity : ValKind → Nat
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
+abbrev Cmp := ProofForge.Core.Ops.Cmp
 
 structure CpiMeta where
   acc : Nat
@@ -118,5 +119,166 @@ def OpExt.wellFormed : OpExt Val → Bool
 
 def Op.wellFormed (op : Op) : Bool :=
   ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op
+
+private partial def walkOps (fuel : Nat) (ops : Array Op) (predicate : Op → Bool) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel' + 1 =>
+      ops.any fun op =>
+        predicate op ||
+          match op with
+          | .ite _ _ _ thn els => walkOps fuel' thn predicate || walkOps fuel' els predicate
+          | .forBody _ body => walkOps fuel' body predicate
+          | _ => false
+
+partial def valNeedsWalk : Val → Bool
+  | .arg _ | .local _ | .lit _ | .loopIx => false
+  | .field base _ | .bitNot base => valNeedsWalk base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs => valNeedsWalk lhs || valNeedsWalk rhs
+  | .indexGet base _ idx _ _ => valNeedsWalk base || valNeedsWalk idx
+  | .select _ lhs rhs thn els =>
+      valNeedsWalk lhs || valNeedsWalk rhs || valNeedsWalk thn || valNeedsWalk els
+  | .ext kind operands =>
+      (match kind with
+       | .accLamports1 | .accOwner1 | .accDataLen1
+       | .isSigner1 | .isWritable1 | .isExecutable1 => true
+       | .accKeyWord acc _ | .accOwnerWord acc _
+       | .accLamportsN acc | .accDataLenN acc
+       | .isSignerN acc | .isWritableN acc | .isExecutableN acc
+       | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
+       | _ => false) || operands.any valNeedsWalk
+
+partial def valMinAccounts : Val → Nat
+  | .arg _ | .local _ | .lit _ | .loopIx => 0
+  | .field base _ | .bitNot base => valMinAccounts base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs => Nat.max (valMinAccounts lhs) (valMinAccounts rhs)
+  | .indexGet base _ idx _ _ => Nat.max (valMinAccounts base) (valMinAccounts idx)
+  | .select _ lhs rhs thn els =>
+      Nat.max (Nat.max (valMinAccounts lhs) (valMinAccounts rhs))
+        (Nat.max (valMinAccounts thn) (valMinAccounts els))
+  | .ext kind operands =>
+      let here :=
+        match kind with
+        | .accLamports1 | .accOwner1 | .accDataLen1
+        | .isSigner1 | .isWritable1 | .isExecutable1 => 2
+        | .accKeyWord acc _ | .accOwnerWord acc _
+        | .accLamportsN acc | .accDataLenN acc
+        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
+        | .signerKeyN acc | .ownerIsSelf acc => acc + 1
+        | _ => 0
+      operands.foldl (init := here) fun current operand =>
+        Nat.max current (valMinAccounts operand)
+
+partial def valHasSelect : Val → Bool
+  | .select .. => true
+  | .arg _ | .local _ | .lit _ | .loopIx => false
+  | .field base _ | .bitNot base => valHasSelect base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs => valHasSelect lhs || valHasSelect rhs
+  | .indexGet base _ idx _ _ => valHasSelect base || valHasSelect idx
+  | .ext _ operands => operands.any valHasSelect
+
+partial def isLangVal : Val → Bool
+  | .local _ | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot ..
+  | .shiftL .. | .shiftR .. | .indexGet .. | .loopIx | .select .. => true
+  | .field base _ => isLangVal base
+  | _ => false
+
+private def CpiWord.needsWalk : CpiWord Val → Bool
+  | .u64le value => valNeedsWalk value
+  | _ => false
+
+private def CpiWord.minAccounts : CpiWord Val → Nat
+  | .u64le value => valMinAccounts value
+  | _ => 0
+
+private def CpiWord.hasSelect : CpiWord Val → Bool
+  | .u64le value => valHasSelect value
+  | _ => false
+
+private def OpExt.needsWalk : OpExt Val → Bool
+  | .invoke _ _ data _ bump =>
+      data.any CpiWord.needsWalk || bump.any valNeedsWalk
+
+private def OpExt.minAccounts : OpExt Val → Nat
+  | .invoke _ _ data _ bump =>
+      let fromData := data.foldl (init := 0) fun current word =>
+        Nat.max current word.minAccounts
+      Nat.max fromData (bump.map valMinAccounts |>.getD 0)
+
+private def OpExt.hasSelect : OpExt Val → Bool
+  | .invoke _ _ data _ bump =>
+      data.any CpiWord.hasSelect || bump.any valHasSelect
+
+def hasInvoke (ops : Array Op) : Bool :=
+  walkOps 16 ops fun | .ext (.invoke ..) => true | _ => false
+
+def hasStoreField (ops : Array Op) : Bool :=
+  walkOps 16 ops fun | .storeField .. => true | _ => false
+
+def hasIndexSet (ops : Array Op) : Bool :=
+  walkOps 16 ops fun | .indexSet .. => true | _ => false
+
+def hasCheckedArith (ops : Array Op) : Bool :=
+  walkOps 16 ops fun
+    | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
+    | .checkedDivU64 .. | .checkedModU64 .. => true
+    | _ => false
+
+def hasForAccum (ops : Array Op) : Bool :=
+  walkOps 16 ops fun | .forAccum .. => true | _ => false
+
+def hasSelect (ops : Array Op) : Bool :=
+  walkOps 16 ops fun
+    | .letLocal _ value | .setLocal _ value | .forAccum _ value
+    | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+        valHasSelect value
+    | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+    | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+    | .indexSet _ lhs rhs _ _ => valHasSelect lhs || valHasSelect rhs
+    | .ext payload => payload.hasSelect
+    | _ => false
+
+def hasAcc1 (ops : Array Op) : Bool :=
+  walkOps 16 ops fun
+    | .letLocal _ value | .setLocal _ value | .forAccum _ value
+    | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+        valNeedsWalk value
+    | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+    | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+    | .indexSet _ lhs rhs _ _ => valNeedsWalk lhs || valNeedsWalk rhs
+    | .ext payload => payload.needsWalk
+    | _ => false
+
+private def opMinAccounts : Op → Nat
+  | .letLocal _ value | .setLocal _ value | .forAccum _ value
+  | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+      valMinAccounts value
+  | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+  | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+  | .indexSet _ lhs rhs _ _ => Nat.max (valMinAccounts lhs) (valMinAccounts rhs)
+  | .ext payload => payload.minAccounts
+  | _ => 0
+
+def opsMinAccounts (ops : Array Op) : Nat :=
+  let rec go (fuel : Nat) (items : Array Op) (current : Nat) : Nat :=
+    match fuel with
+    | 0 => current
+    | fuel' + 1 =>
+        items.foldl (init := current) fun result op =>
+          let result := Nat.max result (opMinAccounts op)
+          match op with
+          | .ite _ _ _ thn els => Nat.max (go fuel' thn result) (go fuel' els result)
+          | .forBody _ body => go fuel' body result
+          | _ => result
+  go 16 ops 0
 
 end ProofForge.Svm.Ops

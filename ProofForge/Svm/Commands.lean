@@ -2,7 +2,6 @@ import Lean
 import ProofForge.Profile
 import ProofForge.Extract
 import ProofForge.Core.IR
-import ProofForge.Ops
 import ProofForge.Svm.Emit
 import ProofForge.Golden
 
@@ -28,23 +27,27 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
   let mutName ← liftCoreM <| realizeGlobalConstNoOverload mutN
   let getName ← liftCoreM <| realizeGlobalConstNoOverload getN
   let env ← getEnv
-  match Extract.extractProgramIR env initName mutName getName none fields? >>= fun source => do
-      source.validateSvm
-      Extract.IR.toLegacyProgram source with
+  match Extract.extractProgramIR env initName mutName getName none fields? with
   | .error reason => throwError reason
-  | .ok program => do
+  | .ok source => do
+    let program ←
+      match source.validateSvm *> Extract.IR.toLegacyProgram source with
+      | .ok program => pure program
+      | .error reason => throwError reason
     let mutOps :=
-      (program.methods.find? (·.kind == Core.IR.MethodKind.increment)).map (·.ops)
+      (source.methods.find? (·.kind == Core.IR.MethodKind.increment)).map (·.ops)
     match mutOps with
-    | some ops =>
-      if Ops.hasEvmEffect ops then
-        throwError "extract/unsupported: svm rejects evm leaf"
+    | some sourceOps =>
+      let ops ←
+        match Extract.IR.toSvmOps sourceOps with
+        | .ok ops => pure ops
+        | .error reason => throwError reason
       unless Ops.hasCheckedArith ops || Ops.hasSelect ops ||
           ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false) ||
           Ops.hasInvoke ops do
         throwError "extract/unsupported: mutating method missing checked arith"
     | none => throwError "extract/unsupported: missing mutating method"
-    match Emit.emitCounterAsm program with
+    match Emit.emitProgramAsm source with
     | .error reason => throwError reason
     | .ok asm =>
       unless asm.contains "entrypoint:" do
@@ -63,12 +66,14 @@ elab_rules : command
 elab "#pf_build " n:ident : command => do
   let ns := n.getId
   let env ← getEnv
-  match Extract.extractModuleIR env ns none >>= fun source => do
-      source.validateSvm
-      Extract.IR.toLegacyProgram source with
+  match Extract.extractModuleIR env ns none with
   | .error reason => throwError reason
-  | .ok program => do
-    match Emit.emitCounterAsm program with
+  | .ok source => do
+    let program ←
+      match source.validateSvm *> Extract.IR.toLegacyProgram source with
+      | .ok program => pure program
+      | .error reason => throwError reason
+    match Emit.emitProgramAsm source with
     | .error reason => throwError reason
     | .ok asm =>
       unless asm.contains "entrypoint:" do

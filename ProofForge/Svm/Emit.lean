@@ -132,22 +132,17 @@ private def emitCpiFlagChecks (p : IR.Program) (err : String) : String :=
 
 /-- walk 入口要查 `is_signer` 的账户下标。 -/
 private def valSignerAccs : Ops.Val → Array Nat
-  | .signerKey0 => #[0]
-  | .signerKeyN a => #[a]
+  | .ext .signerKey0 _ => #[0]
+  | .ext (.signerKeyN a) _ => #[a]
+  | .ext _ operands => operands.flatMap valSignerAccs
   | .field b _ => valSignerAccs b
-  | .checkPda _ b => valSignerAccs b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
   | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
-  | .mapGetU64 l r => valSignerAccs l ++ valSignerAccs r
+      => valSignerAccs l ++ valSignerAccs r
   | .bitNot v => valSignerAccs v
-  | .indexGet b _ i _ => valSignerAccs b ++ valSignerAccs i
+  | .indexGet b _ i _ _ => valSignerAccs b ++ valSignerAccs i
   | .select _ l r t f =>
       valSignerAccs l ++ valSignerAccs r ++ valSignerAccs t ++ valSignerAccs f
-  | .mapGetAddr a b c d =>
-      valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
-  | .mapGetPair a b c d e f g =>
-      valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d ++
-        valSignerAccs e ++ valSignerAccs f ++ valSignerAccs g
   | _ => #[]
 
 private def walkSignerAccs (fuel : Nat) (ops : Array IR.Op) : Array Nat :=
@@ -235,20 +230,8 @@ private def memOfVal (p : IR.Program) (v : Ops.Val) : Except String String :=
       .ok s!"[r7 + {8 + 8 * i}]"
     else
       .ok s!"[r6 + INSTRUCTION_DATA + {8 + 8 * i}]"
-  | .lit _ | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-  | .accN | .isSigner0 | .isWritable0 | .isExecutable0
-  | .accLamports1 | .accOwner1 | .accDataLen1
-  | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-  | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-  | .accKeyWord _ _ | .accOwnerWord _ _
-  | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
-  | .signerKeyN _ | .ownerIsSelf _ =>
-    .error "extract/unsupported: runtime leaf has no mem"
-  | v =>
-    if Ops.isEvmLeaf v then
-      .error "extract/unsupported: runtime leaf has no mem"
-    else
-      .error "extract/unsupported: runtime leaf has no mem"
+  | .ext _ _ => .error "extract/unsupported: runtime leaf has no mem"
+  | _ => .error "extract/unsupported: runtime leaf has no mem"
 
 private def loadInsn (width : Nat) : Except String String :=
   match width with
@@ -270,6 +253,12 @@ private def widthOfVal (p : IR.Program) (v : Ops.Val) : Nat :=
   match v with
   | .field _ name => (IR.fieldWidth p name).getD 8
   | _ => 8
+
+/-- Keep assembly comments byte-stable while the legacy public adapter is phased out. -/
+private partial def sourceValRepr : Ops.Val → String
+  | .arg i => s!"ProofForge.Ops.Val.arg {i}"
+  | .field base name => s!"ProofForge.Ops.Val.field ({sourceValRepr base}) {repr name}"
+  | value => reprStr value
 
 /-- Clock 是 40 字节 `repr(C)`；`slot` 在 0，`epoch` 在 16。缓冲放在 `r10-72`。 -/
 private def emitLoadClockField (field : String) (off stackOff : Nat) (scope : String) : String :=
@@ -659,71 +648,71 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
       .ok s!"  ; load local {i}\n  ldxdw r1, [r10 - {localOff}]\n  stxdw [r10 - {stackOff}], r1\n"
   | .lit n =>
     .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
-  | .clockSlot =>
+  | .ext .clockSlot #[] =>
     .ok (emitLoadClockSlot stackOff scope)
-  | .clockEpoch =>
+  | .ext .clockEpoch #[] =>
     .ok (emitLoadClockEpoch stackOff scope)
-  | .unixTime =>
+  | .ext .unixTime #[] =>
     .ok (emitLoadUnixTime stackOff scope)
-  | .slotsPerEpoch =>
+  | .ext .slotsPerEpoch #[] =>
     .ok (emitLoadSlotsPerEpoch stackOff scope)
-  | .cpiReturn =>
+  | .ext .cpiReturn #[] =>
     .ok (emitLoadCpiReturn stackOff scope)
-  | .signerKey0 =>
+  | .ext .signerKey0 #[] =>
     .ok (emitLoadSignerKey0 stackOff)
-  | .accLamports0 =>
+  | .ext .accLamports0 #[] =>
     .ok (emitLoadAccU64 "load account-0 lamports" "ACC0_LAMPORTS" stackOff)
-  | .accOwner0 =>
+  | .ext .accOwner0 #[] =>
     .ok (emitLoadAccU64 "load account-0 owner first u64" "ACC0_OWNER + 0" stackOff)
-  | .accDataLen0 =>
+  | .ext .accDataLen0 #[] =>
     .ok (emitLoadAccU64 "load account-0 data_len" "ACC0_DATA_LEN" stackOff)
-  | .accN =>
+  | .ext .accN #[] =>
     .ok (emitLoadAccU64 "load NUM_ACCOUNTS" "NUM_ACCOUNTS" stackOff)
-  | .isSigner0 =>
+  | .ext .isSigner0 #[] =>
     .ok (emitLoadAccU8 "load account-0 is_signer" "ACC0_HEADER + 1" stackOff)
-  | .isWritable0 =>
+  | .ext .isWritable0 #[] =>
     .ok (emitLoadAccU8 "load account-0 is_writable" "ACC0_HEADER + 2" stackOff)
-  | .isExecutable0 =>
+  | .ext .isExecutable0 #[] =>
     .ok (emitLoadAccU8 "load account-0 is_executable" "ACC0_HEADER + 3" stackOff)
-  | .accLamports1 =>
+  | .ext .accLamports1 #[] =>
     .ok (emitLoadWalkedU64 1 72 stackOff)
-  | .accOwner1 =>
+  | .ext .accOwner1 #[] =>
     .ok (emitLoadWalkedU64 1 40 stackOff)
-  | .accDataLen1 =>
+  | .ext .accDataLen1 #[] =>
     .ok (emitLoadWalkedU64 1 80 stackOff)
-  | .isSigner1 =>
+  | .ext .isSigner1 #[] =>
     .ok (emitLoadWalkedU8 1 1 stackOff)
-  | .isWritable1 =>
+  | .ext .isWritable1 #[] =>
     .ok (emitLoadWalkedU8 1 2 stackOff)
-  | .isExecutable1 =>
+  | .ext .isExecutable1 #[] =>
     .ok (emitLoadWalkedU8 1 3 stackOff)
-  | .findPda seed =>
+  | .ext (.findPda seed) #[] =>
     .ok (emitLoadFindPda p seed stackOff scope)
-  | .sha256Lit seed =>
+  | .ext (.sha256Lit seed) #[] =>
     .ok (emitLoadSha256Lit seed stackOff)
-  | .keccak256Lit seed =>
+  | .ext (.keccak256Lit seed) #[] =>
     .ok (emitLoadKeccak256Lit seed stackOff)
-  | .accKeyWord acc word =>
+  | .ext (.accKeyWord acc word) #[] =>
     .ok (emitLoadAccWord "key" acc word stackOff)
-  | .accOwnerWord acc word =>
+  | .ext (.accOwnerWord acc word) #[] =>
     .ok (emitLoadAccWord "owner" acc word stackOff)
-  | .accLamportsN acc =>
+  | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
-  | .accDataLenN acc =>
+  | .ext (.accDataLenN acc) #[] =>
     .ok (emitLoadAccN "dataLen" acc stackOff)
-  | .isSignerN acc =>
+  | .ext (.isSignerN acc) #[] =>
     .ok (emitLoadAccN "signer" acc stackOff)
-  | .isWritableN acc =>
+  | .ext (.isWritableN acc) #[] =>
     .ok (emitLoadAccN "writable" acc stackOff)
-  | .isExecutableN acc =>
+  | .ext (.isExecutableN acc) #[] =>
     .ok (emitLoadAccN "executable" acc stackOff)
-  | .signerKeyN acc =>
+  | .ext (.signerKeyN acc) #[] =>
     .ok (emitLoadAccN "key0" acc stackOff)
-  | .ownerIsSelf acc =>
+  | .ext (.ownerIsSelf acc) #[] =>
     .ok (emitLoadOwnerIsSelf p acc stackOff scope)
-  | .checkPda seed bump =>
+  | .ext (.checkPda seed) #[bump] =>
     emitLoadCheckPda p seed bump stackOff nonce scope
-  | .rentExemption n =>
+  | .ext (.rentExemption n) #[] =>
     .ok (emitLoadRentExemption n.toNat stackOff scope)
   | .loopIx =>
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
@@ -741,13 +730,11 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .mulU64 l r => emitLoadBitBin p "mul64" l r stackOff nonce scope
   | .divU64 l r => emitLoadBitBin p "div64" l r stackOff nonce scope
   | .modU64 l r => emitLoadBitBin p "mod64" l r stackOff nonce scope
-  | v =>
-    if Ops.isEvmLeaf v then
-      .error "extract/unsupported: svm rejects evm leaf"
-    else do
-      let mem ← memOfVal p v
-      let insn ← loadInsn (widthOfVal p v)
-      return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
+  | .ext _ _ => .error "extract/ir: malformed SVM value operands"
+  | v => do
+    let mem ← memOfVal p v
+    let insn ← loadInsn (widthOfVal p v)
+    return s!"  ; load {sourceValRepr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
 /-- `cells_0` / `nodes_0_*` 起的定长向量。`idx ≥ len` → Custom(1)。 -/
 private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops.Val)
@@ -877,22 +864,18 @@ private def destField (p : IR.Program) (lhs : Ops.Val) : String :=
   | .field _ n => n
   | _ => (p.slots[0]?.map (·.name)).getD "slot0"
 
-private def valUsesSigner (v : Ops.Val) : Bool :=
+private partial def valUsesSigner (v : Ops.Val) : Bool :=
   match v with
-  | .signerKey0 | .signerKeyN _ => true
+  | .ext .signerKey0 _ | .ext (.signerKeyN _) _ => true
+  | .ext _ operands => operands.any valUsesSigner
   | .field b _ => valUsesSigner b
-  | .checkPda _ b | .bitNot b => valUsesSigner b
+  | .bitNot b => valUsesSigner b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
   | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
-  | .mapGetU64 l r => valUsesSigner l || valUsesSigner r
-  | .indexGet b _ i _ => valUsesSigner b || valUsesSigner i
+      => valUsesSigner l || valUsesSigner r
+  | .indexGet b _ i _ _ => valUsesSigner b || valUsesSigner i
   | .select _ l r t f =>
       valUsesSigner l || valUsesSigner r || valUsesSigner t || valUsesSigner f
-  | .mapGetAddr a b c d =>
-      valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d
-  | .mapGetPair a b c d e f g =>
-      valUsesSigner a || valUsesSigner b || valUsesSigner c || valUsesSigner d ||
-        valUsesSigner e || valUsesSigner f || valUsesSigner g
   | _ => false
 
 private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
@@ -957,7 +940,7 @@ private def emitFillAccountInfoFromHeader (tag : String) (srcStack : Nat) : Stri
   "  lddw r1, 0\n  stxb [r5 + 51], r1\n  stxb [r5 + 52], r1\n" ++
   "  stxb [r5 + 53], r1\n  stxb [r5 + 54], r1\n  stxb [r5 + 55], r1\n"
 
-private def emitCpiData (p : IR.Program) (base : Nat) (data : Array Ops.CpiWord) :
+private def emitCpiData (p : IR.Program) (base : Nat) (data : Array (Ops.CpiWord Ops.Val)) :
     Except String (String × Nat) := do
   -- CreateAccount 是 52B：u32+u64 不对齐。先清 64B，避免残留污染 space。
   let mut body :=
@@ -1081,7 +1064,7 @@ private def emitSignerSeeds (p : IR.Program) (seedOff : Nat)
     .error "extract/unsupported: invoke seeds must be seed+bump or empty"
 
 private def emitInvoke (p : IR.Program) (label : String)
-    (programIx : Nat) (metas : Array Ops.CpiMeta) (data : Array Ops.CpiWord)
+    (programIx : Nat) (metas : Array Ops.CpiMeta) (data : Array (Ops.CpiWord Ops.Val))
     (seed : Option String) (bump : Option Ops.Val) :
     Except String String := do
   let n := IR.cpiAccountCount p
@@ -1400,22 +1383,13 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
             n := n + 1
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
-        | .accN | .isSigner0 | .isWritable0 | .isExecutable0
-        | .accLamports1 | .accOwner1 | .accDataLen1
-        | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
-        | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-        | .accKeyWord _ _ | .accOwnerWord _ _
-        | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
-        | .signerKeyN _ | .ownerIsSelf _ => do
+        | .ext _ _ => do
           let load ← loadVal p v 24 n s!"{label}_{n}_leaf"
           n := n + 1
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | v =>
-          if Ops.isEvmLeaf v then
-            throw "extract/unsupported: svm rejects evm leaf"
-          else if IR.hasCheckedArith ops then
+          if IR.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
           else do
             let load ← loadVal p v 24 n s!"{label}_{n}_value"
@@ -1616,7 +1590,11 @@ entrypoint:
 {dispatchTxt}
 {handlers}"
 
-/-- Stable public entry point: lower the frontend IR before rendering target instructions. -/
+/-- Native SVM entry point from the combined extractor dialect. -/
+def emitProgramAsm (program : Extract.IR.Program) : Except String String := do
+  emitProgram (← IR.fromExtracted program)
+
+/-- Compatibility entry point for legacy fixtures and callers. -/
 def emitCounterAsm (program : Extract.Legacy.Program) : Except String String := do
   emitProgram (← IR.fromProgram program)
 
