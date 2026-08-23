@@ -29,6 +29,7 @@ import ProofForge.Svm.EmitCompat
 import ProofForge.Svm.Assemble
 import ProofForge.Svm.AssembleCompat
 import ProofForge.Svm.Idl
+import ProofForge.Svm.IdlCompat
 import ProofForge.Svm.Commands
 import ProofForge.Evm.Keccak
 import ProofForge.Evm.IR

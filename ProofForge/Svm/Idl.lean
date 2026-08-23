@@ -1,5 +1,5 @@
 import ProofForge.Crypto.Sha256
-import ProofForge.Svm.ABICompat
+import ProofForge.Svm.ABI
 import ProofForge.Svm.IR
 
 namespace ProofForge.Svm.Idl
@@ -34,10 +34,6 @@ def layoutDiscBytesOf (slots : Array Core.IR.Slot) : Array Nat :=
 
 def layoutDiscBytesProgram (p : IR.Program) : Array Nat :=
   layoutDiscBytesOf (sourceSlots p)
-
-/-- Compatibility wrapper for callers that still own the old extraction IR. -/
-def layoutDiscBytes (p : Extract.Legacy.Program) : Array Nat :=
-  u64BeBytes (Sha256.first8Be (ABI.layoutPreimage p))
 
 private def idlTypeOfAbi (abi : String) : String :=
   if abi.startsWith "u8" then "u8"
@@ -108,22 +104,20 @@ private def render (name instructions fields : String) (layoutDisc : Array Nat) 
     "  ]\n" ++
     "}\n"
 
+/-- Render target-owned SVM instruction and slot metadata as a Solana IDL. -/
+def emitIdlOf (name : String) (accountCount : Nat)
+    (methods : Array (Core.IR.MethodKind × String × Nat))
+    (slots : Array Core.IR.Slot) (layoutDisc : Array Nat) : String :=
+  let instructions := String.intercalate ",\n" <| methods.toList.map fun method =>
+    instructionJson accountCount method.1 method.2.1 method.2.2
+  let fields := String.intercalate ", " <| slots.toList.map fun slot =>
+    fieldJson slot.name slot.abi
+  render name instructions fields layoutDisc
+
 /-- Solana IDL spec 0.1.0 from the target-owned SVM program. -/
 def emitProgramIdl (p : IR.Program) : String :=
-  let accountCount := IR.cpiAccountCount p
-  let instructions := String.intercalate ",\n" <| p.methods.toList.map fun method =>
-    instructionJson accountCount method.kind method.ixName method.paramCount
-  let fields := String.intercalate ", " <| p.slots.toList.map fun slot =>
-    fieldJson slot.name slot.abi
-  render p.name instructions fields (layoutDiscBytesProgram p)
-
-/-- Compatibility entry point for the old extraction IR. -/
-def emitIdl (p : Extract.Legacy.Program) : String :=
-  let accountCount := ABI.cpiAccountCount p
-  let instructions := String.intercalate ",\n" <| p.methods.toList.map fun method =>
-    instructionJson accountCount method.kind method.ixName method.paramCount
-  let fields := String.intercalate ", " <| p.slots.toList.map fun slot =>
-    fieldJson slot.name slot.abi
-  render p.name instructions fields (layoutDiscBytes p)
+  let methods := p.methods.map fun method =>
+    (method.kind, method.ixName, method.paramCount)
+  emitIdlOf p.name (IR.cpiAccountCount p) methods (sourceSlots p) (layoutDiscBytesProgram p)
 
 end ProofForge.Svm.Idl
