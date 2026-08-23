@@ -1266,6 +1266,44 @@ def extractedSeat : Program :=
         ops := #[.returnU64 (.findPda "vault")] }
     ] }
 
+private def phoenixState : Ops.Val := .arg 2
+
+private def phoenixSize : Ops.Val := .field phoenixState "sizes_0"
+
+private def phoenixSettle (fill : Ops.Val) : Array Ops.Op :=
+  #[
+    .checkedAddU64 (.field phoenixState "baseFree") fill,
+    Ops.tokenTransferChecked fill 6,
+    .storeField "sizes_0" (.subU64 phoenixSize fill),
+    .storeField "baseFree" (.addU64 (.field phoenixState "baseFree") fill),
+    .okState fill
+  ]
+
+private def phoenixTrade : Array Ops.Op :=
+  #[.ite .le (.arg 0) phoenixSize (phoenixSettle (.arg 0)) (phoenixSettle phoenixSize)]
+
+private def phoenixTif : Array Ops.Op :=
+  #[
+    .ite .eq (.field phoenixState "lastTimes_0") (.lit 0)
+      phoenixTrade
+      #[
+        .ite .lt .unixTime (.field phoenixState "lastTimes_0")
+          phoenixTrade
+          #[.errorOverflow]
+      ]
+  ]
+
+private def phoenixSwapBuy : Array Ops.Op :=
+  #[
+    .ite .ne phoenixSize (.lit 0)
+      #[
+        .ite .le (.field phoenixState "priceTicks_0") (.arg 1)
+          phoenixTif
+          #[.errorOverflow]
+      ]
+      #[.errorOverflow]
+  ]
+
 def extractedPhoenix : Program :=
   { name := "Phoenix"
     slots := #[
@@ -1318,13 +1356,8 @@ def extractedPhoenix : Program :=
           .okState (.field (.arg 1) "sizes_0"),
           .errorOverflow
         ] },
-      { kind := .increment, name := "Projects.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 1
-        ops := #[
-          .checkedAddU64 (.field (.arg 1) "baseFree") (.arg 0),
-          .ite .le (.arg 0) (.field (.arg 1) "sizes_0")
-            #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
-            #[.errorOverflow]
-        ] },
+      { kind := .increment, name := "Projects.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 2
+        ops := phoenixSwapBuy },
       { kind := .get, name := "Projects.Phoenix.askQty", ixName := "askQty", paramCount := 0
         ops := #[.returnU64
           (.addU64

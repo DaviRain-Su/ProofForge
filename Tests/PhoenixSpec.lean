@@ -20,6 +20,7 @@ open ProofForge.Runtime
 #guard makerBase (init 100) == 0
 #guard takerBase (init 100) == 0
 #guard feeOf 10000 == 5
+#guard feeOfBps 10000 25 == 25
 #guard Side.ask != Side.bid
 #guard SelfTradeBehavior.abort != SelfTradeBehavior.cancelProvide
 
@@ -43,17 +44,68 @@ open ProofForge.Runtime
   match postAskFull (init 100) 50 8 with
   | .ok (st, ret) =>
       st.sizes[0]! == 8 && st.priceTicks[0]! == 50 &&
-        st.sequences[0]! == 1 && st.sequence == 2 && st.baseLocked == 8
+        st.sequences[0]! == 1 && st.sequence == 2 && st.baseLocked == 8 && ret == 8
   | .error _ => false
 
 #guard
-  match swapBuy { (init 100) with sizes := #v[8, 0, 0, 0], baseFree := 1 } 3 with
+  match swapBuyAt
+      { (init 100) with sizes := #v[8, 0, 0, 0], baseFree := 1 }
+      3 0 0 0 with
   | .ok (st, ret) =>
       st.sizes[0]! == 5 && st.baseFree == 4 && ret == 3
   | .error _ => false
 
 #guard
-  match swapBuy { (init 100) with sizes := #v[2, 8, 0, 0], baseFree := 0 } 3 with
+  match swapBuyAt
+      { (init 100) with sizes := #v[2, 8, 0, 0], baseFree := 0 }
+      3 0 0 0 with
+  | .ok (st, ret) => st.sizes[0]! == 0 && st.baseFree == 2 && ret == 2
+  | .error _ => false
+
+#guard
+  match swapBuyAt
+      { (init 100) with sizes := #v[8, 0, 0, 0], priceTicks := #v[100, 0, 0, 0] }
+      3 50 0 0 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match swapBuyAt
+      { (init 100) with
+        sizes := #v[8, 0, 0, 0], priceTicks := #v[100, 0, 0, 0],
+        lastTimes := #v[10, 0, 0, 0] }
+      3 100 0 10 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match swapBuyAt
+      { (init 100) with
+        sizes := #v[8, 0, 0, 0], priceTicks := #v[100, 0, 0, 0],
+        lastSlots := #v[20, 0, 0, 0] }
+      3 100 20 0 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match swapBuyAt
+      { (init 100) with sizes := #v[8, 0, 0, 0], baseFree := u64Max }
+      1 0 0 0 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match swapBuy
+      { (init 100) with
+        sizes := #v[8, 0, 0, 0], priceTicks := #v[100, 0, 0, 0], baseFree := 1 }
+      3 100 with
+  | .ok (st, ret) => st.sizes[0]! == 5 && st.baseFree == 4 && ret == 3
+  | .error _ => false
+
+#guard
+  match swapBuy
+      { (init 100) with sizes := #v[8, 0, 0, 0], priceTicks := #v[100, 0, 0, 0] }
+      3 99 with
   | .error .overflow => true
   | _ => false
 
@@ -94,7 +146,14 @@ open ProofForge.Runtime
 #guard expired 0 0 10 10 == false
 #guard expired 5 0 10 10 == true
 #guard expired 0 5 10 10 == true
+#guard expired 10 0 10 0 == true
+#guard expired 0 10 0 10 == true
 
 #guard ProofForge.IR.dataLen ProofForge.Golden.extractedPhoenix == 280
+
+#guard
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPhoenix with
+  | .ok asm => asm.contains "err_swapBuy:"
+  | .error _ => false
 
 end Tests.PhoenixSpec

@@ -68,8 +68,11 @@ def empty4 : Vector UInt64 4 := #v[0, 0, 0, 0]
 /-- 官方 taker fee 默认常用 5 bps。不是 u128 上取整。 -/
 def defaultFeeBps : UInt64 := 5
 
+def feeOfBps (qty feeBps : UInt64) : UInt64 :=
+  qty * feeBps / 10000
+
 def feeOf (qty : UInt64) : UInt64 :=
-  qty * defaultFeeBps / 10000
+  feeOfBps qty defaultFeeBps
 
 @[pf_entry]
 def init (tick : UInt64) : State :=
@@ -92,8 +95,8 @@ def init (tick : UInt64) : State :=
 
 /-- 官方 FIFORestingOrder 是否过期。0 是哨兵。 -/
 def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
-  (lastSlot ≠ 0 && lastSlot < nowSlot) ||
-    (lastTime ≠ 0 && lastTime < nowTime)
+  (lastSlot ≠ 0 && lastSlot ≤ nowSlot) ||
+    (lastTime ≠ 0 && lastTime ≤ nowTime)
 
 /-- 挂到第一档空位。链上只改 `sizes`；价/序号/锁仓是宿主语义。 -/
 @[pf_entry]
@@ -142,18 +145,71 @@ def postAskFull (s : State) (price size : UInt64) : Except Error (State × UInt6
     else
       .error .overflow
 
-/--
-IOC 买：只打档 0。官方不会跳档。
-`want ≤ sizes[0]` 才成交。成交把 maker 的 `baseLocked` 转成 taker `baseFree`。
--/
-@[pf_entry]
-def swapBuy (s : State) (want : UInt64) : Except Error (State × UInt64) :=
-  if s.baseFree ≤ u64Max - want then
-    if want ≤ s.sizes[0]! then
+/-- IOC 买的可测试语义：限价、slot/time TIF、档 0 部分成交。 -/
+def swapBuyAt (s : State) (want limit nowSlot nowTime : UInt64) :
+    Except Error (State × UInt64) :=
+  if s.sizes[0]! = 0 then
+    .error .overflow
+  else if limit < s.priceTicks[0]! then
+    .error .overflow
+  else if expired s.lastSlots[0]! s.lastTimes[0]! nowSlot nowTime then
+    .error .overflow
+  else if want ≤ s.sizes[0]! then
+    if s.baseFree ≤ u64Max - want then
       let _ := tokenTransferChecked want 6
       .ok ({ s with
               sizes := s.sizes.set 0 (s.sizes[0]! - want)
               baseFree := s.baseFree + want }, want)
+    else
+      .error .overflow
+  else if s.baseFree ≤ u64Max - s.sizes[0]! then
+    let fill := s.sizes[0]!
+    let _ := tokenTransferChecked fill 6
+    .ok ({ s with
+            sizes := s.sizes.set 0 (s.sizes[0]! - fill)
+            baseFree := s.baseFree + fill }, fill)
+  else
+    .error .overflow
+
+/-- 链上 IOC 买：当前 Clock 决定 TIF，limit 是第二个 instruction 参数。 -/
+@[pf_entry]
+def swapBuy (s : State) (want limit : UInt64) : Except Error (State × UInt64) :=
+  if s.sizes[0]! ≠ 0 then
+    if s.priceTicks[0]! ≤ limit then
+      if s.lastTimes[0]! = 0 then
+        if want ≤ s.sizes[0]! then
+          if s.baseFree ≤ u64Max - want then
+            let _ := tokenTransferChecked want 6
+            .ok ({ s with
+                    sizes := s.sizes.set 0 (s.sizes[0]! - want)
+                    baseFree := s.baseFree + want }, want)
+          else
+            .error .overflow
+        else if s.baseFree ≤ u64Max - s.sizes[0]! then
+          let _ := tokenTransferChecked s.sizes[0]! 6
+          .ok ({ s with
+                  sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!)
+                  baseFree := s.baseFree + s.sizes[0]! }, s.sizes[0]!)
+        else
+          .error .overflow
+      else if unixTime < s.lastTimes[0]! then
+        if want ≤ s.sizes[0]! then
+          if s.baseFree ≤ u64Max - want then
+            let _ := tokenTransferChecked want 6
+            .ok ({ s with
+                    sizes := s.sizes.set 0 (s.sizes[0]! - want)
+                    baseFree := s.baseFree + want }, want)
+          else
+            .error .overflow
+        else if s.baseFree ≤ u64Max - s.sizes[0]! then
+          let _ := tokenTransferChecked s.sizes[0]! 6
+          .ok ({ s with
+                  sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!)
+                  baseFree := s.baseFree + s.sizes[0]! }, s.sizes[0]!)
+        else
+          .error .overflow
+      else
+        .error .overflow
     else
       .error .overflow
   else
@@ -195,7 +251,7 @@ def cancelAsk (s : State) : Except Error (State × UInt64) :=
     .error .overflow
 
 def takeFee (qty : UInt64) : UInt64 :=
-  if qty = 0 then 0 else qty * defaultFeeBps / 10000
+  if qty = 0 then 0 else feeOf qty
 
 def checkLimit (s : State) (limit : UInt64) : Bool :=
   limit ≥ s.priceTicks[0]!

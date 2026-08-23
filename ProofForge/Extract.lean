@@ -64,6 +64,21 @@ private def substLets (fuel : Nat) (e : Expr) : Expr :=
       goApp 32 e
     | e => e
 
+/-- Drop only unused head lets and lower the remaining binders.
+Effect calls commonly elaborate as `let _ := invoke; ok ...`; plain `peelLets` drops that
+binder without lowering the source arguments, while substituting every let destroys the
+local-result shape used by checked arithmetic decoding. -/
+private def dropUnusedHeadLets (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    match strip e with
+    | .letE n ty value body nondep =>
+      let body := dropUnusedHeadLets fuel' body
+      if body.hasLooseBVar 0 then .letE n ty value body nondep
+      else dropUnusedHeadLets fuel' (body.lowerLooseBVars 1 1)
+    | e => e
+
 private def isIteExpr (e : Expr) : Bool :=
   isConstNamed (peelLets (strip e)) ``ite || isConstNamed (peelLets (strip e)) ``dite
 
@@ -1366,7 +1381,7 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
 
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
 private def asStoreFields (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
-  let e := peelControl 8 e
+  let e := peelControl 8 (dropUnusedHeadLets 32 e)
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
     if args.size ≥ 1 then
@@ -1386,7 +1401,7 @@ private def asStoreFields (env : Environment) (e : Expr) : Option (Array Ops.Op)
   else none
 
 private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
-  let e := peelControl 8 e
+  let e := peelControl 8 (dropUnusedHeadLets 32 e)
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
     if args.size ≥ 1 then
@@ -1713,6 +1728,12 @@ private def invokeOps
     (ret : Ops.Val) : Array Ops.Op :=
   let (prog, metas, data, seed, bump) := inv
   #[.invoke prog metas data seed bump, .returnU64 ret]
+
+private def invokeOp
+    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
+    Ops.Op :=
+  let (prog, metas, data, seed, bump) := inv
+  .invoke prog metas data seed bump
 
 /-- `.ok (state, ret)` 的第二元。找不到就 none。 -/
 private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
@@ -2345,18 +2366,53 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           !isForInStep tRaw && !isForInStep fRaw
       let t := substIteLets 64 (peelProofLam 4 lower tRaw)
       let f := substIteLets 64 (peelProofLam 4 false fRaw)
+      let checkedSubMatches (candidate : Expr) : Bool :=
+        match asCheckedSubGuard env candidate with
+        | none => false
+        | some (guardLhs, guardRhs) =>
+          let directResult :=
+            match strip t with
+            | .letE _ _ value _ _ => val env value
+            | _ => asOkState env t
+          let directMatch :=
+            match directResult with
+            | some (.subU64 bodyLhs bodyRhs) =>
+                guardLhs == bodyLhs && guardRhs == bodyRhs
+            | _ => false
+          let nestedMatch :=
+            match lastNamedBin env ``HSub.hSub t with
+            | some (bodyLhs, bodyRhs) =>
+                guardLhs == bodyLhs && guardRhs == bodyRhs
+            | none => false
+          directMatch || nestedMatch
+      let rec hasNestedIte (fuel : Nat) (e : Expr) : Bool :=
+        match fuel with
+        | 0 => false
+        | fuel' + 1 =>
+          let e := strip e
+          if isConstNamed e ``ite || isConstNamed e ``dite then true
+          else
+            match e with
+            | .letE _ _ value body _ =>
+                hasNestedIte fuel' value || hasNestedIte fuel' body
+            | .lam _ _ body _ => hasNestedIte fuel' body
+            | .app fn arg => hasNestedIte fuel' fn || hasNestedIte fuel' arg
+            | _ => false
+      -- A recursive invoke search must not erase an intervening source branch.
+      let directInvoke := if hasNestedIte 64 t then none else findInvoke env 8 t
       if isErrorOverflow f && !isForInYield f then
         if let some condE := findBy args (fun a =>
             (asCmp env a).isSome &&
               (asCheckedAddGuard env a).isNone &&
               (asCheckedMulGuard env a).isNone &&
-              (asCheckedSubGuard env a).isNone &&
+              !checkedSubMatches a &&
               -- 真支再套 ite 时，`y ≠ 0` 是比较，不是除法守卫。
               ((asNeZero env a).isNone ||
                 isConstNamed (peelLets (strip t)) ``ite ||
                   isConstNamed (peelLets (strip t)) ``dite)) then
-          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asIndexSet env t,
-              asStoreFields env t, asOkState env t, decodeExpr env fuel' t with
+          let decodedThen := decodeExpr env fuel' t
+          match asCmp env condE, directInvoke, decodeEvmEffect env t, asIndexSet env t,
+              asStoreFields env t, asOkState env t, decodedThen with
           | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _, _ =>
             return .ok (invokeOps inv (invokeRet env t inv))
           | some (.ne, .lit 1, .lit 0), some inv, _, _, _, _, _ =>
@@ -2366,18 +2422,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
-            let rec hasNestedIte (fuel : Nat) (e : Expr) : Bool :=
-              match fuel with
-              | 0 => false
-              | fuel' + 1 =>
-                let e := strip e
-                if isConstNamed e ``ite || isConstNamed e ``dite then true
-                else
-                  match e with
-                  | .letE _ _ _ body _ => hasNestedIte fuel' body
-                  | .lam _ _ body _ => hasNestedIte fuel' body
-                  | _ => false
-            if hasNestedIte 8 t then
+            if hasNestedIte 64 t then
               match decodeExpr env fuel' t with
               | .ok thn => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
               | .error r => return .error r
@@ -2400,15 +2445,16 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             | .ok els => return .ok #[.ite cmp lv rv thn els]
             | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
           | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a =>
-            (asCheckedAddGuard env a).isSome && (collectIndexSets env t).isEmpty) then
-          match asCheckedAddGuard env condE, decodeEvmEffect env t, decodeExpr env fuel' t,
-              asStoreFields env t, asOkState env t with
-          | some _, some evmOps, _, _, _ =>
+        else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
+          match asCheckedAddGuard env condE, directInvoke, decodeEvmEffect env t,
+              decodeExpr env fuel' t, asStoreFields env t, asOkState env t with
+          | some (lhs, rhs), some inv, _, _, some stores, _ =>
+            return .ok (#[.checkedAddU64 lhs rhs, invokeOp inv] ++ stores)
+          | some _, none, some evmOps, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some (lhs, rhs), none, .ok thn, _, _ =>
+          | some (lhs, rhs), none, none, .ok thn, _, _ =>
             -- then 支可以再套比较 / CPI。先做 checked-add，再跑内层。
             -- 内层若只是 okState，仍压成旧的三连。
             match thn.toList with
@@ -2417,12 +2463,12 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
               return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
             | _ =>
               return .ok (#[.checkedAddU64 lhs rhs] ++ thn)
-          | some (lhs, rhs), none, .error _, some stores, _ =>
+          | some (lhs, rhs), none, none, .error _, some stores, _ =>
             return .ok (#[.checkedAddU64 lhs rhs] ++ stores)
-          | some (lhs, rhs), none, .error _, none, some v =>
+          | some (lhs, rhs), none, none, .error _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
-          | _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a =>
             (asCheckedMulGuard env a).isSome && (collectIndexSets env t).isEmpty) then
           match asCheckedMulGuard env condE, asStoreFields env t, asOkState env t with
@@ -2433,8 +2479,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
           | _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a =>
-            (asCheckedSubGuard env a).isSome && (collectIndexSets env t).isEmpty) then
-          match asCheckedSubGuard env condE, findInvoke env 8 t, decodeEvmEffect env t,
+            checkedSubMatches a && (collectIndexSets env t).isEmpty) then
+          match asCheckedSubGuard env condE, directInvoke, decodeEvmEffect env t,
               decodeExpr env fuel' t, decodeExpr env fuel' f, asStoreFields env t, asOkState env t with
           | some _, some inv, _, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
@@ -2477,7 +2523,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           (asCmp env a).isSome &&
             (asCheckedAddGuard env a).isNone &&
             (asCheckedMulGuard env a).isNone &&
-            (asCheckedSubGuard env a).isNone
+            !checkedSubMatches a
         if isForInYield f then
           let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
             | return .error "extract/unsupported: ite cond"

@@ -869,6 +869,9 @@ private def usesSignerKey (ops : Array IR.Op) : Bool :=
 private def emitOverflowExit (label : String) : String :=
   s!"err_{label}:\n  lddw r0, {overflowCode}\n  exit\n"
 
+private def emitOverflowReturn : String :=
+  s!"  lddw r0, {overflowCode}\n  exit\n"
+
 private def emitReturnU64 (fromStack : Nat) : String :=
   s!"  ldxdw r1, [r10 - {fromStack}]\n  stxdw [r10 - 32], r1\n  mov64 r1, r10\n  add64 r1, -32\n  lddw r2, 8\n  call sol_set_return_data\n  lddw r0, 0\n  exit\n"
 
@@ -1097,8 +1100,8 @@ private def emitArithOp (label : String) (kind : String) : String :=
       s!"  jeq r2, 0, err_{label}\n  mov64 r4, r1\n  mod64 r4, r2\n"
   | _ => ""
 
-private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op) (fresh : Nat) :
-    Except String (String × Nat) := do
+private partial def emitOps (p : IR.Program) (label errorLabel : String)
+    (ops : Array IR.Op) (fresh : Nat) : Except String (String × Nat) := do
   let mut acc := ""
   let mut n := fresh
   let destHint :=
@@ -1119,7 +1122,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp label "add" ++
+        emitArithOp errorLabel "add" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedSubU64 l r =>
       let loadL ← loadVal p l 8 n
@@ -1127,7 +1130,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp label "sub" ++
+        emitArithOp errorLabel "sub" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedMulU64 l r =>
       let loadL ← loadVal p l 8 n
@@ -1135,7 +1138,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp label "mul" ++
+        emitArithOp errorLabel "mul" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedDivU64 l r =>
       let loadL ← loadVal p l 8 n
@@ -1143,7 +1146,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp label "div" ++
+        emitArithOp errorLabel "div" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedModU64 l r =>
       let loadL ← loadVal p l 8 n
@@ -1151,7 +1154,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
-        emitArithOp label "mod" ++
+        emitArithOp errorLabel "mod" ++
         "  stxdw [r10 - 24], r4\n"
     | .ite cmp l r thn els =>
       let loadL ← loadVal p l 8 n
@@ -1160,8 +1163,8 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
       let thenLab := s!"then_{label}_{n}"
       let elseLab := s!"else_{label}_{n}"
       n := n + 1
-      let (thenTxt, n1) ← emitOps p thenLab thn n
-      let (elseTxt, n2) ← emitOps p elseLab els n1
+      let (thenTxt, n1) ← emitOps p thenLab errorLabel thn n
+      let (elseTxt, n2) ← emitOps p elseLab errorLabel els n1
       n := n2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
@@ -1190,7 +1193,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
   ldxdw r2, [r10 - 16]
   lddw r3, 0xffffffffffffffff
   sub64 r3, r2
-  jgt r1, r3, err_{label}
+  jgt r1, r3, err_{errorLabel}
   add64 r1, r2
   stxdw [r10 - 24], r1
   ldxdw r1, [r10 - 40]
@@ -1203,7 +1206,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
       let loopLab := s!"loop_{label}_{n}"
       let doneLab := s!"done_{label}_{n}"
       n := n + 1
-      let (bodyTxt, n1) ← emitOps p loopLab body n
+      let (bodyTxt, n1) ← emitOps p loopLab errorLabel body n
       n := n1
       acc := acc ++
         s!"\\
@@ -1326,7 +1329,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
     | .errorOverflow =>
-      acc := acc ++ emitOverflowExit label
+      acc := acc ++ emitOverflowReturn
     | .returnU64 v =>
       let load ← loadVal p v 8
       acc := acc ++ load ++ emitReturnU64 8
@@ -1337,12 +1340,17 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array IR.Op
   return (acc, n)
 
 private def emitMutBody (p : IR.Program) (label : String) (ops : Array IR.Op) : Except String String := do
-  let (body, _) ← emitOps p label ops 0
+  let (body, _) ← emitOps p label label ops 0
+  let overflow :=
+    if IR.hasCheckedArith ops || Ops.hasForAccum (IR.toSourceOps ops) then
+      emitOverflowExit label
+    else
+      ""
   let ix :=
     if IR.usesWalk p then
       s!"  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]\n  add64 r7, 8\n"
     else ""
-  return s!"body_{label}:\n{ix}{body}"
+  return s!"body_{label}:\n{ix}{body}{overflow}"
 
 private def emitGetBody (p : IR.Program) (label : String) (v : Ops.Val) : Except String String := do
   let load ← loadVal p v 8
