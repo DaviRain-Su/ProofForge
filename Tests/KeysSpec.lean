@@ -15,9 +15,9 @@ open ProofForge.Svm.Runtime
 #guard accKeyWord 0 0 == 0
 #guard accOwnerWord 1 3 == 0
 
-#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedKeys
-#guard ProofForge.IR.usesWalk ProofForge.Golden.extractedKeys
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedKeys == 2
+#guard !ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedKeys
+#guard ProofForge.Svm.ABI.usesWalk ProofForge.Golden.extractedKeys
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedKeys == 2
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedKeys with

@@ -1,4 +1,5 @@
-import ProofForge.IR
+import ProofForge.Core.IR
+import ProofForge.Svm.ABI
 
 namespace ProofForge.Svm.IR
 
@@ -98,7 +99,7 @@ def hasInvoke (ops : Array Op) : Bool :=
   Ops.hasInvoke (toSourceOps ops)
 
 structure Method where
-  kind : ProofForge.IR.MethodKind
+  kind : Core.IR.MethodKind
   name : String
   ixName : String := ""
   paramCount : Nat := 0
@@ -140,10 +141,10 @@ structure Program where
   schema : Core.Schema := {}
   methods : Array Method
   /-- Retained only for protocol metadata and stable pre-existing digests. -/
-  source : ProofForge.IR.Program
+  source : Core.IR.Program
   deriving BEq, Repr, Inhabited
 
-private def lowerSlots (src : ProofForge.IR.Program) : Array Slot := Id.run do
+private def lowerSlots (src : Core.IR.Program) : Array Slot := Id.run do
   let mut result := #[]
   let mut offset := 8
   for i in [0:src.slots.size] do
@@ -158,7 +159,7 @@ private def lowerSlots (src : ProofForge.IR.Program) : Array Slot := Id.run do
     offset := offset + slot.width
   return result
 
-private def lowerVectors (src : ProofForge.IR.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Core.IR.Program) (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseIndex ← src.schema.vectorBaseLeafIndex? vector
     let base ← slots[baseIndex]?
@@ -180,7 +181,7 @@ private def lowerVectors (src : ProofForge.IR.Program) (slots : Array Slot) : Ar
       leaves
     }
 
-private def lowerMethod (method : ProofForge.IR.Method) : Except String Method := do
+private def lowerMethod (method : Core.IR.Method) : Except String Method := do
   if Ops.hasEvmEffect method.ops then
     throw "extract/unsupported: svm rejects evm leaf"
   return {
@@ -195,7 +196,7 @@ private def lowerMethod (method : ProofForge.IR.Method) : Except String Method :
   }
 
 /-- Lower source metadata and compatibility Ops into an SVM-owned physical program. -/
-def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
+def fromProgram (src : Core.IR.Program) : Except String Program := do
   let slots := lowerSlots src
   return {
     name := src.name
@@ -221,27 +222,27 @@ private def vector? (p : Program) (name : String) : Option Vector :=
 def vectorBaseOffset (p : Program) (name : String) : Option Nat :=
   match vector? p name with
   | some vector => some vector.baseOffset
-  | none => ProofForge.IR.vectorBaseOffset p.source name
+  | none => ABI.vectorBaseOffset p.source name
 
 def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
   if given != 0 then given
   else
     match vector? p name with
     | some vector => vector.length
-    | none => ProofForge.IR.vectorLenOf p.source name given
+    | none => ABI.vectorLenOf p.source name given
 
 def vectorStride (p : Program) (name : String) : Nat :=
   match vector? p name with
   | some vector => vector.strideBytes
-  | none => ProofForge.IR.vectorStride p.source name
+  | none => ABI.vectorStride p.source name
 
 def optionLeafNames? (p : Program) : Option (String × String) :=
   match p.schema.firstOption? with
   | some (tag, payload) => some (tag.name, payload.name)
-  | none => ProofForge.IR.optionLeafNames? p.source
+  | none => Core.IR.optionLeafNames? p.source
 
 def isProgramShape (p : Program) : Bool :=
-  ProofForge.IR.isProgramShape p.source
+  Core.IR.isProgramShape p.source
 
 def usesCpi (p : Program) : Bool :=
   p.methods.any (hasInvoke ·.ops)
@@ -250,22 +251,22 @@ def usesWalk (p : Program) : Bool :=
   usesCpi p || p.methods.any fun method => Ops.hasAcc1 (toSourceOps method.ops)
 
 def cpiAccountCount (p : Program) : Nat :=
-  ProofForge.IR.cpiAccountCount p.source
+  ABI.cpiAccountCount p.source
 
 def dataLen (p : Program) : Nat :=
-  ProofForge.IR.dataLen p.source
+  ABI.dataLen p.source
 
-def inputLayout (p : Program) : ProofForge.IR.InputLayout :=
-  ProofForge.IR.inputLayout p.source
+def inputLayout (p : Program) : ABI.InputLayout :=
+  ABI.inputLayout p.source
 
 def layoutMarkerHex (p : Program) : Except String String :=
-  ProofForge.IR.layoutMarkerHex p.source
+  ABI.layoutMarkerHex p.source
 
 def digestHex (p : Program) : String :=
-  ProofForge.IR.digestHex p.source
+  Core.IR.digestHex p.source
 
 def discHex (m : Method) : Except String String :=
-  ProofForge.IR.discHex {
+  ABI.discHex {
     kind := m.kind
     name := m.name
     ixName := m.ixName
@@ -276,8 +277,8 @@ def discHex (m : Method) : Except String String :=
     evaluation := m.evaluation
   }
 
-def lastName := ProofForge.IR.lastName
-def ixNameOfLean := ProofForge.IR.ixNameOfLean
-def u64Hex := ProofForge.IR.u64Hex
+def lastName := Core.IR.lastName
+def ixNameOfLean := Core.IR.ixNameOfLean
+def u64Hex := Core.IR.u64Hex
 
 end ProofForge.Svm.IR

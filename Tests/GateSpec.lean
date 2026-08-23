@@ -11,7 +11,7 @@ open ProofForge.Svm.Runtime
 #guard unixTime == 0
 
 #guard
-  match ProofForge.IR.fieldOffset ProofForge.Golden.extractedGate "open_" with
+  match ProofForge.Svm.ABI.fieldOffset ProofForge.Golden.extractedGate "open_" with
   | some 8 => true
   | _ => false
 

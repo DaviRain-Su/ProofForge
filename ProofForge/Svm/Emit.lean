@@ -1595,7 +1595,7 @@ entrypoint:
 {handlers}"
 
 /-- Stable public entry point: lower the frontend IR before rendering target instructions. -/
-def emitCounterAsm (program : ProofForge.IR.Program) : Except String String := do
+def emitCounterAsm (program : Core.IR.Program) : Except String String := do
   emitProgram (← IR.fromProgram program)
 
 end ProofForge.Svm.Emit

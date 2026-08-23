@@ -18,15 +18,15 @@ open ProofForge.Svm.Runtime
 #guard signerKey 1 == 0
 #guard ownerIsSelf 0 == 0
 
-#guard ProofForge.IR.maxTxAccountLocks == 64
-#guard ProofForge.IR.maxAccountsPerInstruction == 255
-#guard ProofForge.IR.accInRange 0 == true
-#guard ProofForge.IR.accInRange 63 == true
-#guard ProofForge.IR.accInRange 64 == false
+#guard ProofForge.Svm.ABI.maxTxAccountLocks == 64
+#guard ProofForge.Svm.ABI.maxAccountsPerInstruction == 255
+#guard ProofForge.Svm.ABI.accInRange 0 == true
+#guard ProofForge.Svm.ABI.accInRange 63 == true
+#guard ProofForge.Svm.ABI.accInRange 64 == false
 
-#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedTrio
-#guard ProofForge.IR.usesWalk ProofForge.Golden.extractedTrio
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTrio == 3
+#guard !ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTrio
+#guard ProofForge.Svm.ABI.usesWalk ProofForge.Golden.extractedTrio
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTrio == 3
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTrio with

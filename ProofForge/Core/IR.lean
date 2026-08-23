@@ -1,30 +1,8 @@
 import ProofForge.Ops
 import ProofForge.Core.Schema
 import ProofForge.Core.Eval
-import ProofForge.Crypto.Sha256
 
-namespace ProofForge.IR
-
-open ProofForge.Crypto
-
-/--
-Agave `MAX_TX_ACCOUNT_LOCKS` 在 feature 关着时是 64，开了是 128。
-官方文档当前强制值仍是 64：
-https://solana.com/docs/core/transactions
-https://solana.com/docs/core/constants-reference
--/
-def maxTxAccountLocks : Nat := 64
-
-/--
-Agave `MAX_ACCOUNTS_PER_INSTRUCTION` = 255
-（`MAX_ACCOUNTS_PER_TRANSACTION` 256 里留一个 `NON_DUP_MARKER`）。
-本仓账户下标按这个封顶，不是随便写的 7。
--/
-def maxAccountsPerInstruction : Nat := 255
-
-/-- 账户下标合法：`0 ≤ acc < maxTxAccountLocks`。 -/
-def accInRange (acc : Nat) : Bool :=
-  acc < maxTxAccountLocks
+namespace ProofForge.Core.IR
 
 inductive MethodKind where
   | init
@@ -95,9 +73,6 @@ def lastName (n : String) : String :=
   | [] => n
   | parts => parts.getLast!
 
-def ixParamSig (paramCount : Nat) : String :=
-  String.intercalate "," (List.replicate paramCount "u64")
-
 private def hexDigit (n : Nat) : Char :=
   if n < 10 then Char.ofNat (n + 48) else Char.ofNat (n + 87)
 
@@ -111,149 +86,13 @@ def u64Hex (n : UInt64) : String :=
   let s := go 17 n.toNat ""
   if s = "" then "0" else s
 
-/-- `sha256("proof-forge-solana-v1:" ++ name ++ "(" ++ sig ++ ")")` 前 8 字节，小端。 -/
-def discPreimage (ixName : String) (paramCount : Nat) : String :=
-  s!"proof-forge-solana-v1:{ixName}({ixParamSig paramCount})"
-
-def discHexOf (ixName : String) (paramCount : Nat) : Except String String :=
-  .ok s!"0x{u64Hex (Sha256.first8Le (discPreimage ixName paramCount))}"
-
-def discHex (m : Method) : Except String String :=
-  discHexOf m.ixName m.paramCount
-
 def defaultParamCount (kind : MethodKind) : Nat :=
   match kind with
   | .get => 0
   | _ => 1
 
-def fieldOffset (p : Program) (name : String) : Option Nat :=
-  Id.run do
-    let mut off : Nat := 8
-    for s in p.slots do
-      if s.name == name then return some off
-      off := off + s.width
-    return none
-
 def fieldWidth (p : Program) (name : String) : Option Nat :=
   (p.slots.find? (·.name == name)).map (·.width)
-
-structure VectorStorage where
-  baseSlot : Nat
-  length : Nat
-  strideBytes : Nat
-  strideSlots : Nat
-  deriving BEq, Repr, Inhabited
-
-private def legacyVectorStorage (p : Program) (name : String) : Option VectorStorage :=
-  let pre0 := name ++ "_0"
-  let group :=
-    p.slots.filter fun s => s.name == pre0 || s.name.startsWith (pre0 ++ "_")
-  if group.isEmpty then none
-  else
-    let width := group.foldl (init := 0) fun acc s => acc + s.width
-    let digitPref (s : String) : String :=
-      Id.run do
-        let mut out := ""
-        for c in s.toList do
-          if c.isDigit then out := out.push c else return out
-        return out
-    let n :=
-      p.slots.foldl (init := 0) fun acc s =>
-        let rest :=
-          if s.name.startsWith (name ++ "_") then
-            digitPref (s.name.drop (name.length + 1) |>.copy)
-          else ""
-        match rest.toNat? with
-        | some i => Nat.max acc (i + 1)
-        | none => acc
-    let baseSlot := p.slots.findIdx fun s => s.name == pre0 || s.name.startsWith (pre0 ++ "_")
-    if n = 0 || width = 0 then none
-    else some { baseSlot, length := n, strideBytes := width, strideSlots := group.size }
-
-/-- Typed vector layout for extracted programs; the string parser is isolated here for old Golden fixtures. -/
-def vectorStorage (p : Program) (name : String) : Option VectorStorage :=
-  match p.schema.vector? name with
-  | some vector => do
-      let baseSlot ← p.schema.vectorBaseLeafIndex? vector
-      return {
-        baseSlot
-        length := vector.length
-        strideBytes := vector.elementBytes
-        strideSlots := vector.elementLeaves
-      }
-  | none => legacyVectorStorage p name
-
-/-- `cells` / `nodes` 这类定长向量的元素个数和每元素字节数。 -/
-def vectorElem (p : Program) (name : String) : Option (Nat × Nat) :=
-  (vectorStorage p name).map fun layout => (layout.length, layout.strideBytes)
-
-def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
-  if given ≠ 0 then given
-  else match vectorElem p name with | some (n, _) => n | none => 0
-
-def vectorStride (p : Program) (name : String) : Nat :=
-  match vectorElem p name with
-  | some (_, w) => w
-  | none => 8
-
-private def slotOffsetAt (p : Program) (index : Nat) : Option Nat :=
-  if index ≥ p.slots.size then none
-  else
-    let before := p.slots.extract 0 index
-    some (8 + before.foldl (init := 0) fun acc slot => acc + slot.width)
-
-def vectorBaseOffset (p : Program) (name : String) : Option Nat := do
-  let layout ← vectorStorage p name
-  slotOffsetAt p layout.baseSlot
-
-def vectorBaseSlot (p : Program) (name : String) : Option Nat :=
-  (vectorStorage p name).map (·.baseSlot)
-
-private def legacyVectorLeafOff (p : Program) (name leaf : String) : Nat :=
-  let pre0 := name ++ "_0"
-  Id.run do
-    let mut off : Nat := 0
-    for s in p.slots do
-      if s.name == pre0 || s.name.startsWith (pre0 ++ "_") then
-        if s.name == pre0 ++ "_" ++ leaf || (leaf.isEmpty && s.name == pre0) then
-          return off
-        off := off + s.width
-    return off
-
-/-- `nodes[i].value` 相对 `nodes_0_left` 的叶内偏移。 -/
-def vectorLeafOff (p : Program) (name leaf : String) : Nat :=
-  match p.schema.vector? name with
-  | some vector => Id.run do
-      let mut off : Nat := 0
-      for item in p.schema.vectorElementLeaves vector do
-        if vector.relativeLeafName item == leaf then return off
-        off := off + item.width
-      return off
-  | none => legacyVectorLeafOff p name leaf
-
-private def legacyVectorLeafName (p : Program) (name : String) (off : Nat) : String :=
-  let pre0 := name ++ "_0"
-  Id.run do
-    let mut acc : Nat := 0
-    for s in p.slots do
-      if s.name == pre0 || s.name.startsWith (pre0 ++ "_") then
-        if acc == off then
-          let suf := pre0 ++ "_"
-          if s.name.startsWith suf then return (s.name.drop suf.length |>.copy)
-          else return ""
-        acc := acc + s.width
-    return "value"
-
-/-- 叶内偏移 → 字段名。`0` 对叶子向量仍是整元素。 -/
-def vectorLeafName (p : Program) (name : String) (off : Nat) : String :=
-  match p.schema.vector? name with
-  | some vector => Id.run do
-      let mut acc : Nat := 0
-      for item in p.schema.vectorElementLeaves vector do
-        if acc == off then return vector.relativeLeafName item
-        acc := acc + item.width
-      return "value"
-  | none => legacyVectorLeafName p name off
 
 /-- First Option tag/payload names. Typed paths are authoritative for extracted programs. -/
 def optionLeafNames? (p : Program) : Option (String × String) :=
@@ -266,103 +105,6 @@ def optionLeafNames? (p : Program) : Option (String × String) :=
 
 def hasOptionLeaves (p : Program) : Bool :=
   (optionLeafNames? p).isSome
-
-def dataLen (p : Program) : Nat :=
-  let raw := 8 + p.slots.foldl (init := 0) fun acc s => acc + s.width
-  let pad := (8 - raw % 8) % 8
-  raw + pad
-
-/-- Loader V3 单账户：`ACC0_DATA=0x60`，后接 `10240` 再对齐到 8。 -/
-def acc0Data : Nat := 0x60
-def maxPermittedDataIncrease : Nat := 10240
-
-structure InputLayout where
-  rentEpoch : Nat
-  instructionDataLen : Nat
-  instructionData : Nat
-  deriving BEq, Repr, Inhabited
-
-/-- 账户前缀到 data：header 8 + key 32 + owner 32 + lamports 8 + data_len 8 = 88。 -/
-def accountPrefix : Nat := 0x58
-
-def accountSpan (accountDataLen : Nat) : Nat :=
-  let dataEnd := accountPrefix + accountDataLen + maxPermittedDataIncrease
-  let align := (8 - dataEnd % 8) % 8
-  dataEnd + align + 8
-
-/-- 程序是否含 CPI。 -/
-def usesCpi (p : Program) : Bool :=
-  p.methods.any (fun m => Ops.hasInvoke m.ops)
-
-/-- 要走多账户虚地址 walk：有 CPI，或读账户 ≥1 叶子。 -/
-def usesWalk (p : Program) : Bool :=
-  usesCpi p || p.methods.any (fun m => Ops.hasAcc1 m.ops)
-
-def usesSystemTransfer (p : Program) : Bool :=
-  usesCpi p
-
-/-- 外层账户数：invoke 下标最大值 + 1；叶子下标最大值 + 1。 -/
-def cpiAccountCount (p : Program) : Nat :=
-  let rec maxIx (fuel : Nat) (ops : Array Ops.Op) (acc : Nat) : Nat :=
-    match fuel with
-    | 0 => acc
-    | fuel' + 1 =>
-      ops.foldl (init := acc) fun a op =>
-        match op with
-        | .invoke prog metas .. =>
-          let m := metas.foldl (init := prog) fun b mt => Nat.max b mt.acc
-          Nat.max a m
-        | .ite _ _ _ t f => Nat.max (maxIx fuel' t a) (maxIx fuel' f a)
-        | .forBody _ body => maxIx fuel' body a
-        | _ => a
-  let n := p.methods.foldl (init := 0) fun a m => Nat.max a (maxIx 8 m.ops 0)
-  let fromInvoke := if usesCpi p then Nat.max 2 (n + 1) else 0
-  let fromLeaves := p.methods.foldl (init := 0) fun a m => Nat.max a (Ops.opsMinAccounts m.ops)
-  Nat.max fromInvoke fromLeaves
-
-def inputLayout (p : Program) : InputLayout :=
-  if usesWalk p then
-    -- N 个 data_len=0 的账户：每个 span = 0x2860，instruction 紧跟最后账户 rent。
-    let n := cpiAccountCount p
-    let rec lastRent (i : Nat) (off : Nat) : Nat :=
-      match i with
-      | 0 => off - 8
-      | i' + 1 => lastRent i' (off + accountSpan 0)
-    let rent := lastRent n 8
-    { rentEpoch := rent
-      instructionDataLen := rent + 8
-      instructionData := rent + 16 }
-  else
-    let dataEnd := acc0Data + dataLen p + maxPermittedDataIncrease
-    let align := (8 - dataEnd % 8) % 8
-    let rent := dataEnd + align
-    { rentEpoch := rent
-      instructionDataLen := rent + 8
-      instructionData := rent + 16 }
-
-/-- StateCell 单字段历史名是 `count`，Lean 侧叫 `value`。 -/
-def layoutSlotName (name : String) : String :=
-  if name == "value" then "count" else name
-
-/-- `n|i:name:0:off:8:u64-le|…`，与 PF `proof-forge-solana-layout-v1:` 一致。 -/
-def layoutSig (p : Program) : String :=
-  let parts := Id.run do
-    let mut acc : Array String := #[]
-    let mut i : Nat := 0
-    let mut off : Nat := 8
-    for s in p.slots do
-      acc := acc.push s!"{i}:{layoutSlotName s.name}:0:{off}:{s.width}:{s.abi}"
-      off := off + s.width
-      i := i + 1
-    return acc
-  s!"{p.slots.size}|{String.intercalate "|" parts.toList}"
-
-/-- `sha256("proof-forge-solana-layout-v1:" ++ layoutSig)` 前 8 字节，大端。 -/
-def layoutPreimage (p : Program) : String :=
-  s!"proof-forge-solana-layout-v1:{layoutSig p}"
-
-def layoutMarkerHex (p : Program) : Except String String :=
-  .ok s!"0x{u64Hex (Sha256.first8Be (layoutPreimage p))}"
 
 def counterProgram (name : String := "Counter") : Program :=
   { name
@@ -544,4 +286,4 @@ def fnv1a64 (s : String) : UInt64 :=
 def digestHex (p : Program) : String :=
   u64Hex (fnv1a64 (canonical p))
 
-end ProofForge.IR
+end ProofForge.Core.IR

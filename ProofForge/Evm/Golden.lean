@@ -6,7 +6,7 @@ namespace ProofForge.Evm.Golden
 open ProofForge.Evm
 
 /-- 竖切夹具：无 SVM 叶子。窄槽 / Option 双叶已开。 -/
-def sources : Array ProofForge.IR.Program := #[
+def sources : Array Core.IR.Program := #[
   ProofForge.Golden.extractedCounter,
   ProofForge.Golden.extractedPair,
   ProofForge.Golden.extractedWindow,

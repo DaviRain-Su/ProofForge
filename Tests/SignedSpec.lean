@@ -9,8 +9,8 @@ open ProofForge.Svm.Runtime
 #guard get (init 0) == 0
 #guard invokeSigned 1 #[] #[] "vault" 0 == 0
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedSigned
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedSigned == 2
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedSigned
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedSigned == 2
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedSigned with

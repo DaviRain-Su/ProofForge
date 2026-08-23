@@ -14,11 +14,11 @@ open ProofForge.Svm.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTransfer
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTransfer == 3
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTransfer
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTransfer == 3
 
 #guard
-  let l := ProofForge.IR.inputLayout ProofForge.Golden.extractedTransfer
+  let l := ProofForge.Svm.ABI.inputLayout ProofForge.Golden.extractedTransfer
   l.instructionDataLen == 31016 && l.instructionData == 31024
 
 #guard

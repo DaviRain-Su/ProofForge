@@ -102,8 +102,8 @@ elab "#pf_guard_tree_allocator" : command => do
     match ProofForge.Svm.Emit.emitCounterAsm program with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless ProofForge.IR.dataLen program == 232 do
-    throwError s!"Tree source account layout changed: {ProofForge.IR.dataLen program} bytes"
+  unless ProofForge.Svm.ABI.dataLen program == 232 do
+    throwError s!"Tree source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
   let some alloc := program.methods.find? (·.ixName == "allocNode")
     | throwError "missing allocNode"
   let some release := program.methods.find? (·.ixName == "releaseNode")
@@ -432,6 +432,6 @@ elab "#pf_guard_tree_allocator" : command => do
 
 #guard
   (ProofForge.Golden.extractedTree.fields.find? (· == "nodes_0_value")).isSome
-#guard ProofForge.IR.dataLen ProofForge.Golden.extractedTree == 216
+#guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedTree == 216
 
 end Tests.TreeSpec

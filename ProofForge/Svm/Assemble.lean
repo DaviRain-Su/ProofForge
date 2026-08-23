@@ -1,5 +1,5 @@
 import ProofForge.Svm.Emit
-import ProofForge.IR
+import ProofForge.Core.IR
 import ProofForge.Svm.Idl
 
 namespace ProofForge.Svm.Assemble
@@ -44,7 +44,7 @@ partial def findFileNamed (dir : System.FilePath) (name : String) : IO (Option S
   return none
 
 /-- 把 `program` 汇编写成 `src/Name/Name.s`，调用本机 `sbpf 0.2.2`。 -/
-def assembleProgram (outDir : System.FilePath) (program : ProofForge.IR.Program) : IO Result := do
+def assembleProgram (outDir : System.FilePath) (program : Core.IR.Program) : IO Result := do
   let asm ← match Emit.emitCounterAsm program with
     | .error reason => throw <| IO.userError reason
     | .ok text => pure text
@@ -73,7 +73,7 @@ def assembleProgram (outDir : System.FilePath) (program : ProofForge.IR.Program)
   IO.FS.writeFile stagedIdl (Idl.emitIdl program)
   return { asmPath := stagedAsm, soPath := stagedSo, idlPath := stagedIdl, soBytes }
 
-def assembleCounter (outDir : System.FilePath) (program : ProofForge.IR.Program) :
+def assembleCounter (outDir : System.FilePath) (program : Core.IR.Program) :
     IO Result :=
   assembleProgram outDir program
 

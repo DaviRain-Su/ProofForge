@@ -6,7 +6,7 @@
 |---|---|
 | [Crypto](crypto.md) | 本机 SHA-256 / Keccak-256 |
 | [Attr](attr.md) | `@[pf_entry]` 标记 |
-| [IR](ir.md) | 可哈希程序形状 + body sketch |
+| [IR](ir.md) | `Core.IR` 可哈希程序形状 + `Svm.ABI` 物理布局 |
 | [Profile](profile.md) | 传递闭包剖面 |
 | [Ops](ops.md) | Expr 操作序列 |
 | [Extract](extract.md) | Expr → IR + ops；任意用户项目 |

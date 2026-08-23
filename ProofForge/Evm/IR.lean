@@ -1,4 +1,4 @@
-import ProofForge.IR
+import ProofForge.Core.IR
 import ProofForge.Ops
 import ProofForge.Crypto.Keccak
 
@@ -129,7 +129,7 @@ structure Vector where
   deriving BEq, Repr, Inhabited
 
 structure Method where
-  kind : ProofForge.IR.MethodKind
+  kind : Core.IR.MethodKind
   name : String
   ixName : String
   selector : String := ""
@@ -291,15 +291,15 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
 def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
   walkForbidden 16 ops
 
-private def rejectSlot (s : ProofForge.IR.Slot) : Option String :=
+private def rejectSlot (s : Core.IR.Slot) : Option String :=
   if !(s.width == 1 || s.width == 2 || s.width == 4 || s.width == 8) then
     some s!"extract/unsupported: evm slot {s.name} width {s.width}"
   else none
 
-private def isCtor (m : ProofForge.IR.Method) : Bool :=
+private def isCtor (m : Core.IR.Method) : Bool :=
   m.kind == .init
 
-private def lowerVectors (src : ProofForge.IR.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Core.IR.Program) (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseSlot ← src.schema.vectorBaseLeafIndex? vector
     let _ ← slots[baseSlot]?
@@ -323,14 +323,14 @@ private def lowerVectors (src : ProofForge.IR.Program) (slots : Array Slot) : Ar
     }
 
 /-- 从已抽出的 SVM `IR.Program` 做成 EVM 形状。不改原 IR。 -/
-def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
+def fromProgram (src : Core.IR.Program) : Except String Program := do
   if src.slots.isEmpty then
     throw "extract/unsupported: evm program has no slots"
   for s in src.slots do
     if let some reason := rejectSlot s then
       throw reason
-  let mut ctors : Array ProofForge.IR.Method := #[]
-  let mut extras : Array ProofForge.IR.Method := #[]
+  let mut ctors : Array Core.IR.Method := #[]
+  let mut extras : Array Core.IR.Method := #[]
   for m in src.methods do
     if hasSvmLeaf m.ops then
       throw s!"extract/unsupported: evm rejects svm leaf in {m.ixName}"
@@ -342,7 +342,7 @@ def fromProgram (src : ProofForge.IR.Program) : Except String Program := do
     throw "extract/unsupported: evm wants a constructor"
   let ctorSrc :=
     match ctors.find? (fun m =>
-        m.ixName == "initialize" || ProofForge.IR.lastName m.name == "init") with
+        m.ixName == "initialize" || Core.IR.lastName m.name == "init") with
     | some m => m
     | none => ctors[0]!
   let rest :=
@@ -536,6 +536,6 @@ def canonical (p : Program) : String :=
   s!"evm|{p.name}|{slots}|{ctor}|{String.intercalate "/" entries}"
 
 def digestHex (p : Program) : String :=
-  ProofForge.IR.u64Hex (ProofForge.IR.fnv1a64 (canonical p))
+  Core.IR.u64Hex (Core.IR.fnv1a64 (canonical p))
 
 end ProofForge.Evm.IR

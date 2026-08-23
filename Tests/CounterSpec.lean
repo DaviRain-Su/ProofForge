@@ -59,10 +59,10 @@ private def isOverflow (r : Except Error (State × UInt64)) : Bool :=
   | .error _ => false
 #guard nonzero (s 0) == 1
 #guard nonzero (s 7) == 0
-#guard ProofForge.IR.isCounterShape ProofForge.Golden.extractedCounter
-#guard ProofForge.IR.isCounterShape ProofForge.Golden.extractedPair
-#guard ProofForge.IR.dataLen ProofForge.Golden.extractedPair == 24
-#guard ProofForge.IR.digestHex ProofForge.Golden.extractedCounter != ""
+#guard ProofForge.Core.IR.isCounterShape ProofForge.Golden.extractedCounter
+#guard ProofForge.Core.IR.isCounterShape ProofForge.Golden.extractedPair
+#guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedPair == 24
+#guard ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter != ""
 #guard ProofForge.Profile.checkRootName "increment" == .accept
 #guard (match ProofForge.Profile.checkRootName "evil" with
   | .reject _ => true

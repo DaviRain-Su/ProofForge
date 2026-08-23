@@ -1,7 +1,7 @@
 import Lean
 import ProofForge.Profile
 import ProofForge.Extract
-import ProofForge.IR
+import ProofForge.Core.IR
 import ProofForge.Ops
 import ProofForge.Svm.Emit
 import ProofForge.Golden
@@ -32,7 +32,7 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
   | .error reason => throwError reason
   | .ok program => do
     let mutOps :=
-      (program.methods.find? (·.kind == ProofForge.IR.MethodKind.increment)).map (·.ops)
+      (program.methods.find? (·.kind == Core.IR.MethodKind.increment)).map (·.ops)
     match mutOps with
     | some ops =>
       if Ops.hasEvmEffect ops then
@@ -69,7 +69,7 @@ elab "#pf_build " n:ident : command => do
     | .ok asm =>
       unless asm.contains "entrypoint:" do
         throwError "assemble/tool: missing entrypoint"
-      let digest := ProofForge.IR.digestHex program
+      let digest := Core.IR.digestHex program
       match ProofForge.Golden.digestOf program.name with
       | some want =>
         if digest != want then

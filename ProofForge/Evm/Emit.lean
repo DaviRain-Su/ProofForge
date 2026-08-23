@@ -50,7 +50,7 @@ private def nl : String := "\n"
 
 private def yulLit (n : UInt64) : String :=
   if n == 0 then "0"
-  else s!"0x{ProofForge.IR.u64Hex n}"
+  else s!"0x{Core.IR.u64Hex n}"
 
 /-- Addr20 小端三叶：word i 收 `src` 的字节 0..19 中第 8i ..。`src` 是 `caller()` / `address()`。 -/
 private def packAddrWord (src : String) (word : Nat) : String :=

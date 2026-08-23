@@ -14,8 +14,8 @@ open ProofForge.Svm.Runtime
 #guard sha256Lit "ok" == 0
 #guard sha256Lit "" == 0
 
-#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedHash
-#guard !ProofForge.IR.usesWalk ProofForge.Golden.extractedHash
+#guard !ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedHash
+#guard !ProofForge.Svm.ABI.usesWalk ProofForge.Golden.extractedHash
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedHash with

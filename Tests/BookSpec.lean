@@ -30,6 +30,6 @@ open Examples.Book
   | .error .overflow => true
   | _ => false
 
-#guard ProofForge.IR.dataLen ProofForge.Golden.extractedBook == 40
+#guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedBook == 40
 
 end Tests.BookSpec

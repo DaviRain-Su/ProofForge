@@ -37,7 +37,8 @@ PF HandlerIR / emitSbpf / sbpf   ← 搬，不重写
 | `ProofForge.Profile` | 传递闭包准入规则 | 业务类型检查（Lean 已做） |
 | `ProofForge.Extract` | `Expr` → 本仓语义 IR | LCNF/IR 当语义权威 |
 | `ProofForge.Crypto` | 本机 SHA-256 / Keccak-256 | 链上 syscall |
-| `ProofForge.IR` | 稳定、可哈希的合约 IR | sBPF 文本 |
+| `ProofForge.Core.IR` | 稳定、可哈希的共享 source IR | target 物理布局 |
+| `ProofForge.Svm.ABI` | Solana discriminator / account / Loader V3 布局 | EVM storage |
 | `ProofForge.Svm.Emit` | Ops → Loader V3 sBPF 文本 | Yul |
 | `ProofForge.Svm.Assemble` | 子进程调用 locked `sbpf` | FFI |
 | `ProofForge.Svm.Idl` | Solana IDL spec 0.1.0 | ABI JSON |

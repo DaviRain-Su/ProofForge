@@ -14,8 +14,8 @@ open ProofForge.Svm.Runtime
 #guard keccak256Lit "ok" == 0
 #guard keccak256Lit "" == 0
 
-#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedKeccak
-#guard !ProofForge.IR.usesWalk ProofForge.Golden.extractedKeccak
+#guard !ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedKeccak
+#guard !ProofForge.Svm.ABI.usesWalk ProofForge.Golden.extractedKeccak
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedKeccak with

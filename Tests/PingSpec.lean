@@ -9,8 +9,8 @@ open ProofForge.Svm.Runtime
 #guard get (init 0) == 0
 #guard invokeAcc1 == 0
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedPing
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedPing == 2
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedPing
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedPing == 2
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPing with

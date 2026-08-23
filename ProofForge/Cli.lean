@@ -1,7 +1,7 @@
 import Lean
 import ProofForge.Golden
 import ProofForge.Extract
-import ProofForge.IR
+import ProofForge.Core.IR
 import ProofForge.Ops
 import ProofForge.Svm.Assemble
 import ProofForge.Evm.Assemble
@@ -59,7 +59,7 @@ private def parseArgs (args : List String) : Except String Options :=
     | rest => rest
   go args {}
 
-private def svmFixtures : Array IR.Program :=
+private def svmFixtures : Array Core.IR.Program :=
   Golden.programs.filter fun p =>
     !p.methods.any (fun m => Ops.hasEvmEffect m.ops)
 
@@ -79,7 +79,8 @@ private def svmModuleName (name : String) : Lean.Name :=
 CLI 构建必须重新从用户模块抽 IR，不能组装 `Golden` smoke fixture。Golden 只负责
 列出可构建模块并钉 canonical digest。
 -/
-private unsafe def extractSvmPrograms (names : Array String) : IO (Except String (Array IR.Program)) :=
+private unsafe def extractSvmPrograms (names : Array String) :
+    IO (Except String (Array Core.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
@@ -90,7 +91,7 @@ private unsafe def extractSvmPrograms (names : Array String) : IO (Except String
       match Extract.extractModule env ns none with
       | .error reason => .error s!"{name}: {reason}"
       | .ok program =>
-        let digest := IR.digestHex program
+        let digest := Core.IR.digestHex program
         match Golden.digestOf name with
         | some expected =>
           if digest == expected then .ok program

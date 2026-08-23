@@ -19,8 +19,8 @@ open ProofForge.Svm.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedCreatePda
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedCreatePda == 3
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedCreatePda
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedCreatePda == 3
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCreatePda with

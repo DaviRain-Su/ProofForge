@@ -14,8 +14,8 @@ open ProofForge.Svm.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 0
   | .error _ => false
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedAta
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedAta == 7
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedAta
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedAta == 7
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedAta with

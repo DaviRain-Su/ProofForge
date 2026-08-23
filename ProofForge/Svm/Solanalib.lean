@@ -1,4 +1,5 @@
 import ProofForge.Svm.IR
+import ProofForge.Svm.ABI
 import Solanalib.SBPF.Interpreter
 import Solanalib.SBPF.Verifier
 
@@ -27,7 +28,7 @@ It covers static account-data writes only; Loader input construction remains out
 def staticStoreInstruction? (slot : IR.Slot) (valueReg : BpfIReg := .br1) :
     Option BpfInstruction := do
   let chunk ← memoryChunk? slot.width
-  let offset ← positiveOffset? (ProofForge.IR.acc0Data + slot.offset)
+  let offset ← positiveOffset? (ABI.acc0Data + slot.offset)
   return .st chunk .br6 (.reg valueReg) offset
 
 /-- Resolve a Core place through the SVM target layout before constructing a typed instruction. -/
@@ -128,7 +129,7 @@ theorem checkedAddWrite_simulates (lhs rhs : U64)
     storev .m64 initMem (mmInputStart + 104) (.vlong (lhs + rhs)) := by
   simp [evalCheckedWrite?, hguard, checkedArithBody, arithBinop, evalAluBody,
     evalAlu64, sndOp64, arithInputRegs, staticStoreInstruction?, memoryChunk?,
-    positiveOffset?, evalStore, memoryChunkValueOfU64, setReg, ProofForge.IR.acc0Data]
+    positiveOffset?, evalStore, memoryChunkValueOfU64, setReg, ABI.acc0Data]
 
 /-- Execute one typed static-store instruction through Solanalib's memory semantics. -/
 def evalStaticStore? (slot : IR.Slot) (regs : RegMap) (memory : Mem) : Option Mem := do

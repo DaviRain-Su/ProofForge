@@ -9,8 +9,8 @@ open ProofForge.Svm.Runtime
 #guard get (init 0) == 0
 #guard invoke 1 #[] #[] == 0
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedCall
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedCall == 2
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedCall
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedCall == 2
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCall with

@@ -493,7 +493,7 @@ def createPda (lamports : UInt64) : UInt64 :=
 账户 `acc` 公钥的第 `word` 个小端 `u64`（`word` 0..=3）。
 `acc` / `word` 必须在抽出时是常量。`acc ≥ 1` 走 walk，不强制入口签名。
 这不是 `signerKey0`：读 key 字不检查 `is_signer`。
-`acc ≥ IR.maxTxAccountLocks` 或运行时下标本剖面 fail closed。
+`acc ≥ Svm.ABI.maxTxAccountLocks` 或运行时下标本剖面 fail closed。
 -/
 @[irreducible] def accKeyWord (acc word : UInt64) : UInt64 :=
   let _ := acc
@@ -503,7 +503,7 @@ def createPda (lamports : UInt64) : UInt64 :=
 /--
 账户 `acc` owner 的第 `word` 个小端 `u64`（`word` 0..=3）。
 `acc` / `word` 必须在抽出时是常量。`acc ≥ 1` 走 walk。
-`acc ≥ IR.maxTxAccountLocks` 或运行时下标本剖面 fail closed。
+`acc ≥ Svm.ABI.maxTxAccountLocks` 或运行时下标本剖面 fail closed。
 -/
 @[irreducible] def accOwnerWord (acc word : UInt64) : UInt64 :=
   let _ := acc
@@ -512,14 +512,14 @@ def createPda (lamports : UInt64) : UInt64 :=
 
 /--
 账户 `acc` 的 lamports。`acc` 必须在抽出时是常量，且
-`acc < IR.maxTxAccountLocks`（官方当前强制 64）。
+`acc < Svm.ABI.maxTxAccountLocks`（官方当前强制 64）。
 `acc ≥ 1` 走 walk。旧名 `accLamports0` / `accLamports1` 仍独立。
 -/
 @[irreducible] def accLamports (acc : UInt64) : UInt64 :=
   let _ := acc
   0
 
-/-- 账户 `acc` 的 `data_len`。`acc < IR.maxTxAccountLocks`，抽出时常量。 -/
+/-- 账户 `acc` 的 `data_len`。`acc < Svm.ABI.maxTxAccountLocks`，抽出时常量。 -/
 @[irreducible] def accDataLen (acc : UInt64) : UInt64 :=
   let _ := acc
   0
@@ -541,7 +541,7 @@ def createPda (lamports : UInt64) : UInt64 :=
 
 /--
 账户 `acc` 公钥的第一个小端 `u64`。用到这个叶子的入口会检查该账户 `is_signer`。
-`acc < IR.maxTxAccountLocks`。这不是 `tx.origin`。旧名 `signerKey0` 仍独立。
+`acc < Svm.ABI.maxTxAccountLocks`。这不是 `tx.origin`。旧名 `signerKey0` 仍独立。
 -/
 @[irreducible] def signerKey (acc : UInt64) : UInt64 :=
   let _ := acc
@@ -549,7 +549,7 @@ def createPda (lamports : UInt64) : UInt64 :=
 
 /--
 账户 `acc` 的 owner 是否是当前 program id。
-抽出后比 32B。相等返回 0，不等返回 1。`acc < IR.maxTxAccountLocks`。
+抽出后比 32B。相等返回 0，不等返回 1。`acc < Svm.ABI.maxTxAccountLocks`。
 -/
 @[irreducible] def ownerIsSelf (acc : UInt64) : UInt64 :=
   let _ := acc

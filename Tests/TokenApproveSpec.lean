@@ -14,8 +14,8 @@ open ProofForge.Svm.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenApprove
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenApprove == 5
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenApprove
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenApprove == 5
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenApprove with

@@ -2,8 +2,8 @@
 
 ## Purpose
 
-把 frontend `IR.Program` 降成独立 EVM target IR，再编成 Yul / ABI / bytecode。
-平行于 `Svm/`，不改 frontend `IR.Program`。
+把 frontend `Core.IR.Program` 降成独立 EVM target IR，再编成 Yul / ABI / bytecode。
+平行于 `Svm/`，不改 frontend `Core.IR.Program`。
 
 ## Boundary
 
@@ -16,7 +16,7 @@
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
 | `Evm.Commands` | `#pf_evm_build` | 新 DSL |
 
-输入是已通过 Profile 的 frontend `IR.Program`。`Evm.IR.fromProgram` 物化 storage slot 并把
+输入是已通过 Profile 的 frontend `Core.IR.Program`。`Evm.IR.fromProgram` 物化 storage slot 并把
 compatibility Ops 降成 EVM-only `Op`；SVM 叶子（`clockSlot` / `signerKey0` /
 `systemTransfer`）在这个边界 fail closed，Yul emitter 不再承担跨 target 过滤。承认独立 EVM
 叶子：环境 opcode（超 UInt64 revert）、8 字节 `evmCaller`/`evmSelf`、Addr20 三叶。
@@ -30,7 +30,7 @@ overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 
 ## API
 
-- `IR.fromProgram : ProofForge.IR.Program → Except String IR.Program`
+- `IR.fromProgram : ProofForge.Core.IR.Program → Except String IR.Program`
 - `Emit.emitYul` / `Emit.emitAbi`
 - `Assemble.assembleProgram`
 - `#pf_evm_build Namespace`

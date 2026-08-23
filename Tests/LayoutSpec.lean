@@ -7,7 +7,7 @@ import Examples.Maybe
 #pf_build Examples.Maybe
 
 #guard
-  match ProofForge.IR.fieldOffset
+  match ProofForge.Svm.ABI.fieldOffset
       { name := "Flag"
         slots := #[{ name := "flag", width := 1, abi := "u8-le" }, { name := "count" }]
         methods := #[] } "count" with
@@ -15,15 +15,15 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  let p : ProofForge.IR.Program :=
+  let p : ProofForge.Core.IR.Program :=
     { name := "Maybe"
       slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]
       methods := #[] }
-  ProofForge.IR.fieldOffset p "slot_p0" == some 16 &&
-    ProofForge.IR.dataLen p == 24
+  ProofForge.Svm.ABI.fieldOffset p "slot_p0" == some 16 &&
+    ProofForge.Svm.ABI.dataLen p == 24
 
 #guard
-  match ProofForge.IR.layoutMarkerHex
+  match ProofForge.Svm.ABI.layoutMarkerHex
       { name := "Flag"
         slots := #[{ name := "flag", width := 1, abi := "u8-le" }, { name := "count" }]
         methods := #[] } with
@@ -31,7 +31,7 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  match ProofForge.IR.layoutMarkerHex
+  match ProofForge.Svm.ABI.layoutMarkerHex
       { name := "Maybe"
         slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]
         methods := #[] } with
@@ -39,27 +39,27 @@ import Examples.Maybe
   | _ => false
 
 #guard
-  match ProofForge.IR.discHexOf "setFlag" 1 with
+  match ProofForge.Svm.ABI.discHexOf "setFlag" 1 with
   | .ok "0xabc0ed57af4c46fe" => true
   | _ => false
 
 #guard
-  match ProofForge.IR.discHexOf "isSome" 0 with
+  match ProofForge.Svm.ABI.discHexOf "isSome" 0 with
   | .ok "0xae9916c18320fcc3" => true
   | _ => false
 
 #guard
-  match ProofForge.IR.discHexOf "neverSeen" 2 with
+  match ProofForge.Svm.ABI.discHexOf "neverSeen" 2 with
   | .ok "0xf53bae450cc55143" => true
   | _ => false
 
 #guard
-  ProofForge.IR.digestHex ProofForge.Golden.extractedFlag ==
-    ProofForge.IR.digestHex ProofForge.Golden.extractedFlag
+  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedFlag ==
+    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedFlag
 
 #guard
-  ProofForge.IR.digestHex ProofForge.Golden.extractedFlag !=
-    ProofForge.IR.digestHex ProofForge.Golden.extractedMaybe
+  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedFlag !=
+    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedMaybe
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedFlag with

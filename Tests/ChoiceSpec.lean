@@ -18,10 +18,10 @@ open Examples.Choice
   | .error _ => false
 
 #guard
-  match ProofForge.IR.fieldOffset ProofForge.Golden.extractedChoice "pick_p0" with
+  match ProofForge.Svm.ABI.fieldOffset ProofForge.Golden.extractedChoice "pick_p0" with
   | some 16 => true
   | _ => false
 
-#guard ProofForge.IR.dataLen ProofForge.Golden.extractedChoice == 24
+#guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedChoice == 24
 
 end Tests.ChoiceSpec

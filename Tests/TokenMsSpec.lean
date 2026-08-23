@@ -8,8 +8,8 @@ open ProofForge.Svm.Runtime
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenMs
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenMs == 5
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenMs
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenMs == 5
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenMs with

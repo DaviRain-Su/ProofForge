@@ -1,8 +1,9 @@
 import Lean
-import ProofForge.IR
+import ProofForge.Core.IR
 import ProofForge.Ops
 import ProofForge.Profile
 import ProofForge.Attr
+import ProofForge.Svm.ABI
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 
@@ -290,7 +291,7 @@ private def isUserType (env : Environment) (n : Name) : Bool :=
 
 /-- 用户 structure / inductive 的投影 / 构造子。`UInt64.toNat`、`HSub.hSub` 不是。 -/
 private def isUserName (env : Environment) (n : Name) : Bool :=
-  if isToolName n || isReservedProj (IR.lastName n.toString) then
+  if isToolName n || isReservedProj (Core.IR.lastName n.toString) then
     false
   else if isUserType env n then
     true
@@ -377,7 +378,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if IR.accInRange a && w ≤ 3 then some (.accKeyWord a w) else none
+            if Svm.ABI.accInRange a && w ≤ 3 then some (.accKeyWord a w) else none
           | _, _ => none
         else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Svm.Runtime.accOwnerWord) &&
             e.getAppArgs.size ≥ 2 then
@@ -386,7 +387,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if IR.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
+            if Svm.ABI.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
@@ -406,49 +407,49 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if IR.accInRange a then some (.accLamportsN a) else none
+            if Svm.ABI.accInRange a then some (.accLamportsN a) else none
           | _ => none
         else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if IR.accInRange a then some (.accDataLenN a) else none
+            if Svm.ABI.accInRange a then some (.accDataLenN a) else none
           | _ => none
         else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if IR.accInRange a then some (.isSignerN a) else none
+            if Svm.ABI.accInRange a then some (.isSignerN a) else none
           | _ => none
         else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if IR.accInRange a then some (.isWritableN a) else none
+            if Svm.ABI.accInRange a then some (.isWritableN a) else none
           | _ => none
         else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if IR.accInRange a then some (.isExecutableN a) else none
+            if Svm.ABI.accInRange a then some (.isExecutableN a) else none
           | _ => none
         else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if IR.accInRange a then some (.signerKeyN a) else none
+            if Svm.ABI.accInRange a then some (.signerKeyN a) else none
           | _ => none
         else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Svm.Runtime.ownerIsSelf) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if IR.accInRange a then some (.ownerIsSelf a) else none
+            if Svm.ABI.accInRange a then some (.ownerIsSelf a) else none
           | _ => none
         else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
           let args := e.getAppArgs
@@ -749,7 +750,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               match e.getAppFn.constName? with
               | some n =>
                 let s := n.toString
-                let last := IR.lastName s
+                let last := Core.IR.lastName s
                 let user := isUserName env n
                 let skipTy :=
                   match env.find? n with
@@ -1061,7 +1062,7 @@ private def vectorBaseName (env : Environment) (fuel : Nat) (e : Expr) : Option 
   | fuel' + 1 =>
     match e.getAppFn.constName? with
     | some n =>
-      let last := IR.lastName n.toString
+      let last := Core.IR.lastName n.toString
       let skipTy :=
         match env.find? n with
         | some (.inductInfo _) => true
@@ -1547,7 +1548,7 @@ private def errorCtorName (e : Expr) : Option String :=
       let ctor := strip args[args.size - 1]
       match ctor.getAppFn.constName? with
       | some n =>
-        let last := IR.lastName n.toString
+        let last := Core.IR.lastName n.toString
         if last == "overflow" then none else some last
       | none => none
     else none
@@ -3039,7 +3040,7 @@ private def widthOfType (e : Expr) : Option Nat :=
   | _ => none
 
 /-- 用户参数宽。init 全算；mutate/view 丢掉第一个 state。 -/
-private def inferParamWidths (_env : Environment) (e : Expr) (kind : IR.MethodKind) :
+private def inferParamWidths (_env : Environment) (e : Expr) (kind : Core.IR.MethodKind) :
     Array Nat :=
   let rec collect (fuel : Nat) (e : Expr) (acc : Array Nat) : Array Nat :=
     match fuel with
@@ -3055,8 +3056,8 @@ private def inferParamWidths (_env : Environment) (e : Expr) (kind : IR.MethodKi
   | .init => widths
   | .increment | .get => if widths.isEmpty then #[] else widths.extract 1 widths.size
 
-def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
-    Except String IR.Method := do
+def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
+    Except String Core.IR.Method := do
   let some info := env.find? n
     | throw s!"extract/unsupported: unknown {n}"
   let some e := info.value?
@@ -3066,7 +3067,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     match kind with
     | .increment => decodeMutating env e
     | _ => decodeBody env e
-  let lean := IR.lastName n.toString
+  let lean := Core.IR.lastName n.toString
   let (nLams, _) := peelLams e
   -- Inline entry helpers can own the source loop, so the entry body itself need not expose
   -- `ForIn.forIn`. Explicit stores in the decoded loop distinguish state-carrying loops from
@@ -3271,7 +3272,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       if nRet = 0 then 1 else nRet
     | _ => 1
   return {
-    kind, name := n.toString, ixName := IR.ixNameOfLean lean
+    kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
     paramCount, paramWidths, retCount, sketch, ops
   }
 
@@ -3444,8 +3445,8 @@ def inferSchema (env : Environment) (initName : Name) : Except String Core.Schem
   return { rootType := structName.toString, leaves, vectors }
 
 /-- Compatibility physical slots are now a derived view of the typed schema. -/
-def inferSlots (env : Environment) (initName : Name) : Except String (Array IR.Slot) := do
-  return IR.slotsOfSchema (← inferSchema env initName)
+def inferSlots (env : Environment) (initName : Name) : Except String (Array Core.IR.Slot) := do
+  return Core.IR.slotsOfSchema (← inferSchema env initName)
 
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
   return (← inferSlots env initName).map (·.name)
@@ -3522,16 +3523,16 @@ private def opFields : Ops.Op → Array String
   | .returnU64 v => valFields v
   | .returnState v => valFields v
 
-private def fillElemOff (p : IR.Program) : IR.Program :=
+private def fillElemOff (p : Core.IR.Program) : Core.IR.Program :=
   let rec goVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
     match fuel with
     | 0 => v
     | fuel' + 1 =>
       match v with
       | .indexGet b n i k off =>
-          let leaf := IR.vectorLeafName p n off
+          let leaf := Svm.ABI.vectorLeafName p n off
           let off' :=
-            if leaf.isEmpty then off else IR.vectorLeafOff p n leaf
+            if leaf.isEmpty then off else Svm.ABI.vectorLeafOff p n leaf
           .indexGet (goVal fuel' b) n (goVal fuel' i) k off'
       | .field b n => .field (goVal fuel' b) n
       | .select c l r t f =>
@@ -3549,9 +3550,9 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
       match op with
       | .letLocal i v => .letLocal i (goVal 8 v)
       | .indexSet n i v k off =>
-          let leaf := IR.vectorLeafName p n off
+          let leaf := Svm.ABI.vectorLeafName p n off
           let off' :=
-            if leaf.isEmpty then off else IR.vectorLeafOff p n leaf
+            if leaf.isEmpty then off else Svm.ABI.vectorLeafOff p n leaf
           .indexSet n (goVal 8 i) (goVal 8 v) k off'
       | .ite c l r t f =>
           .ite c (goVal 8 l) (goVal 8 r) (t.map (goOp fuel')) (f.map (goOp fuel'))
@@ -3562,7 +3563,7 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
   { p with methods := p.methods.map fun m => { m with ops := m.ops.map (goOp 8) } }
 
 /-- Make state writeback explicit once, after source schema and normalized Ops are both available. -/
-private def evaluateProgram (p : IR.Program) : Except String IR.Program := do
+private def evaluateProgram (p : Core.IR.Program) : Except String Core.IR.Program := do
   let mut methods := #[]
   for method in p.methods do
     let evaluation ←
@@ -3572,11 +3573,11 @@ private def evaluateProgram (p : IR.Program) : Except String IR.Program := do
     methods := methods.push { method with evaluation }
   return { p with methods }
 
-private def checkUsedFields (p : IR.Program) : Except String Unit := do
+private def checkUsedFields (p : Core.IR.Program) : Except String Unit := do
   for m in p.methods do
     for op in m.ops do
       for name in opFields op do
-        if (IR.fieldOffset p name).isNone then
+        if (Core.IR.fieldWidth p name).isNone then
           throw s!"extract/unsupported: unknown field {name}"
 
 private partial def valEscapedArg (limit : Nat) : Ops.Val → Option Nat
@@ -3623,7 +3624,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .errorOverflow | .errorNamed _ => none
 
 /-- Reject decoder binder leaks before a backend can mistake one for calldata or state. -/
-private def checkArgBounds (p : IR.Program) : Except String Unit := do
+private def checkArgBounds (p : Core.IR.Program) : Except String Unit := do
   for method in p.methods do
     let limit := method.paramCount + if method.kind == .init then 0 else 1
     for op in method.ops do
@@ -3636,12 +3637,12 @@ def extractProgram (env : Environment)
     (initName incrementName getName : Name)
     (programName : Option String := none)
     (fields? : Option (Array String) := none) :
-    Except String IR.Program := do
+    Except String Core.IR.Program := do
   match Profile.checkAll env #[initName, incrementName, getName] with
   | .reject reason => throw reason
   | .accept => pure ()
   let schema ← inferSchema env initName
-  let inferred := IR.slotsOfSchema schema
+  let inferred := Core.IR.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
@@ -3651,23 +3652,20 @@ def extractProgram (env : Environment)
   let initM ← extractMethod env .init initName
   let incM ← extractMethod env .increment incrementName
   let getM ← extractMethod env .get getName
-  let program : IR.Program := {
+  let program : Core.IR.Program := {
     name := programName.getD (programNameOfInit initName)
     slots
     schema
     methods := #[initM, incM, getM]
   }
-  unless IR.isProgramShape program do
+  unless Core.IR.isProgramShape program do
     throw "extract/unsupported: not three-method shape"
-  unless IR.schemaMatchesSlots program do
+  unless Core.IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
   checkArgBounds program
   let program ← evaluateProgram program
   checkUsedFields program
-  match IR.layoutMarkerHex program with
-  | .error reason => throw reason
-  | .ok _ => pure ()
   return program
 
 def extractCounter := extractProgram
@@ -3677,7 +3675,7 @@ private def isExceptType (e : Expr) : Bool :=
 
 /-- `Except` → mutate；`UInt64` → view；其它用户 structure → init。
 `UInt64` 本身也是 structure，必须先判。 -/
-def inferKind (env : Environment) (n : Name) : Except String IR.MethodKind := do
+def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind := do
   let some info := env.find? n
     | throw s!"extract/unsupported: unknown {n}"
   let ret := peelForalls info.type
@@ -3699,7 +3697,7 @@ private def sortNames (ns : Array Name) : Array Name :=
 /-- 收同一名字空间下 `@[pf_entry]` 的根。须恰好一个 init、至少一个 mutate、至少一个 view。 -/
 def extractModule (env : Environment) (ns : Name)
     (fields? : Option (Array String) := none) :
-    Except String IR.Program := do
+    Except String Core.IR.Program := do
   let tagged := sortNames (Attr.entriesIn env ns)
   if tagged.isEmpty then
     throw "extract/unsupported: no pf_entry"
@@ -3721,18 +3719,18 @@ def extractModule (env : Environment) (ns : Name)
   if views.isEmpty then
     throw "extract/unsupported: missing view method"
   let initName :=
-    match inits.find? (fun n => IR.lastName n.toString == "init") with
+    match inits.find? (fun n => Core.IR.lastName n.toString == "init") with
     | some n => n
     | none => inits[0]!
   let schema ← inferSchema env initName
-  let inferred := IR.slotsOfSchema schema
+  let inferred := Core.IR.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
     | some fs =>
       if fs == inferred.map (·.name) then pure inferred
       else throw s!"extract/unsupported: fields {fs} != inferred {inferred.map (·.name)}"
-  let mut methods : Array IR.Method := #[]
+  let mut methods : Array Core.IR.Method := #[]
   let mut seen : Array String := #[]
   for n in inits do
     let m ← extractMethod env .init n
@@ -3752,27 +3750,20 @@ def extractModule (env : Environment) (ns : Name)
       throw s!"extract/unsupported: duplicate ixName {m.ixName}"
     seen := seen.push m.ixName
     methods := methods.push m
-  let program : IR.Program := {
+  let program : Core.IR.Program := {
     name := programNameOfInit initName
     slots
     schema
     methods
   }
-  unless IR.isProgramShape program do
+  unless Core.IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
-  unless IR.schemaMatchesSlots program do
+  unless Core.IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
   checkArgBounds program
   let program ← evaluateProgram program
   checkUsedFields program
-  match IR.layoutMarkerHex program with
-  | .error reason => throw reason
-  | .ok _ => pure ()
-  for m in program.methods do
-    match IR.discHex m with
-    | .error reason => throw reason
-    | .ok _ => pure ()
   return program
 
 end ProofForge.Extract

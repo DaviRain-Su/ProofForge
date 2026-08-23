@@ -10,6 +10,7 @@
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
 | `Svm.Runtime` | sysvar / AccountInfo / CPI / PDA 宿主 stub | EVM opcode |
+| `Svm.ABI` | account limits、discriminator、Loader V3/account byte layout、CPI account count | EVM storage |
 | `Svm.IR` | SVM-only `Op`、account-data byte offset、Vector byte stride | EVM storage slot / EVM effect |
 | `Svm.Solanalib` | bounded typed ALU/static-store semantics bridge | Loader、syscall、ELF、完整 emitter refinement |
 | `Svm.Emit` | Loader V3 单账户 `.s`；checked 算术、CPI、sysvar | Yul、EVM opcode |
@@ -17,15 +18,15 @@
 | `Svm.Assemble` | locked `sbpf 0.2.2` 子进程 | FFI、PATH 随便一个 sbpf |
 | `Svm.Commands` | `#pf_check` / `#pf_extract` / `#pf_build` / `#pf_dump` | `#pf_evm_build` |
 
-公开输入仍是已通过 Profile 的 frontend `ProofForge.IR.Program`；`Svm.IR.fromProgram` 先物化
+公开输入仍是已通过 Profile 的 frontend `ProofForge.Core.IR.Program`；`Svm.IR.fromProgram` 先物化
 byte layout 并拒绝全部 EVM op，`Svm.Emit` 只消费 SVM target `Program` / `Op`。位运算、命名
 错误、有界 for / Vector 下标、wrapping add view 已开。disc / layout 域仍是
 `proof-forge-solana-v1:` / `proof-forge-solana-layout-v1:`，不改现有 `.so` 字节。
 
 ## API
 
-- `IR.fromProgram : ProofForge.IR.Program → Except String Svm.IR.Program`
-- `Emit.emitCounterAsm : ProofForge.IR.Program → Except String String`
+- `IR.fromProgram : ProofForge.Core.IR.Program → Except String Svm.IR.Program`
+- `Emit.emitCounterAsm : ProofForge.Core.IR.Program → Except String String`
 - `Idl.emitIdl` / `Idl.discBytes` / `Idl.layoutDiscBytes`
 - `Assemble.assembleProgram`
 - `#pf_build Namespace`

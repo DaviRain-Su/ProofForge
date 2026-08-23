@@ -21,6 +21,6 @@ open Examples.Nested
   | _ => false
 
 #guard ProofForge.Golden.extractedNested.fields == #["book_price", "book_size", "baseFree"]
-#guard ProofForge.IR.dataLen ProofForge.Golden.extractedNested == 32
+#guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedNested == 32
 
 end Tests.NestedSpec

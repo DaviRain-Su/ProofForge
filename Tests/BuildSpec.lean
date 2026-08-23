@@ -184,27 +184,27 @@ error: extract/unsupported: no pf_entry
 #pf_build Tests.Fixtures
 
 #guard
-  match ProofForge.IR.discHexOf "decrement" 1 with
+  match ProofForge.Svm.ABI.discHexOf "decrement" 1 with
   | .ok "0x1b92f24dfb29d300" => true
   | _ => false
 
 #guard
-  match ProofForge.IR.discHexOf "creditLeft" 1 with
+  match ProofForge.Svm.ABI.discHexOf "creditLeft" 1 with
   | .ok "0xca5ea3052ea3b57e" => true
   | _ => false
 
 #guard
-  match ProofForge.IR.discHexOf "getLeft" 0 with
+  match ProofForge.Svm.ABI.discHexOf "getLeft" 0 with
   | .ok "0xe391a39d1496f393" => true
   | _ => false
 
 #guard
-  match ProofForge.IR.discHexOf "scale" 1 with
+  match ProofForge.Svm.ABI.discHexOf "scale" 1 with
   | .ok "0x5f760731ac44bf15" => true
   | _ => false
 
 #guard
-  match ProofForge.IR.discHexOf "nonzero" 0 with
+  match ProofForge.Svm.ABI.discHexOf "nonzero" 0 with
   | .ok "0x9d4170637dda8281" => true
   | _ => false
 
@@ -226,24 +226,24 @@ error: extract/unsupported: no pf_entry
         !asm.contains "call increment"
 
 #guard
-  ProofForge.IR.digestHex ProofForge.Golden.extractedCounter ==
-    ProofForge.IR.digestHex ProofForge.Golden.extractedCounter
+  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter ==
+    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter
 
 #guard
-  ProofForge.IR.digestHex ProofForge.Golden.extractedCounter !=
-    ProofForge.IR.digestHex ProofForge.Golden.extractedPair
+  ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter !=
+    ProofForge.Core.IR.digestHex ProofForge.Golden.extractedPair
 
 #guard
   let p := ProofForge.Golden.extractedPair
-  let q : ProofForge.IR.Program :=
+  let q : ProofForge.Core.IR.Program :=
     { p with methods := p.methods.map fun m =>
         if m.ixName == "getLeft" then
           { m with ops := #[.returnU64 (.field (.arg 0) "right")] }
         else m }
-  ProofForge.IR.digestHex p != ProofForge.IR.digestHex q
+  ProofForge.Core.IR.digestHex p != ProofForge.Core.IR.digestHex q
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok asm =>
-      asm.contains s!"digest={ProofForge.IR.digestHex ProofForge.Golden.extractedCounter}"
+      asm.contains s!"digest={ProofForge.Core.IR.digestHex ProofForge.Golden.extractedCounter}"

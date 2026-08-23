@@ -27,8 +27,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless labels.length == labels.eraseDups.length do
     let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
-  unless ProofForge.IR.dataLen program == 544 do
-    throwError s!"Phoenix source account layout changed: {ProofForge.IR.dataLen program} bytes"
+  unless ProofForge.Svm.ABI.dataLen program == 544 do
+    throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
   let some post := program.methods.find? (·.ixName == "postAsk")
     | throwError "missing postAsk"
   let some reduce := program.methods.find? (·.ixName == "reduceAsk")
@@ -628,7 +628,7 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard expired 10 0 11 0 == true
 #guard expired 0 10 0 11 == true
 
-#guard ProofForge.IR.dataLen ProofForge.Golden.extractedPhoenix == 344
+#guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedPhoenix == 344
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPhoenix with

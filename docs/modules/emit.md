@@ -28,9 +28,9 @@ writable/signer 的账户在 prelude 里检查。按槽宽用 `ldxb`/`ldxh`/`ldx
 
 ## API
 
-`emitCounterAsm : ProofForge.IR.Program → Except String String`
+`emitCounterAsm : ProofForge.Core.IR.Program → Except String String`
 
-汇编头含 `digest=`（`IR.digestHex`）。
+汇编头含 `digest=`（`Core.IR.digestHex`）。
 
 非 Counter 形状 → `extract/unsupported`。
 

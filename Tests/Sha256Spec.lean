@@ -7,6 +7,6 @@ import ProofForge
   "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
 #guard
-  match ProofForge.IR.discHexOf "initialize" 1 with
+  match ProofForge.Svm.ABI.discHexOf "initialize" 1 with
   | .ok "0x642858a76747495e" => true
   | _ => false

@@ -14,8 +14,8 @@ open ProofForge.Svm.Runtime
   | .ok (st, ret) => st.dummy == 0 && ret == 0
   | .error _ => false
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenNative
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTokenNative == 3
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenNative
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenNative == 3
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenNative with

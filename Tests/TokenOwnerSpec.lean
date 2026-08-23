@@ -8,7 +8,7 @@ open ProofForge.Svm.Runtime
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
 
-#guard ProofForge.IR.usesCpi ProofForge.Golden.extractedTokenOwner
+#guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenOwner
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenOwner with

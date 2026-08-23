@@ -41,8 +41,8 @@ def get (s : CounterState) : UInt64 :=
 入口标记（v0 可用手工 `Program` 描述符代替 attribute，避免第一刀就碰 elaborator）：
 
 ```lean
-def counterProgram : ProofForge.IR.Program :=
-  ProofForge.IR.counterProgramFor increment init get
+def counterProgram : ProofForge.Core.IR.Program :=
+  ProofForge.Core.IR.counterProgram
 ```
 
 第一刀允许 `counterProgramFor` 是**显式构造 IR 的受控 API**（惰性数据，禁止 `IO` / 任意元程序）。第二刀改为从 `increment` 的 `Expr` 抽出，构造结果必须与手工 IR digest 相同。

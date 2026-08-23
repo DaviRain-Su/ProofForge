@@ -14,9 +14,9 @@ open ProofForge.Svm.Runtime
 #guard writable1 (init 0) == isWritable1
 #guard executable1 (init 0) == isExecutable1
 
-#guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedPeer
-#guard ProofForge.IR.usesWalk ProofForge.Golden.extractedPeer
-#guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedPeer == 2
+#guard !ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedPeer
+#guard ProofForge.Svm.ABI.usesWalk ProofForge.Golden.extractedPeer
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedPeer == 2
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPeer with
