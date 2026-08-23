@@ -1406,7 +1406,7 @@ def programs : Array Program := #[
 canonical digest；`extractedPhoenix` 继续作为布局和发射 smoke fixture。
 -/
 def digestOf (name : String) : Option String :=
-  if name == "Phoenix" then some "b768c4809cea96c1"
+  if name == "Phoenix" then some "77805be0b7d18a30"
   else (programs.find? (·.name == name)).map digestHex
 
 end ProofForge.Golden

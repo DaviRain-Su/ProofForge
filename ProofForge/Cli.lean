@@ -1,4 +1,6 @@
+import Lean
 import ProofForge.Golden
+import ProofForge.Extract
 import ProofForge.IR
 import ProofForge.Ops
 import ProofForge.Svm.Assemble
@@ -32,7 +34,7 @@ private def usage : String :=
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
-    "No program names means every Golden fixture for that target.\n"
+    "No program names means every registered source module (svm) or Golden fixture (evm).\n"
 
 private def parseArgs (args : List String) : Except String Options :=
   let rec go (rest : List String) (o : Options) : Except String Options :=
@@ -57,17 +59,45 @@ private def parseArgs (args : List String) : Except String Options :=
     | rest => rest
   go args {}
 
-private def svmSources : Array IR.Program :=
+private def svmFixtures : Array IR.Program :=
   Golden.programs.filter fun p =>
     !p.methods.any (fun m => Ops.hasEvmEffect m.ops)
 
-private def selectSvm (names : Array String) : Except String (Array IR.Program) :=
-  if names.isEmpty then .ok svmSources
+private def selectSvmNames (names : Array String) : Except String (Array String) :=
+  if names.isEmpty then .ok (svmFixtures.map (·.name))
   else
     names.mapM fun n =>
-      match svmSources.find? (·.name == n) with
-      | some p => .ok p
+      match svmFixtures.find? (·.name == n) with
+      | some _ => .ok n
       | none => .error s!"unknown svm program {n}"
+
+private def svmModuleName (name : String) : Lean.Name :=
+  if name == "Phoenix" then `Projects.Phoenix
+  else Lean.Name.str `Examples name
+
+/--
+CLI 构建必须重新从用户模块抽 IR，不能组装 `Golden` smoke fixture。Golden 只负责
+列出可构建模块并钉 canonical digest。
+-/
+private unsafe def extractSvmPrograms (names : Array String) : IO (Except String (Array IR.Program)) :=
+  try
+    Lean.initSearchPath (← Lean.findSysroot)
+    Lean.enableInitializersExecution
+    let modules := names.map fun name => ({ module := svmModuleName name } : Lean.Import)
+    let env ← Lean.importModules modules {} (loadExts := true)
+    return names.mapM fun name =>
+      let ns := svmModuleName name
+      match Extract.extractModule env ns none with
+      | .error reason => .error s!"{name}: {reason}"
+      | .ok program =>
+        let digest := IR.digestHex program
+        match Golden.digestOf name with
+        | some expected =>
+          if digest == expected then .ok program
+          else .error s!"{name}: ir/mismatch: extracted digest != fixture"
+        | none => .ok program
+  catch e =>
+    return .error s!"source import failed: {e}"
 
 private def selectEvm (names : Array String) : Except String (Array ProofForge.Evm.IR.Program) :=
   if names.isEmpty then .ok ProofForge.Evm.Golden.programs
@@ -77,7 +107,7 @@ private def selectEvm (names : Array String) : Except String (Array ProofForge.E
       | some p => .ok p
       | none => .error s!"unknown evm program {n}"
 
-def run (args : List String) : IO UInt32 := do
+unsafe def run (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .error reason =>
     IO.eprintln s!"pf: {reason}"
@@ -89,16 +119,21 @@ def run (args : List String) : IO UInt32 := do
       return 0
     match opts.target with
     | .svm =>
-      match selectSvm opts.names with
+      match selectSvmNames opts.names with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok programs =>
-        IO.FS.createDirAll opts.outDir
-        for program in programs do
-          let r ← ProofForge.Svm.Assemble.assembleProgram opts.outDir program
-          IO.println s!"wrote {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
-        return 0
+      | .ok names =>
+        match ← extractSvmPrograms names with
+        | .error reason =>
+          IO.eprintln s!"pf: {reason}"
+          return 1
+        | .ok programs =>
+          IO.FS.createDirAll opts.outDir
+          for program in programs do
+            let r ← ProofForge.Svm.Assemble.assembleProgram opts.outDir program
+            IO.println s!"wrote {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
+          return 0
     | .evm =>
       match selectEvm opts.names with
       | .error reason =>
@@ -113,5 +148,5 @@ def run (args : List String) : IO UInt32 := do
 
 end ProofForge.Cli
 
-def main (args : List String) : IO UInt32 :=
+unsafe def main (args : List String) : IO UInt32 :=
   ProofForge.Cli.run args

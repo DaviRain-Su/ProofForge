@@ -25,3 +25,4 @@ lean_exe pfEvmAssemble where
 
 lean_exe pf where
   root := `ProofForge.Cli
+  supportInterpreter := true

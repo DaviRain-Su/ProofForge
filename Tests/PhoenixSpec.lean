@@ -5,9 +5,47 @@ namespace Tests.PhoenixSpec
 
 open Projects.Phoenix
 open ProofForge.Runtime
+open Lean Elab Command
+
+elab "#pf_guard_phoenix_artifact" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractModule env `Projects.Phoenix none with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let asm ←
+    match ProofForge.Svm.Emit.emitCounterAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless asm.toUTF8.size < 300000 do
+    throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
+  unless !asm.contains "\n\\\n" do
+    throwError "Phoenix assembly contains a standalone backslash"
+  let labels := (asm.splitOn "\n").filterMap fun line =>
+    let line := line.trimAscii.toString
+    if line.endsWith ":" then some line else none
+  unless labels.length == labels.eraseDups.length do
+    throwError "Phoenix assembly contains duplicate labels"
+  let some post := program.methods.find? (·.ixName == "postAsk")
+    | throwError "missing postAsk"
+  let some reduce := program.methods.find? (·.ixName == "reduceAsk")
+    | throwError "missing reduceAsk"
+  let some swap := program.methods.find? (·.ixName == "swapBuy")
+    | throwError "missing swapBuy"
+  let some collect := program.methods.find? (·.ixName == "collectFees")
+    | throwError "missing collectFees"
+  unless post.paramCount == 5 && reduce.paramCount == 4 && swap.paramCount == 4 &&
+      collect.paramCount == 0 do
+    throwError "Phoenix instruction parameter counts changed"
+  unless asm.contains "; forBody 14" && asm.contains "; forBody 17" &&
+      asm.contains "; forBody 4" do
+    throwError "Phoenix bounded loops missing from assembly"
+
+#pf_guard_phoenix_artifact
 
 private def sameBusinessResult :
-    Except Error (State × UInt64) → Except Error (State × UInt64) → Bool
+    Except Error (Projects.Phoenix.State × UInt64) →
+      Except Error (Projects.Phoenix.State × UInt64) → Bool
   | .error a, .error b => a == b
   | .ok (a, ar), .ok (b, br) =>
       ar == br && a.sizes == b.sizes &&
@@ -16,7 +54,7 @@ private def sameBusinessResult :
         a.unclaimedFees == b.unclaimedFees && a.collectedFees == b.collectedFees
   | _, _ => false
 
-private def matchingSamples : List State := [
+private def matchingSamples : List Projects.Phoenix.State := [
   { (init 1) with
     sizes := #v[2, 3, 1, 0], priceTicks := #v[10, 11, 12, 0],
     quoteLocked := 1000, baseLocked := 6 },
@@ -33,7 +71,7 @@ private def matchingSamples : List State := [
     (List.range 15).all fun limit =>
       sameBusinessResult
         (swapBuyAt s want.toUInt64 limit.toUInt64 0 0)
-        (swapBuy s want.toUInt64 limit.toUInt64)
+        (swapBuy s u64Max 0 want.toUInt64 limit.toUInt64)
 
 #guard (init 100).tickSize == 100
 #guard (init 100).sequence == 1
@@ -69,26 +107,75 @@ private def matchingSamples : List State := [
 #guard SelfTradeBehavior.abort != SelfTradeBehavior.cancelProvide
 
 #guard
-  match postAsk (init 100) 8 with
+  match postAskAt { (init 100) with baseFree := 8 } 7 50 8 0 0 0 0 with
   | .ok (st, ret) =>
-      st.sizes[0]! == 8 && ret == 8 && st.sizes[1]! == 0
+      st.sizes[0]! == 8 && st.priceTicks[0]! == 50 && st.traders[0]! == 7 &&
+        st.sequences[0]! == 1 && st.sequence == 2 &&
+        st.baseLocked == 8 && st.baseFree == 0 && ret == 8
   | .error _ => false
 
 #guard
-  match postAsk { (init 100) with sizes := #v[3, 0, 0, 0] } 5 with
-  | .ok (st, ret) => st.sizes[0]! == 3 && st.sizes[1]! == 5 && ret == 5
+  match postAskAt
+      { (init 100) with
+        sizes := #v[3, 0, 0, 0], priceTicks := #v[60, 0, 0, 0],
+        sequences := #v[1, 0, 0, 0], traders := #v[1, 0, 0, 0],
+        sequence := 2, baseLocked := 3, baseFree := 5 }
+      2 50 5 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.sizes == #v[5, 3, 0, 0] && st.priceTicks == #v[50, 60, 0, 0] &&
+        st.traders == #v[2, 1, 0, 0] && st.sequences == #v[2, 1, 0, 0] &&
+        st.sequence == 3 && st.baseLocked == 8 && st.baseFree == 0 && ret == 5
   | .error _ => false
 
 #guard
-  match postAsk { (init 100) with sizes := #v[1, 1, 1, 1] } 1 with
+  match postAskAt
+      { (init 100) with
+        sizes := #v[1, 1, 1, 1], priceTicks := #v[10, 20, 30, 40],
+        sequences := #v[1, 2, 3, 4], sequence := 5,
+        baseLocked := 4, baseFree := 1 }
+      9 50 1 0 0 0 0 with
   | .error .overflow => true
   | _ => false
 
 #guard
-  match postAskFull (init 100) 50 8 with
+  match postAskFull { (init 100) with baseFree := 8 } 50 8 with
   | .ok (st, ret) =>
       st.sizes[0]! == 8 && st.priceTicks[0]! == 50 &&
-        st.sequences[0]! == 1 && st.sequence == 2 && st.baseLocked == 8 && ret == 8
+        st.sequences[0]! == 1 && st.sequence == 2 &&
+        st.baseLocked == 8 && st.baseFree == 0 && ret == 8
+  | .error _ => false
+
+#guard
+  match postAskAt
+      { (init 100) with
+        sizes := #v[1, 0, 1, 1], priceTicks := #v[10, 0, 30, 40],
+        sequences := #v[1, 0, 3, 4], traders := #v[1, 0, 3, 4],
+        sequence := 5, baseLocked := 3, baseFree := 1 }
+      2 20 1 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.sizes == #v[1, 1, 1, 1] && st.priceTicks == #v[10, 20, 30, 40] &&
+        st.traders == #v[1, 2, 3, 4] && st.sequences == #v[1, 5, 3, 4] &&
+        orderedAsks st && ret == 1
+  | .error _ => false
+
+#guard
+  match postAskAt
+      { (init 100) with
+        sizes := #v[1, 2, 3, 4], priceTicks := #v[10, 20, 30, 40],
+        sequences := #v[1, 2, 3, 4], traders := #v[1, 2, 3, 4],
+        sequence := 5, baseLocked := 10, baseFree := 1 }
+      9 15 1 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.sizes == #v[1, 1, 2, 3] && st.priceTicks == #v[10, 15, 20, 30] &&
+        st.traders == #v[1, 9, 2, 3] && st.sequences == #v[1, 5, 2, 3] &&
+        st.baseLocked == 7 && st.baseFree == 4 && orderedAsks st && ret == 1
+  | .error _ => false
+
+#guard
+  match postAskAt
+      { (init 100) with baseFree := 8 }
+      7 50 8 9 0 10 0 with
+  | .ok (st, ret) => st == { (init 100) with baseFree := 8 } && ret == 0
   | .error _ => false
 
 #guard
@@ -174,7 +261,7 @@ private def matchingSamples : List State := [
       { (init 1) with
         sizes := #v[2, 3, 5, 0], priceTicks := #v[10, 11, 12, 0],
         quoteLocked := 1000, baseLocked := 10 }
-      4 11 with
+      u64Max 0 4 11 with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 5, 0] && ret == 4 &&
         st.quoteLocked == 957 && st.quoteFree == 42 &&
@@ -186,7 +273,7 @@ private def matchingSamples : List State := [
       { (init 1) with
         sizes := #v[2, 0, 0, 0], priceTicks := #v[11, 0, 0, 0],
         quoteLocked := 100, baseLocked := 2 }
-      1 10 with
+      u64Max 0 1 10 with
   | .ok (st, ret) => st.sizes[0]! == 2 && ret == 0
   | .error _ => false
 
@@ -195,11 +282,64 @@ private def matchingSamples : List State := [
       { (init 1) with
         sizes := #v[2, 0, 0, 0], priceTicks := #v[10, 0, 0, 0],
         baseLocked := 2 }
-      0 10 with
+      u64Max 0 0 10 with
   | .ok (st, ret) =>
       st.sizes[0]! == 2 && st.baseLocked == 2 && st.baseFree == 0 &&
         st.matchStopped == 1 && ret == 0
   | .error _ => false
+
+#guard
+  match swapBuyForAt
+      { (init 1) with
+        sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
+        traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+      7 2 11 0 0 .abort with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match swapBuyForAt
+      { (init 1) with
+        sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
+        traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+      7 2 11 0 0 .cancelProvide with
+  | .ok (st, ret) =>
+      st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
+        st.quoteLocked == 977 && st.quoteFree == 22 &&
+        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1
+  | .error _ => false
+
+#guard
+  match swapBuyForAt
+      { (init 1) with
+        sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
+        traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+      7 1 11 0 0 .decrementTake with
+  | .ok (st, ret) =>
+      st.sizes == #v[1, 3, 0, 0] && ret == 0 &&
+        st.quoteLocked == 1000 && st.quoteFree == 0 &&
+        st.baseLocked == 4 && st.baseFree == 1 && st.unclaimedFees == 0
+  | .error _ => false
+
+#guard
+  match swapBuy
+      { (init 1) with
+        sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
+        traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+      7 1 2 11 with
+  | .ok (st, ret) =>
+      st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
+        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1
+  | .error _ => false
+
+#guard
+  let s :=
+    { (init 1) with
+      sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
+      traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
+  sameBusinessResult
+    (swapBuyForAt s 7 1 11 0 0 .decrementTake)
+    (swapBuy s 7 2 1 11)
 
 #guard
   match sweepAsk { (init 100) with
@@ -210,26 +350,63 @@ private def matchingSamples : List State := [
   | .error _ => false
 
 #guard
-  match reduceAsk { (init 100) with sizes := #v[8, 1, 0, 0] } 3 with
-  | .ok (st, ret) => st.sizes[0]! == 5 && ret == 3
+  match reduceAsk
+      { (init 100) with
+        sizes := #v[8, 1, 0, 0], priceTicks := #v[10, 20, 0, 0],
+        sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+        baseLocked := 9, baseFree := 1 }
+      7 10 1 3 with
+  | .ok (st, ret) =>
+      st.sizes == #v[5, 1, 0, 0] && st.baseLocked == 6 && st.baseFree == 4 &&
+        st.matchFilled == 0 && ret == 3
   | .error _ => false
 
 #guard
-  match reduceAsk { (init 100) with sizes := #v[2, 1, 0, 0] } 9 with
+  match reduceAsk
+      { (init 100) with
+        sizes := #v[2, 1, 0, 0], priceTicks := #v[10, 20, 0, 0],
+        sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+        baseLocked := 3 }
+      7 10 1 9 with
+  | .ok (st, ret) =>
+      st.sizes == #v[0, 1, 0, 0] && st.baseLocked == 1 && st.baseFree == 2 && ret == 2
+  | .error _ => false
+
+#guard
+  match reduceAsk
+      { (init 100) with
+        sizes := #v[2, 0, 0, 0], priceTicks := #v[10, 0, 0, 0],
+        sequences := #v[1, 0, 0, 0], traders := #v[7, 0, 0, 0], baseLocked := 2 }
+      8 10 1 1 with
   | .error .overflow => true
   | _ => false
 
 #guard
   match cancelAsk { (init 100) with
-      sizes := #v[8, 1, 0, 0], baseLocked := 9 } with
+      sizes := #v[8, 1, 0, 0], priceTicks := #v[10, 20, 0, 0],
+      sequences := #v[1, 2, 0, 0], traders := #v[7, 8, 0, 0],
+      baseLocked := 9 } 7 10 1 with
   | .ok (st, ret) => st.sizes[0]! == 0 && st.sizes[1]! == 1 &&
-      st.baseLocked == 1 && ret == 8
+      st.baseLocked == 1 && st.baseFree == 8 && ret == 8
   | .error _ => false
 
 #guard
-  match cancelAsk (init 100) with
+  match cancelAsk (init 100) 7 10 1 with
+  | .ok (st, ret) => st == init 100 && ret == 0
+  | .error _ => false
+
+#guard
+  match collectFees { (init 100) with collectedFees := 9, unclaimedFees := 3 } with
+  | .ok (st, ret) => st.collectedFees == 12 && st.unclaimedFees == 0 && ret == 3
+  | .error _ => false
+
+#guard
+  match collectFees { (init 100) with collectedFees := u64Max, unclaimedFees := 1 } with
   | .error .overflow => true
   | _ => false
+
+#guard bestAsk { (init 100) with
+  sizes := #v[0, 0, 2, 1], priceTicks := #v[0, 0, 30, 40] } == 30
 
 #guard checkLimit { (init 100) with priceTicks := #v[100, 0, 0, 0] } 50 == false
 #guard checkLimit { (init 100) with priceTicks := #v[100, 0, 0, 0] } 100 == true

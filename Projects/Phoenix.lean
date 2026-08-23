@@ -14,7 +14,8 @@ Phoenix v1 `src/state` 在本仓剖面下的摊平。
 
 N=4。档 0 是最优 ask；同价时 sequence 小的在前。没有 bid 书。
 `RBTree4` 给出这四档对应的红黑树拓扑见证；撮合只依赖中序次序，
-不把颜色和指针复制进链上状态。
+不把颜色和指针复制进链上状态。free-funds 挂单、驱逐、按 ID reduce/cancel、
+三种 self-trade 和 fee collection 已进入 bounded 模型。
 -/
 namespace Projects.Phoenix
 
@@ -26,7 +27,7 @@ inductive Side where
   | ask
   deriving Repr, DecidableEq, Inhabited, BEq
 
-/-- 官方 `SelfTradeBehavior`。本切片不跑自成交。 -/
+/-- 官方 `SelfTradeBehavior`；链上 ABI 用 0/1/2 编码。 -/
 inductive SelfTradeBehavior where
   | abort
   | cancelProvide
@@ -183,56 +184,138 @@ def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
   (lastSlot ≠ 0 && lastSlot < nowSlot) ||
     (lastTime ≠ 0 && lastTime < nowTime)
 
-/-- 挂到第一档空位。链上只改 `sizes`；价/序号/锁仓是宿主语义。 -/
-@[pf_entry]
-def postAsk (s : State) (size : UInt64) : Except Error (State × UInt64) :=
-  if s.sizes[0]! = 0 then
-    .ok ({ s with sizes := s.sizes.set 0 size }, size)
-  else if s.sizes[1]! = 0 then
-    .ok ({ s with sizes := s.sizes.set 1 size }, size)
-  else if s.sizes[2]! = 0 then
-    .ok ({ s with sizes := s.sizes.set 2 size }, size)
-  else if s.sizes[3]! = 0 then
-    .ok ({ s with sizes := s.sizes.set 3 size }, size)
-  else
-    .error .overflow
+/-- Phoenix 给自然 sequence 留半个 `u64` 空间；bid 用按位取反编码另一半。 -/
+def maxOrderSequence : UInt64 := u64Max / 2
 
-/-- 宿主：写 FIFOOrderId + 锁 base。抽出一次改多叶还不行。 -/
-def postAskFull (s : State) (price size : UInt64) : Except Error (State × UInt64) :=
-  match postAsk s size with
-  | .error e => .error e
-  | .ok (st, ret) =>
-    if st.baseLocked ≤ u64Max - size then
-      if st.sizes[0]! = size && s.sizes[0]! = 0 then
-        .ok ({ st with
-                priceTicks := st.priceTicks.set 0 price
-                sequences := st.sequences.set 0 st.sequence
-                sequence := st.sequence + 1
-                baseLocked := st.baseLocked + size }, ret)
-      else if st.sizes[1]! = size && s.sizes[1]! = 0 then
-        .ok ({ st with
-                priceTicks := st.priceTicks.set 1 price
-                sequences := st.sequences.set 1 st.sequence
-                sequence := st.sequence + 1
-                baseLocked := st.baseLocked + size }, ret)
-      else if st.sizes[2]! = size && s.sizes[2]! = 0 then
-        .ok ({ st with
-                priceTicks := st.priceTicks.set 2 price
-                sequences := st.sequences.set 2 st.sequence
-                sequence := st.sequence + 1
-                baseLocked := st.baseLocked + size }, ret)
+private def swapAskAdjacent (s : State) (j : Nat) : State :=
+  let r := j + 1
+  { s with
+    priceTicks :=
+      (s.priceTicks.set (j % 4) s.priceTicks[r]!).set (r % 4) s.priceTicks[j]!
+    sequences :=
+      (s.sequences.set (j % 4) s.sequences[r]!).set (r % 4) s.sequences[j]!
+    traders :=
+      (s.traders.set (j % 4) s.traders[r]!).set (r % 4) s.traders[j]!
+    sizes :=
+      (s.sizes.set (j % 4) s.sizes[r]!).set (r % 4) s.sizes[j]!
+    lastSlots :=
+      (s.lastSlots.set (j % 4) s.lastSlots[r]!).set (r % 4) s.lastSlots[j]!
+    lastTimes :=
+      (s.lastTimes.set (j % 4) s.lastTimes[r]!).set (r % 4) s.lastTimes[j]! }
+
+attribute [pf_inline] swapAskAdjacent
+
+/--
+固定容量有序投影的 ask 插入。阶段 0–3 找空槽，阶段 4 在满书时按
+`get_max()` 语义驱逐最差订单，阶段 5–13 用相邻 compare/swap 排成
+`(price, sequence)` 升序。空槽视作正无穷，所以会被推到尾部。
+
+这是 free-funds 挂单：`baseFree → baseLocked`。驱逐先把旧 maker 的 base 解锁。
+传进来已经过期的 TIF 是成功 no-op，不占 sequence。
+-/
+def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime : UInt64) :
+    Except Error (State × UInt64) :=
+  if price = 0 || size = 0 || maxOrderSequence ≤ s.sequence then
+    .error .overflow
+  else if expired lastSlot lastTime nowSlot nowTime then
+    .ok (s, 0)
+  else Id.run do
+    let mut st := { s with matchStopped := 0, matchError := 0 }
+    for i in [0:14] do
+      if i < 4 then
+        if st.matchStopped = (0 : UInt64) then
+          let j : Nat := i
+          if st.sizes[j]! = (0 : UInt64) then
+            if size ≤ st.baseFree then
+              if st.baseLocked ≤ u64Max - size then
+                st := { st with
+                  priceTicks := st.priceTicks.set (j % 4) price
+                  sequences := st.sequences.set (j % 4) st.sequence
+                  traders := st.traders.set (j % 4) trader
+                  sizes := st.sizes.set (j % 4) size
+                  lastSlots := st.lastSlots.set (j % 4) lastSlot
+                  lastTimes := st.lastTimes.set (j % 4) lastTime
+                  sequence := st.sequence + 1
+                  baseLocked := st.baseLocked + size
+                  baseFree := st.baseFree - size
+                  matchStopped := 1 }
+              else
+                st := { st with matchError := 1 }
+            else
+              st := { st with matchError := 1 }
+      else if i = 4 then
+        if st.matchStopped = (0 : UInt64) then
+          if st.matchError = (0 : UInt64) then
+            let oldSize := st.sizes[3]!
+            let oldPrice := st.priceTicks[3]!
+            if price < oldPrice then
+              if oldSize ≤ st.baseLocked then
+                if st.baseFree ≤ u64Max - oldSize then
+                  let unlocked := st.baseFree + oldSize
+                  let remainingLocked := st.baseLocked - oldSize
+                  if size ≤ unlocked then
+                    if remainingLocked ≤ u64Max - size then
+                      st := { st with
+                        priceTicks := st.priceTicks.set 3 price
+                        sequences := st.sequences.set 3 st.sequence
+                        traders := st.traders.set 3 trader
+                        sizes := st.sizes.set 3 size
+                        lastSlots := st.lastSlots.set 3 lastSlot
+                        lastTimes := st.lastTimes.set 3 lastTime
+                        sequence := st.sequence + 1
+                        baseLocked := remainingLocked + size
+                        baseFree := unlocked - size
+                        matchStopped := 1 }
+                    else
+                      st := { st with matchError := 1 }
+                  else
+                    st := { st with matchError := 1 }
+                else
+                  st := { st with matchError := 1 }
+              else
+                st := { st with matchError := 1 }
+            else
+              st := { st with matchError := 1 }
       else
-        .ok ({ st with
-                priceTicks := st.priceTicks.set 3 price
-                sequences := st.sequences.set 3 st.sequence
-                sequence := st.sequence + 1
-                baseLocked := st.baseLocked + size }, ret)
-    else
+        if st.matchStopped ≠ (0 : UInt64) then
+          if st.matchError = (0 : UInt64) then
+            let j : Nat := (i - 5) % 3
+            let r : Nat := j + 1
+            let leftSize : UInt64 := st.sizes[j]!
+            let rightSize : UInt64 := st.sizes[r]!
+            if rightSize ≠ (0 : UInt64) then
+              let leftPrice : UInt64 := st.priceTicks[j]!
+              let rightPrice : UInt64 := st.priceTicks[r]!
+              let leftSequence : UInt64 := st.sequences[j]!
+              let rightSequence : UInt64 := st.sequences[r]!
+              if leftSize = (0 : UInt64) then
+                st := swapAskAdjacent st j
+              else if rightPrice < leftPrice then
+                st := swapAskAdjacent st j
+              else if rightPrice = leftPrice then
+                if rightSequence < leftSequence then
+                  st := swapAskAdjacent st j
+    if st.matchError ≠ 0 || st.matchStopped = 0 then
       .error .overflow
+    else
+      .ok ({ st with matchStopped := 0, matchError := 0 }, size)
+
+attribute [pf_inline] postAskAt
+
+/-- 链上 free-funds ask 挂单；slot/time 在入口各读取一次。 -/
+@[pf_entry]
+def postAsk (s : State) (trader price size lastSlot lastTime : UInt64) :
+    Except Error (State × UInt64) :=
+  postAskAt s trader price size lastSlot lastTime clockSlot unixTime
+
+/-- 兼容宿主调用：匿名 trader、无 TIF。 -/
+def postAskFull (s : State) (price size : UInt64) : Except Error (State × UInt64) :=
+  postAskAt s 0 price size 0 0 0 0
 
 /-- 扫书期间的瞬时 `MatchingEngineResponse`。不进入账户 schema。 -/
 structure MatchAcc where
   sizes : Vector UInt64 4
+  targetBase : UInt64
   filledBase : UInt64
   adjustedQuote : UInt64
   expiredBase : UInt64
@@ -243,20 +326,21 @@ structure MatchAcc where
 沿 ask 树中序投影做至多四档的 IOC。过期单取消并继续；第一档超限即停止；
 整档成交继续，部分成交终止。所有乘加都在 UInt64 剖面内 fail-closed。
 -/
-private def scanAsks (s : State) (want limit nowSlot nowTime : UInt64)
+private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
+    (behavior : SelfTradeBehavior)
     (fuel i : Nat) (acc : MatchAcc) : Except Error MatchAcc :=
   match fuel with
   | 0 => .ok acc
   | fuel' + 1 =>
-    if acc.stopped || acc.filledBase = want then
+    if acc.stopped || acc.filledBase = acc.targetBase then
       .ok acc
     else if h : i < 4 then
       let size := acc.sizes[i]
       if size = 0 then
-        scanAsks s want limit nowSlot nowTime fuel' (i + 1) acc
+        scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1) acc
       else if expired s.lastSlots[i] s.lastTimes[i] nowSlot nowTime then
         if acc.expiredBase ≤ u64Max - size then
-          scanAsks s want limit nowSlot nowTime fuel' (i + 1)
+          scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
             { acc with
               sizes := acc.sizes.set i 0
               expiredBase := acc.expiredBase + size }
@@ -264,8 +348,31 @@ private def scanAsks (s : State) (want limit nowSlot nowTime : UInt64)
           .error .overflow
       else if limit < s.priceTicks[i] then
         .ok { acc with stopped := true }
+      else if s.traders[i] = taker then
+        match behavior with
+        | .abort => .error .overflow
+        | .cancelProvide =>
+          if acc.expiredBase ≤ u64Max - size then
+            scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
+              { acc with
+                sizes := acc.sizes.set i 0
+                expiredBase := acc.expiredBase + size }
+          else
+            .error .overflow
+        | .decrementTake =>
+          let remaining := acc.targetBase - acc.filledBase
+          let reduced := if remaining ≤ size then remaining else size
+          if acc.expiredBase ≤ u64Max - reduced then
+            scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
+              { acc with
+                sizes := acc.sizes.set i (size - reduced)
+                targetBase := acc.targetBase - reduced
+                expiredBase := acc.expiredBase + reduced
+                stopped := reduced = remaining }
+          else
+            .error .overflow
       else
-        let remaining := want - acc.filledBase
+        let remaining := acc.targetBase - acc.filledBase
         let fill := if remaining ≤ size then remaining else size
         let price := s.priceTicks[i]
         if price = 0 || s.tickSize ≤ u64Max / price then
@@ -273,8 +380,9 @@ private def scanAsks (s : State) (want limit nowSlot nowTime : UInt64)
           if quotePerBase = 0 || fill ≤ u64Max / quotePerBase then
             let quote := quotePerBase * fill
             if acc.adjustedQuote ≤ u64Max - quote then
-              scanAsks s want limit nowSlot nowTime fuel' (i + 1)
+              scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
                 { sizes := acc.sizes.set i (size - fill)
+                  targetBase := acc.targetBase
                   filledBase := acc.filledBase + fill
                   adjustedQuote := acc.adjustedQuote + quote
                   expiredBase := acc.expiredBase
@@ -341,12 +449,18 @@ private def settleBuy (s : State) (acc : MatchAcc) : Except Error (State × UInt
 可测试的完整 N=4 IOC：红黑树中序跨档、严格 slot/time TIF、聚合费用和余额记账。
 无流动性或首个有效价格超限是成功的零成交 IOC，不伪装成 overflow。
 -/
-def swapBuyAt (s : State) (want limit nowSlot nowTime : UInt64) :
+def swapBuyForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
+    (behavior : SelfTradeBehavior) :
     Except Error (State × UInt64) := do
-  let acc ← scanAsks s want limit nowSlot nowTime 4 0
-    { sizes := s.sizes, filledBase := 0, adjustedQuote := 0,
+  let acc ← scanAsks s taker limit nowSlot nowTime behavior 4 0
+    { sizes := s.sizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
       expiredBase := 0, stopped := false }
   settleBuy s acc
+
+/-- 无自成交身份的兼容入口。 -/
+def swapBuyAt (s : State) (want limit nowSlot nowTime : UInt64) :
+    Except Error (State × UInt64) :=
+  swapBuyForAt s u64Max want limit nowSlot nowTime .abort
 
 private def finishFold (s : State) (quoteLots feeLots : UInt64) :
     Except Error (State × UInt64) :=
@@ -400,13 +514,15 @@ private def settleFold (s : State) : Except Error (State × UInt64) :=
 attribute [pf_inline] finishFold settleFold
 
 /--
-链上 N=4 IOC。十七次 state-carrying bounded fold：第 0 次清瞬时响应，
+链上 N=4 IOC。`behavior`：0=Abort、1=CancelProvide、2=DecrementTake。
+十七次 state-carrying bounded fold：第 0 次清瞬时响应，
 其余十六次按四档 ×（slot TIF、time TIF、撮合、advance）推进。把每档拆成显式
 phase，避免 Lean 的可变 `do` 把公共 continuation 复制进每个分支；循环 store
 会继续下一次，不再静态复制后续档位。
 -/
 @[pf_entry]
-def swapBuy (s : State) (want limit : UInt64) : Except Error (State × UInt64) := Id.run do
+def swapBuy (s : State) (taker behavior want limit : UInt64) :
+    Except Error (State × UInt64) := Id.run do
   let mut st := s
   for i in [0:17] do
     if i = 0 then
@@ -445,6 +561,37 @@ def swapBuy (s : State) (want limit : UInt64) : Except Error (State × UInt64) :
         else if phase = 2 then
           if st.matchLimit < st.priceTicks[j]! then
             st := { st with matchStopped := 1 }
+          else if st.traders[j]! = taker then
+            if behavior = 0 then
+              st := { st with matchStopped := 1, matchError := 1 }
+            else if behavior = 1 then
+              if st.matchExpired ≤ u64Max - size then
+                st := { st with
+                  sizes := st.sizes.set (j % 4) 0
+                  matchExpired := st.matchExpired + size }
+              else
+                st := { st with matchStopped := 1, matchError := 1 }
+            else if behavior = 2 then
+              let remaining := st.matchWant - st.matchFilled
+              if remaining ≤ size then
+                if st.matchExpired ≤ u64Max - remaining then
+                  st := { st with
+                    sizes := st.sizes.set (j % 4) (size - remaining)
+                    matchExpired := st.matchExpired + remaining
+                    matchWant := st.matchWant - remaining
+                    matchStopped := 1 }
+                else
+                  st := { st with matchStopped := 1, matchError := 1 }
+              else
+                if st.matchExpired ≤ u64Max - size then
+                  st := { st with
+                    sizes := st.sizes.set (j % 4) 0
+                    matchExpired := st.matchExpired + size
+                    matchWant := st.matchWant - size }
+                else
+                  st := { st with matchStopped := 1, matchError := 1 }
+            else
+              st := { st with matchStopped := 1, matchError := 1 }
           else
             let remaining := st.matchWant - st.matchFilled
             if remaining ≤ size then
@@ -504,13 +651,59 @@ def swapBuy (s : State) (want limit : UInt64) : Except Error (State × UInt64) :
                 st := { st with matchStopped := 1, matchError := 1 }
   settleFold st
 
-/-- 官方 ReduceOrder：减档 0。锁仓调整在宿主。 -/
+/--
+官方 `reduce_order_inner` 的 ask-side bounded 版本：按 `(price, sequence)` 找订单，
+校验 trader，减少 `min(qty, restingSize)`，并把对应 base 从 locked 解到 free。
+缺失订单成功返回 0；错误 owner 和账本不一致 fail closed。
+-/
 @[pf_entry]
-def reduceAsk (s : State) (qty : UInt64) : Except Error (State × UInt64) :=
-  if qty ≤ s.sizes[0]! then
-    .ok ({ s with sizes := s.sizes.set 0 (s.sizes[0]! - qty) }, qty)
+def reduceAsk (s : State) (trader price sequence qty : UInt64) :
+    Except Error (State × UInt64) := Id.run do
+  if qty = 0 then
+    .ok (s, 0)
   else
-    .error .overflow
+    let mut st := { s with matchFilled := 0, matchStopped := 0, matchError := 0 }
+    for i in [0:4] do
+      if st.matchStopped = (0 : UInt64) then
+        let j : Nat := i
+        let size : UInt64 := st.sizes[j]!
+        if size ≠ (0 : UInt64) then
+          if st.priceTicks[j]! = price then
+            if st.sequences[j]! = sequence then
+              if st.traders[j]! = trader then
+                if qty ≤ size then
+                  if qty ≤ st.baseLocked then
+                    if st.baseFree ≤ u64Max - qty then
+                      st := { st with
+                        sizes := st.sizes.set (j % 4) (size - qty)
+                        baseLocked := st.baseLocked - qty
+                        baseFree := st.baseFree + qty
+                        matchFilled := qty
+                        matchStopped := 1 }
+                    else
+                      st := { st with matchStopped := 1, matchError := 1 }
+                  else
+                    st := { st with matchStopped := 1, matchError := 1 }
+                else
+                  if size ≤ st.baseLocked then
+                    if st.baseFree ≤ u64Max - size then
+                      st := { st with
+                        sizes := st.sizes.set (j % 4) 0
+                        baseLocked := st.baseLocked - size
+                        baseFree := st.baseFree + size
+                        matchFilled := size
+                        matchStopped := 1 }
+                    else
+                      st := { st with matchStopped := 1, matchError := 1 }
+                  else
+                    st := { st with matchStopped := 1, matchError := 1 }
+              else
+                st := { st with matchStopped := 1, matchError := 1 }
+    if st.matchError ≠ 0 then
+      .error .overflow
+    else
+      let reduced := st.matchFilled
+      .ok ({ st with matchFilled := 0, matchStopped := 0, matchError := 0 }, reduced)
 
 /-- 官方部分成交：吃光档 0。抽出还认不了 `set 0 0`。 -/
 def sweepAsk (s : State) : Except Error (State × UInt64) :=
@@ -528,14 +721,18 @@ def sweepAsk (s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-/-- 官方 CancelOrder。抽出还认不了 `size - size`。 -/
-def cancelAsk (s : State) : Except Error (State × UInt64) :=
-  if s.sizes[0]! = 0 then
-    .error .overflow
-  else if s.sizes[0]! ≤ s.baseLocked then
+/-- `CancelOrder` 是把指定订单 reduce 到 0。 -/
+def cancelAsk (s : State) (trader price sequence : UInt64) :
+    Except Error (State × UInt64) :=
+  reduceAsk s trader price sequence u64Max
+
+/-- 收取当前全部未领取费用；返回本次转移的 quote lots。 -/
+@[pf_entry]
+def collectFees (s : State) : Except Error (State × UInt64) :=
+  if s.collectedFees ≤ u64Max - s.unclaimedFees then
     .ok ({ s with
-            sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!)
-            baseLocked := s.baseLocked - s.sizes[0]! }, s.sizes[0]!)
+            collectedFees := s.collectedFees + s.unclaimedFees
+            unclaimedFees := 0 }, s.unclaimedFees)
   else
     .error .overflow
 
@@ -550,7 +747,11 @@ def checkTif (deadline : UInt64) : Bool :=
 
 @[pf_entry]
 def bestAsk (s : State) : UInt64 :=
-  s.priceTicks[0]!
+  if s.sizes[0]! ≠ 0 then s.priceTicks[0]!
+  else if s.sizes[1]! ≠ 0 then s.priceTicks[1]!
+  else if s.sizes[2]! ≠ 0 then s.priceTicks[2]!
+  else if s.sizes[3]! ≠ 0 then s.priceTicks[3]!
+  else 0
 
 @[pf_entry]
 def askQty (s : State) : UInt64 :=

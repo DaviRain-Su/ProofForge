@@ -568,9 +568,9 @@ private def emitLoadKeccak256Lit (seed : String) (stackOff : Nat) : String :=
 set_option linter.unusedVariables false in
 mutual
 private partial def emitLoadBitBin (p : IR.Program) (op : String) (l r : Ops.Val)
-    (stackOff nonce : Nat) : Except String String := do
-  let loadL ← loadVal p l (stackOff + 8) (nonce + 1)
-  let loadR ← loadVal p r (stackOff + 16) (nonce + 2)
+    (stackOff nonce : Nat) (scope : String) : Except String String := do
+  let loadL ← loadVal p l (stackOff + 8) (nonce + 1) (scope ++ "_l")
+  let loadR ← loadVal p r (stackOff + 16) (nonce + 2) (scope ++ "_r")
   return loadL ++ loadR ++
     s!"\
   ldxdw r1, [r10 - {stackOff + 8}]
@@ -579,9 +579,9 @@ private partial def emitLoadBitBin (p : IR.Program) (op : String) (l r : Ops.Val
   stxdw [r10 - {stackOff}], r1
 "
 
-private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff nonce : Nat) :
-    Except String String := do
-  let load ← loadVal p v (stackOff + 8) (nonce + 1)
+private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff nonce : Nat)
+    (scope : String) : Except String String := do
+  let load ← loadVal p v (stackOff + 8) (nonce + 1) (scope ++ "_v")
   return load ++
     s!"\
   ldxdw r1, [r10 - {stackOff + 8}]
@@ -592,11 +592,11 @@ private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff nonc
 
 /-- 移位量 ≥ 64 结果是 0，对齐 Lean `UInt64`。 -/
 private partial def emitLoadShift (p : IR.Program) (op : String) (l r : Ops.Val)
-    (stackOff nonce : Nat) : Except String String := do
-  let loadL ← loadVal p l (stackOff + 8) (nonce + 1)
-  let loadR ← loadVal p r (stackOff + 16) (nonce + 2)
-  let wide := s!"wide_sh_{stackOff}_{nonce}"
-  let done := s!"done_sh_{stackOff}_{nonce}"
+    (stackOff nonce : Nat) (scope : String) : Except String String := do
+  let loadL ← loadVal p l (stackOff + 8) (nonce + 1) (scope ++ "_l")
+  let loadR ← loadVal p r (stackOff + 16) (nonce + 2) (scope ++ "_r")
+  let wide := s!"wide_sh_{scope}_{stackOff}_{nonce}"
+  let done := s!"done_sh_{scope}_{stackOff}_{nonce}"
   return loadL ++ loadR ++
     s!"\
   ldxdw r1, [r10 - {stackOff + 8}]
@@ -612,8 +612,8 @@ private partial def emitLoadShift (p : IR.Program) (op : String) (l r : Ops.Val)
 "
 
 
-private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (nonce : Nat := 0) :
-    Except String String :=
+private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (nonce : Nat := 0)
+    (scope : String := "value") : Except String String :=
   match v with
   | .lit n =>
     .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
@@ -686,18 +686,18 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .loopIx =>
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
   | .indexGet _ name idx len off =>
-    emitLoadIndexGet p name idx len off stackOff nonce
-  | .bitAnd l r => emitLoadBitBin p "and64" l r stackOff nonce
-  | .bitOr l r => emitLoadBitBin p "or64" l r stackOff nonce
-  | .bitXor l r => emitLoadBitBin p "xor64" l r stackOff nonce
-  | .bitNot v => emitLoadBitNot p v stackOff nonce
-  | .shiftL l r => emitLoadShift p "lsh64" l r stackOff nonce
-  | .shiftR l r => emitLoadShift p "rsh64" l r stackOff nonce
-  | .addU64 l r => emitLoadBitBin p "add64" l r stackOff nonce
-  | .subU64 l r => emitLoadBitBin p "sub64" l r stackOff nonce
-  | .mulU64 l r => emitLoadBitBin p "mul64" l r stackOff nonce
-  | .divU64 l r => emitLoadBitBin p "div64" l r stackOff nonce
-  | .modU64 l r => emitLoadBitBin p "mod64" l r stackOff nonce
+    emitLoadIndexGet p name idx len off stackOff nonce scope
+  | .bitAnd l r => emitLoadBitBin p "and64" l r stackOff nonce scope
+  | .bitOr l r => emitLoadBitBin p "or64" l r stackOff nonce scope
+  | .bitXor l r => emitLoadBitBin p "xor64" l r stackOff nonce scope
+  | .bitNot v => emitLoadBitNot p v stackOff nonce scope
+  | .shiftL l r => emitLoadShift p "lsh64" l r stackOff nonce scope
+  | .shiftR l r => emitLoadShift p "rsh64" l r stackOff nonce scope
+  | .addU64 l r => emitLoadBitBin p "add64" l r stackOff nonce scope
+  | .subU64 l r => emitLoadBitBin p "sub64" l r stackOff nonce scope
+  | .mulU64 l r => emitLoadBitBin p "mul64" l r stackOff nonce scope
+  | .divU64 l r => emitLoadBitBin p "div64" l r stackOff nonce scope
+  | .modU64 l r => emitLoadBitBin p "mod64" l r stackOff nonce scope
   | v =>
     if Ops.isEvmLeaf v then
       .error "extract/unsupported: svm rejects evm leaf"
@@ -708,14 +708,14 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
 
 /-- `cells_0` / `nodes_0_*` 起的定长向量。`idx ≥ len` → Custom(1)。 -/
 private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops.Val)
-    (len elemOff stackOff nonce : Nat) : Except String String := do
+    (len elemOff stackOff nonce : Nat) (scope : String) : Except String String := do
   let some baseOff := IR.vectorBaseOffset p name
     | .error s!"extract/unsupported: unknown vector {name}"
-  let loadIdx ← loadVal p idx (stackOff + 8) (nonce + 1)
+  let loadIdx ← loadVal p idx (stackOff + 8) (nonce + 1) (scope ++ "_i")
   let bound := IR.vectorLenOf p name len
   let bound := if bound == 0 then 1 else bound
   let stride := IR.vectorStride p name
-  let tag := s!"{name}_{stackOff}_{elemOff}_{nonce}"
+  let tag := s!"{scope}_{name}_{stackOff}_{elemOff}_{nonce}"
   return loadIdx ++
     s!"\
   ; indexGet {name}[{bound}]+{elemOff}
@@ -1120,48 +1120,48 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
   for op in ops do
     match op with
     | .checkedAddU64 l r =>
-      let loadL ← loadVal p l 8 n
-      let loadR ← loadVal p r 16 (n + 1)
+      let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
+      let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         emitArithOp errorLabel "add" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedSubU64 l r =>
-      let loadL ← loadVal p l 8 n
-      let loadR ← loadVal p r 16 (n + 1)
+      let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
+      let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         emitArithOp errorLabel "sub" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedMulU64 l r =>
-      let loadL ← loadVal p l 8 n
-      let loadR ← loadVal p r 16 (n + 1)
+      let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
+      let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         emitArithOp errorLabel "mul" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedDivU64 l r =>
-      let loadL ← loadVal p l 8 n
-      let loadR ← loadVal p r 16 (n + 1)
+      let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
+      let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         emitArithOp errorLabel "div" ++
         "  stxdw [r10 - 24], r4\n"
     | .checkedModU64 l r =>
-      let loadL ← loadVal p l 8 n
-      let loadR ← loadVal p r 16 (n + 1)
+      let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
+      let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         emitArithOp errorLabel "mod" ++
         "  stxdw [r10 - 24], r4\n"
     | .ite cmp l r thn els =>
-      let loadL ← loadVal p l 8 n
-      let loadR ← loadVal p r 16 (n + 1)
+      let loadL ← loadVal p l 8 n s!"{label}_{n}_l"
+      let loadR ← loadVal p r 16 (n + 1) s!"{label}_{n}_r"
       n := n + 2
       let thenLab := s!"then_{label}_{n}"
       let elseLab := s!"else_{label}_{n}"
@@ -1181,7 +1181,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let loopLab := s!"loop_{label}_{n}"
       let doneLab := s!"done_{label}_{n}"
       n := n + 1
-      let loadAdd ← loadVal p addend 16
+      let loadAdd ← loadVal p addend 16 n s!"{label}_{n}_acc"
+      n := n + 1
       acc := acc ++
         s!"\
   ; forAccum {bound}
@@ -1212,8 +1213,7 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let (bodyTxt, n1) ← emitOps p loopLab errorLabel body n
       n := n1
       acc := acc ++
-        s!"\\
-  ; forBody {bound}
+        s!"  ; forBody {bound}
   lddw r1, 0
   stxdw [r10 - 40], r1
   {loopLab}:
@@ -1229,8 +1229,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
     | .indexSet name idx value len elemOff =>
       let some baseOff := IR.vectorBaseOffset p name
         | throw s!"extract/unsupported: unknown vector {name}"
-      let loadI ← loadVal p idx 8 n
-      let loadV ← loadVal p value 16 (n + 1)
+      let loadI ← loadVal p idx 8 n s!"{label}_{n}_idx"
+      let loadV ← loadVal p value 16 (n + 1) s!"{label}_{n}_value"
       n := n + 2
       let bound := IR.vectorLenOf p name len
       let bound := if bound == 0 then 1 else bound
@@ -1259,7 +1259,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
 {ok}:
 "
     | .storeField name v =>
-      let load ← loadVal p v 24
+      let load ← loadVal p v 24 n s!"{label}_{n}_store"
+      n := n + 1
       acc := acc ++ load
       acc := acc ++ (← storeField p name 24)
     | .okState v =>
@@ -1270,7 +1271,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
           acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
           acc := acc ++ emitReturnU64 24
         | _ =>
-          let load ← loadVal p v 24
+          let load ← loadVal p v 24 n s!"{label}_{n}_ok"
+          n := n + 1
           acc := acc ++ load
           acc := acc ++ emitReturnU64 24
       else if optionNames.isSome then
@@ -1288,7 +1290,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
           acc := acc ++ (← storeField p payName 24)
           acc := acc ++ emitReturnU64 24
         | _ =>
-          let load ← loadVal p v 24
+          let load ← loadVal p v 24 n s!"{label}_{n}_option"
+          n := n + 1
           acc := acc ++ "  lddw r1, 1\n  stxdw [r10 - 16], r1\n"
           acc := acc ++ (← storeField p tagName 16)
           acc := acc ++ load
@@ -1303,12 +1306,14 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
           if IR.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
           else if fname.contains '_' && (IR.fieldOffset p fname).isSome then
-            let load ← loadVal p (.arg 0) 24
+            let load ← loadVal p (.arg 0) 24 n s!"{label}_{n}_field"
+            n := n + 1
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p fname 24)
           else do
             -- 窄字段赋值：okState 抽出的是未改槽，写回指令参数到 dest。
-            let load ← loadVal p (.arg 0) 24
+            let load ← loadVal p (.arg 0) 24 n s!"{label}_{n}_narrow"
+            n := n + 1
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | .clockSlot | .clockEpoch | .unixTime | .slotsPerEpoch | .signerKey0 | .accLamports0 | .accOwner0 | .accDataLen0
@@ -1319,7 +1324,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
         | .accKeyWord _ _ | .accOwnerWord _ _
         | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
         | .signerKeyN _ | .ownerIsSelf _ => do
-          let load ← loadVal p v 24
+          let load ← loadVal p v 24 n s!"{label}_{n}_leaf"
+          n := n + 1
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | v =>
@@ -1328,16 +1334,19 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
           else if IR.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
           else do
-            let load ← loadVal p v 24
+            let load ← loadVal p v 24 n s!"{label}_{n}_value"
+            n := n + 1
             acc := acc ++ load
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
     | .errorOverflow =>
       acc := acc ++ emitOverflowReturn
     | .returnU64 v =>
-      let load ← loadVal p v 8
+      let load ← loadVal p v 8 n s!"{label}_{n}_return"
+      n := n + 1
       acc := acc ++ load ++ emitReturnU64 8
     | .returnState v =>
-      let load ← loadVal p v 8
+      let load ← loadVal p v 8 n s!"{label}_{n}_return_state"
+      n := n + 1
       let dest := (p.slots[0]?.map (·.name)).getD "slot0"
       acc := acc ++ load ++ (← emitStoreAndReturn p dest 8)
   return (acc, n)

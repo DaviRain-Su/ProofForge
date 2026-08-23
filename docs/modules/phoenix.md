@@ -22,17 +22,28 @@
 | `MatchingEngineResponse` | `match*` bounded-fold scratch |
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
-42 个 u64 槽。`#pf_build Projects.Phoenix` digest `b768c4809cea96c1`。
+42 个 u64 槽。`#pf_build Projects.Phoenix` digest `77805be0b7d18a30`。
+
+`postAsk` 是链上 free-funds 挂单：检查 incoming TIF 和 sequence 上界，锁定
+`baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；书满时只有更低价
+ask 能驱逐最差订单。物理空洞通过 bounded compare/swap 收到尾部。
 
 `swapBuyAt` 是完整的 bounded N=4 宿主语义；链上 `swapBuy` 用 17-phase
 state-carrying fold 实现相同扫描：reset 后，每档依次检查 slot TIF、time TIF、
 撮合并推进档位。过期单清零、解锁 base 并继续；第一个超限有效价格停止；整档
 成交继续，部分成交停止。无流动性或超限 IOC 成功返回 0，不伪装成 overflow。
+`swapBuy` 还按 trader id 执行 Abort / CancelProvide / DecrementTake；自成交量不产生
+fill、手续费或 transfer。
 
 quote 和费用先按整次撮合聚合再向上取整。结算扣 `quoteLocked`、增加
 `quoteFree`，扣 maker `baseLocked`，把成交和过期解锁量加到 `baseFree`，并增加
-`unclaimedFees`；`collectedFees` 只由后续收费动作改变。非零成交保留 Token
-`TransferChecked` CPI。
+`unclaimedFees`；`collectFees` 原子地把它转进 lifetime `collectedFees`。非零成交保留
+Token `TransferChecked` CPI。`reduceAsk` 按 trader + `(price, sequence)` 验 owner，
+减少 `min(requested, resting)` 并正确解锁 base；缺失订单成功返回 0。
+
+真实源模块经 `pf build --target svm Phoenix` 生成 224,347-byte assembly 和
+55,968-byte eBPF ELF。测试把 assembly budget 钉在 300 KB，并拒绝重复 label；
+这里的大小仍远低于需要担心的量级，后续按独立 bounded loop 增长，不按档位展开。
 
 ## 官方有、本仓没有
 
@@ -44,7 +55,7 @@ quote 和费用先按整次撮合聚合再向上取整。结算扣 `quoteLocked`
 | `MarketEvent` 带 payload | 多构造子 inductive |
 | `Ladder` / `Vec` | 不定长 |
 | bid book / trader tree / 动态 maker 身份 | 当前只做聚合 ask-side N=4 |
-| self-trade / seat lifecycle / event batch | 需要更完整账户与事件模型 |
+| seat lifecycle / event batch | 需要更完整账户与事件模型 |
 | Seat + 双 vault 同一入口 | CPI 账户表会抬高 |
 | `Log` self-CPI | 变长 event batch |
 
