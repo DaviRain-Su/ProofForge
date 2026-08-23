@@ -502,6 +502,166 @@ def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
 /-- Phoenix 给自然 sequence 留半个 `u64` 空间；bid 用按位取反编码另一半。 -/
 def maxOrderSequence : UInt64 := u64Max / 2
 
+private def registeredSeat (s : State) (address : UInt64) : Bool :=
+  if address = 0 || 4 < address then false
+  else s.traderUsed[address.toNat - 1]! ≠ 0
+
+/--
+Apply the base-ledger part of posting an ask. `oldSize = 0` is an ordinary insertion;
+otherwise the old maker is unlocked before the new owner is locked. Registered orders
+update the authoritative per-seat ledger and the temporary aggregate projection atomically.
+Unregistered addresses retain the host-reference aggregate path and are unreachable through
+the authenticated instruction adapter.
+-/
+private def postAskFunds
+    (s : State) (trader oldTrader oldSize size : UInt64) : State :=
+  if oldSize > s.baseLocked then
+    { s with matchError := 1 }
+  else if s.baseFree > u64Max - oldSize then
+    { s with matchError := 1 }
+  else
+    let aggregateFree := s.baseFree + oldSize
+    let aggregateLocked := s.baseLocked - oldSize
+    if size > aggregateFree then
+      { s with matchError := 1 }
+    else if aggregateLocked > u64Max - size then
+      { s with matchError := 1 }
+    else
+      let aggregate := { s with
+        baseLocked := aggregateLocked + size
+        baseFree := aggregateFree - size }
+      if registeredSeat s trader then
+        let traderIndex := trader.toNat - 1
+        if oldSize = 0 then
+          if size > s.traderBaseFree[traderIndex]! then
+            { s with matchError := 1 }
+          else if s.traderBaseLocked[traderIndex]! > u64Max - size then
+            { s with matchError := 1 }
+          else
+            { aggregate with
+              traderBaseLocked := s.traderBaseLocked.set (traderIndex % 4)
+                (s.traderBaseLocked[traderIndex]! + size)
+              traderBaseFree := s.traderBaseFree.set (traderIndex % 4)
+                (s.traderBaseFree[traderIndex]! - size) }
+        else if registeredSeat s oldTrader then
+          let oldIndex := oldTrader.toNat - 1
+          if oldTrader = trader then
+            if oldSize > s.traderBaseLocked[traderIndex]! then
+              { s with matchError := 1 }
+            else if s.traderBaseFree[traderIndex]! > u64Max - oldSize then
+              { s with matchError := 1 }
+            else
+              let traderFree := s.traderBaseFree[traderIndex]! + oldSize
+              let traderLocked := s.traderBaseLocked[traderIndex]! - oldSize
+              if size > traderFree then
+                { s with matchError := 1 }
+              else if traderLocked > u64Max - size then
+                { s with matchError := 1 }
+              else
+                { aggregate with
+                  traderBaseLocked := s.traderBaseLocked.set (traderIndex % 4)
+                    (traderLocked + size)
+                  traderBaseFree := s.traderBaseFree.set (traderIndex % 4)
+                    (traderFree - size) }
+          else if oldSize > s.traderBaseLocked[oldIndex]! then
+            { s with matchError := 1 }
+          else if s.traderBaseFree[oldIndex]! > u64Max - oldSize then
+            { s with matchError := 1 }
+          else if size > s.traderBaseFree[traderIndex]! then
+            { s with matchError := 1 }
+          else if s.traderBaseLocked[traderIndex]! > u64Max - size then
+            { s with matchError := 1 }
+          else
+            { aggregate with
+              traderBaseLocked :=
+                (s.traderBaseLocked.set (oldIndex % 4)
+                  (s.traderBaseLocked[oldIndex]! - oldSize)).set (traderIndex % 4)
+                    (s.traderBaseLocked[traderIndex]! + size)
+              traderBaseFree :=
+                (s.traderBaseFree.set (oldIndex % 4)
+                  (s.traderBaseFree[oldIndex]! + oldSize)).set (traderIndex % 4)
+                    (s.traderBaseFree[traderIndex]! - size) }
+        else
+          { s with matchError := 1 }
+      else
+        aggregate
+
+/-- Quote-ledger analogue of `postAskFunds`; values are precomputed bid collateral. -/
+private def postBidFunds
+    (s : State) (trader oldTrader oldLock newLock : UInt64) : State :=
+  if oldLock > s.quoteLocked then
+    { s with matchError := 1 }
+  else if s.quoteFree > u64Max - oldLock then
+    { s with matchError := 1 }
+  else
+    let aggregateFree := s.quoteFree + oldLock
+    let aggregateLocked := s.quoteLocked - oldLock
+    if newLock > aggregateFree then
+      { s with matchError := 1 }
+    else if aggregateLocked > u64Max - newLock then
+      { s with matchError := 1 }
+    else
+      let aggregate := { s with
+        quoteLocked := aggregateLocked + newLock
+        quoteFree := aggregateFree - newLock }
+      if registeredSeat s trader then
+        let traderIndex := trader.toNat - 1
+        if oldLock = 0 then
+          if newLock > s.traderQuoteFree[traderIndex]! then
+            { s with matchError := 1 }
+          else if s.traderQuoteLocked[traderIndex]! > u64Max - newLock then
+            { s with matchError := 1 }
+          else
+            { aggregate with
+              traderQuoteLocked := s.traderQuoteLocked.set (traderIndex % 4)
+                (s.traderQuoteLocked[traderIndex]! + newLock)
+              traderQuoteFree := s.traderQuoteFree.set (traderIndex % 4)
+                (s.traderQuoteFree[traderIndex]! - newLock) }
+        else if registeredSeat s oldTrader then
+          let oldIndex := oldTrader.toNat - 1
+          if oldTrader = trader then
+            if oldLock > s.traderQuoteLocked[traderIndex]! then
+              { s with matchError := 1 }
+            else if s.traderQuoteFree[traderIndex]! > u64Max - oldLock then
+              { s with matchError := 1 }
+            else
+              let traderFree := s.traderQuoteFree[traderIndex]! + oldLock
+              let traderLocked := s.traderQuoteLocked[traderIndex]! - oldLock
+              if newLock > traderFree then
+                { s with matchError := 1 }
+              else if traderLocked > u64Max - newLock then
+                { s with matchError := 1 }
+              else
+                { aggregate with
+                  traderQuoteLocked := s.traderQuoteLocked.set (traderIndex % 4)
+                    (traderLocked + newLock)
+                  traderQuoteFree := s.traderQuoteFree.set (traderIndex % 4)
+                    (traderFree - newLock) }
+          else if oldLock > s.traderQuoteLocked[oldIndex]! then
+            { s with matchError := 1 }
+          else if s.traderQuoteFree[oldIndex]! > u64Max - oldLock then
+            { s with matchError := 1 }
+          else if newLock > s.traderQuoteFree[traderIndex]! then
+            { s with matchError := 1 }
+          else if s.traderQuoteLocked[traderIndex]! > u64Max - newLock then
+            { s with matchError := 1 }
+          else
+            { aggregate with
+              traderQuoteLocked :=
+                (s.traderQuoteLocked.set (oldIndex % 4)
+                  (s.traderQuoteLocked[oldIndex]! - oldLock)).set (traderIndex % 4)
+                    (s.traderQuoteLocked[traderIndex]! + newLock)
+              traderQuoteFree :=
+                (s.traderQuoteFree.set (oldIndex % 4)
+                  (s.traderQuoteFree[oldIndex]! + oldLock)).set (traderIndex % 4)
+                    (s.traderQuoteFree[traderIndex]! - newLock) }
+        else
+          { s with matchError := 1 }
+      else
+        aggregate
+
+attribute [pf_inline] registeredSeat postAskFunds postBidFunds
+
 private def swapAskAdjacent (s : State) (j : Nat) : State :=
   let r := j + 1
   { s with
@@ -545,55 +705,33 @@ def postAskWithClientAt (s : State)
         if st.matchStopped = (0 : UInt64) then
           let j : Nat := i
           if st.sizes[j]! = (0 : UInt64) then
-            if size ≤ st.baseFree then
-              if st.baseLocked ≤ u64Max - size then
-                st := { st with
-                  priceTicks := st.priceTicks.set (j % 4) price
-                  sequences := st.sequences.set (j % 4) st.sequence
-                  traders := st.traders.set (j % 4) trader
-                  sizes := st.sizes.set (j % 4) size
-                  lastSlots := st.lastSlots.set (j % 4) lastSlot
-                  lastTimes := st.lastTimes.set (j % 4) lastTime
-                  sequence := st.sequence + 1
-                  baseLocked := st.baseLocked + size
-                  baseFree := st.baseFree - size
-                  matchStopped := 1 }
-              else
-                st := { st with matchError := 1 }
-            else
-              st := { st with matchError := 1 }
+            st := postAskFunds st trader 0 0 size
+            st := { st with
+              priceTicks := st.priceTicks.set (j % 4) price
+              sequences := st.sequences.set (j % 4) st.sequence
+              traders := st.traders.set (j % 4) trader
+              sizes := st.sizes.set (j % 4) size
+              lastSlots := st.lastSlots.set (j % 4) lastSlot
+              lastTimes := st.lastTimes.set (j % 4) lastTime
+              sequence := st.sequence + 1
+              matchStopped := 1 }
       else if i = 4 then
         if st.matchStopped = (0 : UInt64) then
           if st.matchError = (0 : UInt64) then
             let oldSize := st.sizes[3]!
             let oldPrice := st.priceTicks[3]!
             if price < oldPrice then
-              if oldSize ≤ st.baseLocked then
-                if st.baseFree ≤ u64Max - oldSize then
-                  let unlocked := st.baseFree + oldSize
-                  let remainingLocked := st.baseLocked - oldSize
-                  if size ≤ unlocked then
-                    if remainingLocked ≤ u64Max - size then
-                      st := { st with
-                        priceTicks := st.priceTicks.set 3 price
-                        sequences := st.sequences.set 3 st.sequence
-                        traders := st.traders.set 3 trader
-                        sizes := st.sizes.set 3 size
-                        lastSlots := st.lastSlots.set 3 lastSlot
-                        lastTimes := st.lastTimes.set 3 lastTime
-                        sequence := st.sequence + 1
-                        baseLocked := remainingLocked + size
-                        baseFree := unlocked - size
-                        matchStopped := 1
-                        matchLevel := 1 }
-                    else
-                      st := { st with matchError := 1 }
-                  else
-                    st := { st with matchError := 1 }
-                else
-                  st := { st with matchError := 1 }
-              else
-                st := { st with matchError := 1 }
+              st := postAskFunds st trader st.traders[3]! oldSize size
+              st := { st with
+                priceTicks := st.priceTicks.set 3 price
+                sequences := st.sequences.set 3 st.sequence
+                traders := st.traders.set 3 trader
+                sizes := st.sizes.set 3 size
+                lastSlots := st.lastSlots.set 3 lastSlot
+                lastTimes := st.lastTimes.set 3 lastTime
+                sequence := st.sequence + 1
+                matchStopped := 1
+                matchLevel := 1 }
             else
               st := { st with matchError := 1 }
       else if i < 14 then
@@ -722,54 +860,32 @@ def postBidWithClientAt (s : State)
           if st.matchStopped = (0 : UInt64) then
             let j : Nat := i
             if st.bidSizes[j]! = (0 : UInt64) then
-              if newLock ≤ st.quoteFree then
-                if st.quoteLocked ≤ u64Max - newLock then
-                  st := { st with
-                    bidPriceTicks := st.bidPriceTicks.set (j % 4) price
-                    bidSequences := st.bidSequences.set (j % 4) (~~~st.sequence)
-                    bidTraders := st.bidTraders.set (j % 4) trader
-                    bidSizes := st.bidSizes.set (j % 4) size
-                    bidLastSlots := st.bidLastSlots.set (j % 4) lastSlot
-                    bidLastTimes := st.bidLastTimes.set (j % 4) lastTime
-                    sequence := st.sequence + 1
-                    quoteLocked := st.quoteLocked + newLock
-                    quoteFree := st.quoteFree - newLock
-                    matchStopped := 1 }
-                else
-                  st := { st with matchError := 1 }
-              else
-                st := { st with matchError := 1 }
+              st := postBidFunds st trader 0 0 newLock
+              st := { st with
+                bidPriceTicks := st.bidPriceTicks.set (j % 4) price
+                bidSequences := st.bidSequences.set (j % 4) (~~~st.sequence)
+                bidTraders := st.bidTraders.set (j % 4) trader
+                bidSizes := st.bidSizes.set (j % 4) size
+                bidLastSlots := st.bidLastSlots.set (j % 4) lastSlot
+                bidLastTimes := st.bidLastTimes.set (j % 4) lastTime
+                sequence := st.sequence + 1
+                matchStopped := 1 }
         else if i = 4 then
           if st.matchStopped = (0 : UInt64) then
             if st.matchError = (0 : UInt64) then
               let oldPrice := st.bidPriceTicks[3]!
               if oldPrice < price then
-                if oldLock ≤ st.quoteLocked then
-                  if st.quoteFree ≤ u64Max - oldLock then
-                    let unlocked := st.quoteFree + oldLock
-                    let remainingLocked := st.quoteLocked - oldLock
-                    if newLock ≤ unlocked then
-                      if remainingLocked ≤ u64Max - newLock then
-                        st := { st with
-                          bidPriceTicks := st.bidPriceTicks.set 3 price
-                          bidSequences := st.bidSequences.set 3 (~~~st.sequence)
-                          bidTraders := st.bidTraders.set 3 trader
-                          bidSizes := st.bidSizes.set 3 size
-                          bidLastSlots := st.bidLastSlots.set 3 lastSlot
-                          bidLastTimes := st.bidLastTimes.set 3 lastTime
-                          sequence := st.sequence + 1
-                          quoteLocked := remainingLocked + newLock
-                          quoteFree := unlocked - newLock
-                          matchStopped := 1
-                          matchLevel := 1 }
-                      else
-                        st := { st with matchError := 1 }
-                    else
-                      st := { st with matchError := 1 }
-                  else
-                    st := { st with matchError := 1 }
-                else
-                  st := { st with matchError := 1 }
+                st := postBidFunds st trader st.bidTraders[3]! oldLock newLock
+                st := { st with
+                  bidPriceTicks := st.bidPriceTicks.set 3 price
+                  bidSequences := st.bidSequences.set 3 (~~~st.sequence)
+                  bidTraders := st.bidTraders.set 3 trader
+                  bidSizes := st.bidSizes.set 3 size
+                  bidLastSlots := st.bidLastSlots.set 3 lastSlot
+                  bidLastTimes := st.bidLastTimes.set 3 lastTime
+                  sequence := st.sequence + 1
+                  matchStopped := 1
+                  matchLevel := 1 }
               else
                 st := { st with matchError := 1 }
         else if i < 14 then

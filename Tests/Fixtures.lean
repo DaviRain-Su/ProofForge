@@ -205,6 +205,25 @@ def runFold (s : FoldState) (lhs rhs : UInt64) :
 def foldProduct (s : FoldState) : UInt64 :=
   s.product
 
+/-- A State-returning inline helper used before another update in the same loop iteration. -/
+private def stageFold (s : FoldState) (delta : UInt64) : FoldState :=
+  if delta < 10 then { s with product := s.product + delta }
+  else { s with quotient := delta }
+
+attribute [pf_inline] stageFold
+
+/--
+Lean represents the second assignment as projections from `stageFold`; extraction must keep
+the helper transition before the outer `remainder` write instead of silently dropping it.
+-/
+def runComposedFold (s : FoldState) (delta : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut st := s
+  for _ in [:1] do
+    st := stageFold st delta
+    st := { st with remainder := delta }
+  .ok (st, st.product)
+
 /-- Pure conditional values stay shared instead of duplicating the mutation continuation. -/
 structure ChoiceState where
   chosen : UInt64

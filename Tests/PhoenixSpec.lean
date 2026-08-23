@@ -32,7 +32,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Svm.Emit.emitProgramAsm source with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.toUTF8.size < 610000 do
+  unless asm.toUTF8.size < 1100000 do
     throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
   unless !asm.contains "\n\\\n" do
     throwError "Phoenix assembly contains a standalone backslash"
@@ -74,6 +74,31 @@ elab "#pf_guard_phoenix_artifact" : command => do
     | throwError "missing lastEventAmount"
   let some eventCount := program.methods.find? (·.ixName == "eventCountOf")
     | throwError "missing eventCountOf"
+  let rec hasIndexSet (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .indexSet name _ _ _ _ => name == field
+        | .ite _ _ _ thn els =>
+            hasIndexSet fuel' field thn || hasIndexSet fuel' field els
+        | .forBody _ body => hasIndexSet fuel' field body
+        | _ => false
+  let rec hasStoreField (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .storeField name _ => name == field
+        | .ite _ _ _ thn els =>
+            hasStoreField fuel' field thn || hasStoreField fuel' field els
+        | .forBody _ body => hasStoreField fuel' field body
+        | _ => false
+  unless hasIndexSet 32 "traderBaseLocked" post.ops &&
+      hasIndexSet 32 "traderBaseFree" post.ops &&
+      hasIndexSet 32 "sequences" post.ops && hasStoreField 32 "sequence" post.ops &&
+      hasIndexSet 32 "traderQuoteLocked" postBid.ops &&
+      hasIndexSet 32 "traderQuoteFree" postBid.ops &&
+      hasIndexSet 32 "bidSequences" postBid.ops && hasStoreField 32 "sequence" postBid.ops do
+    throwError "Phoenix post entries do not preserve composed ledger/book updates"
   unless deposit.paramCount == 2 && withdrawBase.paramCount == 1 &&
       withdrawQuote.paramCount == 1 && evictSeat.paramCount == 0 &&
       traderIndex.paramCount == 4 &&
@@ -342,6 +367,18 @@ private def sellSamples : List Projects.Phoenix.State := [
 
 #guard
   match postAskAt
+      { (withSeats12 (init 100)) with
+        traderBaseFree := #v[8, 0, 0, 0], baseFree := 8 }
+      1 50 8 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.sizes[0]! == 8 && st.traders[0]! == 1 &&
+        st.traderBaseLocked == #v[8, 0, 0, 0] &&
+        st.traderBaseFree == #v[0, 0, 0, 0] &&
+        st.baseLocked == 8 && st.baseFree == 0 && ret == 8
+  | .error _ => false
+
+#guard
+  match postAskAt
       { (init 100) with
         sizes := #v[3, 0, 0, 0], priceTicks := #v[60, 0, 0, 0],
         sequences := #v[1, 0, 0, 0], traders := #v[1, 0, 0, 0],
@@ -401,6 +438,22 @@ private def sellSamples : List Projects.Phoenix.State := [
 
 #guard
   match postAskAt
+      { (withSeats12 (init 100)) with
+        sizes := #v[1, 2, 3, 4], priceTicks := #v[10, 20, 30, 40],
+        sequences := #v[1, 2, 3, 4], traders := #v[2, 2, 2, 2],
+        sequence := 5, traderBaseLocked := #v[0, 10, 0, 0],
+        traderBaseFree := #v[1, 0, 0, 0], baseLocked := 10, baseFree := 1 }
+      1 15 1 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.sizes == #v[1, 1, 2, 3] && st.traders == #v[2, 1, 2, 2] &&
+        st.traderBaseLocked == #v[1, 6, 0, 0] &&
+        st.traderBaseFree == #v[0, 4, 0, 0] &&
+        st.baseLocked == 7 && st.baseFree == 4 && ret == 1 &&
+        st.events[0]! == .evict 2 4 40 4
+  | .error _ => false
+
+#guard
+  match postAskAt
       { (init 100) with baseFree := 8 }
       7 50 8 9 0 10 0 with
   | .ok (st, ret) => st == { (init 100) with baseFree := 8 } && ret == 0
@@ -428,6 +481,18 @@ private def sellSamples : List Projects.Phoenix.State := [
 
 #guard
   match postBidAt
+      { (withSeats12 (init 1)) with
+        traderQuoteFree := #v[100, 0, 0, 0], quoteFree := 100 }
+      1 50 2 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.bidSizes[0]! == 2 && st.bidTraders[0]! == 1 &&
+        st.traderQuoteLocked == #v[100, 0, 0, 0] &&
+        st.traderQuoteFree == #v[0, 0, 0, 0] &&
+        st.quoteLocked == 100 && st.quoteFree == 0 && ret == 2
+  | .error _ => false
+
+#guard
+  match postBidAt
       { (init 1) with
         bidSizes := #v[1, 1, 0, 0], bidPriceTicks := #v[50, 40, 0, 0],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
@@ -437,6 +502,24 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.bidSizes == #v[1, 1, 1, 0] && st.bidPriceTicks == #v[60, 50, 40, 0] &&
         st.bidSequences == #v[~~~(3 : UInt64), ~~~(1 : UInt64), ~~~(2 : UInt64), 0] &&
         st.quoteLocked == 150 && st.quoteFree == 0 && orderedBids st && ret == 1
+  | .error _ => false
+
+#guard
+  match postBidAt
+      { (withSeats12 (init 1)) with
+        bidSizes := #v[1, 1, 1, 1], bidPriceTicks := #v[40, 30, 20, 10],
+        bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64),
+          ~~~(3 : UInt64), ~~~(4 : UInt64)],
+        bidTraders := #v[2, 2, 2, 2], sequence := 5,
+        traderQuoteLocked := #v[0, 100, 0, 0],
+        traderQuoteFree := #v[100, 0, 0, 0], quoteLocked := 100, quoteFree := 100 }
+      1 25 1 0 0 0 0 with
+  | .ok (st, ret) =>
+      st.bidSizes == #v[1, 1, 1, 1] && st.bidTraders == #v[2, 2, 1, 2] &&
+        st.traderQuoteLocked == #v[25, 90, 0, 0] &&
+        st.traderQuoteFree == #v[75, 10, 0, 0] &&
+        st.quoteLocked == 115 && st.quoteFree == 85 && ret == 1 &&
+        st.events[0]! == .evict 2 4 10 1
   | .error _ => false
 
 #guard

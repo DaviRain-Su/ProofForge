@@ -90,3 +90,4 @@
 | T-L5-05 | happy / fail | Phoenix trader registry | 四-limb Pubkey、幂等注册、容量上限、per-seat deposit 与溢出 |
 | T-L5-06 | happy / fail | Phoenix seat lifecycle | base/quote partial withdraw、非空拒绝 eviction、LIFO address reuse |
 | T-L5-07 | happy / fail | Phoenix authenticated order lifecycle | post/reduce 由完整 signer Pubkey 解析 owner；ask/base 与 bid/quote per-seat reduce 同步解锁；伪造 seat 参数已从 ABI 删除 |
+| T-L5-08 | happy / fail | Phoenix per-seat posting | 普通 ask/bid 锁仓及跨 owner 满书 eviction 原子更新两边 TraderState；抽取 IR 保留动态 index writes |

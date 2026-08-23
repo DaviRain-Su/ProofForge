@@ -1105,6 +1105,16 @@ private def asBoolVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.V
     else if isConstNamed e ``Bool.not then
       last?.bind fun value =>
         (asBoolVal env fuel' value).map fun v => .select .eq v (.lit 0) (.lit 1) (.lit 0)
+    else if (isConstNamed e ``ite || isConstNamed e ``dite) && args.size ≥ 4 then
+      let peelProofLam (value : Expr) : Expr :=
+        match strip value with
+        | .lam _ _ body _ => body.lowerLooseBVars 1 1
+        | value => value
+      match asBoolVal env fuel' args[args.size - 4]!,
+          asBoolVal env fuel' (peelProofLam args[args.size - 2]!),
+          asBoolVal env fuel' (peelProofLam args[args.size - 1]!) with
+      | some cond, some thn, some els => some (.select .ne cond (.lit 0) thn els)
+      | _, _, _ => none
     else if isConstNamed e ``Decidable.decide && args.size ≥ 2 then
       asBoolVal env fuel' args[args.size - 2]!
     else if isConstNamed e ``Eq && args.size ≥ 2 then
@@ -2763,14 +2773,90 @@ private def findYieldPayload (e : Expr) : Option Expr :=
         | _ => e.getAppArgs.findSome? (go fuel')
   go 32 e
 
+/--
+Lean composes consecutive mutable-state assignments as a record update whose unchanged
+fields project from the previous expression. When that base is a `pf_inline` State helper,
+preserve the helper transition before lowering the outer update. This is target-neutral
+structured-state normalization; backends only see the resulting stores.
+-/
+private def findProjectedInlineBase (env : Environment) (fuel : Nat) (e : Expr) : Option Expr :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    let args := e.getAppArgs
+    let projectedBase? :=
+      match e.getAppFn.constName? with
+      | some name =>
+        match env.getProjectionFnInfo? name with
+        | some _ =>
+          if h : args.size > 0 then
+            let base := args[args.size - 1]
+            if (unfoldUserHelper env base).isSome then some base else none
+          else none
+        | none => none
+      | none => none
+    projectedBase? <|> args.findSome? (findProjectedInlineBase env fuel')
+
+private def decodeYieldState (env : Environment) (fuel : Nat) (state : Expr) :
+    Except String (Array Ops.Op) :=
+  match fuel with
+  | 0 => .error "extract/unsupported: inline state depth"
+  | fuel' + 1 =>
+    let state := substLets 256 state
+    let state0 := strip state
+    if (isConstNamed state0 ``ite || isConstNamed state0 ``dite) &&
+        state0.getAppArgs.size ≥ 2 then
+      let args := state0.getAppArgs
+      let peelProofLam (e : Expr) : Expr :=
+        match strip e with
+        | .lam _ _ body _ => body.lowerLooseBVars 1 1
+        | e => e
+      let thn := peelProofLam args[args.size - 2]!
+      let els := peelProofLam args[args.size - 1]!
+      match args.findSome? (asCondition env),
+          decodeYieldState env fuel' thn, decodeYieldState env fuel' els with
+      | some (cmp, lhs, rhs), .ok thnOps, .ok elsOps =>
+        .ok #[.ite cmp lhs rhs thnOps elsOps]
+      | none, _, _ => .error "extract/unsupported: inline state condition"
+      | _, .error reason, _ => .error s!"extract/unsupported: inline state then: {reason}"
+      | _, _, .error reason => .error s!"extract/unsupported: inline state else: {reason}"
+    else do
+      let priorBase? := findProjectedInlineBase env 64 state0
+      let prior ←
+        match priorBase? with
+        | none => .ok #[]
+        | some base =>
+          match unfoldUserHelper env base with
+          | some (name, unfolded) =>
+            match decodeYieldState env fuel' unfolded with
+            | .ok ops => .ok ops
+            | .error reason =>
+              .error s!"extract/unsupported: projected inline state {name}: {reason}"
+          | none => .error "extract/unsupported: projected inline state"
+      -- The prior transition has now run. Rewrite outer projections of its result back to
+      -- the helper's source state expression; state-loop normalization interprets those
+      -- projections against the current mutable state, preserving the sequential semantics.
+      let outerState :=
+        match priorBase? with
+        | none => state0
+        | some base =>
+          let args := base.getAppArgs
+          if h : args.size > 0 then
+            let sourceState := args[0]
+            state0.replace fun e => if e == base then some sourceState else none
+          else state0
+      let dynamic := collectIndexSets env outerState
+      let static := (flattenLeaves env "" outerState).map fun p =>
+        (.storeField p.1 p.2 : Ops.Op)
+      .ok (prior ++ dynamic ++ dropVectorRootStores dynamic static)
+
 /-- State loop 的 `yield newState` 只写账户并继续，不生成 commit/exit。 -/
-private def asYieldStores (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+private def asYieldStores (env : Environment) (e : Expr) :
+    Option (Except String (Array Ops.Op)) :=
   match findYieldPayload e with
   | none => none
-  | some state =>
-    let dynamic := collectIndexSets env state
-    let static := (flattenLeaves env "" state).map fun p => (.storeField p.1 p.2 : Ops.Op)
-    some (dynamic ++ static)
+  | some state => some (decodeYieldState env 64 state)
 
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
     Except String (Array Ops.Op) :=
@@ -2781,8 +2867,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
     .ok ops
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend, .returnU64 addend]
-  else if let some stores := asYieldStores env e then
-    .ok stores
+  else if let some result := asYieldStores env e then
+    result
   else
   let isets := collectIndexSets env e
   if isets.size ≥ 1 then

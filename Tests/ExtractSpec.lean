@@ -117,6 +117,29 @@ elab "#pf_guard_state_fold_ir" : command => do
 
 #pf_guard_state_fold_ir
 
+elab "#pf_guard_composed_state_fold_ir" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runComposedFold ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some run := program.methods.find? (·.ixName == "runComposedFold")
+    | throwError "missing composed state-fold method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .forBody 1 #[
+      .ite .lt (.arg 0) (.lit 10)
+        #[.storeField "product" (.addU64 (.field (.arg 1) "product") (.arg 0))]
+        #[.storeField "quotient" (.arg 0)],
+      .storeField "remainder" (.arg 0)
+    ],
+    .okState (.field (.arg 1) "product")
+  ]
+  unless run.ops == expected do
+    throwError s!"composed state-fold IR mismatch: {repr run.ops}"
+
+#pf_guard_composed_state_fold_ir
+
 elab "#pf_guard_dynamic_write_return" : command => do
   let env ← getEnv
   let program ←
