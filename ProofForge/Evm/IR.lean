@@ -1,4 +1,5 @@
 import ProofForge.Extract.IR
+import ProofForge.Extract.LegacyAdapter
 import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 

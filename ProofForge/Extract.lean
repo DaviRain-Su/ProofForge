@@ -1,5 +1,5 @@
 import Lean
-import ProofForge.Extract.LegacyIR
+import ProofForge.Extract.LegacyAdapter
 import ProofForge.Extract.Ops
 import ProofForge.Profile
 import ProofForge.Attr

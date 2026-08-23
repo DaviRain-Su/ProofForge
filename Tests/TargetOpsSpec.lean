@@ -1,6 +1,6 @@
 import ProofForge.Svm.Ops
 import ProofForge.Evm.Ops
-import ProofForge.Extract.IR
+import ProofForge.Extract.LegacyAdapter
 import ProofForge.Golden
 
 namespace Tests.TargetOpsSpec

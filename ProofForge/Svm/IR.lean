@@ -1,4 +1,5 @@
 import ProofForge.Extract.IR
+import ProofForge.Extract.LegacyAdapter
 import ProofForge.Svm.ABI
 
 namespace ProofForge.Svm.IR
