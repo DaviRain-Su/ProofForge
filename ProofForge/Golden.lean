@@ -108,12 +108,16 @@ def extractedTree : Program :=
             #[.ite .eq (.field (.arg 2) "size") (.lit 0)
               #[.okState (.field (.arg 1) "nodes_0_value")]
               #[.errorOverflow]]
-            #[.errorOverflow]
+            #[.ite .eq (.field (.arg 2) "nodes_0_right") (.lit 0)
+              #[.ite .lt (.field (.arg 2) "size") (.lit 4)
+                #[.okState (.field (.arg 1) "nodes_1_value")]
+                #[.errorOverflow]]
+              #[.errorOverflow]]
         ] },
       { kind := .increment, name := "Examples.Tree.setHead", ixName := "setHead", paramCount := 1
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.okState (.field (.arg 1) "root")]
+            #[.okState (.field (.arg 1) "nodes_0_value")]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Examples.Tree.getHead", ixName := "getHead", paramCount := 0

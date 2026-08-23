@@ -28,7 +28,21 @@ open Examples.Tree
   | .error _ => false
 
 #guard
-  match bumpInsert { (init 0) with root := 1, size := 1 } 2 9 with
+  match bumpInsert (init 0) 3 7 with
+  | .ok (st, _) =>
+    match bumpInsert st 2 9 with
+    | .ok (st2, ret) =>
+        st2.size == 2 && ret == 2 &&
+          st2.nodes[1]!.key == 2 && st2.nodes[1]!.value == 9 &&
+          st2.nodes[1]!.parent == 1 && st2.nodes[0]!.value == 7
+    | .error _ => false
+  | .error _ => false
+
+#guard
+  match bumpInsert { (init 0) with
+      root := 1, size := 2
+      nodes := (init 0).nodes.set 0 { left := 0, right := 2, parent := 0, color := 1, key := 3, value := 7 }
+    } 4 1 with
   | .error .overflow => true
   | _ => false
 

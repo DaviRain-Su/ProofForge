@@ -4,8 +4,8 @@ import ProofForge
 Sokoban 红黑树节点 + 定长 `Vector`。
 
 官方 `Node` 物理顺序：left / right / parent / color / key / value。
-`SENTINEL = 0`，已分配地址从 1 起。本切片容量 4，只钉布局和
-按地址写 value，不实现 insert/remove 旋转。
+`SENTINEL = 0`，已分配地址从 1 起。本切片容量 4：空树写根，
+非空且根右孩空时 bump 到槽 1。旋转 / 染色仍关。
 -/
 namespace Examples.Tree
 
@@ -60,9 +60,10 @@ def setHead (s : State) (v : UInt64) : Except Error (State × UInt64) :=
     .error .overflow
 
 /--
-有界 bump 分配：空树时把地址 1（槽 0）写成红根。
-官方 insert 在空树上就是这个。满树 / 非空走 overflow。
-旋转和染色下一刀。
+有界 bump 分配。
+空树：地址 1（槽 0）写成红根。
+非空且根右孩是 SENTINEL、还有空槽：把地址 2（槽 1）挂到根右边。
+满树 / 右孩已占走 overflow。旋转和染色下一刀。
 -/
 @[pf_entry]
 def bumpInsert (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
@@ -73,6 +74,14 @@ def bumpInsert (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
               size := 1
               nodes := s.nodes.set 0
                 { left := 0, right := 0, parent := 0, color := 1, key := k, value := v } }, k)
+    else
+      .error .overflow
+  else if s.nodes[0]!.right = 0 then
+    if s.size < 4 then
+      .ok ({ s with
+              size := s.size + 1
+              nodes := s.nodes.set 1
+                { left := 0, right := 0, parent := 1, color := 1, key := k, value := v } }, k)
     else
       .error .overflow
   else

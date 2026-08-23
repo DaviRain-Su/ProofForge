@@ -868,6 +868,8 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
             seenIdx := true
           | _ =>
             if seenIdx then
+              -- `{ s.nodes[0]! with value := v }` 展开成 `have __src := …; Node.mk …`。
+              let a := peelLets (strip a)
               match asStateMk env a true with
               | some v => return some (true, v)
               | none =>
@@ -1017,6 +1019,13 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
           match asOptionPayload env st with
           | some v => some v
           | none =>
+            -- `{ s with nodes := s.nodes.set i { … with value := v } }`
+            -- 展开成 `State.mk s.root s.size (Vector.set …)`。`val` 会先吃到
+            -- `s.root`，必须先认嵌套 Vector.set，否则 dest 落到错误槽。
+            match asVectorSet env (strip st) <|>
+                (strip st).getAppArgs.findSome? (asVectorSet env) with
+            | some v => some v
+            | none =>
             match val env st with
             | some (.clockSlot) => some .clockSlot
             | some (.clockEpoch) => some .clockEpoch
