@@ -3,7 +3,7 @@ import Examples.Transfer
 namespace Tests.TransferSpec
 
 open Examples.Transfer
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

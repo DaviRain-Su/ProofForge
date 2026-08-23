@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.TipJar
 
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 /-- 无链上业务状态；init 只占入口形状。 -/
 structure State where

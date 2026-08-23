@@ -3,7 +3,7 @@ import Examples.Clock
 namespace Tests.ClockSpec
 
 open Examples.Clock
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).stamped == 0
 #guard get (init 0) == 0

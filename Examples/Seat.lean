@@ -11,7 +11,7 @@ CPI 账户表不同，混在一个 Program 会抬高 `cpiAccountCount`。
 -/
 namespace Examples.Seat
 
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 structure State where
   dummy : UInt64

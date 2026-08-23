@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Call
 
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 structure State where
   dummy : UInt64

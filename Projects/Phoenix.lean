@@ -19,7 +19,7 @@ Phoenix v1 `src/state` 在本仓剖面下的摊平。
 -/
 namespace Projects.Phoenix
 
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 /-- 官方 `Side`。 -/
 inductive Side where

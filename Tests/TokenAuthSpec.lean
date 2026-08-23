@@ -3,7 +3,7 @@ import Examples.TokenAuth
 namespace Tests.TokenAuthSpec
 
 open Examples.TokenAuth
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

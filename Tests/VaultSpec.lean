@@ -3,7 +3,7 @@ import Examples.Vault
 namespace Tests.VaultSpec
 
 open Examples.Vault
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

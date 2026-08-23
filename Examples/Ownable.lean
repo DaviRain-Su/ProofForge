@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Ownable
 
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 /-- owner 三槽 + 一个计数。allowance 走 hashed pair map，不占槽。 -/
 structure State where

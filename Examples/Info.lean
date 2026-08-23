@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Info
 
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 /-- 无业务状态；init 只占入口形状。 -/
 structure State where

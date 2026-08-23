@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Gate
 
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 structure State where
   open_ : Bool

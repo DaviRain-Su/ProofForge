@@ -3,7 +3,7 @@ import Examples.Keys
 namespace Tests.KeysSpec
 
 open Examples.Keys
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

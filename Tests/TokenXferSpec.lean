@@ -3,7 +3,7 @@ import Examples.TokenXfer
 namespace Tests.TokenXferSpec
 
 open Examples.TokenXfer
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

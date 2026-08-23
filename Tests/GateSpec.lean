@@ -3,7 +3,7 @@ import Examples.Gate
 namespace Tests.GateSpec
 
 open Examples.Gate
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).open_ == false
 #guard isOpen (init 0) == 0

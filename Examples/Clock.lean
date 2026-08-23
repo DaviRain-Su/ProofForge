@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Clock
 
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 structure State where
   stamped : UInt64

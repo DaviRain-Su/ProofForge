@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Vault
 
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 /-- `shares` 的 hashed Map 用 slot 0 当 base。 -/
 structure State where

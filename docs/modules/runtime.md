@@ -1,4 +1,4 @@
-# ProofForge.Runtime
+# Target runtimes
 
 ## Purpose
 
@@ -10,9 +10,9 @@
 |---|---|
 | `ProofForge.Svm.Runtime` | sysvar、AccountInfo、CPI、PDA、hash syscall |
 | `ProofForge.Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 |
-| `ProofForge.Runtime` | 两边重新导出，保住旧名和抽出器 `` `ProofForge.Runtime.* `` |
 
-新合约应 `open ProofForge.Svm.Runtime` 或 `open ProofForge.Evm.Runtime`。
+根层不再提供混合 façade。合约必须按 target 明确 `open ProofForge.Svm.Runtime` 或
+`open ProofForge.Evm.Runtime`，抽出器也只识别对应的具名 runtime。
 
 ## Surface
 

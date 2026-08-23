@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Transfer
 
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 /-- 无链上状态；init 只占入口形状。 -/
 structure State where

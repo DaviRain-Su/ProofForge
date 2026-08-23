@@ -4,7 +4,7 @@ import ProofForge
 namespace Tests.PhoenixSpec
 
 open Projects.Phoenix
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 open Lean Elab Command
 
 elab "#pf_guard_phoenix_artifact" : command => do

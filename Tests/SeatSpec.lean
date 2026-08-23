@@ -4,7 +4,7 @@ import ProofForge
 namespace Tests.SeatSpec
 
 open Examples.Seat
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == findPda "vault"

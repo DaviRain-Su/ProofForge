@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Token
 
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 /-- dummy 占槽；余额和额度走 hashed map。 -/
 structure State where

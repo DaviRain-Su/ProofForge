@@ -3,7 +3,7 @@ import Examples.TokenMint2
 namespace Tests.TokenMint2Spec
 
 open Examples.TokenMint2
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

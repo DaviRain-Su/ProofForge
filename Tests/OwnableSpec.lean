@@ -3,7 +3,7 @@ import Examples.Ownable
 namespace Tests.OwnableSpec
 
 open Examples.Ownable
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 #guard (init 1 2 3).owner0 == 1
 #guard (init 1 2 3).owner1 == 2

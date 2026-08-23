@@ -3,7 +3,8 @@ import ProofForge.IR
 import ProofForge.Ops
 import ProofForge.Profile
 import ProofForge.Attr
-import ProofForge.Runtime
+import ProofForge.Svm.Runtime
+import ProofForge.Evm.Runtime
 
 open Lean
 
@@ -474,7 +475,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | parts => parts.getLast!
           if proj == "mk" || proj == "ok" || proj == "error" ||
               proj.startsWith "_proof" || proj == "rfl" ||
-              (field.startsWith "ProofForge.Runtime." || field.startsWith "ProofForge.Svm.Runtime." || field.startsWith "ProofForge.Evm.Runtime.") then none
+              (field.startsWith "ProofForge.Svm.Runtime." ||
+                field.startsWith "ProofForge.Evm.Runtime.") then none
           else if match env.find? n with
               | some (.ctorInfo _) => true
               | some (.inductInfo _) => true
@@ -1570,8 +1572,7 @@ private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
     vs.map Ops.Op.returnState
 
 private def isRuntimeName (n : Name) (suf : String) : Bool :=
-  n == (`ProofForge.Runtime).append suf.toName ||
-    n == (`ProofForge.Svm.Runtime).append suf.toName ||
+  n == (`ProofForge.Svm.Runtime).append suf.toName ||
     n == (`ProofForge.Evm.Runtime).append suf.toName ||
     n.toString.endsWith s!".{suf}"
 

@@ -3,7 +3,7 @@ import Examples.TipJar
 namespace Tests.TipJarSpec
 
 open Examples.TipJar
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

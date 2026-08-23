@@ -3,7 +3,7 @@ import Examples.Hash
 namespace Tests.HashSpec
 
 open Examples.Hash
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

@@ -4,7 +4,7 @@ import ProofForge
 namespace Tests.EvmCtxSpec
 
 open Examples.EvmCtx
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0

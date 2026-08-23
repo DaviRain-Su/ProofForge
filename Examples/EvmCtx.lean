@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.EvmCtx
 
-open ProofForge.Runtime
+open ProofForge.Evm.Runtime
 
 structure State where
   dummy : UInt64

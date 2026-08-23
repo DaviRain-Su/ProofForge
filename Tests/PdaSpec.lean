@@ -3,7 +3,7 @@ import Examples.Pda
 namespace Tests.PdaSpec
 
 open Examples.Pda
-open ProofForge.Runtime
+open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
