@@ -1128,24 +1128,18 @@ def extractedPhoenix : Program :=
                 ]
             ]
         ] },
+      { kind := .increment, name := "Projects.Phoenix.reduceAsk", ixName := "reduceAsk", paramCount := 1
+        ops := #[
+          .checkedSubU64 (.field (.arg 1) "sizes_0") (.arg 0),
+          .okState (.field (.subU64 (.field (.arg 1) "sizes_0") (.arg 0)) "sizes_0"),
+          .errorOverflow
+        ] },
       { kind := .increment, name := "Projects.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "baseFree") (.arg 0),
           .ite .le (.arg 0) (.field (.arg 1) "sizes_0")
             #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
-            #[
-              .ite .le (.arg 0) (.field (.arg 1) "sizes_1")
-                #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
-                #[
-                  .ite .le (.arg 0) (.field (.arg 1) "sizes_2")
-                    #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
-                    #[
-                      .ite .le (.arg 0) (.field (.arg 1) "sizes_3")
-                        #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
-                        #[.errorOverflow]
-                    ]
-                ]
-            ]
+            #[.errorOverflow]
         ] },
       { kind := .get, name := "Projects.Phoenix.askQty", ixName := "askQty", paramCount := 0
         ops := #[.returnU64

@@ -1,15 +1,14 @@
 import ProofForge
 
 /-!
-Phoenix v1 在本仓剖面下的第三刀：4 档 ask + 限价 / TIF / 部分成交 / UInt64 费用。
+Phoenix v1 在本仓剖面下的第四刀：4 档 ask + 官方吃单顺序。
 
-官方是红黑树 + u128 费用 + 席位 PDA + 双 vault。这里仍用
-`Vector UInt64 4` 表示同一价上的 4 个数量槽。循环改状态
-（`forBody`）已开，但 Phoenix 入口还用展开的 4 路 `ite`，
-等抽出器能区分循环 binder 和外层参数后再收成 `for`。
+官方 FIFO 吃单从最优档开始，允许部分成交，不会跳档。
+这里档 0 是最优 ask。`swapBuy` 只打档 0：`want ≤ size` 整档减，
+否则吃光档 0。跨档、限价进链上入口、u128 费用仍关。
 
-席位 / 双 vault 初始化是独立入口，不跟挂单/吃单混在一个
-Program 里（CPI 账户表不同，不能抬高 `cpiAccountCount`）。
+官方还有 ReduceOrder / CancelOrder。这里用 `reduceAsk` / `cancelAsk`
+钉同一语义：减档 0，减到 0 就是撤。
 -/
 namespace Projects.Phoenix
 
@@ -52,9 +51,9 @@ def postAsk (s : State) (size : UInt64) : Except Error (State × UInt64) :=
     .error .overflow
 
 /--
-IOC 买：第一档有货且 `want ≤ size` 才整档成交。部分成交 /
-跨档扫书等 `forBody` 抽出器能认循环 binder 后再开。
-成交走 Token TransferChecked（decimals=6）。
+IOC 买，官方顺序：只打最优档（档 0），且 `want ≤ sizes[0]`。
+装不下或档 0 空则 overflow，不会跳到档 1。
+部分成交 / 撤单是宿主函数。成交走 Token TransferChecked。
 -/
 @[pf_entry]
 def swapBuy (s : State) (want : UInt64) : Except Error (State × UInt64) :=
@@ -64,25 +63,37 @@ def swapBuy (s : State) (want : UInt64) : Except Error (State × UInt64) :=
       .ok ({ s with
               sizes := s.sizes.set 0 (s.sizes[0]! - want)
               baseFree := s.baseFree + want }, want)
-    else if want ≤ s.sizes[1]! then
-      let _ := tokenTransferChecked want 6
-      .ok ({ s with
-              sizes := s.sizes.set 1 (s.sizes[1]! - want)
-              baseFree := s.baseFree + want }, want)
-    else if want ≤ s.sizes[2]! then
-      let _ := tokenTransferChecked want 6
-      .ok ({ s with
-              sizes := s.sizes.set 2 (s.sizes[2]! - want)
-              baseFree := s.baseFree + want }, want)
-    else if want ≤ s.sizes[3]! then
-      let _ := tokenTransferChecked want 6
-      .ok ({ s with
-              sizes := s.sizes.set 3 (s.sizes[3]! - want)
-              baseFree := s.baseFree + want }, want)
     else
       .error .overflow
   else
     .error .overflow
+
+/-- 官方部分成交：吃光档 0。档 0 空则 overflow。 -/
+def sweepAsk (s : State) : Except Error (State × UInt64) :=
+  if s.sizes[0]! = 0 then
+    .error .overflow
+  else if s.baseFree ≤ u64Max - s.sizes[0]! then
+    let _ := tokenTransferChecked s.sizes[0]! 6
+    .ok ({ s with
+            sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!)
+            baseFree := s.baseFree + s.sizes[0]! }, s.sizes[0]!)
+  else
+    .error .overflow
+
+/-- 官方 ReduceOrder：只减档 0，且 `qty ≤ sizes[0]`。超额 overflow。 -/
+@[pf_entry]
+def reduceAsk (s : State) (qty : UInt64) : Except Error (State × UInt64) :=
+  if qty ≤ s.sizes[0]! then
+    .ok ({ s with sizes := s.sizes.set 0 (s.sizes[0]! - qty) }, qty)
+  else
+    .error .overflow
+
+/-- 官方 CancelOrder：撤档 0。空档 overflow。抽出还认不了 `size - size`。 -/
+def cancelAsk (s : State) : Except Error (State × UInt64) :=
+  if s.sizes[0]! = 0 then
+    .error .overflow
+  else
+    .ok ({ s with sizes := s.sizes.set 0 (s.sizes[0]! - s.sizes[0]!) }, s.sizes[0]!)
 
 /-- UInt64 bps 费用。宿主侧可算；抽出还认不了 `qty * 5 / 10000`。 -/
 def takeFee (qty : UInt64) : UInt64 :=

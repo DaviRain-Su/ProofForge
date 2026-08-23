@@ -39,11 +39,37 @@ open ProofForge.Runtime
 
 #guard
   match swapBuy { askPrice := 100, sizes := #v[2, 8, 0, 0], baseFree := 0 } 3 with
-  | .ok (st, ret) => st.sizes[0]! == 2 && st.sizes[1]! == 5 && st.baseFree == 3
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match sweepAsk { askPrice := 100, sizes := #v[2, 8, 0, 0], baseFree := 0 } with
+  | .ok (st, ret) =>
+      st.sizes[0]! == 0 && st.sizes[1]! == 8 && st.baseFree == 2 && ret == 2
   | .error _ => false
 
 #guard
-  match swapBuy { askPrice := 100, sizes := #v[2, 0, 0, 0], baseFree := 0 } 3 with
+  match swapBuy { askPrice := 100, sizes := #v[0, 8, 0, 0], baseFree := 0 } 3 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match reduceAsk { askPrice := 100, sizes := #v[8, 1, 0, 0], baseFree := 0 } 3 with
+  | .ok (st, ret) => st.sizes[0]! == 5 && st.sizes[1]! == 1 && ret == 3
+  | .error _ => false
+
+#guard
+  match reduceAsk { askPrice := 100, sizes := #v[2, 1, 0, 0], baseFree := 0 } 9 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match cancelAsk { askPrice := 100, sizes := #v[8, 1, 0, 0], baseFree := 0 } with
+  | .ok (st, ret) => st.sizes[0]! == 0 && st.sizes[1]! == 1 && ret == 8
+  | .error _ => false
+
+#guard
+  match cancelAsk (init 100) with
   | .error .overflow => true
   | _ => false
 
