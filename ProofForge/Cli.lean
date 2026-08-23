@@ -88,7 +88,7 @@ private unsafe def extractSvmPrograms (names : Array String) :
     let env ← Lean.importModules modules {} (loadExts := true)
     return names.mapM fun name =>
       let ns := svmModuleName name
-      match Extract.extractModule env ns none with
+      match Extract.extractModuleIR env ns none >>= Extract.IR.toLegacyProgram with
       | .error reason => .error s!"{name}: {reason}"
       | .ok program =>
         let digest := Extract.Legacy.digestHex program

@@ -13,7 +13,7 @@ namespace ProofForge.Evm.Commands
 elab "#pf_evm_build " n:ident : command => do
   let ns := n.getId
   let env ← getEnv
-  match Extract.extractModule env ns none with
+  match Extract.extractModuleIR env ns none >>= Extract.IR.toLegacyProgram with
   | .error reason => throwError reason
   | .ok src => do
     match IR.fromProgram src with
@@ -38,7 +38,7 @@ elab "#pf_evm_build " n:ident : command => do
 elab "#pf_evm_dump " n:ident : command => do
   let ns := n.getId
   let env ← getEnv
-  match Extract.extractModule env ns none with
+  match Extract.extractModuleIR env ns none >>= Extract.IR.toLegacyProgram with
   | .error reason => throwError reason
   | .ok src =>
       logInfo m!"proofforge-evm-dump: {src.name} methods = {src.methods.map (·.ixName)}"
