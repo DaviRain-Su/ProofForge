@@ -175,7 +175,8 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .ok (st, ret) =>
       st.sizes[0]! == 8 && st.priceTicks[0]! == 50 && st.traders[0]! == 7 &&
         st.sequences[0]! == 1 && st.sequence == 2 &&
-        st.baseLocked == 8 && st.baseFree == 0 && ret == 8
+        st.baseLocked == 8 && st.baseFree == 0 && ret == 8 &&
+        st.lastEvent == .place 1 0 50 8
   | .error _ => false
 
 #guard
@@ -247,7 +248,8 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .ok (st, ret) =>
       st.bidSizes == #v[2, 0, 0, 0] && st.bidPriceTicks == #v[50, 0, 0, 0] &&
         st.bidTraders[0]! == 7 && st.bidSequences[0]! == ~~~(1 : UInt64) &&
-        st.sequence == 2 && st.quoteLocked == 100 && st.quoteFree == 0 && ret == 2
+        st.sequence == 2 && st.quoteLocked == 100 && st.quoteFree == 0 && ret == 2 &&
+        st.lastEvent == .place 1 0 50 2
   | .error _ => false
 
 #guard
@@ -302,7 +304,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.sizes == #v[0, 1, 5, 0] && ret == 4 &&
         st.quoteLocked == 957 && st.quoteFree == 42 &&
         st.baseLocked == 6 && st.baseFree == 4 &&
-        st.unclaimedFees == 1 && st.collectedFees == 0
+        st.unclaimedFees == 1 && st.collectedFees == 0 &&
+        st.lastEvent == .fillSummary 0 4 42 1
   | .error _ => false
 
 #guard
@@ -545,7 +548,7 @@ private def sellSamples : List Projects.Phoenix.State := [
       7 10 1 3 with
   | .ok (st, ret) =>
       st.sizes == #v[5, 1, 0, 0] && st.baseLocked == 6 && st.baseFree == 4 &&
-        st.matchFilled == 0 && ret == 3
+        st.matchFilled == 0 && ret == 3 && st.lastEvent == .reduce 1 10 3 5
   | .error _ => false
 
 #guard
@@ -577,7 +580,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       8 11 (~~~(2 : UInt64)) 2 with
   | .ok (st, ret) =>
       st.bidSizes == #v[2, 1, 0, 0] && st.quoteLocked == 35 &&
-        st.quoteFree == 22 && ret == 2
+        st.quoteFree == 22 && ret == 2 &&
+        st.lastEvent == .reduce (~~~(2 : UInt64)) 11 2 1
   | .error _ => false
 
 #guard

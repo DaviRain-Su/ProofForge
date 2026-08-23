@@ -342,7 +342,9 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
     if st.matchError ≠ 0 || st.matchStopped = 0 then
       .error .overflow
     else
-      .ok ({ st with matchStopped := 0, matchError := 0 }, size)
+      .ok ({ st with
+              matchStopped := 0, matchError := 0
+              lastEvent := .place s.sequence 0 price size }, size)
 
 attribute [pf_inline] postAskAt
 
@@ -483,7 +485,9 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
       if st.matchError ≠ 0 || st.matchStopped = 0 then
         .error .overflow
       else
-        .ok ({ st with matchStopped := 0, matchError := 0 }, size)
+        .ok ({ st with
+                matchStopped := 0, matchError := 0
+                lastEvent := .place s.sequence 0 price size }, size)
 
 attribute [pf_inline] postBidAt
 
@@ -623,7 +627,9 @@ private def settleBuy (s : State) (acc : MatchAcc) : Except Error (State × UInt
                     quoteFree := s.quoteFree + quoteLots
                     baseLocked := s.baseLocked - makerBaseDebit
                     baseFree := s.baseFree + baseCredit
-                    unclaimedFees := s.unclaimedFees + feeLots }, acc.filledBase)
+                    unclaimedFees := s.unclaimedFees + feeLots
+                    lastEvent := .fillSummary 0 acc.filledBase quoteLots feeLots },
+                  acc.filledBase)
 
 /--
 可测试的完整 N=4 IOC：红黑树中序跨档、严格 slot/time TIF、聚合费用和余额记账。
@@ -754,7 +760,9 @@ private def settleSell (s : State) (acc : SellAcc) : Except Error (State × UInt
                   bidSizes := acc.sizes
                   quoteLocked := s.quoteLocked - quoteDebit
                   quoteFree := s.quoteFree + quoteCredit
-                  unclaimedFees := s.unclaimedFees + feeLots }, acc.filledBase)
+                  unclaimedFees := s.unclaimedFees + feeLots
+                  lastEvent := .fillSummary 0 acc.filledBase grossQuote feeLots },
+                acc.filledBase)
 
 /-- 可测试的 N=4 sell IOC 宿主语义。 -/
 def swapSellForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
@@ -785,7 +793,9 @@ private def finishFold (s : State) (quoteLots feeLots : UInt64) :
                           quoteFree := s.quoteFree + quoteLots
                           baseLocked := s.baseLocked - baseDebit
                           baseFree := s.baseFree + baseDebit
-                          unclaimedFees := s.unclaimedFees + feeLots }, s.matchFilled)
+                          unclaimedFees := s.unclaimedFees + feeLots
+                          lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots },
+                        s.matchFilled)
                 else
                   let _ := tokenTransferChecked s.matchFilled 6
                   .ok ({ s with
@@ -793,7 +803,9 @@ private def finishFold (s : State) (quoteLots feeLots : UInt64) :
                           quoteFree := s.quoteFree + quoteLots
                           baseLocked := s.baseLocked - baseDebit
                           baseFree := s.baseFree + baseDebit
-                          unclaimedFees := s.unclaimedFees + feeLots }, s.matchFilled)
+                          unclaimedFees := s.unclaimedFees + feeLots
+                          lastEvent := .fillSummary 0 s.matchFilled quoteLots feeLots },
+                        s.matchFilled)
               else .error .overflow
             else .error .overflow
           else .error .overflow
@@ -1038,13 +1050,17 @@ private def commitSellFold (s : State) (grossQuote feeLots : UInt64) :
         .ok ({ s with
                 quoteLocked := s.quoteLocked - quoteDebit
                 quoteFree := s.quoteFree + quoteCredit
-                unclaimedFees := s.unclaimedFees + feeLots }, s.matchFilled)
+                unclaimedFees := s.unclaimedFees + feeLots
+                lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots },
+              s.matchFilled)
       else
         let _ := tokenTransferChecked s.matchFilled 6
         .ok ({ s with
                 quoteLocked := s.quoteLocked - quoteDebit
                 quoteFree := s.quoteFree + quoteCredit
-                unclaimedFees := s.unclaimedFees + feeLots }, s.matchFilled)
+                unclaimedFees := s.unclaimedFees + feeLots
+                lastEvent := .fillSummary 0 s.matchFilled grossQuote feeLots },
+              s.matchFilled)
 
 private def settleSellFold (s : State) : Except Error (State × UInt64) :=
   if s.matchError ≠ 0 then .error .overflow
@@ -1151,7 +1167,8 @@ def reduceAsk (s : State) (trader price sequence qty : UInt64) :
                         baseLocked := st.baseLocked - qty
                         baseFree := st.baseFree + qty
                         matchFilled := qty
-                        matchStopped := 1 }
+                        matchStopped := 1
+                        lastEvent := .reduce sequence price qty (size - qty) }
                     else
                       st := { st with matchStopped := 1, matchError := 1 }
                   else
@@ -1164,7 +1181,8 @@ def reduceAsk (s : State) (trader price sequence qty : UInt64) :
                         baseLocked := st.baseLocked - size
                         baseFree := st.baseFree + size
                         matchFilled := size
-                        matchStopped := 1 }
+                        matchStopped := 1
+                        lastEvent := .reduce sequence price size 0 }
                     else
                       st := { st with matchStopped := 1, matchError := 1 }
                   else
@@ -1196,7 +1214,9 @@ def reduceBid (s : State) (trader price sequence qty : UInt64) :
               if st.bidTraders[j]! = trader then
                 let removed := if qty ≤ size then qty else size
                 st := unlockBidFold st j removed
-                st := { st with matchFilled := removed, matchStopped := 1 }
+                st := { st with
+                  matchFilled := removed, matchStopped := 1
+                  lastEvent := .reduce sequence price removed (size - removed) }
               else
                 st := { st with matchStopped := 1, matchError := 1 }
     if st.matchError ≠ 0 then
