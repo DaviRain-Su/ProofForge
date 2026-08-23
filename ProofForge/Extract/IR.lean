@@ -46,7 +46,7 @@ private def cmpToLegacy : Cmp → ProofForge.Ops.Cmp
   | .gt => .gt
   | .ge => .ge
 
-/-- Lossless compatibility conversion while the extractor still emits the legacy closed union. -/
+/-- Lossless upgrade for callers that still own a legacy closed-union value. -/
 partial def ofLegacyVal : ProofForge.Ops.Val → Val
   | .arg i => .arg i
   | .local i => .local i
@@ -599,7 +599,7 @@ private def methodToLegacy (schema : Core.Schema) (method : Method) :
     evaluation
   }
 
-/-- Downgrade only at an unported backend boundary; malformed target operands fail explicitly. -/
+/-- Downgrade only at a compatibility boundary; malformed target operands fail explicitly. -/
 def toLegacyProgram (program : Program) : Except String Legacy.Program := do
   return {
     name := program.name

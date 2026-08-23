@@ -1,7 +1,6 @@
 import Lean
 import ProofForge.Extract.LegacyIR
-import ProofForge.Extract.IR
-import ProofForge.Ops
+import ProofForge.Extract.Ops
 import ProofForge.Profile
 import ProofForge.Attr
 import ProofForge.Svm.ABI
@@ -1313,7 +1312,7 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
               | "left" => 0 | "right" => 8 | "parent" => 16
               | "color" => 24 | "key" => 32 | "value" => 40
               | _ => 0
-            Ops.Op.indexSet name idx p.2 len hint)
+            (.indexSet name idx p.2 len hint : Ops.Op))
     | (false, some idx, none, some payload) =>
       match idx with
       | .lit _ => none
@@ -1520,7 +1519,7 @@ private def asStoreFields (env : Environment) (e : Expr)
           match val env ret with
           | none => none
           | some rv =>
-            some ((leaves.map fun p => Ops.Op.storeField p.1 p.2).push (.okState rv))
+            some ((leaves.map fun p => (.storeField p.1 p.2 : Ops.Op)).push (.okState rv))
       else none
     else none
   else none
@@ -1661,11 +1660,11 @@ private def isErrorOverflow (e : Expr) : Bool :=
 /-- 每个槽一条 `returnState`。第二槽起全是 `lit 0` 时仍压成一条（旧 init）。 -/
 private def returnStatesOf (vs : Array Ops.Val) : Array Ops.Op :=
   if vs.size ≤ 1 then
-    vs.map Ops.Op.returnState
+    vs.map fun value => .returnState value
   else if vs[1:].all (fun | .lit 0 => true | _ => false) then
     #[.returnState vs[0]!]
   else
-    vs.map Ops.Op.returnState
+    vs.map fun value => .returnState value
 
 private def isRuntimeName (n : Name) (suf : String) : Bool :=
   n == (`ProofForge.Svm.Runtime).append suf.toName ||
@@ -2618,7 +2617,7 @@ private def asYieldStores (env : Environment) (e : Expr) : Option (Array Ops.Op)
   | none => none
   | some state =>
     let dynamic := collectIndexSets env state
-    let static := (flattenLeaves env "" state).map fun p => Ops.Op.storeField p.1 p.2
+    let static := (flattenLeaves env "" state).map fun p => (.storeField p.1 p.2 : Ops.Op)
     some (dynamic ++ static)
 
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
@@ -3234,7 +3233,7 @@ private def inferParamWidths (_env : Environment) (e : Expr) (kind : Core.IR.Met
   | .increment | .get => if widths.isEmpty then #[] else widths.extract 1 widths.size
 
 def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
-    Except String Legacy.Method := do
+    Except String IR.Method := do
   let some info := env.find? n
     | throw s!"extract/unsupported: unknown {n}"
   let some e := info.value?
@@ -3713,16 +3712,36 @@ private def opFields : Ops.Op → Array String
   | .returnU64 v => valFields v
   | .returnState v => valFields v
 
-private def fillElemOff (p : Legacy.Program) : Legacy.Program :=
+private def vectorLeafName (schema : Core.Schema) (name : String) (offset : Nat) : String :=
+  match schema.vector? name with
+  | none => "value"
+  | some vector => Id.run do
+      let mut current := 0
+      for leaf in schema.vectorElementLeaves vector do
+        if current == offset then return vector.relativeLeafName leaf
+        current := current + leaf.width
+      return "value"
+
+private def vectorLeafOffset (schema : Core.Schema) (name leaf : String) : Nat :=
+  match schema.vector? name with
+  | none => 0
+  | some vector => Id.run do
+      let mut offset := 0
+      for item in schema.vectorElementLeaves vector do
+        if vector.relativeLeafName item == leaf then return offset
+        offset := offset + item.width
+      return offset
+
+private def fillElemOff (p : IR.Program) : IR.Program :=
   let rec goVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
     match fuel with
     | 0 => v
     | fuel' + 1 =>
       match v with
       | .indexGet b n i k off =>
-          let leaf := Svm.ABI.vectorLeafName p n off
+          let leaf := vectorLeafName p.schema n off
           let off' :=
-            if leaf.isEmpty then off else Svm.ABI.vectorLeafOff p n leaf
+            if leaf.isEmpty then off else vectorLeafOffset p.schema n leaf
           .indexGet (goVal fuel' b) n (goVal fuel' i) k off'
       | .field b n => .field (goVal fuel' b) n
       | .select c l r t f =>
@@ -3742,9 +3761,9 @@ private def fillElemOff (p : Legacy.Program) : Legacy.Program :=
       | .joinLocal i => .joinLocal i
       | .setLocal i v => .setLocal i (goVal 8 v)
       | .indexSet n i v k off =>
-          let leaf := Svm.ABI.vectorLeafName p n off
+          let leaf := vectorLeafName p.schema n off
           let off' :=
-            if leaf.isEmpty then off else Svm.ABI.vectorLeafOff p n leaf
+            if leaf.isEmpty then off else vectorLeafOffset p.schema n leaf
           .indexSet n (goVal 8 i) (goVal 8 v) k off'
       | .ite c l r t f =>
           .ite c (goVal 8 l) (goVal 8 r) (t.map (goOp fuel')) (f.map (goOp fuel'))
@@ -3755,21 +3774,21 @@ private def fillElemOff (p : Legacy.Program) : Legacy.Program :=
   { p with methods := p.methods.map fun m => { m with ops := m.ops.map (goOp 8) } }
 
 /-- Make state writeback explicit once, after source schema and normalized Ops are both available. -/
-private def evaluateProgram (p : Legacy.Program) : Except String Legacy.Program := do
+private def evaluateProgram (p : IR.Program) : Except String IR.Program := do
   let mut methods := #[]
   for method in p.methods do
     let evaluation ←
-      match Legacy.evaluate p.schema method.ops with
+      match Core.evaluate p.schema method.ops with
       | .ok evaluation => pure evaluation
       | .error reason => throw s!"{method.ixName}: {reason}"
     methods := methods.push { method with evaluation }
   return { p with methods }
 
-private def checkUsedFields (p : Legacy.Program) : Except String Unit := do
+private def checkUsedFields (p : IR.Program) : Except String Unit := do
   for m in p.methods do
     for op in m.ops do
       for name in opFields op do
-        if (Legacy.fieldWidth p name).isNone then
+        if (Core.IR.fieldWidth p name).isNone then
           throw s!"extract/unsupported: unknown field {name}"
 
 private partial def valEscapedArg (limit : Nat) : Ops.Val → Option Nat
@@ -3818,7 +3837,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .errorOverflow | .errorNamed _ => none
 
 /-- Reject decoder binder leaks before a backend can mistake one for calldata or state. -/
-private def checkArgBounds (p : Legacy.Program) : Except String Unit := do
+private def checkArgBounds (p : IR.Program) : Except String Unit := do
   for method in p.methods do
     let limit := method.paramCount + if method.kind == .init then 0 else 1
     for op in method.ops do
@@ -3827,16 +3846,17 @@ private def checkArgBounds (p : Legacy.Program) : Except String Unit := do
           s!"(paramCount {method.paramCount})") : Except String Unit)
   return ()
 
-def extractProgram (env : Environment)
+/-- Extract three named declarations directly into the extensible source dialect. -/
+def extractProgramIR (env : Environment)
     (initName incrementName getName : Name)
     (programName : Option String := none)
     (fields? : Option (Array String) := none) :
-    Except String Legacy.Program := do
+    Except String IR.Program := do
   match Profile.checkAll env #[initName, incrementName, getName] with
   | .reject reason => throw reason
   | .accept => pure ()
   let schema ← inferSchema env initName
-  let inferred := Legacy.slotsOfSchema schema
+  let inferred := Core.IR.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
@@ -3846,15 +3866,15 @@ def extractProgram (env : Environment)
   let initM ← extractMethod env .init initName
   let incM ← extractMethod env .increment incrementName
   let getM ← extractMethod env .get getName
-  let program : Legacy.Program := {
+  let program : IR.Program := {
     name := programName.getD (programNameOfInit initName)
     slots
     schema
     methods := #[initM, incM, getM]
   }
-  unless Legacy.isProgramShape program do
+  unless Core.IR.isProgramShape program do
     throw "extract/unsupported: not three-method shape"
-  unless Legacy.schemaMatchesSlots program do
+  unless Core.IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
   checkArgBounds program
@@ -3862,17 +3882,17 @@ def extractProgram (env : Environment)
   checkUsedFields program
   return program
 
-def extractCounter := extractProgram
+def extractCounterIR := extractProgramIR
 
-/-- Public extensible source IR; the legacy closed union is now only an internal decoder stage. -/
-def extractProgramIR (env : Environment)
+/-- Compatibility adapter for callers that still consume the old closed-union program. -/
+def extractProgram (env : Environment)
     (initName incrementName getName : Name)
     (programName : Option String := none)
     (fields? : Option (Array String) := none) :
-    Except String IR.Program := do
-  IR.ofLegacyProgram (← extractProgram env initName incrementName getName programName fields?)
+    Except String Legacy.Program := do
+  IR.toLegacyProgram (← extractProgramIR env initName incrementName getName programName fields?)
 
-def extractCounterIR := extractProgramIR
+def extractCounter := extractProgram
 
 private def isExceptType (e : Expr) : Bool :=
   e.consumeMData.getAppFn.constName? == some ``Except
@@ -3898,10 +3918,10 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
 private def sortNames (ns : Array Name) : Array Name :=
   ns.qsort (·.toString < ·.toString)
 
-/-- 收同一名字空间下 `@[pf_entry]` 的根。须恰好一个 init、至少一个 mutate、至少一个 view。 -/
-def extractModule (env : Environment) (ns : Name)
+/-- 收同一名字空间下 `@[pf_entry]` 的根，直接生成 extensible IR。 -/
+def extractModuleIR (env : Environment) (ns : Name)
     (fields? : Option (Array String) := none) :
-    Except String Legacy.Program := do
+    Except String IR.Program := do
   let tagged := sortNames (Attr.entriesIn env ns)
   if tagged.isEmpty then
     throw "extract/unsupported: no pf_entry"
@@ -3927,14 +3947,14 @@ def extractModule (env : Environment) (ns : Name)
     | some n => n
     | none => inits[0]!
   let schema ← inferSchema env initName
-  let inferred := Legacy.slotsOfSchema schema
+  let inferred := Core.IR.slotsOfSchema schema
   let slots ←
     match fields? with
     | none => pure inferred
     | some fs =>
       if fs == inferred.map (·.name) then pure inferred
       else throw s!"extract/unsupported: fields {fs} != inferred {inferred.map (·.name)}"
-  let mut methods : Array Legacy.Method := #[]
+  let mut methods : Array IR.Method := #[]
   let mut seen : Array String := #[]
   for n in inits do
     let m ← extractMethod env .init n
@@ -3954,15 +3974,15 @@ def extractModule (env : Environment) (ns : Name)
       throw s!"extract/unsupported: duplicate ixName {m.ixName}"
     seen := seen.push m.ixName
     methods := methods.push m
-  let program : Legacy.Program := {
+  let program : IR.Program := {
     name := programNameOfInit initName
     slots
     schema
     methods
   }
-  unless Legacy.isProgramShape program do
+  unless Core.IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
-  unless Legacy.schemaMatchesSlots program do
+  unless Core.IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
   let program := fillElemOff program
   checkArgBounds program
@@ -3970,10 +3990,10 @@ def extractModule (env : Environment) (ns : Name)
   checkUsedFields program
   return program
 
-/-- Extract a module into the extensible source dialect consumed by new target lowerings. -/
-def extractModuleIR (env : Environment) (ns : Name)
+/-- Compatibility adapter for callers that still consume the old closed-union program. -/
+def extractModule (env : Environment) (ns : Name)
     (fields? : Option (Array String) := none) :
-    Except String IR.Program := do
-  IR.ofLegacyProgram (← extractModule env ns fields?)
+    Except String Legacy.Program := do
+  IR.toLegacyProgram (← extractModuleIR env ns fields?)
 
 end ProofForge.Extract
