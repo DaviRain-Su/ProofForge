@@ -1,11 +1,14 @@
 import ProofForge.Ops
+import ProofForge.Core.Ops
 import ProofForge.Core.Schema
 import ProofForge.Core.Eval
 import ProofForge.Core.IR
 import ProofForge.Crypto.Sha256
 import ProofForge.Crypto.Keccak
 import ProofForge.Sha256
+import ProofForge.Svm.Ops
 import ProofForge.Svm.Runtime
+import ProofForge.Evm.Ops
 import ProofForge.Evm.Runtime
 import ProofForge.Golden
 import ProofForge.Attr

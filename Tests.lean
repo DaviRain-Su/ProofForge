@@ -59,3 +59,4 @@ import Tests.IdlSpec
 import Tests.DumpIncrement
 import Tests.NormalizationSpec
 import Tests.SolanalibSpec
+import Tests.TargetOpsSpec
