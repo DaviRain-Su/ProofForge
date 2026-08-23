@@ -21,13 +21,17 @@ Lean 4.31.0。上游无 encoder / textual assembler，因此这里直接生成
   `mov64 r4,r1; op64 r4,r2`。当前 emitter 使用 classic `alu64 mul/div/mod`，所以该 fragment
   明确选择 Solanalib `.v1`；`checkedArithBody_verified` 证明五种 body 都通过上游 instruction
   verifier，`evalCheckedAdd` 证明 typed add fragment 的结果就是上游 64-bit word addition。
+- `checkedArithGuard`：物化当前 emitter 的五种 source success condition；add/sub/mul 排除
+  wrap，div/mod 排除零除数。
 - `checkedWriteFragment?`：从实际 `Core.StateWrite` 取 checked kind，从实际 `Svm.IR.Program`
   取 typed physical destination，合成一个 bounded compute+store fragment。
-- `evalCheckedArithBody` / `evalStaticStore?` 直接调用上游 ALU / memory semantics。测试固定
-  正常 add/sub、machine wrap、64-bit store/load round trip，以及 invalid width/offset fail closed。
+- `evalCheckedArithBody` / `evalStaticStore?` / `evalCheckedWrite?` 直接调用上游 ALU / memory
+  semantics。`checkedAddWrite_simulates` 证明 Counter 真实 value slot 上，source add guard 成功时，
+  typed ALU+store 把精确和交给上游 `storev`。测试固定正常 add/sub、machine wrap、64-bit
+  store/load round trip，以及 invalid width/offset fail closed。
 
-这个实验刻意没有把 source checked guard 塞进 `checkedArithBody`：Solanalib 的 `BitVec 64`
-正确暴露 wrap（`u64Max + 1 = 0`），ProofForge 必须另证前置 guard 保证成功路径不 wrap。
+guard 与 body 仍刻意分层：Solanalib 的 `BitVec 64` 正确暴露 wrap（`u64Max + 1 = 0`），
+`evalCheckedWrite?` 只在 source guard 成功后执行 typed body 和 store。
 
 ## Non-goals / remaining trust boundary
 
@@ -41,8 +45,8 @@ Solanalib 当前没有为本仓提供：
 - high-level `Account` / `Instruction` 到 SBPF memory 的 refinement；
 - 完整 Agave verifier（上游 verifier 只覆盖 instruction-level version/divisor 条件）。
 
-因此下一步若继续，不应扩大 Extract 语法；应先补“checked guard + typed body + typed store”的
-一个 simulation theorem，再决定是否为现有 textual emitter 做同一小子集的 correspondence。
+因此下一步若继续，不应扩大 Extract 语法；应先为现有 textual emitter 做同一小子集的
+control-flow / instruction correspondence，再扩大 typed bridge。
 
 ## Tests
 

@@ -26,6 +26,18 @@ private def valueSlot : ProofForge.Svm.IR.Slot := {
   | .oks regs => evalReg .br4 regs == 2
   | _ => false
 
+#guard checkedArithGuard .add 7 5
+#guard !checkedArithGuard .add u64Max 1
+#guard checkedArithGuard .sub 7 5
+#guard !checkedArithGuard .sub 5 7
+#guard checkedArithGuard .mul 7 5
+#guard checkedArithGuard .mul u64Max 0
+#guard !checkedArithGuard .mul u64Max 2
+#guard checkedArithGuard .div 7 5
+#guard !checkedArithGuard .div 7 0
+#guard checkedArithGuard .mod 7 5
+#guard !checkedArithGuard .mod 7 0
+
 -- Solanalib exposes the machine wrap; ProofForge's preceding checked guard must exclude it.
 #guard
   match evalCheckedArithBody .add u64Max 1 with
@@ -41,6 +53,14 @@ private def valueSlot : ProofForge.Svm.IR.Slot := {
       loadv .m64 memory (mmInputStart + 104) ==
         some (.vlong 0x0123456789abcdef)
   | none => false
+
+#guard
+  match evalCheckedWrite? valueSlot .add 7 5 initMem with
+  | some memory =>
+      loadv .m64 memory (mmInputStart + 104) == some (.vlong 12)
+  | none => false
+
+#guard (evalCheckedWrite? valueSlot .add u64Max 1 initMem).isNone
 
 #guard (staticStoreInstruction? { valueSlot with width := 3 }).isNone
 

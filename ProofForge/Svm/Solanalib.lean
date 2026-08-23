@@ -43,6 +43,14 @@ def arithBinop : Core.CheckedArith → Binop
   | .div => .div
   | .mod => .mod
 
+/-- The source-level success condition emitted before each classic v1 arithmetic operation. -/
+def checkedArithGuard : Core.CheckedArith → U64 → U64 → Bool
+  | .add, lhs, rhs => lhs.ule (u64Max - rhs)
+  | .sub, lhs, rhs => rhs.ule lhs
+  | .mul, lhs, rhs => rhs == 0 || lhs.ule (u64Max / rhs)
+  | .div, _, rhs => rhs != 0
+  | .mod, _, rhs => rhs != 0
+
 /-- The two typed ALU instructions corresponding to `mov64 r4, r1; op64 r4, r2`. -/
 def checkedArithBody (kind : Core.CheckedArith) : EbpfAsm :=
   [.alu64 .mov .br4 (.reg .br1), .alu64 (arithBinop kind) .br4 (.reg .br2)]
@@ -90,6 +98,37 @@ theorem evalCheckedAdd (lhs rhs : U64) :
     evalAlu64, sndOp64, arithInputRegs, setReg]
   funext reg
   by_cases h : reg = .br4 <;> simp [setReg, h]
+
+/--
+Execute the bounded source guard, typed ALU body, and typed static store as one fragment.
+`r6` is the Loader input base and the result in `r4` is the store source.
+-/
+def evalCheckedWrite? (slot : IR.Slot) (kind : Core.CheckedArith) (lhs rhs : U64)
+    (memory : Mem) : Option Mem := do
+  if !checkedArithGuard kind lhs rhs then none
+  let input := setReg (arithInputRegs lhs rhs) .br6 mmInputStart
+  let regs ←
+    match evalAluBody (checkedArithBody kind) input with
+    | .oks regs => some regs
+    | .nok | .okn => none
+  let instruction ← staticStoreInstruction? slot .br4
+  match instruction with
+  | .st chunk dst src offset => evalStore chunk dst src offset regs memory
+  | _ => none
+
+/--
+End-to-end bounded simulation for Counter's real value slot: when the source add guard
+succeeds, Solanalib's typed ALU+store semantics writes exactly the checked sum.
+-/
+theorem checkedAddWrite_simulates (lhs rhs : U64)
+    (hguard : checkedArithGuard .add lhs rhs = true) :
+    evalCheckedWrite?
+      { name := "value", offset := 8, width := 8, abi := "u64-le" }
+      .add lhs rhs initMem =
+    storev .m64 initMem (mmInputStart + 104) (.vlong (lhs + rhs)) := by
+  simp [evalCheckedWrite?, hguard, checkedArithBody, arithBinop, evalAluBody,
+    evalAlu64, sndOp64, arithInputRegs, staticStoreInstruction?, memoryChunk?,
+    positiveOffset?, evalStore, memoryChunkValueOfU64, setReg, ProofForge.IR.acc0Data]
 
 /-- Execute one typed static-store instruction through Solanalib's memory semantics. -/
 def evalStaticStore? (slot : IR.Slot) (regs : RegMap) (memory : Mem) : Option Mem := do
