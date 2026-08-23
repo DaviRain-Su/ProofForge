@@ -9,8 +9,12 @@ open Lean Elab Command
 
 elab "#pf_guard_phoenix_artifact" : command => do
   let env ← getEnv
+  let source ←
+    match ProofForge.Extract.extractModuleIR env `Projects.Phoenix none with
+    | .ok program => pure program
+    | .error reason => throwError reason
   let program ←
-    match ProofForge.Extract.extractModule env `Projects.Phoenix none with
+    match ProofForge.Extract.IR.toLegacyProgram source with
     | .ok program => pure program
     | .error reason => throwError reason
   let asm ←

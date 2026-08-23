@@ -1,5 +1,6 @@
 import Lean
 import ProofForge.Extract.LegacyIR
+import ProofForge.Extract.IR
 import ProofForge.Ops
 import ProofForge.Profile
 import ProofForge.Attr
@@ -3863,6 +3864,16 @@ def extractProgram (env : Environment)
 
 def extractCounter := extractProgram
 
+/-- Public extensible source IR; the legacy closed union is now only an internal decoder stage. -/
+def extractProgramIR (env : Environment)
+    (initName incrementName getName : Name)
+    (programName : Option String := none)
+    (fields? : Option (Array String) := none) :
+    Except String IR.Program := do
+  IR.ofLegacyProgram (← extractProgram env initName incrementName getName programName fields?)
+
+def extractCounterIR := extractProgramIR
+
 private def isExceptType (e : Expr) : Bool :=
   e.consumeMData.getAppFn.constName? == some ``Except
 
@@ -3958,5 +3969,11 @@ def extractModule (env : Environment) (ns : Name)
   let program ← evaluateProgram program
   checkUsedFields program
   return program
+
+/-- Extract a module into the extensible source dialect consumed by new target lowerings. -/
+def extractModuleIR (env : Environment) (ns : Name)
+    (fields? : Option (Array String) := none) :
+    Except String IR.Program := do
+  IR.ofLegacyProgram (← extractModule env ns fields?)
 
 end ProofForge.Extract

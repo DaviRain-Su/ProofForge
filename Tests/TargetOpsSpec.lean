@@ -47,6 +47,11 @@ private def legacyOpsRoundTrip (ops : Array ProofForge.Ops.Op) : Bool :=
 #guard ProofForge.Golden.programs.all fun program =>
   program.methods.all fun method => legacyOpsRoundTrip method.ops
 
+#guard ProofForge.Golden.programs.all fun program =>
+  match ProofForge.Extract.IR.ofLegacyProgram program >>= ProofForge.Extract.IR.toLegacyProgram with
+  | .ok restored => restored == program
+  | .error _ => false
+
 private def coreSchema : ProofForge.Core.Schema :=
   { rootType := "CoreCounter.State"
     leaves := #[{

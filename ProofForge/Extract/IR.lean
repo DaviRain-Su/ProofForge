@@ -1,6 +1,7 @@
 import ProofForge.Ops
 import ProofForge.Core.Ops
 import ProofForge.Core.IR
+import ProofForge.Extract.LegacyIR
 import ProofForge.Svm.Ops
 import ProofForge.Evm.Ops
 
@@ -371,5 +372,67 @@ def OpExt.wellFormed : OpExt Val → Bool
 
 def Op.wellFormed (op : Op) : Bool :=
   Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op
+
+private def slotOfLegacy (slot : Legacy.Slot) : Core.IR.Slot :=
+  { name := slot.name, width := slot.width, abi := slot.abi }
+
+private def slotToLegacy (slot : Core.IR.Slot) : Legacy.Slot :=
+  { name := slot.name, width := slot.width, abi := slot.abi }
+
+private def methodOfLegacy (schema : Core.Schema) (method : Legacy.Method) :
+    Except String Method := do
+  let ops := ofLegacyOps method.ops
+  unless ops.all Op.wellFormed do
+    throw s!"extract/ir: malformed target extension in {method.ixName}"
+  let evaluation ←
+    if schema.isEmpty then pure {}
+    else Core.evaluate schema ops
+  return {
+    kind := method.kind
+    name := method.name
+    ixName := method.ixName
+    paramCount := method.paramCount
+    paramWidths := method.paramWidths
+    retCount := method.retCount
+    sketch := method.sketch
+    ops
+    evaluation
+  }
+
+/-- Upgrade the complete compatibility program at the extractor boundary. -/
+def ofLegacyProgram (program : Legacy.Program) : Except String Program := do
+  return {
+    name := program.name
+    slots := program.slots.map slotOfLegacy
+    schema := program.schema
+    methods := ← program.methods.mapM (methodOfLegacy program.schema)
+  }
+
+private def methodToLegacy (schema : Core.Schema) (method : Method) :
+    Except String Legacy.Method := do
+  let ops ← toLegacyOps method.ops
+  let evaluation ←
+    if schema.isEmpty then pure {}
+    else Legacy.evaluate schema ops
+  return {
+    kind := method.kind
+    name := method.name
+    ixName := method.ixName
+    paramCount := method.paramCount
+    paramWidths := method.paramWidths
+    retCount := method.retCount
+    sketch := method.sketch
+    ops
+    evaluation
+  }
+
+/-- Downgrade only at an unported backend boundary; malformed target operands fail explicitly. -/
+def toLegacyProgram (program : Program) : Except String Legacy.Program := do
+  return {
+    name := program.name
+    slots := program.slots.map slotToLegacy
+    schema := program.schema
+    methods := ← program.methods.mapM (methodToLegacy program.schema)
+  }
 
 end ProofForge.Extract.IR
