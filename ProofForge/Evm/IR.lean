@@ -1,5 +1,5 @@
-import ProofForge.Extract.LegacyIR
-import ProofForge.Ops
+import ProofForge.Extract.IR
+import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 
 namespace ProofForge.Evm.IR
@@ -50,29 +50,30 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .checkedModU64 lhs rhs => pure (.checkedModU64 lhs rhs)
   | .ite cmp lhs rhs thn els =>
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
-  | .evmDeposit amount => pure (.evmDeposit amount)
-  | .evmSendEth w0 w1 w2 amount => pure (.evmSendEth w0 w1 w2 amount)
-  | .evmLog name amount => pure (.evmLog name amount)
   | .forAccum n addend => pure (.forAccum n addend)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSet name idx value len elemOff => pure (.indexSet name idx value len elemOff)
-  | .mapGetU64 base key => pure (.mapGetU64 base key)
-  | .mapSetU64 base key value => pure (.mapSetU64 base key value)
-  | .mapGetAddr base w0 w1 w2 => pure (.mapGetAddr base w0 w1 w2)
-  | .mapSetAddr base w0 w1 w2 value => pure (.mapSetAddr base w0 w1 w2 value)
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 => pure (.mapGetPair base o0 o1 o2 s0 s1 s2)
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      pure (.mapSetPair base o0 o1 o2 s0 s1 s2 value)
-  | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-      pure (.evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
-  | .evmTokenBalanceOfSelf tw0 tw1 tw2 => pure (.evmTokenBalanceOfSelf tw0 tw1 tw2)
   | .storeField name value => pure (.storeField name value)
   | .okState value => pure (.okState value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
   | .returnU64 value => pure (.returnU64 value)
   | .returnState value => pure (.returnState value)
-  | .invoke .. => throw "extract/unsupported: evm rejects svm leaf"
+  | .ext (.deposit amount) => pure (.evmDeposit amount)
+  | .ext (.sendEth w0 w1 w2 amount) => pure (.evmSendEth w0 w1 w2 amount)
+  | .ext (.log name amount) => pure (.evmLog name amount)
+  | .ext (.mapGetU64 base key) => pure (.mapGetU64 base key)
+  | .ext (.mapSetU64 base key value) => pure (.mapSetU64 base key value)
+  | .ext (.mapGetAddr base w0 w1 w2) => pure (.mapGetAddr base w0 w1 w2)
+  | .ext (.mapSetAddr base w0 w1 w2 value) => pure (.mapSetAddr base w0 w1 w2 value)
+  | .ext (.mapGetPair base o0 o1 o2 s0 s1 s2) =>
+      pure (.mapGetPair base o0 o1 o2 s0 s1 s2)
+  | .ext (.mapSetPair base o0 o1 o2 s0 s1 s2 value) =>
+      pure (.mapSetPair base o0 o1 o2 s0 s1 s2 value)
+  | .ext (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount) =>
+      pure (.evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
+  | .ext (.tokenBalanceOfSelf tw0 tw1 tw2) =>
+      pure (.evmTokenBalanceOfSelf tw0 tw1 tw2)
 
 where
   lowerOps (ops : Array Ops.Op) : Except String (Array Op) :=
@@ -141,7 +142,7 @@ structure Method where
   paramWidths : Array Nat := #[]
   retCount : Nat := 1
   ops : Array Op := #[]
-  evaluation : Extract.Legacy.Evaluation := {}
+  evaluation : Core.Evaluation Ops.ValKind := {}
   view : Bool := false
   payable : Bool := false
   deriving BEq, Repr, Inhabited
@@ -220,92 +221,15 @@ def vectorLeafSlotOffset (p : Program) (name : String) (byteOffset : Nat) : Nat 
         |>.getD vector.leaves.size
   | none => byteOffset / 8
 
-private def valForbidden : Ops.Val → Bool
-  | .clockSlot | .clockEpoch | .slotsPerEpoch | .signerKey0
-  | .accLamports0 | .accOwner0 | .accDataLen0 | .accN
-  | .isSigner0 | .isWritable0 | .isExecutable0
-  | .accLamports1 | .accOwner1 | .accDataLen1
-  | .isSigner1 | .isWritable1 | .isExecutable1
-  | .findPda _ | .checkPda .. | .rentExemption _ | .cpiReturn
-  | .sha256Lit _ | .keccak256Lit _ | .accKeyWord .. | .accOwnerWord .. => true
-  | .unixTime | .accLamportsN _ | .accDataLenN _ | .isSignerN _
-  | .isWritableN _ | .isExecutableN _ | .signerKeyN _ | .ownerIsSelf _ => true
-  | .field b _ => valForbidden b
-  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
-      valForbidden l || valForbidden r
-  | .bitNot v => valForbidden v
-  | .indexGet b _ i _ => valForbidden b || valForbidden i
-  | .select _ l r t f =>
-      valForbidden l || valForbidden r || valForbidden t || valForbidden f
-  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r
-  | .mapGetU64 l r => valForbidden l || valForbidden r
-  | .mapGetAddr a b c d =>
-      valForbidden a || valForbidden b || valForbidden c || valForbidden d
-  | .mapGetPair a b c d e f g =>
-      valForbidden a || valForbidden b || valForbidden c || valForbidden d ||
-        valForbidden e || valForbidden f || valForbidden g
-  | _ => false
-
-private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
-  match fuel with
-  | 0 => true
-  | fuel' + 1 =>
-    ops.any fun
-      | .invoke .. => true
-      | .letLocal _ v => valForbidden v
-      | .joinLocal _ => false
-      | .setLocal _ v => valForbidden v
-      | .checkedAddU64 l r => valForbidden l || valForbidden r
-      | .checkedSubU64 l r => valForbidden l || valForbidden r
-      | .checkedMulU64 l r => valForbidden l || valForbidden r
-      | .checkedDivU64 l r => valForbidden l || valForbidden r
-      | .checkedModU64 l r => valForbidden l || valForbidden r
-      | .ite _ l r t f =>
-          valForbidden l || valForbidden r ||
-            walkForbidden fuel' t || walkForbidden fuel' f
-      | .storeField _ v => valForbidden v
-      | .okState v => valForbidden v
-      | .returnU64 v => valForbidden v
-      | .returnState v => valForbidden v
-      | .evmDeposit v => valForbidden v
-      | .evmSendEth a b c d =>
-          valForbidden a || valForbidden b || valForbidden c || valForbidden d
-      | .evmLog _ v => valForbidden v
-      | .forAccum _ v => valForbidden v
-      | .forBody _ body => walkForbidden fuel' body
-      | .indexSet _ i v _ _ => valForbidden i || valForbidden v
-      | .mapGetU64 a b => valForbidden a || valForbidden b
-      | .mapSetU64 a b c => valForbidden a || valForbidden b || valForbidden c
-      | .mapGetAddr a b c d =>
-          valForbidden a || valForbidden b || valForbidden c || valForbidden d
-      | .mapSetAddr a b c d e =>
-          valForbidden a || valForbidden b || valForbidden c ||
-            valForbidden d || valForbidden e
-      | .mapGetPair a b c d e f g =>
-          valForbidden a || valForbidden b || valForbidden c || valForbidden d ||
-            valForbidden e || valForbidden f || valForbidden g
-      | .mapSetPair a b c d e f g h =>
-          valForbidden a || valForbidden b || valForbidden c || valForbidden d ||
-            valForbidden e || valForbidden f || valForbidden g || valForbidden h
-      | .evmTokenTransfer a b c d e f g =>
-          valForbidden a || valForbidden b || valForbidden c || valForbidden d ||
-            valForbidden e || valForbidden f || valForbidden g
-      | .evmTokenBalanceOfSelf a b c =>
-          valForbidden a || valForbidden b || valForbidden c
-      | .errorOverflow | .errorNamed _ => false
-
-def hasSvmLeaf (ops : Array Ops.Op) : Bool :=
-  walkForbidden 16 ops
-
-private def rejectSlot (s : Extract.Legacy.Slot) : Option String :=
-  if !(s.width == 1 || s.width == 2 || s.width == 4 || s.width == 8) then
-    some s!"extract/unsupported: evm slot {s.name} width {s.width}"
+private def rejectSlot (slot : Core.IR.Slot) : Option String :=
+  if !(slot.width == 1 || slot.width == 2 || slot.width == 4 || slot.width == 8) then
+    some s!"extract/unsupported: evm slot {slot.name} width {slot.width}"
   else none
 
-private def isCtor (m : Extract.Legacy.Method) : Bool :=
-  m.kind == .init
+private def isCtor (method : Extract.IR.Method) : Bool :=
+  method.kind == .init
 
-private def lowerVectors (src : Extract.Legacy.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Extract.IR.Program) (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseSlot ← src.schema.vectorBaseLeafIndex? vector
     let _ ← slots[baseSlot]?
@@ -328,22 +252,31 @@ private def lowerVectors (src : Extract.Legacy.Program) (slots : Array Slot) : A
       leaves
     }
 
-/-- 从已抽出的 SVM `IR.Program` 做成 EVM 形状。不改原 IR。 -/
-def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
+private def lowerMethodBody (schema : Core.Schema) (method : Extract.IR.Method) :
+    Except String (Array Op × Core.Evaluation Ops.ValKind) := do
+  let sourceOps ← Extract.IR.toEvmOps method.ops
+  unless sourceOps.all Ops.Op.wellFormed do
+    throw s!"extract/ir: malformed EVM Ops in {method.ixName}"
+  let evaluation ←
+    if schema.isEmpty then pure {}
+    else Core.evaluate schema sourceOps
+  return (← ofSourceOps sourceOps, evaluation)
+
+/-- Project the combined extractor dialect and lower it into an EVM-owned physical program. -/
+def fromExtracted (src : Extract.IR.Program) : Except String Program := do
+  src.validateEvm
   if src.slots.isEmpty then
     throw "extract/unsupported: evm program has no slots"
-  for s in src.slots do
-    if let some reason := rejectSlot s then
+  for slot in src.slots do
+    if let some reason := rejectSlot slot then
       throw reason
-  let mut ctors : Array Extract.Legacy.Method := #[]
-  let mut extras : Array Extract.Legacy.Method := #[]
-  for m in src.methods do
-    if hasSvmLeaf m.ops then
-      throw s!"extract/unsupported: evm rejects svm leaf in {m.ixName}"
-    if isCtor m then
-      ctors := ctors.push m
+  let mut ctors : Array Extract.IR.Method := #[]
+  let mut extras : Array Extract.IR.Method := #[]
+  for method in src.methods do
+    if isCtor method then
+      ctors := ctors.push method
     else
-      extras := extras.push m
+      extras := extras.push method
   if ctors.isEmpty then
     throw "extract/unsupported: evm wants a constructor"
   let ctorSrc :=
@@ -359,7 +292,7 @@ def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
     throw "extract/unsupported: init missing returnState"
   unless ctorSrc.ops.any (fun | .returnState _ => true | _ => false) do
     throw "extract/unsupported: init missing returnState"
-  let ctorOps ← ofSourceOps ctorSrc.ops
+  let (ctorOps, ctorEvaluation) ← lowerMethodBody src.schema ctorSrc
   let ctor : Method := {
     kind := ctorSrc.kind
     name := ctorSrc.name
@@ -369,7 +302,7 @@ def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
     paramWidths := ctorSrc.paramWidths
     retCount := 1
     ops := ctorOps
-    evaluation := ctorSrc.evaluation
+    evaluation := ctorEvaluation
     view := false
     payable := false
   }
@@ -382,7 +315,7 @@ def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
       else Array.replicate m.paramCount 8
     let sel := Keccak.selectorOfWidths m.ixName widths
     let view := m.kind == .get
-    let ops ← ofSourceOps m.ops
+    let (ops, evaluation) ← lowerMethodBody src.schema m
     entries := entries.push {
       kind := m.kind
       name := m.name
@@ -392,7 +325,7 @@ def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
       paramWidths := widths
       retCount := m.retCount
       ops
-      evaluation := m.evaluation
+      evaluation
       view
       payable := !view && hasEvmDeposit ops
     }
@@ -407,53 +340,36 @@ def fromProgram (src : Extract.Legacy.Program) : Except String Program := do
     entries
   }
 
+/-- Compatibility adapter for callers that still own the old closed-union program. -/
+def fromProgram (src : Extract.Legacy.Program) : Except String Program :=
+  Extract.IR.ofLegacyProgram src >>= fromExtracted
+
 private def cmpTag : Ops.Cmp → String
   | .eq => "eq" | .ne => "ne" | .lt => "lt"
   | .le => "le" | .gt => "gt" | .ge => "ge"
 
-private def valCanon : Ops.Val → String
+/-- Preserve the old closed-union spelling in canonical digests during the IR migration. -/
+private def legacyCmpRepr (cmp : Ops.Cmp) : String :=
+  "ProofForge.Ops.Cmp." ++ cmpTag cmp
+
+private partial def valCanon : Ops.Val → String
   | .arg i => s!"a{i}"
   | .local i => s!"v{i}"
   | .lit n => s!"l{n.toNat}"
   | .field b n => s!"f.{n}({valCanon b})"
-  | .clockSlot => "clk"
-  | .clockEpoch => "epo"
-  | .slotsPerEpoch => "spe"
-  | .signerKey0 => "k0"
-  | .accLamports0 => "lp0"
-  | .accOwner0 => "ow0"
-  | .accDataLen0 => "dl0"
-  | .accN => "nacc"
-  | .isSigner0 => "sg0"
-  | .isWritable0 => "wr0"
-  | .isExecutable0 => "ex0"
-  | .accLamports1 => "lp1"
-  | .accOwner1 => "ow1"
-  | .accDataLen1 => "dl1"
-  | .isSigner1 => "sg1"
-  | .isWritable1 => "wr1"
-  | .isExecutable1 => "ex1"
-  | .findPda s => s!"pda.{s}"
-  | .checkPda s b => s!"chk.{s}:{valCanon b}"
-  | .rentExemption n => s!"rent.{n.toNat}"
-  | .cpiReturn => "cret"
-  | .sha256Lit s => s!"sha.{s}"
-  | .keccak256Lit s => s!"kec.{s}"
-  | .accKeyWord a w => s!"kw.{a}.{w}"
-  | .accOwnerWord a w => s!"ow.{a}.{w}"
-  | .evmCaller => "ecall"
-  | .evmBlockNumber => "eblk"
-  | .evmTimestamp => "ets"
-  | .evmChainId => "echain"
-  | .evmSelf => "eself"
-  | .evmCallValue => "eval"
-  | .evmSelfBalance => "ebal"
-  | .evmCallerW0 => "ecw0"
-  | .evmCallerW1 => "ecw1"
-  | .evmCallerW2 => "ecw2"
-  | .evmSelfW0 => "esw0"
-  | .evmSelfW1 => "esw1"
-  | .evmSelfW2 => "esw2"
+  | .ext .caller #[] => "ecall"
+  | .ext .blockNumber #[] => "eblk"
+  | .ext .timestamp #[] => "ets"
+  | .ext .chainId #[] => "echain"
+  | .ext .self #[] => "eself"
+  | .ext .callValue #[] => "eval"
+  | .ext .selfBalance #[] => "ebal"
+  | .ext .callerW0 #[] => "ecw0"
+  | .ext .callerW1 #[] => "ecw1"
+  | .ext .callerW2 #[] => "ecw2"
+  | .ext .selfW0 #[] => "esw0"
+  | .ext .selfW1 #[] => "esw1"
+  | .ext .selfW2 #[] => "esw2"
   | .bitAnd l r => s!"and({valCanon l},{valCanon r})"
   | .bitOr l r => s!"or({valCanon l},{valCanon r})"
   | .bitXor l r => s!"xor({valCanon l},{valCanon r})"
@@ -465,25 +381,19 @@ private def valCanon : Ops.Val → String
       else s!"idx.{n}+{off}[{valCanon i}/{k}]({valCanon b})"
   | .loopIx => "ix"
   | .select c l r t f =>
-      s!"sel.{repr c}({valCanon l},{valCanon r},{valCanon t},{valCanon f})"
-  | .unixTime => "unix"
-  | .accLamportsN a => s!"lpN.{a}"
-  | .accDataLenN a => s!"dlN.{a}"
-  | .isSignerN a => s!"sgN.{a}"
-  | .isWritableN a => s!"wrN.{a}"
-  | .isExecutableN a => s!"exN.{a}"
-  | .signerKeyN a => s!"sk.{a}"
-  | .ownerIsSelf a => s!"ois.{a}"
+      s!"sel.{legacyCmpRepr c}({valCanon l},{valCanon r},{valCanon t},{valCanon f})"
   | .addU64 l r => s!"uadd({valCanon l},{valCanon r})"
   | .subU64 l r => s!"usub({valCanon l},{valCanon r})"
   | .mulU64 l r => s!"umul({valCanon l},{valCanon r})"
   | .divU64 l r => s!"udiv({valCanon l},{valCanon r})"
   | .modU64 l r => s!"umod({valCanon l},{valCanon r})"
-  | .mapGetU64 b k => s!"vg({valCanon b},{valCanon k})"
-  | .mapGetAddr b a0 a1 a2 =>
+  | .ext .mapGetU64 #[b, k] => s!"vg({valCanon b},{valCanon k})"
+  | .ext .mapGetAddr #[b, a0, a1, a2] =>
       s!"vga({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"
-  | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+  | .ext .mapGetPair #[b, a0, a1, a2, c0, c1, c2] =>
       s!"vgp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2})"
+  | .ext kind operands =>
+      s!"ext.{repr kind}({String.intercalate "," (operands.map valCanon).toList})"
 
 private partial def opsCanon (ops : Array Op) : String :=
   let rec one (op : Op) : String :=

@@ -25,6 +25,7 @@ def ValKind.arity : ValKind → Nat
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
+abbrev Cmp := ProofForge.Core.Ops.Cmp
 
 /-- EVM-only source effects. -/
 inductive OpExt (V : Type) where

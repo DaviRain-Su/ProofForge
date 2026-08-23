@@ -1,4 +1,4 @@
-import ProofForge.Ops
+import ProofForge.Evm.Ops
 import ProofForge.Evm.IR
 import ProofForge.Crypto.Keccak
 
@@ -129,30 +129,19 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       let slot ← slotOf p name
       let w := (IR.slotWidth p name).getD 8
       return maskExpr w s!"sload({slot})"
-  | .clockSlot => .error "extract/unsupported: evm rejects clockSlot"
-  | .signerKey0 => .error "extract/unsupported: evm rejects signerKey0"
-  | .clockEpoch | .slotsPerEpoch | .accLamports0 | .accOwner0 | .accDataLen0
-  | .accN | .isSigner0 | .isWritable0 | .isExecutable0
-  | .accLamports1 | .accOwner1 | .accDataLen1
-  | .isSigner1 | .isWritable1 | .isExecutable1
-  | .findPda _ | .checkPda .. | .rentExemption _ | .cpiReturn
-  | .sha256Lit _ | .keccak256Lit _ | .accKeyWord .. | .accOwnerWord ..
-  | .unixTime | .accLamportsN _ | .accDataLenN _ | .isSignerN _
-  | .isWritableN _ | .isExecutableN _ | .signerKeyN _ | .ownerIsSelf _ =>
-      .error "extract/unsupported: evm rejects svm leaf"
-  | .evmCaller => .ok "and(caller(), 0xffffffffffffffff)"
-  | .evmBlockNumber => .ok "number()"
-  | .evmTimestamp => .ok "timestamp()"
-  | .evmChainId => .ok "chainid()"
-  | .evmSelf => .ok "and(address(), 0xffffffffffffffff)"
-  | .evmCallValue => .ok "callvalue()"
-  | .evmSelfBalance => .ok "selfbalance()"
-  | .evmCallerW0 => .ok (packAddrWord "caller()" 0)
-  | .evmCallerW1 => .ok (packAddrWord "caller()" 1)
-  | .evmCallerW2 => .ok (packAddrWord "caller()" 2)
-  | .evmSelfW0 => .ok (packAddrWord "address()" 0)
-  | .evmSelfW1 => .ok (packAddrWord "address()" 1)
-  | .evmSelfW2 => .ok (packAddrWord "address()" 2)
+  | .ext .caller #[] => .ok "and(caller(), 0xffffffffffffffff)"
+  | .ext .blockNumber #[] => .ok "number()"
+  | .ext .timestamp #[] => .ok "timestamp()"
+  | .ext .chainId #[] => .ok "chainid()"
+  | .ext .self #[] => .ok "and(address(), 0xffffffffffffffff)"
+  | .ext .callValue #[] => .ok "callvalue()"
+  | .ext .selfBalance #[] => .ok "selfbalance()"
+  | .ext .callerW0 #[] => .ok (packAddrWord "caller()" 0)
+  | .ext .callerW1 #[] => .ok (packAddrWord "caller()" 1)
+  | .ext .callerW2 #[] => .ok (packAddrWord "caller()" 2)
+  | .ext .selfW0 #[] => .ok (packAddrWord "address()" 0)
+  | .ext .selfW1 #[] => .ok (packAddrWord "address()" 1)
+  | .ext .selfW2 #[] => .ok (packAddrWord "address()" 2)
   | .bitAnd l r => do
       let lv ← loadVal p paramPrefix paramCount l
       let rv ← loadVal p paramPrefix paramCount r
@@ -187,8 +176,9 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .loopIx => .ok "i"
   | .select .. => .error "extract/unsupported: evm select needs materialize"
   | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. |
-    .mapGetU64 .. | .mapGetAddr .. | .mapGetPair .. =>
+    .ext .mapGetU64 _ | .ext .mapGetAddr _ | .ext .mapGetPair _ =>
       .error "extract/unsupported: evm map/arith val needs materialize"
+  | .ext _ _ => .error "extract/ir: malformed EVM value operands"
 
 private def revert0 : String := "revert(0, 0)"
 
@@ -233,11 +223,11 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
     Except String (String × String × Render) := do
   let checked? : Option String :=
     match v with
-    | .evmBlockNumber => some "number()"
-    | .evmTimestamp => some "timestamp()"
-    | .evmChainId => some "chainid()"
-    | .evmCallValue => some "callvalue()"
-    | .evmSelfBalance => some "selfbalance()"
+    | .ext .blockNumber #[] => some "number()"
+    | .ext .timestamp #[] => some "timestamp()"
+    | .ext .chainId #[] => some "chainid()"
+    | .ext .callValue #[] => some "callvalue()"
+    | .ext .selfBalance #[] => some "selfbalance()"
     | _ => none
   match checked? with
   | some expr =>
@@ -329,7 +319,7 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if iszero(" ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := mod(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
-    | .mapGetU64 base key =>
+    | .ext .mapGetU64 #[base, key] =>
         let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
         let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
         let (slot, st3) := fresh st2
@@ -347,7 +337,7 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "}" ++ nl
         return (txt, pay, st5)
-    | .mapGetAddr base w0 w1 w2 =>
+    | .ext .mapGetAddr #[base, w0, w1, w2] =>
         let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
         let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount w0 st1
         let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount w1 st2
@@ -369,7 +359,7 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "}" ++ nl
         return (txt, pay, st7)
-    | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
+    | .ext .mapGetPair #[base, o0, o1, o2, s0, s1, s2] =>
         let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
         let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount o0 st1
         let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount o1 st2
