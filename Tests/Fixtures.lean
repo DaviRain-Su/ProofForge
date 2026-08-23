@@ -67,7 +67,7 @@ def setBagHead (s : BagState) (n : UInt64) :
     Except Examples.Counter.Error (BagState × UInt64) :=
   .ok ({ items := #[n] }, n)
 
-/-- 负向：带 payload 的 inductive。 -/
+/-- 正向：单构造子、单个 `UInt64` payload 是无 tag 的 representational newtype。 -/
 inductive Tagged where
   | wrap (n : UInt64)
   deriving Repr

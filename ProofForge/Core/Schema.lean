@@ -5,17 +5,21 @@ inductive ScalarTy where
   | uint (bits : Nat)
   | bool
   | enum (typeName : String)
+  /-- A one-constructor source inductive whose sole payload is an unsigned scalar. -/
+  | newtype (typeName : String) (bits : Nat)
   | optionTag
   deriving BEq, Repr, Inhabited
 
 def ScalarTy.width : ScalarTy → Nat
   | .uint bits => bits / 8
   | .bool => 1
+  | .newtype _ bits => bits / 8
   | .enum _ | .optionTag => 8
 
 def ScalarTy.abi : ScalarTy → String
   | .uint bits => s!"u{bits}-le"
   | .bool => "u8-le"
+  | .newtype _ bits => s!"u{bits}-le"
   | .enum _ | .optionTag => "u64-le"
 
 /-- A field is identified by its owner and declaration ordinal; names support diagnostics/compatibility only. -/

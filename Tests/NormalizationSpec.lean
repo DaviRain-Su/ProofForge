@@ -2,6 +2,7 @@ import ProofForge
 import Examples.Maybe
 import Examples.Tree
 import Examples.Window
+import Tests.Fixtures
 
 open Lean Elab Command
 
@@ -255,6 +256,49 @@ elab "#pf_guard_target_lowering" : command => do
     throwError s!"target Option layout mismatch:\nsvm={repr svmMaybe.slots}\nevm={repr evmMaybe.slots}"
 
 #pf_guard_target_lowering
+
+elab "#pf_guard_newtype_lowering" : command => do
+  let env ← getEnv
+  let extracted ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initTagged
+        ``Tests.Fixtures.setTagged ``Tests.Fixtures.getTagged with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some leaf := extracted.schema.leaves[0]?
+    | throwError "newtype schema has no leaf"
+  unless extracted.schema.leaves.size == 1 && leaf.name == "tag" &&
+      leaf.ty == .newtype "Tests.Fixtures.Tagged" 64 do
+    throwError s!"unexpected newtype schema: {repr extracted.schema}"
+  let some setter := extracted.methods.find? (·.ixName == "setTagged")
+    | throwError "missing newtype setter"
+  unless setter.ops.any (fun | .storeField "tag" (.arg 0) => true | _ => false) do
+    throwError "newtype assignment was not normalized to an explicit Core store"
+  let some getter := extracted.methods.find? (·.ixName == "getTagged")
+    | throwError "missing newtype getter"
+  unless getter.ops.any (fun | .returnU64 (.field (.arg 0) "tag") => true | _ => false) do
+    throwError "newtype matcher was not reduced to its payload"
+  let svm ←
+    match ProofForge.Svm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmAsm ←
+    match ProofForge.Svm.Emit.emitAsm svm with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmYul ←
+    match ProofForge.Evm.Emit.emitYul evm with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless svm.slots.size == 1 && evm.slots.size == 1 &&
+      svm.slots[0]!.width == 8 && evm.slots[0]!.width == 8 &&
+      !svmAsm.isEmpty && !evmYul.isEmpty do
+    throwError "newtype did not survive both target lowerings and emitters"
+
+#pf_guard_newtype_lowering
 
 private def firstStringDiff (left right : String) : Nat := Id.run do
   let mut index := 0

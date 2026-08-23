@@ -202,6 +202,62 @@ private def isEnumLeaf (env : Environment) (tyName : Name) : Bool :=
         | _ => false
   | _ => false
 
+/-- One constructor carrying one `UInt64`: a representational newtype, not a tagged union. -/
+private def isUInt64Newtype (env : Environment) (tyName : Name) : Bool :=
+  if isStructure env tyName then false
+  else
+    match env.find? tyName with
+    | some (.inductInfo info) =>
+      info.numParams == 0 && info.numIndices == 0 && info.ctors.length == 1 && !info.isRec &&
+        match env.find? info.ctors[0]! with
+        | some (.ctorInfo ctor) =>
+          ctor.numFields == 1 &&
+            match strip ctor.type with
+            | .forallE _ ty _ _ => ty.consumeMData.getAppFn.constName? == some ``UInt64
+            | _ => false
+        | _ => false
+    | _ => false
+
+private def forallDomainAt? (fuel index : Nat) (type : Expr) : Option Expr :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    match strip type with
+    | .forallE _ domain body _ =>
+      if index == 0 then some domain else forallDomainAt? fuel' (index - 1) body
+    | _ => none
+
+private def uint64NewtypeCtorPayload? (env : Environment) (e : Expr) : Option Expr := do
+  let ctorName ← e.getAppFn.constName?
+  let .ctorInfo ctor ← env.find? ctorName | none
+  if !isUInt64Newtype env ctor.induct || e.getAppArgs.isEmpty then none
+  else e.getAppArgs[e.getAppArgs.size - 1]?
+
+private def containsUInt64NewtypeCtor (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel' + 1 =>
+    (uint64NewtypeCtorPayload? env e).isSome ||
+      e.getAppArgs.any (containsUInt64NewtypeCtor env fuel')
+
+/-- A one-case matcher is representationally its payload branch; use Lean's matcher metadata. -/
+private def reduceUInt64NewtypeMatch? (env : Environment) (e : Expr) : Option Expr := do
+  let matcherName ← e.getAppFn.constName?
+  let info ← Lean.Meta.getMatcherInfoCore? env matcherName
+  if info.numDiscrs != 1 || info.numAlts != 1 then none else pure ()
+  let altInfo ← info.altInfos[0]?
+  if altInfo.numFields != 1 then none else pure ()
+  let decl ← env.find? matcherName
+  let discrType ← forallDomainAt? 32 info.getFirstDiscrPos decl.type
+  let tyName ← discrType.consumeMData.getAppFn.constName?
+  if !isUInt64Newtype env tyName then none else pure ()
+  let args := e.getAppArgs
+  let discr ← args[info.getFirstDiscrPos]?
+  let alt ← args[info.getFirstAltPos]?
+  match strip alt with
+  | .lam _ _ body _ => some (body.instantiate1 discr)
+  | _ => none
+
 /-- 两构造子：一个 0 字段、一个 1 个 UInt64。按 Option 双叶展开。 -/
 private def isOptionLikeInductive (env : Environment) (tyName : Name) : Bool :=
   match env.find? tyName with
@@ -223,6 +279,19 @@ private def isOptionLikeInductive (env : Environment) (tyName : Name) : Bool :=
           | _ => pure ()
         return zeros == 1 && ones == 1
   | _ => false
+
+private def matcherDiscrTypeName? (env : Environment) (e : Expr) : Option Name := do
+  let matcherName ← e.getAppFn.constName?
+  let info ← Lean.Meta.getMatcherInfoCore? env matcherName
+  if info.numDiscrs != 1 then none else pure ()
+  let decl ← env.find? matcherName
+  let discrType ← forallDomainAt? 32 info.getFirstDiscrPos decl.type
+  discrType.consumeMData.getAppFn.constName?
+
+private def isOptionLikeMatcher (env : Environment) (e : Expr) : Bool :=
+  match matcherDiscrTypeName? env e with
+  | some tyName => tyName == ``Option || isOptionLikeInductive env tyName
+  | none => false
 
 private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
@@ -311,7 +380,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
     match e with
     | .bvar i => some (.arg i)
     | _ =>
-      if let some v := asLit fuel' e then some v
+      if let some reduced := reduceUInt64NewtypeMatch? env e then
+        asVal env fuel' reduced
+      else if let some v := asLit fuel' e then some v
+      else if let some payload := uint64NewtypeCtorPayload? env e then
+        asVal env fuel' payload
       else if isConstNamed e ``localRef && e.getAppArgs.size ≥ 1 then
         match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
         | some (.lit i) => some (.local i.toNat)
@@ -1512,7 +1585,8 @@ private def asStoreFields (env : Environment) (e : Expr)
         let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
         let vectorBase := vectorBaseName env 32 st
         let leaves := (flattenLeaves env "" st).filter fun p => some p.1 != vectorBase
-        if leaves.isEmpty || (!includeSingle && leaves.size == 1) then none
+        let explicitSingle := includeSingle || containsUInt64NewtypeCtor env 16 st
+        if leaves.isEmpty || (!explicitSingle && leaves.size == 1) then none
         else
           match val env ret with
           | none => none
@@ -3122,7 +3196,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           (preserveLocals := preserveLocals) (localDepth := localDepth) with
       | .ok ops => return .ok ops
       | .error reason => return .error s!"extract/unsupported: inline {name}: {reason}"
-    else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
+    else if let some reduced := reduceUInt64NewtypeMatch? env e then
+      return decodeExpr env fuel' reduced (stateful := stateful)
+        (preserveLocals := preserveLocals) (localDepth := localDepth)
+    else if isOptionLikeMatcher env e && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs
       let disc := args[args.size - 3]!
@@ -3556,6 +3633,8 @@ private def leafSchema (env : Environment) (fuel : Nat) (name : String)
     else if let some tyName := ty.getAppFn.constName? then
       if isEnumLeaf env tyName then
         .ok (scalarFragment name place (.enum tyName.toString))
+      else if isUInt64Newtype env tyName then
+        .ok (scalarFragment name place (.newtype tyName.toString 64))
       else if isOptionLikeInductive env tyName then
         .ok (optionFragment name place)
       else if isUserName env tyName && isStructure env tyName &&

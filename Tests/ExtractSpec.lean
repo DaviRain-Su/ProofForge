@@ -318,10 +318,6 @@ error: extract/unsupported: svm rejects evm leaf
 #guard_msgs (error) in
 #pf_extract Examples.TipJar.init Examples.TipJar.deposit Examples.TipJar.get
 
-/--
-error: extract/unsupported: field tag enum has payload
--/
-#guard_msgs (error) in
 #pf_extract Tests.Fixtures.initTagged Tests.Fixtures.setTagged Tests.Fixtures.getTagged
 
 /--
