@@ -110,6 +110,25 @@ open ProofForge.Evm
             yul.contains s!"digest={ProofForge.Evm.IR.digestHex p}"
 
 #guard
+  let source : ProofForge.IR.Program :=
+    { ProofForge.Golden.extractedCounter with
+      name := "ValueArith"
+      methods := ProofForge.Golden.extractedCounter.methods.map fun m =>
+        if m.ixName == "get" then
+          { m with ops := #[.returnU64
+              (.modU64 (.divU64 (.mulU64 (.lit 6) (.lit 7)) (.lit 3)) (.lit 5))] }
+        else m }
+  match ProofForge.Evm.IR.fromProgram source with
+  | .error _ => false
+  | .ok p =>
+      match ProofForge.Evm.Emit.emitYul p with
+      | .error _ => false
+      | .ok yul =>
+          yul.contains "if and(" && yul.contains " := mul(" &&
+            yul.contains " := div(" && yul.contains " := mod(" &&
+            yul.contains "if iszero("
+
+#guard
   match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedCounter with
   | .error _ => false
   | .ok p =>

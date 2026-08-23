@@ -57,6 +57,9 @@ inductive Val where
   | loopIx
   | addU64 (lhs rhs : Val)
   | subU64 (lhs rhs : Val)
+  | mulU64 (lhs rhs : Val)
+  | divU64 (lhs rhs : Val)
+  | modU64 (lhs rhs : Val)
   | mapGetU64 (base key : Val)
   | mapGetAddr (base w0 w1 w2 : Val)
   | mapGetPair (base o0 o1 o2 s0 s1 s2 : Val)
@@ -333,7 +336,8 @@ def valNeedsWalk : Val → Bool
       valNeedsWalk l || valNeedsWalk r
   | .bitNot v => valNeedsWalk v
   | .indexGet b _ i _ => valNeedsWalk b || valNeedsWalk i
-  | .addU64 l r | .subU64 l r => valNeedsWalk l || valNeedsWalk r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
+      valNeedsWalk l || valNeedsWalk r
   | .mapGetU64 b k => valNeedsWalk b || valNeedsWalk k
   | .mapGetAddr b a0 a1 a2 =>
       valNeedsWalk b || valNeedsWalk a0 || valNeedsWalk a1 || valNeedsWalk a2

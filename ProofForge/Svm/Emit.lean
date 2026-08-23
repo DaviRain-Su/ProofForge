@@ -695,6 +695,9 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .shiftR l r => emitLoadShift p "rsh64" l r stackOff nonce
   | .addU64 l r => emitLoadBitBin p "add64" l r stackOff nonce
   | .subU64 l r => emitLoadBitBin p "sub64" l r stackOff nonce
+  | .mulU64 l r => emitLoadBitBin p "mul64" l r stackOff nonce
+  | .divU64 l r => emitLoadBitBin p "div64" l r stackOff nonce
+  | .modU64 l r => emitLoadBitBin p "mod64" l r stackOff nonce
   | v =>
     if Ops.isEvmLeaf v then
       .error "extract/unsupported: svm rejects evm leaf"
@@ -1424,7 +1427,9 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
     if m.ops.any (fun
         | .ite .. => true
         | .forAccum .. | .forBody .. => true
-        | .returnU64 v => Ops.isLangVal v || match v with | .addU64 .. | .subU64 .. => true | _ => false
+        | .returnU64 v => Ops.isLangVal v || match v with
+            | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. => true
+            | _ => false
         | _ => false) || m.ops.size > 1 then
       let body ← emitMutBody p label m.ops
       let head :=

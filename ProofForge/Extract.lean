@@ -448,6 +448,24 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some l, some r => some (.subU64 l r)
           | _, _ => none
+          else if (isConstNamed e ``HMul.hMul || endsWith e ".hMul") &&
+              e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.mulU64 l r)
+          | _, _ => none
+          else if (isConstNamed e ``HDiv.hDiv || endsWith e ".hDiv" ||
+              isConstNamed e ``UInt64.div) && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.divU64 l r)
+          | _, _ => none
+          else if (isConstNamed e ``HMod.hMod || endsWith e ".hMod" ||
+              isConstNamed e ``UInt64.mod) && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.modU64 l r)
+          | _, _ => none
           else if (isConstNamed e ``HAnd.hAnd || endsWith e ".hAnd") && e.getAppArgs.size ≥ 2 then
           match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
                 asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -638,11 +656,15 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             endsWith e ".getElem" || endsWith e ".getElem!" || endsWith e ".get") &&
             e.getAppArgs.size ≥ 2 then
           let args := e.getAppArgs
-          let lastVal? : Option Ops.Val :=
-            args.foldr (init := none) fun a acc =>
-              match acc with
-              | some v => some v
-              | none => asVal env fuel' a
+          -- Do not recursively search proof/type arguments for an index: their local binders
+          -- are not source values. The collection/index positions are fixed by GetElem.
+          let collIndex? : Option (Expr × Expr) :=
+            if isConstNamed e ``GetElem.getElem || endsWith e ".getElem" then
+              if h : args.size ≥ 3 then some (args[args.size - 3], args[args.size - 2])
+              else none
+            else if h : args.size ≥ 2 then
+              some (args[args.size - 2], args[args.size - 1])
+            else none
           let rec findState (fuel : Nat) (e : Expr) : Option Nat :=
             match fuel with
             | 0 => none
@@ -672,26 +694,25 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   e.getAppArgs.findSome? (fieldNameOf fuel')
                 else some last
               | none => e.getAppArgs.findSome? (fieldNameOf fuel')
-          match lastVal? with
-          | some (.lit n) =>
+          match collIndex?.bind fun pair => (asVal env fuel' pair.2).map (pair.1, ·) with
+          | some (collection, .lit n) =>
             let i := n.toNat
             let baseField :=
-              args.findSome? fun a =>
-                match asVal env fuel' a with
-                | some (.field _ fname) => some fname
-                | _ => none
-            match findState fuel' e, baseField with
+              match asVal env fuel' collection with
+              | some (.field _ fname) => some fname
+              | _ => none
+            match findState fuel' collection, baseField with
             | some j, some fname =>
               let suf := s!"_{i}"
               let base :=
                 if fname.endsWith suf then fname.dropEnd suf.length |>.copy else fname
               some (.field (.arg j) s!"{base}_{i}")
             | some j, none =>
-              match fieldNameOf 8 e with
+              match fieldNameOf 8 collection with
               | some fname => some (.field (.arg j) s!"{fname}_{i}")
               | none => none
             | _, _ => none
-          | some idx =>
+          | some (collection, idx) =>
             let lits := args.filterMap (asLit fuel')
             let len :=
               if h : lits.size > 0 then
@@ -699,7 +720,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 | .lit n => n.toNat
                 | _ => 0
               else 0
-            match findState fuel' e, fieldNameOf 8 e with
+            match findState fuel' collection, fieldNameOf 8 collection with
             | some j, some fname => some (.indexGet (.arg j) fname idx len)
             | some j, none => some (.indexGet (.arg j) "cells" idx len)
             | _, _ => none
@@ -1070,59 +1091,24 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
         | .lit n => n.toNat
         | _ => 0
       else 0
-    -- `Vector.set α n xs i v h`：长度字面量之后，xs、下标、新元素按出现顺序。
+    -- `Vector.set α n xs i v h`：最后四项固定为 xs、下标、新元素、证明。
+    -- 不要扫描证明参数；其中的局部 binder 不是源程序的动态下标。
     let parsed :=
       Id.run do
-        let mut nLits : Nat := 0
-        let mut litIdx := false
-        let mut idx? : Option Ops.Val := none
-        let mut payloadE? : Option Expr := none
-        let mut scalar? : Option Ops.Val := none
-        for a in args do
-          if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
-            pure ()
-          else
-            match asLit 8 a with
-            | some (.lit _) =>
-              if nLits ≥ 1 then litIdx := true
-              nLits := nLits + 1
-            | some _ =>
-              pure ()
-            | none =>
-              if nLits == 0 then
-                pure ()
-              else
-                let a := peelLets (strip a)
-                -- 长度之后：向量 xs、下标、新元素。`s.nodes` 的 val 是 none。
-                -- `y.toNat - 1` 整段是下标。标量 payload 用 `val`；`Node.mk` 留表达式。
-                if (isConstNamed a ``HSub.hSub || endsWith a ".hSub" ||
-                      isConstNamed a ``Nat.sub) && a.getAppArgs.size ≥ 2 then
-                  if idx?.isNone then idx? := val env a
-                else if (isConstNamed a ``UInt64.toNat || endsWith a ".toNat") &&
-                    a.getAppArgs.size ≥ 1 then
-                  if idx?.isNone then
-                    idx? := val env a.getAppArgs[a.getAppArgs.size - 1]!
-                else
-                  match val env a with
-                  | some (.field ..) =>
-                    -- `s.nodes` / `s.cells`：向量本身，不是下标。
-                    pure ()
-                  | some v =>
-                    if idx?.isNone then idx? := some v
-                    else scalar? := some v
-                  | none =>
-                    -- 只有用户构造子才是多叶 payload。`s.cells` 的 val 是 none，不是 Node.mk。
-                    -- `{ src with value := v }` 展开成 `have __src := …; Node.mk`。
-                    let a' := substLets 8 a
-                    let isCtor :=
-                      match a'.getAppFn.constName? with
-                      | some n =>
-                        match env.find? n with
-                        | some (.ctorInfo _) => true
-                        | _ => false
-                      | none => false
-                    if idx?.isSome && isCtor then payloadE? := some a'
-        return (litIdx, idx?, payloadE?, scalar?)
+        if h : args.size ≥ 4 then
+          let idx? := val env args[args.size - 3]
+          let payload := substLets 8 (peelLets (strip args[args.size - 2]))
+          let isCtor :=
+            match payload.getAppFn.constName? with
+            | some n =>
+              match env.find? n with
+              | some (.ctorInfo _) => true
+              | _ => false
+            | none => false
+          if isCtor then return (false, idx?, some payload, none)
+          else return (false, idx?, none, val env payload)
+        else
+          return (false, none, none, none)
     let rec changedLeaves (selfIdx : Option Ops.Val) (fuel : Nat) (e : Expr) :
         Array (String × Ops.Val) :=
       match fuel with
@@ -1810,10 +1796,8 @@ private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
     | fuel' + 1 =>
       match v with
       | .indexGet b n i k off =>
-          let b' := match b with | .arg _ => .arg 0 | _ => go fuel' b
-          -- 循环体里下标几乎总是 binder；字面量才是常量槽。
-          let i' := match i with | .lit _ => i | _ => .loopIx
-          .indexGet b' n i' k off
+          .indexGet b n (go fuel' i) k off
+      | .arg 1 => .loopIx
       | .field b n => .field (go fuel' b) n
       | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
       | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
@@ -1823,6 +1807,9 @@ private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
       | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
       | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
       | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
+      | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
+      | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
+      | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
       | v => v
   go 8 v
 
@@ -1838,21 +1825,80 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
       | .checkedDivU64 l r => .checkedDivU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .checkedModU64 l r => .checkedModU64 (rewriteLoopIx l) (rewriteLoopIx r)
       | .ite c l r t f =>
-          let l' := match l with | .arg _ => .loopIx | _ => rewriteLoopIx l
-          let r' := match r with | .arg _ => .loopIx | _ => rewriteLoopIx r
-          .ite c l' r' (t.map (go fuel')) (f.map (go fuel'))
+          .ite c (rewriteLoopIx l) (rewriteLoopIx r) (t.map (go fuel')) (f.map (go fuel'))
       | .invoke prog metas data seed bump =>
           .invoke prog metas (data.map fun
             | .u64le v => .u64le (rewriteLoopIx v)
             | w => w) seed (bump.map rewriteLoopIx)
       | .indexSet n i v k off =>
-          let i' := match i with | .lit _ => i | _ => .loopIx
-          .indexSet n i' v k off
-      | .storeField n v => .storeField n v
-      | .okState v => .okState v
+          .indexSet n (rewriteLoopIx i) (rewriteLoopIx v) k off
+      | .storeField n v => .storeField n (rewriteLoopIx v)
+      | .okState v => .okState (rewriteLoopIx v)
       | .returnU64 v => .returnU64 (rewriteLoopIx v)
       | .returnState _ => .errorOverflow
       | .forAccum n v => .forAccum n (rewriteLoopIx v)
+      | .forBody n body => .forBody n (body.map (go fuel'))
+      | op => op
+  go 8 op
+
+/--
+普通 accumulator / early-return 循环沿用原来的 callback 归一化：账户参数落到
+`.arg 0`，动态索引就是 `loopIx`，而 `indexSet` payload 仍是外层方法参数。
+State-carrying loop 不能用这条宽松规则，继续走上面的精确 binder 重写。
+-/
+private def rewritePlainLoopIx (v : Ops.Val) : Ops.Val :=
+  let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+    match fuel with
+    | 0 => v
+    | fuel' + 1 =>
+      match v with
+      | .indexGet b n i k off =>
+          let b' := match b with | .arg _ => .arg 0 | _ => go fuel' b
+          let i' := match i with | .lit _ => i | _ => .loopIx
+          .indexGet b' n i' k off
+      | .field b n => .field (go fuel' b) n
+      | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
+      | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
+      | .bitXor l r => .bitXor (go fuel' l) (go fuel' r)
+      | .bitNot x => .bitNot (go fuel' x)
+      | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
+      | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
+      | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
+      | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
+      | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
+      | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
+      | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
+      | v => v
+  go 8 v
+
+private def rewritePlainLoopOp (op : Ops.Op) : Ops.Op :=
+  let rec go (fuel : Nat) (op : Ops.Op) : Ops.Op :=
+    match fuel with
+    | 0 => op
+    | fuel' + 1 =>
+      let rv := rewritePlainLoopIx
+      match op with
+      | .checkedAddU64 l r => .checkedAddU64 (rv l) (rv r)
+      | .checkedSubU64 l r => .checkedSubU64 (rv l) (rv r)
+      | .checkedMulU64 l r => .checkedMulU64 (rv l) (rv r)
+      | .checkedDivU64 l r => .checkedDivU64 (rv l) (rv r)
+      | .checkedModU64 l r => .checkedModU64 (rv l) (rv r)
+      | .ite c l r t f =>
+          let l' := match l with | .arg _ => .loopIx | _ => rv l
+          let r' := match r with | .arg _ => .loopIx | _ => rv r
+          .ite c l' r' (t.map (go fuel')) (f.map (go fuel'))
+      | .invoke prog metas data seed bump =>
+          .invoke prog metas (data.map fun | .u64le v => .u64le (rv v) | w => w)
+            seed (bump.map rv)
+      | .indexSet n i v k off =>
+          let i' := match i with | .lit _ => i | _ => .loopIx
+          let v' := match v with | .arg _ => .arg 0 | _ => v
+          .indexSet n i' v' k off
+      | .storeField n v => .storeField n v
+      | .okState v => .okState (match v with | .arg _ => .arg 0 | _ => v)
+      | .returnU64 v => .returnU64 (rv v)
+      | .returnState _ => .errorOverflow
+      | .forAccum n v => .forAccum n (rv v)
       | .forBody n body => .forBody n (body.map (go fuel'))
       | op => op
   go 8 op
@@ -1875,7 +1921,7 @@ private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :
           | fuel' + 1 =>
             let e := strip e
             if isConstNamed e ``HAdd.hAdd && e.getAppArgs.size ≥ 2 then
-              (asVal env 8 e.getAppArgs[e.getAppArgs.size - 1]!).map rewriteLoopIx
+              (asVal env 8 e.getAppArgs[e.getAppArgs.size - 1]!).map rewritePlainLoopIx
             else
               match e with
               | .lam _ _ body _ => findAdd fuel' body
@@ -1934,6 +1980,76 @@ private def findForBodyExpr (env : Environment) (e : Expr) : Option (Nat × Expr
         | .app f a => go fuel' f <|> go fuel' a
         | _ => none
   go 16 e
+
+/--
+`do let mut st := s; for ... do st := ...; k st` 的 loop body 与 continuation。
+真正是否为 state-carrying loop 由 body 解码出的显式 store 判定；普通 early-return
+`forBody` 继续走旧路径。
+-/
+private def findForStateExpr (_env : Environment) (e : Expr) : Option (Nat × Expr × Expr) :=
+  let rec findForExpr (fuel : Nat) (e : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then some e
+      else
+        match e with
+        | .letE _ _ value body _ => findForExpr fuel' value <|> findForExpr fuel' body
+        | .lam _ _ body _ => findForExpr fuel' body
+        | _ => e.getAppArgs.findSome? (findForExpr fuel')
+  let loopParts? := do
+    let forExpr ← findForExpr 32 e
+    let n ← forExpr.getAppArgs.findSome? forRangeEnd
+    let rec lastLam (fuel : Nat) (e : Expr) : Option Expr :=
+      match fuel with
+      | 0 => none
+      | fuel' + 1 =>
+        match strip e with
+        | .lam _ _ body _ =>
+          match strip body with
+          | .lam _ _ body2 _ => some (substLets 128 body2)
+          | _ => some (substLets 128 body)
+        | .letE _ _ _ body _ => lastLam fuel' body
+        | e => e.getAppArgs.findSome? (lastLam fuel')
+    let args := forExpr.getAppArgs
+    if args.size < 2 then none else
+    -- State-carrying `for` starts from the mutable state binder itself. Early-return loops
+    -- use an `MProd (Option result) PUnit` constructor accumulator and stay on the legacy path.
+    match strip args[args.size - 2]! with
+    | .bvar _ => pure ()
+    | _ => none
+    let body ← if h : args.size > 0 then lastLam 16 args[args.size - 1] else none
+    if n = 0 || n > 64 then none else some (n, body)
+  let rec findContinuation (fuel : Nat) (e : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if e.getAppFn.constName? == some ``Id.run || endsWith e ".run" then
+        if e.getAppArgs.size ≥ 1 then
+          findContinuation fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else none
+      else
+        match e with
+        | .letE _ _ value body _ => findContinuation fuel' (body.instantiate1 value)
+        | _ =>
+          if e.getAppFn.constName? == some ``Bind.bind || endsWith e ".bind" then
+            let args := e.getAppArgs
+            if args.any fun a => (findForExpr 16 a).isSome then
+              match args.findRev? fun a => match strip a with | .lam .. => true | _ => false with
+              | some continuation =>
+                match strip continuation with
+                | .lam _ _ continuationBody _ =>
+                  some (peelControl 16 (substLets 128 continuationBody))
+                | _ => none
+              | none => none
+            else args.findSome? (findContinuation fuel')
+          else
+            e.getAppArgs.findSome? (findContinuation fuel')
+  match loopParts?, findContinuation 32 e with
+  | some (n, bodyE), some continuation => some (n, bodyE, continuation)
+  | _, _ => none
 
 /-- 收集 `xs.set … .set …` 整条链。先外层（旧向量），后内层（新写）。
 一次 `set` 可以改多叶（`left` + `parent`）。 -/
@@ -2247,6 +2363,52 @@ private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr 
         else zetaPureHeadLets env fuel' (body.instantiate1 value)
     | e => e
 
+/--
+Profile 已检查过且显式标记的用户 helper 在控制流边界按需 β 展开。这个边界
+让有界合约能把匹配和结算步骤拆成具名函数，而不要求某个后端认识合约名字。
+-/
+private def unfoldUserHelper (env : Environment) (e : Expr) : Option (Name × Expr) :=
+  let e := strip e
+  let args := e.getAppArgs
+  match e.getAppFn.constName? with
+  | none => none
+  | some n =>
+    if Attr.isInline env n then
+      match env.find? n with
+      | some (.defnInfo info) => some (n, info.value.beta args)
+      | _ => none
+    else none
+
+private def findYieldPayload (e : Expr) : Option Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``ForInStep.yield || endsWith e ".yield" then
+        if e.getAppArgs.size ≥ 1 then
+          -- The payload remains under the yielded state/control binder. Keep accumulator 0,
+          -- and lower the loop index plus outer method arguments back to callback scope.
+          some (e.getAppArgs[e.getAppArgs.size - 1]!.lowerLooseBVars 1 1)
+        else none
+      else
+        match e with
+        | .letE _ _ value body _ => go fuel' body <|> go fuel' value
+        -- Yield can sit under a dependent branch proof lambda. Dropping that binder without
+        -- lowering would turn the loop index and outer arguments into unrelated `.arg`s.
+        | .lam _ _ body _ => go fuel' (body.lowerLooseBVars 1 1)
+        | _ => e.getAppArgs.findSome? (go fuel')
+  go 32 e
+
+/-- State loop 的 `yield newState` 只写账户并继续，不生成 commit/exit。 -/
+private def asYieldStores (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  match findYieldPayload e with
+  | none => none
+  | some state =>
+    let dynamic := collectIndexSets env state
+    let static := (flattenLeaves env "" state).map fun p => Ops.Op.storeField p.1 p.2
+    some (dynamic ++ static)
+
 private def decodePlain (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
@@ -2255,6 +2417,8 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     .ok ops
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend, .returnU64 addend]
+  else if let some stores := asYieldStores env e then
+    .ok stores
   else
   let isets := collectIndexSets env e
   if isets.size ≥ 1 then
@@ -2267,7 +2431,9 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | _ => .ok #[op]
   else
   let e := peelControl 8 e
-  if let some name := errorCtorName e then
+  if isErrorOverflow e then
+    .ok #[.errorOverflow]
+  else if let some name := errorCtorName e then
     .ok #[.errorNamed name]
   else if let some ops := asStoreFields env e then
     .ok ops
@@ -2296,7 +2462,8 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ => .ok #[.returnU64 v]
     | .indexGet .. => .ok #[.returnU64 v]
-    | .addU64 .. | .subU64 .. => .ok #[.returnU64 v]
+    | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. =>
+        .ok #[.returnU64 v]
     | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. =>
         .ok #[.returnU64 v]
     | v =>
@@ -2325,12 +2492,38 @@ private def lastNamedBin (env : Environment) (want : Name) (e : Expr) : Option (
         e.getAppArgs.findSome? (go fuel')
   go 8 e
 
-private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except String (Array Ops.Op) :=
+private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
+    (stateful : Bool := false) : Except String (Array Ops.Op) :=
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
+    let fullySubstituted := substLets 256 e
+    let controlled := peelControl 16 fullySubstituted
+    let e :=
+      if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
+      else if (unfoldUserHelper env controlled).isSome then controlled
+      else e
     let e0 := strip e
-    if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
+    let stateLoop? : Option (Except String (Array Ops.Op)) :=
+      match findForStateExpr env e with
+      | none => none
+      | some (n, bodyE, continuation) =>
+        match decodeExpr env fuel' bodyE (stateful := true) with
+        | .error reason => some (.error s!"extract/unsupported: state loop body: {reason}")
+        | .ok bodyOps =>
+          if Ops.hasStoreField bodyOps || Ops.hasIndexSet bodyOps then
+            match decodeExpr env fuel' continuation with
+            | .error reason =>
+              match findOkRet env continuation with
+              | some ret =>
+                some (.ok (#[.forBody n (bodyOps.map rewriteLoopOp), .okState ret]))
+              | none => some (.error s!"extract/unsupported: state loop continuation: {reason}")
+            | .ok continuationOps =>
+              some (.ok (#[.forBody n (bodyOps.map rewriteLoopOp)] ++ continuationOps))
+          else none
+    if let some result := stateLoop? then
+      return result
+    else if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
       -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
     else if let some inv := findInvoke env 16 e then
@@ -2341,7 +2534,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       return .ok #[.forAccum n addend, .returnU64 addend]
     else if let some (n, bodyE) := findForBodyExpr env e then
       match decodeExpr env fuel' bodyE with
-      | .ok ops => return .ok #[.forBody n (ops.map rewriteLoopOp), .errorOverflow]
+      | .ok ops => return .ok #[.forBody n (ops.map rewritePlainLoopOp), .errorOverflow]
       | .error r => return .error r
     let e := strip e
     if (isConstNamed e ``ite || isConstNamed e ``dite) && e.getAppArgs.size ≥ 5 then
@@ -2362,10 +2555,11 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let tRaw := args[args.size - 2]!
       let fRaw := args[args.size - 1]!
       let lower :=
-        !(collectIndexSets env tRaw).isEmpty &&
-          !isForInStep tRaw && !isForInStep fRaw
+        stateful ||
+          (!(collectIndexSets env tRaw).isEmpty &&
+            !isForInStep tRaw && !isForInStep fRaw)
       let t := substIteLets 64 (peelProofLam 4 lower tRaw)
-      let f := substIteLets 64 (peelProofLam 4 false fRaw)
+      let f := substIteLets 64 (peelProofLam 4 stateful fRaw)
       let checkedSubMatches (candidate : Expr) : Bool :=
         match asCheckedSubGuard env candidate with
         | none => false
@@ -2410,7 +2604,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
               ((asNeZero env a).isNone ||
                 isConstNamed (peelLets (strip t)) ``ite ||
                   isConstNamed (peelLets (strip t)) ``dite)) then
-          let decodedThen := decodeExpr env fuel' t
+          let decodedThen := decodeExpr env fuel' t (stateful := stateful)
           match asCmp env condE, directInvoke, decodeEvmEffect env t, asIndexSet env t,
               asStoreFields env t, asOkState env t, decodedThen with
           | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _, _ =>
@@ -2423,7 +2617,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
             if hasNestedIte 64 t then
-              match decodeExpr env fuel' t with
+              match decodeExpr env fuel' t (stateful := stateful) with
               | .ok thn => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
               | .error r => return .error r
             else
@@ -2441,13 +2635,16 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | some (cmp, lv, rv), none, none, none, none, some v, _ =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, none, none, .ok thn =>
-            match decodeExpr env fuel' f with
+            match decodeExpr env fuel' f (stateful := stateful) with
             | .ok els => return .ok #[.ite cmp lv rv thn els]
             | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
-          | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | some _, none, none, none, none, none, .error reason =>
+            return .error s!"extract/unsupported: comparison continuation: {reason}"
+          | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then/cmp"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, directInvoke, decodeEvmEffect env t,
-              decodeExpr env fuel' t, asStoreFields env t, asOkState env t with
+              decodeExpr env fuel' t (stateful := stateful), asStoreFields env t,
+              asOkState env t with
           | some (lhs, rhs), some inv, _, _, some stores, _ =>
             return .ok (#[.checkedAddU64 lhs rhs, invokeOp inv] ++ stores)
           | some _, none, some evmOps, _, _, _ =>
@@ -2468,20 +2665,38 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | some (lhs, rhs), none, none, .error _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
-          | _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | some _, none, none, .error reason, none, none =>
+            return .error s!"extract/unsupported: checked-add continuation: {reason}"
+          | _, _, _, _, _, _ => return .error "extract/unsupported: ite then/add"
         else if let some condE := findBy args (fun a =>
             (asCheckedMulGuard env a).isSome && (collectIndexSets env t).isEmpty) then
-          match asCheckedMulGuard env condE, asStoreFields env t, asOkState env t with
-          | some (lhs, rhs), some stores, _ =>
-            return .ok (#[.checkedMulU64 lhs rhs] ++ stores)
-          | some (lhs, rhs), none, some v =>
+          match asCheckedMulGuard env condE,
+              decodeExpr env fuel' t (stateful := stateful),
+              asStoreFields env t, asOkState env t with
+          | some (lhs, rhs), _, some stores, _ =>
+            match stores.toList with
+            | [.okState v] =>
+              let dest := match lhs with | .field .. => lhs | _ => v
+              return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
+            | _ =>
+              return .ok (#[.checkedMulU64 lhs rhs] ++ stores ++ #[.errorOverflow])
+          | some (lhs, rhs), .ok thn, none, _ =>
+            match thn.toList with
+            | [.okState v] =>
+              let dest := match lhs with | .field .. => lhs | _ => v
+              return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
+            | _ =>
+              return .ok (#[.checkedMulU64 lhs rhs] ++ thn ++ #[.errorOverflow])
+          | some (lhs, rhs), .error _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
-          | _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _ => return .error "extract/unsupported: ite then/mul"
         else if let some condE := findBy args (fun a =>
             checkedSubMatches a && (collectIndexSets env t).isEmpty) then
           match asCheckedSubGuard env condE, directInvoke, decodeEvmEffect env t,
-              decodeExpr env fuel' t, decodeExpr env fuel' f, asStoreFields env t, asOkState env t with
+              decodeExpr env fuel' t (stateful := stateful),
+              decodeExpr env fuel' f (stateful := stateful), asStoreFields env t,
+              asOkState env t with
           | some _, some inv, _, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
@@ -2490,6 +2705,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
+          | some (lhs, rhs), none, none, _, .ok #[.errorOverflow], _, some v =>
+            let dest := match lhs with | .field .. => lhs | _ => v
+            return .ok #[.checkedSubU64 lhs rhs, .okState dest, .errorOverflow]
           | some _, none, none, .ok thn, .ok els, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
@@ -2499,7 +2717,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | some (lhs, rhs), none, none, _, _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedSubU64 lhs rhs, .okState dest, .errorOverflow]
-          | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then/sub"
         else if let some condE := findBy args (fun a =>
             (asNeZero env a).isSome && (collectIndexSets env t).isEmpty) then
           match asNeZero env condE with
@@ -2524,26 +2742,33 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             (asCheckedAddGuard env a).isNone &&
             (asCheckedMulGuard env a).isNone &&
             !checkedSubMatches a
-        if isForInYield f then
+        if isForInYield f && !stateful then
           let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
             | return .error "extract/unsupported: ite cond"
           let some (cmp, lv, rv) := asCmp env condE
             | return .error "extract/unsupported: ite cond"
-          match decodeExpr env fuel' t with
+          match decodeExpr env fuel' t (stateful := stateful) with
           | .ok thn => return .ok #[.ite cmp lv rv thn #[]]
           | .error r => return .error s!"extract/unsupported: forBody then {r}"
         let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
           | return .error "extract/unsupported: ite cond"
         let some (cmp, lv, rv) := asCmp env condE
           | return .error "extract/unsupported: ite cond"
-        match decodeExpr env fuel' t, decodeExpr env fuel' f with
+        match decodeExpr env fuel' t (stateful := stateful),
+            decodeExpr env fuel' f (stateful := stateful) with
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
-        | .error r, _ => return .error r
-        | _, .error r => return .error r
+        | .error r, _ =>
+          return .error (if stateful then s!"state loop then: {r}" else r)
+        | _, .error r =>
+          return .error (if stateful then s!"state loop else: {r}" else r)
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       return .ok (invokeOps inv (invokeRet env e inv))
+    else if let some (name, unfolded) := unfoldUserHelper env e then
+      match decodeExpr env fuel' (substIteLets 256 unfolded) (stateful := stateful) with
+      | .ok ops => return .ok ops
+      | .error reason => return .error s!"extract/unsupported: inline {name}: {reason}"
     else if endsWith e ".match_1" && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs
@@ -2571,14 +2796,14 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | e => e
       let noneBody := peelMatcher 8 noneE
       let someBody := peelMatcher 8 someE
-      match decodeExpr env fuel' noneBody with
+      match decodeExpr env fuel' noneBody (stateful := stateful) with
       | .error r => return .error r
       | .ok noneOps =>
         let someOps :=
           match strip someBody with
           | .bvar _ => #[.returnU64 payload]
           | _ =>
-            match decodeExpr env fuel' someBody with
+            match decodeExpr env fuel' someBody (stateful := stateful) with
             | .ok ops =>
               match ops with
               | #[.returnU64 (.arg _)] => #[.returnU64 payload]
@@ -2593,8 +2818,11 @@ def decodeBody (env : Environment) (e : Expr) : Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
   -- Canonicalize syntax-only aliases around control flow before shape decoding.
   -- Effectful lets remain visible to the dedicated intrinsic decoders.
-  let body := zetaPureHeadLets env 32 body
-  decodeExpr env 16 (substIteLets 64 body)
+  let fullySubstituted := substLets 256 body
+  let body :=
+    if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
+    else zetaPureHeadLets env 32 body
+  decodeExpr env 128 (substIteLets 256 body)
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -2658,7 +2886,61 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     | .increment => decodeMutating env e
     | _ => decodeBody env e
   let lean := IR.lastName n.toString
-  let (nLams, _) := peelLams e
+  let (nLams, methodBody) := peelLams e
+  let stateLoop := (findForStateExpr env methodBody).isSome && ops0.any fun
+    | .forBody _ body => Ops.hasStoreField body || Ops.hasIndexSet body
+    | _ => false
+  let rec normalizeStateLoopVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+    match fuel with
+    | 0 => v
+    | fuel' + 1 =>
+      let state := .arg (nLams - 1)
+      match v with
+      -- Loop body binders are accumulator 0 and index 1. `rewriteLoopIx` has already
+      -- canonicalized index 1; shift the remaining outer method arguments back by two.
+      | .arg i => if i ≥ 2 then .arg (i - 2) else v
+      | .field _ name => .field state name
+      | .indexGet _ name index len off =>
+          .indexGet state name (normalizeStateLoopVal fuel' index) len off
+      | .checkPda seed bump => .checkPda seed (normalizeStateLoopVal fuel' bump)
+      | .bitAnd l r => .bitAnd (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .bitOr l r => .bitOr (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .bitXor l r => .bitXor (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .bitNot x => .bitNot (normalizeStateLoopVal fuel' x)
+      | .shiftL l r => .shiftL (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .shiftR l r => .shiftR (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .addU64 l r => .addU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .subU64 l r => .subU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .mulU64 l r => .mulU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .divU64 l r => .divU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | .modU64 l r => .modU64 (normalizeStateLoopVal fuel' l) (normalizeStateLoopVal fuel' r)
+      | v => v
+  let rec normalizeStateLoopOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
+    match fuel with
+    | 0 => op
+    | fuel' + 1 =>
+      let nv := normalizeStateLoopVal fuel'
+      match op with
+      | .checkedAddU64 l r => .checkedAddU64 (nv l) (nv r)
+      | .checkedSubU64 l r => .checkedSubU64 (nv l) (nv r)
+      | .checkedMulU64 l r => .checkedMulU64 (nv l) (nv r)
+      | .checkedDivU64 l r => .checkedDivU64 (nv l) (nv r)
+      | .checkedModU64 l r => .checkedModU64 (nv l) (nv r)
+      | .ite cmp l r t f =>
+          .ite cmp (nv l) (nv r) (t.map (normalizeStateLoopOp fuel'))
+            (f.map (normalizeStateLoopOp fuel'))
+      | .invoke prog metas data seed bump =>
+          .invoke prog metas (data.map fun | .u64le v => .u64le (nv v) | w => w)
+            seed (bump.map nv)
+      | .forAccum bound addend => .forAccum bound (nv addend)
+      | .forBody bound body => .forBody bound (body.map (normalizeStateLoopOp fuel'))
+      | .indexSet name index value len off => .indexSet name (nv index) (nv value) len off
+      | .storeField name value => .storeField name (nv value)
+      | .okState value => .okState (nv value)
+      | .returnU64 value => .returnU64 (nv value)
+      | .returnState value => .returnState (nv value)
+      | op => op
+  let ops0 := if stateLoop then ops0.map (normalizeStateLoopOp 32) else ops0
   let ops1 :=
     if lean == "modulo" then
       ops0.map fun
@@ -2700,6 +2982,9 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .loopIx => v
       | .addU64 l r => .addU64 (flipVal fuel' l) (flipVal fuel' r)
       | .subU64 l r => .subU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .mulU64 l r => .mulU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .divU64 l r => .divU64 (flipVal fuel' l) (flipVal fuel' r)
+      | .modU64 l r => .modU64 (flipVal fuel' l) (flipVal fuel' r)
       | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
       | .mapGetAddr b a0 a1 a2 =>
           .mapGetAddr (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2)
@@ -2974,7 +3259,8 @@ private def valFields : Ops.Val → Array String
   | .bitNot v => valFields v
   | .indexGet b _ i _ => valFields b ++ valFields i
   | .loopIx => #[]
-  | .addU64 l r | .subU64 l r => valFields l ++ valFields r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
+      valFields l ++ valFields r
   | .mapGetU64 b k => valFields b ++ valFields k
   | .mapGetAddr b a0 a1 a2 =>
       valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2
@@ -3038,6 +3324,9 @@ private def fillElemOff (p : IR.Program) : IR.Program :=
       | .field b n => .field (goVal fuel' b) n
       | .addU64 l r => .addU64 (goVal fuel' l) (goVal fuel' r)
       | .subU64 l r => .subU64 (goVal fuel' l) (goVal fuel' r)
+      | .mulU64 l r => .mulU64 (goVal fuel' l) (goVal fuel' r)
+      | .divU64 l r => .divU64 (goVal fuel' l) (goVal fuel' r)
+      | .modU64 l r => .modU64 (goVal fuel' l) (goVal fuel' r)
       | v => v
   let rec goOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with

@@ -1323,14 +1323,21 @@ def extractedPhoenix : Program :=
       { name := "lastTimes_0" }, { name := "lastTimes_1" },
       { name := "lastTimes_2" }, { name := "lastTimes_3" },
       { name := "quoteLocked" }, { name := "quoteFree" },
-      { name := "baseLocked" }, { name := "baseFree" }
+      { name := "baseLocked" }, { name := "baseFree" },
+      { name := "matchFilled" }, { name := "matchQuote" },
+      { name := "matchExpired" }, { name := "matchStopped" },
+      { name := "matchError" }, { name := "matchLevel" }, { name := "matchWant" },
+      { name := "matchLimit" }
     ]
     methods := #[
       { kind := .init, name := "Projects.Phoenix.init", ixName := "initialize", paramCount := 1
         ops := #[
           .returnState (.lit 1), .returnState (.arg 0), .returnState (.lit 1),
           .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0),
-          .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0)
+          .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0),
+          .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0),
+          .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0),
+          .returnState (.lit 0), .returnState (.lit 0)
         ] },
       { kind := .increment, name := "Projects.Phoenix.postAsk", ixName := "postAsk", paramCount := 1
         ops := #[
@@ -1394,8 +1401,12 @@ def programs : Array Program := #[
   extractedToken
 ]
 
-/-- `#pf_build` 抽出的 digest 必须钉住。新例子加进 `programs`，不必改 IR。 -/
+/--
+`#pf_build` 抽出的 digest 必须钉住。Phoenix 的 bounded-fold IR 很大，直接钉
+canonical digest；`extractedPhoenix` 继续作为布局和发射 smoke fixture。
+-/
 def digestOf (name : String) : Option String :=
-  (programs.find? (·.name == name)).map digestHex
+  if name == "Phoenix" then some "b768c4809cea96c1"
+  else (programs.find? (·.name == name)).map digestHex
 
 end ProofForge.Golden

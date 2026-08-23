@@ -70,7 +70,8 @@ SVM 回 L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原�
 
 Token-2022 规划见 [analysis/token-2022.md](analysis/token-2022.md)。没有 Token v3。切片 A（换 program id）是 l5-004。hook / fee / remaining accounts 仍关。
 
-`forBody` IR 已开。抽出器还把循环 binder 和外层参数搅在一起，Phoenix 扫书仍用 4 路 `ite`。
+`forBody` 已支持显式 state-carrying bounded fold 和外层参数。Phoenix N=4 扫书用
+17-phase loop；动态树 allocator/旋转仍是后续独立范围。
 
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。

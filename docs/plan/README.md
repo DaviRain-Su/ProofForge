@@ -76,7 +76,7 @@
 | [l4-033](tasks/l4-033.md) | done | 账户下标叶子收口 |
 | [l4-034](tasks/l4-034.md) | done | 关着的格子一次开完 |
 | [l5-001](tasks/l5-001.md) | done | 有界 for 改状态（`fillFirst` 抽出 `forBody`） |
-| [l5-002](tasks/l5-002.md) | done | Phoenix level-0 IOC：限价 / time TIF / 部分成交 / UInt64 bps |
+| [l5-002](tasks/l5-002.md) | done | Phoenix bounded N=4 IOC：跨档 / slot+time TIF / 费用结算 |
 | [l5-003](tasks/l5-003.md) | doing | 席位 PDA + vault 初始化 |
 | [l5-004](tasks/l5-004.md) | planned | Token-2022 program id 切片 |
 | [l5-005](tasks/l5-005.md) | doing | 嵌套 structure 摊平 |

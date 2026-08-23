@@ -2,7 +2,10 @@
 
 ## Purpose
 
-把 [phoenix-v1](https://github.com/Ellipsis-Labs/phoenix-v1) `src/state` 摊进当前 SVM 剖面。抽出器不认嵌套 structure / 红黑树，所以官方 *记录* 摊成平行 `UInt64` 向量，不是自己发明的 6 槽。
+把 [phoenix-v1](https://github.com/Ellipsis-Labs/phoenix-v1) 的 ask-side IOC
+语义放进当前 SVM 剖面。官方记录摊成平行 `UInt64` 向量；固定 N=4 的
+`RBTree4` 保存规范红黑拓扑及中序次序的 refinement witness，但链上账户不复制
+颜色和指针。
 
 ## 官方 `src/state` 对上了什么
 
@@ -16,30 +19,33 @@
 | `FIFORestingOrder` × 4 | `traders` / `sizes` / `lastSlots` / `lastTimes` |
 | `TraderState` | `quoteLocked` / `quoteFree` / `baseLocked` / `baseFree` |
 | `Side` / `SelfTradeBehavior` | 无 payload 枚举（宿主） |
-| TIF 哨兵 0 | `expired` |
+| `MatchingEngineResponse` | `match*` bounded-fold scratch |
+| TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
-34 个 u64 槽。`#pf_build Projects.Phoenix` digest `28a047016bb7ac90`。
+42 个 u64 槽。`#pf_build Projects.Phoenix` digest `b768c4809cea96c1`。
 
-当前链上 `swapBuy` 是 level-0 IOC 切片：检查限价和 time TIF，按
-`min(want, sizes[0])` 部分或全部成交，保留 Token `TransferChecked` CPI，随后显式写回
-`sizes_0` 和 `baseFree`。`swapBuyAt` 是宿主侧可测试语义，额外覆盖 slot TIF。
+`swapBuyAt` 是完整的 bounded N=4 宿主语义；链上 `swapBuy` 用 17-phase
+state-carrying fold 实现相同扫描：reset 后，每档依次检查 slot TIF、time TIF、
+撮合并推进档位。过期单清零、解锁 base 并继续；第一个超限有效价格停止；整档
+成交继续，部分成交停止。无流动性或超限 IOC 成功返回 0，不伪装成 overflow。
 
-`postAsk` 链上入口仍只写 `sizes`；`postAskFull` 在宿主写价、序号、锁仓。费用可按账户
-`takerFeeBps` 用 `feeOfBps` 计算，但当前成交入口还没有 collected/unclaimed fee 记账。
+quote 和费用先按整次撮合聚合再向上取整。结算扣 `quoteLocked`、增加
+`quoteFree`，扣 maker `baseLocked`，把成交和过期解锁量加到 `baseFree`，并增加
+`unclaimedFees`；`collectedFees` 只由后续收费动作改变。非零成交保留 Token
+`TransferChecked` CPI。
 
 ## 官方有、本仓没有
 
 | 官方 | 为什么关 |
 |---|---|
-| `RedBlackTree` bids/asks/traders | 节点布局已在 `Examples.Tree`；Phoenix 书还没换成 `Vector Node` |
+| 动态 `RedBlackTree` allocator / 插删旋转 | 当前只证明固定四节点规范拓扑和中序投影 |
 | `_padding: [u64; 32]` | 不进账户 |
 | `OrderPacket.client_order_id: u128` | 只有 `UInt64` |
 | `MarketEvent` 带 payload | 多构造子 inductive |
 | `Ladder` / `Vec` | 不定长 |
-| 跨档扫描 / Cancel 进链上 | 当前成交只处理档 0；尚未接红黑树或循环扫书 |
-| slot TIF 进链上 | `swapBuyAt` 已覆盖；链上 `swapBuy` 当前只读 Clock unix time |
-| 成交费用状态记账 | 只有 UInt64 bps 计算，还没更新 collected/unclaimed fee |
+| bid book / trader tree / 动态 maker 身份 | 当前只做聚合 ask-side N=4 |
+| self-trade / seat lifecycle / event batch | 需要更完整账户与事件模型 |
 | Seat + 双 vault 同一入口 | CPI 账户表会抬高 |
 | `Log` self-CPI | 变长 event batch |
 
-缺哪块再补 SVM，不要先假装全量兼容。
+这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。

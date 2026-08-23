@@ -175,7 +175,8 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       return "sload(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
         toString stride ++ ")))"
   | .loopIx => .ok "i"
-  | .addU64 .. | .subU64 .. | .mapGetU64 .. | .mapGetAddr .. | .mapGetPair .. =>
+  | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. |
+    .mapGetU64 .. | .mapGetAddr .. | .mapGetPair .. =>
       .error "extract/unsupported: evm map/arith val needs materialize"
 
 private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
@@ -286,6 +287,31 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
         let txt := preL ++ preR ++
           indent ++ "if lt(" ++ lv ++ ", " ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := sub(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
+        return (txt, nm, st3)
+    | .mulU64 l r =>
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (nm, st3) := fresh st2
+        let txt := preL ++ preR ++
+          indent ++ "if and(" ++ rv ++ ", gt(" ++ lv ++ ", div(" ++ u64MaxYul ++
+            ", " ++ rv ++ "))) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := mul(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
+        return (txt, nm, st3)
+    | .divU64 l r =>
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (nm, st3) := fresh st2
+        let txt := preL ++ preR ++
+          indent ++ "if iszero(" ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := div(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
+        return (txt, nm, st3)
+    | .modU64 l r =>
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (nm, st3) := fresh st2
+        let txt := preL ++ preR ++
+          indent ++ "if iszero(" ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := mod(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
     | .mapGetU64 base key =>
         let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st

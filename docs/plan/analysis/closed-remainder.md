@@ -27,7 +27,7 @@
 - SVM 位运算 / 命名错误 / wrapping add view：已开（`Examples.Lang`）
 - 4 路嵌套 `else if`：抽出器已开（Phoenix `postAsk` / `swapBuy`）
 - 账户下标：`IR.maxTxAccountLocks = 64`（官方当前强制锁账户数）
-- `Op.forBody`：SVM/EVM 发射已开；抽出器还分不清循环 binder，Phoenix / `fillFirst` 先不进链上入口
+- `Op.forBody`：SVM/EVM 发射和 state-carrying 抽取已开；Phoenix bounded N=4 已进链上入口
 - Token-2022：规划见 [token-2022.md](token-2022.md)。没有 Token v3
 - 多构造子 inductive 带 payload
 - `sol_alloc_free_`、`sol_log_*` 当产品语义

@@ -44,6 +44,8 @@ import Examples.TokenOwner
 import Examples.TokenMs
 import Tests.Fixtures
 
+open Lean Elab Command
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
 
 #pf_extract Examples.Counter.init Examples.Counter.decrement Examples.Counter.get
@@ -87,6 +89,33 @@ error: extract/unsupported: fields #[value] != inferred #[left, right]
 #pf_extract Examples.Counter.init Examples.Counter.divide Examples.Counter.get
 
 #pf_extract Examples.Counter.init Examples.Counter.modulo Examples.Counter.get
+
+#pf_extract Tests.Fixtures.initFold Tests.Fixtures.runFold Tests.Fixtures.foldProduct
+
+elab "#pf_guard_state_fold_ir" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runFold ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some run := program.methods.find? (·.ixName == "runFold")
+    | throwError "missing state-fold method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .forBody 2 #[
+      .ite .eq .loopIx (.lit 0)
+        #[.storeField "product" (.mulU64 (.arg 0) (.arg 1))]
+        #[
+          .storeField "quotient" (.divU64 (.arg 0) (.arg 1)),
+          .storeField "remainder" (.modU64 (.arg 0) (.arg 1))
+        ]
+    ],
+    .okState (.field (.arg 2) "product")
+  ]
+  unless run.ops == expected do
+    throwError s!"state-fold IR mismatch: {repr run.ops}"
+
+#pf_guard_state_fold_ir
 
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 

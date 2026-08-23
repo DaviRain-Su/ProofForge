@@ -455,6 +455,9 @@ private def valCanon : Ops.Val → String
   | .ownerIsSelf a => s!"ois.{a}"
   | .addU64 l r => s!"uadd({valCanon l},{valCanon r})"
   | .subU64 l r => s!"usub({valCanon l},{valCanon r})"
+  | .mulU64 l r => s!"umul({valCanon l},{valCanon r})"
+  | .divU64 l r => s!"udiv({valCanon l},{valCanon r})"
+  | .modU64 l r => s!"umod({valCanon l},{valCanon r})"
   | .mapGetU64 b k => s!"vg({valCanon b},{valCanon k})"
   | .mapGetAddr b a0 a1 a2 =>
       s!"vga({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"

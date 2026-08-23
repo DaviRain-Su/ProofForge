@@ -98,4 +98,27 @@ def creditFlag (s : FlagState) (delta : UInt64) :
   else
     .error .overflow
 
+/-- 正向：target-neutral value arithmetic inside a state-carrying bounded fold. -/
+structure FoldState where
+  product : UInt64
+  quotient : UInt64
+  remainder : UInt64
+  deriving Repr, DecidableEq
+
+def initFold (_seed : UInt64) : FoldState :=
+  { product := 0, quotient := 0, remainder := 0 }
+
+def runFold (s : FoldState) (lhs rhs : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut st := s
+  for i in [:2] do
+    if i = 0 then
+      st := { st with product := lhs * rhs }
+    else
+      st := { st with quotient := lhs / rhs, remainder := lhs % rhs }
+  .ok (st, st.product)
+
+def foldProduct (s : FoldState) : UInt64 :=
+  s.product
+
 end Tests.Fixtures
