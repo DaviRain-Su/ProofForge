@@ -43,8 +43,11 @@ open Examples.Lang
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedLang with
-  | .error reason => reason.contains "svm rejects evm leaf"
-  | .ok _ => false
+  | .error _ => false
+  | .ok asm =>
+      asm.contains "and64" &&
+        asm.contains "lsh64" &&
+        asm.contains "named error"
 
 #guard ProofForge.Evm.Keccak.selector "mask8" #["uint8"] ==
   ProofForge.Evm.Keccak.selectorOfWidths "mask8" #[1]

@@ -584,9 +584,54 @@ private def emitLoadKeccak256Lit (seed : String) (stackOff : Nat) : String :=
   emitLoadHashLit "keccak256Lit" "sol_keccak256" seed stackOff
 
 
+set_option linter.unusedVariables false in
 mutual
+private partial def emitLoadBitBin (p : IR.Program) (op : String) (l r : Ops.Val)
+    (stackOff : Nat) : Except String String := do
+  let loadL ← loadVal p l (stackOff + 8)
+  let loadR ← loadVal p r (stackOff + 16)
+  return loadL ++ loadR ++
+    s!"\
+  ldxdw r1, [r10 - {stackOff + 8}]
+  ldxdw r2, [r10 - {stackOff + 16}]
+  {op} r1, r2
+  stxdw [r10 - {stackOff}], r1
+"
 
-private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
+private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff : Nat) :
+    Except String String := do
+  let load ← loadVal p v (stackOff + 8)
+  return load ++
+    s!"\
+  ldxdw r1, [r10 - {stackOff + 8}]
+  lddw r2, 0xffffffffffffffff
+  xor64 r1, r2
+  stxdw [r10 - {stackOff}], r1
+"
+
+/-- 移位量 ≥ 64 结果是 0，对齐 Lean `UInt64`。 -/
+private partial def emitLoadShift (p : IR.Program) (op : String) (l r : Ops.Val)
+    (stackOff : Nat) : Except String String := do
+  let loadL ← loadVal p l (stackOff + 8)
+  let loadR ← loadVal p r (stackOff + 16)
+  let wide := s!"wide_sh_{stackOff}"
+  let done := s!"done_sh_{stackOff}"
+  return loadL ++ loadR ++
+    s!"\
+  ldxdw r1, [r10 - {stackOff + 8}]
+  ldxdw r2, [r10 - {stackOff + 16}]
+  lddw r3, 64
+  jge r2, r3, {wide}
+  {op} r1, r2
+  ja {done}
+{wide}:
+  lddw r1, 0
+{done}:
+  stxdw [r10 - {stackOff}], r1
+"
+
+
+private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except String String :=
   match v with
   | .lit n =>
     .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
@@ -660,8 +705,16 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
   | .indexGet _ name idx len =>
     emitLoadIndexGet p name idx len stackOff
+  | .bitAnd l r => emitLoadBitBin p "and64" l r stackOff
+  | .bitOr l r => emitLoadBitBin p "or64" l r stackOff
+  | .bitXor l r => emitLoadBitBin p "xor64" l r stackOff
+  | .bitNot v => emitLoadBitNot p v stackOff
+  | .shiftL l r => emitLoadShift p "lsh64" l r stackOff
+  | .shiftR l r => emitLoadShift p "rsh64" l r stackOff
+  | .addU64 l r => emitLoadBitBin p "add64" l r stackOff
+  | .subU64 l r => emitLoadBitBin p "sub64" l r stackOff
   | v =>
-    if Ops.isEvmLeaf v || Ops.isBitVal v then
+    if Ops.isEvmLeaf v then
       .error "extract/unsupported: svm rejects evm leaf"
     else do
       let mem ← memOfVal p v
@@ -669,7 +722,7 @@ private def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Except Str
       return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
 /-- `cells_0` 起的连续 u64 槽。`idx ≥ len` → Custom(1)。 -/
-private def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops.Val)
+private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops.Val)
     (len stackOff : Nat) : Except String String := do
   let baseName :=
     if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0" else name
@@ -704,7 +757,7 @@ ok_idx_{stackOff}:
 `sol_create_program_address`：一条 ASCII 种子 + bump 字节 + 当前 program id。
 成功写 0，失败写 1。scratch 同 findPda，用 `r8 = r10-2800`。
 -/
-private def emitLoadCheckPda (p : IR.Program) (seed : String) (bump : Ops.Val)
+private partial def emitLoadCheckPda (p : IR.Program) (seed : String) (bump : Ops.Val)
     (stackOff : Nat) : Except String String := do
   let bumpOff := stackOff + 8
   let loadBump ← loadVal p bump bumpOff
@@ -1153,7 +1206,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
     | .evmDeposit _ | .evmSendEth .. | .evmLog .. =>
       throw "extract/unsupported: svm rejects evm leaf"
     | .errorNamed _ =>
-      throw "extract/unsupported: svm rejects evm leaf"
+      acc := acc ++ s!"  ; named error\n  lddw r0, 0x1\n  exit\n"
     | .forAccum bound addend =>
       let loopLab := s!"loop_{label}_{n}"
       let doneLab := s!"done_{label}_{n}"
@@ -1279,7 +1332,7 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
           acc := acc ++ load
           acc := acc ++ (← emitStoreAndReturn p destHint 24)
         | v =>
-          if Ops.isEvmLeaf v || Ops.isBitVal v then
+          if Ops.isEvmLeaf v then
             throw "extract/unsupported: svm rejects evm leaf"
           else if Ops.hasCheckedArith ops then
             acc := acc ++ (← emitStoreAndReturn p destHint 24)
@@ -1362,7 +1415,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
-    if Ops.hasEvmEffect m.ops || Ops.hasSvmRejectedLang m.ops then
+    if Ops.hasEvmEffect m.ops then
       .error "extract/unsupported: svm rejects evm leaf"
     else if Ops.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
@@ -1377,7 +1430,11 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) true false
       return s!"{label}:\n{head}{body}"
   | .get =>
-    if m.ops.any (fun | .ite .. => true | _ => false) then
+    if m.ops.any (fun
+        | .ite .. => true
+        | .forAccum .. => true
+        | .returnU64 v => Ops.isLangVal v || match v with | .addU64 .. | .subU64 .. => true | _ => false
+        | _ => false) || m.ops.size > 1 then
       let body ← emitMutBody p label m.ops
       let head :=
         if IR.usesWalk p then preludeWalk p label (ixLenOf m) m.ops

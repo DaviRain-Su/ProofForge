@@ -81,7 +81,7 @@ def bestAsk (s : State) : UInt64 :=
 
 @[pf_entry]
 def askQty (s : State) : UInt64 :=
-  s.sizes[0]!
+  s.sizes[0]! + s.sizes[1]! + s.sizes[2]! + s.sizes[3]!
 
 @[pf_entry]
 def makerBase (s : State) : UInt64 :=

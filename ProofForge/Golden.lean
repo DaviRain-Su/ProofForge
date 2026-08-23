@@ -1134,7 +1134,12 @@ def extractedPhoenix : Program :=
             ]
         ] },
       { kind := .get, name := "Projects.Phoenix.askQty", ixName := "askQty", paramCount := 0
-        ops := #[.returnU64 (.field (.arg 0) "sizes_0")] },
+        ops := #[.returnU64
+          (.addU64
+            (.addU64
+              (.addU64 (.field (.arg 0) "sizes_0") (.field (.arg 0) "sizes_1"))
+              (.field (.arg 0) "sizes_2"))
+            (.field (.arg 0) "sizes_3"))] },
       { kind := .get, name := "Projects.Phoenix.bestAsk", ixName := "bestAsk", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "askPrice")] },
       { kind := .get, name := "Projects.Phoenix.level0", ixName := "level0", paramCount := 0

@@ -183,7 +183,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if a ≤ 3 && w ≤ 3 then some (.accKeyWord a w) else none
+            if a ≤ 7 && w ≤ 3 then some (.accKeyWord a w) else none
           | _, _ => none
         else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Svm.Runtime.accOwnerWord) &&
             e.getAppArgs.size ≥ 2 then
@@ -192,7 +192,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
-            if a ≤ 3 && w ≤ 3 then some (.accOwnerWord a w) else none
+            if a ≤ 7 && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
@@ -212,49 +212,49 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 3 then some (.accLamportsN a) else none
+            if a ≤ 7 then some (.accLamportsN a) else none
           | _ => none
         else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 3 then some (.accDataLenN a) else none
+            if a ≤ 7 then some (.accDataLenN a) else none
           | _ => none
         else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 3 then some (.isSignerN a) else none
+            if a ≤ 7 then some (.isSignerN a) else none
           | _ => none
         else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 3 then some (.isWritableN a) else none
+            if a ≤ 7 then some (.isWritableN a) else none
           | _ => none
         else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 3 then some (.isExecutableN a) else none
+            if a ≤ 7 then some (.isExecutableN a) else none
           | _ => none
         else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 3 then some (.signerKeyN a) else none
+            if a ≤ 7 then some (.signerKeyN a) else none
           | _ => none
         else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Svm.Runtime.ownerIsSelf) &&
             e.getAppArgs.size ≥ 1 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
-            if a ≤ 3 then some (.ownerIsSelf a) else none
+            if a ≤ 7 then some (.ownerIsSelf a) else none
           | _ => none
         else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
           let args := e.getAppArgs
@@ -1688,6 +1688,7 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ => .ok #[.returnU64 v]
     | .indexGet .. => .ok #[.returnU64 v]
+    | .addU64 .. | .subU64 .. => .ok #[.returnU64 v]
     | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. =>
         .ok #[.returnU64 v]
     | v =>

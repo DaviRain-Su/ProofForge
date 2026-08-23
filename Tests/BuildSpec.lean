@@ -148,10 +148,6 @@ error: extract/unsupported: svm rejects evm leaf
 #guard_msgs (error) in
 #pf_build Examples.TipJar
 
-/--
-error: extract/unsupported: svm rejects evm leaf
--/
-#guard_msgs (error) in
 #pf_build Examples.Lang
 
 /--

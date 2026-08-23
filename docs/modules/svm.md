@@ -14,7 +14,7 @@
 | `Svm.Assemble` | locked `sbpf 0.2.2` 子进程 | FFI、PATH 随便一个 sbpf |
 | `Svm.Commands` | `#pf_check` / `#pf_extract` / `#pf_build` / `#pf_dump` | `#pf_evm_build` |
 
-输入是已通过 Profile 的 `IR.Program`。碰到 EVM 叶子（`evmCaller` / `evmMapGet*` / `evmLog*`）fail closed。disc / layout 域仍是 `proof-forge-solana-v1:` / `proof-forge-solana-layout-v1:`，不改现有 `.so` 字节。
+输入是已通过 Profile 的 `IR.Program`。碰到 EVM 叶子（`evmCaller` / `evmMapGet*` / `evmLog*`）fail closed。位运算、命名错误、有界 for / Vector 下标、wrapping add view 已开。disc / layout 域仍是 `proof-forge-solana-v1:` / `proof-forge-solana-layout-v1:`，不改现有 `.so` 字节。
 
 ## API
 

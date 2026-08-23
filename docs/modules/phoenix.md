@@ -11,7 +11,7 @@
 - `swapBuy`：一个入口从档 0 扫到 3，第一档装得下就成交 + Token TransferChecked
 - `#pf_build Projects.Phoenix`
 
-四元加法 view、循环里改状态仍关。挂单/吃单用展开的 4 路 `ite`。
+`askQty` 是四档 wrapping 加。循环里改状态仍关。挂单/吃单用展开的 4 路 `ite`。
 
 ## 本切片没有（官方有，剖面关着）
 

@@ -10,6 +10,8 @@ open ProofForge.Runtime
 #guard (init 100).sizes[0]! == 0
 #guard bestAsk (init 100) == 100
 #guard askQty (init 100) == 0
+#guard
+  askQty { askPrice := 100, sizes := #v[1, 2, 3, 4], baseFree := 0 } == 10
 #guard level0 (init 100) == 0
 
 #guard
