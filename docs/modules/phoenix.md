@@ -26,7 +26,7 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 147 个 8-byte 叶，账户含 discriminator 共 1,184 bytes。`#pf_build Projects.Phoenix`
-digest `f110e8e186ca251b`。
+digest `5592f7f7eb6c026b`。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -36,13 +36,14 @@ IR 或 emitter 分支。`withdrawBase` / `withdrawQuote` 分别返回 `min(reque
 不混淆两种 lot 单位；`evictSeat` 只释放四类余额全零的 seat，并把 address 压回 LIFO
 free-list。释放 2 再释放 1 时，后续注册按 1、2 复用且 bump index 不回退。lookup 用
 `Except UInt64` producer 汇合到 CFG join local，复合 key guard 由统一 Extract lowering
-承载。`reduceAsk` / `reduceBid` 的链上入口不再接受可伪造的 trader 参数，而是按 account 1
-signer 完整 Pubkey 解析内部 seat；reduce/cancel 同时解锁该 seat 的 base/quote 余额。
+承载。`postAsk` / `postBid` / `reduceAsk` / `reduceBid` 的链上入口不再接受可伪造的
+trader 参数，而是按 account 1 signer 完整 Pubkey 解析内部 seat；reduce/cancel 同时
+解锁该 seat 的 base/quote 余额。
 旧的四个聚合槽暂时作为尚未迁移的 matching path 兼容投影同步更新；下一步是把
 post/match 结算切到 per-seat 余额，再删除兼容槽。deposit/withdraw 的 vault Token CPI
 仍属于 adapter 缺口。
 
-`postAsk` 是链上 free-funds 挂单：检查 incoming TIF 和 sequence 上界，锁定
+`postAsk` 是 signer-authenticated 链上 free-funds 挂单：检查 incoming TIF 和 sequence 上界，锁定
 `baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；书满时只有更低价
 ask 能驱逐最差订单。物理空洞通过 bounded compare/swap 收到尾部。
 
@@ -61,7 +62,7 @@ Token `TransferChecked` CPI。`reduceAsk` 按 signer seat + `(price, sequence)` 
 projection；缺失订单成功返回 0。
 
 bid-side 对称地按价格降序排列，订单 ID 保存官方的 `~~~sequence` 编码，同价时编码
-降序即时间 FIFO。`postBid` 按原价把 quote 从 free 锁入 locked，满书只允许更高价
+降序即时间 FIFO。`postBid` 同样按 signer seat 授权，按原价把 quote 从 free 锁入 locked，满书只允许更高价
 驱逐最差 bid；`reduceBid` / `cancelBid` 按原价解锁 owner seat 的 quote collateral。
 `swapSell` 扫过期和跨档 bid，
 按总成交 adjusted quote 收 taker fee，并覆盖三种 self-trade 行为。宿主递归规范和
@@ -73,10 +74,11 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 `(lo, hi)` 两个 `UInt64` limb 完整保留；这正好仍落在五 payload 的最大布局内，
 所以 event layout 未再增大。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 559,613-byte assembly、
-131,536-byte eBPF ELF 和 13,529-byte IDL。assembly 是中间文本，不部署；当前 ELF
-约 128.5 KiB。两个 authenticated reduce 入口各自内联 bounded Pubkey lookup 后，ELF
-比上一切片增加 11,248 bytes。测试把 assembly budget 钉在 575 KB，并拒绝重复 label。
+真实源模块经 `pf build --target svm Phoenix` 生成 589,719-byte assembly、
+138,272-byte eBPF ELF 和 13,469-byte IDL。assembly 是中间文本，不部署；当前 ELF
+约 135.0 KiB。四个 authenticated post/reduce 入口各自内联 bounded Pubkey lookup；
+reduce slice 增加 11,248 bytes，post authentication 再增加 6,736 bytes。测试把
+assembly budget 钉在 610 KB，并拒绝重复 label。
 链上 buy / sell 分别是 19 / 23 phase，挂单是 17 phase；代码体积按 bounded loop
 增长，不按四档静态展开。
 

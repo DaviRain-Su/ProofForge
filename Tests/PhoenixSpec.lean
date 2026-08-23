@@ -32,7 +32,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Svm.Emit.emitProgramAsm source with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.toUTF8.size < 575000 do
+  unless asm.toUTF8.size < 610000 do
     throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
   unless !asm.contains "\n\\\n" do
     throwError "Phoenix assembly contains a standalone backslash"
@@ -77,8 +77,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless deposit.paramCount == 2 && withdrawBase.paramCount == 1 &&
       withdrawQuote.paramCount == 1 && evictSeat.paramCount == 0 &&
       traderIndex.paramCount == 4 &&
-      post.paramCount == 7 && reduce.paramCount == 3 &&
-      postBid.paramCount == 7 && reduceBid.paramCount == 3 &&
+      post.paramCount == 6 && reduce.paramCount == 3 &&
+      postBid.paramCount == 6 && reduceBid.paramCount == 3 &&
       swap.paramCount == 6 && swapSell.paramCount == 6 && collect.paramCount == 0 &&
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"

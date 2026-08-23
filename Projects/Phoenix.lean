@@ -645,11 +645,16 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
 
 attribute [pf_inline] postAskAt
 
-/-- 链上 free-funds ask 挂单；slot/time 在入口各读取一次。 -/
+/--
+链上 free-funds ask 挂单；owner 由 account 1 signer 的完整 Pubkey 解析，slot/time
+在入口各读取一次。调用者不能传入其他 trader 的内部 address。
+-/
 @[pf_entry]
 def postAsk (s : State)
-    (trader price size clientOrderIdLo clientOrderIdHi lastSlot lastTime : UInt64) :
-    Except Error (State × UInt64) :=
+    (price size clientOrderIdLo clientOrderIdHi lastSlot lastTime : UInt64) :
+    Except Error (State × UInt64) := do
+  let trader ← requireTraderAddress s (signerKey 1) (accKeyWord 1 1)
+    (accKeyWord 1 2) (accKeyWord 1 3)
   postAskWithClientAt s trader price size clientOrderIdLo clientOrderIdHi
     lastSlot lastTime clockSlot unixTime
 
@@ -817,10 +822,13 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
 
 attribute [pf_inline] postBidAt
 
+/-- Bid-side signer adapter；不能以 instruction 参数伪造 resting-order owner。 -/
 @[pf_entry]
 def postBid (s : State)
-    (trader price size clientOrderIdLo clientOrderIdHi lastSlot lastTime : UInt64) :
-    Except Error (State × UInt64) :=
+    (price size clientOrderIdLo clientOrderIdHi lastSlot lastTime : UInt64) :
+    Except Error (State × UInt64) := do
+  let trader ← requireTraderAddress s (signerKey 1) (accKeyWord 1 1)
+    (accKeyWord 1 2) (accKeyWord 1 3)
   postBidWithClientAt s trader price size clientOrderIdLo clientOrderIdHi
     lastSlot lastTime clockSlot unixTime
 
