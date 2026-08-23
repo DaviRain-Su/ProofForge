@@ -13,6 +13,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Extract.extractModuleIR env `Projects.Phoenix none with
     | .ok program => pure program
     | .error reason => throwError reason
+  match source.validateSvm with
+  | .ok _ => pure ()
+  | .error reason => throwError reason
   let program ←
     match ProofForge.Extract.IR.toLegacyProgram source with
     | .ok program => pure program

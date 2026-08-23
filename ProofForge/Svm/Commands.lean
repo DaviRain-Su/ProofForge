@@ -28,7 +28,9 @@ private def runExtract (initN mutN getN : TSyntax `ident) (fields? : Option (Arr
   let mutName ← liftCoreM <| realizeGlobalConstNoOverload mutN
   let getName ← liftCoreM <| realizeGlobalConstNoOverload getN
   let env ← getEnv
-  match Extract.extractProgramIR env initName mutName getName none fields? >>= Extract.IR.toLegacyProgram with
+  match Extract.extractProgramIR env initName mutName getName none fields? >>= fun source => do
+      source.validateSvm
+      Extract.IR.toLegacyProgram source with
   | .error reason => throwError reason
   | .ok program => do
     let mutOps :=
@@ -61,7 +63,9 @@ elab_rules : command
 elab "#pf_build " n:ident : command => do
   let ns := n.getId
   let env ← getEnv
-  match Extract.extractModuleIR env ns none >>= Extract.IR.toLegacyProgram with
+  match Extract.extractModuleIR env ns none >>= fun source => do
+      source.validateSvm
+      Extract.IR.toLegacyProgram source with
   | .error reason => throwError reason
   | .ok program => do
     match Emit.emitCounterAsm program with

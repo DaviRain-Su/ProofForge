@@ -37,6 +37,20 @@ private def validEvmOp : ProofForge.Evm.Ops.Op :=
 
 #guard validEvmOp.wellFormed
 
+#guard
+  let source := ProofForge.Extract.IR.ofLegacyOps
+    #[.returnU64 ProofForge.Ops.Val.clockSlot]
+  match ProofForge.Extract.IR.toSvmOps source, ProofForge.Extract.IR.toEvmOps source with
+  | .ok svm, .error _ => svm.all ProofForge.Svm.Ops.Op.wellFormed
+  | _, _ => false
+
+#guard
+  let source := ProofForge.Extract.IR.ofLegacyOps
+    #[.evmDeposit ProofForge.Ops.Val.evmCallValue]
+  match ProofForge.Extract.IR.toSvmOps source, ProofForge.Extract.IR.toEvmOps source with
+  | .error _, .ok evm => evm.all ProofForge.Evm.Ops.Op.wellFormed
+  | _, _ => false
+
 private def legacyOpsRoundTrip (ops : Array ProofForge.Ops.Op) : Bool :=
   let extensible := ProofForge.Extract.IR.ofLegacyOps ops
   extensible.all ProofForge.Extract.IR.Op.wellFormed &&
