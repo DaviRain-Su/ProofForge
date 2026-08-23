@@ -79,7 +79,8 @@ schema 默认从 `init` 返回类型收：必须是已注册 `structure`、无 `
 `Tests/LayoutSpec.lean`：窄字段偏移、Option 双叶、layout marker。
 `Tests/NormalizationSpec.lean`：等价 Lean 表面形式抽成同一 Core；Tree 的 typed Vector schema
 固定为 4 个元素、每元素 48 字节 / 6 叶；checked result、Option 双叶和动态 Vector
-writeback 的 Core evaluation 是显式且 typed 的；同一 Tree `Place` 在 SVM target IR 中变成
+writeback 的 Core evaluation 是显式且 typed 的；Tree allocator 已覆盖同一动态元素一次
+改写六个叶子以及 LIFO free-list 复用。同一 Tree `Place` 在 SVM target IR 中变成
 byte offset/stride，在 EVM target IR 中变成 slot/slot-stride；Maybe 的 Option tag/payload
 也保持同一 typed identity；Maybe / Tree / Window 的 typed 与 legacy schema 路径生成逐字节
 相同的 SVM 输出，适用程序的 EVM 输出也相同。

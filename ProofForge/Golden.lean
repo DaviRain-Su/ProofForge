@@ -1402,11 +1402,12 @@ def programs : Array Program := #[
 ]
 
 /--
-`#pf_build` 抽出的 digest 必须钉住。Phoenix 的 bounded-fold IR 很大，直接钉
-canonical digest；`extractedPhoenix` 继续作为布局和发射 smoke fixture。
+`#pf_build` 抽出的 digest 必须钉住。Phoenix 的 bounded-fold IR 和 Tree 的动态
+allocator IR 直接钉 canonical digest；对应手写 fixture 继续作为布局/发射 smoke。
 -/
 def digestOf (name : String) : Option String :=
   if name == "Phoenix" then some "13a349638aa8c993"
+  else if name == "Tree" then some "fdfdc7238fa82803"
   else (programs.find? (·.name == name)).map digestHex
 
 end ProofForge.Golden

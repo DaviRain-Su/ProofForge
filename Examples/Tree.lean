@@ -4,8 +4,9 @@ import ProofForge
 Sokoban 红黑树节点 + 定长 `Vector`。
 
 官方 `Node` 物理顺序：left / right / parent / color / key / value。
-`SENTINEL = 0`，已分配地址从 1 起。本切片容量 4：空树写根，
-非空且根右孩空时 bump 到槽 1。左旋已开；染色仍关。
+`SENTINEL = 0`，已分配地址从 1 起。本切片容量 4。allocator 对齐 Sokoban：
+`bumpIndex/freeHead` 初值 1，一过尾标记 5，free node 的 `left` 复用作 LIFO next。
+树插入仍只保留两节点 smoke path；完整 fixup / deletion 后续继续。
 -/
 namespace Examples.Tree
 
@@ -22,6 +23,8 @@ structure Node where
 structure State where
   root : UInt64
   size : UInt64
+  bumpIndex : UInt64
+  freeHead : UInt64
   nodes : Vector Node 4
   deriving Repr, DecidableEq, Inhabited
 
@@ -36,7 +39,8 @@ def emptyNode : Node :=
 
 @[pf_entry]
 def init (_seed : UInt64) : State :=
-  { root := 0, size := 0, nodes := #v[emptyNode, emptyNode, emptyNode, emptyNode] }
+  { root := 0, size := 0, bumpIndex := 1, freeHead := 1,
+    nodes := #v[emptyNode, emptyNode, emptyNode, emptyNode] }
 
 @[pf_entry]
 def getRoot (s : State) : UInt64 :=
@@ -45,6 +49,14 @@ def getRoot (s : State) : UInt64 :=
 @[pf_entry]
 def getSize (s : State) : UInt64 :=
   s.size
+
+@[pf_entry]
+def getBumpIndex (s : State) : UInt64 :=
+  s.bumpIndex
+
+@[pf_entry]
+def getFreeHead (s : State) : UInt64 :=
+  s.freeHead
 
 /-- 读节点 0 的 value（地址 1 的槽）。 -/
 @[pf_entry]
@@ -94,6 +106,71 @@ def setParent (s : State) (i p : UInt64) : Except Error (State × UInt64) :=
     .error .overflow
 
 /--
+Sokoban `NodeAllocator.add_node` 的 N=4 版本。`freeHead = bumpIndex` 时从 bump
+区分配，否则弹出 free node；复用时把作为 next-free 的 `left` 清零。返回 1-based 地址。
+-/
+@[pf_entry]
+def allocNode (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
+  if s.size < 4 then
+    if s.freeHead = s.bumpIndex then
+      if s.bumpIndex = 0 then
+        .error .overflow
+      else if s.bumpIndex < 5 then
+        let address := s.bumpIndex
+        let i := address.toNat - 1
+        .ok ({ s with
+                size := s.size + 1
+                bumpIndex := s.bumpIndex + 1
+                freeHead := s.bumpIndex + 1
+                nodes := s.nodes.set (i % 4)
+                  { left := 0, right := 0, parent := 0, color := 0, key := k, value := v } },
+          address)
+      else
+        .error .overflow
+    else if s.freeHead = 0 then
+      .error .overflow
+    else if s.freeHead < 5 then
+      let address := s.freeHead
+      let i := address.toNat - 1
+      let next := s.nodes[i]!.left
+      .ok ({ s with
+              size := s.size + 1
+              freeHead := next
+              nodes := s.nodes.set (i % 4)
+                { left := 0, right := 0, parent := 0, color := 0, key := k, value := v } },
+        address)
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+/--
+树层 release：先清 right/parent/color，再由 allocator 把 `left` 写成旧 freeHead。
+key/value 按 Sokoban remove_node 保留，下一次 allocation 才覆盖 payload。
+-/
+@[pf_entry]
+def releaseNode (s : State) (address : UInt64) : Except Error (State × UInt64) :=
+  if address = 0 then
+    .error .overflow
+  else if address < s.bumpIndex then
+    if h : address.toNat - 1 < 4 then
+      if s.size = 0 then
+        .error .overflow
+      else
+        let i := address.toNat - 1
+        let old := s.nodes[i]!
+        .ok ({ s with
+                size := s.size - 1
+                freeHead := address
+                nodes := s.nodes.set i
+                  { old with left := s.freeHead, right := 0, parent := 0, color := 0 } },
+          address)
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+/--
 有界 bump 分配。
 空树：地址 1（槽 0）写成红根。
 非空且根右孩是 SENTINEL、还有空槽：把地址 2（槽 1）挂到根右边。
@@ -106,17 +183,27 @@ def bumpInsert (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
       .ok ({ s with
               root := 1
               size := 1
+              bumpIndex := 2
+              freeHead := 2
               nodes := s.nodes.set 0
                 { left := 0, right := 0, parent := 0, color := 1, key := k, value := v } }, k)
     else
       .error .overflow
   else if s.nodes[0]!.right = 0 then
     if s.size < 4 then
+      if s.bumpIndex = 2 then
+        if s.freeHead = 2 then
       .ok ({ s with
               size := s.size + 1
+              bumpIndex := 3
+              freeHead := 3
               nodes :=
                 (s.nodes.set 0 { s.nodes[0]! with right := 2 }).set 1
                   { left := 0, right := 0, parent := 1, color := 1, key := k, value := v } }, k)
+        else
+          .error .overflow
+      else
+        .error .overflow
     else
       .error .overflow
   else
