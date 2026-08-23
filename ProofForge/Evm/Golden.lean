@@ -1,4 +1,4 @@
-import ProofForge.Golden
+import ProofForge.Extract.LegacyGolden
 import ProofForge.Evm.IRCompat
 
 namespace ProofForge.Evm.Golden

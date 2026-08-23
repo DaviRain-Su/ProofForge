@@ -3,7 +3,7 @@ import ProofForge.Profile
 import ProofForge.Extract
 import ProofForge.Core.IR
 import ProofForge.Svm.Emit
-import ProofForge.Golden
+import ProofForge.Extract.LegacyGolden
 
 open Lean Elab Command
 open ProofForge

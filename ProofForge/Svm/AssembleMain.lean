@@ -1,5 +1,5 @@
 import ProofForge.Svm.AssembleCompat
-import ProofForge.Golden
+import ProofForge.Extract.LegacyGolden
 
 def main (args : List String) : IO UInt32 := do
   let args := args.dropWhile (· == "--")

@@ -11,7 +11,9 @@
 | `Crypto.Sha256` | FIPS 180-4 SHA-256；disc / layout marker | `sol_sha256` |
 | `Crypto.Keccak` | Ethereum Keccak-256（domain `0x01`）；ABI selector | `sol_keccak256`、链上 opcode |
 
-`ProofForge.Sha256` 和 `ProofForge.Evm.Keccak` 只是旧名转发。新代码应 `import ProofForge.Crypto.Sha256` / `ProofForge.Crypto.Keccak`。
+`ProofForge.Crypto.Sha256Compat` 中的 `ProofForge.Sha256` 和
+`ProofForge.Evm.Keccak` 只是旧名转发。新代码应
+`import ProofForge.Crypto.Sha256` / `ProofForge.Crypto.Keccak`。
 
 ## Tests
 

@@ -2,7 +2,7 @@ import ProofForge.Crypto.Sha256
 
 /-!
 本机 SHA-256 在 `ProofForge.Crypto.Sha256`。
-这个模块只保留旧名。
+这个兼容模块只保留旧名。
 -/
 namespace ProofForge.Sha256
 

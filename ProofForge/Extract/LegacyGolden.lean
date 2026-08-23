@@ -1,6 +1,7 @@
 import ProofForge.Extract.LegacyIR
 import ProofForge.Extract.LegacyOps
 
+/-! Hand-authored fixtures for the legacy mixed extraction IR. -/
 namespace ProofForge.Golden
 
 open ProofForge.Extract.Legacy

@@ -3,7 +3,7 @@ import ProofForge.Evm.Keccak
 import ProofForge.Evm.IR
 import ProofForge.Evm.Emit
 import ProofForge.Evm.Golden
-import ProofForge.Golden
+import ProofForge.Extract.LegacyGolden
 
 open ProofForge.Evm
 

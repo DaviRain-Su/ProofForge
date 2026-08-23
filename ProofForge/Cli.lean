@@ -1,5 +1,5 @@
 import Lean
-import ProofForge.Golden
+import ProofForge.Extract.LegacyGolden
 import ProofForge.Extract
 import ProofForge.Core.IR
 import ProofForge.Svm.Assemble

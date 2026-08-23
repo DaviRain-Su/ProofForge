@@ -1,7 +1,7 @@
 import ProofForge.Svm.Ops
 import ProofForge.Evm.Ops
 import ProofForge.Extract.LegacyAdapter
-import ProofForge.Golden
+import ProofForge.Extract.LegacyGolden
 
 namespace Tests.TargetOpsSpec
 

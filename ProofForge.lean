@@ -7,12 +7,12 @@ import ProofForge.Extract.LegacyEval
 import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256
 import ProofForge.Crypto.Keccak
-import ProofForge.Sha256
+import ProofForge.Crypto.Sha256Compat
 import ProofForge.Svm.Ops
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Ops
 import ProofForge.Evm.Runtime
-import ProofForge.Golden
+import ProofForge.Extract.LegacyGolden
 import ProofForge.Attr
 import ProofForge.Profile
 import ProofForge.Extract.IR
