@@ -123,6 +123,52 @@ def fieldOffset (p : Program) (name : String) : Option Nat :=
 def fieldWidth (p : Program) (name : String) : Option Nat :=
   (p.slots.find? (·.name == name)).map (·.width)
 
+/-- `cells` / `nodes` 这类定长向量：按 `name_0*` 一组算元素个数和每元素字节。 -/
+def vectorElem (p : Program) (name : String) : Option (Nat × Nat) :=
+  let pre0 := name ++ "_0"
+  let group :=
+    p.slots.filter fun s => s.name == pre0 || s.name.startsWith (pre0 ++ "_")
+  if group.isEmpty then none
+  else
+    let width := group.foldl (init := 0) fun acc s => acc + s.width
+    let digitPref (s : String) : String :=
+      Id.run do
+        let mut out := ""
+        for c in s.toList do
+          if c.isDigit then out := out.push c else return out
+        return out
+    let n :=
+      p.slots.foldl (init := 0) fun acc s =>
+        let rest :=
+          if s.name.startsWith (name ++ "_") then
+            digitPref (s.name.drop (name.length + 1) |>.copy)
+          else ""
+        match rest.toNat? with
+        | some i => Nat.max acc (i + 1)
+        | none => acc
+    if n = 0 || width = 0 then none else some (n, width)
+
+def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
+  if given ≠ 0 then given
+  else match vectorElem p name with | some (n, _) => n | none => 0
+
+def vectorStride (p : Program) (name : String) : Nat :=
+  match vectorElem p name with
+  | some (_, w) => w
+  | none => 8
+
+/-- `nodes[i].value` 相对 `nodes_0_left` 的叶内偏移。 -/
+def vectorLeafOff (p : Program) (name leaf : String) : Nat :=
+  let pre0 := name ++ "_0"
+  Id.run do
+    let mut off : Nat := 0
+    for s in p.slots do
+      if s.name == pre0 || s.name.startsWith (pre0 ++ "_") then
+        if s.name == pre0 ++ "_" ++ leaf || (leaf.isEmpty && s.name == pre0) then
+          return off
+        off := off + s.width
+    return off
+
 def dataLen (p : Program) : Nat :=
   let raw := 8 + p.slots.foldl (init := 0) fun acc s => acc + s.width
   let pad := (8 - raw % 8) % 8
@@ -266,7 +312,9 @@ private def valCanon : Ops.Val → String
   | .bitNot v => s!"not({valCanon v})"
   | .shiftL l r => s!"shl({valCanon l},{valCanon r})"
   | .shiftR l r => s!"shr({valCanon l},{valCanon r})"
-  | .indexGet b n i k => s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
+  | .indexGet b n i k off =>
+      if off == 0 then s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
+      else s!"idx.{n}+{off}[{valCanon i}/{k}]({valCanon b})"
   | .loopIx => "ix"
   | .addU64 l r => s!"uadd({valCanon l},{valCanon r})"
   | .subU64 l r => s!"usub({valCanon l},{valCanon r})"
@@ -320,7 +368,9 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .evmLog n v => s!"elog.{n}({valCanon v})"
     | .forAccum n v => s!"for({n},{valCanon v})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
-    | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
+    | .indexSet n i v k off =>
+        if off == 0 then s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
+        else s!"iset.{n}+{off}[{valCanon i}/{k}]({valCanon v})"
     | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
     | .mapSetU64 b k v => s!"mset({valCanon b},{valCanon k},{valCanon v})"
     | .mapGetAddr b a0 a1 a2 =>

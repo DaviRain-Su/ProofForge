@@ -83,7 +83,7 @@ private def walkForbidden (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .evmLog _ v => valForbidden v
       | .forAccum _ v => valForbidden v
       | .forBody _ body => walkForbidden fuel' body
-      | .indexSet _ i v _ => valForbidden i || valForbidden v
+      | .indexSet _ i v _ _ => valForbidden i || valForbidden v
       | .mapGetU64 a b => valForbidden a || valForbidden b
       | .mapSetU64 a b c => valForbidden a || valForbidden b || valForbidden c
       | .mapGetAddr a b c d =>
@@ -235,7 +235,9 @@ private def valCanon : Ops.Val → String
   | .bitNot v => s!"not({valCanon v})"
   | .shiftL l r => s!"shl({valCanon l},{valCanon r})"
   | .shiftR l r => s!"shr({valCanon l},{valCanon r})"
-  | .indexGet b n i k => s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
+  | .indexGet b n i k off =>
+      if off == 0 then s!"idx.{n}[{valCanon i}/{k}]({valCanon b})"
+      else s!"idx.{n}+{off}[{valCanon i}/{k}]({valCanon b})"
   | .loopIx => "ix"
   | .unixTime => "unix"
   | .accLamportsN a => s!"lpN.{a}"
@@ -269,7 +271,9 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .evmLog n v => s!"elog.{n}({valCanon v})"
     | .forAccum n v => s!"for({n},{valCanon v})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
-    | .indexSet n i v k => s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
+    | .indexSet n i v k off =>
+        if off == 0 then s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
+        else s!"iset.{n}+{off}[{valCanon i}/{k}]({valCanon v})"
     | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
     | .mapSetU64 b k v => s!"mset({valCanon b},{valCanon k},{valCanon v})"
     | .mapGetAddr b a0 a1 a2 =>

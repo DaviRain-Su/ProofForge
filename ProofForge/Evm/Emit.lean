@@ -106,6 +106,13 @@ private def widthMask (width : Nat) : String :=
 private def maskExpr (width : Nat) (value : String) : String :=
   if width == 8 then value else "and(" ++ value ++ ", " ++ widthMask width ++ ")"
 
+private def vectorStrideSlots (p : IR.Program) (name : String) : Nat :=
+  let pre0 := name ++ "_0"
+  let n :=
+    p.slots.foldl (init := 0) fun acc s =>
+      if s.name == pre0 || s.name.startsWith (pre0 ++ "_") then acc + 1 else acc
+  if n == 0 then 1 else n
+
 private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
     (v : Ops.Val) : Except String String :=
   match v with
@@ -166,16 +173,20 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       let lv ← loadVal p paramPrefix paramCount l
       let rv ← loadVal p paramPrefix paramCount r
       return "shr(" ++ rv ++ ", " ++ lv ++ ")"
-  | .indexGet _ name idx _len => do
+  | .indexGet _ name idx _len off => do
       let iv ← loadVal p paramPrefix paramCount idx
       let base ←
-        match p.slots.find? (fun s => s.name == name ++ "_0" || s.name == name) with
+        match p.slots.find? (fun s =>
+            s.name == name ++ "_0" || s.name == name ++ "_0_left" || s.name == name) with
         | some s => pure s.index
         | none =>
-          match p.slots.find? (fun s => s.name.endsWith "_0") with
+          match p.slots.find? (fun s => s.name.startsWith (name ++ "_0")) with
           | some s => pure s.index
           | none => throw s!"extract/unsupported: unknown vector {name}"
-      return "sload(add(" ++ toString base ++ ", " ++ iv ++ "))"
+      let stride := vectorStrideSlots p name
+      let leaf := off / 8
+      return "sload(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
+        toString stride ++ ")))"
   | .loopIx => .ok "i"
   | .addU64 .. | .subU64 .. | .mapGetU64 .. | .mapGetAddr .. | .mapGetPair .. =>
       .error "extract/unsupported: evm map/arith val needs materialize"
@@ -270,24 +281,28 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if gt(" ++ rv ++ ", 63) { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := " ++ op ++ "(" ++ rv ++ ", " ++ lv ++ ")" ++ nl
         return (txt, nm, st3)
-    | .indexGet _ name idx len =>
+    | .indexGet _ name idx len off =>
         let (pre, iv, st1) ←
           match idx with
           | .loopIx =>
               pure ("", st.loopIx.getD "i", st)
           | _ => materializeVal p indent paramPrefix paramCount idx st
         let base ←
-          match p.slots.find? (fun s => s.name == name ++ "_0" || s.name == name) with
+          match p.slots.find? (fun s =>
+              s.name == name ++ "_0" || s.name == name ++ "_0_left" || s.name == name) with
           | some s => pure s.index
           | none =>
-            match p.slots.find? (fun s => s.name.endsWith "_0") with
+            match p.slots.find? (fun s => s.name.startsWith (name ++ "_0")) with
             | some s => pure s.index
             | none => throw s!"extract/unsupported: unknown vector {name}"
         let (nm, st2) := fresh st1
         let bound := toString (vectorLen p name len)
+        let stride := vectorStrideSlots p name
+        let leaf := off / 8
         let txt := pre ++
           indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ nm ++ " := sload(add(" ++ toString base ++ ", " ++ iv ++ "))" ++ nl
+          indent ++ "let " ++ nm ++ " := sload(add(" ++ toString (base + leaf) ++
+            ", mul(" ++ iv ++ ", " ++ toString stride ++ ")))" ++ nl
         return (txt, nm, st2)
     | .loopIx =>
         return ("", st.loopIx.getD "i", st)
@@ -513,21 +528,25 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
             ") { " ++ iN ++ " := add(" ++ iN ++ ", 1) } {" ++ nl ++
           bodyTxt ++
           indent ++ "}" ++ nl
-    | .indexSet name idx value len =>
+    | .indexSet name idx value len elemOff =>
         let (preI, iv, st1) ← materializeVal p indent paramPrefix paramCount idx st
         let (preV, vv, st2) ← materializeVal p indent paramPrefix paramCount value st1
         st := st2
         let base ←
-          match p.slots.find? (fun s => s.name == name ++ "_0" || s.name == name) with
+          match p.slots.find? (fun s =>
+              s.name == name ++ "_0" || s.name == name ++ "_0_left" || s.name == name) with
           | some s => pure s.index
           | none =>
-            match p.slots.find? (fun s => s.name.endsWith "_0") with
+            match p.slots.find? (fun s => s.name.startsWith (name ++ "_0")) with
             | some s => pure s.index
             | none => throw s!"extract/unsupported: unknown vector {name}"
         let bound := toString (vectorLen p name len)
+        let stride := vectorStrideSlots p name
+        let leaf := elemOff / 8
         acc := acc ++ preI ++ preV ++
           indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "sstore(add(" ++ toString base ++ ", " ++ iv ++ "), " ++ vv ++ ")" ++ nl
+          indent ++ "sstore(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
+            toString stride ++ ")), " ++ vv ++ ")" ++ nl
         st := { st with last := some vv }
     | .mapGetU64 base key =>
         let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st

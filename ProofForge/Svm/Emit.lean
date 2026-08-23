@@ -158,7 +158,7 @@ private def walkSignerAccs (fuel : Nat) (ops : Array Ops.Op) : Array Nat :=
         | .forBody _ _ => #[]
         | .evmSendEth a b c d =>
             valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c ++ valSignerAccs d
-        | .indexSet _ i v _ => valSignerAccs i ++ valSignerAccs v
+        | .indexSet _ i v _ _ => valSignerAccs i ++ valSignerAccs v
         | .mapGetU64 a b => valSignerAccs a ++ valSignerAccs b
         | .mapSetU64 a b c => valSignerAccs a ++ valSignerAccs b ++ valSignerAccs c
         | .mapGetAddr a b c d =>
@@ -705,8 +705,8 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Ex
     .ok (emitLoadRentExemption n.toNat stackOff)
   | .loopIx =>
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
-  | .indexGet _ name idx len =>
-    emitLoadIndexGet p name idx len stackOff
+  | .indexGet _ name idx len off =>
+    emitLoadIndexGet p name idx len off stackOff
   | .bitAnd l r => emitLoadBitBin p "and64" l r stackOff
   | .bitOr l r => emitLoadBitBin p "or64" l r stackOff
   | .bitXor l r => emitLoadBitBin p "xor64" l r stackOff
@@ -723,28 +723,29 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) : Ex
       let insn ← loadInsn (widthOfVal p v)
       return s!"  ; load {repr v}\n  {insn} r1, {mem}\n  stxdw [r10 - {stackOff}], r1\n"
 
-/-- `cells_0` 起的连续 u64 槽。`idx ≥ len` → Custom(1)。 -/
+/-- `cells_0` / `nodes_0_*` 起的定长向量。`idx ≥ len` → Custom(1)。 -/
 private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops.Val)
-    (len stackOff : Nat) : Except String String := do
+    (len elemOff stackOff : Nat) : Except String String := do
   let baseName :=
-    if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0" else name
+    if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0"
+    else if (IR.fieldOffset p (name ++ "_0_left")).isSome then name ++ "_0_left"
+    else name
   let some baseOff := IR.fieldOffset p baseName
     | .error s!"extract/unsupported: unknown vector {name}"
   let loadIdx ← loadVal p idx (stackOff + 8)
-  let inferred :=
-    p.slots.foldl (init := 0) fun acc s =>
-      if s.name.startsWith (name ++ "_") then acc + 1 else acc
-  let bound := if len == 0 then (if inferred == 0 then 1 else inferred) else len
+  let bound := IR.vectorLenOf p name len
+  let bound := if bound == 0 then 1 else bound
+  let stride := IR.vectorStride p name
   return loadIdx ++
     s!"\
-  ; indexGet {name}[{bound}]
+  ; indexGet {name}[{bound}]+{elemOff}
   ldxdw r2, [r10 - {stackOff + 8}]
   lddw r3, {bound}
   jge r2, r3, err_idx_{stackOff}
-  mul64 r2, 8
+  mul64 r2, {stride}
   mov64 r1, r6
   add64 r1, ACC0_DATA
-  add64 r1, {baseOff}
+  add64 r1, {baseOff + elemOff}
   add64 r1, r2
   ldxdw r1, [r1 + 0]
   stxdw [r10 - {stackOff}], r1
@@ -878,7 +879,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array Ops.Op) : Bool :=
       | .evmLog _ v => valUsesSigner v
       | .forAccum _ v => valUsesSigner v
       | .forBody _ body => walkUsesSigner fuel' body
-      | .indexSet _ i v _ => valUsesSigner i || valUsesSigner v
+      | .indexSet _ i v _ _ => valUsesSigner i || valUsesSigner v
       | .mapGetU64 a b => valUsesSigner a || valUsesSigner b
       | .mapSetU64 a b c => valUsesSigner a || valUsesSigner b || valUsesSigner c
       | .mapGetAddr a b c d =>
@@ -1260,30 +1261,31 @@ private partial def emitOps (p : IR.Program) (label : String) (ops : Array Ops.O
   ja {loopLab}
   {doneLab}:
   "
-    | .indexSet name idx value len =>
+    | .indexSet name idx value len elemOff =>
       let baseName :=
-        if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0" else name
+        if (IR.fieldOffset p (name ++ "_0")).isSome then name ++ "_0"
+        else if (IR.fieldOffset p (name ++ "_0_left")).isSome then name ++ "_0_left"
+        else name
       let some baseOff := IR.fieldOffset p baseName
         | throw s!"extract/unsupported: unknown vector {name}"
       let loadI ← loadVal p idx 8
       let loadV ← loadVal p value 16
-      let inferred :=
-        p.slots.foldl (init := 0) fun acc s =>
-          if s.name.startsWith (name ++ "_") then acc + 1 else acc
-      let bound := if len == 0 then (if inferred == 0 then 1 else inferred) else len
+      let bound := IR.vectorLenOf p name len
+      let bound := if bound == 0 then 1 else bound
+      let stride := IR.vectorStride p name
       let oob := s!"err_iset_{label}_{n}"
       let ok := s!"ok_iset_{label}_{n}"
       n := n + 1
       acc := acc ++ loadI ++ loadV ++
         s!"\
-  ; indexSet {name}[{bound}]
+  ; indexSet {name}[{bound}]+{elemOff}
   ldxdw r2, [r10 - 8]
   lddw r3, {bound}
   jge r2, r3, {oob}
-  mul64 r2, 8
+  mul64 r2, {stride}
   mov64 r1, r6
   add64 r1, ACC0_DATA
-  add64 r1, {baseOff}
+  add64 r1, {baseOff + elemOff}
   add64 r1, r2
   ldxdw r3, [r10 - 16]
   stxdw [r1 + 0], r3

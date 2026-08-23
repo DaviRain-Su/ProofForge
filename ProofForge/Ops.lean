@@ -53,7 +53,7 @@ inductive Val where
   | bitNot (v : Val)
   | shiftL (lhs rhs : Val)
   | shiftR (lhs rhs : Val)
-  | indexGet (base : Val) (name : String) (idx : Val) (len : Nat)
+  | indexGet (base : Val) (name : String) (idx : Val) (len : Nat) (elemOff : Nat := 0)
   | loopIx
   | addU64 (lhs rhs : Val)
   | subU64 (lhs rhs : Val)
@@ -98,7 +98,7 @@ inductive Op where
   | forAccum (n : Nat) (addend : Val)
   /-- 有界 `for i in [:n]`，体里可用 `loopIx`。体里 `exit` 的 op 提前结束；否则落到循环后。 -/
   | forBody (n : Nat) (body : Array Op)
-  | indexSet (name : String) (idx value : Val) (len : Nat)
+  | indexSet (name : String) (idx value : Val) (len : Nat) (elemOff : Nat := 0)
   | mapGetU64 (base key : Val)
   | mapSetU64 (base key value : Val)
   | mapGetAddr (base w0 w1 w2 : Val)
@@ -374,7 +374,7 @@ def hasAcc1 (ops : Array Op) : Bool :=
     | .evmLog _ v => valNeedsAcc1 v
     | .forAccum _ v => valNeedsAcc1 v
     | .forBody _ _ => false
-    | .indexSet _ i v _ => valNeedsAcc1 i || valNeedsAcc1 v
+    | .indexSet _ i v _ _ => valNeedsAcc1 i || valNeedsAcc1 v
     | .mapGetU64 a b => valNeedsAcc1 a || valNeedsAcc1 b
     | .mapSetU64 a b c => valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c
     | .mapGetAddr a b c d =>
@@ -426,7 +426,7 @@ def opMinAccounts : Op → Nat
   | .evmSendEth a b c d =>
       Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
         (Nat.max (valMinAccounts c) (valMinAccounts d))
-  | .indexSet _ i v _ => Nat.max (valMinAccounts i) (valMinAccounts v)
+  | .indexSet _ i v _ _ => Nat.max (valMinAccounts i) (valMinAccounts v)
   | .mapGetU64 a b => Nat.max (valMinAccounts a) (valMinAccounts b)
   | .mapSetU64 a b c =>
       Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b)) (valMinAccounts c)
@@ -546,7 +546,7 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
     | .evmLog _ v => isEvmLeaf v
     | .forAccum _ v => isEvmLeaf v
     | .forBody _ _ => false
-    | .indexSet _ i v _ => isEvmLeaf i || isEvmLeaf v
+    | .indexSet _ i v _ _ => isEvmLeaf i || isEvmLeaf v
     | .mapGetU64 a b => isEvmLeaf a || isEvmLeaf b
     | .mapSetU64 a b c => isEvmLeaf a || isEvmLeaf b || isEvmLeaf c
     | .mapGetAddr a b c d =>
@@ -591,7 +591,7 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .evmLog _ v => isLangLeaf v
     | .forAccum _ v => isLangLeaf v
     | .forBody _ _ => false
-    | .indexSet _ i v _ => isLangLeaf i || isLangLeaf v
+    | .indexSet _ i v _ _ => isLangLeaf i || isLangLeaf v
     | .mapGetU64 a b => isLangLeaf a || isLangLeaf b
     | .mapSetU64 a b c => isLangLeaf a || isLangLeaf b || isLangLeaf c
     | .mapGetAddr a b c d =>

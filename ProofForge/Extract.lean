@@ -963,32 +963,62 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
           let s := n.toString
           let last := IR.lastName s
           let user := isUserName env n
-          if !user || isReservedProj last then
+          let skipTy :=
+            match env.find? n with
+            | some (.inductInfo _) => true
+            | some (.ctorInfo _) => true
+            | _ => false
+          if !user || isReservedProj last || skipTy then
             e.getAppArgs.findSome? (baseName fuel')
           else some last
-          | none => e.getAppArgs.findSome? (baseName fuel')
-          let lits := args.filterMap (asLit 8)
-          let len :=
-            if h : lits.size > 0 then
-              match lits[0] with
-              | .lit n => n.toNat
-              | _ => 0
-            else 0
-    let vals := args.filterMap fun a =>
-      if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
+        | none => e.getAppArgs.findSome? (baseName fuel')
+    let lits := args.filterMap (asLit 8)
+    let len :=
+      if h : lits.size > 0 then
+        match lits[0] with
+        | .lit n => n.toNat
+        | _ => 0
+      else 0
+    let rec lastFieldName (fuel : Nat) (e : Expr) : Option String :=
+      match fuel with
+      | 0 => none
+      | fuel' + 1 =>
+        let e := peelLets (strip e)
+        match e.getAppFn.constName? with
+        | some n =>
+          match env.find? n with
+          | some (.ctorInfo c) =>
+            if isUserType env c.induct && isStructure env c.induct then
+              let names := getStructureFields env c.induct
+              if names.isEmpty then none
+              else some names[names.size - 1]!.toString
+            else e.getAppArgs.findSome? (lastFieldName fuel')
+          | _ => e.getAppArgs.findSome? (lastFieldName fuel')
+        | none => e.getAppArgs.findSome? (lastFieldName fuel')
+    let rec asIdxVal (e : Expr) : Option Ops.Val :=
+      let e := peelLets (strip e)
+      if endsWith e "._proof_1" || endsWith e "._proof_2" || endsWith e ".rfl" then
         none
-      else val env a
-    -- 不去掉字面量：长度字面量已经单独算过，剩下的运行时值按出现顺序取最后两个。
-    if vals.size ≥ 2 then
-      let last := vals[vals.size - 1]!
-      let prev := vals[vals.size - 2]!
+      else if (isConstNamed e ``UInt64.toNat || endsWith e ".toNat") && e.getAppArgs.size ≥ 1 then
+        val env e.getAppArgs[e.getAppArgs.size - 1]!
+      else val env e
+    let vals := args.filterMap asIdxVal
+    -- 长度字面量丢掉。最后两个运行时值是下标和 payload。
+    let runtime := vals.filter fun | .lit _ => false | _ => true
+    if runtime.size ≥ 2 then
+      let last := runtime[runtime.size - 1]!
+      let prev := runtime[runtime.size - 2]!
       let (idx, payload) := (prev, last)
       match idx with
       | .lit _ => none
       | _ =>
+        let leaf := (args.findSome? (lastFieldName 8)).getD ""
+        -- 叶内偏移先按字段序估：Sokoban Node 最后一叶是 value = 5*8。
+        -- `fillElemOff` 再用真实槽表改写。
+        let hint := if leaf.isEmpty then 0 else 40
         match baseName 8 e with
-        | some n => some (.indexSet n idx payload len)
-        | none => some (.indexSet "cells" idx payload len)
+        | some n => some (.indexSet n idx payload len hint)
+        | none => some (.indexSet "cells" idx payload len hint)
     else none
   else none
 
@@ -1582,11 +1612,11 @@ private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
     | 0 => v
     | fuel' + 1 =>
       match v with
-      | .indexGet b n i k =>
+      | .indexGet b n i k off =>
           let b' := match b with | .arg _ => .arg 0 | _ => go fuel' b
           -- 循环体里下标几乎总是 binder；字面量才是常量槽。
           let i' := match i with | .lit _ => i | _ => .loopIx
-          .indexGet b' n i' k
+          .indexGet b' n i' k off
       | .field b n => .field (go fuel' b) n
       | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
       | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
@@ -1618,9 +1648,9 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
           .invoke prog metas (data.map fun
             | .u64le v => .u64le (rewriteLoopIx v)
             | w => w) seed (bump.map rewriteLoopIx)
-      | .indexSet n i v k =>
+      | .indexSet n i v k off =>
           let i' := match i with | .lit _ => i | _ => .loopIx
-          .indexSet n i' v k
+          .indexSet n i' v k off
       | .storeField n v => .storeField n v
       | .okState v => .okState v
       | .returnU64 v => .returnU64 (rewriteLoopIx v)
@@ -2092,25 +2122,30 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
       let f := peelProofLam 4 args[args.size - 1]!
       if isErrorOverflow f && !isForInYield f then
         if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
-          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asStoreFields env t,
-              asOkState env t, decodeExpr env fuel' t with
-          | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _ =>
+          match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asIndexSet env t,
+              asStoreFields env t, asOkState env t, decodeExpr env fuel' t with
+          | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _, _ =>
             return .ok (invokeOps inv (invokeRet env t inv))
-          | some (.ne, .lit 1, .lit 0), some inv, _, _, _, _ =>
+          | some (.ne, .lit 1, .lit 0), some inv, _, _, _, _, _ =>
             return .ok (invokeOps inv (invokeRet env t inv))
-          | some (cmp, lv, rv), some inv, _, _, _, _ =>
+          | some (cmp, lv, rv), some inv, _, _, _, _, _ =>
             return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
-          | some (cmp, lv, rv), none, some evmOps, _, _, _ =>
+          | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
-          | some (cmp, lv, rv), none, none, some stores, _, _ =>
+          | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
+            match iset with
+            | .indexSet _ _ v _ _ =>
+              return .ok #[.ite cmp lv rv #[iset, .okState v] #[.errorOverflow]]
+            | _ => return .ok #[.ite cmp lv rv #[iset] #[.errorOverflow]]
+          | some (cmp, lv, rv), none, none, none, some stores, _, _ =>
             return .ok #[.ite cmp lv rv stores #[.errorOverflow]]
-          | some (cmp, lv, rv), none, none, none, some v, _ =>
+          | some (cmp, lv, rv), none, none, none, none, some v, _ =>
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
-          | some (cmp, lv, rv), none, none, none, none, .ok thn =>
+          | some (cmp, lv, rv), none, none, none, none, none, .ok thn =>
             match decodeExpr env fuel' f with
             | .ok els => return .ok #[.ite cmp lv rv thn els]
             | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
-          | _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
+          | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, decodeEvmEffect env t, decodeExpr env fuel' t,
               asStoreFields env t, asOkState env t with
@@ -2353,7 +2388,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .bitNot v => .bitNot (flipVal fuel' v)
       | .shiftL l r => .shiftL (flipVal fuel' l) (flipVal fuel' r)
       | .shiftR l r => .shiftR (flipVal fuel' l) (flipVal fuel' r)
-      | .indexGet b n i k => .indexGet (flipVal fuel' b) n (flipVal fuel' i) k
+      | .indexGet b n i k off => .indexGet (flipVal fuel' b) n (flipVal fuel' i) k off
       | .loopIx => v
       | .addU64 l r => .addU64 (flipVal fuel' l) (flipVal fuel' r)
       | .subU64 l r => .subU64 (flipVal fuel' l) (flipVal fuel' r)
@@ -2391,7 +2426,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .evmLog n v => .evmLog n (flipVal fuel' v)
       | .forAccum n v => .forAccum n (flipVal fuel' v)
       | .forBody n body => .forBody n (body.map (flipOp fuel'))
-      | .indexSet n i v k => .indexSet n (flipVal fuel' i) (flipVal fuel' v) k
+      | .indexSet n i v k off => .indexSet n (flipVal fuel' i) (flipVal fuel' v) k off
       | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
       | .mapSetU64 b k v =>
           .mapSetU64 (flipVal fuel' b) (flipVal fuel' k) (flipVal fuel' v)
@@ -2625,7 +2660,7 @@ private def opFields : Ops.Op → Array String
   | .evmLog _ v => valFields v
   | .forAccum _ v => valFields v
   | .forBody _ body => body.flatMap opFields
-  | .indexSet _ i v _ => valFields i ++ valFields v
+  | .indexSet _ i v _ _ => valFields i ++ valFields v
   | .storeField n v => #[n] ++ valFields v
   | .mapGetU64 b k => valFields b ++ valFields k
   | .mapSetU64 b k v => valFields b ++ valFields k ++ valFields v
@@ -2647,6 +2682,21 @@ private def opFields : Ops.Op → Array String
   | .errorNamed _ => #[]
   | .returnU64 v => valFields v
   | .returnState v => valFields v
+
+private def fillElemOff (p : IR.Program) : IR.Program :=
+  let rec goOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
+    match fuel with
+    | 0 => op
+    | fuel' + 1 =>
+      match op with
+      | .indexSet n i v k off =>
+          let off' := if off == 0 then 0 else IR.vectorLeafOff p n "value"
+          .indexSet n i v k off'
+      | .ite c l r t f =>
+          .ite c l r (t.map (goOp fuel')) (f.map (goOp fuel'))
+      | .forBody n body => .forBody n (body.map (goOp fuel'))
+      | op => op
+  { p with methods := p.methods.map fun m => { m with ops := m.ops.map (goOp 8) } }
 
 private def checkUsedFields (p : IR.Program) : Except String Unit := do
   for m in p.methods do
@@ -2680,6 +2730,7 @@ def extractProgram (env : Environment)
   }
   unless IR.isProgramShape program do
     throw "extract/unsupported: not three-method shape"
+  let program := fillElemOff program
   checkUsedFields program
   match IR.layoutMarkerHex program with
   | .error reason => throw reason
@@ -2774,6 +2825,7 @@ def extractModule (env : Environment) (ns : Name)
   }
   unless IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
+  let program := fillElemOff program
   checkUsedFields program
   match IR.layoutMarkerHex program with
   | .error reason => throw reason

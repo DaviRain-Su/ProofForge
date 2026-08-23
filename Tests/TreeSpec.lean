@@ -20,6 +20,16 @@ open Examples.Tree
   | .error _ => false
 
 #guard
+  match setAt (init 0) 1 9 with
+  | .ok (st, ret) => st.nodes[1]!.value == 9 && ret == 9 && st.nodes[0]!.value == 0
+  | .error _ => false
+
+#guard
+  match setAt (init 0) 9 1 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
   match bumpInsert (init 0) 3 7 with
   | .ok (st, ret) =>
       st.root == 1 && st.size == 1 && ret == 3 &&

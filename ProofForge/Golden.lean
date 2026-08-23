@@ -134,6 +134,12 @@ def extractedTree : Program :=
                 #[.errorOverflow]]
               #[.errorOverflow]]
         ] },
+      { kind := .increment, name := "Examples.Tree.setAt", ixName := "setAt", paramCount := 2
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.indexSet "nodes" (.arg 2) (.arg 1) 4 40, .okState (.arg 1)]
+            #[.errorOverflow]
+        ] },
       { kind := .increment, name := "Examples.Tree.setHead", ixName := "setHead", paramCount := 1
         ops := #[
           .ite .ne (.lit 0) (.lit 1)

@@ -59,6 +59,14 @@ def setHead (s : State) (v : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+/-- 运行时下标写节点 value。 -/
+@[pf_entry]
+def setAt (s : State) (i v : UInt64) : Except Error (State × UInt64) :=
+  if h : i.toNat < 4 then
+    .ok ({ s with nodes := s.nodes.set i.toNat { s.nodes[i.toNat]! with value := v } }, v)
+  else
+    .error .overflow
+
 /--
 有界 bump 分配。
 空树：地址 1（槽 0）写成红根。
