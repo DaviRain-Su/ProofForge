@@ -10,3 +10,4 @@ __pycache__/
 *.pyc
 /runtime-tests/**/target/
 phoenix-v1
+.amp/portals/

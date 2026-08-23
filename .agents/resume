@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/.foundry/bin:$PATH"
+
+for tool in lake cargo sbpf solc anvil cast; do
+  command -v "$tool" >/dev/null
+done
+
+echo "ProofForge toolchains are ready; no services or authentication need resuming."

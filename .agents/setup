@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+step() {
+  printf '\n==> %s\n' "$1"
+}
+
+if [[ "$EUID" -eq 0 ]]; then
+  sudo=()
+else
+  sudo=(sudo -n)
+fi
+
+step "Installing required system packages"
+packages=(build-essential elan)
+missing_packages=()
+for package in "${packages[@]}"; do
+  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq "install ok installed"; then
+    missing_packages+=("$package")
+  fi
+done
+if ((${#missing_packages[@]})); then
+  "${sudo[@]}" apt-get update
+  "${sudo[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
+else
+  echo "System packages are already installed."
+fi
+
+step "Configuring login-shell tool paths"
+mkdir -p "$HOME/.local/bin" "$HOME/.cargo/bin" "$HOME/.foundry/bin"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/.foundry/bin:$PATH"
+
+profile_marker="# ProofForge orb toolchains"
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >>"$HOME/.bash_profile" <<EOF
+
+$profile_marker
+if [[ "\$PWD" == "$repo_root" || "\$PWD" == "$repo_root/"* ]]; then
+  export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$HOME/.foundry/bin:\$PATH"
+fi
+EOF
+fi
+
+step "Installing the pinned Lean toolchain"
+lean_toolchain="$(tr -d '[:space:]' <lean-toolchain)"
+if ! elan toolchain list | grep -Fq "$lean_toolchain"; then
+  elan toolchain install "$lean_toolchain"
+else
+  echo "$lean_toolchain is already installed."
+fi
+lake --version
+
+step "Installing Rust 1.90.0"
+rust_toolchain="1.90.0"
+if [[ ! -x "$HOME/.cargo/bin/rustup" ]]; then
+  curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs |
+    sh -s -- -y --profile minimal --default-toolchain "$rust_toolchain"
+elif ! "$HOME/.cargo/bin/rustup" toolchain list | grep -Eq "^${rust_toolchain}(-|$)"; then
+  "$HOME/.cargo/bin/rustup" toolchain install "$rust_toolchain" --profile minimal
+fi
+rustup default "$rust_toolchain"
+rustc --version
+
+step "Installing pinned sbpf 0.2.2"
+sbpf_revision="d835bc6e638e4f55b88f31a31bbc92e3a2e0a5ba"
+if [[ "$(sbpf --version 2>/dev/null || true)" != "sbpf 0.2.2" ]]; then
+  cargo install \
+    --git https://github.com/blueshift-gg/sbpf.git \
+    --rev "$sbpf_revision" \
+    --locked \
+    --force \
+    sbpf
+else
+  echo "sbpf 0.2.2 is already installed."
+fi
+sbpf --version
+
+step "Installing pinned solc 0.8.34"
+solc_url="https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"
+solc_sha256="d40adc6f9fdbb22a97d32a02fa05688bf2ee7886affc48c9851b0afd4a726b39"
+if ! solc --version 2>/dev/null | grep -Fq "Version: 0.8.34+commit.80d5c536"; then
+  solc_download="$(mktemp)"
+  trap 'rm -f "$solc_download"' EXIT
+  curl --proto '=https' --tlsv1.2 -fsSL "$solc_url" -o "$solc_download"
+  echo "$solc_sha256  $solc_download" | sha256sum --check --status
+  "${sudo[@]}" install -m 0755 "$solc_download" /usr/local/bin/solc
+  rm -f "$solc_download"
+  trap - EXIT
+else
+  echo "solc 0.8.34 is already installed."
+fi
+solc --version | sed -n '1,3p'
+
+step "Installing Foundry 1.7.1"
+foundry_version="1.7.1"
+foundry_archive="foundry_v${foundry_version}_linux_amd64.tar.gz"
+foundry_url="https://github.com/foundry-rs/foundry/releases/download/v${foundry_version}/${foundry_archive}"
+foundry_sha256="cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b"
+if ! anvil --version 2>/dev/null | grep -Fq "$foundry_version" ||
+    ! cast --version 2>/dev/null | grep -Fq "$foundry_version"; then
+  foundry_download="$(mktemp)"
+  trap 'rm -f "$foundry_download"' EXIT
+  curl --proto '=https' --tlsv1.2 -fsSL "$foundry_url" -o "$foundry_download"
+  echo "$foundry_sha256  $foundry_download" | sha256sum --check --status
+  tar -xzf "$foundry_download" -C "$HOME/.foundry/bin"
+  rm -f "$foundry_download"
+  trap - EXIT
+else
+  echo "Foundry $foundry_version is already installed."
+fi
+anvil --version
+cast --version
+
+step "Fetching locked Solana runtime-test dependencies"
+cargo fetch --locked --manifest-path runtime-tests/solana/Cargo.toml
+
+printf '\nOrb setup complete.\n'
