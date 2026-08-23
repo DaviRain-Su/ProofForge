@@ -87,6 +87,30 @@ def setTagged (s : TaggedState) (n : UInt64) :
     Except Examples.Counter.Error (TaggedState × UInt64) :=
   .ok ({ tag := .wrap n }, n)
 
+/-- Fixed-layout tagged union: one discriminant slot plus one shared `UInt64` payload slot. -/
+inductive Event where
+  | idle
+  | fill (n : UInt64)
+  | cancel (n : UInt64)
+  deriving Repr
+
+structure EventState where
+  event : Event
+  deriving Repr
+
+def initEvent (n : UInt64) : EventState :=
+  { event := .fill n }
+
+def setEventCancel (_s : EventState) (n : UInt64) :
+    Except Examples.Counter.Error (EventState × UInt64) :=
+  .ok ({ event := .cancel n }, n)
+
+def getEvent (s : EventState) : UInt64 :=
+  match s.event with
+  | .idle => 0
+  | .fill n => n
+  | .cancel n => n
+
 def getFlagValue (s : FlagState) : UInt64 :=
   s.value
 

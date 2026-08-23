@@ -218,6 +218,24 @@ private def isUInt64Newtype (env : Environment) (tyName : Name) : Bool :=
         | _ => false
     | _ => false
 
+/-- Three or more constructors, each empty or carrying one `UInt64`, sharing tag + payload slots. -/
+private def isUInt64Variant (env : Environment) (tyName : Name) : Bool :=
+  if isStructure env tyName then false
+  else
+    match env.find? tyName with
+    | some (.inductInfo info) =>
+      info.numParams == 0 && info.numIndices == 0 && info.ctors.length >= 3 && !info.isRec &&
+        info.ctors.all fun ctorName =>
+          match env.find? ctorName with
+          | some (.ctorInfo ctor) =>
+            ctor.numFields == 0 ||
+              (ctor.numFields == 1 &&
+                match strip ctor.type with
+                | .forallE _ ty _ _ => ty.consumeMData.getAppFn.constName? == some ``UInt64
+                | _ => false)
+          | _ => false
+    | _ => false
+
 private def forallDomainAt? (fuel index : Nat) (type : Expr) : Option Expr :=
   match fuel with
   | 0 => none
@@ -292,6 +310,19 @@ private def isOptionLikeMatcher (env : Environment) (e : Expr) : Bool :=
   match matcherDiscrTypeName? env e with
   | some tyName => tyName == ``Option || isOptionLikeInductive env tyName
   | none => false
+
+private def isUInt64VariantMatcher (env : Environment) (e : Expr) : Bool :=
+  match matcherDiscrTypeName? env e with
+  | some tyName => isUInt64Variant env tyName
+  | none => false
+
+private def peelMatcherLams (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    match strip e with
+    | .lam _ _ body _ => peelMatcherLams fuel' body
+    | e => e
 
 private def asLit (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
@@ -883,6 +914,19 @@ private def val (env : Environment) (e : Expr) : Option Ops.Val :=
   -- `GetElem`/`toNat` wrappers are deeper than ordinary scalar expressions, but still finite.
   asVal env 32 e
 
+private def asUInt64VariantCtor (env : Environment) (e : Expr) :
+    Option (UInt64 × Ops.Val) := do
+  let ctorName ← e.getAppFn.constName?
+  let .ctorInfo ctor ← env.find? ctorName | none
+  if !isUInt64Variant env ctor.induct then none else pure ()
+  let index ← enumCtorIndex env ctor.induct ctorName
+  if ctor.numFields == 0 then
+    some (UInt64.ofNat index, .lit 0)
+  else do
+    let payloadExpr ← e.getAppArgs[e.getAppArgs.size - 1]?
+    let payload ← val env payloadExpr
+    return (UInt64.ofNat index, payload)
+
 private def asSubFromMax (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``HSub.hSub then
@@ -1409,29 +1453,33 @@ private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val
         Id.run do
           let mut acc : Array Ops.Val := #[]
           for a in e.getAppArgs do
-            match asOptionPayload env a with
-            | some (.lit 0) =>
-              acc := acc.push (.lit 0) |>.push (.lit 0)
-            | some v =>
-              acc := acc.push (.lit 1) |>.push v
+            match asUInt64VariantCtor env a with
+            | some (tag, payload) =>
+              acc := acc.push (.lit tag) |>.push payload
             | none =>
-              if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
-                pure ()
-              else if endsWith a "Vector.mk" || isConstNamed a ``Vector.mk then
-                match asVectorLits env a with
-                | some vs => acc := acc ++ vs
-                | none => pure ()
-              else
-                let nested := collect fuel' a
-                if !nested.isEmpty then
-                  acc := acc ++ nested
+              match asOptionPayload env a with
+              | some (.lit 0) =>
+                acc := acc.push (.lit 0) |>.push (.lit 0)
+              | some v =>
+                acc := acc.push (.lit 1) |>.push v
+              | none =>
+                if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
+                  pure ()
+                else if endsWith a "Vector.mk" || isConstNamed a ``Vector.mk then
+                  match asVectorLits env a with
+                  | some vs => acc := acc ++ vs
+                  | none => pure ()
                 else
-                  match asVectorSet env a with
-                  | some v => acc := acc.push v
-                  | none =>
-                    match val env a with
+                  let nested := collect fuel' a
+                  if !nested.isEmpty then
+                    acc := acc ++ nested
+                  else
+                    match asVectorSet env a with
                     | some v => acc := acc.push v
-                    | none => pure ()
+                    | none =>
+                      match val env a with
+                      | some v => acc := acc.push v
+                      | none => pure ()
           acc
       else #[]
   let acc := collect 8 e
@@ -1536,34 +1584,40 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                 -- Its root projection is not a scalar account leaf.
                 pure ()
               else
-                match asOptionPayload env arg with
-                | some (.lit 0) =>
-                  acc := acc.push (s!"{child}_tag", .lit 0) |>.push (s!"{child}_p0", .lit 0)
-                | some v =>
-                  acc := acc.push (s!"{child}_tag", .lit 1) |>.push (s!"{child}_p0", v)
+                match asUInt64VariantCtor env arg with
+                | some (tag, payload) =>
+                  acc := acc.push (s!"{child}_tag", .lit tag)
+                    |>.push (s!"{child}_p0", payload)
                 | none =>
-                  match val env arg with
+                  match asOptionPayload env arg with
+                  | some (.lit 0) =>
+                    acc := acc.push (s!"{child}_tag", .lit 0)
+                      |>.push (s!"{child}_p0", .lit 0)
                   | some v =>
-                    unless looksUnchangedField v child || looksUnchangedField v fname do
-                      acc := acc.push (child, v)
+                    acc := acc.push (s!"{child}_tag", .lit 1) |>.push (s!"{child}_p0", v)
                   | none =>
-                    if isConstNamed arg ``Bool.true || endsWith arg ".true" then
-                      acc := acc.push (child, .lit 1)
-                    else if isConstNamed arg ``Bool.false || endsWith arg ".false" then
-                      acc := acc.push (child, .lit 0)
-                    else
-                      match arg.getAppFn.constName? with
-                      | some ctor =>
-                        match env.find? ctor with
-                        | some (.ctorInfo info) =>
-                          match enumCtorIndex env info.induct ctor with
-                          | some k => acc := acc.push (child, .lit (UInt64.ofNat k))
+                    match val env arg with
+                    | some v =>
+                      unless looksUnchangedField v child || looksUnchangedField v fname do
+                        acc := acc.push (child, v)
+                    | none =>
+                      if isConstNamed arg ``Bool.true || endsWith arg ".true" then
+                        acc := acc.push (child, .lit 1)
+                      else if isConstNamed arg ``Bool.false || endsWith arg ".false" then
+                        acc := acc.push (child, .lit 0)
+                      else
+                        match arg.getAppFn.constName? with
+                        | some ctor =>
+                          match env.find? ctor with
+                          | some (.ctorInfo info) =>
+                            match enumCtorIndex env info.induct ctor with
+                            | some k => acc := acc.push (child, .lit (UInt64.ofNat k))
+                            | none => pure ()
+                          | _ => pure ()
+                        | none =>
+                          match asLit 8 arg with
+                          | some v => acc := acc.push (child, v)
                           | none => pure ()
-                        | _ => pure ()
-                      | none =>
-                        match asLit 8 arg with
-                        | some v => acc := acc.push (child, v)
-                        | none => pure ()
           acc
       | _ => #[]
   else
@@ -3199,6 +3253,53 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if let some reduced := reduceUInt64NewtypeMatch? env e then
       return decodeExpr env fuel' reduced (stateful := stateful)
         (preserveLocals := preserveLocals) (localDepth := localDepth)
+    else if isUInt64VariantMatcher env e then
+      let args := e.getAppArgs
+      let some matcherName := e.getAppFn.constName?
+        | return .error "extract/unsupported: variant matcher name"
+      let some info := Lean.Meta.getMatcherInfoCore? env matcherName
+        | return .error "extract/unsupported: variant matcher metadata"
+      let some disc := args[info.getFirstDiscrPos]?
+        | return .error "extract/unsupported: variant discriminant"
+      let tag :=
+        match val env disc with
+        | some (.field base name) =>
+          if name.endsWith "_tag" then .field base name else .field base s!"{name}_tag"
+        | some base => .field base "variant_tag"
+        | none => .field (.arg 0) "variant_tag"
+      let payload :=
+        match tag with
+        | .field base name =>
+          let root := if name.endsWith "_tag" then name.dropEnd 4 |>.copy else name
+          .field base s!"{root}_p0"
+        | _ => .field (.arg 0) "variant_p0"
+      let alternativesResult : Except String (Array (Array Ops.Op)) := Id.run do
+        let mut alternatives : Array (Array Ops.Op) := #[]
+        for index in [:info.numAlts] do
+          let some altInfo := info.altInfos[index]?
+            | return .error "extract/unsupported: variant alternative metadata"
+          let some altExpr := args[info.getFirstAltPos + index]?
+            | return .error "extract/unsupported: variant alternative"
+          let altBody := peelMatcherLams 8 altExpr
+          let altOps :=
+            if altInfo.numFields == 1 then
+              match strip altBody with
+              | .bvar _ => .ok #[.returnU64 payload]
+              | _ => .error "extract/unsupported: variant payload expression"
+            else
+              decodePlain env altBody stateful
+          match altOps with
+          | .ok ops => alternatives := alternatives.push ops
+          | .error reason => return .error reason
+        return .ok alternatives
+      match alternativesResult with
+      | .error reason => return .error reason
+      | .ok alternatives =>
+        let mut chain : Array Ops.Op := #[.errorNamed "invalidVariant"]
+        for offset in [:alternatives.size] do
+          let index := alternatives.size - 1 - offset
+          chain := #[.ite .eq tag (.lit (UInt64.ofNat index)) alternatives[index]! chain]
+        return .ok chain
     else if isOptionLikeMatcher env e && e.getAppArgs.size ≥ 3 then
       -- `match opt with | none => a | some n => b` → ite (eq tag 0) a b。
       let args := e.getAppArgs
@@ -3217,15 +3318,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let base := if n.endsWith "_tag" then n.dropEnd 4 |>.copy else n
           .field b s!"{base}_p0"
         | _ => .field (.arg 0) "slot_p0"
-      let rec peelMatcher (fuel : Nat) (e : Expr) : Expr :=
-        match fuel with
-        | 0 => e
-        | fuel' + 1 =>
-          match strip e with
-          | .lam _ _ body _ => peelMatcher fuel' body
-          | e => e
-      let noneBody := peelMatcher 8 noneE
-      let someBody := peelMatcher 8 someE
+      let noneBody := peelMatcherLams 8 noneE
+      let someBody := peelMatcherLams 8 someE
       match decodeExpr env fuel' noneBody (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth) with
       | .error r => return .error r
@@ -3576,6 +3670,12 @@ private def optionFragment (name : String) (place : Core.Place) : SchemaFragment
       { place := place.push .optionPayload, name := s!"{name}_p0", ty := .uint 64 }
     ] }
 
+private def variantFragment (typeName name : String) (place : Core.Place) : SchemaFragment :=
+  { leaves := #[
+      { place := place.push .variantTag, name := s!"{name}_tag", ty := .variantTag typeName },
+      { place := place.push (.variantPayload 0), name := s!"{name}_p0", ty := .uint 64 }
+    ] }
+
 private def leafSchema (env : Environment) (fuel : Nat) (name : String)
     (place : Core.Place) (ty : Expr) : Except String SchemaFragment :=
   match fuel with
@@ -3637,6 +3737,8 @@ private def leafSchema (env : Environment) (fuel : Nat) (name : String)
         .ok (scalarFragment name place (.newtype tyName.toString 64))
       else if isOptionLikeInductive env tyName then
         .ok (optionFragment name place)
+      else if isUInt64Variant env tyName then
+        .ok (variantFragment tyName.toString name place)
       else if isUserName env tyName && isStructure env tyName &&
           !(isEnumLeaf env tyName) && !(isOptionLikeInductive env tyName) then
         if !(getStructureParentInfo env tyName).isEmpty then

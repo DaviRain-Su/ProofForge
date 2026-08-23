@@ -300,6 +300,55 @@ elab "#pf_guard_newtype_lowering" : command => do
 
 #pf_guard_newtype_lowering
 
+elab "#pf_guard_variant_lowering" : command => do
+  let env ← getEnv
+  let extracted ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initEvent
+        ``Tests.Fixtures.setEventCancel ``Tests.Fixtures.getEvent with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some tag := extracted.schema.leaves[0]?
+    | throwError "variant schema has no tag"
+  let some payload := extracted.schema.leaves[1]?
+    | throwError "variant schema has no payload"
+  unless extracted.schema.leaves.size == 2 && tag.name == "event_tag" &&
+      tag.ty == .variantTag "Tests.Fixtures.Event" && payload.name == "event_p0" &&
+      payload.ty == .uint 64 do
+    throwError s!"unexpected variant schema: {repr extracted.schema}"
+  let some setter := extracted.methods.find? (·.ixName == "setEventCancel")
+    | throwError "missing variant setter"
+  unless setter.ops.any (fun | .storeField "event_tag" (.lit 2) => true | _ => false) &&
+      setter.ops.any (fun | .storeField "event_p0" (.arg 0) => true | _ => false) do
+    throwError "variant assignment did not write its tag and payload"
+  let some getter := extracted.methods.find? (·.ixName == "getEvent")
+    | throwError "missing variant getter"
+  let hasTagBranch := getter.ops.any fun
+    | .ite .eq (.field (.arg 0) "event_tag") (.lit 0) _ _ => true
+    | _ => false
+  unless hasTagBranch do
+    throwError "variant matcher was not normalized to structured branches"
+  let svm ←
+    match ProofForge.Svm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.IR.fromExtracted extracted with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmAsm ←
+    match ProofForge.Svm.Emit.emitAsm svm with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmYul ←
+    match ProofForge.Evm.Emit.emitYul evm with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless svm.slots.size == 2 && evm.slots.size == 2 &&
+      !svmAsm.isEmpty && !evmYul.isEmpty do
+    throwError "variant did not survive both target lowerings and emitters"
+
+#pf_guard_variant_lowering
+
 private def firstStringDiff (left right : String) : Nat := Id.run do
   let mut index := 0
   for pair in left.toList.zip right.toList do

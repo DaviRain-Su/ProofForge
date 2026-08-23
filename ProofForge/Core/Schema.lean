@@ -7,6 +7,8 @@ inductive ScalarTy where
   | enum (typeName : String)
   /-- A one-constructor source inductive whose sole payload is an unsigned scalar. -/
   | newtype (typeName : String) (bits : Nat)
+  /-- Discriminant for a fixed-layout multi-constructor source inductive. -/
+  | variantTag (typeName : String)
   | optionTag
   deriving BEq, Repr, Inhabited
 
@@ -14,13 +16,13 @@ def ScalarTy.width : ScalarTy → Nat
   | .uint bits => bits / 8
   | .bool => 1
   | .newtype _ bits => bits / 8
-  | .enum _ | .optionTag => 8
+  | .enum _ | .variantTag _ | .optionTag => 8
 
 def ScalarTy.abi : ScalarTy → String
   | .uint bits => s!"u{bits}-le"
   | .bool => "u8-le"
   | .newtype _ bits => s!"u{bits}-le"
-  | .enum _ | .optionTag => "u64-le"
+  | .enum _ | .variantTag _ | .optionTag => "u64-le"
 
 /-- A field is identified by its owner and declaration ordinal; names support diagnostics/compatibility only. -/
 inductive PathStep where
@@ -28,6 +30,8 @@ inductive PathStep where
   | index (ordinal : Nat)
   | optionTag
   | optionPayload
+  | variantTag
+  | variantPayload (ordinal : Nat)
   deriving Repr, Inhabited
 
 instance : BEq PathStep where
@@ -37,6 +41,8 @@ instance : BEq PathStep where
         leftOwner == rightOwner && leftOrdinal == rightOrdinal
     | .index leftOrdinal, .index rightOrdinal => leftOrdinal == rightOrdinal
     | .optionTag, .optionTag | .optionPayload, .optionPayload => true
+    | .variantTag, .variantTag => true
+    | .variantPayload left, .variantPayload right => left == right
     | _, _ => false
 
 /-- Stable source-level identity for a state location. No byte offset or target storage slot lives here. -/
@@ -124,6 +130,8 @@ private def relativeStepName : PathStep → Option String
   | .field _ _ name => some name
   | .optionTag => some "tag"
   | .optionPayload => some "p0"
+  | .variantTag => some "tag"
+  | .variantPayload ordinal => some s!"p{ordinal}"
   | .index _ => none
 
 /-- Logical leaf path inside one vector element (`nodes[i].value` → `value`). -/

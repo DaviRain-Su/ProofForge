@@ -320,6 +320,8 @@ error: extract/unsupported: svm rejects evm leaf
 
 #pf_extract Tests.Fixtures.initTagged Tests.Fixtures.setTagged Tests.Fixtures.getTagged
 
+#pf_extract Tests.Fixtures.initEvent Tests.Fixtures.setEventCancel Tests.Fixtures.getEvent
+
 /--
 error: extract/unsupported: field items Array is not fixed-length; use Vector
 -/
