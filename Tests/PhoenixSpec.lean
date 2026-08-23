@@ -32,7 +32,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Svm.Emit.emitProgramAsm source with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.toUTF8.size < 450000 do
+  unless asm.toUTF8.size < 525000 do
     throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
   unless !asm.contains "\n\\\n" do
     throwError "Phoenix assembly contains a standalone backslash"
@@ -46,6 +46,12 @@ elab "#pf_guard_phoenix_artifact" : command => do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
   let some deposit := program.methods.find? (·.ixName == "depositFunds")
     | throwError "missing depositFunds"
+  let some withdrawBase := program.methods.find? (·.ixName == "withdrawBase")
+    | throwError "missing withdrawBase"
+  let some withdrawQuote := program.methods.find? (·.ixName == "withdrawQuote")
+    | throwError "missing withdrawQuote"
+  let some evictSeat := program.methods.find? (·.ixName == "evictSeat")
+    | throwError "missing evictSeat"
   let some traderIndex := program.methods.find? (·.ixName == "traderIndexOf")
     | throwError "missing traderIndexOf"
   let some post := program.methods.find? (·.ixName == "postAsk")
@@ -68,7 +74,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
     | throwError "missing lastEventAmount"
   let some eventCount := program.methods.find? (·.ixName == "eventCountOf")
     | throwError "missing eventCountOf"
-  unless deposit.paramCount == 2 && traderIndex.paramCount == 4 &&
+  unless deposit.paramCount == 2 && withdrawBase.paramCount == 1 &&
+      withdrawQuote.paramCount == 1 && evictSeat.paramCount == 0 &&
+      traderIndex.paramCount == 4 &&
       post.paramCount == 7 && reduce.paramCount == 4 &&
       postBid.paramCount == 7 && reduceBid.paramCount == 4 &&
       swap.paramCount == 6 && swapSell.paramCount == 6 && collect.paramCount == 0 &&
@@ -255,6 +263,65 @@ private def sellSamples : List Projects.Phoenix.State := [
   match depositFundsFor s 9 0 0 0 1 0 with
   | .error .overflow => true
   | _ => false
+
+#guard
+  match depositFundsFor (init 1) 11 12 13 14 7 9 with
+  | .error _ => false
+  | .ok (s1, _) =>
+    match withdrawBaseFor s1 11 12 13 14 5 with
+    | .error _ => false
+    | .ok (s2, baseOut) =>
+      match withdrawQuoteFor s2 11 12 13 14 20 with
+      | .error _ => false
+      | .ok (s3, quoteOut) =>
+        match withdrawBaseFor s3 11 12 13 14 9 with
+        | .error _ => false
+        | .ok (s4, finalBaseOut) =>
+          match evictSeatFor s4 11 12 13 14 with
+          | .ok (s5, address) =>
+              baseOut == 5 && quoteOut == 9 && finalBaseOut == 2 && address == 1 &&
+                s5.traderCount == 0 && s5.traderBumpIndex == 2 &&
+                s5.traderFreeHead == 1 && s5.traderNextFree[0]! == 2 &&
+                s5.traderUsed[0]! == 0 && s5.traderKey0[0]! == 0
+          | .error _ => false
+
+#guard
+  match withdrawBaseFor (init 1) 99 0 0 0 1 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
+  match depositFundsFor (init 1) 1 0 0 0 0 0 with
+  | .error _ => false
+  | .ok (s1, _) =>
+    let locked := { s1 with traderBaseLocked := s1.traderBaseLocked.set 0 1 }
+    match evictSeatFor locked 1 0 0 0 with
+    | .error .overflow => true
+    | _ => false
+
+#guard
+  match depositFundsFor (init 1) 1 0 0 0 0 0 with
+  | .error _ => false
+  | .ok (s1, _) =>
+    match depositFundsFor s1 2 0 0 0 0 0 with
+    | .error _ => false
+    | .ok (s2, _) =>
+      match evictSeatFor s2 2 0 0 0 with
+      | .error _ => false
+      | .ok (s3, a2) =>
+        match evictSeatFor s3 1 0 0 0 with
+        | .error _ => false
+        | .ok (s4, a1) =>
+          match depositFundsFor s4 9 0 0 0 0 0 with
+          | .error _ => false
+          | .ok (s5, reused1) =>
+            match depositFundsFor s5 8 0 0 0 0 0 with
+            | .ok (s6, reused2) =>
+                a2 == 2 && a1 == 1 && reused1 == 1 && reused2 == 2 &&
+                  s6.traderCount == 2 && s6.traderBumpIndex == 3 &&
+                  s6.traderFreeHead == 3 && traderIndexOf s6 9 0 0 0 == 1 &&
+                  traderIndexOf s6 8 0 0 0 == 2
+            | .error _ => false
 
 #guard
   match postAskAt { (init 100) with baseFree := 8 } 7 50 8 0 0 0 0 with

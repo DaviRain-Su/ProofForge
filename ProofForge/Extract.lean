@@ -1140,7 +1140,7 @@ private def asBoolVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.V
         | none => none
 
 private def asCondition (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
-  asCmp env e <|> (asBoolVal env 16 e).map fun value => (.ne, value, .lit 0)
+  asCmp env e <|> (asBoolVal env 64 e).map fun value => (.ne, value, .lit 0)
 
 /-- `x ≥ y` / `y ≤ x`  →  checked sub x y。`x ≤ lit` 是上界（255 / u64Max），不是 sub。 -/
 private def asCheckedSubGuard (env : Environment) (e : Expr) : Option (Ops.Val × Ops.Val) :=
@@ -2733,13 +2733,12 @@ Profile 已检查过且显式标记的用户 helper 在控制流边界按需 β 
 -/
 private def unfoldUserHelper (env : Environment) (e : Expr) : Option (Name × Expr) :=
   let e := strip e
-  let args := e.getAppArgs
   match e.getAppFn.constName? with
   | none => none
   | some n =>
     if Attr.isInline env n then
       match env.find? n with
-      | some (.defnInfo info) => some (n, info.value.beta args)
+      | some (.defnInfo info) => some (n, info.value.beta e.getAppArgs)
       | _ => none
     else none
 
@@ -3236,7 +3235,13 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               let (lhs, rhs) := (lastNamedBin env ``HDiv.hDiv t).getD fallback
               return .ok #[.checkedDivU64 lhs (if rhs == den then rhs else den), .okState v, .errorOverflow]
         else
-          return .error "extract/unsupported: ite cond"
+          let condE := args[args.size - 4]!
+          match asCondition env condE,
+              decodeExpr env fuel' t (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth) with
+          | some (cmp, lv, rv), .ok thn =>
+            return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+          | _, _ => return .error "extract/unsupported: ite cond"
       else
         let isValueCmp (a : Expr) : Bool :=
           (asCmp env a).isSome &&
@@ -4191,19 +4196,28 @@ def extractModuleIR (env : Environment) (ns : Name)
   let mut methods : Array IR.Method := #[]
   let mut seen : Array String := #[]
   for n in inits do
-    let m ← extractMethod env .init n
+    let m ←
+      match extractMethod env .init n with
+      | .ok method => pure method
+      | .error reason => throw s!"{n}: {reason}"
     if seen.contains m.ixName then
       throw s!"extract/unsupported: duplicate ixName {m.ixName}"
     seen := seen.push m.ixName
     methods := methods.push m
   for n in muts do
-    let m ← extractMethod env .increment n
+    let m ←
+      match extractMethod env .increment n with
+      | .ok method => pure method
+      | .error reason => throw s!"{n}: {reason}"
     if seen.contains m.ixName then
       throw s!"extract/unsupported: duplicate ixName {m.ixName}"
     seen := seen.push m.ixName
     methods := methods.push m
   for n in views do
-    let m ← extractMethod env .get n
+    let m ←
+      match extractMethod env .get n with
+      | .ok method => pure method
+      | .error reason => throw s!"{n}: {reason}"
     if seen.contains m.ixName then
       throw s!"extract/unsupported: duplicate ixName {m.ixName}"
     seen := seen.push m.ixName

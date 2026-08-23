@@ -221,6 +221,31 @@ elab "#pf_guard_except_bind_join" : command => do
 
 #pf_guard_except_bind_join
 
+elab "#pf_guard_compound_error_guard" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initChoice
+        ``Tests.Fixtures.compoundChoice ``Tests.Fixtures.getChosen with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some compound := program.methods.find? (·.ixName == "compoundChoice")
+    | throwError "missing compound-guard method"
+  let rec comparisonLeaves (fuel : Nat) (value : ProofForge.Ops.Val) : Nat :=
+    match fuel with
+    | 0 => 0
+    | fuel' + 1 =>
+      match value with
+      | .bitAnd lhs rhs => comparisonLeaves fuel' lhs + comparisonLeaves fuel' rhs
+      | .select _ _ _ _ _ => 1
+      | _ => 0
+  match compound.ops with
+  | #[.ite .ne condition (.lit 0) #[.okState (.arg 0)] #[.errorOverflow]] =>
+      unless comparisonLeaves 8 condition == 4 do
+        throwError s!"compound guard lost comparisons: {repr compound.ops}"
+  | _ => throwError s!"compound error-guard IR mismatch: {repr compound.ops}"
+
+#pf_guard_compound_error_guard
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 
 #pf_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag

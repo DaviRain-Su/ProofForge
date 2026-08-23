@@ -51,7 +51,9 @@ SVM / EVM emitter 不再扫描 `_0_left`、`_tag`、`_p0` 来猜 Vector / Option
 窄整数 alias 和包住 `if` 的 pure head `let` 做 zeta-reduction；`UInt64` pure let 保留成
 `letLocal`，纯值 `if` 保留成 `Val.select`，避免把同一 mutation continuation 复制到两个
 分支。动态 `Vector.set` 会保留 `.ok (newState, ret)` 的显式 `ret`，不会误用最后写入的
-element value。`invoke`、EVM effect 和循环仍交给专用 decoder。这里不做全局 `whnf`，新增 Lean
+element value。普通复合 Boolean guard 即使 error 在 else 分支，也统一降成 target-neutral
+bit/select value + structured `ite`；checked arithmetic guard 仍优先走专用 lowering。
+`invoke`、EVM effect 和循环仍交给专用 decoder。这里不做全局 `whnf`，新增 Lean
 表面形式应先加等价性 characterization test，再扩规范化或 decoder。
 
 方法完成规范化后会递归检查所有 Val、CPI data、branch 和 loop 的 `.arg`。init 只允许
@@ -89,7 +91,8 @@ ops 里出现的字段名必须在表内。
 ## Tests
 
 `Tests/ExtractSpec.lean`：Counter / Pair / Flag / Maybe / Window 抽出；动态 multi-leaf
-variant-vector 写保留独立返回值；非支持叶子与不定长 Array 拒绝。
+variant-vector 写保留独立返回值；四项 compound guard 在 error else 前不丢比较；
+非支持叶子与不定长 Array 拒绝。
 `Tests/BuildSpec.lean`：`#pf_build` 收入口；无标记 fail closed。
 `Tests/LayoutSpec.lean`：窄字段偏移、Option 双叶、layout marker。
 `Tests/NormalizationSpec.lean`：等价 Lean 表面形式抽成同一 Core；Tree 的 typed Vector schema

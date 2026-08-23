@@ -26,14 +26,18 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 147 个 8-byte 叶，账户含 discriminator 共 1,184 bytes。`#pf_build Projects.Phoenix`
-digest `e263b1245f28c9de`。
+digest `c1ef1654d339a4d1`。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
 加进该 seat 的 free 余额。全零 Pubkey 也合法，`traderUsed` 单独区分空槽。查找是
 structured `forBody 4`，注册和余额更新是通用动态 `Vector.set`，没有 Phoenix-specific
-IR 或 emitter 分支。当前撮合仍维护旧的四个聚合兼容槽；下一步是把 post/match/reduce
-结算逐项切到这些 per-seat 余额，再删除兼容槽。
+IR 或 emitter 分支。`withdrawBase` / `withdrawQuote` 分别返回 `min(requested, free)`，
+不混淆两种 lot 单位；`evictSeat` 只释放四类余额全零的 seat，并把 address 压回 LIFO
+free-list。释放 2 再释放 1 时，后续注册按 1、2 复用且 bump index 不回退。lookup 用
+`Except UInt64` producer 汇合到 CFG join local，复合 key guard 由统一 Extract lowering
+承载。当前撮合仍维护旧的四个聚合兼容槽；下一步是把 post/match/reduce 结算逐项切到
+这些 per-seat 余额，再删除兼容槽。deposit/withdraw 的 vault Token CPI 仍属于 adapter 缺口。
 
 `postAsk` 是链上 free-funds 挂单：检查 incoming TIF 和 sequence 上界，锁定
 `baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；书满时只有更低价
@@ -64,9 +68,9 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 `(lo, hi)` 两个 `UInt64` limb 完整保留；这正好仍落在五 payload 的最大布局内，
 所以 event layout 未再增大。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 440,512-byte assembly 和
-102,664-byte eBPF ELF。assembly 是中间文本，不部署；当前 ELF 约 100 KB。测试把
-assembly budget 钉在 450 KB，并拒绝重复 label。
+真实源模块经 `pf build --target svm Phoenix` 生成 507,074-byte assembly、
+120,288-byte eBPF ELF 和 13,584-byte IDL。assembly 是中间文本，不部署；当前 ELF
+约 117.5 KiB。测试把 assembly budget 钉在 525 KB，并拒绝重复 label。
 链上 buy / sell 分别是 19 / 23 phase，挂单是 17 phase；代码体积按 bounded loop
 增长，不按四档静态展开。
 
@@ -78,9 +82,9 @@ assembly budget 钉在 450 KB，并拒绝重复 label。
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
 | trader tree 的动态 RB 拓扑 | 已有 bounded Pubkey registry、allocator 和 per-seat 值；key 查找暂用四槽扫描 |
-| 完整 seat lifecycle | deposit/注册已开；withdraw、zero-state eviction 和 free-list reuse transition 尚未接入口 |
+| vault-backed seat lifecycle | bounded deposit/withdraw/zero-state eviction/LIFO reuse 已完成；双 vault Token CPI 尚未接这些入口 |
 | per-seat 撮合结算 / maker Pubkey event | 订单已存内部 seat address，但现有撮合仍写聚合兼容余额，event 尚未 resolve 四 limb key |
-| Seat + 双 vault 同一入口 | CPI 账户表会抬高 |
+| Seat + 双 vault 同一入口 | state transition 已有；CPI 账户表会抬高 |
 | Borsh wire event / `Log` self-CPI | 当前只存 typed fixed-capacity batch，尚未编码成官方一字节 tag 并发给 event recorder |
 
 这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。

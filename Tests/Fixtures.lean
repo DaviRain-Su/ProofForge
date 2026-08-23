@@ -239,4 +239,12 @@ def bindChoice (s : ChoiceState) (lhs rhs limit delta : UInt64) :
   else
     .error .overflow
 
+/-- Compound Boolean guards must retain every comparison when the else branch is an error. -/
+def compoundChoice (s : ChoiceState) (a b c d e : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  if a = b && b = c && c = d && d = e then
+    .ok ({ s with chosen := a }, a)
+  else
+    .error .overflow
+
 end Tests.Fixtures

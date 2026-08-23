@@ -88,3 +88,4 @@
 | T-L5-03 | happy | Phoenix 跨四档 buy/sell | host reference 与链上 structured fold 逐样本一致 |
 | T-L5-04 | happy | Phoenix event batch | Fill/Expired/Reduce/Evict/Place/TIF/Fee/Summary 顺序正确 |
 | T-L5-05 | happy / fail | Phoenix trader registry | 四-limb Pubkey、幂等注册、容量上限、per-seat deposit 与溢出 |
+| T-L5-06 | happy / fail | Phoenix seat lifecycle | base/quote partial withdraw、非空拒绝 eviction、LIFO address reuse |

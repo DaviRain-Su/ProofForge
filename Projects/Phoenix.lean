@@ -18,7 +18,8 @@ Phoenix v1 `src/state` 在本仓剖面下的摊平。
 `RBTree4` 给出四档对应的红黑树拓扑见证；撮合只依赖中序次序，
 不把颜色和指针复制进链上状态。free-funds 挂单、驱逐、按 ID reduce/cancel、
 三种 self-trade 和 fee collection 已进入 bounded 模型。trader registry 保留
-Sokoban 的 1-based address、bump 分配与 LIFO free-list；订单仍只存内部 address。
+Sokoban 的 1-based address、bump 分配与 LIFO free-list；withdraw 和 zero-state
+seat eviction 已接入，订单仍只存内部 address。
 -/
 namespace Projects.Phoenix
 
@@ -284,21 +285,39 @@ def init (tick : UInt64) : State :=
     eventCount := 0
     lastEvent := .uninitialized }
 
-/-- 完整四 limb Pubkey 相等；`traderUsed` 单独区分合法的全零 Pubkey 与空 seat。 -/
-private def traderKeyEq (s : State) (i : Nat)
-    (key0 key1 key2 key3 : UInt64) : Bool :=
-  s.traderUsed[i]! ≠ 0 &&
-    s.traderKey0[i]! = key0 && s.traderKey1[i]! = key1 &&
-    s.traderKey2[i]! = key2 && s.traderKey3[i]! = key3
+/-- 完整四 limb Pubkey lookup；`traderUsed` 单独区分合法的全零 Pubkey 与空 seat。 -/
+private def traderAddressFor (s : State) (key0 key1 key2 key3 : UInt64) : UInt64 :=
+  if s.traderUsed[0]! ≠ 0 && s.traderKey0[0]! = key0 && s.traderKey1[0]! = key1 &&
+      s.traderKey2[0]! = key2 && s.traderKey3[0]! = key3 then 1
+  else if s.traderUsed[1]! ≠ 0 && s.traderKey0[1]! = key0 && s.traderKey1[1]! = key1 &&
+      s.traderKey2[1]! = key2 && s.traderKey3[1]! = key3 then 2
+  else if s.traderUsed[2]! ≠ 0 && s.traderKey0[2]! = key0 && s.traderKey1[2]! = key1 &&
+      s.traderKey2[2]! = key2 && s.traderKey3[2]! = key3 then 3
+  else if s.traderUsed[3]! ≠ 0 && s.traderKey0[3]! = key0 && s.traderKey1[3]! = key1 &&
+      s.traderKey2[3]! = key2 && s.traderKey3[3]! = key3 then 4
+  else 0
+
+attribute [pf_inline] traderAddressFor
+
+/-- Stateful callers use an `Except` producer so the bounded lookup joins into a CFG local. -/
+private def requireTraderAddress (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error UInt64 :=
+  if s.traderUsed[0]! ≠ 0 && s.traderKey0[0]! = key0 && s.traderKey1[0]! = key1 &&
+      s.traderKey2[0]! = key2 && s.traderKey3[0]! = key3 then .ok 1
+  else if s.traderUsed[1]! ≠ 0 && s.traderKey0[1]! = key0 && s.traderKey1[1]! = key1 &&
+      s.traderKey2[1]! = key2 && s.traderKey3[1]! = key3 then .ok 2
+  else if s.traderUsed[2]! ≠ 0 && s.traderKey0[2]! = key0 && s.traderKey1[2]! = key1 &&
+      s.traderKey2[2]! = key2 && s.traderKey3[2]! = key3 then .ok 3
+  else if s.traderUsed[3]! ≠ 0 && s.traderKey0[3]! = key0 && s.traderKey1[3]! = key1 &&
+      s.traderKey2[3]! = key2 && s.traderKey3[3]! = key3 then .ok 4
+  else .error .overflow
+
+attribute [pf_inline] requireTraderAddress
 
 /-- Host/view lookup；返回官方 1-based trader index，0 表示未注册。 -/
 @[pf_entry]
 def traderIndexOf (s : State) (key0 key1 key2 key3 : UInt64) : UInt64 :=
-  if traderKeyEq s 0 key0 key1 key2 key3 then 1
-  else if traderKeyEq s 1 key0 key1 key2 key3 then 2
-  else if traderKeyEq s 2 key0 key1 key2 key3 then 3
-  else if traderKeyEq s 3 key0 key1 key2 key3 then 4
-  else 0
+  traderAddressFor s key0 key1 key2 key3
 
 /-- 读取某 seat 的 base-free；无效或未分配 address fail-closed 为 0。 -/
 @[pf_entry]
@@ -407,6 +426,73 @@ def depositFunds (s : State) (baseLots quoteLots : UInt64) :
     Except Error (State × UInt64) :=
   depositFundsFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
     baseLots quoteLots
+
+/--
+从一个已注册 seat 提取 base free funds。官方语义是 `min(requested, free)`；
+返回实际可提取的 base lots，找不到完整 Pubkey 时 fail closed。
+-/
+def withdrawBaseFor (s : State) (key0 key1 key2 key3 requested : UInt64) :
+    Except Error (State × UInt64) := do
+  let address ← requireTraderAddress s key0 key1 key2 key3
+  let i := address.toNat - 1
+  let available := s.traderBaseFree[i]!
+  let amount := if requested < available then requested else available
+  .ok ({ s with
+          traderBaseFree := s.traderBaseFree.set (i % 4) (available - amount) }, amount)
+
+/-- Quote-lot 版本；单独入口避免把 base/quote 两种单位混进一个 UInt64 返回值。 -/
+def withdrawQuoteFor (s : State) (key0 key1 key2 key3 requested : UInt64) :
+    Except Error (State × UInt64) := do
+  let address ← requireTraderAddress s key0 key1 key2 key3
+  let i := address.toNat - 1
+  let available := s.traderQuoteFree[i]!
+  let amount := if requested < available then requested else available
+  .ok ({ s with
+          traderQuoteFree := s.traderQuoteFree.set (i % 4) (available - amount) }, amount)
+
+/--
+只有 `TraderState` 四类余额都为零时才释放 seat。释放后的 1-based address 压入
+Sokoban LIFO free-list；bump index 不回退，下一次注册优先复用 free-list 头。
+-/
+def evictSeatFor (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error (State × UInt64) := do
+  let address ← requireTraderAddress s key0 key1 key2 key3
+  let i := address.toNat - 1
+  if s.traderQuoteLocked[i]! = 0 && s.traderQuoteFree[i]! = 0 &&
+      s.traderBaseLocked[i]! = 0 && s.traderBaseFree[i]! = 0 then
+    if s.traderCount = 0 then
+      .error .overflow
+    else
+      .ok ({ s with
+              traderCount := s.traderCount - 1
+              traderFreeHead := address
+              traderNextFree := s.traderNextFree.set (i % 4) s.traderFreeHead
+              traderUsed := s.traderUsed.set (i % 4) 0
+              traderKey0 := s.traderKey0.set (i % 4) 0
+              traderKey1 := s.traderKey1.set (i % 4) 0
+              traderKey2 := s.traderKey2.set (i % 4) 0
+              traderKey3 := s.traderKey3.set (i % 4) 0 }, address)
+  else
+    .error .overflow
+
+attribute [pf_inline] withdrawBaseFor withdrawQuoteFor evictSeatFor
+
+/-- SVM base-vault adapter；account 1 必须签名并以完整 Pubkey 拥有目标 seat。 -/
+@[pf_entry]
+def withdrawBase (s : State) (requested : UInt64) : Except Error (State × UInt64) :=
+  withdrawBaseFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
+    requested
+
+/-- SVM quote-vault adapter；返回实际提取的 quote lots。 -/
+@[pf_entry]
+def withdrawQuote (s : State) (requested : UInt64) : Except Error (State × UInt64) :=
+  withdrawQuoteFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
+    requested
+
+/-- SVM seat eviction adapter；非空 TraderState 或未注册 signer 都拒绝。 -/
+@[pf_entry]
+def evictSeat (s : State) : Except Error (State × UInt64) :=
+  evictSeatFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
 
 /-- 官方 FIFORestingOrder 是否过期。0 是哨兵。 -/
 def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
