@@ -14,6 +14,8 @@
 
 见 `ProofForge/IR.lean`：`MethodKind`、`Method`、`Program`。
 
+账户下标上限是 `maxTxAccountLocks = 64`（Agave 当前强制值；feature 开了才 128）。单条 instruction 编码上限是 `maxAccountsPerInstruction = 255`。
+
 ## Errors
 
 无。构造是纯数据。

@@ -5,6 +5,25 @@ namespace ProofForge.IR
 
 open ProofForge.Crypto
 
+/--
+Agave `MAX_TX_ACCOUNT_LOCKS` 在 feature 关着时是 64，开了是 128。
+官方文档当前强制值仍是 64：
+https://solana.com/docs/core/transactions
+https://solana.com/docs/core/constants-reference
+-/
+def maxTxAccountLocks : Nat := 64
+
+/--
+Agave `MAX_ACCOUNTS_PER_INSTRUCTION` = 255
+（`MAX_ACCOUNTS_PER_TRANSACTION` 256 里留一个 `NON_DUP_MARKER`）。
+本仓账户下标按这个封顶，不是随便写的 7。
+-/
+def maxAccountsPerInstruction : Nat := 255
+
+/-- 账户下标合法：`0 ≤ acc < maxTxAccountLocks`。 -/
+def accInRange (acc : Nat) : Bool :=
+  acc < maxTxAccountLocks
+
 inductive MethodKind where
   | init
   | increment

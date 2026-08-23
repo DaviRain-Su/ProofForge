@@ -26,6 +26,6 @@
 - 有界 `for` / `Vector` 下标：SVM 已开（`Examples.Book`）
 - SVM 位运算 / 命名错误 / wrapping add view：已开（`Examples.Lang`）
 - 4 路嵌套 `else if`：抽出器已开（Phoenix `postAsk` / `swapBuy`）
-- 账户下标 0..7：已开
+- 账户下标：`IR.maxTxAccountLocks = 64`（官方当前强制锁账户数）
 - 多构造子 inductive 带 payload
 - `sol_alloc_free_`、`sol_log_*` 当产品语义

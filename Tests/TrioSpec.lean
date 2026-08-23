@@ -18,6 +18,12 @@ open ProofForge.Runtime
 #guard signerKey 1 == 0
 #guard ownerIsSelf 0 == 0
 
+#guard ProofForge.IR.maxTxAccountLocks == 64
+#guard ProofForge.IR.maxAccountsPerInstruction == 255
+#guard ProofForge.IR.accInRange 0 == true
+#guard ProofForge.IR.accInRange 63 == true
+#guard ProofForge.IR.accInRange 64 == false
+
 #guard !ProofForge.IR.usesCpi ProofForge.Golden.extractedTrio
 #guard ProofForge.IR.usesWalk ProofForge.Golden.extractedTrio
 #guard ProofForge.IR.cpiAccountCount ProofForge.Golden.extractedTrio == 3
