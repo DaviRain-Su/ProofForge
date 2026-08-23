@@ -1,4 +1,4 @@
-import ProofForge.Svm.Assemble
+import ProofForge.Svm.AssembleCompat
 import ProofForge.Golden
 
 def main (args : List String) : IO UInt32 := do

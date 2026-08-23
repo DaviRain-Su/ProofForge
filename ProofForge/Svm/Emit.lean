@@ -1,4 +1,4 @@
-import ProofForge.Svm.IRCompat
+import ProofForge.Svm.IR
 
 namespace ProofForge.Svm.Emit
 
@@ -1594,9 +1594,5 @@ entrypoint:
 /-- Native SVM entry point from the combined extractor dialect. -/
 def emitProgramAsm (program : Extract.IR.Program) : Except String String := do
   emitAsm (← IR.fromExtracted program)
-
-/-- Compatibility entry point for legacy fixtures and callers. -/
-def emitCounterAsm (program : Extract.Legacy.Program) : Except String String := do
-  emitAsm (← IR.fromProgram program)
 
 end ProofForge.Svm.Emit

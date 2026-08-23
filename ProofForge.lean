@@ -25,7 +25,9 @@ import ProofForge.Svm.IR
 import ProofForge.Svm.IRCompat
 import ProofForge.Svm.Solanalib
 import ProofForge.Svm.Emit
+import ProofForge.Svm.EmitCompat
 import ProofForge.Svm.Assemble
+import ProofForge.Svm.AssembleCompat
 import ProofForge.Svm.Idl
 import ProofForge.Svm.Commands
 import ProofForge.Evm.Keccak

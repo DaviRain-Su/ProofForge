@@ -3,6 +3,7 @@ import ProofForge.Golden
 import ProofForge.Extract
 import ProofForge.Core.IR
 import ProofForge.Svm.Assemble
+import ProofForge.Svm.IRCompat
 import ProofForge.Evm.Assemble
 import ProofForge.Evm.Golden
 import ProofForge.Evm.IR
