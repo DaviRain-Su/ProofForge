@@ -16,6 +16,10 @@ def sketchOfExpr (e : Expr) : Array String :=
 private def isConstNamed (e : Expr) (n : Name) : Bool :=
   e.consumeMData.getAppFn.constName? == some n
 
+private def isVectorSet (e : Expr) : Bool :=
+  isConstNamed e ``Vector.set ||
+    (e.getAppFn.constName?.map (·.toString.endsWith "Vector.set")).getD false
+
 private def strip (e : Expr) : Expr :=
   e.consumeMData
 
@@ -29,7 +33,6 @@ private def peelLams (e : Expr) : Nat × Expr :=
     | fuel' + 1 =>
       match strip e with
       | .lam _ _ body _ => go fuel' (n + 1) body
-      | .letE _ _ _ body _ => go fuel' n body
       | e => (n, e)
   go 32 0 e
 
@@ -42,6 +45,50 @@ private def peelLets (e : Expr) : Expr :=
       | .letE _ _ _ body _ => go fuel' body
       | e => e
   go 16 e
+
+/-- 把 `have x := v; e` 代进 `e`。剥 let 会丢掉 `have nodes := xs.set`。
+必须走进 `dite` 的 proof λ，否则内层 `have` 还在。
+`dite` 应用脊很长，fuel 要够。 -/
+private def substLets (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    match strip e with
+    | .letE _ _ value body _ => substLets fuel' (body.instantiate1 (substLets fuel' value))
+    | .lam n ty body bi => .lam n ty (substLets fuel' body) bi
+    | .app _ _ =>
+      let rec goApp (n : Nat) (e : Expr) : Expr :=
+        match n, strip e with
+        | n + 1, .app f a => .app (goApp n f) (substLets fuel' a)
+        | _, e => substLets fuel' e
+      goApp 32 e
+    | e => e
+
+private def isIteExpr (e : Expr) : Bool :=
+  isConstNamed (peelLets (strip e)) ``ite || isConstNamed (peelLets (strip e)) ``dite
+
+/-- 只代包着 `ite` 的 `have y := …; if y ≠ 0`。
+`have next := mul; ok` 要留 bvar，给 `asOkState`。 -/
+private def substIteLets (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    match strip e with
+    | .letE n ty value body nd =>
+      let value := substIteLets fuel' value
+      let body := substIteLets fuel' body
+      if isIteExpr body then
+        substIteLets fuel' (body.instantiate1 value)
+      else
+        .letE n ty value body nd
+    | .lam n ty body bi => .lam n ty (substIteLets fuel' body) bi
+    | .app _ _ =>
+      let rec goApp (n : Nat) (e : Expr) : Expr :=
+        match n, strip e with
+        | n + 1, .app f a => .app (goApp n f) (substIteLets fuel' a)
+        | _, e => substIteLets fuel' e
+      goApp 32 e
+    | e => e
 
 /-- 剥 `pure` / `ForInStep.done` / `Option.some`；`Prod.mk` 只在末字段是 `PUnit` 时剥。 -/
 private def peelControl (fuel : Nat) (e : Expr) : Expr :=
@@ -68,6 +115,22 @@ private def isForInYield (e : Expr) : Bool :=
     | fuel' + 1 =>
       let e := peelLets (strip e)
       if isConstNamed e ``ForInStep.yield || endsWith e ".yield" then true
+      else
+        match e with
+        | .lam _ _ body _ => go fuel' body
+        | .letE _ _ value body _ => go fuel' value || go fuel' body
+        | _ => e.getAppArgs.any (go fuel')
+  go 8 e
+
+/-- `ForInStep.done` / `yield`：循环体里的 ite 不要降 proof λ。 -/
+private def isForInStep (e : Expr) : Bool :=
+  let rec go (fuel : Nat) (e : Expr) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      let e := peelLets (strip e)
+      if isConstNamed e ``ForInStep.yield || endsWith e ".yield" ||
+          isConstNamed e ``ForInStep.done || endsWith e ".done" then true
       else
         match e with
         | .lam _ _ body _ => go fuel' body
@@ -364,7 +427,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some l, some r => some (.addU64 l r)
           | _, _ => none
-          else if (isConstNamed e ``HSub.hSub || endsWith e ".hSub") && e.getAppArgs.size ≥ 2 then
+          else if (isConstNamed e ``HSub.hSub || endsWith e ".hSub" ||
+              isConstNamed e ``Nat.sub) && e.getAppArgs.size ≥ 2 then
           match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
                 asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some l, some r => some (.subU64 l r)
@@ -881,7 +945,7 @@ private def asVectorLits (env : Environment) (e : Expr) : Option (Array Ops.Val)
 /-- `xs.set i v`：只抽出被改的那一叶。 -/
 private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
-  if isConstNamed e ``Vector.set || endsWith e ".set" then
+  if isVectorSet e then
     let args := e.getAppArgs
     -- 只认编译期常量下标。运行时下标走 `asIndexSet`。
     -- `Vector.set.{u} α n xs i v h` 里 `n` 是长度，不能当 index。
@@ -943,24 +1007,28 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   else none
 
 /-- `State.mk` 每个字段一个值。`Option` 展开成 tag + payload；`Vector` 展开成各叶。 -/
-private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
+private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) :=
   let rec go (fuel : Nat) (e : Expr) : Option Expr :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
       let e := strip e
-      if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
-        go fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-      else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
-        go fuel' e.getAppArgs[e.getAppArgs.size - 2]!
-      else if isConstNamed e ``Vector.set || endsWith e ".set" then
-        some e
-      else
-        e.getAppArgs.findSome? (go fuel')
+      match e with
+      | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+      | .lam _ _ body _ => go fuel' body
+      | _ =>
+        if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+          go fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+        else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
+          go fuel' e.getAppArgs[e.getAppArgs.size - 2]!
+        else if isVectorSet e then
+          some e
+        else
+          e.getAppArgs.findSome? (go fuel')
   match go 8 e0 with
   | none => none
   | some e =>
-  if isConstNamed e ``Vector.set || endsWith e ".set" then
+  if isVectorSet e then
     let args := e.getAppArgs
     let rec baseName (fuel : Nat) (e : Expr) : Option String :=
       match fuel with
@@ -987,45 +1055,14 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
         | .lit n => n.toNat
         | _ => 0
       else 0
-    let rec lastFieldName (fuel : Nat) (e : Expr) : Option String :=
-      match fuel with
-      | 0 => none
-      | fuel' + 1 =>
-        let e := peelLets (strip e)
-        match e.getAppFn.constName? with
-        | some n =>
-          match env.find? n with
-          | some (.ctorInfo c) =>
-            if isUserType env c.induct && isStructure env c.induct then
-              let names := getStructureFields env c.induct
-              let args := e.getAppArgs
-              let nF := names.size
-              if nF == 0 || args.size < nF then none
-              else
-                -- `{ src with right := v }`：被改的那一叶不是 `src.right`。
-                Id.run do
-                  let mut hit : Option String := none
-                  for i in [0:nF] do
-                    if h : i < nF ∧ i < args.size then
-                      let fname := names[i].toString
-                      let arg := peelLets (strip args[args.size - nF + i])
-                      let looksSame :=
-                        match val env arg with
-                        | some (.field _ n) =>
-                          n == fname || n.endsWith ("_" ++ fname)
-                        | _ => false
-                      unless looksSame do hit := some fname
-                  return hit
-            else e.getAppArgs.findSome? (lastFieldName fuel')
-          | _ => e.getAppArgs.findSome? (lastFieldName fuel')
-        | none => e.getAppArgs.findSome? (lastFieldName fuel')
     -- `Vector.set α n xs i v h`：长度字面量之后，xs、下标、新元素按出现顺序。
     let parsed :=
       Id.run do
         let mut nLits : Nat := 0
         let mut litIdx := false
         let mut idx? : Option Ops.Val := none
-        let mut payload? : Option Ops.Val := none
+        let mut payloadE? : Option Expr := none
+        let mut scalar? : Option Ops.Val := none
         for a in args do
           if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
             pure ()
@@ -1041,7 +1078,12 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
                 pure ()
               else
                 let a := peelLets (strip a)
-                if (isConstNamed a ``UInt64.toNat || endsWith a ".toNat") &&
+                -- 长度之后：向量 xs、下标、新元素。`s.nodes` 的 val 是 none。
+                -- `y.toNat - 1` 整段是下标。标量 payload 用 `val`；`Node.mk` 留表达式。
+                if (isConstNamed a ``HSub.hSub || endsWith a ".hSub" ||
+                      isConstNamed a ``Nat.sub) && a.getAppArgs.size ≥ 2 then
+                  if idx?.isNone then idx? := val env a
+                else if (isConstNamed a ``UInt64.toNat || endsWith a ".toNat") &&
                     a.getAppArgs.size ≥ 1 then
                   if idx?.isNone then
                     idx? := val env a.getAppArgs[a.getAppArgs.size - 1]!
@@ -1052,45 +1094,109 @@ private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
                     pure ()
                   | some v =>
                     if idx?.isNone then idx? := some v
-                    else payload? := some v
+                    else scalar? := some v
                   | none =>
-                    -- 嵌套 `Node.mk`：新值是最后一个标量参数。
-                    match val env a with
-                    | some v => payload? := some v
-                    | none =>
-                      let rec lastScalar (fuel : Nat) (e : Expr) : Option Ops.Val :=
-                        match fuel with
-                        | 0 => none
-                        | fuel' + 1 =>
-                          let e := peelLets (strip e)
-                          match e.getAppArgs.foldr (init := none) fun x acc =>
-                            match acc with
-                            | some v => some v
-                            | none => val env x with
-                          | some v => some v
-                          | none => e.getAppArgs.findSome? (lastScalar fuel')
-                      match lastScalar 8 a with
-                      | some v => payload? := some v
-                      | none => pure ()
-        return (litIdx, idx?, payload?)
+                    -- 只有用户构造子才是多叶 payload。`s.cells` 的 val 是 none，不是 Node.mk。
+                    -- `{ src with value := v }` 展开成 `have __src := …; Node.mk`。
+                    let a' := substLets 8 a
+                    let isCtor :=
+                      match a'.getAppFn.constName? with
+                      | some n =>
+                        match env.find? n with
+                        | some (.ctorInfo _) => true
+                        | _ => false
+                      | none => false
+                    if idx?.isSome && isCtor then payloadE? := some a'
+        return (litIdx, idx?, payloadE?, scalar?)
+    let rec changedLeaves (selfIdx : Option Ops.Val) (fuel : Nat) (e : Expr) :
+        Array (String × Ops.Val) :=
+      match fuel with
+      | 0 => #[]
+      | fuel' + 1 =>
+        let e := substLets 16 (strip e)
+        match e.getAppFn.constName? with
+        | some n =>
+          match env.find? n with
+          | some (.ctorInfo c) =>
+            if isUserType env c.induct && isStructure env c.induct then
+              let names := getStructureFields env c.induct
+              let args := e.getAppArgs
+              let nF := names.size
+              if nF == 0 || args.size < nF then #[]
+              else
+                -- `{ src with left := a, parent := b }`：叶来自别的节点 / 别的字段就算改了。
+                -- `y.parent := x.parent` 两边都叫 parent，不能只看字段名。
+                Id.run do
+                  let mut acc : Array (String × Ops.Val) := #[]
+                  for i in [0:nF] do
+                    if h : i < nF ∧ i < args.size then
+                      let fname := names[i].toString
+                      let arg := substLets 8 (strip args[args.size - nF + i])
+                      let looksSame :=
+                        match val env arg with
+                        | some (.field (.arg _) n) =>
+                          n == fname || n.endsWith ("_" ++ fname)
+                        | some (.indexGet _ _ i _ off) =>
+                          -- 同一下标上的同一叶才算没改。
+                          let sameOff :=
+                            off ==
+                              (match fname with
+                               | "left" => 0 | "right" => 8 | "parent" => 16
+                               | "color" => 24 | "key" => 32 | "value" => 40
+                               | _ => 999)
+                          sameOff &&
+                            (match selfIdx with
+                             | some j => i == j
+                             | none => true)
+                        | _ => false
+                      unless looksSame do
+                        match val env arg with
+                        | some v => acc := acc.push (fname, v)
+                        | none => pure ()
+                  return acc
+            else
+              e.getAppArgs.foldl (init := #[]) fun a x =>
+                a ++ changedLeaves selfIdx fuel' x
+          | _ => e.getAppArgs.foldl (init := #[]) fun a x =>
+              a ++ changedLeaves selfIdx fuel' x
+        | none => e.getAppArgs.foldl (init := #[]) fun a x =>
+            a ++ changedLeaves selfIdx fuel' x
     match parsed with
-    | (true, _, _) => none
-    | (false, some idx, some payload) =>
+    | (true, _, _, _) => none
+    | (false, some idx, some payloadE, _) =>
       match idx with
       | .lit _ => none
       | _ =>
-        let leaf := (args.findSome? (lastFieldName 8)).getD ""
-        -- 先按官方 Node 物理顺序估偏移；`fillElemOff` 再用槽表改写。
-        let hint :=
-          match leaf with
-          | "left" => 0 | "right" => 8 | "parent" => 16
-          | "color" => 24 | "key" => 32 | "value" => 40
-          | _ => 0
-        match baseName 8 e with
-        | some n => some (.indexSet n idx payload len hint)
-        | none => some (.indexSet "cells" idx payload len hint)
+        let leaves := changedLeaves (some idx) 8 payloadE
+        let leaves :=
+          if leaves.isEmpty then
+            match val env payloadE with
+            | some v => #[("", v)]
+            | none => #[]
+          else leaves
+        if leaves.isEmpty then none
+        else
+          let name := (baseName 8 e).getD "cells"
+          some (leaves.map fun p =>
+            let hint :=
+              match p.1 with
+              | "left" => 0 | "right" => 8 | "parent" => 16
+              | "color" => 24 | "key" => 32 | "value" => 40
+              | _ => 0
+            Ops.Op.indexSet name idx p.2 len hint)
+    | (false, some idx, none, some payload) =>
+      match idx with
+      | .lit _ => none
+      | _ =>
+        let name := (baseName 8 e).getD "cells"
+        some #[.indexSet name idx payload len 0]
     | _ => none
   else none
+
+private def asIndexSet (env : Environment) (e0 : Expr) : Option Ops.Op :=
+  match asIndexSets env e0 with
+  | some ops => ops[0]?
+  | none => none
 
 private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let rec collect (fuel : Nat) (e : Expr) : Array Ops.Val :=
@@ -1157,7 +1263,7 @@ private def looksUnchangedField (v : Ops.Val) (leaf : String) : Bool :=
 private partial def flattenLeaves (env : Environment) (base : String) (e : Expr) :
     Array (String × Ops.Val) :=
   let e := peelLets (strip e)
-  if isConstNamed e ``Vector.set || endsWith e ".set" then
+  if isVectorSet e then
     let args := e.getAppArgs
     -- `Vector.set α n xs i v h`：第一个字面量是长度，第二个是下标。
     -- 长度之后的第一个非字面量是旧向量，两下标之后才是新元素。
@@ -1622,7 +1728,7 @@ private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
         else none
       else
         match e with
-        | .letE _ _ _ body _ => go fuel' body
+        | .letE _ _ value body _ => go fuel' (body.instantiate1 value)
         | .lam _ _ body _ => go fuel' body
         | .app f a => go fuel' f <|> go fuel' a
         | _ => none
@@ -1808,21 +1914,38 @@ private def findForBodyExpr (env : Environment) (e : Expr) : Option (Nat × Expr
         | _ => none
   go 16 e
 
-private def findIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
-  let rec go (fuel : Nat) (e : Expr) : Option Ops.Op :=
+/-- 收集 `xs.set … .set …` 整条链。先外层（旧向量），后内层（新写）。
+一次 `set` 可以改多叶（`left` + `parent`）。 -/
+private def collectIndexSets (env : Environment) (e : Expr) : Array Ops.Op :=
+  let rec go (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
     match fuel with
-    | 0 => none
+    | 0 => acc
     | fuel' + 1 =>
-      let e := e.consumeMData
-      match asIndexSet env e with
-      | some op => some op
-      | none =>
-        match e with
-        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
-        | .lam _ _ body _ => go fuel' body
-        | .app f a => go fuel' f <|> go fuel' a
-        | _ => none
-  go 16 e
+      let e := strip e
+      match e with
+      | .letE _ _ value body _ => go fuel' body (go fuel' value acc)
+      | .lam _ _ body _ => go fuel' body acc
+      | _ =>
+        if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+          go fuel' e.getAppArgs[e.getAppArgs.size - 1]! acc
+        else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
+          go fuel' e.getAppArgs[e.getAppArgs.size - 2]! acc
+        else if isVectorSet e then
+          -- 先收旧向量上的 set，再收这一层。
+          let args := e.getAppArgs
+          let acc :=
+            args.foldl (init := acc) fun a x =>
+              if endsWith x "._proof_1" || endsWith x "._proof_2" || endsWith x ".rfl" then a
+              else go fuel' x a
+          match asIndexSets env e with
+          | some ops => acc ++ ops
+          | none => acc
+        else
+          e.getAppArgs.foldl (init := acc) fun a x => go fuel' x a
+  go 16 e #[]
+
+private def findIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
+  (collectIndexSets env e)[0]?
 
 private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : String) :
     Option Expr :=
@@ -2095,9 +2218,15 @@ private def decodePlain (env : Environment) (e : Expr) : Except String (Array Op
     .ok ops
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend, .returnU64 addend]
+  else
+  let isets := collectIndexSets env e
+  if isets.size ≥ 1 then
+    match isets[isets.size - 1]! with
+    | .indexSet _ _ v _ _ => .ok (isets.push (.okState v))
+    | _ => .ok isets
   else if let some op := findIndexSet env e then
     match op with
-    | .indexSet _ _ v _ => .ok #[op, .okState v]
+    | .indexSet _ _ v _ _ => .ok #[op, .okState v]
     | _ => .ok #[op]
   else
   let e := peelControl 8 e
@@ -2180,18 +2309,36 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
     let e := strip e
     if (isConstNamed e ``ite || isConstNamed e ``dite) && e.getAppArgs.size ≥ 5 then
       let args := e.getAppArgs
-      let rec peelProofLam (fuel : Nat) (e : Expr) : Expr :=
+      let rec peelProofLam (fuel : Nat) (lower : Bool) (e : Expr) : Expr :=
         match fuel with
         | 0 => e
         | fuel' + 1 =>
           match strip e with
-          | .lam _ _ body _ => peelProofLam fuel' body
+          -- 先代入 `have __src`，再降 proof λ。反过来会把 `h` 叠到 `__src` 上。
+          | .lam _ _ body _ =>
+            let body := substLets 16 body
+            let body := if lower then body.lowerLooseBVars 1 1 else body
+            peelProofLam fuel' lower body
           | e => e
       -- 不在这里 peelLets：`let debit := evmMapSetAddr …` 必须留给 decodeEvmEffect。
-      let t := peelProofLam 4 args[args.size - 2]!
-      let f := peelProofLam 4 args[args.size - 1]!
+      -- 只代 then / else：入口代整个 ite 会把 `have y` 塞进 `y ≠ 0`，asCmp 认不出。
+      let tRaw := args[args.size - 2]!
+      let fRaw := args[args.size - 1]!
+      let lower :=
+        !(collectIndexSets env tRaw).isEmpty &&
+          !isForInStep tRaw && !isForInStep fRaw
+      let t := substIteLets 64 (peelProofLam 4 lower tRaw)
+      let f := substIteLets 64 (peelProofLam 4 false fRaw)
       if isErrorOverflow f && !isForInYield f then
-        if let some condE := findBy args (fun a => (asCmp env a).isSome && (asCheckedAddGuard env a).isNone && (asCheckedMulGuard env a).isNone && (asCheckedSubGuard env a).isNone && (asNeZero env a).isNone) then
+        if let some condE := findBy args (fun a =>
+            (asCmp env a).isSome &&
+              (asCheckedAddGuard env a).isNone &&
+              (asCheckedMulGuard env a).isNone &&
+              (asCheckedSubGuard env a).isNone &&
+              -- 真支再套 ite 时，`y ≠ 0` 是比较，不是除法守卫。
+              ((asNeZero env a).isNone ||
+                isConstNamed (peelLets (strip t)) ``ite ||
+                  isConstNamed (peelLets (strip t)) ``dite)) then
           match asCmp env condE, findInvoke env 8 t, decodeEvmEffect env t, asIndexSet env t,
               asStoreFields env t, asOkState env t, decodeExpr env fuel' t with
           | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _, _ =>
@@ -2203,10 +2350,31 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
           | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
-            match iset with
-            | .indexSet _ _ v _ _ =>
-              return .ok #[.ite cmp lv rv #[iset, .okState v] #[.errorOverflow]]
-            | _ => return .ok #[.ite cmp lv rv #[iset] #[.errorOverflow]]
+            let rec hasNestedIte (fuel : Nat) (e : Expr) : Bool :=
+              match fuel with
+              | 0 => false
+              | fuel' + 1 =>
+                let e := strip e
+                if isConstNamed e ``ite || isConstNamed e ``dite then true
+                else
+                  match e with
+                  | .letE _ _ _ body _ => hasNestedIte fuel' body
+                  | .lam _ _ body _ => hasNestedIte fuel' body
+                  | _ => false
+            if hasNestedIte 8 t then
+              match decodeExpr env fuel' t with
+              | .ok thn => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+              | .error r => return .error r
+            else
+              let isets := collectIndexSets env t
+              let ops := if isets.size ≥ 1 then isets else #[iset]
+              match ops[ops.size - 1]! with
+              | .indexSet _ _ v _ _ =>
+                -- 多叶 set 的返回值是 `.ok (_, y)`。循环体不要用 findOkRet。
+                let ret :=
+                  if isForInStep t then v else (findOkRet env t).getD v
+                return .ok #[.ite cmp lv rv (ops.push (.okState ret)) #[.errorOverflow]]
+              | _ => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, some stores, _, _ =>
             return .ok #[.ite cmp lv rv stores #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, none, some v, _ =>
@@ -2216,7 +2384,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             | .ok els => return .ok #[.ite cmp lv rv thn els]
             | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
           | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
+        else if let some condE := findBy args (fun a =>
+            (asCheckedAddGuard env a).isSome && (collectIndexSets env t).isEmpty) then
           match asCheckedAddGuard env condE, decodeEvmEffect env t, decodeExpr env fuel' t,
               asStoreFields env t, asOkState env t with
           | some _, some evmOps, _, _, _ =>
@@ -2238,7 +2407,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
           | _, _, _, _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asCheckedMulGuard env a).isSome) then
+        else if let some condE := findBy args (fun a =>
+            (asCheckedMulGuard env a).isSome && (collectIndexSets env t).isEmpty) then
           match asCheckedMulGuard env condE, asStoreFields env t, asOkState env t with
           | some (lhs, rhs), some stores, _ =>
             return .ok (#[.checkedMulU64 lhs rhs] ++ stores)
@@ -2246,7 +2416,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
           | _, _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asCheckedSubGuard env a).isSome) then
+        else if let some condE := findBy args (fun a =>
+            (asCheckedSubGuard env a).isSome && (collectIndexSets env t).isEmpty) then
           match asCheckedSubGuard env condE, findInvoke env 8 t, decodeEvmEffect env t,
               decodeExpr env fuel' t, decodeExpr env fuel' f, asStoreFields env t, asOkState env t with
           | some _, some inv, _, _, _, _, _ =>
@@ -2267,7 +2438,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedSubU64 lhs rhs, .okState dest, .errorOverflow]
           | _, _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
-        else if let some condE := findBy args (fun a => (asNeZero env a).isSome) then
+        else if let some condE := findBy args (fun a =>
+            (asNeZero env a).isSome && (collectIndexSets env t).isEmpty) then
           match asNeZero env condE with
           | none => return .error "extract/unsupported: ite then"
           | some den =>
@@ -2459,13 +2631,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .shiftL l r => .shiftL (flipVal fuel' l) (flipVal fuel' r)
       | .shiftR l r => .shiftR (flipVal fuel' l) (flipVal fuel' r)
       | .indexGet b n i k off =>
-          let i' :=
-            match i with
-            | .arg j =>
-              if kind != .init && nLams > 1 && j + 1 ≥ nLams then .arg 0
-              else flipVal fuel' i
-            | _ => flipVal fuel' i
-          .indexGet (flipVal fuel' b) n i' k off
+          .indexGet (flipVal fuel' b) n (flipVal fuel' i) k off
       | .loopIx => v
       | .addU64 l r => .addU64 (flipVal fuel' l) (flipVal fuel' r)
       | .subU64 l r => .subU64 (flipVal fuel' l) (flipVal fuel' r)
@@ -2504,13 +2670,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
       | .forAccum n v => .forAccum n (flipVal fuel' v)
       | .forBody n body => .forBody n (body.map (flipOp fuel'))
       | .indexSet n i v k off =>
-          let i' :=
-            match i with
-            | .arg j =>
-              if kind != .init && nLams > 1 && j + 1 ≥ nLams then .arg 0
-              else flipVal fuel' i
-            | _ => flipVal fuel' i
-          .indexSet n i' (flipVal fuel' v) k off
+          .indexSet n (flipVal fuel' i) (flipVal fuel' v) k off
       | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
       | .mapSetU64 b k v =>
           .mapSetU64 (flipVal fuel' b) (flipVal fuel' k) (flipVal fuel' v)
@@ -2537,7 +2697,7 @@ def extractMethod (env : Environment) (kind : IR.MethodKind) (n : Name) :
     if (kind == .init && nLams > 1) ||
         (kind == .increment && nLams > 2) ||
         (kind == .get && nLams > 2) then
-      ops1.map (flipOp 8)
+      ops1.map (flipOp 16)
     else ops1
   let paramCount :=
     match kind with

@@ -72,6 +72,20 @@ open Examples.Tree
   | _ => false
 
 #guard
+  match
+    let s0 :=
+      { (init 0) with
+        root := 1, size := 2
+        nodes :=
+          ((init 0).nodes.set 0 { left := 0, right := 2, parent := 0, color := 1, key := 3, value := 7 }).set 1
+            { left := 0, right := 0, parent := 1, color := 1, key := 2, value := 9 } }
+    rotateLeft s0 0 with
+  | .ok (st, y) =>
+      y == 2 && st.nodes[0]!.right == 0 &&
+        st.nodes[1]!.left == 1 && st.nodes[1]!.parent == 0
+  | .error _ => false
+
+#guard
   (ProofForge.Golden.extractedTree.fields.find? (· == "nodes_0_value")).isSome
 #guard ProofForge.IR.dataLen ProofForge.Golden.extractedTree == 216
 

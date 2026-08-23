@@ -158,6 +158,34 @@ def extractedTree : Program :=
             #[.indexSet "nodes" (.arg 0) (.arg 1) 4 8, .okState (.arg 1)]
             #[.errorOverflow]
         ] },
+      { kind := .increment, name := "Examples.Tree.rotateLeft", ixName := "rotateLeft", paramCount := 1
+        ops := #[
+          .ite .lt (.arg 0) (.lit 4)
+            #[.ite .ne
+                (.indexGet (.arg 1) "nodes" (.arg 0) 0 8)
+                (.lit 0)
+                #[.ite .lt
+                    (.subU64 (.indexGet (.arg 1) "nodes" (.arg 0) 0 8) (.lit 1))
+                    (.lit 4)
+                    #[
+                      .indexSet "nodes" (.arg 0)
+                        (.indexGet (.arg 1) "nodes"
+                          (.subU64 (.indexGet (.arg 1) "nodes" (.arg 0) 0 8) (.lit 1)) 0 0)
+                        4 8,
+                      .indexSet "nodes"
+                        (.subU64 (.indexGet (.arg 1) "nodes" (.arg 0) 0 8) (.lit 1))
+                        (.addU64 (.arg 0) (.lit 1))
+                        4 0,
+                      .indexSet "nodes"
+                        (.subU64 (.indexGet (.arg 1) "nodes" (.arg 0) 0 8) (.lit 1))
+                        (.indexGet (.arg 1) "nodes" (.arg 0) 0 16)
+                        4 16,
+                      .okState (.indexGet (.arg 1) "nodes" (.arg 0) 0 8)
+                    ]
+                    #[.errorOverflow]]
+                #[.errorOverflow]]
+            #[.errorOverflow]
+        ] },
       { kind := .get, name := "Examples.Tree.getAt", ixName := "getAt", paramCount := 1
         ops := #[
           .ite .lt (.arg 0) (.lit 4)
