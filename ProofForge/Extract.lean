@@ -289,9 +289,12 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           if proj == "mk" || proj == "ok" || proj == "error" ||
               proj.startsWith "_proof" || proj == "rfl" ||
               (field.startsWith "ProofForge.Runtime." || field.startsWith "ProofForge.Svm.Runtime." || field.startsWith "ProofForge.Evm.Runtime.") then none
-          else if match env.find? n with | some (.ctorInfo _) => true | _ => false then none
+          else if match env.find? n with
+              | some (.ctorInfo _) => true
+              | some (.inductInfo _) => true
+              | _ => false then none
           else
-            -- 整个 Vector 投影本身不是叶；下标再展开成 `name_i`。
+            -- 整个 Vector 投影本身不是叶。下标 / 元素字段再展开。
             let skipVector :=
               match env.find? n with
               | some info =>
@@ -302,6 +305,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
               | some b =>
                 let leaf := if looksLikeOptionProj env n then s!"{proj}_tag" else proj
+                -- `s.nodes[0]!.value`：基是 `nodes_0`，叶是 `value`。
                 some (flattenField b leaf)
               | none =>
                 match e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -536,19 +540,34 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 let s := n.toString
                 let last := IR.lastName s
                 let user := isUserName env n
-                if !user || isReservedProj last then
+                let skipTy :=
+                  match env.find? n with
+                  | some (.inductInfo _) => true
+                  | some (.ctorInfo _) => true
+                  | some _ =>
+                    -- `Node.value` 是元素投影，不是账户字段 `nodes`。
+                    last == "value" || last == "key" || last == "left" ||
+                      last == "right" || last == "parent" || last == "color"
+                  | none => false
+                if !user || isReservedProj last || skipTy then
                   e.getAppArgs.findSome? (fieldNameOf fuel')
                 else some last
               | none => e.getAppArgs.findSome? (fieldNameOf fuel')
           match lastVal? with
           | some (.lit n) =>
             let i := n.toNat
-            match findState fuel' e, args.findSome? (asVal env fuel') with
-            | some j, some (.field _ fname) =>
+            let baseField :=
+              args.findSome? fun a =>
+                match asVal env fuel' a with
+                | some (.field _ fname) => some fname
+                | _ => none
+            match findState fuel' e, baseField with
+            | some j, some fname =>
               let suf := s!"_{i}"
-              let base := if fname.endsWith suf then fname.dropEnd suf.length |>.copy else fname
+              let base :=
+                if fname.endsWith suf then fname.dropEnd suf.length |>.copy else fname
               some (.field (.arg j) s!"{base}_{i}")
-            | some j, _ =>
+            | some j, none =>
               match fieldNameOf 8 e with
               | some fname => some (.field (.arg j) s!"{fname}_{i}")
               | none => none
@@ -1891,16 +1910,19 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
             -- 内层若只是 okState，仍压成旧的三连。
             match thn.toList with
             | [.okState v] =>
-              return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
+              let dest := match lhs with | .field .. => lhs | _ => v
+              return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
             | _ =>
               return .ok (#[.checkedAddU64 lhs rhs] ++ thn)
           | some (lhs, rhs), none, .error _, some v =>
-            return .ok #[.checkedAddU64 lhs rhs, .okState v, .errorOverflow]
+            let dest := match lhs with | .field .. => lhs | _ => v
+            return .ok #[.checkedAddU64 lhs rhs, .okState dest, .errorOverflow]
           | _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedMulGuard env a).isSome) then
           match asCheckedMulGuard env condE, asOkState env t with
           | some (lhs, rhs), some v =>
-            return .ok #[.checkedMulU64 lhs rhs, .okState v, .errorOverflow]
+            let dest := match lhs with | .field .. => lhs | _ => v
+            return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
           | _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asCheckedSubGuard env a).isSome) then
           match asCheckedSubGuard env condE, findInvoke env 8 t, decodeEvmEffect env t,
@@ -1918,7 +1940,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr) : Except Stri
               | return .error "extract/unsupported: ite then"
             return .ok #[.ite cmp lv rv thn els]
           | some (lhs, rhs), none, none, _, _, some v =>
-            return .ok #[.checkedSubU64 lhs rhs, .okState v, .errorOverflow]
+            let dest := match lhs with | .field .. => lhs | _ => v
+            return .ok #[.checkedSubU64 lhs rhs, .okState dest, .errorOverflow]
           | _, _, _, _, _, _ => return .error "extract/unsupported: ite then"
         else if let some condE := findBy args (fun a => (asNeZero env a).isSome) then
           match asNeZero env condE with

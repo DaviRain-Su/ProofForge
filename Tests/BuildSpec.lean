@@ -2,6 +2,7 @@ import ProofForge
 import Examples.Counter
 import Examples.Pair
 import Examples.Nested
+import Examples.Tree
 import Examples.Flag
 import Examples.Maybe
 import Examples.Window
@@ -57,6 +58,8 @@ import Projects.Phoenix
 #pf_build Examples.Pair
 
 #pf_build Examples.Nested
+
+#pf_build Examples.Tree
 
 #pf_build Examples.Flag
 

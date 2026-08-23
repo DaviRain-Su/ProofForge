@@ -26,7 +26,7 @@
 
 | 官方 | 为什么关 |
 |---|---|
-| `RedBlackTree` bids/asks/traders | 不定长树；不是 `Vector` |
+| `RedBlackTree` bids/asks/traders | 节点布局已在 `Examples.Tree`；Phoenix 书还没换成 `Vector Node` |
 | `_padding: [u64; 32]` | 不进账户 |
 | `OrderPacket.client_order_id: u128` | 只有 `UInt64` |
 | `MarketEvent` 带 payload | 多构造子 inductive |

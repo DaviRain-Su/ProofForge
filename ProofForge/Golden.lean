@@ -15,13 +15,13 @@ def extractedCounter : Program :=
       { kind := .increment, name := "Examples.Counter.increment", ixName := "increment", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "value") (.arg 0),
-          .okState (.arg 0),
+          .okState (.field (.arg 1) "value"),
           .errorOverflow
         ] },
       { kind := .increment, name := "Examples.Counter.decrement", ixName := "decrement", paramCount := 1
         ops := #[
           .checkedSubU64 (.field (.arg 1) "value") (.arg 0),
-          .okState (.arg 0),
+          .okState (.field (.arg 1) "value"),
           .errorOverflow
         ] },
       { kind := .get, name := "Examples.Counter.get", ixName := "get", paramCount := 0
@@ -30,7 +30,7 @@ def extractedCounter : Program :=
         ops := #[
           .ite .eq (.arg 0) (.lit 0)
             #[.okState (.lit 0)]
-            #[.checkedMulU64 (.field (.arg 1) "value") (.arg 0), .okState (.arg 0), .errorOverflow]
+            #[.checkedMulU64 (.field (.arg 1) "value") (.arg 0), .okState (.field (.arg 1) "value"), .errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Counter.divide", ixName := "divide", paramCount := 1
         ops := #[.checkedDivU64 (.field (.arg 1) "value") (.arg 0), .okState (.arg 0), .errorOverflow] },
@@ -55,7 +55,7 @@ def extractedPair : Program :=
       { kind := .increment, name := "Examples.Pair.creditLeft", ixName := "creditLeft", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "left") (.arg 0),
-          .okState (.field (.arg 2) "right"),
+          .okState (.field (.arg 1) "left"),
           .errorOverflow
         ] },
       { kind := .get, name := "Examples.Pair.getLeft", ixName := "getLeft", paramCount := 0
@@ -73,13 +73,47 @@ def extractedNested : Program :=
       { kind := .increment, name := "Examples.Nested.postAsk", ixName := "postAsk", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "book_size") (.arg 0),
-          .okState (.field (.arg 1) "baseFree"),
+          .okState (.field (.arg 1) "book_size"),
           .errorOverflow
         ] },
       { kind := .get, name := "Examples.Nested.askSize", ixName := "askSize", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "book_size")] },
       { kind := .get, name := "Examples.Nested.bestAsk", ixName := "bestAsk", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "book_price")] }
+    ] }
+
+def extractedTree : Program :=
+  { name := "Tree"
+    slots := #[
+      { name := "root" }, { name := "size" },
+      { name := "nodes_0_left" }, { name := "nodes_0_right" },
+      { name := "nodes_0_parent" }, { name := "nodes_0_color" },
+      { name := "nodes_0_key" }, { name := "nodes_0_value" },
+      { name := "nodes_1_left" }, { name := "nodes_1_right" },
+      { name := "nodes_1_parent" }, { name := "nodes_1_color" },
+      { name := "nodes_1_key" }, { name := "nodes_1_value" },
+      { name := "nodes_2_left" }, { name := "nodes_2_right" },
+      { name := "nodes_2_parent" }, { name := "nodes_2_color" },
+      { name := "nodes_2_key" }, { name := "nodes_2_value" },
+      { name := "nodes_3_left" }, { name := "nodes_3_right" },
+      { name := "nodes_3_parent" }, { name := "nodes_3_color" },
+      { name := "nodes_3_key" }, { name := "nodes_3_value" }
+    ]
+    methods := #[
+      { kind := .init, name := "Examples.Tree.init", ixName := "initialize", paramCount := 1
+        ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Tree.setHead", ixName := "setHead", paramCount := 1
+        ops := #[
+          .ite .ne (.lit 0) (.lit 1)
+            #[.okState (.field (.arg 1) "root")]
+            #[.errorOverflow]
+        ] },
+      { kind := .get, name := "Examples.Tree.getHead", ixName := "getHead", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "nodes_0_value")] },
+      { kind := .get, name := "Examples.Tree.getRoot", ixName := "getRoot", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "root")] },
+      { kind := .get, name := "Examples.Tree.getSize", ixName := "getSize", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "size")] }
     ] }
 
 def extractedFlag : Program :=
@@ -413,7 +447,7 @@ def extractedOwnable : Program :=
             #[.ite .eq .evmCallerW1 (.field (.arg 1) "owner1")
               #[.ite .eq .evmCallerW2 (.field (.arg 1) "owner2")
                 #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
-                  .okState (.arg 0), .errorOverflow]
+                  .okState (.field (.arg 1) "value"), .errorOverflow]
                 #[.errorNamed "unauthorized"]]
               #[.errorNamed "unauthorized"]]
             #[.errorNamed "unauthorized"]
@@ -1166,7 +1200,7 @@ def extractedPhoenix : Program :=
       { kind := .increment, name := "Projects.Phoenix.reduceAsk", ixName := "reduceAsk", paramCount := 1
         ops := #[
           .checkedSubU64 (.field (.arg 1) "sizes_0") (.arg 0),
-          .okState (.field (.subU64 (.field (.arg 1) "sizes_0") (.arg 0)) "sizes_0"),
+          .okState (.field (.arg 1) "sizes_0"),
           .errorOverflow
         ] },
       { kind := .increment, name := "Projects.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 1
@@ -1198,7 +1232,7 @@ def extractedPhoenix : Program :=
     ] }
 
 def programs : Array Program := #[
-  extractedCounter, extractedPair, extractedNested, extractedFlag,
+  extractedCounter, extractedPair, extractedNested, extractedTree, extractedFlag,
   extractedMaybe, extractedWindow, extractedPhase, extractedChoice,
   extractedClock, extractedTransfer, extractedPing, extractedCall, extractedInfo, extractedPeer,
   extractedPda, extractedSigned, extractedCreate, extractedTokenXfer, extractedAta,
