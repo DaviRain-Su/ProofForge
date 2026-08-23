@@ -1087,31 +1087,47 @@ def extractedBook : Program :=
 
 def extractedPhoenix : Program :=
   { name := "Phoenix"
-    slots := #[{ name := "askPrice" }, { name := "askSize" }, { name := "baseFree" }]
+    slots := #[
+      { name := "askPrice" },
+      { name := "sizes_0" }, { name := "sizes_1" },
+      { name := "sizes_2" }, { name := "sizes_3" },
+      { name := "baseFree" }
+    ]
     methods := #[
       { kind := .init, name := "Projects.Phoenix.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.arg 0)] },
       { kind := .increment, name := "Projects.Phoenix.postAsk", ixName := "postAsk", paramCount := 1
         ops := #[
-          .ite .eq (.field (.arg 1) "askSize") (.lit 0)
-            #[
-              .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
-                #[.okState (.field (.arg 1) "baseFree")]
-                #[.errorOverflow]
-            ]
+          .ite .eq (.field (.arg 1) "sizes_0") (.lit 0)
+            #[.okState (.field (.arg 0) "sizes_0")]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Projects.Phoenix.postAsk1", ixName := "postAsk1", paramCount := 1
+        ops := #[
+          .ite .eq (.field (.arg 1) "sizes_1") (.lit 0)
+            #[.okState (.field (.arg 0) "sizes_1")]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Projects.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 1
         ops := #[
           .checkedAddU64 (.field (.arg 1) "baseFree") (.arg 0),
-          .ite .le (.arg 0) (.field (.arg 1) "askSize")
+          .ite .le (.arg 0) (.field (.arg 1) "sizes_0")
+            #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
+            #[.errorOverflow]
+        ] },
+      { kind := .increment, name := "Projects.Phoenix.swapBuy1", ixName := "swapBuy1", paramCount := 1
+        ops := #[
+          .checkedAddU64 (.field (.arg 1) "baseFree") (.arg 0),
+          .ite .le (.arg 0) (.field (.arg 1) "sizes_1")
             #[Ops.tokenTransferChecked (.arg 0) 6, .returnU64 (.arg 0)]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Projects.Phoenix.askQty", ixName := "askQty", paramCount := 0
-        ops := #[.returnU64 (.field (.arg 0) "askSize")] },
+        ops := #[.returnU64 (.field (.arg 0) "sizes_0")] },
       { kind := .get, name := "Projects.Phoenix.bestAsk", ixName := "bestAsk", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "askPrice")] },
+      { kind := .get, name := "Projects.Phoenix.level0", ixName := "level0", paramCount := 0
+        ops := #[.returnU64 (.field (.arg 0) "sizes_0")] },
       { kind := .get, name := "Projects.Phoenix.makerBase", ixName := "makerBase", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "baseFree")] }
     ] }

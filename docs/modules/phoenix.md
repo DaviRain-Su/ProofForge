@@ -6,11 +6,12 @@
 
 ## 本切片有
 
-- 单档 ask：`askPrice` / `askSize` / `baseFree`
-- `postAsk`：空档才挂
-- `swapBuy want`：checked-add `baseFree`，再 `want ≤ askSize`，Token TransferChecked
-- 宿主定理钉数量不够 / 成交更新
-- `#pf_build Projects.Phoenix`；抽出器不要求 `Examples.` 前缀
+- 4 档 ask 书：`askPrice` + `sizes : Vector UInt64 4` + `baseFree`
+- `postAsk` / `postAsk1`：分别挂档 0 / 档 1（空档才挂）
+- `swapBuy` / `swapBuy1`：checked-add `baseFree`，再吃对应档，Token TransferChecked
+- `#pf_build Projects.Phoenix`
+
+循环里改状态、四元加法 view 抽出器还不认，所以挂单/吃单按档拆入口，不在一个 `for` 里扫。
 
 ## 本切片没有（官方有，剖面关着）
 
