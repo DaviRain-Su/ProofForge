@@ -33,6 +33,12 @@ Lean 4.31.0。上游无 encoder / textual assembler，因此这里直接生成
 guard 与 body 仍刻意分层：Solanalib 的 `BitVec 64` 正确暴露 wrap（`u64Max + 1 = 0`），
 `evalCheckedWrite?` 只在 source guard 成功后执行 typed body 和 store。
 
+上游另有 machine-layer `SBPF.U128 := BitVec 128`，但用途是 wide multiply，不是
+high-level Program ABI 或 Borsh codec；`Solanalib.Pubkey` 仍包 `ByteArray`，其 32-byte
+长度约束也尚未进入类型。因此 Phoenix 的 `client_order_id` 不把 SVM `BitVec` 泄漏到
+Core，而用 target-neutral little-endian `(lo, hi) : UInt64 × UInt64`；未来 32-byte key
+同样应先用固定长度 Core layout，再由 SVM adapter 编 wire bytes。
+
 ## Non-goals / remaining trust boundary
 
 Solanalib 当前没有为本仓提供：
@@ -42,6 +48,7 @@ Solanalib 当前没有为本仓提供：
 - syscall、sysvar、PDA、CPI 或 `sol_invoke_signed` host semantics；
 - ELF、linker、relocation、loader acceptance；
 - textual assembly parser 或 instruction encoder；
+- `u128` / Pubkey / Borsh 的 protocol codec 与长度/round-trip 证明；
 - high-level `Account` / `Instruction` 到 SBPF memory 的 refinement；
 - 完整 Agave verifier（上游 verifier 只覆盖 instruction-level version/divisor 条件）。
 

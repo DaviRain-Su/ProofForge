@@ -24,7 +24,7 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 104 个 8-byte 叶，账户含 discriminator 共 840 bytes。`#pf_build Projects.Phoenix`
-digest `1532010d80923c58`。
+digest `398e5164a731dc0`。
 
 `postAsk` 是链上 free-funds 挂单：检查 incoming TIF 和 sequence 上界，锁定
 `baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；书满时只有更低价
@@ -51,10 +51,12 @@ bid-side 对称地按价格降序排列，订单 ID 保存官方的 `~~~sequence
 撮合逐档记录 `Fill` / `ExpiredOrder` / self-trade `Reduce`，最后记录
 `FillSummary`；reduce 和收取费用分别记录 `Reduce` / `Fee`。事件 batch 的动态
 variant-vector 写入通过 target-neutral typed layout 降到两个 target，不需要 emitter
-认识 Phoenix。
+认识 Phoenix。`Place` / `FillSummary` 的 `u128 client_order_id` 用 little-endian
+`(lo, hi)` 两个 `UInt64` limb 完整保留；这正好仍落在五 payload 的最大布局内，
+所以账户不增大。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 374,405-byte assembly 和
-85,120-byte eBPF ELF。测试把 assembly budget 钉在 450 KB，并拒绝重复 label。
+真实源模块经 `pf build --target svm Phoenix` 生成 375,120-byte assembly 和
+85,248-byte eBPF ELF。测试把 assembly budget 钉在 450 KB，并拒绝重复 label。
 链上 buy / sell 分别是 19 / 23 phase，挂单是 17 phase；代码体积按 bounded loop
 增长，不按四档静态展开。
 
@@ -64,7 +66,6 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 |---|---|
 | 动态 `RedBlackTree` 删除 fixup | allocator/free-list、完整左右旋和 N=4 insertion fixup 已在独立 Tree refinement 实现；Phoenix 仍用有序投影 |
 | `_padding: [u64; 32]` | 不进账户 |
-| `OrderPacket.client_order_id: u128` | 只有 `UInt64` |
 | `Ladder` / `Vec` | 不定长 |
 | trader tree / 动态 maker 身份 | 当前双边书仍聚合到一个 bounded TraderState |
 | seat lifecycle / 动态 trader registry | 需要更完整账户与身份模型 |

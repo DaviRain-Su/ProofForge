@@ -42,10 +42,11 @@ inductive SelfTradeBehavior where
 inductive MarketEvent where
   | uninitialized
   | fill (maker orderSequence price filled remaining : UInt64)
-  | place (orderSequence clientOrderId price placed : UInt64)
+  /-- `clientOrderIdLo` then `clientOrderIdHi` is the little-endian two-limb form of Phoenix's u128. -/
+  | place (orderSequence clientOrderIdLo clientOrderIdHi price placed : UInt64)
   | reduce (orderSequence price removed remaining : UInt64)
   | evict (maker orderSequence price evicted : UInt64)
-  | fillSummary (clientOrderId totalBase totalQuote totalFee : UInt64)
+  | fillSummary (clientOrderIdLo clientOrderIdHi totalBase totalQuote totalFee : UInt64)
   | fee (feesCollected : UInt64)
   | timeInForce (orderSequence lastValidSlot lastValidTime : UInt64)
   | expiredOrder (maker orderSequence price removed : UInt64)
@@ -281,7 +282,8 @@ attribute [pf_inline] swapAskAdjacent
 这是 free-funds 挂单：`baseFree → baseLocked`。驱逐先把旧 maker 的 base 解锁。
 传进来已经过期的 TIF 是成功 no-op，不占 sequence。
 -/
-def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime : UInt64) :
+def postAskWithClientAt (s : State)
+    (trader price size clientOrderIdLo clientOrderIdHi lastSlot lastTime nowSlot nowTime : UInt64) :
     Except Error (State × UInt64) :=
   if price = 0 || size = 0 || maxOrderSequence ≤ s.sequence then
     .error .overflow
@@ -376,7 +378,8 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
       else if i = 15 then
         if st.matchStopped ≠ (0 : UInt64) then
           if st.matchError = (0 : UInt64) then
-            st := appendEvent st (.place s.sequence 0 price size)
+            st := appendEvent st
+              (.place s.sequence clientOrderIdLo clientOrderIdHi price size)
       else if i = 16 then
         if st.matchStopped ≠ (0 : UInt64) then
           if st.matchError = (0 : UInt64) then
@@ -387,13 +390,22 @@ def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
     else
       .ok ({ st with matchStopped := 0, matchError := 0, matchLevel := 0 }, size)
 
+attribute [pf_inline] postAskWithClientAt
+
+/-- 兼容宿主调用：client order id 为零。 -/
+def postAskAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime : UInt64) :
+    Except Error (State × UInt64) :=
+  postAskWithClientAt s trader price size 0 0 lastSlot lastTime nowSlot nowTime
+
 attribute [pf_inline] postAskAt
 
 /-- 链上 free-funds ask 挂单；slot/time 在入口各读取一次。 -/
 @[pf_entry]
-def postAsk (s : State) (trader price size lastSlot lastTime : UInt64) :
+def postAsk (s : State)
+    (trader price size clientOrderIdLo clientOrderIdHi lastSlot lastTime : UInt64) :
     Except Error (State × UInt64) :=
-  postAskAt s trader price size lastSlot lastTime clockSlot unixTime
+  postAskWithClientAt s trader price size clientOrderIdLo clientOrderIdHi
+    lastSlot lastTime clockSlot unixTime
 
 /-- 兼容宿主调用：匿名 trader、无 TIF。 -/
 def postAskFull (s : State) (price size : UInt64) : Except Error (State × UInt64) :=
@@ -439,7 +451,8 @@ attribute [pf_inline] swapBidAdjacent
 满书时只有更高价能驱逐最差 bid。free-funds collateral 从 quoteFree 锁进
 quoteLocked，驱逐则按原价准确解锁旧订单。
 -/
-def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime : UInt64) :
+def postBidWithClientAt (s : State)
+    (trader price size clientOrderIdLo clientOrderIdHi lastSlot lastTime nowSlot nowTime : UInt64) :
     Except Error (State × UInt64) :=
   if price = 0 || size = 0 || maxOrderSequence ≤ s.sequence then
     .error .overflow
@@ -537,7 +550,8 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
         else if i = 15 then
           if st.matchStopped ≠ (0 : UInt64) then
             if st.matchError = (0 : UInt64) then
-              st := appendEvent st (.place s.sequence 0 price size)
+              st := appendEvent st
+                (.place s.sequence clientOrderIdLo clientOrderIdHi price size)
         else if i = 16 then
           if st.matchStopped ≠ (0 : UInt64) then
             if st.matchError = (0 : UInt64) then
@@ -548,12 +562,21 @@ def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime :
       else
         .ok ({ st with matchStopped := 0, matchError := 0, matchLevel := 0 }, size)
 
+attribute [pf_inline] postBidWithClientAt
+
+/-- 兼容宿主调用：client order id 为零。 -/
+def postBidAt (s : State) (trader price size lastSlot lastTime nowSlot nowTime : UInt64) :
+    Except Error (State × UInt64) :=
+  postBidWithClientAt s trader price size 0 0 lastSlot lastTime nowSlot nowTime
+
 attribute [pf_inline] postBidAt
 
 @[pf_entry]
-def postBid (s : State) (trader price size lastSlot lastTime : UInt64) :
+def postBid (s : State)
+    (trader price size clientOrderIdLo clientOrderIdHi lastSlot lastTime : UInt64) :
     Except Error (State × UInt64) :=
-  postBidAt s trader price size lastSlot lastTime clockSlot unixTime
+  postBidWithClientAt s trader price size clientOrderIdLo clientOrderIdHi
+    lastSlot lastTime clockSlot unixTime
 
 /-- 扫书期间的瞬时 `MatchingEngineResponse`。不进入账户 schema。 -/
 structure MatchAcc where
@@ -667,7 +690,8 @@ taker 预算，`quoteFree` 是 maker 收益，`baseLocked` 是 maker 锁仓，
 `baseFree` 同时承载 taker 输出和过期单解锁。撮合只增加
 `unclaimedFees`；`collectedFees` 留给独立收取动作。
 -/
-private def settleBuy (s : State) (acc : MatchAcc) : Except Error (State × UInt64) :=
+private def settleBuy (s : State) (clientOrderIdLo clientOrderIdHi : UInt64)
+    (acc : MatchAcc) : Except Error (State × UInt64) :=
   if s.baseLotsPerBaseUnit = 0 then
     .error .overflow
   else if acc.adjustedQuote ≠ 0 && s.takerFeeBps > u64Max / acc.adjustedQuote then
@@ -710,14 +734,16 @@ private def settleBuy (s : State) (acc : MatchAcc) : Except Error (State × UInt
               events := acc.events
               eventCount := acc.eventCount
               lastEvent := acc.lastEvent }
-            .ok (appendEvent settled (.fillSummary 0 acc.filledBase quoteLots feeLots),
+            .ok (appendEvent settled
+                (.fillSummary clientOrderIdLo clientOrderIdHi acc.filledBase quoteLots feeLots),
               acc.filledBase)
 
 /--
 可测试的完整 N=4 IOC：红黑树中序跨档、严格 slot/time TIF、聚合费用和余额记账。
 无流动性或首个有效价格超限是成功的零成交 IOC，不伪装成 overflow。
 -/
-def swapBuyForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
+def swapBuyForClientAt (s : State)
+    (taker clientOrderIdLo clientOrderIdHi want limit nowSlot nowTime : UInt64)
     (behavior : SelfTradeBehavior) :
     Except Error (State × UInt64) := do
   let s := beginEvents s
@@ -725,7 +751,12 @@ def swapBuyForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
     { sizes := s.sizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
       expiredBase := 0, stopped := false, events := s.events,
       eventCount := s.eventCount, lastEvent := s.lastEvent }
-  settleBuy s acc
+  settleBuy s clientOrderIdLo clientOrderIdHi acc
+
+/-- 兼容宿主调用：client order id 为零。 -/
+def swapBuyForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
+    (behavior : SelfTradeBehavior) : Except Error (State × UInt64) :=
+  swapBuyForClientAt s taker 0 0 want limit nowSlot nowTime behavior
 
 /-- 无自成交身份的兼容入口。 -/
 def swapBuyAt (s : State) (want limit nowSlot nowTime : UInt64) :
@@ -831,7 +862,8 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
     else
       .ok acc
 
-private def settleSell (s : State) (acc : SellAcc) : Except Error (State × UInt64) :=
+private def settleSell (s : State) (clientOrderIdLo clientOrderIdHi : UInt64)
+    (acc : SellAcc) : Except Error (State × UInt64) :=
   if s.baseLotsPerBaseUnit = 0 then
     .error .overflow
   else if acc.adjustedQuote ≠ 0 && s.takerFeeBps > u64Max / acc.adjustedQuote then
@@ -869,18 +901,25 @@ private def settleSell (s : State) (acc : SellAcc) : Except Error (State × UInt
             events := acc.events
             eventCount := acc.eventCount
             lastEvent := acc.lastEvent }
-          .ok (appendEvent settled (.fillSummary 0 acc.filledBase grossQuote feeLots),
+          .ok (appendEvent settled
+              (.fillSummary clientOrderIdLo clientOrderIdHi acc.filledBase grossQuote feeLots),
             acc.filledBase)
 
 /-- 可测试的 N=4 sell IOC 宿主语义。 -/
-def swapSellForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
+def swapSellForClientAt (s : State)
+    (taker clientOrderIdLo clientOrderIdHi want limit nowSlot nowTime : UInt64)
     (behavior : SelfTradeBehavior) : Except Error (State × UInt64) := do
   let s := beginEvents s
   let acc ← scanBids s taker limit nowSlot nowTime behavior 4 0
     { sizes := s.bidSizes, targetBase := want, filledBase := 0, adjustedQuote := 0,
       makerQuote := 0, unlockedQuote := 0, stopped := false, events := s.events,
       eventCount := s.eventCount, lastEvent := s.lastEvent }
-  settleSell s acc
+  settleSell s clientOrderIdLo clientOrderIdHi acc
+
+/-- 兼容宿主调用：client order id 为零。 -/
+def swapSellForAt (s : State) (taker want limit nowSlot nowTime : UInt64)
+    (behavior : SelfTradeBehavior) : Except Error (State × UInt64) :=
+  swapSellForClientAt s taker 0 0 want limit nowSlot nowTime behavior
 
 def swapSellAt (s : State) (want limit nowSlot nowTime : UInt64) :
     Except Error (State × UInt64) :=
@@ -936,7 +975,8 @@ summary。把算术和动态 event write 分 phase，避免 checked-arithmetic c
 复制动态 variant-vector write；循环 store 会继续下一次，不再静态复制后续档位。
 -/
 @[pf_entry]
-def swapBuy (s : State) (taker behavior want limit : UInt64) :
+def swapBuy (s : State)
+    (taker behavior clientOrderIdLo clientOrderIdHi want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
   let mut st := beginEvents s
   for i in [0:19] do
@@ -965,7 +1005,8 @@ def swapBuy (s : State) (taker behavior want limit : UInt64) :
     else if i = 18 then
       if st.matchError = 0 then
         st := appendEvent st
-          (.fillSummary 0 st.matchFilled st.matchMakerQuote st.matchLimit)
+          (.fillSummary clientOrderIdLo clientOrderIdHi
+            st.matchFilled st.matchMakerQuote st.matchLimit)
     else if st.matchStopped = 0 then
       let k := i - 1
       let phase := k % 4
@@ -1212,7 +1253,8 @@ attribute [pf_inline] commitSellFold settleSellFold
 继续/停止”，flush 后归一为 0/1。这样 helper 结果先跨迭代物化，再做动态写。
 -/
 @[pf_entry]
-def swapSell (s : State) (taker behavior want limit : UInt64) :
+def swapSell (s : State)
+    (taker behavior clientOrderIdLo clientOrderIdHi want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
   let mut st := beginEvents s
   for i in [0:23] do
@@ -1240,7 +1282,9 @@ def swapSell (s : State) (taker behavior want limit : UInt64) :
             st := { st with matchError := 1 }
     else if i = 22 then
       if st.matchError = 0 then
-        st := appendEvent st (.fillSummary 0 st.matchFilled st.matchLimit st.matchWant)
+        st := appendEvent st
+          (.fillSummary clientOrderIdLo clientOrderIdHi
+            st.matchFilled st.matchLimit st.matchWant)
     else
       let k := i - 1
       let phase := k % 5
@@ -1514,10 +1558,10 @@ def lastEventKind (s : State) : UInt64 :=
   match s.lastEvent with
   | .uninitialized => 0
   | .fill _ _ _ _ _ => 1
-  | .place _ _ _ _ => 2
+  | .place _ _ _ _ _ => 2
   | .reduce _ _ _ _ => 3
   | .evict _ _ _ _ => 4
-  | .fillSummary _ _ _ _ => 5
+  | .fillSummary _ _ _ _ _ => 5
   | .fee _ => 6
   | .timeInForce _ _ _ => 7
   | .expiredOrder _ _ _ _ => 8
@@ -1527,10 +1571,10 @@ def lastEventAmount (s : State) : UInt64 :=
   match s.lastEvent with
   | .uninitialized => 0
   | .fill _ _ _ filled _ => filled
-  | .place _ _ _ placed => placed
+  | .place _ _ _ _ placed => placed
   | .reduce _ _ removed _ => removed
   | .evict _ _ _ evicted => evicted
-  | .fillSummary _ totalBase _ _ => totalBase
+  | .fillSummary _ _ totalBase _ _ => totalBase
   | .fee fees => fees
   | .timeInForce _ lastValidSlot _ => lastValidSlot
   | .expiredOrder _ _ _ removed => removed
