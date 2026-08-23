@@ -858,16 +858,22 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
           | _ => pure ()
         return none
     -- `Vector.set xs i v h`：值在字面量下标之后。
+    -- 嵌套 `Node.mk` 时取被改的那一叶（preferLast）。
     let payload :=
       Id.run do
         let mut seenIdx := false
         for a in args do
-          match asLit 8 a, val env a with
-          | some (.lit _), _ =>
+          match asLit 8 a with
+          | some (.lit _) =>
             seenIdx := true
-          | none, some v =>
-            if seenIdx then return some v
-          | _, _ => pure ()
+          | _ =>
+            if seenIdx then
+              match asStateMk env a true with
+              | some v => return some (true, v)
+              | none =>
+                match val env a with
+                | some v => return some (false, v)
+                | none => pure ()
         return none
     let rec baseName (fuel : Nat) (e : Expr) : Option String :=
       match fuel with
@@ -878,13 +884,19 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
           let s := n.toString
           let last := IR.lastName s
           let user := isUserName env n
-          if !user || isReservedProj last then
+          let skipTy :=
+            match env.find? n with
+            | some (.inductInfo _) => true
+            | some (.ctorInfo _) => true
+            | _ => false
+          if !user || isReservedProj last || skipTy then
             e.getAppArgs.findSome? (baseName fuel')
           else some last
-          | none => e.getAppArgs.findSome? (baseName fuel')
-          match idx?, payload, baseName 8 e with
-    | some i, some v, some n => some (.field v s!"{n}_{i}")
-    | some i, some v, none => some (.field v s!"cells_{i}")
+        | none => e.getAppArgs.findSome? (baseName fuel')
+    match idx?, payload, baseName 8 e with
+    | some i, some (true, v), some n => some (.field v s!"{n}_{i}_value")
+    | some i, some (false, v), some n => some (.field v s!"{n}_{i}")
+    | some i, some (_, v), none => some (.field v s!"cells_{i}")
     | _, _, _ => none
   else none
 

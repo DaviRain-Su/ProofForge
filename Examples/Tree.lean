@@ -51,11 +51,30 @@ def getSize (s : State) : UInt64 :=
 def getHead (s : State) : UInt64 :=
   s.nodes[0]!.value
 
-/-- 写节点 0 的 value。root/size 由宿主维护。 -/
+/-- 写节点 0 的 value。 -/
 @[pf_entry]
 def setHead (s : State) (v : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     .ok ({ s with nodes := s.nodes.set 0 { s.nodes[0]! with value := v } }, v)
+  else
+    .error .overflow
+
+/--
+有界 bump 分配：空树时把地址 1（槽 0）写成红根。
+官方 insert 在空树上就是这个。满树 / 非空走 overflow。
+旋转和染色下一刀。
+-/
+@[pf_entry]
+def bumpInsert (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
+  if s.root = 0 then
+    if s.size = 0 then
+      .ok ({ s with
+              root := 1
+              size := 1
+              nodes := s.nodes.set 0
+                { left := 0, right := 0, parent := 0, color := 1, key := k, value := v } }, k)
+    else
+      .error .overflow
   else
     .error .overflow
 

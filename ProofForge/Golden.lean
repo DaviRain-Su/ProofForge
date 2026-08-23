@@ -102,6 +102,14 @@ def extractedTree : Program :=
     methods := #[
       { kind := .init, name := "Examples.Tree.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.lit 0)] },
+      { kind := .increment, name := "Examples.Tree.bumpInsert", ixName := "bumpInsert", paramCount := 2
+        ops := #[
+          .ite .eq (.field (.arg 2) "root") (.lit 0)
+            #[.ite .eq (.field (.arg 2) "size") (.lit 0)
+              #[.okState (.field (.arg 1) "nodes_0_value")]
+              #[.errorOverflow]]
+            #[.errorOverflow]
+        ] },
       { kind := .increment, name := "Examples.Tree.setHead", ixName := "setHead", paramCount := 1
         ops := #[
           .ite .ne (.lit 0) (.lit 1)

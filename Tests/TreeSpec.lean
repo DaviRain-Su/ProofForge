@@ -20,6 +20,19 @@ open Examples.Tree
   | .error _ => false
 
 #guard
+  match bumpInsert (init 0) 3 7 with
+  | .ok (st, ret) =>
+      st.root == 1 && st.size == 1 && ret == 3 &&
+        st.nodes[0]!.key == 3 && st.nodes[0]!.value == 7 &&
+        st.nodes[0]!.color == 1 && st.nodes[0]!.parent == 0
+  | .error _ => false
+
+#guard
+  match bumpInsert { (init 0) with root := 1, size := 1 } 2 9 with
+  | .error .overflow => true
+  | _ => false
+
+#guard
   (ProofForge.Golden.extractedTree.fields.find? (· == "nodes_0_value")).isSome
 #guard ProofForge.IR.dataLen ProofForge.Golden.extractedTree == 216
 
