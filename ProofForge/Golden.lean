@@ -1,5 +1,5 @@
 import ProofForge.Extract.LegacyIR
-import ProofForge.Ops
+import ProofForge.Extract.LegacyOps
 
 namespace ProofForge.Golden
 

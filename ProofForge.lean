@@ -1,8 +1,8 @@
-import ProofForge.Ops
 import ProofForge.Core.Ops
 import ProofForge.Core.Schema
 import ProofForge.Core.Eval
 import ProofForge.Core.IR
+import ProofForge.Extract.LegacyOps
 import ProofForge.Extract.LegacyEval
 import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256

@@ -1,3 +1,4 @@
+/-! Legacy closed union retained at the extraction compatibility boundary. -/
 namespace ProofForge.Ops
 
 inductive Cmp where

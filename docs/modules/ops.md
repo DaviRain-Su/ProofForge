@@ -1,8 +1,13 @@
-# ProofForge.Ops
+# ProofForge.Extract.LegacyOps (`ProofForge.Ops`)
 
 ## Purpose
 
-从 elaborated `Expr` 抽出的操作。发射 overflow 路径的依据是 checked 算术，不是方法名。
+旧抽取器从 elaborated `Expr` 抽出的封闭操作 union。该定义同时含有 SVM 和 EVM
+叶子，仅由 `Extract` 兼容链路和 Golden fixtures 使用；新的抽取链路使用
+`Core.Ops`、`Extract.IR` 以及各 target 自有的 `Svm.Ops` / `Evm.Ops`。
+
+文件位于 `ProofForge/Extract/LegacyOps.lean`，暂时保留 `ProofForge.Ops` 命名空间，
+避免破坏兼容 API。发射 overflow 路径的依据是 checked 算术，不是方法名。
 
 ## Types
 

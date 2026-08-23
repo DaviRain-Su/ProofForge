@@ -1,4 +1,4 @@
-import ProofForge.Ops
+import ProofForge.Extract.LegacyOps
 import ProofForge.Core.Eval
 
 namespace ProofForge.Extract.Legacy

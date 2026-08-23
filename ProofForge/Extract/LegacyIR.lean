@@ -1,5 +1,5 @@
 import ProofForge.Core.IR
-import ProofForge.Ops
+import ProofForge.Extract.LegacyOps
 import ProofForge.Extract.LegacyEval
 
 namespace ProofForge.Extract.Legacy
