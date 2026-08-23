@@ -32,6 +32,8 @@ inductive Val (Ext : Type) where
   | ext (kind : Ext) (operands : Array (Val Ext))
   deriving Repr
 
+instance : Inhabited (Val Ext) := ⟨.lit 0⟩
+
 /--
 Target-independent effects and control flow. `OpExt V` is target-owned and may carry typed
 metadata plus source values, but cannot recursively contain `Op`.
@@ -58,6 +60,8 @@ inductive Op (ValExt : Type) (OpExt : Type → Type) where
   | returnU64 (value : Val ValExt)
   | returnState (value : Val ValExt)
   | ext (payload : OpExt (Val ValExt))
+
+instance : Inhabited (Op ValExt OpExt) := ⟨.errorOverflow⟩
 
 /-- Check extension arity and all recursively contained common values. -/
 partial def Val.wellFormed (arity : Ext → Nat) : Val Ext → Bool

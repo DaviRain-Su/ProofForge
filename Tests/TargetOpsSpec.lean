@@ -1,5 +1,7 @@
 import ProofForge.Svm.Ops
 import ProofForge.Evm.Ops
+import ProofForge.Extract.IR
+import ProofForge.Golden
 
 namespace Tests.TargetOpsSpec
 
@@ -34,5 +36,15 @@ private def validEvmOp : ProofForge.Evm.Ops.Op :=
   .ext (.sendEth (.lit 1) (.lit 2) (.lit 3) validEvmValue)
 
 #guard validEvmOp.wellFormed
+
+private def legacyOpsRoundTrip (ops : Array ProofForge.Ops.Op) : Bool :=
+  let extensible := ProofForge.Extract.IR.ofLegacyOps ops
+  extensible.all ProofForge.Extract.IR.Op.wellFormed &&
+    match ProofForge.Extract.IR.toLegacyOps extensible with
+    | .ok restored => restored == ops
+    | .error _ => false
+
+#guard ProofForge.Golden.programs.all fun program =>
+  program.methods.all fun method => legacyOpsRoundTrip method.ops
 
 end Tests.TargetOpsSpec

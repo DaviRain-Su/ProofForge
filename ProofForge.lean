@@ -13,6 +13,7 @@ import ProofForge.Evm.Runtime
 import ProofForge.Golden
 import ProofForge.Attr
 import ProofForge.Profile
+import ProofForge.Extract.IR
 import ProofForge.Extract
 import ProofForge.Svm.ABI
 import ProofForge.Svm.IR
