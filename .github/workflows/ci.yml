@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+          key: toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup') }}
+
+      - name: Cache Rust build products
+        uses: actions/cache@v4
+        with:
+          path: runtime-tests/solana/target
+          key: mollusk-${{ runner.os }}-${{ hashFiles('runtime-tests/solana/Cargo.lock', 'runtime-tests/solana/Cargo.toml') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build Lean libraries and guards
+        run: |
+          lake build
+          lake build Tests
+
+      - name: Build all SVM programs
+        run: lake exe pf -- build --target svm --out build/sbpf
+
+      - name: Run Mollusk integration suite
+        run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml -- --test-threads=1
+
+      - name: Build all EVM programs
+        run: lake exe pf -- build --target evm --out build/evm
+
+      - name: Run Anvil integration suite
+        run: runtime-tests/evm/anvil.sh
