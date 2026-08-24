@@ -5,6 +5,7 @@ import Examples.Counter
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Extract.Legacy.counterProgram with
+  | .error "extract/cfg: initialize: cfg/invalid: initializer has no state values" => true
   | .error "extract/unsupported: init missing returnState" => true
   | .error "extract/unsupported: increment missing checked arith" => true
   | _ => false

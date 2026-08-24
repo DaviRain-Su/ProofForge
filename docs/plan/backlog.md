@@ -57,28 +57,27 @@
 - Phoenix bounded N=4 双边书、四 seat registry、逐 seat 结算、TIF、费用和 typed event batch
 - SVM 异构 PDA seeds（ASCII/state key/account key）、完整 canonical key 校验和可续接 ignored CPI；Phoenix classic SPL Token 双 vault 全链路
 - SVM packed u8/u16/u32/u64 CPI words 与 canonical PDA 签名 raw self-entry；SelfLog 覆盖 self-CPI、续段写回和认证失败矩阵
+- Phoenix 官方形状 `AuditLogHeader` / Borsh event 通过 `"log"` PDA signed self-CPI 发布真实 `Program data`
 - SVM 48 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
+- GitHub CI 串行执行 Lake guards、48 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
+- Core 显式 basic-block CFG 第一阶段：block arguments、显式 branch/checked/exit、完整 checker、local CSE、线性共享 block；Phoenix 全方法已通过 lowering/validation
 
 ## 当前状态
 
-- `lake build Tests` 当前 185 jobs；67 个 imported test modules 含 748 个 `#guard` / `#guard_msgs`。
+- `lake build Tests` 当前 187 jobs；68 个 imported test modules 含 759 个 `#guard` / `#guard_msgs`。
 - SVM registry 48 个程序 / 48 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
-- Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade 及 vault/mint/program/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
+- Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片尚未开始。
 - `l5-005` 已完成；任务状态已同步为 done。
 
 ## 按优先级继续
 
-### P0：现有语义的链上闭环
-
-1. 把 `AuditLogHeader` + Borsh wire event 接入 Phoenix。packed integer words、canonical `"log"` PDA 签名、当前 program-id self-CPI、raw tag 入口及 fail-closed 校验已由通用 SelfLog 切片完成；剩余工作只应组合 Phoenix wire 字段和账户，不再修改抽取器/IR/emitter。
-
 ### P1：通用后端边界
 
-1. 显式 basic-block CFG、local CSE 和共享 block；先缩小 Phoenix，不在合约或 emitter 加特判。
+1. 让 SVM/EVM emitter 消费 Core CFG，并为 sBPF 全局 block layout 补 long-jump trampoline；随后用现有 CSE/共享 block 实测缩小 Phoenix，不在合约或 emitter 加特判。
 2. Solanalib control-flow / instruction correspondence；当前只覆盖 bounded checked arithmetic + static store。
 3. 新 target 的注册边界；现在新增 target 仍需在 `Extract.IR` 增加 typed extension case 和 conversion。
 
@@ -87,7 +86,6 @@
 1. `l5-004` Token-2022 指令 0–24 的 program-id 切片；hook / fee mint 在 TLV / remaining accounts 之前继续 fail closed。
 2. Phoenix 动态 trader/order 红黑树、删除 fixup 和非固定 N；当前 Phoenix 仍是 bounded N=4 有序投影。
 3. 固定长度 32-byte / u128 / Borsh protocol types；当前 Pubkey 和 client id 使用 `UInt64` limbs。
-4. GitHub CI：串行 Lake、SVM Mollusk、EVM Anvil。
 
 ## 明确保持 fail closed
 

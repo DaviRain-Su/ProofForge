@@ -1,5 +1,6 @@
 import ProofForge.Core.Ops
 import ProofForge.Core.IR
+import ProofForge.Core.CFG
 import ProofForge.Svm.Ops
 import ProofForge.Evm.Ops
 
@@ -27,6 +28,76 @@ abbrev Op := Core.Ops.Op ValKind OpExt
 abbrev Evaluation := Core.Evaluation ValKind
 abbrev Method := Core.IR.Method ValKind OpExt
 abbrev Program := Core.IR.Program ValKind OpExt
+abbrev CFG := Core.CFG.Graph ValKind OpExt
+
+private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.Ops.OpExt Val
+  | .invoke programIx metas data seeds bump =>
+      .invoke programIx metas (data.map (Svm.Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
+
+private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
+  | .invoke _ _ data _ bump =>
+      data.filterMap Svm.Ops.CpiWord.value? ++ match bump with
+        | some value => #[value]
+        | none => #[]
+
+private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.Ops.OpExt Val
+  | .deposit amount => .deposit (mapValue amount)
+  | .sendEth w0 w1 w2 amount => .sendEth (mapValue w0) (mapValue w1) (mapValue w2)
+      (mapValue amount)
+  | .log name amount => .log name (mapValue amount)
+  | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
+  | .mapSetU64 base key value => .mapSetU64 (mapValue base) (mapValue key) (mapValue value)
+  | .mapGetAddr base w0 w1 w2 =>
+      .mapGetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2)
+  | .mapSetAddr base w0 w1 w2 value =>
+      .mapSetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2) (mapValue value)
+  | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
+      .mapGetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2)
+  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
+      .mapSetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2) (mapValue value)
+  | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
+      .tokenTransfer (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue dw0) (mapValue dw1) (mapValue dw2) (mapValue amount)
+  | .tokenBalanceOfSelf tw0 tw1 tw2 =>
+      .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
+
+private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
+  | .deposit amount | .log _ amount => #[amount]
+  | .sendEth w0 w1 w2 amount => #[w0, w1, w2, amount]
+  | .mapGetU64 base key => #[base, key]
+  | .mapSetU64 base key value => #[base, key, value]
+  | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2]
+  | .mapSetAddr base w0 w1 w2 value => #[base, w0, w1, w2, value]
+  | .mapGetPair base o0 o1 o2 s0 s1 s2 => #[base, o0, o1, o2, s0, s1, s2]
+  | .mapSetPair base o0 o1 o2 s0 s1 s2 value => #[base, o0, o1, o2, s0, s1, s2, value]
+  | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount => #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
+  | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
+
+def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
+  | .svm payload => .svm (mapSvmPayload mapValue payload)
+  | .evm payload => .evm (mapEvmPayload mapValue payload)
+
+def OpExt.values : OpExt Val → Array Val
+  | .svm payload => svmPayloadValues payload
+  | .evm payload => evmPayloadValues payload
+
+def cfgDialect : Core.CFG.Dialect ValKind OpExt where
+  mapValues := OpExt.mapValues
+  values := OpExt.values
+  payloadEq := fun left right => left == right
+
+/-- Build and optimize the shared target-neutral CFG for one extracted method. -/
+def toCFG (ops : Array Op) : Except String CFG := do
+  let graph ← Core.CFG.lower cfgDialect ops
+  Core.CFG.optimize cfgDialect graph
+
+def methodToCFG (method : Method) : Except String CFG := do
+  let graph ←
+    if method.kind == .init then Core.CFG.lowerInit cfgDialect method.ops
+    else Core.CFG.lower cfgDialect method.ops
+  Core.CFG.optimize cfgDialect graph
 
 private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
   | .invoke _ _ data _ bump =>
@@ -223,7 +294,14 @@ partial def toEvmOp : Op → Except String Evm.Ops.Op
 def toEvmOps (ops : Array Op) : Except String (Array Evm.Ops.Op) :=
   ops.mapM toEvmOp
 
+private def Program.validateCFG (program : Program) : Except String Unit := do
+  for method in program.methods do
+    match methodToCFG method with
+    | .ok _ => pure ()
+    | .error reason => throw s!"extract/cfg: {method.ixName}: {reason}"
+
 def Program.validateSvm (program : Program) : Except String Unit := do
+  program.validateCFG
   for method in program.methods do
     let ops ←
       match toSvmOps method.ops with
@@ -233,6 +311,7 @@ def Program.validateSvm (program : Program) : Except String Unit := do
       throw s!"extract/ir: malformed SVM Ops in {method.ixName}"
 
 def Program.validateEvm (program : Program) : Except String Unit := do
+  program.validateCFG
   for method in program.methods do
     let ops ←
       match toEvmOps method.ops with

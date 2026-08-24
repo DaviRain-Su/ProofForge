@@ -1,4 +1,5 @@
 import ProofForge.Core.Ops
+import ProofForge.Core.CFG
 import ProofForge.Core.Schema
 import ProofForge.Core.Eval
 import ProofForge.Core.IR
