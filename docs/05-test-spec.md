@@ -98,5 +98,5 @@
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
 refinement 仍未宣称。当前构建快照：source account data_len 1376 bytes，SVM digest
-`6c06e1ced6a60a03`，assembly 3,023,644 bytes，sBPF ELF 552,264 bytes；发射汇编另设
+`50a4a12458a6c6f5`，assembly 3,023,640 bytes，sBPF ELF 552,264 bytes；发射汇编另设
 `< 5,750,000` bytes 的预算门。

@@ -26,7 +26,7 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 171 个 8-byte 叶，账户含 discriminator 共 1,376 bytes。`#pf_build Projects.Phoenix`
-SVM digest `6c06e1ced6a60a03`。
+SVM digest `50a4a12458a6c6f5`。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -91,8 +91,8 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 little-endian `(lo, hi)` 两个 `UInt64` limb 完整保留。最宽事件现在是九 payload，测试
 明确钉住动态 `events` 的 byte offset 72，防止抽取器静默漏掉尾叶。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 3,023,644-byte assembly、
-552,264-byte eBPF ELF 和 14,742-byte IDL；SVM digest 是 `6c06e1ced6a60a03`。
+真实源模块经 `pf build --target svm Phoenix` 生成 3,023,640-byte assembly、
+552,264-byte eBPF ELF 和 14,742-byte IDL；SVM digest 是 `50a4a12458a6c6f5`。
 assembly 是未做 CSE/共享基本块的中间文本，不是部署文件；当前 ELF 约 539.3 KiB。
 通用抽取器现在去重嵌套 state-helper 的祖先 transition，避免 bid reduce 等组合更新
 被重复发射；完整 maker Pubkey 与 event/lastEvent 双写仍会展开 conditional values。
