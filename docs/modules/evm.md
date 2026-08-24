@@ -48,9 +48,11 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_maybe.sh`：none 清零、some 写双叶
 - `runtime-tests/evm/anvil_ctx.sh`：`evmCaller` 对发送者低 8 字节；`height` 对 `block.number`
 - `runtime-tests/evm/anvil_tipjar.sh`：chainid、timestamp、Addr20 三叶、精确 deposit、错 value 保持、sendEth 改余额、Tipped log
-- `runtime-tests/evm/anvil_lang.sh`：位运算、移位越界、`uint8` ABI、tuple return、运行时下标、有界 for、`oob` revert
+- `runtime-tests/evm/anvil_lang.sh`：位运算、mod-64 移位、`uint8` ABI、tuple return、运行时下标、有界 for、`oob` revert
 - `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、ERC-20 transfer、超额保持、USDT 无返回成功
 - `runtime-tests/evm/anvil_ownable.sh`：owner 三槽、非 owner revert、Incremented log、approve / allowance / spend、超额额度保持
 - `runtime-tests/evm/anvil_token.sh`：mint / transfer 扣余额、不足 revert、approve / transferFrom 扣额度、Transfer/Approval log
+- `runtime-tests/evm/anvil_window.sh`：固定长 Vector 两槽；`setTail` 只写第二叶，第一叶保持
+- `runtime-tests/evm/anvil_phase.sh`：零 payload variant 的 idle/live tag 往返与 view
 
 入口：`runtime-tests/evm/anvil.sh`（Darwin / Linux）。工具查找：`FOUNDRY_BIN`、`~/.foundry/bin`、`PATH`。缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。

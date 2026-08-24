@@ -71,12 +71,12 @@
 | T-L2-08 | happy | 未挂过的 `neverSeen(u64,u64)` | 算出 disc，不必改表 |
 | T-L2-09 | happy | Window slots | cells_0=8、cells_1=16；data_len 24 |
 | T-L2-10 | error | 不定长 Array 字段 | `use Vector` |
-| T-L2-11 | happy | Window Mollusk init(7) | head=7，tail=0 |
-| T-L2-12 | happy | setTail 9 | head 保持 7，tail=9 |
+| T-L2-11 | happy | Window Mollusk + Anvil init(7) | head=7，tail=0 |
+| T-L2-12 | happy | Window setTail 9 | 两个 target runtime 都验证 head 保持 7，tail=9 |
 | T-L2-13 | happy | Phase slots | mode 偏移 8 |
 | T-L2-14 | happy | 固定布局多构造子 UInt64 variant | tag + 最大 payload；短构造子补零 |
-| T-L2-15 | happy | Phase Mollusk init | mode=0 |
-| T-L2-16 | happy | setLive / isLive | tag=1，view 返回 1 |
+| T-L2-15 | happy | Phase Mollusk + Anvil init | mode=0 |
+| T-L2-16 | happy | Phase setLive / setIdle / isLive | 两个 target runtime 都验证 tag 往返 0→1→0 |
 | T-L3-01 | happy | Pair.initBoth 3 9 | left=3，right=9 |
 | T-L3-02 | happy | getRight | return right，不改账户 |
 | T-L3-03 | happy | Maybe.getValue none | return 0 |
@@ -85,11 +85,16 @@
 | T-L3-06 | happy | getHeld empty / hold 77 | 0 / 77 |
 | T-L5-01 | happy | state-carrying bounded `forBody` | loop index 与外层 payload 身份不混淆 |
 | T-L5-02 | happy | `Vector MarketEvent 4` 动态写 | root `pf_inline` State helper 的 tag + payload、计数与 lastEvent 同时写入；SVM/EVM 都可发射 |
-| T-L5-03 | happy | Phoenix 跨四档 buy/sell | host reference 与链上 structured fold 逐样本一致 |
-| T-L5-04 | happy | Phoenix event batch | 官方 ordinal、instruction index、四-limb maker Pubkey 及 Fill/Expired/Reduce/Evict/Place/TIF/Fee/Summary 顺序正确；最宽 payload offset 72 进入 IR |
-| T-L5-05 | happy / fail | Phoenix trader registry | 四-limb Pubkey、幂等注册、容量上限、per-seat deposit 与溢出 |
-| T-L5-06 | happy / fail | Phoenix seat lifecycle | base/quote partial withdraw、非空拒绝 eviction、LIFO address reuse |
-| T-L5-07 | happy / fail | Phoenix authenticated order lifecycle | post/reduce 由完整 signer Pubkey 解析 owner；ask/base 与 bid/quote per-seat reduce 同步解锁；伪造 seat 参数已从 ABI 删除 |
-| T-L5-08 | happy / fail | Phoenix per-seat posting | 普通 ask/bid 锁仓及跨 owner 满书 eviction 原子更新两边 TraderState；抽取 IR 保留动态 index writes |
-| T-L5-09 | happy / fail | Phoenix per-seat matching | signer-derived self-trade；ask/bid fill、TIF expiry、self-cancel 原子更新 maker/taker 四类余额；host/fold 逐 seat 一致；不足 maker ledger fail closed |
+| T-L5-03 | happy | Phoenix 跨四档 buy/sell | host reference 与 source structured fold 的 `#guard` 逐样本一致；不宣称链上逐样本 refinement |
+| T-L5-04 | happy | Phoenix event batch（host / IR） | 官方 ordinal、instruction index、四-limb maker Pubkey 及 Fill/Expired/Reduce/Evict/Place/TIF/Fee/Summary 顺序正确；最宽 payload offset 72 进入 IR |
+| T-L5-05 | happy / fail | Phoenix trader registry（host） | 四-limb Pubkey、幂等注册、容量上限、per-seat deposit 与溢出 |
+| T-L5-06 | happy / fail | Phoenix seat lifecycle（host） | base/quote partial withdraw、非空拒绝 eviction、LIFO address reuse |
+| T-L5-07 | happy / fail | Phoenix authenticated order lifecycle（host / IR） | post/reduce 由完整 signer Pubkey 解析 owner；ask/base 与 bid/quote per-seat reduce 同步解锁；伪造 seat 参数已从 ABI 删除 |
+| T-L5-08 | happy / fail | Phoenix per-seat posting（host / IR） | 普通 ask/bid 锁仓及跨 owner 满书 eviction 原子更新两边 TraderState；抽取 IR 保留动态 index writes |
+| T-L5-09 | happy / fail | Phoenix per-seat matching（host / fold） | signer-derived self-trade；ask/bid fill、TIF expiry、self-cancel 原子更新 maker/taker 四类余额；逐 seat 一致；不足 maker ledger fail closed |
 | T-L5-10 | happy | inline scalar / record projection | `pf_inline` UInt64/Bool helper 与 updated-record projection 在 variant payload 中归一化；不泄漏未知 state leaf |
+| T-L5-11 | happy | Phoenix Mollusk smoke | 认证 state 上 initialize → authenticated depositFunds → postAsk；验证 trader key 四 limb、余额、book、sequence 与 Place event |
+
+Phoenix 的链上门目前只覆盖 T-L5-11，不等价于 T-L5-03～09 的完整撮合路径。
+当前构建快照：source account data_len 1376 bytes，SVM digest `1d988fc09ff38595`，
+发射汇编 5,084,550 bytes，sBPF ELF 828,256 bytes；汇编测试另设 `< 5,750,000` bytes 的预算门。

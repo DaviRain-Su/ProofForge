@@ -28,11 +28,10 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shl(uint64,ui
   8 "shl"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shr(uint64,uint64)(uint64)' 8 3)" \
   1 "shr"
-
-if "$cast" call --rpc-url "$rpc" "$addr" 'shl(uint64,uint64)(uint64)' 1 64 >/dev/null 2>&1; then
-  echo "FAIL: shl count 64 should revert" >&2
-  exit 1
-fi
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shl(uint64,uint64)(uint64)' 1 64)" \
+  1 "shl count 64 wraps to 0"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shl(uint64,uint64)(uint64)' 1 65)" \
+  2 "shl count 65 wraps to 1"
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'mask8(uint8)(uint64)' 7)" \
   7 "mask8"
@@ -65,4 +64,4 @@ solana_lean_require_storage "$addr" 1 9 "oob holds cells_1"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'sum4()(uint64)')" \
   12 "sum4 = 3+9+0+0"
 
-echo "evm-anvil-lang: ok (bits/for/index/abi/tuple/oob; engineering only)"
+echo "evm-anvil-lang: ok (bits/mod64-shift/for/index/abi/tuple/oob; engineering only)"

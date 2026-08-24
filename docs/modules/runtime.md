@@ -32,7 +32,8 @@
 - `evmTokenTransfer` — 封闭 ERC-20 `transfer`；返回 0 或 32 非零。
 - `evmTokenBalanceOfSelf` — `STATICCALL balanceOf(address(this))`，超 UInt64 revert。
 
-`unixTime`、完整 32B key、独立 caller 账户、通用 CPI 本切片 fail closed。不把 SVM 名译成 EVM opcode。
+`unixTime` 已支持。32B key / owner 可通过四个 `UInt64` word 读取；把它们当作一个
+native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 SVM 名译成 EVM opcode。
 - `invoke programIx metas data` — 编译期钉死的 CPI。抽出认这个名字。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
 - `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一条 `invoke` / `invokeSigned`。
@@ -50,7 +51,9 @@
 - `cpiReturn` — 最近一次 CPI 的 8 字节返回；`sol_get_return_data`。长度不是 8 → Custom(1)。
 - `tokenAccountSize` — Token GetAccountDataSize；返回值走 `cpiReturn`。
 
-完整 32B key、账户 4+ header、运行时拼的 CPI（动态 program id / remaining accounts）fail closed。编译期钉死的 `invoke` 已开。`unixTime` / `Bool` 字段已开。
+把完整 32B key 当作单一值、运行时拼的 CPI（动态 program id / remaining accounts）
+fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已开；编译期钉死的
+`invoke`、`unixTime` 和 `Bool` 字段也已开。
 
 
 ## Tests
@@ -65,19 +68,25 @@
 `Examples/Gate.lean` + `runtime-tests/solana/tests/gate.rs`：Bool 字段 1 字节；`unixTime` 跟 `clock.unix_timestamp`。
 `Examples/Nonce.lean` + `runtime-tests/solana/tests/nonce.rs`：AdvanceNonceAccount 缺 signer → `Custom(1)`。
 `Examples/TokenOwner.lean` + `runtime-tests/solana/tests/token_owner.rs`：SetAuthority AccountOwner 改 owner；Approve 写 delegate。
-`Examples/TokenMs.lean` + `runtime-tests/solana/tests/token_ms.rs`：InitializeMultisig2 m=2 n=2。
+`Examples/TokenMs.lean` + `runtime-tests/solana/tests/token_ms.rs`：InitializeMultisig2 m=2 n=2；未使用的 payer 不要求 signer。
 `Examples/Pda.lean` + `runtime-tests/solana/tests/pda.rs`：`findPda "vault"` 的 bump 与宿主 `find_program_address` 一致；`checkPda` 对 canonical bump 返回 0，对 bump 0 返回 1。
 `Examples/Signed.lean` + `runtime-tests/solana/tests/signed.rs`：canonical bump 签字成功；bump 0 失败。
 `Examples/SysAlloc.lean` + `runtime-tests/solana/tests/sys_alloc.rs`：allocate 把空 System 账户扩到 16 字节；assign 把 owner 改成当前 program；缺 signer → `Custom(1)`。
-`Examples/TokenAcc.lean` + `runtime-tests/solana/tests/token_acc.rs`：InitializeAccount3 写 owner/mint；CloseAccount 把 0 余额账户 lamports 退回 dest；缺 signer → `Custom(1)`。
+`Examples/TokenAcc.lean` + `runtime-tests/solana/tests/token_acc.rs`：InitializeAccount3 写 owner/mint 且不要求 owner signer；CloseAccount 把 0 余额账户 lamports 退回 dest，并要求 owner signer。
 `Examples/Memo.lean` + `runtime-tests/solana/tests/memo.rs`：CPI 进官方 Memo v3，写字面量 `"ok"`；缺 signer → `Custom(1)`。
 `Examples/CreatePda.lean` + `runtime-tests/solana/tests/create_pda.rs`：给 `"vault"` PDA 开 16 字节；bump 0 失败。
 `Examples/TokenApprove.lean` + `runtime-tests/solana/tests/token_approve.rs`：ApproveChecked 写 delegate + delegated_amount；缺 signer → `Custom(1)`。
 `Examples/TokenFreeze.lean` + `runtime-tests/solana/tests/token_freeze.rs`：Freeze 把 state 写成 Frozen；Thaw 写回 Initialized；缺 signer → `Custom(1)`。
 `Examples/TokenAuth.lean` + `runtime-tests/solana/tests/token_auth.rs`：SetAuthority 把 mint_authority 改成 acc2；Revoke 清掉 delegate；缺 signer → `Custom(1)`。
 `Examples/Epoch.lean` + `runtime-tests/solana/tests/epoch.rs`：默认 `slots_per_epoch` 432000；改 schedule 后再读一次。
-`Examples/TokenSize.lean` + `runtime-tests/solana/tests/token_size.rs`：GetAccountDataSize 返回 165；缺 signer → `Custom(1)`。
+`Examples/TokenSize.lean` + `runtime-tests/solana/tests/token_size.rs`：GetAccountDataSize 返回 165；未使用的 dummy 不要求 signer。
 `Examples/SysSeed.lean` + `runtime-tests/solana/tests/sys_seed.rs`：AllocateWithSeed 开 16 字节；CreateAccountWithSeed 转 lamports；AssignWithSeed 改 owner；缺 signer → `Custom(1)`。
 `Examples/SysXfer.lean` + `runtime-tests/solana/tests/sys_xfer.rs`：TransferWithSeed 从 `create_with_seed(acc0, "vault", program)` 转 lamports；缺 signer → `Custom(1)`。
-`Examples/TokenMint2.lean` + `runtime-tests/solana/tests/token_mint2.rs`：InitializeMint2 写 decimals=6、authority=acc0；缺 signer → `Custom(1)`。
-`Examples/TokenNative.lean` + `runtime-tests/solana/tests/token_native.rs`：SyncNative 把 native 账户 amount 同步成多余 lamports；缺 signer → `Custom(1)`。
+`Examples/TokenMint2.lean` + `runtime-tests/solana/tests/token_mint2.rs`：InitializeMint2 写 decimals=6、authority=acc0；authority 不要求 signer。
+`Examples/TokenNative.lean` + `runtime-tests/solana/tests/token_native.rs`：SyncNative 把 native 账户 amount 同步成多余 lamports；owner 不要求 signer。
+`Examples/Nested.lean` + `runtime-tests/solana/tests/nested.rs`：嵌套 projection 更新只写目标叶。
+`Examples/Book.lean` + `runtime-tests/solana/tests/book.rs`：有界循环与运行时 Vector 下标写在链上执行。
+`Examples/Lang.lean` + `runtime-tests/solana/tests/lang.rs`：位运算、mod-64 移位及 state-carrying fold 的链上语义。
+`Examples/Tree.lean` + `runtime-tests/solana/tests/tree.rs`：三次红黑树插入后的 root、child 与颜色布局。
+`Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：walk prelude 下多账户 PDA bump view。
+`Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 initialize → depositFunds → postAsk smoke；不代表完整撮合路径的 host↔chain refinement。

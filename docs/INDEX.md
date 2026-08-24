@@ -7,8 +7,8 @@
 | [README.md](../README.md) | 仓库入口与当前范围 |
 | [00-business-validation.md](00-business-validation.md) | 为什么做、为什么现在做 |
 | [01-prd.md](01-prd.md) | 做 / 不做 |
-| [02-architecture.md](02-architecture.md) | 模块边界与信任边界 |
-| [03-technical-spec.md](03-technical-spec.md) | v0 切片的具体契约 |
+| [02-architecture.md](02-architecture.md) | 当前模块边界、信任边界与早期迁移背景 |
+| [03-technical-spec.md](03-technical-spec.md) | 历史 v0 Counter 切片（非当前权威） |
 | [04-task-breakdown.md](04-task-breakdown.md) | 阶段与任务 |
 | [05-test-spec.md](05-test-spec.md) | 怎样算对 |
 | [plan/README.md](plan/README.md) | 交付队列 |
