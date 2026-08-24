@@ -3075,8 +3075,11 @@ private def lastNamedBin (env : Environment) (want : Name) (e : Expr) : Option (
           | _, _ => none
         | none => none
       else
-        e.getAppArgs.findSome? (go fuel')
-  go 8 e
+        match e with
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .lam _ _ body _ => go fuel' body
+        | _ => e.getAppArgs.findSome? (go fuel')
+  go 16 e
 
 /-- Materialize only source values whose repeated expansion grows bounded tree control flow.
 Plain scalar arithmetic remains canonicalized by substitution, preserving checked-arithmetic IR. -/
@@ -3773,12 +3776,6 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .returnState value => .returnState (nv value)
       | op => op
   let ops0 := if stateLoop then ops0.map (normalizeStateLoopOp 32) else ops0
-  let ops1 :=
-    if lean == "modulo" then
-      ops0.map fun
-        | .checkedDivU64 l r => .checkedModU64 l r
-        | op => op
-    else ops0
   -- init 的 λ 从外到内编号；elaborated bvar 从内到外。翻过来对齐 ix 参数。
   let rec flipVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
     match fuel with
@@ -3884,8 +3881,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     if (kind == .init && nLams > 1) ||
         (kind == .increment && nLams > 2) ||
         (kind == .get && nLams > 2) then
-      ops1.map (flipOp 16)
-    else ops1
+      ops0.map (flipOp 16)
+    else ops0
   let paramCount :=
     match kind with
     | .init => if nLams = 0 then 1 else nLams

@@ -54,6 +54,20 @@ def getWithLet (s : State) : UInt64 :=
   let value := s.value
   value
 
+def modulo (s : State) (den : UInt64) : Except Error (State × UInt64) :=
+  if den ≠ 0 then
+    let next := s.value / den
+    .ok ({ value := next }, next)
+  else
+    .error .overflow
+
+def remainder (s : State) (den : UInt64) : Except Error (State × UInt64) :=
+  if den ≠ 0 then
+    let next := s.value % den
+    .ok ({ value := next }, next)
+  else
+    .error .overflow
+
 namespace MisleadingConstants
 
 structure State where
@@ -173,6 +187,24 @@ elab "#pf_guard_constant_semantics" : command => do
   | .error _ => pure ()
   | .ok bad =>
       throwError s!"a constant named u64Max bypassed checked-add validation: {repr bad.methods}"
+  let division ←
+    match ProofForge.Extract.extractProgram env ``initDirect ``modulo ``getDirect with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let remainder ←
+    match ProofForge.Extract.extractProgram env ``initDirect ``remainder ``getDirect with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some divisionMethod := division.methods.find? (·.ixName == "modulo")
+    | throwError "missing misleading modulo method"
+  let some remainderMethod := remainder.methods.find? (·.ixName == "remainder")
+    | throwError "missing remainder method"
+  unless divisionMethod.ops.any (fun | .checkedDivU64 _ _ => true | _ => false) &&
+      !divisionMethod.ops.any (fun | .checkedModU64 _ _ => true | _ => false) &&
+      remainderMethod.ops.any (fun | .checkedModU64 _ _ => true | _ => false) &&
+      !remainderMethod.ops.any (fun | .checkedDivU64 _ _ => true | _ => false) do
+    throwError s!"division/modulo followed method names instead of source operators:\n" ++
+      s!"division={repr divisionMethod.ops}\nremainder={repr remainderMethod.ops}"
 
 #pf_guard_constant_semantics
 
