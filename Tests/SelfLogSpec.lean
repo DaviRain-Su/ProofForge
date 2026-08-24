@@ -59,7 +59,7 @@ elab "#pf_guard_self_log_ir" : command => do
     match Emit.emitAsm initCpiProgram with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless initCpiAsm.contains "xfer_ok_initialize_init_0" do
+  unless initCpiAsm.contains "xfer_ok_initialize_b0_0" do
     throwError "init CPI was retained in IR but omitted from assembly"
 
 #pf_guard_self_log_ir

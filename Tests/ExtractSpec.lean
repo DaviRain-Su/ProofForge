@@ -125,6 +125,17 @@ elab "#pf_guard_state_fold_ir" : command => do
   ]
   unless run.ops == expected do
     throwError s!"state-fold IR mismatch: {repr run.ops}"
+  let evmProgram ←
+    match ProofForge.Evm.IR.fromProgram program with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  let yul ←
+    match ProofForge.Evm.Emit.emitYul evmProgram with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  let productReturn := "mstore(0, sload(0))\n            return(0, 32)"
+  unless (yul.splitOn productReturn).length ≥ 3 do
+    throwError "EVM state-fold exit returns the last write instead of the requested state field"
 
 #pf_guard_state_fold_ir
 
@@ -582,7 +593,7 @@ elab "#pf_guard_conditional_local" : command => do
   unless svm.contains "then_select_" && svm.contains "load local 0" do
     throwError "SVM conditional-local lowering is missing"
   unless evm.contains "let v0 := 0" && evm.contains "v0 := arg0" &&
-      evm.contains "v0 := arg1" && evm.contains "let l0 := v0" do
+      evm.contains "v0 := arg1" && evm.contains "l0 := v0" do
     throwError "EVM conditional-local lowering is missing"
 
 #pf_guard_conditional_local
@@ -624,11 +635,12 @@ elab "#pf_guard_except_bind_join" : command => do
   unless svm.contains "; declare join local 0" &&
       svm.contains "; set join local 0" && svm.contains "; load local 0" do
     throwError "SVM Except.bind join lowering is missing"
-  unless svm.contains "ja done_bindChoice_" && svm.contains "done_bindChoice_" do
+  unless svm.contains "cfg_bindChoice_block_" &&
+      svm.contains "ja cfg_bindChoice_block_" && !svm.contains "@@CFG_EDGE_" do
     throwError "SVM successful Except.bind branch falls through into its else branch"
   unless evm.contains "let l0 := 0" && evm.contains "l0 := arg0" &&
       evm.contains "l0 := arg1" &&
-      evm.contains "if gt(l0, sub(0xffffffffffffffff, arg3))" do
+      evm.contains "gt(l0, sub(0xffffffffffffffff, arg3))" do
     throwError "EVM Except.bind join lowering is missing"
 
 #pf_guard_except_bind_join

@@ -19,6 +19,7 @@ inductive Exit (ValExt : Type) where
   | errorOverflow
   | errorNamed (name : String)
   | returnU64 (value : Val ValExt)
+  | returnU64s (values : Array (Val ValExt))
   | returnState (value : Val ValExt)
   deriving BEq, Repr
 
@@ -252,7 +253,12 @@ mutual
     | .okState value :: rest => finishExit id instructions (.okState value) rest builder
     | .errorOverflow :: rest => finishExit id instructions .errorOverflow rest builder
     | .errorNamed name :: rest => finishExit id instructions (.errorNamed name) rest builder
-    | .returnU64 value :: rest => finishExit id instructions (.returnU64 value) rest builder
+    | .returnU64 value :: rest =>
+        let values := #[value] ++ rest.toArray.filterMap fun
+          | .returnU64 next => some next
+          | _ => none
+        let result := if values.size == 1 then .returnU64 value else .returnU64s values
+        finishExit id instructions result rest builder
     | .returnState value :: rest => finishExit id instructions (.returnState value) rest builder
     | op :: rest => lowerInto dialect id (instructions.push op) rest fallback builder
 
@@ -422,6 +428,7 @@ private def rewriteExit (rewrite : Val ValExt → Val ValExt) : Exit ValExt → 
   | .initialize values => .initialize (values.map rewrite)
   | .okState value => .okState (rewrite value)
   | .returnU64 value => .returnU64 (rewrite value)
+  | .returnU64s values => .returnU64s (values.map rewrite)
   | .returnState value => .returnState (rewrite value)
   | .errorOverflow => .errorOverflow
   | .errorNamed name => .errorNamed name
@@ -454,6 +461,7 @@ private def checkedLocalIds : Checked ValExt → Array Nat
 private def exitLocalIds : Exit ValExt → Array Nat
   | .initialize values => values.flatMap valueLocalIds
   | .okState value | .returnU64 value | .returnState value => valueLocalIds value
+  | .returnU64s values => values.flatMap valueLocalIds
   | .errorOverflow | .errorNamed _ => #[]
 
 private def terminatorLocalIds : Terminator ValExt → Array Nat

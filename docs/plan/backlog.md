@@ -62,6 +62,7 @@
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
 - GitHub CI 串行执行 Lake guards、48 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
 - Core 显式 basic-block CFG 第一阶段：block arguments、显式 branch/checked/exit、完整 checker、local CSE、线性共享 block；Phoenix 全方法已通过 lowering/validation
+- SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；Phoenix 汇编由 4,109,725 B 降至 2,801,196 B，全部 48 个 Mollusk 文件与 12 个 Anvil 程序通过
 
 ## 当前状态
 
@@ -77,9 +78,8 @@
 
 ### P1：通用后端边界
 
-1. 让 SVM/EVM emitter 消费 Core CFG，并为 sBPF 全局 block layout 补 long-jump trampoline；随后用现有 CSE/共享 block 实测缩小 Phoenix，不在合约或 emitter 加特判。
-2. Solanalib control-flow / instruction correspondence；当前只覆盖 bounded checked arithmetic + static store。
-3. 新 target 的注册边界；现在新增 target 仍需在 `Extract.IR` 增加 typed extension case 和 conversion。
+1. Solanalib control-flow / instruction correspondence；当前只覆盖 bounded checked arithmetic + static store。
+2. 新 target 的注册边界；现在新增 target 仍需在 `Extract.IR` 增加 typed extension case 和 conversion。
 
 ### P2：扩大产品面
 

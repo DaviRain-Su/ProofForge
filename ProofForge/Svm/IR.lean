@@ -88,6 +88,24 @@ where
 def toSourceOps (ops : Array Op) : Array Ops.Op :=
   ops.map Op.toSource
 
+abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
+
+private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
+    Ops.OpExt Ops.Val → Ops.OpExt Ops.Val
+  | .invoke programIx metas data seeds bump =>
+      .invoke programIx metas (data.map (Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
+
+private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
+  | .invoke _ _ data _ bump =>
+      data.filterMap Ops.CpiWord.value? ++ match bump with
+        | some value => #[value]
+        | none => #[]
+
+def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
+  mapValues := mapCfgPayload
+  values := cfgPayloadValues
+  payloadEq := fun left right => left == right
+
 def hasStoreField (ops : Array Op) : Bool :=
   Ops.hasStoreField (toSourceOps ops)
 
@@ -113,6 +131,16 @@ structure Method where
   ops : Array Op := #[]
   evaluation : Core.Evaluation Ops.ValKind := {}
   deriving BEq, Repr, Inhabited
+
+/-- Lower a target-owned SVM method to the shared basic-block representation consumed by
+code generation. This deliberately happens after target projection, so no combined EVM/SVM
+extension can cross the backend boundary. -/
+def Method.toCFG (method : Method) : Except String CFG := do
+  let source := toSourceOps method.ops
+  let graph ←
+    if method.kind == .init then Core.CFG.lowerInit cfgDialect source
+    else Core.CFG.lower cfgDialect source
+  Core.CFG.optimize cfgDialect graph
 
 /-- A statically addressed SVM account-data cell. Offsets include the eight-byte layout marker. -/
 structure Slot where

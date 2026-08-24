@@ -85,6 +85,18 @@ private def duplicateExpression : Array ProofForge.Extract.IR.Op := #[
             | _ => false
       | none => false
 
+private def tupleReturn : Array ProofForge.Extract.IR.Op := #[
+  .returnU64 (.arg 0),
+  .returnU64 (.arg 1)
+]
+
+-- A CFG exit retains the complete ABI tuple instead of silently dropping values after the first.
+#guard match ProofForge.Extract.IR.toCFG tupleReturn with
+  | .ok graph =>
+      (graph.block? graph.entry).any fun block =>
+        block.terminator == .exit (.returnU64s #[.arg 0, .arg 1])
+  | .error _ => false
+
 private def checkedProgram : Array ProofForge.Extract.IR.Op := #[
   .checkedAddU64 (.arg 0) (.lit 1),
   .okState (.arg 0),

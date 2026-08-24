@@ -12,7 +12,7 @@
 | `Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
-| `Evm.Emit` | Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance、event ABI、本合约 transfer/transferFrom | 任意 CALL / Token-2022 |
+| `Evm.Emit` | Core CFG → Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance、event ABI、本合约 transfer/transferFrom | 任意 CALL / Token-2022 |
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
 | `Evm.Commands` | `#pf_evm_build` | 新 DSL |
 
@@ -23,6 +23,14 @@ compatibility Ops 降成 EVM-only `Op`；SVM 叶子（`clockSlot` / `signerKey0`
 `evmDeposit` 让该 entry payable；程序若有任一 payable 入口，去掉全局 `callvalue()` 守卫，
 非 payable 入口本地守卫。`evmSendEth` 是封闭 value CALL。`evmLogTipped` 是 LOG1。窄槽
 `UInt8/16/32` 各占一个 storage word。`Option UInt64` 是 tag+payload 两槽。
+
+每个 target-owned method 通过 `Method.toCFG` 后生成 Yul：入口预声明 CFG locals，`pf_pc`
+dispatcher 的每个 `case` 对应一个 basic block，branch / checked success / overflow 只改下一
+block id。`pf_last` 只显式承接原 ABI 的 checked/effect result；local 和 storage value 直接
+按 CFG 中的显式引用读取，冲突 join fail closed。由于 Yul
+没有 `goto`，该 dispatcher 是任意 reducible CFG 的统一边界，不再依赖 source 嵌套形状。
+tuple return 由 CFG 的 `returnU64s` exit 一次编码为连续 ABI words。Constructor 也从
+`lowerInit` 的唯一 `initialize` exit 取值；尚未建模的 constructor effect fail closed。
 
 首选的 `init` / `initialize` → constructor；其它 `.init` 方法不会成为 runtime entry，避免部署后重置 storage。非 init 方法 → `uint64` ABI entry；`kind.get` 标 `view`；含 `evmDeposit` 的 mutate 标 `payable`。`evmLog name amt` 是 LOG1，topic = `keccak("name(uint64)")`。pair-key Map 是 `keccak256(owner||spender||base)`。
 

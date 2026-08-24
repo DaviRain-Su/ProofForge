@@ -111,6 +111,26 @@ open ProofForge.Evm
             yul.contains s!"digest={ProofForge.Evm.IR.digestHex p}"
 
 #guard
+  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedCounter with
+  | .error _ => false
+  | .ok p =>
+      match p.entries.find? (·.ixName == "get") with
+      | none => false
+      | some get =>
+          let localProgram : ProofForge.Evm.IR.Program := {
+            p with
+            entries := #[{ get with ops := #[
+              .letLocal 0 (.lit 11),
+              .letLocal 1 (.lit 22),
+              .returnU64 (.local 0)
+            ] }]
+          }
+          match ProofForge.Evm.Emit.emitYul localProgram with
+          | .error _ => false
+          | .ok yul =>
+              yul.contains "mstore(0, l0)" && !yul.contains "mstore(0, l1)"
+
+#guard
   let source : ProofForge.Extract.Legacy.Program :=
     { ProofForge.Golden.extractedCounter with
       name := "ValueArith"

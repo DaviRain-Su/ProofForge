@@ -54,7 +54,7 @@ open Examples.Lang
       asm.contains "and64" &&
         asm.contains "lsh64" &&
         asm.contains "and64 r2, 63" &&
-        asm.contains "done_sum4_0:\n    ; load local 0" &&
+        asm.contains "cfg_sum4_block_1:\n  ; load local 0" &&
         asm.contains "named error"
 
 elab "#pf_guard_narrow_vector_codegen" : command => do

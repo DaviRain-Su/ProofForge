@@ -341,9 +341,13 @@ elab "#pf_guard_phoenix_artifact" : command => do
       swap.paramCount == 5 && swapSell.paramCount == 5 && collect.paramCount == 0 &&
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
-  unless asm.contains "; forBody 17" && asm.contains "; forBody 19" &&
-      asm.contains "; forBody 4" do
+  unless asm.contains "; CFG loop header bound=17" &&
+      asm.contains "; CFG loop header bound=19" &&
+      asm.contains "; CFG loop header bound=4" do
     throwError "Phoenix bounded loops missing from assembly"
+  unless asm.contains "cfg_swapBuy_block_" && asm.contains "cfg_swapBuy_relay_" &&
+      asm.contains "lddw r0, 0x1001" && !asm.contains "@@CFG_EDGE_" do
+    throwError "Phoenix CFG layout or long-jump relays are incomplete"
   unless asm.contains "; checkPdaSeeds account=5 count=3" &&
       asm.contains "; checkPdaSeeds account=6 count=3" do
     throwError "Phoenix canonical vault checks are missing from assembly"
@@ -1341,11 +1345,6 @@ private def sellSamples : List Projects.Phoenix.State := [
 
 #guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedPhoenix == 344
 #guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedPhoenix != 1376
-
-#guard
-  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPhoenix with
-  | .ok asm => asm.contains "err_swapBuy:"
-  | .error _ => false
 
 #guard
   let full :=

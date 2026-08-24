@@ -1454,6 +1454,78 @@ private def wrapLoopRelays (tag loopTarget doneTarget body : String) : String ×
 "
   return (forward 0, out, backward (chunks.size - 1))
 
+private def emitOkState (p : IR.Program) (label : String) (v : Ops.Val) (fresh : Nat)
+    (destHint : String) (hasStore hasIndexSet hasChecked : Bool) :
+    Except String (String × Nat) := do
+  let mut acc := ""
+  let mut n := fresh
+  let optionNames := IR.optionLeafNames? p
+  if hasStore || hasIndexSet then
+    match v with
+    | .lit k =>
+      acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
+      acc := acc ++ emitReturnU64 24
+    | _ =>
+      let load ← loadVal p v 24 n s!"{label}_{n}_ok"
+      n := n + 1
+      acc := acc ++ load
+      acc := acc ++ emitReturnU64 24
+  else if optionNames.isSome then
+    let (tagName, payName) := optionNames.getD (destHint, destHint)
+    match v with
+    | .lit 0 =>
+      acc := acc ++ "  lddw r1, 0\n  stxdw [r10 - 24], r1\n"
+      acc := acc ++ (← storeField p tagName 24)
+      acc := acc ++ (← storeField p payName 24)
+      acc := acc ++ emitReturnU64 24
+    | .lit k =>
+      acc := acc ++ "  lddw r1, 1\n  stxdw [r10 - 16], r1\n"
+      acc := acc ++ (← storeField p tagName 16)
+      acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
+      acc := acc ++ (← storeField p payName 24)
+      acc := acc ++ emitReturnU64 24
+    | _ =>
+      let load ← loadVal p v 24 n s!"{label}_{n}_option"
+      n := n + 1
+      acc := acc ++ "  lddw r1, 1\n  stxdw [r10 - 16], r1\n"
+      acc := acc ++ (← storeField p tagName 16)
+      acc := acc ++ load
+      acc := acc ++ (← storeField p payName 24)
+      acc := acc ++ emitReturnU64 24
+  else
+    match v with
+    | .lit k =>
+      acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
+      acc := acc ++ (← emitStoreAndReturn p destHint 24)
+    | .field _ fname =>
+      if hasChecked then
+        acc := acc ++ (← emitStoreAndReturn p destHint 24)
+      else if fname.contains '_' && (IR.fieldOffset p fname).isSome then
+        let load ← loadVal p (.arg 0) 24 n s!"{label}_{n}_field"
+        n := n + 1
+        acc := acc ++ load
+        acc := acc ++ (← emitStoreAndReturn p fname 24)
+      else do
+        -- 窄字段赋值：okState 抽出的是未改槽，写回指令参数到 dest。
+        let load ← loadVal p (.arg 0) 24 n s!"{label}_{n}_narrow"
+        n := n + 1
+        acc := acc ++ load
+        acc := acc ++ (← emitStoreAndReturn p destHint 24)
+    | .ext _ _ => do
+      let load ← loadVal p v 24 n s!"{label}_{n}_leaf"
+      n := n + 1
+      acc := acc ++ load
+      acc := acc ++ (← emitStoreAndReturn p destHint 24)
+    | v =>
+      if hasChecked then
+        acc := acc ++ (← emitStoreAndReturn p destHint 24)
+      else do
+        let load ← loadVal p v 24 n s!"{label}_{n}_value"
+        n := n + 1
+        acc := acc ++ load
+        acc := acc ++ (← emitStoreAndReturn p destHint 24)
+  return (acc, n)
+
 private partial def emitOps (p : IR.Program) (label errorLabel : String)
     (ops : Array IR.Op) (fresh : Nat) : Except String (String × Nat) := do
   let mut acc := ""
@@ -1669,71 +1741,10 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       acc := acc ++ load
       acc := acc ++ (← storeField p name 24)
     | .okState v =>
-      let optionNames := IR.optionLeafNames? p
-      if IR.hasStoreField ops || IR.hasIndexSet ops then
-        match v with
-        | .lit k =>
-          acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
-          acc := acc ++ emitReturnU64 24
-        | _ =>
-          let load ← loadVal p v 24 n s!"{label}_{n}_ok"
-          n := n + 1
-          acc := acc ++ load
-          acc := acc ++ emitReturnU64 24
-      else if optionNames.isSome then
-        let (tagName, payName) := optionNames.getD (destHint, destHint)
-        match v with
-        | .lit 0 =>
-          acc := acc ++ "  lddw r1, 0\n  stxdw [r10 - 24], r1\n"
-          acc := acc ++ (← storeField p tagName 24)
-          acc := acc ++ (← storeField p payName 24)
-          acc := acc ++ emitReturnU64 24
-        | .lit k =>
-          acc := acc ++ "  lddw r1, 1\n  stxdw [r10 - 16], r1\n"
-          acc := acc ++ (← storeField p tagName 16)
-          acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
-          acc := acc ++ (← storeField p payName 24)
-          acc := acc ++ emitReturnU64 24
-        | _ =>
-          let load ← loadVal p v 24 n s!"{label}_{n}_option"
-          n := n + 1
-          acc := acc ++ "  lddw r1, 1\n  stxdw [r10 - 16], r1\n"
-          acc := acc ++ (← storeField p tagName 16)
-          acc := acc ++ load
-          acc := acc ++ (← storeField p payName 24)
-          acc := acc ++ emitReturnU64 24
-      else
-        match v with
-        | .lit k =>
-          acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
-          acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .field _ fname =>
-          if IR.hasCheckedArith ops then
-            acc := acc ++ (← emitStoreAndReturn p destHint 24)
-          else if fname.contains '_' && (IR.fieldOffset p fname).isSome then
-            let load ← loadVal p (.arg 0) 24 n s!"{label}_{n}_field"
-            n := n + 1
-            acc := acc ++ load
-            acc := acc ++ (← emitStoreAndReturn p fname 24)
-          else do
-            -- 窄字段赋值：okState 抽出的是未改槽，写回指令参数到 dest。
-            let load ← loadVal p (.arg 0) 24 n s!"{label}_{n}_narrow"
-            n := n + 1
-            acc := acc ++ load
-            acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | .ext _ _ => do
-          let load ← loadVal p v 24 n s!"{label}_{n}_leaf"
-          n := n + 1
-          acc := acc ++ load
-          acc := acc ++ (← emitStoreAndReturn p destHint 24)
-        | v =>
-          if IR.hasCheckedArith ops then
-            acc := acc ++ (← emitStoreAndReturn p destHint 24)
-          else do
-            let load ← loadVal p v 24 n s!"{label}_{n}_value"
-            n := n + 1
-            acc := acc ++ load
-            acc := acc ++ (← emitStoreAndReturn p destHint 24)
+      let (text, next) ← emitOkState p label v n destHint
+        (IR.hasStoreField ops) (IR.hasIndexSet ops) (IR.hasCheckedArith ops)
+      acc := acc ++ text
+      n := next
     | .errorOverflow =>
       acc := acc ++ emitOverflowReturn
     | .returnU64 v =>
@@ -1746,6 +1757,375 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let dest := (p.slots[0]?.map (·.name)).getD "slot0"
       acc := acc ++ load ++ (← emitStoreAndReturn p dest 8)
   return (acc, n)
+
+private inductive CFGResultHint where
+  | plain
+  | checked (destination : String)
+  | stored
+  | conflict
+  deriving BEq, Inhabited
+
+private def mergeCFGHint (old next : CFGResultHint) : CFGResultHint :=
+  if old == next then old else .conflict
+
+private def updateCFGHint (hints : Array (Core.CFG.BlockId × CFGResultHint))
+    (id : Core.CFG.BlockId) (next : CFGResultHint) :
+    Array (Core.CFG.BlockId × CFGResultHint) × Bool :=
+  match hints.findIdx? (·.1 == id) with
+  | none => (hints.push (id, next), true)
+  | some index =>
+      let old := hints[index]!.2
+      let merged := mergeCFGHint old next
+      if merged == old then (hints, false)
+      else (hints.set! index (id, merged), true)
+
+private def hintAfterInstructions (instructions : Array Ops.Op)
+    (incoming : CFGResultHint) : CFGResultHint :=
+  if instructions.any fun
+      | .storeField .. | .indexSet .. | .indexSetLeaf .. => true
+      | _ => false then
+    .stored
+  else
+    incoming
+
+/-- Track the implicit result cell used by the legacy ABI convention. CFG control flow makes
+the convention path-sensitive: a checked result and an explicit store may only flow to an exit
+through graph edges, never through the emitter's recursive call stack. Ambiguous joins fail closed. -/
+private def cfgResultHints (p : IR.Program)
+    (graph : Core.CFG.Graph Ops.ValKind Ops.OpExt) :
+    Array (Core.CFG.BlockId × CFGResultHint) := Id.run do
+  let mut hints : Array (Core.CFG.BlockId × CFGResultHint) := #[(graph.entry, .plain)]
+  let fuel := graph.blocks.size * 4 + 1
+  for _ in [0:fuel] do
+    let mut changed := false
+    for block in graph.blocks do
+      match hints.find? (·.1 == block.id) with
+      | none => pure ()
+      | some entry =>
+          let outgoing := hintAfterInstructions block.instructions entry.2
+          let mut flows : Array (Core.CFG.Edge Ops.ValKind × CFGResultHint) := #[]
+          match block.terminator with
+          | .jump next => flows := #[(next, outgoing)]
+          | .branch _ _ _ thenEdge elseEdge =>
+              flows := #[(thenEdge, outgoing), (elseEdge, outgoing)]
+          | .checked operation success overflow =>
+              let successHint := match operation with
+                | .addU64 lhs _ | .subU64 lhs _ | .mulU64 lhs _
+                | .divU64 lhs _ | .modU64 lhs _ => .checked (destField p lhs)
+                | .forAccum .. => outgoing
+              flows := #[(success, successHint), (overflow, .plain)]
+          | .exit _ | .unreachable => pure ()
+          for flow in flows do
+            let (nextHints, didChange) := updateCFGHint hints flow.1.target flow.2
+            hints := nextHints
+            changed := changed || didChange
+    unless changed do break
+  return hints
+
+private structure CFGAsmNode where
+  id : Nat
+  label : String
+  template : String
+  successors : Array Nat := #[]
+  sizeBound : Nat := 0
+  deriving Inhabited
+
+private def cfgEdgeToken (index : Nat) : String := s!"@@CFG_EDGE_{index}@@"
+
+private def cfgNode? (nodes : Array CFGAsmNode) (id : Nat) : Option CFGAsmNode :=
+  match nodes[id]? with
+  | some node => if node.label.isEmpty then none else some node
+  | none => none
+
+private def renderCFGNode (nodes : Array CFGAsmNode) (node : CFGAsmNode) :
+    Except String String := do
+  let mut text := node.template
+  for index in [0:node.successors.size] do
+    let targetId := node.successors[index]!
+    let some target := cfgNode? nodes targetId
+      | throw s!"svm/cfg: node {node.id} targets missing node {targetId}"
+    text := text.replace (cfgEdgeToken index) target.label
+  return text
+
+/-- Two instructions per source line is conservative for sBPF assembly (`lddw` is the only
+two-word instruction emitted here). Labels and comments are deliberately over-counted. -/
+private def cfgInstructionBound (text : String) : Nat :=
+  2 * (text.splitOn "\n").length + 2
+
+private structure CFGNodePosition where
+  id : Nat
+  start : Nat
+  size : Nat
+  deriving Inhabited
+
+private def cfgPositions (nodes : Array CFGAsmNode) (layout : Array Nat) :
+    Except String (Array CFGNodePosition) := do
+  let mut result := Array.replicate nodes.size ({ id := 0, start := 0, size := 0 } : CFGNodePosition)
+  let mut offset := 0
+  for id in layout do
+    let some node := cfgNode? nodes id
+      | throw s!"svm/cfg: layout references missing node {id}"
+    result := result.set! id { id, start := offset, size := node.sizeBound }
+    offset := offset + node.sizeBound
+  return result
+
+private structure CFGFarEdge where
+  source : Nat
+  successorIndex : Nat
+  target : Nat
+  midpoint : Nat
+
+private def firstFarCFGEdge (nodes : Array CFGAsmNode)
+    (layout : Array Nat) (positions : Array CFGNodePosition) : Option CFGFarEdge := Id.run do
+  -- Keep a wide safety margin below sBPF's signed 16-bit instruction displacement.
+  let maxSpan := 12000
+  for sourceId in layout do
+    let source := positions[sourceId]!
+    let some node := cfgNode? nodes source.id | continue
+    for successorIndex in [0:node.successors.size] do
+      let targetId := node.successors[successorIndex]!
+      let some target := positions[targetId]? | continue
+      let low := min source.start target.start
+      let high := max (source.start + source.size) target.start
+      if high - low > maxSpan then
+        return some {
+          source := source.id
+          successorIndex
+          target := targetId
+          midpoint := low + (high - low) / 2
+        }
+  return none
+
+private partial def insertCFGRelays (scope : String) (nodes : Array CFGAsmNode)
+    (layout : Array Nat) (nextId fuel : Nat) : Except String (Array CFGAsmNode × Array Nat) := do
+  if fuel == 0 then
+    throw "svm/cfg: long-jump relay layout did not converge"
+  let positions ← cfgPositions nodes layout
+  match firstFarCFGEdge nodes layout positions with
+  | none => pure (nodes, layout)
+  | some edge =>
+      let some source := cfgNode? nodes edge.source
+        | throw s!"svm/cfg: missing relay source {edge.source}"
+      unless edge.successorIndex < source.successors.size do
+        throw s!"svm/cfg: invalid successor {edge.successorIndex} of node {edge.source}"
+      let relayTemplate := s!"  ja {cfgEdgeToken 0}\n"
+      let relay : CFGAsmNode := {
+        id := nextId
+        label := s!"cfg_{scope}_relay_{nextId}"
+        template := relayTemplate
+        successors := #[edge.target]
+        sizeBound := cfgInstructionBound relayTemplate
+      }
+      let redirected := {
+        source with successors := source.successors.set! edge.successorIndex nextId
+      }
+      let nodes := (nodes.set! edge.source redirected).push relay
+      let insertion := Id.run do
+        for index in [0:layout.size] do
+          if positions[layout[index]!]!.start >= edge.midpoint then return index
+        return layout.size
+      let layout := layout.extract 0 insertion ++ #[nextId] ++ layout.extract insertion layout.size
+      insertCFGRelays scope nodes layout (nextId + 1) (fuel - 1)
+
+private def checkedCFGTemplate (p : IR.Program) (scope : String)
+    (operation : Core.CFG.Checked Ops.ValKind) : Except String String := do
+  match operation with
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      let loadL ← loadVal p lhs 8 0 s!"{scope}_checked_l"
+      let loadR ← loadVal p rhs 16 1 s!"{scope}_checked_r"
+      let arithmetic := match operation with
+        | .addU64 .. =>
+            s!"  lddw r3, 0xffffffffffffffff\n  sub64 r3, r2\n" ++
+              s!"  jgt r1, r3, {cfgEdgeToken 1}\n  mov64 r4, r1\n  add64 r4, r2\n"
+        | .subU64 .. =>
+            s!"  jlt r1, r2, {cfgEdgeToken 1}\n  mov64 r4, r1\n  sub64 r4, r2\n"
+        | .mulU64 .. =>
+            s!"  lddw r3, 0xffffffffffffffff\n  jeq r2, 0, {scope}_mul_ok\n" ++
+              s!"  div64 r3, r2\n  jgt r1, r3, {cfgEdgeToken 1}\n" ++
+              s!"{scope}_mul_ok:\n  mov64 r4, r1\n  mul64 r4, r2\n"
+        | .divU64 .. =>
+            s!"  jeq r2, 0, {cfgEdgeToken 1}\n  mov64 r4, r1\n  div64 r4, r2\n"
+        | .modU64 .. =>
+            s!"  jeq r2, 0, {cfgEdgeToken 1}\n  mov64 r4, r1\n  mod64 r4, r2\n"
+        | .forAccum .. => ""
+      return loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++ arithmetic ++
+        s!"  stxdw [r10 - 24], r4\n  ja {cfgEdgeToken 0}\n"
+  | .forAccum bound addend resultLocal =>
+      let localOff := 320 + resultLocal * 8
+      if localOff > 504 then
+        throw "extract/unsupported: too many scalar locals"
+      let loadAdd ← loadVal p addend 16 0 s!"{scope}_acc"
+      return s!"\
+  ; CFG forAccum {bound}
+  lddw r1, 0
+  stxdw [r10 - {localOff}], r1
+  stxdw [r10 - {loopCounterScratch}], r1
+{scope}_loop:
+  ldxdw r1, [r10 - {loopCounterScratch}]
+  lddw r2, {bound}
+  jge r1, r2, {scope}_done
+{loadAdd}  ldxdw r1, [r10 - {localOff}]
+  ldxdw r2, [r10 - 16]
+  lddw r3, 0xffffffffffffffff
+  sub64 r3, r2
+  jgt r1, r3, {cfgEdgeToken 1}
+  add64 r1, r2
+  stxdw [r10 - {localOff}], r1
+  ldxdw r1, [r10 - {loopCounterScratch}]
+  add64 r1, 1
+  stxdw [r10 - {loopCounterScratch}], r1
+  ja {scope}_loop
+{scope}_done:
+  ja {cfgEdgeToken 0}
+"
+
+private def emitCFGInitialize (p : IR.Program) (marker scope : String)
+    (values : Array Ops.Val) (fresh : Nat) : Except String String := do
+  if values.isEmpty then
+    throw "extract/unsupported: init missing returnState"
+  if !p.schema.isEmpty && values.size != p.slots.size then
+    throw (s!"extract/unsupported: init initializes {values.size} state leaves, " ++
+      s!"schema requires {p.slots.size}")
+  let mut body := ""
+  let mut n := fresh
+  for i in [0:p.slots.size] do
+    let slot := p.slots[i]!
+    if h : i < values.size then
+      let load ← loadVal p values[i] 8 n s!"{scope}_init_{i}"
+      n := n + 1
+      body := body ++ load ++ (← storeField p slot.name 8)
+    else
+      let some offset := IR.fieldOffset p slot.name
+        | throw s!"extract/unsupported: unknown field {slot.name}"
+      let store ← storeInsn slot.width
+      body := body ++ s!"  lddw r1, 0\n  {store} [r6 + ACC0_DATA + {offset}], r1\n"
+  return body ++ s!"\
+  lddw r1, {marker}
+  stxdw [r6 + ACC0_DATA + 0], r1
+  lddw r0, 0
+  exit
+"
+
+private def emitCFGReturnValues (p : IR.Program) (scope : String)
+    (values : Array Ops.Val) (fresh : Nat) : Except String String := do
+  if values.isEmpty then throw "svm/cfg: empty return tuple"
+  let byteCount := values.size * 8
+  if byteCount > loopCounterScratch then
+    throw "extract/unsupported: return tuple exceeds scalar scratch"
+  let mut body := ""
+  let mut n := fresh
+  for i in [0:values.size] do
+    let stackOff := byteCount - i * 8
+    body := body ++ (← loadVal p values[i]! stackOff n s!"{scope}_return_{i}")
+    n := n + 1
+  return body ++ s!"\
+  mov64 r1, r10
+  add64 r1, -{byteCount}
+  lddw r2, {byteCount}
+  call sol_set_return_data
+  lddw r0, 0
+  exit
+"
+
+private def makeCFGNode (p : IR.Program) (marker handler : String)
+    (hints : Array (Core.CFG.BlockId × CFGResultHint))
+    (block : Core.CFG.Block Ops.ValKind Ops.OpExt) : Except String CFGAsmNode := do
+  unless block.params.isEmpty do
+    throw s!"svm/cfg: block parameters are not lowered in block {block.id}"
+  let scope := s!"{handler}_b{block.id}"
+  let instructions ← IR.ofSourceOps block.instructions
+  let (bodyPrefix, fresh) ← emitOps p scope handler instructions 0
+  let incoming := (hints.find? (·.1 == block.id)).map (·.2) |>.getD .plain
+  let afterInstructions := hintAfterInstructions block.instructions incoming
+  let mut template := bodyPrefix
+  let mut successors := #[]
+  match block.terminator with
+  | .jump next =>
+      unless next.args.isEmpty do
+        throw s!"svm/cfg: edge arguments remain at block {block.id}"
+      template := template ++ s!"  ja {cfgEdgeToken 0}\n"
+      successors := #[next.target]
+  | .branch cmp lhs rhs thenEdge elseEdge =>
+      unless thenEdge.args.isEmpty && elseEdge.args.isEmpty do
+        throw s!"svm/cfg: branch arguments remain at block {block.id}"
+      let loadL ← loadVal p lhs 8 fresh s!"{scope}_branch_l"
+      let loadR ← loadVal p rhs 16 (fresh + 1) s!"{scope}_branch_r"
+      let branchComment := match cmp, lhs, rhs with
+        | .lt, .local _, .lit bound => s!"  ; CFG loop header bound={bound.toNat}\n"
+        | _, _, _ => ""
+      template := template ++ branchComment ++ loadL ++ loadR ++
+        "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
+        jmpIf cmp (cfgEdgeToken 0) ++ s!"  ja {cfgEdgeToken 1}\n"
+      successors := #[thenEdge.target, elseEdge.target]
+  | .checked operation success overflow =>
+      unless success.args.isEmpty && overflow.args.isEmpty do
+        throw s!"svm/cfg: checked arguments remain at block {block.id}"
+      template := template ++ (← checkedCFGTemplate p scope operation)
+      successors := #[success.target, overflow.target]
+  | .exit result =>
+      match result with
+      | .initialize values =>
+          template := template ++ (← emitCFGInitialize p marker scope values fresh)
+      | .okState value =>
+          let defaultDest := (p.slots[0]?.map (·.name)).getD "slot0"
+          let (dest, hasStore, hasChecked) ← match afterInstructions with
+            | .plain => pure (defaultDest, false, false)
+            | .checked destination => pure (destination, false, true)
+            | .stored => pure (defaultDest, true, false)
+            | .conflict =>
+                if (IR.optionLeafNames? p).isSome then pure (defaultDest, false, false)
+                else match value with
+                  | .field _ _ => pure (defaultDest, true, false)
+                  | _ => throw s!"svm/cfg: ambiguous implicit result at block {block.id}"
+          let (exitText, _) ← emitOkState p scope value fresh dest hasStore false hasChecked
+          template := template ++ exitText
+      | .errorOverflow => template := template ++ emitOverflowReturn
+      | .errorNamed name =>
+          let code := match name with
+            | "unauthorized" => "0x1002"
+            | "full" => "0x1003"
+            | "selfTrade" => "0x1004"
+            | _ => "0x1"
+          template := template ++ s!"  ; named error {name}\n  lddw r0, {code}\n  exit\n"
+      | .returnU64 value =>
+          let (exitText, _) ← emitOps p scope handler #[.returnU64 value] fresh
+          template := template ++ exitText
+      | .returnU64s values =>
+          template := template ++ (← emitCFGReturnValues p scope values fresh)
+      | .returnState value =>
+          let (exitText, _) ← emitOps p scope handler #[.returnState value] fresh
+          template := template ++ exitText
+  | .unreachable => throw s!"svm/cfg: reachable block {block.id} is incomplete"
+  return {
+    id := block.id
+    label := s!"cfg_{handler}_block_{block.id}"
+    template
+    successors
+    sizeBound := cfgInstructionBound template
+  }
+
+private def emitCFGBody (p : IR.Program) (marker handler : String) (method : IR.Method) :
+    Except String String := do
+  let graph ← method.toCFG
+  let hints := cfgResultHints p graph
+  let nextId := graph.blocks.foldl (init := 0) fun next block => max next (block.id + 1)
+  let mut nodes := Array.replicate nextId (default : CFGAsmNode)
+  for block in graph.blocks do
+    nodes := nodes.set! block.id (← makeCFGNode p marker handler hints block)
+  let layout := graph.reachable
+  let (finalNodes, layout) ← insertCFGRelays handler nodes layout nextId 100000
+  let mut body := ""
+  for id in layout do
+    let some node := cfgNode? finalNodes id
+      | throw s!"svm/cfg: missing laid-out node {id}"
+    body := body ++ s!"{node.label}:\n" ++ (← renderCFGNode finalNodes node)
+  let ix :=
+    if IR.usesWalk p then
+      s!"  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]\n  add64 r7, 8\n"
+    else ""
+  return s!"body_{handler}:\n{ix}{body}"
 
 private def emitMutBody (p : IR.Program) (label : String) (ops : Array IR.Op) : Except String String := do
   let (body, _) ← emitOps p label label ops 0
@@ -1809,47 +2189,33 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   match m.kind with
   | .init =>
     if IR.usesCpi p then
-      let body ← emitInitBody p marker label m.ops
+      let body ← emitCFGBody p marker label m
       return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) true m.ops}{body}"
     else if IR.usesWalk p then
-      let body ← emitInitBody p marker label m.ops
+      let body ← emitCFGBody p marker label m
       return s!"{label}:\n{preludeWalk p marker label (ixLenOf m) true m.ops}{body}"
     else
-      let body ← emitInitBody p marker label m.ops
+      let body ← emitCFGBody p marker label m
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
     if IR.hasInvoke m.ops then
-      let body ← emitMutBody p label m.ops
+      let body ← emitCFGBody p marker label m
       return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) false m.ops}{body}"
     else if !(IR.hasCheckedArith m.ops || IR.hasSelect m.ops ||
         m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
-      let body ← emitMutBody p label m.ops
+      let body ← emitCFGBody p marker label m
       let head :=
         if IR.usesWalk p then preludeWalk p marker label (ixLenOf m) false m.ops
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) true false
       return s!"{label}:\n{head}{body}"
   | .get =>
-    if m.ops.any (fun
-        | .ite .. => true
-        | .forAccum .. | .forBody .. => true
-        | .returnU64 v => Ops.isLangVal v || match v with
-            | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. => true
-            | _ => false
-        | _ => false) || m.ops.size > 1 then
-      let body ← emitMutBody p label m.ops
-      let head :=
-        if IR.usesWalk p then preludeWalk p marker label (ixLenOf m) false m.ops
-        else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
-      return s!"{label}:\n{head}{body}"
-    else
-      let v ← getVal m.ops
-      let body ← emitGetBody p label v
-      let head :=
-        if IR.usesWalk p then preludeWalk p marker label (ixLenOf m) false m.ops
-        else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
-      return s!"{label}:\n{head}{body}"
+    let body ← emitCFGBody p marker label m
+    let head :=
+      if IR.usesWalk p then preludeWalk p marker label (ixLenOf m) false m.ops
+      else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
+    return s!"{label}:\n{head}{body}"
 
 private def emitDispatch (program : IR.Program) : Except String String := do
   if program.methods.isEmpty then
@@ -1973,7 +2339,7 @@ def emitAsm (program : IR.Program) : Except String String := do
   let rawJump := if rawSelfEntry.isSome then "  jeq r1, 1, raw_self_entry\n" else ""
   let rawHandler := rawSelfEntry.map emitRawSelfHandler |>.getD ""
   return s!"\
-; SOLANA-LEAN-SBPF-ASM v0 (ops-driven handler bodies)
+; SOLANA-LEAN-SBPF-ASM v0 (CFG-driven handler bodies)
 ; digest={IR.digestHex program}
 ; Layout matches ProofForge StateCell: header u64 + count u64
 

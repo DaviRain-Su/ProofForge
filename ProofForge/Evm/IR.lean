@@ -84,6 +84,91 @@ where
 def ofSourceOps (ops : Array Ops.Op) : Except String (Array Op) :=
   ops.mapM lowerOp
 
+private partial def Op.toSource : Op → Ops.Op
+  | .letLocal i value => .letLocal i value
+  | .joinLocal i => .joinLocal i
+  | .setLocal i value => .setLocal i value
+  | .checkedAddU64 lhs rhs => .checkedAddU64 lhs rhs
+  | .checkedSubU64 lhs rhs => .checkedSubU64 lhs rhs
+  | .checkedMulU64 lhs rhs => .checkedMulU64 lhs rhs
+  | .checkedDivU64 lhs rhs => .checkedDivU64 lhs rhs
+  | .checkedModU64 lhs rhs => .checkedModU64 lhs rhs
+  | .ite cmp lhs rhs thenOps elseOps =>
+      .ite cmp lhs rhs (toSourceOps thenOps) (toSourceOps elseOps)
+  | .evmDeposit amount => .ext (.deposit amount)
+  | .evmSendEth w0 w1 w2 amount => .ext (.sendEth w0 w1 w2 amount)
+  | .evmLog name amount => .ext (.log name amount)
+  | .forAccum bound addend resultLocal => .forAccum bound addend resultLocal
+  | .forBody bound body => .forBody bound (toSourceOps body)
+  | .indexSet name index value len elemOff => .indexSet name index value len elemOff
+  | .mapGetU64 base key => .ext (.mapGetU64 base key)
+  | .mapSetU64 base key value => .ext (.mapSetU64 base key value)
+  | .mapGetAddr base w0 w1 w2 => .ext (.mapGetAddr base w0 w1 w2)
+  | .mapSetAddr base w0 w1 w2 value => .ext (.mapSetAddr base w0 w1 w2 value)
+  | .mapGetPair base o0 o1 o2 s0 s1 s2 => .ext (.mapGetPair base o0 o1 o2 s0 s1 s2)
+  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
+      .ext (.mapSetPair base o0 o1 o2 s0 s1 s2 value)
+  | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
+      .ext (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
+  | .evmTokenBalanceOfSelf tw0 tw1 tw2 => .ext (.tokenBalanceOfSelf tw0 tw1 tw2)
+  | .storeField name value => .storeField name value
+  | .okState value => .okState value
+  | .errorOverflow => .errorOverflow
+  | .errorNamed name => .errorNamed name
+  | .returnU64 value => .returnU64 value
+  | .returnState value => .returnState value
+
+where
+  toSourceOps (ops : Array Op) : Array Ops.Op := ops.map Op.toSource
+
+def toSourceOps (ops : Array Op) : Array Ops.Op := ops.map Op.toSource
+
+abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
+
+private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
+    Ops.OpExt Ops.Val → Ops.OpExt Ops.Val
+  | .deposit amount => .deposit (mapValue amount)
+  | .sendEth w0 w1 w2 amount =>
+      .sendEth (mapValue w0) (mapValue w1) (mapValue w2) (mapValue amount)
+  | .log name amount => .log name (mapValue amount)
+  | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
+  | .mapSetU64 base key value =>
+      .mapSetU64 (mapValue base) (mapValue key) (mapValue value)
+  | .mapGetAddr base w0 w1 w2 =>
+      .mapGetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2)
+  | .mapSetAddr base w0 w1 w2 value =>
+      .mapSetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2) (mapValue value)
+  | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
+      .mapGetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2)
+  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
+      .mapSetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2) (mapValue value)
+  | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
+      .tokenTransfer (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue dw0) (mapValue dw1) (mapValue dw2) (mapValue amount)
+  | .tokenBalanceOfSelf tw0 tw1 tw2 =>
+      .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
+
+private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
+  | .deposit amount | .log _ amount => #[amount]
+  | .sendEth w0 w1 w2 amount => #[w0, w1, w2, amount]
+  | .mapGetU64 base key => #[base, key]
+  | .mapSetU64 base key value => #[base, key, value]
+  | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2]
+  | .mapSetAddr base w0 w1 w2 value => #[base, w0, w1, w2, value]
+  | .mapGetPair base o0 o1 o2 s0 s1 s2 => #[base, o0, o1, o2, s0, s1, s2]
+  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
+      #[base, o0, o1, o2, s0, s1, s2, value]
+  | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
+      #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
+  | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
+
+def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
+  mapValues := mapCfgPayload
+  values := cfgPayloadValues
+  payloadEq := fun left right => left == right
+
 private partial def walk (fuel : Nat) (ops : Array Op) (predicate : Op → Bool) : Bool :=
   match fuel with
   | 0 => false
@@ -148,6 +233,13 @@ structure Method where
   view : Bool := false
   payable : Bool := false
   deriving BEq, Repr, Inhabited
+
+def Method.toCFG (method : Method) : Except String CFG := do
+  let source := toSourceOps method.ops
+  let graph ←
+    if method.kind == .init then Core.CFG.lowerInit cfgDialect source
+    else Core.CFG.lower cfgDialect source
+  Core.CFG.optimize cfgDialect graph
 
 structure Program where
   name : String

@@ -211,6 +211,7 @@ private structure Render where
   last : Option String := none
   next : Nat := 0
   loopIx : Option String := none
+  predeclaredLocals : Bool := false
 
 private def fresh (r : Render) : String × Render :=
   (s!"v{r.next}", { r with next := r.next + 1 })
@@ -434,10 +435,12 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
     | .letLocal i value =>
         let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount value st
         st := { st' with last := some s!"l{i}" }
-        acc := acc ++ pre ++ indent ++ s!"let l{i} := {valueExpr}" ++ nl
+        let binding := if st.predeclaredLocals then s!"l{i} := " else s!"let l{i} := "
+        acc := acc ++ pre ++ indent ++ binding ++ valueExpr ++ nl
     | .joinLocal i =>
         st := { st with last := none }
-        acc := acc ++ indent ++ s!"let l{i} := 0" ++ nl
+        let binding := if st.predeclaredLocals then s!"l{i} := 0" else s!"let l{i} := 0"
+        acc := acc ++ indent ++ binding ++ nl
     | .setLocal i value =>
         let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount value st
         st := { st' with last := some s!"l{i}" }
@@ -846,11 +849,322 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           acc := acc ++ storeSlot indent destSlot0 (maskExpr w value) ++ returnWord indent value
   return (acc, st)
 
+private inductive CFGResultHint where
+  | plain
+  | checked (destination : String)
+  | effect
+  | stored
+  | conflict
+  deriving BEq, Inhabited
+
+private def cfgHintHasLast : CFGResultHint → Bool
+  | .checked _ | .effect => true
+  | .plain | .stored | .conflict => false
+
+private def mergeCFGHint (old next : CFGResultHint) : CFGResultHint :=
+  if old == next then old else .conflict
+
+private def updateCFGHint (hints : Array (Core.CFG.BlockId × CFGResultHint))
+    (id : Core.CFG.BlockId) (next : CFGResultHint) :
+    Array (Core.CFG.BlockId × CFGResultHint) × Bool :=
+  match hints.findIdx? (·.1 == id) with
+  | none => (hints.push (id, next), true)
+  | some index =>
+      let old := hints[index]!.2
+      let merged := mergeCFGHint old next
+      if merged == old then (hints, false)
+      else (hints.set! index (id, merged), true)
+
+private def cfgHintAfterInstructions (instructions : Array Ops.Op)
+    (incoming : CFGResultHint) : CFGResultHint :=
+  instructions.foldl (init := incoming) fun hint instruction =>
+    match instruction with
+    | .storeField .. | .indexSet .. | .indexSetLeaf .. => .stored
+    | .ext _ => .effect
+    | _ => hint
+
+private def cfgInstructionProducesEffectResult : Ops.Op → Bool
+  | .ext _ => true
+  | _ => false
+
+private def checkedDestination (p : IR.Program) (lhs : Ops.Val) : String :=
+  match lhs with
+  | .field _ name => name
+  | _ => (p.slots[0]?.map (·.name)).getD "slot0"
+
+private def cfgResultHints (p : IR.Program)
+    (graph : Core.CFG.Graph Ops.ValKind Ops.OpExt) :
+    Array (Core.CFG.BlockId × CFGResultHint) := Id.run do
+  let mut hints : Array (Core.CFG.BlockId × CFGResultHint) := #[(graph.entry, .plain)]
+  let fuel := graph.blocks.size * 4 + 1
+  for _ in [0:fuel] do
+    let mut changed := false
+    for block in graph.blocks do
+      match hints.find? (·.1 == block.id) with
+      | none => pure ()
+      | some entry =>
+          let outgoing := cfgHintAfterInstructions block.instructions entry.2
+          let mut flows : Array (Core.CFG.Edge Ops.ValKind × CFGResultHint) := #[]
+          match block.terminator with
+          | .jump next => flows := #[(next, outgoing)]
+          | .branch _ _ _ thenEdge elseEdge =>
+              flows := #[(thenEdge, outgoing), (elseEdge, outgoing)]
+          | .checked operation success overflow =>
+              let successHint := match operation with
+                | .addU64 lhs _ | .subU64 lhs _ | .mulU64 lhs _
+                | .divU64 lhs _ | .modU64 lhs _ => .checked (checkedDestination p lhs)
+                | .forAccum .. => outgoing
+              flows := #[(success, successHint), (overflow, .plain)]
+          | .exit _ | .unreachable => pure ()
+          for flow in flows do
+            let (nextHints, didChange) := updateCFGHint hints flow.1.target flow.2
+            hints := nextHints
+            changed := changed || didChange
+    unless changed do break
+  return hints
+
+private def cfgDefinedLocals (graph : Core.CFG.Graph Ops.ValKind Ops.OpExt) : Array Nat :=
+  let ids := graph.blocks.flatMap fun block =>
+    block.params ++ block.instructions.filterMap (fun
+      | .letLocal id _ | .joinLocal id | .setLocal id _ => some id
+      | _ => none) ++ match block.terminator with
+        | .checked (.forAccum _ _ resultLocal) _ _ => #[resultLocal]
+        | _ => #[]
+  ids.toList.eraseDups.toArray
+
+private def emitCFGOkState (p : IR.Program) (indent paramPrefix : String)
+    (paramCount : Nat) (value : Ops.Val) (last : Option String)
+    (hint : CFGResultHint) (st : Render) : Except String (String × Render) := do
+  let mut body := ""
+  let mut st := st
+  if hint == .stored then
+    let (pre, result, next) ← materializeVal p indent paramPrefix paramCount value st
+    st := next
+    body := body ++ pre ++ returnWord indent result
+  else if hint == .conflict then
+    match value with
+    | .field _ _ =>
+        let (pre, result, next) ← materializeVal p indent paramPrefix paramCount value st
+        st := next
+        body := body ++ pre ++ returnWord indent result
+    | _ => throw "evm/cfg: ambiguous implicit result at state exit"
+  else if IR.hasOptionLeaves p then
+    let (tagName, payloadName) := (IR.optionLeafNames? p).getD ("slot_tag", "slot_p0")
+    match value with
+    | .lit 0 =>
+        body := body ++ (← storeNamed p indent tagName "0")
+        body := body ++ (← storeNamed p indent payloadName "0")
+        body := body ++ returnWord indent "0"
+    | .lit literal =>
+        body := body ++ (← storeNamed p indent tagName "1")
+        body := body ++ (← storeNamed p indent payloadName (yulLit literal))
+        body := body ++ returnWord indent (yulLit literal)
+    | _ =>
+        let (pre, payload, next) ← materializeVal p indent paramPrefix paramCount value st
+        st := next
+        body := body ++ pre ++ (← storeNamed p indent tagName "1")
+        body := body ++ (← storeNamed p indent payloadName payload)
+        body := body ++ returnWord indent payload
+  else
+    let destination := match hint with
+      | .checked name => name
+      | _ => destForOk p #[] value
+    let slot ← slotOf p destination
+    let result ← match last with
+      | some expression => pure expression
+      | none =>
+          if cfgHintHasLast hint then pure "pf_last"
+          else match value with
+            | .field _ _ => loadVal p paramPrefix paramCount (.arg 0)
+            | _ =>
+                let (pre, expression, next) ←
+                  materializeVal p indent paramPrefix paramCount value st
+                st := next
+                body := body ++ pre
+                pure expression
+    let width := (IR.slotWidth p destination).getD 8
+    body := body ++ storeSlot indent slot (maskExpr width result) ++ returnWord indent result
+  return (body, st)
+
+private def emitCFGChecked (p : IR.Program) (indent paramPrefix : String)
+    (paramCount : Nat) (operation : Core.CFG.Checked Ops.ValKind)
+    (success overflow : Nat) (st : Render) : Except String (String × Render) := do
+  match operation with
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      let (preL, left, st1) ← materializeVal p indent paramPrefix paramCount lhs st
+      let (preR, right, st2) ← materializeVal p indent paramPrefix paramCount rhs st1
+      let (resultName, st3) := fresh st2
+      let (failedName, st4) := fresh st3
+      let (result, failed) := match operation with
+        | .addU64 .. => ("add(" ++ left ++ ", " ++ right ++ ")",
+            "gt(" ++ left ++ ", sub(" ++ u64MaxYul ++ ", " ++ right ++ "))")
+        | .subU64 .. => ("sub(" ++ left ++ ", " ++ right ++ ")",
+            "lt(" ++ left ++ ", " ++ right ++ ")")
+        | .mulU64 .. => ("mul(" ++ left ++ ", " ++ right ++ ")",
+            "gt(" ++ resultName ++ ", " ++ u64MaxYul ++ ")")
+        | .divU64 .. => ("div(" ++ left ++ ", " ++ right ++ ")", "iszero(" ++ right ++ ")")
+        | .modU64 .. => ("mod(" ++ left ++ ", " ++ right ++ ")", "iszero(" ++ right ++ ")")
+        | .forAccum .. => ("0", "1")
+      let text := preL ++ preR ++
+        indent ++ "let " ++ resultName ++ " := " ++ result ++ nl ++
+        indent ++ "let " ++ failedName ++ " := " ++ failed ++ nl ++
+        indent ++ "if " ++ failedName ++ " { pf_pc := " ++ toString overflow ++ " }" ++ nl ++
+        indent ++ "if iszero(" ++ failedName ++ ") {" ++ nl ++
+        indent ++ "  pf_last := " ++ resultName ++ nl ++
+        indent ++ "  pf_pc := " ++ toString success ++ nl ++
+        indent ++ "}" ++ nl
+      return (text, { st4 with last := some "pf_last" })
+  | .forAccum bound addend resultLocal =>
+      let (loopName, st1) := fresh st
+      let (failedName, st2) := fresh st1
+      let inner := { st2 with loopIx := some loopName }
+      let (pre, addendExpr, st3) ←
+        materializeVal p (indent ++ "  ") paramPrefix paramCount addend inner
+      let accumulator := s!"l{resultLocal}"
+      let text :=
+        indent ++ accumulator ++ " := 0" ++ nl ++
+        indent ++ "let " ++ failedName ++ " := 0" ++ nl ++
+        indent ++ "for { let " ++ loopName ++ " := 0 } and(lt(" ++ loopName ++ ", " ++
+          toString bound ++ "), iszero(" ++ failedName ++ ")) { " ++ loopName ++
+          " := add(" ++ loopName ++ ", 1) } {" ++ nl ++ pre ++
+        indent ++ "  if gt(" ++ accumulator ++ ", sub(" ++ u64MaxYul ++ ", " ++
+          addendExpr ++ ")) { " ++ failedName ++ " := 1 }" ++ nl ++
+        indent ++ "  if iszero(" ++ failedName ++ ") { " ++ accumulator ++ " := add(" ++
+          accumulator ++ ", " ++ addendExpr ++ ") }" ++ nl ++
+        indent ++ "}" ++ nl ++
+        indent ++ "if " ++ failedName ++ " { pf_pc := " ++ toString overflow ++ " }" ++ nl ++
+        indent ++ "if iszero(" ++ failedName ++ ") {" ++ nl ++
+        indent ++ "  pf_last := " ++ accumulator ++ nl ++
+        indent ++ "  pf_pc := " ++ toString success ++ nl ++
+        indent ++ "}" ++ nl
+      return (text, { st3 with last := some "pf_last", loopIx := none })
+
+private def emitCFGCase (p : IR.Program) (method : IR.Method)
+    (hints : Array (Core.CFG.BlockId × CFGResultHint))
+    (block : Core.CFG.Block Ops.ValKind Ops.OpExt) (st : Render) :
+    Except String (String × Render) := do
+  unless block.params.isEmpty do
+    throw s!"evm/cfg: block parameters are not lowered in block {block.id}"
+  let indent := "            "
+  let incoming := (hints.find? (·.1 == block.id)).map (·.2) |>.getD .plain
+  let initialLast := if cfgHintHasLast incoming then some "pf_last" else none
+  let blockState := { st with
+    last := initialLast
+    loopIx := none
+    predeclaredLocals := true
+  }
+  let mut instructionText := ""
+  let mut afterInstructions := blockState
+  for sourceInstruction in block.instructions do
+    let instruction ← IR.ofSourceOps #[sourceInstruction]
+    let (text, next) ←
+      emitOps p indent "arg" method.paramCount instruction afterInstructions
+    instructionText := instructionText ++ text
+    if cfgInstructionProducesEffectResult sourceInstruction then
+      let some expression := next.last
+        | throw s!"evm/cfg: effect instruction in block {block.id} produced no result"
+      instructionText := instructionText ++ indent ++ "pf_last := " ++ expression ++ nl
+    afterInstructions := { next with last := none }
+  let afterHint := cfgHintAfterInstructions block.instructions incoming
+  let mut body := instructionText
+  let mut finalState := { afterInstructions with last := none, loopIx := none }
+  match block.terminator with
+  | .jump next =>
+      unless next.args.isEmpty do throw s!"evm/cfg: edge arguments remain at block {block.id}"
+      body := body ++ indent ++ "pf_pc := " ++ toString next.target ++ nl
+  | .branch cmp lhs rhs thenEdge elseEdge =>
+      unless thenEdge.args.isEmpty && elseEdge.args.isEmpty do
+        throw s!"evm/cfg: branch arguments remain at block {block.id}"
+      let (preL, left, st1) ← materializeVal p indent "arg" method.paramCount lhs finalState
+      let (preR, right, st2) ← materializeVal p indent "arg" method.paramCount rhs st1
+      let (condition, st3) := fresh st2
+      finalState := st3
+      body := body ++ preL ++ preR ++ indent ++ "let " ++ condition ++ " := " ++
+        cmpYul cmp left right ++ nl ++
+        indent ++ "if " ++ condition ++ " { pf_pc := " ++ toString thenEdge.target ++ " }" ++ nl ++
+        indent ++ "if iszero(" ++ condition ++ ") { pf_pc := " ++
+          toString elseEdge.target ++ " }" ++ nl
+  | .checked operation success overflow =>
+      unless success.args.isEmpty && overflow.args.isEmpty do
+        throw s!"evm/cfg: checked arguments remain at block {block.id}"
+      let (checkedText, next) ← emitCFGChecked p indent "arg" method.paramCount operation
+        success.target overflow.target finalState
+      body := body ++ checkedText
+      finalState := { next with last := none }
+  | .exit result =>
+      match result with
+      | .initialize _ => throw "evm/cfg: initializer reached runtime entry"
+      | .okState value =>
+          let (exitText, next) ← emitCFGOkState p indent "arg" method.paramCount value
+            none afterHint finalState
+          body := body ++ exitText
+          finalState := next
+      | .errorOverflow => body := body ++ indent ++ revert0 ++ nl
+      | .errorNamed name => body := body ++ revertNamed indent name
+      | .returnU64 value =>
+          let (pre, expression, next) ←
+            if cfgHintHasLast afterHint then pure ("", "pf_last", finalState)
+            else materializeVal p indent "arg" method.paramCount value finalState
+          body := body ++ pre ++ returnWord indent expression
+          finalState := next
+      | .returnU64s values =>
+          if values.isEmpty then throw "evm/cfg: empty return tuple"
+          for i in [0:values.size] do
+            let (pre, expression, next) ←
+              materializeVal p indent "arg" method.paramCount values[i]! finalState
+            finalState := next
+            body := body ++ pre ++ indent ++ "mstore(" ++ toString (i * 32) ++ ", " ++
+              expression ++ ")" ++ nl
+          body := body ++ indent ++ "return(0, " ++ toString (values.size * 32) ++ ")" ++ nl
+      | .returnState value =>
+          let (pre, expression, next) ←
+            materializeVal p indent "arg" method.paramCount value finalState
+          finalState := next
+          let destination := (p.slots[0]?.map (·.name)).getD "slot0"
+          let slot ← slotOf p destination
+          let width := (IR.slotWidth p destination).getD 8
+          body := body ++ pre ++ storeSlot indent slot (maskExpr width expression) ++
+            returnWord indent expression
+  | .unreachable => throw s!"evm/cfg: reachable block {block.id} is incomplete"
+  return ("          case " ++ toString block.id ++ " {" ++ nl ++ body ++
+    "          }" ++ nl, finalState)
+
+private def emitCFGEntry (p : IR.Program) (method : IR.Method) : Except String String := do
+  let graph ← method.toCFG
+  let hints := cfgResultHints p graph
+  let locals := cfgDefinedLocals graph
+  let mut declarations := ""
+  for id in locals do
+    declarations := declarations ++ "        let l" ++ toString id ++ " := 0" ++ nl
+  declarations := declarations ++
+    "        let pf_last := 0" ++ nl ++
+    "        let pf_pc := " ++ toString graph.entry ++ nl
+  let mut cases := ""
+  let mut state : Render := { predeclaredLocals := true }
+  for block in graph.blocks do
+    let (text, next) ← emitCFGCase p method hints block state
+    cases := cases ++ text
+    state := next
+  return declarations ++
+    "        for { } 1 { } {" ++ nl ++
+    "          switch pf_pc" ++ nl ++ cases ++
+    "          default { " ++ revert0 ++ " }" ++ nl ++
+    "        }" ++ nl
+
 private def q (s : String) : String :=
   "\"" ++ s ++ "\""
 
 private def emitConstructorStores (p : IR.Program) : Except String String := do
-  let vs := p.constructor.ops.filterMap (fun | .returnState v => some v | _ => none)
+  let graph ← p.constructor.toCFG
+  unless graph.blocks.all (·.instructions.isEmpty) do
+    throw "extract/unsupported: EVM constructor effects are not lowered"
+  let exits := graph.blocks.filterMap fun block => match block.terminator with
+    | .exit (.initialize values) => some values
+    | _ => none
+  unless exits.size == 1 do
+    throw "evm/cfg: constructor requires exactly one initialize exit"
+  let vs := exits[0]!
   if vs.isEmpty then
     throw "extract/unsupported: init missing returnState"
   if !p.schema.isEmpty && vs.size != p.slots.size then
@@ -907,9 +1221,8 @@ private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool
       "        let arg" ++ toString i ++ " := calldataload(" ++ toString off ++ ")" ++ nl ++
       "        if gt(arg" ++ toString i ++ ", " ++ max ++ ") { " ++
         revert0 ++ " }" ++ nl
-  let (body, _) ←
-    match emitOps p "        " "arg" m.paramCount m.ops {} with
-    | .ok pair => pure pair
+  let body ← match emitCFGEntry p m with
+    | .ok body => pure body
     | .error reason => throw s!"{reason} in {m.ixName}"
   if body == "" then
     throw s!"extract/unsupported: empty ops {m.ixName}"
