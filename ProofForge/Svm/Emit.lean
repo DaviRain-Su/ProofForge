@@ -106,7 +106,7 @@ private partial def walkInvokeMetas (ops : Array IR.Op)
     (acc : Array (Ops.CpiMeta × Bool)) : Array (Ops.CpiMeta × Bool) :=
   ops.foldl (init := acc) fun a op =>
     match op with
-    | .invoke _ metas _ seed _ => a ++ metas.map (·, seed.isSome)
+    | .invoke _ metas _ seeds _ => a ++ metas.map (·, !seeds.isEmpty)
     | .ite _ _ _ t f => walkInvokeMetas f (walkInvokeMetas t a)
     | .forBody _ body => walkInvokeMetas body a
     | _ => a
@@ -566,6 +566,83 @@ find_pda_bad_{scope}_{stackOff}:
 find_pda_done_{scope}_{stackOff}:
 "
 
+/-- `sol_try_find_program_address` for a static heterogeneous seed list. Account-key seeds point
+directly into walked input headers; literal bytes and descriptors live in the dedicated PDA
+scratch region at `r10-2800`. The returned value is the canonical bump. -/
+private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
+    (stackOff : Nat) (scope : String) : String := Id.run do
+  let descOff := 512
+  let outKeyOff := 1024
+  let outBumpOff := 1056
+  let mut bytes := ""
+  let mut descriptors := ""
+  let mut byteOff := 0
+  for i in [0:seeds.size] do
+    let descriptor := descOff + 16 * i
+    match seeds[i]! with
+    | .ascii value =>
+        let start := byteOff
+        for c in value.toList do
+          bytes := bytes ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {byteOff}], r1\n"
+          byteOff := byteOff + 1
+        descriptors := descriptors ++ s!"\
+  mov64 r1, r8
+  add64 r1, {start}
+  stxdw [r8 + {descriptor}], r1
+  lddw r1, {value.length}
+  stxdw [r8 + {descriptor + 8}], r1
+"
+    | .stateKey =>
+        descriptors := descriptors ++ s!"\
+  ldxdw r1, [r10 - {headerStack 0}]
+  add64 r1, 8
+  stxdw [r8 + {descriptor}], r1
+  lddw r1, 32
+  stxdw [r8 + {descriptor + 8}], r1
+"
+    | .accKey account =>
+        descriptors := descriptors ++ s!"\
+  ldxdw r1, [r10 - {headerStack (account + 1)}]
+  add64 r1, 8
+  stxdw [r8 + {descriptor}], r1
+  lddw r1, 32
+  stxdw [r8 + {descriptor + 8}], r1
+"
+  let progId :=
+    if IR.usesWalk p then
+      s!"\
+  ldxdw r3, [r10 - {headerStack (IR.cpiAccountCount p)}]
+  ldxdw r1, [r3 + 0]
+  add64 r3, 8
+  add64 r3, r1
+"
+    else
+      s!"\
+  ldxdw r1, [r6 + INSTRUCTION_DATA_LEN]
+  mov64 r3, r6
+  add64 r3, INSTRUCTION_DATA
+  add64 r3, r1
+"
+  return s!"\
+  ; findPdaSeeds count={seeds.size}
+  mov64 r8, r10
+  add64 r8, -2800
+{bytes}{descriptors}{progId}  mov64 r1, r8
+  add64 r1, {descOff}
+  lddw r2, {seeds.size}
+  mov64 r4, r8
+  add64 r4, {outKeyOff}
+  mov64 r5, r8
+  add64 r5, {outBumpOff}
+  call sol_try_find_program_address
+  jeq r0, 0, find_pdas_ok_{scope}_{stackOff}
+  lddw r0, 0x1
+  exit
+find_pdas_ok_{scope}_{stackOff}:
+  ldxb r1, [r8 + {outBumpOff}]
+  stxdw [r10 - {stackOff}], r1
+"
+
 /--
 一条 ASCII 字面量的哈希 syscall：`sol_sha256` / `sol_keccak256`。
 r1 = SolBytes[1]，r2 = 1，r3 = 32B dest。返回 dest 第一个小端 u64。
@@ -738,6 +815,8 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadWalkedU8 1 3 stackOff)
   | .ext (.findPda seed) #[] =>
     .ok (emitLoadFindPda p seed stackOff scope)
+  | .ext (.findPdaSeeds seeds) #[] =>
+    .ok (emitLoadFindPdaSeeds p seeds stackOff scope)
   | .ext (.sha256Lit seed) #[] =>
     .ok (emitLoadSha256Lit seed stackOff)
   | .ext (.keccak256Lit seed) #[] =>
@@ -956,8 +1035,8 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
       | .forAccum _ v _ => valUsesSigner v
       | .forBody _ body => walkUsesSigner body
       | .indexSet _ i v _ _ => valUsesSigner i || valUsesSigner v
-      | .invoke _ metas data _ bump =>
-          metas.any (·.signer) ||
+      | .invoke _ metas data seeds bump =>
+          (seeds.isEmpty && metas.any (·.signer)) ||
             data.any (fun | .u64le v => valUsesSigner v | _ => false) ||
               (match bump with | some v => valUsesSigner v | none => false)
       | .okState v => valUsesSigner v
@@ -1085,48 +1164,80 @@ private def emitOneMeta (i : Nat) (m : Ops.CpiMeta) : String :=
 "
 
 private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
-    (seed : Option String) (bump : Option Ops.Val) : Except String (String × String) :=
-  match seed, bump with
-  | some s, some b => do
+    (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) : Except String (String × String) :=
+  match bump with
+  | some b => do
+    if seeds.isEmpty then
+      throw "extract/unsupported: invoke signer seeds cannot be empty"
     let load ← loadVal p b 8 seedOff s!"{scope}_seed"
-    let (bytes, _) :=
-      s.toList.foldl (init := ("", (0 : Nat))) fun (acc, i) c =>
-        (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {seedOff + i}], r1\n", i + 1)
-    let seedPtr := seedOff
-    let bumpByte := seedOff + ((s.length + 7) / 8) * 8 + 8
+    let byteCount := seeds.foldl (init := 0) fun total seed =>
+      match seed with
+      | .ascii value => total + value.length
+      | _ => total
+    let bumpByte := ((seedOff + byteCount + 7) / 8) * 8
     let seedsArr := bumpByte + 8
-    let groupOff := seedsArr + 32
+    let mut bytes := ""
+    let mut entries := ""
+    let mut byteOff := seedOff
+    for i in [0:seeds.size] do
+      match seeds[i]! with
+      | .ascii value =>
+          let start := byteOff
+          for c in value.toList do
+            bytes := bytes ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {byteOff}], r1\n"
+            byteOff := byteOff + 1
+          entries := entries ++ s!"\
+  mov64 r1, r9
+  add64 r1, {start}
+  stxdw [r9 + {seedsArr + 16 * i}], r1
+  lddw r1, {value.length}
+  stxdw [r9 + {seedsArr + 16 * i + 8}], r1
+"
+      | .stateKey =>
+          entries := entries ++ s!"\
+  ldxdw r1, [r10 - {headerStack 0}]
+  add64 r1, 8
+  stxdw [r9 + {seedsArr + 16 * i}], r1
+  lddw r1, 32
+  stxdw [r9 + {seedsArr + 16 * i + 8}], r1
+"
+      | .accKey account =>
+          entries := entries ++ s!"\
+  ldxdw r1, [r10 - {headerStack (account + 1)}]
+  add64 r1, 8
+  stxdw [r9 + {seedsArr + 16 * i}], r1
+  lddw r1, 32
+  stxdw [r9 + {seedsArr + 16 * i + 8}], r1
+"
+    let bumpEntry := seedsArr + 16 * seeds.size
+    let groupOff := bumpEntry + 16
     let txt :=
-      load ++ bytes ++ s!"\
+      load ++ bytes ++ entries ++ s!"\
   ldxdw r1, [r10 - 8]
   stxb [r9 + {bumpByte}], r1
   mov64 r1, r9
-  add64 r1, {seedPtr}
-  stxdw [r9 + {seedsArr}], r1
-  lddw r1, {s.length}
-  stxdw [r9 + {seedsArr + 8}], r1
-  mov64 r1, r9
   add64 r1, {bumpByte}
-  stxdw [r9 + {seedsArr + 16}], r1
+  stxdw [r9 + {bumpEntry}], r1
   lddw r1, 1
-  stxdw [r9 + {seedsArr + 24}], r1
+  stxdw [r9 + {bumpEntry + 8}], r1
   mov64 r1, r9
   add64 r1, {seedsArr}
   stxdw [r9 + {groupOff}], r1
-  lddw r1, 2
+  lddw r1, {seeds.size + 1}
   stxdw [r9 + {groupOff + 8}], r1
 "
     let regs :=
       s!"  mov64 r4, r9\n  add64 r4, {groupOff}\n  lddw r5, 1\n"
     return (txt, regs)
-  | none, none =>
-    return ("", "  lddw r4, 0\n  lddw r5, 0\n")
-  | _, _ =>
-    .error "extract/unsupported: invoke seeds must be seed+bump or empty"
+  | none =>
+    if seeds.isEmpty then
+      return ("", "  lddw r4, 0\n  lddw r5, 0\n")
+    else
+      throw "extract/unsupported: invoke signer seeds require a bump"
 
 private def emitInvoke (p : IR.Program) (label : String)
     (programIx : Nat) (metas : Array Ops.CpiMeta) (data : Array (Ops.CpiWord Ops.Val))
-    (seed : Option String) (bump : Option Ops.Val) :
+    (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) :
     Except String String := do
   let n := IR.cpiAccountCount p
   let physicalProgramIx := programIx + 1
@@ -1136,7 +1247,7 @@ private def emitInvoke (p : IR.Program) (label : String)
   let (dataTxt, dataLen) ← emitCpiData p label dataOff data
   let infoOff := dataOff + ((dataLen + 7) / 8) * 8
   let seedOff := infoOff + 56 * n
-  let (seedTxt, seedRegs) ← emitSignerSeeds p label seedOff seed bump
+  let (seedTxt, seedRegs) ← emitSignerSeeds p label seedOff seeds bump
   let mut metasTxt := ""
   for i in [0:metas.size] do
     metasTxt := metasTxt ++ emitOneMeta i metas[i]!

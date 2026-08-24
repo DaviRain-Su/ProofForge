@@ -16,7 +16,7 @@ inductive Op where
   | ite (cmp : Ops.Cmp) (lhs rhs : Ops.Val) (thn els : Array Op)
   | invoke (programIx : Nat) (metas : Array Ops.CpiMeta)
       (data : Array (Ops.CpiWord Ops.Val))
-      (seed : Option String := none) (bump : Option Ops.Val := none)
+      (seeds : Array Ops.PdaSeed := #[]) (bump : Option Ops.Val := none)
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -343,6 +343,11 @@ private def cmpTag : Ops.Cmp → String
 private def legacyCmpRepr (cmp : Ops.Cmp) : String :=
   "ProofForge.Ops.Cmp." ++ cmpTag cmp
 
+private def pdaSeedCanon : Ops.PdaSeed → String
+  | .ascii value => s!"s.{value}"
+  | .stateKey => "state"
+  | .accKey i => s!"k.{i}"
+
 private partial def valCanon : Ops.Val → String
   | .arg i => s!"a{i}"
   | .local i => s!"v{i}"
@@ -381,6 +386,8 @@ private partial def valCanon : Ops.Val → String
   | .ext (.isExecutableN acc) #[] => s!"exN.{acc}"
   | .ext (.signerKeyN acc) #[] => s!"sk.{acc}"
   | .ext (.ownerIsSelf acc) #[] => s!"ois.{acc}"
+  | .ext (.findPdaSeeds seeds) #[] =>
+      s!"pdas.[{String.intercalate "," (seeds.toList.map pdaSeedCanon)}]"
   | .bitAnd lhs rhs => s!"and({valCanon lhs},{valCanon rhs})"
   | .bitOr lhs rhs => s!"or({valCanon lhs},{valCanon rhs})"
   | .bitXor lhs rhs => s!"xor({valCanon lhs},{valCanon rhs})"
@@ -414,7 +421,7 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .checkedModU64 lhs rhs => s!"mod({valCanon lhs},{valCanon rhs})"
     | .ite cmp lhs rhs thn els =>
         s!"ite.{cmpTag cmp}({valCanon lhs},{valCanon rhs},[{opsCanon thn}],[{opsCanon els}])"
-    | .invoke programIx metas data seed bump =>
+    | .invoke programIx metas data seeds bump =>
         let metaCanon := String.intercalate "," <| metas.toList.map fun entry =>
           s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}"
         let wordCanon (word : Ops.CpiWord Ops.Val) : String :=
@@ -426,11 +433,16 @@ private partial def opsCanon (ops : Array Op) : String :=
           | .programId => "pid"
           | .accKey i => s!"k.{i}"
         let dataCanon := String.intercalate "," (data.toList.map wordCanon)
-        let seeds :=
-          match seed, bump with
-          | some value, some valueBump => s!",s.{value}:{valCanon valueBump}"
-          | _, _ => ""
-        s!"inv({programIx},[{metaCanon}],[{dataCanon}]{seeds})"
+        let signer :=
+          match seeds.toList, bump with
+          -- Preserve the v1 spelling, and therefore existing fixture digests, for the original
+          -- one-ASCII-seed signer shape.
+          | [.ascii value], some valueBump => s!",s.{value}:{valCanon valueBump}"
+          | _, some valueBump =>
+              let seedCanon := String.intercalate "," (seeds.toList.map pdaSeedCanon)
+              s!",s.[{seedCanon}]:{valCanon valueBump}"
+          | _, none => ""
+        s!"inv({programIx},[{metaCanon}],[{dataCanon}]{signer})"
     | .forAccum n addend resultLocal =>
         s!"for.{resultLocal}({n},{valCanon addend})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"

@@ -523,6 +523,50 @@ private def staticUInt64? : Ops.Val → Option UInt64
   | .bitNot value => staticUInt64? value |>.map (~~~·)
   | _ => none
 
+/-- Decode a literal `#[...]` without interpreting its element type. Kept before `asVal` so
+compile-time PDA seed lists can be values as well as CPI operands. -/
+private def asStaticArrayElems (e : Expr) : Option (Array Expr) :=
+  let rec fromList (fuel : Nat) (e : Expr) (acc : Array Expr) : Option (Array Expr) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``List.nil then some acc
+      else if isConstNamed e ``List.cons && e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        fromList fuel' args[args.size - 1]! (acc.push args[args.size - 2]!)
+      else none
+  let e := strip e
+  if isConstNamed e ``Array.mk && e.getAppArgs.size ≥ 1 then
+    fromList 32 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+  else if isConstNamed e ``List.toArray && e.getAppArgs.size ≥ 1 then
+    fromList 32 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+  else if isConstNamed e ``Array.empty || endsWith e ".empty" then
+    some #[]
+  else none
+
+private def asPdaSeed (e : Expr) : Option Ops.PdaSeed :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.PdaSeed.ascii || endsWith e ".ascii" then
+    if e.getAppArgs.size ≥ 1 then
+      match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+      | .lit (.strVal value) => if value.isEmpty then none else some (.ascii value)
+      | _ => none
+    else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.PdaSeed.stateKey || endsWith e ".stateKey" then
+    some .stateKey
+  else if isConstNamed e ``ProofForge.Svm.Runtime.PdaSeed.accKey || endsWith e ".accKey" then
+    if e.getAppArgs.size ≥ 1 then
+      match asLit 8 e.getAppArgs[e.getAppArgs.size - 1]! with
+      | some (.lit i) => some (.accKey i.toNat)
+      | _ => none
+    else none
+  else none
+
+private def asPdaSeeds (e : Expr) : Option (Array Ops.PdaSeed) := do
+  let elems ← asStaticArrayElems e
+  elems.mapM asPdaSeed
+
 private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -628,6 +672,9 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.defnInfo info) =>
             if isScalarResult env info.type then asVal env fuel' unfolded else none
           | _ => none
+        else if (endsWith e ".findPdaSeeds" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.findPdaSeeds) && e.getAppArgs.size ≥ 1 then
+          (asPdaSeeds e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.findPdaSeeds
         else if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Svm.Runtime.findPda) &&
             e.getAppArgs.size ≥ 1 then
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -2205,11 +2252,28 @@ private def asAsciiLit (e : Expr) : Option String :=
   | .lit (.strVal s) => if s.isEmpty then none else some s
   | _ => none
 
-/-- 抽出结果：program / metas / data / 可选 (seed, bump)。 -/
+private abbrev DecodedInvoke :=
+  Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Array Ops.PdaSeed × Option Ops.Val
+
+/-- Extracted static program, metas, data, non-bump signer seeds, and optional bump. -/
 private def decodeInvokeArgs (env : Environment) (e : Expr) :
-    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
+    Option DecodedInvoke :=
   let e := strip e
-  if isConstNamed e ``ProofForge.Svm.Runtime.invokeSigned || endsWith e ".invokeSigned" then
+  if isConstNamed e ``ProofForge.Svm.Runtime.invokeSignedSeeds ||
+      endsWith e ".invokeSignedSeeds" then
+    let args := e.getAppArgs
+    if args.size < 5 then none
+    else
+      match val env args[args.size - 5]!,
+          decodeMetasData env args[args.size - 4]! args[args.size - 3]!,
+          asPdaSeeds args[args.size - 2]!,
+          val env args[args.size - 1]! with
+      | some progV, some (metas, data), some seeds, some bump =>
+        match natOfVal progV with
+        | some prog => some (prog, metas, data, seeds, some bump)
+        | none => none
+      | _, _, _, _ => none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.invokeSigned || endsWith e ".invokeSigned" then
     let args := e.getAppArgs
     if args.size < 5 then none
     else
@@ -2219,7 +2283,7 @@ private def decodeInvokeArgs (env : Environment) (e : Expr) :
           val env args[args.size - 1]! with
       | some progV, some (metas, data), some seed, some bump =>
         match natOfVal progV with
-        | some prog => some (prog, metas, data, some seed, some bump)
+        | some prog => some (prog, metas, data, #[.ascii seed], some bump)
         | none => none
       | _, _, _, _ => none
   else if isConstNamed e ``ProofForge.Svm.Runtime.invoke || endsWith e ".invoke" then
@@ -2230,16 +2294,15 @@ private def decodeInvokeArgs (env : Environment) (e : Expr) :
           decodeMetasData env args[args.size - 2]! args[args.size - 1]! with
       | some progV, some (metas, data) =>
         match natOfVal progV with
-        | some prog => some (prog, metas, data, none, none)
+        | some prog => some (prog, metas, data, #[], none)
         | none => none
       | _, _ => none
   else none
 
 /-- 体里任意深度的编译期 `invoke`。包装会 unfold 成这条。 -/
 private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
-    Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
-  let rec go (fuel : Nat) (e : Expr) :
-      Option (Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :=
+    Option DecodedInvoke :=
+  let rec go (fuel : Nat) (e : Expr) : Option DecodedInvoke :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
@@ -2269,6 +2332,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
           | .app f a => go fuel' f <|> go fuel' a
           | _ => none
   if mentionsRuntime e "invoke" || mentionsRuntime e "invokeSigned" ||
+      mentionsRuntime e "invokeSignedSeeds" ||
       mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" ||
       mentionsRuntime e "systemCreate" ||
       mentionsRuntime e "createPda" ||
@@ -2281,6 +2345,8 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
       mentionsRuntime e "tokenInitMint" ||
       mentionsRuntime e "tokenSyncNative" ||
       mentionsRuntime e "tokenTransferChecked" ||
+      mentionsRuntime e "tokenTransferCheckedIx" ||
+      mentionsRuntime e "tokenTransferCheckedSignedIx" ||
       mentionsRuntime e "tokenMintToChecked" ||
       mentionsRuntime e "tokenBurnChecked" ||
       mentionsRuntime e "tokenInitAccount" ||
@@ -2300,17 +2366,39 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
     go fuel e
   else none
 
-private def invokeOps
-    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val)
-    (ret : Ops.Val) : Array Ops.Op :=
-  let (prog, metas, data, seed, bump) := inv
-  #[.invoke prog metas data seed bump, .returnU64 ret]
+/-- Collect consecutive ignored CPI results without collapsing the final state transition. One
+call keeps the established lowering path; two or more calls need explicit sequencing so a
+recursive invoke search cannot silently retain only the first effect. -/
+private def leadingInvokes (env : Environment) (e : Expr) : Array DecodedInvoke × Expr :=
+  let rec go (fuel : Nat) (e : Expr) (invokes : Array DecodedInvoke) :
+      Array DecodedInvoke × Expr :=
+    match fuel with
+    | 0 => (invokes, e)
+    | fuel' + 1 =>
+      match strip e with
+      | .letE _ _ value body _ =>
+          if body.hasLooseBVar 0 then
+            -- Preserve effect order while substituting a compile-time seed recipe used by a
+            -- later signed CPI. Other dependent lets retain the established lowering path.
+            match asPdaSeeds value with
+            | some _ => go fuel' (body.instantiate1 value) invokes
+            | none => (invokes, e)
+          else
+            match findInvoke env 16 value with
+            | some invoke => go fuel' (body.instantiate1 value) (invokes.push invoke)
+            | none => (invokes, e)
+      | _ => (invokes, e)
+  go 16 e #[]
 
-private def invokeOp
-    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
-    Ops.Op :=
-  let (prog, metas, data, seed, bump) := inv
-  .invoke prog metas data seed bump
+private def invokeOps
+    (inv : DecodedInvoke)
+    (ret : Ops.Val) : Array Ops.Op :=
+  let (prog, metas, data, seeds, bump) := inv
+  #[.invoke prog metas data seeds bump, .returnU64 ret]
+
+private def invokeOp (inv : DecodedInvoke) : Ops.Op :=
+  let (prog, metas, data, seeds, bump) := inv
+  .invoke prog metas data seeds bump
 
 /-- `.ok (state, ret)` 的第二元。找不到就 none。 -/
 private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
@@ -2337,41 +2425,42 @@ private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
 
 private def invokeRet
     (env : Environment) (e : Expr)
-    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
+    (inv : DecodedInvoke) :
     Except String Ops.Val :=
   if let some ret := findOkRet env e then
     .ok ret
   else match inv with
-  | (2, _, #[.u32le 2, .u64le amount], none, none) => .ok amount
-  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], none, none) => .ok amount
-  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], some _, some _) => .ok amount
-  | (1, _, #[.u32le 1, .programId], none, none) => .ok (.lit 0)
-  | (1, _, #[.u32le 8, .u64le space], none, none) => .ok space
-  | (2, _, #[.u32le 9, .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], none, none) => .ok space
-  | (2, _, #[.u32le 3, .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], none, none) => .ok lamports
-  | (2, _, #[.u32le 10, .accKey 0, .u64le _, .ascii "vault", .programId], none, none) => .ok (.lit 0)
-  | (3, _, #[.u32le 11, .u64le lamports, .u64le _, .ascii "vault", .programId], none, none) => .ok lamports
-  | (2, _, #[.u8le 20, .u8le 6, .accKey 0, .u8le 0], none, none) => .ok (.lit 0)
-  | (2, _, #[.u8le 17], none, none) => .ok (.lit 0)
-  | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => .ok amount
-  | (3, _, #[.u8le 14, .u64le amount, .u8le _], none, none) => .ok amount
-  | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => .ok amount
-  | (3, _, #[.u8le 18, .accKey 0], none, none) => .ok (.lit 0)
-  | (3, _, #[.u8le 9], none, none) => .ok (.lit 0)
-  | (4, _, #[.u8le 13, .u64le amount, .u8le _], none, none) => .ok amount
-  | (3, _, #[.u8le 10], none, none) => .ok (.lit 0)
-  | (3, _, #[.u8le 11], none, none) => .ok (.lit 0)
-  | (3, _, #[.u8le 6, .u8le 0, .u8le 1, .accKey 2], none, none) => .ok (.lit 0)
-  | (3, _, #[.u8le 5], none, none) => .ok (.lit 0)
-  | (2, _, #[.u8le 21], none, none) => .ok .cpiReturn
-  | (1, _, #[.ascii "ok"], none, none) => .ok (.lit 0)
-  | (6, _, #[.u8le 1], none, none) => .ok (.lit 0)
+  | (2, _, #[.u32le 2, .u64le amount], #[], none) => .ok amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], #[], none) => .ok amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], #[.ascii _], some _) =>
+      .ok amount
+  | (1, _, #[.u32le 1, .programId], #[], none) => .ok (.lit 0)
+  | (1, _, #[.u32le 8, .u64le space], #[], none) => .ok space
+  | (2, _, #[.u32le 9, .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], #[], none) => .ok space
+  | (2, _, #[.u32le 3, .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], #[], none) => .ok lamports
+  | (2, _, #[.u32le 10, .accKey 0, .u64le _, .ascii "vault", .programId], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u32le 11, .u64le lamports, .u64le _, .ascii "vault", .programId], #[], none) => .ok lamports
+  | (2, _, #[.u8le 20, .u8le 6, .accKey 0, .u8le 0], #[], none) => .ok (.lit 0)
+  | (2, _, #[.u8le 17], #[], none) => .ok (.lit 0)
+  | (4, _, #[.u8le 12, .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le 14, .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le 15, .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le 18, .accKey 0], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le 9], #[], none) => .ok (.lit 0)
+  | (4, _, #[.u8le 13, .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le 10], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le 11], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le 6, .u8le 0, .u8le 1, .accKey 2], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le 5], #[], none) => .ok (.lit 0)
+  | (2, _, #[.u8le 21], #[], none) => .ok .cpiReturn
+  | (1, _, #[.ascii "ok"], #[], none) => .ok (.lit 0)
+  | (6, _, #[.u8le 1], #[], none) => .ok (.lit 0)
   | (programIx, _, _, _, _) =>
       .error s!"extract/unsupported: unknown CPI return semantics for program {programIx}"
 
 private def invokeOpsWithRet
     (env : Environment) (e : Expr)
-    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
+    (inv : DecodedInvoke) :
     Except String (Array Ops.Op) := do
   return invokeOps inv (← invokeRet env e inv)
 
@@ -3449,6 +3538,17 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
+    let (invokes, continuation) := leadingInvokes env e
+    if 1 < invokes.size then
+      match decodeExpr env fuel' continuation (stateful := stateful)
+          (preserveLocals := preserveLocals) (localDepth := localDepth) with
+      | .ok decodedOps =>
+          let continuationOps :=
+            if Ops.hasStoreField decodedOps || Ops.hasIndexSet decodedOps then decodedOps
+            else (asStoreFields env continuation true).getD decodedOps
+          return .ok (invokes.map invokeOp ++ continuationOps)
+      | .error reason =>
+          return .error s!"extract/unsupported: invoke sequence continuation: {reason}"
     let stripped := strip e
     if isConstNamed stripped ``Id.run then
       if let some guarded := guardedRunBody? 64 stripped then
@@ -3631,6 +3731,23 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let decodedThen := decodeExpr env fuel' t (stateful := stateful)
             (preserveLocals := preserveLocals) (localDepth := localDepth)
           if let .ok thn := decodedThen then
+            let rec invokeCount (fuel : Nat) (ops : Array Ops.Op) : Nat :=
+              match fuel with
+              | 0 => 0
+              | fuel' + 1 => ops.foldl (init := 0) fun count op =>
+                  count + match op with
+                  | .invoke .. => 1
+                  | .ite _ _ _ nestedThen nestedElse =>
+                      invokeCount fuel' nestedThen + invokeCount fuel' nestedElse
+                  | .forBody _ body => invokeCount fuel' body
+                  | _ => 0
+            if 1 < invokeCount 8 thn then
+              match asCmp env condE with
+              | some (.ne, .lit 0, .lit 1) | some (.ne, .lit 1, .lit 0) =>
+                  return .ok thn
+              | some (cmp, lv, rv) =>
+                  return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+              | none => pure ()
             if thn.any fun | .letLocal .. => true | _ => false then
               match asCmp env condE with
               | some (cmp, lv, rv) =>

@@ -624,6 +624,51 @@ elab "#pf_guard_compound_error_guard" : command => do
 
 #pf_guard_compound_error_guard
 
+elab "#pf_guard_multi_seed_invoke_sequence" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Examples.Counter.init
+        ``Tests.Fixtures.multiSeedTransfer ``Examples.Counter.get with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let lowered ←
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some transfer := lowered.methods.find? (·.ixName == "multiSeedTransfer")
+    | throwError "missing multi-seed transfer method"
+  let expectedSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
+    #[.ascii "vault", .stateKey, .accKey 3]
+  match transfer.ops with
+  | #[.invoke 8
+          #[{ acc := 1, signer := false, writable := true },
+            { acc := 3, signer := false, writable := false },
+            { acc := 5, signer := false, writable := true },
+            { acc := 0, signer := true, writable := false }]
+          #[.u8le 12, .u64le (.arg 0), .u8le 6] #[] none,
+      .invoke 8
+          #[{ acc := 5, signer := false, writable := true },
+            { acc := 3, signer := false, writable := false },
+            { acc := 1, signer := false, writable := true },
+            { acc := 7, signer := true, writable := false }]
+          #[.u8le 12, .u64le (.arg 0), .u8le 6] seeds
+          (some (.ext (.findPdaSeeds bumpSeeds) #[])),
+      .storeField "value" (.arg 0), .okState (.arg 0)] =>
+        unless seeds == expectedSeeds && bumpSeeds == expectedSeeds do
+          throwError s!"multi-seed list mismatch: {repr transfer.ops}"
+  | _ => throwError s!"multi-invoke sequence IR mismatch: {repr transfer.ops}"
+  unless ProofForge.Svm.IR.cpiAccountCount lowered == 10 do
+    throwError s!"multi-seed account scan stopped at {ProofForge.Svm.IR.cpiAccountCount lowered}"
+  let asm ←
+    match ProofForge.Svm.Emit.emitProgramAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless asm.contains "; findPdaSeeds count=3" &&
+      (asm.splitOn "; invoke programIx=9").length == 3 do
+    throwError "multi-seed discovery or consecutive CPI emission is missing"
+
+#pf_guard_multi_seed_invoke_sequence
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 
 #pf_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag

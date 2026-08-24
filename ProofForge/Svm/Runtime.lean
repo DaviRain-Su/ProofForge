@@ -71,6 +71,17 @@ inductive CpiWord where
   deriving Repr, Inhabited
 
 /--
+One compile-time-shaped PDA seed. `stateKey` is physical account 0; `accKey i` is relative to
+the external-account region after state, matching `CpiMeta.acc`. The final bump is supplied
+separately so one representation serves both PDA discovery and signed CPI.
+-/
+inductive PdaSeed where
+  | ascii (s : String)
+  | stateKey
+  | accKey (i : UInt64)
+  deriving Repr, Inhabited
+
+/--
 编译期钉死的 CPI。抽出器认这个名字，发射 `sol_invoke_signed_c`。
 `programIx`、metas 和 `.accKey` 都相对于 state 之后的 CPI 账户区，且必须在抽出时已知。
 宿主侧是不可约 stub，返回 0，不要当链上结果用。
@@ -94,6 +105,21 @@ inductive CpiWord where
   let _ := metas
   let _ := data
   let _ := seed
+  let _ := bump
+  0
+
+/--
+One signer group with a compile-time-shaped list of PDA seeds plus a runtime bump. Seed count,
+seed kinds, account indices, metas, and instruction layout must all be known during extraction.
+This covers Solana authorities such as `["vault", market_key, mint_key, bump]` without teaching
+the extractor or emitter about a particular Program.
+-/
+@[irreducible] def invokeSignedSeeds (programIx : UInt64) (metas : Array CpiMeta)
+    (data : Array CpiWord) (seeds : Array PdaSeed) (bump : UInt64) : UInt64 :=
+  let _ := programIx
+  let _ := metas
+  let _ := data
+  let _ := seeds
   let _ := bump
   0
 
@@ -218,6 +244,36 @@ def tokenTransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
       { acc := 0, signer := true, writable := false }]
     -- packed：u8 tag 12 || u64le amount || u8 decimals。
     #[.u8le 12, .u64le amount, .u8le decimals]
+
+/--
+Token `TransferChecked` with a statically indexed outer account recipe. Every index must reduce
+to a literal during extraction. This is the multi-vault form of `tokenTransferChecked`; the
+authority is an ordinary transaction signer.
+-/
+def tokenTransferCheckedIx (programIx sourceIx mintIx destinationIx authorityIx amount decimals :
+    UInt64) : UInt64 :=
+  invoke programIx
+    #[{ acc := sourceIx, signer := false, writable := true },
+      { acc := mintIx, signer := false, writable := false },
+      { acc := destinationIx, signer := false, writable := true },
+      { acc := authorityIx, signer := true, writable := false }]
+    #[.u8le 12, .u64le amount, .u8le decimals]
+
+/--
+Statically indexed Token `TransferChecked` whose authority is a PDA signer group. `seeds` does
+not include the final bump. The Solana runtime grants signer privilege only when the derived key
+matches `authorityIx`.
+-/
+def tokenTransferCheckedSignedIx
+    (programIx sourceIx mintIx destinationIx authorityIx amount decimals : UInt64)
+    (seeds : Array PdaSeed) (bump : UInt64) : UInt64 :=
+  invokeSignedSeeds programIx
+    #[{ acc := sourceIx, signer := false, writable := true },
+      { acc := mintIx, signer := false, writable := false },
+      { acc := destinationIx, signer := false, writable := true },
+      { acc := authorityIx, signer := true, writable := false }]
+    #[.u8le 12, .u64le amount, .u8le decimals]
+    seeds bump
 
 /--
 Token `MintToChecked`：普通包装。decimals 编译期常量。
@@ -411,6 +467,15 @@ def ataCreateIdempotent : UInt64 :=
 -/
 @[irreducible] def findPda (seed : String) : UInt64 :=
   let _ := seed
+  0
+
+/--
+Find the canonical bump for a compile-time-shaped seed list under the current program id.
+Account-key seeds refer to the authenticated account table; arbitrary runtime byte buffers and
+alternate program ids remain fail closed.
+-/
+@[irreducible] def findPdaSeeds (seeds : Array PdaSeed) : UInt64 :=
+  let _ := seeds
   0
 
 /--

@@ -19,7 +19,7 @@ private def validSvmOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 2
     #[{ acc := 0, signer := true, writable := true }]
     #[.u64le validSvmValue]
-    (some "vault")
+    #[.ascii "vault"]
     (some validSvmValue))
 
 #guard validSvmOp.wellFormed
@@ -27,9 +27,20 @@ private def validSvmOp : ProofForge.Svm.Ops.Op :=
 #guard !ProofForge.Svm.Ops.cpiAccInRange 63
 
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
-  .ext (.invoke 63 #[] #[] none none)
+  .ext (.invoke 63 #[] #[] #[] none)
 
 #guard !invalidCpiAccountOp.wellFormed
+
+private def invalidLongSeedOp : ProofForge.Svm.Ops.Op :=
+  .ext (.invoke 1 #[] #[] #[.ascii "123456789012345678901234567890123"] (some (.lit 1)))
+
+#guard !invalidLongSeedOp.wellFormed
+
+private def invalidSeedCountOp : ProofForge.Svm.Ops.Op :=
+  .ext (.invoke 1 #[] #[]
+    (Array.replicate 16 (.stateKey : ProofForge.Svm.Ops.PdaSeed)) (some (.lit 1)))
+
+#guard !invalidSeedCountOp.wellFormed
 
 private def accKeySizedProgram : ProofForge.Svm.IR.Program :=
   { name := "AccKeySized"
@@ -37,10 +48,21 @@ private def accKeySizedProgram : ProofForge.Svm.IR.Program :=
     slots := #[]
     methods := #[
       { kind := .increment, name := "AccKeySized.call", ixName := "call", paramCount := 0
-        ops := #[.invoke 1 #[] #[.accKey 5] none none] }
+        ops := #[.invoke 1 #[] #[.accKey 5] #[] none] }
     ] }
 
 #guard ProofForge.Svm.IR.cpiAccountCount accKeySizedProgram == 7
+
+private def seedAccKeySizedProgram : ProofForge.Svm.IR.Program :=
+  { name := "SeedAccKeySized"
+    schema := {}
+    slots := #[]
+    methods := #[
+      { kind := .increment, name := "SeedAccKeySized.call", ixName := "call", paramCount := 0
+        ops := #[.invoke 1 #[] #[] #[.accKey 5] (some (.lit 1))] }
+    ] }
+
+#guard ProofForge.Svm.IR.cpiAccountCount seedAccKeySizedProgram == 7
 
 private def validEvmValue : ProofForge.Evm.Ops.Val :=
   ProofForge.Evm.Ops.mapGetU64 ProofForge.Evm.Ops.self (.lit 7)

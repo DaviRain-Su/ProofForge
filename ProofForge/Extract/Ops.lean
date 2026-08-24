@@ -8,6 +8,7 @@ abbrev Val := IR.Val
 abbrev Op := IR.Op
 abbrev CpiMeta := Svm.Ops.CpiMeta
 abbrev CpiWord := Svm.Ops.CpiWord Val
+abbrev PdaSeed := Svm.Ops.PdaSeed
 
 private def svmLeaf (kind : Svm.Ops.ValKind) : Val :=
   .ext (.svm kind) #[]
@@ -51,6 +52,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.isExecutableN (acc : Nat) : Val := svmLeaf (.isExecutableN acc)
 @[match_pattern] def Val.signerKeyN (acc : Nat) : Val := svmLeaf (.signerKeyN acc)
 @[match_pattern] def Val.ownerIsSelf (acc : Nat) : Val := svmLeaf (.ownerIsSelf acc)
+@[match_pattern] def Val.findPdaSeeds (seeds : Array PdaSeed) : Val :=
+  svmLeaf (.findPdaSeeds seeds)
 
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber
@@ -73,8 +76,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.evm .mapGetPair) #[base, o0, o1, o2, s0, s1, s2]
 
 @[match_pattern] def Op.invoke (programIx : Nat) (metas : Array CpiMeta)
-    (data : Array CpiWord) (seed : Option String := none) (bump : Option Val := none) : Op :=
-  .ext (.svm (.invoke programIx metas data seed bump))
+    (data : Array CpiWord) (seeds : Array PdaSeed := #[]) (bump : Option Val := none) : Op :=
+  .ext (.svm (.invoke programIx metas data seeds bump))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.deposit amount))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=

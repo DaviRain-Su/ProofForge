@@ -52,6 +52,20 @@ def unknownCpiResult (_s : Examples.Counter.State) :
   else
     .error .overflow
 
+/-- Two independently indexed Token CPIs followed by a real state transition. The second call
+uses the common `[literal, state key, account key, bump]` PDA authority shape. -/
+def multiSeedTransfer (_s : Examples.Counter.State) (amount : UInt64) :
+    Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := ProofForge.Svm.Runtime.tokenTransferCheckedIx 8 1 3 5 0 amount 6
+    let seeds : Array ProofForge.Svm.Runtime.PdaSeed :=
+      #[.ascii "vault", .stateKey, .accKey 3]
+    let _ := ProofForge.Svm.Runtime.tokenTransferCheckedSignedIx
+      8 5 3 1 7 amount 6 seeds (ProofForge.Svm.Runtime.findPdaSeeds seeds)
+    .ok ({ value := amount }, amount)
+  else
+    .error .overflow
+
 /-- 负向：state 含 Float，不是支持的叶子。 -/
 structure FlagState where
   value : UInt64

@@ -155,6 +155,8 @@ partial def toLegacyVal : Val → Except String ProofForge.Ops.Val
   | .ext (.svm (.isExecutableN acc)) #[] => pure (.isExecutableN acc)
   | .ext (.svm (.signerKeyN acc)) #[] => pure (.signerKeyN acc)
   | .ext (.svm (.ownerIsSelf acc)) #[] => pure (.ownerIsSelf acc)
+  | .ext (.svm (.findPdaSeeds _)) #[] =>
+      throw "extract/unsupported: legacy adapter cannot represent multi-seed PDA discovery"
   | .ext (.evm .caller) #[] => pure .evmCaller
   | .ext (.evm .blockNumber) #[] => pure .evmBlockNumber
   | .ext (.evm .timestamp) #[] => pure .evmTimestamp
@@ -214,7 +216,8 @@ partial def ofLegacyOp : ProofForge.Ops.Op → Op
         (thn.map ofLegacyOp) (els.map ofLegacyOp)
   | .invoke programIx metas data seed bump =>
       .ext (.svm (.invoke programIx (metas.map metaOfLegacy) (data.map wordOfLegacy)
-        seed (bump.map ofLegacyVal)))
+        (match seed with | some value => #[.ascii value] | none => #[])
+        (bump.map ofLegacyVal)))
   | .evmDeposit amount => .ext (.evm (.deposit (ofLegacyVal amount)))
   | .evmSendEth w0 w1 w2 amount =>
       .ext (.evm (.sendEth (ofLegacyVal w0) (ofLegacyVal w1)
@@ -279,7 +282,12 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
   | .errorNamed name => pure (.errorNamed name)
   | .returnU64 value => return .returnU64 (← toLegacyVal value)
   | .returnState value => return .returnState (← toLegacyVal value)
-  | .ext (.svm (.invoke programIx metas data seed bump)) =>
+  | .ext (.svm (.invoke programIx metas data seeds bump)) => do
+      let seed ←
+        match seeds.toList with
+        | [] => pure none
+        | [.ascii value] => pure (some value)
+        | _ => throw "extract/unsupported: legacy adapter cannot represent multi-seed CPI"
       return .invoke programIx (metas.map metaToLegacy) (← data.mapM wordToLegacy)
         seed (← bump.mapM toLegacyVal)
   | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)

@@ -12,6 +12,13 @@ def accInRange (acc : Nat) : Bool :=
 def cpiAccInRange (acc : Nat) : Bool :=
   acc + 1 < maxTxAccountLocks
 
+/-- Static non-bump bytes in one PDA signer group. -/
+inductive PdaSeed where
+  | ascii (value : String)
+  | stateKey
+  | accKey (i : Nat)
+  deriving BEq, Repr, Inhabited
+
 /-- SVM-only source value intrinsics. Recursive operands live in `Core.Ops.Val.ext`. -/
 inductive ValKind where
   | clockSlot
@@ -47,6 +54,7 @@ inductive ValKind where
   | isExecutableN (acc : Nat)
   | signerKeyN (acc : Nat)
   | ownerIsSelf (acc : Nat)
+  | findPdaSeeds (seeds : Array PdaSeed)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
@@ -75,7 +83,7 @@ inductive CpiWord (V : Type) where
 /-- SVM-only source effects. -/
 inductive OpExt (V : Type) where
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord V))
-      (seed : Option String := none) (bump : Option V := none)
+      (seeds : Array PdaSeed := #[]) (bump : Option V := none)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -115,6 +123,7 @@ def isWritableN (acc : Nat) : Val := leaf (.isWritableN acc)
 def isExecutableN (acc : Nat) : Val := leaf (.isExecutableN acc)
 def signerKeyN (acc : Nat) : Val := leaf (.signerKeyN acc)
 def ownerIsSelf (acc : Nat) : Val := leaf (.ownerIsSelf acc)
+def findPdaSeeds (seeds : Array PdaSeed) : Val := leaf (.findPdaSeeds seeds)
 
 def CpiWord.wellFormed (word : CpiWord Val) : Bool :=
   match word with
@@ -122,16 +131,65 @@ def CpiWord.wellFormed (word : CpiWord Val) : Bool :=
   | .accKey acc => cpiAccInRange acc
   | _ => true
 
+def PdaSeed.wellFormed : PdaSeed → Bool
+  | .ascii value =>
+      !value.isEmpty && value.length ≤ 32 && value.toList.all (·.toNat < 128)
+  | .stateKey => true
+  | .accKey acc => cpiAccInRange acc
+
+/-- Solana permits at most 16 seeds of at most 32 bytes each. The emitter appends the bump, so
+the statically declared non-bump group is nonempty and contains at most 15 seeds. -/
+def PdaSeed.groupWellFormed (seeds : Array PdaSeed) : Bool :=
+  !seeds.isEmpty && seeds.size ≤ 15 && seeds.all PdaSeed.wellFormed
+
+private partial def staticPayloadsWellFormed : Val → Bool
+  | .field base _ | .bitNot base => staticPayloadsWellFormed base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      staticPayloadsWellFormed lhs && staticPayloadsWellFormed rhs
+  | .indexGet base _ idx _ _ =>
+      staticPayloadsWellFormed base && staticPayloadsWellFormed idx
+  | .select _ lhs rhs thn els =>
+      staticPayloadsWellFormed lhs && staticPayloadsWellFormed rhs &&
+        staticPayloadsWellFormed thn && staticPayloadsWellFormed els
+  | .ext (.findPdaSeeds seeds) operands =>
+      PdaSeed.groupWellFormed seeds && operands.all staticPayloadsWellFormed
+  | .ext _ operands => operands.all staticPayloadsWellFormed
+  | _ => true
+
 def OpExt.wellFormed : OpExt Val → Bool
-  | .invoke programIx metas data _ bump =>
+  | .invoke programIx metas data seeds bump =>
       cpiAccInRange programIx && metas.all (cpiAccInRange ·.acc) &&
         data.all CpiWord.wellFormed &&
-        match bump with
-        | some value => value.wellFormed ValKind.arity
-        | none => true
+        ((seeds.isEmpty && bump.isNone) ||
+          (PdaSeed.groupWellFormed seeds && bump.isSome)) &&
+        bump.all fun value =>
+          value.wellFormed ValKind.arity && staticPayloadsWellFormed value
+
+private partial def opStaticPayloadsWellFormed : Op → Bool
+  | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+  | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+      staticPayloadsWellFormed value
+  | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+  | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs
+  | .indexSetLeaf _ lhs rhs _ _ | .indexSet _ lhs rhs _ _ =>
+      staticPayloadsWellFormed lhs && staticPayloadsWellFormed rhs
+  | .ite _ lhs rhs thn els =>
+      staticPayloadsWellFormed lhs && staticPayloadsWellFormed rhs &&
+        thn.all opStaticPayloadsWellFormed && els.all opStaticPayloadsWellFormed
+  | .forBody _ body => body.all opStaticPayloadsWellFormed
+  | .ext payload =>
+      match payload with
+      | .invoke _ _ data _ bump =>
+          data.all (fun | .u64le value => staticPayloadsWellFormed value | _ => true) &&
+            bump.all staticPayloadsWellFormed
+  | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
 def Op.wellFormed (op : Op) : Bool :=
-  ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op
+  ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op &&
+    opStaticPayloadsWellFormed op
 
 private partial def walkOps (ops : Array Op) (predicate : Op → Bool) : Bool :=
   ops.any fun op =>
@@ -159,6 +217,7 @@ partial def valNeedsWalk : Val → Bool
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
+       | .findPdaSeeds seeds => seeds.any fun | .stateKey | .accKey _ => true | _ => false
        | _ => false) || operands.any valNeedsWalk
 
 partial def valMinAccounts : Val → Nat
@@ -181,6 +240,10 @@ partial def valMinAccounts : Val → Nat
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc
         | .signerKeyN acc | .ownerIsSelf acc => acc + 1
+        | .findPdaSeeds seeds => seeds.foldl (init := 0) fun current seed =>
+            match seed with
+            | .accKey acc => Nat.max current (acc + 2)
+            | _ => current
         | _ => 0
       operands.foldl (init := here) fun current operand =>
         Nat.max current (valMinAccounts operand)
@@ -215,14 +278,20 @@ private def CpiWord.hasSelect : CpiWord Val → Bool
   | _ => false
 
 private def OpExt.needsWalk : OpExt Val → Bool
-  | .invoke _ _ data _ bump =>
-      data.any CpiWord.needsWalk || bump.any valNeedsWalk
+  | .invoke _ _ data seeds bump =>
+      data.any CpiWord.needsWalk ||
+        seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
+        bump.any valNeedsWalk
 
 private def OpExt.minAccounts : OpExt Val → Nat
-  | .invoke _ _ data _ bump =>
+  | .invoke _ _ data seeds bump =>
       let fromData := data.foldl (init := 0) fun current word =>
         Nat.max current word.minAccounts
-      Nat.max fromData (bump.map valMinAccounts |>.getD 0)
+      let fromSeeds := seeds.foldl (init := 0) fun current seed =>
+        match seed with
+        | .accKey acc => Nat.max current (acc + 2)
+        | _ => current
+      Nat.max (Nat.max fromData fromSeeds) (bump.map valMinAccounts |>.getD 0)
 
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
