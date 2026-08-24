@@ -413,6 +413,36 @@ elab "#pf_guard_target_lowering" : command => do
           (.st .m64 .br6 (.reg .br1) (BitVec.ofNat 16 104)) do
       throwError s!"unexpected Counter.{methodName} Solanalib fragment: {repr fragment}"
 
+  let some nonzero := svmFullCounter.methods.find? (·.ixName == "nonzero")
+    | throwError "missing Counter.nonzero target method"
+  let nonzeroCFG ←
+    match nonzero.toCFG with
+    | .ok graph => pure graph
+    | .error reason => throwError reason
+  let some branchBlock := nonzeroCFG.blocks.find? fun block => match block.terminator with
+      | .branch .. => true
+      | _ => false
+    | throwError "Counter.nonzero CFG is missing its branch"
+  let some branch := ProofForge.Svm.Solanalib.cfgBranchFragment?
+      nonzeroCFG branchBlock.id
+    | throwError "Solanalib bridge rejected Counter.nonzero CFG branch"
+  unless branch.cmp == .eq && branch.lhs == .field (.arg 0) "value" &&
+      branch.rhs == .lit 0 &&
+      branch.body == ProofForge.Svm.Solanalib.branchBody .eq do
+    throwError s!"unexpected Counter.nonzero Solanalib branch: {repr branch}"
+  let argumentedCFG := { nonzeroCFG with
+    blocks := nonzeroCFG.blocks.map fun block =>
+      if block.id == branchBlock.id then
+        { block with terminator := match block.terminator with
+          | .branch cmp lhs rhs thenEdge elseEdge =>
+              .branch cmp lhs rhs { thenEdge with args := #[.lit 0] } elseEdge
+          | terminator => terminator }
+      else block
+  }
+  unless (ProofForge.Svm.Solanalib.cfgBranchFragment?
+      argumentedCFG branchBlock.id).isNone do
+    throwError "Solanalib CFG branch bridge accepted an argumented edge"
+
   let tree ←
     match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with
     | .ok program => pure program

@@ -95,6 +95,37 @@ private def checkedOverflowsWithoutWrite (kind : ProofForge.Core.CheckedArith)
 #guard checkedOverflowsWithoutWrite .div 7 0
 #guard checkedOverflowsWithoutWrite .mod 7 0
 
+private def branchFragment (cmp : ProofForge.Core.Ops.Cmp) : CFGBranchFragment := {
+  cmp
+  lhs := .lit 0
+  rhs := .lit 0
+  thenTarget := 21
+  elseTarget := 22
+  body := branchBody cmp
+}
+
+private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
+    (expectThen : Bool) : Bool :=
+  match evalCFGBranch (branchFragment cmp) lhs rhs initMem with
+  | some (.thenEdge target memory) =>
+      expectThen && target == 21 && loadv .m64 memory (mmInputStart + 104) == none
+  | some (.elseEdge target memory) =>
+      !expectThen && target == 22 && loadv .m64 memory (mmInputStart + 104) == none
+  | none => false
+
+#guard branchSelects .eq 5 5 true
+#guard branchSelects .eq 5 4 false
+#guard branchSelects .ne 5 4 true
+#guard branchSelects .ne 5 5 false
+#guard branchSelects .lt 4 5 true
+#guard branchSelects .lt 5 4 false
+#guard branchSelects .le 5 5 true
+#guard branchSelects .le 6 5 false
+#guard branchSelects .gt 5 4 true
+#guard branchSelects .gt 4 5 false
+#guard branchSelects .ge 5 5 true
+#guard branchSelects .ge 4 5 false
+
 #guard (staticStoreInstruction? { valueSlot with width := 3 }).isNone
 
 #guard

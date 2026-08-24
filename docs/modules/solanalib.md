@@ -39,6 +39,10 @@ Lean 4.31.0。上游无 encoder / textual assembler，因此这里直接生成
   `evalCheckedGuard_corresponds` 对任意 kind/lhs/rhs 证明 emitter guard 恰好选择 source
   success/overflow condition 且不改内存；`checkedControl_selects_success` 和
   `checkedControl_overflow_preserves` 给出两条通用 edge theorem。
+- `cfgBranchFragment?` 从真实 target-owned SVM CFG branch 保留 cmp/lhs/rhs/then/else identity，
+  拒绝尚未 lowering 的 argumented edge，并生成 emitter 对应的
+  `j<cmp> r1,r2,then; ja else` decoded pair。`evalCFGBranch_corresponds` 直接通过上游 `step`
+  证明 eq/ne/lt/le/gt/ge 六种 unsigned 比较选择同一 Core edge 且内存不变。
 
 旧的通用 guard/body API 仍刻意分层：Solanalib 的 `BitVec 64` 正确暴露 wrap
 （`u64Max + 1 = 0`），`evalCheckedWrite?` 只在 source guard 成功后执行 typed body 和 store；
@@ -63,14 +67,15 @@ Solanalib 当前没有为本仓提供：
 - high-level `Account` / `Instruction` 到 SBPF memory 的 refinement；
 - 完整 Agave verifier（上游 verifier 只覆盖 instruction-level version/divisor 条件）。
 
-这仍不是完整 emitter refinement。下一片应沿同一边界补普通 CFG branch，而不是扩大
-Extract 语法或另造 VM semantics。
+这仍不是完整 emitter refinement；目前只覆盖 checked arithmetic/static write 和普通
+CFG branch，不覆盖 operand materialization、任意 block body 或 whole-program execution。
 
 ## Tests
 
 - `Tests/SolanalibSpec.lean`：上游 executable semantics 的 bounded characterization，以及
   五种 checked arithmetic 的 success/overflow edge、multiply zero path、scratch handoff 与
-  state-store 行为。
+  state-store 行为；六种普通比较各覆盖 then/else decoded edge。
 - `Tests/NormalizationSpec.lean`：真实抽出的 Counter increment/decrement/scale/divide/modulo
   都从 Core Place、SVM slot 和各自 target-owned CFG checked terminator 生成对应 typed
-  fragment；任一 Core/CFG operand 不一致都 fail closed。
+  fragment；Counter.nonzero 生成真实普通 branch fragment；任一 Core/CFG operand 不一致或
+  argumented branch edge 都 fail closed。

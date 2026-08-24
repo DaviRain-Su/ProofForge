@@ -387,4 +387,104 @@ def evalCheckedCFGWrite (fragment : CheckedCFGWriteFragment) (lhs rhs : U64)
       else none
   | .success _ | .eflag | .err => none
 
+def cmpCondition : Core.Ops.Cmp → Condition
+  | .eq => .eq
+  | .ne => .ne
+  | .lt => .lt
+  | .le => .le
+  | .gt => .gt
+  | .ge => .ge
+
+/-- Source-level unsigned comparison selected by a Core CFG branch. -/
+def cmpHolds : Core.Ops.Cmp → U64 → U64 → Bool
+  | .eq, lhs, rhs => lhs == rhs
+  | .ne, lhs, rhs => lhs != rhs
+  | .lt, lhs, rhs => lhs.ult rhs
+  | .le, lhs, rhs => lhs.ule rhs
+  | .gt, lhs, rhs => rhs.ult lhs
+  | .ge, lhs, rhs => rhs.ule lhs
+
+/-- The normalized form of `j<cmp> r1, r2, then; ja else`. Local PC 3 denotes the
+then edge and PC 2 the else edge, keeping the two external labels distinguishable. -/
+def branchBody (cmp : Core.Ops.Cmp) : EbpfAsm :=
+  [ .jump (cmpCondition cmp) .br1 (.reg .br2) 2,
+    .ja 0 ]
+
+structure CFGBranchFragment where
+  cmp : Core.Ops.Cmp
+  lhs : Ops.Val
+  rhs : Ops.Val
+  thenTarget : Core.CFG.BlockId
+  elseTarget : Core.CFG.BlockId
+  body : EbpfAsm
+  deriving Repr, BEq
+
+/-- Resolve one real target-owned SVM CFG branch to its decoded conditional/unconditional jump
+pair. Argumented edges remain fail closed until block arguments are lowered by a backend. -/
+def cfgBranchFragment? (graph : IR.CFG) (blockId : Core.CFG.BlockId) :
+    Option CFGBranchFragment := do
+  let block ← graph.block? blockId
+  let (cmp, lhs, rhs, thenEdge, elseEdge) ← match block.terminator with
+    | .branch cmp lhs rhs thenEdge elseEdge => some (cmp, lhs, rhs, thenEdge, elseEdge)
+    | _ => none
+  if !thenEdge.args.isEmpty || !elseEdge.args.isEmpty then none else
+  return {
+    cmp
+    lhs
+    rhs
+    thenTarget := thenEdge.target
+    elseTarget := elseEdge.target
+    body := branchBody cmp
+  }
+
+theorem branchBody_verified (cmp : Core.Ops.Cmp) :
+    (branchBody cmp).all (verifyInstr · version) = true := by
+  cases cmp <;> decide
+
+/-- Solanalib's decoded unsigned jump condition is exactly the Core comparison relation. -/
+theorem evalJmp_corresponds (cmp : Core.Ops.Cmp) (lhs rhs : U64) :
+    evalJmp (cmpCondition cmp) .br1 (.reg .br2) (arithInputRegs lhs rhs) =
+      cmpHolds cmp lhs rhs := by
+  cases cmp <;> simp [cmpCondition, cmpHolds, evalJmp, sndOp64, arithInputRegs, setReg]
+
+private theorem evalJmp_setFramePointer (condition : Condition) (lhs rhs framePointer : U64) :
+    evalJmp condition .br1 (.reg .br2)
+        (setReg (arithInputRegs lhs rhs) .br10 framePointer) =
+      evalJmp condition .br1 (.reg .br2) (arithInputRegs lhs rhs) := by
+  cases condition <;> simp [evalJmp, sndOp64, arithInputRegs, setReg]
+
+inductive CFGBranchOutcome where
+  | thenEdge (target : Core.CFG.BlockId) (memory : Mem)
+  | elseEdge (target : Core.CFG.BlockId) (memory : Mem)
+
+/-- Execute the exact decoded CFG branch pair through upstream small-step semantics. -/
+def evalCFGBranch (fragment : CFGBranchFragment) (lhs rhs : U64)
+    (memory : Mem) : Option CFGBranchOutcome :=
+  let state := runDecodedFrom 0 fragment.body
+    (initBpfState (arithInputRegs lhs rhs) memory 8 version)
+  match state with
+  | .ok pc _ finalMemory _ _ _ _ _ =>
+      if pc == 3 then some (.thenEdge fragment.thenTarget finalMemory)
+      else if pc == 2 then some (.elseEdge fragment.elseTarget finalMemory)
+      else none
+  | .success _ | .eflag | .err => none
+
+/-- The exact decoded branch pair selects the same edge as Core and leaves memory unchanged. -/
+theorem evalCFGBranch_corresponds (cmp : Core.Ops.Cmp) (lhs rhs : U64)
+    (thenTarget elseTarget : Core.CFG.BlockId) (memory : Mem) :
+    evalCFGBranch
+        { cmp, lhs := .lit 0, rhs := .lit 0, thenTarget, elseTarget,
+          body := branchBody cmp }
+        lhs rhs memory =
+      if cmpHolds cmp lhs rhs then some (.thenEdge thenTarget memory)
+      else some (.elseEdge elseTarget memory) := by
+  rw [← evalJmp_corresponds cmp lhs rhs]
+  by_cases hbranch :
+      evalJmp (cmpCondition cmp) .br1 (.reg .br2) (arithInputRegs lhs rhs) = true
+  · simp [evalCFGBranch, runDecodedFrom, runDecodedFrom.go, decodedInstructionAt?,
+      decodedSlots, branchBody, stepDecoded, step, initBpfState, evalJmp_setFramePointer, hbranch]
+  · simp [evalCFGBranch, runDecodedFrom, runDecodedFrom.go, decodedInstructionAt?,
+      decodedSlots, branchBody, stepDecoded, step, initBpfState, evalJmp_setFramePointer,
+      hbranch]
+
 end ProofForge.Svm.Solanalib
