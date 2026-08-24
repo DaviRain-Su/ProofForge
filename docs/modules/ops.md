@@ -21,7 +21,7 @@
 
 `forBody n body`：有界 `for i in [:n]`，体里可用 `loopIx`。普通 early-return loop 和
 显式 state-carrying fold 分开解码；callback-local index 会重写成 `loopIx`，外层方法
-参数和 payload 保持原参数身份。Phoenix 的 17 / 19 / 23-phase fold 覆盖了跨迭代
+参数和 payload 保持原参数身份。Phoenix 的 17 / 19-phase fold 覆盖了跨迭代
 state、动态 Vector 写和循环后的 continuation。
 
 ## Tests

@@ -39,21 +39,23 @@ inductive SelfTradeBehavior where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 /--
-官方内部 `MarketEvent` 的 bounded 形状。maker 暂存 trader tree 的内部 address；
-client id 已是 u128 的两个 little-endian limbs。把 maker address resolve 为 Pubkey，
-以及 Borsh event batch，属于后续 wire/event-recorder adapter。
+官方 `PhoenixMarketEvent` 的 bounded typed 形状。`header` 只保留 Borsh ordinal 1；
+真实 `AuditLogHeader` 是 recorder 的独立 batch prefix，不写进本向量。maker-bearing
+event 在构造前把内部 seat resolve 成四 limb Pubkey。官方 u16 event index 在这里以
+UInt64 保存，但 `appendEvent` 保证其值小于 5；wire adapter 再收窄成 little-endian u16。
 -/
 inductive MarketEvent where
   | uninitialized
-  | fill (maker orderSequence price filled remaining : UInt64)
+  | header
+  | fill (index maker0 maker1 maker2 maker3 orderSequence price filled remaining : UInt64)
   /-- `clientOrderIdLo` then `clientOrderIdHi` is the little-endian two-limb form of Phoenix's u128. -/
-  | place (orderSequence clientOrderIdLo clientOrderIdHi price placed : UInt64)
-  | reduce (orderSequence price removed remaining : UInt64)
-  | evict (maker orderSequence price evicted : UInt64)
-  | fillSummary (clientOrderIdLo clientOrderIdHi totalBase totalQuote totalFee : UInt64)
-  | fee (feesCollected : UInt64)
-  | timeInForce (orderSequence lastValidSlot lastValidTime : UInt64)
-  | expiredOrder (maker orderSequence price removed : UInt64)
+  | place (index orderSequence clientOrderIdLo clientOrderIdHi price placed : UInt64)
+  | reduce (index orderSequence price removed remaining : UInt64)
+  | evict (index maker0 maker1 maker2 maker3 orderSequence price evicted : UInt64)
+  | fillSummary (index clientOrderIdLo clientOrderIdHi totalBase totalQuote totalFee : UInt64)
+  | fee (index feesCollected : UInt64)
+  | timeInForce (index orderSequence lastValidSlot lastValidTime : UInt64)
+  | expiredOrder (index maker0 maker1 maker2 maker3 orderSequence price removed : UInt64)
   deriving Repr, DecidableEq, Inhabited
 
 /--
@@ -138,7 +140,30 @@ def emptyEvents : Vector MarketEvent 5 :=
 private def beginEvents (s : State) : State :=
   { s with eventCount := 0, lastEvent := .uninitialized }
 
-/-- 写满后 fail-closed 地丢弃额外事件；N=4 撮合至多四个逐档事件加一个 summary。 -/
+/-- Host accumulator 在保存前按 instruction 内顺序覆盖每个 wire event 的 u16 index。 -/
+private def MarketEvent.withIndex (event : MarketEvent) (index : UInt64) : MarketEvent :=
+  match event with
+  | .uninitialized => .uninitialized
+  | .header => .header
+  | .fill _ maker0 maker1 maker2 maker3 sequence price filled remaining =>
+      .fill index maker0 maker1 maker2 maker3 sequence price filled remaining
+  | .place _ sequence clientLo clientHi price placed =>
+      .place index sequence clientLo clientHi price placed
+  | .reduce _ sequence price removed remaining =>
+      .reduce index sequence price removed remaining
+  | .evict _ maker0 maker1 maker2 maker3 sequence price evicted =>
+      .evict index maker0 maker1 maker2 maker3 sequence price evicted
+  | .fillSummary _ clientLo clientHi totalBase totalQuote totalFee =>
+      .fillSummary index clientLo clientHi totalBase totalQuote totalFee
+  | .fee _ fees => .fee index fees
+  | .timeInForce _ sequence slot time => .timeInForce index sequence slot time
+  | .expiredOrder _ maker0 maker1 maker2 maker3 sequence price removed =>
+      .expiredOrder index maker0 maker1 maker2 maker3 sequence price removed
+
+/--
+写满后 fail-closed 地丢弃额外事件；调用点用当前 `eventCount` 构造 wire index。
+不在这里二次 match event，因为动态 variant 已摊平成 State 的 tag/payload leaves。
+-/
 private def appendEvent (s : State) (event : MarketEvent) : State :=
   if h : s.eventCount.toNat < 5 then
     { s with
@@ -148,7 +173,7 @@ private def appendEvent (s : State) (event : MarketEvent) : State :=
   else
     s
 
-attribute [pf_inline] beginEvents appendEvent
+attribute [pf_inline] beginEvents MarketEvent.withIndex appendEvent
 
 /-- 固定容量 ask 树的节点地址；0 是 Phoenix 的 sentinel。 -/
 structure RBNode where
@@ -521,6 +546,19 @@ private def registeredSeat (s : State) (address : UInt64) : Bool :=
   if address = 0 || 4 < address then false
   else s.traderUsed[address.toNat - 1]! ≠ 0
 
+/-- Resolve a resting order's internal trader-tree address before constructing a wire event. -/
+private def makerKey0 (s : State) (address : UInt64) : UInt64 :=
+  if registeredSeat s address then s.traderKey0[address.toNat - 1]! else address
+
+private def makerKey1 (s : State) (address : UInt64) : UInt64 :=
+  if registeredSeat s address then s.traderKey1[address.toNat - 1]! else 0
+
+private def makerKey2 (s : State) (address : UInt64) : UInt64 :=
+  if registeredSeat s address then s.traderKey2[address.toNat - 1]! else 0
+
+private def makerKey3 (s : State) (address : UInt64) : UInt64 :=
+  if registeredSeat s address then s.traderKey3[address.toNat - 1]! else 0
+
 /--
 Apply the base-ledger part of posting an ask. `oldSize = 0` is an ordinary insertion;
 otherwise the old maker is unlocked before the new owner is locked. Registered orders
@@ -675,7 +713,8 @@ private def postBidFunds
       else
         aggregate
 
-attribute [pf_inline] registeredSeat postAskFunds postBidFunds
+attribute [pf_inline] registeredSeat makerKey0 makerKey1 makerKey2 makerKey3
+  postAskFunds postBidFunds
 
 private def swapAskAdjacent (s : State) (j : Nat) : State :=
   let r := j + 1
@@ -772,18 +811,21 @@ def postAskWithClientAt (s : State)
         if st.matchStopped ≠ (0 : UInt64) then
           if st.matchError = (0 : UInt64) then
             if st.matchLevel = (1 : UInt64) then
+              let maker := s.traders[3]!
               st := appendEvent st
-                (.evict s.traders[3]! s.sequences[3]! s.priceTicks[3]! s.sizes[3]!)
+                (.evict st.eventCount (makerKey0 s maker) (makerKey1 s maker)
+                  (makerKey2 s maker) (makerKey3 s maker)
+                  s.sequences[3]! s.priceTicks[3]! s.sizes[3]!)
       else if i = 15 then
         if st.matchStopped ≠ (0 : UInt64) then
           if st.matchError = (0 : UInt64) then
             st := appendEvent st
-              (.place s.sequence clientOrderIdLo clientOrderIdHi price size)
+              (.place st.eventCount s.sequence clientOrderIdLo clientOrderIdHi price size)
       else if i = 16 then
         if st.matchStopped ≠ (0 : UInt64) then
           if st.matchError = (0 : UInt64) then
             if lastSlot ≠ 0 || lastTime ≠ 0 then
-              st := appendEvent st (.timeInForce s.sequence lastSlot lastTime)
+              st := appendEvent st (.timeInForce st.eventCount s.sequence lastSlot lastTime)
     if st.matchError ≠ 0 || st.matchStopped = 0 then
       .error .overflow
     else
@@ -926,19 +968,21 @@ def postBidWithClientAt (s : State)
           if st.matchStopped ≠ (0 : UInt64) then
             if st.matchError = (0 : UInt64) then
               if st.matchLevel = (1 : UInt64) then
+                let maker := s.bidTraders[3]!
                 st := appendEvent st
-                  (.evict s.bidTraders[3]! (~~~s.bidSequences[3]!)
-                    s.bidPriceTicks[3]! s.bidSizes[3]!)
+                  (.evict st.eventCount (makerKey0 s maker) (makerKey1 s maker)
+                    (makerKey2 s maker) (makerKey3 s maker)
+                    (~~~s.bidSequences[3]!) s.bidPriceTicks[3]! s.bidSizes[3]!)
         else if i = 15 then
           if st.matchStopped ≠ (0 : UInt64) then
             if st.matchError = (0 : UInt64) then
               st := appendEvent st
-                (.place s.sequence clientOrderIdLo clientOrderIdHi price size)
+                (.place st.eventCount s.sequence clientOrderIdLo clientOrderIdHi price size)
         else if i = 16 then
           if st.matchStopped ≠ (0 : UInt64) then
             if st.matchError = (0 : UInt64) then
               if lastSlot ≠ 0 || lastTime ≠ 0 then
-                st := appendEvent st (.timeInForce s.sequence lastSlot lastTime)
+                st := appendEvent st (.timeInForce st.eventCount s.sequence lastSlot lastTime)
       if st.matchError ≠ 0 || st.matchStopped = 0 then
         .error .overflow
       else
@@ -1050,10 +1094,11 @@ structure MatchAcc where
 
 private def MatchAcc.pushEvent (acc : MatchAcc) (event : MarketEvent) : MatchAcc :=
   if h : acc.eventCount.toNat < 5 then
+    let indexed := event.withIndex acc.eventCount
     { acc with
-      events := acc.events.set acc.eventCount.toNat event
+      events := acc.events.set acc.eventCount.toNat indexed
       eventCount := acc.eventCount + 1
-      lastEvent := event }
+      lastEvent := indexed }
   else
     acc
 
@@ -1075,8 +1120,11 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
         scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1) acc
       else if expired s.lastSlots[i] s.lastTimes[i] nowSlot nowTime then
         if acc.expiredBase ≤ u64Max - size then
+          let maker := s.traders[i]
           let next := acc.pushEvent
-            (.expiredOrder s.traders[i] s.sequences[i] s.priceTicks[i] size)
+            (.expiredOrder 0 (makerKey0 s maker) (makerKey1 s maker)
+              (makerKey2 s maker) (makerKey3 s maker)
+              s.sequences[i] s.priceTicks[i] size)
           scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
             { next with
               sizes := acc.sizes.set i 0
@@ -1090,7 +1138,7 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
         | .abort => .error .overflow
         | .cancelProvide =>
           if acc.expiredBase ≤ u64Max - size then
-            let next := acc.pushEvent (.reduce s.sequences[i] s.priceTicks[i] size 0)
+            let next := acc.pushEvent (.reduce 0 s.sequences[i] s.priceTicks[i] size 0)
             scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
               { next with
                 sizes := acc.sizes.set i 0
@@ -1102,7 +1150,7 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
           let reduced := if remaining ≤ size then remaining else size
           if acc.expiredBase ≤ u64Max - reduced then
             let next := acc.pushEvent
-              (.reduce s.sequences[i] s.priceTicks[i] reduced (size - reduced))
+              (.reduce 0 s.sequences[i] s.priceTicks[i] reduced (size - reduced))
             scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
               { next with
                 sizes := acc.sizes.set i (size - reduced)
@@ -1120,8 +1168,11 @@ private def scanAsks (s : State) (taker limit nowSlot nowTime : UInt64)
           if quotePerBase = 0 || fill ≤ u64Max / quotePerBase then
             let quote := quotePerBase * fill
             if acc.adjustedQuote ≤ u64Max - quote then
+              let maker := s.traders[i]
               let next := acc.pushEvent
-                (.fill s.traders[i] s.sequences[i] price fill (size - fill))
+                (.fill 0 (makerKey0 s maker) (makerKey1 s maker)
+                  (makerKey2 s maker) (makerKey3 s maker)
+                  s.sequences[i] price fill (size - fill))
               scanAsks s taker limit nowSlot nowTime behavior fuel' (i + 1)
                 { next with
                   sizes := acc.sizes.set i (size - fill)
@@ -1149,9 +1200,12 @@ private def applyAskEvents
     else if h : i < 5 then
       let next :=
         match s.events[i] with
-        | .expiredOrder maker _ _ removed => unlockAskTrader s maker removed
-        | .reduce _ _ removed _ => unlockAskTrader s taker removed
-        | .fill maker _ price filled _ =>
+        | .expiredOrder _ maker0 maker1 maker2 maker3 _ _ removed =>
+          let maker := traderAddressFor s maker0 maker1 maker2 maker3
+          unlockAskTrader s maker removed
+        | .reduce _ _ _ removed _ => unlockAskTrader s taker removed
+        | .fill _ maker0 maker1 maker2 maker3 _ price filled _ =>
+          let maker := traderAddressFor s maker0 maker1 maker2 maker3
           if s.baseLotsPerBaseUnit = 0 then
             { s with matchStopped := 1, matchError := 1 }
           else if price = 0 || s.tickSize = 0 then
@@ -1268,7 +1322,8 @@ private def settleBuy (s : State) (taker clientOrderIdLo clientOrderIdHi : UInt6
       let (settled, filled) ←
         commitBuy ledger taker acc.filledBase acc.expiredBase quoteLots feeLots
       .ok (appendEvent settled
-          (.fillSummary clientOrderIdLo clientOrderIdHi filled quoteLots feeLots), filled)
+          (.fillSummary settled.eventCount clientOrderIdLo clientOrderIdHi
+            filled quoteLots feeLots), filled)
 
 /--
 可测试的完整 N=4 IOC：红黑树中序跨档、严格 slot/time TIF、聚合费用和余额记账。
@@ -1311,10 +1366,11 @@ structure SellAcc where
 
 private def SellAcc.pushEvent (acc : SellAcc) (event : MarketEvent) : SellAcc :=
   if h : acc.eventCount.toNat < 5 then
+    let indexed := event.withIndex acc.eventCount
     { acc with
-      events := acc.events.set acc.eventCount.toNat event
+      events := acc.events.set acc.eventCount.toNat indexed
       eventCount := acc.eventCount + 1
-      lastEvent := event }
+      lastEvent := indexed }
   else
     acc
 
@@ -1333,8 +1389,11 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
       else if expired s.bidLastSlots[i] s.bidLastTimes[i] nowSlot nowTime then
         let unlocked ← bidCollateral s s.bidPriceTicks[i] size
         if acc.unlockedQuote ≤ u64Max - unlocked then
+          let maker := s.bidTraders[i]
           let next := acc.pushEvent
-            (.expiredOrder s.bidTraders[i] (~~~s.bidSequences[i]) s.bidPriceTicks[i] size)
+            (.expiredOrder 0 (makerKey0 s maker) (makerKey1 s maker)
+              (makerKey2 s maker) (makerKey3 s maker)
+              (~~~s.bidSequences[i]) s.bidPriceTicks[i] size)
           scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
             { next with
               sizes := acc.sizes.set i 0
@@ -1350,7 +1409,7 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
           let unlocked ← bidCollateral s s.bidPriceTicks[i] size
           if acc.unlockedQuote ≤ u64Max - unlocked then
             let next := acc.pushEvent
-              (.reduce (~~~s.bidSequences[i]) s.bidPriceTicks[i] size 0)
+              (.reduce 0 (~~~s.bidSequences[i]) s.bidPriceTicks[i] size 0)
             scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
               { next with
                 sizes := acc.sizes.set i 0
@@ -1363,7 +1422,7 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
           let unlocked ← bidCollateral s s.bidPriceTicks[i] reduced
           if acc.unlockedQuote ≤ u64Max - unlocked then
             let next := acc.pushEvent
-              (.reduce (~~~s.bidSequences[i]) s.bidPriceTicks[i] reduced (size - reduced))
+              (.reduce 0 (~~~s.bidSequences[i]) s.bidPriceTicks[i] reduced (size - reduced))
             scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
               { next with
                 sizes := acc.sizes.set i (size - reduced)
@@ -1380,8 +1439,11 @@ private def scanBids (s : State) (taker limit nowSlot nowTime : UInt64)
         if acc.adjustedQuote > u64Max - adjusted || acc.makerQuote > u64Max - makerQuote then
           .error .overflow
         else
+          let maker := s.bidTraders[i]
           let next := acc.pushEvent
-            (.fill s.bidTraders[i] (~~~s.bidSequences[i]) s.bidPriceTicks[i] fill (size - fill))
+            (.fill 0 (makerKey0 s maker) (makerKey1 s maker)
+              (makerKey2 s maker) (makerKey3 s maker)
+              (~~~s.bidSequences[i]) s.bidPriceTicks[i] fill (size - fill))
           scanBids s taker limit nowSlot nowTime behavior fuel' (i + 1)
             { next with
               sizes := acc.sizes.set i (size - fill)
@@ -1404,15 +1466,17 @@ private def applySellEvents
     else if h : i < 5 then
       let next :=
         match s.events[i] with
-        | .expiredOrder maker _ price removed =>
+        | .expiredOrder _ maker0 maker1 maker2 maker3 _ price removed =>
+          let maker := traderAddressFor s maker0 maker1 maker2 maker3
           match bidCollateral s price removed with
           | .ok quote => unlockBidTrader s maker quote
           | .error _ => { s with matchStopped := 1, matchError := 1 }
-        | .reduce _ price removed _ =>
+        | .reduce _ _ price removed _ =>
           match bidCollateral s price removed with
           | .ok quote => unlockBidTrader s taker quote
           | .error _ => { s with matchStopped := 1, matchError := 1 }
-        | .fill maker _ price filled _ =>
+        | .fill _ maker0 maker1 maker2 maker3 _ price filled _ =>
+          let maker := traderAddressFor s maker0 maker1 maker2 maker3
           match bidCollateral s price filled with
           | .ok quote => fillBidTrader s maker quote filled
           | .error _ => { s with matchStopped := 1, matchError := 1 }
@@ -1495,7 +1559,8 @@ private def settleSell (s : State) (taker clientOrderIdLo clientOrderIdHi : UInt
       let (settled, filled) ← commitSell ledger taker acc.filledBase acc.unlockedQuote
         acc.makerQuote grossQuote feeLots
       .ok (appendEvent settled
-          (.fillSummary clientOrderIdLo clientOrderIdHi filled grossQuote feeLots), filled)
+          (.fillSummary settled.eventCount clientOrderIdLo clientOrderIdHi
+            filled grossQuote feeLots), filled)
 
 /-- 可测试的 N=4 sell IOC 宿主语义。 -/
 def swapSellForClientAt (s : State)
@@ -1608,7 +1673,7 @@ private def swapBuyFold (s : State)
     else if i = 18 then
       if st.matchError = 0 then
         st := appendEvent st
-          (.fillSummary clientOrderIdLo clientOrderIdHi
+          (.fillSummary st.eventCount clientOrderIdLo clientOrderIdHi
             st.matchFilled st.matchQuote st.matchLimit)
     else if st.matchStopped = 0 then
       let k := i - 1
@@ -1624,14 +1689,20 @@ private def swapBuyFold (s : State)
           if st.lastSlots[j]! ≠ 0 then
             if st.lastSlots[j]! < clockSlot then
               let unlocked := unlockAskFold st j size
+              let maker := st.traders[j]!
               st := appendEvent unlocked
-                (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
+                (.expiredOrder st.eventCount (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  st.sequences[j]! st.priceTicks[j]! size)
         else if phase = 1 then
           if st.lastTimes[j]! ≠ 0 then
             if st.lastTimes[j]! < unixTime then
               let unlocked := unlockAskFold st j size
+              let maker := st.traders[j]!
               st := appendEvent unlocked
-                (.expiredOrder st.traders[j]! st.sequences[j]! st.priceTicks[j]! size)
+                (.expiredOrder st.eventCount (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  st.sequences[j]! st.priceTicks[j]! size)
         else if phase = 2 then
           if st.matchLimit < st.priceTicks[j]! then
             st := { st with matchStopped := 1 }
@@ -1641,7 +1712,7 @@ private def swapBuyFold (s : State)
             else if behavior = 1 then
               let unlocked := unlockAskFold st j size
               st := appendEvent unlocked
-                (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
+                (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]! size 0)
             else if behavior = 2 then
               let remaining := st.matchWant - st.matchFilled
               if remaining ≤ size then
@@ -1650,24 +1721,30 @@ private def swapBuyFold (s : State)
                   { unlocked with
                     matchWant := st.matchWant - remaining
                     matchStopped := 1 }
-                  (.reduce st.sequences[j]! st.priceTicks[j]! remaining (size - remaining))
+                  (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]!
+                    remaining (size - remaining))
               else
                 let unlocked := unlockAskFold st j size
                 st := appendEvent { unlocked with matchWant := st.matchWant - size }
-                  (.reduce st.sequences[j]! st.priceTicks[j]! size 0)
+                  (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]! size 0)
             else
               st := { st with matchStopped := 1, matchError := 1 }
           else
             let remaining := st.matchWant - st.matchFilled
             if remaining ≤ size then
               let filled := fillAskFold st j remaining
+              let maker := st.traders[j]!
               st := appendEvent { filled with matchStopped := 1 }
-                (.fill st.traders[j]! st.sequences[j]! st.priceTicks[j]!
-                  remaining (size - remaining))
+                (.fill st.eventCount (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  st.sequences[j]! st.priceTicks[j]! remaining (size - remaining))
             else
               let filled := fillAskFold st j size
+              let maker := st.traders[j]!
               st := appendEvent filled
-                (.fill st.traders[j]! st.sequences[j]! st.priceTicks[j]! size 0)
+                (.fill st.eventCount (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  st.sequences[j]! st.priceTicks[j]! size 0)
   settleFold st taker
 
 attribute [pf_inline] swapBuyFold
@@ -1757,21 +1834,22 @@ private def settleSellFold (s : State) (taker : UInt64) : Except Error (State ×
 attribute [pf_inline] commitSellFold settleSellFold
 
 /--
-链上 N=4 sell IOC。每档拆为 slot TIF、time TIF、撮合、event flush、advance
-五个 phase；随后计算并追加 summary。`matchStopped` 的 2/3 临时表示“待发事件后
-继续/停止”，flush 后归一为 0/1。这样 helper 结果先跨迭代物化，再做动态写。
+链上 N=4 sell IOC。与 buy 一样使用十九次 state-carrying bounded fold：第 0 次
+清瞬时响应，接着十六次按四档 ×（slot TIF、time TIF、撮合、advance）推进，
+第 17 次计算结算数值，第 18 次追加 summary。内联 State helper 的结果可直接接
+typed event 动态写，不再借 `lastEvent` 跨 phase 暂存完整 variant。
 -/
 private def swapSellFold (s : State)
     (taker behavior clientOrderIdLo clientOrderIdHi want limit : UInt64) :
     Except Error (State × UInt64) := Id.run do
   let mut st := beginEvents s
-  for i in [0:23] do
+  for i in [0:19] do
     if i = 0 then
       st := { st with
         matchFilled := 0, matchQuote := 0, matchMakerQuote := 0, matchExpired := 0,
         matchStopped := 0, matchError := 0, matchLevel := 0,
         matchWant := want, matchLimit := limit }
-    else if i = 21 then
+    else if i = 17 then
       if st.matchError = 0 then
         if st.baseLotsPerBaseUnit = 0 then
           st := { st with matchError := 1 }
@@ -1788,88 +1866,87 @@ private def swapSellFold (s : State)
             st := { st with matchLimit := grossQuote, matchWant := feeLots }
           else
             st := { st with matchError := 1 }
-    else if i = 22 then
+    else if i = 18 then
       if st.matchError = 0 then
         st := appendEvent st
-          (.fillSummary clientOrderIdLo clientOrderIdHi
+          (.fillSummary st.eventCount clientOrderIdLo clientOrderIdHi
             st.matchFilled st.matchLimit st.matchWant)
-    else
+    else if st.matchStopped = 0 then
       let k := i - 1
-      let phase := k % 5
+      let phase := k % 4
       let j := st.matchLevel.toNat
       let size := st.bidSizes[j]!
-      if phase = 3 then
-        if st.matchError = 0 then
-          if st.matchStopped = 2 then
-            let event := st.lastEvent
-            st := appendEvent { st with matchStopped := 0 } event
-          else if st.matchStopped = 3 then
-            let event := st.lastEvent
-            st := appendEvent { st with matchStopped := 1 } event
-      else if st.matchStopped = 0 then
-        if st.matchFilled = st.matchWant then
-          st := { st with matchStopped := 1 }
-        else if phase = 4 then
-          st := { st with matchLevel := st.matchLevel + 1 }
-        else if size ≠ 0 then
-          if phase = 0 then
-            if st.bidLastSlots[j]! ≠ 0 then
-              if st.bidLastSlots[j]! < clockSlot then
-                let unlocked := unlockBidFold st j size
-                st := { unlocked with
-                  matchStopped := 2
-                  lastEvent := .expiredOrder st.bidTraders[j]! (~~~st.bidSequences[j]!)
-                    st.bidPriceTicks[j]! size }
-          else if phase = 1 then
-            if st.bidLastTimes[j]! ≠ 0 then
-              if st.bidLastTimes[j]! < unixTime then
-                let unlocked := unlockBidFold st j size
-                st := { unlocked with
-                  matchStopped := 2
-                  lastEvent := .expiredOrder st.bidTraders[j]! (~~~st.bidSequences[j]!)
-                    st.bidPriceTicks[j]! size }
-          else if phase = 2 then
-            if st.bidPriceTicks[j]! < st.matchLimit then
-              st := { st with matchStopped := 1 }
-            else if st.bidTraders[j]! = taker then
-              if behavior = 0 then
-                st := { st with matchStopped := 1, matchError := 1 }
-              else if behavior = 1 then
-                let unlocked := unlockBidFold st j size
-                st := { unlocked with
-                  matchStopped := 2
-                  lastEvent := .reduce (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0 }
-              else if behavior = 2 then
-                let remaining := st.matchWant - st.matchFilled
-                if remaining ≤ size then
-                  let unlocked := unlockBidFold st j remaining
-                  st := { unlocked with
-                    matchWant := st.matchWant - remaining
-                    matchStopped := 3
-                    lastEvent := .reduce (~~~st.bidSequences[j]!) st.bidPriceTicks[j]!
-                      remaining (size - remaining) }
-                else
-                  let unlocked := unlockBidFold st j size
-                  st := { unlocked with
-                    matchWant := st.matchWant - size
-                    matchStopped := 2
-                    lastEvent := .reduce (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0 }
-              else
-                st := { st with matchStopped := 1, matchError := 1 }
-            else
+      if st.matchFilled = st.matchWant then
+        st := { st with matchStopped := 1 }
+      else if phase = 3 then
+        st := { st with matchLevel := st.matchLevel + 1 }
+      else if size ≠ 0 then
+        if phase = 0 then
+          if st.bidLastSlots[j]! ≠ 0 then
+            if st.bidLastSlots[j]! < clockSlot then
+              let unlocked := unlockBidFold st j size
+              let maker := st.bidTraders[j]!
+              st := appendEvent unlocked
+                (.expiredOrder st.eventCount
+                  (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size)
+        else if phase = 1 then
+          if st.bidLastTimes[j]! ≠ 0 then
+            if st.bidLastTimes[j]! < unixTime then
+              let unlocked := unlockBidFold st j size
+              let maker := st.bidTraders[j]!
+              st := appendEvent unlocked
+                (.expiredOrder st.eventCount
+                  (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size)
+        else if phase = 2 then
+          if st.bidPriceTicks[j]! < st.matchLimit then
+            st := { st with matchStopped := 1 }
+          else if st.bidTraders[j]! = taker then
+            if behavior = 0 then
+              st := { st with matchStopped := 1, matchError := 1 }
+            else if behavior = 1 then
+              let unlocked := unlockBidFold st j size
+              st := appendEvent unlocked
+                (.reduce st.eventCount
+                  (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
+            else if behavior = 2 then
               let remaining := st.matchWant - st.matchFilled
               if remaining ≤ size then
-                let filled := fillBidFold st j remaining
-                st := { filled with
-                  matchStopped := 3
-                  lastEvent := .fill st.bidTraders[j]! (~~~st.bidSequences[j]!)
-                    st.bidPriceTicks[j]! remaining (size - remaining) }
+                let unlocked := unlockBidFold st j remaining
+                st := appendEvent
+                  { unlocked with
+                    matchWant := st.matchWant - remaining
+                    matchStopped := 1 }
+                  (.reduce st.eventCount (~~~st.bidSequences[j]!) st.bidPriceTicks[j]!
+                    remaining (size - remaining))
               else
-                let filled := fillBidFold st j size
-                st := { filled with
-                  matchStopped := 2
-                  lastEvent := .fill st.bidTraders[j]! (~~~st.bidSequences[j]!)
-                    st.bidPriceTicks[j]! size 0 }
+                let unlocked := unlockBidFold st j size
+                st := appendEvent { unlocked with matchWant := st.matchWant - size }
+                  (.reduce st.eventCount
+                    (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
+            else
+              st := { st with matchStopped := 1, matchError := 1 }
+          else
+            let remaining := st.matchWant - st.matchFilled
+            if remaining ≤ size then
+              let filled := fillBidFold st j remaining
+              let maker := st.bidTraders[j]!
+              st := appendEvent { filled with matchStopped := 1 }
+                (.fill st.eventCount
+                  (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! remaining (size - remaining))
+            else
+              let filled := fillBidFold st j size
+              let maker := st.bidTraders[j]!
+              st := appendEvent filled
+                (.fill st.eventCount
+                  (makerKey0 st maker) (makerKey1 st maker)
+                  (makerKey2 st maker) (makerKey3 st maker)
+                  (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
   settleSellFold st taker
 
 attribute [pf_inline] swapSellFold
@@ -1927,7 +2004,8 @@ def reduceAskAt (s : State) (trader price sequence qty : UInt64) :
                               baseFree := st.baseFree + removed
                               matchFilled := removed
                               matchStopped := 1 }
-                            st := appendEvent reduced (.reduce sequence price removed (size - removed))
+                            st := appendEvent reduced
+                              (.reduce reduced.eventCount sequence price removed (size - removed))
                           else
                             st := { st with matchStopped := 1, matchError := 1 }
                         else
@@ -1971,7 +2049,8 @@ def reduceBidAt (s : State) (trader price sequence qty : UInt64) :
                     let removed := if qty ≤ size then qty else size
                     st := unlockBidFold st j removed
                     let reduced := { st with matchFilled := removed, matchStopped := 1 }
-                    st := appendEvent reduced (.reduce sequence price removed (size - removed))
+                    st := appendEvent reduced
+                      (.reduce reduced.eventCount sequence price removed (size - removed))
                   else
                     st := { st with matchStopped := 1, matchError := 1 }
         if st.matchError ≠ 0 then
@@ -2039,7 +2118,7 @@ def collectFees (s : State) : Except Error (State × UInt64) :=
     let settled := { s with
       collectedFees := s.collectedFees + s.unclaimedFees
       unclaimedFees := 0 }
-    .ok (appendEvent settled (.fee s.unclaimedFees), s.unclaimedFees)
+    .ok (appendEvent settled (.fee settled.eventCount s.unclaimedFees), s.unclaimedFees)
   else
     .error .overflow
 
@@ -2104,26 +2183,28 @@ def eventCountOf (s : State) : UInt64 :=
 def lastEventKind (s : State) : UInt64 :=
   match s.lastEvent with
   | .uninitialized => 0
-  | .fill _ _ _ _ _ => 1
-  | .place _ _ _ _ _ => 2
-  | .reduce _ _ _ _ => 3
-  | .evict _ _ _ _ => 4
-  | .fillSummary _ _ _ _ _ => 5
-  | .fee _ => 6
-  | .timeInForce _ _ _ => 7
-  | .expiredOrder _ _ _ _ => 8
+  | .header => 1
+  | .fill _ _ _ _ _ _ _ _ _ => 2
+  | .place _ _ _ _ _ _ => 3
+  | .reduce _ _ _ _ _ => 4
+  | .evict _ _ _ _ _ _ _ _ => 5
+  | .fillSummary _ _ _ _ _ _ => 6
+  | .fee _ _ => 7
+  | .timeInForce _ _ _ _ => 8
+  | .expiredOrder _ _ _ _ _ _ _ _ => 9
 
 @[pf_entry]
 def lastEventAmount (s : State) : UInt64 :=
   match s.lastEvent with
   | .uninitialized => 0
-  | .fill _ _ _ filled _ => filled
-  | .place _ _ _ _ placed => placed
-  | .reduce _ _ removed _ => removed
-  | .evict _ _ _ evicted => evicted
-  | .fillSummary _ _ totalBase _ _ => totalBase
-  | .fee fees => fees
-  | .timeInForce _ lastValidSlot _ => lastValidSlot
-  | .expiredOrder _ _ _ removed => removed
+  | .header => 0
+  | .fill _ _ _ _ _ _ _ filled _ => filled
+  | .place _ _ _ _ _ placed => placed
+  | .reduce _ _ _ removed _ => removed
+  | .evict _ _ _ _ _ _ _ evicted => evicted
+  | .fillSummary _ _ _ totalBase _ _ => totalBase
+  | .fee _ fees => fees
+  | .timeInForce _ _ lastValidSlot _ => lastValidSlot
+  | .expiredOrder _ _ _ _ _ _ _ removed => removed
 
 end Projects.Phoenix

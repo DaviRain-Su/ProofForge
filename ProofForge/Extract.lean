@@ -415,6 +415,48 @@ private def isUserName (env : Environment) (n : Name) : Bool :=
       | _ => false
     | none => false
 
+/--
+Profile 已检查过且显式标记的用户 helper 按需 β 展开。控制流与 State
+归一化共用这一个边界；未标记的定义不会因为碰巧能展开而进入 IR。
+-/
+private def unfoldUserHelper (env : Environment) (e : Expr) : Option (Name × Expr) :=
+  let e := strip e
+  match e.getAppFn.constName? with
+  | none => none
+  | some n =>
+    if Attr.isInline env n then
+      match env.find? n with
+      | some (.defnInfo info) => some (n, info.value.beta e.getAppArgs)
+      | _ => none
+    else none
+
+private def resultType (fuel : Nat) (type : Expr) : Expr :=
+  match fuel with
+  | 0 => type
+  | fuel' + 1 =>
+    match strip type with
+    | .forallE _ _ body _ => resultType fuel' body
+    | type => type
+
+private def isScalarResult (env : Environment) (type : Expr) : Bool :=
+  match (resultType 16 type).consumeMData.getAppFn.constName? with
+  | some name => name == ``UInt64 || name == ``Bool || isUInt64Newtype env name
+  | none => false
+
+/-- Reduce `({ s with field := value }).field` before scalar lowering. -/
+private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr := do
+  let projection ← e.getAppFn.constName?
+  let projectionInfo ← env.getProjectionFnInfo? projection
+  let args := e.getAppArgs
+  let base ← args[args.size - 1]?
+  let base := strip base
+  let ctorName ← base.getAppFn.constName?
+  if ctorName != projectionInfo.ctorName then none else pure ()
+  let .ctorInfo ctor ← env.find? ctorName | none
+  let fields := base.getAppArgs
+  if fields.size < ctor.numFields || projectionInfo.i ≥ ctor.numFields then none
+  else fields[fields.size - ctor.numFields + projectionInfo.i]?
+
 private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -423,7 +465,9 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
     match e with
     | .bvar i => some (.arg i)
     | _ =>
-      if let some reduced := reduceUInt64NewtypeMatch? env e then
+      if let some reduced := reduceCtorProjection? env e then
+        asVal env fuel' reduced
+      else if let some reduced := reduceUInt64NewtypeMatch? env e then
         asVal env fuel' reduced
       else if let some v := asLit fuel' e then some v
       else if let some payload := uint64NewtypeCtorPayload? env e then
@@ -466,11 +510,53 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 some (.select cmp lv rv thn els)
             | _, _, _, _, _ => none
           else none
-        | none => none
+        | none =>
+          match asVal env fuel' rawCond,
+              asVal env fuel' args[args.size - 2]!, asVal env fuel' args[args.size - 1]! with
+          | some cond, some thn, some els => some (.select .ne cond (.lit 0) thn els)
+          | _, _, _ => none
       else if let some n := e.getAppFn.constName? then
         let field := n.toString
         let user := isUserName env n
-        if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Svm.Runtime.findPda) &&
+        if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
+            isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
+            isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe") &&
+            e.getAppArgs.size ≥ 2 then
+          let args := e.getAppArgs
+          let cmp : Ops.Cmp :=
+            if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then .eq
+            else if isConstNamed e ``Ne then .ne
+            else if isConstNamed e ``LT.lt then .lt
+            else if isConstNamed e ``LE.le then .le
+            else if isConstNamed e ``GT.gt then .gt
+            else .ge
+          match asVal env fuel' args[args.size - 2]!,
+              asVal env fuel' args[args.size - 1]! with
+          | some lhs, some rhs => some (.select cmp lhs rhs (.lit 1) (.lit 0))
+          | _, _ => none
+        else if isConstNamed e ``Bool.or && e.getAppArgs.size ≥ 2 then
+          let args := e.getAppArgs
+          match asVal env fuel' args[args.size - 2]!,
+              asVal env fuel' args[args.size - 1]! with
+          | some lhs, some rhs => some (.bitOr lhs rhs)
+          | _, _ => none
+        else if isConstNamed e ``Bool.and && e.getAppArgs.size ≥ 2 then
+          let args := e.getAppArgs
+          match asVal env fuel' args[args.size - 2]!,
+              asVal env fuel' args[args.size - 1]! with
+          | some lhs, some rhs => some (.bitAnd lhs rhs)
+          | _, _ => none
+        else if isConstNamed e ``Bool.not && e.getAppArgs.size ≥ 1 then
+          (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map fun value =>
+            .select .eq value (.lit 0) (.lit 1) (.lit 0)
+        else if isConstNamed e ``Decidable.decide && e.getAppArgs.size ≥ 2 then
+          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!
+        else if let some (_, unfolded) := unfoldUserHelper env e then
+          match env.find? n with
+          | some (.defnInfo info) =>
+            if isScalarResult env info.type then asVal env fuel' unfolded else none
+          | _ => none
+        else if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Svm.Runtime.findPda) &&
             e.getAppArgs.size ≥ 1 then
           match strip e.getAppArgs[e.getAppArgs.size - 1]! with
           | .lit (.strVal s) => if s.isEmpty then none else some (.findPda s)
@@ -1607,7 +1693,11 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
               let fname := names[i].toString
               let child := if base.isEmpty then fname else s!"{base}_{fname}"
               let arg := fields[i]
-              let nested := flattenLeaves env child arg
+              -- A payload constructor is one typed variant field, not a nested scalar
+              -- expression whose first argument can stand in for the whole field.
+              let nested :=
+                if (asUInt64VariantCtor env arg).isSome then #[]
+                else flattenLeaves env child arg
               let isVectorField :=
                 match env.find? (c.induct.str fname) with
                 | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
@@ -2737,21 +2827,6 @@ private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr 
         else zetaPureHeadLets env fuel' (body.instantiate1 value)
     | e => e
 
-/--
-Profile 已检查过且显式标记的用户 helper 在控制流边界按需 β 展开。这个边界
-让有界合约能把匹配和结算步骤拆成具名函数，而不要求某个后端认识合约名字。
--/
-private def unfoldUserHelper (env : Environment) (e : Expr) : Option (Name × Expr) :=
-  let e := strip e
-  match e.getAppFn.constName? with
-  | none => none
-  | some n =>
-    if Attr.isInline env n then
-      match env.find? n with
-      | some (.defnInfo info) => some (n, info.value.beta e.getAppArgs)
-      | _ => none
-    else none
-
 private def findYieldPayload (e : Expr) : Option Expr :=
   let rec go (fuel : Nat) (e : Expr) : Option Expr :=
     match fuel with
@@ -2798,6 +2873,29 @@ private def findProjectedInlineBase (env : Environment) (fuel : Nat) (e : Expr) 
       | none => none
     projectedBase? <|> args.findSome? (findProjectedInlineBase env fuel')
 
+/-- Find the mutable source underneath a composed State expression. -/
+private def inlineStateSource (env : Environment) (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    let e := strip e
+    if (unfoldUserHelper env e).isSome then
+      let args := e.getAppArgs
+      if h : args.size > 0 then inlineStateSource env fuel' args[0] else e
+    else
+      let projectionBase? := e.getAppArgs.findSome? fun arg =>
+        match arg.getAppFn.constName? with
+        | some name =>
+          match env.getProjectionFnInfo? name with
+          | some _ =>
+            let args := arg.getAppArgs
+            if h : args.size > 0 then some args[args.size - 1] else none
+          | none => none
+        | none => none
+      match projectionBase? with
+      | some base => inlineStateSource env fuel' base
+      | none => e
+
 private def decodeYieldState (env : Environment) (fuel : Nat) (state : Expr) :
     Except String (Array Ops.Op) :=
   match fuel with
@@ -2805,7 +2903,24 @@ private def decodeYieldState (env : Environment) (fuel : Nat) (state : Expr) :
   | fuel' + 1 =>
     let state := substLets 256 state
     let state0 := strip state
-    if (isConstNamed state0 ``ite || isConstNamed state0 ``dite) &&
+    if let some (name, unfolded) := unfoldUserHelper env state0 then do
+      let args := state0.getAppArgs
+      let (prior, normalized) ←
+        if h : args.size > 0 then
+          let base := args[0]
+          let source := inlineStateSource env 64 base
+          if source == base then
+            .ok (#[], unfolded)
+          else do
+            let prior ← decodeYieldState env fuel' base
+            let normalized := unfolded.replace fun e => if e == base then some source else none
+            .ok (prior, normalized)
+        else
+          .ok (#[], unfolded)
+      match decodeYieldState env fuel' normalized with
+      | .ok ops => .ok (prior ++ ops)
+      | .error reason => .error s!"extract/unsupported: inline state {name}: {reason}"
+    else if (isConstNamed state0 ``ite || isConstNamed state0 ``dite) &&
         state0.getAppArgs.size ≥ 2 then
       let args := state0.getAppArgs
       let peelProofLam (e : Expr) : Expr :=

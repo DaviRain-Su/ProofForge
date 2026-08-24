@@ -84,11 +84,12 @@
 | T-L3-05 | happy | Choice slots | pick_tag 8、pick_p0 16 |
 | T-L3-06 | happy | getHeld empty / hold 77 | 0 / 77 |
 | T-L5-01 | happy | state-carrying bounded `forBody` | loop index 与外层 payload 身份不混淆 |
-| T-L5-02 | happy | `Vector MarketEvent 4` 动态写 | tag + 五 payload 同时写入；SVM/EVM 都可发射 |
+| T-L5-02 | happy | `Vector MarketEvent 4` 动态写 | root `pf_inline` State helper 的 tag + payload、计数与 lastEvent 同时写入；SVM/EVM 都可发射 |
 | T-L5-03 | happy | Phoenix 跨四档 buy/sell | host reference 与链上 structured fold 逐样本一致 |
-| T-L5-04 | happy | Phoenix event batch | Fill/Expired/Reduce/Evict/Place/TIF/Fee/Summary 顺序正确 |
+| T-L5-04 | happy | Phoenix event batch | 官方 ordinal、instruction index、四-limb maker Pubkey 及 Fill/Expired/Reduce/Evict/Place/TIF/Fee/Summary 顺序正确；最宽 payload offset 72 进入 IR |
 | T-L5-05 | happy / fail | Phoenix trader registry | 四-limb Pubkey、幂等注册、容量上限、per-seat deposit 与溢出 |
 | T-L5-06 | happy / fail | Phoenix seat lifecycle | base/quote partial withdraw、非空拒绝 eviction、LIFO address reuse |
 | T-L5-07 | happy / fail | Phoenix authenticated order lifecycle | post/reduce 由完整 signer Pubkey 解析 owner；ask/base 与 bid/quote per-seat reduce 同步解锁；伪造 seat 参数已从 ABI 删除 |
 | T-L5-08 | happy / fail | Phoenix per-seat posting | 普通 ask/bid 锁仓及跨 owner 满书 eviction 原子更新两边 TraderState；抽取 IR 保留动态 index writes |
 | T-L5-09 | happy / fail | Phoenix per-seat matching | signer-derived self-trade；ask/bid fill、TIF expiry、self-cancel 原子更新 maker/taker 四类余额；host/fold 逐 seat 一致；不足 maker ledger fail closed |
+| T-L5-10 | happy | inline scalar / record projection | `pf_inline` UInt64/Bool helper 与 updated-record projection 在 variant payload 中归一化；不泄漏未知 state leaf |

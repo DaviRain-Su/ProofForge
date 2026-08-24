@@ -17,9 +17,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
   | .ok _ => pure ()
   | .error reason => throwError reason
   unless source.schema.leaves.any (·.name == "lastEvent_tag") &&
-      source.schema.leaves.any (·.name == "lastEvent_p4") &&
+      source.schema.leaves.any (·.name == "lastEvent_p8") &&
       source.schema.leaves.any (·.name == "events_0_tag") &&
-      source.schema.leaves.any (·.name == "events_4_p4") &&
+      source.schema.leaves.any (·.name == "events_4_p8") &&
       source.schema.leaves.any (·.name == "traderKey3_3") &&
       source.schema.leaves.any (·.name == "traderBaseFree_3") &&
       source.schema.leaves.any (·.name == "eventCount") do
@@ -32,7 +32,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Svm.Emit.emitProgramAsm source with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.toUTF8.size < 1520000 do
+  unless asm.toUTF8.size < 5750000 do
     throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
   unless !asm.contains "\n\\\n" do
     throwError "Phoenix assembly contains a standalone backslash"
@@ -42,7 +42,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless labels.length == labels.eraseDups.length do
     let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
-  unless ProofForge.Svm.ABI.dataLen program == 1184 do
+  unless ProofForge.Svm.ABI.dataLen program == 1376 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
   let some deposit := program.methods.find? (·.ixName == "depositFunds")
     | throwError "missing depositFunds"
@@ -83,6 +83,18 @@ elab "#pf_guard_phoenix_artifact" : command => do
             hasIndexSet fuel' field thn || hasIndexSet fuel' field els
         | .forBody _ body => hasIndexSet fuel' field body
         | _ => false
+  let rec hasIndexSetAt
+      (fuel : Nat) (field : String) (byteOffset : Nat)
+      (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .indexSet name _ _ _ offset => name == field && offset == byteOffset
+        | .ite _ _ _ thn els =>
+            hasIndexSetAt fuel' field byteOffset thn ||
+              hasIndexSetAt fuel' field byteOffset els
+        | .forBody _ body => hasIndexSetAt fuel' field byteOffset body
+        | _ => false
   let rec hasStoreField (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
     match fuel with
     | 0 => false
@@ -106,6 +118,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
       hasIndexSet 32 "traderQuoteFree" swapSell.ops &&
       hasIndexSet 32 "traderBaseFree" swapSell.ops do
     throwError "Phoenix swap entries do not settle both maker and taker TraderState"
+  unless hasIndexSetAt 32 "events" 72 swap.ops &&
+      hasIndexSetAt 32 "events" 72 swapSell.ops do
+    throwError "Phoenix swaps do not lower the widest MarketEvent payload leaf"
   unless deposit.paramCount == 2 && withdrawBase.paramCount == 1 &&
       withdrawQuote.paramCount == 1 && evictSeat.paramCount == 0 &&
       traderIndex.paramCount == 4 &&
@@ -115,7 +130,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
       eventKind.paramCount == 0 && eventAmount.paramCount == 0 && eventCount.paramCount == 0 do
     throwError "Phoenix instruction parameter counts changed"
   unless asm.contains "; forBody 17" && asm.contains "; forBody 19" &&
-      asm.contains "; forBody 23" && asm.contains "; forBody 4" do
+      asm.contains "; forBody 4" do
     throwError "Phoenix bounded loops missing from assembly"
 
 #pf_guard_phoenix_artifact
@@ -125,7 +140,11 @@ private def withSeats12 (s : Projects.Phoenix.State) : Projects.Phoenix.State :=
     traderCount := 2
     traderBumpIndex := 3
     traderFreeHead := 3
-    traderUsed := #v[1, 1, 0, 0] }
+    traderUsed := #v[1, 1, 0, 0]
+    traderKey0 := #v[0, 22, 0, 0]
+    traderKey1 := #v[0, 23, 0, 0]
+    traderKey2 := #v[0, 24, 0, 0]
+    traderKey3 := #v[0, 25, 0, 0] }
 
 private def sameBusinessResult :
     Except Error (Projects.Phoenix.State × UInt64) →
@@ -376,8 +395,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.sizes[0]! == 8 && st.priceTicks[0]! == 50 && st.traders[0]! == 7 &&
         st.sequences[0]! == 1 && st.sequence == 2 &&
         st.baseLocked == 8 && st.baseFree == 0 && ret == 8 &&
-        st.eventCount == 1 && st.events[0]! == .place 1 0 0 50 8 &&
-        st.lastEvent == .place 1 0 0 50 8
+        st.eventCount == 1 && st.events[0]! == .place 0 1 0 0 50 8 &&
+        st.lastEvent == .place 0 1 0 0 50 8
   | .error _ => false
 
 #guard
@@ -447,8 +466,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.sizes == #v[1, 1, 2, 3] && st.priceTicks == #v[10, 15, 20, 30] &&
         st.traders == #v[1, 9, 2, 3] && st.sequences == #v[1, 5, 2, 3] &&
         st.baseLocked == 7 && st.baseFree == 4 && orderedAsks st && ret == 1 &&
-        st.eventCount == 2 && st.events[0]! == .evict 4 4 40 4 &&
-        st.events[1]! == .place 5 0 0 15 1
+        st.eventCount == 2 && st.events[0]! == .evict 0 4 0 0 0 4 40 4 &&
+        st.events[1]! == .place 1 5 0 0 15 1
   | .error _ => false
 
 #guard
@@ -464,7 +483,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderBaseLocked == #v[1, 6, 0, 0] &&
         st.traderBaseFree == #v[0, 4, 0, 0] &&
         st.baseLocked == 7 && st.baseFree == 4 && ret == 1 &&
-        st.events[0]! == .evict 2 4 40 4
+        st.events[0]! == .evict 0 22 23 24 25 4 40 4
   | .error _ => false
 
 #guard
@@ -480,9 +499,9 @@ private def sellSamples : List Projects.Phoenix.State := [
       7 50 8 9 10 10 20 10 19 with
   | .ok (st, ret) =>
       ret == 8 && st.eventCount == 2 &&
-        st.events[0]! == .place 1 9 10 50 8 &&
-        st.events[1]! == .timeInForce 1 10 20 &&
-        st.lastEvent == .timeInForce 1 10 20
+        st.events[0]! == .place 0 1 9 10 50 8 &&
+        st.events[1]! == .timeInForce 1 1 10 20 &&
+        st.lastEvent == .timeInForce 1 1 10 20
   | .error _ => false
 
 #guard
@@ -491,7 +510,7 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.bidSizes == #v[2, 0, 0, 0] && st.bidPriceTicks == #v[50, 0, 0, 0] &&
         st.bidTraders[0]! == 7 && st.bidSequences[0]! == ~~~(1 : UInt64) &&
         st.sequence == 2 && st.quoteLocked == 100 && st.quoteFree == 0 && ret == 2 &&
-        st.lastEvent == .place 1 0 0 50 2
+        st.lastEvent == .place 0 1 0 0 50 2
   | .error _ => false
 
 #guard
@@ -534,7 +553,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderQuoteLocked == #v[25, 90, 0, 0] &&
         st.traderQuoteFree == #v[75, 10, 0, 0] &&
         st.quoteLocked == 115 && st.quoteFree == 85 && ret == 1 &&
-        st.events[0]! == .evict 2 4 10 1
+        st.events[0]! == .evict 0 22 23 24 25 4 10 1
   | .error _ => false
 
 #guard
@@ -549,8 +568,8 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .ok (st, ret) =>
       st.bidSizes == #v[1, 1, 1, 1] && st.bidPriceTicks == #v[40, 30, 25, 20] &&
         st.quoteLocked == 115 && st.quoteFree == 85 && orderedBids st && ret == 1 &&
-        st.eventCount == 2 && st.events[0]! == .evict 4 4 10 1 &&
-        st.events[1]! == .place 5 0 0 25 1
+        st.eventCount == 2 && st.events[0]! == .evict 0 4 0 0 0 4 10 1 &&
+        st.events[1]! == .place 1 5 0 0 25 1
   | .error _ => false
 
 #guard
@@ -575,9 +594,9 @@ private def sellSamples : List Projects.Phoenix.State := [
       7 50 2 10 20 10 19 with
   | .ok (st, ret) =>
       ret == 2 && st.eventCount == 2 &&
-        st.events[0]! == .place 1 0 0 50 2 &&
-        st.events[1]! == .timeInForce 1 10 20 &&
-        st.lastEvent == .timeInForce 1 10 20
+        st.events[0]! == .place 0 1 0 0 50 2 &&
+        st.events[1]! == .timeInForce 1 1 10 20 &&
+        st.lastEvent == .timeInForce 1 1 10 20
   | .error _ => false
 
 #guard
@@ -593,10 +612,10 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.baseLocked == 6 && st.baseFree == 4 &&
         st.unclaimedFees == 1 && st.collectedFees == 0 &&
         st.eventCount == 3 &&
-        st.events[0]! == .fill 7 1 10 2 0 &&
-        st.events[1]! == .fill 8 2 11 2 1 &&
-        st.events[2]! == .fillSummary 0 0 4 42 1 &&
-        st.lastEvent == .fillSummary 0 0 4 42 1
+        st.events[0]! == .fill 0 7 0 0 0 1 10 2 0 &&
+        st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 0 0 4 42 1 &&
+        st.lastEvent == .fillSummary 2 0 0 4 42 1
   | .error _ => false
 
 #guard
@@ -610,9 +629,9 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.quoteLocked == 77 && st.quoteFree == 22 &&
         st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
         st.eventCount == 3 &&
-        st.events[0]! == .expiredOrder 0 0 10 2 &&
-        st.events[1]! == .fill 0 0 11 2 1 &&
-        st.events[2]! == .fillSummary 0 0 2 22 1
+        st.events[0]! == .expiredOrder 0 0 0 0 0 0 10 2 &&
+        st.events[1]! == .fill 1 0 0 0 0 0 11 2 1 &&
+        st.events[2]! == .fillSummary 2 0 0 2 22 1
   | .error _ => false
 
 #guard
@@ -680,10 +699,10 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.quoteLocked == 957 && st.quoteFree == 42 &&
         st.baseLocked == 6 && st.baseFree == 4 && st.unclaimedFees == 1 &&
         st.eventCount == 3 &&
-        st.events[0]! == .fill 7 1 10 2 0 &&
-        st.events[1]! == .fill 8 2 11 2 1 &&
-        st.events[2]! == .fillSummary 11 12 4 42 1 &&
-        st.lastEvent == .fillSummary 11 12 4 42 1
+        st.events[0]! == .fill 0 7 0 0 0 1 10 2 0 &&
+        st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 11 12 4 42 1 &&
+        st.lastEvent == .fillSummary 2 11 12 4 42 1
   | .error _ => false
 
 #guard
@@ -726,9 +745,9 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
         st.quoteLocked == 977 && st.quoteFree == 22 &&
         st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
-        st.eventCount == 3 && st.events[0]! == .reduce 1 10 2 0 &&
-        st.events[1]! == .fill 8 2 11 2 1 &&
-        st.events[2]! == .fillSummary 0 0 2 22 1
+        st.eventCount == 3 && st.events[0]! == .reduce 0 1 10 2 0 &&
+        st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 0 0 2 22 1
   | .error _ => false
 
 #guard
@@ -742,8 +761,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.sizes == #v[1, 3, 0, 0] && ret == 0 &&
         st.quoteLocked == 1000 && st.quoteFree == 0 &&
         st.baseLocked == 4 && st.baseFree == 1 && st.unclaimedFees == 0 &&
-        st.eventCount == 2 && st.events[0]! == .reduce 1 10 1 1 &&
-        st.events[1]! == .fillSummary 0 0 0 0 0
+        st.eventCount == 2 && st.events[0]! == .reduce 0 1 10 1 1 &&
+        st.events[1]! == .fillSummary 1 0 0 0 0 0
   | .error _ => false
 
 #guard
@@ -761,9 +780,9 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderBaseLocked == #v[0, 1, 0, 0] &&
         st.traderBaseFree == #v[4, 0, 0, 0] &&
         st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
-        st.eventCount == 3 && st.events[0]! == .reduce 1 10 2 0 &&
-        st.events[1]! == .fill 2 2 11 2 1 &&
-        st.events[2]! == .fillSummary 0 0 2 22 1
+        st.eventCount == 3 && st.events[0]! == .reduce 0 1 10 2 0 &&
+        st.events[1]! == .fill 1 22 23 24 25 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 0 0 2 22 1
   | .error _ => false
 
 #guard
@@ -780,8 +799,8 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderQuoteFree == #v[977, 22, 0, 0] && st.quoteFree == 999 &&
         st.traderBaseLocked == #v[0, 1, 0, 0] &&
         st.traderBaseFree == #v[2, 2, 0, 0] &&
-        st.events[0]! == .expiredOrder 2 0 10 2 &&
-        st.events[1]! == .fill 2 0 11 2 1
+        st.events[0]! == .expiredOrder 0 22 23 24 25 0 10 2 &&
+        st.events[1]! == .fill 1 22 23 24 25 0 11 2 1
   | .error _ => false
 
 #guard
@@ -817,9 +836,9 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.bidSizes == #v[0, 1, 5, 0] && ret == 4 &&
         st.quoteLocked == 61 && st.quoteFree == 45 && st.baseFree == 4 &&
         st.unclaimedFees == 1 && st.eventCount == 3 &&
-        st.events[0]! == .fill 7 1 12 2 0 &&
-        st.events[1]! == .fill 8 2 11 2 1 &&
-        st.events[2]! == .fillSummary 0 0 4 46 1
+        st.events[0]! == .fill 0 7 0 0 0 1 12 2 0 &&
+        st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 0 0 4 46 1
   | .error _ => false
 
 #guard
@@ -834,9 +853,9 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.bidSizes == #v[0, 1, 5, 0] && ret == 4 &&
         st.quoteLocked == 61 && st.quoteFree == 45 && st.baseFree == 4 &&
         st.unclaimedFees == 1 && st.eventCount == 3 &&
-        st.events[0]! == .fill 7 1 12 2 0 &&
-        st.events[1]! == .fill 8 2 11 2 1 &&
-        st.events[2]! == .fillSummary 13 14 4 46 1
+        st.events[0]! == .fill 0 7 0 0 0 1 12 2 0 &&
+        st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 13 14 4 46 1
   | .error _ => false
 
 #guard
@@ -850,9 +869,9 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
         st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1 &&
-        st.eventCount == 3 && st.events[0]! == .expiredOrder 7 1 12 2 &&
-        st.events[1]! == .fill 8 2 11 2 1 &&
-        st.events[2]! == .fillSummary 0 0 2 22 1
+        st.eventCount == 3 && st.events[0]! == .expiredOrder 0 7 0 0 0 1 12 2 &&
+        st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 0 0 2 22 1
   | .error _ => false
 
 #guard
@@ -883,9 +902,9 @@ private def sellSamples : List Projects.Phoenix.State := [
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
         st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1 &&
-        st.eventCount == 3 && st.events[0]! == .reduce 1 12 2 0 &&
-        st.events[1]! == .fill 8 2 11 2 1 &&
-        st.events[2]! == .fillSummary 0 0 2 22 1
+        st.eventCount == 3 && st.events[0]! == .reduce 0 1 12 2 0 &&
+        st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
+        st.events[2]! == .fillSummary 2 0 0 2 22 1
   | .error _ => false
 
 #guard
@@ -899,8 +918,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.bidSizes == #v[1, 3, 0, 0] && ret == 0 &&
         st.quoteLocked == 45 && st.quoteFree == 12 && st.baseFree == 1 &&
         st.unclaimedFees == 0 && st.eventCount == 2 &&
-        st.events[0]! == .reduce 1 12 1 1 &&
-        st.events[1]! == .fillSummary 0 0 0 0 0
+        st.events[0]! == .reduce 0 1 12 1 1 &&
+        st.events[1]! == .fillSummary 1 0 0 0 0 0
   | .error _ => false
 
 #guard
@@ -917,8 +936,8 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderQuoteFree == #v[45, 0, 0, 0] &&
         st.traderBaseFree == #v[0, 2, 0, 0] &&
         st.quoteLocked == 11 && st.quoteFree == 45 && st.baseFree == 2 &&
-        st.events[0]! == .reduce 1 12 2 0 &&
-        st.events[1]! == .fill 2 2 11 2 1
+        st.events[0]! == .reduce 0 1 12 2 0 &&
+        st.events[1]! == .fill 1 22 23 24 25 2 11 2 1
   | .error _ => false
 
 #guard
@@ -935,8 +954,8 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderQuoteLocked == #v[0, 11, 0, 0] &&
         st.traderQuoteFree == #v[21, 24, 0, 0] &&
         st.traderBaseFree == #v[0, 2, 0, 0] &&
-        st.events[0]! == .expiredOrder 2 1 12 2 &&
-        st.events[1]! == .fill 2 2 11 2 1
+        st.events[0]! == .expiredOrder 0 22 23 24 25 1 12 2 &&
+        st.events[1]! == .fill 1 22 23 24 25 2 11 2 1
   | .error _ => false
 
 #guard
@@ -971,7 +990,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderBaseLocked == #v[5, 1, 0, 0] &&
         st.traderBaseFree == #v[4, 0, 0, 0] &&
         st.matchFilled == 0 && ret == 3 && st.eventCount == 1 &&
-        st.events[0]! == .reduce 1 10 3 5 && st.lastEvent == .reduce 1 10 3 5
+        st.events[0]! == .reduce 0 1 10 3 5 && st.lastEvent == .reduce 0 1 10 3 5
   | .error _ => false
 
 #guard
@@ -1010,7 +1029,7 @@ private def sellSamples : List Projects.Phoenix.State := [
       st.bidSizes == #v[2, 1, 0, 0] && st.quoteLocked == 35 &&
         st.quoteFree == 22 && st.traderQuoteLocked == #v[24, 11, 0, 0] &&
         st.traderQuoteFree == #v[0, 22, 0, 0] && ret == 2 &&
-        st.lastEvent == .reduce (~~~(2 : UInt64)) 11 2 1
+        st.lastEvent == .reduce 0 (~~~(2 : UInt64)) 11 2 1
   | .error _ => false
 
 #guard
@@ -1058,8 +1077,8 @@ private def sellSamples : List Projects.Phoenix.State := [
   match collectFees { (init 100) with collectedFees := 9, unclaimedFees := 3 } with
   | .ok (st, ret) =>
       st.collectedFees == 12 && st.unclaimedFees == 0 && ret == 3 &&
-        st.eventCount == 1 && st.events[0]! == .fee 3 &&
-        st.lastEvent == .fee 3 && lastEventKind st == 6 && lastEventAmount st == 3
+        st.eventCount == 1 && st.events[0]! == .fee 0 3 &&
+        st.lastEvent == .fee 0 3 && lastEventKind st == 7 && lastEventAmount st == 3
   | .error _ => false
 
 #guard

@@ -165,6 +165,94 @@ elab "#pf_guard_dynamic_write_return" : command => do
 
 #pf_guard_dynamic_write_return
 
+elab "#pf_guard_inline_state_dynamic_write" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initMarketEventBatch
+        ``Tests.Fixtures.appendMarketEventInFold
+        ``Tests.Fixtures.firstMarketEventValue with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some append := program.methods.find? (·.ixName == "appendMarketEventInFold")
+    | throwError "missing inline State dynamic-write fixture"
+  let rec collectWrites (fuel : Nat) (ops : Array ProofForge.Ops.Op) :
+      Array (String × Nat) × Array String :=
+    match fuel with
+    | 0 => (#[], #[])
+    | fuel' + 1 => Id.run do
+      let mut dynamic := #[]
+      let mut static := #[]
+      for op in ops do
+        match op with
+        | .indexSet name _ _ _ offset => dynamic := dynamic.push (name, offset)
+        | .storeField name _ => static := static.push name
+        | .ite _ _ _ thn els =>
+          let thenWrites := collectWrites fuel' thn
+          let elseWrites := collectWrites fuel' els
+          dynamic := dynamic ++ thenWrites.1 ++ elseWrites.1
+          static := static ++ thenWrites.2 ++ elseWrites.2
+        | .forBody _ body =>
+          let bodyWrites := collectWrites fuel' body
+          dynamic := dynamic ++ bodyWrites.1
+          static := static ++ bodyWrites.2
+        | _ => pure ()
+      return (dynamic, static)
+  let writes := collectWrites 16 append.ops
+  unless [0, 8, 16, 24, 32, 40].all fun offset =>
+      writes.1.contains ("events", offset) do
+    throwError s!"inline State helper lost variant-vector leaves: {writes.1}"
+  let rec hasSelect : Nat → ProofForge.Ops.Val → Bool
+    | 0, _ => false
+    | _ + 1, .select _ _ _ _ _ => true
+    | fuel + 1, .field base _ => hasSelect fuel base
+    | fuel + 1, .indexGet base _ index _ _ =>
+      hasSelect fuel base || hasSelect fuel index
+    | _ + 1, _ => false
+  let rec containsInlineScalar (fuel : Nat) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+      | .indexSet "events" _ value _ 8 => hasSelect 16 value
+      | .ite _ _ _ thn els =>
+        containsInlineScalar fuel' thn || containsInlineScalar fuel' els
+      | .forBody _ body => containsInlineScalar fuel' body
+      | _ => false
+  unless containsInlineScalar 16 append.ops do
+    throwError "pf_inline scalar event payload was not normalized"
+  let rec containsProjectedUpdate (fuel : Nat) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+      | .indexSet "events" _ (.addU64 _ (.lit 1)) _ 16 => true
+      | .ite _ _ _ thn els =>
+        containsProjectedUpdate fuel' thn || containsProjectedUpdate fuel' els
+      | .forBody _ body => containsProjectedUpdate fuel' body
+      | _ => false
+  unless containsProjectedUpdate 16 append.ops do
+    throwError "updated-record scalar projection was not normalized"
+  unless writes.2.contains "eventCount" do
+    throwError s!"inline State helper lost scalar update: {writes.2}"
+  unless ["lastEvent_tag", "lastEvent_p0", "lastEvent_p1", "lastEvent_p2",
+      "lastEvent_p3", "lastEvent_p4"].all writes.2.contains do
+    throwError s!"inline State helper lost static variant leaves: {writes.2}"
+  let svm ←
+    match ProofForge.Svm.Emit.emitCounterAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmProgram ←
+    match ProofForge.Evm.IR.fromProgram program with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.Emit.emitYul evmProgram with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless svm.contains "; indexSet events[4]+40" &&
+      evm.contains "sstore(add(" do
+    throwError "inline State dynamic variant writes did not reach both targets"
+
+#pf_guard_inline_state_dynamic_write
+
 elab "#pf_guard_conditional_local" : command => do
   let env ← getEnv
   let program ←
@@ -263,6 +351,9 @@ elab "#pf_guard_compound_error_guard" : command => do
       | _ => 0
   match compound.ops with
   | #[.ite .ne condition (.lit 0) #[.okState (.arg 0)] #[.errorOverflow]] =>
+      unless comparisonLeaves 8 condition == 4 do
+        throwError s!"compound guard lost comparisons: {repr compound.ops}"
+  | #[.ite .eq condition (.lit 1) #[.okState (.arg 0)] #[.errorOverflow]] =>
       unless comparisonLeaves 8 condition == 4 do
         throwError s!"compound guard lost comparisons: {repr compound.ops}"
   | _ => throwError s!"compound error-guard IR mismatch: {repr compound.ops}"

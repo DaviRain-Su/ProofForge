@@ -235,6 +235,25 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
       return (bindChecked indent nm expr, nm, st')
   | none =>
     match v with
+    | .bitAnd l r | .bitOr l r | .bitXor l r =>
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (nm, st3) := fresh st2
+        let op :=
+          match v with
+          | .bitAnd .. => "and"
+          | .bitOr .. => "or"
+          | _ => "xor"
+        let txt := preL ++ preR ++
+          indent ++ "let " ++ nm ++ " := " ++ op ++ "(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
+        return (txt, nm, st3)
+    | .bitNot value =>
+        let (pre, valueExpr, st1) ←
+          materializeVal p indent paramPrefix paramCount value st
+        let (nm, st2) := fresh st1
+        let txt := pre ++ indent ++ "let " ++ nm ++ " := and(not(" ++ valueExpr ++
+          "), " ++ u64MaxYul ++ ")" ++ nl
+        return (txt, nm, st2)
     | .shiftL l r | .shiftR l r =>
         let (preR, rv, st1) ← materializeVal p indent paramPrefix paramCount r st
         let (preL, lv, st2) ← materializeVal p indent paramPrefix paramCount l st1

@@ -76,8 +76,10 @@ fee collection 已进真实源构建。bid book 的 free-funds collateral、驱�
 reduce/cancel 和 sell IOC 也复用同一 fold 落地。四 seat trader registry 已按完整
 四-limb Pubkey 做 lookup/bump allocation/deposit，并保存 per-seat TraderState；base/quote
 partial withdraw、zero-state eviction 和 LIFO address reuse 已完成。post/reduce/match
-已逐 seat 结算，swap 的 self-trade identity 也由 signer 推导。下一步 resolve event
-中的 maker Pubkey，并接双 vault CPI；动态树拓扑和删除 fixup 仍是后续独立范围。
+已逐 seat 结算，swap 的 self-trade identity 也由 signer 推导。event 已对齐官方
+ordinal/index，并把 maker seat resolve 成四-limb Pubkey；下一步实现真实
+`AuditLogHeader` + Borsh self-CPI recorder，再接双 vault CPI。动态树拓扑和删除
+fixup 仍是后续独立范围。
 
 
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。

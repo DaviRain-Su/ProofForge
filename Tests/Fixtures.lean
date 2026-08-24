@@ -141,16 +141,21 @@ def marketEventValue (s : MarketEventState) : UInt64 :=
 /-- Fixed-capacity event storage exercises dynamic writes of a multi-leaf variant element. -/
 structure MarketEventBatchState where
   events : Vector MarketEvent 4
+  eventCount : UInt64
+  lastEvent : MarketEvent
   deriving Repr
 
 def initMarketEventBatch (_seed : UInt64) : MarketEventBatchState :=
-  { events := #v[.uninitialized, .uninitialized, .uninitialized, .uninitialized] }
+  { events := #v[.uninitialized, .uninitialized, .uninitialized, .uninitialized]
+    eventCount := 0
+    lastEvent := .uninitialized }
 
 def setMarketEventAt (s : MarketEventBatchState)
     (i maker sequence price filled remaining : UInt64) :
     Except Examples.Counter.Error (MarketEventBatchState × UInt64) :=
   if h : i.toNat < 4 then
-    .ok ({ events := s.events.set i.toNat (.fill maker sequence price filled remaining) }, filled)
+    .ok ({ s with
+      events := s.events.set i.toNat (.fill maker sequence price filled remaining) }, filled)
   else
     .error .overflow
 
@@ -159,9 +164,41 @@ def setMarketEventReturningIndex (s : MarketEventBatchState)
     (i maker sequence price filled remaining : UInt64) :
     Except Examples.Counter.Error (MarketEventBatchState × UInt64) :=
   if h : i.toNat < 4 then
-    .ok ({ events := s.events.set i.toNat (.fill maker sequence price filled remaining) }, i)
+    .ok ({ s with
+      events := s.events.set i.toNat (.fill maker sequence price filled remaining) }, i)
   else
     .error .overflow
+
+/-- A root State-returning helper must retain both its dynamic variant write and scalar update. -/
+private def appendMarketEvent (s : MarketEventBatchState) (event : MarketEvent) :
+    MarketEventBatchState :=
+  if h : s.eventCount.toNat < 4 then
+    { s with
+      events := s.events.set s.eventCount.toNat event
+      eventCount := s.eventCount + 1
+      lastEvent := event }
+  else
+    s
+
+attribute [pf_inline] appendMarketEvent
+
+private def activeMarketSeat (s : MarketEventBatchState) (address : UInt64) : Bool :=
+  if address = 0 || 4 < address then false else s.eventCount ≠ 0
+
+private def marketMaker (s : MarketEventBatchState) (address : UInt64) : UInt64 :=
+  if activeMarketSeat s address then s.eventCount else address
+
+attribute [pf_inline] activeMarketSeat marketMaker
+
+def appendMarketEventInFold (s : MarketEventBatchState)
+    (maker sequence price filled remaining : UInt64) :
+    Except Examples.Counter.Error (MarketEventBatchState × UInt64) := Id.run do
+  let mut st := s
+  for _ in [:1] do
+    let staged := { st with eventCount := st.eventCount + 1 }
+    st := appendMarketEvent st
+      (.fill (marketMaker st maker) staged.eventCount price filled remaining)
+  .ok (st, st.eventCount)
 
 def firstMarketEventValue (s : MarketEventBatchState) : UInt64 :=
   match s.events[0]! with

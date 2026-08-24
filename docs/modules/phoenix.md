@@ -22,11 +22,11 @@
 | 每-seat `TraderState` | 四个 `trader{Quote,Base}{Locked,Free}` 向量 |
 | `Side` / `SelfTradeBehavior` | 无 payload 枚举（宿主） |
 | `MatchingEngineResponse` | `match*` bounded-fold scratch |
-| `MarketEvent` | tag + 五个规范 payload 槽；instruction 内固定容量 5 的 batch |
+| `PhoenixMarketEvent` | 官方 ordinal tag + 九个规范 payload 槽；instruction 内固定容量 5 的 batch |
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
-147 个 8-byte 叶，账户含 discriminator 共 1,184 bytes。`#pf_build Projects.Phoenix`
-digest `6993b240f63a9cb7`。
+171 个 8-byte 叶，账户含 discriminator 共 1,376 bytes。`#pf_build Projects.Phoenix`
+digest `3a4652b6083de283`。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -82,17 +82,20 @@ registered taker 执行 `baseFree → quoteFree`，过期和 self-cancel 解锁 
 撮合逐档记录 `Fill` / `ExpiredOrder` / self-trade `Reduce`，最后记录
 `FillSummary`；reduce 和收取费用分别记录 `Reduce` / `Fee`。事件 batch 的动态
 variant-vector 写入通过 target-neutral typed layout 降到两个 target，不需要 emitter
-认识 Phoenix。`Place` / `FillSummary` 的 `u128 client_order_id` 用 little-endian
-`(lo, hi)` 两个 `UInt64` limb 完整保留；这正好仍落在五 payload 的最大布局内，
-所以 event layout 未再增大。
+认识 Phoenix。ordinal 对齐官方 wire enum：0 Uninitialized、1 Header、2 Fill、3 Place、
+4 Reduce、5 Evict、6 FillSummary、7 Fee、8 TimeInForce、9 ExpiredOrder。每个实际事件
+携带 instruction 内 index；maker-bearing Fill/Evict/ExpiredOrder 在构造前把内部 seat
+解析成完整四 limb Pubkey。`Place` / `FillSummary` 的 `u128 client_order_id` 继续用
+little-endian `(lo, hi)` 两个 `UInt64` limb 完整保留。最宽事件现在是九 payload，测试
+明确钉住动态 `events` 的 byte offset 72，防止抽取器静默漏掉尾叶。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 1,483,588-byte assembly、
-253,432-byte eBPF ELF 和 12,086-byte IDL。assembly 是中间文本，不部署；当前 ELF
-约 247.5 KiB。per-seat matching 分支在 ask/bid fold 内联，相对此前 post-only 切片，
-assembly 增加 450,508 bytes，ELF 增加 47,680 bytes。测试把 assembly budget 钉在
-1.52 MB，并拒绝重复 label，同时断言 maker/taker 六类动态 ledger index writes 都存在。
-链上 buy / sell 分别是 19 / 23 phase，挂单是 17 phase；代码体积按 bounded loop
-增长，不按四档静态展开。
+真实源模块经 `pf build --target svm Phoenix` 生成 5,613,720-byte assembly、
+841,984-byte eBPF ELF 和 12,974-byte IDL。assembly 是未做 CSE/共享基本块的中间文本，
+不是部署文件；当前 ELF 约 822.3 KiB。完整 maker Pubkey 与 event/lastEvent 双写会重复
+展开 conditional values，因此文本体积明显增加。测试把 assembly 回归预算钉在
+5.75 MB，并拒绝重复 label，同时断言 maker/taker ledger writes 和最宽 event leaf
+都存在。链上 buy / sell 都是 19 phase，挂单是 17 phase；要显著缩小文件应在通用
+IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter 加事件特判。
 
 ## 官方有、本仓没有
 
@@ -103,8 +106,7 @@ assembly 增加 450,508 bytes，ELF 增加 47,680 bytes。测试把 assembly bud
 | `Ladder` / `Vec` | 不定长 |
 | trader tree 的动态 RB 拓扑 | 已有 bounded Pubkey registry、allocator 和 per-seat 值；key 查找暂用四槽扫描 |
 | vault-backed seat lifecycle | bounded deposit/withdraw/zero-state eviction/LIFO reuse 已完成；双 vault Token CPI 尚未接这些入口 |
-| maker Pubkey event | per-seat post/reduce/match 已接 TraderState；`Fill` event 仍保存内部 seat，尚未 resolve 四 limb Pubkey |
 | Seat + 双 vault 同一入口 | state transition 已有；CPI 账户表会抬高 |
-| Borsh wire event / `Log` self-CPI | 当前只存 typed fixed-capacity batch，尚未编码成官方一字节 tag 并发给 event recorder |
+| `AuditLogHeader` / Borsh wire event / `Log` self-CPI | ordinal 1 只留 Header 占位；尚未编码真实 header 和窄字段，也未发给 event recorder |
 
 这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。

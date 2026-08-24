@@ -411,7 +411,7 @@ elab "#pf_guard_variant_vector_lowering" : command => do
   let some vector := extracted.schema.vector? "events"
     | throwError "variant vector schema has no vector layout"
   unless vector.length == 4 && vector.elementBytes == 48 && vector.elementLeaves == 6 &&
-      extracted.schema.leaves.size == 24 do
+      extracted.schema.leaves.size == 31 do
     throwError s!"unexpected variant vector schema: {repr extracted.schema}"
   let some setter := extracted.methods.find? (·.ixName == "setMarketEventAt")
     | throwError "missing variant vector setter"
@@ -439,7 +439,7 @@ elab "#pf_guard_variant_vector_lowering" : command => do
     match ProofForge.Evm.Emit.emitYul evm with
     | .ok yul => pure yul
     | .error reason => throwError reason
-  unless svm.slots.size == 24 && evm.slots.size == 24 &&
+  unless svm.slots.size == 31 && evm.slots.size == 31 &&
       !svmAsm.isEmpty && !evmYul.isEmpty do
     throwError "variant vector did not survive both target lowerings and emitters"
 
