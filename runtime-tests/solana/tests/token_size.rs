@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -5,7 +7,6 @@ use {
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_native_token::LAMPORTS_PER_SOL,
-    solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     spl_token_interface::state::Mint,
     std::{env, fs, path::PathBuf},
@@ -87,6 +88,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(dummy, dummy_signer),
             AccountMeta::new_readonly(mint, false),
             AccountMeta::new_readonly(token_id, false),
@@ -104,6 +106,10 @@ fn size_returns_classic_token_account_len() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (dummy, funded()),
             (mint, mint_account(dummy)),
             (token_id, token_acc),
@@ -116,7 +122,7 @@ fn size_returns_classic_token_account_len() {
 }
 
 #[test]
-fn size_missing_signer_fails() {
+fn size_does_not_require_dummy_signer() {
     let (program_id, mollusk) = harness();
     let dummy = Pubkey::new_unique();
     let mint = Pubkey::new_unique();
@@ -125,10 +131,17 @@ fn size_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (dummy, funded()),
             (mint, mint_account(dummy)),
             (token_id, token_acc),
         ],
-        &[Check::err(ProgramError::Custom(1))],
+        &[
+            Check::success(),
+            Check::return_data(&TOKEN_ACCOUNT_LEN.to_le_bytes()),
+        ],
     );
 }

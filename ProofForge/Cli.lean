@@ -93,7 +93,7 @@ private unsafe def extractSvmPrograms (names : Array String) :
         match Svm.Registry.digestOf name with
         | some expected =>
           if digest == expected then .ok program
-          else .error s!"{name}: ir/mismatch: extracted digest != fixture"
+          else .error s!"{name}: ir/mismatch: extracted digest {digest} != fixture {expected}"
         | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
@@ -125,7 +125,7 @@ private unsafe def extractEvmPrograms (names : Array String) :
         match Evm.Registry.digestOf name with
         | some expected =>
           if digest == expected then .ok program
-          else .error s!"{name}: ir/mismatch: extracted evm digest != fixture"
+          else .error s!"{name}: ir/mismatch: extracted evm digest {digest} != fixture {expected}"
         | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"

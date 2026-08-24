@@ -20,7 +20,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def signed (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := invokeSigned 1 #[] #[] "vault" (findPda "vault")
+    let _ := invokeSigned 1 #[{ acc := 0, signer := true }] #[] "vault" (findPda "vault")
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
@@ -29,7 +29,7 @@ def signed (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def badBump (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := invokeSigned 1 #[] #[] "vault" 0
+    let _ := invokeSigned 1 #[{ acc := 0, signer := true }] #[] "vault" 0
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

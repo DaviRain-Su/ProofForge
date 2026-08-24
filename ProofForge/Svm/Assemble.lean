@@ -44,7 +44,9 @@ partial def findFileNamed (dir : System.FilePath) (name : String) : IO (Option S
 
 private def assembleOutput (outDir : System.FilePath) (name asm idl : String) : IO Result := do
   let soName := s!"{name}.so"
-  let project := outDir / "sbpf-project"
+  -- `sbpf build` compiles every source under its project root. Keep each program isolated so a
+  -- stale or failed source from one build cannot poison later, otherwise unrelated programs fail.
+  let project := outDir / "sbpf-project" / name
   let srcDir := project / "src" / name
   let deployDir := project / "deploy"
   IO.FS.createDirAll srcDir

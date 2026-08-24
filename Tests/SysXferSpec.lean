@@ -15,16 +15,16 @@ open ProofForge.Svm.Runtime
   | .error _ => false
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedSysXfer
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedSysXfer == 4
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedSysXfer == 5
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedSysXfer with
   | .error _ => false
   | .ok asm =>
-      asm.contains "invoke programIx=3" &&
+      asm.contains "invoke programIx=4" &&
         asm.contains "dataLen=57" &&
         asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "jlt r1, 4" &&
-        asm.contains "ja sendSeed"
+        asm.contains "jlt r1, 5" &&
+        asm.contains "call sendSeed"
 
 end Tests.SysXferSpec

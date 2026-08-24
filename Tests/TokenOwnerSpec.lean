@@ -15,7 +15,7 @@ open ProofForge.Svm.Runtime
   | .error _ => false
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "ja setOwner" &&
-        asm.contains "ja approve"
+        asm.contains "call setOwner" &&
+        asm.contains "call approve"
 
 end Tests.TokenOwnerSpec

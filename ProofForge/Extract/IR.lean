@@ -110,7 +110,8 @@ partial def toSvmOp : Op → Except String Svm.Ops.Op
   | .ite cmp lhs rhs thn els =>
       return .ite cmp (← toSvmVal lhs) (← toSvmVal rhs)
         (← thn.mapM toSvmOp) (← els.mapM toSvmOp)
-  | .forAccum n addend => return .forAccum n (← toSvmVal addend)
+  | .forAccum n addend resultLocal =>
+      return .forAccum n (← toSvmVal addend) resultLocal
   | .forBody n body => return .forBody n (← body.mapM toSvmOp)
   | .indexSetLeaf name _ _ _ leaf =>
       throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"
@@ -173,7 +174,8 @@ partial def toEvmOp : Op → Except String Evm.Ops.Op
   | .ite cmp lhs rhs thn els =>
       return .ite cmp (← toEvmVal lhs) (← toEvmVal rhs)
         (← thn.mapM toEvmOp) (← els.mapM toEvmOp)
-  | .forAccum n addend => return .forAccum n (← toEvmVal addend)
+  | .forAccum n addend resultLocal =>
+      return .forAccum n (← toEvmVal addend) resultLocal
   | .forBody n body => return .forBody n (← body.mapM toEvmOp)
   | .indexSetLeaf name _ _ _ leaf =>
       throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"

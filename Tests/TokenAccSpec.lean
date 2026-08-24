@@ -21,18 +21,18 @@ open ProofForge.Svm.Runtime
   | .error _ => false
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenAcc
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenAcc == 4
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenAcc == 5
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenAcc with
   | .error _ => false
   | .ok asm =>
-      asm.contains "invoke programIx=3" &&
+      asm.contains "invoke programIx=4" &&
         asm.contains "dataLen=33" &&
         asm.contains "dataLen=1" &&
         asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "jlt r1, 4" &&
-        asm.contains "ja openAcc" &&
-        asm.contains "ja closeAcc"
+        asm.contains "jlt r1, 5" &&
+        asm.contains "call openAcc" &&
+        asm.contains "call closeAcc"
 
 end Tests.TokenAccSpec

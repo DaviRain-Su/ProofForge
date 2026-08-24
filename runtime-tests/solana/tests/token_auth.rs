@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -102,6 +104,7 @@ fn build_set_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(authority, authority_signer),
             AccountMeta::new(mint, false),
             AccountMeta::new_readonly(new_authority, false),
@@ -123,6 +126,7 @@ fn build_revoke_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(owner, owner_signer),
             AccountMeta::new(source, false),
             AccountMeta::new_readonly(pad, false),
@@ -142,6 +146,7 @@ fn set_auth_rewrites_mint_authority() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (mint, mint_account(authority)),
             (new_authority, funded()),
@@ -169,6 +174,7 @@ fn set_auth_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (mint, mint_account(authority)),
             (new_authority, funded()),
@@ -197,6 +203,7 @@ fn revoke_clears_delegate() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (owner, funded()),
             (source, token_account(mint, owner, Some(delegate))),
             (pad, funded()),
@@ -226,6 +233,7 @@ fn revoke_missing_owner_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (owner, funded()),
             (source, token_account(mint, owner, Some(delegate))),
             (pad, funded()),

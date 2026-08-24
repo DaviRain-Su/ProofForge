@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -79,6 +81,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[CREATE_LAMPORTS]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, true),
             AccountMeta::new(new_acc, new_signer),
             AccountMeta::new_readonly(system, false),
@@ -96,6 +99,7 @@ fn create_allocates_account_owned_by_program() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(BASE_LAMPORTS)),
             (new_acc, funded(0)),
             (system, system_acc),
@@ -125,6 +129,7 @@ fn create_missing_new_account_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(BASE_LAMPORTS)),
             (new_acc, funded(0)),
             (system, system_acc),

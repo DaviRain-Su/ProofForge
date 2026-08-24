@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -5,7 +7,6 @@ use {
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_native_token::LAMPORTS_PER_SOL,
-    solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     spl_token_interface::{
@@ -97,6 +98,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(owner, owner_signer),
             AccountMeta::new(native_acc, false),
             AccountMeta::new_readonly(token_id, false),
@@ -114,6 +116,10 @@ fn sync_native_updates_amount() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (owner, funded(LAMPORTS_PER_SOL)),
             (native_acc, native_token_account(owner, EXTRA)),
             (token_id, token_prog),
@@ -129,7 +135,7 @@ fn sync_native_updates_amount() {
 }
 
 #[test]
-fn sync_native_missing_signer_fails() {
+fn sync_native_does_not_require_owner_signer() {
     let (program_id, mollusk) = harness();
     let owner = Pubkey::new_unique();
     let native_acc = Pubkey::new_unique();
@@ -138,14 +144,18 @@ fn sync_native_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (owner, funded(LAMPORTS_PER_SOL)),
             (native_acc, native_token_account(owner, EXTRA)),
             (token_id, token_prog),
         ],
         &[
-            Check::err(ProgramError::Custom(1)),
+            Check::success(),
             Check::account(&native_acc)
-                .data_slice(64, &0u64.to_le_bytes())
+                .data_slice(64, &EXTRA.to_le_bytes())
                 .build(),
         ],
     );

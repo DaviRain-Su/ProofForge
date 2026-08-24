@@ -24,6 +24,20 @@ elab "#pf_guard_phoenix_artifact" : command => do
       source.schema.leaves.any (·.name == "traderBaseFree_3") &&
       source.schema.leaves.any (·.name == "eventCount") do
     throwError "Phoenix bounded event/trader layout is missing"
+  let some initMethod := source.methods.find? (·.ixName == "initialize")
+    | throwError "missing initialize"
+  let initValues := initMethod.ops.filterMap fun
+    | .returnState value => some value
+    | _ => none
+  unless initValues.size == source.schema.leaves.size do
+    throwError s!"Phoenix init covers {initValues.size}/{source.schema.leaves.size} state leaves"
+  for (name, expected) in #[
+      ("traderCount", .lit 0), ("traderBumpIndex", .lit 1), ("traderFreeHead", .lit 1)
+    ] do
+    let some index := source.schema.leaves.findIdx? (·.name == name)
+      | throwError s!"missing init leaf {name}"
+    unless initValues[index]! == expected do
+      throwError s!"Phoenix init value for {name} is {repr initValues[index]!}"
   let program ←
     match ProofForge.Extract.IR.toLegacyProgram source with
     | .ok program => pure program
@@ -44,6 +58,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
   unless ProofForge.Svm.ABI.dataLen program == 1376 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
+  unless ProofForge.Svm.ABI.cpiAccountCount program == 6 do
+    throwError s!"Phoenix CPI account scan stopped early: " ++
+      s!"{ProofForge.Svm.ABI.cpiAccountCount program}/6 accounts"
   let some deposit := program.methods.find? (·.ixName == "depositFunds")
     | throwError "missing depositFunds"
   let some withdrawBase := program.methods.find? (·.ixName == "withdrawBase")
@@ -95,6 +112,17 @@ elab "#pf_guard_phoenix_artifact" : command => do
               hasIndexSetAt fuel' field byteOffset els
         | .forBody _ body => hasIndexSetAt fuel' field byteOffset body
         | _ => false
+  let rec hasIndexSetValue
+      (fuel : Nat) (field : String) (value : ProofForge.Ops.Val)
+      (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .indexSet name _ actual _ _ => name == field && actual == value
+        | .ite _ _ _ thn els =>
+            hasIndexSetValue fuel' field value thn || hasIndexSetValue fuel' field value els
+        | .forBody _ body => hasIndexSetValue fuel' field value body
+        | _ => false
   let rec hasStoreField (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
     match fuel with
     | 0 => false
@@ -104,6 +132,28 @@ elab "#pf_guard_phoenix_artifact" : command => do
             hasStoreField fuel' field thn || hasStoreField fuel' field els
         | .forBody _ body => hasStoreField fuel' field body
         | _ => false
+  let rec hasStoreFieldValue
+      (fuel : Nat) (field : String) (value : ProofForge.Ops.Val)
+      (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .storeField name actual => name == field && actual == value
+        | .ite _ _ _ thn els =>
+            hasStoreFieldValue fuel' field value thn ||
+              hasStoreFieldValue fuel' field value els
+        | .forBody _ body => hasStoreFieldValue fuel' field value body
+        | _ => false
+  let rec hasOkStateValue
+      (fuel : Nat) (value : ProofForge.Ops.Val) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .okState actual => actual == value
+        | .ite _ _ _ thn els =>
+            hasOkStateValue fuel' value thn || hasOkStateValue fuel' value els
+        | .forBody _ body => hasOkStateValue fuel' value body
+        | _ => false
   unless hasIndexSet 32 "traderBaseLocked" post.ops &&
       hasIndexSet 32 "traderBaseFree" post.ops &&
       hasIndexSet 32 "sequences" post.ops && hasStoreField 32 "sequence" post.ops &&
@@ -111,6 +161,15 @@ elab "#pf_guard_phoenix_artifact" : command => do
       hasIndexSet 32 "traderQuoteFree" postBid.ops &&
       hasIndexSet 32 "bidSequences" postBid.ops && hasStoreField 32 "sequence" postBid.ops do
     throwError "Phoenix post entries do not preserve composed ledger/book updates"
+  unless hasIndexSetValue 32 "traderBaseFree" (.arg 0) deposit.ops &&
+      hasIndexSetValue 32 "traderQuoteFree" (.arg 1) deposit.ops do
+    throwError "Phoenix state-loop parameters are not in source ABI order"
+  unless hasStoreFieldValue 32 "lastEvent_p2" (.arg 2) post.ops &&
+      hasStoreFieldValue 32 "lastEvent_p3" (.arg 3) post.ops &&
+      hasStoreFieldValue 32 "lastEvent_p4" (.arg 0) post.ops &&
+      hasStoreFieldValue 32 "lastEvent_p5" (.arg 1) post.ops &&
+      hasOkStateValue 32 (.arg 1) post.ops do
+    throwError "Phoenix nested bind parameters are not in source ABI order"
   unless hasIndexSet 32 "traderQuoteFree" swap.ops &&
       hasIndexSet 32 "traderBaseLocked" swap.ops &&
       hasIndexSet 32 "traderBaseFree" swap.ops &&
@@ -273,6 +332,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         st.traderKey0[0]! == 11 && st.traderKey1[0]! == 12 &&
         st.traderKey2[0]! == 13 && st.traderKey3[0]! == 14 &&
         st.traderBaseFree[0]! == 7 && st.traderQuoteFree[0]! == 9 &&
+        st.baseFree == 7 && st.quoteFree == 9 &&
         traderIndexOf st 11 12 13 14 == 1 && traderBaseFreeAt st 1 == 7
   | .error _ => false
 
@@ -289,7 +349,8 @@ private def sellSamples : List Projects.Phoenix.State := [
     match depositFundsFor s1 11 12 13 14 5 6 with
     | .ok (s2, address) =>
         address == 1 && s2.traderCount == 1 && s2.traderBumpIndex == 2 &&
-          s2.traderBaseFree[0]! == 12 && s2.traderQuoteFree[0]! == 15
+          s2.traderBaseFree[0]! == 12 && s2.traderQuoteFree[0]! == 15 &&
+          s2.baseFree == 12 && s2.quoteFree == 15
     | .error _ => false
 
 #guard
@@ -346,6 +407,7 @@ private def sellSamples : List Projects.Phoenix.State := [
           match evictSeatFor s4 11 12 13 14 with
           | .ok (s5, address) =>
               baseOut == 5 && quoteOut == 9 && finalBaseOut == 2 && address == 1 &&
+                s5.baseFree == 0 && s5.quoteFree == 0 &&
                 s5.traderCount == 0 && s5.traderBumpIndex == 2 &&
                 s5.traderFreeHead == 1 && s5.traderNextFree[0]! == 2 &&
                 s5.traderUsed[0]! == 0 && s5.traderKey0[0]! == 0

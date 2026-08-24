@@ -220,7 +220,7 @@ partial def ofLegacyOp : ProofForge.Ops.Op → Op
       .ext (.evm (.sendEth (ofLegacyVal w0) (ofLegacyVal w1)
         (ofLegacyVal w2) (ofLegacyVal amount)))
   | .evmLog name amount => .ext (.evm (.log name (ofLegacyVal amount)))
-  | .forAccum n addend => .forAccum n (ofLegacyVal addend)
+  | .forAccum n addend resultLocal => .forAccum n (ofLegacyVal addend) resultLocal
   | .forBody n body => .forBody n (body.map ofLegacyOp)
   | .indexSet name idx value len elemOff =>
       .indexSet name (ofLegacyVal idx) (ofLegacyVal value) len elemOff
@@ -266,7 +266,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
   | .ite cmp lhs rhs thn els =>
       return .ite (cmpToLegacy cmp) (← toLegacyVal lhs) (← toLegacyVal rhs)
         (← thn.mapM toLegacyOp) (← els.mapM toLegacyOp)
-  | .forAccum n addend => return .forAccum n (← toLegacyVal addend)
+  | .forAccum n addend resultLocal =>
+      return .forAccum n (← toLegacyVal addend) resultLocal
   | .forBody n body => return .forBody n (← body.mapM toLegacyOp)
   | .indexSetLeaf name _ _ _ leaf =>
       throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"

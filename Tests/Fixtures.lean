@@ -300,6 +300,14 @@ def runFold (s : FoldState) (lhs rhs : UInt64) :
       st := { st with quotient := lhs / rhs, remainder := lhs % rhs }
   .ok (st, st.product)
 
+/-- A state-carrying loop must preserve the explicit mutable accumulator initializer. -/
+def runInitializedFold (s : FoldState) (lhs : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut st := { s with product := lhs }
+  for _ in [:1] do
+    st := { st with remainder := lhs }
+  .ok (st, st.product)
+
 def foldProduct (s : FoldState) : UInt64 :=
   s.product
 

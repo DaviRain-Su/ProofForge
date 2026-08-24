@@ -215,7 +215,7 @@ private partial def opsCanon (ops : Array Ops.Op) : String :=
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
     | .evmLog n v => s!"elog.{n}({valCanon v})"
-    | .forAccum n v => s!"for({n},{valCanon v})"
+    | .forAccum n v resultLocal => s!"for.{resultLocal}({n},{valCanon v})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
     | .indexSet n i v k off =>
         if off == 0 then s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"

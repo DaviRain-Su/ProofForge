@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -111,6 +113,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(owner, owner_signer),
             AccountMeta::new(acc1, false),
             AccountMeta::new(acc2, false),
@@ -130,6 +133,10 @@ fn init_writes_owner_and_mint() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (owner, funded(LAMPORTS_PER_SOL)),
             (account, uninitialized_token_account()),
             (mint, mint_account(owner)),
@@ -149,7 +156,7 @@ fn init_writes_owner_and_mint() {
 }
 
 #[test]
-fn init_missing_owner_signer_fails() {
+fn init_does_not_require_owner_signer() {
     let (program_id, mollusk) = harness();
     let owner = Pubkey::new_unique();
     let account = Pubkey::new_unique();
@@ -159,15 +166,20 @@ fn init_missing_owner_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (owner, funded(LAMPORTS_PER_SOL)),
             (account, uninitialized_token_account()),
             (mint, mint_account(owner)),
             (token_id, token_acc),
         ],
         &[
-            Check::err(ProgramError::Custom(1)),
+            Check::success(),
             Check::account(&account)
-                .data_slice(0, &[0u8; 32])
+                .data_slice(0, mint.as_ref())
+                .data_slice(32, owner.as_ref())
                 .build(),
         ],
     );
@@ -188,6 +200,10 @@ fn close_returns_lamports_to_dest() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (owner, funded(LAMPORTS_PER_SOL)),
             (source, source_acc),
             (dest, funded(dest_before)),
@@ -218,6 +234,10 @@ fn close_missing_owner_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (owner, funded(LAMPORTS_PER_SOL)),
             (source, source_acc),
             (dest, funded(LAMPORTS_PER_SOL)),

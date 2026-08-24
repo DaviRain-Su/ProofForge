@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -84,6 +86,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[XFER]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(base, base_signer),
             AccountMeta::new(from, false),
             AccountMeta::new(dest, false),
@@ -103,6 +106,7 @@ fn transfer_with_seed_moves_lamports() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (from, funded(BASE_LAMPORTS)),
             (dest, funded(BASE_LAMPORTS)),
@@ -132,6 +136,7 @@ fn transfer_with_seed_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (from, funded(BASE_LAMPORTS)),
             (dest, funded(BASE_LAMPORTS)),
@@ -156,6 +161,7 @@ fn transfer_with_seed_wrong_address_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (wrong, funded(BASE_LAMPORTS)),
             (dest, funded(BASE_LAMPORTS)),

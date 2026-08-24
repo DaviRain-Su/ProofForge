@@ -50,7 +50,10 @@ namespace ProofForge.Svm.Runtime
 -/
 @[irreducible] def signerKey0 : UInt64 := 0
 
-/-- 内层 AccountMeta。编译期钉死下标和旗。 -/
+/--
+内层 AccountMeta。`acc` 是 state 账户之后的 CPI 账户区下标；编译期钉死下标和旗。
+物理账户 0 永远留给已认证的 ProofForge state。
+-/
 structure CpiMeta where
   acc : UInt64
   signer : Bool := false
@@ -69,7 +72,7 @@ inductive CpiWord where
 
 /--
 编译期钉死的 CPI。抽出器认这个名字，发射 `sol_invoke_signed_c`。
-`programIx`、metas、data 布局必须在抽出时已知。
+`programIx`、metas 和 `.accKey` 都相对于 state 之后的 CPI 账户区，且必须在抽出时已知。
 宿主侧是不可约 stub，返回 0，不要当链上结果用。
 运行时拼 program id / remaining accounts / 变长 data 仍 fail closed。
 -/
@@ -195,7 +198,7 @@ def tokenInitMint : UInt64 :=
 
 /--
 Token `SyncNative`：把 native token 账户的 amount 同步成底层 lamports。
-外层：owner s+w、native 账户 w、Token。
+外层账户 0 只为统一 CPI 区保留；native 账户 w、Token。SyncNative 不要求 owner 签名。
 -/
 def tokenSyncNative : UInt64 :=
   invoke 2

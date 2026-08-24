@@ -8,6 +8,10 @@ def maxTxAccountLocks : Nat := 64
 def accInRange (acc : Nat) : Bool :=
   acc < maxTxAccountLocks
 
+/-- CPI indices address the external-account region after the state account at physical index 0. -/
+def cpiAccInRange (acc : Nat) : Bool :=
+  acc + 1 < maxTxAccountLocks
+
 /-- SVM-only source value intrinsics. Recursive operands live in `Core.Ops.Val.ext`. -/
 inductive ValKind where
   | clockSlot
@@ -52,6 +56,7 @@ def ValKind.arity : ValKind → Nat
 abbrev Val := ProofForge.Core.Ops.Val ValKind
 abbrev Cmp := ProofForge.Core.Ops.Cmp
 
+/-- Account index relative to the CPI account region; physical account 0 is reserved for state. -/
 structure CpiMeta where
   acc : Nat
   signer : Bool := false
@@ -114,11 +119,13 @@ def ownerIsSelf (acc : Nat) : Val := leaf (.ownerIsSelf acc)
 def CpiWord.wellFormed (word : CpiWord Val) : Bool :=
   match word with
   | .u64le value => value.wellFormed ValKind.arity
+  | .accKey acc => cpiAccInRange acc
   | _ => true
 
 def OpExt.wellFormed : OpExt Val → Bool
-  | .invoke _ _ data _ bump =>
-      data.all CpiWord.wellFormed &&
+  | .invoke programIx metas data _ bump =>
+      cpiAccInRange programIx && metas.all (cpiAccInRange ·.acc) &&
+        data.all CpiWord.wellFormed &&
         match bump with
         | some value => value.wellFormed ValKind.arity
         | none => true
@@ -126,16 +133,13 @@ def OpExt.wellFormed : OpExt Val → Bool
 def Op.wellFormed (op : Op) : Bool :=
   ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op
 
-private partial def walkOps (fuel : Nat) (ops : Array Op) (predicate : Op → Bool) : Bool :=
-  match fuel with
-  | 0 => false
-  | fuel' + 1 =>
-      ops.any fun op =>
-        predicate op ||
-          match op with
-          | .ite _ _ _ thn els => walkOps fuel' thn predicate || walkOps fuel' els predicate
-          | .forBody _ body => walkOps fuel' body predicate
-          | _ => false
+private partial def walkOps (ops : Array Op) (predicate : Op → Bool) : Bool :=
+  ops.any fun op =>
+    predicate op ||
+      match op with
+      | .ite _ _ _ thn els => walkOps thn predicate || walkOps els predicate
+      | .forBody _ body => walkOps body predicate
+      | _ => false
 
 partial def valNeedsWalk : Val → Bool
   | .arg _ | .local _ | .lit _ | .loopIx => false
@@ -225,26 +229,26 @@ private def OpExt.hasSelect : OpExt Val → Bool
       data.any CpiWord.hasSelect || bump.any valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=
-  walkOps 16 ops fun | .ext (.invoke ..) => true | _ => false
+  walkOps ops fun | .ext (.invoke ..) => true | _ => false
 
 def hasStoreField (ops : Array Op) : Bool :=
-  walkOps 16 ops fun | .storeField .. => true | _ => false
+  walkOps ops fun | .storeField .. => true | _ => false
 
 def hasIndexSet (ops : Array Op) : Bool :=
-  walkOps 16 ops fun | .indexSet .. => true | _ => false
+  walkOps ops fun | .indexSet .. => true | _ => false
 
 def hasCheckedArith (ops : Array Op) : Bool :=
-  walkOps 16 ops fun
+  walkOps ops fun
     | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
     | .checkedDivU64 .. | .checkedModU64 .. => true
     | _ => false
 
 def hasForAccum (ops : Array Op) : Bool :=
-  walkOps 16 ops fun | .forAccum .. => true | _ => false
+  walkOps ops fun | .forAccum .. => true | _ => false
 
 def hasSelect (ops : Array Op) : Bool :=
-  walkOps 16 ops fun
-    | .letLocal _ value | .setLocal _ value | .forAccum _ value
+  walkOps ops fun
+    | .letLocal _ value | .setLocal _ value | .forAccum _ value _
     | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
         valHasSelect value
     | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
@@ -254,8 +258,8 @@ def hasSelect (ops : Array Op) : Bool :=
     | _ => false
 
 def hasAcc1 (ops : Array Op) : Bool :=
-  walkOps 16 ops fun
-    | .letLocal _ value | .setLocal _ value | .forAccum _ value
+  walkOps ops fun
+    | .letLocal _ value | .setLocal _ value | .forAccum _ value _
     | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
         valNeedsWalk value
     | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
@@ -265,7 +269,7 @@ def hasAcc1 (ops : Array Op) : Bool :=
     | _ => false
 
 private def opMinAccounts : Op → Nat
-  | .letLocal _ value | .setLocal _ value | .forAccum _ value
+  | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
       valMinAccounts value
   | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
@@ -274,17 +278,12 @@ private def opMinAccounts : Op → Nat
   | .ext payload => payload.minAccounts
   | _ => 0
 
-def opsMinAccounts (ops : Array Op) : Nat :=
-  let rec go (fuel : Nat) (items : Array Op) (current : Nat) : Nat :=
-    match fuel with
-    | 0 => current
-    | fuel' + 1 =>
-        items.foldl (init := current) fun result op =>
-          let result := Nat.max result (opMinAccounts op)
-          match op with
-          | .ite _ _ _ thn els => Nat.max (go fuel' thn result) (go fuel' els result)
-          | .forBody _ body => go fuel' body result
-          | _ => result
-  go 16 ops 0
+partial def opsMinAccounts (ops : Array Op) : Nat :=
+  ops.foldl (init := 0) fun result op =>
+    let result := Nat.max result (opMinAccounts op)
+    match op with
+    | .ite _ _ _ thn els => Nat.max result (Nat.max (opsMinAccounts thn) (opsMinAccounts els))
+    | .forBody _ body => Nat.max result (opsMinAccounts body)
+    | _ => result
 
 end ProofForge.Svm.Ops

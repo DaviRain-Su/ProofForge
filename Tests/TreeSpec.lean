@@ -131,7 +131,7 @@ elab "#pf_guard_tree_allocator" : command => do
       ((storeNames rotateLeft.ops).filter (· == "root")).size == 2 &&
       ((storeNames rotateRight.ops).filter (· == "root")).size == 2 do
     throwError "Tree rotation writeback is incomplete or duplicated"
-  unless maxIndexWrites insert.ops == 34 && insert.evaluation.dynamicWrites.size == 238 do
+  unless maxIndexWrites insert.ops == 38 && insert.evaluation.dynamicWrites.size == 302 do
     throwError "Tree insertion writeback changed or expanded"
   let xi := ProofForge.Ops.Val.select .ge (.arg 0) (.lit 1)
     (.subU64 (.arg 0) (.lit 1)) (.lit 0)
@@ -147,7 +147,7 @@ elab "#pf_guard_tree_allocator" : command => do
     if line.endsWith ":" then some line else none
   unless labels.length == labels.eraseDups.length do
     throwError "Tree allocator assembly contains duplicate labels"
-  unless asm.toUTF8.size < 450000 do
+  unless asm.toUTF8.size < 550000 do
     throwError s!"Tree assembly expanded unexpectedly: {asm.toUTF8.size} bytes"
 
 #pf_guard_tree_allocator

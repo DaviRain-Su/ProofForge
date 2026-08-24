@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -79,6 +81,7 @@ fn build_ix(
         program_id,
         &instruction_data(disc_hex, params),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, payer_signer),
             AccountMeta::new(recipient, false),
             AccountMeta::new_readonly(system, false),
@@ -97,6 +100,7 @@ fn transfer_moves_lamports_and_returns() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(BASE_LAMPORTS)),
             (recipient, funded(0)),
             (system, system_acc),
@@ -123,6 +127,7 @@ fn transfer_missing_payer_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(BASE_LAMPORTS)),
             (recipient, funded(0)),
             (system, system_acc),
@@ -146,6 +151,7 @@ fn transfer_underfunded_rolls_back() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(XFER - 1)),
             (recipient, funded(0)),
             (system, system_acc),

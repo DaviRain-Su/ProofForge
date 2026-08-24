@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -103,6 +105,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[DELTA]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(authority, authority_signer),
             AccountMeta::new(acc1, false),
             AccountMeta::new(acc2, false),
@@ -122,6 +125,7 @@ fn mint_to_increases_dest_and_supply() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (mint, mint_account(authority, INITIAL)),
             (dest, token_account(mint, authority, 0)),
@@ -151,6 +155,7 @@ fn mint_missing_authority_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (mint, mint_account(authority, INITIAL)),
             (dest, token_account(mint, authority, 0)),
@@ -174,6 +179,7 @@ fn burn_decreases_source_and_supply() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (owner, funded()),
             (source, token_account(mint, owner, INITIAL)),
             (mint, mint_account(owner, INITIAL)),
@@ -203,6 +209,7 @@ fn burn_missing_owner_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (owner, funded()),
             (source, token_account(mint, owner, INITIAL)),
             (mint, mint_account(owner, INITIAL)),

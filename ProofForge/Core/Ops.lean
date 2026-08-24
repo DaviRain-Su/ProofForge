@@ -49,7 +49,8 @@ inductive Op (ValExt : Type) (OpExt : Type → Type) where
   | checkedModU64 (lhs rhs : Val ValExt)
   | ite (cmp : Cmp) (lhs rhs : Val ValExt)
       (thn els : Array (Op ValExt OpExt))
-  | forAccum (n : Nat) (addend : Val ValExt)
+  /-- Sum `addend` over `[0, n)`, exposing the final accumulator through `resultLocal`. -/
+  | forAccum (n : Nat) (addend : Val ValExt) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array (Op ValExt OpExt))
   /-- Dynamic write identified by its logical leaf name inside a vector element. The extractor
   resolves it against `Schema` before target lowering; an empty name denotes a scalar element. -/
@@ -85,7 +86,7 @@ partial def Val.wellFormed (arity : Ext → Nat) : Val Ext → Bool
 /-- Walk common control flow while allowing the caller to inspect target extension payloads. -/
 partial def Op.wellFormed (arity : ValExt → Nat)
     (validExt : OpExt (Val ValExt) → Bool) : Op ValExt OpExt → Bool
-  | .letLocal _ value | .setLocal _ value | .forAccum _ value
+  | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
       value.wellFormed arity
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true

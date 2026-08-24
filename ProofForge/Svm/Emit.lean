@@ -7,6 +7,9 @@ def overflowCode : String := "0x1001"
 /-- Deep scratch stays clear of expression temporaries, walk headers, scalar locals, and CPI data. -/
 private def sysvarScratch : Nat := 3072
 private def sysvarProgramIdScratch : Nat := 3104
+/-- Loop control must not overlap expression temporaries (8..), scalar locals (320..), or
+walked-account headers (512..). -/
+private def loopCounterScratch : Nat := 304
 
 private def handlerLabel (m : IR.Method) : String :=
   if m.ixName != "" then m.ixName else IR.ixNameOfLean (IR.lastName m.name)
@@ -82,9 +85,10 @@ walk_al_{tag}:
   mov64 r8, r5
 "
 
-/-- 账户 i 的 header* 存在 `[r10 - (48 + 8*i)]`。ix 长度指针在最后一个 header 之后。 -/
+/-- Account headers live above expression temporaries and scalar locals. The instruction-data
+length pointer follows the final account header. -/
 private def headerStack (i : Nat) : Nat :=
-  48 + 8 * i
+  512 + 8 * i
 
 private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
   Id.run do
@@ -98,39 +102,38 @@ private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
 {emitSkipAccount s!"{i}_{tag}"}"
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
-private def walkInvokeMetas (fuel : Nat) (ops : Array IR.Op)
+private partial def walkInvokeMetas (ops : Array IR.Op)
     (acc : Array (Ops.CpiMeta × Bool)) : Array (Ops.CpiMeta × Bool) :=
-  match fuel with
-  | 0 => acc
-  | fuel' + 1 =>
-    ops.foldl (init := acc) fun a op =>
-      match op with
-      | .invoke _ metas _ seed _ => a ++ metas.map (·, seed.isSome)
-      | .ite _ _ _ t f => walkInvokeMetas fuel' f (walkInvokeMetas fuel' t a)
-      | _ => a
+  ops.foldl (init := acc) fun a op =>
+    match op with
+    | .invoke _ metas _ seed _ => a ++ metas.map (·, seed.isSome)
+    | .ite _ _ _ t f => walkInvokeMetas f (walkInvokeMetas t a)
+    | .forBody _ body => walkInvokeMetas body a
+    | _ => a
 
-/-- acc0 必须 signer+writable；其余 writable 查外层；无 seeds 的 signer 也查外层。 -/
-private def emitCpiFlagChecks (p : IR.Program) (err : String) : String :=
-  let metas := p.methods.foldl (init := #[]) fun a m => walkInvokeMetas 8 m.ops a
+/-- State is writable (and signer for init); CPI-account flags are checked on physical index +1. -/
+private def emitCpiFlagChecks (ops : Array IR.Op) (err : String) (stateSigner : Bool) : String :=
+  let metas := walkInvokeMetas ops #[]
   let extra := Id.run do
     let mut seen : Array Nat := #[0]
     let mut out := ""
     for (m, seeded) in metas do
-      unless seen.any (· == m.acc) do
-        seen := seen.push m.acc
+      let physical := m.acc + 1
+      unless seen.any (· == physical) do
+        seen := seen.push physical
         if m.writable then
           out := out ++
-            s!"  ldxdw r8, [r10 - {headerStack m.acc}]\n  ldxb r1, [r8 + 2]\n  jeq r1, 0, {err}\n"
+            s!"  ldxdw r8, [r10 - {headerStack physical}]\n  ldxb r1, [r8 + 2]\n  jeq r1, 0, {err}\n"
         -- PDA 用 seeds 签内层，不能要求外层 is_signer。
         if m.signer && !seeded then
           out := out ++
-            s!"  ldxdw r8, [r10 - {headerStack m.acc}]\n  ldxb r1, [r8 + 1]\n  jeq r1, 0, {err}\n"
+            s!"  ldxdw r8, [r10 - {headerStack physical}]\n  ldxb r1, [r8 + 1]\n  jeq r1, 0, {err}\n"
     return out
+  let signer :=
+    if stateSigner then s!"  ldxb r1, [r8 + 1]\n  jeq r1, 0, {err}\n" else ""
   s!"\
   ldxdw r8, [r10 - {headerStack 0}]
-  ldxb r1, [r8 + 1]
-  jeq r1, 0, {err}
-  ldxb r1, [r8 + 2]
+{signer}  ldxb r1, [r8 + 2]
   jeq r1, 0, {err}
 {extra}"
 
@@ -149,11 +152,8 @@ private def valSignerAccs : Ops.Val → Array Nat
       valSignerAccs l ++ valSignerAccs r ++ valSignerAccs t ++ valSignerAccs f
   | _ => #[]
 
-private def walkSignerAccs (fuel : Nat) (ops : Array IR.Op) : Array Nat :=
-  match fuel with
-  | 0 => #[]
-  | fuel' + 1 =>
-    ops.foldl (init := #[]) fun acc op =>
+private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
+  ops.foldl (init := #[]) fun acc op =>
       let here :=
         match op with
         | .letLocal _ v => valSignerAccs v
@@ -167,18 +167,18 @@ private def walkSignerAccs (fuel : Nat) (ops : Array IR.Op) : Array Nat :=
               (match bump with | some v => valSignerAccs v | none => #[])
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
-        | .forAccum _ v => valSignerAccs v
+        | .forAccum _ v _ => valSignerAccs v
         | .forBody _ _ => #[]
         | .indexSet _ i v _ _ => valSignerAccs i ++ valSignerAccs v
       let nested :=
         match op with
-        | .ite _ _ _ t f => walkSignerAccs fuel' t ++ walkSignerAccs fuel' f
-        | .forBody _ body => walkSignerAccs fuel' body
+        | .ite _ _ _ t f => walkSignerAccs t ++ walkSignerAccs f
+        | .forBody _ body => walkSignerAccs body
         | _ => #[]
       acc ++ here ++ nested
 
 private def emitWalkSignerChecks (ops : Array IR.Op) (err : String) : String :=
-  let accs := walkSignerAccs 16 ops
+  let accs := walkSignerAccs ops
   Id.run do
     let mut seen : Array Nat := #[]
     let mut out := ""
@@ -236,7 +236,7 @@ private def preludeWalk (p : IR.Program) (marker label : String) (ixLen : Nat)
 
 /-- CPI prelude: authenticated walked state plus account-meta flags. -/
 private def preludeCpi (p : IR.Program) (marker label : String) (ixLen : Nat)
-    (needUninit : Bool) : String :=
+    (needUninit : Bool) (ops : Array IR.Op) : String :=
   let err := s!"err_check_{label}"
   let n := IR.cpiAccountCount p
   s!"\
@@ -245,7 +245,7 @@ private def preludeCpi (p : IR.Program) (marker label : String) (ixLen : Nat)
 {emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
   ldxdw r1, [r1 + 0]
   jne r1, {ixLen}, {err}
-{emitWalkStateChecks p marker ixLen err needUninit}{emitCpiFlagChecks p err}  ja body_{label}
+{emitWalkStateChecks p marker ixLen err needUninit}{emitCpiFlagChecks ops err needUninit}  ja body_{label}
 {err}:
   lddw r0, 0x1
   exit
@@ -765,7 +765,7 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .ext (.rentExemption n) #[] =>
     .ok (emitLoadRentExemption n.toNat stackOff scope)
   | .loopIx =>
-    .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
+    .ok s!"  ; load loop index\n  ldxdw r1, [r10 - {loopCounterScratch}]\n  stxdw [r10 - {stackOff}], r1\n"
   | .select .ge l r (.subU64 tl tr) (.lit 0) =>
     if l == tl && r == tr then emitLoadNatSub p l r stackOff nonce scope
     else emitLoadSelect p .ge l r (.subU64 tl tr) (.lit 0) stackOff nonce scope
@@ -892,6 +892,9 @@ private def emitInitBody (p : IR.Program) (marker : String) (label : String) (op
   let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
   if vs.isEmpty then
     .error "extract/unsupported: init missing returnState"
+  else if !p.schema.isEmpty && vs.size != p.slots.size then
+    .error (s!"extract/unsupported: init initializes {vs.size} state leaves, " ++
+      s!"schema requires {p.slots.size}")
   else do
     let mut body :=
       if IR.usesWalk p then
@@ -900,7 +903,7 @@ private def emitInitBody (p : IR.Program) (marker : String) (label : String) (op
     let mut i : Nat := 0
     for s in p.slots do
       if h : i < vs.size then
-        let load ← loadVal p vs[i] 8
+        let load ← loadVal p vs[i] 8 i s!"{label}_init_{i}"
         let store ← storeField p s.name 8
         body := body ++ load ++ store
       else
@@ -937,11 +940,8 @@ private partial def valUsesSigner (v : Ops.Val) : Bool :=
       valUsesSigner l || valUsesSigner r || valUsesSigner t || valUsesSigner f
   | _ => false
 
-private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
-  match fuel with
-  | 0 => false
-  | fuel' + 1 =>
-    ops.any fun
+private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
+  ops.any fun
       | .letLocal _ v => valUsesSigner v
       | .joinLocal _ => false
       | .setLocal _ v => valUsesSigner v
@@ -952,9 +952,9 @@ private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
       | .checkedModU64 l r => valUsesSigner l || valUsesSigner r
       | .ite _ l r t f =>
           valUsesSigner l || valUsesSigner r ||
-            walkUsesSigner fuel' t || walkUsesSigner fuel' f
-      | .forAccum _ v => valUsesSigner v
-      | .forBody _ body => walkUsesSigner fuel' body
+            walkUsesSigner t || walkUsesSigner f
+      | .forAccum _ v _ => valUsesSigner v
+      | .forBody _ body => walkUsesSigner body
       | .indexSet _ i v _ _ => valUsesSigner i || valUsesSigner v
       | .invoke _ metas data _ bump =>
           metas.any (·.signer) ||
@@ -967,7 +967,7 @@ private def walkUsesSigner (fuel : Nat) (ops : Array IR.Op) : Bool :=
       | .errorOverflow | .errorNamed _ => false
 
 private def usesSignerKey (ops : Array IR.Op) : Bool :=
-  walkUsesSigner 16 ops
+  walkUsesSigner ops
 
 private def emitOverflowExit (label : String) : String :=
   s!"err_{label}:\n  lddw r0, {overflowCode}\n  exit\n"
@@ -999,8 +999,8 @@ private def emitFillAccountInfoFromHeader (tag : String) (srcStack : Nat) : Stri
   "  lddw r1, 0\n  stxb [r5 + 51], r1\n  stxb [r5 + 52], r1\n" ++
   "  stxb [r5 + 53], r1\n  stxb [r5 + 54], r1\n  stxb [r5 + 55], r1\n"
 
-private def emitCpiData (p : IR.Program) (base : Nat) (data : Array (Ops.CpiWord Ops.Val)) :
-    Except String (String × Nat) := do
+private def emitCpiData (p : IR.Program) (scope : String) (base : Nat)
+    (data : Array (Ops.CpiWord Ops.Val)) : Except String (String × Nat) := do
   -- CreateAccount 是 52B：u32+u64 不对齐。先清 64B，避免残留污染 space。
   let mut body :=
     s!"  lddw r1, 0\n  stxdw [r9 + {base}], r1\n  stxdw [r9 + {base + 8}], r1\n" ++
@@ -1017,7 +1017,7 @@ private def emitCpiData (p : IR.Program) (base : Nat) (data : Array (Ops.CpiWord
       body := body ++ s!"  lddw r1, {n.toNat}\n  stxw [r9 + {base + off}], r1\n"
       off := off + 4
     | .u64le v =>
-      let load ← loadVal p v 8
+      let load ← loadVal p v 8 off s!"{scope}_data_{off}"
       body := body ++ load ++ s!"  ldxdw r1, [r10 - 8]\n  stxdw [r9 + {base + off}], r1\n"
       off := off + 8
     | .ascii s =>
@@ -1050,8 +1050,9 @@ private def emitCpiData (p : IR.Program) (base : Nat) (data : Array (Ops.CpiWord
         s!"  ldxdw r2, [r1 + 24]\n  stxdw [r9 + {base + off + 24}], r2\n"
       off := off + 32
     | .accKey i =>
+      let physical := i + 1
       body := body ++
-        s!"  ldxdw r1, [r10 - {headerStack i}]\n  add64 r1, 8\n" ++
+        s!"  ldxdw r1, [r10 - {headerStack physical}]\n  add64 r1, 8\n" ++
         s!"  ldxdw r2, [r1 + 0]\n  stxdw [r9 + {base + off}], r2\n" ++
         s!"  ldxdw r2, [r1 + 8]\n  stxdw [r9 + {base + off + 8}], r2\n" ++
         s!"  ldxdw r2, [r1 + 16]\n  stxdw [r9 + {base + off + 16}], r2\n" ++
@@ -1064,8 +1065,9 @@ private def emitOneMeta (i : Nat) (m : Ops.CpiMeta) : String :=
   let base := 16 * i
   let w := if m.writable then 1 else 0
   let s := if m.signer then 1 else 0
+  let physical := m.acc + 1
   s!"\
-  ldxdw r8, [r10 - {headerStack m.acc}]
+  ldxdw r8, [r10 - {headerStack physical}]
   mov64 r1, r8
   add64 r1, 8
   stxdw [r5 + {base}], r1
@@ -1082,11 +1084,11 @@ private def emitOneMeta (i : Nat) (m : Ops.CpiMeta) : String :=
   stxb [r5 + {base + 15}], r1
 "
 
-private def emitSignerSeeds (p : IR.Program) (seedOff : Nat)
+private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
     (seed : Option String) (bump : Option Ops.Val) : Except String (String × String) :=
   match seed, bump with
   | some s, some b => do
-    let load ← loadVal p b 8
+    let load ← loadVal p b 8 seedOff s!"{scope}_seed"
     let (bytes, _) :=
       s.toList.foldl (init := ("", (0 : Nat))) fun (acc, i) c =>
         (acc ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {seedOff + i}], r1\n", i + 1)
@@ -1127,13 +1129,14 @@ private def emitInvoke (p : IR.Program) (label : String)
     (seed : Option String) (bump : Option Ops.Val) :
     Except String String := do
   let n := IR.cpiAccountCount p
+  let physicalProgramIx := programIx + 1
   let metaOff := 0
   let ixOff := metaOff + 16 * metas.size
   let dataOff := ixOff + 40
-  let (dataTxt, dataLen) ← emitCpiData p dataOff data
+  let (dataTxt, dataLen) ← emitCpiData p label dataOff data
   let infoOff := dataOff + ((dataLen + 7) / 8) * 8
   let seedOff := infoOff + 56 * n
-  let (seedTxt, seedRegs) ← emitSignerSeeds p seedOff seed bump
+  let (seedTxt, seedRegs) ← emitSignerSeeds p label seedOff seed bump
   let mut metasTxt := ""
   for i in [0:metas.size] do
     metasTxt := metasTxt ++ emitOneMeta i metas[i]!
@@ -1143,14 +1146,14 @@ private def emitInvoke (p : IR.Program) (label : String)
     if i + 1 < n then
       infos := infos ++ "  add64 r5, 56\n"
   return s!"\
-  ; invoke programIx={programIx} metas={metas.size} dataLen={dataLen}
+  ; invoke programIx={physicalProgramIx} metas={metas.size} dataLen={dataLen}
   mov64 r9, r10
   add64 r9, -2048
 {dataTxt}  mov64 r5, r9
   add64 r5, {metaOff}
 {metasTxt}  mov64 r8, r9
   add64 r8, {ixOff}
-  ldxdw r1, [r10 - {headerStack programIx}]
+  ldxdw r1, [r10 - {headerStack physicalProgramIx}]
   add64 r1, 8
   stxdw [r8 + 0], r1
   mov64 r1, r9
@@ -1208,6 +1211,63 @@ private partial def opsTerminate (ops : Array IR.Op) : Bool :=
     | .okState _ | .errorOverflow | .errorNamed _ | .returnU64 _ | .returnState _ => true
     | .ite _ _ _ thn els => opsTerminate thn && opsTerminate els
     | _ => false
+
+/--
+sBPF branch offsets are signed 16-bit instruction counts. Split large rendered regions by source
+line count (an `lddw` is the worst case at two instructions per line) and place relay islands
+between chunks. Normal execution jumps over each island; a bypass stays in the same stack frame
+while hopping between its relay labels.
+-/
+private def relayChunks (text : String) : Array String := Id.run do
+  let maxLines := 4096
+  let mut chunks : Array String := #[]
+  let mut current : Array String := #[]
+  for line in text.splitOn "\n" do
+    current := current.push line
+    if current.size == maxLines then
+      chunks := chunks.push (String.intercalate "\n" current.toList ++ "\n")
+      current := #[]
+  unless current.isEmpty do
+    chunks := chunks.push (String.intercalate "\n" current.toList ++ "\n")
+  return chunks
+
+/-- Preserve normal execution of `body` while exposing a short-hop entry that bypasses it. -/
+private def wrapRelayBypass (tag target body : String) : String × String := Id.run do
+  let chunks := relayChunks body
+  if chunks.size ≤ 1 then
+    return (target, body)
+  let relay (i : Nat) := s!"relay_jump_{tag}_{i}"
+  let normal (i : Nat) := s!"relay_normal_{tag}_{i}"
+  let mut out := ""
+  for i in [0:chunks.size] do
+    out := out ++ chunks[i]!
+    let next := if i + 1 == chunks.size then target else relay (i + 1)
+    out := out ++ s!"  ja {normal i}\n{relay i}:\n  ja {next}\n{normal i}:\n"
+  return (relay 0, out)
+
+/-- Add forward and backward relay chains around a large loop body. -/
+private def wrapLoopRelays (tag loopTarget doneTarget body : String) : String × String × String :=
+    Id.run do
+  let chunks := relayChunks body
+  if chunks.size ≤ 1 then
+    return (doneTarget, body, loopTarget)
+  let forward (i : Nat) := s!"relay_forward_{tag}_{i}"
+  let backward (i : Nat) := s!"relay_backward_{tag}_{i}"
+  let normal (i : Nat) := s!"relay_loop_normal_{tag}_{i}"
+  let mut out := ""
+  for i in [0:chunks.size] do
+    out := out ++ chunks[i]!
+    let nextForward := if i + 1 == chunks.size then doneTarget else forward (i + 1)
+    let nextBackward := if i == 0 then loopTarget else backward (i - 1)
+    out := out ++ s!"\
+  ja {normal i}
+{forward i}:
+  ja {nextForward}
+{backward i}:
+  ja {nextBackward}
+{normal i}:
+"
+  return (forward 0, out, backward (chunks.size - 1))
 
 private partial def emitOps (p : IR.Program) (label errorLabel : String)
     (ops : Array IR.Op) (fresh : Nat) : Except String (String × Nat) := do
@@ -1300,24 +1360,35 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       -- `label` grows with every nesting level; the method-level error label plus the fresh
       -- counter is already unique and keeps join labels bounded in large decision trees.
       let doneLab := s!"done_{errorLabel}_{n}"
-      let thenJump := if opsTerminate thn then "" else s!"  ja {doneLab}\n"
+      let thenTerminates := opsTerminate thn
       let doneLabel := if opsTerminate thn then "" else s!"{doneLab}:\n"
       n := n + 1
       let (thenTxt, n1) ← emitOps p thenLab errorLabel thn n
       let (elseTxt, n2) ← emitOps p elseLab errorLabel els n1
       n := n2
+      let (falseTarget, thenTxt) :=
+        wrapRelayBypass s!"{thenLab}_body" elseLab thenTxt
+      let (doneTarget, elseTxt) :=
+        if thenTerminates then (doneLab, elseTxt)
+        else wrapRelayBypass s!"{elseLab}_body" doneLab elseTxt
+      let thenJump := if thenTerminates then "" else s!"  ja {doneTarget}\n"
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         jmpIf cmp thenLab ++
-        s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{thenJump}" ++
+        s!"  ja {falseTarget}\n{thenLab}:\n{thenTxt}{thenJump}" ++
         s!"{elseLab}:\n{elseTxt}{doneLabel}"
     | .invoke prog metas data seed bump =>
-      acc := acc ++ (← emitInvoke p label prog metas data seed bump)
+      let invokeLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++ (← emitInvoke p invokeLabel prog metas data seed bump)
     | .errorNamed _ =>
       acc := acc ++ s!"  ; named error\n  lddw r0, 0x1\n  exit\n"
-    | .forAccum bound addend =>
+    | .forAccum bound addend resultLocal =>
       let loopLab := s!"loop_{label}_{n}"
       let doneLab := s!"done_{label}_{n}"
+      let localOff := 320 + resultLocal * 8
+      if localOff > 504 then
+        throw "extract/unsupported: too many scalar locals"
       n := n + 1
       let loadAdd ← loadVal p addend 16 n s!"{label}_{n}_acc"
       n := n + 1
@@ -1325,22 +1396,22 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
         s!"\
   ; forAccum {bound}
   lddw r1, 0
-  stxdw [r10 - 24], r1
-  stxdw [r10 - 40], r1
+  stxdw [r10 - {localOff}], r1
+  stxdw [r10 - {loopCounterScratch}], r1
 {loopLab}:
-  ldxdw r1, [r10 - 40]
+  ldxdw r1, [r10 - {loopCounterScratch}]
   lddw r2, {bound}
   jge r1, r2, {doneLab}
-{loadAdd}  ldxdw r1, [r10 - 24]
+{loadAdd}  ldxdw r1, [r10 - {localOff}]
   ldxdw r2, [r10 - 16]
   lddw r3, 0xffffffffffffffff
   sub64 r3, r2
   jgt r1, r3, err_{errorLabel}
   add64 r1, r2
-  stxdw [r10 - 24], r1
-  ldxdw r1, [r10 - 40]
+  stxdw [r10 - {localOff}], r1
+  ldxdw r1, [r10 - {loopCounterScratch}]
   add64 r1, 1
-  stxdw [r10 - 40], r1
+  stxdw [r10 - {loopCounterScratch}], r1
   ja {loopLab}
   {doneLab}:
   "
@@ -1350,18 +1421,20 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       n := n + 1
       let (bodyTxt, n1) ← emitOps p loopLab errorLabel body n
       n := n1
+      let (doneTarget, bodyTxt, loopTarget) :=
+        wrapLoopRelays s!"{loopLab}_body" loopLab doneLab bodyTxt
       acc := acc ++
         s!"  ; forBody {bound}
   lddw r1, 0
-  stxdw [r10 - 40], r1
+  stxdw [r10 - {loopCounterScratch}], r1
   {loopLab}:
-  ldxdw r1, [r10 - 40]
+  ldxdw r1, [r10 - {loopCounterScratch}]
   lddw r2, {bound}
-  jge r1, r2, {doneLab}
-  {bodyTxt}  ldxdw r1, [r10 - 40]
+  jge r1, r2, {doneTarget}
+  {bodyTxt}  ldxdw r1, [r10 - {loopCounterScratch}]
   add64 r1, 1
-  stxdw [r10 - 40], r1
-  ja {loopLab}
+  stxdw [r10 - {loopCounterScratch}], r1
+  ja {loopTarget}
   {doneLab}:
   "
     | .indexSet name idx value len elemOff =>
@@ -1406,7 +1479,7 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       acc := acc ++ (← storeField p name 24)
     | .okState v =>
       let optionNames := IR.optionLeafNames? p
-      if IR.hasStoreField ops then
+      if IR.hasStoreField ops || IR.hasIndexSet ops then
         match v with
         | .lit k =>
           acc := acc ++ s!"  lddw r1, 0x{IR.u64Hex k}\n  stxdw [r10 - 24], r1\n"
@@ -1497,7 +1570,7 @@ private def emitMutBody (p : IR.Program) (label : String) (ops : Array IR.Op) : 
   return s!"body_{label}:\n{ix}{body}{overflow}"
 
 private def emitGetBody (p : IR.Program) (label : String) (v : Ops.Val) : Except String String := do
-  let load ← loadVal p v 8
+  let load ← loadVal p v 8 0 s!"{label}_get"
   return s!"\
 body_{label}:
 {load}  ldxdw r1, [r10 - 8]
@@ -1546,7 +1619,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   | .init =>
     if IR.usesCpi p then
       let body ← emitInitBody p marker label m.ops
-      return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) true}{body}"
+      return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) true m.ops}{body}"
     else if IR.usesWalk p then
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{preludeWalk p marker label (ixLenOf m) true m.ops}{body}"
@@ -1556,7 +1629,7 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   | .increment =>
     if IR.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
-      return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) false}{body}"
+      return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) false m.ops}{body}"
     else if !(IR.hasCheckedArith m.ops || IR.hasSelect m.ops ||
         m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
@@ -1598,7 +1671,10 @@ private def emitDispatch (program : IR.Program) : Except String String := do
     let next :=
       if i + 1 == program.methods.size then "err_unknown_disc"
       else s!"dispatch_next_{label}"
-    let jump := if IR.usesCpi program then s!"  ja {label}\n" else s!"  call {label}\n  exit\n"
+    -- Conditional and unconditional jumps have a signed 16-bit instruction offset. Large
+    -- programs can place handlers beyond that range, while local calls use a 32-bit offset.
+    -- Every handler rebuilds its own account-walk frame, so CPI handlers are safe to call too.
+    let jump := s!"  call {label}\n  exit\n"
     if i == 0 then
       out := out ++ s!"  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
     else

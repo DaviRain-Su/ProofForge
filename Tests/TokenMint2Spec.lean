@@ -15,16 +15,16 @@ open ProofForge.Svm.Runtime
   | .error _ => false
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenMint2
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenMint2 == 3
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenMint2 == 4
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenMint2 with
   | .error _ => false
   | .ok asm =>
-      asm.contains "invoke programIx=2" &&
+      asm.contains "invoke programIx=3" &&
         asm.contains "dataLen=35" &&
         asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "jlt r1, 3" &&
-        asm.contains "ja openMint"
+        asm.contains "jlt r1, 4" &&
+        asm.contains "call openMint"
 
 end Tests.TokenMint2Spec

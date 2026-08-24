@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -84,6 +86,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(base, base_signer),
             AccountMeta::new(derived_key, false),
             AccountMeta::new_readonly(system, false),
@@ -101,6 +104,7 @@ fn allocate_with_seed_grows_derived_account() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (derived_key, funded(BASE_LAMPORTS)),
             (system, system_acc),
@@ -126,6 +130,7 @@ fn allocate_with_seed_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (derived_key, funded(BASE_LAMPORTS)),
             (system, system_acc),
@@ -147,6 +152,7 @@ fn allocate_with_seed_wrong_address_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (wrong, funded(BASE_LAMPORTS)),
             (system, system_acc),
@@ -171,6 +177,7 @@ fn build_create_ix(
         program_id,
         &instruction_data(&disc, &[CREATE_LAMPORTS]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(base, base_signer),
             AccountMeta::new(derived_key, false),
             AccountMeta::new_readonly(system, false),
@@ -188,6 +195,7 @@ fn create_with_seed_funds_derived_account() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (derived_key, funded(0)),
             (system, system_acc),
@@ -217,6 +225,7 @@ fn create_with_seed_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (derived_key, funded(0)),
             (system, system_acc),
@@ -239,6 +248,7 @@ fn create_with_seed_wrong_address_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (wrong, funded(0)),
             (system, system_acc),
@@ -263,6 +273,7 @@ fn build_assign_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(base, base_signer),
             AccountMeta::new(derived_key, false),
             AccountMeta::new_readonly(system, false),
@@ -280,6 +291,7 @@ fn assign_with_seed_sets_owner() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (derived_key, funded(BASE_LAMPORTS)),
             (system, system_acc),
@@ -302,6 +314,7 @@ fn assign_with_seed_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (derived_key, funded(BASE_LAMPORTS)),
             (system, system_acc),
@@ -323,6 +336,7 @@ fn assign_with_seed_wrong_address_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (base, funded(BASE_LAMPORTS)),
             (wrong, funded(BASE_LAMPORTS)),
             (system, system_acc),

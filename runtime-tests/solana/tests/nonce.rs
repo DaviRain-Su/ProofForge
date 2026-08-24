@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -77,6 +79,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(authority, authority_signer),
             AccountMeta::new(nonce, false),
             AccountMeta::new_readonly(recent, false),
@@ -95,6 +98,7 @@ fn advance_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (nonce, Account::new(LAMPORTS_PER_SOL, NONCE_LEN, &system_id())),
             (recent, funded()),

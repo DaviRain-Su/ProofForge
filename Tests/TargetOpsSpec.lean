@@ -1,4 +1,5 @@
 import ProofForge.Svm.Ops
+import ProofForge.Svm.IR
 import ProofForge.Evm.Ops
 import ProofForge.Extract.LegacyAdapter
 import ProofForge.Extract.LegacyGolden
@@ -22,6 +23,24 @@ private def validSvmOp : ProofForge.Svm.Ops.Op :=
     (some validSvmValue))
 
 #guard validSvmOp.wellFormed
+#guard ProofForge.Svm.Ops.cpiAccInRange 62
+#guard !ProofForge.Svm.Ops.cpiAccInRange 63
+
+private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
+  .ext (.invoke 63 #[] #[] none none)
+
+#guard !invalidCpiAccountOp.wellFormed
+
+private def accKeySizedProgram : ProofForge.Svm.IR.Program :=
+  { name := "AccKeySized"
+    schema := {}
+    slots := #[]
+    methods := #[
+      { kind := .increment, name := "AccKeySized.call", ixName := "call", paramCount := 0
+        ops := #[.invoke 1 #[] #[.accKey 5] none none] }
+    ] }
+
+#guard ProofForge.Svm.IR.cpiAccountCount accKeySizedProgram == 7
 
 private def validEvmValue : ProofForge.Evm.Ops.Val :=
   ProofForge.Evm.Ops.mapGetU64 ProofForge.Evm.Ops.self (.lit 7)

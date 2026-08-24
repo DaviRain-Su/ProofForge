@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -91,6 +93,7 @@ fn build_set_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(owner, owner_signer),
             AccountMeta::new(source, false),
             AccountMeta::new_readonly(new_owner, false),
@@ -111,6 +114,7 @@ fn set_owner_rewrites_token_owner() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (owner, funded()),
             (source, token_account(mint, owner)),
             (new_owner, funded()),
@@ -138,6 +142,7 @@ fn set_owner_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (owner, funded()),
             (source, token_account(mint, owner)),
             (new_owner, funded()),
@@ -160,6 +165,7 @@ fn approve_sets_delegate() {
         program_id,
         &instruction_data(&disc, &[ALLOW]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(owner, true),
             AccountMeta::new(source, false),
             AccountMeta::new_readonly(delegate, false),
@@ -169,6 +175,7 @@ fn approve_sets_delegate() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (owner, funded()),
             (source, token_account(mint, owner)),
             (delegate, funded()),

@@ -20,7 +20,7 @@ inductive Op where
   | evmDeposit (amount : Ops.Val)
   | evmSendEth (w0 w1 w2 amount : Ops.Val)
   | evmLog (name : String) (amount : Ops.Val)
-  | forAccum (n : Nat) (addend : Ops.Val)
+  | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
   | mapGetU64 (base key : Ops.Val)
@@ -50,7 +50,7 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .checkedModU64 lhs rhs => pure (.checkedModU64 lhs rhs)
   | .ite cmp lhs rhs thn els =>
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
-  | .forAccum n addend => pure (.forAccum n addend)
+  | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSetLeaf name _ _ _ leaf =>
       throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"
@@ -419,7 +419,7 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
     | .evmLog n v => s!"elog.{n}({valCanon v})"
-    | .forAccum n v => s!"for({n},{valCanon v})"
+    | .forAccum n v resultLocal => s!"for.{resultLocal}({n},{valCanon v})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
     | .indexSet n i v k off =>
         if off == 0 then s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"

@@ -10,7 +10,7 @@ open ProofForge.Svm.Runtime
 #guard invokeSigned 1 #[] #[] "vault" 0 == 0
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedSigned
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedSigned == 2
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedSigned == 3
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedSigned with
@@ -18,8 +18,9 @@ open ProofForge.Svm.Runtime
   | .ok asm =>
       asm.contains "call sol_invoke_signed_c" &&
         asm.contains "call sol_try_find_program_address" &&
+        asm.contains "metas=1" &&
         asm.contains "lddw r5, 1" &&
-        asm.contains "invoke programIx=1"
+        asm.contains "invoke programIx=2"
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with

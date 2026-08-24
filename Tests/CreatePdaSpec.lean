@@ -20,17 +20,17 @@ open ProofForge.Svm.Runtime
   | .error _ => false
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedCreatePda
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedCreatePda == 3
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedCreatePda == 4
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedCreatePda with
   | .error _ => false
   | .ok asm =>
-      asm.contains "invoke programIx=2" &&
+      asm.contains "invoke programIx=3" &&
         asm.contains "dataLen=52" &&
         asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "jlt r1, 3" &&
-        asm.contains "ja openPda" &&
-        asm.contains "ja openBad"
+        asm.contains "jlt r1, 4" &&
+        asm.contains "call openPda" &&
+        asm.contains "call openBad"
 
 end Tests.CreatePdaSpec

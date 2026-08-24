@@ -8,14 +8,14 @@ structure Entry where
 
 def entries : Array Entry := #[
   { name := "Counter", digest := "254202356ee921d6" },
-  { name := "Pair", digest := "efb8159513508e49" },
-  { name := "Window", digest := "dfe0620770ff04d4" },
-  { name := "Phase", digest := "5da5688932fbb630" },
-  { name := "Flag", digest := "f59454e5e4736334" },
-  { name := "Maybe", digest := "842f2a30ab664aac" },
-  { name := "EvmCtx", digest := "d32b3b41290088b3" },
+  { name := "Pair", digest := "13af3b0dba53f17" },
+  { name := "Window", digest := "966cbad710c7eff1" },
+  { name := "Phase", digest := "bed1d2111e652ac1" },
+  { name := "Flag", digest := "6056d4920876b4f7" },
+  { name := "Maybe", digest := "6b602a44477483ee" },
+  { name := "EvmCtx", digest := "3214848828e0e590" },
   { name := "TipJar", digest := "54e2ac6083d0820b" },
-  { name := "Lang", digest := "e0e6dafdfef6d142" },
+  { name := "Lang", digest := "d2a43e6bf208bff0" },
   { name := "Vault", digest := "afd331572631e6e2" },
   { name := "Ownable", digest := "7dc4a3ba2bb470b2" },
   { name := "Token", digest := "8db43ef123b7e9a9" }

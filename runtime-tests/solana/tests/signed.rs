@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -5,7 +7,12 @@ use {
     solana_instruction::{AccountMeta, Instruction},
     solana_native_token::LAMPORTS_PER_SOL,
     solana_pubkey::Pubkey,
-    std::{env, fs, path::PathBuf, process::Command},
+    std::{
+        env, fs,
+        path::PathBuf,
+        process::Command,
+        sync::atomic::{AtomicU64, Ordering},
+    },
 };
 
 const DISCRIMINATOR_DOMAIN: &str = "proof-forge-solana-v1:";
@@ -45,7 +52,12 @@ fn signed_so() -> PathBuf {
 }
 
 fn stub_so() -> PathBuf {
-    let dir = PathBuf::from(env::temp_dir()).join("proofforge-signed-stub");
+    static NEXT_STUB: AtomicU64 = AtomicU64::new(0);
+    let id = NEXT_STUB.fetch_add(1, Ordering::Relaxed);
+    let dir = PathBuf::from(env::temp_dir()).join(format!(
+        "proofforge-signed-stub-{}-{id}",
+        std::process::id()
+    ));
     let src = dir.join("src/Stub/Stub.s");
     let deploy = dir.join("deploy");
     fs::create_dir_all(src.parent().unwrap()).unwrap();
@@ -70,9 +82,10 @@ entrypoint:
     so
 }
 
-fn harness() -> (Pubkey, Pubkey, u8, Mollusk) {
+fn harness() -> (Pubkey, Pubkey, Pubkey, u8, Mollusk) {
     let program_id = Pubkey::new_unique();
     let (pda, bump) = Pubkey::find_program_address(&[b"vault"], &program_id);
+    let callee = Pubkey::new_unique();
     let elf = fs::read(signed_so()).unwrap_or_else(|e| panic!("read Signed.so: {e}"));
     let stub = fs::read(stub_so()).unwrap_or_else(|e| panic!("read Stub.so: {e}"));
     let mut mollusk = Mollusk::default();
@@ -82,11 +95,11 @@ fn harness() -> (Pubkey, Pubkey, u8, Mollusk) {
         &elf,
     );
     mollusk.add_program_with_loader_and_elf(
-        &pda,
+        &callee,
         &mollusk_svm::program::loader_keys::LOADER_V3,
         &stub,
     );
-    (program_id, pda, bump, mollusk)
+    (program_id, pda, callee, bump, mollusk)
 }
 
 fn funded(owner: &Pubkey) -> Account {
@@ -95,58 +108,71 @@ fn funded(owner: &Pubkey) -> Account {
 
 #[test]
 fn signed_invokes_pda_with_canonical_bump() {
-    let (program_id, pda, bump, mollusk) = harness();
+    let (program_id, pda, callee, bump, mollusk) = harness();
     assert!((1..=255).contains(&bump));
-    let payer = Pubkey::new_unique();
     let disc = instruction_discriminator("signed", 0);
     let ix = Instruction::new_with_bytes(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
-            AccountMeta::new(payer, true),
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new_readonly(pda, false),
+            AccountMeta::new_readonly(callee, false),
         ],
     );
     mollusk.process_and_validate_instruction(
         &ix,
         &[
-            (payer, funded(&program_id)),
             (
-                pda,
-                mollusk_svm::program::create_program_account_loader_v3(&pda),
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
+            (pda, funded(&program_id)),
+            (
+                callee,
+                mollusk_svm::program::create_program_account_loader_v3(&callee),
             ),
         ],
-        &[
-            Check::success(),
-            Check::return_data(&0u64.to_le_bytes()),
-        ],
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
     );
 }
 
 #[test]
 fn signed_wrong_bump_fails() {
-    let (program_id, pda, _bump, mollusk) = harness();
-    let payer = Pubkey::new_unique();
+    let (program_id, pda, callee, _bump, mollusk) = harness();
     let disc = instruction_discriminator("badBump", 0);
     let ix = Instruction::new_with_bytes(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
-            AccountMeta::new(payer, true),
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new_readonly(pda, false),
+            AccountMeta::new_readonly(callee, false),
         ],
     );
-    mollusk.process_and_validate_instruction(
+    let result = mollusk.process_instruction(
         &ix,
         &[
-            (payer, funded(&program_id)),
             (
-                pda,
-                mollusk_svm::program::create_program_account_loader_v3(&pda),
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
+            (pda, funded(&program_id)),
+            (
+                callee,
+                mollusk_svm::program::create_program_account_loader_v3(&callee),
             ),
         ],
-        &[Check::instruction_err(
-            solana_instruction::error::InstructionError::ProgramFailedToComplete,
-        )],
+    );
+    assert!(
+        matches!(
+            result.raw_result,
+            Err(
+                solana_instruction::error::InstructionError::ProgramFailedToComplete
+                    | solana_instruction::error::InstructionError::PrivilegeEscalation
+            )
+        ),
+        "wrong bump must reject the signed CPI: {:?}",
+        result.program_result
     );
 }

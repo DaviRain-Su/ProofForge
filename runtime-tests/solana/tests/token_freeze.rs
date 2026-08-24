@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -102,6 +104,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(authority, authority_signer),
             AccountMeta::new(account, false),
             AccountMeta::new_readonly(mint, false),
@@ -121,6 +124,7 @@ fn freeze_sets_account_state() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (account, token_account(mint, authority, AccountState::Initialized)),
             (mint, mint_account(authority)),
@@ -155,6 +159,7 @@ fn freeze_missing_authority_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (account, token_account(mint, authority, AccountState::Initialized)),
             (mint, mint_account(authority)),
@@ -180,6 +185,7 @@ fn thaw_clears_frozen_state() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (account, token_account(mint, authority, AccountState::Frozen)),
             (mint, mint_account(authority)),
@@ -206,6 +212,7 @@ fn thaw_missing_authority_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (authority, funded()),
             (account, token_account(mint, authority, AccountState::Frozen)),
             (mint, mint_account(authority)),

@@ -142,24 +142,26 @@ def usesWalk (program : Extract.Legacy.Program) : Bool :=
 def usesSystemTransfer (program : Extract.Legacy.Program) : Bool :=
   usesCpi program
 
+private partial def highestInvokeIndex (ops : Array ProofForge.Ops.Op) : Nat :=
+  ops.foldl (init := 0) fun result op =>
+    match op with
+    | .invoke programIndex metas data .. =>
+      let fromMetas := metas.foldl (init := Nat.max result programIndex) fun value entry =>
+          Nat.max value entry.acc
+      data.foldl (init := fromMetas) fun value word =>
+        match word with
+        | .accKey accountIndex => Nat.max value accountIndex
+        | _ => value
+    | .ite _ _ _ thn els =>
+        Nat.max result (Nat.max (highestInvokeIndex thn) (highestInvokeIndex els))
+    | .forBody _ body => Nat.max result (highestInvokeIndex body)
+    | _ => result
+
 def cpiAccountCount (program : Extract.Legacy.Program) : Nat :=
-  let rec maxIndex (fuel : Nat) (ops : Array ProofForge.Ops.Op) (acc : Nat) : Nat :=
-    match fuel with
-    | 0 => acc
-    | fuel' + 1 =>
-        ops.foldl (init := acc) fun current op =>
-          match op with
-          | .invoke programIndex metas .. =>
-              let metaIndex := metas.foldl (init := programIndex) fun result item =>
-                Nat.max result item.acc
-              Nat.max current metaIndex
-          | .ite _ _ _ thenOps elseOps =>
-              Nat.max (maxIndex fuel' thenOps current) (maxIndex fuel' elseOps current)
-          | .forBody _ body => maxIndex fuel' body current
-          | _ => current
   let highest := program.methods.foldl (init := 0) fun acc method =>
-    Nat.max acc (maxIndex 8 method.ops 0)
-  let fromInvoke := if usesCpi program then Nat.max 2 (highest + 1) else 0
+    Nat.max acc (highestInvokeIndex method.ops)
+  -- CPI indices are relative to the external-account region; physical account 0 is state.
+  let fromInvoke := if usesCpi program then Nat.max 3 (highest + 2) else 0
   let fromLeaves := program.methods.foldl (init := 0) fun acc method =>
     Nat.max acc (ProofForge.Ops.opsMinAccounts method.ops)
   Nat.max fromInvoke fromLeaves

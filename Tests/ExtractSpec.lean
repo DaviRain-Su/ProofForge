@@ -128,6 +128,25 @@ elab "#pf_guard_state_fold_ir" : command => do
 
 #pf_guard_state_fold_ir
 
+elab "#pf_guard_initialized_state_fold_ir" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runInitializedFold ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some run := program.methods.find? (·.ixName == "runInitializedFold")
+    | throwError "missing initialized state-fold method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .storeField "product" (.arg 0),
+    .forBody 1 #[.storeField "remainder" (.arg 0)],
+    .okState (.field (.arg 1) "product")
+  ]
+  unless run.ops == expected do
+    throwError s!"initialized state-fold IR mismatch: {repr run.ops}"
+
+#pf_guard_initialized_state_fold_ir
+
 elab "#pf_guard_composed_state_fold_ir" : command => do
   let env ← getEnv
   let program ←
@@ -444,10 +463,12 @@ elab "#pf_guard_compound_error_guard" : command => do
       | .select _ _ _ _ _ => 1
       | _ => 0
   match compound.ops with
-  | #[.ite .ne condition (.lit 0) #[.okState (.arg 0)] #[.errorOverflow]] =>
+  | #[.ite .ne condition (.lit 0)
+        #[.storeField "chosen" (.arg 0), .okState (.arg 0)] #[.errorOverflow]] =>
       unless comparisonLeaves 8 condition == 4 do
         throwError s!"compound guard lost comparisons: {repr compound.ops}"
-  | #[.ite .eq condition (.lit 1) #[.okState (.arg 0)] #[.errorOverflow]] =>
+  | #[.ite .eq condition (.lit 1)
+        #[.storeField "chosen" (.arg 0), .okState (.arg 0)] #[.errorOverflow]] =>
       unless comparisonLeaves 8 condition == 4 do
         throwError s!"compound guard lost comparisons: {repr compound.ops}"
   | _ => throwError s!"compound error-guard IR mismatch: {repr compound.ops}"

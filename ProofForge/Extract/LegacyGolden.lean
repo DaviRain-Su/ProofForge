@@ -254,11 +254,11 @@ def extractedWindow : Program :=
     slots := #[{ name := "cells_0" }, { name := "cells_1" }]
     methods := #[
       { kind := .init, name := "Examples.Window.init", ixName := "initialize", paramCount := 1
-        ops := #[.returnState (.arg 0)] },
+        ops := #[.returnState (.arg 0), .returnState (.lit 0)] },
       { kind := .increment, name := "Examples.Window.setTail", ixName := "setTail", paramCount := 1
         ops := #[
           .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
-            #[.okState (.field (.arg 0) "cells_1")]
+            #[.storeField "cells_1" (.arg 0), .okState (.arg 0)]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Examples.Window.getHead", ixName := "getHead", paramCount := 0
@@ -270,7 +270,7 @@ def extractedMaybe : Program :=
     slots := #[{ name := "slot_tag" }, { name := "slot_p0" }]
     methods := #[
       { kind := .init, name := "Examples.Maybe.init", ixName := "initialize", paramCount := 1
-        ops := #[.returnState (.lit 0)] },
+        ops := #[.returnState (.lit 0), .returnState (.lit 0)] },
       { kind := .increment, name := "Examples.Maybe.setNone", ixName := "setNone", paramCount := 0
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
@@ -480,8 +480,8 @@ def extractedLang : Program :=
         ops := #[.returnU64 (.shiftR (.arg 0) (.arg 1))] },
       { kind := .get, name := "Examples.Lang.sum4", ixName := "sum4", paramCount := 0
         ops := #[
-          .forAccum 4 (.indexGet (.arg 0) "cells" .loopIx 0),
-          .returnU64 (.indexGet (.arg 0) "cells" .loopIx 0)
+          .forAccum 4 (.indexGet (.arg 0) "cells" .loopIx 0) 0,
+          .returnU64 (.local 0)
         ] }
     ] }
 
@@ -741,11 +741,12 @@ def extractedSigned : Program :=
     methods := #[
       { kind := .init, name := "Examples.Signed.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.lit 0)] },
-      { kind := .increment, name := "Examples.Signed.signed", ixName := "signed", paramCount := 0
-        ops := #[.invoke 1 #[] #[] (some "vault") (some (.findPda "vault")),
-          .returnU64 (.lit 0)] },
       { kind := .increment, name := "Examples.Signed.badBump", ixName := "badBump", paramCount := 0
-        ops := #[.invoke 1 #[] #[] (some "vault") (some (.lit 0)),
+        ops := #[.invoke 1 #[{ acc := 0, signer := true }] #[] (some "vault") (some (.lit 0)),
+          .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.Signed.signed", ixName := "signed", paramCount := 0
+        ops := #[.invoke 1 #[{ acc := 0, signer := true }] #[]
+          (some "vault") (some (.findPda "vault")),
           .returnU64 (.lit 0)] },
       { kind := .get, name := "Examples.Signed.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.lit 0)] }
@@ -1251,8 +1252,8 @@ def extractedBook : Program :=
         ] },
       { kind := .get, name := "Examples.Book.sum4", ixName := "sum4", paramCount := 0
         ops := #[
-          .forAccum 4 (.indexGet (.arg 0) "cells" .loopIx 0),
-          .returnU64 (.indexGet (.arg 0) "cells" .loopIx 0)
+          .forAccum 4 (.indexGet (.arg 0) "cells" .loopIx 0) 0,
+          .returnU64 (.local 0)
         ] }
     ] }
 

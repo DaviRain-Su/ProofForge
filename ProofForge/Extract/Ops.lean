@@ -98,34 +98,31 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val) : Op :=
   .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2))
 
-private partial def walk (fuel : Nat) (ops : Array Op) (predicate : Op → Bool) : Bool :=
-  match fuel with
-  | 0 => false
-  | fuel' + 1 =>
-      ops.any fun op =>
-        predicate op ||
-          match op with
-          | .ite _ _ _ thn els => walk fuel' thn predicate || walk fuel' els predicate
-          | .forBody _ body => walk fuel' body predicate
-          | _ => false
+private partial def walk (ops : Array Op) (predicate : Op → Bool) : Bool :=
+  ops.any fun op =>
+    predicate op ||
+      match op with
+      | .ite _ _ _ thn els => walk thn predicate || walk els predicate
+      | .forBody _ body => walk body predicate
+      | _ => false
 
 def hasCheckedArith (ops : Array Op) : Bool :=
-  walk 16 ops fun
+  walk ops fun
     | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
     | .checkedDivU64 .. | .checkedModU64 .. => true
     | _ => false
 
 def hasForAccum (ops : Array Op) : Bool :=
-  walk 16 ops fun | .forAccum .. => true | _ => false
+  walk ops fun | .forAccum .. => true | _ => false
 
 def hasIndexSet (ops : Array Op) : Bool :=
-  walk 16 ops fun | .indexSetLeaf .. | .indexSet .. => true | _ => false
+  walk ops fun | .indexSetLeaf .. | .indexSet .. => true | _ => false
 
 def hasStoreField (ops : Array Op) : Bool :=
-  walk 16 ops fun | .storeField .. => true | _ => false
+  walk ops fun | .storeField .. => true | _ => false
 
 def hasInvoke (ops : Array Op) : Bool :=
-  walk 16 ops fun | .invoke .. => true | _ => false
+  walk ops fun | .invoke .. => true | _ => false
 
 partial def isLangLeaf : Val → Bool
   | .local _ | .loopIx | .select .. | .bitAnd .. | .bitOr .. | .bitXor ..
@@ -154,7 +151,7 @@ private partial def isBitVal : Val → Bool
   | _ => false
 
 private def opValuesAny (predicate : Val → Bool) : Op → Bool
-  | .letLocal _ value | .setLocal _ value | .forAccum _ value
+  | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
       predicate value
   | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
@@ -193,16 +190,16 @@ private partial def isEvmContext : Val → Bool
   | _ => false
 
 def hasEvmLeaf (ops : Array Op) : Bool :=
-  walk 16 ops (opValuesAny isEvmContext)
+  walk ops (opValuesAny isEvmContext)
 
 def hasLangOp (ops : Array Op) : Bool :=
-  walk 16 ops fun op =>
+  walk ops fun op =>
     match op with
     | .forAccum .. | .forBody .. | .indexSetLeaf .. | .indexSet .. | .errorNamed _ => true
     | _ => opValuesAny (fun value => isLangLeaf value || isBitVal value || hasSelectVal value) op
 
 def hasEvmEffect (ops : Array Op) : Bool :=
-  hasEvmLeaf ops || walk 16 ops fun
+  hasEvmLeaf ops || walk ops fun
     | .evmDeposit .. | .evmSendEth .. | .evmLog ..
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
     | .mapGetPair .. | .mapSetPair ..

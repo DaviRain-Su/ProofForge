@@ -198,11 +198,22 @@ elab "#pf_guard_constant_semantics" : command => do
       | .checkedAddU64 (.field (.arg 1) "max") (.arg 0) => true
       | _ => false) do
     throwError s!"semantically maximal guard was not accepted: {repr add.ops}"
-  match ProofForge.Extract.extractProgram env ``MisleadingConstants.init
-      ``MisleadingConstants.addWithMisleadingMax ``MisleadingConstants.getMax with
-  | .error _ => pure ()
-  | .ok bad =>
-      throwError s!"a constant named u64Max bypassed checked-add validation: {repr bad.methods}"
+  let bounded ←
+    match ProofForge.Extract.extractProgram env ``MisleadingConstants.init
+        ``MisleadingConstants.addWithMisleadingMax ``MisleadingConstants.getMax with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some boundedAdd := bounded.methods.find? (·.ixName == "addWithMisleadingMax")
+    | throwError "missing misleading bounded-add method"
+  unless boundedAdd.ops.any (fun
+      | .ite .le (.field (.arg 1) "max") (.subU64 (.lit 100) (.arg 0)) thn
+          #[.errorOverflow] =>
+        thn.any (fun
+          | .storeField "max" (.addU64 (.field (.arg 1) "max") (.arg 0)) => true
+          | _ => false) &&
+        !thn.any (fun | .checkedAddU64 .. => true | _ => false)
+      | _ => false) do
+    throwError s!"a constant named u64Max changed bounded-add semantics: {repr boundedAdd.ops}"
   let division ←
     match ProofForge.Extract.extractProgram env ``initDirect ``modulo ``getDirect with
     | .ok program => pure program

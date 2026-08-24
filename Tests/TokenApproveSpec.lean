@@ -15,16 +15,16 @@ open ProofForge.Svm.Runtime
   | .error _ => false
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenApprove
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenApprove == 5
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenApprove == 6
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenApprove with
   | .error _ => false
   | .ok asm =>
-      asm.contains "invoke programIx=4" &&
+      asm.contains "invoke programIx=5" &&
         asm.contains "dataLen=10" &&
         asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "jlt r1, 5" &&
-        asm.contains "ja approve"
+        asm.contains "jlt r1, 6" &&
+        asm.contains "call approve"
 
 end Tests.TokenApproveSpec

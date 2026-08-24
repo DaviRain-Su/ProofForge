@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -6,7 +8,12 @@ use {
     solana_native_token::LAMPORTS_PER_SOL,
     solana_instruction::error::InstructionError,
     solana_pubkey::Pubkey,
-    std::{env, fs, path::PathBuf, process::Command},
+    std::{
+        env, fs,
+        path::PathBuf,
+        process::Command,
+        sync::atomic::{AtomicU64, Ordering},
+    },
 };
 
 const DISCRIMINATOR_DOMAIN: &str = "proof-forge-solana-v1:";
@@ -46,7 +53,10 @@ fn ping_so() -> PathBuf {
 }
 
 fn stub_so() -> PathBuf {
-    let dir = PathBuf::from(env::temp_dir()).join("proofforge-ping-stub");
+    static NEXT_STUB: AtomicU64 = AtomicU64::new(0);
+    let id = NEXT_STUB.fetch_add(1, Ordering::Relaxed);
+    let dir = PathBuf::from(env::temp_dir())
+        .join(format!("proofforge-ping-stub-{}-{id}", std::process::id()));
     let src = dir.join("src/Stub/Stub.s");
     let deploy = dir.join("deploy");
     fs::create_dir_all(src.parent().unwrap()).unwrap();
@@ -103,6 +113,7 @@ fn ping_invokes_account_1() {
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, true),
             AccountMeta::new_readonly(callee_id, false),
         ],
@@ -110,6 +121,7 @@ fn ping_invokes_account_1() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(&program_id)),
             (
                 callee_id,
@@ -133,6 +145,7 @@ fn ping_wrong_program_fails() {
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, true),
             AccountMeta::new_readonly(fake, false),
         ],
@@ -140,6 +153,7 @@ fn ping_wrong_program_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(&program_id)),
             (fake, funded(&Pubkey::new_unique())),
         ],

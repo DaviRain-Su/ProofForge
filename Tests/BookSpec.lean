@@ -32,4 +32,15 @@ open Examples.Book
 
 #guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedBook == 40
 
+#guard
+  match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedBook with
+  | .error _ => false
+  | .ok asm =>
+      match asm.splitOn "body_setAt:" with
+      | _ :: body :: _ =>
+          let body := (body.splitOn "\nget:")[0]!
+          body.contains "; indexSet cells[4]+0" &&
+            !body.contains "stxdw [r6 + ACC0_DATA + 8], r1"
+      | _ => false
+
 end Tests.BookSpec

@@ -389,13 +389,19 @@ def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64
                 let address : UInt64 :=
                   if i = 0 then 1 else if i = 1 then 2 else if i = 2 then 3 else 4
                 st := { st with matchStopped := address }
-  if st.matchStopped ≠ (0 : UInt64) then
+  if st.baseFree > u64Max - baseLots then
+    .error .overflow
+  else if st.quoteFree > u64Max - quoteLots then
+    .error .overflow
+  else if st.matchStopped ≠ (0 : UInt64) then
     let address := st.matchStopped
     let i := address.toNat - 1
     if h : i < 4 then
       if st.traderBaseFree[i]! ≤ u64Max - baseLots then
         if st.traderQuoteFree[i]! ≤ u64Max - quoteLots then
           .ok ({ st with
+                  baseFree := st.baseFree + baseLots
+                  quoteFree := st.quoteFree + quoteLots
                   traderBaseFree := st.traderBaseFree.set i (st.traderBaseFree[i]! + baseLots)
                   traderQuoteFree :=
                     st.traderQuoteFree.set i (st.traderQuoteFree[i]! + quoteLots) },
@@ -427,6 +433,8 @@ def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64
                 traderQuoteFree := st.traderQuoteFree.set (i % 4) quoteLots
                 traderBaseLocked := st.traderBaseLocked.set (i % 4) 0
                 traderBaseFree := st.traderBaseFree.set (i % 4) baseLots
+                quoteFree := st.quoteFree + quoteLots
+                baseFree := st.baseFree + baseLots
                 matchStopped := address }, address)
       else
         .error .overflow
@@ -449,6 +457,8 @@ def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64
               traderQuoteFree := st.traderQuoteFree.set (i % 4) quoteLots
               traderBaseLocked := st.traderBaseLocked.set (i % 4) 0
               traderBaseFree := st.traderBaseFree.set (i % 4) baseLots
+              quoteFree := st.quoteFree + quoteLots
+              baseFree := st.baseFree + baseLots
               matchStopped := address }, address)
     else
       .error .overflow
@@ -477,8 +487,12 @@ def withdrawBaseFor (s : State) (key0 key1 key2 key3 requested : UInt64) :
   let i := address.toNat - 1
   let available := s.traderBaseFree[i]!
   let amount := if requested < available then requested else available
-  .ok ({ s with
-          traderBaseFree := s.traderBaseFree.set (i % 4) (available - amount) }, amount)
+  if amount > s.baseFree then
+    .error .overflow
+  else
+    .ok ({ s with
+            baseFree := s.baseFree - amount
+            traderBaseFree := s.traderBaseFree.set (i % 4) (available - amount) }, amount)
 
 /-- Quote-lot 版本；单独入口避免把 base/quote 两种单位混进一个 UInt64 返回值。 -/
 def withdrawQuoteFor (s : State) (key0 key1 key2 key3 requested : UInt64) :
@@ -487,8 +501,12 @@ def withdrawQuoteFor (s : State) (key0 key1 key2 key3 requested : UInt64) :
   let i := address.toNat - 1
   let available := s.traderQuoteFree[i]!
   let amount := if requested < available then requested else available
-  .ok ({ s with
-          traderQuoteFree := s.traderQuoteFree.set (i % 4) (available - amount) }, amount)
+  if amount > s.quoteFree then
+    .error .overflow
+  else
+    .ok ({ s with
+            quoteFree := s.quoteFree - amount
+            traderQuoteFree := s.traderQuoteFree.set (i % 4) (available - amount) }, amount)
 
 /--
 只有 `TraderState` 四类余额都为零时才释放 seat。释放后的 1-based address 压入

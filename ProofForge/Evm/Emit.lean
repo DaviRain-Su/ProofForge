@@ -530,9 +530,9 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "log1(0, 32, 0x" ++
             Keccak.keccak256HexOfString (name ++ "(uint64)") ++ ")" ++ nl
         st := { st with last := some amt }
-    | .forAccum n addend =>
-        let (accN, st1) := fresh st
-        let (iN, st2) := fresh st1
+    | .forAccum n addend resultLocal =>
+        let accN := s!"l{resultLocal}"
+        let (iN, st2) := fresh st
         let innerSt := { st2 with loopIx := some iN }
         let (pre, addE, st3) ←
           materializeVal p (indent ++ "  ") paramPrefix paramCount addend innerSt
@@ -853,6 +853,9 @@ private def emitConstructorStores (p : IR.Program) : Except String String := do
   let vs := p.constructor.ops.filterMap (fun | .returnState v => some v | _ => none)
   if vs.isEmpty then
     throw "extract/unsupported: init missing returnState"
+  if !p.schema.isEmpty && vs.size != p.slots.size then
+    throw (s!"extract/unsupported: init initializes {vs.size} state leaves, " ++
+      s!"schema requires {p.slots.size}")
   let mut body := ""
   let mut i : Nat := 0
   for s in p.slots do

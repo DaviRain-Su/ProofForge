@@ -17,7 +17,7 @@ inductive Op where
   | invoke (programIx : Nat) (metas : Array Ops.CpiMeta)
       (data : Array (Ops.CpiWord Ops.Val))
       (seed : Option String := none) (bump : Option Ops.Val := none)
-  | forAccum (n : Nat) (addend : Ops.Val)
+  | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
   | storeField (name : String) (value : Ops.Val)
@@ -41,7 +41,7 @@ private partial def lowerOp : Ops.Op → Except String Op
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
   | .ext (.invoke programIx metas data seed bump) =>
       pure (.invoke programIx metas data seed bump)
-  | .forAccum n addend => pure (.forAccum n addend)
+  | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSetLeaf name _ _ _ leaf =>
       throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"
@@ -71,7 +71,7 @@ private partial def Op.toSource : Op → Ops.Op
   | .checkedModU64 lhs rhs => .checkedModU64 lhs rhs
   | .ite cmp lhs rhs thn els => .ite cmp lhs rhs (toSourceOps thn) (toSourceOps els)
   | .invoke programIx metas data seed bump => .ext (.invoke programIx metas data seed bump)
-  | .forAccum n addend => .forAccum n addend
+  | .forAccum n addend resultLocal => .forAccum n addend resultLocal
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
   | .storeField name value => .storeField name value
@@ -293,23 +293,26 @@ def usesCpi (p : Program) : Bool :=
 def usesWalk (p : Program) : Bool :=
   usesCpi p || p.methods.any fun method => Ops.hasAcc1 (toSourceOps method.ops)
 
+private partial def highestInvokeIndex (ops : Array Op) : Nat :=
+  ops.foldl (init := 0) fun result op =>
+    match op with
+    | .invoke programIndex metas data .. =>
+      let fromMetas := metas.foldl (init := Nat.max result programIndex) fun value entry =>
+          Nat.max value entry.acc
+      data.foldl (init := fromMetas) fun value word =>
+        match word with
+        | .accKey accountIndex => Nat.max value accountIndex
+        | _ => value
+    | .ite _ _ _ thn els =>
+        Nat.max result (Nat.max (highestInvokeIndex thn) (highestInvokeIndex els))
+    | .forBody _ body => Nat.max result (highestInvokeIndex body)
+    | _ => result
+
 def cpiAccountCount (p : Program) : Nat :=
-  let rec highestInvoke (fuel : Nat) (ops : Array Op) (current : Nat) : Nat :=
-    match fuel with
-    | 0 => current
-    | fuel' + 1 =>
-        ops.foldl (init := current) fun result op =>
-          match op with
-          | .invoke programIndex metas .. =>
-              metas.foldl (init := Nat.max result programIndex) fun value entry =>
-                Nat.max value entry.acc
-          | .ite _ _ _ thn els =>
-              Nat.max (highestInvoke fuel' thn result) (highestInvoke fuel' els result)
-          | .forBody _ body => highestInvoke fuel' body result
-          | _ => result
   let highest := p.methods.foldl (init := 0) fun current method =>
-    Nat.max current (highestInvoke 8 method.ops 0)
-  let fromInvoke := if usesCpi p then Nat.max 2 (highest + 1) else 0
+    Nat.max current (highestInvokeIndex method.ops)
+  -- CPI indices are relative to the external-account region; physical account 0 is state.
+  let fromInvoke := if usesCpi p then Nat.max 3 (highest + 2) else 0
   let fromValues := p.methods.foldl (init := 0) fun current method =>
     Nat.max current (Ops.opsMinAccounts (toSourceOps method.ops))
   Nat.max fromInvoke fromValues
@@ -428,7 +431,8 @@ private partial def opsCanon (ops : Array Op) : String :=
           | some value, some valueBump => s!",s.{value}:{valCanon valueBump}"
           | _, _ => ""
         s!"inv({programIx},[{metaCanon}],[{dataCanon}]{seeds})"
-    | .forAccum n addend => s!"for({n},{valCanon addend})"
+    | .forAccum n addend resultLocal =>
+        s!"for.{resultLocal}({n},{valCanon addend})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
     | .indexSet name index value len offset =>
         if offset == 0 then s!"iset.{name}[{valCanon index}/{len}]({valCanon value})"

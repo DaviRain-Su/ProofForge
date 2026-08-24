@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::{associated_token, token},
@@ -96,6 +98,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, payer_signer),
             AccountMeta::new(ata, false),
             AccountMeta::new_readonly(wallet, false),
@@ -123,6 +126,7 @@ fn ata_creates_token_account_for_wallet() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(10 * LAMPORTS_PER_SOL)),
             (ata, empty_system()),
             (wallet, funded(LAMPORTS_PER_SOL)),
@@ -167,6 +171,7 @@ fn ata_idempotent_when_already_exists() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(10 * LAMPORTS_PER_SOL)),
             (ata, ata_acc),
             (wallet, funded(LAMPORTS_PER_SOL)),
@@ -199,6 +204,7 @@ fn ata_missing_payer_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(10 * LAMPORTS_PER_SOL)),
             (ata, empty_system()),
             (wallet, funded(LAMPORTS_PER_SOL)),

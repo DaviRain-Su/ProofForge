@@ -21,18 +21,18 @@ open ProofForge.Svm.Runtime
   | .error _ => false
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedTokenAuth
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenAuth == 4
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedTokenAuth == 5
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTokenAuth with
   | .error _ => false
   | .ok asm =>
-      asm.contains "invoke programIx=3" &&
+      asm.contains "invoke programIx=4" &&
         asm.contains "dataLen=35" &&
         asm.contains "dataLen=1" &&
         asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "jlt r1, 4" &&
-        asm.contains "ja setAuth" &&
-        asm.contains "ja revoke"
+        asm.contains "jlt r1, 5" &&
+        asm.contains "call setAuth" &&
+        asm.contains "call revoke"
 
 end Tests.TokenAuthSpec

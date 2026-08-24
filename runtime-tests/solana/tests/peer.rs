@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -102,7 +104,7 @@ fn view(name: &str, writable1: bool, signer1: bool, expect: u64) {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
-            (acc0, funded(BASE_LAMPORTS)),
+            (acc0, common::dummy_state_account(&program_id)),
             (acc1, peer_account(&owner, PEER_LAMPORTS, PEER_DATA_LEN)),
         ],
         &[
@@ -132,7 +134,7 @@ fn owner1_returns_first_u64() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
-            (acc0, funded(BASE_LAMPORTS)),
+            (acc0, common::dummy_state_account(&program_id)),
             (acc1, peer_account(&owner, PEER_LAMPORTS, PEER_DATA_LEN)),
         ],
         &[

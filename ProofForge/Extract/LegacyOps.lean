@@ -108,7 +108,8 @@ inductive Op where
   | evmDeposit (amount : Val)
   | evmSendEth (w0 w1 w2 amount : Val)
   | evmLog (name : String) (amount : Val)
-  | forAccum (n : Nat) (addend : Val)
+  /-- Sum `addend` over `[0, n)`, exposing the final accumulator through `resultLocal`. -/
+  | forAccum (n : Nat) (addend : Val) (resultLocal : Nat)
   /-- 有界 `for i in [:n]`，体里可用 `loopIx`。体里 `exit` 的 op 提前结束；否则落到循环后。 -/
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Val) (len : Nat) (elemOff : Nat := 0)
@@ -318,19 +319,16 @@ def ataCreateIdempotent : Op :=
       { acc := 5, signer := false, writable := false }]
     #[.u8le 1]
 
-private def walk (fuel : Nat) (ops : Array Op) (p : Op → Bool) : Bool :=
-  match fuel with
-  | 0 => false
-  | fuel' + 1 =>
-    ops.any fun op =>
-      p op ||
-        match op with
-        | .ite _ _ _ t f => walk fuel' t p || walk fuel' f p
-        | .forBody _ body => walk fuel' body p
-        | _ => false
+private partial def walk (ops : Array Op) (p : Op → Bool) : Bool :=
+  ops.any fun op =>
+    p op ||
+      match op with
+      | .ite _ _ _ t f => walk t p || walk f p
+      | .forBody _ body => walk body p
+      | _ => false
 
 def hasInvoke (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .invoke .. => true | _ => false)
+  walk ops (fun | .invoke .. => true | _ => false)
 
 /-- 读账户 ≥1 header 的叶子；要 walk，但不等于 CPI。 -/
 def valNeedsWalk : Val → Bool
@@ -390,7 +388,7 @@ def valMinAccounts : Val → Nat
   | _ => 0
 
 def hasAcc1 (ops : Array Op) : Bool :=
-  walk 16 ops fun
+  walk ops fun
     | .letLocal _ v => valNeedsAcc1 v
     | .joinLocal _ => false
     | .setLocal _ v => valNeedsAcc1 v
@@ -407,7 +405,7 @@ def hasAcc1 (ops : Array Op) : Bool :=
     | .evmSendEth a b c d =>
         valNeedsAcc1 a || valNeedsAcc1 b || valNeedsAcc1 c || valNeedsAcc1 d
     | .evmLog _ v => valNeedsAcc1 v
-    | .forAccum _ v => valNeedsAcc1 v
+    | .forAccum _ v _ => valNeedsAcc1 v
     | .forBody _ _ => false
     | .indexSet _ i v _ _ => valNeedsAcc1 i || valNeedsAcc1 v
     | .mapGetU64 a b => valNeedsAcc1 a || valNeedsAcc1 b
@@ -432,13 +430,13 @@ def hasAcc1 (ops : Array Op) : Bool :=
     | .errorOverflow | .errorNamed _ => false
 
 def hasEvmDeposit (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .evmDeposit _ => true | _ => false)
+  walk ops (fun | .evmDeposit _ => true | _ => false)
 
 def hasEvmSendEth (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .evmSendEth .. => true | _ => false)
+  walk ops (fun | .evmSendEth .. => true | _ => false)
 
 def hasEvmLog (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .evmLog .. => true | _ => false)
+  walk ops (fun | .evmLog .. => true | _ => false)
 
 private def maxValAccounts (l r : Val) : Nat :=
   Nat.max (valMinAccounts l) (valMinAccounts r)
@@ -459,7 +457,7 @@ def opMinAccounts : Op → Nat
       Nat.max fromData fromBump
   | .okState v | .returnU64 v | .returnState v | .storeField _ v => valMinAccounts v
   | .errorOverflow | .errorNamed _ => 0
-  | .evmDeposit v | .evmLog _ v | .forAccum _ v => valMinAccounts v
+  | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valMinAccounts v
   | .forBody _ _ => 0
   | .evmSendEth a b c d =>
       Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b))
@@ -496,36 +494,31 @@ def opMinAccounts : Op → Nat
   | .evmTokenBalanceOfSelf a b c =>
       Nat.max (Nat.max (valMinAccounts a) (valMinAccounts b)) (valMinAccounts c)
 
-def opsMinAccounts (ops : Array Op) : Nat :=
-  let rec go (fuel : Nat) (ops : Array Op) (acc : Nat) : Nat :=
-    match fuel with
-    | 0 => acc
-    | fuel' + 1 =>
-      ops.foldl (init := acc) fun a op =>
-        let here := Nat.max a (opMinAccounts op)
-        match op with
-        | .ite _ _ _ t f => Nat.max (go fuel' t here) (go fuel' f here)
-        | .forBody _ body => go fuel' body here
-        | _ => here
-  go 16 ops 0
+partial def opsMinAccounts (ops : Array Op) : Nat :=
+  ops.foldl (init := 0) fun result op =>
+    let result := Nat.max result (opMinAccounts op)
+    match op with
+    | .ite _ _ _ thn els => Nat.max result (Nat.max (opsMinAccounts thn) (opsMinAccounts els))
+    | .forBody _ body => Nat.max result (opsMinAccounts body)
+    | _ => result
 
 def hasSystemTransfer (ops : Array Op) : Bool :=
   hasInvoke ops
 
 def hasCheckedAdd (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .checkedAddU64 .. => true | _ => false)
+  walk ops (fun | .checkedAddU64 .. => true | _ => false)
 
 def hasCheckedSub (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .checkedSubU64 .. => true | _ => false)
+  walk ops (fun | .checkedSubU64 .. => true | _ => false)
 
 def hasCheckedMul (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .checkedMulU64 .. => true | _ => false)
+  walk ops (fun | .checkedMulU64 .. => true | _ => false)
 
 def hasCheckedDiv (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .checkedDivU64 .. => true | _ => false)
+  walk ops (fun | .checkedDivU64 .. => true | _ => false)
 
 def hasCheckedMod (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .checkedModU64 .. => true | _ => false)
+  walk ops (fun | .checkedModU64 .. => true | _ => false)
 
 def hasCheckedArith (ops : Array Op) : Bool :=
   hasCheckedAdd ops || hasCheckedSub ops ||
@@ -595,7 +588,7 @@ private def cpiWordEvm : CpiWord → Bool
   | _ => false
 
 def hasEvmLeaf (ops : Array Op) : Bool :=
-  walk 16 ops fun
+  walk ops fun
     | .letLocal _ v => isEvmLeaf v
     | .joinLocal _ => false
     | .setLocal _ v => isEvmLeaf v
@@ -612,7 +605,7 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
     | .evmSendEth a b c d =>
         isEvmLeaf a || isEvmLeaf b || isEvmLeaf c || isEvmLeaf d
     | .evmLog _ v => isEvmLeaf v
-    | .forAccum _ v => isEvmLeaf v
+    | .forAccum _ v _ => isEvmLeaf v
     | .forBody _ _ => false
     | .indexSet _ i v _ _ => isEvmLeaf i || isEvmLeaf v
     | .mapGetU64 a b => isEvmLeaf a || isEvmLeaf b
@@ -643,7 +636,7 @@ private def cpiWordLang : CpiWord → Bool
   | _ => false
 
 def hasLangLeaf (ops : Array Op) : Bool :=
-  walk 16 ops fun
+  walk ops fun
     | .letLocal _ v => isLangLeaf v
     | .joinLocal _ => false
     | .setLocal _ v => isLangLeaf v
@@ -660,7 +653,7 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .evmSendEth a b c d =>
         isLangLeaf a || isLangLeaf b || isLangLeaf c || isLangLeaf d
     | .evmLog _ v => isLangLeaf v
-    | .forAccum _ v => isLangLeaf v
+    | .forAccum _ v _ => isLangLeaf v
     | .forBody _ _ => false
     | .indexSet _ i v _ _ => isLangLeaf i || isLangLeaf v
     | .mapGetU64 a b => isLangLeaf a || isLangLeaf b
@@ -687,7 +680,7 @@ def hasLangLeaf (ops : Array Op) : Bool :=
     | .errorOverflow | .errorNamed _ => false
 
 def hasSelect (ops : Array Op) : Bool :=
-  walk 16 ops fun
+  walk ops fun
     | .letLocal _ v => hasSelectVal v
     | .joinLocal _ => false
     | .setLocal _ v => hasSelectVal v
@@ -697,7 +690,7 @@ def hasSelect (ops : Array Op) : Bool :=
     | .invoke _ _ data _ bump =>
         (data.any fun | .u64le v => hasSelectVal v | _ => false) ||
           (match bump with | some v => hasSelectVal v | none => false)
-    | .evmDeposit v | .evmLog _ v | .forAccum _ v => hasSelectVal v
+    | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => hasSelectVal v
     | .forBody _ _ => false
     | .evmSendEth a b c d =>
         hasSelectVal a || hasSelectVal b || hasSelectVal c || hasSelectVal d
@@ -722,35 +715,35 @@ def hasSelect (ops : Array Op) : Bool :=
     | .errorOverflow | .errorNamed _ => false
 
 def hasForAccum (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .forAccum .. => true | _ => false)
+  walk ops (fun | .forAccum .. => true | _ => false)
 
 def hasForBody (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .forBody .. => true | _ => false)
+  walk ops (fun | .forBody .. => true | _ => false)
 
 def hasIndexSet (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .indexSet .. => true | _ => false)
+  walk ops (fun | .indexSet .. => true | _ => false)
 
 def hasStoreField (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .storeField .. => true | _ => false)
+  walk ops (fun | .storeField .. => true | _ => false)
 
 def hasErrorNamed (ops : Array Op) : Bool :=
-  walk 16 ops (fun | .errorNamed _ => true | _ => false)
+  walk ops (fun | .errorNamed _ => true | _ => false)
 
 def hasMapOp (ops : Array Op) : Bool :=
-  walk 16 ops fun
+  walk ops fun
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
     | .mapGetPair .. | .mapSetPair .. => true
     | _ => false
 
 def hasTokenOp (ops : Array Op) : Bool :=
-  walk 16 ops fun
+  walk ops fun
     | .evmTokenTransfer .. | .evmTokenBalanceOfSelf .. => true
     | _ => false
 
 /-- SVM 还不能发的语言叶：位运算、命名错误。for / index 不算。 -/
 def hasSvmRejectedLang (ops : Array Op) : Bool :=
   hasErrorNamed ops ||
-    walk 16 ops (fun
+    walk ops (fun
       | .letLocal _ v => isBitVal v
       | .joinLocal _ => false
       | .setLocal _ v => isBitVal v

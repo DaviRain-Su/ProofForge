@@ -15,15 +15,15 @@ open ProofForge.Svm.Runtime
   | .error _ => false
 
 #guard ProofForge.Svm.ABI.usesCpi ProofForge.Golden.extractedAta
-#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedAta == 7
+#guard ProofForge.Svm.ABI.cpiAccountCount ProofForge.Golden.extractedAta == 8
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedAta with
   | .error _ => false
   | .ok asm =>
-      asm.contains "invoke programIx=6" &&
+      asm.contains "invoke programIx=7" &&
         asm.contains "dataLen=1" &&
         asm.contains "call sol_invoke_signed_c" &&
-        asm.contains "jlt r1, 7"
+        asm.contains "jlt r1, 8"
 
 end Tests.AtaSpec

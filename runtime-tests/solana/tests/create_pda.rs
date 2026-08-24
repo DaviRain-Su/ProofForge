@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -79,6 +81,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[CREATE_LAMPORTS]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, true),
             AccountMeta::new(pda, false),
             AccountMeta::new_readonly(system, false),
@@ -96,6 +99,7 @@ fn create_pda_allocates_vault() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(BASE_LAMPORTS)),
             (pda, funded(0)),
             (system, system_acc),
@@ -121,15 +125,24 @@ fn create_pda_wrong_bump_fails() {
     let payer = Pubkey::new_unique();
     let (system, system_acc) = system_program_keyed();
     let ix = build_ix(program_id, "openBad", payer, pda, system);
-    mollusk.process_and_validate_instruction(
+    let result = mollusk.process_instruction(
         &ix,
         &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
             (payer, funded(BASE_LAMPORTS)),
             (pda, funded(0)),
             (system, system_acc),
         ],
-        &[Check::instruction_err(
-            solana_instruction::error::InstructionError::ProgramFailedToComplete,
-        )],
+    );
+    assert!(
+        matches!(
+            result.raw_result,
+            Err(
+                solana_instruction::error::InstructionError::ProgramFailedToComplete
+                    | solana_instruction::error::InstructionError::PrivilegeEscalation
+            )
+        ),
+        "wrong bump must reject the signed create: {:?}",
+        result.program_result
     );
 }

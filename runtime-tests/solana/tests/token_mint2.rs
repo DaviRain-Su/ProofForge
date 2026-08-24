@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token,
@@ -5,7 +7,6 @@ use {
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_native_token::LAMPORTS_PER_SOL,
-    solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     std::{env, fs, path::PathBuf},
@@ -85,6 +86,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(authority, authority_signer),
             AccountMeta::new(mint, false),
             AccountMeta::new_readonly(token_id, false),
@@ -102,6 +104,10 @@ fn init_mint_writes_authority_and_decimals() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (authority, funded(LAMPORTS_PER_SOL)),
             (mint, uninitialized_mint()),
             (token_id, token_acc),
@@ -120,7 +126,7 @@ fn init_mint_writes_authority_and_decimals() {
 }
 
 #[test]
-fn init_mint_missing_signer_fails() {
+fn init_mint_does_not_require_authority_signer() {
     let (program_id, mollusk) = harness();
     let authority = Pubkey::new_unique();
     let mint = Pubkey::new_unique();
@@ -129,13 +135,20 @@ fn init_mint_missing_signer_fails() {
     mollusk.process_and_validate_instruction(
         &ix,
         &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
             (authority, funded(LAMPORTS_PER_SOL)),
             (mint, uninitialized_mint()),
             (token_id, token_acc),
         ],
         &[
-            Check::err(ProgramError::Custom(1)),
-            Check::account(&mint).data_slice(36 + 8 + 1, &[0]).build(),
+            Check::success(),
+            Check::account(&mint)
+                .data_slice(36 + 8, &[DECIMALS])
+                .data_slice(36 + 8 + 1, &[1])
+                .build(),
         ],
     );
 }

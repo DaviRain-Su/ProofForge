@@ -1,3 +1,5 @@
+mod common;
+
 use {
     mollusk_svm::{result::Check, Mollusk},
     sha2::{Digest, Sha256},
@@ -78,6 +80,7 @@ fn build_ix(
         program_id,
         &instruction_data(&disc, &[]),
         vec![
+            AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(acc0, acc0_signer),
             AccountMeta::new_readonly(system, false),
         ],
@@ -92,7 +95,11 @@ fn allocate_grows_system_account() {
     let ix = build_ix(program_id, "alloc", acc0, system, true);
     mollusk.process_and_validate_instruction(
         &ix,
-        &[(acc0, funded(BASE_LAMPORTS)), (system, system_acc)],
+        &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
+            (acc0, funded(BASE_LAMPORTS)),
+            (system, system_acc),
+        ],
         &[
             Check::success(),
             Check::return_data(&16u64.to_le_bytes()),
@@ -112,7 +119,11 @@ fn allocate_missing_signer_fails() {
     let ix = build_ix(program_id, "alloc", acc0, system, false);
     mollusk.process_and_validate_instruction(
         &ix,
-        &[(acc0, funded(BASE_LAMPORTS)), (system, system_acc)],
+        &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
+            (acc0, funded(BASE_LAMPORTS)),
+            (system, system_acc),
+        ],
         &[
             Check::err(ProgramError::Custom(1)),
             Check::account(&acc0).space(0).build(),
@@ -128,7 +139,11 @@ fn assign_sets_owner_to_program() {
     let ix = build_ix(program_id, "assign", acc0, system, true);
     mollusk.process_and_validate_instruction(
         &ix,
-        &[(acc0, funded(BASE_LAMPORTS)), (system, system_acc)],
+        &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
+            (acc0, funded(BASE_LAMPORTS)),
+            (system, system_acc),
+        ],
         &[
             Check::success(),
             Check::return_data(&0u64.to_le_bytes()),
@@ -145,7 +160,11 @@ fn assign_missing_signer_fails() {
     let ix = build_ix(program_id, "assign", acc0, system, false);
     mollusk.process_and_validate_instruction(
         &ix,
-        &[(acc0, funded(BASE_LAMPORTS)), (system, system_acc)],
+        &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
+            (acc0, funded(BASE_LAMPORTS)),
+            (system, system_acc),
+        ],
         &[
             Check::err(ProgramError::Custom(1)),
             Check::account(&acc0).owner(&Pubkey::default()).build(),
