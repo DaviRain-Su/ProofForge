@@ -24,7 +24,7 @@ compatibility Ops 降成 EVM-only `Op`；SVM 叶子（`clockSlot` / `signerKey0`
 非 payable 入口本地守卫。`evmSendEth` 是封闭 value CALL。`evmLogTipped` 是 LOG1。窄槽
 `UInt8/16/32` 各占一个 storage word。`Option UInt64` 是 tag+payload 两槽。
 
-`init` / `initialize` → constructor。其它方法 → `uint64` ABI entry；`kind.get` 标 `view`；含 `evmDeposit` 的 mutate 标 `payable`。`evmLog name amt` 是 LOG1，topic = `keccak("name(uint64)")`。pair-key Map 是 `keccak256(owner||spender||base)`。
+首选的 `init` / `initialize` → constructor；其它 `.init` 方法不会成为 runtime entry，避免部署后重置 storage。非 init 方法 → `uint64` ABI entry；`kind.get` 标 `view`；含 `evmDeposit` 的 mutate 标 `payable`。`evmLog name amt` 是 LOG1，topic = `keccak("name(uint64)")`。pair-key Map 是 `keccak256(owner||spender||base)`。
 
 overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 
@@ -43,7 +43,7 @@ overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 Anvil（工程门，不是 refinement）：
 
 - `runtime-tests/evm/anvil_counter.sh`：constructor / increment / get / overflow
-- `runtime-tests/evm/anvil_pair.sh`：constructor 只写 left；`initBoth` 写两槽；`creditLeft` 保 right
+- `runtime-tests/evm/anvil_pair.sh`：constructor 只写 left；拒绝 runtime `initBoth`；`creditLeft` 保 right
 - `runtime-tests/evm/anvil_flag.sh`：UInt8 mask + count 保持
 - `runtime-tests/evm/anvil_maybe.sh`：none 清零、some 写双叶
 - `runtime-tests/evm/anvil_ctx.sh`：`evmCaller` 对发送者低 8 字节；`height` 对 `block.number`

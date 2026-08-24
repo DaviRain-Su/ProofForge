@@ -65,7 +65,8 @@ open ProofForge.Evm
   | .error _ => false
   | .ok p =>
       p.constructor.ixName == "initialize" &&
-        (p.entries.find? (·.ixName == "initBoth")).isSome &&
+        (p.entries.find? (·.ixName == "initBoth")).isNone &&
+        p.entries.all (·.kind != .init) &&
         p.slots.size == 2
 
 #guard
@@ -144,13 +145,8 @@ open ProofForge.Evm
       match ProofForge.Evm.Emit.emitYul p with
       | .error _ => false
       | .ok yul =>
-          let both :=
-            match yul.splitOn "case 0x8ced0f9f" with
-            | _ :: rest :: _ => rest
-            | _ => ""
-          both.contains "sstore(0, arg0)" &&
-            both.contains "sstore(1, arg1)" &&
-            !both.contains "return(0, 32)\n        sstore(1"
+          !yul.contains "case 0x8ced0f9f" &&
+            !(ProofForge.Evm.Emit.emitAbi p).contains "\"name\":\"initBoth\""
 
 #guard
   match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedFlag with

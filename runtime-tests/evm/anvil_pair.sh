@@ -28,26 +28,28 @@ require_pair() {
 addr="$(solana_lean_deploy_ctor_u64 "$bytecode" 7)"
 require_pair "$addr" 7 0 "constructor"
 
-"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'initBoth(uint64,uint64)' 5 99 >/dev/null
-require_pair "$addr" 5 99 "initBoth"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'initBoth(uint64,uint64)' 5 99 >/dev/null 2>&1; then
+  echo "FAIL: alternate initializer unexpectedly exposed at runtime" >&2
+  exit 1
+fi
+require_pair "$addr" 7 0 "rejected initBoth"
 
 simulated="$("$cast" call --rpc-url "$rpc" "$addr" 'creditLeft(uint64)(uint64)' 3)"
-solana_lean_require_uint "$simulated" 8 "creditLeft return"
-require_pair "$addr" 5 99 "eth_call creditLeft must not commit"
+solana_lean_require_uint "$simulated" 10 "creditLeft return"
+require_pair "$addr" 7 0 "eth_call creditLeft must not commit"
 
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'creditLeft(uint64)' 3 >/dev/null
-require_pair "$addr" 8 99 "creditLeft"
+require_pair "$addr" 10 0 "creditLeft"
 
-"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'initBoth(uint64,uint64)' "$UINT64_MAX" 99 >/dev/null
-require_pair "$addr" "$UINT64_MAX" 99 "max left"
+max_addr="$(solana_lean_deploy_ctor_u64 "$bytecode" "$UINT64_MAX")"
+require_pair "$max_addr" "$UINT64_MAX" 0 "max constructor"
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-    "$addr" 'creditLeft(uint64)' 1 >/dev/null 2>&1; then
+    "$max_addr" 'creditLeft(uint64)' 1 >/dev/null 2>&1; then
   echo "FAIL: overflow creditLeft unexpectedly succeeded" >&2
   exit 1
 fi
-require_pair "$addr" "$UINT64_MAX" 99 "overflow hold"
+require_pair "$max_addr" "$UINT64_MAX" 0 "overflow hold"
 
-echo "evm-anvil-pair: ok (ctor/initBoth/creditLeft/right-hold; engineering only)"
+echo "evm-anvil-pair: ok (ctor/initBoth-rejected/creditLeft/right-hold; engineering only)"

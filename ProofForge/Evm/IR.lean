@@ -293,8 +293,9 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
         m.ixName == "initialize" || Core.IR.lastName m.name == "init") with
     | some m => m
     | none => ctors[0]!
-  let rest :=
-    extras ++ ctors.filter (fun m => m.ixName != ctorSrc.ixName || m.name != ctorSrc.name)
+  -- EVM initialization is deployment-only. Alternative source initializers may remain useful to
+  -- targets such as SVM, but exposing them as runtime selectors would allow storage reinitialization.
+  let rest := extras
   if rest.isEmpty then
     throw "extract/unsupported: evm wants at least one entry"
   if ctorSrc.ops.isEmpty then
