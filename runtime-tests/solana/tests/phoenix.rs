@@ -52,6 +52,81 @@ fn phoenix_accounts(
     ]
 }
 
+struct PhoenixAccounts {
+    program_id: Pubkey,
+    mollusk: mollusk_svm::Mollusk,
+    state_key: Pubkey,
+    token_source: Pubkey,
+    mint: Pubkey,
+    token_destination: Pubkey,
+    token_program: Pubkey,
+}
+
+impl PhoenixAccounts {
+    fn new() -> Self {
+        let (program_id, mollusk) = harness("Phoenix", "PF_PHOENIX_SO");
+        Self {
+            program_id,
+            mollusk,
+            state_key: Pubkey::new_unique(),
+            token_source: Pubkey::new_unique(),
+            mint: Pubkey::new_unique(),
+            token_destination: Pubkey::new_unique(),
+            token_program: Pubkey::new_unique(),
+        }
+    }
+
+    fn extras(&self, trader: Pubkey, signer: bool) -> Vec<AccountMeta> {
+        phoenix_metas(
+            trader,
+            signer,
+            self.token_source,
+            self.mint,
+            self.token_destination,
+            self.token_program,
+        )
+    }
+
+    fn extra_accounts(&self, trader: Pubkey) -> Vec<(Pubkey, solana_account::Account)> {
+        phoenix_accounts(
+            trader,
+            self.token_source,
+            self.mint,
+            self.token_destination,
+            self.token_program,
+        )
+    }
+
+    fn send(
+        &self,
+        state: solana_account::Account,
+        trader: Pubkey,
+        trader_signer: bool,
+        name: &str,
+        params: &[u64],
+        writable: bool,
+        state_signer: bool,
+        checks: &[Check],
+    ) -> solana_account::Account {
+        let ix = instruction(
+            self.program_id,
+            self.state_key,
+            name,
+            params,
+            writable,
+            state_signer,
+            self.extras(trader, trader_signer),
+        );
+        let mut accounts = vec![(self.state_key, state)];
+        accounts.extend(self.extra_accounts(trader));
+        resulting_state(
+            self.mollusk
+                .process_and_validate_instruction(&ix, &accounts, checks),
+            &self.state_key,
+        )
+    }
+}
+
 #[test]
 fn authenticated_deposit_and_post_ask_run_on_chain() {
     let (program_id, mollusk) = harness("Phoenix", "PF_PHOENIX_SO");
@@ -237,4 +312,128 @@ fn authenticated_deposit_and_post_ask_run_on_chain() {
         &overflow_accounts,
         &[Check::err(solana_program_error::ProgramError::Custom(0x1001))],
     );
+}
+
+#[test]
+fn registered_taker_swap_buy_fills_on_chain() {
+    let ctx = PhoenixAccounts::new();
+    let maker = Pubkey::new_unique();
+    let taker = Pubkey::new_unique();
+
+    let account = ctx.send(
+        state_account(&ctx.program_id, 1376),
+        maker,
+        false,
+        "initialize",
+        &[1],
+        true,
+        true,
+        &[Check::success()],
+    );
+    assert_eq!((slot(&account, 0), slot(&account, 1)), (1, 1));
+
+    let account = ctx.send(
+        account,
+        maker,
+        true,
+        "depositFunds",
+        &[3, 0],
+        true,
+        false,
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    let account = ctx.send(
+        account,
+        maker,
+        true,
+        "postAsk",
+        &[10, 3, 0, 0, 0, 0],
+        true,
+        false,
+        &[Check::success(), Check::return_data(&3u64.to_le_bytes())],
+    );
+    assert_eq!(
+        (slot(&account, 6), slot(&account, 14), slot(&account, 18)),
+        (10, 1, 3)
+    );
+
+    let account = ctx.send(
+        account,
+        taker,
+        true,
+        "depositFunds",
+        &[0, 40],
+        true,
+        false,
+        &[Check::success(), Check::return_data(&2u64.to_le_bytes())],
+    );
+    assert_eq!(slot(&account, 54), 2, "two registered seats");
+    assert_eq!(slot(&account, 86), 40, "taker quote free");
+
+    let account = ctx.send(
+        account,
+        taker,
+        true,
+        "swapBuy",
+        &[0, 7, 8, 2, 10],
+        true,
+        false,
+        &[Check::success(), Check::return_data(&2u64.to_le_bytes())],
+    );
+    assert_eq!(slot(&account, 18), 1, "one lot remains on the book");
+    assert_eq!(slot(&account, 86), 19, "taker quote after fill+fee");
+    assert_eq!(slot(&account, 94), 2, "taker received base");
+    assert_eq!(slot(&account, 85), 20, "maker received quote");
+    assert_eq!(slot(&account, 89), 1, "maker still has one locked lot");
+    assert_eq!(slot(&account, 5), 1, "one lot of unclaimed fees");
+    assert_eq!(slot(&account, 160), 2, "fill + summary");
+}
+
+#[test]
+fn self_trade_abort_fails_on_chain() {
+    let ctx = PhoenixAccounts::new();
+    let trader = Pubkey::new_unique();
+
+    let account = ctx.send(
+        state_account(&ctx.program_id, 1376),
+        trader,
+        false,
+        "initialize",
+        &[1],
+        true,
+        true,
+        &[Check::success()],
+    );
+    let account = ctx.send(
+        account,
+        trader,
+        true,
+        "depositFunds",
+        &[3, 40],
+        true,
+        false,
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    let account = ctx.send(
+        account,
+        trader,
+        true,
+        "postAsk",
+        &[10, 3, 0, 0, 0, 0],
+        true,
+        false,
+        &[Check::success(), Check::return_data(&3u64.to_le_bytes())],
+    );
+    let after = ctx.send(
+        account,
+        trader,
+        true,
+        "swapBuy",
+        &[0, 0, 0, 1, 10],
+        true,
+        false,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    assert_eq!(slot(&after, 18), 3, "self-cross does not consume the ask");
+    assert_eq!(slot(&after, 89), 3, "maker base stays locked");
 }

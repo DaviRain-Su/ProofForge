@@ -144,6 +144,13 @@ private def errorOfMatch (code : UInt64) : Error :=
   else if code = matchUnauthorized then .unauthorized
   else .overflow
 
+/-- Extractable: the extractor only lowers concrete `.error .ctor` leaves. -/
+private def throwMatch (code : UInt64) : Except Error (State × UInt64) :=
+  if code = matchFull then .error .full
+  else if code = matchSelfTrade then .error .selfTrade
+  else if code = matchUnauthorized then .error .unauthorized
+  else .error .overflow
+
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
 def empty4 : Vector UInt64 4 := #v[0, 0, 0, 0]
@@ -196,7 +203,7 @@ private def finishWithEvent (s : State) (event : MarketEvent) (ret : UInt64) :
   else .ok ({ next with matchStopped := 0, matchError := 0, matchLevel := 0 }, ret)
 
 attribute [pf_inline] beginEvents MarketEvent.withIndex appendEvent
-  finishWithEvent errorOfMatch
+  finishWithEvent errorOfMatch throwMatch
 
 /-- 固定容量 ask 树的节点地址；0 是 Phoenix 的 sentinel。 -/
 structure RBNode where
@@ -1676,7 +1683,7 @@ private def finishFold (s : State) (taker quoteLots feeLots : UInt64) :
   commitBuy s taker s.matchFilled s.matchExpired quoteLots feeLots
 
 private def settleFold (s : State) (taker : UInt64) : Except Error (State × UInt64) :=
-  if s.matchError ≠ 0 then .error (errorOfMatch s.matchError)
+  if s.matchError ≠ 0 then throwMatch s.matchError
   else finishFold s taker s.matchQuote s.matchLimit
 
 attribute [pf_inline] unlockAskFold fillAskFold finishFold settleFold
@@ -1873,7 +1880,7 @@ private def commitSellFold (s : State) (taker grossQuote feeLots : UInt64) :
   commitSell s taker s.matchFilled s.matchExpired s.matchMakerQuote grossQuote feeLots
 
 private def settleSellFold (s : State) (taker : UInt64) : Except Error (State × UInt64) :=
-  if s.matchError ≠ 0 then .error (errorOfMatch s.matchError)
+  if s.matchError ≠ 0 then throwMatch s.matchError
   else commitSellFold s taker s.matchLimit s.matchWant
 
 attribute [pf_inline] commitSellFold settleSellFold
