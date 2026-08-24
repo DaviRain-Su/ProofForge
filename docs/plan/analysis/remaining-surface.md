@@ -1,5 +1,8 @@
 # 剩余表面：一次收口
 
+> 历史 L4-033 快照：账户下标现已支持编译期常量 `acc < 64`，不再用本文作当前上限。
+> 当前 backlog 见 [../backlog.md](../backlog.md)。
+
 依据：[authority.md](authority.md)、[sdk-surface.md](sdk-surface.md)。
 不是 30 个 syscall 全开，也不是 Token-2022 / 运行时 CPI。
 

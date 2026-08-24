@@ -52,49 +52,53 @@
 - `keccak256Lit`；Keccak Mollusk
 - 账户下标叶子收口；Trio Mollusk
 - Bool / `unixTime` / nonce prelude / SetAuthority owner / Approve / Multisig2；Gate / Nonce / TokenOwner / TokenMs Mollusk
+- Core control/schema 与 `Svm.Ops/IR/Runtime`、`Evm.Ops/IR/Runtime` 分层；Extract.IR 是唯一 typed target-extension 组合点
+- 嵌套 structure / `Vector Nested n` 摊平；Nested / Tree Mollusk
+- Phoenix bounded N=4 双边书、四 seat registry、逐 seat 结算、TIF、费用和 typed event batch
+- SVM 47 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
+- 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
 
-## 进行中
+## 当前状态
 
-- EVM 三大切片已交付（E-RT / E-LANG / E-ASSET）。见 [research/05-evm-coverage-slices.md](../research/05-evm-coverage-slices.md)。不做 Window。不把 SVM 名译成 EVM。
-- E-OWN 已交付：Ownable + 通用 event + pair-key allowance。
+- `lake build Tests` 当前 181 jobs；65 个 imported test modules 含 723 个 `#guard`。
+- SVM registry 47 个程序 / 47 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
+- EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
+- Phoenix 当前链上覆盖 authenticated deposit/postAsk、registered swapBuy fill 和 self-trade Abort；完整矩阵仍主要是 host / IR 检查。
+- `l5-003` 抽取已完成，Seat 的 CPI runtime 成功路径与双 vault 尚未完成。
+- `l5-004` Token-2022 classic-compatible program-id 切片尚未开始。
+- `l5-005` 已完成；任务状态已同步为 done。
 
-## 下一刀
+## 按优先级继续
 
-Phoenix：`AuditLogHeader` + Borsh self-CPI recorder，再接双 vault Token CPI。
-l5-003 剩余：同一入口的 quote vault recipe。动态树删除 fixup 仍是独立范围。
-完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
+### P0：现有语义的链上闭环
 
-能 fail-closed 抽出的格子已收口（L4-034）。
+1. Phoenix Mollusk：postBid / reduceAsk / reduceBid / swapBuy / swapSell、slot/time TIF、三种 self-trade、withdraw / evictSeat / collectFees、签名与账户负例。
+2. Seat Mollusk：`openSeat` / `openBase` CPI 成功路径及权限负例。
+3. Phoenix 双 vault Token CPI adapter，把 deposit/withdraw/未注册 take-only 的占位结算接到真实账户。
+4. `AuditLogHeader` + Borsh wire event + `Log` self-CPI recorder。
 
-仍关、且不是延期：账户 3+ 成功路径、`ByteArray 32`、feature-gated 哈希与曲线、nonce 成功路径（要现成 nonce 账户）。
+### P1：通用后端边界
 
-Token-2022 规划见 [analysis/token-2022.md](analysis/token-2022.md)。没有 Token v3。切片 A（换 program id）是 l5-004。hook / fee / remaining accounts 仍关。
+1. 显式 basic-block CFG、local CSE 和共享 block；先缩小 Phoenix，不在合约或 emitter 加特判。
+2. Solanalib control-flow / instruction correspondence；当前只覆盖 bounded checked arithmetic + static store。
+3. 新 target 的注册边界；现在新增 target 仍需在 `Extract.IR` 增加 typed extension case 和 conversion。
 
-`forBody` 已支持显式 state-carrying bounded fold 和外层参数。Phoenix N=4 扫书用
-17-phase loop；free-funds ask 插入、驱逐、按 ID reduce/cancel、三种 self-trade 和
-fee collection 已进真实源构建。bid book 的 free-funds collateral、驱逐、
-reduce/cancel 和 sell IOC 也复用同一 fold 落地。四 seat trader registry 已按完整
-四-limb Pubkey 做 lookup/bump allocation/deposit，并保存 per-seat TraderState；base/quote
-partial withdraw、zero-state eviction 和 LIFO address reuse 已完成。post/reduce/match
-已逐 seat 结算，swap 的 self-trade identity 也由 signer 推导。event 已对齐官方
-ordinal/index，并把 maker seat resolve 成四-limb Pubkey；下一步实现真实
-`AuditLogHeader` + Borsh self-CPI recorder，再接双 vault CPI。动态树拓扑和删除
-fixup 仍是后续独立范围。
+### P2：扩大产品面
 
+1. `l5-004` Token-2022 指令 0–24 的 program-id 切片；hook / fee mint 在 TLV / remaining accounts 之前继续 fail closed。
+2. Phoenix 动态 trader/order 红黑树、删除 fixup 和非固定 N；当前 Phoenix 仍是 bounded N=4 有序投影。
+3. 固定长度 32-byte / u128 / Borsh protocol types；当前 Pubkey 和 client id 使用 `UInt64` limbs。
+4. GitHub CI：串行 Lake、SVM Mollusk、EVM Anvil。
 
-完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
+## 明确保持 fail closed
 
-## 其后（L2 / L3）
+- 搬 PF 前端 / `HandlerIR.mk` 私有构造、新 DSL、无约束 Lean、FFI→asm。
+- `.so` / loader / 全 SVM refinement 与公网部署声明。
+- 运行时 program id、变长 data、运行时 remaining accounts；编译期钉死的 CPI 已开。
+- Token-2022 transfer hook / fee / TLV extension，直到对应账户模型落地。
+- feature-gated blake3 / poseidon / curve25519 / alt_bn128 / `sol_get_sysvar`。
+- 把完整 32B key 当作现有 8B return-data ABI 的单一返回值。
 
-- 多字段 / 多构造子 inductive
-
-## 有具体合约再开（L4）
-
-- Token mint/burn/close、System assign/allocate、Rent exemption
-- 特化仍是具名 recipe；底层是编译期钉死的 `invoke`
-
-## 不做
-
-- 搬 PF 前端 / `HandlerIR.mk` 私有构造
-- FFI→asm；`.so` refinement；公网；运行时拼 CPI；Token-2022
-- 换 Anza platform-tools
+历史 SDK 清单和阶段分析保留作设计记录，不再当当前 backlog：
+[sdk-surface.md](analysis/sdk-surface.md)、[gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)、
+[remaining-surface.md](analysis/remaining-surface.md)。

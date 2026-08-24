@@ -91,9 +91,10 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 little-endian `(lo, hi)` 两个 `UInt64` limb 完整保留。最宽事件现在是九 payload，测试
 明确钉住动态 `events` 的 byte offset 72，防止抽取器静默漏掉尾叶。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 5,613,720-byte assembly、
-841,984-byte eBPF ELF 和 12,974-byte IDL。assembly 是未做 CSE/共享基本块的中间文本，
-不是部署文件；当前 ELF 约 822.3 KiB。完整 maker Pubkey 与 event/lastEvent 双写会重复
+真实源模块经 `pf build --target svm Phoenix` 生成 5,084,550-byte assembly、
+828,256-byte eBPF ELF 和 14,742-byte IDL；SVM digest 是 `1d988fc09ff38595`。
+assembly 是未做 CSE/共享基本块的中间文本，不是部署文件；当前 ELF 约 808.8 KiB。
+完整 maker Pubkey 与 event/lastEvent 双写会重复
 展开 conditional values，因此文本体积明显增加。测试把 assembly 回归预算钉在
 5.75 MB，并拒绝重复 label，同时断言 maker/taker ledger writes 和最宽 event leaf
 都存在。链上 buy / sell 都是 19 phase，挂单是 17 phase；要显著缩小文件应在通用

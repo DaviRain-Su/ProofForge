@@ -1,5 +1,8 @@
 # SDK 表面：还剩什么
 
+> 历史 L4 设计清单：通用固定 CPI、AccountInfo、sysvar、PDA、System、Token、ATA 与 Memo
+> 已按后续任务落地。当前工作顺序见 [../backlog.md](../backlog.md)。
+
 依据：[authority.md](authority.md)（官方 SVM / syscall，不是 `solana-program` 模块树，也不是 PF 产品清单）。
 官方 syscall 表（2026-08-22）：[Syscall reference](https://solana.com/docs/core/programs/syscall-reference)。
 官方 sysvar：[Anza sysvars](https://docs.anza.xyz/runtime/sysvars)。

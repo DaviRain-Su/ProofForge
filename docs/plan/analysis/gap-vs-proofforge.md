@@ -1,5 +1,8 @@
 # 分析：相对 ProofForge Solana 的缺口
 
+> 历史阶段快照：本文保留早期 Counter→L4 决策依据，不再表示当前实现状态。
+> 当前 backlog 见 [../backlog.md](../backlog.md)，当前模块边界见 [../../modules/README.md](../../modules/README.md)。
+
 补全依据：[authority.md](authority.md)（官方运行时 + syscall，不是 PF 清单，也不是 `solana-program` crate）。
 权威调研：[research/03-feasibility.md](../../research/03-feasibility.md)。
 PF 工程面只作 ABI 对照：[proof_forge/docs/targets/02-solana.md](file:///Users/davirian/orca/projects/proof_forge/docs/targets/02-solana.md)。
