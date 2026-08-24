@@ -1304,6 +1304,35 @@ private def asOptionPayload (env : Environment) (e : Expr) : Option Ops.Val :=
       | _ => none
     | none => none
 
+/-- Preserve the constructor discriminant when an Option-like value becomes storage leaves. -/
+private def asOptionStorage (env : Environment) (e : Expr) : Option (Ops.Val × Ops.Val) :=
+  let e := strip e
+  if isConstNamed e ``Option.none || endsWith e ".none" then
+    some (.lit 0, .lit 0)
+  else if isConstNamed e ``Option.some || endsWith e ".some" then
+    let args := e.getAppArgs
+    if args.size ≥ 1 then
+      (val env args[args.size - 1]!).map fun payload => (.lit 1, payload)
+    else none
+  else
+    match e.getAppFn.constName? with
+    | some ctor =>
+      match env.find? ctor with
+      | some (.ctorInfo info) =>
+        if isOptionLikeInductive env info.induct then
+          match enumCtorIndex env info.induct ctor with
+          | some 0 => some (.lit 0, .lit 0)
+          | some _ =>
+            if info.numFields == 0 then some (.lit 1, .lit 1)
+            else if e.getAppArgs.size ≥ 1 then
+              (val env e.getAppArgs[e.getAppArgs.size - 1]!).map fun payload =>
+                (.lit 1, payload)
+            else none
+          | none => none
+        else none
+      | _ => none
+    | none => none
+
 /-- `#v[a, b, …]` = `Vector.mk (List.toArray (a :: b :: []))`。 -/
 private def collectListVals (env : Environment) (fuel : Nat) (e : Expr) : Array Ops.Val :=
   match fuel with
@@ -1584,11 +1613,9 @@ private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val
               for index in [:payloadWidth] do
                 acc := acc.push (payloads[index]?.getD (.lit 0))
             | none =>
-              match asOptionPayload env a with
-              | some (.lit 0) =>
-                acc := acc.push (.lit 0) |>.push (.lit 0)
-              | some v =>
-                acc := acc.push (.lit 1) |>.push v
+              match asOptionStorage env a with
+              | some (tag, payload) =>
+                acc := acc.push tag |>.push payload
               | none =>
                 if endsWith a "._proof_1" || endsWith a "._proof_2" || endsWith a ".rfl" then
                   pure ()
@@ -1702,7 +1729,7 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
               -- A payload constructor is one typed variant field, not a nested scalar
               -- expression whose first argument can stand in for the whole field.
               let nested :=
-                if (asUInt64VariantCtor env arg).isSome then #[]
+                if (asUInt64VariantCtor env arg).isSome || (asOptionStorage env arg).isSome then #[]
                 else flattenLeaves env child arg
               let isVectorField :=
                 match env.find? (c.induct.str fname) with
@@ -1722,12 +1749,9 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                     acc := acc.push
                       (s!"{child}_p{index}", payloads[index]?.getD (.lit 0))
                 | none =>
-                  match asOptionPayload env arg with
-                  | some (.lit 0) =>
-                    acc := acc.push (s!"{child}_tag", .lit 0)
-                      |>.push (s!"{child}_p0", .lit 0)
-                  | some v =>
-                    acc := acc.push (s!"{child}_tag", .lit 1) |>.push (s!"{child}_p0", v)
+                  match asOptionStorage env arg with
+                  | some (tag, payload) =>
+                    acc := acc.push (s!"{child}_tag", tag) |>.push (s!"{child}_p0", payload)
                   | none =>
                     match val env arg with
                     | some v =>

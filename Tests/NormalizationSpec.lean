@@ -68,6 +68,13 @@ def remainder (s : State) (den : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+def setSomeZero (_s : Examples.Maybe.State) :
+    Except Examples.Maybe.Error (Examples.Maybe.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ slot := some 0 }, 0)
+  else
+    .error .overflow
+
 namespace MisleadingConstants
 
 structure State where
@@ -128,6 +135,15 @@ private def sameProgramCore (left right : ProofForge.Extract.Legacy.Program) : B
     left.schema == right.schema &&
     left.methods.size == right.methods.size &&
     (left.methods.zip right.methods).all fun pair => sameMethodCore pair.1 pair.2
+
+private partial def hasStore (ops : Array ProofForge.Ops.Op) (name : String)
+    (value : ProofForge.Ops.Val) : Bool :=
+  ops.any fun
+    | .storeField actualName actualValue => actualName == name && actualValue == value
+    | .ite _ _ _ thenOps elseOps =>
+        hasStore thenOps name value || hasStore elseOps name value
+    | .forBody _ body => hasStore body name value
+    | _ => false
 
 syntax "#pf_guard_equiv " ident ident ident " == " ident ident ident : command
 
@@ -238,19 +254,25 @@ elab "#pf_guard_core_evaluation" : command => do
     | .error reason => throwError reason
   let some setSome := maybe.methods.find? (·.ixName == "setSome")
     | throwError "missing Maybe.setSome"
-  let some (tag, payload) := maybe.schema.firstOption?
-    | throwError "missing Maybe Option leaves"
-  let some optionCommit := setSome.evaluation.commits[0]?
-    | throwError s!"missing Maybe.setSome commit: {repr setSome.evaluation}"
-  let some tagWrite := optionCommit.writes[0]?
-    | throwError "missing Maybe tag write"
-  let some payloadWrite := optionCommit.writes[1]?
-    | throwError "missing Maybe payload write"
-  unless optionCommit.writes.size == 2 && tagWrite.place == tag.place &&
-      payloadWrite.place == payload.place &&
-      tagWrite.value == .source (.lit 1) && payloadWrite.value == .source (.arg 0) &&
-      optionCommit.result == payloadWrite.value do
-    throwError s!"Option writeback is not explicit: {repr optionCommit}"
+  unless hasStore setSome.ops "slot_tag" (.lit 1) &&
+      hasStore setSome.ops "slot_p0" (.arg 0) do
+    throwError s!"Option writeback is not explicit: {repr setSome.ops}"
+  let ambiguous : Array ProofForge.Extract.IR.Op := #[.okState (.lit 0)]
+  match ProofForge.Core.evaluate maybe.schema ambiguous with
+  | .error _ => pure ()
+  | .ok evaluation =>
+      throwError s!"ambiguous scalar Option writeback did not fail closed: {repr evaluation}"
+
+  let someZero ←
+    match ProofForge.Extract.extractProgram env ``Examples.Maybe.init ``setSomeZero
+        ``Examples.Maybe.getValue with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some setZero := someZero.methods.find? (·.ixName == "setSomeZero")
+    | throwError "missing setSomeZero"
+  unless hasStore setZero.ops "slot_tag" (.lit 1) &&
+      hasStore setZero.ops "slot_p0" (.lit 0) do
+    throwError s!"Option.some 0 lost its constructor identity: {repr setZero.ops}"
 
   let tree ←
     match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with

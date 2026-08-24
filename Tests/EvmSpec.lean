@@ -170,7 +170,7 @@ open ProofForge.Evm
       match ProofForge.Evm.Emit.emitYul p with
       | .error _ => false
       | .ok yul =>
-          yul.contains "sstore(0, 1)" &&
+          yul.contains "sstore(0, 0x1)" &&
             yul.contains "sstore(1, arg0)" &&
             yul.contains "sstore(0, 0)" &&
             yul.contains "sstore(1, 0)"

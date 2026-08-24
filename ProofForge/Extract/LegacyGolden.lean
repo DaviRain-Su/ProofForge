@@ -274,13 +274,15 @@ def extractedMaybe : Program :=
       { kind := .increment, name := "Examples.Maybe.setNone", ixName := "setNone", paramCount := 0
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.okState (.lit 0)]
+            #[.storeField "slot_tag" (.lit 0), .storeField "slot_p0" (.lit 0),
+              .okState (.lit 0)]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Maybe.setSome", ixName := "setSome", paramCount := 1
         ops := #[
           .ite .le (.arg 0) (.lit (~~~(0 : UInt64)))
-            #[.okState (.arg 0)]
+            #[.storeField "slot_tag" (.lit 1), .storeField "slot_p0" (.arg 0),
+              .okState (.arg 0)]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Examples.Maybe.isSome", ixName := "isSome", paramCount := 0
@@ -306,7 +308,8 @@ def extractedChoice : Program :=
       { kind := .increment, name := "Examples.Choice.setEmpty", ixName := "setEmpty", paramCount := 0
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.okState (.lit 0)]
+            #[.storeField "pick_tag" (.lit 0), .storeField "pick_p0" (.lit 0),
+              .okState (.lit 0)]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Choice.setHold", ixName := "setHold", paramCount := 1

@@ -12,7 +12,7 @@ def entries : Array Entry := #[
   { name := "Window", digest := "dfe0620770ff04d4" },
   { name := "Phase", digest := "5da5688932fbb630" },
   { name := "Flag", digest := "f59454e5e4736334" },
-  { name := "Maybe", digest := "c46b7be7739f2d18" },
+  { name := "Maybe", digest := "842f2a30ab664aac" },
   { name := "EvmCtx", digest := "d32b3b41290088b3" },
   { name := "TipJar", digest := "54e2ac6083d0820b" },
   { name := "Lang", digest := "e0e6dafdfef6d142" },

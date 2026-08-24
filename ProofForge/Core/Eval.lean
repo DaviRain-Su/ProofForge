@@ -165,19 +165,8 @@ private def commitFor (schema : Schema) (ops : Array (Ops.Op ValExt OpExt))
     return { result := .source value }
   if hasIndexSet ops then
     return { result := .source value }
-  if let some (tag, payload) := schema.firstOption? then
-    let (tagValue, payloadValue) :=
-      match value with
-      | .lit 0 => (ValueRef.source (.lit 0), ValueRef.source (.lit 0))
-      | .lit n => (ValueRef.source (.lit 1), ValueRef.source (.lit n))
-      | other => (ValueRef.source (.lit 1), ValueRef.source other)
-    return {
-      writes := #[
-        { place := tag.place, value := tagValue },
-        { place := payload.place, value := payloadValue }
-      ]
-      result := payloadValue
-    }
+  if schema.firstOption?.isSome then
+    throw "extract/unsupported: Option writeback requires explicit tag and payload stores"
   let place ← implicitDestination schema ops value
   let stored := implicitValue ops value
   return { writes := #[{ place, value := stored }], result := stored }
