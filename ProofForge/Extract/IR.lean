@@ -112,6 +112,8 @@ partial def toSvmOp : Op → Except String Svm.Ops.Op
         (← thn.mapM toSvmOp) (← els.mapM toSvmOp)
   | .forAccum n addend => return .forAccum n (← toSvmVal addend)
   | .forBody n body => return .forBody n (← body.mapM toSvmOp)
+  | .indexSetLeaf name _ _ _ leaf =>
+      throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"
   | .indexSet name idx value len elemOff =>
       return .indexSet name (← toSvmVal idx) (← toSvmVal value) len elemOff
   | .storeField name value => return .storeField name (← toSvmVal value)
@@ -173,6 +175,8 @@ partial def toEvmOp : Op → Except String Evm.Ops.Op
         (← thn.mapM toEvmOp) (← els.mapM toEvmOp)
   | .forAccum n addend => return .forAccum n (← toEvmVal addend)
   | .forBody n body => return .forBody n (← body.mapM toEvmOp)
+  | .indexSetLeaf name _ _ _ leaf =>
+      throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"
   | .indexSet name idx value len elemOff =>
       return .indexSet name (← toEvmVal idx) (← toEvmVal value) len elemOff
   | .storeField name value => return .storeField name (← toEvmVal value)

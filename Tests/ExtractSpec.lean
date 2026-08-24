@@ -264,6 +264,87 @@ elab "#pf_guard_inline_state_dynamic_write" : command => do
 
 #pf_guard_inline_state_dynamic_write
 
+elab "#pf_guard_schema_driven_vector_layout" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initLayout
+        ``Tests.Fixtures.setLayout ``Tests.Fixtures.getLayout with
+    | .ok p => pure p
+    | .error reason =>
+      let methodError (kind : ProofForge.Core.IR.MethodKind) (name : Name) : String :=
+        match ProofForge.Extract.extractMethod env kind name with
+        | .ok _ => "ok"
+        | .error detail => detail
+      throwError s!"{reason}; init={methodError .init ``Tests.Fixtures.initLayout}; " ++
+        s!"set={methodError .increment ``Tests.Fixtures.setLayout}; " ++
+        s!"get={methodError .get ``Tests.Fixtures.getLayout}"
+  let some vector := program.schema.vector? "entries"
+    | throwError "layout fixture has no entries vector"
+  let names := program.schema.vectorElementLeaves vector |>.map (vector.relativeLeafName ·)
+  unless vector.elementBytes == 24 && names == #["marker", "left", "color"] do
+    throwError s!"unexpected logical vector layout: {repr program.schema}"
+  let some setter := program.methods.find? (·.ixName == "setLayout")
+    | throwError "missing layout setter"
+  let some getter := program.methods.find? (·.ixName == "getLayout")
+    | throwError "missing layout getter"
+  let rec containsWrite (fuel offset : Nat)
+      (ops : Array ProofForge.Extract.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .indexSet "entries" _ _ 2 actual => actual == offset
+        | .ite _ _ _ thn els =>
+            containsWrite fuel' offset thn || containsWrite fuel' offset els
+        | .forBody _ body => containsWrite fuel' offset body
+        | _ => false
+  let rec containsRead (offset : Nat) : ProofForge.Extract.IR.Val → Bool
+    | .indexGet _ "entries" _ _ actual => actual == offset
+    | .field base _ | .bitNot base => containsRead offset base
+    | .select _ lhs rhs thn els =>
+        containsRead offset lhs || containsRead offset rhs ||
+          containsRead offset thn || containsRead offset els
+    | _ => false
+  let rec opsContainRead (fuel offset : Nat)
+      (ops : Array ProofForge.Extract.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .letLocal _ value | .setLocal _ value | .returnU64 value =>
+            containsRead offset value
+        | .ite _ lhs rhs thn els =>
+            containsRead offset lhs || containsRead offset rhs ||
+              opsContainRead fuel' offset thn || opsContainRead fuel' offset els
+        | .forBody _ body => opsContainRead fuel' offset body
+        | _ => false
+  let getterReads := opsContainRead 8 8 getter.ops
+  let svm ←
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  unless containsWrite 8 8 setter.ops && containsWrite 8 16 setter.ops && getterReads do
+    let some svmGetter := svm.methods.find? (·.ixName == "getLayout")
+      | throwError "lowered SVM program has no layout getter"
+    throwError s!"schema offsets did not replace field-name guesses: " ++
+      s!"write8={containsWrite 8 8 setter.ops}, write16={containsWrite 8 16 setter.ops}, " ++
+      s!"read0={opsContainRead 8 0 getter.ops}, read8={getterReads}, " ++
+      s!"read16={opsContainRead 8 16 getter.ops}; ops={repr svmGetter.ops}"
+  let evm ←
+    match ProofForge.Evm.IR.fromExtracted program with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  let svmAsm ←
+    match ProofForge.Svm.Emit.emitAsm svm with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmYul ←
+    match ProofForge.Evm.Emit.emitYul evm with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless !svmAsm.isEmpty && !evmYul.isEmpty do
+    throwError "schema-driven vector layout did not reach both emitters"
+
+#pf_guard_schema_driven_vector_layout
+
 elab "#pf_guard_conditional_local" : command => do
   let env ← getEnv
   let program ←

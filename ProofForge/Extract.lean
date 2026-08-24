@@ -357,18 +357,11 @@ private def looksLikeOptionProj (env : Environment) (n : Name) : Bool :=
   | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Option)
   | none => false
 
-/-- `s.book.price` → 槽 `book_price`。嵌套投影拼进一个 field 名。 -/
+/-- `s.book.price` → 槽 `book_price`。动态向量投影保留逻辑叶名，稍后由 schema 解析。 -/
 private def flattenField (base : Ops.Val) (leaf : String) : Ops.Val :=
   match base with
   | .field b parent => .field b s!"{parent}_{leaf}"
-  | .indexGet b n i k _ =>
-      -- 运行时下标上的元素投影：先估叶内偏移，`fillElemOff` 再用槽表改写。
-      let off :=
-        match leaf with
-        | "left" => 0 | "right" => 8 | "parent" => 16
-        | "color" => 24 | "key" => 32 | "value" => 40
-        | _ => 0
-      .indexGet b n i k off
+  | b@(.indexGet ..) => .field b leaf
   | b => .field b leaf
 
 /-- 工具自己的模块。用户项目可以叫任何名字。 -/
@@ -414,6 +407,28 @@ private def isUserName (env : Environment) (n : Name) : Bool :=
         last != "toNat" && last != "toUInt64" && isUserType env p
       | _ => false
     | none => false
+
+/-- Trace an expression to the user projection whose result is the owning fixed vector. -/
+private def vectorBaseName (env : Environment) (fuel : Nat) (e : Expr) : Option String :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    match e.getAppFn.constName? with
+    | some n =>
+      let last := Core.IR.lastName n.toString
+      let skipTy :=
+        match env.find? n with
+        | some (.inductInfo _) => true
+        | some (.ctorInfo _) => true
+        | _ => false
+      let returnsVector :=
+        match env.find? n with
+        | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
+        | none => false
+      if !isUserName env n || isReservedProj last || skipTy || !returnsVector then
+        e.getAppArgs.findSome? (vectorBaseName env fuel')
+      else some last
+    | none => e.getAppArgs.findSome? (vectorBaseName env fuel')
 
 /--
 Profile 已检查过且显式标记的用户 helper 按需 β 展开。控制流与 State
@@ -949,28 +964,6 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               match strip e with
               | .bvar j => some j
               | e => e.getAppArgs.findSome? (findState fuel')
-          let rec fieldNameOf (fuel : Nat) (e : Expr) : Option String :=
-            match fuel with
-            | 0 => none
-            | fuel' + 1 =>
-              match e.getAppFn.constName? with
-              | some n =>
-                let s := n.toString
-                let last := Core.IR.lastName s
-                let user := isUserName env n
-                let skipTy :=
-                  match env.find? n with
-                  | some (.inductInfo _) => true
-                  | some (.ctorInfo _) => true
-                  | some _ =>
-                    -- `Node.value` 是元素投影，不是账户字段 `nodes`。
-                    last == "value" || last == "key" || last == "left" ||
-                      last == "right" || last == "parent" || last == "color"
-                  | none => false
-                if !user || isReservedProj last || skipTy then
-                  e.getAppArgs.findSome? (fieldNameOf fuel')
-                else some last
-              | none => e.getAppArgs.findSome? (fieldNameOf fuel')
           match collIndex?.bind fun pair => (asVal env fuel' pair.2).map (pair.1, ·) with
           | some (collection, .lit n) =>
             let i := n.toNat
@@ -985,7 +978,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 if fname.endsWith suf then fname.dropEnd suf.length |>.copy else fname
               some (.field (.arg j) s!"{base}_{i}")
             | some j, none =>
-              match fieldNameOf 8 collection with
+              match vectorBaseName env 8 collection with
               | some fname => some (.field (.arg j) s!"{fname}_{i}")
               | none => none
             | _, _ => none
@@ -997,9 +990,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 | .lit n => n.toNat
                 | _ => 0
               else 0
-            match findState fuel' collection, fieldNameOf 8 collection with
+            match findState fuel' collection, vectorBaseName env 8 collection with
             | some j, some fname => some (.indexGet (.arg j) fname idx len)
-            | some j, none => some (.indexGet (.arg j) "cells" idx len)
             | _, _ => none
           | none => none
 
@@ -1385,32 +1377,6 @@ private def asVectorLits (env : Environment) (e : Expr) : Option (Array Ops.Val)
     | none => none
   else none
 
-/--
-Trace a nested `Vector.set` chain back to the user structure projection that owns the vector.
-Element projections such as `Node.left` can occur in an intervening branch condition; only a
-projection whose result type mentions `Vector` is a valid storage base.
--/
-private def vectorBaseName (env : Environment) (fuel : Nat) (e : Expr) : Option String :=
-  match fuel with
-  | 0 => none
-  | fuel' + 1 =>
-    match e.getAppFn.constName? with
-    | some n =>
-      let last := Core.IR.lastName n.toString
-      let skipTy :=
-        match env.find? n with
-        | some (.inductInfo _) => true
-        | some (.ctorInfo _) => true
-        | _ => false
-      let returnsVector :=
-        match env.find? n with
-        | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
-        | none => false
-      if !isUserName env n || isReservedProj last || skipTy || !returnsVector then
-        e.getAppArgs.findSome? (vectorBaseName env fuel')
-      else some last
-    | none => e.getAppArgs.findSome? (vectorBaseName env fuel')
-
 /-- `xs.set i v`：只抽出被改的那一叶。 -/
 private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
@@ -1453,7 +1419,6 @@ private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
     match idx?, payload, vectorBaseName env 16 e with
     | some i, some (true, v), some n => some (.field v s!"{n}_{i}_value")
     | some i, some (false, v), some n => some (.field v s!"{n}_{i}")
-    | some i, some (_, v), none => some (.field v s!"cells_{i}")
     | _, _, _ => none
   else none
 
@@ -1534,15 +1499,9 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
                         match val env arg with
                         | some (.field (.arg _) n) =>
                           n == fname || n.endsWith ("_" ++ fname)
-                        | some (.indexGet _ _ i _ off) =>
-                          -- 同一下标上的同一叶才算没改。
-                          let sameOff :=
-                            off ==
-                              (match fname with
-                               | "left" => 0 | "right" => 8 | "parent" => 16
-                               | "color" => 24 | "key" => 32 | "value" => 40
-                               | _ => 999)
-                          sameOff &&
+                        | some (.field (.indexGet _ _ i _ _) leaf) =>
+                          -- 同一下标上的同一逻辑叶才算没改。
+                          (leaf == fname || leaf.endsWith ("_" ++ fname)) &&
                             (match selfIdx with
                              | some j => i == j
                              | none => true)
@@ -1565,38 +1524,36 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
       match idx with
       | .lit _ => none
       | _ =>
-        let name := (vectorBaseName env 16 e).getD "cells"
-        match asUInt64VariantCtor env payloadE with
-        | some (tag, payloads, payloadWidth) =>
-          some (Id.run do
-            let mut ops : Array Ops.Op := #[.indexSet name idx (.lit tag) len 0]
-            for offset in [:payloadWidth] do
-              ops := ops.push (.indexSet name idx
-                (payloads[offset]?.getD (.lit 0)) len ((offset + 1) * 8))
-            return ops)
-        | none =>
-          let leaves := changedLeaves (some idx) 8 payloadE
-          let leaves :=
-            if leaves.isEmpty then
-              match val env payloadE with
-              | some v => #[("", v)]
-              | none => #[]
-            else leaves
-          if leaves.isEmpty then none
-          else
-            some (leaves.map fun p =>
-              let hint :=
-                match p.1 with
-                | "left" => 0 | "right" => 8 | "parent" => 16
-                | "color" => 24 | "key" => 32 | "value" => 40
-                | _ => 0
-              (.indexSet name idx p.2 len hint : Ops.Op))
+        match vectorBaseName env 16 e with
+        | none => none
+        | some name =>
+          match asUInt64VariantCtor env payloadE with
+          | some (tag, payloads, payloadWidth) =>
+            some (Id.run do
+              let mut ops : Array Ops.Op := #[.indexSetLeaf name idx (.lit tag) len "tag"]
+              for offset in [:payloadWidth] do
+                ops := ops.push (.indexSetLeaf name idx
+                  (payloads[offset]?.getD (.lit 0)) len s!"p{offset}")
+              return ops)
+          | none =>
+            let leaves := changedLeaves (some idx) 8 payloadE
+            let leaves :=
+              if leaves.isEmpty then
+                match val env payloadE with
+                | some v => #[("", v)]
+                | none => #[]
+              else leaves
+            if leaves.isEmpty then none
+            else
+              some (leaves.map fun p =>
+                (.indexSetLeaf name idx p.2 len p.1 : Ops.Op))
     | (false, some idx, none, some payload) =>
       match idx with
       | .lit _ => none
       | _ =>
-        let name := (vectorBaseName env 16 e).getD "cells"
-        some #[.indexSet name idx payload len 0]
+        match vectorBaseName env 16 e with
+        | some name => some #[.indexSetLeaf name idx payload len]
+        | none => none
     | _ => none
   else none
 
@@ -2331,6 +2288,8 @@ private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
           .invoke prog metas (data.map fun
             | .u64le v => .u64le (rewriteLoopIx v)
             | w => w) seed (bump.map rewriteLoopIx)
+      | .indexSetLeaf n i v k leaf =>
+          .indexSetLeaf n (rewriteLoopIndex i) (rewriteLoopIx v) k leaf
       | .indexSet n i v k off =>
           .indexSet n (rewriteLoopIndex i) (rewriteLoopIx v) k off
       | .storeField n v => .storeField n (rewriteLoopIx v)
@@ -2396,6 +2355,10 @@ private def rewritePlainLoopOp (op : Ops.Op) : Ops.Op :=
       | .invoke prog metas data seed bump =>
           .invoke prog metas (data.map fun | .u64le v => .u64le (rv v) | w => w)
             seed (bump.map rv)
+      | .indexSetLeaf n i v k leaf =>
+          let i' := match i with | .lit _ => i | _ => .loopIx
+          let v' := match v with | .arg _ => .arg 0 | _ => v
+          .indexSetLeaf n i' v' k leaf
       | .indexSet n i v k off =>
           let i' := match i with | .lit _ => i | _ => .loopIx
           let v' := match v with | .arg _ => .arg 0 | _ => v
@@ -2856,7 +2819,7 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
 helper's vector parameter as a changed structure field; discard that synthetic root store. -/
 private def dropVectorRootStores (dynamic stores : Array Ops.Op) : Array Ops.Op :=
   let vectorNames := dynamic.filterMap fun
-    | .indexSet name _ _ _ _ => some name
+    | .indexSetLeaf name _ _ _ _ | .indexSet name _ _ _ _ => some name
     | _ => none
   stores.filter fun
     | .storeField name _ => !vectorNames.contains name
@@ -3042,7 +3005,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
     | some stores => .ok (isets ++ dropVectorRootStores isets stores)
     | none =>
       match isets[isets.size - 1]! with
-      | .indexSet _ _ v _ _ =>
+      | .indexSetLeaf _ _ v _ _ | .indexSet _ _ v _ _ =>
         -- `.ok ({ state with xs := xs.set i value }, ret)` returns its explicit second
         -- component, which need not be `value`. Loop yields have no public return and keep
         -- the written value as their internal fallback.
@@ -3051,7 +3014,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
       | _ => .ok isets
   else if let some op := findIndexSet env e then
     match op with
-    | .indexSet _ _ v _ _ =>
+    | .indexSetLeaf _ _ v _ _ | .indexSet _ _ v _ _ =>
       let ret := if isForInStep e then v else (findOkRet env e).getD v
       .ok #[op, .okState ret]
     | _ => .ok #[op]
@@ -3376,7 +3339,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
                   (ops ++ dropVectorRootStores ops stores) #[.errorOverflow]]
               | none =>
                 match ops[ops.size - 1]! with
-                | .indexSet _ _ v _ _ =>
+                | .indexSetLeaf _ _ v _ _ | .indexSet _ _ v _ _ =>
                   -- 多叶 set 的返回值是 `.ok (_, y)`。循环体不要用 findOkRet。
                   let ret :=
                     if isForInStep t then v else (findOkRet env t).getD v
@@ -3818,6 +3781,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
             seed (bump.map nv)
       | .forAccum bound addend => .forAccum bound (nv addend)
       | .forBody bound body => .forBody bound (body.map (normalizeStateLoopOp fuel'))
+      | .indexSetLeaf name index value len leaf =>
+          .indexSetLeaf name (nv index) (nv value) len leaf
       | .indexSet name index value len off => .indexSet name (nv index) (nv value) len off
       | .storeField name value => .storeField name (nv value)
       | .okState value => .okState (nv value)
@@ -3902,6 +3867,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .evmLog n v => .evmLog n (flipVal fuel' v)
       | .forAccum n v => .forAccum n (flipVal fuel' v)
       | .forBody n body => .forBody n (body.map (flipOp fuel'))
+      | .indexSetLeaf n i v k leaf =>
+          .indexSetLeaf n (flipVal fuel' i) (flipVal fuel' v) k leaf
       | .indexSet n i v k off =>
           .indexSet n (flipVal fuel' i) (flipVal fuel' v) k off
       | .mapGetU64 b k => .mapGetU64 (flipVal fuel' b) (flipVal fuel' k)
@@ -4191,7 +4158,7 @@ private def opFields : Ops.Op → Array String
   | .evmLog _ v => valFields v
   | .forAccum _ v => valFields v
   | .forBody _ body => body.flatMap opFields
-  | .indexSet _ i v _ _ => valFields i ++ valFields v
+  | .indexSetLeaf _ i v _ _ | .indexSet _ i v _ _ => valFields i ++ valFields v
   | .storeField n v => #[n] ++ valFields v
   | .mapGetU64 b k => valFields b ++ valFields k
   | .mapSetU64 b k v => valFields b ++ valFields k ++ valFields v
@@ -4214,66 +4181,109 @@ private def opFields : Ops.Op → Array String
   | .returnU64 v => valFields v
   | .returnState v => valFields v
 
-private def vectorLeafName (schema : Core.Schema) (name : String) (offset : Nat) : String :=
+private def vectorLeafOffset? (schema : Core.Schema) (name leaf : String) : Option Nat :=
   match schema.vector? name with
-  | none => "value"
-  | some vector => Id.run do
-      let mut current := 0
-      for leaf in schema.vectorElementLeaves vector do
-        if current == offset then return vector.relativeLeafName leaf
-        current := current + leaf.width
-      return "value"
-
-private def vectorLeafOffset (schema : Core.Schema) (name leaf : String) : Nat :=
-  match schema.vector? name with
-  | none => 0
+  | none => none
   | some vector => Id.run do
       let mut offset := 0
       for item in schema.vectorElementLeaves vector do
-        if vector.relativeLeafName item == leaf then return offset
+        if vector.relativeLeafName item == leaf then return some offset
         offset := offset + item.width
-      return offset
+      return none
 
-private def fillElemOff (p : IR.Program) : IR.Program :=
-  let rec goVal (fuel : Nat) (v : Ops.Val) : Ops.Val :=
+/-- Resolve logical dynamic-vector leaves exactly once, against the typed source schema. -/
+private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := do
+  let resolve (name leaf : String) : Except String Nat :=
+    match vectorLeafOffset? p.schema name leaf with
+    | some offset => pure offset
+    | none => throw s!"extract/unsupported: vector {name} has no leaf {leaf}"
+  let rec goVal (fuel : Nat) (v : Ops.Val) : Except String Ops.Val :=
     match fuel with
-    | 0 => v
+    | 0 => throw "extract/unsupported: value nesting exceeds schema resolution limit"
     | fuel' + 1 =>
       match v with
+      | .arg _ | .local _ | .lit _ | .loopIx => pure v
+      | .field (.indexGet b n i k _) leaf =>
+          return .indexGet (← goVal fuel' b) n (← goVal fuel' i) k (← resolve n leaf)
+      | .field b n => return .field (← goVal fuel' b) n
+      | .bitAnd l r => return .bitAnd (← goVal fuel' l) (← goVal fuel' r)
+      | .bitOr l r => return .bitOr (← goVal fuel' l) (← goVal fuel' r)
+      | .bitXor l r => return .bitXor (← goVal fuel' l) (← goVal fuel' r)
+      | .bitNot value => return .bitNot (← goVal fuel' value)
+      | .shiftL l r => return .shiftL (← goVal fuel' l) (← goVal fuel' r)
+      | .shiftR l r => return .shiftR (← goVal fuel' l) (← goVal fuel' r)
       | .indexGet b n i k off =>
-          let leaf := vectorLeafName p.schema n off
-          let off' :=
-            if leaf.isEmpty then off else vectorLeafOffset p.schema n leaf
-          .indexGet (goVal fuel' b) n (goVal fuel' i) k off'
-      | .field b n => .field (goVal fuel' b) n
+          return .indexGet (← goVal fuel' b) n (← goVal fuel' i) k off
       | .select c l r t f =>
-          .select c (goVal fuel' l) (goVal fuel' r) (goVal fuel' t) (goVal fuel' f)
-      | .addU64 l r => .addU64 (goVal fuel' l) (goVal fuel' r)
-      | .subU64 l r => .subU64 (goVal fuel' l) (goVal fuel' r)
-      | .mulU64 l r => .mulU64 (goVal fuel' l) (goVal fuel' r)
-      | .divU64 l r => .divU64 (goVal fuel' l) (goVal fuel' r)
-      | .modU64 l r => .modU64 (goVal fuel' l) (goVal fuel' r)
-      | v => v
-  let rec goOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
+          return .select c (← goVal fuel' l) (← goVal fuel' r)
+            (← goVal fuel' t) (← goVal fuel' f)
+      | .addU64 l r => return .addU64 (← goVal fuel' l) (← goVal fuel' r)
+      | .subU64 l r => return .subU64 (← goVal fuel' l) (← goVal fuel' r)
+      | .mulU64 l r => return .mulU64 (← goVal fuel' l) (← goVal fuel' r)
+      | .divU64 l r => return .divU64 (← goVal fuel' l) (← goVal fuel' r)
+      | .modU64 l r => return .modU64 (← goVal fuel' l) (← goVal fuel' r)
+      | .ext kind operands => return .ext kind (← operands.mapM (goVal fuel'))
+  let normalizeVal := goVal 128
+  let rec goOp (fuel : Nat) (op : Ops.Op) : Except String Ops.Op :=
     match fuel with
-    | 0 => op
+    | 0 => throw "extract/unsupported: control-flow nesting exceeds schema resolution limit"
     | fuel' + 1 =>
       match op with
-      | .letLocal i v => .letLocal i (goVal 8 v)
-      | .joinLocal i => .joinLocal i
-      | .setLocal i v => .setLocal i (goVal 8 v)
+      | .letLocal i v => return .letLocal i (← normalizeVal v)
+      | .joinLocal i => pure (.joinLocal i)
+      | .setLocal i v => return .setLocal i (← normalizeVal v)
+      | .checkedAddU64 l r => return .checkedAddU64 (← normalizeVal l) (← normalizeVal r)
+      | .checkedSubU64 l r => return .checkedSubU64 (← normalizeVal l) (← normalizeVal r)
+      | .checkedMulU64 l r => return .checkedMulU64 (← normalizeVal l) (← normalizeVal r)
+      | .checkedDivU64 l r => return .checkedDivU64 (← normalizeVal l) (← normalizeVal r)
+      | .checkedModU64 l r => return .checkedModU64 (← normalizeVal l) (← normalizeVal r)
+      | .indexSetLeaf n i v k leaf =>
+          return .indexSet n (← normalizeVal i) (← normalizeVal v) k (← resolve n leaf)
       | .indexSet n i v k off =>
-          let leaf := vectorLeafName p.schema n off
-          let off' :=
-            if leaf.isEmpty then off else vectorLeafOffset p.schema n leaf
-          .indexSet n (goVal 8 i) (goVal 8 v) k off'
+          return .indexSet n (← normalizeVal i) (← normalizeVal v) k off
       | .ite c l r t f =>
-          .ite c (goVal 8 l) (goVal 8 r) (t.map (goOp fuel')) (f.map (goOp fuel'))
-      | .forBody n body => .forBody n (body.map (goOp fuel'))
-      | .okState v => .okState (goVal 8 v)
-      | .returnU64 v => .returnU64 (goVal 8 v)
-      | op => op
-  { p with methods := p.methods.map fun m => { m with ops := m.ops.map (goOp 8) } }
+          return .ite c (← normalizeVal l) (← normalizeVal r)
+            (← t.mapM (goOp fuel')) (← f.mapM (goOp fuel'))
+      | .forAccum n v => return .forAccum n (← normalizeVal v)
+      | .forBody n body => return .forBody n (← body.mapM (goOp fuel'))
+      | .storeField n v => return .storeField n (← normalizeVal v)
+      | .okState v => return .okState (← normalizeVal v)
+      | .errorOverflow => pure .errorOverflow
+      | .errorNamed n => pure (.errorNamed n)
+      | .returnU64 v => return .returnU64 (← normalizeVal v)
+      | .returnState v => return .returnState (← normalizeVal v)
+      | .invoke programIx metas data seed bump =>
+          return .invoke programIx metas (← data.mapM fun
+            | .u64le v => return .u64le (← normalizeVal v)
+            | word => pure word) seed (← bump.mapM normalizeVal)
+      | .evmDeposit v => return .evmDeposit (← normalizeVal v)
+      | .evmSendEth a b c d =>
+          return .evmSendEth (← normalizeVal a) (← normalizeVal b)
+            (← normalizeVal c) (← normalizeVal d)
+      | .evmLog n v => return .evmLog n (← normalizeVal v)
+      | .mapGetU64 b k => return .mapGetU64 (← normalizeVal b) (← normalizeVal k)
+      | .mapSetU64 b k v =>
+          return .mapSetU64 (← normalizeVal b) (← normalizeVal k) (← normalizeVal v)
+      | .mapGetAddr b a0 a1 a2 =>
+          return .mapGetAddr (← normalizeVal b) (← normalizeVal a0)
+            (← normalizeVal a1) (← normalizeVal a2)
+      | .mapSetAddr b a0 a1 a2 v =>
+          return .mapSetAddr (← normalizeVal b) (← normalizeVal a0)
+            (← normalizeVal a1) (← normalizeVal a2) (← normalizeVal v)
+      | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
+          return .mapGetPair (← normalizeVal b) (← normalizeVal a0) (← normalizeVal a1)
+            (← normalizeVal a2) (← normalizeVal c0) (← normalizeVal c1) (← normalizeVal c2)
+      | .mapSetPair b a0 a1 a2 c0 c1 c2 v =>
+          return .mapSetPair (← normalizeVal b) (← normalizeVal a0) (← normalizeVal a1)
+            (← normalizeVal a2) (← normalizeVal c0) (← normalizeVal c1) (← normalizeVal c2)
+            (← normalizeVal v)
+      | .evmTokenTransfer a b c d e f g =>
+          return .evmTokenTransfer (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+            (← normalizeVal d) (← normalizeVal e) (← normalizeVal f) (← normalizeVal g)
+      | .evmTokenBalanceOfSelf a b c =>
+          return .evmTokenBalanceOfSelf (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+  return { p with methods := ← p.methods.mapM fun m => do
+    return { m with ops := ← m.ops.mapM (goOp 128) } }
 
 /-- Make state writeback explicit once, after source schema and normalized Ops are both available. -/
 private def evaluateProgram (p : IR.Program) : Except String IR.Program := do
@@ -4322,7 +4332,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .evmDeposit v | .evmLog _ v | .forAccum _ v => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
   | .forBody _ body => body.findSome? (opEscapedArg limit)
-  | .indexSet _ i v _ _ | .mapGetU64 i v =>
+  | .indexSetLeaf _ i v _ _ | .indexSet _ i v _ _ | .mapGetU64 i v =>
       #[i, v].findSome? (valEscapedArg limit)
   | .mapSetU64 a b c => #[a, b, c].findSome? (valEscapedArg limit)
   | .mapGetAddr a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
@@ -4378,7 +4388,7 @@ def extractProgramIR (env : Environment)
     throw "extract/unsupported: not three-method shape"
   unless Core.IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
-  let program := fillElemOff program
+  let program ← resolveVectorLeaves program
   checkArgBounds program
   let program ← evaluateProgram program
   checkUsedFields program
@@ -4485,7 +4495,7 @@ def extractModuleIR (env : Environment) (ns : Name)
     throw "extract/unsupported: not program shape"
   unless Core.IR.schemaMatchesSlots program do
     throw "extract/unsupported: schema does not match slots"
-  let program := fillElemOff program
+  let program ← resolveVectorLeaves program
   checkArgBounds program
   let program ← evaluateProgram program
   checkUsedFields program

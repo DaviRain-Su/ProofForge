@@ -268,6 +268,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         (← thn.mapM toLegacyOp) (← els.mapM toLegacyOp)
   | .forAccum n addend => return .forAccum n (← toLegacyVal addend)
   | .forBody n body => return .forBody n (← body.mapM toLegacyOp)
+  | .indexSetLeaf name _ _ _ leaf =>
+      throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"
   | .indexSet name idx value len elemOff =>
       return .indexSet name (← toLegacyVal idx) (← toLegacyVal value) len elemOff
   | .storeField name value => return .storeField name (← toLegacyVal value)

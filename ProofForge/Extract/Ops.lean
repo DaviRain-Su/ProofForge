@@ -119,7 +119,7 @@ def hasForAccum (ops : Array Op) : Bool :=
   walk 16 ops fun | .forAccum .. => true | _ => false
 
 def hasIndexSet (ops : Array Op) : Bool :=
-  walk 16 ops fun | .indexSet .. => true | _ => false
+  walk 16 ops fun | .indexSetLeaf .. | .indexSet .. => true | _ => false
 
 def hasStoreField (ops : Array Op) : Bool :=
   walk 16 ops fun | .storeField .. => true | _ => false
@@ -159,7 +159,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       predicate value
   | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
   | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
-  | .indexSet _ lhs rhs _ _ => predicate lhs || predicate rhs
+  | .indexSetLeaf _ lhs rhs _ _ | .indexSet _ lhs rhs _ _ => predicate lhs || predicate rhs
   | .invoke _ _ data _ bump =>
       data.any (fun | .u64le value => predicate value | _ => false) || bump.any predicate
   | .evmDeposit value | .evmLog _ value => predicate value
@@ -198,7 +198,7 @@ def hasEvmLeaf (ops : Array Op) : Bool :=
 def hasLangOp (ops : Array Op) : Bool :=
   walk 16 ops fun op =>
     match op with
-    | .forAccum .. | .forBody .. | .indexSet .. | .errorNamed _ => true
+    | .forAccum .. | .forBody .. | .indexSetLeaf .. | .indexSet .. | .errorNamed _ => true
     | _ => opValuesAny (fun value => isLangLeaf value || isBitVal value || hasSelectVal value) op
 
 def hasEvmEffect (ops : Array Op) : Bool :=

@@ -98,6 +98,36 @@ def getNarrow (s : NarrowState) (i : UInt64) : UInt64 :=
 def getNarrowPrevious (s : NarrowState) (i : UInt64) : UInt64 :=
   s.cells[(i.toNat - 1) % 2]!.toUInt64
 
+/-- Adversarial vector-element layout: familiar tree field names deliberately have noncanonical
+byte offsets, so extraction must use the typed schema rather than names. -/
+structure LayoutNode where
+  marker : UInt64
+  left : UInt64
+  color : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+structure LayoutState where
+  entries : Vector LayoutNode 2
+  count : UInt64
+  deriving Repr, DecidableEq
+
+def emptyLayoutNode : LayoutNode :=
+  { marker := 0, left := 0, color := 0 }
+
+def initLayout (_seed : UInt64) : LayoutState :=
+  { entries := #v[emptyLayoutNode, emptyLayoutNode], count := 0 }
+
+def setLayout (s : LayoutState) (i value : UInt64) :
+    Except Examples.Counter.Error (LayoutState × UInt64) :=
+  if h : i.toNat < 2 then
+    .ok ({ s with entries := s.entries.set i.toNat {
+      s.entries[i.toNat]! with left := value, color := 1 } }, value)
+  else
+    .error .overflow
+
+def getLayout (s : LayoutState) (i : UInt64) : UInt64 :=
+  if i < 2 then s.entries[i.toNat]!.left else 0
+
 /-- 正向：单构造子、单个 `UInt64` payload 是无 tag 的 representational newtype。 -/
 inductive Tagged where
   | wrap (n : UInt64)

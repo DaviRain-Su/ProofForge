@@ -51,6 +51,9 @@ inductive Op (ValExt : Type) (OpExt : Type → Type) where
       (thn els : Array (Op ValExt OpExt))
   | forAccum (n : Nat) (addend : Val ValExt)
   | forBody (n : Nat) (body : Array (Op ValExt OpExt))
+  /-- Dynamic write identified by its logical leaf name inside a vector element. The extractor
+  resolves it against `Schema` before target lowering; an empty name denotes a scalar element. -/
+  | indexSetLeaf (name : String) (idx value : Val ValExt) (len : Nat) (leaf : String := "")
   | indexSet (name : String) (idx value : Val ValExt) (len : Nat)
       (elemOff : Nat := 0)
   | storeField (name : String) (value : Val ValExt)
@@ -93,6 +96,7 @@ partial def Op.wellFormed (arity : ValExt → Nat)
       lhs.wellFormed arity && rhs.wellFormed arity &&
         thn.all (wellFormed arity validExt) && els.all (wellFormed arity validExt)
   | .forBody _ body => body.all (wellFormed arity validExt)
+  | .indexSetLeaf _ idx value _ _ => idx.wellFormed arity && value.wellFormed arity
   | .indexSet _ idx value _ _ => idx.wellFormed arity && value.wellFormed arity
   | .ext payload => validExt payload
 

@@ -52,6 +52,8 @@ private partial def lowerOp : Ops.Op → Except String Op
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
   | .forAccum n addend => pure (.forAccum n addend)
   | .forBody n body => return .forBody n (← lowerOps body)
+  | .indexSetLeaf name _ _ _ leaf =>
+      throw s!"extract/ir: unresolved vector leaf {name}.{leaf}"
   | .indexSet name idx value len elemOff => pure (.indexSet name idx value len elemOff)
   | .storeField name value => pure (.storeField name value)
   | .okState value => pure (.okState value)

@@ -131,7 +131,7 @@ private partial def hasStoreField (ops : Array (Ops.Op ValExt OpExt)) : Bool :=
 
 private partial def hasIndexSet (ops : Array (Ops.Op ValExt OpExt)) : Bool :=
   ops.any fun
-    | .indexSet .. => true
+    | .indexSetLeaf .. | .indexSet .. => true
     | .ite _ _ _ thn els => hasIndexSet thn || hasIndexSet els
     | .forBody _ body => hasIndexSet body
     | _ => false
@@ -183,6 +183,16 @@ private def dynamicPlace (schema : Schema) (name : String) (index : Ops.Val ValE
     offset := offset + leaf.width
   throw s!"extract/unsupported: vector {name} has no leaf at byte offset {byteOffset}"
 
+private def dynamicLeafPlace (schema : Schema) (name : String) (index : Ops.Val ValExt)
+    (leafName : String) : Except String (DynamicPlace ValExt) := do
+  let some vector := schema.vector? name
+    | throw s!"extract/unsupported: unknown vector {name}"
+  for leaf in schema.vectorElementLeaves vector do
+    if vector.relativeLeafName leaf == leafName then
+      let relative := leaf.place.steps.extract (vector.place.steps.size + 1)
+      return { vector := vector.place, index, elementPath := relative }
+  throw s!"extract/unsupported: vector {name} has no leaf {leafName}"
+
 private partial def eventsFor (schema : Schema) (ops : Array (Ops.Op ValExt OpExt)) :
     Except String (Array (StateEvent ValExt)) := do
   let mut events := #[]
@@ -202,6 +212,9 @@ private partial def eventsFor (schema : Schema) (ops : Array (Ops.Op ValExt OpEx
         let bodyEvents ← eventsFor schema body
         if !bodyEvents.isEmpty then
           events := events.push (.loop bound bodyEvents)
+    | .indexSetLeaf name index value _ leafName =>
+        let place ← dynamicLeafPlace schema name index leafName
+        events := events.push (.dynamicWrite { place, value := .source value })
     | .indexSet name index value _ byteOffset =>
         let place ← dynamicPlace schema name index byteOffset
         events := events.push (.dynamicWrite { place, value := .source value })
