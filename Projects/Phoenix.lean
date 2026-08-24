@@ -1758,30 +1758,7 @@ private def swapBuyFold (s : State)
         else if phase = 2 then
           if st.matchLimit < st.priceTicks[j]! then
             st := { st with matchStopped := 1 }
-          else if st.traders[j]! = taker then
-            if behavior = 0 then
-              st := { st with matchStopped := 1, matchError := matchSelfTrade }
-            else if behavior = 1 then
-              let unlocked := unlockAskFold st j size
-              st := appendEvent unlocked
-                (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]! size 0)
-            else if behavior = 2 then
-              let remaining := st.matchWant - st.matchFilled
-              if remaining ≤ size then
-                let unlocked := unlockAskFold st j remaining
-                st := appendEvent
-                  { unlocked with
-                    matchWant := st.matchWant - remaining
-                    matchStopped := 1 }
-                  (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]!
-                    remaining (size - remaining))
-              else
-                let unlocked := unlockAskFold st j size
-                st := appendEvent { unlocked with matchWant := st.matchWant - size }
-                  (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]! size 0)
-            else
-              st := { st with matchStopped := 1, matchError := 1 }
-          else
+          else if st.traders[j]! ≠ taker then
             let remaining := st.matchWant - st.matchFilled
             if remaining ≤ size then
               let filled := fillAskFold st j remaining
@@ -1797,6 +1774,28 @@ private def swapBuyFold (s : State)
                 (.fill st.eventCount (makerKey0 st maker) (makerKey1 st maker)
                   (makerKey2 st maker) (makerKey3 st maker)
                   st.sequences[j]! st.priceTicks[j]! size 0)
+          else if behavior = 0 then
+            st := { st with matchStopped := 1, matchError := matchSelfTrade }
+          else if behavior = 1 then
+            let unlocked := unlockAskFold st j size
+            st := appendEvent unlocked
+              (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]! size 0)
+          else if behavior = 2 then
+            let remaining := st.matchWant - st.matchFilled
+            if remaining ≤ size then
+              let unlocked := unlockAskFold st j remaining
+              st := appendEvent
+                { unlocked with
+                  matchWant := st.matchWant - remaining
+                  matchStopped := 1 }
+                (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]!
+                  remaining (size - remaining))
+            else
+              let unlocked := unlockAskFold st j size
+              st := appendEvent { unlocked with matchWant := st.matchWant - size }
+                (.reduce st.eventCount st.sequences[j]! st.priceTicks[j]! size 0)
+          else
+            st := { st with matchStopped := 1, matchError := 1 }
   settleFold st taker
 
 attribute [pf_inline] swapBuyFold
@@ -1956,32 +1955,7 @@ private def swapSellFold (s : State)
         else if phase = 2 then
           if st.bidPriceTicks[j]! < st.matchLimit then
             st := { st with matchStopped := 1 }
-          else if st.bidTraders[j]! = taker then
-            if behavior = 0 then
-              st := { st with matchStopped := 1, matchError := matchSelfTrade }
-            else if behavior = 1 then
-              let unlocked := unlockBidFold st j size
-              st := appendEvent unlocked
-                (.reduce st.eventCount
-                  (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
-            else if behavior = 2 then
-              let remaining := st.matchWant - st.matchFilled
-              if remaining ≤ size then
-                let unlocked := unlockBidFold st j remaining
-                st := appendEvent
-                  { unlocked with
-                    matchWant := st.matchWant - remaining
-                    matchStopped := 1 }
-                  (.reduce st.eventCount (~~~st.bidSequences[j]!) st.bidPriceTicks[j]!
-                    remaining (size - remaining))
-              else
-                let unlocked := unlockBidFold st j size
-                st := appendEvent { unlocked with matchWant := st.matchWant - size }
-                  (.reduce st.eventCount
-                    (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
-            else
-              st := { st with matchStopped := 1, matchError := 1 }
-          else
+          else if st.bidTraders[j]! ≠ taker then
             let remaining := st.matchWant - st.matchFilled
             if remaining ≤ size then
               let filled := fillBidFold st j remaining
@@ -1999,6 +1973,30 @@ private def swapSellFold (s : State)
                   (makerKey0 st maker) (makerKey1 st maker)
                   (makerKey2 st maker) (makerKey3 st maker)
                   (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
+          else if behavior = 0 then
+            st := { st with matchStopped := 1, matchError := matchSelfTrade }
+          else if behavior = 1 then
+            let unlocked := unlockBidFold st j size
+            st := appendEvent unlocked
+              (.reduce st.eventCount
+                (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
+          else if behavior = 2 then
+            let remaining := st.matchWant - st.matchFilled
+            if remaining ≤ size then
+              let unlocked := unlockBidFold st j remaining
+              st := appendEvent
+                { unlocked with
+                  matchWant := st.matchWant - remaining
+                  matchStopped := 1 }
+                (.reduce st.eventCount (~~~st.bidSequences[j]!) st.bidPriceTicks[j]!
+                  remaining (size - remaining))
+            else
+              let unlocked := unlockBidFold st j size
+              st := appendEvent { unlocked with matchWant := st.matchWant - size }
+                (.reduce st.eventCount
+                  (~~~st.bidSequences[j]!) st.bidPriceTicks[j]! size 0)
+          else
+            st := { st with matchStopped := 1, matchError := 1 }
   settleSellFold st taker
 
 attribute [pf_inline] swapSellFold
