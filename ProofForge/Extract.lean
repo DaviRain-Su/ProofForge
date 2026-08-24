@@ -2206,6 +2206,14 @@ private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
       | some v => some (.u64le v)
       | none => none
     else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.selfEntry then
+    let args := e.getAppArgs
+    if args.size ≥ 2 then
+      match val env args[args.size - 2]! >>= natOfVal, strip args[args.size - 1]! with
+      | some tag, .lit (.strVal authoritySeed) =>
+          some (.selfEntry (UInt64.ofNat tag) authoritySeed)
+      | _, _ => none
+    else none
   else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.ascii || endsWith e ".ascii" then
     if e.getAppArgs.size ≥ 1 then
       match e.getAppArgs[e.getAppArgs.size - 1]! with

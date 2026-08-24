@@ -203,6 +203,7 @@ private def wordToLegacy : Svm.Ops.CpiWord Val → Except String ProofForge.Ops.
   | .u32le (.lit n) => pure (.u32le n)
   | .u32le _ => throw "extract/legacy: dynamic u32 CPI word"
   | .u64le value => return .u64le (← toLegacyVal value)
+  | .selfEntry _ _ => throw "extract/legacy: raw self-entry CPI word"
   | .ascii value => pure (.ascii value)
   | .programId => pure .programId
   | .accKey i => pure (.accKey i)

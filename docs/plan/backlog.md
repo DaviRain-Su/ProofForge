@@ -56,13 +56,14 @@
 - 嵌套 structure / `Vector Nested n` 摊平；Nested / Tree Mollusk
 - Phoenix bounded N=4 双边书、四 seat registry、逐 seat 结算、TIF、费用和 typed event batch
 - SVM 异构 PDA seeds（ASCII/state key/account key）、完整 canonical key 校验和可续接 ignored CPI；Phoenix classic SPL Token 双 vault 全链路
-- SVM 47 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
+- SVM packed u8/u16/u32/u64 CPI words 与 canonical PDA 签名 raw self-entry；SelfLog 覆盖 self-CPI、续段写回和认证失败矩阵
+- SVM 48 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
 
 ## 当前状态
 
-- `lake build Tests` 当前 183 jobs；65 个 imported test modules 含 733 个 `#guard`。
-- SVM registry 47 个程序 / 47 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
+- `lake build Tests` 当前 185 jobs；67 个 imported test modules 含 748 个 `#guard` / `#guard_msgs`。
+- SVM registry 48 个程序 / 48 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade 及 vault/mint/program/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
@@ -73,7 +74,7 @@
 
 ### P0：现有语义的链上闭环
 
-1. `AuditLogHeader` + Borsh wire event + `Log` self-CPI recorder。
+1. 把 `AuditLogHeader` + Borsh wire event 接入 Phoenix。packed integer words、canonical `"log"` PDA 签名、当前 program-id self-CPI、raw tag 入口及 fail-closed 校验已由通用 SelfLog 切片完成；剩余工作只应组合 Phoenix wire 字段和账户，不再修改抽取器/IR/emitter。
 
 ### P1：通用后端边界
 

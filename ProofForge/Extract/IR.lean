@@ -93,6 +93,7 @@ private def cpiWordToSvm : Svm.Ops.CpiWord Val → Except String (Svm.Ops.CpiWor
   | .u16le value => return .u16le (← toSvmVal value)
   | .u32le value => return .u32le (← toSvmVal value)
   | .u64le value => return .u64le (← toSvmVal value)
+  | .selfEntry tag authoritySeed => pure (.selfEntry tag authoritySeed)
   | .ascii value => pure (.ascii value)
   | .programId => pure .programId
   | .accKey i => pure (.accKey i)

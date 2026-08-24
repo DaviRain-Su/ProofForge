@@ -77,6 +77,8 @@ inductive CpiWord (V : Type) where
   | u16le (value : V)
   | u32le (value : V)
   | u64le (value : V)
+  /-- One-byte data prefix that also declares the matching signed raw self-entry. -/
+  | selfEntry (tag : UInt64) (authoritySeed : String)
   | ascii (value : String)
   | programId
   | accKey (i : Nat)
@@ -87,13 +89,23 @@ def CpiWord.map (f : α → β) : CpiWord α → CpiWord β
   | .u16le value => .u16le (f value)
   | .u32le value => .u32le (f value)
   | .u64le value => .u64le (f value)
+  | .selfEntry tag authoritySeed => .selfEntry tag authoritySeed
   | .ascii value => .ascii value
   | .programId => .programId
   | .accKey i => .accKey i
 
 def CpiWord.value? : CpiWord V → Option V
   | .u8le value | .u16le value | .u32le value | .u64le value => some value
-  | .ascii _ | .programId | .accKey _ => none
+  | .selfEntry _ _ | .ascii _ | .programId | .accKey _ => none
+
+structure RawSelfEntry where
+  tag : UInt64
+  authoritySeed : String
+  deriving BEq, Repr, Inhabited
+
+def CpiWord.rawSelfEntry? : CpiWord V → Option RawSelfEntry
+  | .selfEntry tag authoritySeed => some { tag, authoritySeed }
+  | _ => none
 
 /-- SVM-only source effects. -/
 inductive OpExt (V : Type) where
@@ -142,16 +154,20 @@ def findPdaSeeds (seeds : Array PdaSeed) : Val := leaf (.findPdaSeeds seeds)
 def checkPdaSeeds (account : Nat) (seeds : Array PdaSeed) : Val :=
   leaf (.checkPdaSeeds account seeds)
 
+private def asciiSeedWellFormed (value : String) : Bool :=
+  !value.isEmpty && value.length ≤ 32 && value.toList.all (·.toNat < 128)
+
 def CpiWord.wellFormed (word : CpiWord Val) : Bool :=
   match word with
   | .u8le value | .u16le value | .u32le value | .u64le value =>
       value.wellFormed ValKind.arity
+  | .selfEntry tag authoritySeed =>
+      tag.toNat < 256 && asciiSeedWellFormed authoritySeed
   | .accKey acc => cpiAccInRange acc
   | _ => true
 
 def PdaSeed.wellFormed : PdaSeed → Bool
-  | .ascii value =>
-      !value.isEmpty && value.length ≤ 32 && value.toList.all (·.toNat < 128)
+  | .ascii value => asciiSeedWellFormed value
   | .stateKey => true
   | .accKey acc => cpiAccInRange acc
 
@@ -180,10 +196,23 @@ private partial def staticPayloadsWellFormed : Val → Bool
   | .ext _ operands => operands.all staticPayloadsWellFormed
   | _ => true
 
+private def rawSelfInvokeWellFormed (metas : Array CpiMeta) (data : Array (CpiWord Val))
+    (seeds : Array PdaSeed) (bump : Option Val) : Bool :=
+  let entries := data.filterMap CpiWord.rawSelfEntry?
+  if entries.isEmpty then true
+  else
+    match data[0]?, entries[0]?, metas.toList, seeds.toList, bump with
+    | some (CpiWord.selfEntry tag authoritySeed), some entry,
+        [authorityMeta], [.ascii signerSeed], some _ =>
+        entries.size == 1 && entry.tag == tag && entry.authoritySeed == authoritySeed &&
+          signerSeed == authoritySeed && authorityMeta.signer && !authorityMeta.writable
+    | _, _, _, _, _ => false
+
 def OpExt.wellFormed : OpExt Val → Bool
   | .invoke programIx metas data seeds bump =>
       cpiAccInRange programIx && metas.all (cpiAccInRange ·.acc) &&
         data.all CpiWord.wellFormed &&
+        rawSelfInvokeWellFormed metas data seeds bump &&
         ((seeds.isEmpty && bump.isNone) ||
           (PdaSeed.groupWellFormed seeds && bump.isSome)) &&
         bump.all fun value =>

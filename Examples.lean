@@ -40,6 +40,7 @@ import Examples.Gate
 import Examples.Nonce
 import Examples.TokenOwner
 import Examples.TokenMs
+import Examples.SelfLog
 import Examples.EvmCtx
 import Examples.TipJar
 import Examples.Lang

@@ -147,6 +147,42 @@ structure Program where
   methods : Array Method
   deriving BEq, Repr, Inhabited
 
+private partial def rawSelfEntriesIn (ops : Array Op) :
+    Except String (Array Ops.RawSelfEntry) := do
+  let mut result := #[]
+  for op in ops do
+    match op with
+    | .invoke _ metas data seeds bump =>
+        let entries := data.filterMap Ops.CpiWord.rawSelfEntry?
+        unless entries.isEmpty do
+          match data[0]?, entries[0]?, metas.toList, seeds.toList, bump with
+          | some (Ops.CpiWord.selfEntry tag authoritySeed), some entry,
+              [authorityMeta], [.ascii signerSeed], some _ =>
+              unless entries.size == 1 && entry.tag == tag &&
+                  entry.authoritySeed == authoritySeed && signerSeed == authoritySeed &&
+                  authorityMeta.signer && !authorityMeta.writable do
+                throw "extract/unsupported: malformed raw self-entry invocation"
+              result := result.push entry
+          | _, _, _, _, _ =>
+              throw "extract/unsupported: malformed raw self-entry invocation"
+    | .ite _ _ _ thn els =>
+        result := result ++ (← rawSelfEntriesIn thn) ++ (← rawSelfEntriesIn els)
+    | .forBody _ body => result := result ++ (← rawSelfEntriesIn body)
+    | _ => pure ()
+  return result
+
+/-- A program can expose at most one raw signed self-entry contract. -/
+def rawSelfEntry? (program : Program) : Except String (Option Ops.RawSelfEntry) := do
+  let mut found : Option Ops.RawSelfEntry := none
+  for method in program.methods do
+    for entry in ← rawSelfEntriesIn method.ops do
+      match found with
+      | none => found := some entry
+      | some expected =>
+          unless expected == entry do
+            throw "extract/unsupported: inconsistent raw self-entry tags or authority seeds"
+  return found
+
 private def lowerSlots (src : Extract.IR.Program) : Array Slot := Id.run do
   let mut result := #[]
   let mut offset := 8
@@ -207,13 +243,15 @@ private def lowerMethod (schema : Core.Schema) (method : Extract.IR.Method) :
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
   src.validateSvm
   let slots := lowerSlots src
-  return {
+  let program : Program := {
     name := src.name
     slots
     vectors := lowerVectors src slots
     schema := src.schema
     methods := ← src.methods.mapM (lowerMethod src.schema)
   }
+  let _ ← rawSelfEntry? program
+  return program
 
 def Program.fields (p : Program) : Array String :=
   p.slots.map (·.name)
@@ -434,6 +472,7 @@ private partial def opsCanon (ops : Array Op) : String :=
           | .u32le (.lit n) => s!"u32.{n.toNat}"
           | .u32le value => s!"u32v.{valCanon value}"
           | .u64le value => s!"u64.{valCanon value}"
+          | .selfEntry tag authoritySeed => s!"self.{tag.toNat}.{authoritySeed}"
           | .ascii value => s!"s.{value}"
           | .programId => "pid"
           | .accKey i => s!"k.{i}"

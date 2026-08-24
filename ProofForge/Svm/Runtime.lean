@@ -66,6 +66,8 @@ inductive CpiWord where
   | u16le (v : UInt64)
   | u32le (v : UInt64)
   | u64le (v : UInt64)
+  /-- One-byte data prefix that also declares the matching signed raw self-entry. -/
+  | selfEntry (tag : UInt64) (authoritySeed : String)
   | ascii (s : String)
   | programId
   | accKey (i : UInt64)

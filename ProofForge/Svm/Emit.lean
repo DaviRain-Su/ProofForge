@@ -1149,6 +1149,9 @@ private def emitCpiData (p : IR.Program) (scope : String) (base : Nat)
     | .u64le value =>
       body := body ++ (← emitCpiInteger p scope base off "stxdw" value)
       off := off + 8
+    | .selfEntry tag _ =>
+      body := body ++ s!"  lddw r1, {tag.toNat}\n  stxb [r9 + {base + off}], r1\n"
+      off := off + 1
     | .ascii s =>
       -- 逐字节；本切片字面量很短。
       let mut i : Nat := 0
@@ -1306,6 +1309,17 @@ private def emitInvoke (p : IR.Program) (label : String)
     infos := infos ++ emitFillAccountInfoFromHeader label (headerStack i)
     if i + 1 < n then
       infos := infos ++ "  add64 r5, 56\n"
+  let programIdPtr :=
+    match data[0]? with
+    | some (.selfEntry _ _) =>
+        s!"\
+  ldxdw r1, [r10 - {headerStack n}]
+  ldxdw r2, [r1 + 0]
+  add64 r1, 8
+  add64 r1, r2
+"
+    | _ =>
+        s!"  ldxdw r1, [r10 - {headerStack physicalProgramIx}]\n  add64 r1, 8\n"
   return s!"\
   ; invoke programIx={physicalProgramIx} metas={metas.size} dataLen={dataLen}
   mov64 r9, r10
@@ -1314,8 +1328,7 @@ private def emitInvoke (p : IR.Program) (label : String)
   add64 r5, {metaOff}
 {metasTxt}  mov64 r8, r9
   add64 r8, {ixOff}
-  ldxdw r1, [r10 - {headerStack physicalProgramIx}]
-  add64 r1, 8
+{programIdPtr}  ; raw self-entry invocations use the current program id, not caller-supplied data
   stxdw [r8 + 0], r1
   mov64 r1, r9
   add64 r1, {metaOff}
@@ -1848,10 +1861,66 @@ private def emitDispatch (program : IR.Program) : Except String String := do
       out := out ++ s!"dispatch_next_{handlerLabel program.methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
   return out
 
+private def emitRawSelfHandler (entry : Ops.RawSelfEntry) : String :=
+  let (seedBytes, _) :=
+    entry.authoritySeed.toList.foldl (init := ("", 0)) fun (out, offset) byte =>
+      (out ++ s!"  lddw r1, {byte.toNat}\n  stxb [r8 + {offset}], r1\n", offset + 1)
+  s!"\
+raw_self_entry:
+  ; signed raw self-entry tag={entry.tag.toNat} seed={entry.authoritySeed}
+{emitWalkAccounts 1 "raw_self" "err_unknown_disc"}  ldxdw r7, [r10 - {headerStack 1}]
+  ldxdw r1, [r7 + 0]
+  jlt r1, 1, err_unknown_disc
+  add64 r7, 8
+  ldxb r1, [r7 + 0]
+  jne r1, {entry.tag.toNat}, err_unknown_disc
+  ldxdw r2, [r10 - {headerStack 0}]
+  ldxb r1, [r2 + 1]
+  jeq r1, 0, err_unknown_disc
+  ldxb r1, [r2 + 2]
+  jne r1, 0, err_unknown_disc
+  mov64 r8, r10
+  add64 r8, -2800
+{seedBytes}  mov64 r1, r8
+  stxdw [r8 + 64], r1
+  lddw r1, {entry.authoritySeed.length}
+  stxdw [r8 + 72], r1
+  ldxdw r3, [r10 - {headerStack 1}]
+  ldxdw r1, [r3 + 0]
+  add64 r3, 8
+  add64 r3, r1
+  mov64 r1, r8
+  add64 r1, 64
+  lddw r2, 1
+  mov64 r4, r8
+  add64 r4, 96
+  mov64 r5, r8
+  add64 r5, 128
+  call sol_try_find_program_address
+  jne r0, 0, err_unknown_disc
+  ldxdw r2, [r10 - {headerStack 0}]
+  add64 r2, 8
+  ldxdw r1, [r8 + 96]
+  ldxdw r3, [r2 + 0]
+  jne r1, r3, err_unknown_disc
+  ldxdw r1, [r8 + 104]
+  ldxdw r3, [r2 + 8]
+  jne r1, r3, err_unknown_disc
+  ldxdw r1, [r8 + 112]
+  ldxdw r3, [r2 + 16]
+  jne r1, r3, err_unknown_disc
+  ldxdw r1, [r8 + 120]
+  ldxdw r3, [r2 + 24]
+  jne r1, r3, err_unknown_disc
+  lddw r0, 0
+  exit
+"
+
 /-- Emit assembly from the fully lowered, target-owned SVM IR. -/
 def emitAsm (program : IR.Program) : Except String String := do
   unless IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
+  let rawSelfEntry ← IR.rawSelfEntry? program
   let marker ← IR.layoutMarkerHex program
   let layout := IR.inputLayout program
   let dispatch ← emitDispatch program
@@ -1881,6 +1950,8 @@ def emitAsm (program : IR.Program) : Except String String := do
     if IR.usesWalk program then
       dispatch.replace "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n" dispatchHead
     else dispatch
+  let rawJump := if rawSelfEntry.isSome then "  jeq r1, 1, raw_self_entry\n" else ""
+  let rawHandler := rawSelfEntry.map emitRawSelfHandler |>.getD ""
   return s!"\
 ; SOLANA-LEAN-SBPF-ASM v0 (ops-driven handler bodies)
 ; digest={IR.digestHex program}
@@ -1904,7 +1975,7 @@ def emitAsm (program : IR.Program) : Except String String := do
 entrypoint:
   mov64 r6, r1
   ldxdw r1, [r6 + NUM_ACCOUNTS]
-{entryIx}err_unknown_disc:
+{rawJump}{entryIx}{rawHandler}err_unknown_disc:
   lddw r0, 1
   exit
 {dispatchTxt}

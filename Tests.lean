@@ -39,6 +39,7 @@ import Tests.GateSpec
 import Tests.NonceSpec
 import Tests.TokenOwnerSpec
 import Tests.TokenMsSpec
+import Tests.SelfLogSpec
 import Tests.PhoenixSpec
 import Tests.CliSpec
 import Tests.Fixtures
