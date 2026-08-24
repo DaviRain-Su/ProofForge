@@ -54,6 +54,53 @@ def getWithLet (s : State) : UInt64 :=
   let value := s.value
   value
 
+namespace MisleadingConstants
+
+structure State where
+  max : UInt64
+  share : UInt64
+  balance : UInt64
+  allowance : UInt64
+  tokenAllowance : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+def u64Max : UInt64 := 100
+def shareBase : UInt64 := 7
+def balBase : UInt64 := 9
+def allowBase : UInt64 := 11
+def largest : UInt64 := ~~~(0 : UInt64)
+
+namespace Token
+
+def allowBase : UInt64 := 13
+
+end Token
+
+def init (_seed : UInt64) : State :=
+  { max := u64Max
+    share := shareBase
+    balance := balBase
+    allowance := allowBase
+    tokenAllowance := Token.allowBase }
+
+def addWithLargest (s : State) (n : UInt64) : Except Error (State × UInt64) :=
+  if s.max ≤ largest - n then
+    let next := s.max + n
+    .ok ({ s with max := next }, next)
+  else
+    .error .overflow
+
+def addWithMisleadingMax (s : State) (n : UInt64) : Except Error (State × UInt64) :=
+  if s.max ≤ u64Max - n then
+    let next := s.max + n
+    .ok ({ s with max := next }, next)
+  else
+    .error .overflow
+
+def getMax (s : State) : UInt64 := s.max
+
+end MisleadingConstants
+
 private def sameMethodCore (left right : ProofForge.Extract.Legacy.Method) : Bool :=
   left.kind == right.kind &&
     left.paramCount == right.paramCount &&
@@ -102,6 +149,32 @@ elab_rules : command
   Tests.NormalizationSpec.initWithLet
   Tests.NormalizationSpec.incrementWithLets
   Tests.NormalizationSpec.getWithLet
+
+elab "#pf_guard_constant_semantics" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``MisleadingConstants.init
+        ``MisleadingConstants.addWithLargest ``MisleadingConstants.getMax with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some init := program.methods.find? (·.kind == .init)
+    | throwError "missing misleading-constant init"
+  let values := init.ops.filterMap fun | .returnState value => some value | _ => none
+  unless values == #[.lit 100, .lit 7, .lit 9, .lit 11, .lit 13] do
+    throwError s!"constants were not evaluated from their definitions: {repr init.ops}"
+  let some add := program.methods.find? (·.ixName == "addWithLargest")
+    | throwError "missing addWithLargest"
+  unless add.ops.any (fun
+      | .checkedAddU64 (.field (.arg 1) "max") (.arg 0) => true
+      | _ => false) do
+    throwError s!"semantically maximal guard was not accepted: {repr add.ops}"
+  match ProofForge.Extract.extractProgram env ``MisleadingConstants.init
+      ``MisleadingConstants.addWithMisleadingMax ``MisleadingConstants.getMax with
+  | .error _ => pure ()
+  | .ok bad =>
+      throwError s!"a constant named u64Max bypassed checked-add validation: {repr bad.methods}"
+
+#pf_guard_constant_semantics
 
 elab "#pf_guard_core_evaluation" : command => do
   let env ← getEnv

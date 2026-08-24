@@ -457,6 +457,11 @@ private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :
   if fields.size < ctor.numFields || projectionInfo.i ≥ ctor.numFields then none
   else fields[fields.size - ctor.numFields + projectionInfo.i]?
 
+private def staticUInt64? : Ops.Val → Option UInt64
+  | .lit value => some value
+  | .bitNot value => staticUInt64? value |>.map (~~~·)
+  | _ => none
+
 private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -776,14 +781,6 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             else some (.field b s!"{n}_tag")
           | some b => some (.field b s!"slot_tag")
           | none => none
-        else if endsWith e ".u64Max" then
-          some (.lit (~~~(0 : UInt64)))
-        else if endsWith e ".shareBase" || endsWith e ".balBase" then
-          some (.lit 0)
-        else if endsWith e ".Token.allowBase" then
-          some (.lit 1)
-        else if endsWith e ".allowBase" then
-          some (.lit 0)
         else if endsWith e ".clockSlot" || isConstNamed e ``ProofForge.Svm.Runtime.clockSlot then
           some .clockSlot
         else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
@@ -1001,7 +998,12 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           match env.find? n with
           | some (.defnInfo info) =>
             if info.type.consumeMData.getAppFn.constName? == some ``UInt64 then
-              asVal env fuel' info.value
+              match asVal env fuel' info.value with
+              | some value =>
+                  match staticUInt64? value with
+                  | some literal => some (.lit literal)
+                  | none => some value
+              | none => none
             else none
           | _ => none
         else none
@@ -1031,8 +1033,10 @@ private def asSubFromMax (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``HSub.hSub then
     let args := e.getAppArgs
-    if args.size ≥ 2 && endsWith (strip args[args.size - 2]!) ".u64Max" then
-      val env args[args.size - 1]!
+    if args.size ≥ 2 then
+      match val env args[args.size - 2]! >>= staticUInt64? with
+      | some max => if max == ~~~(0 : UInt64) then val env args[args.size - 1]! else none
+      | none => none
     else none
   else none
 
@@ -1052,8 +1056,10 @@ private def asDivFromMax (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``HDiv.hDiv then
     let args := e.getAppArgs
-    if args.size ≥ 2 && endsWith (strip args[args.size - 2]!) ".u64Max" then
-      val env args[args.size - 1]!
+    if args.size ≥ 2 then
+      match val env args[args.size - 2]! >>= staticUInt64? with
+      | some max => if max == ~~~(0 : UInt64) then val env args[args.size - 1]! else none
+      | none => none
     else none
   else none
 
