@@ -4,6 +4,10 @@ namespace ProofForge.Svm.Emit
 
 def overflowCode : String := "0x1001"
 
+/-- Deep scratch stays clear of expression temporaries, walk headers, scalar locals, and CPI data. -/
+private def sysvarScratch : Nat := 3072
+private def sysvarProgramIdScratch : Nat := 3104
+
 private def handlerLabel (m : IR.Method) : String :=
   if m.ixName != "" then m.ixName else IR.ixNameOfLean (IR.lastName m.name)
 
@@ -289,18 +293,18 @@ private partial def sourceValRepr : Ops.Val → String
   | .field base name => s!"ProofForge.Ops.Val.field ({sourceValRepr base}) {repr name}"
   | value => reprStr value
 
-/-- Clock 是 40 字节 `repr(C)`；`slot` 在 0，`epoch` 在 16。缓冲放在 `r10-72`。 -/
+/-- Clock 是 40 字节 `repr(C)`；`slot` 在 0，`epoch` 在 16。 -/
 private def emitLoadClockField (field : String) (off stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load clock.{field} via sol_get_clock_sysvar
   mov64 r1, r10
-  add64 r1, -72
+  add64 r1, -{sysvarScratch}
   call sol_get_clock_sysvar
   jeq r0, 0, clock_{field}_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
 clock_{field}_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - {72 - off}]
+  ldxdw r1, [r10 - {sysvarScratch - off}]
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -318,13 +322,13 @@ private def emitLoadSlotsPerEpoch (stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load slotsPerEpoch via sol_get_epoch_schedule_sysvar
   mov64 r1, r10
-  add64 r1, -72
+  add64 r1, -{sysvarScratch}
   call sol_get_epoch_schedule_sysvar
   jeq r0, 0, epoch_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
 epoch_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - 72]
+  ldxdw r1, [r10 - {sysvarScratch}]
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -333,16 +337,16 @@ private def emitLoadCpiReturn (stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load cpiReturn via sol_get_return_data
   mov64 r1, r10
-  add64 r1, -72
+  add64 r1, -{sysvarScratch}
   lddw r2, 8
   mov64 r3, r10
-  add64 r3, -104
+  add64 r3, -{sysvarProgramIdScratch}
   call sol_get_return_data
   jeq r0, 8, cpi_ret_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
 cpi_ret_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - 72]
+  ldxdw r1, [r10 - {sysvarScratch}]
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -351,13 +355,13 @@ private def emitLoadRentExemption (dataLen stackOff : Nat) (scope : String) : St
   s!"\
   ; load rentExemption {dataLen} via sol_get_rent_sysvar
   mov64 r1, r10
-  add64 r1, -72
+  add64 r1, -{sysvarScratch}
   call sol_get_rent_sysvar
   jeq r0, 0, rent_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
 rent_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - 72]
+  ldxdw r1, [r10 - {sysvarScratch}]
   lddw r2, {128 + dataLen}
   mul64 r1, r2
   stxdw [r10 - {stackOff}], r1
@@ -506,7 +510,7 @@ ois_done_{scope}_{acc}_{stackOff}:
 
 /--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
-scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 clock 的 `r10-72`。
+scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 sysvar 的 `r10-3072`。
 CPI 程序的 program id 在 walk 出的 ix 长度字之后。
 -/
 private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat)
@@ -624,24 +628,17 @@ private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff nonc
   stxdw [r10 - {stackOff}], r1
 "
 
-/-- 移位量 ≥ 64 结果是 0，对齐 Lean `UInt64`。 -/
+/-- Lean `UInt64` uses the low six bits of a `UInt64` shift amount. -/
 private partial def emitLoadShift (p : IR.Program) (op : String) (l r : Ops.Val)
     (stackOff nonce : Nat) (scope : String) : Except String String := do
   let loadL ← loadVal p l (stackOff + 8) (nonce + 1) (scope ++ "_l")
   let loadR ← loadVal p r (stackOff + 16) (nonce + 2) (scope ++ "_r")
-  let wide := s!"wide_sh_{scope}_{stackOff}_{nonce}"
-  let done := s!"done_sh_{scope}_{stackOff}_{nonce}"
   return loadL ++ loadR ++
     s!"\
   ldxdw r1, [r10 - {stackOff + 8}]
   ldxdw r2, [r10 - {stackOff + 16}]
-  lddw r3, 64
-  jge r2, r3, {wide}
+  and64 r2, 63
   {op} r1, r2
-  ja {done}
-{wide}:
-  lddw r1, 0
-{done}:
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -770,6 +767,9 @@ private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops
     (len elemOff stackOff nonce : Nat) (scope : String) : Except String String := do
   let some baseOff := IR.vectorBaseOffset p name
     | .error s!"extract/unsupported: unknown vector {name}"
+  let some width := IR.vectorLeafWidth p name elemOff
+    | .error s!"extract/unsupported: unknown vector leaf {name}+{elemOff}"
+  let load ← loadInsn width
   let loadIdx ← loadVal p idx (stackOff + 8) (nonce + 1) (scope ++ "_i")
   let bound := IR.vectorLenOf p name len
   let bound := if bound == 0 then 1 else bound
@@ -786,7 +786,7 @@ private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops
   add64 r1, ACC0_DATA
   add64 r1, {baseOff + elemOff}
   add64 r1, r2
-  ldxdw r1, [r1 + 0]
+  {load} r1, [r1 + 0]
   stxdw [r10 - {stackOff}], r1
   ja ok_idx_{tag}
   err_idx_{tag}:
@@ -1340,6 +1340,9 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
     | .indexSet name idx value len elemOff =>
       let some baseOff := IR.vectorBaseOffset p name
         | throw s!"extract/unsupported: unknown vector {name}"
+      let some width := IR.vectorLeafWidth p name elemOff
+        | throw s!"extract/unsupported: unknown vector leaf {name}+{elemOff}"
+      let store ← storeInsn width
       let loadI ← loadVal p idx 8 n s!"{label}_{n}_idx"
       let loadV ← loadVal p value 16 (n + 1) s!"{label}_{n}_value"
       n := n + 2
@@ -1361,7 +1364,7 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
   add64 r1, {baseOff + elemOff}
   add64 r1, r2
   ldxdw r3, [r10 - 16]
-  stxdw [r1 + 0], r3
+  {store} [r1 + 0], r3
   stxdw [r10 - 24], r3
   ja {ok}
 {oob}:

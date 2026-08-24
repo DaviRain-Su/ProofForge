@@ -24,6 +24,8 @@ open ProofForge.Svm.Runtime
   | .ok asm =>
       asm.contains "call sol_get_clock_sysvar" &&
         asm.contains "ACC0_KEY + 0" &&
+        asm.contains "add64 r1, -3072" &&
+        !asm.contains "add64 r1, -72\n  call sol_get_clock_sysvar" &&
         asm.contains "call height" &&
         asm.contains "call era" &&
         asm.contains "call key0" &&

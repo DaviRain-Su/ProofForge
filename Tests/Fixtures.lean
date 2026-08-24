@@ -67,6 +67,24 @@ def setBagHead (s : BagState) (n : UInt64) :
     Except Examples.Counter.Error (BagState × UInt64) :=
   .ok ({ items := #[n] }, n)
 
+/-- Narrow vector leaves exercise physical indexed loads and stores in both backends. -/
+structure NarrowState where
+  cells : Vector UInt8 2
+  deriving Repr, DecidableEq
+
+def initNarrow (initial : UInt8) : NarrowState :=
+  { cells := #v[initial, 0] }
+
+def setNarrow (s : NarrowState) (i : UInt64) (value : UInt8) :
+    Except Examples.Counter.Error (NarrowState × UInt64) :=
+  if h : i.toNat < 2 then
+    .ok ({ cells := s.cells.set i.toNat value }, value.toUInt64)
+  else
+    .error .overflow
+
+def getNarrow (s : NarrowState) (i : UInt64) : UInt64 :=
+  if i < 2 then s.cells[i.toNat]!.toUInt64 else 0
+
 /-- 正向：单构造子、单个 `UInt64` payload 是无 tag 的 representational newtype。 -/
 inductive Tagged where
   | wrap (n : UInt64)

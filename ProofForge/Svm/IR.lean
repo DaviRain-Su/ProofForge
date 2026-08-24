@@ -263,6 +263,15 @@ def vectorLenOf (p : Program) (name : String) (given : Nat) : Nat :=
 def vectorStride (p : Program) (name : String) : Nat :=
   (vector? p name).map (·.strideBytes) |>.getD 8
 
+/-- Width of the leaf at one byte offset within a source vector element. -/
+def vectorLeafWidth (p : Program) (name : String) (byteOffset : Nat) : Option Nat := do
+  let vector ← vector? p name
+  if vector.leaves.isEmpty then
+    -- Legacy fixtures only model vectors of UInt64 leaves.
+    some 8
+  else
+    (vector.leaves.find? (·.offset == byteOffset)).map (·.width)
+
 def optionLeafNames? (p : Program) : Option (String × String) :=
   match p.schema.firstOption? with
   | some (tag, payload) => some (tag.name, payload.name)

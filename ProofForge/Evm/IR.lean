@@ -221,6 +221,15 @@ def vectorLeafSlotOffset (p : Program) (name : String) (byteOffset : Nat) : Nat 
         |>.getD vector.leaves.size
   | none => byteOffset / 8
 
+/-- Width of the leaf at one byte offset within a source vector element. -/
+def vectorLeafWidth (p : Program) (name : String) (byteOffset : Nat) : Option Nat := do
+  let vector ← vector? p name
+  if vector.leaves.isEmpty then
+    -- Legacy fixtures only model vectors of UInt64 leaves.
+    some 8
+  else
+    (vector.leaves.find? (·.byteOffset == byteOffset)).map (·.width)
+
 private def rejectSlot (slot : Core.IR.Slot) : Option String :=
   if !(slot.width == 1 || slot.width == 2 || slot.width == 4 || slot.width == 8) then
     some s!"extract/unsupported: evm slot {slot.name} width {slot.width}"

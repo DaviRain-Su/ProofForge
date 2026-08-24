@@ -160,19 +160,21 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .shiftL l r => do
       let lv ← loadVal p paramPrefix paramCount l
       let rv ← loadVal p paramPrefix paramCount r
-      return "shl(" ++ rv ++ ", " ++ lv ++ ")"
+      return "and(shl(and(" ++ rv ++ ", 63), " ++ lv ++ "), " ++ u64MaxYul ++ ")"
   | .shiftR l r => do
       let lv ← loadVal p paramPrefix paramCount l
       let rv ← loadVal p paramPrefix paramCount r
-      return "shr(" ++ rv ++ ", " ++ lv ++ ")"
+      return "shr(and(" ++ rv ++ ", 63), " ++ lv ++ ")"
   | .indexGet _ name idx _len off => do
       let iv ← loadVal p paramPrefix paramCount idx
       let some base := IR.vectorBaseSlot p name
         | throw s!"extract/unsupported: unknown vector {name}"
+      let some width := IR.vectorLeafWidth p name off
+        | throw s!"extract/unsupported: unknown vector leaf {name}+{off}"
       let stride := IR.vectorStrideSlots p name
       let leaf := IR.vectorLeafSlotOffset p name off
-      return "sload(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
-        toString stride ++ ")))"
+      return maskExpr width ("sload(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++
+        ", " ++ toString stride ++ ")))")
   | .loopIx => .ok "i"
   | .select .. => .error "extract/unsupported: evm select needs materialize"
   | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. |
@@ -259,9 +261,11 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
         let (preL, lv, st2) ← materializeVal p indent paramPrefix paramCount l st1
         let (nm, st3) := fresh st2
         let op := if match v with | .shiftL .. => true | _ => false then "shl" else "shr"
+        let shifted := op ++ "(and(" ++ rv ++ ", 63), " ++ lv ++ ")"
+        let value :=
+          if op == "shl" then "and(" ++ shifted ++ ", " ++ u64MaxYul ++ ")" else shifted
         let txt := preR ++ preL ++
-          indent ++ "if gt(" ++ rv ++ ", 63) { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ nm ++ " := " ++ op ++ "(" ++ rv ++ ", " ++ lv ++ ")" ++ nl
+          indent ++ "let " ++ nm ++ " := " ++ value ++ nl
         return (txt, nm, st3)
     | .select c l r t f =>
         let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
@@ -285,14 +289,16 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           | _ => materializeVal p indent paramPrefix paramCount idx st
         let some base := IR.vectorBaseSlot p name
           | throw s!"extract/unsupported: unknown vector {name}"
+        let some width := IR.vectorLeafWidth p name off
+          | throw s!"extract/unsupported: unknown vector leaf {name}+{off}"
         let (nm, st2) := fresh st1
         let bound := toString (IR.vectorLenOf p name len)
         let stride := IR.vectorStrideSlots p name
         let leaf := IR.vectorLeafSlotOffset p name off
         let txt := pre ++
           indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ nm ++ " := sload(add(" ++ toString (base + leaf) ++
-            ", mul(" ++ iv ++ ", " ++ toString stride ++ ")))" ++ nl
+          indent ++ "let " ++ nm ++ " := " ++ maskExpr width ("sload(add(" ++
+            toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++ toString stride ++ ")))") ++ nl
         return (txt, nm, st2)
     | .loopIx =>
         return ("", st.loopIx.getD "i", st)
@@ -558,14 +564,17 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         st := st2
         let some base := IR.vectorBaseSlot p name
           | throw s!"extract/unsupported: unknown vector {name}"
+        let some width := IR.vectorLeafWidth p name elemOff
+          | throw s!"extract/unsupported: unknown vector leaf {name}+{elemOff}"
         let bound := toString (IR.vectorLenOf p name len)
         let stride := IR.vectorStrideSlots p name
         let leaf := IR.vectorLeafSlotOffset p name elemOff
+        let stored := maskExpr width vv
         acc := acc ++ preI ++ preV ++
           indent ++ "if iszero(lt(" ++ iv ++ ", " ++ bound ++ ")) { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "sstore(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
-            toString stride ++ ")), " ++ vv ++ ")" ++ nl
-        st := { st with last := some vv }
+            toString stride ++ ")), " ++ stored ++ ")" ++ nl
+        st := { st with last := some stored }
     | .mapGetU64 base key =>
         let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
         let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
