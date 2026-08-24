@@ -55,7 +55,7 @@
 - Core control/schema 与 `Svm.Ops/IR/Runtime`、`Evm.Ops/IR/Runtime` 分层；Extract.IR 是唯一 typed target-extension 组合点
 - 嵌套 structure / `Vector Nested n` 摊平；Nested / Tree Mollusk
 - Phoenix bounded N=4 双边书、四 seat registry、逐 seat 结算、TIF、费用和 typed event batch
-- SVM 异构 PDA seeds（ASCII/state key/account key）、完整 canonical key 校验和可续接 signed CPI；Phoenix classic SPL Token 双 vault 全链路
+- SVM 异构 PDA seeds（ASCII/state key/account key）、完整 canonical key 校验和可续接 ignored CPI；Phoenix classic SPL Token 双 vault 全链路
 - SVM 47 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
 

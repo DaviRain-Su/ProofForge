@@ -669,6 +669,25 @@ elab "#pf_guard_multi_seed_invoke_sequence" : command => do
 
 #pf_guard_multi_seed_invoke_sequence
 
+elab "#pf_guard_single_invoke_continuation" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Examples.Counter.init
+        ``Tests.Fixtures.singleInvokeTransfer ``Examples.Counter.get with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let lowered ←
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some transfer := lowered.methods.find? (·.ixName == "singleInvokeTransfer")
+    | throwError "missing single invoke transfer method"
+  match transfer.ops with
+  | #[.invoke 8 _ _ #[] none, .storeField "value" (.arg 0), .okState (.arg 0)] => pure ()
+  | _ => throwError s!"single invoke continuation IR mismatch: {repr transfer.ops}"
+
+#pf_guard_single_invoke_continuation
+
 elab "#pf_guard_single_multi_seed_invoke_continuation" : command => do
   let env ← getEnv
   let program ←

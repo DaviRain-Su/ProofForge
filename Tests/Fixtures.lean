@@ -66,6 +66,12 @@ def multiSeedTransfer (_s : Examples.Counter.State) (amount : UInt64) :
   else
     .error .overflow
 
+/-- One ignored unsigned CPI must preserve the following state transition. -/
+def singleInvokeTransfer (_s : Examples.Counter.State) (amount : UInt64) :
+    Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
+  let _ := ProofForge.Svm.Runtime.tokenTransferCheckedIx 8 1 3 5 0 amount 6
+  .ok ({ value := amount }, amount)
+
 /-- One heterogeneous signed CPI must preserve the state transition after its ignored result. -/
 def singleMultiSeedTransfer (_s : Examples.Counter.State) (amount : UInt64) :
     Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=

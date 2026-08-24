@@ -37,6 +37,7 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - `invoke programIx metas data` — 编译期钉死的 CPI。抽出认这个名字。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
 - `invokeSignedSeeds programIx metas data seeds bump` — 一组编译期定形的异构 signer seeds；支持 ASCII、state key 和静态 account key，运行时只提供 bump。
+- `let _ := invoke...` — 被忽略的 CPI 结果按效应顺序保留；无论普通或 signed、单条或多条，后续 state writes 都不能被抽取器吞掉。
 - `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。

@@ -2374,9 +2374,9 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
     go fuel e
   else none
 
-/-- Collect consecutive ignored CPI results without collapsing the final state transition. One
-call keeps the established lowering path; two or more calls need explicit sequencing so a
-recursive invoke search cannot silently retain only the first effect. -/
+/-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
+ignored call needs explicit sequencing: recursive invoke search would otherwise retain the CPI
+but silently discard a following state write. -/
 private def leadingInvokes (env : Environment) (e : Expr) : Array DecodedInvoke × Expr :=
   let rec go (fuel : Nat) (e : Expr) (invokes : Array DecodedInvoke) :
       Array DecodedInvoke × Expr :=
@@ -2397,18 +2397,6 @@ private def leadingInvokes (env : Environment) (e : Expr) : Array DecodedInvoke 
             | none => (invokes, e)
       | _ => (invokes, e)
   go 16 e #[]
-
-/--
-A single legacy unsigned or one-ASCII-seed CPI keeps its established return-value lowering.
-Heterogeneous signer groups instead use continuation-preserving lowering even when there is only
-one call: their common use is a PDA-authorized transfer followed by a state commit.
--/
-private def invokeNeedsContinuation : DecodedInvoke → Bool
-  | (_, _, _, seeds, some _) =>
-      1 < seeds.size || seeds.any fun
-        | .ascii _ => false
-        | .stateKey | .accKey _ => true
-  | _ => false
 
 private def invokeOps
     (inv : DecodedInvoke)
@@ -3560,7 +3548,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
     let (invokes, continuation) := leadingInvokes env e
-    if 1 < invokes.size || invokes.any invokeNeedsContinuation then
+    if !invokes.isEmpty then
       match decodeExpr env fuel' continuation (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth) with
       | .ok decodedOps =>
