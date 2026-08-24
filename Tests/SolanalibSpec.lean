@@ -62,6 +62,24 @@ private def valueSlot : ProofForge.Svm.IR.Slot := {
 
 #guard (evalCheckedWrite? valueSlot .add u64Max 1 initMem).isNone
 
+private def checkedControl :=
+  checkedAddControlFragment 11 12
+    (.st .m64 .br6 (.reg .br1) (BitVec.ofNat 16 104))
+
+#guard
+  match evalCheckedAddCFGWrite checkedControl 7 5 initMem with
+  | some (.success target memory) =>
+      target == 11 &&
+        loadv .m64 memory (mmInputStart + 104) == some (.vlong 12)
+  | _ => false
+
+-- The typed conditional jump selects the CFG overflow edge before either scratch or state store.
+#guard
+  match evalCheckedAddCFGWrite checkedControl u64Max 1 initMem with
+  | some (.overflow target memory) =>
+      target == 12 && loadv .m64 memory (mmInputStart + 104) == none
+  | _ => false
+
 #guard (staticStoreInstruction? { valueSlot with width := 3 }).isNone
 
 #guard

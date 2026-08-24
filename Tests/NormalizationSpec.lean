@@ -338,6 +338,34 @@ elab "#pf_guard_target_lowering" : command => do
   unless fragment.compute == ProofForge.Svm.Solanalib.checkedArithBody .add &&
       fragment.store == .st .m64 .br6 (.reg .br4) (BitVec.ofNat 16 104) do
     throwError s!"unexpected Solanalib checked-write fragment: {repr fragment}"
+  let cfg ←
+    match increment.toCFG with
+    | .ok graph => pure graph
+    | .error reason => throwError reason
+  let some checkedBlock := cfg.blocks.find? fun block => match block.terminator with
+      | .checked (.addU64 ..) _ _ => true
+      | _ => false
+    | throwError "normalized Counter CFG is missing its checked-add terminator"
+  let (success, overflow) ← match checkedBlock.terminator with
+    | .checked (.addU64 ..) success overflow => pure (success.target, overflow.target)
+    | _ => throwError "selected Counter CFG block is not checked-add"
+  let some control :=
+      ProofForge.Svm.Solanalib.checkedAddCFGWriteFragment?
+        svmCounter cfg checkedBlock.id checkedWrite
+    | throwError "Solanalib bridge rejected Counter checked-add CFG edges"
+  unless control.success == success && control.overflow == overflow &&
+      control.guard == ProofForge.Svm.Solanalib.checkedAddGuardBody &&
+      control.successBody == ProofForge.Svm.Solanalib.checkedAddSuccessBody
+        (.st .m64 .br6 (.reg .br1) (BitVec.ofNat 16 104)) do
+    throwError s!"unexpected Solanalib CFG control fragment: {repr control}"
+  let mismatchedWrite := { checkedWrite with
+    value := match checkedWrite.value with
+      | .checked kind lhs _ => .checked kind lhs (.lit 0xdeadbeef)
+      | value => value
+  }
+  unless (ProofForge.Svm.Solanalib.checkedAddCFGWriteFragment?
+      svmCounter cfg checkedBlock.id mismatchedWrite).isNone do
+    throwError "Solanalib CFG bridge accepted mismatched Core and CFG operands"
 
   let tree ←
     match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with
