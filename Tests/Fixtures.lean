@@ -43,6 +43,15 @@ def wrappingMul (s : Examples.Counter.State) (factor : UInt64) :
   let next := s.value * factor
   .ok ({ value := next }, next)
 
+/-- Negative: an unknown CPI result must not be silently modeled as zero. -/
+def unknownCpiResult (_s : Examples.Counter.State) :
+    Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let result := ProofForge.Svm.Runtime.invoke 1 #[] #[.u8le 99]
+    .ok ({ value := result }, result)
+  else
+    .error .overflow
+
 /-- 负向：state 含 Float，不是支持的叶子。 -/
 structure FlagState where
   value : UInt64

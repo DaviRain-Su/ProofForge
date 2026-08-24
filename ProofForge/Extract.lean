@@ -2189,7 +2189,10 @@ private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
       if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
         let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
         if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
-          val env pair.getAppArgs[pair.getAppArgs.size - 1]!
+          let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
+          -- Constant evaluation of Runtime stubs must not turn a consumed CPI result into zero.
+          if mentionsRuntime ret "invoke" || mentionsRuntime ret "invokeSigned" then none
+          else val env ret
         else none
       else
         match e with
@@ -2200,35 +2203,44 @@ private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
   go 16 e
 
 private def invokeRet
-    (_env : Environment) (_e : Expr)
+    (env : Environment) (e : Expr)
     (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
-    Ops.Val :=
-  match inv with
-  | (2, _, #[.u32le 2, .u64le amount], none, none) => amount
-  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], none, none) => amount
-  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], some _, some _) => amount
-  | (1, _, #[.u32le 1, .programId], none, none) => .lit 0
-  | (1, _, #[.u32le 8, .u64le space], none, none) => space
-  | (2, _, #[.u32le 9, .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], none, none) => space
-  | (2, _, #[.u32le 3, .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], none, none) => lamports
-  | (2, _, #[.u32le 10, .accKey 0, .u64le _, .ascii "vault", .programId], none, none) => .lit 0
-  | (3, _, #[.u32le 11, .u64le lamports, .u64le _, .ascii "vault", .programId], none, none) => lamports
-  | (2, _, #[.u8le 20, .u8le 6, .accKey 0, .u8le 0], none, none) => .lit 0
-  | (2, _, #[.u8le 17], none, none) => .lit 0
-  | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => amount
-  | (3, _, #[.u8le 14, .u64le amount, .u8le _], none, none) => amount
-  | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => amount
-  | (3, _, #[.u8le 18, .accKey 0], none, none) => .lit 0
-  | (3, _, #[.u8le 9], none, none) => .lit 0
-  | (4, _, #[.u8le 13, .u64le amount, .u8le _], none, none) => amount
-  | (3, _, #[.u8le 10], none, none) => .lit 0
-  | (3, _, #[.u8le 11], none, none) => .lit 0
-  | (3, _, #[.u8le 6, .u8le 0, .u8le 1, .accKey 2], none, none) => .lit 0
-  | (3, _, #[.u8le 5], none, none) => .lit 0
-  | (2, _, #[.u8le 21], none, none) => .cpiReturn
-  | (1, _, #[.ascii "ok"], none, none) => .lit 0
-  | (6, _, #[.u8le 1], none, none) => .lit 0
-  | _ => .lit 0
+    Except String Ops.Val :=
+  if let some ret := findOkRet env e then
+    .ok ret
+  else match inv with
+  | (2, _, #[.u32le 2, .u64le amount], none, none) => .ok amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], none, none) => .ok amount
+  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], some _, some _) => .ok amount
+  | (1, _, #[.u32le 1, .programId], none, none) => .ok (.lit 0)
+  | (1, _, #[.u32le 8, .u64le space], none, none) => .ok space
+  | (2, _, #[.u32le 9, .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], none, none) => .ok space
+  | (2, _, #[.u32le 3, .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], none, none) => .ok lamports
+  | (2, _, #[.u32le 10, .accKey 0, .u64le _, .ascii "vault", .programId], none, none) => .ok (.lit 0)
+  | (3, _, #[.u32le 11, .u64le lamports, .u64le _, .ascii "vault", .programId], none, none) => .ok lamports
+  | (2, _, #[.u8le 20, .u8le 6, .accKey 0, .u8le 0], none, none) => .ok (.lit 0)
+  | (2, _, #[.u8le 17], none, none) => .ok (.lit 0)
+  | (4, _, #[.u8le 12, .u64le amount, .u8le _], none, none) => .ok amount
+  | (3, _, #[.u8le 14, .u64le amount, .u8le _], none, none) => .ok amount
+  | (3, _, #[.u8le 15, .u64le amount, .u8le _], none, none) => .ok amount
+  | (3, _, #[.u8le 18, .accKey 0], none, none) => .ok (.lit 0)
+  | (3, _, #[.u8le 9], none, none) => .ok (.lit 0)
+  | (4, _, #[.u8le 13, .u64le amount, .u8le _], none, none) => .ok amount
+  | (3, _, #[.u8le 10], none, none) => .ok (.lit 0)
+  | (3, _, #[.u8le 11], none, none) => .ok (.lit 0)
+  | (3, _, #[.u8le 6, .u8le 0, .u8le 1, .accKey 2], none, none) => .ok (.lit 0)
+  | (3, _, #[.u8le 5], none, none) => .ok (.lit 0)
+  | (2, _, #[.u8le 21], none, none) => .ok .cpiReturn
+  | (1, _, #[.ascii "ok"], none, none) => .ok (.lit 0)
+  | (6, _, #[.u8le 1], none, none) => .ok (.lit 0)
+  | (programIx, _, _, _, _) =>
+      .error s!"extract/unsupported: unknown CPI return semantics for program {programIx}"
+
+private def invokeOpsWithRet
+    (env : Environment) (e : Expr)
+    (inv : Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Option String × Option Ops.Val) :
+    Except String (Array Ops.Op) := do
+  return invokeOps inv (← invokeRet env e inv)
 
 private def forRangeEnd (e : Expr) : Option Nat :=
   let rec rangeEnd (fuel : Nat) (e : Expr) : Option Nat :=
@@ -3016,7 +3028,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool) :
     Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
-    .ok (invokeOps inv (invokeRet env e inv))
+    invokeOpsWithRet env e inv
   else if let some ops := decodeEvmEffect env e then
     .ok ops
   else if let some (n, addend) := findForIn env e then
@@ -3251,7 +3263,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
     else if let some inv := findInvoke env 16 e then
-      return .ok (invokeOps inv (invokeRet env e inv))
+      return invokeOpsWithRet env e inv
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
     else if let some (n, addend) := findForIn env e then
@@ -3340,11 +3352,13 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           match asCmp env condE, directInvoke, decodeEvmEffect env t, asIndexSet env t,
               asStoreFields env t, asOkState env t, decodedThen with
           | some (.ne, .lit 0, .lit 1), some inv, _, _, _, _, _ =>
-            return .ok (invokeOps inv (invokeRet env t inv))
+            return invokeOpsWithRet env t inv
           | some (.ne, .lit 1, .lit 0), some inv, _, _, _, _, _ =>
-            return .ok (invokeOps inv (invokeRet env t inv))
+            return invokeOpsWithRet env t inv
           | some (cmp, lv, rv), some inv, _, _, _, _, _ =>
-            return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
+            match invokeOpsWithRet env t inv with
+            | .ok ops => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
+            | .error reason => return .error reason
           | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
@@ -3443,7 +3457,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | some _, some inv, _, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
-            return .ok #[.ite cmp lv rv (invokeOps inv (invokeRet env t inv)) #[.errorOverflow]]
+            match invokeOpsWithRet env t inv with
+            | .ok ops => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
+            | .error reason => return .error reason
           | some _, none, some evmOps, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
               | return .error "extract/unsupported: ite then"
@@ -3527,7 +3543,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
-      return .ok (invokeOps inv (invokeRet env e inv))
+      return invokeOpsWithRet env e inv
     else if let some (name, unfolded) := unfoldUserHelper env e then
       match decodeExpr env fuel' (substIteLets 256 unfolded) (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth) with

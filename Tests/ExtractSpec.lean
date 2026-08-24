@@ -72,6 +72,17 @@ error: extract/unsupported: mutating method missing checked arith
 #guard_msgs (error) in
 #pf_extract Examples.Counter.init Tests.Fixtures.wrappingSub Examples.Counter.get
 
+elab "#pf_guard_unknown_cpi_return" : command => do
+  let env ← getEnv
+  match ProofForge.Extract.extractProgram env ``Examples.Counter.init
+      ``Tests.Fixtures.unknownCpiResult ``Examples.Counter.get with
+  | .error reason =>
+      unless reason.contains "unknown CPI return semantics" do
+        throwError s!"unexpected unknown-CPI error: {reason}"
+  | .ok _ => throwError "unknown CPI return semantics were silently accepted"
+
+#pf_guard_unknown_cpi_return
+
 /--
 error: extract/unsupported: field flag enum has payload
 -/
