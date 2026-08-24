@@ -176,4 +176,65 @@ fn authenticated_deposit_and_post_ask_run_on_chain() {
     assert_eq!((slot(&account, 89), slot(&account, 93)), (3, 4));
     assert_eq!(slot(&account, 2), 2, "sequence advanced");
     assert_eq!(slot(&account, 160), 1, "place event recorded");
+
+    let stranger = Pubkey::new_unique();
+    let unauthorized = instruction(
+        program_id,
+        state_key,
+        "postAsk",
+        &[40, 1, 0, 0, 0, 0],
+        true,
+        false,
+        phoenix_metas(
+            stranger,
+            true,
+            token_source,
+            mint,
+            token_destination,
+            token_program,
+        ),
+    );
+    let mut unauthorized_accounts = vec![(state_key, account.clone())];
+    unauthorized_accounts.extend(phoenix_accounts(
+        stranger,
+        token_source,
+        mint,
+        token_destination,
+        token_program,
+    ));
+    mollusk.process_and_validate_instruction(
+        &unauthorized,
+        &unauthorized_accounts,
+        &[Check::err(solana_program_error::ProgramError::Custom(0x1002))],
+    );
+
+    let overflow = instruction(
+        program_id,
+        state_key,
+        "depositFunds",
+        &[u64::MAX, 1],
+        true,
+        false,
+        phoenix_metas(
+            trader_key,
+            true,
+            token_source,
+            mint,
+            token_destination,
+            token_program,
+        ),
+    );
+    let mut overflow_accounts = vec![(state_key, account)];
+    overflow_accounts.extend(phoenix_accounts(
+        trader_key,
+        token_source,
+        mint,
+        token_destination,
+        token_program,
+    ));
+    mollusk.process_and_validate_instruction(
+        &overflow,
+        &overflow_accounts,
+        &[Check::err(solana_program_error::ProgramError::Custom(0x1001))],
+    );
 }

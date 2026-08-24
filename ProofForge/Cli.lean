@@ -35,7 +35,7 @@ private def usage : String :=
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
     "No program names means every registered source module for the selected target.\n"
 
-private def parseArgs (args : List String) : Except String Options :=
+def parseArgs (args : List String) : Except String Options :=
   let rec go (rest : List String) (o : Options) : Except String Options :=
     match rest with
     | [] => .ok o
@@ -47,10 +47,7 @@ private def parseArgs (args : List String) : Except String Options :=
     | "--out" :: d :: rest => go rest { o with outDir := d }
     | flag :: rest =>
       if flag.startsWith "-" then .error s!"unknown flag {flag}"
-      else
-        let names := rest.foldl (init := #[flag]) fun acc a =>
-          if a.startsWith "-" then acc else acc.push a
-        .ok { o with names }
+      else go rest { o with names := o.names.push flag }
   let args := args.dropWhile (· == "--")
   let args :=
     match args with
@@ -69,8 +66,11 @@ private def selectSvmNames (names : Array String) : Except String (Array String)
       | some _ => .ok n
       | none => .error s!"unknown svm program {n}"
 
-private def svmModuleName (name : String) : Lean.Name :=
-  if name == "Phoenix" then `Projects.Phoenix
+/-- Programs whose source lives under `Projects.*` instead of `Examples.*`. -/
+def projectPrograms : Array String := #["Phoenix"]
+
+def svmModuleName (name : String) : Lean.Name :=
+  if projectPrograms.contains name then Lean.Name.str `Projects name
   else Lean.Name.str `Examples name
 
 /--

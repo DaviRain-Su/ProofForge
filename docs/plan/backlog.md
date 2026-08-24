@@ -60,8 +60,8 @@
 
 ## 下一刀
 
-SVM 回 L4-cpi-invoke（把 transfer 的 walk + `sol_invoke_signed_c` 收成原语）。
-再后：AccountInfo 叶子 → PDA find / invokeSigned → System create / Token+ATA。
+Phoenix：`AuditLogHeader` + Borsh self-CPI recorder，再接双 vault Token CPI。
+l5-003 剩余：同一入口的 quote vault recipe。动态树删除 fixup 仍是独立范围。
 完整清单：[analysis/sdk-surface.md](analysis/sdk-surface.md)。
 
 能 fail-closed 抽出的格子已收口（L4-034）。

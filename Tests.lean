@@ -40,6 +40,7 @@ import Tests.NonceSpec
 import Tests.TokenOwnerSpec
 import Tests.TokenMsSpec
 import Tests.PhoenixSpec
+import Tests.CliSpec
 import Tests.Fixtures
 import Tests.ProfileSpec
 import Tests.ExtractSpec

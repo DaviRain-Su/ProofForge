@@ -211,6 +211,8 @@ private def sameBusinessResult :
   | .error a, .error b => a == b
   | .ok (a, ar), .ok (b, br) =>
       ar == br && a.sizes == b.sizes &&
+        a.priceTicks == b.priceTicks && a.sequences == b.sequences &&
+        a.traders == b.traders && a.lastSlots == b.lastSlots && a.lastTimes == b.lastTimes &&
         a.traderQuoteLocked == b.traderQuoteLocked &&
         a.traderQuoteFree == b.traderQuoteFree &&
         a.traderBaseLocked == b.traderBaseLocked &&
@@ -227,6 +229,9 @@ private def sameSellResult :
   | .error a, .error b => a == b
   | .ok (a, ar), .ok (b, br) =>
       ar == br && a.bidSizes == b.bidSizes &&
+        a.bidPriceTicks == b.bidPriceTicks && a.bidSequences == b.bidSequences &&
+        a.bidTraders == b.bidTraders &&
+        a.bidLastSlots == b.bidLastSlots && a.bidLastTimes == b.bidLastTimes &&
         a.traderQuoteLocked == b.traderQuoteLocked &&
         a.traderQuoteFree == b.traderQuoteFree &&
         a.traderBaseLocked == b.traderBaseLocked &&
@@ -255,6 +260,16 @@ private def matchingSamples : List Projects.Phoenix.State := [
       sameBusinessResult
         (swapBuyAt s want.toUInt64 limit.toUInt64 0 0)
         (swapBuy s 0 0 0 want.toUInt64 limit.toUInt64)
+
+#guard
+  let expiredBook :=
+    { (init 1) with
+      sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
+      sequences := #v[1, 2, 0, 0], lastSlots := #v[9, 0, 0, 0],
+      quoteLocked := 1000, baseLocked := 5 }
+  sameBusinessResult
+    (swapBuyAt expiredBook 4 20 10 0)
+    (swapBuyAt expiredBook 4 20 0 0) == false
 
 private def sellSamples : List Projects.Phoenix.State := [
   { (init 1) with
@@ -379,7 +394,7 @@ private def sellSamples : List Projects.Phoenix.State := [
           a4 == 4 && s4.traderCount == 4 && s4.traderBumpIndex == 5 &&
             s4.traderFreeHead == 5 &&
             match depositFundsFor s4 5 0 0 0 1 0 with
-            | .error .overflow => true
+            | .error .full => true
             | _ => false
 
 #guard
@@ -415,7 +430,7 @@ private def sellSamples : List Projects.Phoenix.State := [
 
 #guard
   match withdrawBaseFor (init 1) 99 0 0 0 1 with
-  | .error .overflow => true
+  | .error .unauthorized => true
   | _ => false
 
 #guard
@@ -493,7 +508,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         sequences := #v[1, 2, 3, 4], sequence := 5,
         baseLocked := 4, baseFree := 1 }
       9 50 1 0 0 0 0 with
-  | .error .overflow => true
+  | .error .full => true
   | _ => false
 
 #guard
@@ -642,7 +657,7 @@ private def sellSamples : List Projects.Phoenix.State := [
           ~~~(3 : UInt64), ~~~(4 : UInt64)],
         sequence := 5, quoteLocked := 100, quoteFree := 100 }
       9 10 1 0 0 0 0 with
-  | .error .overflow => true
+  | .error .full => true
   | _ => false
 
 #guard
@@ -793,7 +808,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         sizes := #v[2, 3, 0, 0], priceTicks := #v[10, 11, 0, 0],
         traders := #v[7, 8, 0, 0], quoteLocked := 1000, baseLocked := 5 }
       7 2 11 0 0 .abort with
-  | .error .overflow => true
+  | .error .selfTrade => true
   | _ => false
 
 #guard
@@ -951,7 +966,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
         bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
       7 2 11 0 0 .abort with
-  | .error .overflow => true
+  | .error .selfTrade => true
   | _ => false
 
 #guard
@@ -1167,10 +1182,26 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard expired 0 10 0 11 == true
 
 #guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedPhoenix == 344
+#guard ProofForge.Svm.ABI.dataLen ProofForge.Golden.extractedPhoenix != 1376
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedPhoenix with
   | .ok asm => asm.contains "err_swapBuy:"
   | .error _ => false
+
+#guard
+  let full :=
+    (appendEvent
+      (appendEvent
+        (appendEvent
+          (appendEvent
+            (appendEvent (init 1) (.fee 0 1))
+            (.fee 1 1))
+          (.fee 2 1))
+        (.fee 3 1))
+      (.fee 4 1))
+  full.eventCount == 5 &&
+    (appendEvent full (.fee 5 1)).matchError == matchFull &&
+    (appendEvent full (.fee 5 1)).eventCount == 5
 
 end Tests.PhoenixSpec

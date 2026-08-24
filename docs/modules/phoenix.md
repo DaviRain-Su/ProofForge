@@ -26,7 +26,7 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 171 个 8-byte 叶，账户含 discriminator 共 1,376 bytes。`#pf_build Projects.Phoenix`
-digest `3a4652b6083de283`。
+digest 以 `ProofForge.Svm.Registry` 为准（当前 `4b9b1686e97c83c`）。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -85,7 +85,9 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 认识 Phoenix。ordinal 对齐官方 wire enum：0 Uninitialized、1 Header、2 Fill、3 Place、
 4 Reduce、5 Evict、6 FillSummary、7 Fee、8 TimeInForce、9 ExpiredOrder。每个实际事件
 携带 instruction 内 index；maker-bearing Fill/Evict/ExpiredOrder 在构造前把内部 seat
-解析成完整四 limb Pubkey。`Place` / `FillSummary` 的 `u128 client_order_id` 继续用
+解析成完整四 limb Pubkey。事件 batch 满 5 条时 instruction fail-closed（`.full` /
+`0x1003`），不再静默丢事件仍返回成功。`Error` 现为 `overflow` / `unauthorized` /
+`full` / `selfTrade`，链上分别是 `0x1001` / `0x1002` / `0x1003` / `0x1004`。`Place` / `FillSummary` 的 `u128 client_order_id` 继续用
 little-endian `(lo, hi)` 两个 `UInt64` limb 完整保留。最宽事件现在是九 payload，测试
 明确钉住动态 `events` 的 byte offset 72，防止抽取器静默漏掉尾叶。
 

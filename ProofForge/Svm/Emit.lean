@@ -1381,8 +1381,14 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let invokeLabel := s!"{label}_{n}"
       n := n + 1
       acc := acc ++ (← emitInvoke p invokeLabel prog metas data seed bump)
-    | .errorNamed _ =>
-      acc := acc ++ s!"  ; named error\n  lddw r0, 0x1\n  exit\n"
+    | .errorNamed name =>
+      let code :=
+        match name with
+        | "unauthorized" => "0x1002"
+        | "full" => "0x1003"
+        | "selfTrade" => "0x1004"
+        | _ => "0x1"
+      acc := acc ++ s!"  ; named error {name}\n  lddw r0, {code}\n  exit\n"
     | .forAccum bound addend resultLocal =>
       let loopLab := s!"loop_{label}_{n}"
       let doneLab := s!"done_{label}_{n}"

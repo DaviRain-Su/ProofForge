@@ -78,7 +78,7 @@ elab "#pf_build " n:ident : command => do
       match Registry.digestOf program.name with
       | some want =>
         if digest != want then
-          throwError s!"ir/mismatch: extracted {program.name} digest != fixture"
+          throwError s!"ir/mismatch: extracted {program.name} digest {digest} != fixture {want}"
       | none => pure ()
       logInfo m!"proofforge: program {program.name} fields = {program.fields}"
       logInfo m!"proofforge: methods = {program.methods.map (fun m => m.ixName)}"
