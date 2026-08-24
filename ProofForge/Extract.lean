@@ -86,6 +86,21 @@ private def dropUnusedHeadLets (fuel : Nat) (e : Expr) : Expr :=
 private def isIteExpr (e : Expr) : Bool :=
   isConstNamed (peelLets (strip e)) ``ite || isConstNamed (peelLets (strip e)) ``dite
 
+/-- Find an outer guard under only `Id.run` and leading lets, without searching through the guard
+or hoisting a loop from one of its branches. -/
+private def guardedRunBody? (fuel : Nat) (e : Expr) : Option Expr :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    if isConstNamed e ``ite || isConstNamed e ``dite then some e
+    else if isConstNamed e ``Id.run && e.getAppArgs.size ≥ 1 then
+      guardedRunBody? fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+    else
+      match e with
+      | .letE _ _ value body _ => guardedRunBody? fuel' (body.instantiate1 value)
+      | _ => none
+
 /-- Preserve `UInt64` lets for lexical lowering. Zeta-reduce narrow scalar aliases and
 aliases around `ite`; retain control/state lets for their dedicated decoders. -/
 private def substIteLets (fuel : Nat) (e : Expr) : Expr :=
@@ -167,6 +182,22 @@ private def isForInYield (e : Expr) : Bool :=
         | .letE _ _ value body _ => go fuel' value || go fuel' body
         | _ => e.getAppArgs.any (go fuel')
   go 8 e
+
+/-- An early `return` from a `for` callback elaborates to `ForInStep.done`; it belongs to the
+early-return loop lowering, not the state-carrying loop lowering. -/
+private def isForInDone (e : Expr) : Bool :=
+  let rec go (fuel : Nat) (e : Expr) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      let e := peelLets (strip e)
+      if isConstNamed e ``ForInStep.done || endsWith e ".done" then true
+      else
+        match e with
+        | .lam _ _ body _ => go fuel' body
+        | .letE _ _ value body _ => go fuel' value || go fuel' body
+        | _ => e.getAppArgs.any (go fuel')
+  go 32 e
 
 /-- `ForInStep.done` / `yield`：循环体里的 ite 不要降 proof λ。 -/
 private def isForInStep (e : Expr) : Bool :=
@@ -474,6 +505,19 @@ private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :
   if fields.size < ctor.numFields || projectionInfo.i ≥ ctor.numFields then none
   else fields[fields.size - ctor.numFields + projectionInfo.i]?
 
+/-- A projection from an inline State transition reads the current mutable state after that
+transition has been emitted. Rebase the projection on the helper's source expression so scalar
+lowering produces the same account read instead of treating the helper call as an opaque value. -/
+private def reduceInlineProjection? (env : Environment) (e : Expr) : Option Expr := do
+  let projection ← e.getAppFn.constName?
+  let _ ← env.getProjectionFnInfo? projection
+  let args := e.getAppArgs
+  let base ← args[args.size - 1]?
+  let _ ← unfoldUserHelper env base
+  let baseArgs := base.getAppArgs
+  let source ← baseArgs[0]?
+  return e.replace fun child => if child == base then some source else none
+
 private def staticUInt64? : Ops.Val → Option UInt64
   | .lit value => some value
   | .bitNot value => staticUInt64? value |>.map (~~~·)
@@ -488,6 +532,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
     | .bvar i => some (.arg i)
     | _ =>
       if let some reduced := reduceCtorProjection? env e then
+        asVal env fuel' reduced
+      else if let some reduced := reduceInlineProjection? env e then
         asVal env fuel' reduced
       else if let some reduced := reduceUInt64NewtypeMatch? env e then
         asVal env fuel' reduced
@@ -1744,8 +1790,8 @@ private def looksUnchangedField (v : Ops.Val) (leaf : String) : Bool :=
   | _ => false
 
 /-- 把一个值摊成账户叶。`Vector.set` / 嵌套 `with` 只展开被改的那些。 -/
-private partial def flattenLeaves (env : Environment) (base : String) (e : Expr) :
-    Array (String × Ops.Val) :=
+private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
+    (appliedBases : Array Expr := #[]) : Array (String × Ops.Val) :=
   let e := peelLets (strip e)
   if isVectorSet e then
     let args := e.getAppArgs
@@ -1781,7 +1827,7 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
     match parsed with
     | (some i, xs?, some payload) =>
       let pre := if base.isEmpty then s!"{i}" else s!"{base}_{i}"
-      let here := flattenLeaves env pre payload
+      let here := flattenLeaves env pre payload appliedBases
       let here :=
         if here.isEmpty then
           match val env payload with
@@ -1790,7 +1836,7 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
         else here
       let prev :=
         match xs? with
-        | some xs => flattenLeaves env base xs
+        | some xs => flattenLeaves env base xs appliedBases
         | none => #[]
       prev ++ here
     | _ => #[]
@@ -1808,16 +1854,31 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
               let fname := names[i].toString
               let child := if base.isEmpty then fname else s!"{base}_{fname}"
               let arg := fields[i]
+              let inheritedFromAppliedBase :=
+                match (peelLets (strip arg)).getAppFn.constName? with
+                | some projection =>
+                  match env.getProjectionFnInfo? projection with
+                  | some info =>
+                    let args := (peelLets (strip arg)).getAppArgs
+                    info.ctorName == n && info.i == i &&
+                      (args[args.size - 1]?.map appliedBases.contains).getD false
+                  | none => false
+                | none => false
               -- A payload constructor is one typed variant field, not a nested scalar
               -- expression whose first argument can stand in for the whole field.
               let nested :=
                 if (asUInt64VariantCtor env arg).isSome || (asOptionStorage env arg).isSome then #[]
-                else flattenLeaves env child arg
+                else flattenLeaves env child arg appliedBases
               let isVectorField :=
                 match env.find? (c.induct.str fname) with
                 | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
                 | none => false
-              if !nested.isEmpty then
+              -- Inner transitions represented by `appliedBases` were already lowered. A direct
+              -- projection only inherits that field; reducing it through the constructor would
+              -- replay a transition rather than describe an outer write.
+              if inheritedFromAppliedBase then
+                pure ()
+              else if !nested.isEmpty then
                 acc := acc ++ nested.filter fun p => !looksUnchangedField p.2 p.1
               else if isVectorField then
                 -- A runtime-indexed vector is represented only by typed indexSet writes.
@@ -1984,7 +2045,8 @@ private def asOkScalar (env : Environment) (e : Expr) : Option Ops.Val :=
   else none
 
 /-- `.ok (s, value)` with the original state is a successful no-op, not an implicit write. -/
-private def asOkNoop (env : Environment) (e : Expr) : Option Ops.Val :=
+private def asOkNoop (env : Environment) (e : Expr) (markedOnly : Bool := false) :
+    Option Ops.Val :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
@@ -1994,8 +2056,10 @@ private def asOkNoop (env : Environment) (e : Expr) : Option Ops.Val :=
         let pairArgs := pair.getAppArgs
         if h : pairArgs.size ≥ 2 then
           match strip pairArgs[pairArgs.size - 2] with
-          | .bvar _ => val env pairArgs[pairArgs.size - 1]
-          | _ => none
+          | .bvar _ => if markedOnly then none else val env pairArgs[pairArgs.size - 1]
+          | state =>
+            if isConstNamed state ``methodArgRef then val env pairArgs[pairArgs.size - 1]
+            else none
         else none
       else none
     else none
@@ -2328,164 +2392,118 @@ private def forRangeEnd (e : Expr) : Option Nat :=
   rangeEnd 8 e
 
 /-- `forAccum` / `forBody`：下标位的 `.arg` 是循环变量。不要改 payload。 -/
-private def rewriteLoopIx (v : Ops.Val) : Ops.Val :=
-  let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
-    match fuel with
-    | 0 => v
-    | fuel' + 1 =>
-      match v with
-      | .indexGet b n i k off =>
-          .indexGet b n (go fuel' i) k off
-      -- State-loop callbacks expose the mutable accumulator and index as their two innermost
-      -- binders. Depending on zeta/proof reduction, the scalar index is decoded as either one;
-      -- captured method parameters remain at indices ≥ 2 and are normalized later.
-      | .arg 0 | .arg 1 => .loopIx
-      | .field b n => .field (go fuel' b) n
-      | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
-      | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
-      | .bitXor l r => .bitXor (go fuel' l) (go fuel' r)
-      | .bitNot v => .bitNot (go fuel' v)
-      | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
-      | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
-      | .select c l r t f =>
-          .select c (go fuel' l) (go fuel' r) (go fuel' t) (go fuel' f)
-      | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
-      | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
-      | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
-      | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
-      | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
-      | v => v
-  go 8 v
+private partial def rewriteLoopIx : Ops.Val → Ops.Val
+  | .indexGet b n i k off => .indexGet b n (rewriteLoopIx i) k off
+  -- State-loop callbacks expose the mutable accumulator and index as their two innermost
+  -- binders. Depending on zeta/proof reduction, the scalar index is decoded as either one;
+  -- captured method parameters remain at indices ≥ 2 and are normalized later.
+  | .arg 0 | .arg 1 => .loopIx
+  | .field b n => .field (rewriteLoopIx b) n
+  | .bitAnd l r => .bitAnd (rewriteLoopIx l) (rewriteLoopIx r)
+  | .bitOr l r => .bitOr (rewriteLoopIx l) (rewriteLoopIx r)
+  | .bitXor l r => .bitXor (rewriteLoopIx l) (rewriteLoopIx r)
+  | .bitNot v => .bitNot (rewriteLoopIx v)
+  | .shiftL l r => .shiftL (rewriteLoopIx l) (rewriteLoopIx r)
+  | .shiftR l r => .shiftR (rewriteLoopIx l) (rewriteLoopIx r)
+  | .select c l r t f =>
+      .select c (rewriteLoopIx l) (rewriteLoopIx r) (rewriteLoopIx t) (rewriteLoopIx f)
+  | .addU64 l r => .addU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .subU64 l r => .subU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .mulU64 l r => .mulU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .divU64 l r => .divU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .modU64 l r => .modU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .ext kind operands => .ext kind (operands.map rewriteLoopIx)
+  | v => v
 
-/-- Dynamic write indices live in callback scope. Depending on whether Lean retained the mutable
-state alias, the source loop index can elaborate as binder 0 or 1; both are callback-local and
-must not escape as instruction arguments. -/
-private def rewriteLoopIndex (v : Ops.Val) : Ops.Val :=
-  let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
-    match fuel with
-    | 0 => v
-    | fuel' + 1 =>
-      match v with
-      | .arg 0 | .arg 1 => .loopIx
-      | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
-      | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
-      | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
-      | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
-      | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
-      | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
-      | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
-      | .bitXor l r => .bitXor (go fuel' l) (go fuel' r)
-      | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
-      | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
-      | .bitNot x => .bitNot (go fuel' x)
-      | .select c l r t f =>
-          .select c (go fuel' l) (go fuel' r) (go fuel' t) (go fuel' f)
-      | v => v
-  go 8 v
-
-private def rewriteLoopOp (op : Ops.Op) : Ops.Op :=
-  let rec go (fuel : Nat) (op : Ops.Op) : Ops.Op :=
-    match fuel with
-    | 0 => op
-    | fuel' + 1 =>
-      match op with
-      | .letLocal i v => .letLocal i (rewriteLoopIx v)
-      | .joinLocal i => .joinLocal i
-      | .setLocal i v => .setLocal i (rewriteLoopIx v)
-      | .checkedAddU64 l r => .checkedAddU64 (rewriteLoopIx l) (rewriteLoopIx r)
-      | .checkedSubU64 l r => .checkedSubU64 (rewriteLoopIx l) (rewriteLoopIx r)
-      | .checkedMulU64 l r => .checkedMulU64 (rewriteLoopIx l) (rewriteLoopIx r)
-      | .checkedDivU64 l r => .checkedDivU64 (rewriteLoopIx l) (rewriteLoopIx r)
-      | .checkedModU64 l r => .checkedModU64 (rewriteLoopIx l) (rewriteLoopIx r)
-      | .ite c l r t f =>
-          .ite c (rewriteLoopIx l) (rewriteLoopIx r) (t.map (go fuel')) (f.map (go fuel'))
-      | .invoke prog metas data seed bump =>
-          .invoke prog metas (data.map fun
-            | .u64le v => .u64le (rewriteLoopIx v)
-            | w => w) seed (bump.map rewriteLoopIx)
-      | .indexSetLeaf n i v k leaf =>
-          .indexSetLeaf n (rewriteLoopIndex i) (rewriteLoopIx v) k leaf
-      | .indexSet n i v k off =>
-          .indexSet n (rewriteLoopIndex i) (rewriteLoopIx v) k off
-      | .storeField n v => .storeField n (rewriteLoopIx v)
-      | .okState v => .okState (rewriteLoopIx v)
-      | .returnU64 v => .returnU64 (rewriteLoopIx v)
-      | .returnState _ => .errorOverflow
-      | .forAccum n v resultLocal => .forAccum n (rewriteLoopIx v) resultLocal
-      | .forBody n body => .forBody n (body.map (go fuel'))
-      | op => op
-  go 8 op
+private partial def rewriteLoopOp : Ops.Op → Ops.Op
+  | .letLocal i v => .letLocal i (rewriteLoopIx v)
+  | .joinLocal i => .joinLocal i
+  | .setLocal i v => .setLocal i (rewriteLoopIx v)
+  | .checkedAddU64 l r => .checkedAddU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .checkedSubU64 l r => .checkedSubU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .checkedMulU64 l r => .checkedMulU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .checkedDivU64 l r => .checkedDivU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .checkedModU64 l r => .checkedModU64 (rewriteLoopIx l) (rewriteLoopIx r)
+  | .ite c l r t f =>
+      .ite c (rewriteLoopIx l) (rewriteLoopIx r)
+        (t.map rewriteLoopOp) (f.map rewriteLoopOp)
+  | .invoke prog metas data seed bump =>
+      .invoke prog metas (data.map fun
+        | .u64le v => .u64le (rewriteLoopIx v)
+        | w => w) seed (bump.map rewriteLoopIx)
+  | .indexSetLeaf n i v k leaf =>
+      .indexSetLeaf n (rewriteLoopIx i) (rewriteLoopIx v) k leaf
+  | .indexSet n i v k off =>
+      .indexSet n (rewriteLoopIx i) (rewriteLoopIx v) k off
+  | .storeField n v => .storeField n (rewriteLoopIx v)
+  | .okState v => .okState (rewriteLoopIx v)
+  | .returnU64 v => .returnU64 (rewriteLoopIx v)
+  | .returnState _ => .errorOverflow
+  | .forAccum n v resultLocal => .forAccum n (rewriteLoopIx v) resultLocal
+  | .forBody n body => .forBody n (body.map rewriteLoopOp)
+  | op => op
 
 /--
 普通 accumulator / early-return 循环沿用原来的 callback 归一化：账户参数落到
 `.arg 0`，动态索引就是 `loopIx`，而 `indexSet` payload 仍是外层方法参数。
 State-carrying loop 不能用这条宽松规则，继续走上面的精确 binder 重写。
 -/
-private def rewritePlainLoopIx (v : Ops.Val) : Ops.Val :=
-  let rec go (fuel : Nat) (v : Ops.Val) : Ops.Val :=
-    match fuel with
-    | 0 => v
-    | fuel' + 1 =>
-      match v with
-      | .indexGet b n i k off =>
-          let b' := match b with | .arg _ => .arg 0 | _ => go fuel' b
-          let i' := match i with | .lit _ => i | _ => .loopIx
-          .indexGet b' n i' k off
-      | .field b n => .field (go fuel' b) n
-      | .bitAnd l r => .bitAnd (go fuel' l) (go fuel' r)
-      | .bitOr l r => .bitOr (go fuel' l) (go fuel' r)
-      | .bitXor l r => .bitXor (go fuel' l) (go fuel' r)
-      | .bitNot x => .bitNot (go fuel' x)
-      | .shiftL l r => .shiftL (go fuel' l) (go fuel' r)
-      | .shiftR l r => .shiftR (go fuel' l) (go fuel' r)
-      | .select c l r t f =>
-          .select c (go fuel' l) (go fuel' r) (go fuel' t) (go fuel' f)
-      | .addU64 l r => .addU64 (go fuel' l) (go fuel' r)
-      | .subU64 l r => .subU64 (go fuel' l) (go fuel' r)
-      | .mulU64 l r => .mulU64 (go fuel' l) (go fuel' r)
-      | .divU64 l r => .divU64 (go fuel' l) (go fuel' r)
-      | .modU64 l r => .modU64 (go fuel' l) (go fuel' r)
-      | v => v
-  go 8 v
+private partial def rewritePlainLoopIx : Ops.Val → Ops.Val
+  | .indexGet b n i k off =>
+      let b' := match b with | .arg _ => .arg 0 | _ => rewritePlainLoopIx b
+      let i' := match i with | .lit _ => i | _ => .loopIx
+      .indexGet b' n i' k off
+  | .field b n => .field (rewritePlainLoopIx b) n
+  | .bitAnd l r => .bitAnd (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .bitOr l r => .bitOr (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .bitXor l r => .bitXor (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .bitNot x => .bitNot (rewritePlainLoopIx x)
+  | .shiftL l r => .shiftL (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .shiftR l r => .shiftR (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .select c l r t f =>
+      .select c (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+        (rewritePlainLoopIx t) (rewritePlainLoopIx f)
+  | .addU64 l r => .addU64 (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .subU64 l r => .subU64 (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .mulU64 l r => .mulU64 (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .divU64 l r => .divU64 (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .modU64 l r => .modU64 (rewritePlainLoopIx l) (rewritePlainLoopIx r)
+  | .ext kind operands => .ext kind (operands.map rewritePlainLoopIx)
+  | v => v
 
-private def rewritePlainLoopOp (op : Ops.Op) : Ops.Op :=
-  let rec go (fuel : Nat) (op : Ops.Op) : Ops.Op :=
-    match fuel with
-    | 0 => op
-    | fuel' + 1 =>
-      let rv := rewritePlainLoopIx
-      match op with
-      | .letLocal i v => .letLocal i (rv v)
-      | .joinLocal i => .joinLocal i
-      | .setLocal i v => .setLocal i (rv v)
-      | .checkedAddU64 l r => .checkedAddU64 (rv l) (rv r)
-      | .checkedSubU64 l r => .checkedSubU64 (rv l) (rv r)
-      | .checkedMulU64 l r => .checkedMulU64 (rv l) (rv r)
-      | .checkedDivU64 l r => .checkedDivU64 (rv l) (rv r)
-      | .checkedModU64 l r => .checkedModU64 (rv l) (rv r)
-      | .ite c l r t f =>
-          let l' := match l with | .arg _ => .loopIx | _ => rv l
-          let r' := match r with | .arg _ => .loopIx | _ => rv r
-          .ite c l' r' (t.map (go fuel')) (f.map (go fuel'))
-      | .invoke prog metas data seed bump =>
-          .invoke prog metas (data.map fun | .u64le v => .u64le (rv v) | w => w)
-            seed (bump.map rv)
-      | .indexSetLeaf n i v k leaf =>
-          let i' := match i with | .lit _ => i | _ => .loopIx
-          let v' := match v with | .arg _ => .arg 0 | _ => v
-          .indexSetLeaf n i' v' k leaf
-      | .indexSet n i v k off =>
-          let i' := match i with | .lit _ => i | _ => .loopIx
-          let v' := match v with | .arg _ => .arg 0 | _ => v
-          .indexSet n i' v' k off
-      | .storeField n v => .storeField n v
-      | .okState v => .okState (match v with | .arg _ => .arg 0 | _ => v)
-      | .returnU64 v => .returnU64 (rv v)
-      | .returnState _ => .errorOverflow
-      | .forAccum n v resultLocal => .forAccum n (rv v) resultLocal
-      | .forBody n body => .forBody n (body.map (go fuel'))
-      | op => op
-  go 8 op
+private partial def rewritePlainLoopOp (op : Ops.Op) : Ops.Op :=
+  let rv := rewritePlainLoopIx
+  match op with
+  | .letLocal i v => .letLocal i (rv v)
+  | .joinLocal i => .joinLocal i
+  | .setLocal i v => .setLocal i (rv v)
+  | .checkedAddU64 l r => .checkedAddU64 (rv l) (rv r)
+  | .checkedSubU64 l r => .checkedSubU64 (rv l) (rv r)
+  | .checkedMulU64 l r => .checkedMulU64 (rv l) (rv r)
+  | .checkedDivU64 l r => .checkedDivU64 (rv l) (rv r)
+  | .checkedModU64 l r => .checkedModU64 (rv l) (rv r)
+  | .ite c l r t f =>
+      let l' := match l with | .arg _ => .loopIx | _ => rv l
+      let r' := match r with | .arg _ => .loopIx | _ => rv r
+      .ite c l' r' (t.map rewritePlainLoopOp) (f.map rewritePlainLoopOp)
+  | .invoke prog metas data seed bump =>
+      .invoke prog metas (data.map fun | .u64le v => .u64le (rv v) | w => w)
+        seed (bump.map rv)
+  | .indexSetLeaf n i v k leaf =>
+      let i' := match i with | .lit _ => i | _ => .loopIx
+      let v' := match v with | .arg _ => .arg 0 | _ => v
+      .indexSetLeaf n i' v' k leaf
+  | .indexSet n i v k off =>
+      let i' := match i with | .lit _ => i | _ => .loopIx
+      let v' := match v with | .arg _ => .arg 0 | _ => v
+      .indexSet n i' v' k off
+  | .storeField n v => .storeField n v
+  | .okState v => .okState (match v with | .arg _ => .arg 0 | _ => v)
+  | .returnU64 v => .returnU64 (rv v)
+  | .returnState _ => .errorOverflow
+  | .forAccum n v resultLocal => .forAccum n (rv v) resultLocal
+  | .forBody n body => .forBody n (body.map rewritePlainLoopOp)
+  | op => op
 
 private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :=
   let rec go (fuel : Nat) (e : Expr) : Option (Nat × Ops.Val) :=
@@ -2516,6 +2534,7 @@ private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :
         | some n, some v =>
           if n = 0 || n > 64 then none else some (n, v)
         | _, _ => none
+      else if isConstNamed e ``ite || isConstNamed e ``dite then none
       else
         match e with
         | .letE _ _ value body _ => go fuel' value <|> go fuel' body
@@ -2557,6 +2576,7 @@ private def findForBodyExpr (env : Environment) (e : Expr) : Option (Nat × Expr
           | some n, some bodyE =>
             if n = 0 || n > 64 then none else some (n, bodyE)
           | _, _ => none
+      else if isConstNamed e ``ite || isConstNamed e ``dite then none
       else
         match e with
         | .letE _ _ value body _ => go fuel' value <|> go fuel' body
@@ -2578,6 +2598,7 @@ private def findForStateExpr (_env : Environment) (e : Expr) :
     | fuel' + 1 =>
       let e := strip e
       if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then some e
+      else if isConstNamed e ``ite || isConstNamed e ``dite then none
       else
         match e with
         | .letE _ _ value body _ =>
@@ -2612,6 +2633,7 @@ private def findForStateExpr (_env : Environment) (e : Expr) :
         if e.getAppArgs.size ≥ 1 then
           findContinuation fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else none
+      else if isConstNamed e ``ite || isConstNamed e ``dite then none
       else
         match e with
         | .letE _ _ value body _ => findContinuation fuel' (body.instantiate1 value)
@@ -2635,32 +2657,47 @@ private def findForStateExpr (_env : Environment) (e : Expr) :
 
 /-- 收集 `xs.set … .set …` 整条链。先外层（旧向量），后内层（新写）。
 一次 `set` 可以改多叶（`left` + `parent`）。 -/
-private def collectIndexSets (env : Environment) (e : Expr) : Array Ops.Op :=
-  let rec go (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
+private def collectIndexSets (env : Environment) (e : Expr)
+    (deduplicate : Bool := false) (appliedBases : Array Expr := #[]) : Array Ops.Op :=
+  let rec go (fuel : Nat) (e : Expr) (state : Array Expr × Array Ops.Op) :
+      Array Expr × Array Ops.Op :=
     match fuel with
-    | 0 => acc
+    | 0 => state
     | fuel' + 1 =>
       let e := strip e
       match e with
-      | .letE _ _ value body _ => go fuel' (body.instantiate1 value) acc
-      | .lam _ _ body _ => go fuel' body acc
+      | .letE _ _ value body _ => go fuel' (body.instantiate1 value) state
+      | .lam _ _ body _ => go fuel' body state
       | _ =>
         if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
-          go fuel' e.getAppArgs[e.getAppArgs.size - 1]! acc
+          go fuel' e.getAppArgs[e.getAppArgs.size - 1]! state
         else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
-          go fuel' e.getAppArgs[e.getAppArgs.size - 2]! acc
+          go fuel' e.getAppArgs[e.getAppArgs.size - 2]! state
         else if isVectorSet e then
           -- `Vector.set α n xs i v h`：只沿 xs 追溯旧写。payload/下标里的
-          -- vector reads 不是写；遍历全部参数会把旧链指数级重复收集。
-          let args := e.getAppArgs
-          let acc :=
-            if h : args.size ≥ 4 then go fuel' args[args.size - 4] acc else acc
-          match asIndexSets env e with
-          | some ops => acc ++ ops
-          | none => acc
+          -- vector reads 不是写；共享 record projections 也会重复引用同一个 set node。
+          if deduplicate && state.1.contains e then state else
+            let args := e.getAppArgs
+            let state :=
+              if h : args.size ≥ 4 then go fuel' args[args.size - 4] state else state
+            match asIndexSets env e with
+            | some ops =>
+                let seen := if deduplicate then state.1.push e else state.1
+                (seen, state.2 ++ ops)
+            | none => state
         else
-          e.getAppArgs.foldl (init := acc) fun a x => go fuel' x a
-  go 16 e #[]
+          let inheritedFromAppliedBase :=
+            match e.getAppFn.constName? with
+            | some projection =>
+              match env.getProjectionFnInfo? projection with
+              | some _ =>
+                let args := e.getAppArgs
+                (args[args.size - 1]?.map appliedBases.contains).getD false
+              | none => false
+            | none => false
+          if inheritedFromAppliedBase then state
+          else e.getAppArgs.foldl (init := state) fun state arg => go fuel' arg state
+  (go 16 e (#[], #[])).2
 
 private def findIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
   (collectIndexSets env e)[0]?
@@ -3000,6 +3037,35 @@ private def findProjectedInlineBase (env : Environment) (fuel : Nat) (e : Expr) 
       | none => none
     projectedBase? <|> args.findSome? (findProjectedInlineBase env fuel')
 
+/-- Collect the inline State expressions inherited through record projections. Once such an
+expression has been lowered, later wrappers may still contain several projections of the same
+result; retaining every applied ancestor prevents those transitions from being emitted again. -/
+private def projectedInlineBases (env : Environment) (fuel : Nat) (e : Expr) : Array Expr :=
+  let rec go (fuel : Nat) (e : Expr) (acc : Array Expr) : Array Expr :=
+    match fuel with
+    | 0 => acc
+    | fuel' + 1 =>
+      let e := strip e
+      let args := e.getAppArgs
+      let acc :=
+        match e.getAppFn.constName? with
+        | some name =>
+          match env.getProjectionFnInfo? name with
+          | some _ =>
+            match args[args.size - 1]? with
+            | some base =>
+              if (unfoldUserHelper env base).isSome && !acc.contains base then acc.push base
+              else acc
+            | none => acc
+          | none => acc
+        | none => acc
+      args.foldl (init := acc) fun acc arg => go fuel' arg acc
+  go fuel e #[]
+
+private def addAppliedBases (current extra : Array Expr) : Array Expr :=
+  extra.foldl (init := current) fun result base =>
+    if result.contains base then result else result.push base
+
 /-- Find the mutable source underneath a composed State expression. -/
 private def inlineStateSource (env : Environment) (fuel : Nat) (e : Expr) : Expr :=
   match fuel with
@@ -3013,7 +3079,7 @@ private def inlineStateSource (env : Environment) (fuel : Nat) (e : Expr) : Expr
       let projectionBase? := e.getAppArgs.findSome? fun arg =>
         match arg.getAppFn.constName? with
         | some name =>
-          match env.getProjectionFnInfo? name with
+          if !isUserName env name then none else match env.getProjectionFnInfo? name with
           | some _ =>
             let args := arg.getAppArgs
             if h : args.size > 0 then some args[args.size - 1] else none
@@ -3097,28 +3163,35 @@ private def snapshotStateUpdate (base : Nat) (ops : Array Ops.Op) : Array Ops.Op
     | op => body := body.push op
   return state.prelude ++ body
 
-private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state : Expr) :
-    Except String (Array Ops.Op) :=
+private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state : Expr)
+    (appliedBases : Array Expr := #[]) : Except String (Array Ops.Op) :=
   match fuel with
   | 0 => .error "extract/unsupported: inline state depth"
   | fuel' + 1 =>
     let state := substLets 256 state
     let state0 := strip state
-    if let some (name, unfolded) := unfoldUserHelper env state0 then do
+    let appliedBases := addAppliedBases #[] <|
+      appliedBases.map fun base => strip (substLets 256 base)
+    if appliedBases.contains state0 then
+      .ok #[]
+    else if let some (name, unfolded) := unfoldUserHelper env state0 then do
       let args := state0.getAppArgs
-      let (prior, normalized) ←
+      let (prior, normalized, bodyAppliedBases) ←
         if h : args.size > 0 then
           let base := args[0]
           let source := inlineStateSource env 64 base
           if source == base then
-            .ok (#[], unfolded)
+            .ok (#[], unfolded, appliedBases)
           else do
-            let prior ← decodeYieldState env fuel' localDepth base
+            let prior ← decodeYieldState env fuel' localDepth base appliedBases
             let normalized := unfolded.replace fun e => if e == base then some source else none
-            .ok (prior, normalized)
+            let bodyAppliedBases := addAppliedBases appliedBases #[base]
+            let bodyAppliedBases :=
+              addAppliedBases bodyAppliedBases (projectedInlineBases env 64 base)
+            .ok (prior, normalized, bodyAppliedBases)
         else
-          .ok (#[], unfolded)
-      match decodeYieldState env fuel' localDepth normalized with
+          .ok (#[], unfolded, appliedBases)
+      match decodeYieldState env fuel' localDepth normalized bodyAppliedBases with
       | .ok ops => .ok (prior ++ ops)
       | .error reason => .error s!"extract/unsupported: inline state {name}: {reason}"
     else if (isConstNamed state0 ``ite || isConstNamed state0 ``dite) &&
@@ -3131,7 +3204,8 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
       let thn := peelProofLam args[args.size - 2]!
       let els := peelProofLam args[args.size - 1]!
       match args.findSome? (asCondition env),
-          decodeYieldState env fuel' localDepth thn, decodeYieldState env fuel' localDepth els with
+          decodeYieldState env fuel' localDepth thn appliedBases,
+          decodeYieldState env fuel' localDepth els appliedBases with
       | some (cmp, lhs, rhs), .ok thnOps, .ok elsOps =>
         .ok #[.ite cmp lhs rhs thnOps elsOps]
       | none, _, _ => .error "extract/unsupported: inline state condition"
@@ -3143,9 +3217,10 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
         match priorBase? with
         | none => .ok #[]
         | some base =>
-          match unfoldUserHelper env base with
+          if appliedBases.contains base then .ok #[] else match unfoldUserHelper env base with
           | some (name, unfolded) =>
-            match decodeYieldState env fuel' localDepth unfolded with
+            let nestedAppliedBases := addAppliedBases appliedBases #[base]
+            match decodeYieldState env fuel' localDepth unfolded nestedAppliedBases with
             | .ok ops => .ok ops
             | .error reason =>
               .error s!"extract/unsupported: projected inline state {name}: {reason}"
@@ -3162,8 +3237,15 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
             let sourceState := args[0]
             state0.replace fun e => if e == base then some sourceState else none
           else state0
-      let dynamic := collectIndexSets env outerState
-      let static := (flattenLeaves env "" outerState).map fun p =>
+      let outerAppliedBases :=
+        match priorBase? with
+        | some base =>
+          let bases := addAppliedBases appliedBases #[base]
+          addAppliedBases bases (projectedInlineBases env 64 base)
+        | none => appliedBases
+      let dynamic := collectIndexSets env outerState (deduplicate := true)
+        (appliedBases := outerAppliedBases)
+      let static := (flattenLeaves env "" outerState outerAppliedBases).map fun p =>
         (.storeField p.1 p.2 : Ops.Op)
       let update := snapshotStateUpdate localDepth
         (dynamic ++ dropVectorRootStores dynamic static)
@@ -3176,6 +3258,26 @@ private def asYieldStores (env : Environment) (e : Expr) (localDepth : Nat) :
   | none => none
   | some state => some (decodeYieldState env 64 localDepth state)
 
+/-- An inline State helper used as the state component of `.ok (state, ret)` still owns a real
+transition. Decode that transition before returning the pair's explicit scalar result. -/
+private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Nat) :
+    Option (Except String (Array Ops.Op)) :=
+  let e := peelControl 8 (dropUnusedHeadLets 32 e)
+  if !isConstNamed e ``Except.ok || e.getAppArgs.size < 1 then none else
+  let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
+  if !isConstNamed pair ``Prod.mk || pair.getAppArgs.size < 2 then none else
+  let args := pair.getAppArgs
+  let state := args[args.size - 2]!
+  let result := args[args.size - 1]!
+  if (unfoldUserHelper env state).isNone then none else
+  some do
+    let value ←
+      match val env result with
+      | some value => .ok value
+      | none => .error "extract/unsupported: inline state success result"
+    let stores ← decodeYieldState env 64 localDepth state
+    return stores.push (.okState value)
+
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) :
     Except String (Array Ops.Op) :=
@@ -3187,6 +3289,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
   else if let some result := asYieldStores env e localDepth then
+    result
+  else if let some result := asInlineStateSuccess env e localDepth then
     result
   else
   let isets := collectIndexSets env e
@@ -3215,7 +3319,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.errorOverflow]
   else if let some name := errorCtorName e then
     .ok #[.errorNamed name]
-  else if let some v := (if stateful then none else asOkNoop env e) then
+  else if let some v := asOkNoop env e (markedOnly := stateful) then
     .ok #[.returnU64 v]
   else if let some ops := asStoreFields env e then
     .ok (snapshotStateUpdate localDepth ops)
@@ -3292,34 +3396,52 @@ Checked arithmetic already branches to the enclosing error exit, so operations a
 success are unreachable and must not be copied into the joined path.
 -/
 private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
-    Option (Array Ops.Op × Bool) := Id.run do
+    Option (Array Ops.Op × Bool × Bool) := Id.run do
   let mut lowered := #[]
   let mut hadSuccess := false
   for op in ops do
     match op with
     | .okState value | .returnU64 value =>
-        return some (lowered.push (.setLocal slot value), true)
+        return some (lowered.push (.setLocal slot value), true, true)
     | .errorOverflow | .errorNamed _ =>
-        return some (lowered.push op, false)
+        return some (lowered.push op, hadSuccess, true)
     | .ite cmp lhs rhs thn els =>
-        let some (thn', thnSuccess) := lowerBindProducer slot thn | return none
-        let some (els', elsSuccess) := lowerBindProducer slot els | return none
+        let some (thn', thnSuccess, thnTerminates) := lowerBindProducer slot thn
+          | return none
+        let some (els', elsSuccess, elsTerminates) := lowerBindProducer slot els
+          | return none
         lowered := lowered.push (.ite cmp lhs rhs thn' els')
         hadSuccess := hadSuccess || thnSuccess || elsSuccess
+        if thnTerminates && elsTerminates then
+          return some (lowered, hadSuccess, true)
     | .letLocal .. | .joinLocal .. | .setLocal ..
     | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
     | .checkedDivU64 .. | .checkedModU64 .. =>
         lowered := lowered.push op
     | _ => return none
-  return some (lowered, hadSuccess)
+  return some (lowered, hadSuccess, false)
 
-private def containsBind (fuel : Nat) (e : Expr) : Bool :=
+/-- A bind enclosing a loop belongs to the surrounding monadic control flow and must be decoded
+before loop discovery. Binds inside the callback body are part of that iteration and do not hide
+the state loop itself. -/
+private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : Bool :=
   match fuel with
   | 0 => false
   | fuel' + 1 =>
-      let e := strip e
-      if isConstNamed e ``Bind.bind || endsWith e ".bind" then true
-      else e.getAppArgs.any (containsBind fuel')
+    let e := strip e
+    if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then underBind
+    else if isConstNamed e ``Bind.bind || endsWith e ".bind" then
+      let args := e.getAppArgs
+      if h : args.size ≥ 2 then
+        let producer := args[args.size - 2]
+        let continuation := args[args.size - 1]
+        -- `forIn ... >>= continuation` is the loop's own sequencing bind. A loop in the
+        -- producer is therefore not hidden by this bind; a loop in the continuation is.
+        loopUnderBind fuel' producer underBind || loopUnderBind fuel' continuation true
+      else
+        args.any (loopUnderBind fuel' · true)
+    else
+      e.getAppArgs.any (loopUnderBind fuel' · underBind)
 
 private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     (stateful : Bool := false) (preserveLocals : Bool := false)
@@ -3327,6 +3449,11 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
+    let stripped := strip e
+    if isConstNamed stripped ``Id.run then
+      if let some guarded := guardedRunBody? 64 stripped then
+        return decodeExpr env fuel' guarded (stateful := stateful)
+          (preserveLocals := preserveLocals) (localDepth := localDepth)
     match strip e with
     | .letE _ ty value body _ =>
       let effectful :=
@@ -3376,7 +3503,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               return .error s!"extract/unsupported: bind producer: {reason}"
           | .ok producerOps =>
             match lowerBindProducer localDepth producerOps with
-            | some (joinedProducer, true) =>
+            | some (joinedProducer, true, true) =>
               let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
               match decodeExpr env fuel' (body.instantiate1 marker) (stateful := stateful)
                   (preserveLocals := preserveLocals) (localDepth := localDepth + 1) with
@@ -3392,9 +3519,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     let stateLoop? : Option (Except String (Array Ops.Op)) :=
       -- State-loop callbacks capture scalar outer lets by value, while their mutable state binder
       -- must remain visible so `findForStateExpr` can distinguish them from ordinary loops.
-      if containsBind 64 e then none else match findForStateExpr env (substUInt64Lets 256 e) with
+      if loopUnderBind 64 e then none else match findForStateExpr env (substUInt64Lets 256 e) with
       | none => none
       | some (n, initial, bodyE, continuation) =>
+        if isForInDone bodyE then none else
         match decodeYieldState env 64 localDepth initial,
             decodeExpr env fuel' bodyE (stateful := true)
               (preserveLocals := preserveLocals) (localDepth := localDepth) with

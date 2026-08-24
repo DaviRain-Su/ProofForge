@@ -311,6 +311,43 @@ def runInitializedFold (s : FoldState) (lhs : UInt64) :
 def foldProduct (s : FoldState) : UInt64 :=
   s.product
 
+/--
+A state loop nested under an entry guard must stay in that branch. The intentionally deep value
+expression also ensures every vector read derived from the callback index becomes `loopIx` without
+rewriting captured method parameters.
+-/
+structure GuardedLoopState where
+  cells : Vector UInt64 4
+  selected : UInt64
+  deriving Repr, DecidableEq
+
+def initGuardedLoop (_seed : UInt64) : GuardedLoopState :=
+  { cells := #v[0, 0, 0, 0], selected := 0 }
+
+private def resetGuardedLoop (s : GuardedLoopState) : GuardedLoopState :=
+  { s with selected := 0 }
+
+attribute [pf_inline] resetGuardedLoop
+
+def runGuardedLoop (s : GuardedLoopState) (needle qty replacement : UInt64) :
+    Except Examples.Counter.Error (GuardedLoopState × UInt64) :=
+  let s := resetGuardedLoop s
+  if qty = 0 then
+    .ok (s, 0)
+  else Id.run do
+    let mut st := s
+    for i in [0:4] do
+      if st.selected = 0 then
+        let j : Nat := i
+        let current := st.cells[j]!
+        if current = needle then
+          let mixed := current ^^^ replacement ^^^ 1 ^^^ 2 ^^^ 3 ^^^ 4 ^^^ 5 ^^^ 6 ^^^ 7
+          st := { st with cells := st.cells.set (j % 4) mixed, selected := current }
+    .ok (st, st.selected)
+
+def guardedLoopSelected (s : GuardedLoopState) : UInt64 :=
+  s.selected
+
 /-- A State-returning inline helper used before another update in the same loop iteration. -/
 private def stageFold (s : FoldState) (delta : UInt64) : FoldState :=
   if delta < 10 then { s with product := s.product + delta }
@@ -329,6 +366,47 @@ def runComposedFold (s : FoldState) (delta : UInt64) :
     st := stageFold st delta
     st := { st with remainder := delta }
   .ok (st, st.product)
+
+/-- A second inline helper wrapping a composed update must not replay the first helper. -/
+private def finishFoldStage (s : FoldState) : FoldState :=
+  if s.remainder < 100 then { s with quotient := s.quotient + 1 } else s
+
+attribute [pf_inline] finishFoldStage
+
+def runNestedComposedFold (s : FoldState) (delta : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut st := s
+  for _ in [:1] do
+    st := stageFold st delta
+    let staged := { st with remainder := delta }
+    st := finishFoldStage staged
+  .ok (st, st.product)
+
+/-- Checked continuations preserve an explicit scalar snapshot across state writeback. -/
+structure SnapshotState where
+  total : UInt64
+  pending : UInt64
+  last : UInt64
+  deriving Repr, DecidableEq
+
+def initSnapshot (_seed : UInt64) : SnapshotState :=
+  { total := 0, pending := 0, last := 0 }
+
+private def settleSnapshot (s : SnapshotState) (amount : UInt64) : SnapshotState :=
+  { s with total := s.total + amount, pending := 0, last := amount }
+
+attribute [pf_inline] settleSnapshot
+
+def collectSnapshot (s : SnapshotState) :
+    Except Examples.Counter.Error (SnapshotState × UInt64) :=
+  if s.total ≤ Examples.Counter.u64Max - s.pending then
+    let amount := s.pending
+    .ok (settleSnapshot s amount, amount)
+  else
+    .error .overflow
+
+def snapshotTotal (s : SnapshotState) : UInt64 :=
+  s.total
 
 /-- Pure conditional values stay shared instead of duplicating the mutation continuation. -/
 structure ChoiceState where

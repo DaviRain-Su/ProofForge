@@ -2164,11 +2164,12 @@ def cancelBid (s : State) (trader price sequence : UInt64) :
 @[pf_entry]
 def collectFees (s : State) : Except Error (State × UInt64) :=
   if s.collectedFees ≤ u64Max - s.unclaimedFees then
+    let fees := s.unclaimedFees
     let s := beginEvents s
     let settled := { s with
-      collectedFees := s.collectedFees + s.unclaimedFees
+      collectedFees := s.collectedFees + fees
       unclaimedFees := 0 }
-    .ok (appendEvent settled (.fee settled.eventCount s.unclaimedFees), s.unclaimedFees)
+    .ok (appendEvent settled (.fee settled.eventCount fees), fees)
   else
     .error .overflow
 

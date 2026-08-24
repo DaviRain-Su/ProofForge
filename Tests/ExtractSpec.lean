@@ -147,6 +147,107 @@ elab "#pf_guard_initialized_state_fold_ir" : command => do
 
 #pf_guard_initialized_state_fold_ir
 
+elab "#pf_guard_nested_state_loop_control" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initGuardedLoop
+        ``Tests.Fixtures.runGuardedLoop ``Tests.Fixtures.guardedLoopSelected with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some run := program.methods.find? (·.ixName == "runGuardedLoop")
+    | throwError "missing guarded state-loop method"
+  let rec valIndices (fuel : Nat) (value : ProofForge.Ops.Val) : Array ProofForge.Ops.Val :=
+    match fuel with
+    | 0 => #[]
+    | fuel' + 1 =>
+      match value with
+      | .indexGet base "cells" index _ _ =>
+          #[index] ++ valIndices fuel' base ++ valIndices fuel' index
+      | .field base _ | .bitNot base => valIndices fuel' base
+      | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+      | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+      | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+          valIndices fuel' lhs ++ valIndices fuel' rhs
+      | .select _ lhs rhs thn els =>
+          valIndices fuel' lhs ++ valIndices fuel' rhs ++
+            valIndices fuel' thn ++ valIndices fuel' els
+      | _ => #[]
+  let rec opIndices (fuel : Nat) (ops : Array ProofForge.Ops.Op) : Array ProofForge.Ops.Val :=
+    match fuel with
+    | 0 => #[]
+    | fuel' + 1 => ops.flatMap fun
+      | .letLocal _ value | .setLocal _ value | .storeField _ value | .okState value
+      | .returnU64 value => valIndices 64 value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
+          valIndices 64 lhs ++ valIndices 64 rhs
+      | .indexSet "cells" index value _ _ =>
+          #[index] ++ valIndices 64 value
+      | .ite _ lhs rhs thn els =>
+          valIndices 64 lhs ++ valIndices 64 rhs ++
+            opIndices fuel' thn ++ opIndices fuel' els
+      | .forBody _ body => opIndices fuel' body
+      | _ => #[]
+  match run.ops with
+  | #[.ite .eq (.arg 1) (.lit 0) thn els] =>
+      unless thn == #[.storeField "selected" (.lit 0), .okState (.lit 0)] do
+        throwError s!"zero-quantity branch was not preserved: {repr thn}"
+      unless els.any fun | .forBody 4 _ => true | _ => false do
+        throwError s!"guarded loop was not retained in the else branch: {repr els}"
+  | _ => throwError s!"state loop escaped its source guard: {repr run.ops}"
+  let indices := opIndices 32 run.ops
+  let rec containsLoopIx : ProofForge.Ops.Val → Bool
+    | .loopIx => true
+    | .field base _ | .bitNot base => containsLoopIx base
+    | .indexGet base _ index _ _ => containsLoopIx base || containsLoopIx index
+    | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+    | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+    | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+        containsLoopIx lhs || containsLoopIx rhs
+    | .select _ lhs rhs thn els =>
+        containsLoopIx lhs || containsLoopIx rhs || containsLoopIx thn || containsLoopIx els
+    | _ => false
+  let rec containsArg : ProofForge.Ops.Val → Bool
+    | .arg _ => true
+    | .field base _ | .bitNot base => containsArg base
+    | .indexGet base _ index _ _ => containsArg base || containsArg index
+    | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+    | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+    | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+        containsArg lhs || containsArg rhs
+    | .select _ lhs rhs thn els =>
+        containsArg lhs || containsArg rhs || containsArg thn || containsArg els
+    | _ => false
+  unless !indices.isEmpty && indices.all fun index =>
+      containsLoopIx index && !containsArg index do
+    throwError s!"state-loop vector indices escaped callback scope: {repr indices}"
+  let rec containsArgIndex (want : Nat) : ProofForge.Ops.Val → Bool
+    | .arg index => index == want
+    | .field base _ | .bitNot base => containsArgIndex want base
+    | .indexGet base _ index _ _ =>
+        containsArgIndex want base || containsArgIndex want index
+    | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+    | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+    | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+        containsArgIndex want lhs || containsArgIndex want rhs
+    | .select _ lhs rhs thn els =>
+        containsArgIndex want lhs || containsArgIndex want rhs ||
+          containsArgIndex want thn || containsArgIndex want els
+    | _ => false
+  let rec containsReplacement (fuel : Nat) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+      | .indexSet "cells" _ value _ _ => containsArgIndex 2 value
+      | .ite _ _ _ thn els =>
+          containsReplacement fuel' thn || containsReplacement fuel' els
+      | .forBody _ body => containsReplacement fuel' body
+      | _ => false
+  unless containsReplacement 32 run.ops do
+    throwError s!"captured replacement parameter was rewritten as a loop binder: {repr run.ops}"
+
+#pf_guard_nested_state_loop_control
+
 elab "#pf_guard_composed_state_fold_ir" : command => do
   let env ← getEnv
   let program ←
@@ -169,6 +270,54 @@ elab "#pf_guard_composed_state_fold_ir" : command => do
     throwError s!"composed state-fold IR mismatch: {repr run.ops}"
 
 #pf_guard_composed_state_fold_ir
+
+elab "#pf_guard_nested_composed_state_fold_ir" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runNestedComposedFold ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some run := program.methods.find? (·.ixName == "runNestedComposedFold")
+    | throwError "missing nested composed state-fold method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .forBody 1 #[
+      .ite .lt (.arg 0) (.lit 10)
+        #[.storeField "product" (.addU64 (.field (.arg 1) "product") (.arg 0))]
+        #[.storeField "quotient" (.arg 0)],
+      .storeField "remainder" (.arg 0),
+      .ite .lt (.field (.arg 1) "remainder") (.lit 100)
+        #[.storeField "quotient" (.addU64 (.field (.arg 1) "quotient") (.lit 1))]
+        #[]
+    ],
+    .okState (.field (.arg 1) "product")
+  ]
+  unless run.ops == expected do
+    throwError s!"nested composed state-fold IR mismatch: {repr run.ops}"
+
+#pf_guard_nested_composed_state_fold_ir
+
+elab "#pf_guard_checked_state_snapshot_ir" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initSnapshot
+        ``Tests.Fixtures.collectSnapshot ``Tests.Fixtures.snapshotTotal with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some collect := program.methods.find? (·.ixName == "collectSnapshot")
+    | throwError "missing checked state snapshot method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .checkedAddU64 (.field (.arg 0) "total") (.field (.arg 0) "pending"),
+    .letLocal 0 (.field (.arg 0) "pending"),
+    .storeField "total" (.addU64 (.field (.arg 0) "total") (.local 0)),
+    .storeField "pending" (.lit 0),
+    .storeField "last" (.local 0),
+    .okState (.local 0)
+  ]
+  unless collect.ops == expected do
+    throwError s!"checked state snapshot IR mismatch: {repr collect.ops}"
+
+#pf_guard_checked_state_snapshot_ir
 
 elab "#pf_guard_dynamic_write_return" : command => do
   let env ← getEnv

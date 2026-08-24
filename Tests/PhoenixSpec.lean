@@ -100,6 +100,16 @@ elab "#pf_guard_phoenix_artifact" : command => do
             hasIndexSet fuel' field thn || hasIndexSet fuel' field els
         | .forBody _ body => hasIndexSet fuel' field body
         | _ => false
+  let rec countIndexSets (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Nat :=
+    match fuel with
+    | 0 => 0
+    | fuel' + 1 => ops.foldl (init := 0) fun count op =>
+        count + match op with
+        | .indexSet name _ _ _ _ => if name == field then 1 else 0
+        | .ite _ _ _ thn els =>
+            countIndexSets fuel' field thn + countIndexSets fuel' field els
+        | .forBody _ body => countIndexSets fuel' field body
+        | _ => 0
   let rec hasIndexSetAt
       (fuel : Nat) (field : String) (byteOffset : Nat)
       (ops : Array ProofForge.Ops.Op) : Bool :=
@@ -180,6 +190,17 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless hasIndexSetAt 32 "events" 72 swap.ops &&
       hasIndexSetAt 32 "events" 72 swapSell.ops do
     throwError "Phoenix swaps do not lower the widest MarketEvent payload leaf"
+  unless countIndexSets 32 "traderQuoteLocked" reduceBid.ops == 1 &&
+      countIndexSets 32 "traderQuoteFree" reduceBid.ops == 1 &&
+      countIndexSets 32 "bidSizes" reduceBid.ops == 1 do
+    throwError "Phoenix bid reduction replays a composed state transition"
+  unless collect.ops.any (fun
+        | .letLocal 0 (.field (.arg 0) "unclaimedFees") => true
+        | _ => false) &&
+      hasStoreFieldValue 32 "unclaimedFees" (.lit 0) collect.ops &&
+      hasIndexSetValue 32 "events" (.local 0) collect.ops &&
+      hasOkStateValue 32 (.local 0) collect.ops do
+    throwError "Phoenix fee collection lost its pre-write scalar snapshot"
   unless deposit.paramCount == 2 && withdrawBase.paramCount == 1 &&
       withdrawQuote.paramCount == 1 && evictSeat.paramCount == 0 &&
       traderIndex.paramCount == 4 &&

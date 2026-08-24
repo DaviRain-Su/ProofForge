@@ -93,8 +93,9 @@
 | T-L5-08 | happy / fail | Phoenix per-seat posting（host / IR） | 普通 ask/bid 锁仓及跨 owner 满书 eviction 原子更新两边 TraderState；抽取 IR 保留动态 index writes |
 | T-L5-09 | happy / fail | Phoenix per-seat matching（host / fold） | signer-derived self-trade；ask/bid fill、TIF expiry、self-cancel 原子更新 maker/taker 四类余额；逐 seat 一致；不足 maker ledger fail closed |
 | T-L5-10 | happy | inline scalar / record projection | `pf_inline` UInt64/Bool helper 与 updated-record projection 在 variant payload 中归一化；不泄漏未知 state leaf |
-| T-L5-11 | happy | Phoenix Mollusk smoke | 认证 state 上 initialize → authenticated depositFunds → postAsk；验证 trader key 四 limb、余额、book、sequence 与 Place event |
+| T-L5-11 | happy / fail | Phoenix Mollusk lifecycle matrix | ask/bid post+reduce+swap、collect/withdraw/evict、严格 slot/time TIF、Abort/CancelProvide/DecrementTake、缺 signer 与伪造 state owner 原子失败 |
 
-Phoenix 的链上门目前只覆盖 T-L5-11，不等价于 T-L5-03～09 的完整撮合路径。
-当前构建快照：source account data_len 1376 bytes，SVM digest `1d988fc09ff38595`，
-发射汇编 5,084,550 bytes，sBPF ELF 828,256 bytes；汇编测试另设 `< 5,750,000` bytes 的预算门。
+T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
+refinement 仍未宣称。当前构建快照：source account data_len 1376 bytes，SVM digest
+`d0a3da81e9003d29`，assembly 3,011,776 bytes，sBPF ELF 549,784 bytes；发射汇编另设
+`< 5,750,000` bytes 的预算门。
