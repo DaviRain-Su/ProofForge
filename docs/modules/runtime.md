@@ -88,5 +88,5 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/Book.lean` + `runtime-tests/solana/tests/book.rs`：有界循环与运行时 Vector 下标写在链上执行。
 `Examples/Lang.lean` + `runtime-tests/solana/tests/lang.rs`：位运算、mod-64 移位及 state-carrying fold 的链上语义。
 `Examples/Tree.lean` + `runtime-tests/solana/tests/tree.rs`：三次红黑树插入后的 root、child 与颜色布局。
-`Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：walk prelude 下多账户 PDA bump view。
+`Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
 `Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、严格 slot/time TIF、三种 self-trade 与签名/owner 负例；跨四档逐样本 refinement 仍由 host/IR 门覆盖。

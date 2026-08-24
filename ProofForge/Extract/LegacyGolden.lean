@@ -1265,6 +1265,8 @@ def extractedSeat : Program :=
         ops := #[.returnState (.lit 0)] },
       { kind := .increment, name := "Examples.Seat.openBase", ixName := "openBase", paramCount := 0
         ops := #[Ops.tokenInitAccount, .returnU64 (.lit 0)] },
+      { kind := .increment, name := "Examples.Seat.openQuote", ixName := "openQuote", paramCount := 0
+        ops := #[Ops.tokenInitAccount, .returnU64 (.lit 0)] },
       { kind := .increment, name := "Examples.Seat.openSeat", ixName := "openSeat", paramCount := 1
         ops := #[Ops.createPda (.arg 0), .returnU64 (.arg 0)] },
       { kind := .get, name := "Examples.Seat.get", ixName := "get", paramCount := 0

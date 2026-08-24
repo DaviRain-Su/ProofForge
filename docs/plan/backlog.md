@@ -60,11 +60,11 @@
 
 ## 当前状态
 
-- `lake build Tests` 当前 181 jobs；65 个 imported test modules 含 723 个 `#guard`。
+- `lake build Tests` 当前 183 jobs；65 个 imported test modules 含 733 个 `#guard`。
 - SVM registry 47 个程序 / 47 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、withdraw/evict、严格 slot/time TIF、三种 self-trade 及签名/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
-- `l5-003` 抽取已完成，Seat 的 CPI runtime 成功路径与双 vault 尚未完成。
+- `l5-003` 已完成：Seat 的 PDA 与 base/quote vault CPI 成功路径、权限负例都进 Mollusk；同一入口双 vault 归 Phoenix adapter。
 - `l5-004` Token-2022 classic-compatible program-id 切片尚未开始。
 - `l5-005` 已完成；任务状态已同步为 done。
 
@@ -72,9 +72,8 @@
 
 ### P0：现有语义的链上闭环
 
-1. Seat Mollusk：`openSeat` / `openBase` CPI 成功路径及权限负例。
-2. Phoenix 双 vault Token CPI adapter，把 deposit/withdraw/未注册 take-only 的占位结算接到真实账户。
-3. `AuditLogHeader` + Borsh wire event + `Log` self-CPI recorder。
+1. Phoenix 双 vault Token CPI adapter，把 deposit/withdraw/未注册 take-only 的占位结算接到真实账户。
+2. `AuditLogHeader` + Borsh wire event + `Log` self-CPI recorder。
 
 ### P1：通用后端边界
 

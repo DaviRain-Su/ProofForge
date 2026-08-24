@@ -19,4 +19,9 @@ open ProofForge.Svm.Runtime
   | .ok (_, ret) => ret == 0
   | .error _ => false
 
+#guard
+  match openQuote (init 0) with
+  | .ok (_, ret) => ret == 0
+  | .error _ => false
+
 end Tests.SeatSpec

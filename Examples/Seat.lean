@@ -1,13 +1,12 @@
 import ProofForge
 
 /-!
-席位 PDA + 双 vault 初始化。不跟 Phoenix 挂单/吃单混：
+席位 PDA + vault 初始化。不跟 Phoenix 挂单/吃单混：
 CPI 账户表不同，混在一个 Program 会抬高 `cpiAccountCount`。
 
-外层：payer s+w、seat PDA w、base vault w、quote vault w、mint r、Token。
-本切片只开 seat PDA（种子 `"vault"`，跟 `createPda` 同一条）。
-双 vault 的 `tokenInitAccount` 是下一切片：同一入口里两套 recipe
-会把账户表拼在一起。
+`openSeat` 的外层账户是 payer s+w、seat PDA w、System；`openBase` / `openQuote`
+分别把一组 owner、vault、mint、Token 绑定到同一条 `tokenInitAccount` recipe。
+双 vault 同一入口会需要两组不同的账户索引，留给 Phoenix adapter 切片。
 -/
 namespace Examples.Seat
 
@@ -37,6 +36,15 @@ def openSeat (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :
 /-- 给 base vault 开 Token 账户。owner = acc0。 -/
 @[pf_entry]
 def openBase (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := tokenInitAccount
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
+/-- 给 quote vault 开 Token 账户。owner = acc0。 -/
+@[pf_entry]
+def openQuote (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := tokenInitAccount
     .ok ({ dummy := 0 }, 0)
