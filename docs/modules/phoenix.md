@@ -26,9 +26,9 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 171 个 8-byte 叶，账户含 discriminator 共 1,376 bytes。`#pf_build Projects.Phoenix`
-SVM digest `7a9385514c2b6275`。物理账户表固定为 market state、trader signer、trader
+SVM digest `c34216acaf0dd525`。物理账户表固定为 market state、trader signer、trader
 base/quote Token account、base/quote mint、base/quote vault 和 classic SPL Token program，
-共 9 个账户。
+再加 executable current program 与 canonical `"log"` PDA，共 11 个账户。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -99,9 +99,17 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 little-endian `(lo, hi)` 两个 `UInt64` limb 完整保留。最宽事件现在是九 payload，测试
 明确钉住动态 `events` 的 byte offset 72，防止抽取器静默漏掉尾叶。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 3,132,585-byte assembly、
-595,272-byte eBPF ELF 和 16,068-byte IDL；SVM digest 是 `7a9385514c2b6275`。
-assembly 是未做 CSE/共享基本块的中间文本，不是部署文件；当前 ELF 约 581.3 KiB。
+每个成功路径还通过 signed self-CPI 发出官方形状的认证 audit record。93-byte
+`AuditLogHeader` 包含 Log tag 15、Header tag 1、instruction origin、sequence、i64
+timestamp bits、slot、market/signer Pubkey 与 u16 event count；payload 按官方 2..9
+ordinal 及 u16 index 0 做 Borsh 窄编码。每个实际 event 是一个单-event batch，成功但
+无 event 的路径发 header-only batch。raw handler 只接受当前 program id 下由 `"log"`
+seed 导出的 readonly signer PDA。IR 门覆盖所有 header/event recipe，Mollusk 同时验证
+真实 `Program data`、错 executable self program 与错 log PDA 的原子失败。
+
+真实源模块经 `pf build --target svm Phoenix` 生成 4,109,725-byte assembly、
+860,688-byte eBPF ELF 和 16,978-byte IDL；SVM digest 是 `c34216acaf0dd525`。
+assembly 是未做 CSE/共享基本块的中间文本，不是部署文件；当前 ELF 约 840.5 KiB。
 通用抽取器现在去重嵌套 state-helper 的祖先 transition，避免 bid reduce 等组合更新
 被重复发射；完整 maker Pubkey 与 event/lastEvent 双写仍会展开 conditional values。
 测试把 assembly 回归预算钉在 5.75 MB，并拒绝重复 label，同时断言 maker/taker ledger writes 和最宽 event leaf
@@ -116,6 +124,5 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
 | trader tree 的动态 RB 拓扑 | 已有 bounded Pubkey registry、allocator 和 per-seat 值；key 查找暂用四槽扫描 |
-| `AuditLogHeader` / Borsh wire event / `Log` self-CPI | ordinal 1 只留 Header 占位；尚未编码真实 header 和窄字段，也未发给 event recorder |
 
 这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。

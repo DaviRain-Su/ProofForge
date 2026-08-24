@@ -8,6 +8,7 @@ use {
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
+    solana_svm_log_collector::LogCollector,
     spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
 };
 
@@ -40,6 +41,9 @@ impl TraderAccounts {
 
 struct PhoenixFixture {
     program_id: Pubkey,
+    self_program: Account,
+    log_key: Pubkey,
+    log: Account,
     mollusk: Mollusk,
     state_key: Pubkey,
     state: Account,
@@ -95,6 +99,29 @@ fn account_after(accounts: &[(Pubkey, Account)], key: &Pubkey) -> Account {
         .clone()
 }
 
+fn has_phoenix_record(messages: &[String], origin: u8) -> bool {
+    const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let prefix = format!(
+        "Program data: Dw{}{}",
+        BASE64[4 + usize::from(origin >> 6)] as char,
+        BASE64[usize::from(origin & 63)] as char
+    );
+    messages.iter().any(|message| message.starts_with(&prefix))
+}
+
+fn phoenix_origin(name: &str) -> u8 {
+    match name {
+        "swapBuy" | "swapSell" => 0,
+        "postAsk" | "postBid" => 3,
+        "reduceAsk" | "reduceBid" => 5,
+        "withdrawBase" | "withdrawQuote" => 12,
+        "depositFunds" => 13,
+        "evictSeat" => 106,
+        "collectFees" => 108,
+        _ => panic!("missing Phoenix origin for {name}"),
+    }
+}
+
 fn assert_atomic_failure(
     result: &mollusk_svm::result::InstructionResult,
     snapshots: &[(Pubkey, Vec<u8>)],
@@ -115,8 +142,12 @@ fn assert_atomic_failure(
 impl PhoenixFixture {
     fn new(tick_size: u64) -> Self {
         let (program_id, mut mollusk) = harness("Phoenix", "PF_PHOENIX_SO");
+        mollusk.logger = Some(LogCollector::new_ref_with_limit(None));
         token::add_program(&mut mollusk);
 
+        let self_program = mollusk_svm::program::create_program_account_loader_v3(&program_id);
+        let (log_key, _) = Pubkey::find_program_address(&[b"log"], &program_id);
+        let log = plain_account();
         let state_key = Pubkey::new_unique();
         let base_mint_key = Pubkey::new_unique();
         let quote_mint_key = Pubkey::new_unique();
@@ -150,6 +181,8 @@ impl PhoenixFixture {
                 base_vault_key,
                 quote_vault_key,
                 token_program_key,
+                program_id,
+                log_key,
                 true,
             ),
         );
@@ -163,9 +196,23 @@ impl PhoenixFixture {
             (base_vault_key, base_vault.clone()),
             (quote_vault_key, quote_vault.clone()),
             (token_program_key, token_program.clone()),
+            (program_id, self_program.clone()),
+            (log_key, log.clone()),
         ];
         let initialized =
             mollusk.process_and_validate_instruction(&init, &init_accounts, &[Check::success()]);
+        {
+            let logger = mollusk
+                .logger
+                .as_ref()
+                .expect("Phoenix log collector")
+                .borrow();
+            assert!(
+                has_phoenix_record(logger.get_recorded_content(), 100),
+                "initialize did not publish Phoenix data: {:?}",
+                logger.get_recorded_content()
+            );
+        }
         let state = account_after(&initialized.resulting_accounts, &state_key);
         assert_eq!((slot(&state, 0), slot(&state, 1)), (1, tick_size));
         assert_eq!((slot(&state, 2), slot(&state, 3)), (1, 5));
@@ -177,6 +224,9 @@ impl PhoenixFixture {
 
         Self {
             program_id,
+            self_program,
+            log_key,
+            log,
             mollusk,
             state_key,
             state,
@@ -204,6 +254,8 @@ impl PhoenixFixture {
         base_vault: Pubkey,
         quote_vault: Pubkey,
         token_program: Pubkey,
+        self_program: Pubkey,
+        log: Pubkey,
         trader_signer: bool,
     ) -> Vec<AccountMeta> {
         vec![
@@ -215,6 +267,8 @@ impl PhoenixFixture {
             AccountMeta::new(base_vault, false),
             AccountMeta::new(quote_vault, false),
             AccountMeta::new_readonly(token_program, false),
+            AccountMeta::new_readonly(self_program, false),
+            AccountMeta::new_readonly(log, false),
         ]
     }
 
@@ -240,6 +294,8 @@ impl PhoenixFixture {
                 self.base_vault_key,
                 self.quote_vault_key,
                 self.token_program_key,
+                self.program_id,
+                self.log_key,
                 trader_signer,
             ),
         );
@@ -253,12 +309,22 @@ impl PhoenixFixture {
             (self.base_vault_key, self.base_vault.clone()),
             (self.quote_vault_key, self.quote_vault.clone()),
             (self.token_program_key, self.token_program.clone()),
+            (self.program_id, self.self_program.clone()),
+            (self.log_key, self.log.clone()),
         ];
         (ix, accounts)
     }
 
     fn run(&mut self, trader: &mut TraderAccounts, name: &str, params: &[u64], expected: u64) {
         let (ix, accounts) = self.invocation(trader, name, params, true, self.state.clone());
+        let log_start = self
+            .mollusk
+            .logger
+            .as_ref()
+            .expect("Phoenix log collector")
+            .borrow()
+            .get_recorded_content()
+            .len();
         let result = self.mollusk.process_and_validate_instruction(
             &ix,
             &accounts,
@@ -267,6 +333,16 @@ impl PhoenixFixture {
                 Check::return_data(&expected.to_le_bytes()),
             ],
         );
+        assert!(has_phoenix_record(
+            &self
+                .mollusk
+                .logger
+                .as_ref()
+                .expect("Phoenix log collector")
+                .borrow()
+                .get_recorded_content()[log_start..],
+            phoenix_origin(name)
+        ));
         let resulting = result.resulting_accounts;
         self.state = account_after(&resulting, &self.state_key);
         trader.base = account_after(&resulting, &trader.base_key);
@@ -508,7 +584,7 @@ fn all_self_trade_behaviors_run_on_chain() {
 }
 
 #[test]
-fn vault_mint_program_and_writable_failures_are_atomic() {
+fn vault_mint_program_log_and_writable_failures_are_atomic() {
     let fixture = PhoenixFixture::new(1);
     let trader = fixture.trader();
 
@@ -587,6 +663,46 @@ fn vault_mint_program_and_writable_failures_are_atomic() {
         .mollusk
         .process_instruction(&wrong_program_ix, &wrong_program_accounts);
     assert_atomic_failure(&wrong_program_result, &snapshots);
+
+    let (mut wrong_self_ix, mut wrong_self_accounts) = fixture.invocation(
+        &trader,
+        "depositFunds",
+        &[1, 0],
+        true,
+        fixture.state.clone(),
+    );
+    let wrong_self = Pubkey::new_unique();
+    wrong_self_ix.accounts[9] = AccountMeta::new_readonly(wrong_self, false);
+    wrong_self_accounts[9] = (wrong_self, plain_account());
+    let snapshots = vec![
+        (fixture.state_key, fixture.state.data.clone()),
+        (trader.base_key, trader.base.data.clone()),
+        (fixture.base_vault_key, fixture.base_vault.data.clone()),
+    ];
+    let wrong_self_result = fixture
+        .mollusk
+        .process_instruction(&wrong_self_ix, &wrong_self_accounts);
+    assert_atomic_failure(&wrong_self_result, &snapshots);
+
+    let (mut wrong_log_ix, mut wrong_log_accounts) = fixture.invocation(
+        &trader,
+        "depositFunds",
+        &[1, 0],
+        true,
+        fixture.state.clone(),
+    );
+    let wrong_log = Pubkey::new_unique();
+    wrong_log_ix.accounts[10] = AccountMeta::new_readonly(wrong_log, false);
+    wrong_log_accounts[10] = (wrong_log, plain_account());
+    let snapshots = vec![
+        (fixture.state_key, fixture.state.data.clone()),
+        (trader.base_key, trader.base.data.clone()),
+        (fixture.base_vault_key, fixture.base_vault.data.clone()),
+    ];
+    let wrong_log_result = fixture
+        .mollusk
+        .process_instruction(&wrong_log_ix, &wrong_log_accounts);
+    assert_atomic_failure(&wrong_log_result, &snapshots);
 
     let (mut readonly_ix, readonly_accounts) = fixture.invocation(
         &trader,

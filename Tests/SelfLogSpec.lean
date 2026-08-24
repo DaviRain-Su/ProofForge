@@ -46,9 +46,21 @@ elab "#pf_guard_self_log_ir" : command => do
       asm.contains "signed raw self-entry tag=15 seed=log" &&
       asm.contains "raw self-entry invocations use the current program id" &&
       asm.contains "call sol_try_find_program_address" &&
+      asm.contains "call sol_log_data" &&
       asm.contains "call sol_invoke_signed_c" &&
       asm.contains "stxh" && asm.contains "stxdw" do
     throwError "raw self-entry assembly contract is incomplete"
+  let initCpiProgram :=
+    { program with methods := program.methods.map fun method =>
+        if method.ixName == "initialize" then
+          { method with ops := #[record.ops[0]!, .returnState (.arg 0)] }
+        else method }
+  let initCpiAsm ←
+    match Emit.emitAsm initCpiProgram with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless initCpiAsm.contains "xfer_ok_initialize_init_0" do
+    throwError "init CPI was retained in IR but omitted from assembly"
 
 #pf_guard_self_log_ir
 

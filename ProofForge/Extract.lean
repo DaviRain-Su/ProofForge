@@ -139,7 +139,11 @@ private def substUInt64Lets (fuel : Nat) (e : Expr) : Expr :=
       let value := substUInt64Lets fuel' value
       let body := substUInt64Lets fuel' body
       if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
-        substUInt64Lets fuel' (body.instantiate1 value)
+        -- An unused UInt64 can still own an effect (for example `let _ := invoke ...`).
+        -- Keep it until effect-aware loop normalization can distinguish the call from a
+        -- disposable scalar alias.
+        if body.hasLooseBVar 0 then substUInt64Lets fuel' (body.instantiate1 value)
+        else .letE n ty value body nd
       else
         .letE n ty value body nd
     | .lam n ty body bi => .lam n ty (substUInt64Lets fuel' body) bi
@@ -2243,10 +2247,11 @@ private def asArrayElems (e : Expr) : Option (Array Expr) :=
         fromList fuel' args[args.size - 1]! (acc.push args[args.size - 2]!)
       else none
   let e := strip e
+  -- Keep a bounded decoder for compile-time payloads while allowing realistic event records.
   if isConstNamed e ``Array.mk && e.getAppArgs.size ≥ 1 then
-    fromList 16 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+    fromList 256 e.getAppArgs[e.getAppArgs.size - 1]! #[]
   else if isConstNamed e ``List.toArray && e.getAppArgs.size ≥ 1 then
-    fromList 16 e.getAppArgs[e.getAppArgs.size - 1]! #[]
+    fromList 256 e.getAppArgs[e.getAppArgs.size - 1]! #[]
   else if isConstNamed e ``Array.empty || endsWith e ".empty" then
     some #[]
   else none
@@ -2411,6 +2416,28 @@ private def leadingInvokes (env : Environment) (e : Expr) : Array DecodedInvoke 
             | none => (invokes, e)
       | _ => (invokes, e)
   go 16 e #[]
+
+/-- Substitute loop-body aliases without erasing an ignored SVM effect. `substUInt64Lets` keeps
+unused scalar lets long enough to reach this effect-aware boundary; pure aliases still reduce as
+before, while invocation lets remain ordered before the yielded state update. -/
+private def substLetsPreservingInvokes (env : Environment) (fuel : Nat) (e : Expr) : Expr :=
+  match fuel with
+  | 0 => e
+  | fuel' + 1 =>
+    match strip e with
+    | .letE n ty value body nd =>
+      let value := substLetsPreservingInvokes env fuel' value
+      let body := substLetsPreservingInvokes env fuel' body
+      if (findInvoke env 16 value).isSome then .letE n ty value body nd
+      else substLetsPreservingInvokes env fuel' (body.instantiate1 value)
+    | .lam n ty body bi => .lam n ty (substLetsPreservingInvokes env fuel' body) bi
+    | .app _ _ =>
+      let rec goApp (n : Nat) (e : Expr) : Expr :=
+        match n, strip e with
+        | n + 1, .app f a => .app (goApp n f) (substLetsPreservingInvokes env fuel' a)
+        | _, e => substLetsPreservingInvokes env fuel' e
+      goApp 32 e
+    | e => e
 
 private def invokeOps
     (inv : DecodedInvoke)
@@ -2723,8 +2750,8 @@ private def findForStateExpr (_env : Environment) (e : Expr) :
         match strip e with
         | .lam _ _ body _ =>
           match strip body with
-          | .lam _ _ body2 _ => some (substLets 128 body2)
-          | _ => some (substLets 128 body)
+          | .lam _ _ body2 _ => some (substLetsPreservingInvokes _env 128 body2)
+          | _ => some (substLetsPreservingInvokes _env 128 body)
         | .letE _ _ _ body _ => lastLam fuel' body
         | e => e.getAppArgs.findSome? (lastLam fuel')
     let args := forExpr.getAppArgs
@@ -3094,8 +3121,11 @@ private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr 
         let effectful :=
           (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
             (findForIn env value).isSome || (findForBodyExpr env value).isSome
+        -- A scalar captured before a CPI must remain a local: substituting its state-field read
+        -- through the call can move that read after a later state write.
+        let bodyHasInvoke := (findInvoke env 16 body).isSome
         let directAlias := match strip body with | .bvar 0 => true | _ => false
-        if effectful || (!directAlias && !isIteExpr body) then e
+        if effectful || bodyHasInvoke || (!directAlias && !isIteExpr body) then e
         else zetaPureHeadLets env fuel' (body.instantiate1 value)
     | e => e
 

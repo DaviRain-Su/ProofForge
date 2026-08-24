@@ -147,6 +147,45 @@ elab "#pf_guard_initialized_state_fold_ir" : command => do
 
 #pf_guard_initialized_state_fold_ir
 
+elab "#pf_guard_invoke_state_fold_ir" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runInvokeFold ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some run := program.methods.find? (·.ixName == "runInvokeFold")
+    | throwError "missing CPI state-fold method"
+  let expected : Array ProofForge.Ops.Op := #[
+    .forBody 2 #[
+      .ite .eq .loopIx (.lit 0)
+        #[
+          .invoke 1 #[] #[.u64le (.arg 0)],
+          .storeField "product" (.arg 0)
+        ] #[]
+    ],
+    .okState (.field (.arg 1) "product")
+  ]
+  unless run.ops == expected do
+    throwError s!"CPI state-fold IR mismatch: {repr run.ops}"
+  let snapshotProgram ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runInvokeSnapshot ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some snapshot := snapshotProgram.methods.find? (·.ixName == "runInvokeSnapshot")
+    | throwError "missing CPI snapshot method"
+  let snapshotExpected : Array ProofForge.Ops.Op := #[
+    .letLocal 0 (.field (.arg 0) "product"),
+    .invoke 1 #[] #[.u64le (.local 0)],
+    .storeField "product" (.lit 0),
+    .okState (.local 0)
+  ]
+  unless snapshot.ops == snapshotExpected do
+    throwError s!"CPI snapshot IR mismatch: {repr snapshot.ops}"
+
+#pf_guard_invoke_state_fold_ir
+
 elab "#pf_guard_nested_state_loop_control" : command => do
   let env ← getEnv
   let program ←

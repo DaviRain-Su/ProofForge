@@ -1004,40 +1004,6 @@ private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Exce
     let insn ← storeInsn w
     .ok s!"  ldxdw r1, [r10 - {fromStack}]\n  {insn} [r6 + ACC0_DATA + {off}], r1\n"
 
-private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
-    Except String String := do
-  let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
-  if vs.isEmpty then
-    .error "extract/unsupported: init missing returnState"
-  else if !p.schema.isEmpty && vs.size != p.slots.size then
-    .error (s!"extract/unsupported: init initializes {vs.size} state leaves, " ++
-      s!"schema requires {p.slots.size}")
-  else do
-    let mut body :=
-      if IR.usesWalk p then
-        s!"  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]\n  add64 r7, 8\n"
-      else ""
-    let mut i : Nat := 0
-    for s in p.slots do
-      if h : i < vs.size then
-        let load ← loadVal p vs[i] 8 i s!"{label}_init_{i}"
-        let store ← storeField p s.name 8
-        body := body ++ load ++ store
-      else
-        match IR.fieldOffset p s.name with
-        | some off =>
-          let insn ← storeInsn s.width
-          body := body ++ s!"  lddw r1, 0\n  {insn} [r6 + ACC0_DATA + {off}], r1\n"
-        | none => pure ()
-      i := i + 1
-    return s!"\
-body_{label}:
-{body}  lddw r1, {marker}
-  stxdw [r6 + ACC0_DATA + 0], r1
-  lddw r0, 0
-  exit
-"
-
 private def destField (p : IR.Program) (lhs : Ops.Val) : String :=
   match lhs with
   | .field _ n => n
@@ -1351,6 +1317,51 @@ private def emitInvoke (p : IR.Program) (label : String)
   jeq r0, 0, xfer_ok_{label}
   exit
 xfer_ok_{label}:
+"
+
+private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
+    Except String String := do
+  let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
+  let effects := ops.filter fun | .returnState _ => false | _ => true
+  if vs.isEmpty then
+    .error "extract/unsupported: init missing returnState"
+  else if !p.schema.isEmpty && vs.size != p.slots.size then
+    .error (s!"extract/unsupported: init initializes {vs.size} state leaves, " ++
+      s!"schema requires {p.slots.size}")
+  else if !effects.all (fun | .invoke .. => true | _ => false) then
+    .error "extract/unsupported: init contains a non-CPI effect"
+  else do
+    let mut effectBody := ""
+    for i in [0:effects.size] do
+      match effects[i]! with
+      | .invoke programIx metas data seeds bump =>
+          effectBody := effectBody ++
+            (← emitInvoke p s!"{label}_init_{i}" programIx metas data seeds bump)
+      | _ => pure ()
+    let mut body :=
+      if IR.usesWalk p then
+        s!"  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]\n  add64 r7, 8\n"
+      else ""
+    body := body ++ effectBody
+    let mut i : Nat := 0
+    for s in p.slots do
+      if h : i < vs.size then
+        let load ← loadVal p vs[i] 8 i s!"{label}_init_{i}"
+        let store ← storeField p s.name 8
+        body := body ++ load ++ store
+      else
+        match IR.fieldOffset p s.name with
+        | some off =>
+          let insn ← storeInsn s.width
+          body := body ++ s!"  lddw r1, 0\n  {insn} [r6 + ACC0_DATA + {off}], r1\n"
+        | none => pure ()
+      i := i + 1
+    return s!"\
+body_{label}:
+{body}  lddw r1, {marker}
+  stxdw [r6 + ACC0_DATA + 0], r1
+  lddw r0, 0
+  exit
 "
 
 private def emitStoreAndReturn (p : IR.Program) (dest : String) (fromStack : Nat) : Except String String := do
@@ -1912,6 +1923,15 @@ raw_self_entry:
   ldxdw r1, [r8 + 120]
   ldxdw r3, [r2 + 24]
   jne r1, r3, err_unknown_disc
+  ; Publish the authenticated raw payload as one sol_log_data field.
+  stxdw [r8 + 160], r7
+  ldxdw r1, [r10 - {headerStack 1}]
+  ldxdw r1, [r1 + 0]
+  stxdw [r8 + 168], r1
+  mov64 r1, r8
+  add64 r1, 160
+  lddw r2, 1
+  call sol_log_data
   lddw r0, 0
   exit
 "

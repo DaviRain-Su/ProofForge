@@ -58,11 +58,13 @@ elab "#pf_guard_phoenix_artifact" : command => do
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
   unless ProofForge.Svm.IR.dataLen program == 1376 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.IR.dataLen program} bytes"
-  unless ProofForge.Svm.IR.cpiAccountCount program == 9 do
+  unless ProofForge.Svm.IR.cpiAccountCount program == 11 do
     throwError s!"Phoenix CPI account scan stopped early: " ++
-      s!"{ProofForge.Svm.IR.cpiAccountCount program}/9 accounts"
+      s!"{ProofForge.Svm.IR.cpiAccountCount program}/11 accounts"
   let some deposit := program.methods.find? (·.ixName == "depositFunds")
     | throwError "missing depositFunds"
+  let some initProgram := program.methods.find? (·.ixName == "initialize")
+    | throwError "missing SVM initialize"
   let some withdrawBase := program.methods.find? (·.ixName == "withdrawBase")
     | throwError "missing withdrawBase"
   let some withdrawQuote := program.methods.find? (·.ixName == "withdrawQuote")
@@ -195,6 +197,46 @@ elab "#pf_guard_phoenix_artifact" : command => do
             hasTransferRecipe fuel' programIx sourceIx mintIx destinationIx authorityIx
               seeds signed body
         | _ => false
+  let rec hasPhoenixRecord
+      (fuel : Nat) (origin totalEvents : UInt64) (eventTag : Option UInt64)
+      (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .invoke programIx metas data seeds bump =>
+            let header :=
+              programIx == 8 &&
+                metas == #[{ acc := 9, signer := true, writable := false }] &&
+                seeds == #[.ascii "log"] &&
+                bump == some (ProofForge.Svm.Ops.findPda "log") &&
+                data[0]? == some (.selfEntry 15 "log") &&
+                data[1]? == some (.u8le (.lit 1)) &&
+                data[2]? == some (.u8le (.lit origin)) &&
+                (match data[3]? with
+                 | some (ProofForge.Svm.Ops.CpiWord.u64le _) => true
+                 | _ => false) &&
+                data[4]? == some (ProofForge.Svm.Ops.CpiWord.u64le ProofForge.Svm.Ops.unixTime) &&
+                data[5]? == some (ProofForge.Svm.Ops.CpiWord.u64le ProofForge.Svm.Ops.clockSlot) &&
+                data[6]? == some (ProofForge.Svm.Ops.CpiWord.u64le
+                  (ProofForge.Svm.Ops.accKeyWord 0 0)) &&
+                data[7]? == some (ProofForge.Svm.Ops.CpiWord.u64le
+                  (ProofForge.Svm.Ops.accKeyWord 0 1)) &&
+                data[8]? == some (ProofForge.Svm.Ops.CpiWord.u64le
+                  (ProofForge.Svm.Ops.accKeyWord 0 2)) &&
+                data[9]? == some (ProofForge.Svm.Ops.CpiWord.u64le
+                  (ProofForge.Svm.Ops.accKeyWord 0 3)) &&
+                data[10]? == some (.accKey 0) &&
+                data[11]? == some (.u16le (.lit totalEvents))
+            header && match eventTag with
+              | none => data.size == 12
+              | some tag =>
+                  14 < data.size && data[12]? == some (.u8le (.lit tag)) &&
+                    data[13]? == some (.u16le (.lit 0))
+        | .ite _ _ _ thn els =>
+            hasPhoenixRecord fuel' origin totalEvents eventTag thn ||
+              hasPhoenixRecord fuel' origin totalEvents eventTag els
+        | .forBody _ body => hasPhoenixRecord fuel' origin totalEvents eventTag body
+        | _ => false
   let baseVaultSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
     #[.ascii "vault", .stateKey, .accKey 3]
   let quoteVaultSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
@@ -216,6 +258,38 @@ elab "#pf_guard_phoenix_artifact" : command => do
       s!"swapBuyOut={hasTransferRecipe 32 7 5 3 1 5 baseVaultSeeds true swap.ops}, " ++
       s!"swapSellIn={hasTransferRecipe 32 7 1 3 5 0 #[] false swapSell.ops}, " ++
       s!"swapSellOut={hasTransferRecipe 32 7 6 4 2 6 quoteVaultSeeds true swapSell.ops}"
+  match ProofForge.Svm.IR.rawSelfEntry? program with
+  | .ok (some entry) =>
+      unless entry.tag == 15 && entry.authoritySeed == "log" do
+        throwError s!"Phoenix raw log entry changed: {repr entry}"
+  | result => throwError s!"Phoenix raw log entry is missing: {repr result}"
+  unless hasPhoenixRecord 32 100 0 none initProgram.ops &&
+      hasPhoenixRecord 32 13 0 none deposit.ops &&
+      hasPhoenixRecord 32 12 0 none withdrawBase.ops &&
+      hasPhoenixRecord 32 12 0 none withdrawQuote.ops &&
+      hasPhoenixRecord 32 106 0 none evictSeat.ops &&
+      hasPhoenixRecord 32 3 0 none post.ops &&
+      hasPhoenixRecord 32 3 1 (some 3) post.ops &&
+      hasPhoenixRecord 32 3 1 (some 5) post.ops &&
+      hasPhoenixRecord 32 3 1 (some 8) post.ops &&
+      hasPhoenixRecord 32 3 0 none postBid.ops &&
+      hasPhoenixRecord 32 3 1 (some 3) postBid.ops &&
+      hasPhoenixRecord 32 3 1 (some 5) postBid.ops &&
+      hasPhoenixRecord 32 3 1 (some 8) postBid.ops &&
+      hasPhoenixRecord 32 5 0 none reduce.ops &&
+      hasPhoenixRecord 32 5 1 (some 4) reduce.ops &&
+      hasPhoenixRecord 32 5 0 none reduceBid.ops &&
+      hasPhoenixRecord 32 5 1 (some 4) reduceBid.ops &&
+      hasPhoenixRecord 32 0 1 (some 2) swap.ops &&
+      hasPhoenixRecord 32 0 1 (some 4) swap.ops &&
+      hasPhoenixRecord 32 0 1 (some 6) swap.ops &&
+      hasPhoenixRecord 32 0 1 (some 9) swap.ops &&
+      hasPhoenixRecord 32 0 1 (some 2) swapSell.ops &&
+      hasPhoenixRecord 32 0 1 (some 4) swapSell.ops &&
+      hasPhoenixRecord 32 0 1 (some 6) swapSell.ops &&
+      hasPhoenixRecord 32 0 1 (some 9) swapSell.ops &&
+      hasPhoenixRecord 32 108 1 (some 7) collect.ops do
+    throwError "Phoenix AuditLogHeader/event Borsh records are incomplete"
   unless hasStoreField 32 "baseFree" withdrawBase.ops &&
       hasIndexSet 32 "traderBaseFree" withdrawBase.ops &&
       hasStoreField 32 "quoteFree" withdrawQuote.ops &&
@@ -251,12 +325,13 @@ elab "#pf_guard_phoenix_artifact" : command => do
       countIndexSets 32 "traderQuoteFree" reduceBid.ops == 1 &&
       countIndexSets 32 "bidSizes" reduceBid.ops == 1 do
     throwError "Phoenix bid reduction replays a composed state transition"
-  unless collect.ops.any (fun
-        | .letLocal 0 (.field (.arg 0) "unclaimedFees") => true
-        | _ => false) &&
-      hasStoreFieldValue 32 "unclaimedFees" (.lit 0) collect.ops &&
-      hasIndexSetValue 32 "events" (.local 0) collect.ops &&
-      hasOkStateValue 32 (.local 0) collect.ops do
+  let feeSnapshots := collect.ops.filterMap fun
+    | .letLocal localId (.field (.arg 0) "unclaimedFees") => some localId
+    | _ => none
+  unless hasStoreFieldValue 32 "unclaimedFees" (.lit 0) collect.ops &&
+      feeSnapshots.any (fun localId =>
+        hasIndexSetValue 32 "events" (.local localId) collect.ops &&
+          hasOkStateValue 32 (.local localId) collect.ops) do
     throwError "Phoenix fee collection lost its pre-write scalar snapshot"
   unless deposit.paramCount == 2 && withdrawBase.paramCount == 1 &&
       withdrawQuote.paramCount == 1 && evictSeat.paramCount == 0 &&

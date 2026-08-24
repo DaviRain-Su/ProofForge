@@ -37,7 +37,9 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - `invoke programIx metas data` — 编译期钉死的 CPI。抽出认这个名字。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
 - `invokeSignedSeeds programIx metas data seeds bump` — 一组编译期定形的异构 signer seeds；支持 ASCII、state key 和静态 account key，运行时只提供 bump。
+- 首个 CPI word `.selfEntry tag seed` — 声明唯一 raw self-entry；只接受 canonical seed PDA 的 readonly signer，认证后把完整 payload 作为一个 `sol_log_data` field 发布。
 - `let _ := invoke...` — 被忽略的 CPI 结果按效应顺序保留；无论普通或 signed、单条或多条，后续 state writes 都不能被抽取器吞掉。
+- init 中的静态 CPI 在账户初始化写回前执行；非 CPI init effect fail closed，不再静默省略。
 - `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
@@ -94,4 +96,4 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/Tree.lean` + `runtime-tests/solana/tests/tree.rs`：三次红黑树插入后的 root、child 与颜色布局。
 `Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
 `Examples/SelfLog.lean` + `runtime-tests/solana/tests/self_log.rs`：当前 program id 的 signed self-CPI，canonical `"log"` PDA raw 入口、packed Borsh integer words、续段状态写回，以及 signer/writable/tag/key 失败矩阵。
-`Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade，以及 vault/mint/program/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
+`Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。

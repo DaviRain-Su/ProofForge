@@ -351,6 +351,23 @@ def runInitializedFold (s : FoldState) (lhs : UInt64) :
     st := { st with remainder := lhs }
   .ok (st, st.product)
 
+/-- An ignored CPI inside a state-carrying loop must remain ordered before that iteration's write. -/
+def runInvokeFold (s : FoldState) (value : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut st := s
+  for i in [:2] do
+    if i = 0 then
+      let _ := ProofForge.Svm.Runtime.invoke 1 #[] #[.u64le value]
+      st := { st with product := value }
+  .ok (st, st.product)
+
+/-- A state-field snapshot captured before a CPI must not be reloaded after the state write. -/
+def runInvokeSnapshot (s : FoldState) :
+    Except Examples.Counter.Error (FoldState × UInt64) :=
+  let before := s.product
+  let _ := ProofForge.Svm.Runtime.invoke 1 #[] #[.u64le before]
+  .ok ({ s with product := 0 }, before)
+
 def foldProduct (s : FoldState) : UInt64 :=
   s.product
 
