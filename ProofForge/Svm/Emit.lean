@@ -628,6 +628,29 @@ private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff nonc
   stxdw [r10 - {stackOff}], r1
 "
 
+/-- Compact call site for `Nat.sub`, normalized as `select (lhs ≥ rhs) (lhs - rhs) 0`. -/
+private partial def emitLoadNatSub (p : IR.Program) (l r : Ops.Val)
+    (stackOff nonce : Nat) (scope : String) : Except String String := do
+  let loadL ← loadVal p l (stackOff + 8) (nonce + 1) (scope ++ "_l")
+  let loadR ← loadVal p r (stackOff + 16) (nonce + 2) (scope ++ "_r")
+  return loadL ++ loadR ++
+    s!"\
+  ldxdw r1, [r10 - {stackOff + 8}]
+  ldxdw r2, [r10 - {stackOff + 16}]
+  call __pf_nat_sub_u64
+  stxdw [r10 - {stackOff}], r1
+"
+
+private partial def natSubHelper : String := "\
+__pf_nat_sub_u64:
+  jge r1, r2, __pf_nat_sub_u64_subtract
+  lddw r1, 0
+  exit
+__pf_nat_sub_u64_subtract:
+  sub64 r1, r2
+  exit
+"
+
 /-- Lean `UInt64` uses the low six bits of a `UInt64` shift amount. -/
 private partial def emitLoadShift (p : IR.Program) (op : String) (l r : Ops.Val)
     (stackOff nonce : Nat) (scope : String) : Except String String := do
@@ -648,8 +671,9 @@ private partial def emitLoadSelect (p : IR.Program) (cmp : Ops.Cmp) (l r t f : O
   let loadR ← loadVal p r (stackOff + 16) (nonce + 2) (scope ++ "_r")
   let loadT ← loadVal p t stackOff (nonce + 3) (scope ++ "_t")
   let loadF ← loadVal p f stackOff (nonce + 4) (scope ++ "_f")
-  let thenLab := s!"then_select_{scope}_{stackOff}_{nonce}"
-  let doneLab := s!"done_select_{scope}_{stackOff}_{nonce}"
+  let token := IR.u64Hex (Core.IR.fnv1a64 s!"{scope}:{stackOff}:{nonce}")
+  let thenLab := s!"then_select_{token}"
+  let doneLab := s!"done_select_{token}"
   let jump :=
     match cmp with
     | .eq => s!"  jeq r1, r2, {thenLab}\n"
@@ -742,6 +766,9 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadRentExemption n.toNat stackOff scope)
   | .loopIx =>
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - 40]\n  stxdw [r10 - {stackOff}], r1\n"
+  | .select .ge l r (.subU64 tl tr) (.lit 0) =>
+    if l == tl && r == tr then emitLoadNatSub p l r stackOff nonce scope
+    else emitLoadSelect p .ge l r (.subU64 tl tr) (.lit 0) stackOff nonce scope
   | .select cmp l r t f => emitLoadSelect p cmp l r t f stackOff nonce scope
   | .indexGet _ name idx len off =>
     emitLoadIndexGet p name idx len off stackOff nonce scope
@@ -1638,7 +1665,7 @@ entrypoint:
   lddw r0, 1
   exit
 {dispatchTxt}
-{handlers}"
+{handlers}{natSubHelper}"
 
 /-- Native SVM entry point from the combined extractor dialect. -/
 def emitProgramAsm (program : Extract.IR.Program) : Except String String := do

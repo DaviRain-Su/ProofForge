@@ -85,6 +85,10 @@ def setNarrow (s : NarrowState) (i : UInt64) (value : UInt8) :
 def getNarrow (s : NarrowState) (i : UInt64) : UInt64 :=
   if i < 2 then s.cells[i.toNat]!.toUInt64 else 0
 
+/-- `Nat.sub` saturates: index zero stays zero instead of wrapping to `UInt64.max`. -/
+def getNarrowPrevious (s : NarrowState) (i : UInt64) : UInt64 :=
+  s.cells[(i.toNat - 1) % 2]!.toUInt64
+
 /-- 正向：单构造子、单个 `UInt64` payload 是无 tag 的 representational newtype。 -/
 inductive Tagged where
   | wrap (n : UInt64)

@@ -18,6 +18,7 @@ open Examples.Lang
 #guard shl (init 0) 1 65 == 2
 #guard shr (init 0) 8 67 == 1
 #guard mask8 (init 0) 7 == 7
+#guard Tests.Fixtures.getNarrowPrevious (Tests.Fixtures.initNarrow 7) 0 == 7
 #guard
   match both (init 9) with
   | (a, b) => a == 9 && b == 0
@@ -81,6 +82,32 @@ elab "#pf_guard_narrow_vector_codegen" : command => do
     throwError "EVM indexed UInt8 leaves are not masked"
 
 #pf_guard_narrow_vector_codegen
+
+elab "#pf_guard_nat_sub_semantics" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initNarrow
+        ``Tests.Fixtures.setNarrow ``Tests.Fixtures.getNarrowPrevious with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let asm ←
+    match ProofForge.Svm.Emit.emitProgramAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless asm.contains "call __pf_nat_sub_u64" do
+    throwError "Nat.sub was not lowered as saturating subtraction"
+  let evmProgram ←
+    match ProofForge.Evm.IR.fromExtracted program with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.Emit.emitYul evmProgram with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless evm.contains "if iszero(lt(" && evm.contains "sub(" do
+    throwError "EVM did not preserve saturating Nat.sub control flow"
+
+#pf_guard_nat_sub_semantics
 
 #guard ProofForge.Evm.Keccak.selector "mask8" #["uint8"] ==
   ProofForge.Evm.Keccak.selectorOfWidths "mask8" #[1]

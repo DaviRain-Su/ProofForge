@@ -133,7 +133,8 @@ elab "#pf_guard_tree_allocator" : command => do
     throwError "Tree rotation writeback is incomplete or duplicated"
   unless maxIndexWrites insert.ops == 34 && insert.evaluation.dynamicWrites.size == 238 do
     throwError "Tree insertion writeback changed or expanded"
-  let xi := ProofForge.Ops.Val.subU64 (.arg 0) (.lit 1)
+  let xi := ProofForge.Ops.Val.select .ge (.arg 0) (.lit 1)
+    (.subU64 (.arg 0) (.lit 1)) (.lit 0)
   let leftY := ProofForge.Ops.Val.indexGet (.arg 1) "nodes" xi 0 8
   let rightY := ProofForge.Ops.Val.indexGet (.arg 1) "nodes" xi 0 0
   unless (storeValues "root" rotateLeft.ops).all (· == .local 0) &&

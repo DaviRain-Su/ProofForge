@@ -718,8 +718,17 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some l, some r => some (.addU64 l r)
           | _, _ => none
-          else if (isConstNamed e ``HSub.hSub || endsWith e ".hSub" ||
-              isConstNamed e ``Nat.sub) && e.getAppArgs.size ≥ 2 then
+          else if (isConstNamed e ``Nat.sub ||
+              (isConstNamed e ``HSub.hSub && e.getAppArgs.size ≥ 3 &&
+                isConstNamed e.getAppArgs[0]! ``Nat &&
+                isConstNamed e.getAppArgs[1]! ``Nat &&
+                isConstNamed e.getAppArgs[2]! ``Nat)) && e.getAppArgs.size ≥ 2 then
+          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some l, some r => some (.select .ge l r (.subU64 l r) (.lit 0))
+          | _, _ => none
+          else if (isConstNamed e ``HSub.hSub || endsWith e ".hSub") &&
+              e.getAppArgs.size ≥ 2 then
           match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
                 asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some l, some r => some (.subU64 l r)
