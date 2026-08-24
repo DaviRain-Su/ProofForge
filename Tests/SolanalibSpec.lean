@@ -62,23 +62,38 @@ private def valueSlot : ProofForge.Svm.IR.Slot := {
 
 #guard (evalCheckedWrite? valueSlot .add u64Max 1 initMem).isNone
 
-private def checkedControl :=
-  checkedAddControlFragment 11 12
+private def checkedControl (kind : ProofForge.Core.CheckedArith) :=
+  checkedControlFragment kind 11 12
     (.st .m64 .br6 (.reg .br1) (BitVec.ofNat 16 104))
 
-#guard
-  match evalCheckedAddCFGWrite checkedControl 7 5 initMem with
+private def checkedSucceedsWith (kind : ProofForge.Core.CheckedArith)
+    (lhs rhs expected : U64) : Bool :=
+  match evalCheckedCFGWrite (checkedControl kind) lhs rhs initMem with
   | some (.success target memory) =>
       target == 11 &&
-        loadv .m64 memory (mmInputStart + 104) == some (.vlong 12)
+        loadv .m64 memory (mmInputStart + 104) == some (.vlong expected)
   | _ => false
 
--- The typed conditional jump selects the CFG overflow edge before either scratch or state store.
-#guard
-  match evalCheckedAddCFGWrite checkedControl u64Max 1 initMem with
+private def checkedOverflowsWithoutWrite (kind : ProofForge.Core.CheckedArith)
+    (lhs rhs : U64) : Bool :=
+  match evalCheckedCFGWrite (checkedControl kind) lhs rhs initMem with
   | some (.overflow target memory) =>
       target == 12 && loadv .m64 memory (mmInputStart + 104) == none
   | _ => false
+
+#guard checkedSucceedsWith .add 7 5 12
+#guard checkedSucceedsWith .sub 7 5 2
+#guard checkedSucceedsWith .mul 7 5 35
+#guard checkedSucceedsWith .mul u64Max 0 0
+#guard checkedSucceedsWith .div 7 5 1
+#guard checkedSucceedsWith .mod 7 5 2
+
+-- Every typed conditional guard selects overflow before either scratch or state store.
+#guard checkedOverflowsWithoutWrite .add u64Max 1
+#guard checkedOverflowsWithoutWrite .sub 5 7
+#guard checkedOverflowsWithoutWrite .mul u64Max 2
+#guard checkedOverflowsWithoutWrite .div 7 0
+#guard checkedOverflowsWithoutWrite .mod 7 0
 
 #guard (staticStoreInstruction? { valueSlot with width := 3 }).isNone
 

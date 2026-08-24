@@ -1,4 +1,5 @@
 import ProofForge
+import Examples.Counter
 import Examples.Maybe
 import Examples.Tree
 import Examples.Window
@@ -350,12 +351,12 @@ elab "#pf_guard_target_lowering" : command => do
     | .checked (.addU64 ..) success overflow => pure (success.target, overflow.target)
     | _ => throwError "selected Counter CFG block is not checked-add"
   let some control :=
-      ProofForge.Svm.Solanalib.checkedAddCFGWriteFragment?
+      ProofForge.Svm.Solanalib.checkedCFGWriteFragment?
         svmCounter cfg checkedBlock.id checkedWrite
     | throwError "Solanalib bridge rejected Counter checked-add CFG edges"
-  unless control.success == success && control.overflow == overflow &&
-      control.guard == ProofForge.Svm.Solanalib.checkedAddGuardBody &&
-      control.successBody == ProofForge.Svm.Solanalib.checkedAddSuccessBody
+  unless control.kind == .add && control.success == success && control.overflow == overflow &&
+      control.guard == ProofForge.Svm.Solanalib.checkedGuardBody .add &&
+      control.successBody == ProofForge.Svm.Solanalib.checkedSuccessBody .add
         (.st .m64 .br6 (.reg .br1) (BitVec.ofNat 16 104)) do
     throwError s!"unexpected Solanalib CFG control fragment: {repr control}"
   let mismatchedWrite := { checkedWrite with
@@ -363,9 +364,54 @@ elab "#pf_guard_target_lowering" : command => do
       | .checked kind lhs _ => .checked kind lhs (.lit 0xdeadbeef)
       | value => value
   }
-  unless (ProofForge.Svm.Solanalib.checkedAddCFGWriteFragment?
+  unless (ProofForge.Svm.Solanalib.checkedCFGWriteFragment?
       svmCounter cfg checkedBlock.id mismatchedWrite).isNone do
     throwError "Solanalib CFG bridge accepted mismatched Core and CFG operands"
+
+  let fullCounter ←
+    match ProofForge.Extract.extractModule env
+        (Name.mkSimple "Examples" |>.str "Counter") none with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let svmFullCounter ←
+    match ProofForge.Svm.IR.fromProgram fullCounter with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let checkedKind : ProofForge.Core.CFG.Checked ProofForge.Svm.Ops.ValKind →
+      Option ProofForge.Core.CheckedArith
+    | .addU64 .. => some .add
+    | .subU64 .. => some .sub
+    | .mulU64 .. => some .mul
+    | .divU64 .. => some .div
+    | .modU64 .. => some .mod
+    | .forAccum .. => none
+  let arithmeticMethods : Array (String × ProofForge.Core.CheckedArith) :=
+    #[ ("increment", .add), ("decrement", .sub), ("scale", .mul),
+       ("divide", .div), ("modulo", .mod) ]
+  for (methodName, expectedKind) in arithmeticMethods do
+    let some method := svmFullCounter.methods.find? (·.ixName == methodName)
+      | throwError s!"missing Counter.{methodName} target method"
+    let graph ←
+      match method.toCFG with
+      | .ok graph => pure graph
+      | .error reason => throwError reason
+    let some block := graph.blocks.find? fun block => match block.terminator with
+        | .checked operation _ _ => checkedKind operation == some expectedKind
+        | _ => false
+      | throwError s!"Counter.{methodName} CFG is missing {repr expectedKind}"
+    let writes := method.evaluation.commits.flatMap (·.writes)
+    let some write := writes.find? fun write => match write.value with
+        | .checked kind _ _ => kind == expectedKind
+        | _ => false
+      | throwError s!"Counter.{methodName} evaluation is missing {repr expectedKind}"
+    let some fragment := ProofForge.Svm.Solanalib.checkedCFGWriteFragment?
+        svmFullCounter graph block.id write
+      | throwError s!"Solanalib bridge rejected Counter.{methodName}"
+    unless fragment.kind == expectedKind &&
+        fragment.guard == ProofForge.Svm.Solanalib.checkedGuardBody expectedKind &&
+        fragment.successBody == ProofForge.Svm.Solanalib.checkedSuccessBody expectedKind
+          (.st .m64 .br6 (.reg .br1) (BitVec.ofNat 16 104)) do
+      throwError s!"unexpected Counter.{methodName} Solanalib fragment: {repr fragment}"
 
   let tree ←
     match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with
