@@ -495,6 +495,28 @@ private def isScalarResult (env : Environment) (type : Expr) : Bool :=
   | some name => name == ``UInt64 || name == ``Bool || isUInt64Newtype env name
   | none => false
 
+private def firstUserInputType (env : Environment) : Nat → Expr → Option Name
+  | 0, _ => none
+  | fuel + 1, type =>
+      match strip type with
+      | .forallE _ input body _ =>
+          match input.consumeMData.getAppFn.constName? with
+          | some name => if isUserType env name then some name else firstUserInputType env fuel body
+          | none => firstUserInputType env fuel body
+      | _ => none
+
+/-- A marked structure helper is a state transition only when its result preserves the type of
+its first user-typed input. This separates `State → … → State` updates from pure readers such as
+`State → address → Node` without relying on declaration names. -/
+private def inlineHelperPreservesUserType (env : Environment) (name : Name) : Bool :=
+  match env.find? name with
+  | some (.defnInfo helper) =>
+      match firstUserInputType env 16 helper.type,
+          (resultType 16 helper.type).consumeMData.getAppFn.constName? with
+      | some input, some output => input == output
+      | _, _ => false
+  | _ => false
+
 /-- Reduce `({ s with field := value }).field` before scalar lowering. -/
 private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr := do
   let projection ← e.getAppFn.constName?
@@ -509,18 +531,21 @@ private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :
   if fields.size < ctor.numFields || projectionInfo.i ≥ ctor.numFields then none
   else fields[fields.size - ctor.numFields + projectionInfo.i]?
 
-/-- A projection from an inline State transition reads the current mutable state after that
-transition has been emitted. Rebase the projection on the helper's source expression so scalar
-lowering produces the same account read instead of treating the helper call as an opaque value. -/
+/-- Reduce a projection over a marked structure helper without guessing from its name. A helper
+whose first user-typed input and result have the same type is a State transition already emitted
+by `decodeYieldState`, so its projection reads the current mutable source. Other helpers are pure
+structure readers (for example a vector-node lookup), so project from their unfolded value. -/
 private def reduceInlineProjection? (env : Environment) (e : Expr) : Option Expr := do
   let projection ← e.getAppFn.constName?
   let _ ← env.getProjectionFnInfo? projection
   let args := e.getAppArgs
   let base ← args[args.size - 1]?
-  let _ ← unfoldUserHelper env base
+  let (helperName, unfolded) ← unfoldUserHelper env base
   let baseArgs := base.getAppArgs
   let source ← baseArgs[0]?
-  return e.replace fun child => if child == base then some source else none
+  let replacement :=
+    if inlineHelperPreservesUserType env helperName then source else unfolded
+  return e.replace fun child => if child == base then some replacement else none
 
 private def staticUInt64? : Ops.Val → Option UInt64
   | .lit value => some value
@@ -3151,7 +3176,10 @@ private def findProjectedInlineBase (env : Environment) (fuel : Nat) (e : Expr) 
         | some _ =>
           if h : args.size > 0 then
             let base := args[args.size - 1]
-            if (unfoldUserHelper env base).isSome then some base else none
+            match unfoldUserHelper env base with
+            | some (helper, _) =>
+              if inlineHelperPreservesUserType env helper then some base else none
+            | none => none
           else none
         | none => none
       | none => none
@@ -3174,8 +3202,11 @@ private def projectedInlineBases (env : Environment) (fuel : Nat) (e : Expr) : A
           | some _ =>
             match args[args.size - 1]? with
             | some base =>
-              if (unfoldUserHelper env base).isSome && !acc.contains base then acc.push base
-              else acc
+              match unfoldUserHelper env base with
+              | some (helper, _) =>
+                if inlineHelperPreservesUserType env helper && !acc.contains base then acc.push base
+                else acc
+              | none => acc
             | none => acc
           | none => acc
         | none => acc
@@ -3192,7 +3223,17 @@ private def inlineStateSource (env : Environment) (fuel : Nat) (e : Expr) : Expr
   | 0 => e
   | fuel' + 1 =>
     let e := strip e
-    if (unfoldUserHelper env e).isSome then
+    if let .letE _ _ value body _ := e then
+      inlineStateSource env fuel' (body.instantiate1 value)
+    else if (isConstNamed e ``ite || isConstNamed e ``dite) && e.getAppArgs.size ≥ 2 then
+      let args := e.getAppArgs
+      let branch := args[args.size - 2]!
+      let branch :=
+        match strip branch with
+        | .lam _ _ body _ => body.lowerLooseBVars 1 1
+        | branch => branch
+      inlineStateSource env fuel' branch
+    else if (unfoldUserHelper env e).isSome then
       let args := e.getAppArgs
       if h : args.size > 0 then inlineStateSource env fuel' args[0] else e
     else
@@ -3208,6 +3249,81 @@ private def inlineStateSource (env : Environment) (fuel : Nat) (e : Expr) : Expr
       match projectionBase? with
       | some base => inlineStateSource env fuel' base
       | none => e
+
+private def isStateTransitionValue (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      let e := strip e
+      match e with
+      | .letE _ _ value body _ =>
+          isStateTransitionValue env fuel (body.instantiate1 value)
+      | _ =>
+        if (isConstNamed e ``ite || isConstNamed e ``dite) && e.getAppArgs.size ≥ 2 then
+          let args := e.getAppArgs
+          let peelProofLam (branch : Expr) : Expr :=
+            match strip branch with
+            | .lam _ _ body _ => body.lowerLooseBVars 1 1
+            | branch => branch
+          isStateTransitionValue env fuel (peelProofLam args[args.size - 2]!) ||
+            isStateTransitionValue env fuel (peelProofLam args[args.size - 1]!)
+        else
+          match unfoldUserHelper env e with
+          | some (name, _) => inlineHelperPreservesUserType env name
+          | none => false
+
+/-- Sequential decoding is needed only when substituting a helper would duplicate dynamic
+structure writes. Scalar-only helpers retain the established zeta-normalized Core shape. Follow
+marked helper calls recursively so wrappers around `Vector.set` remain generic. -/
+private def stateTransitionNeedsSequencing (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      let e := strip e
+      if !(collectIndexSets env e).isEmpty then true
+      else
+        match e with
+        | .letE _ _ value body _ =>
+            stateTransitionNeedsSequencing env fuel value ||
+              stateTransitionNeedsSequencing env fuel body
+        | .lam _ _ body _ => stateTransitionNeedsSequencing env fuel body
+        | _ =>
+          match unfoldUserHelper env e with
+          | some (_, unfolded) => stateTransitionNeedsSequencing env fuel unfolded
+          | none => e.getAppArgs.any (stateTransitionNeedsSequencing env fuel)
+
+/--
+A let-bound user structure rooted at a method state argument is a sequential State transition,
+not a pure value alias. Decoding it before the continuation avoids substituting an ever-growing
+record expression through every later projection. Other user structures (for example a tree
+`Node` value) do not trace to the method state argument and remain ordinary aliases.
+-/
+private def sequentialStateSource? (env : Environment) (type value : Expr) : Option Expr := do
+  let typeName ← type.consumeMData.getAppFn.constName?
+  if !isUserType env typeName then none else
+  let value := strip value
+  if !isStateTransitionValue env 64 value then none else
+  if !stateTransitionNeedsSequencing env 64 value then none else
+  let source := inlineStateSource env 64 value
+  if source == value then none else
+  match strip source with
+  | .bvar _ => some source
+  | source => if isConstNamed source ``methodArgRef then some source else none
+
+/-- Conservatively detect a structured binding before zeta reduction erases its sharing. This
+only retains the candidate syntax; `sequentialStateSource?` performs the exact typed/source check
+later, and pure structure-reader lets still take the ordinary alias path there. -/
+private def containsStructuredStateLet (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      match strip e with
+      | .letE _ type value body _ =>
+          let userStructure :=
+            (type.consumeMData.getAppFn.constName?.map (isUserType env)).getD false
+          (userStructure && (isIteExpr value || (unfoldUserHelper env value).isSome)) ||
+            containsStructuredStateLet env fuel value || containsStructuredStateLet env fuel body
+      | .lam _ _ body _ => containsStructuredStateLet env fuel body
+      | .app fn arg =>
+          containsStructuredStateLet env fuel fn || containsStructuredStateLet env fuel arg
+      | _ => false
 
 private def stateNamesAlias (left right : String) : Bool :=
   left == right || left.startsWith (right ++ "_") || right.startsWith (left ++ "_")
@@ -3288,88 +3404,125 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
   match fuel with
   | 0 => .error "extract/unsupported: inline state depth"
   | fuel' + 1 =>
-    let state := substLets 256 state
-    let state0 := strip state
-    let appliedBases := addAppliedBases #[] <|
-      appliedBases.map fun base => strip (substLets 256 base)
-    if appliedBases.contains state0 then
-      .ok #[]
-    else if let some (name, unfolded) := unfoldUserHelper env state0 then do
-      let args := state0.getAppArgs
-      let (prior, normalized, bodyAppliedBases) ←
-        if h : args.size > 0 then
-          let base := args[0]
-          let source := inlineStateSource env 64 base
-          if source == base then
-            .ok (#[], unfolded, appliedBases)
-          else do
-            let prior ← decodeYieldState env fuel' localDepth base appliedBases
-            let normalized := unfolded.replace fun e => if e == base then some source else none
-            let bodyAppliedBases := addAppliedBases appliedBases #[base]
-            let bodyAppliedBases :=
-              addAppliedBases bodyAppliedBases (projectedInlineBases env 64 base)
-            .ok (prior, normalized, bodyAppliedBases)
-        else
-          .ok (#[], unfolded, appliedBases)
-      match decodeYieldState env fuel' localDepth normalized bodyAppliedBases with
-      | .ok ops => .ok (prior ++ ops)
-      | .error reason => .error s!"extract/unsupported: inline state {name}: {reason}"
-    else if (isConstNamed state0 ``ite || isConstNamed state0 ``dite) &&
-        state0.getAppArgs.size ≥ 2 then
-      let args := state0.getAppArgs
-      let peelProofLam (e : Expr) : Expr :=
-        match strip e with
-        | .lam _ _ body _ => body.lowerLooseBVars 1 1
-        | e => e
-      let thn := peelProofLam args[args.size - 2]!
-      let els := peelProofLam args[args.size - 1]!
-      match args.findSome? (asCondition env),
-          decodeYieldState env fuel' localDepth thn appliedBases,
-          decodeYieldState env fuel' localDepth els appliedBases with
-      | some (cmp, lhs, rhs), .ok thnOps, .ok elsOps =>
-        .ok #[.ite cmp lhs rhs thnOps elsOps]
-      | none, _, _ => .error "extract/unsupported: inline state condition"
-      | _, .error reason, _ => .error s!"extract/unsupported: inline state then: {reason}"
-      | _, _, .error reason => .error s!"extract/unsupported: inline state else: {reason}"
-    else do
-      let priorBase? := findProjectedInlineBase env 64 state0
-      let prior ←
-        match priorBase? with
-        | none => .ok #[]
-        | some base =>
-          if appliedBases.contains base then .ok #[] else match unfoldUserHelper env base with
-          | some (name, unfolded) =>
-            let nestedAppliedBases := addAppliedBases appliedBases #[base]
-            match decodeYieldState env fuel' localDepth unfolded nestedAppliedBases with
-            | .ok ops => .ok ops
-            | .error reason =>
-              .error s!"extract/unsupported: projected inline state {name}: {reason}"
-          | none => .error "extract/unsupported: projected inline state"
-      -- The prior transition has now run. Rewrite outer projections of its result back to
-      -- the helper's source state expression; state-loop normalization interprets those
-      -- projections against the current mutable state, preserving the sequential semantics.
-      let outerState :=
-        match priorBase? with
-        | none => state0
-        | some base =>
-          let args := base.getAppArgs
+    let raw := strip state
+    let sequential? : Option (Expr × Expr × Expr) :=
+      match raw with
+      | .letE _ type value body _ =>
+          (sequentialStateSource? env type value).map fun source => (value, source, body)
+      | _ => none
+    let ordinaryLet? : Option (Expr × Expr × Expr) :=
+      match raw with
+      | .letE _ type value body _ => some (type, value, body)
+      | _ => none
+    match sequential?, ordinaryLet? with
+    | some (value, source, body), _ =>
+      match decodeYieldState env fuel' localDepth value appliedBases,
+          decodeYieldState env fuel' localDepth (body.instantiate1 source) appliedBases with
+      | .ok prior, .ok continuation => .ok (prior ++ continuation)
+      | .error reason, _ =>
+          .error s!"extract/unsupported: sequential inline state binding: {reason}"
+      | _, .error reason => .error reason
+    | none, some (type, value, body) =>
+      if type.consumeMData.getAppFn.constName? == some ``UInt64 then
+        match val env value with
+        | some localValue =>
+          let materialize :=
+            match localValue with
+            | .field .. | .indexGet .. | .select .. => true
+            | _ => false
+          if materialize then
+            let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
+            match decodeYieldState env fuel' (localDepth + 1)
+                (body.instantiate1 marker) appliedBases with
+            | .ok continuation => .ok (#[.letLocal localDepth localValue] ++ continuation)
+            | .error reason => .error reason
+          else
+            decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases
+        | none => decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases
+      else
+        decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases
+    | none, none =>
+      let state0 := raw
+      let appliedBases := addAppliedBases #[] <|
+        appliedBases.map fun base => strip (substLets 256 base)
+      if appliedBases.contains state0 then
+        .ok #[]
+      else if let some (name, unfolded) := unfoldUserHelper env state0 then do
+        let args := state0.getAppArgs
+        let (prior, normalized, bodyAppliedBases) ←
           if h : args.size > 0 then
-            let sourceState := args[0]
-            state0.replace fun e => if e == base then some sourceState else none
-          else state0
-      let outerAppliedBases :=
-        match priorBase? with
-        | some base =>
-          let bases := addAppliedBases appliedBases #[base]
-          addAppliedBases bases (projectedInlineBases env 64 base)
-        | none => appliedBases
-      let dynamic := collectIndexSets env outerState (deduplicate := true)
-        (appliedBases := outerAppliedBases)
-      let static := (flattenLeaves env "" outerState outerAppliedBases).map fun p =>
-        (.storeField p.1 p.2 : Ops.Op)
-      let update := snapshotStateUpdate localDepth
-        (dynamic ++ dropVectorRootStores dynamic static)
-      .ok (prior ++ update)
+            let base := args[0]
+            let source := inlineStateSource env 64 base
+            if source == base then
+              .ok (#[], unfolded, appliedBases)
+            else do
+              let prior ← decodeYieldState env fuel' localDepth base appliedBases
+              let normalized := unfolded.replace fun e => if e == base then some source else none
+              let bodyAppliedBases := addAppliedBases appliedBases #[base]
+              let bodyAppliedBases :=
+                addAppliedBases bodyAppliedBases (projectedInlineBases env 64 base)
+              .ok (prior, normalized, bodyAppliedBases)
+          else
+            .ok (#[], unfolded, appliedBases)
+        match decodeYieldState env fuel' localDepth normalized bodyAppliedBases with
+        | .ok ops => .ok (prior ++ ops)
+        | .error reason => .error s!"extract/unsupported: inline state {name}: {reason}"
+      else if (isConstNamed state0 ``ite || isConstNamed state0 ``dite) &&
+          state0.getAppArgs.size ≥ 2 then
+        let args := state0.getAppArgs
+        let peelProofLam (e : Expr) : Expr :=
+          match strip e with
+          | .lam _ _ body _ => body.lowerLooseBVars 1 1
+          | e => e
+        let thn := peelProofLam args[args.size - 2]!
+        let els := peelProofLam args[args.size - 1]!
+        match args.findSome? (asCondition env),
+            decodeYieldState env fuel' localDepth thn appliedBases,
+            decodeYieldState env fuel' localDepth els appliedBases with
+        | some (cmp, lhs, rhs), .ok thnOps, .ok elsOps =>
+          .ok #[.ite cmp lhs rhs thnOps elsOps]
+        | none, _, _ => .error "extract/unsupported: inline state condition"
+        | _, .error reason, _ => .error s!"extract/unsupported: inline state then: {reason}"
+        | _, _, .error reason => .error s!"extract/unsupported: inline state else: {reason}"
+      else do
+        let priorBase? := findProjectedInlineBase env 64 state0
+        let prior ←
+          match priorBase? with
+          | none => .ok #[]
+          | some base =>
+            if appliedBases.contains base then .ok #[] else match unfoldUserHelper env base with
+            | some (name, unfolded) =>
+              let nestedAppliedBases := addAppliedBases appliedBases #[base]
+              match decodeYieldState env fuel' localDepth unfolded nestedAppliedBases with
+              | .ok ops => .ok ops
+              | .error reason =>
+                .error s!"extract/unsupported: projected inline state {name}: {reason}"
+            | none => .error "extract/unsupported: projected inline state"
+        -- The prior transition has now run. Rewrite outer projections of its result back to
+        -- the helper's source state expression; state-loop normalization interprets those
+        -- projections against the current mutable state, preserving the sequential semantics.
+        let outerState :=
+          match priorBase? with
+          | none => state0
+          | some base =>
+            let args := base.getAppArgs
+            if h : args.size > 0 then
+              let sourceState := args[0]
+              state0.replace fun e => if e == base then some sourceState else none
+            else state0
+        let outerAppliedBases :=
+          match priorBase? with
+          | some base =>
+            let bases := addAppliedBases appliedBases #[base]
+            addAppliedBases bases (projectedInlineBases env 64 base)
+          | none => appliedBases
+        let dynamic := collectIndexSets env outerState (deduplicate := true)
+          (appliedBases := outerAppliedBases)
+        let static := (flattenLeaves env "" outerState outerAppliedBases).map fun p =>
+          (.storeField p.1 p.2 : Ops.Op)
+        let update := snapshotStateUpdate localDepth
+          (dynamic ++ dropVectorRootStores dynamic static)
+        .ok (prior ++ update)
 
 /-- State loop 的 `yield newState` 只写账户并继续，不生成 commit/exit。 -/
 private def asYieldStores (env : Environment) (e : Expr) (localDepth : Nat) :
@@ -3592,7 +3745,15 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       if !effectful then
-        if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
+        if let some source := sequentialStateSource? env ty value then
+          match decodeYieldState env 64 localDepth value,
+              decodeExpr env fuel' (body.instantiate1 source) (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth) with
+          | .ok prior, .ok continuation => return .ok (prior ++ continuation)
+          | .error reason, _ =>
+            return .error s!"extract/unsupported: sequential state binding: {reason}"
+          | _, .error reason => return .error reason
+        else if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
           match val env value with
           | some localValue =>
             if preserveLocals && shouldMaterializeLocal localValue then
@@ -3615,7 +3776,13 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             (stateful := stateful) (preserveLocals := preserveLocals)
             (localDepth := localDepth)
     | _ => pure ()
-    let fullySubstituted := substLets 256 e
+    -- Branch decoders normalize their arms independently. Zeta-reducing the entire branch here
+    -- duplicates let-bound State transitions into every projection before the sequential-state
+    -- boundary can consume them, making composed record updates exponential.
+    let structured := strip e
+    let fullySubstituted :=
+      if isConstNamed structured ``ite || isConstNamed structured ``dite then e
+      else substLets 256 e
     let controlled := peelControl 16 fullySubstituted
     let e :=
       if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
@@ -3714,8 +3881,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         stateful ||
           (!(collectIndexSets env tRaw).isEmpty &&
             !isForInStep tRaw && !isForInStep fRaw)
-      let t := substIteLets 64 (peelProofLam 4 lower tRaw)
-      let f := substIteLets 64 (peelProofLam 4 stateful fRaw)
+      let t := peelProofLam 4 lower tRaw
+      let f := peelProofLam 4 stateful fRaw
+      let t := if containsStructuredStateLet env 64 t then t else substIteLets 64 t
+      let f := if containsStructuredStateLet env 64 f then f else substIteLets 64 f
       let checkedSubMatches (candidate : Expr) : Bool :=
         match asCheckedSubGuard env candidate with
         | none => false
@@ -4103,12 +4272,17 @@ def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false) :
     Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
   -- Canonicalize syntax-only aliases around control flow before shape decoding.
-  -- Effectful lets remain visible to the dedicated intrinsic decoders.
-  let fullySubstituted := substLets 256 body
+  -- A method with structured-State sequencing also retains adjacent scalar lets so `decodeExpr`
+  -- can materialize bounded lookups instead of duplicating them through every later projection.
+  -- Ordinary mutating methods keep their established zeta-normalized Core identity.
+  let hasStructuredState := containsStructuredStateLet env 128 body
+  let retainLets := hasStructuredState
+  let fullySubstituted := if retainLets then body else substLets 256 body
   let body :=
     if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
-    else zetaPureHeadLets env 32 body
-  decodeExpr env 128 (substIteLets 256 body) (preserveLocals := preserveLocals)
+    else if retainLets then body else zetaPureHeadLets env 32 body
+  let body := if retainLets then body else substIteLets 256 body
+  decodeExpr env 128 body (preserveLocals := preserveLocals)
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with

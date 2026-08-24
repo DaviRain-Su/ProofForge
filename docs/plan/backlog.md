@@ -58,18 +58,19 @@
 - SVM 异构 PDA seeds（ASCII/state key/account key）、完整 canonical key 校验和可续接 ignored CPI；Phoenix classic SPL Token 双 vault 全链路
 - SVM packed u8/u16/u32/u64 CPI words 与 canonical PDA 签名 raw self-entry；SelfLog 覆盖 self-CPI、续段写回和认证失败矩阵
 - Phoenix 官方形状 `AuditLogHeader` / Borsh event 通过 `"log"` PDA signed self-CPI 发布真实 `Program data`
-- SVM 48 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
+- SVM 49 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
-- GitHub CI 串行执行 Lake guards、48 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
+- GitHub CI 串行执行 Lake guards、49 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
 - Core 显式 basic-block CFG 第一阶段：block arguments、显式 branch/checked/exit、完整 checker、local CSE、线性共享 block；Phoenix 全方法已通过 lowering/validation
-- SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；Phoenix 汇编由 4,109,725 B 降至 2,801,112 B，全部 48 个 Mollusk 文件与 12 个 Anvil 程序通过
+- SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；Phoenix 汇编由 4,109,725 B 降至当前 2,748,784 B，全部 49 个 Mollusk 文件与 12 个 Anvil 程序通过
 - Solanalib CFG correspondence：Counter add/sub/mul/div/mod 的 Core operands / physical slot / success-overflow edge 必须一致；typed guards、multiply zero-path jump、`r10-24` scratch handoff、static store 由上游 small-step semantics 执行。普通 eq/ne/lt/le/gt/ge branch 保留 cmp/operands/then/else identity，exact decoded pair theorem 证明 edge selection 与内存不变
 - 通用 target registration：`Core.Target.Registration` 统一递归投影公共 Val/Op/Program，并携带 extension callbacks、arity、op well-formedness 和 CFG dialect；SVM/EVM conversion 已移回各自 IR，`Extract.IR` 不再含后端 projection case。Core-only 合成第三 target 证明新增公共语言后端无需修改抽取 IR，并继续 fail closed 拒绝 foreign extension
 - Token-2022 classic-compatible `TransferChecked`：通用 `CpiMeta.expectedDataLen` 在 CPI 前约束 base Mint=82B / Account=165B；真实 base transfer 成功，transfer-fee / enabled transfer-hook mint 原子拒绝；Runtime CPI wrapper 改为按命名空间统一展开，不再维护 recipe 名白名单
+- 独立 Tree N=4 删除切片：successor transplant、全部可达 delete-fixup、free-list 回收和精确地址复用；24 种插入顺序 × 4 个删除 key 的宿主不变量门，以及 black-leaf fixup/reuse Mollusk 链上门
 
 ## 当前状态
 
-- `lake build Tests` 当前 190 jobs；69 个 imported test modules 含 790 个 `#guard` / `#guard_msgs`。
+- `lake build Tests` 当前 190 jobs；69 个 imported test modules 含 800 个 `#guard` / `#guard_msgs`。
 - SVM registry 49 个程序 / 49 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
@@ -81,8 +82,9 @@
 
 ### P1：扩大产品面
 
-1. Phoenix 动态 trader/order 红黑树、删除 fixup 和非固定 N；当前 Phoenix 仍是 bounded N=4 有序投影。
-2. 固定长度 32-byte / u128 / Borsh protocol types；当前 Pubkey 和 client id 使用 `UInt64` limbs。
+1. 把独立 Tree 已验证的 N=4 可变红黑拓扑接入 Phoenix trader/order；当前 Phoenix 仍是 bounded N=4 有序投影。
+2. 去除 Tree/Phoenix 的固定 N=4 容量；这需要先决定账户固定上限和 bounded CFG 生成策略，不能把运行时变长账户偷偷引入当前 profile。
+3. 固定长度 32-byte / u128 / Borsh protocol types；当前 Pubkey 和 client id 使用 `UInt64` limbs。
 
 ## 明确保持 fail closed
 

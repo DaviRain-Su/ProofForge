@@ -26,7 +26,7 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 171 个 8-byte 叶，账户含 discriminator 共 1,376 bytes。`#pf_build Projects.Phoenix`
-SVM digest `c34216acaf0dd525`。物理账户表固定为 market state、trader signer、trader
+SVM digest `9ad78a5bd3d7dc6e`。物理账户表固定为 market state、trader signer、trader
 base/quote Token account、base/quote mint、base/quote vault 和 classic SPL Token program，
 再加 executable current program 与 canonical `"log"` PDA，共 11 个账户。
 
@@ -107,11 +107,12 @@ ordinal 及 u16 index 0 做 Borsh 窄编码。每个实际 event 是一个单-ev
 seed 导出的 readonly signer PDA。IR 门覆盖所有 header/event recipe，Mollusk 同时验证
 真实 `Program data`、错 executable self program 与错 log PDA 的原子失败。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 4,109,725-byte assembly、
-860,688-byte eBPF ELF 和 16,978-byte IDL；SVM digest 是 `c34216acaf0dd525`。
-assembly 是未做 CSE/共享基本块的中间文本，不是部署文件；当前 ELF 约 840.5 KiB。
-通用抽取器现在去重嵌套 state-helper 的祖先 transition，避免 bid reduce 等组合更新
-被重复发射；完整 maker Pubkey 与 event/lastEvent 双写仍会展开 conditional values。
+真实源模块经 `pf build --target svm Phoenix` 生成 2,748,784-byte assembly、
+849,648-byte eBPF ELF 和 16,978-byte IDL；SVM digest 是 `9ad78a5bd3d7dc6e`。
+assembly 是带 local CSE/共享 basic block 的 target CFG 中间文本，不是部署文件；当前 ELF
+约 829.7 KiB。通用抽取器按 helper 的输入/输出类型区分 State transition 与纯结构 reader，
+并去重嵌套 state-helper 的祖先 transition，避免组合更新和 reader projection 被重复发射；
+完整 maker Pubkey 与 event/lastEvent 双写仍会展开 conditional values。
 测试把 assembly 回归预算钉在 5.75 MB，并拒绝重复 label，同时断言 maker/taker ledger writes 和最宽 event leaf
 都存在。链上 buy / sell 都是 19 phase，挂单是 17 phase；要显著缩小文件应在通用
 IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter 加事件特判。
@@ -120,7 +121,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 
 | 官方 | 为什么关 |
 |---|---|
-| 动态 `RedBlackTree` 删除 fixup | allocator/free-list、完整左右旋和 N=4 insertion fixup 已在独立 Tree refinement 实现；Phoenix 仍用有序投影 |
+| 动态 `RedBlackTree` | allocator/free-list、完整左右旋、N=4 insertion/deletion fixup 和地址复用已在独立 Tree refinement 实现；接入 Phoenix 是下一切片，非固定 N 仍关 |
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
 | trader tree 的动态 RB 拓扑 | 已有 bounded Pubkey registry、allocator 和 per-seat 值；key 查找暂用四槽扫描 |

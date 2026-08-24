@@ -57,6 +57,35 @@ private def validRedBlackTree (s : Examples.Tree.State) : Bool :=
       | some (_, count) => s.size == UInt64.ofNat count
       | none => false
 
+private def linkedContainsKey (s : Examples.Tree.State) (address key : UInt64) : Nat → Bool
+  | 0 => false
+  | fuel + 1 =>
+      if address = 0 then false
+      else
+        let node := nodeAt s address
+        node.key == key || linkedContainsKey s node.left key fuel ||
+          linkedContainsKey s node.right key fuel
+
+private def fourKeyOrders : List (List UInt64) :=
+  [ [10, 20, 30, 40], [10, 20, 40, 30], [10, 30, 20, 40], [10, 30, 40, 20]
+  , [10, 40, 20, 30], [10, 40, 30, 20], [20, 10, 30, 40], [20, 10, 40, 30]
+  , [20, 30, 10, 40], [20, 30, 40, 10], [20, 40, 10, 30], [20, 40, 30, 10]
+  , [30, 10, 20, 40], [30, 10, 40, 20], [30, 20, 10, 40], [30, 20, 40, 10]
+  , [30, 40, 10, 20], [30, 40, 20, 10], [40, 10, 20, 30], [40, 10, 30, 20]
+  , [40, 20, 10, 30], [40, 20, 30, 10], [40, 30, 10, 20], [40, 30, 20, 10] ]
+
+private def validDeletion (order : List UInt64) (key : UInt64) : Bool :=
+  match insertMany (init 0) (order.map fun value => (value, value)) with
+  | .error _ => false
+  | .ok full =>
+      match removeNode full key with
+      | .error _ => false
+      | .ok (removed, address) =>
+          validRedBlackTree removed && removed.size == 3 && removed.freeHead == address &&
+            !linkedContainsKey removed removed.root key 5 &&
+            [10, 20, 30, 40].all fun remaining =>
+              remaining == key || linkedContainsKey removed removed.root remaining 5
+
 private partial def maxIndexWrites (ops : Array ProofForge.Ops.Op) : Nat :=
   ops.foldl (init := 0) fun count op =>
     count +
@@ -102,6 +131,20 @@ elab "#pf_guard_tree_allocator" : command => do
     match ProofForge.Svm.Emit.emitCounterAsm program with
     | .ok asm => pure asm
     | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.IR.fromProgram program with
+    | .ok evm => pure evm
+    | .error reason => throwError reason
+  let yul ←
+    match ProofForge.Evm.Emit.emitYul evm with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  let some evmRemove := evm.entries.find? (·.ixName == "removeNode")
+    | throwError "missing EVM removeNode"
+  let removeCfg ←
+    match evmRemove.toCFG with
+    | .ok cfg => pure cfg
+    | .error reason => throwError reason
   unless ProofForge.Svm.ABI.dataLen program == 232 do
     throwError s!"Tree source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
   let some alloc := program.methods.find? (·.ixName == "allocNode")
@@ -114,8 +157,11 @@ elab "#pf_guard_tree_allocator" : command => do
     | throwError "missing rotateRight"
   let some insert := program.methods.find? (·.ixName == "insertNode")
     | throwError "missing insertNode"
+  let some remove := program.methods.find? (·.ixName == "removeNode")
+    | throwError "missing removeNode"
   unless alloc.paramCount == 2 && release.paramCount == 1 &&
-      rotateLeft.paramCount == 1 && rotateRight.paramCount == 1 && insert.paramCount == 2 do
+      rotateLeft.paramCount == 1 && rotateRight.paramCount == 1 && insert.paramCount == 2 &&
+      remove.paramCount == 1 do
     throwError "Tree storage ABI changed"
   let allocStores := storeNames alloc.ops
   let releaseStores := storeNames release.ops
@@ -133,6 +179,10 @@ elab "#pf_guard_tree_allocator" : command => do
     throwError "Tree rotation writeback is incomplete or duplicated"
   unless maxIndexWrites insert.ops == 38 && insert.evaluation.dynamicWrites.size == 302 do
     throwError "Tree insertion writeback changed or expanded"
+  unless maxIndexWrites remove.ops == 44 && remove.evaluation.dynamicWrites.size == 104 do
+    throwError s!"Tree deletion writeback changed or expanded: " ++
+      s!"{maxIndexWrites remove.ops} path writes, " ++
+      s!"{remove.evaluation.dynamicWrites.size} evaluated writes"
   let xi := ProofForge.Ops.Val.select .ge (.arg 0) (.lit 1)
     (.subU64 (.arg 0) (.lit 1)) (.lit 0)
   let leftY := ProofForge.Ops.Val.indexGet (.arg 1) "nodes" xi 0 8
@@ -147,8 +197,11 @@ elab "#pf_guard_tree_allocator" : command => do
     if line.endsWith ":" then some line else none
   unless labels.length == labels.eraseDups.length do
     throwError "Tree allocator assembly contains duplicate labels"
-  unless asm.toUTF8.size < 550000 do
+  unless asm.toUTF8.size < 650000 do
     throwError s!"Tree assembly expanded unexpectedly: {asm.toUTF8.size} bytes"
+  unless !removeCfg.blocks.isEmpty && yul.toUTF8.size < 400000 do
+    throwError s!"Tree EVM deletion lowering changed: {removeCfg.blocks.size} blocks, " ++
+      s!"{yul.toUTF8.size} Yul bytes"
 
 #pf_guard_tree_allocator
 
@@ -430,6 +483,106 @@ elab "#pf_guard_tree_allocator" : command => do
           | .error _ => false
       | .error _ => false
   | .error _ => false
+
+-- Red leaf deletion returns the detached address to the allocator.
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (5, 50)] with
+  | .ok full =>
+      match removeNode full 5 with
+      | .ok (removed, address) =>
+          address == 4 && removed.size == 3 && removed.freeHead == 4 &&
+            removed.nodes[3]!.left == 5 && validRedBlackTree removed
+      | .error _ => false
+  | .error _ => false
+
+-- Removing a black node with one red child promotes and blackens that child.
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (5, 50)] with
+  | .ok full =>
+      match removeNode full 10 with
+      | .ok (removed, address) =>
+          address == 2 && removed.size == 3 && removed.freeHead == 2 &&
+            (nodeAt removed 4).parent == 1 && (nodeAt removed 4).color == 0 &&
+            validRedBlackTree removed
+      | .error _ => false
+  | .error _ => false
+
+-- Black-leaf deletion exercises the far-red sibling rotation.
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (5, 50)] with
+  | .ok full =>
+      match removeNode full 30 with
+      | .ok (removed, address) =>
+          address == 3 && removed.root == 2 && (nodeAt removed 2).key == 10 &&
+            removed.size == 3 && validRedBlackTree removed
+      | .error _ => false
+  | .error _ => false
+
+-- A direct successor replaces a two-child root and still runs black-leaf fixup.
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (5, 50)] with
+  | .ok full =>
+      match removeNode full 20 with
+      | .ok (removed, address) =>
+          address == 1 && removed.size == 3 && removed.freeHead == 1 &&
+            validRedBlackTree removed
+      | .error _ => false
+  | .error _ => false
+
+-- A deeper red successor is transplanted without a fixup pass.
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (25, 250)] with
+  | .ok full =>
+      match removeNode full 20 with
+      | .ok (removed, address) =>
+          address == 1 && removed.root == 4 && (nodeAt removed 4).key == 25 &&
+            (nodeAt removed 4).left == 2 && (nodeAt removed 4).right == 3 &&
+            validRedBlackTree removed
+      | .error _ => false
+  | .error _ => false
+
+#guard
+  match insertMany (init 0) [(10, 100), (20, 200)] with
+  | .ok two =>
+      match removeNode two 10 with
+      | .ok (one, address) =>
+          address == 1 && one.root == 2 && (nodeAt one 2).color == 0 &&
+            one.size == 1 && validRedBlackTree one
+      | .error _ => false
+  | .error _ => false
+
+#guard
+  match insertNode (init 0) 10 100 with
+  | .ok (one, _) =>
+      match removeNode one 10 with
+      | .ok (empty, address) =>
+          address == 1 && empty.root == 0 && empty.size == 0 &&
+            empty.freeHead == 1 && validRedBlackTree empty
+      | .error _ => false
+  | .error _ => false
+
+#guard
+  match removeNode (init 0) 99 with
+  | .error .overflow => true
+  | _ => false
+
+-- The next insertion reuses the exact removed address and restores a valid full tree.
+#guard
+  match insertMany (init 0) [(20, 200), (10, 100), (30, 300), (5, 50)] with
+  | .ok full =>
+      match removeNode full 30 with
+      | .ok (removed, removedAddress) =>
+          match insertNode removed 25 250 with
+          | .ok (reused, insertedAddress) =>
+              removedAddress == 3 && insertedAddress == 3 && reused.size == 4 &&
+                reused.bumpIndex == 5 && reused.freeHead == 5 && validRedBlackTree reused
+          | .error _ => false
+      | .error _ => false
+  | .error _ => false
+
+-- All 24 insertion orders × all four deletion keys cover every reachable full N=4 shape.
+#guard fourKeyOrders.all fun order =>
+  [10, 20, 30, 40].all fun key => validDeletion order key
 
 #guard
   (ProofForge.Golden.extractedTree.fields.find? (· == "nodes_0_value")).isSome

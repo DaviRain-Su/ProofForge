@@ -6,7 +6,8 @@ Sokoban 红黑树节点 + 定长 `Vector`。
 官方 `Node` 物理顺序：left / right / parent / color / key / value。
 `SENTINEL = 0`，已分配地址从 1 起。本切片容量 4。allocator 对齐 Sokoban：
 `bumpIndex/freeHead` 初值 1，一过尾标记 5，free node 的 `left` 复用作 LIFO next。
-树插入仍只保留两节点 smoke path；完整 fixup / deletion 后续继续。
+插入覆盖 N=4 的全部旋转/染色形状；删除按 successor transplant、bounded delete fixup，
+最后把脱链地址归还同一 free list。
 -/
 namespace Examples.Tree
 
@@ -566,5 +567,295 @@ def insertNode (s : State) (k v : UInt64) : Except Error (State × UInt64) :=
       let parentIndex := (parent.toNat - 1) % 4
       let direction : UInt64 := if k < s.nodes[parentIndex]!.key then 0 else 1
       insertAt s parent direction k v
+
+/-!
+Delete support deliberately stays in the same N=4 refinement as insertion. A valid four-node
+red-black tree can propagate a double-black node at most once: a second black parent below the
+root would require at least five live nodes. `fixDeleted` therefore implements every standard
+sibling case for that one reachable level rather than pretending that the fixed layout is dynamic.
+-/
+
+private def treeNode (s : State) (address : UInt64) : Node :=
+  s.nodes[(address.toNat - 1) % 4]!
+
+private def treeColor (s : State) (address : UInt64) : UInt64 :=
+  if address = 0 then 0 else (treeNode s address).color
+
+private def paintNode (s : State) (address color : UInt64) : State :=
+  if address = 0 then s
+  else
+    let i := (address.toNat - 1) % 4
+    { s with nodes := s.nodes.set i { s.nodes[i]! with color := color } }
+
+private def linkLeft (s : State) (parent child : UInt64) : State :=
+  let parentIndex := (parent.toNat - 1) % 4
+  if child = 0 then
+    { s with nodes := s.nodes.set parentIndex { s.nodes[parentIndex]! with left := child } }
+  else
+    let childIndex := (child.toNat - 1) % 4
+    let nodes :=
+      (s.nodes.set parentIndex { s.nodes[parentIndex]! with left := child }).set childIndex
+        { s.nodes[childIndex]! with parent := parent }
+    { s with nodes := nodes }
+
+private def linkRight (s : State) (parent child : UInt64) : State :=
+  let parentIndex := (parent.toNat - 1) % 4
+  if child = 0 then
+    { s with nodes := s.nodes.set parentIndex { s.nodes[parentIndex]! with right := child } }
+  else
+    let childIndex := (child.toNat - 1) % 4
+    let nodes :=
+      (s.nodes.set parentIndex { s.nodes[parentIndex]! with right := child }).set childIndex
+        { s.nodes[childIndex]! with parent := parent }
+    { s with nodes := nodes }
+
+/-- Replace one linked subtree while preserving the replacement root's parent pointer. -/
+private def transplantNode (s : State) (removed replacement : UInt64) : State :=
+  let removedNode := treeNode s removed
+  let parent := removedNode.parent
+  let parentLinked :=
+    if parent = 0 then
+      { s with root := replacement }
+    else
+      let parentIndex := (parent.toNat - 1) % 4
+      if s.nodes[parentIndex]!.left = removed then
+        { s with nodes := s.nodes.set parentIndex { s.nodes[parentIndex]! with left := replacement } }
+      else
+        { s with nodes := s.nodes.set parentIndex { s.nodes[parentIndex]! with right := replacement } }
+  if replacement = 0 then parentLinked
+  else
+    let replacementIndex := (replacement.toNat - 1) % 4
+    { parentLinked with
+      nodes := parentLinked.nodes.set replacementIndex
+        { parentLinked.nodes[replacementIndex]! with parent := parent } }
+
+/-- Internal total left rotation; callers have already established a non-sentinel right child. -/
+private def rotateLeftDelete (s : State) (xAddress : UInt64) : State :=
+  let xi := (xAddress.toNat - 1) % 4
+  let x := s.nodes[xi]!
+  let yAddress := x.right
+  if yAddress = 0 then s
+  else
+    let yi := (yAddress.toNat - 1) % 4
+    let y := s.nodes[yi]!
+    let innerAddress := y.left
+    let parentAddress := x.parent
+    let nodes1 := s.nodes.set xi { x with right := innerAddress, parent := yAddress }
+    let nodes2 :=
+      if innerAddress = 0 then nodes1
+      else
+        let innerIndex := (innerAddress.toNat - 1) % 4
+        nodes1.set innerIndex { nodes1[innerIndex]! with parent := xAddress }
+    let nodes3 :=
+      if parentAddress = 0 then nodes2
+      else
+        let parentIndex := (parentAddress.toNat - 1) % 4
+        if nodes2[parentIndex]!.left = xAddress then
+          nodes2.set parentIndex { nodes2[parentIndex]! with left := yAddress }
+        else
+          nodes2.set parentIndex { nodes2[parentIndex]! with right := yAddress }
+    let nodes4 :=
+      nodes3.set yi { nodes3[yi]! with left := xAddress, parent := parentAddress }
+    { s with
+      root := if parentAddress = 0 then yAddress else s.root
+      nodes := nodes4 }
+
+/-- Internal total right rotation; callers have already established a non-sentinel left child. -/
+private def rotateRightDelete (s : State) (xAddress : UInt64) : State :=
+  let xi := (xAddress.toNat - 1) % 4
+  let x := s.nodes[xi]!
+  let yAddress := x.left
+  if yAddress = 0 then s
+  else
+    let yi := (yAddress.toNat - 1) % 4
+    let y := s.nodes[yi]!
+    let innerAddress := y.right
+    let parentAddress := x.parent
+    let nodes1 := s.nodes.set xi { x with left := innerAddress, parent := yAddress }
+    let nodes2 :=
+      if innerAddress = 0 then nodes1
+      else
+        let innerIndex := (innerAddress.toNat - 1) % 4
+        nodes1.set innerIndex { nodes1[innerIndex]! with parent := xAddress }
+    let nodes3 :=
+      if parentAddress = 0 then nodes2
+      else
+        let parentIndex := (parentAddress.toNat - 1) % 4
+        if nodes2[parentIndex]!.left = xAddress then
+          nodes2.set parentIndex { nodes2[parentIndex]! with left := yAddress }
+        else
+          nodes2.set parentIndex { nodes2[parentIndex]! with right := yAddress }
+    let nodes4 :=
+      nodes3.set yi { nodes3[yi]! with right := xAddress, parent := parentAddress }
+    { s with
+      root := if parentAddress = 0 then yAddress else s.root
+      nodes := nodes4 }
+
+/-- N=4 standard delete fixup, with the sentinel parent carried separately. -/
+private def fixDeleted (s : State) (xAddress parentAddress : UInt64) : State :=
+  if xAddress = s.root then
+    paintNode s xAddress 0
+  else if treeColor s xAddress = 1 then
+    paintNode s xAddress 0
+  else if parentAddress = 0 then
+    paintNode s xAddress 0
+  else
+    let parent := treeNode s parentAddress
+    if parent.left = xAddress then
+      let firstSibling := parent.right
+      let afterRedSibling :=
+        if treeColor s firstSibling = 1 then
+          let recolored := paintNode (paintNode s firstSibling 0) parentAddress 1
+          rotateLeftDelete recolored parentAddress
+        else s
+      let sibling := (treeNode afterRedSibling parentAddress).right
+      let nearChild := (treeNode afterRedSibling sibling).left
+      let farChild := (treeNode afterRedSibling sibling).right
+      if treeColor afterRedSibling nearChild = 0 && treeColor afterRedSibling farChild = 0 then
+        let siblingRed := paintNode afterRedSibling sibling 1
+        -- If the parent is black it is necessarily the root in a valid N=4 tree.
+        paintNode siblingRed parentAddress 0
+      else
+        let aligned :=
+          if treeColor afterRedSibling farChild = 0 then
+            let recolored :=
+              paintNode (paintNode afterRedSibling nearChild 0) sibling 1
+            rotateRightDelete recolored sibling
+          else afterRedSibling
+        let alignedSibling := (treeNode aligned parentAddress).right
+        let alignedFar := (treeNode aligned alignedSibling).right
+        let parentColor := treeColor aligned parentAddress
+        let recolored :=
+          paintNode
+            (paintNode (paintNode aligned alignedSibling parentColor) parentAddress 0)
+            alignedFar 0
+        rotateLeftDelete recolored parentAddress
+    else
+      let firstSibling := parent.left
+      let afterRedSibling :=
+        if treeColor s firstSibling = 1 then
+          let recolored := paintNode (paintNode s firstSibling 0) parentAddress 1
+          rotateRightDelete recolored parentAddress
+        else s
+      let sibling := (treeNode afterRedSibling parentAddress).left
+      let nearChild := (treeNode afterRedSibling sibling).right
+      let farChild := (treeNode afterRedSibling sibling).left
+      if treeColor afterRedSibling nearChild = 0 && treeColor afterRedSibling farChild = 0 then
+        let siblingRed := paintNode afterRedSibling sibling 1
+        paintNode siblingRed parentAddress 0
+      else
+        let aligned :=
+          if treeColor afterRedSibling farChild = 0 then
+            let recolored :=
+              paintNode (paintNode afterRedSibling nearChild 0) sibling 1
+            rotateLeftDelete recolored sibling
+          else afterRedSibling
+        let alignedSibling := (treeNode aligned parentAddress).left
+        let alignedFar := (treeNode aligned alignedSibling).left
+        let parentColor := treeColor aligned parentAddress
+        let recolored :=
+          paintNode
+            (paintNode (paintNode aligned alignedSibling parentColor) parentAddress 0)
+            alignedFar 0
+        rotateRightDelete recolored parentAddress
+
+/-- Move the in-order successor into a two-child node's linked position. -/
+private def moveSuccessor (s : State) (removed successor replacement : UInt64) : State :=
+  let removedNode := treeNode s removed
+  let successorNode := treeNode s successor
+  if successorNode.parent = removed then
+    let moved := transplantNode s removed successor
+    let withLeft := linkLeft moved successor removedNode.left
+    paintNode withLeft successor removedNode.color
+  else
+    let detached := transplantNode s successor replacement
+    let withRight := linkRight detached successor removedNode.right
+    let moved := transplantNode withRight removed successor
+    let withLeft := linkLeft moved successor removedNode.left
+    paintNode withLeft successor removedNode.color
+
+/-- Return a detached tree node to the Sokoban LIFO free list. -/
+private def releaseRemoved (s : State) (address : UInt64) : State :=
+  let i := (address.toNat - 1) % 4
+  let old := s.nodes[i]!
+  { s with
+    size := s.size - 1
+    freeHead := address
+    nodes := s.nodes.set i
+      { old with left := s.freeHead, right := 0, parent := 0, color := 0 } }
+
+attribute [pf_inline] treeNode treeColor paintNode linkLeft linkRight transplantNode
+  rotateLeftDelete rotateRightDelete fixDeleted moveSuccessor releaseRemoved
+
+/--
+Sokoban-style key removal. The node is structurally detached, black-height is repaired, then its
+address is pushed onto the allocator free list. The removed address is returned for refinement
+tests and deterministic reuse checks.
+-/
+@[pf_entry]
+def removeNode (s : State) (k : UInt64) : Except Error (State × UInt64) :=
+  -- Keep the bounded lookup in the entry body so every comparison remains a typed scalar value.
+  let a0 := s.root
+  let i0 := (a0.toNat - 1) % 4
+  let n0 := s.nodes[i0]!
+  let a1 := if k = n0.key then 0 else if k < n0.key then n0.left else n0.right
+  let i1 := (a1.toNat - 1) % 4
+  let n1 := s.nodes[i1]!
+  let a2 :=
+    if a1 = 0 then 0
+    else if k = n1.key then 0
+    else if k < n1.key then n1.left else n1.right
+  let i2 := (a2.toNat - 1) % 4
+  let n2 := s.nodes[i2]!
+  let a3 :=
+    if a2 = 0 then 0
+    else if k = n2.key then 0
+    else if k < n2.key then n2.left else n2.right
+  let i3 := (a3.toNat - 1) % 4
+  let n3 := s.nodes[i3]!
+  let removedAddress :=
+    if k = n0.key then a0
+    else if a1 = 0 then 0
+    else if k = n1.key then a1
+    else if a2 = 0 then 0
+    else if k = n2.key then a2
+    else if a3 = 0 then 0
+    else if k = n3.key then a3 else 0
+  if removedAddress = 0 then
+    .error .overflow
+  else
+    let removedIndex := (removedAddress.toNat - 1) % 4
+    let removed := s.nodes[removedIndex]!
+    let successorRoot := removed.right
+    let successorLeft1 := s.nodes[(successorRoot.toNat - 1) % 4]!.left
+    let successorLeft2 :=
+      if successorLeft1 = 0 then 0
+      else s.nodes[(successorLeft1.toNat - 1) % 4]!.left
+    let successorAddress :=
+      if removed.left = 0 || removed.right = 0 then removedAddress
+      else if successorLeft2 ≠ 0 then successorLeft2
+      else if successorLeft1 ≠ 0 then successorLeft1
+      else successorRoot
+    let successorIndex := (successorAddress.toNat - 1) % 4
+    let successor := s.nodes[successorIndex]!
+    let removedColor := successor.color
+    let replacementAddress :=
+      if successor.left ≠ 0 then successor.left else successor.right
+    let replacementParent :=
+      if successorAddress = removedAddress then removed.parent
+      else if successor.parent = removedAddress then successorAddress
+      else successor.parent
+    let moved :=
+      if removed.left = 0 then
+        transplantNode s removedAddress removed.right
+      else if removed.right = 0 then
+        transplantNode s removedAddress removed.left
+      else
+        moveSuccessor s removedAddress successorAddress replacementAddress
+    let fixed :=
+      if removedColor = 0 then fixDeleted moved replacementAddress replacementParent else moved
+    let rootBlack := paintNode fixed fixed.root 0
+    let released := releaseRemoved rootBlack removedAddress
+    .ok (released, removedAddress)
 
 end Examples.Tree

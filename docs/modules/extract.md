@@ -55,7 +55,11 @@ constructor 的 target `Op`，把 typed `Place` 物化成 SVM account-data byte 
 element value。普通复合 Boolean guard 即使 error 在 else 分支，也统一降成 target-neutral
 bit/select value + structured `ite`；checked arithmetic guard 仍优先走专用 lowering。
 `invoke`、EVM effect 和循环仍交给专用 decoder。这里不做全局 `whnf`，新增 Lean
-表面形式应先加等价性 characterization test，再扩规范化或 decoder。
+表面形式应先加等价性 characterization test，再扩规范化或 decoder。连续的
+`State → … → State` inline helper 先按顺序发 transition，再处理 continuation，避免把逐层
+record expression 重复替换进后续每个 projection；helper 是否为 transition 由第一个用户
+structure 输入类型与结果类型是否相同判定。`State → … → Node` 这类纯结构 reader 则展开
+后再投影，不能因名称或恰好同处 Tree 模块而重定位到可变 State。
 
 方法完成规范化后会递归检查所有 Val、CPI data、branch 和 loop 的 `.arg`。init 只允许
 `arg < paramCount`；mutate/view 另允许 `arg == paramCount` 表示隐式 state。任何 proof / let /
@@ -63,7 +67,30 @@ callback binder 泄漏都会在 target lowering 之前 fail closed，不能再�
 
 ## Boundary
 
-递归下降 `Expr`。`x ≤ u64Max - y` → `checkedAddU64`；`y ≤ x` → `checkedSubU64`；`y = 0 ∨ x ≤ u64Max / y` → `checkedMulU64`；`y ≠ 0` 后 `/` `%` → `checkedDivU64` / `checkedModU64`。比较认 `=` `≠` `<` `≤` `>` `≥`。假支不必是 overflow。`match opt with | none => a | some n => b` 抽成 `ite (eq tag 0)`。`ProofForge.Svm.Runtime.clockSlot` / `signerKey0` / `acc*` 抽成 SVM 运行时叶子；`ProofForge.Evm.Runtime.evm*` 抽成 EVM 叶子。`invoke programIx metas data` 抽成 `Op.invoke`。`systemTransfer` / `invokeAcc1` 是普通包装，展开成同一条。`findPda "seed"` 抽成运行时叶子。`evmDeposit` / `evmSendEth` / `evmLog*` / pair-key Map / 全部 EVM 环境叶抽成独立 ops。位运算 / 有界 `forIn [:N]` / 运行时 `Vector` 下标 / 命名 `Error` 构造子 / `UInt64 × UInt64` view 也抽。SVM 发射器再拒语言叶和 EVM 叶。可变方法无 checked 算术 / ite / invoke / EVM 效应 / 语言叶则 fail closed。嵌套用户 structure 摊成 `parent_child` 槽；`Vector Nested n` 每个元素再摊，例如 `nodes_0_value`。固定布局、多构造子且 payload 全是 `UInt64` 的 inductive 摊成 tag + 最大 payload，短构造子补零；其 match 绑定 lexical locals。`extends` 仍关。Sokoban 节点是普通 structure + `Vector Node n`。mutate 的 `State.mk` / `Vector.set` / 嵌套 `with` 按叶 diff：改了几个槽就发几条 `storeField`，不按合约猜 dest。root `@[pf_inline]` State helper 会先展开并保留其 transition；UInt64/Bool scalar helper 与 `({ s with x := v }).x` 也在 typed value 边界归一化。单叶仍压成 `okState`。`for i in [:n]` 改状态抽出 `forBody`，循环下标是 `loopIx`，payload 仍是外层参数。运行时下标读写嵌套记录或 variant 走 `indexGet` / `indexSet`；`elemOff` 是元素内被改叶的偏移。N=4 Tree 已覆盖 allocator、free-list、完整左右旋、duplicate update 和 red-uncle / LL / RR / LR / RL insertion fixup；Phoenix 已覆盖 fixed-capacity event batch 的动态 multi-leaf variant 写入，最宽九 payload 到 byte offset 72。删除 fixup 与 `extends` 仍关。
+递归下降 `Expr`。`x ≤ u64Max - y` → `checkedAddU64`；`y ≤ x` → `checkedSubU64`；
+`y = 0 ∨ x ≤ u64Max / y` → `checkedMulU64`；`y ≠ 0` 后 `/` `%` →
+`checkedDivU64` / `checkedModU64`。比较认 `=` `≠` `<` `≤` `>` `≥`。假支不必是
+overflow。`match opt with | none => a | some n => b` 抽成 `ite (eq tag 0)`。
+`ProofForge.Svm.Runtime.clockSlot` / `signerKey0` / `acc*` 抽成 SVM 运行时叶子；
+`ProofForge.Evm.Runtime.evm*` 抽成 EVM 叶子。`invoke programIx metas data` 抽成
+`Op.invoke`。`systemTransfer` / `invokeAcc1` 是普通包装，展开成同一条。`findPda "seed"`
+抽成运行时叶子。`evmDeposit` / `evmSendEth` / `evmLog*` / pair-key Map / 全部 EVM 环境叶
+抽成独立 ops。位运算 / 有界 `forIn [:N]` / 运行时 `Vector` 下标 / 命名 `Error` 构造子 /
+`UInt64 × UInt64` view 也抽。SVM 发射器再拒语言叶和 EVM 叶。可变方法无 checked 算术 /
+ite / invoke / EVM 效应 / 语言叶则 fail closed。
+
+嵌套用户 structure 摊成 `parent_child` 槽；`Vector Nested n` 每个元素再摊，例如
+`nodes_0_value`。固定布局、多构造子且 payload 全是 `UInt64` 的 inductive 摊成 tag + 最大
+payload，短构造子补零；其 match 绑定 lexical locals。`extends` 仍关。Sokoban 节点是普通
+structure + `Vector Node n`。mutate 的 `State.mk` / `Vector.set` / 嵌套 `with` 按叶 diff：
+改了几个槽就发几条 `storeField`，不按合约猜 dest。root `@[pf_inline]` State helper 会先
+展开并保留其 transition；UInt64/Bool scalar helper 与 `({ s with x := v }).x` 也在 typed value
+边界归一化。单叶仍压成 `okState`。`for i in [:n]` 改状态抽出 `forBody`，循环下标是
+`loopIx`，payload 仍是外层参数。运行时下标读写嵌套记录或 variant 走 `indexGet` /
+`indexSet`；`elemOff` 是元素内被改叶的偏移。N=4 Tree 已覆盖 allocator、free-list、完整
+左右旋、duplicate update、insertion fixup、deletion fixup 和地址复用；Phoenix 已覆盖
+fixed-capacity event batch 的动态 multi-leaf variant 写入，最宽九 payload 到 byte offset 72。
+非固定 N 与 `extends` 仍关。
 
 schema 默认从 `init` 返回类型收：必须是已注册 `structure`、无 `extends`。叶子接受
 `UInt8/16/32/64`、`Bool`（1 字节 u8-le）、`Option UInt64`（展开双叶）、固定长度
@@ -101,13 +128,17 @@ variant-vector 写保留独立返回值；四项 compound guard 在 error else �
 writeback 的 Core evaluation 是显式且 typed 的；Tree allocator 已覆盖同一动态元素一次
 改写六个叶子、静态 allocator 元数据 writeback 以及 LIFO free-list 复用。完整左右旋
 进一步覆盖条件分支、同一返回中的静态 root + 动态 Vector 写，以及只沿
-`Vector.set` base 追溯旧写，避免把 payload read 指数级复制成写。同一 Tree `Place`
+`Vector.set` base 追溯旧写，避免把 payload read 指数级复制成写。`Tests/TreeSpec.lean` 的删除门覆盖 successor
+transplant、black/red sibling fixup 和脱链地址回收到同一 free-list；所有 24 种四 key
+插入顺序分别删除四个 key 后都检查 BST、parent、root-black、red-red、black-height 和
+存活 key。同一 Tree `Place`
 在 SVM target IR 中变成 byte offset/stride，在 EVM target IR 中变成
 slot/slot-stride；Maybe 的 Option tag/payload 也保持同一 typed identity。Maybe / Window
 的 typed 与 legacy schema 路径生成逐字节相同的 SVM 输出，适用程序的 EVM 输出也相同；
 真实 Tree 已超出旧手写 fixture，只钉 source digest 和 typed target identity。N=4 insertion
 还逐项检查四种旋转、red-uncle、duplicate-full、overflow、free-list reuse、BST 顺序、parent、
-root-black、red-red 和 black-height 不变量。当前产物为 426,823-byte source assembly 和
-115,640-byte eBPF ELF；lexical locals 让增长保持线性，而不是按搜索分支复制 allocator/fixup。
+root-black、red-red 和 black-height 不变量。加入删除后，当前产物为 612,547-byte source
+assembly 和 203,648-byte eBPF ELF；lexical locals 与 sequential-State normalization 让增长
+保持线性，而不是按搜索分支或连续 helper projection 指数级复制 allocator/fixup。
 wide variant characterization 另钉 tag + 五 payload、match binder、短构造子补零，以及
 `Vector Variant 4` 的六叶动态写；同一 extracted Core 同时通过 SVM 和 EVM lowering/emitter。
