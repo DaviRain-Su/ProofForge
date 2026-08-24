@@ -60,3 +60,6 @@ import Tests.DumpIncrement
 import Tests.NormalizationSpec
 import Tests.SolanalibSpec
 import Tests.TargetOpsSpec
+import Tests.NestedSpec
+import Tests.SeatSpec
+import Tests.TreeSpec

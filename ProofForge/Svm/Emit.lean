@@ -185,9 +185,37 @@ private def emitWalkSignerChecks (ops : Array IR.Op) (err : String) : String :=
           s!"  ldxdw r8, [r10 - {headerStack a}]\n  ldxb r1, [r8 + 1]\n  jeq r1, 0, {err}\n"
     return out
 
-/-- 只 walk：N 账户虚地址；查 ix 长度。不强制 acc0 signer；`signerKey acc` 才查该账户。 -/
-private def preludeWalk (p : IR.Program) (label : String) (ixLen : Nat)
-    (ops : Array IR.Op := #[]) : String :=
+private def emitWalkStateChecks (p : IR.Program) (marker : String) (ixLen : Nat)
+    (err : String) (needUninit : Bool) : String :=
+  let expectedMarker := if needUninit then "0x0" else marker
+  s!"\
+  ; validate walked state account owner, data length, and layout marker
+  ldxdw r8, [r10 - {headerStack 0}]
+  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]
+  mov64 r2, r7
+  add64 r2, {8 + ixLen}
+  ldxdw r1, [r8 + 40]
+  ldxdw r3, [r2 + 0]
+  jne r1, r3, {err}
+  ldxdw r1, [r8 + 48]
+  ldxdw r3, [r2 + 8]
+  jne r1, r3, {err}
+  ldxdw r1, [r8 + 56]
+  ldxdw r3, [r2 + 16]
+  jne r1, r3, {err}
+  ldxdw r1, [r8 + 64]
+  ldxdw r3, [r2 + 24]
+  jne r1, r3, {err}
+  ldxdw r1, [r8 + 80]
+  jne r1, {IR.dataLen p}, {err}
+  ldxdw r1, [r8 + 88]
+  lddw r2, {expectedMarker}
+  jne r1, r2, {err}
+"
+
+/-- Walk N account headers and authenticate account 0 as ProofForge state. -/
+private def preludeWalk (p : IR.Program) (marker label : String) (ixLen : Nat)
+    (needUninit : Bool) (ops : Array IR.Op := #[]) : String :=
   let err := s!"err_check_{label}"
   let n := IR.cpiAccountCount p
   s!"\
@@ -196,14 +224,15 @@ private def preludeWalk (p : IR.Program) (label : String) (ixLen : Nat)
 {emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
   ldxdw r1, [r1 + 0]
   jne r1, {ixLen}, {err}
-{emitWalkSignerChecks ops err}  ja body_{label}
+{emitWalkStateChecks p marker ixLen err needUninit}{emitWalkSignerChecks ops err}  ja body_{label}
 {err}:
   lddw r0, 0x1
   exit
 "
 
-/-- CPI 预检：walk + acc0 signer+writable + meta 旗。 -/
-private def preludeCpi (p : IR.Program) (label : String) (ixLen : Nat) : String :=
+/-- CPI prelude: authenticated walked state plus account-meta flags. -/
+private def preludeCpi (p : IR.Program) (marker label : String) (ixLen : Nat)
+    (needUninit : Bool) : String :=
   let err := s!"err_check_{label}"
   let n := IR.cpiAccountCount p
   s!"\
@@ -212,7 +241,7 @@ private def preludeCpi (p : IR.Program) (label : String) (ixLen : Nat) : String 
 {emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
   ldxdw r1, [r1 + 0]
   jne r1, {ixLen}, {err}
-{emitCpiFlagChecks p err}  ja body_{label}
+{emitWalkStateChecks p marker ixLen err needUninit}{emitCpiFlagChecks p err}  ja body_{label}
 {err}:
   lddw r0, 0x1
   exit
@@ -837,7 +866,10 @@ private def emitInitBody (p : IR.Program) (marker : String) (label : String) (op
   if vs.isEmpty then
     .error "extract/unsupported: init missing returnState"
   else do
-    let mut body := ""
+    let mut body :=
+      if IR.usesWalk p then
+        s!"  ldxdw r7, [r10 - {headerStack (IR.cpiAccountCount p)}]\n  add64 r7, 8\n"
+      else ""
     let mut i : Nat := 0
     for s in p.slots do
       if h : i < vs.size then
@@ -1144,6 +1176,12 @@ private def emitArithOp (errorLabel opLabel : String) (kind : String) : String :
       s!"  jeq r2, 0, err_{errorLabel}\n  mov64 r4, r1\n  mod64 r4, r2\n"
   | _ => ""
 
+private partial def opsTerminate (ops : Array IR.Op) : Bool :=
+  ops.any fun
+    | .okState _ | .errorOverflow | .errorNamed _ | .returnU64 _ | .returnState _ => true
+    | .ite _ _ _ thn els => opsTerminate thn && opsTerminate els
+    | _ => false
+
 private partial def emitOps (p : IR.Program) (label errorLabel : String)
     (ops : Array IR.Op) (fresh : Nat) : Except String (String × Nat) := do
   let mut acc := ""
@@ -1232,6 +1270,11 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       n := n + 2
       let thenLab := s!"then_{label}_{n}"
       let elseLab := s!"else_{label}_{n}"
+      -- `label` grows with every nesting level; the method-level error label plus the fresh
+      -- counter is already unique and keeps join labels bounded in large decision trees.
+      let doneLab := s!"done_{errorLabel}_{n}"
+      let thenJump := if opsTerminate thn then "" else s!"  ja {doneLab}\n"
+      let doneLabel := if opsTerminate thn then "" else s!"{doneLab}:\n"
       n := n + 1
       let (thenTxt, n1) ← emitOps p thenLab errorLabel thn n
       let (elseTxt, n2) ← emitOps p elseLab errorLabel els n1
@@ -1239,7 +1282,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       acc := acc ++ loadL ++ loadR ++
         "  ldxdw r1, [r10 - 8]\n  ldxdw r2, [r10 - 16]\n" ++
         jmpIf cmp thenLab ++
-        s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{elseLab}:\n{elseTxt}"
+        s!"  ja {elseLab}\n{thenLab}:\n{thenTxt}{thenJump}" ++
+        s!"{elseLab}:\n{elseTxt}{doneLabel}"
     | .invoke prog metas data seed bump =>
       acc := acc ++ (← emitInvoke p label prog metas data seed bump)
     | .errorNamed _ =>
@@ -1471,23 +1515,25 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
   match m.kind with
   | .init =>
     if IR.usesCpi p then
-      return s!"{label}:\n{preludeCpi p label (ixLenOf m)}body_{label}:\n  lddw r0, 0\n  exit\n"
+      let body ← emitInitBody p marker label m.ops
+      return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) true}{body}"
     else if IR.usesWalk p then
-      return s!"{label}:\n{preludeWalk p label (ixLenOf m) m.ops}body_{label}:\n  lddw r0, 0\n  exit\n"
+      let body ← emitInitBody p marker label m.ops
+      return s!"{label}:\n{preludeWalk p marker label (ixLenOf m) true m.ops}{body}"
     else
       let body ← emitInitBody p marker label m.ops
       return s!"{label}:\n{prelude p marker label (ixLenOf m) true true true}{body}"
   | .increment =>
     if IR.hasInvoke m.ops then
       let body ← emitMutBody p label m.ops
-      return s!"{label}:\n{preludeCpi p label (ixLenOf m)}{body}"
+      return s!"{label}:\n{preludeCpi p marker label (ixLenOf m) false}{body}"
     else if !(IR.hasCheckedArith m.ops || IR.hasSelect m.ops ||
         m.ops.any (fun | .ite .. => true | .indexSet .. => true | .forAccum .. => true | .forBody .. => true | .storeField .. => true | _ => false)) then
       .error "extract/unsupported: increment missing checked arith"
     else do
       let body ← emitMutBody p label m.ops
       let head :=
-        if IR.usesWalk p then preludeWalk p label (ixLenOf m) m.ops
+        if IR.usesWalk p then preludeWalk p marker label (ixLenOf m) false m.ops
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) true false
       return s!"{label}:\n{head}{body}"
   | .get =>
@@ -1500,14 +1546,14 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
         | _ => false) || m.ops.size > 1 then
       let body ← emitMutBody p label m.ops
       let head :=
-        if IR.usesWalk p then preludeWalk p label (ixLenOf m) m.ops
+        if IR.usesWalk p then preludeWalk p marker label (ixLenOf m) false m.ops
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
       return s!"{label}:\n{head}{body}"
     else
       let v ← getVal m.ops
       let body ← emitGetBody p label v
       let head :=
-        if IR.usesWalk p then preludeWalk p label (ixLenOf m) m.ops
+        if IR.usesWalk p then preludeWalk p marker label (ixLenOf m) false m.ops
         else prelude p marker label (ixLenOf m) (usesSignerKey m.ops) false false
       return s!"{label}:\n{head}{body}"
 

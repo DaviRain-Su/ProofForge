@@ -325,6 +325,8 @@ elab "#pf_guard_except_bind_join" : command => do
   unless svm.contains "; declare join local 0" &&
       svm.contains "; set join local 0" && svm.contains "; load local 0" do
     throwError "SVM Except.bind join lowering is missing"
+  unless svm.contains "ja done_bindChoice_" && svm.contains "done_bindChoice_" do
+    throwError "SVM successful Except.bind branch falls through into its else branch"
   unless evm.contains "let l0 := 0" && evm.contains "l0 := arg0" &&
       evm.contains "l0 := arg1" &&
       evm.contains "if gt(l0, sub(0xffffffffffffffff, arg3))" do

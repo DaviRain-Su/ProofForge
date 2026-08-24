@@ -32,7 +32,15 @@ open ProofForge.Svm.Runtime
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTrio with
   | .error _ => false
   | .ok asm =>
-      asm.contains "load walked acc2 +72" &&
+      let marker :=
+        (ProofForge.Svm.ABI.layoutMarkerHex ProofForge.Golden.extractedTrio).toOption.getD ""
+      asm.contains "; validate walked state account owner, data length, and layout marker" &&
+        asm.contains "ldxdw r1, [r8 + 40]" &&
+        asm.contains "ldxdw r1, [r8 + 80]" &&
+        asm.contains s!"lddw r2, {marker}" &&
+        asm.contains "body_initialize:\n  ldxdw r7" &&
+        asm.contains "stxdw [r6 + ACC0_DATA + 0], r1" &&
+        asm.contains "load walked acc2 +72" &&
         asm.contains "load walked acc2 +80" &&
         asm.contains "load walked acc2 +8" &&
         asm.contains "jlt r1, 3" &&

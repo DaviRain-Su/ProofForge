@@ -25,7 +25,15 @@ open ProofForge.Svm.Runtime
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedTransfer with
   | .error _ => false
   | .ok asm =>
-      asm.contains "call sol_invoke_signed_c" &&
+      let marker :=
+        (ProofForge.Svm.ABI.layoutMarkerHex ProofForge.Golden.extractedTransfer).toOption.getD ""
+      asm.contains "; validate walked state account owner, data length, and layout marker" &&
+        asm.contains "ldxdw r1, [r8 + 40]" &&
+        asm.contains "ldxdw r1, [r8 + 80]" &&
+        asm.contains s!"lddw r2, {marker}" &&
+        asm.contains "body_initialize:\n  ldxdw r7" &&
+        asm.contains "stxdw [r6 + ACC0_DATA + 0], r1" &&
+        asm.contains "call sol_invoke_signed_c" &&
         asm.contains "MAX_PERMITTED_DATA_INCREASE" &&
         asm.contains "jlt r1, 3" &&
         asm.contains "ja transfer" &&
