@@ -167,7 +167,7 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
         | .checkedDivU64 l r | .checkedModU64 l r | .ite _ l r _ _ =>
             valSignerAccs l ++ valSignerAccs r
         | .invoke _ _ data _ bump =>
-            (data.flatMap fun | .u64le v => valSignerAccs v | _ => #[]) ++
+            (data.flatMap fun word => word.value?.map valSignerAccs |>.getD #[]) ++
               (match bump with | some v => valSignerAccs v | none => #[])
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
@@ -1075,7 +1075,7 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
       | .indexSet _ i v _ _ => valUsesSigner i || valUsesSigner v
       | .invoke _ metas data seeds bump =>
           (seeds.isEmpty && metas.any (·.signer)) ||
-            data.any (fun | .u64le v => valUsesSigner v | _ => false) ||
+            data.any (fun word => word.value?.any valUsesSigner) ||
               (match bump with | some v => valUsesSigner v | none => false)
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
@@ -1116,6 +1116,16 @@ private def emitFillAccountInfoFromHeader (tag : String) (srcStack : Nat) : Stri
   "  lddw r1, 0\n  stxb [r5 + 51], r1\n  stxb [r5 + 52], r1\n" ++
   "  stxb [r5 + 53], r1\n  stxb [r5 + 54], r1\n  stxb [r5 + 55], r1\n"
 
+private def emitCpiInteger (p : IR.Program) (scope : String) (base off : Nat)
+    (store : String) (value : Ops.Val) : Except String String := do
+  match value with
+  | .lit n =>
+      return s!"  lddw r1, {n.toNat}\n  {store} [r9 + {base + off}], r1\n"
+  | _ =>
+      let load ← loadVal p value 8 off s!"{scope}_data_{off}"
+      return load ++
+        s!"  ldxdw r1, [r10 - 8]\n  {store} [r9 + {base + off}], r1\n"
+
 private def emitCpiData (p : IR.Program) (scope : String) (base : Nat)
     (data : Array (Ops.CpiWord Ops.Val)) : Except String (String × Nat) := do
   -- CreateAccount 是 52B：u32+u64 不对齐。先清 64B，避免残留污染 space。
@@ -1127,15 +1137,17 @@ private def emitCpiData (p : IR.Program) (scope : String) (base : Nat)
   let mut off : Nat := 0
   for w in data do
     match w with
-    | .u8le n =>
-      body := body ++ s!"  lddw r1, {n.toNat}\n  stxb [r9 + {base + off}], r1\n"
+    | .u8le value =>
+      body := body ++ (← emitCpiInteger p scope base off "stxb" value)
       off := off + 1
-    | .u32le n =>
-      body := body ++ s!"  lddw r1, {n.toNat}\n  stxw [r9 + {base + off}], r1\n"
+    | .u16le value =>
+      body := body ++ (← emitCpiInteger p scope base off "stxh" value)
+      off := off + 2
+    | .u32le value =>
+      body := body ++ (← emitCpiInteger p scope base off "stxw" value)
       off := off + 4
-    | .u64le v =>
-      let load ← loadVal p v 8 off s!"{scope}_data_{off}"
-      body := body ++ load ++ s!"  ldxdw r1, [r10 - 8]\n  stxdw [r9 + {base + off}], r1\n"
+    | .u64le value =>
+      body := body ++ (← emitCpiInteger p scope base off "stxdw" value)
       off := off + 8
     | .ascii s =>
       -- 逐字节；本切片字面量很短。

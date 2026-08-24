@@ -183,7 +183,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
                 { acc := destinationIx, signer := false, writable := true },
                 { acc := authorityIx, signer := true, writable := false }] &&
               (match data with
-               | #[.u8le 12, .u64le _, .u8le 6] => true
+               | #[.u8le (.lit 12), .u64le _, .u8le (.lit 6)] => true
                | _ => false) &&
               actualSeeds == seeds && bump.isSome == signed
         | .ite _ _ _ thn els =>

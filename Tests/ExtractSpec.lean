@@ -645,13 +645,13 @@ elab "#pf_guard_multi_seed_invoke_sequence" : command => do
             { acc := 3, signer := false, writable := false },
             { acc := 5, signer := false, writable := true },
             { acc := 0, signer := true, writable := false }]
-          #[.u8le 12, .u64le (.arg 0), .u8le 6] #[] none,
+          #[.u8le (.lit 12), .u64le (.arg 0), .u8le (.lit 6)] #[] none,
       .invoke 8
           #[{ acc := 5, signer := false, writable := true },
             { acc := 3, signer := false, writable := false },
             { acc := 1, signer := false, writable := true },
             { acc := 7, signer := true, writable := false }]
-          #[.u8le 12, .u64le (.arg 0), .u8le 6] seeds
+          #[.u8le (.lit 12), .u64le (.arg 0), .u8le (.lit 6)] seeds
           (some (.ext (.findPdaSeeds bumpSeeds) #[])),
       .storeField "value" (.arg 0), .okState (.arg 0)] =>
         unless seeds == expectedSeeds && bumpSeeds == expectedSeeds do
@@ -712,6 +712,35 @@ elab "#pf_guard_single_multi_seed_invoke_continuation" : command => do
       throwError s!"single multi-seed continuation IR mismatch: {repr transfer.ops}"
 
 #pf_guard_single_multi_seed_invoke_continuation
+
+elab "#pf_guard_dynamic_cpi_word_widths" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Examples.Counter.init
+        ``Tests.Fixtures.dynamicCpiWords ``Examples.Counter.get with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let lowered ←
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some method := lowered.methods.find? (·.ixName == "dynamicCpiWords")
+    | throwError "missing dynamic CPI word method"
+  match method.ops with
+  | #[.invoke 1 #[]
+        #[.u8le (.arg 0), .u16le (.arg 0), .u32le (.arg 0), .u64le (.arg 0)] #[] none,
+      .storeField "value" (.arg 0), .okState (.arg 0)] => pure ()
+  | _ => throwError s!"dynamic CPI word IR mismatch: {repr method.ops}"
+  let asm ←
+    match ProofForge.Svm.Emit.emitProgramAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless asm.contains "; invoke programIx=2 metas=0 dataLen=15" &&
+      asm.contains "stxb [r9 + 40], r1" && asm.contains "stxh [r9 + 41], r1" &&
+      asm.contains "stxw [r9 + 43], r1" && asm.contains "stxdw [r9 + 47], r1" do
+    throwError "dynamic CPI words lost their packed little-endian widths"
+
+#pf_guard_dynamic_cpi_word_widths
 
 elab "#pf_guard_multi_seed_pda_account_check" : command => do
   let env ← getEnv

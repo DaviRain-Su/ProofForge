@@ -30,9 +30,7 @@ abbrev Program := Core.IR.Program ValKind OpExt
 
 private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
   | .invoke _ _ data _ bump =>
-      data.all (fun
-        | .u64le value => value.wellFormed ValKind.arity
-        | _ => true) &&
+      data.all (fun word => word.value?.all (·.wellFormed ValKind.arity)) &&
       match bump with
       | some value => value.wellFormed ValKind.arity
       | none => true
@@ -91,8 +89,9 @@ partial def toSvmVal : Val → Except String Svm.Ops.Val
   | .ext (.evm _) _ => rejectEvmValue
 
 private def cpiWordToSvm : Svm.Ops.CpiWord Val → Except String (Svm.Ops.CpiWord Svm.Ops.Val)
-  | .u8le n => pure (.u8le n)
-  | .u32le n => pure (.u32le n)
+  | .u8le value => return .u8le (← toSvmVal value)
+  | .u16le value => return .u16le (← toSvmVal value)
+  | .u32le value => return .u32le (← toSvmVal value)
   | .u64le value => return .u64le (← toSvmVal value)
   | .ascii value => pure (.ascii value)
   | .programId => pure .programId

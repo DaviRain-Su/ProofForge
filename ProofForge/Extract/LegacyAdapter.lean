@@ -189,16 +189,19 @@ private def metaToLegacy (entry : Svm.Ops.CpiMeta) : ProofForge.Ops.CpiMeta :=
   { acc := entry.acc, signer := entry.signer, writable := entry.writable }
 
 private def wordOfLegacy : ProofForge.Ops.CpiWord → Svm.Ops.CpiWord Val
-  | .u8le n => .u8le n
-  | .u32le n => .u32le n
+  | .u8le n => .u8le (.lit n)
+  | .u32le n => .u32le (.lit n)
   | .u64le value => .u64le (ofLegacyVal value)
   | .ascii value => .ascii value
   | .programId => .programId
   | .accKey i => .accKey i
 
 private def wordToLegacy : Svm.Ops.CpiWord Val → Except String ProofForge.Ops.CpiWord
-  | .u8le n => pure (.u8le n)
-  | .u32le n => pure (.u32le n)
+  | .u8le (.lit n) => pure (.u8le n)
+  | .u8le _ => throw "extract/legacy: dynamic u8 CPI word"
+  | .u16le _ => throw "extract/legacy: u16 CPI word"
+  | .u32le (.lit n) => pure (.u32le n)
+  | .u32le _ => throw "extract/legacy: dynamic u32 CPI word"
   | .u64le value => return .u64le (← toLegacyVal value)
   | .ascii value => pure (.ascii value)
   | .programId => pure .programId

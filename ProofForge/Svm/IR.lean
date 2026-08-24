@@ -428,8 +428,11 @@ private partial def opsCanon (ops : Array Op) : String :=
           s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}"
         let wordCanon (word : Ops.CpiWord Ops.Val) : String :=
           match word with
-          | .u8le n => s!"u8.{n.toNat}"
-          | .u32le n => s!"u32.{n.toNat}"
+          | .u8le (.lit n) => s!"u8.{n.toNat}"
+          | .u8le value => s!"u8v.{valCanon value}"
+          | .u16le value => s!"u16.{valCanon value}"
+          | .u32le (.lit n) => s!"u32.{n.toNat}"
+          | .u32le value => s!"u32v.{valCanon value}"
           | .u64le value => s!"u64.{valCanon value}"
           | .ascii value => s!"s.{value}"
           | .programId => "pid"

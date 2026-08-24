@@ -2184,14 +2184,20 @@ private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
   let e := strip e
   if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u8le || endsWith e ".u8le" then
     if e.getAppArgs.size ≥ 1 then
-      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
-      | some n => some (.u8le (UInt64.ofNat n))
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+      | some value => some (.u8le value)
+      | none => none
+    else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u16le || endsWith e ".u16le" then
+    if e.getAppArgs.size ≥ 1 then
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+      | some value => some (.u16le value)
       | none => none
     else none
   else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u32le || endsWith e ".u32le" then
     if e.getAppArgs.size ≥ 1 then
-      match val env e.getAppArgs[e.getAppArgs.size - 1]! >>= natOfVal with
-      | some n => some (.u32le (UInt64.ofNat n))
+      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+      | some value => some (.u32le value)
       | none => none
     else none
   else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u64le || endsWith e ".u64le" then
@@ -2438,31 +2444,31 @@ private def invokeRet
   if let some ret := findOkRet env e then
     .ok ret
   else match inv with
-  | (2, _, #[.u32le 2, .u64le amount], #[], none) => .ok amount
-  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], #[], none) => .ok amount
-  | (2, _, #[.u32le 0, .u64le amount, .u64le _, .programId], #[.ascii _], some _) =>
+  | (2, _, #[.u32le (.lit 2), .u64le amount], #[], none) => .ok amount
+  | (2, _, #[.u32le (.lit 0), .u64le amount, .u64le _, .programId], #[], none) => .ok amount
+  | (2, _, #[.u32le (.lit 0), .u64le amount, .u64le _, .programId], #[.ascii _], some _) =>
       .ok amount
-  | (1, _, #[.u32le 1, .programId], #[], none) => .ok (.lit 0)
-  | (1, _, #[.u32le 8, .u64le space], #[], none) => .ok space
-  | (2, _, #[.u32le 9, .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], #[], none) => .ok space
-  | (2, _, #[.u32le 3, .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], #[], none) => .ok lamports
-  | (2, _, #[.u32le 10, .accKey 0, .u64le _, .ascii "vault", .programId], #[], none) => .ok (.lit 0)
-  | (3, _, #[.u32le 11, .u64le lamports, .u64le _, .ascii "vault", .programId], #[], none) => .ok lamports
-  | (2, _, #[.u8le 20, .u8le 6, .accKey 0, .u8le 0], #[], none) => .ok (.lit 0)
-  | (2, _, #[.u8le 17], #[], none) => .ok (.lit 0)
-  | (4, _, #[.u8le 12, .u64le amount, .u8le _], #[], none) => .ok amount
-  | (3, _, #[.u8le 14, .u64le amount, .u8le _], #[], none) => .ok amount
-  | (3, _, #[.u8le 15, .u64le amount, .u8le _], #[], none) => .ok amount
-  | (3, _, #[.u8le 18, .accKey 0], #[], none) => .ok (.lit 0)
-  | (3, _, #[.u8le 9], #[], none) => .ok (.lit 0)
-  | (4, _, #[.u8le 13, .u64le amount, .u8le _], #[], none) => .ok amount
-  | (3, _, #[.u8le 10], #[], none) => .ok (.lit 0)
-  | (3, _, #[.u8le 11], #[], none) => .ok (.lit 0)
-  | (3, _, #[.u8le 6, .u8le 0, .u8le 1, .accKey 2], #[], none) => .ok (.lit 0)
-  | (3, _, #[.u8le 5], #[], none) => .ok (.lit 0)
-  | (2, _, #[.u8le 21], #[], none) => .ok .cpiReturn
+  | (1, _, #[.u32le (.lit 1), .programId], #[], none) => .ok (.lit 0)
+  | (1, _, #[.u32le (.lit 8), .u64le space], #[], none) => .ok space
+  | (2, _, #[.u32le (.lit 9), .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], #[], none) => .ok space
+  | (2, _, #[.u32le (.lit 3), .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], #[], none) => .ok lamports
+  | (2, _, #[.u32le (.lit 10), .accKey 0, .u64le _, .ascii "vault", .programId], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u32le (.lit 11), .u64le lamports, .u64le _, .ascii "vault", .programId], #[], none) => .ok lamports
+  | (2, _, #[.u8le (.lit 20), .u8le (.lit 6), .accKey 0, .u8le (.lit 0)], #[], none) => .ok (.lit 0)
+  | (2, _, #[.u8le (.lit 17)], #[], none) => .ok (.lit 0)
+  | (4, _, #[.u8le (.lit 12), .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le (.lit 14), .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le (.lit 15), .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le (.lit 18), .accKey 0], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le (.lit 9)], #[], none) => .ok (.lit 0)
+  | (4, _, #[.u8le (.lit 13), .u64le amount, .u8le _], #[], none) => .ok amount
+  | (3, _, #[.u8le (.lit 10)], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le (.lit 11)], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le (.lit 6), .u8le (.lit 0), .u8le (.lit 1), .accKey 2], #[], none) => .ok (.lit 0)
+  | (3, _, #[.u8le (.lit 5)], #[], none) => .ok (.lit 0)
+  | (2, _, #[.u8le (.lit 21)], #[], none) => .ok .cpiReturn
   | (1, _, #[.ascii "ok"], #[], none) => .ok (.lit 0)
-  | (6, _, #[.u8le 1], #[], none) => .ok (.lit 0)
+  | (6, _, #[.u8le (.lit 1)], #[], none) => .ok (.lit 0)
   | (programIx, _, _, _, _) =>
       .error s!"extract/unsupported: unknown CPI return semantics for program {programIx}"
 
@@ -2525,9 +2531,7 @@ private partial def rewriteLoopOp : Ops.Op → Ops.Op
       .ite c (rewriteLoopIx l) (rewriteLoopIx r)
         (t.map rewriteLoopOp) (f.map rewriteLoopOp)
   | .invoke prog metas data seed bump =>
-      .invoke prog metas (data.map fun
-        | .u64le v => .u64le (rewriteLoopIx v)
-        | w => w) seed (bump.map rewriteLoopIx)
+      .invoke prog metas (data.map (·.map rewriteLoopIx)) seed (bump.map rewriteLoopIx)
   | .indexSetLeaf n i v k leaf =>
       .indexSetLeaf n (rewriteLoopIx i) (rewriteLoopIx v) k leaf
   | .indexSet n i v k off =>
@@ -2584,8 +2588,7 @@ private partial def rewritePlainLoopOp (op : Ops.Op) : Ops.Op :=
       let r' := match r with | .arg _ => .loopIx | _ => rv r
       .ite c l' r' (t.map rewritePlainLoopOp) (f.map rewritePlainLoopOp)
   | .invoke prog metas data seed bump =>
-      .invoke prog metas (data.map fun | .u64le v => .u64le (rv v) | w => w)
-        seed (bump.map rv)
+      .invoke prog metas (data.map (·.map rv)) seed (bump.map rv)
   | .indexSetLeaf n i v k leaf =>
       let i' := match i with | .lit _ => i | _ => .loopIx
       let v' := match v with | .arg _ => .arg 0 | _ => v
@@ -4249,8 +4252,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           .ite cmp (nv l) (nv r) (t.map (normalizeStateLoopOp fuel'))
             (f.map (normalizeStateLoopOp fuel'))
       | .invoke prog metas data seed bump =>
-          .invoke prog metas (data.map fun | .u64le v => .u64le (nv v) | w => w)
-            seed (bump.map nv)
+          .invoke prog metas (data.map (·.map nv)) seed (bump.map nv)
       | .forAccum bound addend resultLocal => .forAccum bound (nv addend) resultLocal
       | .forBody bound body => .forBody bound (body.map (normalizeStateLoopOp fuel'))
       | .indexSetLeaf name index value len leaf =>
@@ -4326,9 +4328,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
         .ite c (flipVal fuel' l) (flipVal fuel' r)
           (t.map (flipOp fuel')) (f.map (flipOp fuel'))
       | .invoke prog metas data seed bump =>
-        .invoke prog metas (data.map fun
-          | .u64le v => .u64le (flipVal fuel' v)
-          | w => w) seed (bump.map (flipVal fuel'))
+        .invoke prog metas (data.map (·.map (flipVal fuel')))
+          seed (bump.map (flipVal fuel'))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
@@ -4594,9 +4595,7 @@ private def opFields : Ops.Op → Array String
   | .ite _ l r t f =>
       valFields l ++ valFields r ++ t.flatMap opFields ++ f.flatMap opFields
   | .invoke _ _ data _ bump =>
-      (data.flatMap fun
-        | .u64le v => valFields v
-        | _ => #[]) ++
+      (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
@@ -4698,9 +4697,12 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
       | .returnU64 v => return .returnU64 (← normalizeVal v)
       | .returnState v => return .returnState (← normalizeVal v)
       | .invoke programIx metas data seed bump =>
-          return .invoke programIx metas (← data.mapM fun
-            | .u64le v => return .u64le (← normalizeVal v)
-            | word => pure word) seed (← bump.mapM normalizeVal)
+          return .invoke programIx metas (← data.mapM fun word =>
+            match word.value? with
+            | some value => do
+                let normalized ← normalizeVal value
+                pure (word.map fun _ => normalized)
+            | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmSendEth a b c d =>
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
@@ -4782,7 +4784,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
       #[l, r].findSome? (valEscapedArg limit) <|>
         t.findSome? (opEscapedArg limit) <|> f.findSome? (opEscapedArg limit)
   | .invoke _ _ data _ bump =>
-      (data.findSome? fun | .u64le v => valEscapedArg limit v | _ => none) <|>
+      (data.findSome? fun word => word.value?.bind (valEscapedArg limit)) <|>
         bump.bind (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)

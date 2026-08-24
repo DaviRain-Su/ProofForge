@@ -62,8 +62,9 @@ structure CpiMeta where
 
 /-- 内层 instruction data 的一段。长度和布局编译期钉死。 -/
 inductive CpiWord where
-  | u8le (n : UInt64)
-  | u32le (n : UInt64)
+  | u8le (v : UInt64)
+  | u16le (v : UInt64)
+  | u32le (v : UInt64)
   | u64le (v : UInt64)
   | ascii (s : String)
   | programId

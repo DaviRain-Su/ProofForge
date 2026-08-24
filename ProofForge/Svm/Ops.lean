@@ -73,13 +73,27 @@ structure CpiMeta where
   deriving BEq, Repr, Inhabited
 
 inductive CpiWord (V : Type) where
-  | u8le (n : UInt64)
-  | u32le (n : UInt64)
+  | u8le (value : V)
+  | u16le (value : V)
+  | u32le (value : V)
   | u64le (value : V)
   | ascii (value : String)
   | programId
   | accKey (i : Nat)
   deriving BEq, Repr, Inhabited
+
+def CpiWord.map (f : α → β) : CpiWord α → CpiWord β
+  | .u8le value => .u8le (f value)
+  | .u16le value => .u16le (f value)
+  | .u32le value => .u32le (f value)
+  | .u64le value => .u64le (f value)
+  | .ascii value => .ascii value
+  | .programId => .programId
+  | .accKey i => .accKey i
+
+def CpiWord.value? : CpiWord V → Option V
+  | .u8le value | .u16le value | .u32le value | .u64le value => some value
+  | .ascii _ | .programId | .accKey _ => none
 
 /-- SVM-only source effects. -/
 inductive OpExt (V : Type) where
@@ -130,7 +144,8 @@ def checkPdaSeeds (account : Nat) (seeds : Array PdaSeed) : Val :=
 
 def CpiWord.wellFormed (word : CpiWord Val) : Bool :=
   match word with
-  | .u64le value => value.wellFormed ValKind.arity
+  | .u8le value | .u16le value | .u32le value | .u64le value =>
+      value.wellFormed ValKind.arity
   | .accKey acc => cpiAccInRange acc
   | _ => true
 
@@ -189,7 +204,7 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
   | .ext payload =>
       match payload with
       | .invoke _ _ data _ bump =>
-          data.all (fun | .u64le value => staticPayloadsWellFormed value | _ => true) &&
+          data.all (fun word => word.value?.all staticPayloadsWellFormed) &&
             bump.all staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
@@ -278,16 +293,13 @@ partial def isLangVal : Val → Bool
   | _ => false
 
 private def CpiWord.needsWalk : CpiWord Val → Bool
-  | .u64le value => valNeedsWalk value
-  | _ => false
+  | word => word.value?.any valNeedsWalk
 
 private def CpiWord.minAccounts : CpiWord Val → Nat
-  | .u64le value => valMinAccounts value
-  | _ => 0
+  | word => word.value?.map valMinAccounts |>.getD 0
 
 private def CpiWord.hasSelect : CpiWord Val → Bool
-  | .u64le value => valHasSelect value
-  | _ => false
+  | word => word.value?.any valHasSelect
 
 private def OpExt.needsWalk : OpExt Val → Bool
   | .invoke _ _ data seeds bump =>

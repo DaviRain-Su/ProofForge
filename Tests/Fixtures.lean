@@ -81,6 +81,14 @@ def singleMultiSeedTransfer (_s : Examples.Counter.State) (amount : UInt64) :
     8 5 3 1 7 amount 6 seeds (ProofForge.Svm.Runtime.findPdaSeeds seeds)
   .ok ({ value := amount }, amount)
 
+/-- Dynamic integer CPI words are serialized at their exact Borsh widths without changing the
+contract's scalar `UInt64` model. -/
+def dynamicCpiWords (_s : Examples.Counter.State) (value : UInt64) :
+    Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
+  let _ := ProofForge.Svm.Runtime.invoke 1 #[]
+    #[.u8le value, .u16le value, .u32le value, .u64le value]
+  .ok ({ value }, value)
+
 /-- Full-key canonical PDA check for a statically indexed external account. -/
 def checkMultiSeedPda (_s : Examples.Counter.State) : UInt64 :=
   let seeds : Array ProofForge.Svm.Runtime.PdaSeed :=

@@ -163,7 +163,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
   | .indexSetLeaf _ lhs rhs _ _ | .indexSet _ lhs rhs _ _ => predicate lhs || predicate rhs
   | .invoke _ _ data _ bump =>
-      data.any (fun | .u64le value => predicate value | _ => false) || bump.any predicate
+      data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
   | .mapGetU64 base key => #[base, key].any predicate
