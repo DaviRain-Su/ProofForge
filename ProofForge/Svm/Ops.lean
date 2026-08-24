@@ -70,7 +70,11 @@ structure CpiMeta where
   acc : Nat
   signer : Bool := false
   writable : Bool := false
+  expectedDataLen : Option Nat := none
   deriving BEq, Repr, Inhabited
+
+def CpiMeta.wellFormed (entry : CpiMeta) : Bool :=
+  cpiAccInRange entry.acc && entry.expectedDataLen.all (· ≤ 18446744073709551615)
 
 inductive CpiWord (V : Type) where
   | u8le (value : V)
@@ -210,7 +214,7 @@ private def rawSelfInvokeWellFormed (metas : Array CpiMeta) (data : Array (CpiWo
 
 def OpExt.wellFormed : OpExt Val → Bool
   | .invoke programIx metas data seeds bump =>
-      cpiAccInRange programIx && metas.all (cpiAccInRange ·.acc) &&
+      cpiAccInRange programIx && metas.all CpiMeta.wellFormed &&
         data.all CpiWord.wellFormed &&
         rawSelfInvokeWellFormed metas data seeds bump &&
         ((seeds.isEmpty && bump.isNone) ||

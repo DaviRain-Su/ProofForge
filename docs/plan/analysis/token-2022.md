@@ -11,9 +11,14 @@ Mint 前 82B、Account 前 165B 布局相同。扩展是 165 之后的 TLV。ATA
 
 ## 本仓怎么开
 
-### 切片 A（先做，不拆抽出）
+### 切片 A（已完成）
 
 同一套 classic recipe（`TransferChecked` / `MintToChecked` / `InitAccount3` …），`programIx` 指向外层 Token-2022 账户，而不是 Token。指令 data 0–24 不变。
+
+当前独立 `Token2022` 程序钉住 `TransferChecked` tag 12 和 Token-2022 program account。
+`CpiMeta.expectedDataLen` 通用约束要求 Mint=82B、Token Account=165B；发射器在 CPI 前检查，
+不解析 Token-2022，也不在 emitter 中写 program-specific 分支。抽取 Runtime wrapper 已按命名空间
+统一展开，不再因为增加 recipe 修改名字白名单。
 
 fail-closed：
 
@@ -21,6 +26,9 @@ fail-closed：
 - transfer fee mint（实际到账 ≠ data 里的 amount）
 - permanent delegate / closeable mint 再初始化
 - confidential transfer
+
+以上 extension 都会扩展 TLV 账户长度，因此当前 base-layout wrapper 全部在 CPI 前拒绝。Mollusk
+已用真实 transfer-fee / enabled transfer-hook mint 验证原子失败。
 
 ### 切片 B（要 remaining accounts）
 

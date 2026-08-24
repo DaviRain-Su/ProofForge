@@ -1182,6 +1182,28 @@ private def emitOneMeta (i : Nat) (m : Ops.CpiMeta) : String :=
   stxb [r5 + {base + 15}], r1
 "
 
+/-- Optional target-owned account shape constraints run immediately before the CPI. -/
+private def emitCpiDataLenChecks (label : String) (metas : Array Ops.CpiMeta) : String :=
+  let constrained := metas.filter (·.expectedDataLen.isSome)
+  if constrained.isEmpty then ""
+  else Id.run do
+    let err := s!"cpi_data_len_err_{label}"
+    let ok := s!"cpi_data_len_ok_{label}"
+    let mut out := "  ; validate statically constrained CPI account data lengths\n"
+    for entry in constrained do
+      let some expected := entry.expectedDataLen | unreachable!
+      let physical := entry.acc + 1
+      out := out ++
+        s!"  ldxdw r8, [r10 - {headerStack physical}]\n" ++
+        s!"  ldxdw r1, [r8 + 80]\n  jne r1, {expected}, {err}\n"
+    return out ++ s!"\
+  ja {ok}
+{err}:
+  lddw r0, 0x1
+  exit
+{ok}:
+"
+
 private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
     (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) : Except String (String × String) :=
   match bump with
@@ -1286,8 +1308,10 @@ private def emitInvoke (p : IR.Program) (label : String)
 "
     | _ =>
         s!"  ldxdw r1, [r10 - {headerStack physicalProgramIx}]\n  add64 r1, 8\n"
+  let dataLenChecks := emitCpiDataLenChecks label metas
   return s!"\
   ; invoke programIx={physicalProgramIx} metas={metas.size} dataLen={dataLen}
+{dataLenChecks}\
   mov64 r9, r10
   add64 r9, -2048
 {dataTxt}  mov64 r5, r9

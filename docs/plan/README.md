@@ -78,7 +78,7 @@
 | [l5-001](tasks/l5-001.md) | done | 有界 for 改状态（`fillFirst` 抽出 `forBody`） |
 | [l5-002](tasks/l5-002.md) | done | Phoenix bounded N=4 ask lifecycle：挂单 / IOC / self-trade / 结算 |
 | [l5-003](tasks/l5-003.md) | done | 席位 PDA + base/quote vault 初始化 + Mollusk 权限门 |
-| [l5-004](tasks/l5-004.md) | planned | Token-2022 program id 切片 |
+| [l5-004](tasks/l5-004.md) | done | Token-2022 program id 切片 |
 | [l5-005](tasks/l5-005.md) | done | 嵌套 structure / Vector element 摊平 + Mollusk |
 | [l5-006](tasks/l5-006.md) | done | Sokoban 节点 + allocator/free-list + 完整左右旋 |
 | [l5-007](tasks/l5-007.md) | done | Phoenix bounded N=4 bid lifecycle + sell IOC |

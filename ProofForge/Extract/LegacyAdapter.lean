@@ -185,8 +185,10 @@ partial def toLegacyVal : Val → Except String ProofForge.Ops.Val
 private def metaOfLegacy (entry : ProofForge.Ops.CpiMeta) : Svm.Ops.CpiMeta :=
   { acc := entry.acc, signer := entry.signer, writable := entry.writable }
 
-private def metaToLegacy (entry : Svm.Ops.CpiMeta) : ProofForge.Ops.CpiMeta :=
-  { acc := entry.acc, signer := entry.signer, writable := entry.writable }
+private def metaToLegacy (entry : Svm.Ops.CpiMeta) : Except String ProofForge.Ops.CpiMeta := do
+  if entry.expectedDataLen.isSome then
+    throw "extract/unsupported: legacy adapter cannot represent CPI account data length"
+  return { acc := entry.acc, signer := entry.signer, writable := entry.writable }
 
 private def wordOfLegacy : ProofForge.Ops.CpiWord → Svm.Ops.CpiWord Val
   | .u8le n => .u8le (.lit n)
@@ -294,7 +296,7 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         | [] => pure none
         | [.ascii value] => pure (some value)
         | _ => throw "extract/unsupported: legacy adapter cannot represent multi-seed CPI"
-      return .invoke programIx (metas.map metaToLegacy) (← data.mapM wordToLegacy)
+      return .invoke programIx (← metas.mapM metaToLegacy) (← data.mapM wordToLegacy)
         seed (← bump.mapM toLegacyVal)
   | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)
   | .ext (.evm (.sendEth w0 w1 w2 amount)) =>

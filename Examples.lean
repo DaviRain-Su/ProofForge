@@ -16,6 +16,7 @@ import Examples.Pda
 import Examples.Signed
 import Examples.Create
 import Examples.TokenXfer
+import Examples.Token2022
 import Examples.Ata
 import Examples.Rent
 import Examples.TokenMint

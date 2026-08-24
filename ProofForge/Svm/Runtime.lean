@@ -58,6 +58,8 @@ structure CpiMeta where
   acc : UInt64
   signer : Bool := false
   writable : Bool := false
+  /-- Reject the invocation before CPI unless this account has exactly this many data bytes. -/
+  expectedDataLen : Option UInt64 := none
   deriving Repr, DecidableEq, Inhabited
 
 /-- 内层 instruction data 的一段。长度和布局编译期钉死。 -/
@@ -246,6 +248,20 @@ def tokenTransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
       { acc := 3, signer := false, writable := true },
       { acc := 0, signer := true, writable := false }]
     -- packed：u8 tag 12 || u64le amount || u8 decimals。
+    #[.u8le 12, .u64le amount, .u8le decimals]
+
+/--
+Token-2022 `TransferChecked` for the classic-compatible base-account slice. The transaction must
+place the Token-2022 program at external index 4. Exact base lengths reject every TLV extension
+before CPI, including transfer-fee and transfer-hook mints, until those semantics are modeled.
+-/
+def token2022TransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
+  invoke 4
+    #[{ acc := 1, signer := false, writable := true, expectedDataLen := some 165 },
+      { acc := 2, signer := false, writable := false, expectedDataLen := some 82 },
+      { acc := 3, signer := false, writable := true, expectedDataLen := some 165 },
+      { acc := 0, signer := true, writable := false }]
+    -- Token and Token-2022 share the packed tag-12 layout.
     #[.u8le 12, .u64le amount, .u8le decimals]
 
 /--

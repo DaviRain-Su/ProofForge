@@ -528,7 +528,11 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"ite.{cmpTag cmp}({valCanon lhs},{valCanon rhs},[{opsCanon thn}],[{opsCanon els}])"
     | .invoke programIx metas data seeds bump =>
         let metaCanon := String.intercalate "," <| metas.toList.map fun entry =>
-          s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}"
+          let dataLen :=
+            match entry.expectedDataLen with
+            | some n => s!"@{n}"
+            | none => ""
+          s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}{dataLen}"
         let wordCanon (word : Ops.CpiWord Ops.Val) : String :=
           match word with
           | .u8le (.lit n) => s!"u8.{n.toNat}"

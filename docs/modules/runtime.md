@@ -35,12 +35,14 @@
 `unixTime` 已支持。32B key / owner 可通过四个 `UInt64` word 读取；把它们当作一个
 native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 SVM 名译成 EVM opcode。
 - `invoke programIx metas data` — 编译期钉死的 CPI。抽出认这个名字。
+- `CpiMeta.expectedDataLen` — 可选的精确账户 data 长度；目标发射器在 CPI 前检查，错长以
+  `Custom(1)` 退出。未设置时不改变既有 recipe / digest。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
 - `invokeSignedSeeds programIx metas data seeds bump` — 一组编译期定形的异构 signer seeds；支持 ASCII、state key 和静态 account key，运行时只提供 bump。
 - 首个 CPI word `.selfEntry tag seed` — 声明唯一 raw self-entry；只接受 canonical seed PDA 的 readonly signer，认证后把完整 payload 作为一个 `sol_log_data` field 发布。
 - `let _ := invoke...` — 被忽略的 CPI 结果按效应顺序保留；无论普通或 signed、单条或多条，后续 state writes 都不能被抽取器吞掉。
 - init 中的静态 CPI 在账户初始化写回前执行；非 CPI init effect fail closed，不再静默省略。
-- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语。
+- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `token2022TransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，按 Runtime 命名空间统一展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语，不维护 recipe 名白名单。Token-2022 包装只接收 82B mint / 165B token account。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
 - `accLamports1` / `accOwner1` / `accDataLen1` / `isSigner1` / `isWritable1` / `isExecutable1` — 账户 1 只读 header。读到这些叶子就 walk，不强制 acc0 signer。
@@ -90,6 +92,7 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/SysXfer.lean` + `runtime-tests/solana/tests/sys_xfer.rs`：TransferWithSeed 从 `create_with_seed(acc0, "vault", program)` 转 lamports；缺 signer → `Custom(1)`。
 `Examples/TokenMint2.lean` + `runtime-tests/solana/tests/token_mint2.rs`：InitializeMint2 写 decimals=6、authority=acc0；authority 不要求 signer。
 `Examples/TokenNative.lean` + `runtime-tests/solana/tests/token_native.rs`：SyncNative 把 native 账户 amount 同步成多余 lamports；owner 不要求 signer。
+`Examples/Token2022.lean` + `runtime-tests/solana/tests/token_2022.rs`：Token-2022 base-layout TransferChecked 精确转账；缺 signer、transfer-fee mint、enabled transfer-hook mint 均原子失败。
 `Examples/Nested.lean` + `runtime-tests/solana/tests/nested.rs`：嵌套 projection 更新只写目标叶。
 `Examples/Book.lean` + `runtime-tests/solana/tests/book.rs`：有界循环与运行时 Vector 下标写在链上执行。
 `Examples/Lang.lean` + `runtime-tests/solana/tests/lang.rs`：位运算、mod-64 移位及 state-carrying fold 的链上语义。

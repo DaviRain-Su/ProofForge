@@ -15,6 +15,7 @@ import Tests.PdaSpec
 import Tests.SignedSpec
 import Tests.CreateSpec
 import Tests.TokenXferSpec
+import Tests.Token2022Spec
 import Tests.AtaSpec
 import Tests.RentSpec
 import Tests.TokenMintSpec

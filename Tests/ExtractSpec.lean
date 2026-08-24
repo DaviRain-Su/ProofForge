@@ -18,6 +18,7 @@ import Examples.Pda
 import Examples.Signed
 import Examples.Create
 import Examples.TokenXfer
+import Examples.Token2022
 import Examples.Ata
 import Examples.Rent
 import Examples.TokenMint
@@ -691,21 +692,24 @@ elab "#pf_guard_multi_seed_invoke_sequence" : command => do
   let expectedSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
     #[.ascii "vault", .stateKey, .accKey 3]
   match transfer.ops with
-  | #[.invoke 8
+  | #[.invoke 8 firstMetas
+          #[.u8le (.lit 12), .u64le (.arg 0), .u8le (.lit 6)] #[] none,
+      .invoke 8 secondMetas
+          #[.u8le (.lit 12), .u64le (.arg 0), .u8le (.lit 6)] seeds
+          (some (.ext (.findPdaSeeds bumpSeeds) #[])),
+      .storeField "value" (.arg 0), .okState (.arg 0)] =>
+        let expectedFirst : Array ProofForge.Svm.Ops.CpiMeta :=
           #[{ acc := 1, signer := false, writable := true },
             { acc := 3, signer := false, writable := false },
             { acc := 5, signer := false, writable := true },
             { acc := 0, signer := true, writable := false }]
-          #[.u8le (.lit 12), .u64le (.arg 0), .u8le (.lit 6)] #[] none,
-      .invoke 8
+        let expectedSecond : Array ProofForge.Svm.Ops.CpiMeta :=
           #[{ acc := 5, signer := false, writable := true },
             { acc := 3, signer := false, writable := false },
             { acc := 1, signer := false, writable := true },
             { acc := 7, signer := true, writable := false }]
-          #[.u8le (.lit 12), .u64le (.arg 0), .u8le (.lit 6)] seeds
-          (some (.ext (.findPdaSeeds bumpSeeds) #[])),
-      .storeField "value" (.arg 0), .okState (.arg 0)] =>
-        unless seeds == expectedSeeds && bumpSeeds == expectedSeeds do
+        unless firstMetas == expectedFirst && secondMetas == expectedSecond &&
+            seeds == expectedSeeds && bumpSeeds == expectedSeeds do
           throwError s!"multi-seed list mismatch: {repr transfer.ops}"
   | _ => throwError s!"multi-invoke sequence IR mismatch: {repr transfer.ops}"
   unless ProofForge.Svm.IR.cpiAccountCount lowered == 10 do
@@ -863,6 +867,8 @@ elab "#pf_guard_multi_seed_pda_account_check" : command => do
 #pf_extract Examples.Create.init Examples.Create.create Examples.Create.get
 
 #pf_extract Examples.TokenXfer.init Examples.TokenXfer.send Examples.TokenXfer.get
+
+#pf_extract Examples.Token2022.init Examples.Token2022.send Examples.Token2022.get
 
 #pf_extract Examples.Ata.init Examples.Ata.openAta Examples.Ata.get
 

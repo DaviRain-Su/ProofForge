@@ -62,34 +62,35 @@
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
 - GitHub CI 串行执行 Lake guards、48 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
 - Core 显式 basic-block CFG 第一阶段：block arguments、显式 branch/checked/exit、完整 checker、local CSE、线性共享 block；Phoenix 全方法已通过 lowering/validation
-- SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；Phoenix 汇编由 4,109,725 B 降至 2,801,196 B，全部 48 个 Mollusk 文件与 12 个 Anvil 程序通过
+- SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；Phoenix 汇编由 4,109,725 B 降至 2,801,112 B，全部 48 个 Mollusk 文件与 12 个 Anvil 程序通过
 - Solanalib CFG correspondence：Counter add/sub/mul/div/mod 的 Core operands / physical slot / success-overflow edge 必须一致；typed guards、multiply zero-path jump、`r10-24` scratch handoff、static store 由上游 small-step semantics 执行。普通 eq/ne/lt/le/gt/ge branch 保留 cmp/operands/then/else identity，exact decoded pair theorem 证明 edge selection 与内存不变
 - 通用 target registration：`Core.Target.Registration` 统一递归投影公共 Val/Op/Program，并携带 extension callbacks、arity、op well-formedness 和 CFG dialect；SVM/EVM conversion 已移回各自 IR，`Extract.IR` 不再含后端 projection case。Core-only 合成第三 target 证明新增公共语言后端无需修改抽取 IR，并继续 fail closed 拒绝 foreign extension
+- Token-2022 classic-compatible `TransferChecked`：通用 `CpiMeta.expectedDataLen` 在 CPI 前约束 base Mint=82B / Account=165B；真实 base transfer 成功，transfer-fee / enabled transfer-hook mint 原子拒绝；Runtime CPI wrapper 改为按命名空间统一展开，不再维护 recipe 名白名单
 
 ## 当前状态
 
-- `lake build Tests` 当前 188 jobs；68 个 imported test modules 含 784 个 `#guard` / `#guard_msgs`。
-- SVM registry 48 个程序 / 48 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
+- `lake build Tests` 当前 190 jobs；69 个 imported test modules 含 790 个 `#guard` / `#guard_msgs`。
+- SVM registry 49 个程序 / 49 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
-- `l5-004` Token-2022 classic-compatible program-id 切片尚未开始。
+- `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
 
 ## 按优先级继续
 
 ### P1：扩大产品面
 
-1. `l5-004` Token-2022 指令 0–24 的 program-id 切片；hook / fee mint 在 TLV / remaining accounts 之前继续 fail closed。
-2. Phoenix 动态 trader/order 红黑树、删除 fixup 和非固定 N；当前 Phoenix 仍是 bounded N=4 有序投影。
-3. 固定长度 32-byte / u128 / Borsh protocol types；当前 Pubkey 和 client id 使用 `UInt64` limbs。
+1. Phoenix 动态 trader/order 红黑树、删除 fixup 和非固定 N；当前 Phoenix 仍是 bounded N=4 有序投影。
+2. 固定长度 32-byte / u128 / Borsh protocol types；当前 Pubkey 和 client id 使用 `UInt64` limbs。
 
 ## 明确保持 fail closed
 
 - 搬 PF 前端 / `HandlerIR.mk` 私有构造、新 DSL、无约束 Lean、FFI→asm。
 - `.so` / loader / 全 SVM refinement 与公网部署声明。
 - 运行时 program id、变长 data、运行时 remaining accounts；编译期钉死的 CPI 已开。
-- Token-2022 transfer hook / fee / TLV extension，直到对应账户模型落地。
+- Token-2022 transfer hook / fee / TLV extension 语义，直到对应账户模型落地；当前 base-layout
+  wrapper 用精确 data length 在 CPI 前拒绝全部 extension-bearing mint/account。
 - feature-gated blake3 / poseidon / curve25519 / alt_bn128 / `sol_get_sysvar`。
 - 把完整 32B key 当作现有 8B return-data ABI 的单一返回值。
 

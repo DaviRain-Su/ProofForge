@@ -2159,6 +2159,11 @@ private def mentionsRuntime (e : Expr) (suf : String) : Bool :=
   let suf := if suf.front == '.' then String.ofList (suf.toList.drop 1) else suf
   e.getUsedConstantsAsSet.toList.any (isRuntimeName · suf)
 
+/-- Runtime CPI wrappers are unfolded by namespace, not by an ever-growing list of recipe names. -/
+private def mentionsSvmRuntime (e : Expr) : Bool :=
+  e.getUsedConstantsAsSet.toList.any fun name =>
+    name.toString.startsWith "ProofForge.Svm.Runtime."
+
 private def natOfVal : Ops.Val → Option Nat
   | .lit n => some n.toNat
   | _ => none
@@ -2168,19 +2173,27 @@ private def asBoolLit (e : Expr) : Option Bool :=
   else if isConstNamed e ``Bool.false || endsWith e ".false" then some false
   else none
 
-/-- `CpiMeta.mk acc signer writable` 或具名字段。 -/
+/-- A statically shaped `CpiMeta`, including its optional exact account-data length. -/
 private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
   let e := strip e
   if isConstNamed e ``ProofForge.Svm.Runtime.CpiMeta.mk || endsWith e ".mk" then
     let args := e.getAppArgs
-    if args.size ≥ 3 then
-      match val env args[args.size - 3]!, asBoolLit args[args.size - 2]!,
-          asBoolLit args[args.size - 1]! with
-      | some accV, some signer, some writable =>
+    if args.size ≥ 4 then
+      let lenExpr := strip args[args.size - 1]!
+      let expectedDataLen : Option (Option Nat) :=
+        if isConstNamed lenExpr ``Option.none || endsWith lenExpr ".none" then
+          some none
+        else if (isConstNamed lenExpr ``Option.some || endsWith lenExpr ".some") &&
+            lenExpr.getAppArgs.size ≥ 1 then
+          (natOfVal <$> val env lenExpr.getAppArgs[lenExpr.getAppArgs.size - 1]!)
+        else none
+      match val env args[args.size - 4]!, asBoolLit args[args.size - 3]!,
+          asBoolLit args[args.size - 2]!, expectedDataLen with
+      | some accV, some signer, some writable, some expectedDataLen =>
         match natOfVal accV with
-        | some acc => some { acc, signer, writable }
+        | some acc => some { acc, signer, writable, expectedDataLen }
         | none => none
-      | _, _, _ => none
+      | _, _, _, _ => none
     else none
   else none
 
@@ -2358,38 +2371,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
           | .lam _ _ body _ => go fuel' body
           | .app f a => go fuel' f <|> go fuel' a
           | _ => none
-  if mentionsRuntime e "invoke" || mentionsRuntime e "invokeSigned" ||
-      mentionsRuntime e "invokeSignedSeeds" ||
-      mentionsRuntime e "systemTransfer" || mentionsRuntime e "invokeAcc1" ||
-      mentionsRuntime e "systemCreate" ||
-      mentionsRuntime e "createPda" ||
-      mentionsRuntime e "systemAssign" ||
-      mentionsRuntime e "systemAllocate" ||
-      mentionsRuntime e "systemAllocateWithSeed" ||
-      mentionsRuntime e "systemCreateWithSeed" ||
-      mentionsRuntime e "systemAssignWithSeed" ||
-      mentionsRuntime e "systemTransferWithSeed" ||
-      mentionsRuntime e "tokenInitMint" ||
-      mentionsRuntime e "tokenSyncNative" ||
-      mentionsRuntime e "tokenTransferChecked" ||
-      mentionsRuntime e "tokenTransferCheckedIx" ||
-      mentionsRuntime e "tokenTransferCheckedSignedIx" ||
-      mentionsRuntime e "tokenMintToChecked" ||
-      mentionsRuntime e "tokenBurnChecked" ||
-      mentionsRuntime e "tokenInitAccount" ||
-      mentionsRuntime e "tokenCloseAccount" ||
-      mentionsRuntime e "tokenApproveChecked" ||
-      mentionsRuntime e "tokenFreezeAccount" ||
-      mentionsRuntime e "tokenThawAccount" ||
-      mentionsRuntime e "tokenSetMintAuthority" ||
-      mentionsRuntime e "tokenSetAccountAuthority" ||
-      mentionsRuntime e "tokenApprove" ||
-      mentionsRuntime e "tokenInitMultisig" ||
-      mentionsRuntime e "systemAdvanceNonce" ||
-      mentionsRuntime e "tokenRevoke" ||
-      mentionsRuntime e "tokenAccountSize" ||
-      mentionsRuntime e "memoWrite" ||
-      mentionsRuntime e "ataCreateIdempotent" then
+  if mentionsSvmRuntime e then
     go fuel e
   else none
 

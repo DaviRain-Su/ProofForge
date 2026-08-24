@@ -26,6 +26,7 @@ import Examples.Pda
 import Examples.Signed
 import Examples.Create
 import Examples.TokenXfer
+import Examples.Token2022
 import Examples.Ata
 import Examples.Rent
 import Examples.TokenMint
@@ -95,6 +96,8 @@ import Projects.Phoenix
 #pf_build Examples.Create
 
 #pf_build Examples.TokenXfer
+
+#pf_build Examples.Token2022
 
 #pf_build Examples.Ata
 
