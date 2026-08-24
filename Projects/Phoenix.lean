@@ -504,8 +504,19 @@ SVM adapter：market 是 account 0，trader signer 是 account 1。`signerKey 1`
 @[pf_entry]
 def depositFunds (s : State) (baseLots quoteLots : UInt64) :
     Except Error (State × UInt64) :=
-  depositFundsFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
-    baseLots quoteLots
+  let baseSeeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 3]
+  let quoteSeeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 4]
+  if checkPdaSeeds 5 baseSeeds ≠ 0 then
+    .error .unauthorized
+  else if checkPdaSeeds 6 quoteSeeds ≠ 0 then
+    .error .unauthorized
+  else if (0 : UInt64) ≠ 1 then
+    let _ := tokenTransferCheckedIx 7 1 3 5 0 baseLots 6
+    let _ := tokenTransferCheckedIx 7 2 4 6 0 quoteLots 6
+    depositFundsFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
+      baseLots quoteLots
+  else
+    .error .overflow
 
 /--
 从一个已注册 seat 提取 base free funds。官方语义是 `min(requested, free)`；
@@ -567,15 +578,43 @@ attribute [pf_inline] withdrawBaseFor withdrawQuoteFor evictSeatFor
 
 /-- SVM base-vault adapter；account 1 必须签名并以完整 Pubkey 拥有目标 seat。 -/
 @[pf_entry]
-def withdrawBase (s : State) (requested : UInt64) : Except Error (State × UInt64) :=
-  withdrawBaseFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
-    requested
+def withdrawBase (s : State) (requested : UInt64) : Except Error (State × UInt64) := do
+  let key0 := signerKey 1
+  let key1 := accKeyWord 1 1
+  let key2 := accKeyWord 1 2
+  let key3 := accKeyWord 1 3
+  let address ← requireTraderAddress s key0 key1 key2 key3
+  let i := address.toNat - 1
+  let available := s.traderBaseFree[i]!
+  let amount := if requested < available then requested else available
+  if amount > s.baseFree then
+    .error .overflow
+  else
+    let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 3]
+    let _ := tokenTransferCheckedSignedIx 7 5 3 1 5 amount 6 seeds (findPdaSeeds seeds)
+    .ok ({ s with
+            baseFree := s.baseFree - amount
+            traderBaseFree := s.traderBaseFree.set (i % 4) (available - amount) }, amount)
 
 /-- SVM quote-vault adapter；返回实际提取的 quote lots。 -/
 @[pf_entry]
-def withdrawQuote (s : State) (requested : UInt64) : Except Error (State × UInt64) :=
-  withdrawQuoteFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
-    requested
+def withdrawQuote (s : State) (requested : UInt64) : Except Error (State × UInt64) := do
+  let key0 := signerKey 1
+  let key1 := accKeyWord 1 1
+  let key2 := accKeyWord 1 2
+  let key3 := accKeyWord 1 3
+  let address ← requireTraderAddress s key0 key1 key2 key3
+  let i := address.toNat - 1
+  let available := s.traderQuoteFree[i]!
+  let amount := if requested < available then requested else available
+  if amount > s.quoteFree then
+    .error .overflow
+  else
+    let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 4]
+    let _ := tokenTransferCheckedSignedIx 7 6 4 2 6 amount 6 seeds (findPdaSeeds seeds)
+    .ok ({ s with
+            quoteFree := s.quoteFree - amount
+            traderQuoteFree := s.traderQuoteFree.set (i % 4) (available - amount) }, amount)
 
 /-- SVM seat eviction adapter；非空 TraderState 或未注册 signer 都拒绝。 -/
 @[pf_entry]
@@ -1291,11 +1330,12 @@ private def commitBuy
       let baseDebit := filled + expired
       if baseDebit > s.baseLocked then
         .error .overflow
-      else if s.baseFree > u64Max - baseDebit then
-        .error .overflow
       else if s.unclaimedFees > u64Max - feeLots then
         .error .overflow
       else if registeredSeat s taker then
+        if s.baseFree > u64Max - baseDebit then
+          .error .overflow
+        else
         let i := taker.toNat - 1
         if quoteDebit > s.traderQuoteFree[i]! then
           .error .overflow
@@ -1318,24 +1358,18 @@ private def commitBuy
               baseFree := s.baseFree + baseDebit
               unclaimedFees := s.unclaimedFees + feeLots }, filled)
       else
-        if quoteDebit > s.quoteLocked then
+        if s.quoteFree > u64Max - quoteLots then
           .error .overflow
-        else if s.quoteFree > u64Max - quoteLots then
+        else if s.baseFree > u64Max - expired then
           .error .overflow
-        else if filled = 0 then
-          .ok ({ s with
-            quoteLocked := s.quoteLocked - quoteDebit
-            quoteFree := s.quoteFree + quoteLots
-            baseLocked := s.baseLocked - baseDebit
-            baseFree := s.baseFree + baseDebit
-            unclaimedFees := s.unclaimedFees + feeLots }, filled)
         else
-          let _ := tokenTransferChecked filled 6
+          let _ := tokenTransferCheckedIx 7 2 4 6 0 quoteDebit 6
+          let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 3]
+          let _ := tokenTransferCheckedSignedIx 7 5 3 1 5 filled 6 seeds (findPdaSeeds seeds)
           .ok ({ s with
-            quoteLocked := s.quoteLocked - quoteDebit
             quoteFree := s.quoteFree + quoteLots
             baseLocked := s.baseLocked - baseDebit
-            baseFree := s.baseFree + baseDebit
+            baseFree := s.baseFree + expired
             unclaimedFees := s.unclaimedFees + feeLots }, filled)
 
 attribute [pf_inline] commitBuy
@@ -1345,9 +1379,9 @@ attribute [pf_inline] commitBuy
 更新，注册 taker 的 quote-free / base-free 在 commit 中原子更新。
 
 registered free-funds buy 从 taker 的 `quoteFree` 扣成交额和费用，并把成交 base
-加进该 seat 的 `baseFree`。未注册 take-only 暂走 aggregate compatibility 分支，
-其双 vault 输入/输出仍由 adapter 后续补齐。四个 aggregate 余额始终同步投影所有
-seat；撮合只增加 `unclaimedFees`，`collectedFees` 留给独立收取动作。
+加进该 seat 的 `baseFree`。未注册 take-only 通过 classic SPL Token 双 vault 做实际
+输入/输出，四个 aggregate 余额只同步投影 registered maker seat，不虚构 taker custody。
+撮合只增加 `unclaimedFees`，`collectedFees` 留给独立收取动作。
 -/
 private def settleBuy (s : State) (taker clientOrderIdLo clientOrderIdHi : UInt64)
     (acc : MatchAcc) : Except Error (State × UInt64) :=
@@ -1548,17 +1582,21 @@ private def commitSell
   else
     let quoteDebit := makerQuote + unlocked
     let takerQuote := grossQuote - feeLots
-    if quoteDebit > s.quoteLocked || filled > s.baseFree then
-      .error .overflow
-    else if takerQuote > u64Max - unlocked then
+    if quoteDebit > s.quoteLocked then
       .error .overflow
     else
-      let quoteCredit := takerQuote + unlocked
-      if s.quoteFree > u64Max - quoteCredit then
-        .error .overflow
-      else if s.unclaimedFees > u64Max - feeLots then
+      if s.unclaimedFees > u64Max - feeLots then
         .error .overflow
       else if registeredSeat s taker then
+        if filled > s.baseFree then
+          .error .overflow
+        else if takerQuote > u64Max - unlocked then
+          .error .overflow
+        else
+        let quoteCredit := takerQuote + unlocked
+        if s.quoteFree > u64Max - quoteCredit then
+          .error .overflow
+        else
         let i := taker.toNat - 1
         if filled > s.traderBaseFree[i]! then
           .error .overflow
@@ -1573,17 +1611,21 @@ private def commitSell
             quoteLocked := s.quoteLocked - quoteDebit
             quoteFree := s.quoteFree + quoteCredit
             unclaimedFees := s.unclaimedFees + feeLots }, filled)
-      else if filled = 0 then
-        .ok ({ s with
-          quoteLocked := s.quoteLocked - quoteDebit
-          quoteFree := s.quoteFree + quoteCredit
-          unclaimedFees := s.unclaimedFees + feeLots }, filled)
       else
-        let _ := tokenTransferChecked filled 6
-        .ok ({ s with
-          quoteLocked := s.quoteLocked - quoteDebit
-          quoteFree := s.quoteFree + quoteCredit
-          unclaimedFees := s.unclaimedFees + feeLots }, filled)
+        if s.quoteFree > u64Max - unlocked then
+          .error .overflow
+        else if s.baseFree > u64Max - filled then
+          .error .overflow
+        else
+          let _ := tokenTransferCheckedIx 7 1 3 5 0 filled 6
+          let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 4]
+          let _ := tokenTransferCheckedSignedIx
+            7 6 4 2 6 takerQuote 6 seeds (findPdaSeeds seeds)
+          .ok ({ s with
+            quoteLocked := s.quoteLocked - quoteDebit
+            quoteFree := s.quoteFree + unlocked
+            baseFree := s.baseFree + filled
+            unclaimedFees := s.unclaimedFees + feeLots }, filled)
 
 attribute [pf_inline] commitSell
 

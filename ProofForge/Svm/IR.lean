@@ -388,6 +388,8 @@ private partial def valCanon : Ops.Val → String
   | .ext (.ownerIsSelf acc) #[] => s!"ois.{acc}"
   | .ext (.findPdaSeeds seeds) #[] =>
       s!"pdas.[{String.intercalate "," (seeds.toList.map pdaSeedCanon)}]"
+  | .ext (.checkPdaSeeds account seeds) #[] =>
+      s!"chkpdas.{account}.[{String.intercalate "," (seeds.toList.map pdaSeedCanon)}]"
   | .bitAnd lhs rhs => s!"and({valCanon lhs},{valCanon rhs})"
   | .bitOr lhs rhs => s!"or({valCanon lhs},{valCanon rhs})"
   | .bitXor lhs rhs => s!"xor({valCanon lhs},{valCanon rhs})"

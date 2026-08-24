@@ -26,7 +26,9 @@
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
 171 个 8-byte 叶，账户含 discriminator 共 1,376 bytes。`#pf_build Projects.Phoenix`
-SVM digest `50a4a12458a6c6f5`。
+SVM digest `7a9385514c2b6275`。物理账户表固定为 market state、trader signer、trader
+base/quote Token account、base/quote mint、base/quote vault 和 classic SPL Token program，
+共 9 个账户。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
@@ -41,9 +43,14 @@ trader 参数，而是按 account 1 signer 完整 Pubkey 解析内部 seat；red
 解锁该 seat 的 base/quote 余额。post 的普通锁仓和满书 eviction 也会原子更新 taker
 与被驱逐 maker 的 TraderState；同 owner replacement 先解锁再重新锁仓。matching
 现在也逐 event 更新 maker seat，并在 commit 原子更新 registered taker seat。旧的四个
-聚合槽继续作为所有 seat 和未注册 take-only fallback 的 compatibility projection；
-等双 vault adapter 完成后才能删除 fallback。deposit/withdraw 的 vault Token CPI 仍
-属于 adapter 缺口。
+聚合槽继续作为 registered seat 的 compatibility projection；未注册 take-only 的资产
+直接经 vault 流动，不再伪造 taker 的内部余额。
+
+base/quote vault 都是 `["vault", market key, mint key]` 的 canonical PDA。`depositFunds`
+先比较两个目标账户的完整 32-byte canonical key，再分别执行 trader→vault 的
+`TransferChecked`；`withdrawBase` / `withdrawQuote` 以同一异构 seed 列表和 canonical
+bump 执行 PDA-signed vault→trader transfer，并在 CPI 后保留 state continuation。
+这些能力落在通用 `PdaSeed`、SVM Ops/IR 和 emitter；没有 Phoenix 名字或字段偏移特判。
 
 `postAsk` 是 signer-authenticated 链上 free-funds 挂单：检查 incoming TIF 和 sequence
 上界，把 owner seat 的 `baseFree → baseLocked`，按 `(price, sequence)` 插入有序投影；
@@ -65,8 +72,9 @@ quote 和费用先按整次撮合聚合再向上取整。每个 ask fill 执行 
 registered free-funds buy 从 taker `quoteFree` 扣成交额和费用，再把成交量加进
 `baseFree`。这些 seat transition 和 aggregate compatibility projection 同步提交，
 并增加 `unclaimedFees`；`collectFees` 原子地把它转进 lifetime `collectedFees`。
-registered 路径不做 vault CPI；未注册 take-only 暂保留旧 aggregate 结算和单边
-`TransferChecked` 占位，真正的双 vault 输入/输出 adapter 尚未完成。`reduceAsk` 按
+registered 路径不做 vault CPI；未注册 buy 把 quote+fee 从 trader 转入 quote vault，
+并由 base-vault PDA 把 filled base 转给 trader。未注册 sell 对称地把 filled base 转入
+base vault，再由 quote-vault PDA 转出扣费后的 quote。`reduceAsk` 按
 signer seat + `(price, sequence)` 验 owner，减少 `min(requested, resting)`；缺失订单
 成功返回 0。
 
@@ -91,9 +99,9 @@ variant-vector 写入通过 target-neutral typed layout 降到两个 target，�
 little-endian `(lo, hi)` 两个 `UInt64` limb 完整保留。最宽事件现在是九 payload，测试
 明确钉住动态 `events` 的 byte offset 72，防止抽取器静默漏掉尾叶。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 3,023,640-byte assembly、
-552,264-byte eBPF ELF 和 14,742-byte IDL；SVM digest 是 `50a4a12458a6c6f5`。
-assembly 是未做 CSE/共享基本块的中间文本，不是部署文件；当前 ELF 约 539.3 KiB。
+真实源模块经 `pf build --target svm Phoenix` 生成 3,132,585-byte assembly、
+595,272-byte eBPF ELF 和 16,068-byte IDL；SVM digest 是 `7a9385514c2b6275`。
+assembly 是未做 CSE/共享基本块的中间文本，不是部署文件；当前 ELF 约 581.3 KiB。
 通用抽取器现在去重嵌套 state-helper 的祖先 transition，避免 bid reduce 等组合更新
 被重复发射；完整 maker Pubkey 与 event/lastEvent 双写仍会展开 conditional values。
 测试把 assembly 回归预算钉在 5.75 MB，并拒绝重复 label，同时断言 maker/taker ledger writes 和最宽 event leaf
@@ -108,8 +116,6 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
 | trader tree 的动态 RB 拓扑 | 已有 bounded Pubkey registry、allocator 和 per-seat 值；key 查找暂用四槽扫描 |
-| vault-backed seat lifecycle | bounded deposit/withdraw/zero-state eviction/LIFO reuse 已完成；双 vault Token CPI 尚未接这些入口 |
-| Seat + 双 vault 同一入口 | state transition 已有；CPI 账户表会抬高 |
 | `AuditLogHeader` / Borsh wire event / `Log` self-CPI | ordinal 1 只留 Header 占位；尚未编码真实 header 和窄字段，也未发给 event recorder |
 
 这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。

@@ -54,6 +54,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.ownerIsSelf (acc : Nat) : Val := svmLeaf (.ownerIsSelf acc)
 @[match_pattern] def Val.findPdaSeeds (seeds : Array PdaSeed) : Val :=
   svmLeaf (.findPdaSeeds seeds)
+@[match_pattern] def Val.checkPdaSeeds (account : Nat) (seeds : Array PdaSeed) : Val :=
+  svmLeaf (.checkPdaSeeds account seeds)
 
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber

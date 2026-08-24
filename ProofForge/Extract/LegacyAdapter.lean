@@ -157,6 +157,8 @@ partial def toLegacyVal : Val → Except String ProofForge.Ops.Val
   | .ext (.svm (.ownerIsSelf acc)) #[] => pure (.ownerIsSelf acc)
   | .ext (.svm (.findPdaSeeds _)) #[] =>
       throw "extract/unsupported: legacy adapter cannot represent multi-seed PDA discovery"
+  | .ext (.svm (.checkPdaSeeds _ _)) #[] =>
+      throw "extract/unsupported: legacy adapter cannot represent multi-seed PDA checks"
   | .ext (.evm .caller) #[] => pure .evmCaller
   | .ext (.evm .blockNumber) #[] => pure .evmBlockNumber
   | .ext (.evm .timestamp) #[] => pure .evmTimestamp

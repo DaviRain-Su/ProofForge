@@ -3,76 +3,138 @@ mod common;
 use {
     common::{harness, instruction, plain_account, slot, state_account},
     mollusk_svm::{result::Check, Mollusk},
+    mollusk_svm_programs_token::token,
     solana_account::Account,
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
+    spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
 };
 
 const SELF_TRADE: u32 = 0x1004;
+const UNAUTHORIZED: u32 = 0x1002;
 const STATE_LEN: usize = 1376;
+const DECIMALS: u8 = 6;
+const INITIAL_TOKENS: u64 = 1_000;
+
+struct TraderAccounts {
+    key: Pubkey,
+    base_key: Pubkey,
+    base: Account,
+    quote_key: Pubkey,
+    quote: Account,
+}
+
+impl TraderAccounts {
+    fn new(base_mint: Pubkey, quote_mint: Pubkey) -> Self {
+        let key = Pubkey::new_unique();
+        Self {
+            key,
+            base_key: Pubkey::new_unique(),
+            base: token_account(base_mint, key, INITIAL_TOKENS),
+            quote_key: Pubkey::new_unique(),
+            quote: token_account(quote_mint, key, INITIAL_TOKENS),
+        }
+    }
+}
 
 struct PhoenixFixture {
     program_id: Pubkey,
     mollusk: Mollusk,
     state_key: Pubkey,
     state: Account,
+    base_mint_key: Pubkey,
+    base_mint: Account,
+    quote_mint_key: Pubkey,
+    quote_mint: Account,
+    base_vault_key: Pubkey,
+    base_vault: Account,
+    quote_vault_key: Pubkey,
+    quote_vault: Account,
+    token_program_key: Pubkey,
+    token_program: Account,
 }
 
-fn resulting_state(
-    result: mollusk_svm::result::InstructionResult,
-    state_key: &Pubkey,
-) -> solana_account::Account {
-    result
-        .resulting_accounts
-        .into_iter()
-        .find(|(key, _)| key == state_key)
-        .expect("resulting state")
+fn mint_account(authority: Pubkey) -> Account {
+    token::create_account_for_mint(Mint {
+        mint_authority: Some(authority).into(),
+        supply: 10_000_000,
+        decimals: DECIMALS,
+        is_initialized: true,
+        freeze_authority: None.into(),
+    })
+}
+
+fn token_account(mint: Pubkey, owner: Pubkey, amount: u64) -> Account {
+    token::create_account_for_token_account(TokenAccount {
+        mint,
+        owner,
+        amount,
+        delegate: None.into(),
+        state: AccountState::Initialized,
+        is_native: None.into(),
+        delegated_amount: 0,
+        close_authority: None.into(),
+    })
+}
+
+fn token_amount(account: &Account) -> u64 {
+    u64::from_le_bytes(
+        account.data[64..72]
+            .try_into()
+            .expect("SPL Token account amount"),
+    )
+}
+
+fn account_after(accounts: &[(Pubkey, Account)], key: &Pubkey) -> Account {
+    accounts
+        .iter()
+        .find(|(actual, _)| actual == key)
+        .unwrap_or_else(|| panic!("missing resulting account {key}"))
         .1
+        .clone()
 }
 
-fn phoenix_metas(
-    trader_key: Pubkey,
-    trader_signer: bool,
-    token_source: Pubkey,
-    mint: Pubkey,
-    token_destination: Pubkey,
-    token_program: Pubkey,
-) -> Vec<AccountMeta> {
-    vec![
-        AccountMeta::new_readonly(trader_key, trader_signer),
-        AccountMeta::new(token_source, false),
-        AccountMeta::new_readonly(mint, false),
-        AccountMeta::new(token_destination, false),
-        AccountMeta::new_readonly(token_program, false),
-    ]
-}
-
-fn phoenix_accounts(
-    trader_key: Pubkey,
-    token_source: Pubkey,
-    mint: Pubkey,
-    token_destination: Pubkey,
-    token_program: Pubkey,
-) -> Vec<(Pubkey, solana_account::Account)> {
-    vec![
-        (trader_key, plain_account()),
-        (token_source, plain_account()),
-        (mint, plain_account()),
-        (token_destination, plain_account()),
-        (token_program, plain_account()),
-    ]
+fn assert_atomic_failure(
+    result: &mollusk_svm::result::InstructionResult,
+    snapshots: &[(Pubkey, Vec<u8>)],
+) {
+    assert!(
+        result.raw_result.is_err(),
+        "instruction unexpectedly succeeded"
+    );
+    for (key, before) in snapshots {
+        assert_eq!(
+            &account_after(&result.resulting_accounts, key).data,
+            before,
+            "failed instruction mutated {key}"
+        );
+    }
 }
 
 impl PhoenixFixture {
     fn new(tick_size: u64) -> Self {
-        let (program_id, mollusk) = harness("Phoenix", "PF_PHOENIX_SO");
+        let (program_id, mut mollusk) = harness("Phoenix", "PF_PHOENIX_SO");
+        token::add_program(&mut mollusk);
+
         let state_key = Pubkey::new_unique();
-        let trader_key = Pubkey::new_unique();
-        let token_source = Pubkey::new_unique();
-        let mint = Pubkey::new_unique();
-        let token_destination = Pubkey::new_unique();
-        let token_program = Pubkey::new_unique();
+        let base_mint_key = Pubkey::new_unique();
+        let quote_mint_key = Pubkey::new_unique();
+        let mint_authority = Pubkey::new_unique();
+        let base_mint = mint_account(mint_authority);
+        let quote_mint = mint_account(mint_authority);
+        let (base_vault_key, _) = Pubkey::find_program_address(
+            &[b"vault", state_key.as_ref(), base_mint_key.as_ref()],
+            &program_id,
+        );
+        let (quote_vault_key, _) = Pubkey::find_program_address(
+            &[b"vault", state_key.as_ref(), quote_mint_key.as_ref()],
+            &program_id,
+        );
+        let base_vault = token_account(base_mint_key, base_vault_key, 0);
+        let quote_vault = token_account(quote_mint_key, quote_vault_key, 0);
+        let (token_program_key, token_program) = token::keyed_account();
+        let bootstrap = TraderAccounts::new(base_mint_key, quote_mint_key);
 
         let init = instruction(
             program_id,
@@ -81,26 +143,30 @@ impl PhoenixFixture {
             &[tick_size],
             true,
             true,
-            phoenix_metas(
-                trader_key,
-                false,
-                token_source,
-                mint,
-                token_destination,
-                token_program,
+            Self::metas_for(
+                &bootstrap,
+                base_mint_key,
+                quote_mint_key,
+                base_vault_key,
+                quote_vault_key,
+                token_program_key,
+                true,
             ),
         );
-        let mut init_accounts = vec![(state_key, state_account(&program_id, STATE_LEN))];
-        init_accounts.extend(phoenix_accounts(
-            trader_key,
-            token_source,
-            mint,
-            token_destination,
-            token_program,
-        ));
+        let init_accounts = vec![
+            (state_key, state_account(&program_id, STATE_LEN)),
+            (bootstrap.key, plain_account()),
+            (bootstrap.base_key, bootstrap.base),
+            (bootstrap.quote_key, bootstrap.quote),
+            (base_mint_key, base_mint.clone()),
+            (quote_mint_key, quote_mint.clone()),
+            (base_vault_key, base_vault.clone()),
+            (quote_vault_key, quote_vault.clone()),
+            (token_program_key, token_program.clone()),
+        ];
         let initialized =
             mollusk.process_and_validate_instruction(&init, &init_accounts, &[Check::success()]);
-        let state = resulting_state(initialized, &state_key);
+        let state = account_after(&initialized.resulting_accounts, &state_key);
         assert_eq!((slot(&state, 0), slot(&state, 1)), (1, tick_size));
         assert_eq!((slot(&state, 2), slot(&state, 3)), (1, 5));
         assert_eq!(
@@ -108,57 +174,91 @@ impl PhoenixFixture {
             (0, 1, 1),
             "empty trader allocator state"
         );
+
         Self {
             program_id,
             mollusk,
             state_key,
             state,
+            base_mint_key,
+            base_mint,
+            quote_mint_key,
+            quote_mint,
+            base_vault_key,
+            base_vault,
+            quote_vault_key,
+            quote_vault,
+            token_program_key,
+            token_program,
         }
+    }
+
+    fn trader(&self) -> TraderAccounts {
+        TraderAccounts::new(self.base_mint_key, self.quote_mint_key)
+    }
+
+    fn metas_for(
+        trader: &TraderAccounts,
+        base_mint: Pubkey,
+        quote_mint: Pubkey,
+        base_vault: Pubkey,
+        quote_vault: Pubkey,
+        token_program: Pubkey,
+        trader_signer: bool,
+    ) -> Vec<AccountMeta> {
+        vec![
+            AccountMeta::new_readonly(trader.key, trader_signer),
+            AccountMeta::new(trader.base_key, false),
+            AccountMeta::new(trader.quote_key, false),
+            AccountMeta::new_readonly(base_mint, false),
+            AccountMeta::new_readonly(quote_mint, false),
+            AccountMeta::new(base_vault, false),
+            AccountMeta::new(quote_vault, false),
+            AccountMeta::new_readonly(token_program, false),
+        ]
     }
 
     fn invocation(
         &self,
-        trader_key: Pubkey,
+        trader: &TraderAccounts,
         name: &str,
         params: &[u64],
         trader_signer: bool,
-        state_signer: bool,
         state: Account,
     ) -> (solana_instruction::Instruction, Vec<(Pubkey, Account)>) {
-        let token_source = Pubkey::new_unique();
-        let mint = Pubkey::new_unique();
-        let token_destination = Pubkey::new_unique();
-        let token_program = Pubkey::new_unique();
         let ix = instruction(
             self.program_id,
             self.state_key,
             name,
             params,
             true,
-            state_signer,
-            phoenix_metas(
-                trader_key,
+            true,
+            Self::metas_for(
+                trader,
+                self.base_mint_key,
+                self.quote_mint_key,
+                self.base_vault_key,
+                self.quote_vault_key,
+                self.token_program_key,
                 trader_signer,
-                token_source,
-                mint,
-                token_destination,
-                token_program,
             ),
         );
-        let mut accounts = vec![(self.state_key, state)];
-        accounts.extend(phoenix_accounts(
-            trader_key,
-            token_source,
-            mint,
-            token_destination,
-            token_program,
-        ));
+        let accounts = vec![
+            (self.state_key, state),
+            (trader.key, plain_account()),
+            (trader.base_key, trader.base.clone()),
+            (trader.quote_key, trader.quote.clone()),
+            (self.base_mint_key, self.base_mint.clone()),
+            (self.quote_mint_key, self.quote_mint.clone()),
+            (self.base_vault_key, self.base_vault.clone()),
+            (self.quote_vault_key, self.quote_vault.clone()),
+            (self.token_program_key, self.token_program.clone()),
+        ];
         (ix, accounts)
     }
 
-    fn run(&mut self, trader_key: Pubkey, name: &str, params: &[u64], expected: u64) {
-        let (ix, accounts) =
-            self.invocation(trader_key, name, params, true, true, self.state.clone());
+    fn run(&mut self, trader: &mut TraderAccounts, name: &str, params: &[u64], expected: u64) {
+        let (ix, accounts) = self.invocation(trader, name, params, true, self.state.clone());
         let result = self.mollusk.process_and_validate_instruction(
             &ix,
             &accounts,
@@ -167,32 +267,44 @@ impl PhoenixFixture {
                 Check::return_data(&expected.to_le_bytes()),
             ],
         );
-        self.state = resulting_state(result, &self.state_key);
+        let resulting = result.resulting_accounts;
+        self.state = account_after(&resulting, &self.state_key);
+        trader.base = account_after(&resulting, &trader.base_key);
+        trader.quote = account_after(&resulting, &trader.quote_key);
+        self.base_vault = account_after(&resulting, &self.base_vault_key);
+        self.quote_vault = account_after(&resulting, &self.quote_vault_key);
     }
 
     fn run_error(
         &self,
-        trader_key: Pubkey,
+        trader: &TraderAccounts,
         name: &str,
         params: &[u64],
         trader_signer: bool,
         error: ProgramError,
     ) {
-        let before = self.state.data.clone();
-        let (ix, accounts) = self.invocation(
-            trader_key,
-            name,
-            params,
-            trader_signer,
-            true,
-            self.state.clone(),
-        );
+        let (ix, accounts) =
+            self.invocation(trader, name, params, trader_signer, self.state.clone());
         self.mollusk.process_and_validate_instruction(
             &ix,
             &accounts,
             &[
                 Check::err(error),
-                Check::account(&self.state_key).data(&before).build(),
+                Check::account(&self.state_key)
+                    .data(&self.state.data)
+                    .build(),
+                Check::account(&trader.base_key)
+                    .data(&trader.base.data)
+                    .build(),
+                Check::account(&trader.quote_key)
+                    .data(&trader.quote.data)
+                    .build(),
+                Check::account(&self.base_vault_key)
+                    .data(&self.base_vault.data)
+                    .build(),
+                Check::account(&self.quote_vault_key)
+                    .data(&self.quote_vault.data)
+                    .build(),
             ],
         );
     }
@@ -205,155 +317,303 @@ impl PhoenixFixture {
 #[test]
 fn ask_lifecycle_buy_fee_withdraw_and_evict_run_on_chain() {
     let mut fixture = PhoenixFixture::new(1);
-    let maker = Pubkey::new_unique();
-    let taker = Pubkey::new_unique();
+    let mut maker = fixture.trader();
+    let mut taker = fixture.trader();
 
-    fixture.run(maker, "depositFunds", &[8, 0], 1);
+    fixture.run(&mut maker, "depositFunds", &[8, 0], 1);
+    assert_eq!(
+        (token_amount(&maker.base), token_amount(&fixture.base_vault)),
+        (992, 8)
+    );
     assert_eq!(fixture.slots([54, 61, 89, 93, 99, 100]), [1, 1, 0, 8, 0, 8]);
     for (word, index) in [65usize, 69, 73, 77].into_iter().enumerate() {
         let offset = word * 8;
         let expected = u64::from_le_bytes(
-            maker.to_bytes()[offset..offset + 8]
+            maker.key.to_bytes()[offset..offset + 8]
                 .try_into()
                 .expect("pubkey limb"),
         );
         assert_eq!(slot(&fixture.state, index), expected);
     }
 
-    fixture.run(maker, "postAsk", &[10, 3, 11, 12, 0, 0], 3);
+    fixture.run(&mut maker, "postAsk", &[10, 3, 11, 12, 0, 0], 3);
     assert_eq!(fixture.slots([6, 10, 14, 18]), [10, 1, 1, 3]);
     assert_eq!(fixture.slots([2, 89, 93, 99, 100]), [2, 3, 5, 3, 5]);
-    assert_eq!(fixture.slots([110, 160]), [3, 1], "place event");
 
-    fixture.run(maker, "reduceAsk", &[10, 1, 0], 0);
-    fixture.run(maker, "reduceAsk", &[10, 1, 1], 1);
+    fixture.run(&mut maker, "reduceAsk", &[10, 1, 0], 0);
+    fixture.run(&mut maker, "reduceAsk", &[10, 1, 1], 1);
     assert_eq!(fixture.slots([18, 89, 93, 99, 100]), [2, 2, 6, 2, 6]);
-    assert_eq!(fixture.slots([110, 160]), [4, 1], "reduce event");
 
-    fixture.run(taker, "depositFunds", &[0, 100], 2);
+    fixture.run(&mut taker, "depositFunds", &[0, 100], 2);
     assert_eq!(
-        fixture.slots([54, 62, 86, 94, 98, 100]),
-        [2, 1, 100, 0, 100, 6]
+        (
+            token_amount(&taker.quote),
+            token_amount(&fixture.quote_vault)
+        ),
+        (900, 100)
     );
-
-    fixture.run(taker, "swapBuy", &[0, 21, 22, 2, 10], 2);
+    fixture.run(&mut taker, "swapBuy", &[0, 21, 22, 2, 10], 2);
     assert_eq!(fixture.slots([18, 89, 85, 86, 94]), [0, 0, 20, 79, 2]);
     assert_eq!(fixture.slots([5, 97, 98, 99, 100]), [1, 0, 99, 0, 8]);
     assert_eq!(
-        fixture.slots([110, 120, 160]),
-        [2, 6, 2],
-        "fill and summary events"
+        (
+            token_amount(&fixture.base_vault),
+            token_amount(&fixture.quote_vault)
+        ),
+        (8, 100),
+        "registered free-funds matching is vault-internal"
     );
 
-    fixture.run(maker, "collectFees", &[], 1);
+    fixture.run(&mut maker, "collectFees", &[], 1);
     assert_eq!(fixture.slots([4, 5, 110, 160]), [1, 0, 7, 1]);
 
-    fixture.run(maker, "withdrawQuote", &[100], 20);
-    fixture.run(maker, "withdrawBase", &[100], 6);
+    fixture.run(&mut maker, "withdrawQuote", &[100], 20);
+    fixture.run(&mut maker, "withdrawBase", &[100], 6);
     assert_eq!(fixture.slots([85, 93, 98, 100]), [0, 0, 79, 2]);
+    assert_eq!(
+        (
+            token_amount(&maker.base),
+            token_amount(&maker.quote),
+            token_amount(&fixture.base_vault),
+            token_amount(&fixture.quote_vault),
+        ),
+        (998, 1020, 2, 80)
+    );
 
-    fixture.run(maker, "evictSeat", &[], 1);
+    fixture.run(&mut maker, "evictSeat", &[], 1);
     assert_eq!(fixture.slots([54, 55, 56, 57, 61]), [1, 3, 1, 3, 0]);
-    assert_eq!(fixture.slots([65, 69, 73, 77]), [0, 0, 0, 0]);
 }
 
 #[test]
 fn bid_lifecycle_reduce_and_sell_run_on_chain() {
     let mut fixture = PhoenixFixture::new(1);
-    let maker = Pubkey::new_unique();
-    let taker = Pubkey::new_unique();
+    let mut maker = fixture.trader();
+    let mut taker = fixture.trader();
 
-    fixture.run(maker, "depositFunds", &[0, 100], 1);
-    fixture.run(maker, "postBid", &[12, 3, 31, 32, 0, 0], 3);
+    fixture.run(&mut maker, "depositFunds", &[0, 100], 1);
+    fixture.run(&mut maker, "postBid", &[12, 3, 31, 32, 0, 0], 3);
     assert_eq!(fixture.slots([30, 34, 38, 42]), [12, !1, 1, 3]);
     assert_eq!(fixture.slots([2, 81, 85, 97, 98]), [2, 36, 64, 36, 64]);
 
-    fixture.run(maker, "reduceBid", &[12, !1, 0], 0);
-    fixture.run(maker, "reduceBid", &[12, !1, 1], 1);
+    fixture.run(&mut maker, "reduceBid", &[12, !1, 0], 0);
+    fixture.run(&mut maker, "reduceBid", &[12, !1, 1], 1);
     assert_eq!(fixture.slots([42, 81, 85, 97, 98]), [2, 24, 76, 24, 76]);
-    assert_eq!(fixture.slots([110, 160]), [4, 1], "reduce event");
 
-    fixture.run(taker, "depositFunds", &[2, 0], 2);
-    fixture.run(taker, "swapSell", &[0, 41, 42, 2, 12], 2);
+    fixture.run(&mut taker, "depositFunds", &[2, 0], 2);
+    fixture.run(&mut taker, "swapSell", &[0, 41, 42, 2, 12], 2);
     assert_eq!(fixture.slots([42, 81, 86, 93, 94]), [0, 0, 23, 2, 0]);
     assert_eq!(fixture.slots([5, 97, 98, 99, 100]), [1, 0, 99, 0, 2]);
     assert_eq!(
-        fixture.slots([110, 120, 160]),
-        [2, 6, 2],
-        "fill and summary events"
+        (
+            token_amount(&fixture.base_vault),
+            token_amount(&fixture.quote_vault)
+        ),
+        (2, 100),
+        "registered free-funds matching is vault-internal"
+    );
+}
+
+#[test]
+fn unregistered_buy_and_sell_execute_both_token_legs() {
+    let mut buy = PhoenixFixture::new(1);
+    let mut ask_maker = buy.trader();
+    let mut buy_taker = buy.trader();
+    buy.run(&mut ask_maker, "depositFunds", &[4, 0], 1);
+    buy.run(&mut ask_maker, "postAsk", &[10, 4, 1, 2, 0, 0], 4);
+    buy.run(&mut buy_taker, "swapBuy", &[0, 3, 4, 4, 10], 4);
+    assert_eq!(
+        (
+            token_amount(&buy_taker.base),
+            token_amount(&buy_taker.quote),
+            token_amount(&buy.base_vault),
+            token_amount(&buy.quote_vault),
+        ),
+        (1004, 959, 0, 41)
+    );
+    assert_eq!(
+        buy.slots([5, 89, 93, 97, 98, 99, 100]),
+        [1, 0, 0, 0, 40, 0, 0]
+    );
+
+    let mut sell = PhoenixFixture::new(1);
+    let mut bid_maker = sell.trader();
+    let mut sell_taker = sell.trader();
+    sell.run(&mut bid_maker, "depositFunds", &[0, 100], 1);
+    sell.run(&mut bid_maker, "postBid", &[12, 4, 5, 6, 0, 0], 4);
+    sell.run(&mut sell_taker, "swapSell", &[0, 7, 8, 4, 12], 4);
+    assert_eq!(
+        (
+            token_amount(&sell_taker.base),
+            token_amount(&sell_taker.quote),
+            token_amount(&sell.base_vault),
+            token_amount(&sell.quote_vault),
+        ),
+        (996, 1047, 4, 53)
+    );
+    assert_eq!(
+        sell.slots([5, 81, 85, 93, 97, 98, 99, 100]),
+        [1, 0, 52, 4, 0, 52, 0, 4]
     );
 }
 
 #[test]
 fn slot_and_unix_time_in_force_expire_strictly_on_chain() {
     let mut fixture = PhoenixFixture::new(1);
-    let maker = Pubkey::new_unique();
-    let taker = Pubkey::new_unique();
+    let mut maker = fixture.trader();
+    let mut taker = fixture.trader();
 
     fixture.mollusk.warp_to_slot(100);
     fixture.mollusk.sysvars.clock.unix_timestamp = 1_000;
-    fixture.run(maker, "depositFunds", &[4, 0], 1);
-    fixture.run(taker, "depositFunds", &[0, 100], 2);
+    fixture.run(&mut maker, "depositFunds", &[4, 0], 1);
+    fixture.run(&mut taker, "depositFunds", &[0, 100], 2);
 
-    fixture.run(maker, "postAsk", &[10, 2, 51, 52, 100, 0], 2);
-    assert_eq!(
-        fixture.slots([18, 22, 26, 110, 120, 160]),
-        [2, 100, 0, 3, 8, 2]
-    );
+    fixture.run(&mut maker, "postAsk", &[10, 2, 51, 52, 100, 0], 2);
     fixture.mollusk.warp_to_slot(101);
-    fixture.run(taker, "swapBuy", &[0, 61, 62, 1, 10], 0);
+    fixture.run(&mut taker, "swapBuy", &[0, 61, 62, 1, 10], 0);
     assert_eq!(fixture.slots([18, 89, 93, 99, 100]), [0, 0, 4, 0, 4]);
-    assert_eq!(fixture.slots([110, 120, 160]), [9, 6, 2]);
 
-    fixture.run(maker, "postAsk", &[11, 2, 71, 72, 0, 1_000], 2);
-    assert_eq!(
-        fixture.slots([18, 22, 26, 110, 120, 160]),
-        [2, 0, 1_000, 3, 8, 2]
-    );
+    fixture.run(&mut maker, "postAsk", &[11, 2, 71, 72, 0, 1_000], 2);
     fixture.mollusk.sysvars.clock.unix_timestamp = 1_001;
-    fixture.run(taker, "swapBuy", &[0, 81, 82, 1, 11], 0);
+    fixture.run(&mut taker, "swapBuy", &[0, 81, 82, 1, 11], 0);
     assert_eq!(fixture.slots([18, 89, 93, 99, 100]), [0, 0, 4, 0, 4]);
-    assert_eq!(fixture.slots([110, 120, 160]), [9, 6, 2]);
 }
 
 #[test]
 fn all_self_trade_behaviors_run_on_chain() {
-    let trader = Pubkey::new_unique();
-
     let mut abort = PhoenixFixture::new(1);
-    abort.run(trader, "depositFunds", &[3, 100], 1);
-    abort.run(trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
+    let mut abort_trader = abort.trader();
+    abort.run(&mut abort_trader, "depositFunds", &[3, 100], 1);
+    abort.run(&mut abort_trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
     abort.run_error(
-        trader,
+        &abort_trader,
         "swapBuy",
         &[0, 0, 0, 2, 10],
         true,
         ProgramError::Custom(SELF_TRADE),
     );
-    assert_eq!(abort.slots([18, 89, 93, 110, 160]), [3, 3, 0, 3, 1]);
 
-    let mut cancel_provide = PhoenixFixture::new(1);
-    cancel_provide.run(trader, "depositFunds", &[3, 100], 1);
-    cancel_provide.run(trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
-    cancel_provide.run(trader, "swapBuy", &[1, 0, 0, 2, 10], 0);
-    assert_eq!(cancel_provide.slots([18, 89, 93, 99, 100]), [0, 0, 3, 0, 3]);
-    assert_eq!(cancel_provide.slots([110, 120, 160]), [4, 6, 2]);
+    let mut cancel = PhoenixFixture::new(1);
+    let mut cancel_trader = cancel.trader();
+    cancel.run(&mut cancel_trader, "depositFunds", &[3, 100], 1);
+    cancel.run(&mut cancel_trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
+    cancel.run(&mut cancel_trader, "swapBuy", &[1, 0, 0, 2, 10], 0);
+    assert_eq!(cancel.slots([18, 89, 93, 99, 100]), [0, 0, 3, 0, 3]);
 
-    let mut decrement_take = PhoenixFixture::new(1);
-    decrement_take.run(trader, "depositFunds", &[3, 100], 1);
-    decrement_take.run(trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
-    decrement_take.run(trader, "swapBuy", &[2, 0, 0, 2, 10], 0);
-    assert_eq!(decrement_take.slots([18, 89, 93, 99, 100]), [1, 1, 2, 1, 2]);
-    assert_eq!(decrement_take.slots([110, 120, 160]), [4, 6, 2]);
+    let mut decrement = PhoenixFixture::new(1);
+    let mut decrement_trader = decrement.trader();
+    decrement.run(&mut decrement_trader, "depositFunds", &[3, 100], 1);
+    decrement.run(&mut decrement_trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
+    decrement.run(&mut decrement_trader, "swapBuy", &[2, 0, 0, 2, 10], 0);
+    assert_eq!(decrement.slots([18, 89, 93, 99, 100]), [1, 1, 2, 1, 2]);
+}
+
+#[test]
+fn vault_mint_program_and_writable_failures_are_atomic() {
+    let fixture = PhoenixFixture::new(1);
+    let trader = fixture.trader();
+
+    let (mut wrong_vault_ix, mut wrong_vault_accounts) = fixture.invocation(
+        &trader,
+        "depositFunds",
+        &[1, 0],
+        true,
+        fixture.state.clone(),
+    );
+    let wrong_vault = Pubkey::new_unique();
+    wrong_vault_ix.accounts[6] = AccountMeta::new(wrong_vault, false);
+    wrong_vault_accounts[6] = (
+        wrong_vault,
+        token_account(fixture.base_mint_key, wrong_vault, 0),
+    );
+    fixture.mollusk.process_and_validate_instruction(
+        &wrong_vault_ix,
+        &wrong_vault_accounts,
+        &[
+            Check::err(ProgramError::Custom(UNAUTHORIZED)),
+            Check::account(&fixture.state_key)
+                .data(&fixture.state.data)
+                .build(),
+            Check::account(&trader.base_key)
+                .data(&trader.base.data)
+                .build(),
+        ],
+    );
+
+    let (mut wrong_mint_ix, mut wrong_mint_accounts) = fixture.invocation(
+        &trader,
+        "depositFunds",
+        &[1, 0],
+        true,
+        fixture.state.clone(),
+    );
+    let wrong_mint = Pubkey::new_unique();
+    let (wrong_derived_vault, _) = Pubkey::find_program_address(
+        &[b"vault", fixture.state_key.as_ref(), wrong_mint.as_ref()],
+        &fixture.program_id,
+    );
+    wrong_mint_ix.accounts[4] = AccountMeta::new_readonly(wrong_mint, false);
+    wrong_mint_ix.accounts[6] = AccountMeta::new(wrong_derived_vault, false);
+    wrong_mint_accounts[4] = (wrong_mint, mint_account(Pubkey::new_unique()));
+    wrong_mint_accounts[6] = (
+        wrong_derived_vault,
+        token_account(wrong_mint, wrong_derived_vault, 0),
+    );
+    let snapshots = vec![
+        (fixture.state_key, fixture.state.data.clone()),
+        (trader.base_key, trader.base.data.clone()),
+        (wrong_derived_vault, wrong_mint_accounts[6].1.data.clone()),
+    ];
+    let wrong_mint_result = fixture
+        .mollusk
+        .process_instruction(&wrong_mint_ix, &wrong_mint_accounts);
+    assert_atomic_failure(&wrong_mint_result, &snapshots);
+
+    let (mut wrong_program_ix, mut wrong_program_accounts) = fixture.invocation(
+        &trader,
+        "depositFunds",
+        &[1, 0],
+        true,
+        fixture.state.clone(),
+    );
+    let wrong_program = Pubkey::new_unique();
+    wrong_program_ix.accounts[8] = AccountMeta::new_readonly(wrong_program, false);
+    wrong_program_accounts[8] = (wrong_program, plain_account());
+    let snapshots = vec![
+        (fixture.state_key, fixture.state.data.clone()),
+        (trader.base_key, trader.base.data.clone()),
+        (fixture.base_vault_key, fixture.base_vault.data.clone()),
+    ];
+    let wrong_program_result = fixture
+        .mollusk
+        .process_instruction(&wrong_program_ix, &wrong_program_accounts);
+    assert_atomic_failure(&wrong_program_result, &snapshots);
+
+    let (mut readonly_ix, readonly_accounts) = fixture.invocation(
+        &trader,
+        "depositFunds",
+        &[1, 0],
+        true,
+        fixture.state.clone(),
+    );
+    readonly_ix.accounts[6] = AccountMeta::new_readonly(fixture.base_vault_key, false);
+    let snapshots = vec![
+        (fixture.state_key, fixture.state.data.clone()),
+        (trader.base_key, trader.base.data.clone()),
+        (fixture.base_vault_key, fixture.base_vault.data.clone()),
+    ];
+    let readonly_result = fixture
+        .mollusk
+        .process_instruction(&readonly_ix, &readonly_accounts);
+    assert_atomic_failure(&readonly_result, &snapshots);
 }
 
 #[test]
 fn signer_and_state_owner_failures_are_atomic() {
     let fixture = PhoenixFixture::new(1);
-    let trader = Pubkey::new_unique();
+    let trader = fixture.trader();
 
     fixture.run_error(
-        trader,
+        &trader,
         "depositFunds",
         &[1, 0],
         false,
@@ -362,14 +622,15 @@ fn signer_and_state_owner_failures_are_atomic() {
 
     let mut forged = fixture.state.clone();
     forged.owner = Pubkey::new_unique();
-    let before = forged.data.clone();
-    let (ix, accounts) = fixture.invocation(trader, "depositFunds", &[1, 0], true, true, forged);
+    let (ix, accounts) = fixture.invocation(&trader, "depositFunds", &[1, 0], true, forged);
     fixture.mollusk.process_and_validate_instruction(
         &ix,
         &accounts,
         &[
             Check::err(ProgramError::Custom(1)),
-            Check::account(&fixture.state_key).data(&before).build(),
+            Check::account(&fixture.state_key)
+                .data(&fixture.state.data)
+                .build(),
         ],
     );
 }

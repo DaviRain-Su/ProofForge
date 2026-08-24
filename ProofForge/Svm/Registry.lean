@@ -50,7 +50,7 @@ def entries : Array Entry := #[
   { name := "Nonce", digest := "5746ebbdd382bd56" },
   { name := "TokenOwner", digest := "d29884f00e7311b7" },
   { name := "TokenMs", digest := "672b83a54f057f79" },
-  { name := "Phoenix", digest := "50a4a12458a6c6f5" },
+  { name := "Phoenix", digest := "7a9385514c2b6275" },
   { name := "Book", digest := "525c5967ae68d203" },
   { name := "Seat", digest := "831f313077f89947" },
   { name := "Lang", digest := "64264acebea0c34c" }

@@ -669,6 +669,60 @@ elab "#pf_guard_multi_seed_invoke_sequence" : command => do
 
 #pf_guard_multi_seed_invoke_sequence
 
+elab "#pf_guard_single_multi_seed_invoke_continuation" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Examples.Counter.init
+        ``Tests.Fixtures.singleMultiSeedTransfer ``Examples.Counter.get with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let lowered ←
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some transfer := lowered.methods.find? (·.ixName == "singleMultiSeedTransfer")
+    | throwError "missing single multi-seed transfer method"
+  let expectedSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
+    #[.ascii "vault", .stateKey, .accKey 3]
+  match transfer.ops with
+  | #[.invoke 8 _ _ seeds (some (.ext (.findPdaSeeds bumpSeeds) #[])),
+      .storeField "value" (.arg 0), .okState (.arg 0)] =>
+        unless seeds == expectedSeeds && bumpSeeds == expectedSeeds do
+          throwError s!"single multi-seed list mismatch: {repr transfer.ops}"
+  | _ =>
+      throwError s!"single multi-seed continuation IR mismatch: {repr transfer.ops}"
+
+#pf_guard_single_multi_seed_invoke_continuation
+
+elab "#pf_guard_multi_seed_pda_account_check" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Examples.Counter.init
+        ``Examples.Counter.increment ``Tests.Fixtures.checkMultiSeedPda with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let lowered ←
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some check := lowered.methods.find? (·.ixName == "checkMultiSeedPda")
+    | throwError "missing multi-seed PDA check method"
+  let seeds : Array ProofForge.Svm.Ops.PdaSeed :=
+    #[.ascii "vault", .stateKey, .accKey 3]
+  unless check.ops == #[.returnU64 (.ext (.checkPdaSeeds 5 seeds) #[])] do
+    throwError s!"multi-seed PDA check IR mismatch: {repr check.ops}"
+  unless ProofForge.Svm.IR.cpiAccountCount lowered == 7 do
+    throwError s!"multi-seed PDA check account scan stopped at " ++
+      s!"{ProofForge.Svm.IR.cpiAccountCount lowered}"
+  let asm ←
+    match ProofForge.Svm.Emit.emitProgramAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless asm.contains "; checkPdaSeeds account=5 count=3" do
+    throwError "multi-seed full-key PDA check emission is missing"
+
+#pf_guard_multi_seed_pda_account_check
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 
 #pf_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag

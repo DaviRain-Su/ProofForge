@@ -55,6 +55,7 @@ inductive ValKind where
   | signerKeyN (acc : Nat)
   | ownerIsSelf (acc : Nat)
   | findPdaSeeds (seeds : Array PdaSeed)
+  | checkPdaSeeds (account : Nat) (seeds : Array PdaSeed)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
@@ -124,6 +125,8 @@ def isExecutableN (acc : Nat) : Val := leaf (.isExecutableN acc)
 def signerKeyN (acc : Nat) : Val := leaf (.signerKeyN acc)
 def ownerIsSelf (acc : Nat) : Val := leaf (.ownerIsSelf acc)
 def findPdaSeeds (seeds : Array PdaSeed) : Val := leaf (.findPdaSeeds seeds)
+def checkPdaSeeds (account : Nat) (seeds : Array PdaSeed) : Val :=
+  leaf (.checkPdaSeeds account seeds)
 
 def CpiWord.wellFormed (word : CpiWord Val) : Bool :=
   match word with
@@ -156,6 +159,9 @@ private partial def staticPayloadsWellFormed : Val → Bool
         staticPayloadsWellFormed thn && staticPayloadsWellFormed els
   | .ext (.findPdaSeeds seeds) operands =>
       PdaSeed.groupWellFormed seeds && operands.all staticPayloadsWellFormed
+  | .ext (.checkPdaSeeds account seeds) operands =>
+      cpiAccInRange account && PdaSeed.groupWellFormed seeds &&
+        operands.all staticPayloadsWellFormed
   | .ext _ operands => operands.all staticPayloadsWellFormed
   | _ => true
 
@@ -218,6 +224,7 @@ partial def valNeedsWalk : Val → Bool
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
        | .findPdaSeeds seeds => seeds.any fun | .stateKey | .accKey _ => true | _ => false
+       | .checkPdaSeeds _ _ => true
        | _ => false) || operands.any valNeedsWalk
 
 partial def valMinAccounts : Val → Nat
@@ -244,6 +251,11 @@ partial def valMinAccounts : Val → Nat
             match seed with
             | .accKey acc => Nat.max current (acc + 2)
             | _ => current
+        | .checkPdaSeeds account seeds =>
+            seeds.foldl (init := account + 2) fun current seed =>
+              match seed with
+              | .accKey acc => Nat.max current (acc + 2)
+              | _ => current
         | _ => 0
       operands.foldl (init := here) fun current operand =>
         Nat.max current (valMinAccounts operand)

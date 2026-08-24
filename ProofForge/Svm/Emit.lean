@@ -7,6 +7,10 @@ def overflowCode : String := "0x1001"
 /-- Deep scratch stays clear of expression temporaries, walk headers, scalar locals, and CPI data. -/
 private def sysvarScratch : Nat := 3072
 private def sysvarProgramIdScratch : Nat := 3104
+/-- Heterogeneous PDA discovery may need 480 seed bytes, 15 descriptors, and a 32-byte result.
+It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
+PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
+private def pdaSeedsScratch : Nat := 4096
 /-- Loop control must not overlap expression temporaries (8..), scalar locals (320..), or
 walked-account headers (512..). -/
 private def loopCounterScratch : Nat := 304
@@ -567,8 +571,9 @@ find_pda_done_{scope}_{stackOff}:
 "
 
 /-- `sol_try_find_program_address` for a static heterogeneous seed list. Account-key seeds point
-directly into walked input headers; literal bytes and descriptors live in the dedicated PDA
-scratch region at `r10-2800`. The returned value is the canonical bump. -/
+directly into walked input headers; literal bytes, descriptors, and syscall outputs live at the
+bottom of the current stack frame, disjoint from an in-progress CPI layout. The returned value is
+the canonical bump. -/
 private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
     (stackOff : Nat) (scope : String) : String := Id.run do
   let descOff := 512
@@ -626,7 +631,7 @@ private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
   return s!"\
   ; findPdaSeeds count={seeds.size}
   mov64 r8, r10
-  add64 r8, -2800
+  add64 r8, -{pdaSeedsScratch}
 {bytes}{descriptors}{progId}  mov64 r1, r8
   add64 r1, {descOff}
   lddw r2, {seeds.size}
@@ -641,6 +646,37 @@ private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
 find_pdas_ok_{scope}_{stackOff}:
   ldxb r1, [r8 + {outBumpOff}]
   stxdw [r10 - {stackOff}], r1
+"
+
+/-- Find a heterogeneous canonical PDA and compare all four 64-bit key words with one walked
+external account. The result is 0 on equality and 1 on mismatch. -/
+private def emitLoadCheckPdaSeeds (p : IR.Program) (account : Nat)
+    (seeds : Array Ops.PdaSeed) (stackOff : Nat) (scope : String) : String :=
+  let find := emitLoadFindPdaSeeds p seeds stackOff (scope ++ "_find")
+  let tag := s!"{scope}_{stackOff}_{account}"
+  find ++ s!"\
+  ; checkPdaSeeds account={account} count={seeds.size}
+  ldxdw r2, [r10 - {headerStack (account + 1)}]
+  add64 r2, 8
+  ldxdw r1, [r8 + 1024]
+  ldxdw r3, [r2 + 0]
+  jne r1, r3, check_pdas_bad_{tag}
+  ldxdw r1, [r8 + 1032]
+  ldxdw r3, [r2 + 8]
+  jne r1, r3, check_pdas_bad_{tag}
+  ldxdw r1, [r8 + 1040]
+  ldxdw r3, [r2 + 16]
+  jne r1, r3, check_pdas_bad_{tag}
+  ldxdw r1, [r8 + 1048]
+  ldxdw r3, [r2 + 24]
+  jne r1, r3, check_pdas_bad_{tag}
+  lddw r1, 0
+  stxdw [r10 - {stackOff}], r1
+  ja check_pdas_done_{tag}
+check_pdas_bad_{tag}:
+  lddw r1, 1
+  stxdw [r10 - {stackOff}], r1
+check_pdas_done_{tag}:
 "
 
 /--
@@ -817,6 +853,8 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadFindPda p seed stackOff scope)
   | .ext (.findPdaSeeds seeds) #[] =>
     .ok (emitLoadFindPdaSeeds p seeds stackOff scope)
+  | .ext (.checkPdaSeeds account seeds) #[] =>
+    .ok (emitLoadCheckPdaSeeds p account seeds stackOff scope)
   | .ext (.sha256Lit seed) #[] =>
     .ok (emitLoadSha256Lit seed stackOff)
   | .ext (.keccak256Lit seed) #[] =>

@@ -39,7 +39,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     unless initValues[index]! == expected do
       throwError s!"Phoenix init value for {name} is {repr initValues[index]!}"
   let program ←
-    match ProofForge.Extract.IR.toLegacyProgram source with
+    match ProofForge.Svm.IR.fromExtracted source with
     | .ok program => pure program
     | .error reason => throwError reason
   let asm ←
@@ -56,11 +56,11 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless labels.length == labels.eraseDups.length do
     let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
-  unless ProofForge.Svm.ABI.dataLen program == 1376 do
-    throwError s!"Phoenix source account layout changed: {ProofForge.Svm.ABI.dataLen program} bytes"
-  unless ProofForge.Svm.ABI.cpiAccountCount program == 6 do
+  unless ProofForge.Svm.IR.dataLen program == 1376 do
+    throwError s!"Phoenix source account layout changed: {ProofForge.Svm.IR.dataLen program} bytes"
+  unless ProofForge.Svm.IR.cpiAccountCount program == 9 do
     throwError s!"Phoenix CPI account scan stopped early: " ++
-      s!"{ProofForge.Svm.ABI.cpiAccountCount program}/6 accounts"
+      s!"{ProofForge.Svm.IR.cpiAccountCount program}/9 accounts"
   let some deposit := program.methods.find? (·.ixName == "depositFunds")
     | throwError "missing depositFunds"
   let some withdrawBase := program.methods.find? (·.ixName == "withdrawBase")
@@ -91,7 +91,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
     | throwError "missing lastEventAmount"
   let some eventCount := program.methods.find? (·.ixName == "eventCountOf")
     | throwError "missing eventCountOf"
-  let rec hasIndexSet (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
+  let rec hasIndexSet
+      (fuel : Nat) (field : String) (ops : Array ProofForge.Svm.IR.Op) : Bool :=
     match fuel with
     | 0 => false
     | fuel' + 1 => ops.any fun
@@ -100,7 +101,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
             hasIndexSet fuel' field thn || hasIndexSet fuel' field els
         | .forBody _ body => hasIndexSet fuel' field body
         | _ => false
-  let rec countIndexSets (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Nat :=
+  let rec countIndexSets
+      (fuel : Nat) (field : String) (ops : Array ProofForge.Svm.IR.Op) : Nat :=
     match fuel with
     | 0 => 0
     | fuel' + 1 => ops.foldl (init := 0) fun count op =>
@@ -112,7 +114,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
         | _ => 0
   let rec hasIndexSetAt
       (fuel : Nat) (field : String) (byteOffset : Nat)
-      (ops : Array ProofForge.Ops.Op) : Bool :=
+      (ops : Array ProofForge.Svm.IR.Op) : Bool :=
     match fuel with
     | 0 => false
     | fuel' + 1 => ops.any fun
@@ -123,8 +125,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
         | .forBody _ body => hasIndexSetAt fuel' field byteOffset body
         | _ => false
   let rec hasIndexSetValue
-      (fuel : Nat) (field : String) (value : ProofForge.Ops.Val)
-      (ops : Array ProofForge.Ops.Op) : Bool :=
+      (fuel : Nat) (field : String) (value : ProofForge.Svm.Ops.Val)
+      (ops : Array ProofForge.Svm.IR.Op) : Bool :=
     match fuel with
     | 0 => false
     | fuel' + 1 => ops.any fun
@@ -133,7 +135,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
             hasIndexSetValue fuel' field value thn || hasIndexSetValue fuel' field value els
         | .forBody _ body => hasIndexSetValue fuel' field value body
         | _ => false
-  let rec hasStoreField (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
+  let rec hasStoreField
+      (fuel : Nat) (field : String) (ops : Array ProofForge.Svm.IR.Op) : Bool :=
     match fuel with
     | 0 => false
     | fuel' + 1 => ops.any fun
@@ -143,8 +146,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
         | .forBody _ body => hasStoreField fuel' field body
         | _ => false
   let rec hasStoreFieldValue
-      (fuel : Nat) (field : String) (value : ProofForge.Ops.Val)
-      (ops : Array ProofForge.Ops.Op) : Bool :=
+      (fuel : Nat) (field : String) (value : ProofForge.Svm.Ops.Val)
+      (ops : Array ProofForge.Svm.IR.Op) : Bool :=
     match fuel with
     | 0 => false
     | fuel' + 1 => ops.any fun
@@ -155,7 +158,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
         | .forBody _ body => hasStoreFieldValue fuel' field value body
         | _ => false
   let rec hasOkStateValue
-      (fuel : Nat) (value : ProofForge.Ops.Val) (ops : Array ProofForge.Ops.Op) : Bool :=
+      (fuel : Nat) (value : ProofForge.Svm.Ops.Val)
+      (ops : Array ProofForge.Svm.IR.Op) : Bool :=
     match fuel with
     | 0 => false
     | fuel' + 1 => ops.any fun
@@ -164,6 +168,59 @@ elab "#pf_guard_phoenix_artifact" : command => do
             hasOkStateValue fuel' value thn || hasOkStateValue fuel' value els
         | .forBody _ body => hasOkStateValue fuel' value body
         | _ => false
+  let rec hasTransferRecipe
+      (fuel programIx sourceIx mintIx destinationIx authorityIx : Nat)
+      (seeds : Array ProofForge.Svm.Ops.PdaSeed) (signed : Bool)
+      (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+        | .invoke actualProgram metas data actualSeeds bump =>
+            actualProgram == programIx &&
+              metas == #[
+                { acc := sourceIx, signer := false, writable := true },
+                { acc := mintIx, signer := false, writable := false },
+                { acc := destinationIx, signer := false, writable := true },
+                { acc := authorityIx, signer := true, writable := false }] &&
+              (match data with
+               | #[.u8le 12, .u64le _, .u8le 6] => true
+               | _ => false) &&
+              actualSeeds == seeds && bump.isSome == signed
+        | .ite _ _ _ thn els =>
+            hasTransferRecipe fuel' programIx sourceIx mintIx destinationIx authorityIx
+                seeds signed thn ||
+              hasTransferRecipe fuel' programIx sourceIx mintIx destinationIx authorityIx
+                seeds signed els
+        | .forBody _ body =>
+            hasTransferRecipe fuel' programIx sourceIx mintIx destinationIx authorityIx
+              seeds signed body
+        | _ => false
+  let baseVaultSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
+    #[.ascii "vault", .stateKey, .accKey 3]
+  let quoteVaultSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
+    #[.ascii "vault", .stateKey, .accKey 4]
+  unless hasTransferRecipe 32 7 1 3 5 0 #[] false deposit.ops &&
+      hasTransferRecipe 32 7 2 4 6 0 #[] false deposit.ops &&
+      hasTransferRecipe 32 7 5 3 1 5 baseVaultSeeds true withdrawBase.ops &&
+      hasTransferRecipe 32 7 6 4 2 6 quoteVaultSeeds true withdrawQuote.ops &&
+      hasTransferRecipe 32 7 2 4 6 0 #[] false swap.ops &&
+      hasTransferRecipe 32 7 5 3 1 5 baseVaultSeeds true swap.ops &&
+      hasTransferRecipe 32 7 1 3 5 0 #[] false swapSell.ops &&
+      hasTransferRecipe 32 7 6 4 2 6 quoteVaultSeeds true swapSell.ops do
+    throwError s!"Phoenix dual-vault TransferChecked recipes are incomplete: " ++
+      s!"depositBase={hasTransferRecipe 32 7 1 3 5 0 #[] false deposit.ops}, " ++
+      s!"depositQuote={hasTransferRecipe 32 7 2 4 6 0 #[] false deposit.ops}, " ++
+      s!"withdrawBase={hasTransferRecipe 32 7 5 3 1 5 baseVaultSeeds true withdrawBase.ops}, " ++
+      s!"withdrawQuote={hasTransferRecipe 32 7 6 4 2 6 quoteVaultSeeds true withdrawQuote.ops}, " ++
+      s!"swapBuyIn={hasTransferRecipe 32 7 2 4 6 0 #[] false swap.ops}, " ++
+      s!"swapBuyOut={hasTransferRecipe 32 7 5 3 1 5 baseVaultSeeds true swap.ops}, " ++
+      s!"swapSellIn={hasTransferRecipe 32 7 1 3 5 0 #[] false swapSell.ops}, " ++
+      s!"swapSellOut={hasTransferRecipe 32 7 6 4 2 6 quoteVaultSeeds true swapSell.ops}"
+  unless hasStoreField 32 "baseFree" withdrawBase.ops &&
+      hasIndexSet 32 "traderBaseFree" withdrawBase.ops &&
+      hasStoreField 32 "quoteFree" withdrawQuote.ops &&
+      hasIndexSet 32 "traderQuoteFree" withdrawQuote.ops do
+    throwError "Phoenix PDA withdrawals lost their state continuation"
   unless hasIndexSet 32 "traderBaseLocked" post.ops &&
       hasIndexSet 32 "traderBaseFree" post.ops &&
       hasIndexSet 32 "sequences" post.ops && hasStoreField 32 "sequence" post.ops &&
@@ -212,6 +269,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless asm.contains "; forBody 17" && asm.contains "; forBody 19" &&
       asm.contains "; forBody 4" do
     throwError "Phoenix bounded loops missing from assembly"
+  unless asm.contains "; checkPdaSeeds account=5 count=3" &&
+      asm.contains "; checkPdaSeeds account=6 count=3" do
+    throwError "Phoenix canonical vault checks are missing from assembly"
 
 #pf_guard_phoenix_artifact
 
@@ -706,8 +766,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       4 11 0 0 with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 5, 0] && ret == 4 &&
-        st.quoteLocked == 957 && st.quoteFree == 42 &&
-        st.baseLocked == 6 && st.baseFree == 4 &&
+        st.quoteLocked == 1000 && st.quoteFree == 42 &&
+        st.baseLocked == 6 && st.baseFree == 0 &&
         st.unclaimedFees == 1 && st.collectedFees == 0 &&
         st.eventCount == 3 &&
         st.events[0]! == .fill 0 7 0 0 0 1 10 2 0 &&
@@ -724,8 +784,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       2 11 10 0 with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
-        st.quoteLocked == 77 && st.quoteFree == 22 &&
-        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
+        st.quoteLocked == 100 && st.quoteFree == 22 &&
+        st.baseLocked == 1 && st.baseFree == 2 && st.unclaimedFees == 1 &&
         st.eventCount == 3 &&
         st.events[0]! == .expiredOrder 0 0 0 0 0 0 10 2 &&
         st.events[1]! == .fill 1 0 0 0 0 0 11 2 1 &&
@@ -739,7 +799,7 @@ private def sellSamples : List Projects.Phoenix.State := [
         lastSlots := #v[10, 0, 0, 0], lastTimes := #v[10, 0, 0, 0],
         quoteLocked := 100, baseLocked := 2 }
       1 10 10 10 with
-  | .ok (st, ret) => st.sizes[0]! == 1 && ret == 1 && st.baseFree == 1
+  | .ok (st, ret) => st.sizes[0]! == 1 && ret == 1 && st.baseFree == 0
   | .error _ => false
 
 #guard
@@ -779,9 +839,9 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard
   match swapBuyAt
       { (init 1) with
-        sizes := #v[1, 0, 0, 0], baseLocked := 1,
+        sizes := #v[1, 0, 0, 0], lastSlots := #v[1, 0, 0, 0], baseLocked := 1,
         quoteLocked := 2, baseFree := u64Max }
-      1 0 0 0 with
+      1 0 2 0 with
   | .error .overflow => true
   | _ => false
 
@@ -794,8 +854,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       0 11 12 4 11 with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 5, 0] && ret == 4 &&
-        st.quoteLocked == 957 && st.quoteFree == 42 &&
-        st.baseLocked == 6 && st.baseFree == 4 && st.unclaimedFees == 1 &&
+        st.quoteLocked == 1000 && st.quoteFree == 42 &&
+        st.baseLocked == 6 && st.baseFree == 0 && st.unclaimedFees == 1 &&
         st.eventCount == 3 &&
         st.events[0]! == .fill 0 7 0 0 0 1 10 2 0 &&
         st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
@@ -841,8 +901,8 @@ private def sellSamples : List Projects.Phoenix.State := [
       7 2 11 0 0 .cancelProvide with
   | .ok (st, ret) =>
       st.sizes == #v[0, 1, 0, 0] && ret == 2 &&
-        st.quoteLocked == 977 && st.quoteFree == 22 &&
-        st.baseLocked == 1 && st.baseFree == 4 && st.unclaimedFees == 1 &&
+        st.quoteLocked == 1000 && st.quoteFree == 22 &&
+        st.baseLocked == 1 && st.baseFree == 2 && st.unclaimedFees == 1 &&
         st.eventCount == 3 && st.events[0]! == .reduce 0 1 10 2 0 &&
         st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
         st.events[2]! == .fillSummary 2 0 0 2 22 1
@@ -928,11 +988,11 @@ private def sellSamples : List Projects.Phoenix.State := [
         bidSizes := #v[2, 3, 5, 0], bidPriceTicks := #v[12, 11, 10, 0],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), ~~~(3 : UInt64), 0],
         bidTraders := #v[7, 8, 9, 0],
-        quoteLocked := 107, baseFree := 4 }
+        quoteLocked := 107 }
       4 11 0 0 with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 5, 0] && ret == 4 &&
-        st.quoteLocked == 61 && st.quoteFree == 45 && st.baseFree == 4 &&
+        st.quoteLocked == 61 && st.quoteFree == 0 && st.baseFree == 4 &&
         st.unclaimedFees == 1 && st.eventCount == 3 &&
         st.events[0]! == .fill 0 7 0 0 0 1 12 2 0 &&
         st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
@@ -945,11 +1005,11 @@ private def sellSamples : List Projects.Phoenix.State := [
         bidSizes := #v[2, 3, 5, 0], bidPriceTicks := #v[12, 11, 10, 0],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), ~~~(3 : UInt64), 0],
         bidTraders := #v[7, 8, 9, 0],
-        quoteLocked := 107, baseFree := 4 }
+        quoteLocked := 107 }
       0 13 14 4 11 with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 5, 0] && ret == 4 &&
-        st.quoteLocked == 61 && st.quoteFree == 45 && st.baseFree == 4 &&
+        st.quoteLocked == 61 && st.quoteFree == 0 && st.baseFree == 4 &&
         st.unclaimedFees == 1 && st.eventCount == 3 &&
         st.events[0]! == .fill 0 7 0 0 0 1 12 2 0 &&
         st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
@@ -962,11 +1022,12 @@ private def sellSamples : List Projects.Phoenix.State := [
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
         bidTraders := #v[7, 8, 0, 0], bidLastSlots := #v[9, 0, 0, 0],
-        quoteLocked := 57, baseFree := 2 }
+        quoteLocked := 57 }
       2 11 10 0 with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
-        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1 &&
+        st.quoteLocked == 11 && st.quoteFree == 24 && st.baseFree == 2 &&
+        st.unclaimedFees == 1 &&
         st.eventCount == 3 && st.events[0]! == .expiredOrder 0 7 0 0 0 1 12 2 &&
         st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
         st.events[2]! == .fillSummary 2 0 0 2 22 1
@@ -985,7 +1046,7 @@ private def sellSamples : List Projects.Phoenix.State := [
   match swapSellForAt
       { (init 1) with
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
-        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
+        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57 }
       7 2 11 0 0 .abort with
   | .error .selfTrade => true
   | _ => false
@@ -995,11 +1056,12 @@ private def sellSamples : List Projects.Phoenix.State := [
       { (init 1) with
         bidSizes := #v[2, 3, 0, 0], bidPriceTicks := #v[12, 11, 0, 0],
         bidSequences := #v[~~~(1 : UInt64), ~~~(2 : UInt64), 0, 0],
-        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57, baseFree := 2 }
+        bidTraders := #v[7, 8, 0, 0], quoteLocked := 57 }
       7 2 11 0 0 .cancelProvide with
   | .ok (st, ret) =>
       st.bidSizes == #v[0, 1, 0, 0] && ret == 2 &&
-        st.quoteLocked == 11 && st.quoteFree == 45 && st.unclaimedFees == 1 &&
+        st.quoteLocked == 11 && st.quoteFree == 24 && st.baseFree == 2 &&
+        st.unclaimedFees == 1 &&
         st.eventCount == 3 && st.events[0]! == .reduce 0 1 12 2 0 &&
         st.events[1]! == .fill 1 8 0 0 0 2 11 2 1 &&
         st.events[2]! == .fillSummary 2 0 0 2 22 1

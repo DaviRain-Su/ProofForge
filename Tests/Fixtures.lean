@@ -66,6 +66,21 @@ def multiSeedTransfer (_s : Examples.Counter.State) (amount : UInt64) :
   else
     .error .overflow
 
+/-- One heterogeneous signed CPI must preserve the state transition after its ignored result. -/
+def singleMultiSeedTransfer (_s : Examples.Counter.State) (amount : UInt64) :
+    Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
+  let seeds : Array ProofForge.Svm.Runtime.PdaSeed :=
+    #[.ascii "vault", .stateKey, .accKey 3]
+  let _ := ProofForge.Svm.Runtime.tokenTransferCheckedSignedIx
+    8 5 3 1 7 amount 6 seeds (ProofForge.Svm.Runtime.findPdaSeeds seeds)
+  .ok ({ value := amount }, amount)
+
+/-- Full-key canonical PDA check for a statically indexed external account. -/
+def checkMultiSeedPda (_s : Examples.Counter.State) : UInt64 :=
+  let seeds : Array ProofForge.Svm.Runtime.PdaSeed :=
+    #[.ascii "vault", .stateKey, .accKey 3]
+  ProofForge.Svm.Runtime.checkPdaSeeds 5 seeds
+
 /-- 负向：state 含 Float，不是支持的叶子。 -/
 structure FlagState where
   value : UInt64

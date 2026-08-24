@@ -36,18 +36,21 @@
 native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 SVM 名译成 EVM opcode。
 - `invoke programIx metas data` — 编译期钉死的 CPI。抽出认这个名字。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
-- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一条 `invoke` / `invokeSigned`。
+- `invokeSignedSeeds programIx metas data seeds bump` — 一组编译期定形的异构 signer seeds；支持 ASCII、state key 和静态 account key，运行时只提供 bump。
+- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
 - `accLamports1` / `accOwner1` / `accDataLen1` / `isSigner1` / `isWritable1` / `isExecutable1` — 账户 1 只读 header。读到这些叶子就 walk，不强制 acc0 signer。
 - `findPda seed` — 当前 program id + 一条 ASCII 种子；链上 `sol_try_find_program_address`，返回 bump。
+- `findPdaSeeds seeds` — 当前 program id + 编译期定形的异构 seed 列表；返回 canonical bump。
+- `checkPdaSeeds account seeds` — 推导 canonical PDA 并比较目标账户完整 32-byte key；相等 0，否则 1。
 - `sha256Lit seed` — 编译期 ASCII 字面量；链上 `sol_sha256`，返回 digest 第一个小端 u64。完整 32B / 多切片 / blake3 fail closed。
 - `keccak256Lit seed` — 同形；链上 `sol_keccak256`（Ethereum Keccak，不是 FIPS SHA3-256）。blake3 / poseidon 仍 FC。
 - `accKeyWord acc word` / `accOwnerWord acc word` — 账户 `acc < IR.maxTxAccountLocks` 的 32B key / owner 第 `word`∈{0..=3} 个小端 u64。抽出时必须是常量。`acc≥1` 走 walk，不强制入口签名。不是 `signerKey0`。
 - `accLamports` / `accDataLen` / `isSigner` / `isWritable` / `isExecutable` `acc` — 账户 `acc < IR.maxTxAccountLocks`（官方当前 64）header。旧名 `accLamports0` 等仍独立。
 - `signerKey acc` — 该账户 key 首 u64；入口强制该账户 `is_signer`。旧名 `signerKey0` 仍独立。
 - `ownerIsSelf acc` — owner 32B 是否等于当前 program id；相等 0 / 不等 1。
-- `checkPda seed bump` — 同一组种子 + bump；链上 `sol_create_program_address`，成功 0 / 失败 1。完整 32B 地址 fail closed。
+- `checkPda seed bump` — 旧的一条 ASCII 种子接口；链上只检查 bump 能否导出合法 PDA，成功 0 / 失败 1，不接收也不比较目标账户。需要完整 32B account-key 相等时使用 `checkPdaSeeds`。
 - `cpiReturn` — 最近一次 CPI 的 8 字节返回；`sol_get_return_data`。长度不是 8 → Custom(1)。
 - `tokenAccountSize` — Token GetAccountDataSize；返回值走 `cpiReturn`。
 
@@ -89,4 +92,4 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/Lang.lean` + `runtime-tests/solana/tests/lang.rs`：位运算、mod-64 移位及 state-carrying fold 的链上语义。
 `Examples/Tree.lean` + `runtime-tests/solana/tests/tree.rs`：三次红黑树插入后的 root、child 与颜色布局。
 `Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
-`Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、严格 slot/time TIF、三种 self-trade 与签名/owner 负例；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
+`Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade，以及 vault/mint/program/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。

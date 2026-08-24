@@ -672,6 +672,14 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | some (.defnInfo info) =>
             if isScalarResult env info.type then asVal env fuel' unfolded else none
           | _ => none
+        else if (endsWith e ".checkPdaSeeds" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.checkPdaSeeds) && e.getAppArgs.size ≥ 2 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asPdaSeeds e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit account), some seeds =>
+              let account := account.toNat
+              if Svm.Ops.cpiAccInRange account then some (.checkPdaSeeds account seeds) else none
+          | _, _ => none
         else if (endsWith e ".findPdaSeeds" ||
             isConstNamed e ``ProofForge.Svm.Runtime.findPdaSeeds) && e.getAppArgs.size ≥ 1 then
           (asPdaSeeds e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.findPdaSeeds
@@ -2390,6 +2398,18 @@ private def leadingInvokes (env : Environment) (e : Expr) : Array DecodedInvoke 
       | _ => (invokes, e)
   go 16 e #[]
 
+/--
+A single legacy unsigned or one-ASCII-seed CPI keeps its established return-value lowering.
+Heterogeneous signer groups instead use continuation-preserving lowering even when there is only
+one call: their common use is a PDA-authorized transfer followed by a state commit.
+-/
+private def invokeNeedsContinuation : DecodedInvoke → Bool
+  | (_, _, _, seeds, some _) =>
+      1 < seeds.size || seeds.any fun
+        | .ascii _ => false
+        | .stateKey | .accKey _ => true
+  | _ => false
+
 private def invokeOps
     (inv : DecodedInvoke)
     (ret : Ops.Val) : Array Ops.Op :=
@@ -3438,7 +3458,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
     | .accKeyWord _ _ | .accOwnerWord _ _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
-    | .signerKeyN _ | .ownerIsSelf _ => .ok #[.returnU64 v]
+    | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
+        .ok #[.returnU64 v]
     | .indexGet .. => .ok #[.returnU64 v]
     | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. =>
         .ok #[.returnU64 v]
@@ -3539,7 +3560,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
     let (invokes, continuation) := leadingInvokes env e
-    if 1 < invokes.size then
+    if 1 < invokes.size || invokes.any invokeNeedsContinuation then
       match decodeExpr env fuel' continuation (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth) with
       | .ok decodedOps =>
@@ -4271,7 +4292,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
       | .accKeyWord _ _ | .accOwnerWord _ _
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
-      | .signerKeyN _ | .ownerIsSelf _ => v
+      | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
       | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
       | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
@@ -4555,7 +4576,7 @@ private def valFields : Ops.Val → Array String
   | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
   | .accKeyWord _ _ | .accOwnerWord _ _
   | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
-  | .signerKeyN _ | .ownerIsSelf _ => #[]
+  | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => #[]
   | .checkPda _ b => valFields b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valFields l ++ valFields r

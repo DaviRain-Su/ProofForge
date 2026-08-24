@@ -479,9 +479,20 @@ alternate program ids remain fail closed.
   0
 
 /--
+Check that one statically indexed external account is the canonical PDA for a compile-time-shaped
+seed list under the current program id. Returns 0 on equality and 1 otherwise. The full 32-byte
+key comparison is emitted by the SVM backend; the host definition is an irreducible stub.
+-/
+@[irreducible] def checkPdaSeeds (accountIx : UInt64) (seeds : Array PdaSeed) : UInt64 :=
+  let _ := accountIx
+  let _ := seeds
+  0
+
+/--
 当前 program id + 一条 ASCII 种子 + bump 是否是合法 PDA。
 抽出后发射 `sol_create_program_address`。成功 0，失败 1。
-宿主侧是不可约 stub，返回 0。完整 32B 地址本剖面 fail closed。
+宿主侧是不可约 stub，返回 0。它不接收目标账户；需要完整 32B key 相等时使用
+`checkPdaSeeds`。
 -/
 @[irreducible] def checkPda (seed : String) (bump : UInt64) : UInt64 :=
   let _ := seed

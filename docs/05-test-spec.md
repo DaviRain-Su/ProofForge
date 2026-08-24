@@ -95,8 +95,9 @@
 | T-L5-10 | happy | inline scalar / record projection | `pf_inline` UInt64/Bool helper 与 updated-record projection 在 variant payload 中归一化；不泄漏未知 state leaf |
 | T-L5-11 | happy / fail | Phoenix Mollusk lifecycle matrix | ask/bid post+reduce+swap、collect/withdraw/evict、严格 slot/time TIF、Abort/CancelProvide/DecrementTake、缺 signer 与伪造 state owner 原子失败 |
 | T-L5-12 | happy / fail | Seat Mollusk CPI matrix | canonical seat PDA 创建；base/quote vault 写入不同 mint 与同一 owner；缺 payer signer / vault writable 原子失败 |
+| T-L5-13 | happy / fail | Phoenix 双 vault CPI matrix | canonical base/quote vault；真实 deposit/withdraw；未注册 buy/sell 两个 Token 腿；错 vault/mint/program/writable 全部原子失败 |
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
 refinement 仍未宣称。当前构建快照：source account data_len 1376 bytes，SVM digest
-`50a4a12458a6c6f5`，assembly 3,023,640 bytes，sBPF ELF 552,264 bytes；发射汇编另设
+`7a9385514c2b6275`，assembly 3,132,585 bytes，sBPF ELF 595,272 bytes，IDL 16,068 bytes；发射汇编另设
 `< 5,750,000` bytes 的预算门。
