@@ -1,4 +1,5 @@
 import ProofForge.Extract.IR
+import ProofForge.Core.Target
 import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 
@@ -169,6 +170,62 @@ def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   values := cfgPayloadValues
   payloadEq := fun left right => left == right
 
+private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
+  | .evm kind => pure kind
+  | .svm _ => throw "extract/unsupported: evm rejects svm value"
+
+private def projectOpExt
+    (projectVal : Extract.IR.Val → Except String Ops.Val) :
+    Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val)
+  | .svm _ => throw "extract/unsupported: evm rejects svm effect"
+  | .evm payload =>
+      match payload with
+      | .deposit amount => return .deposit (← projectVal amount)
+      | .sendEth w0 w1 w2 amount =>
+          return .sendEth (← projectVal w0) (← projectVal w1) (← projectVal w2)
+            (← projectVal amount)
+      | .log name amount => return .log name (← projectVal amount)
+      | .mapGetU64 base key => return .mapGetU64 (← projectVal base) (← projectVal key)
+      | .mapSetU64 base key value =>
+          return .mapSetU64 (← projectVal base) (← projectVal key) (← projectVal value)
+      | .mapGetAddr base w0 w1 w2 =>
+          return .mapGetAddr (← projectVal base) (← projectVal w0) (← projectVal w1)
+            (← projectVal w2)
+      | .mapSetAddr base w0 w1 w2 value =>
+          return .mapSetAddr (← projectVal base) (← projectVal w0) (← projectVal w1)
+            (← projectVal w2) (← projectVal value)
+      | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
+          return .mapGetPair (← projectVal base) (← projectVal o0) (← projectVal o1)
+            (← projectVal o2) (← projectVal s0) (← projectVal s1) (← projectVal s2)
+      | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
+          return .mapSetPair (← projectVal base) (← projectVal o0) (← projectVal o1)
+            (← projectVal o2) (← projectVal s0) (← projectVal s1) (← projectVal s2)
+            (← projectVal value)
+      | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
+          return .tokenTransfer (← projectVal tw0) (← projectVal tw1) (← projectVal tw2)
+            (← projectVal dw0) (← projectVal dw1) (← projectVal dw2)
+            (← projectVal amount)
+      | .tokenBalanceOfSelf tw0 tw1 tw2 =>
+          return .tokenBalanceOfSelf (← projectVal tw0) (← projectVal tw1)
+            (← projectVal tw2)
+
+/-- Static registration of the extractor-to-EVM projection. -/
+def extractRegistration :
+    Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt Ops.ValKind Ops.OpExt where
+  name := "EVM"
+  projectValExt := projectValExt
+  projectOpExt := projectOpExt
+  projectionError := fun method reason =>
+    if reason.startsWith "extract/unsupported: evm rejects svm" then
+      s!"extract/unsupported: evm rejects svm leaf in {method}"
+    else reason
+  valArity := Ops.ValKind.arity
+  opWellFormed := Ops.Op.wellFormed
+  cfgDialect := cfgDialect
+
+def projectExtractedOps (ops : Array Extract.IR.Op) : Except String (Array Ops.Op) :=
+  Core.Target.projectOps extractRegistration ops
+
 private partial def walk (fuel : Nat) (ops : Array Op) (predicate : Op → Bool) : Bool :=
   match fuel with
   | 0 => false
@@ -329,10 +386,11 @@ private def rejectSlot (slot : Core.IR.Slot) : Option String :=
     some s!"extract/unsupported: evm slot {slot.name} width {slot.width}"
   else none
 
-private def isCtor (method : Extract.IR.Method) : Bool :=
+private def isCtor (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Bool :=
   method.kind == .init
 
-private def lowerVectors (src : Extract.IR.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Core.IR.Program Ops.ValKind Ops.OpExt)
+    (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseSlot ← src.schema.vectorBaseLeafIndex? vector
     let _ ← slots[baseSlot]?
@@ -355,27 +413,21 @@ private def lowerVectors (src : Extract.IR.Program) (slots : Array Slot) : Array
       leaves
     }
 
-private def lowerMethodBody (schema : Core.Schema) (method : Extract.IR.Method) :
+private def lowerMethodBody (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Array Op × Core.Evaluation Ops.ValKind) := do
-  let sourceOps ← Extract.IR.toEvmOps method.ops
-  unless sourceOps.all Ops.Op.wellFormed do
-    throw s!"extract/ir: malformed EVM Ops in {method.ixName}"
-  let evaluation ←
-    if schema.isEmpty then pure {}
-    else Core.evaluate schema sourceOps
-  return (← ofSourceOps sourceOps, evaluation)
+  return (← ofSourceOps method.ops, method.evaluation)
 
 /-- Project the combined extractor dialect and lower it into an EVM-owned physical program. -/
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
-  src.validateEvm
-  if src.slots.isEmpty then
+  let source ← Core.Target.projectProgram extractRegistration src
+  if source.slots.isEmpty then
     throw "extract/unsupported: evm program has no slots"
-  for slot in src.slots do
+  for slot in source.slots do
     if let some reason := rejectSlot slot then
       throw reason
-  let mut ctors : Array Extract.IR.Method := #[]
-  let mut extras : Array Extract.IR.Method := #[]
-  for method in src.methods do
+  let mut ctors : Array (Core.IR.Method Ops.ValKind Ops.OpExt) := #[]
+  let mut extras : Array (Core.IR.Method Ops.ValKind Ops.OpExt) := #[]
+  for method in source.methods do
     if isCtor method then
       ctors := ctors.push method
     else
@@ -396,7 +448,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     throw "extract/unsupported: init missing returnState"
   unless ctorSrc.ops.any (fun | .returnState _ => true | _ => false) do
     throw "extract/unsupported: init missing returnState"
-  let (ctorOps, ctorEvaluation) ← lowerMethodBody src.schema ctorSrc
+  let (ctorOps, ctorEvaluation) ← lowerMethodBody ctorSrc
   let ctor : Method := {
     kind := ctorSrc.kind
     name := ctorSrc.name
@@ -419,7 +471,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       else Array.replicate m.paramCount 8
     let sel := Keccak.selectorOfWidths m.ixName widths
     let view := m.kind == .get
-    let (ops, evaluation) ← lowerMethodBody src.schema m
+    let (ops, evaluation) ← lowerMethodBody m
     entries := entries.push {
       kind := m.kind
       name := m.name
@@ -433,13 +485,14 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       view
       payable := !view && hasEvmDeposit ops
     }
-  let slots := src.slots.mapIdx fun i s =>
-    { place := (src.schema.leaves[i]?).map (·.place), name := s.name, index := i, width := s.width }
+  let slots := source.slots.mapIdx fun i s =>
+    { place := (source.schema.leaves[i]?).map (·.place), name := s.name, index := i,
+      width := s.width }
   return {
-    name := src.name
+    name := source.name
     slots
-    vectors := lowerVectors src slots
-    schema := src.schema
+    vectors := lowerVectors source slots
+    schema := source.schema
     constructor := ctor
     entries
   }

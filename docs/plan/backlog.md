@@ -64,10 +64,11 @@
 - Core 显式 basic-block CFG 第一阶段：block arguments、显式 branch/checked/exit、完整 checker、local CSE、线性共享 block；Phoenix 全方法已通过 lowering/validation
 - SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；Phoenix 汇编由 4,109,725 B 降至 2,801,196 B，全部 48 个 Mollusk 文件与 12 个 Anvil 程序通过
 - Solanalib CFG correspondence：Counter add/sub/mul/div/mod 的 Core operands / physical slot / success-overflow edge 必须一致；typed guards、multiply zero-path jump、`r10-24` scratch handoff、static store 由上游 small-step semantics 执行。普通 eq/ne/lt/le/gt/ge branch 保留 cmp/operands/then/else identity，exact decoded pair theorem 证明 edge selection 与内存不变
+- 通用 target registration：`Core.Target.Registration` 统一递归投影公共 Val/Op/Program，并携带 extension callbacks、arity、op well-formedness 和 CFG dialect；SVM/EVM conversion 已移回各自 IR，`Extract.IR` 不再含后端 projection case。Core-only 合成第三 target 证明新增公共语言后端无需修改抽取 IR，并继续 fail closed 拒绝 foreign extension
 
 ## 当前状态
 
-- `lake build Tests` 当前 187 jobs；68 个 imported test modules 含 782 个 `#guard` / `#guard_msgs`。
+- `lake build Tests` 当前 188 jobs；68 个 imported test modules 含 784 个 `#guard` / `#guard_msgs`。
 - SVM registry 48 个程序 / 48 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
@@ -77,11 +78,7 @@
 
 ## 按优先级继续
 
-### P1：通用后端边界
-
-1. 新 target 的注册边界；现在新增 target 仍需在 `Extract.IR` 增加 typed extension case 和 conversion。Solanalib 的五种 checked arithmetic 与六种普通 CFG branch correspondence 已完成。
-
-### P2：扩大产品面
+### P1：扩大产品面
 
 1. `l5-004` Token-2022 指令 0–24 的 program-id 切片；hook / fee mint 在 TLV / remaining accounts 之前继续 fail closed。
 2. Phoenix 动态 trader/order 红黑树、删除 fixup 和非固定 N；当前 Phoenix 仍是 bounded N=4 有序投影。

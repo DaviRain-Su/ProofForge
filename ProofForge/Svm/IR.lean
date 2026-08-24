@@ -1,4 +1,5 @@
 import ProofForge.Extract.IR
+import ProofForge.Core.Target
 import ProofForge.Svm.ABI
 
 namespace ProofForge.Svm.IR
@@ -106,6 +107,47 @@ def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   values := cfgPayloadValues
   payloadEq := fun left right => left == right
 
+private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
+  | .svm kind => pure kind
+  | .evm _ => throw "extract/unsupported: svm rejects evm value"
+
+private def projectCpiWord
+    (projectVal : Extract.IR.Val → Except String Ops.Val) :
+    Ops.CpiWord Extract.IR.Val → Except String (Ops.CpiWord Ops.Val)
+  | .u8le value => return .u8le (← projectVal value)
+  | .u16le value => return .u16le (← projectVal value)
+  | .u32le value => return .u32le (← projectVal value)
+  | .u64le value => return .u64le (← projectVal value)
+  | .selfEntry tag authoritySeed => pure (.selfEntry tag authoritySeed)
+  | .ascii value => pure (.ascii value)
+  | .programId => pure .programId
+  | .accKey i => pure (.accKey i)
+
+private def projectOpExt
+    (projectVal : Extract.IR.Val → Except String Ops.Val) :
+    Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val)
+  | .svm (.invoke programIx metas data seeds bump) =>
+      return .invoke programIx metas (← data.mapM (projectCpiWord projectVal))
+        seeds (← bump.mapM projectVal)
+  | .evm _ => throw "extract/unsupported: svm rejects evm effect"
+
+/-- Static registration of the extractor-to-SVM projection. -/
+def extractRegistration :
+    Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt Ops.ValKind Ops.OpExt where
+  name := "SVM"
+  projectValExt := projectValExt
+  projectOpExt := projectOpExt
+  projectionError := fun _ reason =>
+    if reason.startsWith "extract/unsupported: svm rejects evm" then
+      "extract/unsupported: svm rejects evm leaf"
+    else reason
+  valArity := Ops.ValKind.arity
+  opWellFormed := Ops.Op.wellFormed
+  cfgDialect := cfgDialect
+
+def projectExtractedOps (ops : Array Extract.IR.Op) : Except String (Array Ops.Op) :=
+  Core.Target.projectOps extractRegistration ops
+
 def hasStoreField (ops : Array Op) : Bool :=
   Ops.hasStoreField (toSourceOps ops)
 
@@ -211,7 +253,7 @@ def rawSelfEntry? (program : Program) : Except String (Option Ops.RawSelfEntry) 
             throw "extract/unsupported: inconsistent raw self-entry tags or authority seeds"
   return found
 
-private def lowerSlots (src : Extract.IR.Program) : Array Slot := Id.run do
+private def lowerSlots (src : Core.IR.Program Ops.ValKind Ops.OpExt) : Array Slot := Id.run do
   let mut result := #[]
   let mut offset := 8
   for i in [0:src.slots.size] do
@@ -226,7 +268,8 @@ private def lowerSlots (src : Extract.IR.Program) : Array Slot := Id.run do
     offset := offset + slot.width
   return result
 
-private def lowerVectors (src : Extract.IR.Program) (slots : Array Slot) : Array Vector :=
+private def lowerVectors (src : Core.IR.Program Ops.ValKind Ops.OpExt)
+    (slots : Array Slot) : Array Vector :=
   src.schema.vectors.filterMap fun vector => do
     let baseIndex ← src.schema.vectorBaseLeafIndex? vector
     let base ← slots[baseIndex]?
@@ -248,14 +291,8 @@ private def lowerVectors (src : Extract.IR.Program) (slots : Array Slot) : Array
       leaves
     }
 
-private def lowerMethod (schema : Core.Schema) (method : Extract.IR.Method) :
+private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String Method := do
-  let sourceOps ← Extract.IR.toSvmOps method.ops
-  unless sourceOps.all Ops.Op.wellFormed do
-    throw s!"extract/ir: malformed SVM Ops in {method.ixName}"
-  let evaluation ←
-    if schema.isEmpty then pure {}
-    else Core.evaluate schema sourceOps
   return {
     kind := method.kind
     name := method.name
@@ -263,20 +300,20 @@ private def lowerMethod (schema : Core.Schema) (method : Extract.IR.Method) :
     paramCount := method.paramCount
     paramWidths := method.paramWidths
     retCount := method.retCount
-    ops := ← ofSourceOps sourceOps
-    evaluation
+    ops := ← ofSourceOps method.ops
+    evaluation := method.evaluation
   }
 
 /-- Project the combined extractor dialect and lower it into an SVM-owned physical program. -/
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
-  src.validateSvm
-  let slots := lowerSlots src
+  let source ← Core.Target.projectProgram extractRegistration src
+  let slots := lowerSlots source
   let program : Program := {
-    name := src.name
+    name := source.name
     slots
-    vectors := lowerVectors src slots
-    schema := src.schema
-    methods := ← src.methods.mapM (lowerMethod src.schema)
+    vectors := lowerVectors source slots
+    schema := source.schema
+    methods := ← source.methods.mapM lowerMethod
   }
   let _ ← rawSelfEntry? program
   return program

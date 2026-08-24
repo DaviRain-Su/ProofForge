@@ -16,8 +16,10 @@
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
 | `Evm.Commands` | `#pf_evm_build` | 新 DSL |
 
-输入是已通过 Profile 的 frontend `Core.IR.Program`。`Evm.IR.fromProgram` 物化 storage slot 并把
-compatibility Ops 降成 EVM-only `Op`；SVM 叶子（`clockSlot` / `signerKey0` /
+输入是已通过 Profile 的 frontend `Core.IR.Program`。`Evm.IR.extractRegistration` 向
+`Core.Target` 注册 extension 投影、arity / well-formed / CFG 合同；`Evm.IR.fromExtracted`
+经通用投影后物化 storage slot 并把 source Ops 降成 EVM-only `Op`。`Extract.IR` 不再拥有
+EVM conversion；SVM 叶子（`clockSlot` / `signerKey0` /
 `systemTransfer`）在这个边界 fail closed，Yul emitter 不再承担跨 target 过滤。承认独立 EVM
 叶子：环境 opcode（超 UInt64 revert）、8 字节 `evmCaller`/`evmSelf`、Addr20 三叶。
 `evmDeposit` 让该 entry payable；程序若有任一 payable 入口，去掉全局 `callvalue()` 守卫，
@@ -38,7 +40,8 @@ overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 
 ## API
 
-- `IR.fromProgram : ProofForge.Core.IR.Program → Except String IR.Program`
+- `IR.fromExtracted : Extract.IR.Program → Except String IR.Program`
+- `IR.extractRegistration : Core.Target.Registration … Evm.Ops.ValKind Evm.Ops.OpExt`
 - `Emit.emitYul` / `Emit.emitAbi`
 - `Assemble.assembleProgram`
 - `#pf_evm_build Namespace`

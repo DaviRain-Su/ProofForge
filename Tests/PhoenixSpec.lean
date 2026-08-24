@@ -13,7 +13,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Extract.extractModuleIR env `Projects.Phoenix none with
     | .ok program => pure program
     | .error reason => throwError reason
-  match source.validateSvm with
+  match ProofForge.Core.Target.projectProgram ProofForge.Svm.IR.extractRegistration source with
   | .ok _ => pure ()
   | .error reason => throwError reason
   unless source.schema.leaves.any (·.name == "lastEvent_tag") &&

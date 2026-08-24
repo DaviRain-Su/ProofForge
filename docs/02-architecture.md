@@ -26,6 +26,9 @@ ProofForge.Profile 子集检查      ← 本仓自建（小）
         ▼
 ProofForge.Extract.IR + Core     ← target-neutral control + typed target extension
         │
+        ▼
+Core.Target.Registration        ← generic projection + target-owned extension callbacks
+        │
    ┌────┴────┐
    ▼         ▼
 Svm.IR     Evm.IR               ← 各自物化布局和 target op
@@ -42,13 +45,14 @@ sBPF/.so   Yul/.bin             ← Mollusk / Anvil 工程门
 | `ProofForge.Profile` | 传递闭包准入规则 | 业务类型检查（Lean 已做） |
 | `ProofForge.Extract` / `Extract.IR` | `Expr` → parameterized Core；在唯一边界组合 typed target extensions | target 物理布局 |
 | `ProofForge.Core.IR` / `Core.Ops` | target-neutral schema、control、checked arithmetic | SVM syscall / EVM opcode |
+| `ProofForge.Core.Target` | 公共 Val/Op/Program 递归投影；静态 target registration 合同 | 具体 target extension case |
 | `ProofForge.Crypto` | 本机 SHA-256 / Keccak-256 | 链上 syscall |
-| `ProofForge.Svm.Runtime` / `Svm.Ops` / `Svm.IR` | Solana runtime surface、CPI/sysvar op、账户布局 | EVM storage/opcode |
+| `ProofForge.Svm.Runtime` / `Svm.Ops` / `Svm.IR` | Solana runtime surface、CPI/sysvar op、SVM projection registration、账户布局 | EVM storage/opcode |
 | `ProofForge.Svm.ABI` | Solana discriminator / account / Loader V3 布局 | EVM selector/storage |
 | `ProofForge.Svm.Emit` | Ops → Loader V3 sBPF 文本 | Yul |
 | `ProofForge.Svm.Assemble` | 子进程调用 locked `sbpf` | FFI |
 | `ProofForge.Svm.Idl` | Solana IDL spec 0.1.0 | ABI JSON |
-| `ProofForge.Evm.Runtime` / `Evm.Ops` / `Evm.IR` | EVM runtime surface、opcode、storage slot、selector | Loader V3 / CPI |
+| `ProofForge.Evm.Runtime` / `Evm.Ops` / `Evm.IR` | EVM runtime surface、opcode、EVM projection registration、storage slot、selector | Loader V3 / CPI |
 | `ProofForge.Evm.Emit` / `Evm.Assemble` | Yul / ABI / locked solc | sBPF / IDL |
 
 ## 信任边界

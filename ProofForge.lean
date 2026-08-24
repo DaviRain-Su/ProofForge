@@ -3,6 +3,7 @@ import ProofForge.Core.CFG
 import ProofForge.Core.Schema
 import ProofForge.Core.Eval
 import ProofForge.Core.IR
+import ProofForge.Core.Target
 import ProofForge.Extract.LegacyOps
 import ProofForge.Extract.LegacyEval
 import ProofForge.Extract.LegacyIR

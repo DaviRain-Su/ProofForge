@@ -38,8 +38,9 @@ SVM / EVM emitter 不再扫描 `_0_left`、`_tag`、`_p0` 来猜 Vector / Option
 - `Evaluation.explicit = false` 只用于没有 schema 的旧手写 fixture。
 
 当前 `Ops` 仍是前端 compatibility lowering，但 emitter 不再直接消费它：
-`Svm.IR.fromProgram` / `Evm.IR.fromProgram` 分别把它降到两个互不共享 constructor 的 target
-`Op`，并把 typed `Place` 物化成 SVM account-data byte offset 或 EVM storage slot。
+`Core.Target.projectProgram` 先按 `Svm.IR.extractRegistration` / `Evm.IR.extractRegistration`
+递归投影公共 Core，并把 extension conversion 留在目标模块；两个 IR 再降到互不共享
+constructor 的 target `Op`，把 typed `Place` 物化成 SVM account-data byte offset 或 EVM storage slot。
 `Core.Evaluation` 随 target method 保留，下一步用它替换 target `okState` 的兼容写回规则。这里刻意
 不让旧规则进入 Core：旧 SVM 对 `indexSet + okState` 会额外覆写首槽，而 EVM 不会；把任一旧
 行为塞回 Core 都会污染 target-neutral 语义。

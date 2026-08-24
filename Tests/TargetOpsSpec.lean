@@ -1,6 +1,8 @@
 import ProofForge.Svm.Ops
 import ProofForge.Svm.IR
 import ProofForge.Evm.Ops
+import ProofForge.Evm.IR
+import ProofForge.Core.Target
 import ProofForge.Extract.LegacyAdapter
 import ProofForge.Extract.LegacyGolden
 
@@ -81,16 +83,88 @@ private def validEvmOp : ProofForge.Evm.Ops.Op :=
 #guard
   let source := ProofForge.Extract.IR.ofLegacyOps
     #[.returnU64 ProofForge.Ops.Val.clockSlot]
-  match ProofForge.Extract.IR.toSvmOps source, ProofForge.Extract.IR.toEvmOps source with
+  match ProofForge.Svm.IR.projectExtractedOps source,
+      ProofForge.Evm.IR.projectExtractedOps source with
   | .ok svm, .error _ => svm.all ProofForge.Svm.Ops.Op.wellFormed
   | _, _ => false
 
 #guard
   let source := ProofForge.Extract.IR.ofLegacyOps
     #[.evmDeposit ProofForge.Ops.Val.evmCallValue]
-  match ProofForge.Extract.IR.toSvmOps source, ProofForge.Extract.IR.toEvmOps source with
+  match ProofForge.Svm.IR.projectExtractedOps source,
+      ProofForge.Evm.IR.projectExtractedOps source with
   | .error _, .ok evm => evm.all ProofForge.Evm.Ops.Op.wellFormed
   | _, _ => false
+
+/-- A synthetic future backend with no accepted source extensions. -/
+private inductive CoreOnlyValKind where
+  | reserved
+  deriving BEq
+
+private inductive CoreOnlyOpExt (V : Type) where
+  | reserved
+
+private def coreOnlyCfgDialect :
+    ProofForge.Core.CFG.Dialect CoreOnlyValKind CoreOnlyOpExt where
+  mapValues := fun _ payload => match payload with | .reserved => .reserved
+  values := fun payload => match payload with | .reserved => #[]
+  payloadEq := fun left right =>
+    match left, right with
+    | .reserved, .reserved => true
+
+private def coreOnlyOpWellFormed :
+    ProofForge.Core.Ops.Op CoreOnlyValKind CoreOnlyOpExt → Bool :=
+  ProofForge.Core.Ops.Op.wellFormed (fun _ => 0) (fun _ => false)
+
+private def coreOnlyRegistration :
+    ProofForge.Core.Target.Registration
+      ProofForge.Extract.IR.ValKind ProofForge.Extract.IR.OpExt
+      CoreOnlyValKind CoreOnlyOpExt where
+  name := "CoreOnly"
+  projectValExt := fun _ => throw "core-only target rejects source value extensions"
+  projectOpExt := fun _ _ => throw "core-only target rejects source effect extensions"
+  valArity := fun _ => 0
+  opWellFormed := coreOnlyOpWellFormed
+  cfgDialect := coreOnlyCfgDialect
+
+private def coreOnlySource : ProofForge.Extract.IR.Program :=
+  { name := "CoreOnly"
+    slots := #[]
+    schema := {}
+    methods := #[{
+      kind := .get
+      name := "CoreOnly.choose"
+      ixName := "choose"
+      paramCount := 1
+      ops := #[
+        .letLocal 0 (.addU64 (.arg 0) (.lit 1)),
+        .ite .ne (.local 0) (.lit 0)
+          #[.returnU64 (.local 0)] #[.returnU64 (.lit 0)]
+      ]
+    }] }
+
+#guard
+  match ProofForge.Core.Target.projectProgram coreOnlyRegistration coreOnlySource with
+  | .ok program =>
+      program.methods.size == 1 &&
+        match program.methods[0]!.ops with
+        | #[.letLocal 0 (.addU64 (.arg 0) (.lit 1)),
+            .ite .ne (.local 0) (.lit 0)
+              #[.returnU64 (.local 0)] #[.returnU64 (.lit 0)]] => true
+        | _ => false
+  | .error _ => false
+
+#guard
+  let source : ProofForge.Extract.IR.Program :=
+    { coreOnlySource with methods := #[{
+        kind := .get
+        name := "CoreOnly.foreign"
+        ixName := "foreign"
+        ops := #[.returnU64 (.ext (.svm .clockSlot) #[])]
+      }] }
+  match ProofForge.Core.Target.projectProgram coreOnlyRegistration source with
+  | .error _ => true
+  | .ok _ => false
 
 private def legacyOpsRoundTrip (ops : Array ProofForge.Ops.Op) : Bool :=
   let extensible := ProofForge.Extract.IR.ofLegacyOps ops
