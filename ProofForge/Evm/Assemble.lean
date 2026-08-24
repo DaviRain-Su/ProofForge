@@ -44,21 +44,27 @@ private def requireSolc : IO System.FilePath := do
     "/usr/local/bin/solc",
     "solc"
   ]
+  let mut mismatch : Option String := none
   for c in candidates do
-    try
-      let proc ← IO.Process.output { cmd := c.toString, args := #["--version"] }
+    let proc? ←
+      try
+        some <$> IO.Process.output { cmd := c.toString, args := #["--version"] }
+      catch _ =>
+        pure none
+    match proc? with
+    | some proc =>
       if proc.exitCode == 0 then
         match parseSolcVersion proc.stdout with
         | some v =>
             if v == requiredSolcVersion then
               return c
-            else
-              throw <| IO.userError
-                s!"assemble/tool: solc {v} != {requiredSolcVersion}"
+            else if mismatch.isNone then
+              mismatch := some s!"assemble/tool: solc {v} != {requiredSolcVersion}"
         | none => pure ()
-    catch _ =>
-      pure ()
-  throw <| IO.userError s!"assemble/tool: solc {requiredSolcVersion} not found"
+    | none => pure ()
+  match mismatch with
+  | some reason => throw <| IO.userError reason
+  | none => throw <| IO.userError s!"assemble/tool: solc {requiredSolcVersion} not found"
 
 def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Result := do
   let (yul, abi) ← match Emit.emit program with
