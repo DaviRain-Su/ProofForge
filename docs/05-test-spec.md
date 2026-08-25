@@ -106,5 +106,5 @@ T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 
 refinement 仍未宣称。P0 探针口径递归统计 `select` 四个分支和 extension operands；当前
 `postAsk` 为 total 90,604 / largest 24,840，单方法 assembly 3,755,860 bytes，完整程序
 assembly 设 `< 12,000,000` bytes 的有限回归门。完整 ELF/IDL/digest 只以当次
-`pf build --target svm Phoenix` 产物记录为准；当前为 assembly 11,815,636 bytes、ELF
-3,550,888 bytes、IDL 19,626 bytes、digest `65fbdcc1cf643f02`，不从旧 topology 快照外推。
+`pf build --target svm Phoenix` 产物记录为准；当前为 assembly 11,936,344 bytes、ELF
+3,582,192 bytes、IDL 19,626 bytes、digest `7a969da7b60ead4`，不从旧 topology 快照外推。

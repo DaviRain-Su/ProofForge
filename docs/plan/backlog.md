@@ -75,7 +75,8 @@
 - `lake build Tests` 当前 190 jobs；69 个 imported test modules 含 809 个 `#guard` / `#guard_msgs`。
 - SVM registry 49 个程序 / 49 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
-- Phoenix Mollusk 已覆盖 ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
+- Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
+- `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 11,936,344 bytes，ELF 3,582,192 bytes，IDL 19,626 bytes。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
@@ -84,9 +85,9 @@
 
 | 阶段 | 状态 | 依赖 | 验收门 |
 |---|---|---|---|
-| P0 抽取收口 | 进行中 | 通用 Extract state-loop/helper sequencing；SVM CFG/local 布局 | `postAsk` 值树预算、单方法发射、PhoenixSpec、可复现的 wall/RSS/assembly 数据；continuation 解码失败必须 fail closed，不能退化成部分 state commit |
+| P0 抽取收口 | 已有 | 通用 Extract state-loop/helper sequencing；SVM CFG/local 布局 | `postAsk` 值树预算、单方法发射、PhoenixSpec、可复现 assembly/ELF/IDL/digest；continuation 不得静默丢 aggregate scalar stores。已知 `postAskFunds` 缺口已关；值树 90,604 / 24,840 是缺口关闭前的探针，本 lowering 后未重测 |
 | P1 bounded 产品语义 | 已有 | P0；固定 N=4 账户布局 | ask/bid/trader 三棵持久化树的 N=4 host/IR 门、24 种 topology、双向 IOC、TIF/self-trade/fee/事件与 exact address reuse 全绿 |
-| P2 链上认证矩阵 | 部分支持 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵全绿；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
+| P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 部分支持 | P0/P2 产物稳定 | Tree Mollusk、全 SVM registry Mollusk、全 EVM registry Anvil 及 `lake build Tests` 全绿，无 target-specific Phoenix 特判 |
 | P4 产物资格/压缩 | 未支持 | P0 的稳定 CFG 和可测基线 | 在独立 milestone 中确定部署上限，做通用 CFG/shared-block/CSE；assembly/ELF 预算和 digest 更新后才能作部署体积声明 |
 | P5 动态 Phoenix-v1 | 未支持、非当前目标 | 账户容量/profile、bounded CFG 策略与变长协议类型设计 | 明确账户上限和资源模型后另立规格；在此之前动态容量、remaining accounts、完整 Phoenix-v1 账户兼容均 fail closed |

@@ -121,8 +121,8 @@ P0 的递归值树门把 `postAsk` 钉在 total `< 200,000`、largest `< 50,000`
 assembly 暂设 `< 12,000,000` bytes 回归门，并拒绝重复 label，同时断言 maker/taker
 ledger writes 和最宽 event leaf 都存在。该门防止重新膨胀，不是部署资格声明；ELF/IDL/
 digest 必须从同一 checkout 的实际 `pf build` 产物记录。当前同一构建产生 assembly
-11,815,636 bytes、ELF 3,550,888 bytes、IDL 19,626 bytes，SVM digest
-`65fbdcc1cf643f02`；这个 ELF 大小尚未通过 P4 部署资格门。链上 buy / sell 都是 19 phase，挂单是 17 phase；要显著缩小文件应在通用
+11,936,344 bytes、ELF 3,582,192 bytes、IDL 19,626 bytes，SVM digest
+`7a969da7b60ead4`；这个 ELF 大小尚未通过 P4 部署资格门。链上 buy / sell 都是 19 phase，挂单是 17 phase；要显著缩小文件应在通用
 IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter 加事件特判。
 
 ## 支持边界与路线
