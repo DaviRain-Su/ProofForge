@@ -80,6 +80,7 @@
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
+- P3 横向回归：`lake build Tests`、全 49 个 SVM `pf build`、Mollusk 194/194（含 Phoenix 8/8 与 Tree 2/2）、Anvil 12/12。lowering 修复没有改 Tree digest。
 
 ## Phoenix / Solana P0–P5 路线
 
@@ -88,7 +89,7 @@
 | P0 抽取收口 | 已有 | 通用 Extract state-loop/helper sequencing；SVM CFG/local 布局 | `postAsk` 值树预算、单方法发射、PhoenixSpec、可复现 assembly/ELF/IDL/digest；continuation 不得静默丢 aggregate scalar stores。已知 `postAskFunds` 缺口已关；值树 90,604 / 24,840 是缺口关闭前的探针，本 lowering 后未重测 |
 | P1 bounded 产品语义 | 已有 | P0；固定 N=4 账户布局 | ask/bid/trader 三棵持久化树的 N=4 host/IR 门、24 种 topology、双向 IOC、TIF/self-trade/fee/事件与 exact address reuse 全绿 |
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
-| P3 横向回归 | 部分支持 | P0/P2 产物稳定 | Tree Mollusk、全 SVM registry Mollusk、全 EVM registry Anvil 及 `lake build Tests` 全绿，无 target-specific Phoenix 特判 |
+| P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 与 P4 部署体积仍未宣称 |
 | P4 产物资格/压缩 | 未支持 | P0 的稳定 CFG 和可测基线 | 在独立 milestone 中确定部署上限，做通用 CFG/shared-block/CSE；assembly/ELF 预算和 digest 更新后才能作部署体积声明 |
 | P5 动态 Phoenix-v1 | 未支持、非当前目标 | 账户容量/profile、bounded CFG 策略与变长协议类型设计 | 明确账户上限和资源模型后另立规格；在此之前动态容量、remaining accounts、完整 Phoenix-v1 账户兼容均 fail closed |
 
