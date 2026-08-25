@@ -403,6 +403,36 @@ elab "#pf_guard_checked_state_snapshot_ir" : command => do
 
 #pf_guard_checked_state_snapshot_ir
 
+elab "#pf_guard_projected_ledger_scalars" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initLedger
+        ``Tests.Fixtures.postLedger ``Tests.Fixtures.ledgerLocked with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some post := program.methods.find? (·.ixName == "postLedger")
+    | throwError "missing projected ledger method"
+  let rec hasStore (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+      | .storeField name _ => name == field
+      | .ite _ _ _ thn els => hasStore fuel' field thn || hasStore fuel' field els
+      | .forBody _ body => hasStore fuel' field body
+      | _ => false
+  let rec hasIndex (fuel : Nat) (field : String) (ops : Array ProofForge.Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun
+      | .indexSet name _ _ _ _ => name == field
+      | .ite _ _ _ thn els => hasIndex fuel' field thn || hasIndex fuel' field els
+      | .forBody _ body => hasIndex fuel' field body
+      | _ => false
+  unless hasStore 8 "locked" post.ops && hasStore 8 "free" post.ops do
+    throwError s!"projected ledger continuation dropped aggregate stores: {repr post.ops}"
+
+#pf_guard_projected_ledger_scalars
+
 elab "#pf_guard_dynamic_write_return" : command => do
   let env ← getEnv
   let program ←

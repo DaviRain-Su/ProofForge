@@ -390,11 +390,17 @@ elab "#pf_guard_phoenix_artifact" : command => do
     throwError "Phoenix PDA withdrawals lost their state continuation"
   unless hasIndexSet 32 "traderBaseLocked" post.ops &&
       hasIndexSet 32 "traderBaseFree" post.ops &&
+      hasStoreField 32 "baseLocked" post.ops && hasStoreField 32 "baseFree" post.ops &&
       hasIndexSet 32 "sequences" post.ops && hasStoreField 32 "sequence" post.ops &&
       hasIndexSet 32 "traderQuoteLocked" postBid.ops &&
       hasIndexSet 32 "traderQuoteFree" postBid.ops &&
+      hasStoreField 32 "quoteLocked" postBid.ops && hasStoreField 32 "quoteFree" postBid.ops &&
       hasIndexSet 32 "bidSequences" postBid.ops && hasStoreField 32 "sequence" postBid.ops do
-    throwError "Phoenix post entries do not preserve composed ledger/book updates"
+    throwError s!"Phoenix post entries do not preserve composed ledger/book updates: " ++
+      s!"baseLocked={hasStoreField 32 "baseLocked" post.ops} " ++
+      s!"baseFree={hasStoreField 32 "baseFree" post.ops} " ++
+      s!"quoteLocked={hasStoreField 32 "quoteLocked" postBid.ops} " ++
+      s!"quoteFree={hasStoreField 32 "quoteFree" postBid.ops}"
   unless hasStoreField 64 "askBook_root" post.ops &&
       hasStoreField 64 "askBook_count" post.ops &&
       hasIndexSet 64 "askBook_nextFree" post.ops &&

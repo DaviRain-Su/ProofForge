@@ -565,6 +565,64 @@ def collectSnapshot (s : SnapshotState) :
 def snapshotTotal (s : SnapshotState) : UInt64 :=
   s.total
 
+/--
+Mirrors Phoenix `postAskFunds → { funded with nested } → insert*` : a helper writes both
+aggregate scalars and a vector leaf, then a later helper only rewrites a nested field. The
+scalar stores must remain after the projected continuation is rewritten to the helper source.
+-/
+structure LedgerBook where
+  root : UInt64
+  left : Vector UInt64 2
+  deriving Repr, DecidableEq
+
+structure LedgerState where
+  locked : UInt64
+  free : UInt64
+  seats : Vector UInt64 2
+  sizes : Vector UInt64 2
+  book : LedgerBook
+  deriving Repr, DecidableEq
+
+def initLedger (_seed : UInt64) : LedgerState :=
+  { locked := 0, free := 0, seats := #v[0, 0], sizes := #v[0, 0],
+    book := { root := 0, left := #v[0, 0] } }
+
+private def postLedgerFunds (s : LedgerState) (amount : UInt64) : LedgerState :=
+  if amount > s.free then
+    { s with locked := s.locked }
+  else if s.locked > Examples.Counter.u64Max - amount then
+    { s with locked := s.locked }
+  else
+    let aggregate :=
+      { s with locked := s.locked + amount, free := s.free - amount }
+    { aggregate with seats := s.seats.set 0 (s.seats[0]! + amount) }
+
+private def insertLedgerBook (book : LedgerBook) (address : UInt64) : LedgerBook :=
+  { book with root := address, left := book.left.set 0 address }
+
+private def removeLedgerBook (book : LedgerBook) (address : UInt64) : LedgerBook :=
+  if address = 0 then book
+  else { book with root := 0, left := book.left.set 0 0 }
+
+private def insertLedgerRoot (s : LedgerState) (address : UInt64) : LedgerState :=
+  { s with book := insertLedgerBook s.book address }
+
+attribute [pf_inline] postLedgerFunds insertLedgerBook removeLedgerBook insertLedgerRoot
+
+def postLedger (s : LedgerState) (amount : UInt64) :
+    Except Examples.Counter.Error (LedgerState × UInt64) := Id.run do
+  let mut st := s
+  for _ in [0:1] do
+    let funded := postLedgerFunds st amount
+    let detachedBook := removeLedgerBook st.book 1
+    let detached := { funded with book := detachedBook }
+    let inserted := insertLedgerRoot detached 1
+    st := { inserted with sizes := inserted.sizes.set 0 amount }
+  .ok (st, amount)
+
+def ledgerLocked (s : LedgerState) : UInt64 :=
+  s.locked
+
 /-- Pure conditional values stay shared instead of duplicating the mutation continuation. -/
 structure ChoiceState where
   chosen : UInt64

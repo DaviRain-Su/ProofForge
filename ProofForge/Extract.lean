@@ -2009,9 +2009,13 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                 | none => false
               -- A payload constructor is one typed variant field, not a nested scalar
               -- expression whose first argument can stand in for the whole field.
+              -- `{ { s with locked := e } with seats := xs.set … }.locked` elaborates as a
+              -- projection of the inner constructor; reduce that projection before treating
+              -- the field as an inherited `s.locked` leaf.
+              let nestedArg := (reduceCtorProjection? env (peelLets (strip arg))).getD arg
               let nested :=
                 if (asUInt64VariantCtor env arg).isSome || (asOptionStorage env arg).isSome then #[]
-                else flattenLeaves env child arg appliedBases
+                else flattenLeaves env child nestedArg appliedBases
               let isVectorField :=
                 match env.find? (c.induct.str fname) with
                 | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
@@ -2039,17 +2043,21 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                   | some (tag, payload) =>
                     acc := acc.push (s!"{child}_tag", tag) |>.push (s!"{child}_p0", payload)
                   | none =>
-                    match val env arg with
+                    -- Record-update fields can close over bounded tree walks (Phoenix
+                    -- `oldSize` / `maxBookAddress`). The ordinary scalar decoder fuel is
+                    -- too low and used to drop those aggregate stores silently.
+                    match val env nestedArg <|> asVal env 128 nestedArg <|>
+                        localScalarValue? env 128 nestedArg with
                     | some v =>
                       unless looksUnchangedField v child || looksUnchangedField v fname do
                         acc := acc.push (child, v)
                     | none =>
-                      if isConstNamed arg ``Bool.true || endsWith arg ".true" then
+                      if isConstNamed nestedArg ``Bool.true || endsWith nestedArg ".true" then
                         acc := acc.push (child, .lit 1)
-                      else if isConstNamed arg ``Bool.false || endsWith arg ".false" then
+                      else if isConstNamed nestedArg ``Bool.false || endsWith nestedArg ".false" then
                         acc := acc.push (child, .lit 0)
                       else
-                        match arg.getAppFn.constName? with
+                        match nestedArg.getAppFn.constName? with
                         | some ctor =>
                           match env.find? ctor with
                           | some (.ctorInfo info) =>
@@ -2062,7 +2070,7 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                               | none => pure ()
                           | _ => pure ()
                         | none =>
-                          match asLit 8 arg with
+                          match asLit 8 nestedArg with
                           | some v => acc := acc.push (child, v)
                           | none => pure ()
           acc
