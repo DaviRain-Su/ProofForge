@@ -14,7 +14,7 @@ use {
 
 const SELF_TRADE: u32 = 0x1004;
 const UNAUTHORIZED: u32 = 0x1002;
-const STATE_LEN: usize = 1376;
+const STATE_LEN: usize = 1512;
 const DECIMALS: u8 = 6;
 const INITIAL_TOKENS: u64 = 1_000;
 
@@ -401,8 +401,8 @@ fn ask_lifecycle_buy_fee_withdraw_and_evict_run_on_chain() {
         (token_amount(&maker.base), token_amount(&fixture.base_vault)),
         (992, 8)
     );
-    assert_eq!(fixture.slots([54, 61, 89, 93, 99, 100]), [1, 1, 0, 8, 0, 8]);
-    for (word, index) in [65usize, 69, 73, 77].into_iter().enumerate() {
+    assert_eq!(fixture.slots([54, 78, 106, 110, 116, 117]), [1, 1, 0, 8, 0, 8]);
+    for (word, index) in [82usize, 86, 90, 94].into_iter().enumerate() {
         let offset = word * 8;
         let expected = u64::from_le_bytes(
             maker.key.to_bytes()[offset..offset + 8]
@@ -414,11 +414,11 @@ fn ask_lifecycle_buy_fee_withdraw_and_evict_run_on_chain() {
 
     fixture.run(&mut maker, "postAsk", &[10, 3, 11, 12, 0, 0], 3);
     assert_eq!(fixture.slots([6, 10, 14, 18]), [10, 1, 1, 3]);
-    assert_eq!(fixture.slots([2, 89, 93, 99, 100]), [2, 3, 5, 3, 5]);
+    assert_eq!(fixture.slots([2, 106, 110, 116, 117]), [2, 3, 5, 3, 5]);
 
     fixture.run(&mut maker, "reduceAsk", &[10, 1, 0], 0);
     fixture.run(&mut maker, "reduceAsk", &[10, 1, 1], 1);
-    assert_eq!(fixture.slots([18, 89, 93, 99, 100]), [2, 2, 6, 2, 6]);
+    assert_eq!(fixture.slots([18, 106, 110, 116, 117]), [2, 2, 6, 2, 6]);
 
     fixture.run(&mut taker, "depositFunds", &[0, 100], 2);
     assert_eq!(
@@ -429,8 +429,8 @@ fn ask_lifecycle_buy_fee_withdraw_and_evict_run_on_chain() {
         (900, 100)
     );
     fixture.run(&mut taker, "swapBuy", &[0, 21, 22, 2, 10], 2);
-    assert_eq!(fixture.slots([18, 89, 85, 86, 94]), [0, 0, 20, 79, 2]);
-    assert_eq!(fixture.slots([5, 97, 98, 99, 100]), [1, 0, 99, 0, 8]);
+    assert_eq!(fixture.slots([18, 106, 102, 103, 111]), [0, 0, 20, 79, 2]);
+    assert_eq!(fixture.slots([5, 114, 115, 116, 117]), [1, 0, 99, 0, 8]);
     assert_eq!(
         (
             token_amount(&fixture.base_vault),
@@ -441,11 +441,11 @@ fn ask_lifecycle_buy_fee_withdraw_and_evict_run_on_chain() {
     );
 
     fixture.run(&mut maker, "collectFees", &[], 1);
-    assert_eq!(fixture.slots([4, 5, 110, 160]), [1, 0, 7, 1]);
+    assert_eq!(fixture.slots([4, 5, 127, 177]), [1, 0, 7, 1]);
 
     fixture.run(&mut maker, "withdrawQuote", &[100], 20);
     fixture.run(&mut maker, "withdrawBase", &[100], 6);
-    assert_eq!(fixture.slots([85, 93, 98, 100]), [0, 0, 79, 2]);
+    assert_eq!(fixture.slots([102, 110, 115, 117]), [0, 0, 79, 2]);
     assert_eq!(
         (
             token_amount(&maker.base),
@@ -457,7 +457,10 @@ fn ask_lifecycle_buy_fee_withdraw_and_evict_run_on_chain() {
     );
 
     fixture.run(&mut maker, "evictSeat", &[], 1);
-    assert_eq!(fixture.slots([54, 55, 56, 57, 61]), [1, 3, 1, 3, 0]);
+    assert_eq!(
+        fixture.slots([54, 55, 56, 57, 61, 78, 79]),
+        [1, 3, 1, 3, 2, 0, 1]
+    );
 }
 
 #[test]
@@ -469,16 +472,16 @@ fn bid_lifecycle_reduce_and_sell_run_on_chain() {
     fixture.run(&mut maker, "depositFunds", &[0, 100], 1);
     fixture.run(&mut maker, "postBid", &[12, 3, 31, 32, 0, 0], 3);
     assert_eq!(fixture.slots([30, 34, 38, 42]), [12, !1, 1, 3]);
-    assert_eq!(fixture.slots([2, 81, 85, 97, 98]), [2, 36, 64, 36, 64]);
+    assert_eq!(fixture.slots([2, 98, 102, 114, 115]), [2, 36, 64, 36, 64]);
 
     fixture.run(&mut maker, "reduceBid", &[12, !1, 0], 0);
     fixture.run(&mut maker, "reduceBid", &[12, !1, 1], 1);
-    assert_eq!(fixture.slots([42, 81, 85, 97, 98]), [2, 24, 76, 24, 76]);
+    assert_eq!(fixture.slots([42, 98, 102, 114, 115]), [2, 24, 76, 24, 76]);
 
     fixture.run(&mut taker, "depositFunds", &[2, 0], 2);
     fixture.run(&mut taker, "swapSell", &[0, 41, 42, 2, 12], 2);
-    assert_eq!(fixture.slots([42, 81, 86, 93, 94]), [0, 0, 23, 2, 0]);
-    assert_eq!(fixture.slots([5, 97, 98, 99, 100]), [1, 0, 99, 0, 2]);
+    assert_eq!(fixture.slots([42, 98, 103, 110, 111]), [0, 0, 23, 2, 0]);
+    assert_eq!(fixture.slots([5, 114, 115, 116, 117]), [1, 0, 99, 0, 2]);
     assert_eq!(
         (
             token_amount(&fixture.base_vault),
@@ -507,7 +510,7 @@ fn unregistered_buy_and_sell_execute_both_token_legs() {
         (1004, 959, 0, 41)
     );
     assert_eq!(
-        buy.slots([5, 89, 93, 97, 98, 99, 100]),
+        buy.slots([5, 106, 110, 114, 115, 116, 117]),
         [1, 0, 0, 0, 40, 0, 0]
     );
 
@@ -527,7 +530,7 @@ fn unregistered_buy_and_sell_execute_both_token_legs() {
         (996, 1047, 4, 53)
     );
     assert_eq!(
-        sell.slots([5, 81, 85, 93, 97, 98, 99, 100]),
+        sell.slots([5, 98, 102, 110, 114, 115, 116, 117]),
         [1, 0, 52, 4, 0, 52, 0, 4]
     );
 }
@@ -546,12 +549,12 @@ fn slot_and_unix_time_in_force_expire_strictly_on_chain() {
     fixture.run(&mut maker, "postAsk", &[10, 2, 51, 52, 100, 0], 2);
     fixture.mollusk.warp_to_slot(101);
     fixture.run(&mut taker, "swapBuy", &[0, 61, 62, 1, 10], 0);
-    assert_eq!(fixture.slots([18, 89, 93, 99, 100]), [0, 0, 4, 0, 4]);
+    assert_eq!(fixture.slots([18, 106, 110, 116, 117]), [0, 0, 4, 0, 4]);
 
     fixture.run(&mut maker, "postAsk", &[11, 2, 71, 72, 0, 1_000], 2);
     fixture.mollusk.sysvars.clock.unix_timestamp = 1_001;
     fixture.run(&mut taker, "swapBuy", &[0, 81, 82, 1, 11], 0);
-    assert_eq!(fixture.slots([18, 89, 93, 99, 100]), [0, 0, 4, 0, 4]);
+    assert_eq!(fixture.slots([18, 106, 110, 116, 117]), [0, 0, 4, 0, 4]);
 }
 
 #[test]
@@ -573,14 +576,14 @@ fn all_self_trade_behaviors_run_on_chain() {
     cancel.run(&mut cancel_trader, "depositFunds", &[3, 100], 1);
     cancel.run(&mut cancel_trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
     cancel.run(&mut cancel_trader, "swapBuy", &[1, 0, 0, 2, 10], 0);
-    assert_eq!(cancel.slots([18, 89, 93, 99, 100]), [0, 0, 3, 0, 3]);
+    assert_eq!(cancel.slots([18, 106, 110, 116, 117]), [0, 0, 3, 0, 3]);
 
     let mut decrement = PhoenixFixture::new(1);
     let mut decrement_trader = decrement.trader();
     decrement.run(&mut decrement_trader, "depositFunds", &[3, 100], 1);
     decrement.run(&mut decrement_trader, "postAsk", &[10, 3, 0, 0, 0, 0], 3);
     decrement.run(&mut decrement_trader, "swapBuy", &[2, 0, 0, 2, 10], 0);
-    assert_eq!(decrement.slots([18, 89, 93, 99, 100]), [1, 1, 2, 1, 2]);
+    assert_eq!(decrement.slots([18, 106, 110, 116, 117]), [1, 1, 2, 1, 2]);
 }
 
 #[test]

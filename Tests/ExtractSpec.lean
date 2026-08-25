@@ -348,6 +348,39 @@ elab "#pf_guard_nested_composed_state_fold_ir" : command => do
 
 #pf_guard_nested_composed_state_fold_ir
 
+elab "#pf_guard_post_loop_topology_ir" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initPostLoopTopology
+        ``Tests.Fixtures.runPostLoopTopology ``Tests.Fixtures.postLoopTopologyRoot with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some run := program.methods.find? (·.ixName == "runPostLoopTopology")
+    | throwError "missing post-loop topology method"
+  let rec summarize (fuel : Nat) (ops : Array ProofForge.Ops.Op) :
+      Bool × Bool × Bool × Bool :=
+    match fuel with
+    | 0 => (false, false, false, false)
+    | fuel' + 1 => ops.foldl (init := (false, false, false, false)) fun found op =>
+      let current := match op with
+        | .forBody 1 _ => (true, false, false, false)
+        | .storeField "count" _ => (false, true, false, false)
+        | .storeField "root" _ => (false, false, true, false)
+        | .indexSet "nodes" _ _ _ _ => (false, false, false, true)
+        | .ite _ _ _ thn els =>
+          let left := summarize fuel' thn
+          let right := summarize fuel' els
+          (left.1 || right.1, left.2.1 || right.2.1,
+            left.2.2.1 || right.2.2.1, left.2.2.2 || right.2.2.2)
+        | _ => (false, false, false, false)
+      (found.1 || current.1, found.2.1 || current.2.1,
+        found.2.2.1 || current.2.2.1, found.2.2.2 || current.2.2.2)
+  let summary := summarize 32 run.ops
+  unless summary.1 && summary.2.1 && summary.2.2.1 && summary.2.2.2 do
+    throwError s!"post-loop topology continuation lost writes: {repr run.ops}"
+
+#pf_guard_post_loop_topology_ir
+
 elab "#pf_guard_checked_state_snapshot_ir" : command => do
   let env ← getEnv
   let program ←
@@ -742,6 +775,27 @@ elab "#pf_guard_single_invoke_continuation" : command => do
   | _ => throwError s!"single invoke continuation IR mismatch: {repr transfer.ops}"
 
 #pf_guard_single_invoke_continuation
+
+elab "#pf_guard_indexed_transfer_result" : command => do
+  let env ← getEnv
+  let program ←
+    match ProofForge.Extract.extractProgramIR env ``Examples.Counter.init
+        ``Tests.Fixtures.indexedTransferResult ``Examples.Counter.get with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let lowered ←
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some transfer := lowered.methods.find? (·.ixName == "indexedTransferResult")
+    | throwError "missing indexed transfer-result method"
+  match transfer.ops with
+  | #[.invoke 8 _
+        #[.u8le (.lit 12), .u64le (.arg 0), .u8le (.lit 6)] #[] none,
+      .returnU64 (.arg 0)] => pure ()
+  | _ => throwError s!"indexed TransferChecked result mismatch: {repr transfer.ops}"
+
+#pf_guard_indexed_transfer_result
 
 elab "#pf_guard_single_multi_seed_invoke_continuation" : command => do
   let env ← getEnv

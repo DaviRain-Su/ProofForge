@@ -12,11 +12,12 @@ Phoenix v1 `src/state` 在本仓剖面下的摊平。
   MatchingEngineResponse → match*（bounded fold scratch）
   MarketEvent          → events（固定容量 batch）+ lastEvent（兼容投影）
   OrderPacket.client_order_id → little-endian UInt64 × UInt64
-  traders tree         → 4×Pubkey limbs + allocator metadata + per-seat TraderState
+  traders tree         → 4×Pubkey limbs + allocator metadata + persisted links/colors + per-seat TraderState
 
 每边 N=4。档 0 是最优价；ask 价格升序、bid 价格降序，同价均为 FIFO。
-`RBTree4` 给出四档对应的红黑树拓扑见证；撮合只依赖中序次序，
-不把颜色和指针复制进链上状态。free-funds 挂单、驱逐、按 ID reduce/cancel、
+`RBTree4` 给出四档 order-book 投影对应的红黑树拓扑见证；撮合只依赖中序次序，
+所以 bid/ask 尚不把颜色和指针复制进链上状态。trader registry 则持久化 root、
+left/right/parent 和 color。free-funds 挂单、驱逐、按 ID reduce/cancel、
 三种 self-trade 和 fee collection 已进入 bounded 模型。trader registry 保留
 Sokoban 的 1-based address、bump 分配与 LIFO free-list；withdraw 和 zero-state
 seat eviction 已接入，订单仍只存内部 address。
@@ -92,6 +93,12 @@ structure State where
   traderBumpIndex : UInt64
   traderFreeHead : UInt64
   traderNextFree : Vector UInt64 4
+  /-- Persisted Sokoban red-black topology for the four trader seats. -/
+  traderRoot : UInt64
+  traderLeft : Vector UInt64 4
+  traderRight : Vector UInt64 4
+  traderParent : Vector UInt64 4
+  traderColor : Vector UInt64 4
   traderUsed : Vector UInt64 4
   /-- Solana Pubkey 的四个 little-endian UInt64 limbs，按 seat 平行存放。 -/
   traderKey0 : Vector UInt64 4
@@ -331,6 +338,11 @@ def init (tick : UInt64) : State :=
       traderBumpIndex := 1
       traderFreeHead := 1
       traderNextFree := empty4
+      traderRoot := 0
+      traderLeft := empty4
+      traderRight := empty4
+      traderParent := empty4
+      traderColor := empty4
       traderUsed := empty4
       traderKey0 := empty4
       traderKey1 := empty4
@@ -359,7 +371,311 @@ def init (tick : UInt64) : State :=
   let _ := recordPhoenix!(state, 100, 0; )
   state
 
-/-- 完整四 limb Pubkey lookup；`traderUsed` 单独区分合法的全零 Pubkey 与空 seat。 -/
+/-!
+The trader registry now persists the same mutable topology as the bounded Sokoban refinement.
+Payload and allocator vectors remain parallel so the account layout still exposes Phoenix's
+TraderState directly; tree links use 1-based addresses and 0 as the black sentinel.
+-/
+
+private def traderKeyBefore
+    (a0 a1 a2 a3 b0 b1 b2 b3 : UInt64) : Bool :=
+  a0 < b0 || (a0 = b0 &&
+    (a1 < b1 || (a1 = b1 && (a2 < b2 || (a2 = b2 && a3 < b3)))))
+
+private def traderKeyEqualsAt
+    (s : State) (address key0 key1 key2 key3 : UInt64) : Bool :=
+  if address = 0 then false
+  else
+    let i := (address.toNat - 1) % 4
+    s.traderUsed[i]! ≠ 0 && s.traderKey0[i]! = key0 && s.traderKey1[i]! = key1 &&
+      s.traderKey2[i]! = key2 && s.traderKey3[i]! = key3
+
+private def traderKeyBeforeAt
+    (s : State) (key0 key1 key2 key3 address : UInt64) : Bool :=
+  let i := (address.toNat - 1) % 4
+  traderKeyBefore key0 key1 key2 key3
+    s.traderKey0[i]! s.traderKey1[i]! s.traderKey2[i]! s.traderKey3[i]!
+
+private def traderColorAt (s : State) (address : UInt64) : UInt64 :=
+  if address = 0 then 0 else s.traderColor[(address.toNat - 1) % 4]!
+
+private def paintTrader (s : State) (address color : UInt64) : State :=
+  if address = 0 then s
+  else
+    { s with traderColor := s.traderColor.set ((address.toNat - 1) % 4) color }
+
+private def rotateTraderLeft (s : State) (xAddress : UInt64) : State :=
+  let xi := (xAddress.toNat - 1) % 4
+  let yAddress := s.traderRight[xi]!
+  if yAddress = 0 then s
+  else
+    let yi := (yAddress.toNat - 1) % 4
+    let innerAddress := s.traderLeft[yi]!
+    let parentAddress := s.traderParent[xi]!
+    let right1 := s.traderRight.set xi innerAddress
+    let parent1 := s.traderParent.set xi yAddress
+    let parent2 :=
+      if innerAddress = 0 then parent1
+      else parent1.set ((innerAddress.toNat - 1) % 4) xAddress
+    let left1 := s.traderLeft.set yi xAddress
+    let parent3 := parent2.set yi parentAddress
+    if parentAddress = 0 then
+      { s with
+        traderRoot := yAddress, traderLeft := left1, traderRight := right1,
+        traderParent := parent3 }
+    else
+      let pi := (parentAddress.toNat - 1) % 4
+      if s.traderLeft[pi]! = xAddress then
+        { s with
+          traderLeft := left1.set pi yAddress, traderRight := right1,
+          traderParent := parent3 }
+      else
+        { s with
+          traderLeft := left1, traderRight := right1.set pi yAddress,
+          traderParent := parent3 }
+
+private def rotateTraderRight (s : State) (xAddress : UInt64) : State :=
+  let xi := (xAddress.toNat - 1) % 4
+  let yAddress := s.traderLeft[xi]!
+  if yAddress = 0 then s
+  else
+    let yi := (yAddress.toNat - 1) % 4
+    let innerAddress := s.traderRight[yi]!
+    let parentAddress := s.traderParent[xi]!
+    let left1 := s.traderLeft.set xi innerAddress
+    let parent1 := s.traderParent.set xi yAddress
+    let parent2 :=
+      if innerAddress = 0 then parent1
+      else parent1.set ((innerAddress.toNat - 1) % 4) xAddress
+    let right1 := s.traderRight.set yi xAddress
+    let parent3 := parent2.set yi parentAddress
+    if parentAddress = 0 then
+      { s with
+        traderRoot := yAddress, traderLeft := left1, traderRight := right1,
+        traderParent := parent3 }
+    else
+      let pi := (parentAddress.toNat - 1) % 4
+      if s.traderLeft[pi]! = xAddress then
+        { s with
+          traderLeft := left1.set pi yAddress, traderRight := right1,
+          traderParent := parent3 }
+      else
+        { s with
+          traderLeft := left1, traderRight := right1.set pi yAddress,
+          traderParent := parent3 }
+
+private def fixTraderInserted (s : State) (nodeAddress parentAddress : UInt64) : State :=
+  if parentAddress = 0 then paintTrader s nodeAddress 0
+  else if traderColorAt s parentAddress = 0 then paintTrader s s.traderRoot 0
+  else
+    let pi := (parentAddress.toNat - 1) % 4
+    let grandAddress := s.traderParent[pi]!
+    if grandAddress = 0 then paintTrader s parentAddress 0
+    else
+      let gi := (grandAddress.toNat - 1) % 4
+      if s.traderLeft[gi]! = parentAddress then
+        let uncleAddress := s.traderRight[gi]!
+        if traderColorAt s uncleAddress = 1 then
+          paintTrader (paintTrader (paintTrader s parentAddress 0) uncleAddress 0)
+            grandAddress 0
+        else if s.traderRight[pi]! = nodeAddress then
+          let rotated := rotateTraderLeft s parentAddress
+          let recolored := paintTrader (paintTrader rotated nodeAddress 0) grandAddress 1
+          rotateTraderRight recolored grandAddress
+        else
+          let recolored := paintTrader (paintTrader s parentAddress 0) grandAddress 1
+          rotateTraderRight recolored grandAddress
+      else
+        let uncleAddress := s.traderLeft[gi]!
+        if traderColorAt s uncleAddress = 1 then
+          paintTrader (paintTrader (paintTrader s parentAddress 0) uncleAddress 0)
+            grandAddress 0
+        else if s.traderLeft[pi]! = nodeAddress then
+          let rotated := rotateTraderRight s parentAddress
+          let recolored := paintTrader (paintTrader rotated nodeAddress 0) grandAddress 1
+          rotateTraderLeft recolored grandAddress
+        else
+          let recolored := paintTrader (paintTrader s parentAddress 0) grandAddress 1
+          rotateTraderLeft recolored grandAddress
+
+/-- Link a newly allocated key into the bounded trader tree and repair its colors. -/
+private def insertTraderTopology
+    (s : State) (address parentAddress key0 key1 key2 key3 : UInt64) : State :=
+  let i := (address.toNat - 1) % 4
+  if s.traderRoot = 0 then
+    { s with
+      traderRoot := address
+      traderLeft := s.traderLeft.set i 0
+      traderRight := s.traderRight.set i 0
+      traderParent := s.traderParent.set i 0
+      traderColor := s.traderColor.set i 0 }
+  else
+    let pi := (parentAddress.toNat - 1) % 4
+    let goesLeft := traderKeyBeforeAt s key0 key1 key2 key3 parentAddress
+    let linked :=
+      if goesLeft then
+        { s with
+          traderLeft := (s.traderLeft.set pi address).set i 0
+          traderRight := s.traderRight.set i 0
+          traderParent := s.traderParent.set i parentAddress
+          traderColor := s.traderColor.set i 1 }
+      else
+        { s with
+          traderLeft := s.traderLeft.set i 0
+          traderRight := (s.traderRight.set pi address).set i 0
+          traderParent := s.traderParent.set i parentAddress
+          traderColor := s.traderColor.set i 1 }
+    fixTraderInserted linked address parentAddress
+
+private def transplantTrader (s : State) (removed replacement : UInt64) : State :=
+  let ri := (removed.toNat - 1) % 4
+  let parentAddress := s.traderParent[ri]!
+  let parentLinked :=
+    if parentAddress = 0 then { s with traderRoot := replacement }
+    else
+      let pi := (parentAddress.toNat - 1) % 4
+      if s.traderLeft[pi]! = removed then
+        { s with traderLeft := s.traderLeft.set pi replacement }
+      else
+        { s with traderRight := s.traderRight.set pi replacement }
+  if replacement = 0 then parentLinked
+  else
+    { parentLinked with
+      traderParent := parentLinked.traderParent.set
+        ((replacement.toNat - 1) % 4) parentAddress }
+
+private def linkTraderLeft (s : State) (parent child : UInt64) : State :=
+  let pi := (parent.toNat - 1) % 4
+  let linked := { s with traderLeft := s.traderLeft.set pi child }
+  if child = 0 then linked
+  else
+    { linked with
+      traderParent := linked.traderParent.set ((child.toNat - 1) % 4) parent }
+
+private def linkTraderRight (s : State) (parent child : UInt64) : State :=
+  let pi := (parent.toNat - 1) % 4
+  let linked := { s with traderRight := s.traderRight.set pi child }
+  if child = 0 then linked
+  else
+    { linked with
+      traderParent := linked.traderParent.set ((child.toNat - 1) % 4) parent }
+
+private def moveTraderSuccessor
+    (s : State) (removed successor replacement : UInt64) : State :=
+  let ri := (removed.toNat - 1) % 4
+  let si := (successor.toNat - 1) % 4
+  let successorParent := s.traderParent[si]!
+  if successorParent = removed then
+    let moved := transplantTrader s removed successor
+    let withLeft := linkTraderLeft moved successor s.traderLeft[ri]!
+    paintTrader withLeft successor s.traderColor[ri]!
+  else
+    let detached := transplantTrader s successor replacement
+    let withRight := linkTraderRight detached successor s.traderRight[ri]!
+    let moved := transplantTrader withRight removed successor
+    let withLeft := linkTraderLeft moved successor s.traderLeft[ri]!
+    paintTrader withLeft successor s.traderColor[ri]!
+
+private def fixTraderDeleted (s : State) (xAddress parentAddress : UInt64) : State :=
+  if xAddress = s.traderRoot then paintTrader s xAddress 0
+  else if traderColorAt s xAddress = 1 then paintTrader s xAddress 0
+  else if parentAddress = 0 then paintTrader s xAddress 0
+  else
+    let pi := (parentAddress.toNat - 1) % 4
+    if s.traderLeft[pi]! = xAddress then
+      let firstSibling := s.traderRight[pi]!
+      let afterRedSibling :=
+        if traderColorAt s firstSibling = 1 then
+          rotateTraderLeft (paintTrader (paintTrader s firstSibling 0) parentAddress 1)
+            parentAddress
+        else s
+      let sibling := afterRedSibling.traderRight[pi]!
+      let si := (sibling.toNat - 1) % 4
+      let nearChild := afterRedSibling.traderLeft[si]!
+      let farChild := afterRedSibling.traderRight[si]!
+      if traderColorAt afterRedSibling nearChild = 0 &&
+          traderColorAt afterRedSibling farChild = 0 then
+        paintTrader (paintTrader afterRedSibling sibling 1) parentAddress 0
+      else
+        let aligned :=
+          if traderColorAt afterRedSibling farChild = 0 then
+            rotateTraderRight
+              (paintTrader (paintTrader afterRedSibling nearChild 0) sibling 1) sibling
+          else afterRedSibling
+        let alignedSibling := aligned.traderRight[pi]!
+        let asi := (alignedSibling.toNat - 1) % 4
+        let alignedFar := aligned.traderRight[asi]!
+        let recolored :=
+          paintTrader
+            (paintTrader (paintTrader aligned alignedSibling
+              (traderColorAt aligned parentAddress)) parentAddress 0) alignedFar 0
+        rotateTraderLeft recolored parentAddress
+    else
+      let firstSibling := s.traderLeft[pi]!
+      let afterRedSibling :=
+        if traderColorAt s firstSibling = 1 then
+          rotateTraderRight (paintTrader (paintTrader s firstSibling 0) parentAddress 1)
+            parentAddress
+        else s
+      let sibling := afterRedSibling.traderLeft[pi]!
+      let si := (sibling.toNat - 1) % 4
+      let nearChild := afterRedSibling.traderRight[si]!
+      let farChild := afterRedSibling.traderLeft[si]!
+      if traderColorAt afterRedSibling nearChild = 0 &&
+          traderColorAt afterRedSibling farChild = 0 then
+        paintTrader (paintTrader afterRedSibling sibling 1) parentAddress 0
+      else
+        let aligned :=
+          if traderColorAt afterRedSibling farChild = 0 then
+            rotateTraderLeft
+              (paintTrader (paintTrader afterRedSibling nearChild 0) sibling 1) sibling
+          else afterRedSibling
+        let alignedSibling := aligned.traderLeft[pi]!
+        let asi := (alignedSibling.toNat - 1) % 4
+        let alignedFar := aligned.traderLeft[asi]!
+        let recolored :=
+          paintTrader
+            (paintTrader (paintTrader aligned alignedSibling
+              (traderColorAt aligned parentAddress)) parentAddress 0) alignedFar 0
+        rotateTraderRight recolored parentAddress
+
+/-- Detach one seat while preserving every surviving address and red-black invariant. -/
+private def removeTraderTopology (s : State) (removedAddress : UInt64) : State :=
+  let ri := (removedAddress.toNat - 1) % 4
+  let left := s.traderLeft[ri]!
+  let right := s.traderRight[ri]!
+  let successorRoot := right
+  let sr := (successorRoot.toNat - 1) % 4
+  let successorLeft1 := s.traderLeft[sr]!
+  let sl1 := (successorLeft1.toNat - 1) % 4
+  let successorLeft2 := if successorLeft1 = 0 then 0 else s.traderLeft[sl1]!
+  let successorAddress :=
+    if left = 0 || right = 0 then removedAddress
+    else if successorLeft2 ≠ 0 then successorLeft2
+    else if successorLeft1 ≠ 0 then successorLeft1
+    else successorRoot
+  let si := (successorAddress.toNat - 1) % 4
+  let removedColor := s.traderColor[si]!
+  let replacementAddress :=
+    if s.traderLeft[si]! ≠ 0 then s.traderLeft[si]! else s.traderRight[si]!
+  let replacementParent :=
+    if successorAddress = removedAddress then s.traderParent[ri]!
+    else if s.traderParent[si]! = removedAddress then successorAddress
+    else s.traderParent[si]!
+  let moved :=
+    if left = 0 then transplantTrader s removedAddress right
+    else if right = 0 then transplantTrader s removedAddress left
+    else moveTraderSuccessor s removedAddress successorAddress replacementAddress
+  let fixed :=
+    if removedColor = 0 then fixTraderDeleted moved replacementAddress replacementParent else moved
+  paintTrader fixed fixed.traderRoot 0
+
+attribute [pf_inline] traderKeyBefore traderKeyEqualsAt traderKeyBeforeAt traderColorAt
+  paintTrader rotateTraderLeft rotateTraderRight fixTraderInserted insertTraderTopology
+  transplantTrader linkTraderLeft linkTraderRight moveTraderSuccessor fixTraderDeleted
+  removeTraderTopology
+
+/-- Full four-limb Pubkey lookup; the persisted topology is maintained independently below. -/
 private def traderAddressFor (s : State) (key0 key1 key2 key3 : UInt64) : UInt64 :=
   if s.traderUsed[0]! ≠ 0 && s.traderKey0[0]! = key0 && s.traderKey1[0]! = key1 &&
       s.traderKey2[0]! = key2 && s.traderKey3[0]! = key3 then 1
@@ -421,23 +737,27 @@ def traderBaseFreeAt (s : State) (address : UInt64) : UInt64 :=
 Sokoban allocator 注册，再分别增加该 seat 的 base/quote free。重复注册幂等，
 容量满和余额溢出都 fail closed。返回 1-based trader index。
 
-循环中的 address 用字面量 select，而不是 `i + 1`：这样它保持 state-carrying
-`forBody`，不会被纯加法的 `forAccum` 识别规则误收。
+四轮 state-carrying walk 沿持久化 links 前进；这既给抽取器一个显式有界 CFG，也避免
+恢复成按物理 slot 的线性扫描。
 -/
 def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64) :
     Except Error (State × UInt64) := Id.run do
-  let mut st := { s with matchStopped := 0 }
-  for i in [0:4] do
+  let mut st := { s with matchStopped := 0, matchLevel := s.traderRoot, matchWant := 0 }
+  for _ in [0:4] do
     if st.matchStopped = (0 : UInt64) then
-      let j : Nat := i
-      if st.traderUsed[j]! ≠ (0 : UInt64) then
-        if st.traderKey0[j]! = key0 then
-          if st.traderKey1[j]! = key1 then
-            if st.traderKey2[j]! = key2 then
-              if st.traderKey3[j]! = key3 then
-                let address : UInt64 :=
-                  if i = 0 then 1 else if i = 1 then 2 else if i = 2 then 3 else 4
-                st := { st with matchStopped := address }
+      let address := st.matchLevel
+      if address ≠ (0 : UInt64) then
+        let i := (address.toNat - 1) % 4
+        if st.traderUsed[i]! ≠ (0 : UInt64) && st.traderKey0[i]! = key0 &&
+            st.traderKey1[i]! = key1 && st.traderKey2[i]! = key2 &&
+            st.traderKey3[i]! = key3 then
+          st := { st with matchStopped := address }
+        else
+          if traderKeyBefore key0 key1 key2 key3 st.traderKey0[i]!
+              st.traderKey1[i]! st.traderKey2[i]! st.traderKey3[i]! then
+            st := { st with matchWant := address, matchLevel := st.traderLeft[i]! }
+          else
+            st := { st with matchWant := address, matchLevel := st.traderRight[i]! }
   if st.baseFree > u64Max - baseLots then
     .error .overflow
   else if st.quoteFree > u64Max - quoteLots then
@@ -468,7 +788,7 @@ def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64
       else if st.traderBumpIndex < (5 : UInt64) then
         let address := st.traderBumpIndex
         let i := address.toNat - 1
-        .ok ({ st with
+        let allocated := { st with
                 traderCount := st.traderCount + 1
                 traderBumpIndex := st.traderBumpIndex + 1
                 traderFreeHead := st.traderBumpIndex + 1
@@ -484,7 +804,14 @@ def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64
                 traderBaseFree := st.traderBaseFree.set (i % 4) baseLots
                 quoteFree := st.quoteFree + quoteLots
                 baseFree := st.baseFree + baseLots
-                matchStopped := address }, address)
+                matchStopped := address }
+        let topology := insertTraderTopology st address st.matchWant key0 key1 key2 key3
+        .ok ({ allocated with
+          traderRoot := topology.traderRoot
+          traderLeft := topology.traderLeft
+          traderRight := topology.traderRight
+          traderParent := topology.traderParent
+          traderColor := topology.traderColor }, address)
       else
         .error .overflow
     else if st.traderFreeHead = (0 : UInt64) then
@@ -493,7 +820,7 @@ def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64
       let address := st.traderFreeHead
       let i := address.toNat - 1
       let next := st.traderNextFree[i]!
-      .ok ({ st with
+      let allocated := { st with
               traderCount := st.traderCount + 1
               traderFreeHead := next
               traderNextFree := st.traderNextFree.set (i % 4) 0
@@ -508,7 +835,14 @@ def depositFundsFor (s : State) (key0 key1 key2 key3 baseLots quoteLots : UInt64
               traderBaseFree := st.traderBaseFree.set (i % 4) baseLots
               quoteFree := st.quoteFree + quoteLots
               baseFree := st.baseFree + baseLots
-              matchStopped := address }, address)
+              matchStopped := address }
+      let topology := insertTraderTopology st address st.matchWant key0 key1 key2 key3
+      .ok ({ allocated with
+        traderRoot := topology.traderRoot
+        traderLeft := topology.traderLeft
+        traderRight := topology.traderRight
+        traderParent := topology.traderParent
+        traderColor := topology.traderColor }, address)
     else
       .error .overflow
   else
@@ -583,15 +917,20 @@ def evictSeatFor (s : State) (key0 key1 key2 key3 : UInt64) :
       .error .overflow
     else
       let _ := recordPhoenix!(s, 106, 0; )
-      .ok ({ s with
-              traderCount := s.traderCount - 1
+      let detached := removeTraderTopology s address
+      .ok ({ detached with
+              traderCount := detached.traderCount - 1
               traderFreeHead := address
-              traderNextFree := s.traderNextFree.set (i % 4) s.traderFreeHead
-              traderUsed := s.traderUsed.set (i % 4) 0
-              traderKey0 := s.traderKey0.set (i % 4) 0
-              traderKey1 := s.traderKey1.set (i % 4) 0
-              traderKey2 := s.traderKey2.set (i % 4) 0
-              traderKey3 := s.traderKey3.set (i % 4) 0 }, address)
+              traderNextFree := detached.traderNextFree.set (i % 4) s.traderFreeHead
+              traderLeft := detached.traderLeft.set (i % 4) 0
+              traderRight := detached.traderRight.set (i % 4) 0
+              traderParent := detached.traderParent.set (i % 4) 0
+              traderColor := detached.traderColor.set (i % 4) 0
+              traderUsed := detached.traderUsed.set (i % 4) 0
+              traderKey0 := detached.traderKey0.set (i % 4) 0
+              traderKey1 := detached.traderKey1.set (i % 4) 0
+              traderKey2 := detached.traderKey2.set (i % 4) 0
+              traderKey3 := detached.traderKey3.set (i % 4) 0 }, address)
   else
     .error .overflow
 

@@ -21,6 +21,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
       source.schema.leaves.any (·.name == "events_0_tag") &&
       source.schema.leaves.any (·.name == "events_4_p8") &&
       source.schema.leaves.any (·.name == "traderKey3_3") &&
+      source.schema.leaves.any (·.name == "traderRoot") &&
+      source.schema.leaves.any (·.name == "traderColor_3") &&
       source.schema.leaves.any (·.name == "traderBaseFree_3") &&
       source.schema.leaves.any (·.name == "eventCount") do
     throwError "Phoenix bounded event/trader layout is missing"
@@ -32,7 +34,8 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless initValues.size == source.schema.leaves.size do
     throwError s!"Phoenix init covers {initValues.size}/{source.schema.leaves.size} state leaves"
   for (name, expected) in #[
-      ("traderCount", .lit 0), ("traderBumpIndex", .lit 1), ("traderFreeHead", .lit 1)
+      ("traderCount", .lit 0), ("traderBumpIndex", .lit 1),
+      ("traderFreeHead", .lit 1), ("traderRoot", .lit 0)
     ] do
     let some index := source.schema.leaves.findIdx? (·.name == name)
       | throwError s!"missing init leaf {name}"
@@ -56,7 +59,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless labels.length == labels.eraseDups.length do
     let duplicates := labels.filter (fun label => 1 < labels.count label) |>.eraseDups
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
-  unless ProofForge.Svm.IR.dataLen program == 1376 do
+  unless ProofForge.Svm.IR.dataLen program == 1512 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.IR.dataLen program} bytes"
   unless ProofForge.Svm.IR.cpiAccountCount program == 11 do
     throwError s!"Phoenix CPI account scan stopped early: " ++
@@ -305,6 +308,17 @@ elab "#pf_guard_phoenix_artifact" : command => do
   unless hasIndexSetValue 32 "traderBaseFree" (.arg 0) deposit.ops &&
       hasIndexSetValue 32 "traderQuoteFree" (.arg 1) deposit.ops do
     throwError "Phoenix state-loop parameters are not in source ABI order"
+  unless hasStoreField 64 "traderCount" deposit.ops &&
+      hasStoreField 64 "baseFree" deposit.ops && hasStoreField 64 "quoteFree" deposit.ops &&
+      hasStoreField 64 "traderRoot" deposit.ops && hasIndexSet 64 "traderUsed" deposit.ops &&
+      hasIndexSet 64 "traderLeft" deposit.ops && hasIndexSet 64 "traderRight" deposit.ops &&
+      hasIndexSet 64 "traderParent" deposit.ops && hasIndexSet 64 "traderColor" deposit.ops do
+    throwError "Phoenix deposit lost allocator, balance, or trader-topology writes"
+  unless hasStoreField 64 "traderCount" evictSeat.ops &&
+      hasStoreField 64 "traderRoot" evictSeat.ops && hasIndexSet 64 "traderUsed" evictSeat.ops &&
+      hasIndexSet 64 "traderLeft" evictSeat.ops && hasIndexSet 64 "traderRight" evictSeat.ops &&
+      hasIndexSet 64 "traderParent" evictSeat.ops && hasIndexSet 64 "traderColor" evictSeat.ops do
+    throwError "Phoenix eviction lost allocator or trader-topology deletion writes"
   unless hasStoreFieldValue 32 "lastEvent_p2" (.arg 2) post.ops &&
       hasStoreFieldValue 32 "lastEvent_p3" (.arg 3) post.ops &&
       hasStoreFieldValue 32 "lastEvent_p4" (.arg 0) post.ops &&
@@ -359,11 +373,85 @@ private def withSeats12 (s : Projects.Phoenix.State) : Projects.Phoenix.State :=
     traderCount := 2
     traderBumpIndex := 3
     traderFreeHead := 3
+    traderRoot := 1
+    traderRight := #v[2, 0, 0, 0]
+    traderParent := #v[0, 1, 0, 0]
+    traderColor := #v[0, 1, 0, 0]
     traderUsed := #v[1, 1, 0, 0]
     traderKey0 := #v[0, 22, 0, 0]
     traderKey1 := #v[0, 23, 0, 0]
     traderKey2 := #v[0, 24, 0, 0]
     traderKey3 := #v[0, 25, 0, 0] }
+
+private def depositTraderKeys (s : Projects.Phoenix.State) :
+    List UInt64 → Except Error Projects.Phoenix.State
+  | [] => .ok s
+  | key :: rest => do
+      let (next, _) ← depositFundsFor s key 0 0 0 0 0
+      depositTraderKeys next rest
+
+private def traderTopologyWalk (s : Projects.Phoenix.State)
+    (address parent : UInt64) : Nat → Option (Nat × Nat × List UInt64)
+  | 0 => none
+  | fuel + 1 =>
+      if address = 0 then some (1, 0, [])
+      else if 4 < address then none
+      else
+        let i := address.toNat - 1
+        if s.traderUsed[i]! = 0 || s.traderParent[i]! ≠ parent then none
+        else
+          match traderTopologyWalk s s.traderLeft[i]! address fuel,
+              traderTopologyWalk s s.traderRight[i]! address fuel with
+          | some (leftBlack, leftCount, leftKeys),
+              some (rightBlack, rightCount, rightKeys) =>
+            let key := s.traderKey0[i]!
+            let ordered := leftKeys.all (· < key) && rightKeys.all (key < ·)
+            let childrenBlack :=
+              s.traderColor[i]! = 0 ||
+                ((s.traderLeft[i]! = 0 ||
+                    s.traderColor[s.traderLeft[i]!.toNat - 1]! = 0) &&
+                  (s.traderRight[i]! = 0 ||
+                    s.traderColor[s.traderRight[i]!.toNat - 1]! = 0))
+            if ordered && childrenBlack && leftBlack = rightBlack then
+              some (leftBlack + if s.traderColor[i]! = 0 then 1 else 0,
+                leftCount + rightCount + 1, leftKeys ++ key :: rightKeys)
+            else none
+          | _, _ => none
+
+private def validTraderTopology (s : Projects.Phoenix.State) : Bool :=
+  if s.traderRoot = 0 then s.traderCount = 0
+  else if 4 < s.traderRoot then false
+  else
+    let rootIndex := s.traderRoot.toNat - 1
+    s.traderParent[rootIndex]! = 0 && s.traderColor[rootIndex]! = 0 &&
+      match traderTopologyWalk s s.traderRoot 0 5 with
+      | some (_, count, keys) =>
+          count = s.traderCount.toNat && keys.length = keys.eraseDups.length &&
+            (List.range 4).countP (fun i => s.traderUsed[i]! ≠ 0) = count
+      | none => false
+
+private def fourTraderOrders : List (List UInt64) :=
+  [ [10, 20, 30, 40], [10, 20, 40, 30], [10, 30, 20, 40], [10, 30, 40, 20]
+  , [10, 40, 20, 30], [10, 40, 30, 20], [20, 10, 30, 40], [20, 10, 40, 30]
+  , [20, 30, 10, 40], [20, 30, 40, 10], [20, 40, 10, 30], [20, 40, 30, 10]
+  , [30, 10, 20, 40], [30, 10, 40, 20], [30, 20, 10, 40], [30, 20, 40, 10]
+  , [30, 40, 10, 20], [30, 40, 20, 10], [40, 10, 20, 30], [40, 10, 30, 20]
+  , [40, 20, 10, 30], [40, 20, 30, 10], [40, 30, 10, 20], [40, 30, 20, 10] ]
+
+private def validTraderDeletion (order : List UInt64) (key : UInt64) : Bool :=
+  match depositTraderKeys (init 1) order with
+  | .error _ => false
+  | .ok full =>
+      match evictSeatFor full key 0 0 0 with
+      | .error _ => false
+      | .ok (removed, address) =>
+          validTraderTopology removed && removed.traderCount = 3 &&
+            removed.traderFreeHead = address && traderIndexOf removed key 0 0 0 = 0 &&
+            match depositFundsFor removed 50 0 0 0 0 0 with
+            | .ok (reused, nextAddress) =>
+                nextAddress = address && validTraderTopology reused &&
+                  traderIndexOf reused 50 0 0 0 = address
+            | .error _ => false
 
 private def sameBusinessResult :
     Except Error (Projects.Phoenix.State × UInt64) →
@@ -460,6 +548,9 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard (init 100).traderCount == 0
 #guard (init 100).traderBumpIndex == 1
 #guard (init 100).traderFreeHead == 1
+#guard (init 100).traderRoot == 0
+#guard (init 100).traderLeft == empty4
+#guard (init 100).traderRight == empty4
 #guard (init 100).traderUsed == empty4
 #guard (init 100).traderBaseFree == empty4
 #guard (init 100).baseLocked == 0
@@ -498,6 +589,12 @@ private def sellSamples : List Projects.Phoenix.State := [
   bidSequences := #v[~~~(1 : UInt64), 0, ~~~(2 : UInt64), 0] }
 #guard Side.ask != Side.bid
 #guard SelfTradeBehavior.abort != SelfTradeBehavior.cancelProvide
+#guard fourTraderOrders.all fun order =>
+  match depositTraderKeys (init 1) order with
+  | .ok state => validTraderTopology state
+  | .error _ => false
+#guard fourTraderOrders.all fun order =>
+  [10, 20, 30, 40].all fun key => validTraderDeletion order key
 
 #guard
   match depositFundsFor (init 1) 11 12 13 14 7 9 with
@@ -560,6 +657,7 @@ private def sellSamples : List Projects.Phoenix.State := [
 #guard
   let s := { (init 1) with
     traderCount := 1, traderBumpIndex := 2, traderFreeHead := 2,
+    traderRoot := 1,
     traderUsed := #v[1, 0, 0, 0], traderKey0 := #v[9, 0, 0, 0],
     traderBaseFree := #v[u64Max, 0, 0, 0] }
   match depositFundsFor s 9 0 0 0 1 0 with

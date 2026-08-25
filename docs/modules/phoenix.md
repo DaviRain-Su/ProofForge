@@ -3,9 +3,9 @@
 ## Purpose
 
 把 [phoenix-v1](https://github.com/Ellipsis-Labs/phoenix-v1) 的双边 IOC
-语义放进当前 SVM 剖面。官方记录摊成平行 `UInt64` 向量；每边固定 N=4 的
-`RBTree4` 保存规范红黑拓扑及中序次序的 refinement witness，但链上账户不复制
-颜色和指针。
+语义放进当前 SVM 剖面。官方 bid/ask 记录摊成平行 `UInt64` 向量；每边固定 N=4
+并按中序优先级保存。trader registry 则把同为 N=4 的 root、left/right、parent 和
+color 真正持久化到账户，执行 bounded 红黑插入、删除修复和地址复用。
 
 ## 官方 `src/state` 对上了什么
 
@@ -18,6 +18,7 @@
 | ask `FIFOOrderId` / order × 4 | `priceTicks` / `sequences` / `traders` / `sizes` / TIF |
 | bid `FIFOOrderId` / order × 4 | 对应的 `bid*` 平行向量 |
 | traders tree key / address | `traderKey0..3` 四 limb Pubkey / 1-based `traders`、`bidTraders` |
+| traders tree topology | `traderRoot` / `traderLeft` / `traderRight` / `traderParent` / `traderColor` |
 | traders allocator | `traderCount` / `traderBumpIndex` / `traderFreeHead` / `traderNextFree` |
 | 每-seat `TraderState` | 四个 `trader{Quote,Base}{Locked,Free}` 向量 |
 | `Side` / `SelfTradeBehavior` | 无 payload 枚举（宿主） |
@@ -25,20 +26,23 @@
 | `PhoenixMarketEvent` | 官方 ordinal tag + 九个规范 payload 槽；instruction 内固定容量 5 的 batch |
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
-171 个 8-byte 叶，账户含 discriminator 共 1,376 bytes。`#pf_build Projects.Phoenix`
-SVM digest `9ad78a5bd3d7dc6e`。物理账户表固定为 market state、trader signer、trader
+188 个 8-byte 叶，账户含 discriminator 共 1,512 bytes。`#pf_build Projects.Phoenix`
+SVM digest `c2685fe590ebff4c`。物理账户表固定为 market state、trader signer、trader
 base/quote Token account、base/quote mint、base/quote vault 和 classic SPL Token program，
 再加 executable current program 与 canonical `"log"` PDA，共 11 个账户。
 
 `depositFunds` 从 account 1 读取 signer 的完整 32-byte Pubkey。已有 key 幂等复用 seat；
 缺失 key 按 Sokoban 的 1-based bump allocator 注册，容量为四个 seat；base/quote 分别
 加进该 seat 的 free 余额。全零 Pubkey 也合法，`traderUsed` 单独区分空槽。查找是
-structured `forBody 4`，注册和余额更新是通用动态 `Vector.set`，没有 Phoenix-specific
-IR 或 emitter 分支。`withdrawBase` / `withdrawQuote` 分别返回 `min(requested, free)`，
+沿持久化 links 的 structured `forBody 4`；循环同时保留最后一个 parent，避免插入前
+再次查找。注册、旋转、recolor 和余额更新都是通用动态 `Vector.set`，没有
+Phoenix-specific IR 或 emitter 分支。`withdrawBase` / `withdrawQuote` 分别返回
+`min(requested, free)`，
 不混淆两种 lot 单位；`evictSeat` 只释放四类余额全零的 seat，并把 address 压回 LIFO
-free-list。释放 2 再释放 1 时，后续注册按 1、2 复用且 bump index 不回退。lookup 用
-`Except UInt64` producer 汇合到 CFG join local，复合 key guard 由统一 Extract lowering
-承载。`postAsk` / `postBid` / `reduceAsk` / `reduceBid` 的链上入口不再接受可伪造的
+free-list。eviction 在回收 address 之前执行 successor transplant 和 delete-fixup；
+后续注册精确复用该地址且 bump index 不回退。其余 scalar lookup 仍是 bounded 四槽
+扫描；`Except UInt64` producer 汇合到 CFG join local，复合 key guard 由统一 Extract
+lowering 承载。`postAsk` / `postBid` / `reduceAsk` / `reduceBid` 的链上入口不再接受可伪造的
 trader 参数，而是按 account 1 signer 完整 Pubkey 解析内部 seat；reduce/cancel 同时
 解锁该 seat 的 base/quote 余额。post 的普通锁仓和满书 eviction 也会原子更新 taker
 与被驱逐 maker 的 TraderState；同 owner replacement 先解锁再重新锁仓。matching
@@ -107,10 +111,10 @@ ordinal 及 u16 index 0 做 Borsh 窄编码。每个实际 event 是一个单-ev
 seed 导出的 readonly signer PDA。IR 门覆盖所有 header/event recipe，Mollusk 同时验证
 真实 `Program data`、错 executable self program 与错 log PDA 的原子失败。
 
-真实源模块经 `pf build --target svm Phoenix` 生成 2,748,784-byte assembly、
-849,648-byte eBPF ELF 和 16,978-byte IDL；SVM digest 是 `9ad78a5bd3d7dc6e`。
+真实源模块经 `pf build --target svm Phoenix` 生成 3,314,430-byte assembly、
+1,030,440-byte eBPF ELF 和 17,639-byte IDL；SVM digest 是 `c2685fe590ebff4c`。
 assembly 是带 local CSE/共享 basic block 的 target CFG 中间文本，不是部署文件；当前 ELF
-约 829.7 KiB。通用抽取器按 helper 的输入/输出类型区分 State transition 与纯结构 reader，
+约 1006.3 KiB。通用抽取器按 helper 的输入/输出类型区分 State transition 与纯结构 reader，
 并去重嵌套 state-helper 的祖先 transition，避免组合更新和 reader projection 被重复发射；
 完整 maker Pubkey 与 event/lastEvent 双写仍会展开 conditional values。
 测试把 assembly 回归预算钉在 5.75 MB，并拒绝重复 label，同时断言 maker/taker ledger writes 和最宽 event leaf
@@ -121,9 +125,9 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 
 | 官方 | 为什么关 |
 |---|---|
-| 动态 `RedBlackTree` | allocator/free-list、完整左右旋、N=4 insertion/deletion fixup 和地址复用已在独立 Tree refinement 实现；接入 Phoenix 是下一切片，非固定 N 仍关 |
+| bid/ask 动态 `RedBlackTree` | 链上书仍是 bounded N=4 有序投影；trader tree 已持久化完整 N=4 topology，但 order tree 尚未接入 links/colors |
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
-| trader tree 的动态 RB 拓扑 | 已有 bounded Pubkey registry、allocator 和 per-seat 值；key 查找暂用四槽扫描 |
+| 非固定容量 trader tree | N=4 insertion/deletion/fixup/reuse 已进账户；多数 scalar lookup 仍用四槽扫描，动态容量仍关 |
 
 这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。

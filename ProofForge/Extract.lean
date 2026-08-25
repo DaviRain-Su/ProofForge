@@ -1324,6 +1324,9 @@ private def asBoolVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.V
   | 0 => none
   | fuel' + 1 =>
     let e := strip e
+    if let .letE _ _ value body _ := e then
+      asBoolVal env fuel' (body.instantiate1 value)
+    else
     let args := e.getAppArgs
     let last? := if h : args.size > 0 then some args[args.size - 1] else none
     if isConstNamed e ``Bool.true then some (.lit 1)
@@ -2498,7 +2501,10 @@ private def invokeRet
   | (3, _, #[.u32le (.lit 11), .u64le lamports, .u64le _, .ascii "vault", .programId], #[], none) => .ok lamports
   | (2, _, #[.u8le (.lit 20), .u8le (.lit 6), .accKey 0, .u8le (.lit 0)], #[], none) => .ok (.lit 0)
   | (2, _, #[.u8le (.lit 17)], #[], none) => .ok (.lit 0)
-  | (4, _, #[.u8le (.lit 12), .u64le amount, .u8le _], #[], none) => .ok amount
+  -- Statically indexed classic/Token-2022 TransferChecked wrappers return their modeled amount;
+  -- the token program may occupy any authenticated external account index.
+  | (_, _, #[.u8le (.lit 12), .u64le amount, .u8le _], #[], none) => .ok amount
+  | (_, _, #[.u8le (.lit 12), .u64le amount, .u8le _], _, some _) => .ok amount
   | (3, _, #[.u8le (.lit 14), .u64le amount, .u8le _], #[], none) => .ok amount
   | (3, _, #[.u8le (.lit 15), .u64le amount, .u8le _], #[], none) => .ok amount
   | (3, _, #[.u8le (.lit 18), .accKey 0], #[], none) => .ok (.lit 0)
@@ -2727,12 +2733,46 @@ private def findForBodyExpr (env : Environment) (e : Expr) : Option (Nat × Expr
         | _ => none
   go 16 e
 
+/-- Conservatively detect a structured State binding before zeta reduction erases its sharing. -/
+private def containsStructuredStateLet (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      match strip e with
+      | .letE _ type value body _ =>
+          let userStructure :=
+            (type.consumeMData.getAppFn.constName?.map (isUserType env)).getD false
+          (userStructure && (isIteExpr value || (unfoldUserHelper env value).isSome)) ||
+            containsStructuredStateLet env fuel value || containsStructuredStateLet env fuel body
+      | .lam _ _ body _ => containsStructuredStateLet env fuel body
+      | .app fn arg =>
+          containsStructuredStateLet env fuel fn || containsStructuredStateLet env fuel arg
+      | _ => false
+
+/-- Detect a marked State transition below surrounding control/record syntax. -/
+private def containsInlineStateTransition (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      let e := strip e
+      let here :=
+        match unfoldUserHelper env e with
+        | some (name, _) => inlineHelperPreservesUserType env name
+        | none => false
+      here || match e with
+        | .letE _ _ value body _ =>
+            containsInlineStateTransition env fuel value ||
+              containsInlineStateTransition env fuel body
+        | .lam _ _ body _ => containsInlineStateTransition env fuel body
+        | .app fn arg =>
+            containsInlineStateTransition env fuel fn ||
+              containsInlineStateTransition env fuel arg
+        | _ => false
+
 /--
 `do let mut st := s; for ... do st := ...; k st` 的 loop body 与 continuation。
 真正是否为 state-carrying loop 由 body 解码出的显式 store 判定；普通 early-return
 `forBody` 继续走旧路径。
 -/
-private def findForStateExpr (_env : Environment) (e : Expr) :
+private def findForStateExpr (env : Environment) (e : Expr) :
     Option (Nat × Expr × Expr × Expr) :=
   let rec findForExpr (fuel : Nat) (e : Expr) : Option Expr :=
     match fuel with
@@ -2757,8 +2797,8 @@ private def findForStateExpr (_env : Environment) (e : Expr) :
         match strip e with
         | .lam _ _ body _ =>
           match strip body with
-          | .lam _ _ body2 _ => some (substLetsPreservingInvokes _env 128 body2)
-          | _ => some (substLetsPreservingInvokes _env 128 body)
+          | .lam _ _ body2 _ => some (substLetsPreservingInvokes env 128 body2)
+          | _ => some (substLetsPreservingInvokes env 128 body)
         | .letE _ _ _ body _ => lastLam fuel' body
         | e => e.getAppArgs.findSome? (lastLam fuel')
     let args := forExpr.getAppArgs
@@ -2787,7 +2827,11 @@ private def findForStateExpr (_env : Environment) (e : Expr) :
               | some continuation =>
                 match strip continuation with
                 | .lam _ _ continuationBody _ =>
-                  some (peelControl 16 (substLets 128 continuationBody))
+                  if containsStructuredStateLet env 2048 continuationBody ||
+                      containsInlineStateTransition env 2048 continuationBody then
+                    some (strip continuationBody)
+                  else
+                    some (peelControl 16 (substLets 128 continuationBody))
                 | _ => none
               | none => none
             else args.findSome? (findContinuation fuel')
@@ -3250,13 +3294,13 @@ private def inlineStateSource (env : Environment) (fuel : Nat) (e : Expr) : Expr
       | some base => inlineStateSource env fuel' base
       | none => e
 
-private def isStateTransitionValue (env : Environment) : Nat → Expr → Bool
-  | 0, _ => false
-  | fuel + 1, e =>
+private def isStateTransitionValue (env : Environment) : Nat → Bool → Expr → Bool
+  | 0, _, _ => false
+  | fuel + 1, underControl, e =>
       let e := strip e
       match e with
       | .letE _ _ value body _ =>
-          isStateTransitionValue env fuel (body.instantiate1 value)
+          isStateTransitionValue env fuel underControl (body.instantiate1 value)
       | _ =>
         if (isConstNamed e ``ite || isConstNamed e ``dite) && e.getAppArgs.size ≥ 2 then
           let args := e.getAppArgs
@@ -3264,21 +3308,29 @@ private def isStateTransitionValue (env : Environment) : Nat → Expr → Bool
             match strip branch with
             | .lam _ _ body _ => body.lowerLooseBVars 1 1
             | branch => branch
-          isStateTransitionValue env fuel (peelProofLam args[args.size - 2]!) ||
-            isStateTransitionValue env fuel (peelProofLam args[args.size - 1]!)
+          isStateTransitionValue env fuel true (peelProofLam args[args.size - 2]!) ||
+            isStateTransitionValue env fuel true (peelProofLam args[args.size - 1]!)
         else
           match unfoldUserHelper env e with
           | some (name, _) => inlineHelperPreservesUserType env name
-          | none => false
+          | none =>
+            match e.getAppFn.constName? with
+            | some name =>
+              match env.find? name with
+              | some (.ctorInfo ctor) =>
+                  underControl && isUserType env ctor.induct && isStructure env ctor.induct
+              | _ => false
+            | none => false
 
-/-- Sequential decoding is needed only when substituting a helper would duplicate dynamic
-structure writes. Scalar-only helpers retain the established zeta-normalized Core shape. Follow
-marked helper calls recursively so wrappers around `Vector.set` remain generic. -/
+/-- Sequential decoding is needed when substitution would duplicate dynamic structure writes or
+erase a conditional State constructor behind later projections. Straight-line scalar-only helpers
+retain the established zeta-normalized Core shape. Follow marked helpers recursively so wrappers
+around `Vector.set` remain generic. -/
 private def stateTransitionNeedsSequencing (env : Environment) : Nat → Expr → Bool
   | 0, _ => false
   | fuel + 1, e =>
       let e := strip e
-      if !(collectIndexSets env e).isEmpty then true
+      if isIteExpr e || !(collectIndexSets env e).isEmpty then true
       else
         match e with
         | .letE _ _ value body _ =>
@@ -3293,37 +3345,22 @@ private def stateTransitionNeedsSequencing (env : Environment) : Nat → Expr �
 /--
 A let-bound user structure rooted at a method state argument is a sequential State transition,
 not a pure value alias. Decoding it before the continuation avoids substituting an ever-growing
-record expression through every later projection. Other user structures (for example a tree
-`Node` value) do not trace to the method state argument and remain ordinary aliases.
+record expression through every later projection. The entry's typed state boundary keeps nested
+user structures (for example a tree `Node`) as ordinary value aliases.
 -/
-private def sequentialStateSource? (env : Environment) (type value : Expr) : Option Expr := do
+private def sequentialStateSource? (env : Environment) (type value : Expr)
+    (stateType? : Option Name := none) : Option Expr := do
   let typeName ← type.consumeMData.getAppFn.constName?
   if !isUserType env typeName then none else
+  if stateType?.any (· != typeName) then none else
   let value := strip value
-  if !isStateTransitionValue env 64 value then none else
+  if !isStateTransitionValue env 64 false value then none else
   if !stateTransitionNeedsSequencing env 64 value then none else
   let source := inlineStateSource env 64 value
   if source == value then none else
   match strip source with
   | .bvar _ => some source
   | source => if isConstNamed source ``methodArgRef then some source else none
-
-/-- Conservatively detect a structured binding before zeta reduction erases its sharing. This
-only retains the candidate syntax; `sequentialStateSource?` performs the exact typed/source check
-later, and pure structure-reader lets still take the ordinary alias path there. -/
-private def containsStructuredStateLet (env : Environment) : Nat → Expr → Bool
-  | 0, _ => false
-  | fuel + 1, e =>
-      match strip e with
-      | .letE _ type value body _ =>
-          let userStructure :=
-            (type.consumeMData.getAppFn.constName?.map (isUserType env)).getD false
-          (userStructure && (isIteExpr value || (unfoldUserHelper env value).isSome)) ||
-            containsStructuredStateLet env fuel value || containsStructuredStateLet env fuel body
-      | .lam _ _ body _ => containsStructuredStateLet env fuel body
-      | .app fn arg =>
-          containsStructuredStateLet env fuel fn || containsStructuredStateLet env fuel arg
-      | _ => false
 
 private def stateNamesAlias (left right : String) : Bool :=
   left == right || left.startsWith (right ++ "_") || right.startsWith (left ++ "_")
@@ -3400,7 +3437,8 @@ private def snapshotStateUpdate (base : Nat) (ops : Array Ops.Op) : Array Ops.Op
   return state.prelude ++ body
 
 private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state : Expr)
-    (appliedBases : Array Expr := #[]) : Except String (Array Ops.Op) :=
+    (appliedBases : Array Expr := #[]) (stateType? : Option Name := none) :
+    Except String (Array Ops.Op) :=
   match fuel with
   | 0 => .error "extract/unsupported: inline state depth"
   | fuel' + 1 =>
@@ -3408,7 +3446,8 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
     let sequential? : Option (Expr × Expr × Expr) :=
       match raw with
       | .letE _ type value body _ =>
-          (sequentialStateSource? env type value).map fun source => (value, source, body)
+          (sequentialStateSource? env type value stateType?).map fun source =>
+            (value, source, body)
       | _ => none
     let ordinaryLet? : Option (Expr × Expr × Expr) :=
       match raw with
@@ -3416,8 +3455,9 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
       | _ => none
     match sequential?, ordinaryLet? with
     | some (value, source, body), _ =>
-      match decodeYieldState env fuel' localDepth value appliedBases,
-          decodeYieldState env fuel' localDepth (body.instantiate1 source) appliedBases with
+      match decodeYieldState env fuel' localDepth value appliedBases stateType?,
+          decodeYieldState env fuel' localDepth (body.instantiate1 source) appliedBases
+            stateType? with
       | .ok prior, .ok continuation => .ok (prior ++ continuation)
       | .error reason, _ =>
           .error s!"extract/unsupported: sequential inline state binding: {reason}"
@@ -3433,14 +3473,15 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
           if materialize then
             let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
             match decodeYieldState env fuel' (localDepth + 1)
-                (body.instantiate1 marker) appliedBases with
+                (body.instantiate1 marker) appliedBases stateType? with
             | .ok continuation => .ok (#[.letLocal localDepth localValue] ++ continuation)
             | .error reason => .error reason
           else
-            decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases
-        | none => decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases
+            decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases stateType?
+        | none =>
+            decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases stateType?
       else
-        decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases
+        decodeYieldState env fuel' localDepth (body.instantiate1 value) appliedBases stateType?
     | none, none =>
       let state0 := raw
       let appliedBases := addAppliedBases #[] <|
@@ -3456,7 +3497,7 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
             if source == base then
               .ok (#[], unfolded, appliedBases)
             else do
-              let prior ← decodeYieldState env fuel' localDepth base appliedBases
+              let prior ← decodeYieldState env fuel' localDepth base appliedBases stateType?
               let normalized := unfolded.replace fun e => if e == base then some source else none
               let bodyAppliedBases := addAppliedBases appliedBases #[base]
               let bodyAppliedBases :=
@@ -3464,7 +3505,7 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
               .ok (prior, normalized, bodyAppliedBases)
           else
             .ok (#[], unfolded, appliedBases)
-        match decodeYieldState env fuel' localDepth normalized bodyAppliedBases with
+        match decodeYieldState env fuel' localDepth normalized bodyAppliedBases stateType? with
         | .ok ops => .ok (prior ++ ops)
         | .error reason => .error s!"extract/unsupported: inline state {name}: {reason}"
       else if (isConstNamed state0 ``ite || isConstNamed state0 ``dite) &&
@@ -3477,8 +3518,8 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
         let thn := peelProofLam args[args.size - 2]!
         let els := peelProofLam args[args.size - 1]!
         match args.findSome? (asCondition env),
-            decodeYieldState env fuel' localDepth thn appliedBases,
-            decodeYieldState env fuel' localDepth els appliedBases with
+            decodeYieldState env fuel' localDepth thn appliedBases stateType?,
+            decodeYieldState env fuel' localDepth els appliedBases stateType? with
         | some (cmp, lhs, rhs), .ok thnOps, .ok elsOps =>
           .ok #[.ite cmp lhs rhs thnOps elsOps]
         | none, _, _ => .error "extract/unsupported: inline state condition"
@@ -3493,7 +3534,7 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
             if appliedBases.contains base then .ok #[] else match unfoldUserHelper env base with
             | some (name, unfolded) =>
               let nestedAppliedBases := addAppliedBases appliedBases #[base]
-              match decodeYieldState env fuel' localDepth unfolded nestedAppliedBases with
+              match decodeYieldState env fuel' localDepth unfolded nestedAppliedBases stateType? with
               | .ok ops => .ok ops
               | .error reason =>
                 .error s!"extract/unsupported: projected inline state {name}: {reason}"
@@ -3525,15 +3566,17 @@ private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state 
         .ok (prior ++ update)
 
 /-- State loop 的 `yield newState` 只写账户并继续，不生成 commit/exit。 -/
-private def asYieldStores (env : Environment) (e : Expr) (localDepth : Nat) :
+private def asYieldStores (env : Environment) (e : Expr) (localDepth : Nat)
+    (stateType? : Option Name := none) :
     Option (Except String (Array Ops.Op)) :=
   match findYieldPayload e with
   | none => none
-  | some state => some (decodeYieldState env 64 localDepth state)
+  | some state => some (decodeYieldState env 64 localDepth state (stateType? := stateType?))
 
 /-- An inline State helper used as the state component of `.ok (state, ret)` still owns a real
 transition. Decode that transition before returning the pair's explicit scalar result. -/
-private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Nat) :
+private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Nat)
+    (stateType? : Option Name := none) :
     Option (Except String (Array Ops.Op)) :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
   if !isConstNamed e ``Except.ok || e.getAppArgs.size < 1 then none else
@@ -3548,11 +3591,11 @@ private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Na
       match val env result with
       | some value => .ok value
       | none => .error "extract/unsupported: inline state success result"
-    let stores ← decodeYieldState env 64 localDepth state
+    let stores ← decodeYieldState env 64 localDepth state (stateType? := stateType?)
     return stores.push (.okState value)
 
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
-    (localDepth : Nat) :
+    (localDepth : Nat) (stateType? : Option Name := none) :
     Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
   if let some inv := findInvoke env 16 e then
@@ -3561,12 +3604,14 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok ops
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
-  else if let some result := asYieldStores env e localDepth then
+  else if let some result := asYieldStores env e localDepth stateType? then
     result
-  else if let some result := asInlineStateSuccess env e localDepth then
+  else if let some result := asInlineStateSuccess env e localDepth stateType? then
     result
   else
-  let isets := collectIndexSets env e
+  -- Record updates repeat one shared constructor through every unchanged projection. Emit each
+  -- exact Vector.set node once; separate branch/set expressions remain distinct.
+  let isets := collectIndexSets env e (deduplicate := true)
   if isets.size ≥ 1 then
     match asStoreFields env e true with
     | some stores =>
@@ -3594,7 +3639,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.errorNamed name]
   else if let some v := asOkNoop env e (markedOnly := stateful) then
     .ok #[.returnU64 v]
-  else if let some ops := asStoreFields env e then
+  else if let some ops := asStoreFields env e stateful then
     .ok (snapshotStateUpdate localDepth ops)
   else if let some v := asOkState env e then
     .ok #[.okState v]
@@ -3719,14 +3764,16 @@ private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : 
 
 private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     (stateful : Bool := false) (preserveLocals : Bool := false)
-    (localDepth : Nat := 0) : Except String (Array Ops.Op) :=
+    (localDepth : Nat := 0) (stateType? : Option Name := none) :
+    Except String (Array Ops.Op) :=
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
     let (invokes, continuation) := leadingInvokes env e
     if !invokes.isEmpty then
       match decodeExpr env fuel' continuation (stateful := stateful)
-          (preserveLocals := preserveLocals) (localDepth := localDepth) with
+          (preserveLocals := preserveLocals) (localDepth := localDepth)
+          (stateType? := stateType?) with
       | .ok decodedOps =>
           let continuationOps :=
             if Ops.hasStoreField decodedOps || Ops.hasIndexSet decodedOps then decodedOps
@@ -3739,16 +3786,18 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       if let some guarded := guardedRunBody? 64 stripped then
         return decodeExpr env fuel' guarded (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth)
+          (stateType? := stateType?)
     match strip e with
     | .letE _ ty value body _ =>
       let effectful :=
         (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       if !effectful then
-        if let some source := sequentialStateSource? env ty value then
-          match decodeYieldState env 64 localDepth value,
+        if let some source := sequentialStateSource? env ty value stateType? then
+          match decodeYieldState env 64 localDepth value (stateType? := stateType?),
               decodeExpr env fuel' (body.instantiate1 source) (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth) with
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?) with
           | .ok prior, .ok continuation => return .ok (prior ++ continuation)
           | .error reason, _ =>
             return .error s!"extract/unsupported: sequential state binding: {reason}"
@@ -3760,21 +3809,21 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
               match decodeExpr env fuel' (body.instantiate1 marker)
                   (stateful := stateful) (preserveLocals := preserveLocals)
-                  (localDepth := localDepth + 1) with
+                  (localDepth := localDepth + 1) (stateType? := stateType?) with
               | .ok ops => return .ok (#[.letLocal localDepth localValue] ++ ops)
               | .error reason => return .error reason
             else
               return decodeExpr env fuel' (body.instantiate1 value)
                 (stateful := stateful) (preserveLocals := preserveLocals)
-                (localDepth := localDepth)
+                (localDepth := localDepth) (stateType? := stateType?)
           | _ =>
             return decodeExpr env fuel' (body.instantiate1 value)
               (stateful := stateful) (preserveLocals := preserveLocals)
-              (localDepth := localDepth)
+              (localDepth := localDepth) (stateType? := stateType?)
         else
           return decodeExpr env fuel' (body.instantiate1 value)
             (stateful := stateful) (preserveLocals := preserveLocals)
-            (localDepth := localDepth)
+            (localDepth := localDepth) (stateType? := stateType?)
     | _ => pure ()
     -- Branch decoders normalize their arms independently. Zeta-reducing the entire branch here
     -- duplicates let-bound State transitions into every projection before the sequential-state
@@ -3797,7 +3846,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       | .lam _ ty body _ =>
         if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
           match decodeExpr env fuel' producer (preserveLocals := preserveLocals)
-              (localDepth := localDepth + 1) with
+              (localDepth := localDepth + 1) (stateType? := stateType?) with
           | .error reason =>
               return .error s!"extract/unsupported: bind producer: {reason}"
           | .ok producerOps =>
@@ -3805,7 +3854,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             | some (joinedProducer, true, true) =>
               let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
               match decodeExpr env fuel' (body.instantiate1 marker) (stateful := stateful)
-                  (preserveLocals := preserveLocals) (localDepth := localDepth + 1) with
+                  (preserveLocals := preserveLocals) (localDepth := localDepth + 1)
+                  (stateType? := stateType?) with
               | .ok continuationOps =>
                   return .ok (#[.joinLocal localDepth] ++ joinedProducer ++ continuationOps)
               | .error reason =>
@@ -3822,9 +3872,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       | none => none
       | some (n, initial, bodyE, continuation) =>
         if isForInDone bodyE then none else
-        match decodeYieldState env 64 localDepth initial,
+        match decodeYieldState env 64 localDepth initial (stateType? := stateType?),
             decodeExpr env fuel' bodyE (stateful := true)
-              (preserveLocals := preserveLocals) (localDepth := localDepth) with
+              (preserveLocals := preserveLocals) (localDepth := localDepth)
+              (stateType? := stateType?) with
         | .error reason, _ =>
             some (.error s!"extract/unsupported: state loop initial value: {reason}")
         | _, .error reason => some (.error s!"extract/unsupported: state loop body: {reason}")
@@ -3832,7 +3883,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           if Ops.hasStoreField bodyOps || Ops.hasIndexSet bodyOps then
             match decodeExpr env fuel' continuation (stateful := true)
                 (preserveLocals := preserveLocals)
-                (localDepth := localDepth) with
+                (localDepth := localDepth) (stateType? := stateType?) with
             | .error reason =>
               match findOkRet env continuation with
               | some ret =>
@@ -3856,7 +3907,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       return .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
     else if let some (n, bodyE) := findForBodyExpr env e then
       match decodeExpr env fuel' bodyE (preserveLocals := preserveLocals)
-          (localDepth := localDepth) with
+          (localDepth := localDepth) (stateType? := stateType?) with
       | .ok ops => return .ok #[.forBody n (ops.map rewritePlainLoopOp), .errorOverflow]
       | .error r => return .error r
     let e := strip e
@@ -3931,6 +3982,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
                   isConstNamed (peelLets (strip t)) ``dite)) then
           let decodedThen := decodeExpr env fuel' t (stateful := stateful)
             (preserveLocals := preserveLocals) (localDepth := localDepth)
+            (stateType? := stateType?)
+          let structuredThen := containsStructuredStateLet env 2048 t ||
+            containsInlineStateTransition env 2048 t
           if let .ok thn := decodedThen then
             let rec invokeCount (fuel : Nat) (ops : Array Ops.Op) : Nat :=
               match fuel with
@@ -3967,9 +4021,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
             return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
-            if hasNestedIte 64 t then
+            if structuredThen || hasNestedIte 64 t then
               match decodeExpr env fuel' t (stateful := stateful)
-                  (preserveLocals := preserveLocals) (localDepth := localDepth) with
+                  (preserveLocals := preserveLocals) (localDepth := localDepth)
+                  (stateType? := stateType?) with
               | .ok thn => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
               | .error r => return .error r
             else
@@ -3993,7 +4048,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             return .ok #[.ite cmp lv rv #[.okState v] #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, none, none, none, .ok thn =>
             match decodeExpr env fuel' f (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth) with
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?) with
             | .ok els => return .ok #[.ite cmp lv rv thn els]
             | .error _ => return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
           | some _, none, none, none, none, none, .error reason =>
@@ -4002,7 +4058,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         else if let some condE := findBy args (fun a => (asCheckedAddGuard env a).isSome) then
           match asCheckedAddGuard env condE, directInvoke, decodeEvmEffect env t,
               decodeExpr env fuel' t (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth), asStoreFields env t,
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?), asStoreFields env t,
               asOkState env t with
           | some (lhs, rhs), some inv, _, _, some stores, _ =>
             return .ok (#[.checkedAddU64 lhs rhs, invokeOp inv] ++ stores)
@@ -4031,7 +4088,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             (asCheckedMulGuard env a).isSome && (collectIndexSets env t).isEmpty) then
           match asCheckedMulGuard env condE,
               decodeExpr env fuel' t (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth),
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?),
               asStoreFields env t, asOkState env t with
           | some (lhs, rhs), _, some stores, _ =>
             match stores.toList with
@@ -4055,9 +4113,11 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             checkedSubMatches a && (collectIndexSets env t).isEmpty) then
           match asCheckedSubGuard env condE, directInvoke, decodeEvmEffect env t,
               decodeExpr env fuel' t (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth),
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?),
               decodeExpr env fuel' f (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth), asStoreFields env t,
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?), asStoreFields env t,
               asOkState env t with
           | some _, some inv, _, _, _, _, _ =>
             let some (cmp, lv, rv) := asCmp env condE
@@ -4102,7 +4162,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let condE := args[args.size - 4]!
           match asCondition env condE,
               decodeExpr env fuel' t (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth) with
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?) with
           | some (cmp, lv, rv), .ok thn =>
             return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
           | _, _ => return .error "extract/unsupported: ite cond"
@@ -4118,16 +4179,19 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let some (cmp, lv, rv) := asCmp env condE
             | return .error s!"extract/unsupported: ite cond: {condE}"
           match decodeExpr env fuel' t (stateful := stateful)
-              (preserveLocals := preserveLocals) (localDepth := localDepth) with
+              (preserveLocals := preserveLocals) (localDepth := localDepth)
+              (stateType? := stateType?) with
           | .ok thn => return .ok #[.ite cmp lv rv thn #[]]
           | .error r => return .error s!"extract/unsupported: forBody then {r}"
         let some condE := findBy args isValueCmp <|> findBy args (fun a => (asCmp env a).isSome)
           | match asCondition env args[args.size - 4]! with
             | some condition =>
               match decodeExpr env fuel' t (stateful := stateful)
-                    (preserveLocals := preserveLocals) (localDepth := localDepth),
+                    (preserveLocals := preserveLocals) (localDepth := localDepth)
+                    (stateType? := stateType?),
                   decodeExpr env fuel' f (stateful := stateful)
-                    (preserveLocals := preserveLocals) (localDepth := localDepth) with
+                    (preserveLocals := preserveLocals) (localDepth := localDepth)
+                    (stateType? := stateType?) with
               | .ok thn, .ok els => return .ok #[.ite condition.1 condition.2.1 condition.2.2 thn els]
               | .error r, _ =>
                 return .error (if stateful then s!"state loop then: {r}" else s!"ite then: {r}")
@@ -4137,9 +4201,11 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         let some (cmp, lv, rv) := asCmp env condE
           | return .error s!"extract/unsupported: ite cond: {condE}"
         match decodeExpr env fuel' t (stateful := stateful)
-              (preserveLocals := preserveLocals) (localDepth := localDepth),
+              (preserveLocals := preserveLocals) (localDepth := localDepth)
+              (stateType? := stateType?),
             decodeExpr env fuel' f (stateful := stateful)
-              (preserveLocals := preserveLocals) (localDepth := localDepth) with
+              (preserveLocals := preserveLocals) (localDepth := localDepth)
+              (stateType? := stateType?) with
         | .ok thn, .ok els => return .ok #[.ite cmp lv rv thn els]
         | .error r, _ =>
           return .error (if stateful then s!"state loop then: {r}" else s!"ite then: {r}")
@@ -4151,12 +4217,14 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       return invokeOpsWithRet env e inv
     else if let some (name, unfolded) := unfoldUserHelper env e then
       match decodeExpr env fuel' (substIteLets 256 unfolded) (stateful := stateful)
-          (preserveLocals := preserveLocals) (localDepth := localDepth) with
+          (preserveLocals := preserveLocals) (localDepth := localDepth)
+          (stateType? := stateType?) with
       | .ok ops => return .ok ops
       | .error reason => return .error s!"extract/unsupported: inline {name}: {reason}"
     else if let some reduced := reduceUInt64NewtypeMatch? env e then
       return decodeExpr env fuel' reduced (stateful := stateful)
         (preserveLocals := preserveLocals) (localDepth := localDepth)
+        (stateType? := stateType?)
     else if isUInt64VariantMatcher env e then
       let args := e.getAppArgs
       let some matcherName := e.getAppFn.constName?
@@ -4211,7 +4279,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let altBody := peelMatcherLams 8 altBody
           match decodeExpr env fuel' altBody (stateful := stateful)
               (preserveLocals := preserveLocals)
-              (localDepth := localDepth + altInfo.numFields) with
+              (localDepth := localDepth + altInfo.numFields) (stateType? := stateType?) with
           | .ok ops =>
             let mut withPayloads : Array Ops.Op := #[]
             for fieldIndex in [:altInfo.numFields] do
@@ -4249,7 +4317,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       let noneBody := peelMatcherLams 8 noneE
       let someBody := peelMatcherLams 8 someE
       match decodeExpr env fuel' noneBody (stateful := stateful)
-          (preserveLocals := preserveLocals) (localDepth := localDepth) with
+          (preserveLocals := preserveLocals) (localDepth := localDepth)
+          (stateType? := stateType?) with
       | .error r => return .error r
       | .ok noneOps =>
         let someOps :=
@@ -4257,7 +4326,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | .bvar _ => #[.returnU64 payload]
           | _ =>
             match decodeExpr env fuel' someBody (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth) with
+                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (stateType? := stateType?) with
             | .ok ops =>
               match ops with
               | #[.returnU64 (.arg _)] => #[.returnU64 payload]
@@ -4266,9 +4336,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             | .error _ => #[.returnU64 payload]
         return .ok #[.ite .eq tag (.lit 0) noneOps someOps]
     else
-      return decodePlain env e stateful localDepth
+      return decodePlain env e stateful localDepth stateType?
 
-def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false) :
+def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false)
+    (stateType? : Option Name := none) :
     Except String (Array Ops.Op) :=
   let (_, body) := peelLams e
   -- Canonicalize syntax-only aliases around control flow before shape decoding.
@@ -4282,7 +4353,7 @@ def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false) :
     if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
     else if retainLets then body else zetaPureHeadLets env 32 body
   let body := if retainLets then body else substIteLets 256 body
-  decodeExpr env 128 body (preserveLocals := preserveLocals)
+  decodeExpr env 128 body (preserveLocals := preserveLocals) (stateType? := stateType?)
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -4300,8 +4371,9 @@ private def hasIte (ops : Array Ops.Op) : Bool :=
   ops.any fun | .ite .. => true | _ => false
 
 /-- 可变入口必须有 checked 算术、Option 双叶，或比较 ite（窄宽上界）。 -/
-def decodeMutating (env : Environment) (e : Expr) : Except String (Array Ops.Op) := do
-  let ops ← decodeBody env e true
+def decodeMutating (env : Environment) (e : Expr) (stateType? : Option Name := none) :
+    Except String (Array Ops.Op) := do
+  let ops ← decodeBody env e true stateType?
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
       Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops ||
         Ops.hasForAccum ops || Ops.hasIndexSet ops || Ops.hasStoreField ops then
@@ -4362,12 +4434,17 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
   let some e := info.value?
     | throw s!"extract/unsupported: no value {n}"
   let sketch := sketchOfExpr e
+  let stateType? :=
+    match kind, strip e with
+    | .init, _ => none
+    | _, .lam _ type _ _ => type.consumeMData.getAppFn.constName?
+    | _, _ => none
   let (nLams, sourceBody) := peelLams e
   let sourceBody := markMethodArgs kind nLams sourceBody
   let ops0 ←
     match kind with
-    | .increment => decodeMutating env sourceBody
-    | _ => decodeBody env sourceBody
+    | .increment => decodeMutating env sourceBody stateType?
+    | _ => decodeBody env sourceBody (stateType? := stateType?)
   let lean := Core.IR.lastName n.toString
   -- Inline entry helpers can own the source loop, so the entry body itself need not expose
   -- `ForIn.forIn`. Explicit stores in the decoded loop distinguish state-carrying loops from

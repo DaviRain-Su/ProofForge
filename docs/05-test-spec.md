@@ -98,8 +98,9 @@
 | T-L5-13 | happy / fail | Phoenix 双 vault CPI matrix | canonical base/quote vault；真实 deposit/withdraw；未注册 buy/sell 两个 Token 腿；错 vault/mint/Token program/writable 全部原子失败 |
 | T-L5-14 | happy / fail | 通用 raw self-CPI recorder | packed u16/u64 payload；当前 program id；canonical `"log"` PDA readonly signer；续段状态写回；错 PDA、缺 signer、writable、错 tag 全部拒绝 |
 | T-L5-15 | happy / fail | Phoenix authenticated audit recorder | initialize、资金、订单、撮合、TIF、费用与 seat 路径的 Header/event Borsh IR；当前 program + `"log"` PDA signed self-CPI；Mollusk 实收 `Program data`；错 self program / log PDA 原子失败 |
+| T-L5-16 | happy / fail | Phoenix persisted trader topology | 24 种 key 插入顺序 × 每个删除 key 的 host 红黑不变量；抽取 IR 钉住动态 links/color/allocator writes；Mollusk 验证删除 root 后 surviving root/seat 与 address reuse |
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
-refinement 仍未宣称。当前构建快照：source account data_len 1376 bytes，SVM digest
-`9ad78a5bd3d7dc6e`，assembly 2,748,784 bytes，sBPF ELF 849,648 bytes，IDL 16,978 bytes；发射汇编另设
+refinement 仍未宣称。当前构建快照：source account data_len 1512 bytes，SVM digest
+`c2685fe590ebff4c`，assembly 3,314,430 bytes，sBPF ELF 1,030,440 bytes，IDL 17,639 bytes；发射汇编另设
 `< 5,750,000` bytes 的预算门。

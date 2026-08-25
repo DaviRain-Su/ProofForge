@@ -72,6 +72,13 @@ def singleInvokeTransfer (_s : Examples.Counter.State) (amount : UInt64) :
   let _ := ProofForge.Svm.Runtime.tokenTransferCheckedIx 8 1 3 5 0 amount 6
   .ok ({ value := amount }, amount)
 
+/-- A statically indexed TransferChecked wrapper models its source-level amount even when the
+wrapper result is consumed; the external token-program position is not fixed to account 4. -/
+def indexedTransferResult (_s : Examples.Counter.State) (amount : UInt64) :
+    Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
+  let result := ProofForge.Svm.Runtime.tokenTransferCheckedIx 8 1 3 5 0 amount 6
+  .ok ({ value := result }, result)
+
 /-- One heterogeneous signed CPI must preserve the state transition after its ignored result. -/
 def singleMultiSeedTransfer (_s : Examples.Counter.State) (amount : UInt64) :
     Except Examples.Counter.Error (Examples.Counter.State × UInt64) :=
@@ -441,6 +448,52 @@ def runNestedComposedFold (s : FoldState) (delta : UInt64) :
     let staged := { st with remainder := delta }
     st := finishFoldStage staged
   .ok (st, st.product)
+
+/-- Minimal topology state for a helper sequenced after a mutable walk. -/
+structure PostLoopTopologyState where
+  nodes : Vector UInt64 2
+  root : UInt64
+  count : UInt64
+  cursor : UInt64
+  deriving Repr, DecidableEq
+
+def initPostLoopTopology (_seed : UInt64) : PostLoopTopologyState :=
+  { nodes := #v[0, 0], root := 0, count := 0, cursor := 0 }
+
+private def topologyKeyBeforeAt (s : PostLoopTopologyState) (key address : UInt64) : Bool :=
+  let i := (address.toNat - 1) % 2
+  key < s.nodes[i]!
+
+private def insertPostLoopTopology
+    (s : PostLoopTopologyState) (key address : UInt64) : PostLoopTopologyState :=
+  let i := (address.toNat - 1) % 2
+  let linked := if s.root = 0 then { s with root := address } else s
+  if s.root = 0 then
+    { linked with nodes := linked.nodes.set i key }
+  else if topologyKeyBeforeAt s key s.root then
+    { linked with nodes := linked.nodes.set i key }
+  else
+    { linked with nodes := linked.nodes.set i (key + 1) }
+
+attribute [pf_inline] topologyKeyBeforeAt insertPostLoopTopology
+
+/--
+The loop continuation must sequence the marked topology helper and then retain the scalar
+allocation update. In particular, it must not collapse to the pair's return value.
+-/
+def runPostLoopTopology (s : PostLoopTopologyState) (key : UInt64) :
+    Except Examples.Counter.Error (PostLoopTopologyState × UInt64) := Id.run do
+  let mut st := { s with cursor := s.root }
+  for _ in [:1] do
+    if st.cursor ≠ 0 then
+      st := { st with cursor := 0 }
+  let address := st.count + 1
+  let allocated := { st with count := address }
+  let topology := insertPostLoopTopology st key address
+  .ok ({ allocated with root := topology.root, nodes := topology.nodes }, key)
+
+def postLoopTopologyRoot (s : PostLoopTopologyState) : UInt64 :=
+  s.root
 
 /-- Checked continuations preserve an explicit scalar snapshot across state writeback. -/
 structure SnapshotState where
