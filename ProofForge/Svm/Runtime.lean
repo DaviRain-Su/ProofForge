@@ -42,6 +42,21 @@ namespace ProofForge.Svm.Runtime
 @[irreducible] def slotsPerEpoch : UInt64 := 0
 
 /--
+Reverse the eight bytes of one `u64`. The source body gives host evaluation its exact semantics;
+the SVM extractor preserves the call as one value intrinsic and the emitter lowers it to sBPF
+`be64`. This uses registers and fixed stack scratch only; it does not allocate heap memory.
+-/
+def svmByteSwap64 (word : UInt64) : UInt64 :=
+  ((word &&& 0x00000000000000ff) <<< 56) |||
+  ((word &&& 0x000000000000ff00) <<< 40) |||
+  ((word &&& 0x0000000000ff0000) <<< 24) |||
+  ((word &&& 0x00000000ff000000) <<< 8) |||
+  ((word &&& 0x000000ff00000000) >>> 8) |||
+  ((word &&& 0x0000ff0000000000) >>> 24) |||
+  ((word &&& 0x00ff000000000000) >>> 40) |||
+  ((word &&& 0xff00000000000000) >>> 56)
+
+/--
 账户 0 公钥的第一个小端 `u64`（`ACC0_KEY+0`）。
 用到这个叶子的入口会检查 `is_signer`。
 
@@ -76,14 +91,17 @@ inductive CpiWord where
   deriving Repr, Inhabited
 
 /--
-One compile-time-shaped PDA seed. `stateKey` is physical account 0; `accKey i` is relative to
-the external-account region after state, matching `CpiMeta.acc`. The final bump is supplied
-separately so one representation serves both PDA discovery and signed CPI.
+One compile-time-shaped PDA seed. `stateKey` is physical account 0; `accKey i` and
+`accData i offset length` are relative to the external-account region after state, matching
+`CpiMeta.acc`. Account-data slices are bounded to Solana's 32-byte seed maximum and point directly
+into the serialized account input; they do not allocate or copy persistent data. The final bump is
+supplied separately so one representation serves both PDA discovery and signed CPI.
 -/
 inductive PdaSeed where
   | ascii (s : String)
   | stateKey
   | accKey (i : UInt64)
+  | accData (i offset length : UInt64)
   deriving Repr, Inhabited
 
 /--
@@ -126,6 +144,157 @@ the extractor or emitter about a particular Program.
   let _ := data
   let _ := seeds
   let _ := bump
+  0
+
+/--
+Open a bounded invocation-local recorder. Static arguments describe the sink and byte geometry;
+`header` excludes the one-byte raw self-entry tag, which the component prepends. Extraction lowers
+this to a component call backed by Solana's 32 KiB downward bump allocator. No heap address is
+observable in source code or persistent account data.
+-/
+@[irreducible] def batchRecorderBegin
+    (logAccount selfEntryTag : UInt64) (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords : UInt64)
+    (header : Array CpiWord) (bump : UInt64) : UInt64 :=
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := header
+  let _ := bump
+  0
+
+/-- Append one compile-time-shaped record when `enabled != 0`. The component flushes before an
+append that would exceed either the configured byte bound or record-count bound. -/
+@[irreducible] def batchRecorderAppend
+    (logAccount selfEntryTag : UInt64) (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords : UInt64)
+    (enabled : UInt64) (record : Array CpiWord) : UInt64 :=
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := enabled
+  let _ := record
+  0
+
+/-- Flush and close a bounded recorder. A header-only batch is emitted when no record was appended. -/
+@[irreducible] def batchRecorderFinish
+    (logAccount selfEntryTag : UInt64) (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords : UInt64) : UInt64 :=
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  0
+
+/-- Open the invocation-local accumulators used by bounded FIFO cancellation. Persistent order and
+trader state remains in account bytes; this handle contains only scalar cursor keys, event index,
+and released-lot totals. -/
+@[irreducible] def fifoCancelBegin : UInt64 :=
+  0
+
+/-- Cancel one statically described FIFO side in logical key order. All geometry and recorder
+arguments must extract to constants. The supplied trader index is one-based; zero is a successful
+no-op for the official missing-trader behavior. -/
+@[irreducible] def fifoCancelSide
+    (marketAccount rootWord linksWord parentWord priceWord sequenceWord ownerWord sizeWord
+      lockedWord freeWord orderStride orderCapacity traderStride traderCapacity bid
+      baseLotsPerBaseUnitWord tickSizeWord logAccount selfEntryTag : UInt64)
+    (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords traderIndex : UInt64) : UInt64 :=
+  let _ := marketAccount
+  let _ := rootWord
+  let _ := linksWord
+  let _ := parentWord
+  let _ := priceWord
+  let _ := sequenceWord
+  let _ := ownerWord
+  let _ := sizeWord
+  let _ := lockedWord
+  let _ := freeWord
+  let _ := orderStride
+  let _ := orderCapacity
+  let _ := traderStride
+  let _ := traderCapacity
+  let _ := bid
+  let _ := baseLotsPerBaseUnitWord
+  let _ := tickSizeWord
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := traderIndex
+  0
+
+/-- Cancel at most `cancelLimit` owned orders among the first `searchLimit` orders on one statically
+described FIFO side, subject to the side's inclusive tick limit. `claimImmediately` is static:
+withdrawal variants claim each released balance before returning, while free-funds variants retain
+it in the trader slot. The traversal remains account-resident and bounded by fixed capacity. -/
+@[irreducible] def fifoCancelUpToSide
+    (marketAccount rootWord linksWord parentWord priceWord sequenceWord ownerWord sizeWord
+      lockedWord freeWord orderStride orderCapacity traderStride traderCapacity bid
+      baseLotsPerBaseUnitWord tickSizeWord logAccount selfEntryTag : UInt64)
+    (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords traderIndex tickLimit searchLimit cancelLimit
+      claimImmediately : UInt64) : UInt64 :=
+  let _ := marketAccount
+  let _ := rootWord
+  let _ := linksWord
+  let _ := parentWord
+  let _ := priceWord
+  let _ := sequenceWord
+  let _ := ownerWord
+  let _ := sizeWord
+  let _ := lockedWord
+  let _ := freeWord
+  let _ := orderStride
+  let _ := orderCapacity
+  let _ := traderStride
+  let _ := traderCapacity
+  let _ := bid
+  let _ := baseLotsPerBaseUnitWord
+  let _ := tickSizeWord
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := traderIndex
+  let _ := tickLimit
+  let _ := searchLimit
+  let _ := cancelLimit
+  let _ := claimImmediately
+  0
+
+/-- Read aggregate quote lots released by the active FIFO cancellation handle. -/
+@[irreducible] def fifoCancelQuoteReleased : UInt64 :=
+  0
+
+/-- Read aggregate base lots released by the active FIFO cancellation handle. -/
+@[irreducible] def fifoCancelBaseReleased : UInt64 :=
+  0
+
+/-- Read the global event index after both sides; automatic recorder flushes never reset it. -/
+@[irreducible] def fifoCancelEventCount : UInt64 :=
+  0
+
+/-- Close the invocation-local FIFO cancellation handle after its aggregate results were consumed. -/
+@[irreducible] def fifoCancelFinish : UInt64 :=
   0
 
 /-- `system.transfer`：普通包装，不是抽出特例。 -/
@@ -292,6 +461,22 @@ def tokenTransferCheckedSignedIx
       { acc := destinationIx, signer := false, writable := true },
       { acc := authorityIx, signer := true, writable := false }]
     #[.u8le 12, .u64le amount, .u8le decimals]
+    seeds bump
+
+/--
+Statically indexed classic SPL Token `Transfer` whose authority is a PDA signer group. This is the
+unchecked tag-3 wire used by protocols whose authenticated account header already fixes the mint;
+unlike `TransferChecked`, its account metas are source / destination / authority and no mint account
+or decimals byte is present. `seeds` remains compile-time-shaped and does not include the bump.
+-/
+def tokenTransferSignedIx
+    (programIx sourceIx destinationIx authorityIx amount : UInt64)
+    (seeds : Array PdaSeed) (bump : UInt64) : UInt64 :=
+  invokeSignedSeeds programIx
+    #[{ acc := sourceIx, signer := false, writable := true },
+      { acc := destinationIx, signer := false, writable := true },
+      { acc := authorityIx, signer := true, writable := false }]
+    #[.u8le 3, .u64le amount]
     seeds bump
 
 /--
@@ -499,8 +684,10 @@ alternate program ids remain fail closed.
 
 /--
 Check that one statically indexed external account is the canonical PDA for a compile-time-shaped
-seed list under the current program id. Returns 0 on equality and 1 otherwise. The full 32-byte
-key comparison is emitted by the SVM backend; the host definition is an irreducible stub.
+seed list under the current program id. Like CPI metas and `PdaSeed.accKey`, `accountIx` is relative
+to the external-account region: physical account 0 is the generated state account or a raw
+adapter's declared program account. Returns 0 on equality and 1 otherwise. The full 32-byte key
+comparison is emitted by the SVM backend; the host definition is an irreducible stub.
 -/
 @[irreducible] def checkPdaSeeds (accountIx : UInt64) (seeds : Array PdaSeed) : UInt64 :=
   let _ := accountIx
@@ -631,6 +818,317 @@ def createPda (lamports : UInt64) : UInt64 :=
   let _ := strideWords
   let _ := capacity
   let _ := index
+  0
+
+/--
+Read one u64 field by the one-based index returned from an account-resident map lookup. Static
+geometry has the same constraints as `accDataWordAt`, but index zero is the null sentinel and is
+rejected before normalization. This lets source code compose `map find → field read` without
+forming a pointer or manually translating persistent indexes.
+-/
+@[irreducible] def accDataWordAtOneBased
+    (acc baseWord strideWords capacity index : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := baseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := index
+  0
+
+/--
+Search a statically shaped account-resident red-black tree by a four-word key and return its
+one-based slot index, or zero when absent. Account/root/field geometry and capacity must be
+compile-time constants; only the key is dynamic. The target performs at most 64 checked links and
+byte-compares the original 32 key bytes. This lookup does not allocate, copy nodes, or expose a
+pointer; callers that require complete topology/allocator assurance compose it after
+`accDataRbTreeKey4Valid`.
+-/
+@[irreducible] def accDataRbTreeKey4Find
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  0
+
+/--
+Search a statically shaped Phoenix FIFO order tree by `(price, encoded_sequence)` and return its
+one-based slot index, or zero when absent. `bid=1` selects descending price/sequence ordering and
+`bid=0` ascending ordering. Geometry is compile-time fixed and traversal is bounded to 64 checked
+links; no heap map, node copy, raw pointer, or persistent allocation is created. Callers compose
+the complete FIFO tree validator when malformed topology must be rejected before business logic.
+-/
+@[irreducible] def accDataRbTreeOrderFind
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      price sequence : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := price
+  let _ := sequence
+  0
+
+/--
+Return the first Phoenix FIFO order slot when `hasCursor=0`, or the strict logical successor of
+`(price, sequence)` when `hasCursor=1`. The result is a one-based slot index or zero at the end.
+Every call restarts from the fixed account-resident root, so callers retain only the scalar key
+across removals; no node pointer, heap collection, or runtime geometry is created.
+-/
+@[irreducible] def accDataRbTreeOrderCursor
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      hasCursor price sequence : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := hasCursor
+  let _ := price
+  let _ := sequence
+  0
+
+/--
+Write one u64 in a fixed-stride slot of an external account. `acc ≥ 1`, `baseWord`,
+`strideWords`, and `capacity` must be compile-time constants; only the zero-based `index` and
+`value` are dynamic. The SVM target requires the account to be writable and owned by the current
+program, then checks both the capacity and final `data_len` before storing. Failure is `Custom(1)`
+and occurs before this write. This is persistent account storage, not transient heap allocation.
+-/
+@[irreducible] def accDataWordSetAt
+    (acc baseWord strideWords capacity index value : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := baseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := index
+  let _ := value
+  0
+
+/--
+Write one u64 field by a one-based account-resident map index. Index zero is rejected as the null
+sentinel; account geometry remains compile-time fixed and the target still requires a writable,
+current-program-owned external account. This is the mutation twin of
+`accDataWordAtOneBased`, not a heap or pointer store.
+-/
+@[irreducible] def accDataWordSetAtOneBased
+    (acc baseWord strideWords capacity index value : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := baseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := index
+  let _ := value
+  0
+
+/--
+Insert one dynamic four-word key into a statically shaped, account-resident red-black tree. The
+tree header is four words (`root`, padding, `size`, packed bump/free cursor); node links,
+parent/color, key, stride, and capacity are compile-time constants. The SVM target first requires
+the external account to be writable and current-program-owned, then validates the complete tree
+and allocator partition before checking duplicate/full conditions. It performs bounded in-place
+search, Sokoban bump/free-list allocation, complete slot initialization, and general insertion
+fixup. Persistent state contains only one-based addresses and the zero sentinel; no heap, Map,
+node copy, raw pointer, or detached allocation is exposed.
+-/
+@[irreducible] def accDataRbTreeKey4Insert
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  0
+
+/--
+Deposit Phoenix quote/base lots into a trader keyed by four little-endian Pubkey limbs. The SVM
+target validates the fixed account-resident trader tree, then either checked-adds to an existing
+TraderState's quote/base free balances or inserts a canonical zeroed TraderState with those free
+balances. No heap map or persistent pointer is created.
+-/
+@[irreducible] def accDataRbTreeTraderDeposit
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 quoteLots baseLots : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  let _ := quoteLots
+  let _ := baseLots
+  0
+
+/--
+Remove one dynamic four-word key from a statically shaped, account-resident red-black tree. The
+SVM target validates the complete tree and allocator partition before searching. It then performs
+the Sokoban predecessor transplant, bounded delete fixup, and free-list push in place. Persistent
+state remains one-based indexes plus the zero sentinel; the removed slot's key/value payload stays
+account-resident until a later bounded insertion reinitializes that slot.
+-/
+@[irreducible] def accDataRbTreeKey4Remove
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  0
+
+/--
+Insert one Phoenix FIFO order into a statically shaped, account-resident Sokoban red-black tree.
+The two-word key is `(price_in_ticks, encoded_sequence)` and `bid` selects Phoenix's descending
+bid ordering or ascending ask ordering. The four value words are the exact `FIFORestingOrder`
+payload. The SVM target validates the complete tree/free partition and incoming side tag before
+the first store, supports Sokoban's in-place duplicate-value replacement, and otherwise performs
+bounded bump/free-list allocation plus insertion fixup. No persistent pointer or heap container is
+created.
+-/
+@[irreducible] def accDataRbTreeOrderInsert
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : UInt64) :
+    UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := price
+  let _ := sequence
+  let _ := traderIndex
+  let _ := numBaseLots
+  let _ := lastValidSlot
+  let _ := lastValidUnixTimestamp
+  0
+
+/--
+Remove one Phoenix FIFO order from a statically shaped, account-resident Sokoban red-black tree.
+The SVM target validates the complete tree/free partition and encoded sequence side tag before the
+first store, then performs bounded predecessor transplant, delete fixup, and free-list push. The
+removed key/value payload remains in its fixed account slot until a later insertion reinitializes
+that slot; no persistent pointer or heap container is created.
+-/
+@[irreducible] def accDataRbTreeOrderRemove
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      price sequence : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := price
+  let _ := sequence
+  0
+
+/--
+沿账户内 fixed-stride 节点的 parent 链验证一条有界路径。静态参数指定 links word、
+parent/color word、stride、capacity 和最多 64 步；运行时只提供起点、root 和 allocator
+`bumpIndex`。目标发射器逐步验证 index envelope、颜色、parent→child reciprocity，并要求
+在 `maxDepth` 内到达 parent/color=0 的 root。它只保留当前 index/depth，不分配 visited
+Map，不复制节点；短账户在形成 data pointer 前 `Custom(1)`。
+-/
+@[irreducible] def accDataParentPathValid
+    (acc linksBaseWord parentBaseWord strideWords capacity maxDepth
+      index root bumpIndex : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := maxDepth
+  let _ := index
+  let _ := root
+  let _ := bumpIndex
+  0
+
+/--
+直接在账户数据中验证完整的 fixed-capacity Sokoban red-black tree 及 allocator partition。
+静态参数选择 links、parent/color、price、sequence word 和槽布局；`bid=1` 使用 Phoenix bid
+降序，`bid=0` 使用 ask 升序。目标发射器使用固定的 4096-bit 栈 bitmap，不分配 Map、
+不复制节点；它验证树结构、颜色/black height、FIFO key 顺序、live count，以及 free-list
+与所有 pre-bump 槽的精确分区。
+-/
+@[irreducible] def accDataRbTreeValid
+    (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      root size bumpIndex freeListHead : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := root
+  let _ := size
+  let _ := bumpIndex
+  let _ := freeListHead
+  0
+
+/--
+直接在账户数据中验证以四个连续 u64 存放 32-byte key 的 fixed-capacity red-black tree。
+key 按原始 unsigned bytes 做 strict lexicographic ascending 比较；目标发射器用固定
+8321-bit bitmap 和 64-entry traversal stack，不分配 heap/Map，不复制节点。除 red-black
+结构和 key ordering 外，它还验证 reachable live count 以及 allocator 的 exact live/free
+partition。
+-/
+@[irreducible] def accDataRbTreeKey4Valid
+    (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      root size bumpIndex freeListHead : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := root
+  let _ := size
+  let _ := bumpIndex
+  let _ := freeListHead
   0
 
 /--

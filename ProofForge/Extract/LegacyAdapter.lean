@@ -305,6 +305,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         | _ => throw "extract/unsupported: legacy adapter cannot represent multi-seed CPI"
       return .invoke programIx (← metas.mapM metaToLegacy) (← data.mapM wordToLegacy)
         seed (← bump.mapM toLegacyVal)
+  | .ext (.svm (.component ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent bounded SVM components"
   | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)
   | .ext (.evm (.deposit256 ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit deposit"
@@ -414,6 +416,8 @@ def ofLegacyProgram (program : Legacy.Program) : Except String Program := do
 
 private def methodToLegacy (schema : Core.Schema) (method : Method) :
     Except String Legacy.Method := do
+  unless method.annotations.isEmpty do
+    throw s!"extract/unsupported: legacy adapter cannot preserve annotations on {method.ixName}"
   let ops ← toLegacyOps method.ops
   let evaluation ←
     if schema.isEmpty then pure {}

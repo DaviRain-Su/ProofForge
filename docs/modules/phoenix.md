@@ -140,20 +140,34 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 202/202 与 Anvil 12/12。跨四档逐样本只作
-  host reference↔source fold，不宣称完整 chain refinement。
-- **部分支持（P5 profile/body/root gate）**：独立 verifier 已按 canonical program
-  owner、576-byte header/discriminant、12 个官方 capacity tuple 和 exact account length
-  选择预编译 profile；最小 `(512,512,128)` 账户为 84,944 bytes。固定 word 继续读取
-  sequence、三棵账户内 Sokoban allocator size 及 root/padding/bump/free-list header envelope，
-  并按 profile capacity fail closed。通用 bounded indexed word 只在编译期固定的
-  base/stride/capacity 内 zero-copy 读取 bid root 及两个直接 child，验证 parent reciprocity、
-  color、bid side tag 与局部 price/sequence ordering；不创建 Rust heap object 或 SVM Map。
-  当前 verifier ELF 还通过 Surfpool 1.5.0 的 708 个 Loader write + deploy + authority
-  transactions 完成本地部署和 exact ProgramData byte 校验；不作公网声明。
-- **未支持（P5 full node body/公网）**：公网部署、完整树/free-list 遍历或节点写入、
-  runtime remaining accounts、
-  Token-2022 extension 语义及完整 Phoenix-v1 账户兼容。
+  矩阵已有；当前产物已通过全 51 SVM build、Phoenix-v1 profile 51/51、全 Mollusk
+  255/255 与 Anvil 12/12。跨四档逐样本只作 host reference↔source fold，不宣称完整
+  chain refinement。
+- **部分支持（P5 fixed account profile + official tags 4–7）**：独立 profile 按 canonical
+  owner、576-byte header、12 个 capacity tuple 与 exact length 选择静态 geometry；完整
+  bid/ask/trader validator、Key4/FIFO find、one-based field access、allocator 与 RB mutation
+  都由 `AccountStorage` 在 account bytes 上有界执行。最小 `(512,512,128)` profile 组合了
+  official tag 5 `ReduceOrderWithFreeFunds` 和 tag 4 `ReduceOrder`：共享 26-byte packed wire、
+  common four-account prefix、ask/bid partial/full collateral unlock 与 exact authenticated audit。
+  tag 4 再验证 9-account classic Token context，只 claim 本次释放量，并用静态
+  `["vault", market key, MarketHeader mint bytes, bump]` 对非零 base/quote atoms 做 tag-3
+  Transfer；tag 5 没有 tag-4 reduce-status gate。`EntryAdapter` 负责协议入口，storage 层负责
+  持久容器。storage-owned ordered cursor 以 scalar `(price, sequence)` 做 ask 升序/bid 降序
+  strict upper-bound，每次 mutation 后从 root 重查，不保留 node address 或收集 heap `Vec`。
+  authenticated audit 由 component-owned bounded recorder 组合：93-byte header、35-byte Reduce、
+  32-record/1,246-byte 双 bound、append 前自动 flush、empty finish header-only。payload 使用
+  官方 SDK 固定 32 KiB downward bump cursor，不把 pointer 写入 market account。
+  tags 6/7 的 exact one-byte no-payload wire 复用同一入口和 recorder，再由 component-owned
+  `FifoCancel` 组合 cursor、validated RB removal、owner/size field、checked locked→free 与
+  aggregate release。完整 trader/bid/ask validator 在任何 sequence/store/CPI 前 dominate；
+  bids 先于 asks，各侧保持 FIFO，event index 跨 32-record flush 连续。missing trader/empty
+  book 仍 sequence+1 并发 header-only。tag 7 无 Token/status gate；tag 6 只 claim 本次释放量，
+  保留 pre-existing free，并按 quote claim/withdraw → base claim/withdraw 排序。
+  Phoenix source 只做组合；没有新增 Phoenix-specific 顶层 Ops/IR/主 Emit case，也不创建
+  heap Map、node copy 或 persistent pointer。
+- **未支持（P5 remaining instructions/公网）**：cancel-up-to/by-id、matching/
+  placement wire、runtime remaining accounts、Token-2022 extension 语义、全部 Phoenix-v1
+  指令兼容与公网部署。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/
 全仓回归 → P4 通用 CFG/产物资格；P5 动态模型另立 profile。任何 helper/state-loop
@@ -169,6 +183,8 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
 
-独立 `PhoenixV1Profile` 验证官方账户头、预编译容量，读取固定 scalar/allocator metadata
-与有界 bid-root neighborhood；这是完整的 bounded N=4 Phoenix IOC 模型加 P5 部分 body
-gate，不是完整 Phoenix-v1 动态账户实现。
+独立 `PhoenixV1Profile` 是预编译 fixed-capacity account profile，不是运行时动态容器。
+`EntryAdapter → Component(FifoCancel/BatchRecorder/AccountStorage) → target-owned SVM backend`
+已贯通 official tags 4–7；下一片在相同稳定边界上增加 tags 8/9 CancelUpTo 的 bounded filter，
+而不是再改顶层 Ops/IR/主 Emit。完整 Phoenix-v1 指令集和
+动态 remaining accounts 仍关闭。

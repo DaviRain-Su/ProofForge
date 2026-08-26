@@ -140,6 +140,7 @@ def projectMethod [BEq ValExt]
     paramWidths := method.paramWidths
     retWidths := method.retWidths
     retCount := method.retCount
+    annotations := method.annotations
     sketch := method.sketch
     ops
     evaluation

@@ -1,6 +1,8 @@
 import ProofForge.Extract.IR
 import ProofForge.Core.Target
 import ProofForge.Svm.ABI
+import ProofForge.Svm.Component
+import ProofForge.Svm.EntryAdapter
 
 namespace ProofForge.Svm.IR
 
@@ -18,6 +20,7 @@ inductive Op where
   | invoke (programIx : Nat) (metas : Array Ops.CpiMeta)
       (data : Array (Ops.CpiWord Ops.Val))
       (seeds : Array Ops.PdaSeed := #[]) (bump : Option Ops.Val := none)
+  | component (call : Component.Call Ops.Val)
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -42,6 +45,7 @@ private partial def lowerOp : Ops.Op → Except String Op
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
   | .ext (.invoke programIx metas data seed bump) =>
       pure (.invoke programIx metas data seed bump)
+  | .ext (.component call) => pure (.component call)
   | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSetLeaf name _ _ _ leaf =>
@@ -72,6 +76,7 @@ private partial def Op.toSource : Op → Ops.Op
   | .checkedModU64 lhs rhs => .checkedModU64 lhs rhs
   | .ite cmp lhs rhs thn els => .ite cmp lhs rhs (toSourceOps thn) (toSourceOps els)
   | .invoke programIx metas data seed bump => .ext (.invoke programIx metas data seed bump)
+  | .component call => .ext (.component call)
   | .forAccum n addend resultLocal => .forAccum n addend resultLocal
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
@@ -95,12 +100,14 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
     Ops.OpExt Ops.Val → Ops.OpExt Ops.Val
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
+  | .component call => .component (call.mapValues mapValue)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .invoke _ _ data _ bump =>
       data.filterMap Ops.CpiWord.value? ++ match bump with
         | some value => #[value]
         | none => #[]
+  | .component call => call.values
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -129,6 +136,8 @@ private def projectOpExt
   | .svm (.invoke programIx metas data seeds bump) =>
       return .invoke programIx metas (← data.mapM (projectCpiWord projectVal))
         seeds (← bump.mapM projectVal)
+  | .svm (.component call) =>
+      return .component (← call.mapValuesM projectVal)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
 
 /-- Static registration of the extractor-to-SVM projection. -/
@@ -171,15 +180,92 @@ structure Method where
   paramWidths : Array Nat := #[]
   retWidths : Array Nat := #[]
   retCount : Nat := 1
+  entry : EntryAdapter.MethodEntry := .generated
   ops : Array Op := #[]
   evaluation : Core.Evaluation Ops.ValKind := {}
   deriving BEq, Repr, Inhabited
+
+private partial def rewriteRawArg (base : Nat) : Ops.Val → Ops.Val
+  | .arg index => .local (base + index)
+  | .local index => .local index
+  | .field value name => .field (rewriteRawArg base value) name
+  | .lit value => .lit value
+  | .bitAnd lhs rhs => .bitAnd (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .bitOr lhs rhs => .bitOr (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .bitXor lhs rhs => .bitXor (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .bitNot value => .bitNot (rewriteRawArg base value)
+  | .shiftL lhs rhs => .shiftL (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .shiftR lhs rhs => .shiftR (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .indexGet value name index len offset =>
+      .indexGet (rewriteRawArg base value) name (rewriteRawArg base index) len offset
+  | .loopIx => .loopIx
+  | .select cmp lhs rhs thn els =>
+      .select cmp (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+        (rewriteRawArg base thn) (rewriteRawArg base els)
+  | .addU64 lhs rhs => .addU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .subU64 lhs rhs => .subU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .mulU64 lhs rhs => .mulU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .divU64 lhs rhs => .divU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .modU64 lhs rhs => .modU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .ext kind operands => .ext kind (operands.map (rewriteRawArg base))
+
+private partial def rewriteRawArgsInOp (base : Nat) : Ops.Op → Ops.Op
+  | .letLocal index value => .letLocal index (rewriteRawArg base value)
+  | .joinLocal index => .joinLocal index
+  | .setLocal index value => .setLocal index (rewriteRawArg base value)
+  | .checkedAddU64 lhs rhs => .checkedAddU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .checkedSubU64 lhs rhs => .checkedSubU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .checkedMulU64 lhs rhs => .checkedMulU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .checkedDivU64 lhs rhs => .checkedDivU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .checkedModU64 lhs rhs => .checkedModU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+  | .ite cmp lhs rhs thn els =>
+      .ite cmp (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+        (thn.map (rewriteRawArgsInOp base)) (els.map (rewriteRawArgsInOp base))
+  | .forAccum count addend result => .forAccum count (rewriteRawArg base addend) result
+  | .forBody count body => .forBody count (body.map (rewriteRawArgsInOp base))
+  | .indexSetLeaf name index value len leaf =>
+      .indexSetLeaf name (rewriteRawArg base index) (rewriteRawArg base value) len leaf
+  | .indexSet name index value len offset =>
+      .indexSet name (rewriteRawArg base index) (rewriteRawArg base value) len offset
+  | .storeField name value => .storeField name (rewriteRawArg base value)
+  | .okState value => .okState (rewriteRawArg base value)
+  | .errorOverflow => .errorOverflow
+  | .errorNamed name => .errorNamed name
+  | .returnU64 value => .returnU64 (rewriteRawArg base value)
+  | .returnState value => .returnState (rewriteRawArg base value)
+  | .ext payload => .ext (mapCfgPayload (rewriteRawArg base) payload)
+
+private partial def opLocalIds : Ops.Op → Array Nat
+  | .letLocal index value | .setLocal index value => #[index] ++ Core.CFG.valueLocalIds value
+  | .joinLocal index => #[index]
+  | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+  | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
+      Core.CFG.valueLocalIds lhs ++ Core.CFG.valueLocalIds rhs
+  | .ite _ lhs rhs thn els =>
+      Core.CFG.valueLocalIds lhs ++ Core.CFG.valueLocalIds rhs ++
+        thn.flatMap opLocalIds ++ els.flatMap opLocalIds
+  | .forAccum _ addend result => #[result] ++ Core.CFG.valueLocalIds addend
+  | .forBody _ body => body.flatMap opLocalIds
+  | .indexSetLeaf _ index value _ _ | .indexSet _ index value _ _ =>
+      Core.CFG.valueLocalIds index ++ Core.CFG.valueLocalIds value
+  | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+      Core.CFG.valueLocalIds value
+  | .errorOverflow | .errorNamed _ => #[]
+  | .ext payload => (cfgPayloadValues payload).flatMap Core.CFG.valueLocalIds
+
+def Method.rawArgLocalBase (method : Method) : Nat :=
+  method.ops.map Op.toSource |>.flatMap opLocalIds |>.foldl (init := 0) fun next index =>
+    Nat.max next (index + 1)
 
 /-- Lower a target-owned SVM method to the shared basic-block representation consumed by
 code generation. This deliberately happens after target projection, so no combined EVM/SVM
 extension can cross the backend boundary. -/
 def Method.toCFG (method : Method) : Except String CFG := do
   let source := toSourceOps method.ops
+  let source :=
+    match method.entry with
+    | .generated => source
+    | .raw _ => source.map (rewriteRawArgsInOp method.rawArgLocalBase)
   let graph ←
     if method.kind == .init then Core.CFG.lowerInit cfgDialect source
     else Core.CFG.lower cfgDialect source
@@ -216,6 +302,8 @@ structure Program where
   vectors : Array Vector := #[]
   schema : Core.Schema := {}
   methods : Array Method
+  /-- Emitter-only method view used by protocol adapters with a different account contract. -/
+  accountCountOverride : Option Nat := none
   deriving BEq, Repr, Inhabited
 
 private partial def rawSelfEntriesIn (ops : Array Op) :
@@ -239,6 +327,9 @@ private partial def rawSelfEntriesIn (ops : Array Op) :
     | .ite _ _ _ thn els =>
         result := result ++ (← rawSelfEntriesIn thn) ++ (← rawSelfEntriesIn els)
     | .forBody _ body => result := result ++ (← rawSelfEntriesIn body)
+    | .component call =>
+        for (tag, authoritySeed) in call.rawSelfEntries do
+          result := result.push { tag := UInt64.ofNat tag, authoritySeed }
     | _ => pure ()
   return result
 
@@ -292,19 +383,95 @@ private def lowerVectors (src : Core.IR.Program Ops.ValKind Ops.OpExt)
       leaves
     }
 
+private partial def scalarizeRawOp : Op → Op
+  | .ite cmp lhs rhs thn els =>
+      .ite cmp lhs rhs (thn.map scalarizeRawOp) (els.map scalarizeRawOp)
+  | .forBody count body => .forBody count (body.map scalarizeRawOp)
+  | .okState value => .returnU64 value
+  | op => op
+
 private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String Method := do
+  let entry ← EntryAdapter.decode method.annotations method.paramCount method.paramWidths
+  let ops ← ofSourceOps method.ops
+  let (kind, ops) ←
+    match entry with
+    | .generated => pure (method.kind, ops)
+    | .raw _ =>
+        unless method.kind == .get || method.kind == .increment do
+          throw s!"extract/unsupported: svm raw entry {method.ixName} must return a scalar result"
+        -- `Except Error (State × UInt64)` is the source-level spelling for an effectful scalar
+        -- protocol handler. Its success terminator already carries only the scalar return value;
+        -- external account effects stay in place and no managed-State writeback is introduced.
+        pure (.get, ops.map scalarizeRawOp)
   return {
-    kind := method.kind
+    kind
     name := method.name
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
     retWidths := method.retWidths
     retCount := method.retCount
-    ops := ← ofSourceOps method.ops
+    entry
+    ops
     evaluation := method.evaluation
   }
+
+private partial def rawValUsesManagedState (paramCount : Nat) : Ops.Val → Bool
+  | .arg index => paramCount ≤ index
+  | .local _ | .lit _ | .loopIx => false
+  | .field value _ | .bitNot value => rawValUsesManagedState paramCount value
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      rawValUsesManagedState paramCount lhs || rawValUsesManagedState paramCount rhs
+  | .indexGet value _ index _ _ =>
+      rawValUsesManagedState paramCount value || rawValUsesManagedState paramCount index
+  | .select _ lhs rhs thn els =>
+      rawValUsesManagedState paramCount lhs || rawValUsesManagedState paramCount rhs ||
+        rawValUsesManagedState paramCount thn || rawValUsesManagedState paramCount els
+  | .ext _ operands => operands.any (rawValUsesManagedState paramCount)
+
+private partial def rawOpsUseManagedState (paramCount : Nat) (ops : Array Op) : Bool :=
+  ops.any fun op =>
+    let uses := rawValUsesManagedState paramCount
+    match op with
+    | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+    | .storeField _ value | .okState value | .returnU64 value | .returnState value => uses value
+    | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+    | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs
+    | .indexSet _ lhs rhs _ _ => uses lhs || uses rhs
+    | .ite _ lhs rhs thn els =>
+        uses lhs || uses rhs || rawOpsUseManagedState paramCount thn ||
+          rawOpsUseManagedState paramCount els
+    | .invoke _ _ data _ bump =>
+        data.any (fun word => word.value?.any uses) || bump.any uses
+    | .component call => call.values.any uses
+    | .forBody _ body => rawOpsUseManagedState paramCount body
+    | .joinLocal _ | .errorOverflow | .errorNamed _ => false
+
+private def validateRawMethod (method : Method) : Except String Unit := do
+  match method.entry with
+  | .generated => pure ()
+  | .raw _ =>
+      unless method.kind == .get do
+        throw s!"extract/unsupported: svm raw entry {method.ixName} must return a scalar"
+      if hasStoreField method.ops || hasIndexSet method.ops ||
+          rawOpsUseManagedState method.paramCount method.ops then
+        throw s!"extract/unsupported: svm raw entry {method.ixName} must use external account storage, not managed State"
+
+private def validateEntryDisjointness (methods : Array Method) : Except String Unit := do
+  let generated := methods.filter (·.entry.isGenerated)
+  for method in methods do
+    match method.entry with
+    | .generated => pure ()
+    | .raw entry =>
+        for candidate in generated do
+          let generatedLen := 8 + 8 * candidate.paramCount
+          if entry.minDataLen ≤ generatedLen && generatedLen ≤ entry.maxDataLen &&
+              entry.tag == ABI.discFirstByte candidate.ixName candidate.paramCount then
+            throw s!"extract/unsupported: svm raw entry {method.ixName} overlaps generated instruction {candidate.ixName}"
 
 /-- Project the combined extractor dialect and lower it into an SVM-owned physical program. -/
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
@@ -317,6 +484,10 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     schema := source.schema
     methods := ← source.methods.mapM lowerMethod
   }
+  EntryAdapter.validateUniqueTags (program.methods.map (·.entry))
+  for method in program.methods do
+    validateRawMethod method
+  validateEntryDisjointness program.methods
   let _ ← rawSelfEntry? program
   return program
 
@@ -395,6 +566,22 @@ def isProgramShape (p : Program) : Bool :=
 def usesCpi (p : Program) : Bool :=
   p.methods.any (hasInvoke ·.ops)
 
+private partial def componentStackScratchEndIn (ops : Array Op) : Nat :=
+  ops.foldl (init := Component.stackScratchEnd) fun current op =>
+    match op with
+    | .component call => Nat.max current call.stackScratchEnd
+    | .ite _ _ _ thn els =>
+        Nat.max current (Nat.max (componentStackScratchEndIn thn) (componentStackScratchEndIn els))
+    | .forBody _ body => Nat.max current (componentStackScratchEndIn body)
+    | _ => current
+
+/-- Highest fixed stack cell required by any component used by this program. Keeping this
+capability-driven preserves the established scalar-local layout for programs that do not use a
+larger component. -/
+def componentStackScratchEnd (p : Program) : Nat :=
+  p.methods.foldl (init := Component.stackScratchEnd) fun current method =>
+    Nat.max current (componentStackScratchEndIn method.ops)
+
 def usesWalk (p : Program) : Bool :=
   usesCpi p || p.methods.any fun method => Ops.hasAcc1 (toSourceOps method.ops)
 
@@ -413,14 +600,25 @@ private partial def highestInvokeIndex (ops : Array Op) : Nat :=
     | .forBody _ body => Nat.max result (highestInvokeIndex body)
     | _ => result
 
-def cpiAccountCount (p : Program) : Nat :=
-  let highest := p.methods.foldl (init := 0) fun current method =>
-    Nat.max current (highestInvokeIndex method.ops)
+def methodAccountCount (method : Method) : Nat :=
+  let highest := highestInvokeIndex method.ops
   -- CPI indices are relative to the external-account region; physical account 0 is state.
-  let fromInvoke := if usesCpi p then Nat.max 3 (highest + 2) else 0
-  let fromValues := p.methods.foldl (init := 0) fun current method =>
-    Nat.max current (Ops.opsMinAccounts (toSourceOps method.ops))
+  let fromInvoke := if hasInvoke method.ops then Nat.max 3 (highest + 2) else 0
+  let fromValues := Ops.opsMinAccounts (toSourceOps method.ops)
   Nat.max fromInvoke fromValues
+
+private def inferredAccountCount (methods : Array Method) : Nat :=
+  methods.foldl (init := 0) fun current method =>
+    Nat.max current (methodAccountCount method)
+
+def generatedAccountCount (p : Program) : Nat :=
+  Nat.max 1 (inferredAccountCount (p.methods.filter (·.entry.isGenerated)))
+
+def cpiAccountCount (p : Program) : Nat :=
+  p.accountCountOverride.getD (inferredAccountCount p.methods)
+
+def withAccountCount (p : Program) (accountCount : Nat) : Program :=
+  { p with accountCountOverride := some accountCount }
 
 private def sourceSlots (p : Program) : Array Core.IR.Slot :=
   p.slots.map fun slot =>
@@ -452,6 +650,7 @@ private def pdaSeedCanon : Ops.PdaSeed → String
   | .ascii value => s!"s.{value}"
   | .stateKey => "state"
   | .accKey i => s!"k.{i}"
+  | .accData i offset length => s!"d.{i}.{offset}.{length}"
 
 private partial def valCanon : Ops.Val → String
   | .arg i => s!"a{i}"
@@ -482,11 +681,11 @@ private partial def valCanon : Ops.Val → String
   | .ext .cpiReturn #[] => "cret"
   | .ext (.sha256Lit seed) #[] => s!"sha.{seed}"
   | .ext (.keccak256Lit seed) #[] => s!"kec.{seed}"
+  | .ext .byteSwap64 #[word] => s!"bswap64({valCanon word})"
   | .ext (.accKeyWord acc word) #[] => s!"kw.{acc}.{word}"
   | .ext (.accOwnerWord acc word) #[] => s!"ow.{acc}.{word}"
   | .ext (.accDataWord acc word) #[] => s!"dw.{acc}.{word}"
-  | .ext (.accDataWordAt acc baseWord strideWords capacity) #[index] =>
-      s!"dwi.{acc}.{baseWord}.{strideWords}.{capacity}({valCanon index})"
+  | .ext (.component query) operands => query.canonical valCanon operands
   | .ext (.accLamportsN acc) #[] => s!"lpN.{acc}"
   | .ext (.accDataLenN acc) #[] => s!"dlN.{acc}"
   | .ext (.isSignerN acc) #[] => s!"sgN.{acc}"
@@ -561,6 +760,7 @@ private partial def opsCanon (ops : Array Op) : String :=
               s!",s.[{seedCanon}]:{valCanon valueBump}"
           | _, none => ""
         s!"inv({programIx},[{metaCanon}],[{dataCanon}]{signer})"
+    | .component call => call.canonical valCanon
     | .forAccum n addend resultLocal =>
         s!"for.{resultLocal}({n},{valCanon addend})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
@@ -582,11 +782,15 @@ def canonical (p : Program) : String :=
     (p.methods.qsort (fun lhs rhs => lhs.ixName < rhs.ixName)).toList.map fun method =>
       let base :=
         s!"{kindTag method.kind}:{method.ixName}:{method.paramCount}:[{opsCanon method.ops}]"
-      if (method.paramWidths.isEmpty || method.paramWidths.all (· == 8)) && method.retCount == 1 then
-        base
-      else
-        let widths := String.intercalate "," (method.paramWidths.map toString).toList
-        s!"{kindTag method.kind}:{method.ixName}:{method.paramCount}:{widths}:r{method.retCount}:[{opsCanon method.ops}]"
+      let base :=
+        if (method.paramWidths.isEmpty || method.paramWidths.all (· == 8)) && method.retCount == 1 then
+          base
+        else
+          let widths := String.intercalate "," (method.paramWidths.map toString).toList
+          s!"{kindTag method.kind}:{method.ixName}:{method.paramCount}:{widths}:r{method.retCount}:[{opsCanon method.ops}]"
+      match method.entry with
+      | .generated => base
+      | .raw entry => s!"{base}:{entry.canonical}"
   s!"{p.name}|{fields}|{String.intercalate "/" methods}"
 
 def digestHex (p : Program) : String :=

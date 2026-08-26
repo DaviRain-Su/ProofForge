@@ -1,4 +1,5 @@
 import Examples.Counter
+import ProofForge.Svm.Runtime
 
 namespace Tests.Fixtures
 
@@ -635,6 +636,33 @@ def choose (s : ChoiceState) (lhs rhs : UInt64) :
     Except Examples.Counter.Error (ChoiceState × UInt64) :=
   let chosen : UInt64 := if lhs < rhs then lhs else rhs
   .ok ({ s with chosen }, chosen)
+
+/-- Negative extractor fixture: external-account shape parameters must be compile-time constants.
+The dynamic account operand must reject extraction rather than silently dropping the write. -/
+def malformedExternalWrite (s : ChoiceState) (acc value : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let _ := ProofForge.Svm.Runtime.accDataWordSetAt acc 1 1 1 0 value
+  .ok ({ s with chosen := value }, value)
+
+/-- Negative extractor fixture: persistent-container geometry may not come from a runtime value. -/
+def malformedOrderCursor (s : ChoiceState) (acc hasCursor price sequence : UInt64) : UInt64 :=
+  let _ := s
+  ProofForge.Svm.Runtime.accDataRbTreeOrderCursor
+    acc 110 114 115 116 117 8 512 1 hasCursor price sequence
+
+/-- A lexical account read before a write must remain a pre-mutation snapshot. -/
+def accountReadBeforeWrite (s : ChoiceState) (value : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let before := ProofForge.Svm.Runtime.accDataWord 1 0
+  let _ := ProofForge.Svm.Runtime.accDataWordSetAt 1 0 1 1 0 value
+  .ok ({ s with chosen := value }, before)
+
+/-- A source read placed after a write must observe the post-mutation account word. -/
+def accountReadAfterWrite (s : ChoiceState) (value : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let _ := ProofForge.Svm.Runtime.accDataWordSetAt 1 0 1 1 0 value
+  let after := ProofForge.Svm.Runtime.accDataWord 1 0
+  .ok ({ s with chosen := value }, after)
 
 def getChosen (s : ChoiceState) : UInt64 :=
   s.chosen

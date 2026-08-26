@@ -12,9 +12,9 @@ manifest="runtime-tests/surfpool/txtx.yml"
 program_name="${1:-Phoenix}"
 
 case "$program_name" in
-  Phoenix|PhoenixV1Profile) ;;
+  Phoenix|PhoenixV1Profile|RawEntry) ;;
   *)
-    echo "surfpool-smoke: supported programs: Phoenix, PhoenixV1Profile" >&2
+    echo "surfpool-smoke: supported programs: Phoenix, PhoenixV1Profile, RawEntry" >&2
     exit 1
     ;;
 esac

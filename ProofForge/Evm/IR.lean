@@ -732,6 +732,9 @@ private def lowerMethodBody (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
 
 /-- Project the combined extractor dialect and lower it into an EVM-owned physical program. -/
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
+  for method in src.methods do
+    unless method.annotations.isEmpty do
+      throw s!"extract/unsupported: evm cannot consume target annotations on {method.ixName}"
   let source ← Core.Target.projectProgram extractRegistration src
   if source.slots.isEmpty then
     throw "extract/unsupported: evm program has no slots"

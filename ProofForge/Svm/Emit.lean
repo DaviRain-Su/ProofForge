@@ -1,4 +1,6 @@
 import ProofForge.Svm.IR
+import ProofForge.Svm.Component.Emit
+import ProofForge.Svm.EntryAdapter.Emit
 
 namespace ProofForge.Svm.Emit
 
@@ -11,9 +13,12 @@ private def sysvarProgramIdScratch : Nat := 3104
 It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
 PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
 private def pdaSeedsScratch : Nat := 4096
-/-- Loop control must not overlap expression temporaries (8..), scalar locals (320..), or
-walked-account headers (512..). -/
+/-- Loop control must not overlap expression temporaries, scalar locals, or walked-account
+headers. Bounded components publish one shared fixed-scratch boundary. -/
 private def loopCounterScratch : Nat := 304
+/-- CPI material grows upward from `r10-2048` and may use at most this many bytes. Keeping it in
+the 1024..2048 stack-offset bank makes it disjoint from account headers and scalar locals. -/
+private def cpiScratchBytes : Nat := 1024
 
 private def handlerLabel (m : IR.Method) : String :=
   if m.ixName != "" then m.ixName else IR.ixNameOfLean (IR.lastName m.name)
@@ -89,19 +94,20 @@ walk_al_{tag}:
   mov64 r8, r5
 "
 
-/-- Account headers live above expression temporaries and scalar locals. The instruction-data
-length pointer follows the final account header. -/
+/-- Account headers live above component scratch. The instruction-data pointer follows the
+final account header. -/
 private def headerStack (i : Nat) : Nat :=
   512 + 8 * i
 
-/-- Keep the first 24 scalar locals in the legacy compact window. Additional locals live above
-the walked-account headers (at most 64) and below CPI scratch, so they remain live across invokes
-without overlapping expression temporaries or account traversal state. -/
+/-- Scalar locals start after both the static account-header prefix and component scratch.
+The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PDA/sysvar/component
+scratch owns 2048..4096. This single frame contract prevents composed target effects from
+clobbering source locals without giving individual intrinsics ad-hoc spill rules. -/
 private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
-  let offset :=
-    if i < 24 then 320 + i * 8
-    else max 1024 (headerStack (IR.cpiAccountCount p) + 8) + (i - 24) * 8
-  if offset < 2048 then some offset else none
+  let base := max (IR.componentStackScratchEnd p + 8)
+    (headerStack (IR.cpiAccountCount p) + 8)
+  let offset := base + i * 8
+  if offset < 1024 then some offset else none
 
 private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
   Id.run do
@@ -178,6 +184,7 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
         | .invoke _ _ data _ bump =>
             (data.flatMap fun word => word.value?.map valSignerAccs |>.getD #[]) ++
               (match bump with | some v => valSignerAccs v | none => #[])
+        | .component call => call.values.flatMap valSignerAccs
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -661,6 +668,23 @@ private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
   lddw r1, 32
   stxdw [r8 + {descriptor + 8}], r1
 "
+    | .accData account offset length =>
+        let ok := s!"find_pda_data_ok_{scope}_{i}"
+        descriptors := descriptors ++ s!"\
+  ldxdw r1, [r10 - {headerStack (account + 1)}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {offset + length}
+  jge r2, r3, {ok}
+  lddw r0, 0x1
+  exit
+{ok}:
+  add64 r1, 88
+  lddw r2, {offset}
+  add64 r1, r2
+  stxdw [r8 + {descriptor}], r1
+  lddw r1, {length}
+  stxdw [r8 + {descriptor + 8}], r1
+"
   let progId :=
     if IR.usesWalk p then
       s!"\
@@ -764,6 +788,7 @@ private def emitLoadKeccak256Lit (seed : String) (stackOff : Nat) : String :=
   emitLoadHashLit "keccak256Lit" "sol_keccak256" seed stackOff
 
 
+set_option maxRecDepth 4096 in
 set_option linter.unusedVariables false in
 mutual
 private partial def emitLoadBitBin (p : IR.Program) (op : String) (l r : Ops.Val)
@@ -786,6 +811,16 @@ private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff nonc
   ldxdw r1, [r10 - {stackOff + 8}]
   lddw r2, 0xffffffffffffffff
   xor64 r1, r2
+  stxdw [r10 - {stackOff}], r1
+"
+
+private partial def emitLoadByteSwap64 (p : IR.Program) (v : Ops.Val) (stackOff nonce : Nat)
+    (scope : String) : Except String String := do
+  let load ← loadVal p v (stackOff + 8) (nonce + 1) (scope ++ "_v")
+  return load ++
+    s!"\
+  ldxdw r1, [r10 - {stackOff + 8}]
+  be64 r1
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -905,14 +940,22 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadSha256Lit seed stackOff)
   | .ext (.keccak256Lit seed) #[] =>
     .ok (emitLoadKeccak256Lit seed stackOff)
+  | .ext .byteSwap64 #[word] =>
+    emitLoadByteSwap64 p word stackOff nonce scope
   | .ext (.accKeyWord acc word) #[] =>
     .ok (emitLoadAccWord "key" acc word stackOff)
   | .ext (.accOwnerWord acc word) #[] =>
     .ok (emitLoadAccWord "owner" acc word stackOff)
   | .ext (.accDataWord acc word) #[] =>
     .ok (emitLoadAccDataWord acc word stackOff scope)
-  | .ext (.accDataWordAt acc baseWord strideWords capacity) #[index] =>
-    emitLoadAccDataWordAt p acc baseWord strideWords capacity index stackOff nonce scope
+  | .ext (.component query) operands =>
+    Component.Emit.emitQuery
+      { loadValue := fun value valueStackOff valueNonce valueScope =>
+          loadVal p value valueStackOff valueNonce valueScope
+        loadOwnerIsSelf := emitLoadOwnerIsSelf p
+        headerStack
+        accountCount := IR.cpiAccountCount p }
+      query operands stackOff nonce scope
   | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
   | .ext (.accDataLenN acc) #[] =>
@@ -987,62 +1030,6 @@ ok_idx_{tag}:
   stxdw [r10 - {stackOff}], r1
   "
 
-/-- Read one runtime-selected slot from a compile-time fixed account-data region. The static
-shape makes byte arithmetic overflow impossible; runtime index and final data length are checked
-before the data pointer is formed. -/
-private partial def emitLoadAccDataWordAt (p : IR.Program) (acc baseWord strideWords capacity : Nat)
-    (index : Ops.Val) (stackOff nonce : Nat) (scope : String) : Except String String := do
-  let loadIndex ← loadVal p index (stackOff + 8) (nonce + 1) (scope ++ "_index")
-  let baseBytes := 8 * baseWord
-  let strideBytes := 8 * strideWords
-  let token := IR.u64Hex (Core.IR.fnv1a64
-    s!"{scope}:{stackOff}:{nonce}:{acc}:{baseWord}:{strideWords}:{capacity}")
-  let indexOk := s!"ok_data_index_{token}"
-  let dataOk := s!"ok_indexed_data_word_{token}"
-  let account :=
-    if acc == 0 then
-      s!"\
-  ldxdw r4, [r6 + ACC0_DATA_LEN]
-  jge r4, r3, {dataOk}
-  lddw r0, 0x1
-  exit
-{dataOk}:
-  mov64 r1, r6
-  add64 r1, ACC0_DATA
-"
-    else
-      s!"\
-  ldxdw r1, [r10 - {headerStack acc}]
-  ldxdw r4, [r1 + 80]
-  jge r4, r3, {dataOk}
-  lddw r0, 0x1
-  exit
-{dataOk}:
-  add64 r1, 88
-"
-  return loadIndex ++
-    s!"\
-  ; load bounded acc{acc} data word base={baseWord} stride={strideWords} capacity={capacity}
-  ldxdw r2, [r10 - {stackOff + 8}]
-  lddw r3, {capacity}
-  jlt r2, r3, {indexOk}
-  lddw r0, 0x1
-  exit
-{indexOk}:
-  lddw r3, {strideBytes}
-  mul64 r2, r3
-  mov64 r3, r2
-  lddw r4, {baseBytes + 8}
-  add64 r3, r4
-" ++ account ++
-    s!"\
-  lddw r3, {baseBytes}
-  add64 r1, r3
-  add64 r1, r2
-  ldxdw r1, [r1 + 0]
-  stxdw [r10 - {stackOff}], r1
-"
-
 /--
 `sol_create_program_address`：一条 ASCII 种子 + bump 字节 + 当前 program id。
 成功写 0，失败写 1。scratch 同 findPda，用 `r8 = r10-2800`。
@@ -1100,6 +1087,11 @@ private partial def emitLoadCheckPda (p : IR.Program) (seed : String) (bump : Op
 
 end
 
+private def accountStorageContext (p : IR.Program) : AccountStorage.Emit.Context :=
+  { loadValue := fun value stackOff nonce scope => loadVal p value stackOff nonce scope
+    loadOwnerIsSelf := emitLoadOwnerIsSelf p
+    headerStack }
+
 private def storeField (p : IR.Program) (name : String) (fromStack : Nat) : Except String String :=
   match IR.fieldOffset p name, IR.fieldWidth p name with
   | none, _ => .error s!"extract/unsupported: unknown field {name}"
@@ -1147,6 +1139,7 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
           (seeds.isEmpty && metas.any (·.signer)) ||
             data.any (fun word => word.value?.any valUsesSigner) ||
               (match bump with | some v => valUsesSigner v | none => false)
+      | .component call => call.values.any valUsesSigner
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -1309,7 +1302,8 @@ private def emitCpiDataLenChecks (label : String) (metas : Array Ops.CpiMeta) : 
 "
 
 private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
-    (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) : Except String (String × String) :=
+    (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) :
+    Except String (String × String × Nat) :=
   match bump with
   | some b => do
     if seeds.isEmpty then
@@ -1354,6 +1348,23 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
   lddw r1, 32
   stxdw [r9 + {seedsArr + 16 * i + 8}], r1
 "
+      | .accData account offset length =>
+          let ok := s!"signer_seed_data_ok_{scope}_{i}"
+          entries := entries ++ s!"\
+  ldxdw r1, [r10 - {headerStack (account + 1)}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {offset + length}
+  jge r2, r3, {ok}
+  lddw r0, 0x1
+  exit
+{ok}:
+  add64 r1, 88
+  lddw r2, {offset}
+  add64 r1, r2
+  stxdw [r9 + {seedsArr + 16 * i}], r1
+  lddw r1, {length}
+  stxdw [r9 + {seedsArr + 16 * i + 8}], r1
+"
     let bumpEntry := seedsArr + 16 * seeds.size
     let groupOff := bumpEntry + 16
     let txt :=
@@ -1373,10 +1384,10 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
 "
     let regs :=
       s!"  mov64 r4, r9\n  add64 r4, {groupOff}\n  lddw r5, 1\n"
-    return (txt, regs)
+    return (txt, regs, groupOff + 16)
   | none =>
     if seeds.isEmpty then
-      return ("", "  lddw r4, 0\n  lddw r5, 0\n")
+      return ("", "  lddw r4, 0\n  lddw r5, 0\n", 0)
     else
       throw "extract/unsupported: invoke signer seeds require a bump"
 
@@ -1392,7 +1403,12 @@ private def emitInvoke (p : IR.Program) (label : String)
   let (dataTxt, dataLen) ← emitCpiData p label dataOff data
   let infoOff := dataOff + ((dataLen + 7) / 8) * 8
   let seedOff := infoOff + 56 * n
-  let (seedTxt, seedRegs) ← emitSignerSeeds p label seedOff seeds bump
+  let (seedTxt, seedRegs, seedEnd) ← emitSignerSeeds p label seedOff seeds bump
+  -- `emitCpiData` clears a full 64-byte data window even for shorter payloads. Account infos and
+  -- signer descriptors may extend farther; all three must remain in the dedicated CPI bank.
+  let frameEnd := max (dataOff + 64) (max (infoOff + 56 * n) seedEnd)
+  if frameEnd > cpiScratchBytes then
+    throw s!"extract/unsupported: invoke scratch requires {frameEnd} bytes, maximum is {cpiScratchBytes}"
   let mut metasTxt := ""
   for i in [0:metas.size] do
     metasTxt := metasTxt ++ emitOneMeta i metas[i]!
@@ -1446,6 +1462,2347 @@ private def emitInvoke (p : IR.Program) (label : String)
   exit
 xfer_ok_{label}:
 "
+
+/-- Local BPF-to-BPF rotations shared by one bounded account-resident mutation. The helper frame
+contains only scalar indexes and pointers derived from the current account-data base. -/
+private def emitRbTreeKey4RotationHelpers (tag : String)
+    (linksBaseBytes parentBaseBytes strideBytes : Nat) : String :=
+  let rotateLeft := "function_" ++ tag ++ "_rotate_left"
+  let rotateRight := "function_" ++ tag ++ "_rotate_right"
+  let leftHasGrand := tag ++ "_rotl_has_grand"
+  let leftGrandRight := tag ++ "_rotl_grand_right"
+  let leftGrandDone := tag ++ "_rotl_grand_done"
+  let leftNoChild := tag ++ "_rotl_no_child"
+  let rightHasGrand := tag ++ "_rotr_has_grand"
+  let rightGrandRight := tag ++ "_rotr_grand_right"
+  let rightGrandDone := tag ++ "_rotr_grand_done"
+  let rightNoChild := tag ++ "_rotr_no_child"
+  s!"\
+{rotateLeft}:
+  ; args: r1=data, r2=x, r3=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  lsh64 r1, 32
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {leftNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftNoChild}:
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {leftHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {leftGrandDone}
+{leftHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {leftGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {leftGrandDone}
+{leftGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
+
+{rotateRight}:
+  ; args: r1=data, r2=x, r3=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  lsh64 r2, 32
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {rightNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightNoChild}:
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {rightHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {rightGrandDone}
+{rightHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {rightGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {rightGrandDone}
+{rightGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
+"
+
+private inductive RbTreeInsertPayload where
+  | key4 (key0 key1 key2 key3 : Ops.Val)
+  | traderDeposit (key0 key1 key2 key3 quoteLots baseLots : Ops.Val)
+  | order (bid : Bool) (price sequence traderIndex numBaseLots lastValidSlot
+      lastValidUnixTimestamp : Ops.Val)
+
+/-- Insert into a complete account-resident Sokoban red-black tree. Validation and every
+duplicate/full check precede the first store. The insertion search and fixup retain only bounded
+scalar indexes; the two local rotation helpers receive the account-data pointer and one-based
+indexes, and never expose pointers to persistent state. -/
+private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (payload : RbTreeInsertPayload) : Except String String := do
+  let loads ←
+    match payload with
+    | .key4 key0 key1 key2 key3 => do
+        let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
+        let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
+        let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
+        let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+        pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3)
+    | .traderDeposit key0 key1 key2 key3 quoteLots baseLots => do
+        let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
+        let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
+        let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
+        let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+        let loadQuote ← loadVal p quoteLots 40 4 s!"{label}_quote"
+        let loadBase ← loadVal p baseLots 48 5 s!"{label}_base"
+        pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3 ++ loadQuote ++ loadBase)
+    | .order _ price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp => do
+        let loadPrice ← loadVal p price 8 0 s!"{label}_price"
+        let loadSequence ← loadVal p sequence 16 1 s!"{label}_sequence"
+        let loadTrader ← loadVal p traderIndex 24 2 s!"{label}_trader"
+        let loadLots ← loadVal p numBaseLots 32 3 s!"{label}_lots"
+        let loadSlot ← loadVal p lastValidSlot 40 4 s!"{label}_slot"
+        let loadTimestamp ← loadVal p lastValidUnixTimestamp 48 5 s!"{label}_timestamp"
+        pure (loadPrice ++ loadSequence ++ loadTrader ++ loadLots ++ loadSlot ++ loadTimestamp)
+  let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
+  let validateStack :=
+    match payload with
+    | .key4 .. => 40
+    | .traderDeposit .. | .order .. => 56
+  let validateNonce :=
+    match payload with
+    | .key4 .. => 4
+    | .traderDeposit .. | .order .. => 6
+  let validate ←
+    match payload with
+    | .key4 .. | .traderDeposit .. =>
+        AccountStorage.Emit.emitQuery (accountStorageContext p)
+          (.key4RbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+            strideWords capacity)
+          #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+            .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+            .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
+          validateStack validateNonce s!"{label}_preflight"
+    | .order bid .. =>
+        AccountStorage.Emit.emitQuery (accountStorageContext p)
+          (.fifoRbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+            (keyBaseWord + 1) strideWords capacity bid)
+          #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+            .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+            .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
+          validateStack validateNonce s!"{label}_preflight"
+  let strideBytes := 8 * strideWords
+  let linksBaseBytes := 8 * linksBaseWord
+  let parentBaseBytes := 8 * parentBaseWord
+  let keyBaseBytes := 8 * keyBaseWord
+  let rootBytes := 8 * rootWord
+  let finalWord := linksBaseWord + strideWords - 1 + strideWords * (capacity - 1)
+  let requiredBytes := 8 * (Nat.max (rootWord + 3) finalWord + 1)
+  let keyRelativeBytes := keyBaseBytes - linksBaseBytes
+  let parentRelativeBytes := parentBaseBytes - linksBaseBytes
+  let clearNode := (List.range strideWords).foldl (init := "") fun text i =>
+    text ++ s!"  stxdw [r9 + {8 * i}], r1\n"
+  let tokenText :=
+    match payload with
+    | .key4 .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}"
+    | .traderDeposit .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:trader-deposit"
+    | .order bid .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:order:{bid}"
+  let token := IR.u64Hex (Core.IR.fnv1a64 tokenText)
+  let tag :=
+    match payload with
+    | .key4 .. => s!"rb4i_{token}"
+    | .traderDeposit .. => s!"rbtd_{token}"
+    | .order .. => s!"rboi_{token}"
+  let authFailure := tag ++ "_auth_failure"
+  let failure := tag ++ "_failure"
+  let full := tag ++ "_full"
+  let dataOk := tag ++ "_data_ok"
+  let searchLoop := tag ++ "_search_loop"
+  let searchBefore := tag ++ "_search_before"
+  let searchAfter := tag ++ "_search_after"
+  let searchNext := tag ++ "_search_next"
+  let searchDone := tag ++ "_search_done"
+  let freePath := tag ++ "_free_path"
+  let allocated := tag ++ "_allocated"
+  let attachRight := tag ++ "_attach_right"
+  let attached := tag ++ "_attached"
+  let firstRoot := tag ++ "_first_root"
+  let fixLoop := tag ++ "_fix_loop"
+  let fixLeft := tag ++ "_fix_left"
+  let fixRight := tag ++ "_fix_right"
+  let leftBlackUncle := tag ++ "_left_black_uncle"
+  let rightBlackUncle := tag ++ "_right_black_uncle"
+  let leftAligned := tag ++ "_left_aligned"
+  let rightAligned := tag ++ "_right_aligned"
+  let fixDone := tag ++ "_fix_done"
+  let publish := tag ++ "_publish"
+  let helpersDone := tag ++ "_helpers_done"
+  let shapeComment :=
+    match payload with
+    | .key4 .. => "four-word-key"
+    | .traderDeposit .. => "Phoenix trader deposit"
+    | .order true .. => "Phoenix bid order"
+    | .order false .. => "Phoenix ask order"
+  let sideCheck :=
+    match payload with
+    | .key4 .. | .traderDeposit .. => ""
+    | .order bid .. =>
+        s!"  ldxdw r1, [r10 - 16]\n  rsh64 r1, 63\n  jne r1, {if bid then 1 else 0}, {failure}\n"
+  let searchCompare :=
+    match payload with
+    | .key4 .. | .traderDeposit .. => s!"\
+  ldxdw r1, [r10 - 8]
+  be64 r1
+  ldxdw r3, [r8 + 0]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  be64 r1
+  ldxdw r3, [r8 + 8]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 24]
+  be64 r1
+  ldxdw r3, [r8 + 16]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 32]
+  be64 r1
+  ldxdw r3, [r8 + 24]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+"
+    | .order bid .. =>
+        let priceBefore := if bid then "jgt" else "jlt"
+        let priceAfter := if bid then "jlt" else "jgt"
+        s!"\
+  ldxdw r1, [r10 - 8]
+  ldxdw r3, [r8 + 0]
+  {priceBefore} r1, r3, {searchBefore}
+  {priceAfter} r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  ldxdw r3, [r8 + 8]
+  {priceBefore} r1, r3, {searchBefore}
+  {priceAfter} r1, r3, {searchAfter}
+"
+  let duplicate :=
+    match payload with
+    | .key4 .. => s!"  ; Duplicate registrations fail instead of replacing TraderState.\n  ja {failure}\n"
+    | .traderDeposit .. => s!"\
+  ; Existing trader: validate both additions before mutating either free balance.
+  ldxdw r1, [r8 + 40]
+  ldxdw r2, [r10 - 40]
+  mov64 r3, r1
+  add64 r3, r2
+  jlt r3, r1, {failure}
+  stxdw [r10 - 56], r3
+  ldxdw r1, [r8 + 56]
+  ldxdw r2, [r10 - 48]
+  mov64 r3, r1
+  add64 r3, r2
+  jlt r3, r1, {failure}
+  stxdw [r10 - 64], r3
+  ldxdw r1, [r10 - 56]
+  stxdw [r8 + 40], r1
+  ldxdw r1, [r10 - 64]
+  stxdw [r8 + 56], r1
+  ja {helpersDone}
+"
+    | .order .. => s!"\
+  ; Sokoban map semantics replace only the existing resting-order value.
+  ldxdw r1, [r10 - 24]
+  stxdw [r8 + 16], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r8 + 24], r1
+  ldxdw r1, [r10 - 40]
+  stxdw [r8 + 32], r1
+  ldxdw r1, [r10 - 48]
+  stxdw [r8 + 40], r1
+  ja {helpersDone}
+"
+  let initializePayload :=
+    match payload with
+    | .key4 .. => s!"\
+  ldxdw r1, [r10 - 8]
+  stxdw [r9 + {keyRelativeBytes}], r1
+  ldxdw r1, [r10 - 16]
+  stxdw [r9 + {keyRelativeBytes + 8}], r1
+  ldxdw r1, [r10 - 24]
+  stxdw [r9 + {keyRelativeBytes + 16}], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r9 + {keyRelativeBytes + 24}], r1
+"
+    | .traderDeposit .. => s!"\
+  ldxdw r1, [r10 - 8]
+  stxdw [r9 + {keyRelativeBytes}], r1
+  ldxdw r1, [r10 - 16]
+  stxdw [r9 + {keyRelativeBytes + 8}], r1
+  ldxdw r1, [r10 - 24]
+  stxdw [r9 + {keyRelativeBytes + 16}], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r9 + {keyRelativeBytes + 24}], r1
+  ldxdw r1, [r10 - 40]
+  stxdw [r9 + {keyRelativeBytes + 40}], r1
+  ldxdw r1, [r10 - 48]
+  stxdw [r9 + {keyRelativeBytes + 56}], r1
+"
+    | .order .. => s!"\
+  ldxdw r1, [r10 - 8]
+  stxdw [r9 + {keyRelativeBytes}], r1
+  ldxdw r1, [r10 - 16]
+  stxdw [r9 + {keyRelativeBytes + 8}], r1
+  ldxdw r1, [r10 - 24]
+  stxdw [r9 + {keyRelativeBytes + 16}], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r9 + {keyRelativeBytes + 24}], r1
+  ldxdw r1, [r10 - 40]
+  stxdw [r9 + {keyRelativeBytes + 32}], r1
+  ldxdw r1, [r10 - 48]
+  stxdw [r9 + {keyRelativeBytes + 40}], r1
+"
+  let rotateLeft := "function_" ++ tag ++ "_rotate_left"
+  let rotateRight := "function_" ++ tag ++ "_rotate_right"
+  let leftHasGrand := tag ++ "_rotl_has_grand"
+  let leftGrandRight := tag ++ "_rotl_grand_right"
+  let leftGrandDone := tag ++ "_rotl_grand_done"
+  let leftNoChild := tag ++ "_rotl_no_child"
+  let rightHasGrand := tag ++ "_rotr_has_grand"
+  let rightGrandRight := tag ++ "_rotr_grand_right"
+  let rightGrandDone := tag ++ "_rotr_grand_done"
+  let rightNoChild := tag ++ "_rotr_no_child"
+  let rotationHelpers := s!"\
+{rotateLeft}:
+  ; args: r1=data, r2=x, r3=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  ; Save x's old parent before connecting the pivot.
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  ; y links pointer and beta=y.left.
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  ; y.left=x.
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ; x.right=beta.
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  lsh64 r1, 32
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ; x.parent=y, preserving x color.
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ; beta.parent=x when beta is non-sentinel.
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {leftNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftNoChild}:
+  ; y.parent=old grandparent, preserving y color.
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {leftHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {leftGrandDone}
+{leftHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {leftGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {leftGrandDone}
+{leftGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
+
+{rotateRight}:
+  ; symmetric right rotation
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  ; y links pointer and beta=y.right.
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  ; y.right=x.
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  lsh64 r2, 32
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ; x.left=beta.
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ; x.parent=y, preserving x color.
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ; beta.parent=x when beta is non-sentinel.
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {rightNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightNoChild}:
+  ; y.parent=old grandparent, preserving y color.
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {rightHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {rightGrandDone}
+{rightHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {rightGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {rightGrandDone}
+{rightGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
+"
+  return loads ++ ownerCheck ++ s!"\
+  ; bounded account-resident {shapeComment} RB insertion
+  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} key={keyBaseWord} stride={strideWords} capacity={capacity}
+  ldxdw r1, [r10 - 216]
+  jne r1, 0, {authFailure}
+  ldxdw r8, [r10 - {headerStack acc}]
+  ldxb r1, [r8 + 2]
+  jeq r1, 0, {authFailure}
+  ldxdw r1, [r8 + 80]
+  lddw r2, {requiredBytes}
+  jge r1, r2, {dataOk}
+  ja {authFailure}
+{dataOk}:
+" ++ sideCheck ++ validate ++ s!"\
+  ldxdw r1, [r10 - {validateStack}]
+  jeq r1, 0, {failure}
+  ldxdw r8, [r10 - {headerStack acc}]
+  add64 r8, 88
+  stxdw [r10 - 248], r8
+  mov64 r9, r8
+  lddw r1, {rootBytes}
+  add64 r9, r1
+  ldxdw r1, [r9 + 0]
+  stxdw [r10 - 216], r1
+  ldxdw r1, [r9 + 16]
+  stxdw [r10 - 224], r1
+  ldxdw r1, [r9 + 24]
+  mov64 r2, r1
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 232], r2
+  rsh64 r1, 32
+  stxdw [r10 - 240], r1
+  ldxdw r1, [r10 - 216]
+  stxdw [r10 - 256], r1
+  lddw r1, 0
+  stxdw [r10 - 264], r1
+  stxdw [r10 - 272], r1
+  stxdw [r10 - 296], r1
+{searchLoop}:
+  ldxdw r2, [r10 - 256]
+  jeq r2, 0, {searchDone}
+  ldxdw r1, [r10 - 296]
+  lddw r3, {AccountStorage.rbTreeTraversalDepth}
+  jge r1, r3, {failure}
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {linksBaseBytes}
+  add64 r9, r4
+  add64 r8, {keyBaseBytes}
+  add64 r8, r4
+" ++ searchCompare ++ duplicate ++ s!"{searchBefore}:
+  lddw r1, 0
+  stxdw [r10 - 272], r1
+  ldxdw r1, [r9 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  ja {searchNext}
+{searchAfter}:
+  lddw r1, 1
+  stxdw [r10 - 272], r1
+  ldxdw r1, [r9 + 0]
+  rsh64 r1, 32
+{searchNext}:
+  stxdw [r10 - 264], r2
+  stxdw [r10 - 256], r1
+  ldxdw r1, [r10 - 296]
+  add64 r1, 1
+  stxdw [r10 - 296], r1
+  ja {searchLoop}
+{searchDone}:
+  ldxdw r1, [r10 - 224]
+  lddw r2, {capacity}
+  jge r1, r2, {full}
+  ldxdw r1, [r10 - 240]
+  ldxdw r2, [r10 - 232]
+  jne r1, r2, {freePath}
+  stxdw [r10 - 280], r2
+  add64 r2, 1
+  stxdw [r10 - 232], r2
+  stxdw [r10 - 240], r2
+  ja {allocated}
+{freePath}:
+  stxdw [r10 - 280], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 240], r1
+{allocated}:
+  ; Fully initialize the allocated slot before linking it into the tree.
+  ldxdw r2, [r10 - 280]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {linksBaseBytes}
+  add64 r9, r2
+  lddw r1, 0
+{clearNode}" ++ initializePayload ++ s!"\
+  ldxdw r1, [r10 - 264]
+  lddw r3, 1
+  lsh64 r3, 32
+  or64 r1, r3
+  stxdw [r9 + {parentRelativeBytes}], r1
+  ldxdw r1, [r10 - 264]
+  jeq r1, 0, {firstRoot}
+  sub64 r1, 1
+  lddw r3, {strideBytes}
+  mul64 r1, r3
+  add64 r8, {linksBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 272]
+  jne r1, 0, {attachRight}
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 280]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ja {attached}
+{attachRight}:
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 280]
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+{attached}:
+  ldxdw r1, [r10 - 280]
+  stxdw [r10 - 256], r1
+  lddw r1, 0
+  stxdw [r10 - 296], r1
+  ja {fixLoop}
+{firstRoot}:
+  ldxdw r1, [r10 - 280]
+  stxdw [r10 - 216], r1
+  lddw r1, 0
+  stxdw [r9 + {parentRelativeBytes}], r1
+  ja {publish}
+{fixLoop}:
+  ldxdw r1, [r10 - 296]
+  lddw r2, {AccountStorage.rbTreeTraversalDepth}
+  jge r1, r2, {failure}
+  add64 r1, 1
+  stxdw [r10 - 296], r1
+  ; parent and color of z
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  jeq r1, 0, {fixDone}
+  stxdw [r10 - 264], r1
+  ; Continue only when parent p is red, then load its parent g.
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r3, [r9 + 0]
+  mov64 r4, r3
+  rsh64 r4, 32
+  jeq r4, 0, {fixDone}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  jeq r3, 0, {fixDone}
+  stxdw [r10 - 288], r3
+  ; Determine whether p is grandparent.left.
+  sub64 r3, 1
+  lddw r4, {strideBytes}
+  mul64 r3, r4
+  add64 r8, {linksBaseBytes}
+  add64 r8, r3
+  ldxdw r4, [r8 + 0]
+  mov64 r2, r4
+  lsh64 r2, 32
+  rsh64 r2, 32
+  ldxdw r1, [r10 - 264]
+  jeq r1, r2, {fixLeft}
+  ja {fixRight}
+{fixLeft}:
+  ; Uncle is grandparent.right. Sentinel color is black.
+  rsh64 r4, 32
+  jeq r4, 0, {leftBlackUncle}
+  mov64 r2, r4
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r3, [r9 + 0]
+  rsh64 r3, 32
+  jeq r3, 0, {leftBlackUncle}
+  ; Red uncle: p and uncle black, grandparent red, then continue at grandparent.
+  ldxdw r1, [r10 - 288]
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  stxdw [r8 + 0], r1
+  stxdw [r9 + 0], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r2, 1
+  lsh64 r2, 32
+  or64 r3, r2
+  stxdw [r8 + 0], r3
+  stxdw [r10 - 256], r1
+  ja {fixLoop}
+{leftBlackUncle}:
+  ; Inner child: rotate p left and continue with z=old p.
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 256]
+  jne r1, r3, {leftAligned}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 264]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 264]
+  stxdw [r10 - 256], r1
+{leftAligned}:
+  ; Recompute p/g, recolor, and rotate g right.
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 264], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 288], r2
+  ; p becomes black while retaining g as its parent.
+  stxdw [r8 + 0], r2
+  ; g becomes red while retaining its own parent.
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r2, [r9 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  lddw r3, 1
+  lsh64 r3, 32
+  or64 r2, r3
+  stxdw [r9 + 0], r2
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 288]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+  ja {fixLoop}
+{fixRight}:
+  ; Uncle is grandparent.left. Sentinel color is black.
+  lsh64 r4, 32
+  rsh64 r4, 32
+  jeq r4, 0, {rightBlackUncle}
+  mov64 r2, r4
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r3, [r9 + 0]
+  rsh64 r3, 32
+  jeq r3, 0, {rightBlackUncle}
+  ldxdw r1, [r10 - 288]
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  stxdw [r8 + 0], r1
+  stxdw [r9 + 0], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r2, 1
+  lsh64 r2, 32
+  or64 r3, r2
+  stxdw [r8 + 0], r3
+  stxdw [r10 - 256], r1
+  ja {fixLoop}
+{rightBlackUncle}:
+  ; Inner child: rotate p right and continue with z=old p.
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 256]
+  jne r1, r3, {rightAligned}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 264]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 264]
+  stxdw [r10 - 256], r1
+{rightAligned}:
+  ; Recompute p/g, recolor, and rotate g left.
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 264], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 288], r2
+  ; p becomes black while retaining g as its parent.
+  stxdw [r8 + 0], r2
+  ; g becomes red while retaining its own parent.
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r2, [r9 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  lddw r3, 1
+  lsh64 r3, 32
+  or64 r2, r3
+  stxdw [r9 + 0], r2
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 288]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {fixLoop}
+{fixDone}:
+  ; Root parent/color is always the packed black sentinel.
+  ldxdw r2, [r10 - 216]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  lddw r1, 0
+  stxdw [r8 + 0], r1
+{publish}:
+  ldxdw r8, [r10 - 248]
+  lddw r1, {rootBytes}
+  add64 r8, r1
+  ldxdw r1, [r10 - 216]
+  stxdw [r8 + 0], r1
+  ldxdw r1, [r10 - 224]
+  add64 r1, 1
+  stxdw [r8 + 16], r1
+  ldxdw r1, [r10 - 240]
+  lsh64 r1, 32
+  ldxdw r2, [r10 - 232]
+  or64 r1, r2
+  stxdw [r8 + 24], r1
+  ja {helpersDone}
+{authFailure}:
+  lddw r0, 0x1
+  exit
+{failure}:
+  lddw r0, {overflowCode}
+  exit
+{full}:
+  lddw r0, 0x1003
+  exit
+" ++ rotationHelpers ++ s!"{helpersDone}:\n"
+
+private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Ops.Val) : Except String String :=
+  emitAccDataRbTreeInsert p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity (.key4 key0 key1 key2 key3)
+
+private def emitAccDataRbTreeTraderDeposit (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 quoteLots baseLots : Ops.Val) : Except String String :=
+  emitAccDataRbTreeInsert p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity (.traderDeposit key0 key1 key2 key3 quoteLots baseLots)
+
+private def emitAccDataRbTreeOrderInsert (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
+      capacity : Nat) (bid : Bool)
+    (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : Ops.Val) :
+    Except String String :=
+  if sequenceBaseWord != keyBaseWord + 1 then
+    .error "extract/unsupported: noncontiguous order key"
+  else
+    emitAccDataRbTreeInsert p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity (.order bid price sequence traderIndex numBaseLots lastValidSlot
+        lastValidUnixTimestamp)
+
+private inductive RbTreeRemoveKey where
+  | key4 (key0 key1 key2 key3 : Ops.Val)
+  | order (bid : Bool) (price sequence : Ops.Val)
+
+/-- Remove from a complete account-resident Sokoban red-black tree. Authentication and key lookup
+precede the first store. Ordinary source calls also run complete tree/free-list validation;
+component-owned bounded loops may reuse one dominating validator through `prevalidated`. The
+mutation follows Sokoban 0.3.0's predecessor transplant and delete-fixup exactly, then pushes the
+removed one-based slot onto the in-account free list without copying its key/value payload. -/
+private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key : RbTreeRemoveKey) (prevalidated : Bool := false)
+    (valueLoader : Ops.Val → Nat → Nat → String → Except String String :=
+      fun value stackOff nonce scope => loadVal p value stackOff nonce scope) :
+    Except String String := do
+  let loads ←
+    match key with
+    | .key4 key0 key1 key2 key3 => do
+        let loadKey0 ← valueLoader key0 8 0 s!"{label}_key0"
+        let loadKey1 ← valueLoader key1 16 1 s!"{label}_key1"
+        let loadKey2 ← valueLoader key2 24 2 s!"{label}_key2"
+        let loadKey3 ← valueLoader key3 32 3 s!"{label}_key3"
+        pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3)
+    | .order _ price sequence => do
+        let loadPrice ← valueLoader price 8 0 s!"{label}_price"
+        let loadSequence ← valueLoader sequence 16 1 s!"{label}_sequence"
+        pure (loadPrice ++ loadSequence)
+  let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
+  let validateStack := match key with | .key4 .. => 40 | .order .. => 24
+  let validateNonce := match key with | .key4 .. => 4 | .order .. => 2
+  let validate ←
+    if prevalidated then pure ""
+    else
+      match key with
+      | .key4 .. =>
+          AccountStorage.Emit.emitQuery (accountStorageContext p)
+            (.key4RbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+              strideWords capacity)
+            #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+              .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+              .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
+            validateStack validateNonce s!"{label}_preflight"
+      | .order bid .. =>
+          AccountStorage.Emit.emitQuery (accountStorageContext p)
+            (.fifoRbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+              (keyBaseWord + 1) strideWords capacity bid)
+            #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+              .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+              .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
+            validateStack validateNonce s!"{label}_preflight"
+  let strideBytes := 8 * strideWords
+  let linksBaseBytes := 8 * linksBaseWord
+  let parentBaseBytes := 8 * parentBaseWord
+  let keyBaseBytes := 8 * keyBaseWord
+  let rootBytes := 8 * rootWord
+  let finalWord := linksBaseWord + strideWords - 1 + strideWords * (capacity - 1)
+  let requiredBytes := 8 * (Nat.max (rootWord + 3) finalWord + 1)
+  let tokenText :=
+    match key with
+    | .key4 .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:remove"
+    | .order bid .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:order-remove:{bid}"
+  let token := IR.u64Hex (Core.IR.fnv1a64 tokenText)
+  let tag := match key with | .key4 .. => s!"rb4r_{token}" | .order .. => s!"rbor_{token}"
+  let authFailure := tag ++ "_auth_failure"
+  let failure := tag ++ "_failure"
+  let validateCheck :=
+    if prevalidated then ""
+    else s!"  ldxdw r1, [r10 - {validateStack}]\n  jeq r1, 0, {failure}\n"
+  let dataOk := tag ++ "_data_ok"
+  let searchLoop := tag ++ "_search_loop"
+  let searchBefore := tag ++ "_search_before"
+  let searchAfter := tag ++ "_search_after"
+  let searchNext := tag ++ "_search_next"
+  let found := tag ++ "_found"
+  let leaf := tag ++ "_leaf"
+  let leafRoot := tag ++ "_leaf_root"
+  let leafRight := tag ++ "_leaf_right"
+  let leafReady := tag ++ "_leaf_ready"
+  let onlyRight := tag ++ "_only_right"
+  let onlyLeft := tag ++ "_only_left"
+  let twoChildren := tag ++ "_two_children"
+  let predLoop := tag ++ "_pred_loop"
+  let predFound := tag ++ "_pred_found"
+  let predDirect := tag ++ "_pred_direct"
+  let predHasChild := tag ++ "_pred_has_child"
+  let removeAllocator := tag ++ "_remove_allocator"
+  let fixRoot := tag ++ "_fix_root"
+  let fixInit := tag ++ "_fix_init"
+  let fixDerive := tag ++ "_fix_derive"
+  let fixDeriveRight := tag ++ "_fix_derive_right"
+  let fixLoop := tag ++ "_fix_loop"
+  let siblingRight := tag ++ "_sibling_right"
+  let siblingReady := tag ++ "_sibling_ready"
+  let siblingBlack := tag ++ "_sibling_black"
+  let noSiblingChildren := tag ++ "_no_sibling_children"
+  let redRotateRight := tag ++ "_red_rotate_right"
+  let redRotated := tag ++ "_red_rotated"
+  let childLeftZero := tag ++ "_child_left_zero"
+  let childLeftDone := tag ++ "_child_left_done"
+  let childRightZero := tag ++ "_child_right_zero"
+  let childRightDone := tag ++ "_child_right_done"
+  let notBothBlack := tag ++ "_not_both_black"
+  let bothBlack := tag ++ "_both_black"
+  let bothBlackNoSibling := tag ++ "_both_black_no_sibling"
+  let fixFarLeft := tag ++ "_fix_far_left"
+  let farReady := tag ++ "_far_ready"
+  let farRed := tag ++ "_far_red"
+  let nearRight := tag ++ "_near_right"
+  let nearReady := tag ++ "_near_ready"
+  let nearBlackDone := tag ++ "_near_black_done"
+  let nearRotateLeft := tag ++ "_near_rotate_left"
+  let nearRotated := tag ++ "_near_rotated"
+  let setSiblingColor := tag ++ "_set_sibling_color"
+  let farAfterLeft := tag ++ "_far_after_left"
+  let farAfterReady := tag ++ "_far_after_ready"
+  let farAfterBlack := tag ++ "_far_after_black"
+  let finalRotateRight := tag ++ "_final_rotate_right"
+  let finalRotated := tag ++ "_final_rotated"
+  let fixCheck := tag ++ "_fix_check"
+  let fixNextRight := tag ++ "_fix_next_right"
+  let fixNextReady := tag ++ "_fix_next_ready"
+  let fixBlacken := tag ++ "_fix_blacken"
+  let publish := tag ++ "_publish"
+  let helpersDone := tag ++ "_helpers_done"
+  let rotateLeft := "function_" ++ tag ++ "_rotate_left"
+  let rotateRight := "function_" ++ tag ++ "_rotate_right"
+  let transplant := "function_" ++ tag ++ "_transplant"
+  let transplantRoot := tag ++ "_transplant_root"
+  let transplantRight := tag ++ "_transplant_right"
+  let transplantLinked := tag ++ "_transplant_linked"
+  let transplantNoSource := tag ++ "_transplant_no_source"
+  let transplantDone := tag ++ "_transplant_done"
+  let rotationHelpers := emitRbTreeKey4RotationHelpers tag
+    linksBaseBytes parentBaseBytes strideBytes
+  let shapeComment :=
+    match key with
+    | .key4 .. => "four-word-key"
+    | .order true .. => "Phoenix bid order"
+    | .order false .. => "Phoenix ask order"
+  let keyComment := match key with | .key4 .. => "key4" | .order .. => "key"
+  let sideCheck :=
+    match key with
+    | .key4 .. => ""
+    | .order bid .. =>
+        s!"  ldxdw r1, [r10 - 16]\n  rsh64 r1, 63\n  jne r1, {if bid then 1 else 0}, {failure}\n"
+  let searchCompare :=
+    match key with
+    | .key4 .. => s!"\
+  ldxdw r1, [r10 - 8]
+  be64 r1
+  ldxdw r3, [r8 + 0]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  be64 r1
+  ldxdw r3, [r8 + 8]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 24]
+  be64 r1
+  ldxdw r3, [r8 + 16]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 32]
+  be64 r1
+  ldxdw r3, [r8 + 24]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+"
+    | .order bid .. =>
+        let keyBefore := if bid then "jgt" else "jlt"
+        let keyAfter := if bid then "jlt" else "jgt"
+        s!"\
+  ldxdw r1, [r10 - 8]
+  ldxdw r3, [r8 + 0]
+  {keyBefore} r1, r3, {searchBefore}
+  {keyAfter} r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  ldxdw r3, [r8 + 8]
+  {keyBefore} r1, r3, {searchBefore}
+  {keyAfter} r1, r3, {searchAfter}
+"
+  let transplantHelper := s!"\
+{transplant}:
+  ; args: r1=data, r2=target, r3=source, r4=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  stxdw [r10 - 32], r4
+  sub64 r2, 1
+  lddw r5, {strideBytes}
+  mul64 r2, r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r5, [r5 + 0]
+  lsh64 r5, 32
+  rsh64 r5, 32
+  stxdw [r10 - 40], r5
+  jeq r5, 0, {transplantRoot}
+  sub64 r5, 1
+  lddw r2, {strideBytes}
+  mul64 r5, r2
+  add64 r1, {linksBaseBytes}
+  add64 r1, r5
+  ldxdw r2, [r1 + 0]
+  mov64 r4, r2
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  jne r4, r5, {transplantRight}
+  rsh64 r2, 32
+  lsh64 r2, 32
+  ldxdw r3, [r10 - 24]
+  or64 r2, r3
+  stxdw [r1 + 0], r2
+  ja {transplantLinked}
+{transplantRight}:
+  lsh64 r2, 32
+  rsh64 r2, 32
+  ldxdw r3, [r10 - 24]
+  lsh64 r3, 32
+  or64 r2, r3
+  stxdw [r1 + 0], r2
+{transplantLinked}:
+  ldxdw r3, [r10 - 24]
+  jeq r3, 0, {transplantNoSource}
+  sub64 r3, 1
+  lddw r2, {strideBytes}
+  mul64 r3, r2
+  ldxdw r1, [r10 - 8]
+  add64 r1, {parentBaseBytes}
+  add64 r1, r3
+  ldxdw r2, [r1 + 0]
+  rsh64 r2, 32
+  lsh64 r2, 32
+  ldxdw r5, [r10 - 40]
+  or64 r2, r5
+  stxdw [r1 + 0], r2
+{transplantNoSource}:
+  ldxdw r0, [r10 - 32]
+  exit
+{transplantRoot}:
+  ldxdw r3, [r10 - 24]
+  stxdw [r10 - 32], r3
+  jeq r3, 0, {transplantDone}
+  sub64 r3, 1
+  lddw r2, {strideBytes}
+  mul64 r3, r2
+  ldxdw r1, [r10 - 8]
+  add64 r1, {parentBaseBytes}
+  add64 r1, r3
+  ldxdw r2, [r1 + 0]
+  rsh64 r2, 32
+  lsh64 r2, 32
+  stxdw [r1 + 0], r2
+{transplantDone}:
+  ldxdw r0, [r10 - 32]
+  exit
+"
+  return loads ++ ownerCheck ++ s!"\
+  ; bounded account-resident {shapeComment} RB removal
+  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} {keyComment}={keyBaseWord} stride={strideWords} capacity={capacity}
+  ldxdw r1, [r10 - 216]
+  jne r1, 0, {authFailure}
+  ldxdw r8, [r10 - {headerStack acc}]
+  ldxb r1, [r8 + 2]
+  jeq r1, 0, {authFailure}
+  ldxdw r1, [r8 + 80]
+  lddw r2, {requiredBytes}
+  jge r1, r2, {dataOk}
+  ja {authFailure}
+{dataOk}:
+" ++ sideCheck ++ validate ++ validateCheck ++ s!"\
+  ldxdw r8, [r10 - {headerStack acc}]
+  add64 r8, 88
+  stxdw [r10 - 248], r8
+  mov64 r9, r8
+  lddw r1, {rootBytes}
+  add64 r9, r1
+  ldxdw r1, [r9 + 0]
+  stxdw [r10 - 216], r1
+  stxdw [r10 - 256], r1
+  ldxdw r1, [r9 + 16]
+  stxdw [r10 - 224], r1
+  ldxdw r1, [r9 + 24]
+  mov64 r2, r1
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 232], r2
+  rsh64 r1, 32
+  stxdw [r10 - 240], r1
+  lddw r1, 0
+  stxdw [r10 - 264], r1
+{searchLoop}:
+  ldxdw r2, [r10 - 256]
+  jeq r2, 0, {failure}
+  ldxdw r1, [r10 - 264]
+  lddw r3, {AccountStorage.rbTreeTraversalDepth}
+  jge r1, r3, {failure}
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {linksBaseBytes}
+  add64 r9, r4
+  add64 r8, {keyBaseBytes}
+  add64 r8, r4
+" ++ searchCompare ++ s!"  ja {found}\n{searchBefore}:
+  ldxdw r1, [r9 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  ja {searchNext}
+{searchAfter}:
+  ldxdw r1, [r9 + 0]
+  rsh64 r1, 32
+{searchNext}:
+  stxdw [r10 - 256], r1
+  ldxdw r1, [r10 - 264]
+  add64 r1, 1
+  stxdw [r10 - 264], r1
+  ja {searchLoop}
+{found}:
+  ldxdw r3, [r9 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 272], r1
+  rsh64 r3, 32
+  stxdw [r10 - 280], r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 288], r1
+  rsh64 r3, 32
+  stxdw [r10 - 296], r3
+  lddw r1, 0
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 272]
+  jne r1, 0, {twoChildren}
+  ldxdw r1, [r10 - 280]
+  jne r1, 0, {onlyRight}
+  ja {leaf}
+{twoChildren}:
+  ldxdw r1, [r10 - 280]
+  jeq r1, 0, {onlyLeft}
+  ; Find the predecessor (largest key in the left subtree).
+  ldxdw r1, [r10 - 272]
+  stxdw [r10 - 336], r1
+  lddw r1, 0
+  stxdw [r10 - 368], r1
+{predLoop}:
+  ldxdw r2, [r10 - 336]
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  rsh64 r1, 32
+  jeq r1, 0, {predFound}
+  stxdw [r10 - 336], r1
+  ldxdw r1, [r10 - 368]
+  add64 r1, 1
+  stxdw [r10 - 368], r1
+  lddw r2, {AccountStorage.rbTreeTraversalDepth}
+  jlt r1, r2, {predLoop}
+  ja {failure}
+{predFound}:
+  lsh64 r3, 32
+  rsh64 r3, 32
+  stxdw [r10 - 352], r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 344], r1
+  rsh64 r3, 32
+  stxdw [r10 - 360], r3
+  ldxdw r2, [r10 - 256]
+  jeq r1, r2, {predDirect}
+  ; Transplant predecessor with its only possible child.
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 336]
+  ldxdw r3, [r10 - 352]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ; predecessor.left = target.left, and target.left.parent = predecessor.
+  ldxdw r2, [r10 - 336]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 272]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 336]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 352]
+  jne r1, 0, {predHasChild}
+  lddw r1, 1
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 344]
+  stxdw [r10 - 312], r1
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+  ja {predHasChild}
+{predDirect}:
+  ldxdw r1, [r10 - 352]
+  jne r1, 0, {predHasChild}
+  lddw r1, 1
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 336]
+  stxdw [r10 - 312], r1
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+{predHasChild}:
+  ; Complete target -> predecessor transplant.
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  ldxdw r3, [r10 - 336]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ; predecessor.right = target.right, and target.right.parent = predecessor.
+  ldxdw r2, [r10 - 336]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 280]
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 280]
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 336]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ; predecessor takes the removed node's color while retaining its transplanted parent.
+  ldxdw r2, [r10 - 336]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 296]
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 352]
+  stxdw [r10 - 304], r1
+  ldxdw r1, [r10 - 360]
+  stxdw [r10 - 296], r1
+  ja {removeAllocator}
+{leaf}:
+  ldxdw r1, [r10 - 256]
+  ldxdw r2, [r10 - 216]
+  jeq r1, r2, {leafRoot}
+  lddw r1, 1
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 288]
+  stxdw [r10 - 312], r1
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 256]
+  jne r3, r1, {leafRight}
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+  ja {leafReady}
+{leafRight}:
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+{leafReady}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  lddw r3, 0
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  lddw r1, 0
+  stxdw [r10 - 304], r1
+  ja {removeAllocator}
+{leafRoot}:
+  lddw r1, 0
+  stxdw [r10 - 216], r1
+  stxdw [r10 - 304], r1
+  ja {removeAllocator}
+{onlyRight}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  ldxdw r3, [r10 - 280]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 280]
+  stxdw [r10 - 304], r1
+  ja {removeAllocator}
+{onlyLeft}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  ldxdw r3, [r10 - 272]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 272]
+  stxdw [r10 - 304], r1
+{removeAllocator}:
+  ; Clear all four registers, then push the removed address onto the free list. Key/value remain.
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  lddw r1, 0
+  stxdw [r9 + 0], r1
+  ldxdw r1, [r10 - 240]
+  stxdw [r8 + 0], r1
+  ldxdw r1, [r10 - 256]
+  stxdw [r10 - 240], r1
+  ldxdw r1, [r10 - 224]
+  sub64 r1, 1
+  stxdw [r10 - 224], r1
+  ldxdw r1, [r10 - 296]
+  jne r1, 0, {publish}
+  ldxdw r1, [r10 - 304]
+  ldxdw r2, [r10 - 216]
+  jeq r1, r2, {fixRoot}
+  ja {fixInit}
+{fixRoot}:
+  jeq r1, 0, {publish}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r8 + 0], r2
+  ja {publish}
+{fixInit}:
+  lddw r1, 0
+  stxdw [r10 - 368], r1
+  ldxdw r1, [r10 - 328]
+  jne r1, 0, {fixLoop}
+{fixDerive}:
+  ldxdw r2, [r10 - 304]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 312], r1
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 304]
+  jne r3, r1, {fixDeriveRight}
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+  ja {fixLoop}
+{fixDeriveRight}:
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+{fixLoop}:
+  ldxdw r1, [r10 - 368]
+  lddw r2, {AccountStorage.rbTreeTraversalDepth}
+  jge r1, r2, {failure}
+  add64 r1, 1
+  stxdw [r10 - 368], r1
+  ; sibling = parent.child(opposite(dir)).
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {siblingRight}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ja {siblingReady}
+{siblingRight}:
+  rsh64 r3, 32
+{siblingReady}:
+  stxdw [r10 - 376], r3
+  jeq r3, 0, {siblingBlack}
+  mov64 r2, r3
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  rsh64 r1, 32
+  jeq r1, 0, {siblingBlack}
+  ; Red sibling: sibling black, parent red, rotate parent toward the pivot.
+  lsh64 r3, 32
+  rsh64 r3, 32
+  stxdw [r8 + 0], r3
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r1, 1
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {redRotateRight}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {redRotated}
+{redRotateRight}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+{redRotated}:
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {siblingRight}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ja {siblingReady}
+{siblingBlack}:
+  ; Cache sibling children and their colors (sentinel is black).
+  ldxdw r2, [r10 - 376]
+  jeq r2, 0, {noSiblingChildren}
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 384], r1
+  rsh64 r3, 32
+  stxdw [r10 - 392], r3
+  jne r1, 0, {childLeftDone}
+{childLeftZero}:
+  lddw r1, 0
+  stxdw [r10 - 400], r1
+  ja {childRightZero}
+{childLeftDone}:
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r1, [r8 + 0]
+  rsh64 r1, 32
+  stxdw [r10 - 400], r1
+{childRightZero}:
+  ldxdw r1, [r10 - 392]
+  jne r1, 0, {childRightDone}
+  lddw r1, 0
+  stxdw [r10 - 408], r1
+  ja {notBothBlack}
+{childRightDone}:
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r1, [r8 + 0]
+  rsh64 r1, 32
+  stxdw [r10 - 408], r1
+  ja {notBothBlack}
+{noSiblingChildren}:
+  lddw r1, 0
+  stxdw [r10 - 384], r1
+  stxdw [r10 - 392], r1
+  stxdw [r10 - 400], r1
+  stxdw [r10 - 408], r1
+{notBothBlack}:
+  ldxdw r1, [r10 - 400]
+  jne r1, 0, {fixFarLeft}
+  ldxdw r1, [r10 - 408]
+  jne r1, 0, {fixFarLeft}
+  ja {bothBlack}
+{bothBlack}:
+  ldxdw r2, [r10 - 376]
+  jeq r2, 0, {bothBlackNoSibling}
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r1, 1
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+{bothBlackNoSibling}:
+  ldxdw r1, [r10 - 312]
+  stxdw [r10 - 304], r1
+  ja {fixCheck}
+{fixFarLeft}:
+  ; far child is sibling.child(opposite(dir)).
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {farReady}
+  ldxdw r1, [r10 - 408]
+  ja {farRed}
+{farReady}:
+  ldxdw r1, [r10 - 400]
+{farRed}:
+  jne r1, 0, {setSiblingColor}
+  ; Near child blackening and inner rotation.
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {nearRight}
+  ldxdw r1, [r10 - 384]
+  ja {nearReady}
+{nearRight}:
+  ldxdw r1, [r10 - 392]
+{nearReady}:
+  jeq r1, 0, {nearBlackDone}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r8 + 0], r2
+{nearBlackDone}:
+  ldxdw r2, [r10 - 376]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r1, 1
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {nearRotateLeft}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 376]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {nearRotated}
+{nearRotateLeft}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 376]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+{nearRotated}:
+  ; Refresh sibling after the inner rotation.
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {siblingRight}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ja {siblingReady}
+{setSiblingColor}:
+  ; sibling.color = parent.color, parent becomes black.
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  rsh64 r1, 32
+  lsh64 r3, 32
+  rsh64 r3, 32
+  stxdw [r8 + 0], r3
+  ldxdw r2, [r10 - 376]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ; Blacken the refreshed far child.
+  ldxdw r2, [r10 - 376]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {farAfterLeft}
+  rsh64 r3, 32
+  ja {farAfterReady}
+{farAfterLeft}:
+  lsh64 r3, 32
+  rsh64 r3, 32
+{farAfterReady}:
+  jeq r3, 0, {farAfterBlack}
+  sub64 r3, 1
+  lddw r1, {strideBytes}
+  mul64 r3, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r3
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r8 + 0], r1
+{farAfterBlack}:
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {finalRotateRight}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {finalRotated}
+{finalRotateRight}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+{finalRotated}:
+  ldxdw r1, [r10 - 216]
+  stxdw [r10 - 304], r1
+{fixCheck}:
+  ldxdw r1, [r10 - 304]
+  ldxdw r2, [r10 - 216]
+  jeq r1, r2, {fixBlacken}
+  jeq r1, 0, {fixBlacken}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  mov64 r1, r2
+  rsh64 r1, 32
+  jne r1, 0, {fixBlacken}
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 312], r2
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 304]
+  jne r3, r1, {fixNextRight}
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+  ja {fixNextReady}
+{fixNextRight}:
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+{fixNextReady}:
+  ja {fixLoop}
+{fixBlacken}:
+  ldxdw r1, [r10 - 304]
+  jeq r1, 0, {publish}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r8 + 0], r2
+{publish}:
+  ldxdw r8, [r10 - 248]
+  lddw r1, {rootBytes}
+  add64 r8, r1
+  ldxdw r1, [r10 - 216]
+  stxdw [r8 + 0], r1
+  ldxdw r1, [r10 - 224]
+  stxdw [r8 + 16], r1
+  ldxdw r1, [r10 - 240]
+  lsh64 r1, 32
+  ldxdw r2, [r10 - 232]
+  or64 r1, r2
+  stxdw [r8 + 24], r1
+  ja {helpersDone}
+{authFailure}:
+  lddw r0, 0x1
+  exit
+{failure}:
+  lddw r0, {overflowCode}
+  exit
+" ++ transplantHelper ++ rotationHelpers ++ s!"{helpersDone}:\n"
+
+private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Ops.Val) : Except String String :=
+  emitAccDataRbTreeRemove p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity (.key4 key0 key1 key2 key3)
+
+private def emitAccDataRbTreeOrderRemove (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
+      capacity : Nat) (bid : Bool) (price sequence : Ops.Val) : Except String String :=
+  if keyBaseWord + 1 != sequenceBaseWord then
+    .error "extract/unsupported: Phoenix order key words must be contiguous"
+  else
+    emitAccDataRbTreeRemove p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity (.order bid price sequence)
+
+/-- Compatibility adapter from the stable account-storage map vocabulary to the current in-place
+assembly routines. Operand shape is validated before emission; generic SVM Ops/IR never sees a
+trader/order-specific constructor. -/
+private def accountStorageMutationBackend (p : IR.Program) :
+    AccountStorage.Emit.MutationBackend where
+  emitInsert := fun label map key value existing =>
+    match map, key, value, existing with
+    | .key4 rootWord tree, #[key0, key1, key2, key3], #[], .reject =>
+        emitAccDataRbTreeKey4Insert p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity key0 key1 key2 key3
+    | .fifo rootWord tree, #[price, sequence],
+        #[traderIndex, numBaseLots, lastValidSlot, lastValidUnixTimestamp], .replace =>
+        emitAccDataRbTreeOrderInsert p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.price.firstWord
+          tree.sequence.firstWord tree.links.region.strideWords tree.links.region.capacity tree.bid
+          price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp
+    | _, _, _, _ => .error "extract/ir: malformed account-storage map insert"
+  emitRemove := fun label map key =>
+    match map, key with
+    | .key4 rootWord tree, #[key0, key1, key2, key3] =>
+        emitAccDataRbTreeKey4Remove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity key0 key1 key2 key3
+    | .fifo rootWord tree, #[price, sequence] =>
+        emitAccDataRbTreeOrderRemove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.price.firstWord
+          tree.sequence.firstWord tree.links.region.strideWords tree.links.region.capacity tree.bid
+          price sequence
+    | _, _ => .error "extract/ir: malformed account-storage map remove"
+  emitRemoveValidated := fun valueLoader label map key =>
+    match map, key with
+    | .key4 rootWord tree, #[key0, key1, key2, key3] =>
+        emitAccDataRbTreeRemove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity (.key4 key0 key1 key2 key3) true
+          valueLoader
+    | .fifo rootWord tree, #[price, sequence] =>
+        emitAccDataRbTreeRemove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.price.firstWord
+          tree.links.region.strideWords tree.links.region.capacity
+          (.order tree.bid price sequence) true valueLoader
+    | _, _ => .error "extract/ir: malformed validated account-storage map remove"
+  emitCheckedAdd := fun label map key delta =>
+    match map, key, delta with
+    | .key4 rootWord tree, #[key0, key1, key2, key3], #[delta0, delta1] =>
+        emitAccDataRbTreeTraderDeposit p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity key0 key1 key2 key3 delta0 delta1
+    | _, _, _ => .error "extract/ir: malformed account-storage checked add"
 
 private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
     Except String String := do
@@ -1762,6 +4119,17 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let invokeLabel := s!"{label}_{n}"
       n := n + 1
       acc := acc ++ (← emitInvoke p invokeLabel prog metas data seed bump)
+    | .component call =>
+      let storageLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++ (← Component.Emit.emitCall
+        { loadValue := fun value stackOff nonce scope =>
+            loadVal p value stackOff nonce scope
+          loadOwnerIsSelf := emitLoadOwnerIsSelf p
+          headerStack
+          accountCount := IR.cpiAccountCount p }
+        { accountStorage := accountStorageMutationBackend p }
+        storageLabel call)
     | .errorNamed name =>
       let code :=
         match name with
@@ -2391,15 +4759,16 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
     return s!"{label}:\n{head}{body}"
 
 private def emitDispatch (program : IR.Program) : Except String String := do
-  if program.methods.isEmpty then
+  let methods := program.methods.filter (·.entry.isGenerated)
+  if methods.isEmpty then
     throw "extract/unsupported: no methods"
   let mut out := "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n"
-  for i in [0:program.methods.size] do
-    let m := program.methods[i]!
+  for i in [0:methods.size] do
+    let m := methods[i]!
     let label := handlerLabel m
     let disc ← IR.discHex m
     let next :=
-      if i + 1 == program.methods.size then "err_unknown_disc"
+      if i + 1 == methods.size then "err_unknown_disc"
       else s!"dispatch_next_{label}"
     -- Conditional and unconditional jumps have a signed 16-bit instruction offset. Large
     -- programs can place handlers beyond that range, while local calls use a 32-bit offset.
@@ -2408,8 +4777,27 @@ private def emitDispatch (program : IR.Program) : Except String String := do
     if i == 0 then
       out := out ++ s!"  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
     else
-      out := out ++ s!"dispatch_next_{handlerLabel program.methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
+      out := out ++ s!"dispatch_next_{handlerLabel methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
   return out
+
+/-- Raw adapters have already located the actual instruction-data pointer in `r8`. Route generated
+discriminators from that pointer as well, so malformed protocol input cannot make a generated
+handler read static offsets derived from an executable program account's unrelated data size. -/
+private def emitGeneratedRoute (program : IR.Program) (err : String) : Except String String := do
+  let methods := program.methods.filter (·.entry.isGenerated)
+  let mut out := s!"  ldxdw r2, [r8 + 0]\n  jlt r2, 8, {err}\n  ldxdw r1, [r8 + 8]\n"
+  for i in [0:methods.size] do
+    let method := methods[i]!
+    let next := s!"raw_generated_next_{i}"
+    let disc ← IR.discHex method
+    out := out ++ s!"\
+  lddw r2, {disc}
+  jne r1, r2, {next}
+  call {handlerLabel method}
+  exit
+{next}:
+"
+  return out ++ s!"  ja {err}\n"
 
 private def emitRawSelfHandler (entry : Ops.RawSelfEntry) : String :=
   let (seedBytes, _) :=
@@ -2480,15 +4868,39 @@ def emitAsm (program : IR.Program) : Except String String := do
   unless IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
   let rawSelfEntry ← IR.rawSelfEntry? program
+  let rawMethods := program.methods.filterMap fun method =>
+    match method.entry with
+    | .generated => none
+    | .raw entry => some (method, entry)
+  if let some selfEntry := rawSelfEntry then
+    unless rawMethods.all (·.2.tag != selfEntry.tag.toNat) do
+      throw "extract/unsupported: raw method tag conflicts with signed self-entry tag"
+  let generatedProgram := IR.withAccountCount
+    { program with methods := program.methods.filter (·.entry.isGenerated) }
+    (IR.generatedAccountCount program)
   let marker ← IR.layoutMarkerHex program
-  let layout := IR.inputLayout program
-  let dispatch ← emitDispatch program
+  -- Static offsets only serve the generated ABI. Raw adapters always locate instruction data by
+  -- walking the actual bounded account list, so a program account never inherits state geometry.
+  let layout := IR.inputLayout generatedProgram
+  let dispatch ← emitDispatch generatedProgram
   let mut handlers := ""
   for m in program.methods do
-    handlers := handlers ++ (← emitHandler program marker m) ++ "\n"
+    match m.entry with
+    | .generated =>
+        handlers := handlers ++ (← emitHandler generatedProgram marker m) ++ "\n"
+    | .raw entry =>
+        let methodProgram := IR.withAccountCount { program with methods := #[m] } entry.accountCount
+        let body ← emitCFGBody methodProgram marker (handlerLabel m) m
+        let context : EntryAdapter.Emit.Context := {
+          headerStack
+          scalarLocalStackOff := scalarLocalStackOff methodProgram
+          walkAccounts := emitWalkAccounts
+          signerChecks := emitWalkSignerChecks
+        }
+        handlers := handlers ++ (← EntryAdapter.Emit.emitHandler context m entry) ++ body ++ "\n"
   let entryIx :=
-    if IR.usesWalk program then
-      let n := IR.cpiAccountCount program
+    if IR.usesWalk generatedProgram then
+      let n := IR.cpiAccountCount generatedProgram
       emitWalkAccounts n "entry" "err_unknown_disc" ++
         s!"  ldxdw r1, [r10 - {headerStack n}]\n  ldxdw r1, [r1 + 0]\n  jlt r1, 8, err_unknown_disc\n  ja dispatch_begin\n"
     else
@@ -2500,16 +4912,37 @@ def emitAsm (program : IR.Program) : Except String String := do
   ja dispatch_begin
 "
   let dispatchHead :=
-    if IR.usesWalk program then
-      s!"dispatch_begin:\n  ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount program)}]\n  add64 r1, 8\n  ldxdw r1, [r1 + 0]\n"
+    if IR.usesWalk generatedProgram then
+      s!"dispatch_begin:\n  ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount generatedProgram)}]\n  add64 r1, 8\n  ldxdw r1, [r1 + 0]\n"
     else
       "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n"
   -- emitDispatch 自己写了 dispatch_begin 头；transfer 要换掉。
   let dispatchTxt :=
-    if IR.usesWalk program then
+    if IR.usesWalk generatedProgram then
       dispatch.replace "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n" dispatchHead
     else dispatch
-  let rawJump := if rawSelfEntry.isSome then "  jeq r1, 1, raw_self_entry\n" else ""
+  let adapterRoutes := rawMethods.map fun (method, entry) => ({
+    label := handlerLabel method
+    tag := entry.tag
+    minDataLen := entry.minDataLen
+    maxDataLen := some entry.maxDataLen
+  } : EntryAdapter.Emit.Route)
+  let adapterRoutes :=
+    match rawSelfEntry with
+    | some entry => adapterRoutes.push {
+        label := "raw_self_entry"
+        tag := entry.tag.toNat
+        minDataLen := 1
+        maxDataLen := none
+      }
+    | none => adapterRoutes
+  let generatedRoute ← emitGeneratedRoute generatedProgram "err_unknown_disc"
+  let entryHead :=
+    if rawMethods.isEmpty then entryIx
+    else EntryAdapter.Emit.emitRoute adapterRoutes "raw_generated_entry" "err_unknown_disc" ++
+      "raw_generated_entry:\n" ++ generatedRoute
+  let rawJump :=
+    if rawMethods.isEmpty && rawSelfEntry.isSome then "  jeq r1, 1, raw_self_entry\n" else ""
   let rawHandler := rawSelfEntry.map emitRawSelfHandler |>.getD ""
   return s!"\
 ; SOLANA-LEAN-SBPF-ASM v0 (CFG-driven handler bodies)
@@ -2534,7 +4967,7 @@ def emitAsm (program : IR.Program) : Except String String := do
 entrypoint:
   mov64 r6, r1
   ldxdw r1, [r6 + NUM_ACCOUNTS]
-{rawJump}{entryIx}{rawHandler}err_unknown_disc:
+{rawJump}{entryHead}{rawHandler}err_unknown_disc:
   lddw r0, 1
   exit
 {dispatchTxt}

@@ -88,6 +88,41 @@
 | [l5-011](tasks/l5-011.md) | done | Phoenix-v1 bounded account-resident bid-root slot read |
 | [l5-012](tasks/l5-012.md) | done | Phoenix-v1 constant-memory bid-root child reciprocity/order gate |
 | [l5-013](tasks/l5-013.md) | done | Phoenix-v1 verifier Surfpool Loader-v3 transaction deployment |
+| [l5-014](tasks/l5-014.md) | done | Phoenix-v1 bounded parent-path reciprocity/cycle gate |
+| [l5-015](tasks/l5-015.md) | done | Phoenix-v1 fixed-memory whole bid tree + allocator partition |
+| [l5-016](tasks/l5-016.md) | done | Phoenix-v1 complete ask tree + ascending FIFO ordering |
+| [l5-017](tasks/l5-017.md) | done | Phoenix-v1 complete trader tree + 32-byte Pubkey ordering |
+| [l5-018](tasks/l5-018.md) | done | Phoenix-v1 bounded account-resident topology-word writes |
+| [l5-019](tasks/l5-019.md) | done | Phoenix-v1 exact first trader registration |
+| [l5-020](tasks/l5-020.md) | done | Phoenix-v1 exact second trader registration |
+| [l5-021](tasks/l5-021.md) | done | Phoenix-v1 exact third trader registration + full insertion fixups |
+| [l5-022](tasks/l5-022.md) | done | Phoenix-v1 exact fourth trader registration + red-uncle recolor |
+| [l5-023](tasks/l5-023.md) | done | Phoenix-v1 exact fifth trader registration + black-uncle rotations |
+| [l5-024](tasks/l5-024.md) | done | Phoenix-v1 general bounded trader insertion |
+| [l5-025](tasks/l5-025.md) | done | Phoenix-v1 general bounded trader removal |
+| [l5-026](tasks/l5-026.md) | done | Phoenix-v1 fixed-capacity bid/ask insertion |
+| [l5-027](tasks/l5-027.md) | done | Phoenix-v1 fixed-capacity bid/ask removal |
+| [l5-028](tasks/l5-028.md) | done | Phoenix-v1 fixed-capacity trader get-or-register deposit |
+| [l5-029](tasks/l5-029.md) | done | SVM account-resident storage backend boundary + word-store migration |
+| [l5-030](tasks/l5-030.md) | done | Bounded account-storage query bridge + parent-path migration |
+| [l5-031](tasks/l5-031.md) | done | FIFO RB-tree validator migration + reusable preflight composition |
+| [l5-032](tasks/l5-032.md) | done | Pubkey RB-tree validator migration + shared bounded topology |
+| [l5-033](tasks/l5-033.md) | done | Bounded account-storage map mutation vocabulary |
+| [l5-034](tasks/l5-034.md) | done | Bounded zero/one-based account-storage field reads |
+| [l5-035](tasks/l5-035.md) | done | Bounded Key4/FIFO account-storage RB map find |
+| [l5-036](tasks/l5-036.md) | done | Source-level bounded RB find + Phoenix validator composition |
+| [l5-037](tasks/l5-037.md) | done | Composed Phoenix ReduceOrderWithFreeFunds state transition |
+| [l5-038](tasks/l5-038.md) | done | Reusable packed SVM wire/account entry adapter |
+| [l5-039](tasks/l5-039.md) | done | Official Phoenix-v1 tag 5 ReduceOrderWithFreeFunds adapter |
+| [l5-040](tasks/l5-040.md) | done | Official Phoenix-v1 tag 4 ReduceOrder + Token withdrawal |
+| [l5-041](tasks/l5-041.md) | done | Storage-owned scalar-key ordered FIFO cursor |
+| [l5-042](tasks/l5-042.md) | done | Stable bounded SVM component bridge |
+| [l5-043](tasks/l5-043.md) | done | Bounded invocation-local audit recorder/batching |
+| [l5-044](tasks/l5-044.md) | done | Official Phoenix-v1 tags 6/7 CancelAll composition |
+| [l5-045](tasks/l5-045.md) | done | Bounded Borsh Option entry plans |
+| [l5-046](tasks/l5-046.md) | done | Official Phoenix-v1 tags 8/9 CancelUpTo composition |
+| [l5-047](tasks/l5-047.md) | done | Correct Phoenix market/order sequence domains |
+| [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 
 积压：[backlog.md](backlog.md)

@@ -53,3 +53,4 @@ import Examples.Const
 import Examples.Nested
 import Examples.Seat
 import Examples.Tree
+import Examples.RawEntry

@@ -46,6 +46,10 @@ pub fn instruction(
 }
 
 pub fn harness(name: &str, env_name: &str) -> (Pubkey, Mollusk) {
+    harness_at(name, env_name, Pubkey::new_unique())
+}
+
+pub fn harness_at(name: &str, env_name: &str, program_id: Pubkey) -> (Pubkey, Mollusk) {
     let path = PathBuf::from(env::var(env_name).unwrap_or_else(|_| {
         format!(
             "{}/build/sbpf/{name}.so",
@@ -54,7 +58,6 @@ pub fn harness(name: &str, env_name: &str) -> (Pubkey, Mollusk) {
                 .unwrap_or_else(|_| ".".into())
         )
     }));
-    let program_id = Pubkey::new_unique();
     let elf = fs::read(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let mut mollusk = Mollusk::default();
     mollusk.add_program_with_loader_and_elf(

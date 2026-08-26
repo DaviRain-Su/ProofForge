@@ -48,12 +48,56 @@ sBPF/.so   Yul/.bin             ← Mollusk / Anvil 工程门
 | `ProofForge.Core.Target` | 公共 Val/Op/Program 递归投影；静态 target registration 合同 | 具体 target extension case |
 | `ProofForge.Crypto` | 本机 SHA-256 / Keccak-256 | 链上 syscall |
 | `ProofForge.Svm.Runtime` / `Svm.Ops` / `Svm.IR` | Solana runtime surface、CPI/sysvar op、SVM projection registration、账户布局 | EVM storage/opcode |
+| `ProofForge.Svm.EntryAdapter` | packed wire、raw/generated dispatch、physical account prefix | 协议持久状态和容器算法 |
+| `ProofForge.Svm.AccountStorage` | 固定 geometry 的账户内 Region/Field、bounded Query/Call、读写 effect | transient heap、业务协议入口 |
+| `ProofForge.Svm.Heap` | 官方形状的 invocation-local bounded bump allocator 模型 | 持久 Map/Queue、raw pointer surface |
 | `ProofForge.Svm.ABI` | Solana discriminator / account / Loader V3 布局 | EVM selector/storage |
 | `ProofForge.Svm.Emit` | Ops → Loader V3 sBPF 文本 | Yul |
 | `ProofForge.Svm.Assemble` | 子进程调用 locked `sbpf` | FFI |
 | `ProofForge.Svm.Idl` | Solana IDL spec 0.1.0 | ABI JSON |
 | `ProofForge.Evm.Runtime` / `Evm.Ops` / `Evm.IR` | EVM runtime surface、opcode、EVM projection registration、storage slot、selector | Loader V3 / CPI |
 | `ProofForge.Evm.Emit` / `Evm.Assemble` | Yul / ABI / locked solc | sBPF / IDL |
+
+## SVM 组合边界
+
+Queue、Map、allocator 或具体协议 instruction 不是新的顶层指令集。它们按生命周期组合：
+
+```diagram
+┌──────────────────────┐
+│ 普通 Lean source 语义 │
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│ Core CFG / typed effect│  checked scalar、分支、effect ordering
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│ Svm.EntryAdapter      │  wire、账户前缀、raw/generated route
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│ Svm.AccountStorage    │  account-resident Map/Queue/allocator/tree
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│ target-owned backend │  frame、CPI/PDA/syscall、sBPF
+└──────────────────────┘
+
+┌──────────────────────┐
+│ Svm.Heap              │  bounded transient scratch only
+└──────────────────────┘
+```
+
+`AccountStorage.Region/Field` 固定 account/base/stride/capacity/index base，`Query/Call` 携带
+arity、geometry、canonical digest 与 transitive read/write effects。新容器能力优先扩展这套
+target-owned vocabulary；主 Extract/IR/Emit 只保留一个 generic storage bridge，不能出现
+Phoenix、订单类型或某个账户偏移的特判。PDA/CPI 只在遇到一种此前无法表达的链上字节形状
+时扩展通用 seed/word/meta vocabulary，而不是为协议 wrapper 增加 recipe opcode。
+
+持久内存和 transient heap 严格分离。官方 SVM allocator 的 `Vec`/`Box` 等 allocation 只在
+一次 invocation 内存活，默认 32 KiB、可请求到 256 KiB，向下 bump 且 `dealloc` 不回收；
+任何 native pointer/capacity 都不能写进账户。持久 Map/Queue 使用账户 bytes 上的固定容量
+index/offset/POD 视图，零或 one-based sentinel 由 descriptor 明确声明。
 
 ## 信任边界
 

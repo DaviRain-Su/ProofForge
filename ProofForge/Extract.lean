@@ -652,6 +652,15 @@ private def asPdaSeed (e : Expr) : Option Ops.PdaSeed :=
       | some (.lit i) => some (.accKey i.toNat)
       | _ => none
     else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.PdaSeed.accData || endsWith e ".accData" then
+    if e.getAppArgs.size ≥ 3 then
+      let args := e.getAppArgs
+      match asLit 8 args[args.size - 3]!, asLit 8 args[args.size - 2]!,
+          asLit 8 args[args.size - 1]! with
+      | some (.lit account), some (.lit offset), some (.lit length) =>
+          some (.accData account.toNat offset.toNat length.toNat)
+      | _, _, _ => none
+    else none
   else none
 
 private def asPdaSeeds (e : Expr) : Option (Array Ops.PdaSeed) := do
@@ -767,6 +776,9 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             .select .eq value (.lit 0) (.lit 1) (.lit 0)
         else if isConstNamed e ``Decidable.decide && e.getAppArgs.size ≥ 2 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!
+        else if (endsWith e ".svmByteSwap64" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.svmByteSwap64) && e.getAppArgs.size ≥ 1 then
+          (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.byteSwap64
         else if let some (_, unfolded) := unfoldUserHelper env e then
           match env.find? n with
           | some (.defnInfo info) =>
@@ -816,6 +828,15 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let w := word.toNat
             if Svm.Ops.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
+        else if endsWith e ".fifoCancelQuoteReleased" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelQuoteReleased then
+          some (.fifoCancelResult .quoteReleased)
+        else if endsWith e ".fifoCancelBaseReleased" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelBaseReleased then
+          some (.fifoCancelResult .baseReleased)
+        else if endsWith e ".fifoCancelEventCount" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelEventCount then
+          some (.fifoCancelResult .eventCount)
         else if (endsWith e ".accDataWord" || isConstNamed e ``ProofForge.Svm.Runtime.accDataWord) &&
             e.getAppArgs.size ≥ 2 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -844,6 +865,188 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               some (.accDataWordAt a b s c index)
             else none
           | _, _, _, _, _ => none
+        else if (endsWith e ".accDataWordAtOneBased" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAtOneBased) &&
+            e.getAppArgs.size ≥ 5 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
+              some (.lit capacity), some index =>
+            let query := Svm.AccountStorage.Query.readWordOneBased acc.toNat baseWord.toNat
+              strideWords.toNat capacity.toNat
+            if query.wellFormed then
+              some (.accDataWordAtOneBased acc.toNat baseWord.toNat strideWords.toNat
+                capacity.toNat index)
+            else none
+          | _, _, _, _, _ => none
+        else if (endsWith e ".accDataRbTreeKey4Find" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Find) &&
+            e.getAppArgs.size ≥ 11 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
+              some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit strideWords),
+              some (.lit capacity), some key0, some key1, some key2, some key3 =>
+            let query := Svm.AccountStorage.Query.key4FindOneBased acc.toNat rootWord.toNat
+              linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat strideWords.toNat
+              capacity.toNat
+            if query.wellFormed then
+              some (.accDataRbTreeKey4Find acc.toNat rootWord.toNat linksBaseWord.toNat
+                parentBaseWord.toNat keyBaseWord.toNat strideWords.toNat capacity.toNat
+                key0 key1 key2 key3)
+            else none
+          | _, _, _, _, _, _, _, _, _, _, _ => none
+        else if (endsWith e ".accDataRbTreeOrderFind" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderFind) &&
+            e.getAppArgs.size ≥ 11 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
+              some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit sequenceBaseWord),
+              some (.lit strideWords), some (.lit capacity), some (.lit bid),
+              some price, some sequence =>
+            let query := Svm.AccountStorage.Query.fifoFindOneBased acc.toNat rootWord.toNat
+              linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat
+              strideWords.toNat capacity.toNat (bid == 1)
+            if (bid == 0 || bid == 1) && query.wellFormed then
+              some (.accDataRbTreeOrderFind acc.toNat rootWord.toNat linksBaseWord.toNat
+                parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat strideWords.toNat
+                capacity.toNat (bid == 1) price sequence)
+            else none
+          | _, _, _, _, _, _, _, _, _, _, _ => none
+        else if (endsWith e ".accDataRbTreeOrderCursor" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderCursor) &&
+            e.getAppArgs.size ≥ 12 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
+              some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit sequenceBaseWord),
+              some (.lit strideWords), some (.lit capacity), some (.lit bid),
+              some hasCursor, some price, some sequence =>
+            let query := Svm.AccountStorage.Query.fifoCursorOneBased acc.toNat rootWord.toNat
+              linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat
+              strideWords.toNat capacity.toNat (bid == 1)
+            if (bid == 0 || bid == 1) && query.wellFormed then
+              some (.accDataRbTreeOrderCursor acc.toNat rootWord.toNat linksBaseWord.toNat
+                parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat strideWords.toNat
+                capacity.toNat (bid == 1) hasCursor price sequence)
+            else none
+          | _, _, _, _, _, _, _, _, _, _, _, _ => none
+        else if (endsWith e ".accDataParentPathValid" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataParentPathValid) &&
+            e.getAppArgs.size ≥ 9 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+              some (.lit strideWords), some (.lit capacity), some (.lit maxDepth),
+              some index, some root, some bumpIndex =>
+            let a := acc.toNat
+            let l := linksBaseWord.toNat
+            let p := parentBaseWord.toNat
+            let s := strideWords.toNat
+            let c := capacity.toNat
+            let d := maxDepth.toNat
+            if Svm.Ops.accInRange a && Svm.Ops.parentPathWordsInRange l p s c d then
+              some (.accDataParentPathValid a l p s c d index root bumpIndex)
+            else none
+          | _, _, _, _, _, _, _, _, _ => none
+        else if (endsWith e ".accDataRbTreeValid" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeValid) &&
+            e.getAppArgs.size ≥ 12 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+              some (.lit keyBaseWord), some (.lit sequenceBaseWord), some (.lit strideWords),
+              some (.lit capacity), some (.lit bid), some root, some size, some bumpIndex,
+              some freeListHead =>
+            let a := acc.toNat
+            let l := linksBaseWord.toNat
+            let p := parentBaseWord.toNat
+            let k := keyBaseWord.toNat
+            let q := sequenceBaseWord.toNat
+            let s := strideWords.toNat
+            let c := capacity.toNat
+            if Svm.Ops.accInRange a &&
+                Svm.Ops.rbTreeWordsInRange l p k q s c && (bid == 0 || bid == 1) then
+              some (.accDataRbTreeValid a l p k q s c (bid == 1)
+                root size bumpIndex freeListHead)
+            else none
+          | _, _, _, _, _, _, _, _, _, _, _, _ => none
+        else if (endsWith e ".accDataRbTreeKey4Valid" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Valid) &&
+            e.getAppArgs.size ≥ 10 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+              some (.lit keyBaseWord), some (.lit strideWords), some (.lit capacity),
+              some root, some size, some bumpIndex, some freeListHead =>
+            let a := acc.toNat
+            let l := linksBaseWord.toNat
+            let p := parentBaseWord.toNat
+            let k := keyBaseWord.toNat
+            let s := strideWords.toNat
+            let c := capacity.toNat
+            if Svm.Ops.accInRange a && Svm.Ops.rbTreeKey4WordsInRange l p k s c then
+              some (.accDataRbTreeKey4Valid a l p k s c
+                root size bumpIndex freeListHead)
+            else none
+          | _, _, _, _, _, _, _, _, _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
           match strip e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -1600,10 +1803,11 @@ private partial def valNodeCount : Ops.Val → Nat
   | .ext _ operands =>
       1 + operands.foldl (init := 0) fun total operand => total + valNodeCount operand
 
-/-- Materialize scalar source values whose substitution would duplicate bounded control flow. -/
+/-- Materialize scalar source values whose substitution would duplicate bounded control flow or
+re-evaluate a target read after a later effect. -/
 private def shouldMaterializeLocal (_type : Expr) (value : Ops.Val) : Bool :=
   match value with
-  | .field .. | .indexGet .. | .select .. => true
+  | .field .. | .indexGet .. | .select .. | .ext .. => true
   | value => valNodeCount value ≥ 1024
 
 private def localScalarValue? (env : Environment) (fuel : Nat) (value : Expr) : Option Ops.Val :=
@@ -2637,10 +2841,13 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.rentExemption n) => some (.rentExemption n)
             | some (.sha256Lit s) => some (.sha256Lit s)
             | some (.keccak256Lit s) => some (.keccak256Lit s)
+            | some (.byteSwap64 word) => some (.byteSwap64 word)
             | some (.accKeyWord a w) => some (.accKeyWord a w)
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
             | some (.accDataWord a w) => some (.accDataWord a w)
             | some (.accDataWordAt a b s c i) => some (.accDataWordAt a b s c i)
+            | some (.ext (.svm (.component query)) operands) =>
+                some (.ext (.svm (.component query)) operands)
             | some (.accLamportsN a) => some (.accLamportsN a)
             | some (.accDataLenN a) => some (.accDataLenN a)
             | some (.isSignerN a) => some (.isSignerN a)
@@ -2888,8 +3095,229 @@ private def asAsciiLit (e : Expr) : Option String :=
   | .lit (.strVal s) => if s.isEmpty then none else some s
   | _ => none
 
+private def asBatchRecorderWord : Ops.CpiWord → Option (Svm.BatchRecorder.Word Ops.Val)
+  | .u8le value => some (.u8le value)
+  | .u16le value => some (.u16le value)
+  | .u32le value => some (.u32le value)
+  | .u64le value => some (.u64le value)
+  | .ascii value => some (.ascii value)
+  | .programId => some .programId
+  | .accKey account => some (.accountKey account)
+  | .selfEntry .. => none
+
+private def decodeBatchRecorderWords (env : Environment) (e : Expr) :
+    Option (Array (Svm.BatchRecorder.Word Ops.Val)) := do
+  let expressions ← asArrayElems e
+  let mut words := #[]
+  for expression in expressions do
+    let word ← asCpiWord env expression >>= asBatchRecorderWord
+    words := words.push word
+  return words
+
+private def decodeBatchRecorderConfig (env : Environment)
+    (logAccountE selfEntryTagE authoritySeedE maxBytesE headerBytesE countOffsetE
+      maxRecordsE : Expr) : Option Svm.BatchRecorder.Config := do
+  let logAccount ← val env logAccountE >>= natOfVal
+  let selfEntryTag ← val env selfEntryTagE >>= natOfVal
+  let authoritySeed ← asAsciiLit authoritySeedE
+  let maxBytes ← val env maxBytesE >>= natOfVal
+  let headerBytes ← val env headerBytesE >>= natOfVal
+  let countOffset ← val env countOffsetE >>= natOfVal
+  let maxRecords ← val env maxRecordsE >>= natOfVal
+  return { logAccount, selfEntryTag, authoritySeed, maxBytes, headerBytes, countOffset, maxRecords }
+
+private def decodeBatchRecorderCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.batchRecorderBegin ||
+      endsWith e ".batchRecorderBegin" then
+    if args.size < 9 then none else do
+      let config ← decodeBatchRecorderConfig env
+        args[args.size - 9]! args[args.size - 8]! args[args.size - 7]!
+        args[args.size - 6]! args[args.size - 5]! args[args.size - 4]! args[args.size - 3]!
+      let header ← decodeBatchRecorderWords env args[args.size - 2]!
+      let bump ← val env args[args.size - 1]!
+      return .batchRecorder (.begin config header bump)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.batchRecorderAppend ||
+      endsWith e ".batchRecorderAppend" then
+    if args.size < 9 then none else do
+      let config ← decodeBatchRecorderConfig env
+        args[args.size - 9]! args[args.size - 8]! args[args.size - 7]!
+        args[args.size - 6]! args[args.size - 5]! args[args.size - 4]! args[args.size - 3]!
+      let enabled ← val env args[args.size - 2]!
+      let record ← decodeBatchRecorderWords env args[args.size - 1]!
+      return .batchRecorder (.append config enabled record)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.batchRecorderFinish ||
+      endsWith e ".batchRecorderFinish" then
+    if args.size < 7 then none else do
+      let config ← decodeBatchRecorderConfig env
+        args[args.size - 7]! args[args.size - 6]! args[args.size - 5]!
+        args[args.size - 4]! args[args.size - 3]! args[args.size - 2]! args[args.size - 1]!
+      return .batchRecorder (.finish config)
+  else none
+
+private def decodeFifoCancelCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelBegin ||
+      endsWith e ".fifoCancelBegin" then
+    some (.fifoCancel .begin)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelFinish ||
+      endsWith e ".fifoCancelFinish" then
+    some (.fifoCancel .finish)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelSide ||
+      endsWith e ".fifoCancelSide" then
+    if args.size < 25 then none else do
+      let marketAccount ← val env args[args.size - 25]! >>= natOfVal
+      let rootWord ← val env args[args.size - 24]! >>= natOfVal
+      let linksWord ← val env args[args.size - 23]! >>= natOfVal
+      let parentWord ← val env args[args.size - 22]! >>= natOfVal
+      let priceWord ← val env args[args.size - 21]! >>= natOfVal
+      let sequenceWord ← val env args[args.size - 20]! >>= natOfVal
+      let ownerWord ← val env args[args.size - 19]! >>= natOfVal
+      let sizeWord ← val env args[args.size - 18]! >>= natOfVal
+      let lockedWord ← val env args[args.size - 17]! >>= natOfVal
+      let freeWord ← val env args[args.size - 16]! >>= natOfVal
+      let orderStride ← val env args[args.size - 15]! >>= natOfVal
+      let orderCapacity ← val env args[args.size - 14]! >>= natOfVal
+      let traderStride ← val env args[args.size - 13]! >>= natOfVal
+      let traderCapacity ← val env args[args.size - 12]! >>= natOfVal
+      let bid ← val env args[args.size - 11]! >>= natOfVal
+      let baseLotsPerBaseUnitWord ← val env args[args.size - 10]! >>= natOfVal
+      let tickSizeWord ← val env args[args.size - 9]! >>= natOfVal
+      let recorder ← decodeBatchRecorderConfig env
+        args[args.size - 8]! args[args.size - 7]! args[args.size - 6]!
+        args[args.size - 5]! args[args.size - 4]! args[args.size - 3]! args[args.size - 2]!
+      let traderIndex ← val env args[args.size - 1]!
+      if bid != 0 && bid != 1 then none else
+      let bid := bid == 1
+      let access : Svm.AccountStorage.Access :=
+        { writable := true, currentProgramOwned := true }
+      let field (baseWord strideWords capacity : Nat) : Svm.AccountStorage.Field :=
+        { region :=
+            { account := marketAccount, baseWord, strideWords, capacity
+              indexBase := .one, access } }
+      let config : Svm.FifoCancel.Config :=
+        { map := .fifoOneBased marketAccount rootWord linksWord parentWord priceWord sequenceWord
+            orderStride orderCapacity bid
+          owner := field ownerWord orderStride orderCapacity
+          size := field sizeWord orderStride orderCapacity
+          locked := field lockedWord traderStride traderCapacity
+          free := field freeWord traderStride traderCapacity
+          collateral := if bid then .quote baseLotsPerBaseUnitWord tickSizeWord else .base
+          recorder }
+      if config.wellFormed then some (.fifoCancel (.cancelSide config traderIndex)) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelUpToSide ||
+      endsWith e ".fifoCancelUpToSide" then
+    if args.size < 29 then none else do
+      let marketAccount ← val env args[args.size - 29]! >>= natOfVal
+      let rootWord ← val env args[args.size - 28]! >>= natOfVal
+      let linksWord ← val env args[args.size - 27]! >>= natOfVal
+      let parentWord ← val env args[args.size - 26]! >>= natOfVal
+      let priceWord ← val env args[args.size - 25]! >>= natOfVal
+      let sequenceWord ← val env args[args.size - 24]! >>= natOfVal
+      let ownerWord ← val env args[args.size - 23]! >>= natOfVal
+      let sizeWord ← val env args[args.size - 22]! >>= natOfVal
+      let lockedWord ← val env args[args.size - 21]! >>= natOfVal
+      let freeWord ← val env args[args.size - 20]! >>= natOfVal
+      let orderStride ← val env args[args.size - 19]! >>= natOfVal
+      let orderCapacity ← val env args[args.size - 18]! >>= natOfVal
+      let traderStride ← val env args[args.size - 17]! >>= natOfVal
+      let traderCapacity ← val env args[args.size - 16]! >>= natOfVal
+      let bid ← val env args[args.size - 15]! >>= natOfVal
+      let baseLotsPerBaseUnitWord ← val env args[args.size - 14]! >>= natOfVal
+      let tickSizeWord ← val env args[args.size - 13]! >>= natOfVal
+      let recorder ← decodeBatchRecorderConfig env
+        args[args.size - 12]! args[args.size - 11]! args[args.size - 10]!
+        args[args.size - 9]! args[args.size - 8]! args[args.size - 7]! args[args.size - 6]!
+      let traderIndex ← val env args[args.size - 5]!
+      let tickLimit ← val env args[args.size - 4]!
+      let searchLimit ← val env args[args.size - 3]!
+      let cancelLimit ← val env args[args.size - 2]!
+      let claimImmediately ← val env args[args.size - 1]! >>= natOfVal
+      if (bid != 0 && bid != 1) || (claimImmediately != 0 && claimImmediately != 1) then none else
+      let bid := bid == 1
+      let access : Svm.AccountStorage.Access :=
+        { writable := true, currentProgramOwned := true }
+      let field (baseWord strideWords capacity : Nat) : Svm.AccountStorage.Field :=
+        { region :=
+            { account := marketAccount, baseWord, strideWords, capacity
+              indexBase := .one, access } }
+      let config : Svm.FifoCancel.Config :=
+        { map := .fifoOneBased marketAccount rootWord linksWord parentWord priceWord sequenceWord
+            orderStride orderCapacity bid
+          owner := field ownerWord orderStride orderCapacity
+          size := field sizeWord orderStride orderCapacity
+          locked := field lockedWord traderStride traderCapacity
+          free := field freeWord traderStride traderCapacity
+          collateral := if bid then .quote baseLotsPerBaseUnitWord tickSizeWord else .base
+          recorder }
+      if config.wellFormed then
+        some (.fifoCancel (.cancelUpTo config traderIndex tickLimit searchLimit cancelLimit
+          (claimImmediately == 1)))
+      else none
+  else none
+
+private def decodeComponentCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e
+
+/-- Find a bounded component call through ordinary source wrappers without exposing concrete
+component constructors to the generic extraction IR. -/
+private def findComponentCall (env : Environment) (fuel : Nat) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let rec go (fuel : Nat) (e : Expr) : Option (Svm.Component.Call Ops.Val) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      match decodeComponentCall env e with
+      | some call => some call
+      | none =>
+        let unfolded :=
+          match e.getAppFn.constName? with
+          | none => none
+          | some name =>
+            if name.getRoot != `ProofForge && !Attr.isInline env name then none
+            else
+              match env.find? name with
+              | some (.defnInfo info) =>
+                  if e.getAppArgs.isEmpty then some info.value
+                  else some (info.value.beta e.getAppArgs)
+              | _ => none
+        match unfolded with
+        | some body => go fuel' body
+        | none =>
+          match e with
+          | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+          | .lam _ _ body _ => go fuel' body
+          | .app fn arg => go fuel' fn <|> go fuel' arg
+          | _ => none
+  go fuel e
+
 private abbrev DecodedInvoke :=
   Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Array Ops.PdaSeed × Option Ops.Val
+
+private abbrev DecodedAccDataWordSetAt :=
+  Svm.AccountStorage.IndexBase × Nat × Nat × Nat × Nat × Ops.Val × Ops.Val
+
+private abbrev DecodedAccDataRbTreeKey4Insert :=
+  Nat × Nat × Nat × Nat × Nat × Nat × Nat × Ops.Val × Ops.Val × Ops.Val × Ops.Val
+
+private abbrev DecodedAccDataRbTreeKey4Remove := DecodedAccDataRbTreeKey4Insert
+
+private abbrev DecodedAccDataRbTreeTraderDeposit :=
+  Nat × Nat × Nat × Nat × Nat × Nat × Nat × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
+    Ops.Val × Ops.Val
+
+private abbrev DecodedAccDataRbTreeOrderInsert :=
+  Nat × Nat × Nat × Nat × Nat × Nat × Nat × Nat × Bool ×
+    Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val
+
+private abbrev DecodedAccDataRbTreeOrderRemove :=
+  Nat × Nat × Nat × Nat × Nat × Nat × Nat × Nat × Bool × Ops.Val × Ops.Val
 
 /-- Extracted static program, metas, data, non-bump signer seeds, and optional bump. -/
 private def decodeInvokeArgs (env : Environment) (e : Expr) :
@@ -2971,6 +3399,287 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
     go fuel e
   else none
 
+private def decodeAccDataWordSetAt (env : Environment) (e : Expr) :
+    Option DecodedAccDataWordSetAt :=
+  let e := strip e
+  let indexBase : Option Svm.AccountStorage.IndexBase :=
+    if isConstNamed e ``ProofForge.Svm.Runtime.accDataWordSetAtOneBased then some .one
+    else if isConstNamed e ``ProofForge.Svm.Runtime.accDataWordSetAt then some .zero
+    else none
+  if indexBase.isSome && e.getAppArgs.size ≥ 6 then
+    let args := e.getAppArgs
+    match val env args[args.size - 6]! >>= natOfVal,
+        val env args[args.size - 5]! >>= natOfVal,
+        val env args[args.size - 4]! >>= natOfVal,
+        val env args[args.size - 3]! >>= natOfVal,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some baseWord, some strideWords, some capacity, some index, some value =>
+        some (indexBase.get!, acc, baseWord, strideWords, capacity, index, value)
+    | _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataWordSetAt (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataWordSetAt :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataWordSetAt env e with
+      | some write => some write
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataWordSetAt env fuel' value <|> findAccDataWordSetAt env fuel' body
+          | .lam _ _ body _ => findAccDataWordSetAt env fuel' body
+          | .app fn arg =>
+              findAccDataWordSetAt env fuel' fn <|> findAccDataWordSetAt env fuel' arg
+          | _ => none
+
+private def decodeAccDataRbTreeKey4Insert (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeKey4Insert :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert &&
+      e.getAppArgs.size ≥ 11 then
+    let args := e.getAppArgs
+    match val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]! >>= natOfVal,
+        val env args[args.size - 5]! >>= natOfVal,
+        val env args[args.size - 4]!, val env args[args.size - 3]!,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some strideWords, some capacity, some key0, some key1, some key2, some key3 =>
+        some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+          capacity, key0, key1, key2, key3)
+    | _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeKey4Insert (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeKey4Insert :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeKey4Insert env e with
+      | some insert => some insert
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeKey4Insert env fuel' value <|>
+                findAccDataRbTreeKey4Insert env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeKey4Insert env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeKey4Insert env fuel' fn <|>
+                findAccDataRbTreeKey4Insert env fuel' arg
+          | _ => none
+
+private def decodeAccDataRbTreeKey4Remove (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeKey4Remove :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Remove &&
+      e.getAppArgs.size ≥ 11 then
+    let args := e.getAppArgs
+    match val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]! >>= natOfVal,
+        val env args[args.size - 5]! >>= natOfVal,
+        val env args[args.size - 4]!, val env args[args.size - 3]!,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some strideWords, some capacity, some key0, some key1, some key2, some key3 =>
+        some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+          capacity, key0, key1, key2, key3)
+    | _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeKey4Remove (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeKey4Remove :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeKey4Remove env e with
+      | some remove => some remove
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeKey4Remove env fuel' value <|>
+                findAccDataRbTreeKey4Remove env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeKey4Remove env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeKey4Remove env fuel' fn <|>
+                findAccDataRbTreeKey4Remove env fuel' arg
+          | _ => none
+
+private def decodeAccDataRbTreeTraderDeposit (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeTraderDeposit :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeTraderDeposit &&
+      e.getAppArgs.size ≥ 13 then
+    let args := e.getAppArgs
+    match val env args[args.size - 13]! >>= natOfVal,
+        val env args[args.size - 12]! >>= natOfVal,
+        val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]!, val env args[args.size - 5]!,
+        val env args[args.size - 4]!, val env args[args.size - 3]!,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some strideWords, some capacity, some key0, some key1, some key2, some key3,
+        some quoteLots, some baseLots =>
+        some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+          capacity, key0, key1, key2, key3, quoteLots, baseLots)
+    | _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeTraderDeposit (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeTraderDeposit :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeTraderDeposit env e with
+      | some deposit => some deposit
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeTraderDeposit env fuel' value <|>
+                findAccDataRbTreeTraderDeposit env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeTraderDeposit env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeTraderDeposit env fuel' fn <|>
+                findAccDataRbTreeTraderDeposit env fuel' arg
+          | _ => none
+
+private def decodeAccDataRbTreeOrderInsert (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeOrderInsert :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderInsert &&
+      e.getAppArgs.size ≥ 15 then
+    let args := e.getAppArgs
+    match val env args[args.size - 15]! >>= natOfVal,
+        val env args[args.size - 14]! >>= natOfVal,
+        val env args[args.size - 13]! >>= natOfVal,
+        val env args[args.size - 12]! >>= natOfVal,
+        val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]!, val env args[args.size - 5]!,
+        val env args[args.size - 4]!, val env args[args.size - 3]!,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some sequenceBaseWord, some strideWords, some capacity, some bid, some price,
+        some sequence, some traderIndex, some numBaseLots, some lastValidSlot,
+        some lastValidUnixTimestamp =>
+        if bid == 0 || bid == 1 then
+          some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, sequenceBaseWord,
+            strideWords, capacity, bid == 1, price, sequence, traderIndex, numBaseLots,
+            lastValidSlot, lastValidUnixTimestamp)
+        else none
+    | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeOrderInsert (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeOrderInsert :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeOrderInsert env e with
+      | some insert => some insert
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeOrderInsert env fuel' value <|>
+                findAccDataRbTreeOrderInsert env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeOrderInsert env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeOrderInsert env fuel' fn <|>
+                findAccDataRbTreeOrderInsert env fuel' arg
+          | _ => none
+
+private def decodeAccDataRbTreeOrderRemove (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeOrderRemove :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove &&
+      e.getAppArgs.size ≥ 11 then
+    let args := e.getAppArgs
+    match val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]! >>= natOfVal,
+        val env args[args.size - 5]! >>= natOfVal,
+        val env args[args.size - 4]! >>= natOfVal,
+        val env args[args.size - 3]! >>= natOfVal,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some sequenceBaseWord, some strideWords, some capacity, some bid, some price,
+        some sequence =>
+        if bid == 0 || bid == 1 then
+          some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, sequenceBaseWord,
+            strideWords, capacity, bid == 1, price, sequence)
+        else none
+    | _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeOrderRemove (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeOrderRemove :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeOrderRemove env e with
+      | some remove => some remove
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeOrderRemove env fuel' value <|>
+                findAccDataRbTreeOrderRemove env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeOrderRemove env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeOrderRemove env fuel' fn <|>
+                findAccDataRbTreeOrderRemove env fuel' arg
+          | _ => none
+
+/-- Distinguish an absent SVM component effect from one whose static shape or dynamic value failed
+to decode. Such a call must fail extraction rather than disappear. -/
+private def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
+  let constants := e.getUsedConstantsAsSet
+  if constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAt ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAtOneBased ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Remove ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeTraderDeposit ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderInsert ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove ||
+      constants.contains ``ProofForge.Svm.Runtime.batchRecorderBegin ||
+      constants.contains ``ProofForge.Svm.Runtime.batchRecorderAppend ||
+      constants.contains ``ProofForge.Svm.Runtime.batchRecorderFinish ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelBegin ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelSide ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelUpToSide ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelFinish then true
+  else
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+        match unfoldUserHelper env e with
+        | some (_, unfolded) => mentionsSvmEffect env fuel' unfolded
+        | none => false
+
 /-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
 ignored call needs explicit sequencing: recursive invoke search would otherwise retain the CPI
 but silently discard a following state write. -/
@@ -3008,7 +3717,8 @@ private def substLetsPreservingInvokes (env : Environment) (fuel : Nat) (e : Exp
         (ty.consumeMData.getAppFn.constName?.map (isUserType env)).getD false &&
           ((unfoldUserHelper env value).isSome || (userCtorFields env value).isSome ||
             isIteExpr value)
-      if (findInvoke env 16 value).isSome || structuredState || scalarBinding then
+      if (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
+          structuredState || scalarBinding then
         .letE n ty value body nd
       else substLetsPreservingInvokes env fuel' (body.instantiate1 value)
     | .lam n ty body bi => .lam n ty (substLetsPreservingInvokes env fuel' body) bi
@@ -3029,6 +3739,93 @@ private def invokeOps
 private def invokeOp (inv : DecodedInvoke) : Ops.Op :=
   let (prog, metas, data, seeds, bump) := inv
   .invoke prog metas data seeds bump
+
+private def accDataWordSetAtOp (write : DecodedAccDataWordSetAt) : Ops.Op :=
+  let (indexBase, acc, baseWord, strideWords, capacity, index, value) := write
+  match indexBase with
+  | .zero => .accDataWordSetAt acc baseWord strideWords capacity index value
+  | .one => .accDataWordSetAtOneBased acc baseWord strideWords capacity index value
+
+private def accDataRbTreeKey4InsertOp (insert : DecodedAccDataRbTreeKey4Insert) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+    capacity, key0, key1, key2, key3) := insert
+  .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
+    capacity key0 key1 key2 key3
+
+private def accDataRbTreeKey4RemoveOp (remove : DecodedAccDataRbTreeKey4Remove) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+    capacity, key0, key1, key2, key3) := remove
+  .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
+    capacity key0 key1 key2 key3
+
+private def accDataRbTreeTraderDepositOp
+    (deposit : DecodedAccDataRbTreeTraderDeposit) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+    capacity, key0, key1, key2, key3, quoteLots, baseLots) := deposit
+  .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
+    capacity key0 key1 key2 key3 quoteLots baseLots
+
+private def accDataRbTreeOrderInsertOp (insert : DecodedAccDataRbTreeOrderInsert) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, sequenceBaseWord,
+    strideWords, capacity, bid, price, sequence, traderIndex, numBaseLots, lastValidSlot,
+    lastValidUnixTimestamp) := insert
+  .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+    strideWords capacity bid price sequence traderIndex numBaseLots lastValidSlot
+    lastValidUnixTimestamp
+
+private def accDataRbTreeOrderRemoveOp (remove : DecodedAccDataRbTreeOrderRemove) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, sequenceBaseWord,
+    strideWords, capacity, bid, price, sequence) := remove
+  .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+    strideWords capacity bid price sequence
+
+/-- Preserve consecutive ignored SVM effects before decoding their state/return continuation.
+The final flag reports an external-account write that was present but could not be decoded. -/
+private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × Expr × Bool :=
+  let rec go (fuel : Nat) (e : Expr) (effects : Array Ops.Op) : Array Ops.Op × Expr × Bool :=
+    match fuel with
+    | 0 => (effects, e, false)
+    | fuel' + 1 =>
+      match strip e with
+      | .letE _ _ value body _ =>
+          if body.hasLooseBVar 0 then
+            match asPdaSeeds value with
+            | some _ => go fuel' (body.instantiate1 value) effects
+            | none => (effects, e, mentionsSvmEffect env 16 value)
+          else
+            match findComponentCall env 16 value with
+            | some call =>
+                go fuel' (body.instantiate1 value) (effects.push (.component call))
+            | none =>
+              match findInvoke env 16 value, findAccDataWordSetAt env 16 value,
+                  findAccDataRbTreeKey4Insert env 16 value,
+                  findAccDataRbTreeKey4Remove env 16 value,
+                  findAccDataRbTreeTraderDeposit env 16 value,
+                  findAccDataRbTreeOrderInsert env 16 value,
+                  findAccDataRbTreeOrderRemove env 16 value with
+              | some invoke, _, _, _, _, _, _ =>
+                  go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
+              | none, some write, _, _, _, _, _ =>
+                  go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
+              | none, none, some insert, _, _, _, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeKey4InsertOp insert))
+              | none, none, none, some remove, _, _, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeKey4RemoveOp remove))
+              | none, none, none, none, some deposit, _, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeTraderDepositOp deposit))
+              | none, none, none, none, none, some insert, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeOrderInsertOp insert))
+              | none, none, none, none, none, none, some remove =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeOrderRemoveOp remove))
+              | none, none, none, none, none, none, none =>
+                  (effects, e, mentionsSvmEffect env 16 value)
+      | _ => (effects, e, false)
+  go 32 e #[]
 
 /-- `.ok (state, ret)` 的第二元。找不到就 none。 -/
 private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
@@ -3076,6 +3873,8 @@ private def invokeRet
   -- the token program may occupy any authenticated external account index.
   | (_, _, #[.u8le (.lit 12), .u64le amount, .u8le _], #[], none) => .ok amount
   | (_, _, #[.u8le (.lit 12), .u64le amount, .u8le _], _, some _) => .ok amount
+  | (_, _, #[.u8le (.lit 3), .u64le amount], #[], none) => .ok amount
+  | (_, _, #[.u8le (.lit 3), .u64le amount], _, some _) => .ok amount
   | (3, _, #[.u8le (.lit 14), .u64le amount, .u8le _], #[], none) => .ok amount
   | (3, _, #[.u8le (.lit 15), .u64le amount, .u8le _], #[], none) => .ok amount
   | (3, _, #[.u8le (.lit 18), .accKey 0], #[], none) => .ok (.lit 0)
@@ -3088,8 +3887,10 @@ private def invokeRet
   | (2, _, #[.u8le (.lit 21)], #[], none) => .ok .cpiReturn
   | (1, _, #[.ascii "ok"], #[], none) => .ok (.lit 0)
   | (6, _, #[.u8le (.lit 1)], #[], none) => .ok (.lit 0)
-  | (programIx, _, _, _, _) =>
-      .error s!"extract/unsupported: unknown CPI return semantics for program {programIx}"
+  | (programIx, _, data, _, _) =>
+      match data[0]? with
+      | some (ProofForge.Svm.Ops.CpiWord.selfEntry ..) => .ok (.lit 0)
+      | _ => .error s!"extract/unsupported: unknown CPI return semantics for program {programIx}"
 
 private def invokeOpsWithRet
     (env : Environment) (e : Expr)
@@ -4575,7 +5376,8 @@ private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr 
     match strip e with
     | .letE _ _ value body _ =>
         let effectful :=
-          (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
+          (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
+            (decodeEvmEffect env value).isSome ||
             (findForIn env value).isSome || (findForBodyExpr env value).isSome
         -- A scalar captured before a CPI must remain a local: substituting its state-field read
         -- through the call can move that read after a later state write.
@@ -5208,7 +6010,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) (stateType? : Option Name := none) (deepScalars : Bool := false) :
     Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
-  if let some inv := findInvoke env 16 e then
+  if let some call := findComponentCall env 16 e then
+    .ok #[.component call, .returnU64 (.lit 0)]
+  else if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
   else if let some ops := decodeEvmEffect env e then
     match asStoreFields env e true with
@@ -5302,7 +6106,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .accLamports1 | .accOwner1 | .accDataLen1
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
+    | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
+    | .ext (.svm (.component _)) _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
@@ -5368,8 +6174,23 @@ private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
     | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
     | .checkedDivU64 .. | .checkedModU64 .. =>
         lowered := lowered.push op
+    | .ext _ =>
+        -- Target effects can precede a scalar success just like checked arithmetic. Preserve
+        -- them in order; their own backend contracts fail closed before the join continuation.
+        lowered := lowered.push op
     | _ => return none
   return some (lowered, hadSuccess, false)
+
+/-- The return of an ignored scalar helper is not a method return. Keep its branch structure and
+effects, but splice the caller's continuation after every successful helper path. -/
+private partial def dropIgnoredScalarTerminals (ops : Array Ops.Op) : Array Ops.Op :=
+  ops.filterMap fun op =>
+    match op with
+    | .returnU64 _ | .okState _ => none
+    | .ite cmp lhs rhs thn els =>
+        some (.ite cmp lhs rhs (dropIgnoredScalarTerminals thn) (dropIgnoredScalarTerminals els))
+    | .forBody n body => some (.forBody n (dropIgnoredScalarTerminals body))
+    | op => some op
 
 /-- A bind enclosing a loop belongs to the surrounding monadic control flow and must be decoded
 before loop discovery. Binds inside the callback body are part of that iteration and do not hide
@@ -5401,8 +6222,14 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
-    let (invokes, continuation) := leadingInvokes env e
-    if !invokes.isEmpty then
+    -- Do-notation over a branch-selected inline helper can leave a head beta redex after the bind
+    -- result is replaced by a lexical marker. Normalize that language-level composition before
+    -- looking for effects or control flow; this keeps helper composition out of target Ops/Emit.
+    let e := e.headBeta
+    let (effects, continuation, malformedWrite) := leadingSvmEffects env e
+    if malformedWrite then
+      return .error "extract/unsupported: external account write operands"
+    if !effects.isEmpty then
       match decodeExpr env fuel' continuation (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth)
           (stateType? := stateType?) (deepScalars := deepScalars) with
@@ -5410,9 +6237,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let continuationOps :=
             if Ops.hasStoreField decodedOps || Ops.hasIndexSet decodedOps then decodedOps
             else (asStoreFields env continuation true).getD decodedOps
-          return .ok (invokes.map invokeOp ++ continuationOps)
+          return .ok (effects ++ continuationOps)
       | .error reason =>
-          return .error s!"extract/unsupported: invoke sequence continuation: {reason}"
+          return .error s!"extract/unsupported: SVM effect sequence continuation: {reason}"
     let stripped := strip e
     if isConstNamed stripped ``Id.run then
       if let some guarded := guardedRunBody? 64 stripped then
@@ -5421,8 +6248,29 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           (stateType? := stateType?) (deepScalars := deepScalars)
     match strip e with
     | .letE _ ty value body _ =>
+      let ignoredInlineEffect :=
+        if body.hasLooseBVar 0 then false
+        else
+          match unfoldUserHelper env value with
+          | some (_, unfolded) =>
+              mentionsSvmRuntime unfolded || (findInvoke env 64 unfolded).isSome ||
+                mentionsSvmEffect env 64 unfolded
+          | none => false
+      if ignoredInlineEffect then
+        match decodeExpr env fuel' value (preserveLocals := preserveLocals)
+              (localDepth := localDepth) (stateType? := stateType?)
+              (deepScalars := deepScalars),
+            decodeExpr env fuel' (body.instantiate1 value) (stateful := stateful)
+              (preserveLocals := preserveLocals) (localDepth := localDepth)
+              (stateType? := stateType?) (deepScalars := deepScalars) with
+        | .ok helperOps, .ok continuationOps =>
+            return .ok (dropIgnoredScalarTerminals helperOps ++ continuationOps)
+        | .error reason, _ =>
+            return .error s!"extract/unsupported: inline effect helper: {reason}"
+        | _, .error reason => return .error reason
       let effectful :=
-        (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
+        (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
+          (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       if !effectful then
         if let some source := sequentialStateSource? env ty value stateType? then
@@ -5534,6 +6382,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
       -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
+    else if let some call := findComponentCall env 16 e then
+      return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
     else if let some ops := decodeEvmEffect env e then
@@ -5632,6 +6482,24 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let structuredThen := containsStructuredStateLet env 2048 t ||
             containsInlineStateTransition env 2048 t
           if let .ok thn := decodedThen then
+            let rec hasAccDataWrite (fuel : Nat) (ops : Array Ops.Op) : Bool :=
+              match fuel with
+              | 0 => false
+              | fuel' + 1 => ops.any fun op =>
+                  match op with
+                  | .ext (.svm (.component call)) => !call.effects.writes.isEmpty
+                  | .ite _ _ _ nestedThen nestedElse =>
+                      hasAccDataWrite fuel' nestedThen || hasAccDataWrite fuel' nestedElse
+                  | .forBody _ body => hasAccDataWrite fuel' body
+                  | _ => false
+            -- A decoded external-account write is the branch's observable effect. Prefer the
+            -- recursively decoded sequence over `asStoreFields`, which only sees the final state
+            -- value and would otherwise erase ignored writes preceding `.ok`.
+            if hasAccDataWrite 8 thn then
+              match asCmp env condE with
+              | some (cmp, lv, rv) =>
+                  return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+              | none => pure ()
             let rec invokeCount (fuel : Nat) (ops : Array Ops.Op) : Nat :=
               match fuel with
               | 0 => 0
@@ -5758,6 +6626,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | some (lhs, rhs), .error _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
+          | some _, .error reason, none, none =>
+            return .error s!"extract/unsupported: checked-mul continuation: {reason}"
           | _, _, _, _ => return .error "extract/unsupported: ite then/mul"
         else if let some condE := findBy args (fun a =>
             checkedSubMatches a && (collectIndexSets env t).isEmpty) then
@@ -5863,6 +6733,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           return .error (if stateful then s!"state loop else: {r}" else s!"ite else: {r}")
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
+    else if let some call := decodeComponentCall env e <|> findComponentCall env 8 e then
+      return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       return invokeOpsWithRet env e inv
     else if let some (name, unfolded) := unfoldUserHelper env e then
@@ -5996,15 +6868,18 @@ def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false)
   -- Canonicalize syntax-only aliases around control flow before shape decoding.
   -- A method with structured-State sequencing also retains adjacent scalar lets so `decodeExpr`
   -- can materialize bounded lookups instead of duplicating them through every later projection.
-  -- Ordinary mutating methods keep their established zeta-normalized Core identity.
+  -- Account effects need the same lexical boundary: a value captured before a write or CPI must
+  -- not be substituted into that later effect and re-read after the mutation.
   let hasStructuredState := containsStructuredStateLet env 128 body
-  let retainLets := hasStructuredState
+  let hasSequencedSvmEffects := mentionsSvmEffect env 128 body
+  let retainLets := hasStructuredState || hasSequencedSvmEffects
   let fullySubstituted := if retainLets then body else substLets 256 body
   let body :=
     if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
     else if retainLets then body else zetaPureHeadLets env 32 body
   let body := if retainLets then body else substIteLets 256 body
-  decodeExpr env 128 body (preserveLocals := preserveLocals) (stateType? := stateType?)
+  decodeExpr env 128 body (preserveLocals := preserveLocals || hasSequencedSvmEffects)
+    (stateType? := stateType?)
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
@@ -6210,7 +7085,10 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
       | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
+      | .byteSwap64 word => .byteSwap64 (flipVal fuel' word)
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
+      | .ext (.svm (.component query)) operands =>
+          .ext (.svm (.component query)) (operands.map (flipVal fuel'))
       | .checkPda s b => .checkPda s (flipVal fuel' b)
       | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
       | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
@@ -6258,6 +7136,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .invoke prog metas data seed bump =>
         .invoke prog metas (data.map (·.map (flipVal fuel')))
           seed (bump.map (flipVal fuel'))
+      | .ext (.svm (.component call)) =>
+          .ext (.svm (.component (call.mapValues (flipVal fuel'))))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           .evmDeposit256 (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2) (flipVal fuel' a3)
@@ -6409,9 +7289,10 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           match op with | .returnU64 _ => acc + 1 | _ => acc
         if nRet = 0 then 1 else nRet
     | _ => 1
+  let annotations := (Attr.svmRawEntries env n).map (·.annotation)
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
-    paramCount, paramWidths, retWidths, retCount, sketch, ops
+    paramCount, paramWidths, retWidths, retCount, annotations, sketch, ops
   }
 
 private def isUInt64Type (e : Expr) : Bool :=
@@ -6604,7 +7485,7 @@ def inferSlots (env : Environment) (initName : Name) : Except String (Array Core
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
   return (← inferSlots env initName).map (·.name)
 
-private def valFields : Ops.Val → Array String
+private partial def valFields : Ops.Val → Array String
   | .field (.arg _) n =>
       if n == "w0" || n == "w1" || n == "w2" || n == "w3" then #[] else #[n]
   | .field (.local _) n =>
@@ -6621,7 +7502,9 @@ private def valFields : Ops.Val → Array String
   | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
   | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
   | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => #[]
+  | .byteSwap64 word => valFields word
   | .accDataWordAt _ _ _ _ i => valFields i
+  | .ext (.svm (.component _)) operands => operands.flatMap valFields
   | .checkPda _ b => valFields b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valFields l ++ valFields r
@@ -6653,6 +7536,7 @@ private def opFields : Ops.Op → Array String
   | .invoke _ _ data _ bump =>
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
+  | .ext (.svm (.component call)) => call.values.flatMap valFields
   | .evmDeposit v => valFields v
   | .evmDeposit256 a0 a1 a2 a3 =>
       valFields a0 ++ valFields a1 ++ valFields a2 ++ valFields a3
@@ -6831,6 +7715,8 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
                 let normalized ← normalizeVal value
                 pure (word.map fun _ => normalized)
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
+      | .ext (.svm (.component call)) =>
+          return .ext (.svm (.component (← call.mapValuesM normalizeVal)))
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           return .evmDeposit256 (← normalizeVal a0) (← normalizeVal a1)
@@ -6993,6 +7879,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .invoke _ _ data _ bump =>
       (data.findSome? fun word => word.value?.bind (valEscapedArg limit)) <|>
         bump.bind (valEscapedArg limit)
+  | .ext (.svm (.component call)) =>
+      call.values.findSome? (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].findSome? (valEscapedArg limit)
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)

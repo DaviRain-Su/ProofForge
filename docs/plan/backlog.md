@@ -5,6 +5,9 @@
 
 ## 已做
 
+- **当前可验证基线（2026-08-26）**：Lean 汇总 207 jobs；SVM manifest 全 51 programs；
+  Phoenix-v1 profile 60/60、全 Mollusk 266/266；Anvil 12/12；Surfpool 1.5.0 的当前
+  Phoenix-v1 profile Loader-v3 部署门见 P5 第四十段记录。
 - S0–S5：普通 Lean Counter 竖切到 Mollusk
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
@@ -72,9 +75,12 @@
 
 ## 当前状态
 
-- `lake build Tests` 当前 192 jobs；70 个 imported test modules 含 860 个 `#guard` / `#guard_msgs`。
-- SVM registry 50 个程序 / 50 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量 `pf build` 与 Mollusk 202/202 当前通过。
-- EVM registry 13 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase / Wide 的 Anvil 总门。E-ADDR：`Addr20` 是一等类型，ABI 编成一个 `address`。E-U256：显式 `UInt256` + checked add/sub/mul，ABI 一个 `uint256`；默认算术仍是 `UInt64`。
+- `lake build Tests` 当前 211 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+  `pf build` 与 Mollusk 271/271 当前通过；其中 Phoenix-v1 profile 为 65/65。
+- EVM registry 13 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault /
+  Ownable / Token / Window / Phase / Wide 均进入 Anvil 总门。`Addr20` 是一等 ABI `address`；
+  显式 `UInt256` 使用 checked add/sub/mul 和 ABI `uint256`，默认算术仍是 `UInt64`。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
 - P4 通用压缩 / Loader-v3 部署资格：Core `shareBlocks` 从相邻比较升级为全图 fingerprint 分桶 + 精确结构相等，已知 redirect 先归一化；collision 不会错误共享。Phoenix CFG 6,128 → 5,151 blocks；实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 10,642,331 bytes，ELF 3,429,336 bytes，IDL 19,626 bytes，比上一 checkpoint 再减 244,637 / 75,440 bytes。Assembler 按 Agave 4.0 Loader-v3 `ProgramData` 10 MiB、metadata 45 B，强制 ELF ≤ 10,485,715 B；当前 headroom 7,056,379 B。Surfpool 1.5.0 offline smoke 禁用 instant direct-state 路径，以 3,389 个 Loader write transactions + deploy + authority transfer 完成本地部署；confirmed signature、Program/ProgramData layout 与完整 ELF bytes 全部核对。本轮 `lake build Tests`、全 49 个 SVM `pf build`、Mollusk 198/198（含 Phoenix 8/8 与 Tree 2/2）及 Anvil 12/12 全绿；不作公网部署声明。
@@ -84,6 +90,428 @@
 - P5 第四段 bounded root slot 已完成：通用 `accDataWordAt` 只允许运行时 slot，account/base/stride/capacity 均编译期固定，并做 slot + 最终 data-length 双边界。bid root index=2 的 links/parent/color/price 直接从账户读取；无 heap/Map/节点复制。当前 digest `b2519600b8cfe99f`，assembly 878,132 B，ELF 282,536 B；profile Mollusk 4/4。
 - P5 第五段 constant-memory root neighborhood 已完成：四档 profile 原位读取 bid root 与两个直接 child，验证 bid side tag、child→parent reciprocity、color、index envelope 及局部 price/sequence ordering；不分配节点容器，也不声明全树验证。当前 digest `7952977f008911a8`，assembly 2,171,011 B，ELF 716,344 B；profile Mollusk 4/4。
 - P5 第六段本地部署门已完成：Surfpool smoke 参数化为 Phoenix / PhoenixV1Profile 两个显式目标；P5 verifier 的 716,344 B ELF 经 708 个 Loader write + deploy + authority transactions 落入 exact 716,389-byte ProgramData，confirmed signature 与完整 bytes 已核对。默认 Phoenix 3,389-write 路径也重跑通过；不用 `solana-test-validator`，不声明公网部署。
+- P5 第七段 bounded parent path 已完成：通用 `accDataParentPathValid` 以静态
+  base/stride/capacity/max-depth 逐步读取账户内 parent path，验证 color、index envelope、
+  parent→child reciprocity，并在 32 edge 内要求到 root；root 外 reciprocal cycle 有界返回 0。
+  当前 digest `381c728318e7fe26`，assembly 2,509,900 B，ELF 821,576 B；无 heap/Map；
+  Surfpool 1.5.0 以 812 个 Loader write transactions 部署并核对 exact ProgramData。
+- P5 第八段 whole bid tree + allocator partition 已完成：通用 `accDataRbTreeValid` 以
+  iterative parent-pointer traversal 和固定 4096-bit stack bitmap 原位验证 root/color、
+  reciprocity、red rule、equal black height、strict Phoenix FIFO ordering、reachable live count，
+  再验证 free-list 无 cycle/duplicate/live overlap 且精确覆盖全部 pre-bump slot；无 heap、
+  Map、node copy 或 persistent pointer。4095-node / 4096-capacity perfect tree 在 Mollusk 中
+  消耗 852,066 CU。当前 digest `53d37673dbf95305`，assembly 2,876,110 B，ELF 936,264 B；
+  Surfpool 1.5.0 以 926 个 Loader write transactions 部署并核对 exact 936,309-byte
+  ProgramData。
+- P5 第九段 whole ask tree 已完成：四档 ask allocator 复用同一 fixed-memory validator，
+  额外强制 ask side tag=0 与 `(price, stored sequence)` strict ascending FIFO；4095-node /
+  4096-capacity perfect ask tree 消耗 852,060 CU。当前 digest `1356885e6582aab2`，assembly
+  3,242,689 B，ELF 1,050,952 B；Surfpool 1.5.0 以 1,039 个 Loader write transactions
+  部署并核对 exact 1,050,997-byte ProgramData。
+- P5 第十段 whole registered-trader tree 已完成：十二个官方 profile 选择固定
+  base/18-word stride/capacity，通用 `accDataRbTreeKey4Valid` 直接扫描账户内节点，以固定
+  8321-bit bitmap + 64-entry stack 验证完整 RB invariants、child-parent reciprocity、
+  Rust `[u8;32]` byte-lexicographic Pubkey strict ordering 和 exact live/free partition；不复制
+  node，不使用 heap/Map 或持久 pointer。最大 8321-capacity allocator 的 8191 live + 130
+  free slots 消耗 1,344,959 / 1,400,000 CU。当前 digest `6d8e6cbb2d5dd163`，assembly
+  3,703,126 B，ELF 1,194,760 B；Surfpool 1.5.0 以 1,181 个 Loader write transactions
+  部署并核对 exact 1,194,805-byte ProgramData。
+- P5 第十一段 bounded account-resident write 基础已完成：通用 `accDataWordSetAt` 把
+  account/base/stride/capacity 固定在编译期，只让运行时选择 slot 和 u64 value；只写外部
+  writable、current-program-owned account，并在 store 前检查 account count、capacity 和
+  最终 data length。它是有序 target effect / CFG CSE barrier，不返回或持久化 pointer。
+  `writeTraderTopology128` 连续原位写最小 profile 的 links 与 parent/color；readonly、错误
+  owner、slot 128 和“第一字可写、第二字越界”的短账户均 `Custom(1)` 且原子回滚。
+  当前 digest `f77c4fc2ca622dc9`，assembly 3,709,362 B，ELF 1,196,400 B，IDL 3,386 B；
+  Surfpool 1.5.0 以 1,183 个 Loader write transactions 完成本地部署并核对 exact
+  1,196,445-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 210/210 和
+  Anvil 12/12 全绿。
+- P5 第十二段 exact first trader registration 已完成：按 Sokoban 0.3.0 的真实
+  16-byte registers + 32-byte Pubkey + 96-byte TraderState 节点布局，把 canonical fresh
+  128-seat allocator 从 root/size=0、bump/free=1 原子变成 slot 1 黑根、root/size=1、
+  bump/free=2。完整 144-byte slot 均覆盖，guarded `Except` 分支内 21 个 ignored effects
+  不再被最终 state projection 吞掉；成功后 complete trader validator 返回 1，不暴露
+  detached node。nonempty/profile 错误、readonly 和 wrong owner 均原子失败。当前 digest
+  `e6a7a4e2393cc64f`，assembly 3,759,660 B，ELF 1,209,400 B，IDL 3,721 B；Surfpool 1.5.0
+  以 1,196 个 Loader write transactions 部署并核对 exact 1,209,445-byte ProgramData。
+- P5 第十三段 exact second trader registration 已完成：canonical one-root 128-seat tree
+  经 bump path 分配 address 2，完整覆盖第二个 144-byte slot，以 parent=1/color=Red 挂到
+  黑根 left 或 right，不发生 rotation。四个 little-endian limb 各自 byte-swap 后逐 limb
+  比较，精确复现 Rust `[u8;32]` Pubkey ordering；测试 key 刻意让该顺序与 u64 数值序相反。
+  duplicate/malformed、readonly/wrong owner 均原子失败，左右结果都通过 complete tree/
+  allocator validator。当前 digest `f741f2eaffde779e`，assembly 3,888,574 B，ELF
+  1,248,584 B，IDL 4,058 B；Surfpool 1.5.0 以 1,234 个 Loader write transactions
+  部署并核对 exact 1,248,629-byte ProgramData。本轮 194-job Lean、50 个 SVM build、
+  Mollusk 212/212 和 Anvil 12/12 全绿。
+- P5 第十四段 exact third trader registration 已完成：canonical two-node 128-seat tree 经
+  bump path 分配 address 3，完整覆盖第三个 144-byte slot，并按 Sokoban 0.3.0 精确产生
+  LL/LR/RR/RL rotation/recolor 与两个 no-fix topology。通用 `svmByteSwap64` 在宿主侧保持
+  纯语义，SVM 侧直接发射 `be64`，不引入 heap allocation；external-account write 只要出现
+  但任一 operand 无法解码，抽取就 fail closed，不再静默丢 effect。六种结果逐字节匹配并
+  通过 complete trader tree/allocator validator；duplicate/malformed/readonly/wrong owner
+  均原子失败。当前 digest `d9b9ee673526ff9f`，assembly 3,949,948 B，ELF 1,261,744 B，
+  IDL 4,392 B；Surfpool 1.5.0 以 1,247 个 Loader write transactions 部署并核对 exact
+  1,261,789-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 214/214 和
+  Anvil 12/12 全绿。
+- P5 第十五段 exact fourth trader registration 已完成：任意 canonical three-node trader
+  tree 必为 black root + two red leaves；本切片从六种 address assignments bump-alloc
+  address 4，覆盖四个 key intervals，把新节点挂到 selected red parent，并按 Sokoban
+  red-uncle path 把两个 existing leaves recolor black，root 地址不变。slot 4 的 18 words
+  全部覆盖，三个既有 TraderState 逐字节保留，成功路径精确 23 个 account writes；三种
+  duplicate、malformed、readonly/wrong owner 均原子失败。fixed-memory tree/parent-path
+  intrinsic 现在保存 walked ABI 的 `r7` instruction-data base，traversal 不再破坏后续参数
+  读取。当前 digest `a2c228178be89985`，assembly 4,078,543 B，ELF 1,300,352 B，
+  IDL 4,727 B；Surfpool 1.5.0 以 1,285 个 Loader write transactions 部署并核对 exact
+  1,300,397-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 216/216 和
+  Anvil 12/12 全绿。
+- P5 第十六段 exact fifth trader registration 已完成：canonical four-node tree 经 bump
+  path 分配 address 5，完整覆盖第五个 144-byte slot。若 parent 为 black，只填 missing
+  child；若 parent 是唯一 red address-4 leaf，则按 Sokoban black/null-uncle 路径执行
+  LL/LR/RL/RR local rotation/recolor，并保持最上层 black root 地址不变。八种逐字节结果
+  覆盖全部六种既有 address layout、四种 rotation 和两侧 black-parent insertion；四个
+  existing TraderState 保留，结果都通过 complete tree/allocator validator。四个
+  duplicate、malformed、readonly/wrong owner 均原子失败。持久状态仍只使用 one-based
+  slot index 与 `0` sentinel，不引入 heap/Map、节点副本或 persistent pointer。当前 digest
+  `9140326aef66cbdc`，assembly 4,378,054 B，ELF 1,399,096 B，IDL 5,061 B；Surfpool 1.5.0
+  以 1,383 个 Loader write transactions 部署并核对 exact 1,399,141-byte ProgramData。
+  本轮 194-job Lean、50 个 SVM build、Mollusk 218/218 和 Anvil 12/12 全绿。
+- P5 第十七段 general bounded trader insertion 已完成：通用
+  `accDataRbTreeKey4Insert` 以编译期固定 geometry 在账户原位执行 bounded search、
+  bump/free-list allocation 与完整 RB insert fixup，不再继续增加第六/第七次特例。
+  `lib-sokoban = 0.3.0` differential test 用 128-key permutation 填满全部 seat，并在每次
+  插入后精确比较完整 18,464 bytes；官方 delete 产生的 free head 也能逐字节复用。
+  duplicate/full/malformed/readonly/wrong owner 全部在 store 前原子失败。IDL 现在从
+  instruction effect 推导 external writable meta。持久状态仍只有 one-based index 与
+  `0` sentinel，不使用 heap/Map 或 persistent pointer。当前 digest `ea2110304454c9e6`，
+  assembly 4,413,033 B，ELF 1,410,648 B，IDL 5,499 B；Surfpool 1.5.0 以 1,394 个
+  Loader write transactions 部署并核对 exact 1,410,693-byte ProgramData。本轮
+  194-job Lean、50 个 SVM build、Mollusk 220/220 和 Anvil 12/12 全绿。
+- P5 第十八段 general bounded trader removal 已完成：通用
+  `accDataRbTreeKey4Remove` 在完整 tree/free-list preflight 与 key lookup 后，按 Sokoban
+  0.3.0 原位执行 predecessor transplant、bounded delete-fixup 和 free-list push。128-key
+  tree 以独立 permutation 逐个删空，每一步完整 18,464 bytes 与官方实现一致；随后 16 次
+  insertion 也精确复用同一 LIFO free-list。持久状态仍只有 one-based index / `0` sentinel，
+  不使用 heap/Map、detached node 或 persistent pointer。当前 digest `74f755a74720a766`，
+  assembly 4,456,725 B，ELF 1,424,912 B，IDL 5,842 B；Surfpool 1.5.0 以 1,409 个 Loader
+  write transactions 部署并核对 exact 1,424,957-byte ProgramData。本轮 194-job Lean、
+  50 个 SVM build、Mollusk 222/222 和 Anvil 12/12 全绿。
+- P5 第十九段 fixed-capacity bid/ask insertion 已完成：通用
+  `accDataRbTreeOrderInsert` 以官方连续 8-word / 64-byte order slot 原位保存 2-word
+  `FIFOOrderId` 与 4-word `FIFORestingOrder`，按 bid descending / ask ascending comparator
+  和 encoded sequence side tag 执行 bounded search、bump/free-list allocation 与完整 RB
+  fixup。两个 512-node books 各自填满，每一步完整 32,800 bytes 都与 `lib-sokoban 0.3.0`
+  一致；满树 duplicate 只替换 value，满树新 key 与 malformed/readonly/wrong owner 均原子
+  失败。持久状态仍只有 one-based index / `0` sentinel，不使用 heap/Map、detached node 或
+  persistent pointer。当前 digest `2a24252f935ac912`，assembly 4,528,527 B，ELF
+  1,448,496 B，IDL 6,647 B；Surfpool 1.5.0 以 1,432 个 Loader write transactions 部署并
+  核对 exact 1,448,541-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk
+  225/225 和 Anvil 12/12 全绿。
+- P5 第二十段 fixed-capacity bid/ask removal 已完成：通用
+  `accDataRbTreeOrderRemove` 在完整 tree/free-list preflight、encoded sequence side tag 与
+  key lookup 后，按 Sokoban 0.3.0 原位执行 predecessor transplant、bounded delete-fixup
+  和 free-list push。两个满载 512-node books 各自按独立 permutation 逐个删空，每一步
+  完整 32,800 bytes 都与官方实现一致；随后各 16 次 insertion 也精确复用同一 LIFO
+  free-list。missing/malformed/readonly/wrong owner 全部在 store 前原子失败。持久状态仍
+  只有 one-based index / `0` sentinel，不使用 heap/Map、detached node 或 persistent
+  pointer。当前 digest `8290f8143ffc2374`，assembly 4,616,716 B，ELF 1,477,344 B，IDL
+  7,210 B；Surfpool 1.5.0 以 1,460 个 Loader write transactions 部署并核对 exact
+  1,477,389-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 228/228 和
+  Anvil 12/12 全绿。
+- P5 第二十一段 fixed-capacity trader deposit 已完成：通用
+  `accDataRbTreeTraderDeposit` 按官方 18-word node / 12-word `TraderState` 布局，在完整
+  tree/free-list preflight 后执行 Pubkey get-or-register。已有 trader 的 quote/base free
+  lots 在两个 checked-add 均成功后才一起写回；新 trader 的完整 slot 先清零再初始化，
+  满树 existing-key 仍成功而 absent-key 返回 full。128 个 trader 在每个 allocator size
+  重复 deposit，每一步完整 18,464 bytes 均与 `lib-sokoban 0.3.0` 一致；两类 overflow、
+  malformed/readonly/wrong owner 全部原子失败。持久状态只有 one-based index / `0`
+  sentinel，不使用 heap/Map、detached node 或 persistent pointer。当前 digest
+  `e9966de4a1795a47`，assembly 4,652,382 B，ELF 1,489,088 B，IDL 7,613 B；Surfpool
+  1.5.0 以 1,472 个 Loader write transactions 部署并核对 exact 1,489,133-byte
+  ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 230/230 和 Anvil 12/12 全绿。
+- P5 第二十二段 account-resident storage backend boundary 已完成：新增 target-owned
+  `Svm.AccountStorage`，以编译期固定 `Region/Field`、显式 zero/one-based indexing、generic
+  value traversal/canonicalization 与 transitive `EffectSummary` 承载 persistent container
+  routine。`accDataWordSetAt` 已从顶层 SVM Ops/IR 和主 emitter 的 bespoke case 迁入单一
+  `.accountStorage` bridge；主 emitter 只注入 value loader、owner check 与 walked-account
+  frame，IDL writable meta 由 storage effect 推导。source spelling、digest
+  `e9966de4a1795a47`、ELF 1,489,088 B 与 IDL 7,613 B 均保持不变。该层不引入 heap
+  allocation、runtime capacity、Map、detached node 或 persistent pointer。本轮 196-job
+  Lean、50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool 1.5.0 以 1,472 个
+  Loader write transactions 部署并核对 exact 1,489,133-byte ProgramData。下一步先迁移
+  bounded parent-path，再收拢 RB search/allocator/rotation/transplant/fixup。
+- P5 第二十三段 bounded account-storage query bridge 已完成：
+  `accDataParentPathValid` 迁入 `AccountStorage.Query.parentPathValid`；两个 fixed-stride
+  `Field` 统一声明 one-based region、read-only effects、三参数 arity、geometry/depth bound、
+  account walk 与 canonical spelling。SVM `ValKind`、generic extraction traversal、IR digest
+  与主 `loadVal` 都只保留单一 `.accountStorage query` bridge，原 138 行 parent-path emitter
+  已移入 storage backend。source 名称与 digest `e9966de4a1795a47` 保持；assembly
+  4,652,144 B、ELF 1,489,088 B、IDL 7,613 B 均不变。路径仍只保存当前 one-based index、
+  depth 和 account-derived transient pointer，不使用 heap/Map、visited collection、node copy
+  或 persistent pointer。本轮 196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil
+  12/12 全绿；Surfpool 1.5.0 以 1,472 个 Loader write transactions 部署并核对 exact
+  1,489,133-byte ProgramData。下一步迁移 complete RB validator 的共同 envelope 与内部例程。
+- P5 第二十四段 FIFO RB-tree account-storage query 已完成：bid/ask 共用的 complete
+  `accDataRbTreeValid` 已迁入 `AccountStorage.Query.fifoRbTreeValid`；links、parent/color、
+  price、sequence 四个 fixed-stride `Field` 统一声明 one-based region、read-only effects、
+  四参数 arity、4096-slot capacity bound 与 canonical spelling。原 449 行完整 tree/free-list
+  validator 已从主 emitter 移入 storage backend，order insert/remove preflight 也组合调用
+  同一 Query routine；`ValKind`、generic extractor、IR canonicalization 与主 `loadVal` 不再有
+  FIFO validator 特判。实现继续只用 fixed 4096-bit frame bitmap、one-based index 和 `0`
+  sentinel，不使用 heap/Map、node copy、runtime geometry 或 persistent pointer。digest
+  `e9966de4a1795a47`、assembly 4,652,144 B、ELF 1,489,088 B 与 IDL 7,613 B 保持不变；
+  196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿，Surfpool 1.5.0
+  以 1,472 个 Loader write transactions 部署并核对 exact 1,489,133-byte ProgramData。
+  下一步迁移 four-word Pubkey validator 并抽取共同 topology/allocator layout。
+- P5 第二十五段 Pubkey RB-tree account-storage query 已完成：four-word
+  `accDataRbTreeKey4Valid` 已迁入 `AccountStorage.Query.key4RbTreeValid`；FIFO 与 Pubkey
+  layout 共用编译期固定的 `RbTree` links/parent-color topology 和 64-edge traversal bound，
+  Pubkey query 另声明连续四字 key region 与 8321-slot capacity bound。trader insert/remove/
+  deposit preflight 组合调用同一个 Query routine，顶层 `ValKind`、主 `loadVal` 和 IR
+  canonicalization 不再有 Pubkey validator 特判。完整 tree/free-list 验证仍只使用 fixed
+  8321-bit frame bitmap、64-entry stack、one-based index 与 `0` sentinel，不引入 heap/Map、
+  runtime geometry、node copy 或 persistent pointer。source digest `e9966de4a1795a47`、
+  assembly 4,652,144 B、ELF 1,489,088 B 与 IDL 7,613 B 保持不变；196-job Lean、50 个
+  SVM build、Mollusk 230/230、Anvil 12/12 全绿，Surfpool 1.5.0 以 1,472 个 Loader write
+  transactions 部署并核对 exact 1,489,133-byte ProgramData。下一步把 bounded search、
+  allocator acquire/release、rotation/transplant/fixup 迁为 storage mutation routines。
+- P5 第二十六段 bounded account-storage map mutation vocabulary 已完成：原 five 个
+  trader/order bespoke mutation constructors 已从顶层 `Svm.OpExt`、`Svm.IR.Op` 和主 emitter
+  dispatch 删除，收敛为 `AccountStorage.Call` 的 `rbMapInsert`、`rbMapRemove` 与
+  `rbMapCheckedAdd`。`RbMap` descriptor 统一拥有编译期固定 account/header/topology/key/value
+  geometry、capacity、one-based indexing、writable/current-owner access 与 duplicate policy；
+  extraction、CFG、signer/account inference、IDL writable inference 和 canonicalization 只遍历
+  generic values/effects。现有原位 assembly 由 storage mutation backend adapter 复用，source
+  digest `e9966de4a1795a47`、assembly 4,652,144 B、ELF 1,489,088 B 与 IDL 7,613 B 均不变。
+  持久状态仍不使用 heap/Map、runtime geometry、node copy、detached node 或 persistent
+  pointer。196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool
+  1.5.0 以 1,472 个 Loader write transactions 部署并核对 exact 1,489,133-byte
+  ProgramData。下一步把 search/allocator/rotation/transplant/fixup assembly 实体迁入 backend。
+- P5 第二十七段 bounded account-storage field extractor 已完成：runtime-indexed
+  `accDataWordAt` 已从独立 SVM `ValKind` 和主 `loadVal` case 迁入
+  `AccountStorage.Query.readWord`。统一 `Field` descriptor 携带编译期固定 account/base/stride/
+  capacity 与 zero/one-based indexing；one-based 模式拒绝 `0` sentinel 后再归一化，供后续
+  map lookup 返回 index 直接组合。query 自己拥有 arity、read-only effects、account inference
+  与 `dwi`/`dwi1` canonical spelling，source helper 和 wire ABI 不变。实现只在 index 与最终
+  data length 检查后形成调用期 transient pointer，不分配 heap/Map、不复制 node、不开放
+  runtime geometry 或 persistent pointer。source digest `e9966de4a1795a47` 保持，迁移前后
+  4,652,144-byte assembly 逐字节相同；ELF 1,489,088 B、IDL 7,613 B 不变。196-job Lean、
+  50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool 1.5.0 以 1,472 个 Loader
+  write transactions 部署并核对 exact 1,489,133-byte ProgramData。下一步增加 bounded
+  Key4/FIFO map-find query，再组合 field read/write/remove 实现 ReduceOrder。
+- P5 第二十八段 bounded account-storage RB map find 已完成：`Query.fifoFind` 与
+  `Query.key4Find` 复用同一个 storage-owned `emitRbFind`，按编译期固定 root/links/key/
+  stride/capacity 在 account bytes 中直接搜索，返回 one-based node index 或 `0`。Key4 用
+  `be64` 保持 `[u8;32]` byte ordering；FIFO ask 升序、bid 降序。每个 dereference 都检查
+  `1..capacity`，统一 64-level bound 拒绝 cycle/过深输入；account 0 与 walked external
+  account 都先做覆盖 root/links/key 的 data-length gate。validator/find/mutable map 现在共用
+  `FifoRbTree.oneBased` / `Key4RbTree.oneBased` layout constructors；query 自己拥有 arity、
+  read-only effects、account inference 与 `rbof`/`rb4f` canonical spelling，主 `loadVal` 没有
+  新 case。实现只保留 scalar index/depth 和调用期 transient pointer，不分配 heap/Map、
+  bitmap，不复制 node，不开放 runtime geometry。isolated Key4/FIFO programs 经 `sbpf build`
+  产出 3,720 B / 3,480 B ELF；196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil
+  12/12 与 Surfpool smoke 全绿。下一步接 Runtime/source intrinsic，再组合
+  find/read/write/remove 实现 ReduceOrder。
+- P5 第二十九段 source-level bounded RB find 已完成：新增薄
+  `accDataRbTreeKey4Find` / `accDataRbTreeOrderFind` Runtime decoder，所有 account/root/field/
+  stride/capacity/bid geometry 必须是 extraction-time constant，dynamic 参数只有 Key4 四词或
+  FIFO `(price, sequence)`。decoder 直接构造 `AccountStorage.Query` 并复用 well-formed gate，
+  没有新增顶层 Op/IR/主 Emit case。PhoenixV1Profile 的 `findTrader128`、`findBid512`、
+  `findAsk512` 先组合 complete tree/free-list validator，再执行共同 64-level bounded search，
+  found 返回 exact one-based slot，missing 或 malformed topology 返回 `0`；三个 IDL account
+  metas 都是 read-only。Mollusk 覆盖 trader/bid/ask found/missing 与 malformed self-cycle；
+  持久状态仍无 heap Map、node copy、detached allocation 或 pointer。当前 digest
+  `b37d4fce03b21ff4`，assembly 5,638,878 B，ELF 1,799,856 B，IDL 8,370 B；196-job
+  Lean、50 个 SVM build、Mollusk 231/231、Anvil 12/12 与 Surfpool 1.5.0 Loader-v3 smoke
+  全绿。下一步组合 find/read/write/remove 实现 official ReduceOrder semantics。
+- P5 第三十段 composed ReduceOrderWithFreeFunds state transition 已完成：source 新增薄
+  `accDataWordAtOneBased` / `accDataWordSetAtOneBased`，直接落入既有 AccountStorage
+  read/write descriptor，不新增顶层 ValKind/Op/IR/主 Emit case。最小 official profile 的
+  ask/bid reducer 组合 complete trader/order validator、signer Pubkey Key4 find、FIFO find、
+  one-based field read/write 与 full `rbMapRemove`；missing 成功 no-op，wrong trader 失败，
+  partial 原位改 quantity，full 回收固定节点。ask 解锁 base lots；bid 按
+  `price × tick × removed / baseLotsPerBaseUnit` 解锁 quote lots，所有除零、乘法、余额
+  subtraction/addition 在第一条 store 前 preflight。持久状态仍只有 one-based index / `0`
+  sentinel，无 heap Map、node copy、detached allocation 或 persistent pointer。当前 digest
+  `fdec3afb265a542`，assembly 6,548,227 B，ELF 2,081,880 B，IDL 9,011 B；196-job Lean、
+  50 个 SVM build、Mollusk 232/232、Anvil 12/12 与 Surfpool 1.5.0 Loader-v3 smoke 全绿。
+  下一步独立接 tag 5 wire/account/event adapter，再实现 tag 4 Token withdrawal。
+- P5 第三十一段 reusable packed SVM entry adapter 已完成：Core annotation 只携带 opaque
+  target metadata，不新增 executable Ops；`Svm.EntryAdapter` 在 target projection 后统一拥有
+  u8 tag dispatch、exact packed u8/u16/u32/u64 widening、bounded account-prefix walk、当前
+  executable program authentication 与 raw/generated route。raw 方法不得把 physical program
+  account 当 managed State，持久读写必须组合 `AccountStorage`；IDL 排除 protocol-owned raw
+  wire，Legacy downgrade 显式拒绝 metadata loss。`Examples.RawEntry` 的同一 ELF 验证 raw
+  与 generated ABI 共存；Mollusk 覆盖 exact/short/long/tag/signer/program/trailing-account
+  matrix，Surfpool 1.5.0 用 4 个 Loader write transactions 部署 3,064-byte ELF 并核对 exact
+  ProgramData；200-job Lean、51 个 SVM build、Mollusk 238/238、Anvil 12/12 全绿。下一步只用
+  这层组合 Phoenix tag 5 wire/account/event，不向主 Emit 添加 Phoenix 分支。
+- P5 第三十二段 official Phoenix-v1 tag 5 已完成：source 以 exact 26-byte
+  `05 || side:u8 || price:u64-le || sequence:u64-le || size:u64-le` wire 和 current program / readonly
+  canonical `"log"` PDA / writable market / readonly trader signer 四账户进入；generated probes 与
+  raw handler 复用同一组 extraction-time account-index-parametric `AccountStorage` reducer，没有
+  新增 Phoenix-specific top-level op、IR node 或主 Emit case。ask/base 与 bid/quote collateral 的
+  partial update、full RB-tree removal/free-list reuse、missing-order sequence-only transition 和
+  existing-order exact 128-byte authenticated self-CPI event 均已由 Mollusk 固定；tag 5 不触发
+  Token CPI。raw external-account index 明确排除 physical program prefix；SVM frame 也固定为
+  account-storage scratch ≤408、headers 512..、scalar locals <1024、CPI 1024..2048、deep scratch
+  2048..4096，并对超过 1,024-byte 的完整 CPI frame fail closed。PhoenixV1Profile digest 为
+  `c6d4dd40cfd7b340`；artifact 为 7,504,658-byte assembly / 2,375,160-byte ELF /
+  9,011-byte IDL；200-job Lean、51 个 SVM build、Mollusk 242/242、Anvil 12/12 全绿；Surfpool
+  1.5.0 以 2,347 个 Loader-v3 writes 部署并核对 exact 2,375,205-byte ProgramData。详见
+  `docs/plan/tasks/l5-039.md`。下一步实现 official tag 4 Token withdrawal。
+- P5 第三十三段 official Phoenix-v1 tag 4 已完成：`ReduceOrder` 复用 tag 5 的
+  account-index-parametric `AccountStorage` reducer，只在九账户 `EntryAdapter` 边界增加官方
+  reduce-status 与 classic Token context validation。ask/base 与 bid/quote 都只 claim 本次
+  release，不动既有 free balance；非零 atoms 通过通用 unchecked tag-3 transfer，以
+  `["vault", market key, MarketHeader mint bytes, bump]` 签名。新的 `.accData` PDA seed
+  直接引用经过 data-length gate 的固定 ≤32-byte account slice，不分配或复制。通用抽取器
+  现在把账户 read 的 lexical `let` 在后续 effect 前 materialize，并保留 ignored inline
+  helper 的控制流/effect continuation，因此 audit header 使用 pre-increment sequence；
+  existing/missing order 分别产生 exact 128/93-byte batch。tag 5 的 reducer 不再错误继承
+  tag 4 status gate。没有新增 Phoenix-specific 顶层 Op、IR node 或主 Emit case；持久状态
+  仍只有 one-based index / `0` sentinel。当前 digest `987f4a8231f46f75`，assembly
+  9,072,964 B、ELF 2,855,072 B、IDL 9,011 B；200-job Lean、51 个 SVM build、
+  Phoenix-v1 profile 42/42、全 Mollusk 246/246 与 Anvil 12/12 全绿。Surfpool 1.5.0
+  以 2,822 个 Loader-v3 writes 部署并核对 exact 2,855,117-byte ProgramData。详见
+  `docs/plan/tasks/l5-040.md`。下一步先提供 storage-owned ordered cursor 与 bounded audit
+  batching，再在其上组合无 payload 的 tag 6/7 CancelAll pair。
+- P5 第三十四段 storage-owned ordered cursor 已完成：`Query.fifoCursor` 在 target-owned
+  `AccountStorage` 内拥有固定 account/root/links/key/stride/capacity/bid geometry、三操作数
+  arity、read-only effects、account inference、well-formed gate 与 `rboc` canonical spelling。
+  `hasCursor=0` 返回逻辑 first one-based slot；`hasCursor=1` 从保留的 scalar
+  `(price, sequence)` 做 strict upper-bound；empty/end 返回 `0`。每次都从 root 重新查询，
+  mutation 前后不保存 node address；ask 升序、bid 降序和 equal-price FIFO 都复用现有比较器。
+  查询只保留 current/candidate/depth scalars，逐 link 检查 `1..capacity`，64-level bound 与完整
+  account envelope 拒绝 cycle、越界和短数据；`hasCursor > 1` 失败。薄 Runtime/Ops/Extract
+  helper 强制全部 geometry 为 extraction-time constants；没有新增顶层 Op/IR/主 Emit case，
+  也没有 heap Map/Vec、node copy、runtime geometry 或 persistent pointer。profile read-only
+  probe 覆盖 empty/first/strict next/in-between/equal-price/end、删除后重查和 malformed cycle。
+  当前 digest `c464e5b76446904d`，assembly 9,733,659 B、ELF 3,062,480 B、IDL 9,537 B。
+  200-job Lean、51 个 SVM build、Phoenix profile 43/43、全 Mollusk 247/247 与 Anvil 12/12
+  全绿；Surfpool 1.5.0 以 3,027 个 Loader-v3 writes 部署并核对 exact 3,062,525-byte
+  ProgramData，不使用 Test Validator。
+  详见 `docs/plan/tasks/l5-041.md`。下一步提供 reusable bounded audit recorder/batching，
+  再组合 tags 6/7 CancelAll。
+- P5 第三十五段 generic bounded SVM component bridge 已完成：新增
+  `Svm.Component.Query/Call` 与 component-owned Emit context/backend，把原顶层
+  `.accountStorage` value/effect/IR case 收进唯一 `.component` bridge。generic extraction、
+  target projection、CFG payload、value traversal、account/signature inference、IDL writable
+  inference 与主 emitter 不再枚举具体 storage/queue/recorder/allocator；新增 bounded feature
+  只扩 component-owned vocabulary/backend。AccountStorage 的 Region/Field/index、effects、
+  well-formedness、canonical spelling 与 emitter 原样委托，source spelling 和 runtime 语义
+  不变。当前 digest `c464e5b76446904d`、assembly 9,733,659 B、ELF 3,062,480 B、IDL
+  9,537 B 均保持。持久结构仍只用 fixed account bytes、one-based index 与 `0` sentinel；
+  不开放 heap Map/Vec、runtime geometry、detached node 或 persistent pointer。详见
+  `docs/plan/tasks/l5-042.md`。下一步在该 bridge 内实现 bounded audit recorder/batching，
+  再组合 tags 6/7 CancelAll。本轮 202-job Lean、51 个 SVM build、Mollusk 247/247 与
+  Anvil 12/12 全绿。
+- P5 第三十六段 bounded invocation-local audit recorder 已完成：在唯一
+  `Svm.Component.Call` bridge 内增加 begin/append/finish 与 component-owned dynamic signed
+  self-CPI sink；generic Ops/IR/CFG/主 Emit 不增加 recorder case。payload 与官方 Rust SDK
+  allocator 协调同一个 `0x300000000` 首-word cursor，固定按 SDK 的 32 KiB end 向下 bump、
+  8-byte align，OOM 不提交 cursor；不假设 Agave 可选的大 frame，也不把地址暴露给 source
+  或持久账户。Phoenix header 为 93 B、Reduce 为 35 B、inner data 上限为
+  `1280 - 34 = 1246 B`；32 条共 1,213 B，第 33 条 append 前自动 flush，finish 即使零事件
+  也发 header-only batch。stack metadata 只占 416..448，scalar-local planner 按实际 component
+  capability 求 max，未使用 recorder 的程序保持旧 408 boundary。tag 4/5 已迁移到 recorder，
+  existing/missing output 仍由 Mollusk 固定为 exact 128/93 B。当前 digest
+  `79102f84e2217820`，assembly 9,708,793 B、ELF 3,052,280 B、IDL 9,537 B；205-job Lean、
+  51 个 SVM build、Phoenix profile 43/43、全 Mollusk 247/247 与 Anvil 12/12 全绿；
+  Surfpool 1.5.0 以 3,017 个 Loader-v3 writes 部署同一 ELF，并核对 exact
+  3,052,325-byte ProgramData。详见
+  `docs/plan/tasks/l5-043.md`。下一步直接组合 tags 6/7 CancelAll；persistent Queue/Map/
+  Allocator 仍必须使用 fixed account bytes、one-based index 和 `0` sentinel。
+- P5 第三十七段 official Phoenix-v1 tags 6/7 CancelAll 已完成：新增 target-owned
+  `FifoCancel` component，在一个完整 trader/bid/ask tree/free-list validator 之后，组合
+  storage-owned strict-successor cursor、one-based owner/size/balance fields、内部
+  validated RB removal 与现有 `BatchRecorder`。每次 mutation 后只凭 scalar
+  `(price, sequence)` 从 root 重查；不保存 node address，不收集 heap `Vec/Map`，也不把
+  pointer 写入账户。tag 7 使用 exact one-byte wire / 四账户且不进入 Token/status gate；
+  tag 6 使用九账户 classic Token context，只 claim 本次释放量并按 quote claim/withdraw →
+  base claim/withdraw。两者均先 bids 后 asks、各侧保持官方 FIFO、按 trader owner 过滤；
+  global u16 event index 跨 32-record recorder flush 连续，missing trader/empty books 仍
+  sequence+1 并发 93-byte header-only batch。generic Ops/IR/CFG/主 Emit 仍只有单一
+  `.component` bridge；source 无法选择 validated-remove 内部 hook。当前 digest
+  `5c4cc53d053d7035`，assembly 10,920,313 B、ELF 3,433,400 B、IDL 9,537 B，ELF
+  SHA-256 `797cfa1a599ae704140e06fb29f1230df5d211bd993224c961922e3eced8d3c6`。
+  207-job Lean、51 个 SVM build、Phoenix profile 51/51、全 Mollusk 255/255 与 Anvil
+  12/12 全绿。Surfpool 1.5.0 以 3,393 个 Loader-v3 writes 部署同一 ELF，并核对 exact
+  3,433,445-byte ProgramData；未使用 `solana-test-validator`。详见
+  `docs/plan/tasks/l5-044.md`。下一步在同一 component/entry-adapter 边界实现 tags 8/9
+  CancelUpTo 的 Borsh Option payload 与 bounded side/price/search/cancel filter，不扩张顶层
+  Ops/IR/主 Emit。
+- P5 第三十八段可复用变长 Borsh Option entry plan 已完成：新增
+  `@[pf_svm_raw_borsh_options ...]` / `svm.raw.v2`，将固定 scalar prefix 与编译期定宽的
+  `Option` 字段投影到 target-owned `EntryAdapter.RawEntry`，由 adapter 自己生成 finite
+  min/max route、canonical 0/1 discriminant、`Some` payload end-bound 和最终 exact cursor
+  consumption；invalid discriminant、truncated payload 与 trailing bytes 全部 fail closed。
+  executable current-program 检查按实际 instruction length 动态定位，fixed/variable wire
+  共用同一认证路径；generic Ops/IR/CFG/主 Emit 没有新增 codec op。`RawEntry` probe 覆盖
+  `side:u8 + Option<u64> + Option<u32> + Option<u32>` 的全部 8 种 presence 组合和完整 malformed
+  matrix，digest `74fced960b29aba0`，assembly 15,171 B、ELF 5,088 B、IDL 1,033 B，ELF
+  SHA-256 `dcb49ec81a41665c89101c84f91dc782edda062e3fde7f14c4ad51a10c17d763`。
+  207-job Lean、51 个 SVM build、RawEntry 8/8 与 Phoenix profile 51/51 全绿。Surfpool 1.5.0
+  以 6 个 Loader-v3 writes 部署同一 ELF，并核对 exact 5,133-byte ProgramData；未使用
+  `solana-test-validator`。详见 `docs/plan/tasks/l5-045.md`。下一步直接复用该 plan 与现有
+  `FifoCancel` component 实现 official Phoenix-v1 tags 8/9，不扩张顶层 Ops/IR/主 Emit。
+- P5 第三十九段 official Phoenix-v1 tags 8/9 CancelUpTo 已完成：复用 variable Borsh
+  entry plan 的 exact `tag || side:u8 || Option<u64> || Option<u32> || Option<u32>` wire，并只在
+  target-owned `FifoCancel.Call` 增加 bounded `cancelUpTo`；generic executable Ops/IR/CFG/主
+  Emit 继续只有一个 `.component` bridge。组件复用 account-storage strict-successor cursor，
+  每个 cursor result 在 owner/price filter 前计入 search，只有 selected order 计入 cancel；
+  bids 用 inclusive `price >= tick`，asks 用 inclusive `price <= tick`，equal-price FIFO 不变，
+  capacity/search/cancel 三重边界均在 emitter 内 fail closed。`None` tick 使用 side extreme，
+  `None` search/cancel 使用 selected book 当前 size；missing trader、no match 与显式零仍
+  sequence+1 并发 header-only batch。tag 9 四账户、无 Token/status gate并保留 free funds；
+  tag 8 九账户、逐单 claim 以保留 pre-existing free，再只提款 selected side aggregate。
+  持久 Queue/Map/Allocator 仍只使用 fixed account bytes、one-based index 与 `0` sentinel；
+  不引入 heap `Vec/Map`、copied/detached node、persistent pointer、runtime geometry 或无界遍历。
+  当前 digest `afe3c027d0f83661`，assembly 12,091,217 B、ELF 3,796,416 B、IDL 9,537 B，
+  ELF SHA-256 `d8dc3ebdbdfe4d01a3b0aa314248418c4772d098c07a772f5f728bf599a8fef6`。
+  207-job Lean、51 个 SVM build、Phoenix profile 60/60、全 Mollusk 266/266 与 Anvil 12/12
+  全绿。Surfpool 1.5.0 以 3,752 个 Loader-v3 writes 部署 byte-identical ELF，并核对 exact
+  3,796,461-byte ProgramData；未使用 `solana-test-validator`。详见
+  `docs/plan/tasks/l5-046.md`。下一步保持 component bridge 不变，分片识别并组合
+  matching/placement ABI；remaining accounts 作为独立 bounded adapter capability，不把协议
+  语义或持久容器下沉成新的顶层 opcode。
+- P5 第四十段 Phoenix sequence domain correction 已完成：官方
+  `MarketHeader.market_sequence_number` 位于 absolute account word 34，而 FIFO body 的
+  `order_sequence_number` 位于 word 106；此前 tags 4–9 错把后者当成 market sequence，既会
+  污染后续挂单 key，也会让 audit header 携带错误序列。本切片把 profile view、六个 raw
+  reduce/cancel route 的 pre-increment audit sequence 与写回统一迁到 word 34，并用独立
+  fixtures 证明每条 route 都只递增 market sequence、保持 word 106 不变。word 106 仍由
+  storage envelope 验证为已初始化 FIFO order sequence；修正不改变 EntryAdapter、Component、
+  AccountStorage 或 generic Ops/IR/CFG/主 Emit 边界。当前 digest `ad2734feeb8c49dd`，assembly
+  12,091,190 B、ELF 3,796,416 B、IDL 9,537 B，ELF SHA-256
+  `96086af4bbcaaff2aa05b1ad92635ff4ea3576714433bd3986e00c3bfdce0821`。207-job Lean、
+  51 个 SVM build、Phoenix profile 60/60、全 Mollusk 266/266 与 Anvil 12/12 全绿；
+  Surfpool 1.5.0 以 3,752 个 Loader-v3 writes 部署 byte-identical ELF，并核对 exact
+  3,796,461-byte ProgramData；未使用 `solana-test-validator`。详见
+  `docs/plan/tasks/l5-047.md`。下一步在固定 bridge 上实现 official tag 3 的严格
+  PostOnly/no-TIF/deposited-funds-only 子集，再把完整 OrderPacket enum/option decoding
+  收敛成 EntryAdapter schema 数据，而不是新增 codec opcode。
+- P5 第四十一段 official Phoenix-v1 tag 3 严格 PostOnly placement 已完成：新增 exact
+  40-byte `OrderPacket::PostOnly` wire 与五账户认证，canonical log/seat PDA、Phoenix-owned
+  128-byte approved seat 及其 market/trader identity 在任何 storage effect 前 fail closed。
+  成功路径组合既有 complete trader/bid/ask validator、one-based trader find、FIFO
+  find/insert、balance word-store 与 BatchRecorder；买单复用共享 quote-lot geometry 把 free
+  quote 转 locked，卖单把 free base 转 locked。当前严格边界要求 Active/PostOnly status、
+  opposite book empty、selected book 有容量、无 TIF、deposited funds only、hard funds failure，
+  因而不伪装 matching/reprice/expiry/eviction。word 106 只生成并递增 FIFO order sequence，
+  word 34 独立生成 audit sequence；43-byte Place record 保留 u128 client id 的两个 LE limbs。
+  generic Ops/IR/CFG/主 Emit 与 Component vocabulary 均未新增 case，持久状态继续只有 account
+  bytes、one-based index 和 `0` sentinel。当前 digest `4a74bafb995ad60a`，assembly
+  12,636,870 B、ELF 3,960,464 B、IDL 9,537 B，ELF SHA-256
+  `abdd4b5af17be9e6b363a52365ce200f3a1ee8d2fc759c2cd7b5b2a0c5665311`。207-job Lean、
+  51 个 SVM build、Phoenix profile 65/65、全 Mollusk 271/271 与 Anvil 12/12 全绿；
+  Surfpool 1.5.0 以 3,914 个 Loader-v3 writes 部署 byte-identical ELF，并核对 exact
+  3,960,509-byte ProgramData；未使用 `solana-test-validator`。详见
+  `docs/plan/tasks/l5-048.md`。下一步先把 effectful raw scalar return 泛化成 bounded scalar
+  tuple，直接复用现有 CFG `returnU64s` / SVM `sol_set_return_data`，补齐 tag 3 官方
+  16-byte `(price, sequence)` return；随后把完整 OrderPacket 继续收敛成 EntryAdapter schema。
+- P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
+  `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
+  deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
@@ -98,11 +526,18 @@
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
-| P5 动态 Phoenix-v1 | 部分：profile + metadata/header + bid root neighborhood 与本地部署门已有，完整 traversal 未支持 | 固定/固定-stride有界 account word；后续依赖 parent-pointer constant-memory traversal | canonical profile、sequence、allocator envelope、bid root/child reciprocity 与局部 ordering 已进 Lean/Mollusk；当前 verifier 另经 Surfpool Loader-v3 transaction 部署；完整 tree/free-list 遍历、节点写入、remaining accounts 和完整 Phoenix-v1 兼容仍 fail closed |
+| P5 动态 Phoenix-v1 | 部分：profile + complete tree/free-list validation + bounded trader/order insertion/removal + generic component/account-storage boundary + ordered cursor/audit recorder + strict tag 3 PostOnly slice + official tags 4–9 + 本地部署门已有 | 固定/固定-stride有界 account region、parent walk、fixed bitmap/stack、effect-safe guarded stores | canonical profile/allocator envelope/三树 invariants 已进 Lean/Mollusk；trader allocator 与 bid/ask books 均可按 Sokoban 0.3.0 填满并逐个删空；word-store、parent path、FIFO/Pubkey RB validators/mutation/key-based cursor 均已迁入 `Component → AccountStorage` bridge；bounded recorder 以 SDK 32 KiB cursor 提供 1,246-byte pre-flush 与 header-only finish，strict tag 3 与 official tags 4–9 通过 `EntryAdapter + Component` 组合。下一步补 effectful tuple return，再扩 OrderPacket/matching；remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
+| P6 SDK memory/protocol surface | 进行中：官方形状 transient heap 模型和 recorder lowering 已有 | P5 的 account-resident 边界；后续需要 effect-safe lowering | VM frame 可显式建模 32–256 KiB，但官方 SDK global allocator 固定使用 32 KiB；recorder 遵守同一 cursor/OOM/no-op free。后续只开放 bounded scratch/container API，禁止持久 heap pointer。再分片补 32-byte/u128/Borsh、remaining accounts 和 Token-2022 extension semantics |
 
-P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。固定长度 32-byte / u128 /
-Borsh protocol types 可在 P5 后续设计；当前 Pubkey 与 client id 仍以 `UInt64` limbs
-表达。P5 profile gate 不是把运行时变长账户偷偷放进现有 bounded model，也不是 P0 的验收条件。
+P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。P5 verifier 已能按账户原始
+32 bytes 比较 Pubkey，但通用 SDK 的固定长度 32-byte / u128 / Borsh protocol types 仍需
+后续设计；现有 contract source 的 Pubkey 与 client id 仍以 `UInt64` limbs 表达。P5 profile
+gate 不是把运行时变长账户偷偷放进现有 bounded model，也不是 P0 的验收条件。
+
+Solana Rust 允许 `Vec`/`Box` 等调用期 allocation，但默认 allocator 是有界 bump heap，
+不是通用进程 heap；`dealloc` 不回收，pointer 不能跨 invocation 或写入 account。普通
+`HashMap` 也不作为 SVM SDK 的默认能力。ProofForge 后续 transient container lowering 必须
+携带静态/运行时容量门和显式 OOM，不得把它用于 P5 持久树的全量复制。
 
 ## 明确保持 fail closed
 

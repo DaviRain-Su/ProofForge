@@ -65,6 +65,10 @@ jobs:
         timeout-minutes: 15
         run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 
+      - name: Deploy packed entry adapter fixture through Surfpool Loader-v3
+        timeout-minutes: 15
+        run: runtime-tests/surfpool/smoke.sh RawEntry
+
       - name: Build all EVM programs
         run: lake exe pf -- build --target evm --out build/evm
 

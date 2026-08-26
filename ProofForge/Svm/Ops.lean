@@ -1,4 +1,5 @@
 import ProofForge.Core.Ops
+import ProofForge.Svm.Component
 
 namespace ProofForge.Svm.Ops
 
@@ -21,11 +22,36 @@ def indexedDataWordsInRange (baseWord strideWords capacity : Nat) : Bool :=
   capacity > 0 && strideWords > 0 && dataWordInRange strideWords &&
     dataWordInRange (baseWord + strideWords * (capacity - 1))
 
+/-- A parent-path reader touches the links and parent/color words of fixed-stride slots and has a
+compile-time loop bound. Keeping the bound at most 64 prevents an intrinsic from becoming an
+unbounded account scan. -/
+def parentPathWordsInRange
+    (linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat) : Bool :=
+  (AccountStorage.Query.parentPathValidOneBased
+    0 linksBaseWord parentBaseWord strideWords capacity maxDepth).wellFormed maxTxAccountLocks
+
+/-- A complete account-resident red-black tree scan uses one fixed 4096-bit stack bitmap. The
+selected words cover Sokoban's links, parent/color, order-price, and order-sequence fields. -/
+def rbTreeWordsInRange
+    (linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat) : Bool :=
+  (AccountStorage.Query.fifoRbTreeValidOneBased
+    0 linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity false).wellFormed
+      maxTxAccountLocks
+
+/-- A four-word-key complete tree scan uses a fixed 8321-bit bitmap and a fixed 64-entry
+traversal stack. The key words are consecutive and compared in original byte order. -/
+def rbTreeKey4WordsInRange
+    (linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Bool :=
+  (AccountStorage.Query.key4RbTreeValidOneBased
+    0 linksBaseWord parentBaseWord keyBaseWord strideWords capacity).wellFormed maxTxAccountLocks
+
 /-- Static non-bump bytes in one PDA signer group. -/
 inductive PdaSeed where
   | ascii (value : String)
   | stateKey
   | accKey (i : Nat)
+  /-- Fixed byte slice of an external account's data, used directly as one PDA seed. -/
+  | accData (i offset length : Nat)
   deriving BEq, Repr, Inhabited
 
 /-- SVM-only source value intrinsics. Recursive operands live in `Core.Ops.Val.ext`. -/
@@ -34,6 +60,7 @@ inductive ValKind where
   | clockEpoch
   | unixTime
   | slotsPerEpoch
+  | byteSwap64
   | signerKey0
   | accLamports0
   | accOwner0
@@ -57,7 +84,7 @@ inductive ValKind where
   | accKeyWord (acc word : Nat)
   | accOwnerWord (acc word : Nat)
   | accDataWord (acc word : Nat)
-  | accDataWordAt (acc baseWord strideWords capacity : Nat)
+  | component (query : Component.Query)
   | accLamportsN (acc : Nat)
   | accDataLenN (acc : Nat)
   | isSignerN (acc : Nat)
@@ -71,7 +98,8 @@ inductive ValKind where
 
 def ValKind.arity : ValKind → Nat
   | .checkPda _ => 1
-  | .accDataWordAt .. => 1
+  | .byteSwap64 => 1
+  | .component query => query.arity
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
@@ -127,6 +155,7 @@ def CpiWord.rawSelfEntry? : CpiWord V → Option RawSelfEntry
 inductive OpExt (V : Type) where
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord V))
       (seeds : Array PdaSeed := #[]) (bump : Option V := none)
+  | component (call : Component.Call V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -157,11 +186,53 @@ def rentExemption (dataLen : UInt64) : Val := leaf (.rentExemption dataLen)
 def cpiReturn : Val := leaf .cpiReturn
 def sha256Lit (seed : String) : Val := leaf (.sha256Lit seed)
 def keccak256Lit (seed : String) : Val := leaf (.keccak256Lit seed)
+def byteSwap64 (word : Val) : Val := .ext .byteSwap64 #[word]
 def accKeyWord (acc word : Nat) : Val := leaf (.accKeyWord acc word)
 def accOwnerWord (acc word : Nat) : Val := leaf (.accOwnerWord acc word)
 def accDataWord (acc word : Nat) : Val := leaf (.accDataWord acc word)
 def accDataWordAt (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
-  .ext (.accDataWordAt acc baseWord strideWords capacity) #[index]
+  .ext (.component (.accountStorage
+    (.readWordZeroBased acc baseWord strideWords capacity))) #[index]
+def accDataWordAtOneBased (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
+  .ext (.component (.accountStorage
+    (.readWordOneBased acc baseWord strideWords capacity))) #[index]
+def accDataRbTreeKey4Find
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Val) : Val :=
+  .ext (.component (.accountStorage (.key4FindOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity)))
+      #[key0, key1, key2, key3]
+def accDataRbTreeOrderFind
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
+    (bid : Bool) (price sequence : Val) : Val :=
+  .ext (.component (.accountStorage (.fifoFindOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
+      #[price, sequence]
+def accDataRbTreeOrderCursor
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
+    (bid : Bool) (hasCursor price sequence : Val) : Val :=
+  .ext (.component (.accountStorage (.fifoCursorOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
+      #[hasCursor, price, sequence]
+def accDataParentPathValid
+    (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
+    (index root bumpIndex : Val) : Val :=
+  .ext (.component (.accountStorage (.parentPathValidOneBased
+    acc linksBaseWord parentBaseWord strideWords capacity maxDepth))) #[index, root, bumpIndex]
+def accDataRbTreeValid
+    (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
+    (bid : Bool) (root size bumpIndex freeListHead : Val) : Val :=
+  .ext (.component (.accountStorage (.fifoRbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
+      #[root, size, bumpIndex, freeListHead]
+def accDataRbTreeKey4Valid
+    (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (root size bumpIndex freeListHead : Val) : Val :=
+  .ext (.component (.accountStorage (.key4RbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity)))
+      #[root, size, bumpIndex, freeListHead]
+def fifoCancelResult (query : FifoCancel.Query) : Val :=
+  .ext (.component (.fifoCancel query)) #[]
 def accLamportsN (acc : Nat) : Val := leaf (.accLamportsN acc)
 def accDataLenN (acc : Nat) : Val := leaf (.accDataLenN acc)
 def isSignerN (acc : Nat) : Val := leaf (.isSignerN acc)
@@ -189,6 +260,9 @@ def PdaSeed.wellFormed : PdaSeed → Bool
   | .ascii value => asciiSeedWellFormed value
   | .stateKey => true
   | .accKey acc => cpiAccInRange acc
+  | .accData acc offset length =>
+      cpiAccInRange acc && 0 < length && length ≤ 32 &&
+        offset ≤ 18446744073709551615 - length
 
 /-- Solana permits at most 16 seeds of at most 32 bytes each. The emitter appends the bump, so
 the statically declared non-bump group is nonempty and contains at most 15 seeds. -/
@@ -214,9 +288,8 @@ private partial def staticPayloadsWellFormed : Val → Bool
         operands.all staticPayloadsWellFormed
   | .ext (.accDataWord acc word) operands =>
       accInRange acc && dataWordInRange word && operands.all staticPayloadsWellFormed
-  | .ext (.accDataWordAt acc baseWord strideWords capacity) operands =>
-      accInRange acc && indexedDataWordsInRange baseWord strideWords capacity &&
-        operands.all staticPayloadsWellFormed
+  | .ext (.component query) operands =>
+      query.wellFormed maxTxAccountLocks && operands.all staticPayloadsWellFormed
   | .ext _ operands => operands.all staticPayloadsWellFormed
   | _ => true
 
@@ -241,6 +314,9 @@ def OpExt.wellFormed : OpExt Val → Bool
           (PdaSeed.groupWellFormed seeds && bump.isSome)) &&
         bump.all fun value =>
           value.wellFormed ValKind.arity && staticPayloadsWellFormed value
+  | .component call =>
+      call.wellFormed (fun value =>
+        value.wellFormed ValKind.arity && staticPayloadsWellFormed value) maxTxAccountLocks
 
 private partial def opStaticPayloadsWellFormed : Op → Bool
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
@@ -259,6 +335,7 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
       | .invoke _ _ data _ bump =>
           data.all (fun word => word.value?.all staticPayloadsWellFormed) &&
             bump.all staticPayloadsWellFormed
+      | .component call => call.allValues staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
 def Op.wellFormed (op : Op) : Bool :=
@@ -288,11 +365,12 @@ partial def valNeedsWalk : Val → Bool
        | .accLamports1 | .accOwner1 | .accDataLen1
        | .isSigner1 | .isWritable1 | .isExecutable1 => true
        | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
-       | .accDataWordAt acc _ _ _
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
-       | .findPdaSeeds seeds => seeds.any fun | .stateKey | .accKey _ => true | _ => false
+       | .findPdaSeeds seeds =>
+           seeds.any fun | .stateKey | .accKey _ | .accData .. => true | _ => false
+       | .component query => query.needsWalk
        | .checkPdaSeeds _ _ => true
        | _ => false) || operands.any valNeedsWalk
 
@@ -313,22 +391,24 @@ partial def valMinAccounts : Val → Nat
         | .accLamports1 | .accOwner1 | .accDataLen1
         | .isSigner1 | .isWritable1 | .isExecutable1 => 2
         | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
-        | .accDataWordAt acc _ _ _
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc
         | .signerKeyN acc | .ownerIsSelf acc => acc + 1
+        | .component query => query.minAccounts valMinAccounts operands
         | .findPdaSeeds seeds => seeds.foldl (init := 0) fun current seed =>
             match seed with
-            | .accKey acc => Nat.max current (acc + 2)
+            | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
             | _ => current
         | .checkPdaSeeds account seeds =>
             seeds.foldl (init := account + 2) fun current seed =>
               match seed with
-              | .accKey acc => Nat.max current (acc + 2)
+              | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
               | _ => current
         | _ => 0
-      operands.foldl (init := here) fun current operand =>
-        Nat.max current (valMinAccounts operand)
+      match kind with
+      | .component _ => here
+      | _ => operands.foldl (init := here) fun current operand =>
+          Nat.max current (valMinAccounts operand)
 
 partial def valHasSelect : Val → Bool
   | .select .. => true
@@ -359,8 +439,9 @@ private def CpiWord.hasSelect : CpiWord Val → Bool
 private def OpExt.needsWalk : OpExt Val → Bool
   | .invoke _ _ data seeds bump =>
       data.any CpiWord.needsWalk ||
-        seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
+        seeds.any (fun | .stateKey | .accKey _ | .accData .. => true | _ => false) ||
         bump.any valNeedsWalk
+  | .component .. => true
 
 private def OpExt.minAccounts : OpExt Val → Nat
   | .invoke _ _ data seeds bump =>
@@ -368,16 +449,21 @@ private def OpExt.minAccounts : OpExt Val → Nat
         Nat.max current word.minAccounts
       let fromSeeds := seeds.foldl (init := 0) fun current seed =>
         match seed with
-        | .accKey acc => Nat.max current (acc + 2)
+        | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
         | _ => current
       Nat.max (Nat.max fromData fromSeeds) (bump.map valMinAccounts |>.getD 0)
+  | .component call => call.minAccounts valMinAccounts
 
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
       data.any CpiWord.hasSelect || bump.any valHasSelect
+  | .component call => call.anyValue valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=
-  walkOps ops fun | .ext (.invoke ..) => true | _ => false
+  walkOps ops fun
+    | .ext (.invoke ..) => true
+    | .ext (.component call) => call.usesCpi
+    | _ => false
 
 def hasStoreField (ops : Array Op) : Bool :=
   walkOps ops fun | .storeField .. => true | _ => false
