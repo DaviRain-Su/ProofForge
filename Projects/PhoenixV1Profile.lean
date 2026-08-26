@@ -5,12 +5,11 @@ Phoenix v1 market-account profile gate.
 
 The official program does not accept arbitrary runtime capacities. Its 24-byte `MarketSizeParams`
 header selects one of twelve statically compiled `FIFOMarket<Pubkey, B, A, S>` layouts. This module
-validates that dispatch boundary, fixed scalar/allocator metadata, and the complete bid tree plus
-allocator partition against the pinned Sokoban 0.3.0 layout.
+validates that dispatch boundary, fixed scalar/allocator metadata, and both complete order trees
+plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 
 This is deliberately a separate verifier program whose ProofForge state is account 0 and candidate
-Phoenix market is account 1. It does not yet claim ask/trader traversal or official instruction
-execution.
+Phoenix market is account 1. It does not yet claim trader traversal or official instruction execution.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -438,6 +437,40 @@ def bidTreeValid (s : State) : UInt64 :=
     else if bids = 4096 then
       accDataRbTreeValid 1 114 115 116 117 8 4096 1
         root size bumpIndex freeListHead
+    else
+      0
+
+/--
+Validate the complete ask red-black tree and its allocator partition. This is the same fixed-memory
+account walk as `bidTreeValid`, with Phoenix ask keys required to be side-tag 0 and strictly
+ascending by `(price, sequence)`.
+-/
+@[pf_entry]
+def askTreeValid (s : State) : UInt64 :=
+  if profileAccountBytes s = 0 || allocatorHeadersValid s = 0 then
+    0
+  else
+    let bids := accDataWord 1 2
+    if bids = 512 then
+      let cursor := accDataWord 1 4213
+      accDataRbTreeValid 1 4214 4215 4216 4217 8 512 0
+        (lowUInt32 (accDataWord 1 4210)) (accDataWord 1 4212)
+        (lowUInt32 cursor) (highUInt32 cursor)
+    else if bids = 1024 then
+      let cursor := accDataWord 1 8309
+      accDataRbTreeValid 1 8310 8311 8312 8313 8 1024 0
+        (lowUInt32 (accDataWord 1 8306)) (accDataWord 1 8308)
+        (lowUInt32 cursor) (highUInt32 cursor)
+    else if bids = 2048 then
+      let cursor := accDataWord 1 16501
+      accDataRbTreeValid 1 16502 16503 16504 16505 8 2048 0
+        (lowUInt32 (accDataWord 1 16498)) (accDataWord 1 16500)
+        (lowUInt32 cursor) (highUInt32 cursor)
+    else if bids = 4096 then
+      let cursor := accDataWord 1 32885
+      accDataRbTreeValid 1 32886 32887 32888 32889 8 4096 0
+        (lowUInt32 (accDataWord 1 32882)) (accDataWord 1 32884)
+        (lowUInt32 cursor) (highUInt32 cursor)
     else
       0
 

@@ -183,29 +183,41 @@ private partial def opsHaveParentPath
           opsHaveParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth body
       | _ => false
 
-private partial def valHasRbTree (capacity : Nat) : ProofForge.Svm.Ops.Val → Bool
-  | .field base _ | .bitNot base => valHasRbTree capacity base
+private partial def valHasRbTree
+    (linksBase parentBase keyBase sequenceBase capacity : Nat) (expectedBid : Bool) :
+    ProofForge.Svm.Ops.Val → Bool
+  | .field base _ | .bitNot base =>
+      valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
   | .shiftL lhs rhs | .shiftR lhs rhs
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
   | .divU64 lhs rhs | .modU64 lhs rhs =>
-      valHasRbTree capacity lhs || valHasRbTree capacity rhs
-  | .indexGet base _ index _ _ => valHasRbTree capacity base || valHasRbTree capacity index
+      valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid lhs ||
+        valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid rhs
+  | .indexGet base _ index _ _ =>
+      valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid base ||
+        valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid index
   | .select _ lhs rhs thenValue elseValue =>
-      valHasRbTree capacity lhs || valHasRbTree capacity rhs ||
-        valHasRbTree capacity thenValue || valHasRbTree capacity elseValue
+      valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid lhs ||
+        valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid rhs ||
+        valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid thenValue ||
+        valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid elseValue
   | .ext (.accDataRbTreeValid actualAcc links parent key sequence stride actualCapacity bid)
       operands =>
-      (actualAcc == 1 && links == 114 && parent == 115 && key == 116 && sequence == 117 &&
-        stride == 8 && actualCapacity == capacity && bid) ||
-        operands.any (valHasRbTree capacity)
-  | .ext _ operands => operands.any (valHasRbTree capacity)
+      (actualAcc == 1 && links == linksBase && parent == parentBase && key == keyBase &&
+        sequence == sequenceBase && stride == 8 && actualCapacity == capacity &&
+        bid == expectedBid) ||
+        operands.any
+          (valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid)
+  | .ext _ operands => operands.any
+      (valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid)
   | _ => false
 
-private partial def opsHaveRbTree (capacity : Nat)
+private partial def opsHaveRbTree
+    (linksBase parentBase keyBase sequenceBase capacity : Nat) (bid : Bool)
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
-    let has := valHasRbTree capacity
+    let has := valHasRbTree linksBase parentBase keyBase sequenceBase capacity bid
     let here :=
       match op with
       | .letLocal _ value | .setLocal _ value | .forAccum _ value _
@@ -219,8 +231,10 @@ private partial def opsHaveRbTree (capacity : Nat)
     here ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
-          opsHaveRbTree capacity thenOps || opsHaveRbTree capacity elseOps
-      | .forBody _ body => opsHaveRbTree capacity body
+          opsHaveRbTree linksBase parentBase keyBase sequenceBase capacity bid thenOps ||
+            opsHaveRbTree linksBase parentBase keyBase sequenceBase capacity bid elseOps
+      | .forBody _ body =>
+          opsHaveRbTree linksBase parentBase keyBase sequenceBase capacity bid body
       | _ => false
 
 elab "#pf_guard_phoenix_v1_profile" : command => do
@@ -254,6 +268,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing bidParentPathValid"
   let some bidTree := program.methods.find? (·.ixName == "bidTreeValid")
     | throwError "missing bidTreeValid"
+  let some askTree := program.methods.find? (·.ixName == "askTreeValid")
+    | throwError "missing askTreeValid"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -283,8 +299,14 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveParentPath 1 114 115 8 1024 32 parentPath.ops &&
       opsHaveParentPath 1 114 115 8 2048 32 parentPath.ops &&
       opsHaveParentPath 1 114 115 8 4096 32 parentPath.ops &&
-      opsHaveRbTree 512 bidTree.ops && opsHaveRbTree 1024 bidTree.ops &&
-      opsHaveRbTree 2048 bidTree.ops && opsHaveRbTree 4096 bidTree.ops do
+      opsHaveRbTree 114 115 116 117 512 true bidTree.ops &&
+      opsHaveRbTree 114 115 116 117 1024 true bidTree.ops &&
+      opsHaveRbTree 114 115 116 117 2048 true bidTree.ops &&
+      opsHaveRbTree 114 115 116 117 4096 true bidTree.ops &&
+      opsHaveRbTree 4214 4215 4216 4217 512 false askTree.ops &&
+      opsHaveRbTree 8310 8311 8312 8313 1024 false askTree.ops &&
+      opsHaveRbTree 16502 16503 16504 16505 2048 false askTree.ops &&
+      opsHaveRbTree 32886 32887 32888 32889 4096 false askTree.ops do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
@@ -299,7 +321,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "validate bounded acc1 parent path links=114 parent=115 stride=8 capacity=4096 depth=32" &&
       asm.contains "parent_path_loop_" &&
       asm.contains "complete account-resident RB tree and allocator validation" &&
-      asm.contains "stride=8 capacity=4096 bid=true" && asm.contains "rb_free_loop_" &&
+      asm.contains "stride=8 capacity=4096 bid=true" &&
+      asm.contains "stride=8 capacity=4096 bid=false" && asm.contains "rb_free_loop_" &&
       asm.contains "add64 r9, -4096" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 

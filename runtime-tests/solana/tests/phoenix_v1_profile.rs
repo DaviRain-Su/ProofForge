@@ -131,6 +131,39 @@ fn write_perfect_bid_tree(
     }
 }
 
+fn write_perfect_ask_tree(
+    account: &mut Account,
+    tree_root_word: usize,
+    index: u32,
+    last_index: u32,
+    parent: u32,
+    rank: &mut u64,
+) {
+    let left = index.checked_mul(2).filter(|child| *child <= last_index);
+    let right = index
+        .checked_mul(2)
+        .and_then(|child| child.checked_add(1))
+        .filter(|child| *child <= last_index);
+    if let Some(left) = left {
+        write_perfect_ask_tree(account, tree_root_word, left, last_index, index, rank);
+    }
+    *rank += 1;
+    write_order_node(
+        account,
+        tree_root_word,
+        index as usize,
+        left.unwrap_or(0),
+        right.unwrap_or(0),
+        parent,
+        0,
+        *rank,
+        u64::from(index),
+    );
+    if let Some(right) = right {
+        write_perfect_ask_tree(account, tree_root_word, right, last_index, index, rank);
+    }
+}
+
 fn body_count_words(book_capacity: u64) -> (usize, usize) {
     match book_capacity {
         512 => (4212, 8312),
@@ -191,6 +224,8 @@ fn all_official_profiles_select_exact_account_size() {
         write_allocator_header(&mut market, ask_root_word, 2, 1, 3, 3);
         write_allocator_header(&mut market, trader_root_word, 3, 1, 4, 4);
         write_order_node(&mut market, 110, 1, 0, 0, 0, 0, 999, !1u64);
+        write_order_node(&mut market, ask_root_word, 1, 0, 2, 0, 0, 100, 1);
+        write_order_node(&mut market, ask_root_word, 2, 0, 0, 1, 1, 110, 2);
         assert_eq!(ask_count_word, ask_root_word + 2);
         assert_eq!(trader_count_word, trader_root_word + 2);
         run_view(
@@ -224,6 +259,11 @@ fn all_official_profiles_select_exact_account_size() {
         );
         run_view(
             "bidTreeValid",
+            market.clone(),
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+        run_view(
+            "askTreeValid",
             market.clone(),
             &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
         );
@@ -572,6 +612,69 @@ fn largest_bid_profile_validates_full_capacity_tree_with_fixed_memory() {
     assert_eq!(rank, 4095);
     run_view(
         "bidTreeValid",
+        market,
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn ask_tree_uses_ascending_fifo_order_and_side_tag() {
+    let mut market = market_account(
+        PHOENIX_PROGRAM,
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    write_allocator_header(&mut market, 110, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 4210, 3, 2, 5, 4);
+    write_allocator_header(&mut market, 8310, 0, 0, 1, 1);
+    write_order_node(&mut market, 4210, 1, 0, 0, 2, 1, 90, 1);
+    write_order_node(&mut market, 4210, 2, 1, 3, 0, 0, 100, 2);
+    write_order_node(&mut market, 4210, 3, 0, 0, 2, 1, 110, 3);
+    write_free_order_slot(&mut market, 4210, 4, 5);
+    run_view(
+        "askTreeValid",
+        market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+
+    let mut descending = market.clone();
+    write_order_node(&mut descending, 4210, 1, 0, 0, 2, 1, 120, 1);
+    run_view(
+        "askTreeValid",
+        descending,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let mut bid_side_sequence = market;
+    write_order_node(&mut bid_side_sequence, 4210, 3, 0, 0, 2, 1, 110, !3u64);
+    run_view(
+        "askTreeValid",
+        bid_side_sequence,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn largest_ask_profile_validates_full_capacity_tree_with_fixed_memory() {
+    let mut market = market_account(
+        PHOENIX_PROGRAM,
+        543_696,
+        MARKET_HEADER_DISCRIMINANT,
+        4096,
+        4096,
+        128,
+    );
+    write_allocator_header(&mut market, 110, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 32882, 4095, 1, 4096, 4096);
+    write_allocator_header(&mut market, 65654, 0, 0, 1, 1);
+    let mut rank = 0;
+    write_perfect_ask_tree(&mut market, 32882, 1, 4095, 0, &mut rank);
+    assert_eq!(rank, 4095);
+    run_view(
+        "askTreeValid",
         market,
         &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
     );
