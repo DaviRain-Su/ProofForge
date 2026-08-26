@@ -783,6 +783,80 @@ def registerThirdTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
   else
     .error .overflow
 
+/--
+Insert a fourth distinct key into any canonical three-node 128-seat trader tree. A valid
+three-node red-black tree is a black root with two red leaf children. Sokoban therefore takes the
+red-uncle path for every fourth-key position: attach address 4 below the selected child, recolor
+both existing children black, and keep the root and all account-resident addresses unchanged.
+-/
+@[pf_entry]
+def registerFourthTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error (State × UInt64) :=
+  let root := lowUInt32 (accDataWord 1 8310)
+  let rootSlot := boundedNodeSlot 128 root
+  let rootLinks := accDataWordAt 1 8314 18 128 rootSlot
+  let left := lowUInt32 rootLinks
+  let right := highUInt32 rootLinks
+  let leftSlot := boundedNodeSlot 128 left
+  let rightSlot := boundedNodeSlot 128 right
+  let rootKey0 := accDataWordAt 1 8316 18 128 rootSlot
+  let rootKey1 := accDataWordAt 1 8317 18 128 rootSlot
+  let rootKey2 := accDataWordAt 1 8318 18 128 rootSlot
+  let rootKey3 := accDataWordAt 1 8319 18 128 rootSlot
+  let leftKey0 := accDataWordAt 1 8316 18 128 leftSlot
+  let leftKey1 := accDataWordAt 1 8317 18 128 leftSlot
+  let leftKey2 := accDataWordAt 1 8318 18 128 leftSlot
+  let leftKey3 := accDataWordAt 1 8319 18 128 leftSlot
+  let rightKey0 := accDataWordAt 1 8316 18 128 rightSlot
+  let rightKey1 := accDataWordAt 1 8317 18 128 rightSlot
+  let rightKey2 := accDataWordAt 1 8318 18 128 rightSlot
+  let rightKey3 := accDataWordAt 1 8319 18 128 rightSlot
+  let treeValid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128 root 3 4 4
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 8311 = 0 && accDataWord 1 8312 = 3 &&
+      accDataWord 1 8313 = 0x0000000400000004 && treeValid = 1 &&
+      left ≠ 0 && right ≠ 0 &&
+      !key4Equal key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3 &&
+      !key4Equal key0 key1 key2 key3 leftKey0 leftKey1 leftKey2 leftKey3 &&
+      !key4Equal key0 key1 key2 key3 rightKey0 rightKey1 rightKey2 rightKey3 then
+    let newBeforeRoot :=
+      key4Before key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3
+    let parent := if newBeforeRoot then left else right
+    let parentSlot := boundedNodeSlot 128 parent
+    let newBeforeParent :=
+      if newBeforeRoot then
+        key4Before key0 key1 key2 key3 leftKey0 leftKey1 leftKey2 leftKey3
+      else
+        key4Before key0 key1 key2 key3 rightKey0 rightKey1 rightKey2 rightKey3
+    let parentLinks := if newBeforeParent then 4 else 0x0000000400000000
+    let _ := accDataWordSetAt 1 8313 1 1 0 0x0000000500000005
+    let _ := accDataWordSetAt 1 8314 18 128 3 0
+    let _ := accDataWordSetAt 1 8315 18 128 3 (parent ||| 0x0000000100000000)
+    let _ := accDataWordSetAt 1 8316 18 128 3 key0
+    let _ := accDataWordSetAt 1 8317 18 128 3 key1
+    let _ := accDataWordSetAt 1 8318 18 128 3 key2
+    let _ := accDataWordSetAt 1 8319 18 128 3 key3
+    let _ := accDataWordSetAt 1 8320 18 128 3 0
+    let _ := accDataWordSetAt 1 8321 18 128 3 0
+    let _ := accDataWordSetAt 1 8322 18 128 3 0
+    let _ := accDataWordSetAt 1 8323 18 128 3 0
+    let _ := accDataWordSetAt 1 8324 18 128 3 0
+    let _ := accDataWordSetAt 1 8325 18 128 3 0
+    let _ := accDataWordSetAt 1 8326 18 128 3 0
+    let _ := accDataWordSetAt 1 8327 18 128 3 0
+    let _ := accDataWordSetAt 1 8328 18 128 3 0
+    let _ := accDataWordSetAt 1 8329 18 128 3 0
+    let _ := accDataWordSetAt 1 8330 18 128 3 0
+    let _ := accDataWordSetAt 1 8331 18 128 3 0
+    let _ := accDataWordSetAt 1 8314 18 128 parentSlot parentLinks
+    let _ := accDataWordSetAt 1 8315 18 128 leftSlot root
+    let _ := accDataWordSetAt 1 8315 18 128 rightSlot root
+    let _ := accDataWordSetAt 1 8312 1 1 0 4
+    .ok ({ s with dummy := 0 }, 4)
+  else
+    .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=

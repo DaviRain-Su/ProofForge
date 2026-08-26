@@ -365,6 +365,20 @@ fn market_with_two_traders(root_key: [u64; 4], child_key: [u64; 4]) -> Account {
     )
 }
 
+fn market_with_three_traders(
+    first_key: [u64; 4],
+    second_key: [u64; 4],
+    third_key: [u64; 4],
+) -> Account {
+    run_market_write(
+        "registerThirdTrader128",
+        market_with_two_traders(first_key, second_key),
+        true,
+        &third_key,
+        &[Check::success(), Check::return_data(&3u64.to_le_bytes())],
+    )
+}
+
 #[test]
 fn all_official_profiles_select_exact_account_size() {
     for (bids, asks, seats, expected) in OFFICIAL_PROFILES {
@@ -1412,6 +1426,173 @@ fn third_trader_registration_rejects_noncanonical_inputs_atomically() {
         malformed.clone(),
         true,
         &C,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
+}
+
+#[test]
+fn fourth_trader_registration_handles_every_three_node_address_layout() {
+    const A: [u64; 4] = [0x10, 0, 0, 0];
+    const B: [u64; 4] = [0x20, 0, 0, 0];
+    const C: [u64; 4] = [0x30, 0, 0, 0];
+    const LOW: [u64; 4] = [0x05, 0, 0, 0];
+    const LEFT_INNER: [u64; 4] = [0x18, 0, 0, 0];
+    const RIGHT_INNER: [u64; 4] = [0x28, 0, 0, 0];
+    const HIGH: [u64; 4] = [0x40, 0, 0, 0];
+    const CURSOR_5_5: u64 = 0x0000_0005_0000_0005;
+
+    // The first three keys produce all six possible address assignments for the same canonical
+    // black-root/two-red-leaf shape. The fourth key covers all four child-link positions.
+    let cases = [
+        ("LL layout, outer left", C, B, A, LOW, 2, 3, 1, 3, 4),
+        (
+            "LR layout, inner left",
+            C,
+            A,
+            B,
+            LEFT_INNER,
+            3,
+            2,
+            1,
+            2,
+            4u64 << 32,
+        ),
+        (
+            "no-fix layout, inner right",
+            B,
+            A,
+            C,
+            RIGHT_INNER,
+            1,
+            2,
+            3,
+            3,
+            4,
+        ),
+        (
+            "RR layout, outer right",
+            A,
+            B,
+            C,
+            HIGH,
+            2,
+            1,
+            3,
+            3,
+            4u64 << 32,
+        ),
+        ("RL address layout", A, C, B, LOW, 3, 1, 2, 1, 4),
+        (
+            "opposite no-fix address layout",
+            B,
+            C,
+            A,
+            HIGH,
+            1,
+            3,
+            2,
+            2,
+            4u64 << 32,
+        ),
+    ];
+
+    for (name, first, second, third, fourth, root, left, right, parent, parent_links) in cases {
+        let mut three_nodes = market_with_three_traders(first, second, third);
+        for (word, value) in [(8320, 0x1111), (8338, 0x2222), (8356, 0x3333)] {
+            write_word(&mut three_nodes, word, value);
+        }
+        for word in 8368..8386 {
+            write_word(&mut three_nodes, word, u64::MAX);
+        }
+
+        let mut expected = three_nodes.clone();
+        write_allocator_header(&mut expected, 8310, 4, root, 5, 5);
+        for word in 8368..8386 {
+            write_word(&mut expected, word, 0);
+        }
+        write_word(&mut expected, 8369, packed_u32(parent, 1));
+        for (offset, value) in fourth.into_iter().enumerate() {
+            write_word(&mut expected, 8370 + offset, value);
+        }
+        let parent_slot = 8314 + 18 * (parent as usize - 1);
+        write_word(&mut expected, parent_slot, parent_links);
+        for child in [left, right] {
+            let child_slot = 8314 + 18 * (child as usize - 1);
+            write_word(&mut expected, child_slot + 1, u64::from(root));
+        }
+
+        let registered = run_market_write(
+            "registerFourthTrader128",
+            three_nodes,
+            true,
+            &fourth,
+            &[Check::success(), Check::return_data(&4u64.to_le_bytes())],
+        );
+        assert_eq!(read_word(&registered, 8313), CURSOR_5_5, "{name}");
+        assert_eq!(read_word(&registered, 8320), 0x1111, "{name}");
+        assert_eq!(read_word(&registered, 8338), 0x2222, "{name}");
+        assert_eq!(read_word(&registered, 8356), 0x3333, "{name}");
+        assert_eq!(registered.data, expected.data, "{name}");
+        run_view(
+            "bodyEntryCount",
+            registered.clone(),
+            &[Check::success(), Check::return_data(&4u64.to_le_bytes())],
+        );
+        run_view(
+            "traderTreeValid",
+            registered,
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+    }
+}
+
+#[test]
+fn fourth_trader_registration_rejects_noncanonical_inputs_atomically() {
+    const A: [u64; 4] = [0x10, 0, 0, 0];
+    const B: [u64; 4] = [0x20, 0, 0, 0];
+    const C: [u64; 4] = [0x30, 0, 0, 0];
+    const D: [u64; 4] = [0x40, 0, 0, 0];
+
+    let canonical = market_with_three_traders(A, B, C);
+    for duplicate in [A, B, C] {
+        let after_duplicate = run_market_write(
+            "registerFourthTrader128",
+            canonical.clone(),
+            true,
+            &duplicate,
+            &[Check::err(ProgramError::Custom(0x1001))],
+        );
+        assert_eq!(after_duplicate.data, canonical.data);
+    }
+
+    let after_readonly = run_market_write(
+        "registerFourthTrader128",
+        canonical.clone(),
+        false,
+        &D,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_readonly.data, canonical.data);
+
+    let mut wrong_owner = canonical.clone();
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "registerFourthTrader128",
+        wrong_owner.clone(),
+        true,
+        &D,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let mut malformed = canonical;
+    write_word(&mut malformed, 8315, 0);
+    let after_malformed = run_market_write(
+        "registerFourthTrader128",
+        malformed.clone(),
+        true,
+        &D,
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(after_malformed.data, malformed.data);

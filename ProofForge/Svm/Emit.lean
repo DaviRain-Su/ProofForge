@@ -1131,6 +1131,8 @@ private partial def emitLoadAccDataParentPathValid (p : IR.Program)
   return loadIndex ++ loadRoot ++ loadBump ++ account ++
     s!"\
   ; validate bounded acc{acc} parent path links={linksBaseWord} parent={parentBaseWord} stride={strideWords} capacity={capacity} depth={maxDepth}
+  ; r7 remains the walked instruction-data base outside this intrinsic.
+  stxdw [r10 - {stackOff + 32}], r7
   ldxdw r2, [r10 - {stackOff + 8}]
   ldxdw r3, [r10 - {stackOff + 16}]
   ldxdw r4, [r10 - {stackOff + 24}]
@@ -1207,6 +1209,7 @@ private partial def emitLoadAccDataParentPathValid (p : IR.Program)
   lddw r1, 0
   stxdw [r10 - {stackOff}], r1
 {done}:
+  ldxdw r7, [r10 - {stackOff + 32}]
 "
 
 /-- Validate every live node and every released slot in a fixed-capacity Sokoban allocator. The
@@ -1736,6 +1739,8 @@ private partial def emitLoadAccDataRbTreeKey4Valid (p : IR.Program)
     s!"\
   ; complete four-word-key account-resident RB tree and allocator validation
   ; links={linksBaseWord} parent={parentBaseWord} key4={keyBaseWord} stride={strideWords} capacity={capacity}
+  ; r7 remains the walked instruction-data base outside this intrinsic.
+  stxdw [r10 - {stackOff + 168}], r7
   ldxdw r2, [r10 - {stackOff + 16}]
   lddw r1, {capacity}
   jgt r2, r1, {failure}
@@ -2038,6 +2043,7 @@ private partial def emitLoadAccDataRbTreeKey4Valid (p : IR.Program)
   lddw r1, 0
   stxdw [r10 - {stackOff}], r1
 {done}:
+  ldxdw r7, [r10 - {stackOff + 168}]
 "
 
 /--

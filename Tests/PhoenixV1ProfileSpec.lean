@@ -375,6 +375,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing registerSecondTrader128"
   let some registerThird := program.methods.find? (·.ixName == "registerThirdTrader128")
     | throwError "missing registerThirdTrader128"
+  let some registerFourth := program.methods.find? (·.ixName == "registerFourthTrader128")
+    | throwError "missing registerFourthTrader128"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -454,7 +456,18 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveDataWordSetAt 1 8313 1 1 registerThird.ops &&
       (List.range 18).all (fun offset =>
         opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerThird.ops) &&
-      countDataWordSetAt registerThird.ops == 25 do
+      countDataWordSetAt registerThird.ops == 25 &&
+      opsHaveIndexedDataWord 1 8314 18 128 registerFourth.ops &&
+      opsHaveIndexedDataWord 1 8316 18 128 registerFourth.ops &&
+      opsHaveIndexedDataWord 1 8317 18 128 registerFourth.ops &&
+      opsHaveIndexedDataWord 1 8318 18 128 registerFourth.ops &&
+      opsHaveIndexedDataWord 1 8319 18 128 registerFourth.ops &&
+      opsHaveRbTreeKey4 8314 8315 8316 128 registerFourth.ops &&
+      opsHaveDataWordSetAt 1 8312 1 1 registerFourth.ops &&
+      opsHaveDataWordSetAt 1 8313 1 1 registerFourth.ops &&
+      (List.range 18).all (fun offset =>
+        opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerFourth.ops) &&
+      countDataWordSetAt registerFourth.ops == 23 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
@@ -473,6 +486,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "stride=8 capacity=4096 bid=false" && asm.contains "rb_free_loop_" &&
       asm.contains "complete four-word-key account-resident RB tree" &&
       asm.contains "key4=65660 stride=18 capacity=8321" && asm.contains "be64 r1" &&
+      asm.contains "r7 remains the walked instruction-data base outside this intrinsic" &&
       asm.contains "rb4_free_loop_" && asm.contains "add64 r9, -4096" &&
       asm.contains "add64 r9, -3000" &&
       asm.contains "fixed-stride external account word write acc=1 base=8314 stride=18 capacity=128" &&
