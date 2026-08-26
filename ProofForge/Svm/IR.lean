@@ -1,6 +1,7 @@
 import ProofForge.Extract.IR
 import ProofForge.Core.Target
 import ProofForge.Svm.ABI
+import ProofForge.Svm.AccountStorage
 
 namespace ProofForge.Svm.IR
 
@@ -18,7 +19,7 @@ inductive Op where
   | invoke (programIx : Nat) (metas : Array Ops.CpiMeta)
       (data : Array (Ops.CpiWord Ops.Val))
       (seeds : Array Ops.PdaSeed := #[]) (bump : Option Ops.Val := none)
-  | accDataWordSetAt (acc baseWord strideWords capacity : Nat) (index value : Ops.Val)
+  | accountStorage (call : AccountStorage.Call Ops.Val)
   | accDataRbTreeKey4Insert
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : Ops.Val)
@@ -59,8 +60,7 @@ private partial def lowerOp : Ops.Op → Except String Op
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
   | .ext (.invoke programIx metas data seed bump) =>
       pure (.invoke programIx metas data seed bump)
-  | .ext (.accDataWordSetAt acc baseWord strideWords capacity index value) =>
-      pure (.accDataWordSetAt acc baseWord strideWords capacity index value)
+  | .ext (.accountStorage call) => pure (.accountStorage call)
   | .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3) =>
       pure (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
@@ -113,8 +113,7 @@ private partial def Op.toSource : Op → Ops.Op
   | .checkedModU64 lhs rhs => .checkedModU64 lhs rhs
   | .ite cmp lhs rhs thn els => .ite cmp lhs rhs (toSourceOps thn) (toSourceOps els)
   | .invoke programIx metas data seed bump => .ext (.invoke programIx metas data seed bump)
-  | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-      .ext (.accDataWordSetAt acc baseWord strideWords capacity index value)
+  | .accountStorage call => .ext (.accountStorage call)
   | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3 =>
       .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
@@ -160,8 +159,7 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
     Ops.OpExt Ops.Val → Ops.OpExt Ops.Val
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
-  | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-      .accDataWordSetAt acc baseWord strideWords capacity (mapValue index) (mapValue value)
+  | .accountStorage call => .accountStorage (call.mapValues mapValue)
   | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3 =>
       .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
@@ -192,7 +190,7 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
       data.filterMap Ops.CpiWord.value? ++ match bump with
         | some value => #[value]
         | none => #[]
-  | .accDataWordSetAt _ _ _ _ index value => #[index, value]
+  | .accountStorage call => call.values
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3]
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
@@ -231,9 +229,8 @@ private def projectOpExt
   | .svm (.invoke programIx metas data seeds bump) =>
       return .invoke programIx metas (← data.mapM (projectCpiWord projectVal))
         seeds (← bump.mapM projectVal)
-  | .svm (.accDataWordSetAt acc baseWord strideWords capacity index value) =>
-      return .accDataWordSetAt acc baseWord strideWords capacity
-        (← projectVal index) (← projectVal value)
+  | .svm (.accountStorage call) =>
+      return .accountStorage (← call.mapValuesM projectVal)
   | .svm (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3) =>
       return .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
@@ -706,9 +703,7 @@ private partial def opsCanon (ops : Array Op) : String :=
               s!",s.[{seedCanon}]:{valCanon valueBump}"
           | _, none => ""
         s!"inv({programIx},[{metaCanon}],[{dataCanon}]{signer})"
-    | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-        s!"dws.{acc}.{baseWord}.{strideWords}.{capacity}" ++
-          s!"({valCanon index},{valCanon value})"
+    | .accountStorage call => call.canonical valCanon
     | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity key0 key1 key2 key3 =>
         s!"rb4i.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++

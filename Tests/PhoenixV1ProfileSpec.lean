@@ -313,9 +313,9 @@ private partial def opsHaveDataWordSetAt
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accDataWordSetAt actualAcc actualBase actualStride actualCapacity _ _ =>
-         actualAcc == acc && actualBase == baseWord && actualStride == strideWords &&
-           actualCapacity == capacity
+     | .accountStorage (.writeWord field _ _) =>
+         field.region.account == acc && field.firstWord == baseWord &&
+           field.region.strideWords == strideWords && field.region.capacity == capacity
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
@@ -327,7 +327,7 @@ private partial def opsHaveDataWordSetAt
 private partial def countDataWordSetAt (ops : Array ProofForge.Svm.IR.Op) : Nat :=
   ops.foldl (init := 0) fun count op =>
     count + match op with
-    | .accDataWordSetAt .. => 1
+    | .accountStorage (.writeWord ..) => 1
     | .ite _ _ _ thenOps elseOps =>
         countDataWordSetAt thenOps + countDataWordSetAt elseOps
     | .forBody _ body => countDataWordSetAt body

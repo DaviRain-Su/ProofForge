@@ -298,7 +298,7 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         | _ => throw "extract/unsupported: legacy adapter cannot represent multi-seed CPI"
       return .invoke programIx (← metas.mapM metaToLegacy) (← data.mapM wordToLegacy)
         seed (← bump.mapM toLegacyVal)
-  | .ext (.svm (.accDataWordSetAt ..))
+  | .ext (.svm (.accountStorage ..))
   | .ext (.svm (.accDataRbTreeKey4Insert ..))
   | .ext (.svm (.accDataRbTreeKey4Remove ..))
   | .ext (.svm (.accDataRbTreeTraderDeposit ..))

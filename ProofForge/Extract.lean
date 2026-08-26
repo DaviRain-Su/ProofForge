@@ -4909,7 +4909,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               | 0 => false
               | fuel' + 1 => ops.any fun op =>
                   match op with
-                  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert ..
+                  | .ext (.svm (.accountStorage ..)) | .accDataRbTreeKey4Insert ..
                   | .accDataRbTreeKey4Remove .. | .accDataRbTreeTraderDeposit ..
                   | .accDataRbTreeOrderInsert ..
                   | .accDataRbTreeOrderRemove .. => true
@@ -5552,9 +5552,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .invoke prog metas data seed bump =>
         .invoke prog metas (data.map (·.map (flipVal fuel')))
           seed (bump.map (flipVal fuel'))
-      | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-          .accDataWordSetAt acc baseWord strideWords capacity
-            (flipVal fuel' index) (flipVal fuel' value)
+      | .ext (.svm (.accountStorage call)) =>
+          .ext (.svm (.accountStorage (call.mapValues (flipVal fuel'))))
       | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
           strideWords capacity key0 key1 key2 key3 =>
           .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
@@ -5858,7 +5857,7 @@ private def opFields : Ops.Op → Array String
   | .invoke _ _ data _ bump =>
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
-  | .accDataWordSetAt _ _ _ _ index value => valFields index ++ valFields value
+  | .ext (.svm (.accountStorage call)) => call.values.flatMap valFields
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
@@ -5978,9 +5977,8 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
                 let normalized ← normalizeVal value
                 pure (word.map fun _ => normalized)
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
-      | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-          return .accDataWordSetAt acc baseWord strideWords capacity
-            (← normalizeVal index) (← normalizeVal value)
+      | .ext (.svm (.accountStorage call)) =>
+          return .ext (.svm (.accountStorage (← call.mapValuesM normalizeVal)))
       | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
           strideWords capacity key0 key1 key2 key3 =>
           return .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
@@ -6092,8 +6090,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .invoke _ _ data _ bump =>
       (data.findSome? fun word => word.value?.bind (valEscapedArg limit)) <|>
         bump.bind (valEscapedArg limit)
-  | .accDataWordSetAt _ _ _ _ index value =>
-      #[index, value].findSome? (valEscapedArg limit)
+  | .ext (.svm (.accountStorage call)) =>
+      call.values.findSome? (valEscapedArg limit)
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].findSome? (valEscapedArg limit)
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>

@@ -1,4 +1,5 @@
 import ProofForge.Core.Ops
+import ProofForge.Svm.AccountStorage
 
 namespace ProofForge.Svm.Ops
 
@@ -202,7 +203,7 @@ def CpiWord.rawSelfEntry? : CpiWord V → Option RawSelfEntry
 inductive OpExt (V : Type) where
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord V))
       (seeds : Array PdaSeed := #[]) (bump : Option V := none)
-  | accDataWordSetAt (acc baseWord strideWords capacity : Nat) (index value : V)
+  | accountStorage (call : AccountStorage.Call V)
   | accDataRbTreeKey4Insert
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : V)
@@ -367,11 +368,9 @@ def OpExt.wellFormed : OpExt Val → Bool
           (PdaSeed.groupWellFormed seeds && bump.isSome)) &&
         bump.all fun value =>
           value.wellFormed ValKind.arity && staticPayloadsWellFormed value
-  | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-      acc > 0 && accInRange acc &&
-        indexedDataWordsInRange baseWord strideWords capacity &&
-        index.wellFormed ValKind.arity && value.wellFormed ValKind.arity &&
-        staticPayloadsWellFormed index && staticPayloadsWellFormed value
+  | .accountStorage call =>
+      call.wellFormed (fun value =>
+        value.wellFormed ValKind.arity && staticPayloadsWellFormed value) maxTxAccountLocks
   | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3 =>
       acc > 0 && accInRange acc &&
@@ -427,8 +426,7 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
       | .invoke _ _ data _ bump =>
           data.all (fun word => word.value?.all staticPayloadsWellFormed) &&
             bump.all staticPayloadsWellFormed
-      | .accDataWordSetAt _ _ _ _ index value =>
-          staticPayloadsWellFormed index && staticPayloadsWellFormed value
+      | .accountStorage call => call.allValues staticPayloadsWellFormed
       | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].all staticPayloadsWellFormed
       | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
@@ -549,7 +547,7 @@ private def OpExt.needsWalk : OpExt Val → Bool
       data.any CpiWord.needsWalk ||
         seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
         bump.any valNeedsWalk
-  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert .. | .accDataRbTreeTraderDeposit ..
+  | .accountStorage .. | .accDataRbTreeKey4Insert .. | .accDataRbTreeTraderDeposit ..
   | .accDataRbTreeKey4Remove .. | .accDataRbTreeOrderInsert ..
   | .accDataRbTreeOrderRemove .. => true
 
@@ -562,8 +560,7 @@ private def OpExt.minAccounts : OpExt Val → Nat
         | .accKey acc => Nat.max current (acc + 2)
         | _ => current
       Nat.max (Nat.max fromData fromSeeds) (bump.map valMinAccounts |>.getD 0)
-  | .accDataWordSetAt acc _ _ _ index value =>
-      Nat.max (acc + 1) (Nat.max (valMinAccounts index) (valMinAccounts value))
+  | .accountStorage call => call.minAccounts valMinAccounts
   | .accDataRbTreeKey4Insert acc _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
         Nat.max current (valMinAccounts key)
@@ -585,8 +582,7 @@ private def OpExt.minAccounts : OpExt Val → Nat
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
       data.any CpiWord.hasSelect || bump.any valHasSelect
-  | .accDataWordSetAt _ _ _ _ index value =>
-      valHasSelect index || valHasSelect value
+  | .accountStorage call => call.anyValue valHasSelect
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].any valHasSelect
   | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>

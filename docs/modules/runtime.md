@@ -60,6 +60,12 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   guarded `Except` success branch 也保留完整 effect sequence，不会被最终 state projection
   消除。失败以 `Custom(1)` 退出并由 SVM 回滚整条 instruction。它不返回或持久化
   pointer，也不把 transient heap 当账户 allocator。
+- 该写入在 target 内部通过 `Svm.AccountStorage.Call` lowering：`Region/Field` 固定
+  account/base/stride/capacity，显式记录 zero/one-based indexing，并统一提供 value
+  traversal、geometry validation、canonical digest 与 read/write effect。主 SVM IR/emitter
+  只看一个 generic storage bridge；allocator/tree/map/queue 的 bounded routine 应继续进入
+  这一层，而不是增加新的顶层 store emitter。它是 account-resident zero-copy backend，
+  不是 Rust transient heap 或普通 `HashMap`。
 - `accDataParentPathValid acc linksBase parentBase stride capacity maxDepth index root bump` —
   static shape + 最多 64 步的账户内 parent walk；运行时 index/root/bump 先过 1-based
   envelope，每步验证 color、parent 和 parent→child reciprocity，root 外 cycle 到界返回 0。

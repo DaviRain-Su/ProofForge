@@ -1,4 +1,5 @@
 import ProofForge.Svm.Ops
+import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.IR
 import ProofForge.Evm.Ops
 import ProofForge.Evm.IR
@@ -110,17 +111,45 @@ private def oversizedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
 #guard !oversizedRbTreeKey4Op.wellFormed
 
 private def validAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
-  .ext (.accDataWordSetAt 1 8314 18 128 (.arg 0) (.arg 1))
+  .ext (.accountStorage (.writeWordZeroBased 1 8314 18 128 (.arg 0) (.arg 1)))
 
 private def stateAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
-  .ext (.accDataWordSetAt 0 1 1 1 (.arg 0) (.arg 1))
+  .ext (.accountStorage (.writeWordZeroBased 0 1 1 1 (.arg 0) (.arg 1)))
 
 private def unboundedAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
-  .ext (.accDataWordSetAt 1 8314 0 128 (.arg 0) (.arg 1))
+  .ext (.accountStorage (.writeWordZeroBased 1 8314 0 128 (.arg 0) (.arg 1)))
 
 #guard validAccDataWordSetAtOp.wellFormed
 #guard !stateAccDataWordSetAtOp.wellFormed
 #guard !unboundedAccDataWordSetAtOp.wellFormed
+
+private def oneBasedTraderLinks : ProofForge.Svm.AccountStorage.Field :=
+  { region :=
+      { account := 1
+        baseWord := 8314
+        strideWords := 18
+        capacity := 128
+        indexBase := .one
+        access := { writable := true, currentProgramOwned := true } } }
+
+private def oneBasedTraderWrite :
+    ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
+  .writeWord oneBasedTraderLinks (.arg 0) (.arg 1)
+
+#guard oneBasedTraderLinks.wellFormed
+#guard oneBasedTraderWrite.wellFormed
+  (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard oneBasedTraderWrite.effects.reads == #[1]
+#guard oneBasedTraderWrite.effects.writes == #[1]
+#guard oneBasedTraderWrite.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
+  "dws1.1.8314.18.128(a0,a1)"
+#guard
+  match ProofForge.Svm.IR.ofSourceOps #[validAccDataWordSetAtOp] with
+  | .ok #[.accountStorage (.writeWord field (.arg 0) (.arg 1))] =>
+      field.region.account == 1 && field.firstWord == 8314 &&
+        field.region.strideWords == 18 && field.region.capacity == 128 &&
+        field.region.indexBase == .zero
+  | _ => false
 
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 63 #[] #[] #[] none)

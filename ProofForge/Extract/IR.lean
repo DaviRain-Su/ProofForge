@@ -33,8 +33,7 @@ abbrev CFG := Core.CFG.Graph ValKind OpExt
 private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.Ops.OpExt Val
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Svm.Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
-  | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-      .accDataWordSetAt acc baseWord strideWords capacity (mapValue index) (mapValue value)
+  | .accountStorage call => .accountStorage (call.mapValues mapValue)
   | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3 =>
       .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
@@ -65,7 +64,7 @@ private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
       data.filterMap Svm.Ops.CpiWord.value? ++ match bump with
         | some value => #[value]
         | none => #[]
-  | .accDataWordSetAt _ _ _ _ index value => #[index, value]
+  | .accountStorage call => call.values
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3]
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
@@ -142,10 +141,8 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
       match bump with
       | some value => value.wellFormed ValKind.arity
       | none => true
-  | .accDataWordSetAt acc baseWord strideWords capacity index value =>
-      acc > 0 && Svm.Ops.accInRange acc &&
-        Svm.Ops.indexedDataWordsInRange baseWord strideWords capacity &&
-        index.wellFormed ValKind.arity && value.wellFormed ValKind.arity
+  | .accountStorage call =>
+      call.wellFormed (·.wellFormed ValKind.arity) Svm.Ops.maxTxAccountLocks
   | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3 =>
       acc > 0 && Svm.Ops.accInRange acc &&
