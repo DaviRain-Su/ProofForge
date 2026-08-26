@@ -204,4 +204,12 @@ if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
   exit 1
 fi
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit; engineering only)"
+got_dom="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
+if [[ ! "$got_dom" =~ ^0x[0-9a-fA-F]{64}$ ]]; then
+  echo "FAIL: DOMAIN_SEPARATOR not bytes32: $got_dom" >&2
+  exit 1
+fi
+got_dom2="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
+solana_lean_require_equal "${got_dom2,,}" "${got_dom,,}" "DOMAIN_SEPARATOR holds after permit"
+
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain; engineering only)"

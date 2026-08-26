@@ -414,7 +414,17 @@ def extractedToken : IR.Program :=
       view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
       view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
       dummyGet "Token",
-      view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0)
+      view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0),
+      {
+        kind := .get
+        name := "Examples.Token.DOMAIN_SEPARATOR"
+        ixName := "DOMAIN_SEPARATOR"
+        selector := Keccak.selectorOfWidths "DOMAIN_SEPARATOR" #[]
+        retWidths := #[33]
+        retCount := 4
+        ops := return256 fun limb => .ext (.domainSep256 limb) #[]
+        view := true
+      }
     ]
   }
 

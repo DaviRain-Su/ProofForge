@@ -21,6 +21,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .error _ => false
 
 #guard nonceOf (init 0) sample == zero256
+#guard DOMAIN_SEPARATOR (init 0) == ⟨0, 0, 0, 0⟩
 
 #guard
   match permit (init 0) sample sample nine nine 27 ⟨1, 0, 0, 0⟩ ⟨2, 0, 0, 0⟩ with
@@ -55,7 +56,10 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"Expired\"" &&
         abi.contains "\"type\":\"error\"" &&
         yul.contains "staticcall(gas(), 1," &&
-        yul.contains "0x1901"
+        yul.contains "0x1901" &&
+        yul.contains "keccak256(0, 160)" &&
+        abi.contains "\"name\":\"DOMAIN_SEPARATOR\"" &&
+        abi.contains "\"type\":\"bytes32\""
 
 #guard
   let p := ProofForge.Evm.Golden.extractedToken
@@ -63,7 +67,9 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "transferFrom")).isSome &&
     (p.entries.find? (·.ixName == "approve")).isSome &&
     (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&
-    (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true
+    (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.retWidths) == some #[33]
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedToken with

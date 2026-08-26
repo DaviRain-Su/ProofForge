@@ -28,6 +28,8 @@ inductive ValKind where
   | callValue256 (limb : Nat)
   /-- packed `selfbalance()` limb; `limb` is 0..3 (w0 lowest). -/
   | selfBalance256 (limb : Nat)
+  /-- EIP-712 domain separator limb; `limb` is 0..3 (w0 lowest). -/
+  | domainSep256 (limb : Nat)
   /-- `a ≥ b` on packed 256-bit words. Eight operands: a0..a3, b0..b3. -/
   | ge256
   /-- Packed address equality. Six operands: a0..a2, b0..b2. -/
@@ -44,7 +46,7 @@ def ValKind.arity : ValKind → Nat
   | .mapGetPair256 _ => 7
   | .tokenBalance256 _ => 3
   | .tokenAllowance256 _ => 9
-  | .callValue256 _ | .selfBalance256 _ => 0
+  | .callValue256 _ | .selfBalance256 _ | .domainSep256 _ => 0
   | .ge256 => 8
   | .eq20 => 6
   | .arith256 _ _ => 8
@@ -122,6 +124,7 @@ def tokenAllowance256 (limb : Nat) (tw0 tw1 tw2 o0 o1 o2 s0 s1 s2 : Val) : Val :
   .ext (.tokenAllowance256 limb) #[tw0, tw1, tw2, o0, o1, o2, s0, s1, s2]
 def callValue256 (limb : Nat) : Val := .ext (.callValue256 limb) #[]
 def selfBalance256 (limb : Nat) : Val := .ext (.selfBalance256 limb) #[]
+def domainSep256 (limb : Nat) : Val := .ext (.domainSep256 limb) #[]
 def ge256 (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext .ge256 #[a0, a1, a2, a3, b0, b1, b2, b3]
 def eq20 (a0 a1 a2 b0 b1 b2 : Val) : Val :=

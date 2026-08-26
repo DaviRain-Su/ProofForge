@@ -1013,6 +1013,9 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelfBalance256 ||
                   endsWith baseE ".evmSelfBalance256" then
                 some (.ext (.evm (.selfBalance256 limb.toNat)) #[])
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmDomainSeparator ||
+                  endsWith baseE ".evmDomainSeparator" then
+                some (.ext (.evm (.domainSep256 limb.toNat)) #[])
               else
                 match asVal env fuel' baseE with
                 | some b => some (flattenField b leaf)
@@ -3491,6 +3494,9 @@ private def findEvmCallValue256 (_env : Environment) (e : Expr) : Bool :=
 private def findEvmSelfBalance256 (_env : Environment) (e : Expr) : Bool :=
   mentionsRuntime e "evmSelfBalance256"
 
+private def findEvmDomainSeparator (_env : Environment) (e : Expr) : Bool :=
+  mentionsRuntime e "evmDomainSeparator"
+
 private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
   findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogTipped ".evmLogTipped" e
 
@@ -4318,6 +4324,13 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
       .returnU64 (.ext (.evm (.selfBalance256 1)) #[]),
       .returnU64 (.ext (.evm (.selfBalance256 2)) #[]),
       .returnU64 (.ext (.evm (.selfBalance256 3)) #[])
+    ]
+  else if findEvmDomainSeparator env e then
+    some #[
+      .returnU64 (.ext (.evm (.domainSep256 0)) #[]),
+      .returnU64 (.ext (.evm (.domainSep256 1)) #[]),
+      .returnU64 (.ext (.evm (.domainSep256 2)) #[]),
+      .returnU64 (.ext (.evm (.domainSep256 3)) #[])
     ]
   else none
 
@@ -6238,7 +6251,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | _ => ops
   let ops :=
     let retTy := peelForalls info.type
-    if isUInt256Type retTy then expandWide ops 32
+    if isUInt256Type retTy || isBytes32Type retTy then expandWide ops 32
     else if isAddr20Type retTy then expandWide ops 20
     else ops
   let paramCount :=
@@ -6252,6 +6265,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | .get =>
       if isAddr20Type retTy then #[20]
       else if isUInt256Type retTy then #[32]
+      else if isBytes32Type retTy then #[33]
       else #[]
     | _ => #[]
   let retCount :=
@@ -6259,6 +6273,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | .get =>
       if isAddr20Type retTy then 3
       else if isUInt256Type retTy then 4
+      else if isBytes32Type retTy then 4
       else
         let nRet := ops.foldl (init := 0) fun acc op =>
           match op with | .returnU64 _ => acc + 1 | _ => acc
@@ -6945,13 +6960,15 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
   let ret := peelForalls info.type
   if isExceptType ret then
     return .increment
-  if isUInt64Type ret || (widthOfType ret).isSome || isAddr20Type ret || isUInt256Type ret then
+  if isUInt64Type ret || (widthOfType ret).isSome || isAddr20Type ret ||
+      isUInt256Type ret || isBytes32Type ret then
     return .get
   if ret.getAppFn.constName? == some ``Prod then
     return .get
   if let some structName := ret.getAppFn.constName? then
     if isStructure env structName && structName != ``UInt64 &&
-        structName != ``Prod && structName != addr20Name && structName != uint256Name then
+        structName != ``Prod && structName != addr20Name &&
+        structName != uint256Name && structName != bytes32Name then
       return .init
   throw s!"extract/unsupported: cannot classify {n}"
 

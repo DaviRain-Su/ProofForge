@@ -243,4 +243,7 @@ def evmImm20 : Addr20 :=
     (_owner _spender : Addr20) (value _deadline : UInt256) (_v : UInt8) (_r _s : Bytes32) : UInt64 :=
   value.w0
 
+/-- 封闭 EIP-712 domain separator。name=`Token`，version=`1`。宿主返回 0。 -/
+@[irreducible] def evmDomainSeparator : Bytes32 := ⟨0, 0, 0, 0⟩
+
 end ProofForge.Evm.Runtime

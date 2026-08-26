@@ -223,7 +223,8 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
     .ext .mapGetU64 _ | .ext .mapGetAddr _ | .ext .mapGetPair _ |
     .ext (.mapGetAddr256 _) _ | .ext (.mapGetPair256 _) _ |
     .ext (.tokenBalance256 _) _ | .ext (.tokenAllowance256 _) _ |
-    .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext .ge256 _ | .ext .eq20 _ =>
+    .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext (.domainSep256 _) _ |
+    .ext .ge256 _ | .ext .eq20 _ =>
       .error "extract/unsupported: evm map/arith val needs materialize"
   | .ext _ _ => .error "extract/ir: malformed EVM value operands"
 
@@ -295,6 +296,37 @@ private partial def valKey : Ops.Val → String
   | .loopIx => "ix"
   | .select c l r t f =>
       s!"sel.{repr c}({valKey l},{valKey r},{valKey t},{valKey f})"
+
+private def eip712DomainTypeHash : String :=
+  Keccak.keccak256HexOfString
+    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+
+private def eip712PermitTypeHash : String :=
+  Keccak.keccak256HexOfString
+    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+
+private def eip712NameHash : String := Keccak.keccak256HexOfString "Token"
+
+private def eip712VersionHash : String := Keccak.keccak256HexOfString "1"
+
+/-- Closed Token/1 domain hash. Cached on `Render` so permit and DOMAIN_SEPARATOR share it. -/
+private def emitDomainSeparator (indent : String) (st : Render) : String × String × Render :=
+  match lookupWide st "domsep" with
+  | some ret => ("", ret, st)
+  | none =>
+    let (nameH, st1) := fresh st
+    let (verH, st2) := fresh st1
+    let (domainH, st3) := fresh st2
+    let txt :=
+      indent ++ "let " ++ nameH ++ " := 0x" ++ eip712NameHash ++ nl ++
+      indent ++ "let " ++ verH ++ " := 0x" ++ eip712VersionHash ++ nl ++
+      indent ++ "mstore(0, 0x" ++ eip712DomainTypeHash ++ ")" ++ nl ++
+      indent ++ "mstore(32, " ++ nameH ++ ")" ++ nl ++
+      indent ++ "mstore(64, " ++ verH ++ ")" ++ nl ++
+      indent ++ "mstore(96, chainid())" ++ nl ++
+      indent ++ "mstore(128, address())" ++ nl ++
+      indent ++ "let " ++ domainH ++ " := keccak256(0, 160)" ++ nl
+    (txt, domainH, rememberWide st3 "domsep" domainH)
 
 private def bindChecked (indent name expr : String) : String :=
   indent ++ "let " ++ name ++ " := " ++ expr ++ nl ++
@@ -616,6 +648,10 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
             indent ++ "let " ++ ret ++ " := selfbalance()" ++ nl ++
             indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl
           return (txt, nm, st2)
+    | .ext (.domainSep256 limb) #[] =>
+        let (pre, ret, st1) := emitDomainSeparator indent st
+        let (nm, st2) := fresh st1
+        return (pre ++ indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl, nm, st2)
     | .ext (.tokenAllowance256 limb) #[tw0, tw1, tw2, o0, o1, o2, s0, s1, s2] =>
         let (p0, a0, st0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
         let (p1, a1, st1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 st0
@@ -779,19 +815,11 @@ private def emitPermit (p : IR.Program) (indent paramPrefix : String)
   let (ntag, st30) := fresh st29
   let (nonce, st31) := fresh st30
   let (structH, st32) := fresh st31
-  let (nameH, st33) := fresh st32
-  let (verH, st34) := fresh st33
-  let (domainH, st35) := fresh st34
-  let (digest, st36) := fresh st35
-  let (signer, st37) := fresh st36
-  let (aslot, st38) := fresh st37
-  st := st38
-  let domainType := Keccak.keccak256HexOfString
-    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-  let permitType := Keccak.keccak256HexOfString
-    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
-  let nameHash := Keccak.keccak256HexOfString "Token"
-  let versionHash := Keccak.keccak256HexOfString "1"
+  let (domPre, domainH, st33) := emitDomainSeparator indent st32
+  let (digest, st34) := fresh st33
+  let (signer, st35) := fresh st34
+  let (aslot, st36) := fresh st35
+  st := st36
   let expiredSel := Keccak.selector "Expired" #[]
   let mut acc := ""
   acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
@@ -822,21 +850,14 @@ private def emitPermit (p : IR.Program) (indent paramPrefix : String)
   indent ++ "if gt(" ++ ntag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
   indent ++ "let " ++ nonce ++ " := 0" ++ nl ++
   indent ++ "if " ++ ntag ++ " { " ++ nonce ++ " := sload(add(" ++ nslot ++ ", 1)) }" ++ nl ++
-  indent ++ "mstore(0, 0x" ++ permitType ++ ")" ++ nl ++
+  indent ++ "mstore(0, 0x" ++ eip712PermitTypeHash ++ ")" ++ nl ++
   indent ++ "mstore(32, " ++ own ++ ")" ++ nl ++
   indent ++ "mstore(64, " ++ spd ++ ")" ++ nl ++
   indent ++ "mstore(96, " ++ amt ++ ")" ++ nl ++
   indent ++ "mstore(128, " ++ nonce ++ ")" ++ nl ++
   indent ++ "mstore(160, " ++ dead ++ ")" ++ nl ++
   indent ++ "let " ++ structH ++ " := keccak256(0, 192)" ++ nl ++
-  indent ++ "let " ++ nameH ++ " := 0x" ++ nameHash ++ nl ++
-  indent ++ "let " ++ verH ++ " := 0x" ++ versionHash ++ nl ++
-  indent ++ "mstore(0, 0x" ++ domainType ++ ")" ++ nl ++
-  indent ++ "mstore(32, " ++ nameH ++ ")" ++ nl ++
-  indent ++ "mstore(64, " ++ verH ++ ")" ++ nl ++
-  indent ++ "mstore(96, chainid())" ++ nl ++
-  indent ++ "mstore(128, address())" ++ nl ++
-  indent ++ "let " ++ domainH ++ " := keccak256(0, 160)" ++ nl ++
+  domPre ++
   indent ++ "mstore(0, 0x1901000000000000000000000000000000000000000000000000000000000000)" ++ nl ++
   indent ++ "mstore(2, " ++ domainH ++ ")" ++ nl ++
   indent ++ "mstore(34, " ++ structH ++ ")" ++ nl ++
@@ -2000,7 +2021,7 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
           finalState := next
       | .returnU64s values =>
           if values.isEmpty then throw "evm/cfg: empty return tuple"
-          if method.retWidths == #[32] && values.size == 4 then
+          if (method.retWidths == #[32] || method.retWidths == #[33]) && values.size == 4 then
             let (p0, a0, s0) ←
               materializeVal p indent "arg" method.paramCount method.paramWidths values[0]! finalState
             let (p1, a1, s1) ←
@@ -2239,6 +2260,8 @@ private def outputsJson (m : IR.Method) : String :=
     "[{\"name\":\"\",\"type\":\"address\"}]"
   else if m.retWidths == #[32] then
     "[{\"name\":\"\",\"type\":\"uint256\"}]"
+  else if m.retWidths == #[33] then
+    "[{\"name\":\"\",\"type\":\"bytes32\"}]"
   else if m.retCount ≤ 1 then
     "[{\"name\":\"\",\"type\":\"uint64\"}]"
   else

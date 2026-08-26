@@ -42,6 +42,11 @@ def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
 def nonceOf (_s : State) (who : Addr20) : UInt256 :=
   evmMapGetAddr256 nonceBase who
 
+/-- 封闭 EIP-712 domain separator。name=`Token`，version=`1`。 -/
+@[pf_entry]
+def DOMAIN_SEPARATOR (_s : State) : Bytes32 :=
+  evmDomainSeparator
+
 /-- 封闭 EIP-2612 `permit`。name=`Token`，version=`1`。 -/
 @[pf_entry]
 def permit (_s : State) (owner spender : Addr20) (value deadline : UInt256)
