@@ -609,6 +609,16 @@ def createPda (lamports : UInt64) : UInt64 :=
   0
 
 /--
+账户 `acc` data 的第 `word` 个小端 `u64`。`acc` / `word` 必须在抽出时是常量；
+`acc ≥ 1` 走 walk。目标发射器先检查 `data_len ≥ 8 * (word + 1)`，越界以
+`Custom(1)` fail closed，不返回零值冒充账户内容。
+-/
+@[irreducible] def accDataWord (acc word : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := word
+  0
+
+/--
 账户 `acc` 的 lamports。`acc` 必须在抽出时是常量，且
 `acc < Svm.ABI.maxTxAccountLocks`（官方当前强制 64）。
 `acc ≥ 1` 走 walk。旧名 `accLamports0` / `accLamports1` 仍独立。

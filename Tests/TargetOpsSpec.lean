@@ -27,6 +27,13 @@ private def validSvmOp : ProofForge.Svm.Ops.Op :=
 #guard validSvmOp.wellFormed
 #guard ProofForge.Svm.Ops.cpiAccInRange 62
 #guard !ProofForge.Svm.Ops.cpiAccInRange 63
+#guard ProofForge.Svm.Ops.dataWordInRange 4
+#guard !ProofForge.Svm.Ops.dataWordInRange 2305843009213693951
+
+private def invalidDataWordOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataWord 1 2305843009213693951)
+
+#guard !invalidDataWordOp.wellFormed
 
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 63 #[] #[] #[] none)

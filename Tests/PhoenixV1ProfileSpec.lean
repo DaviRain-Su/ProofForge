@@ -1,0 +1,95 @@
+import Projects.PhoenixV1Profile
+import ProofForge
+
+namespace Tests.PhoenixV1ProfileSpec
+
+open Projects.PhoenixV1Profile
+open Lean Elab Command
+
+#guard accountBytesFor 512 512 128 == 84944
+#guard accountBytesFor 512 512 1025 == 214112
+#guard accountBytesFor 512 512 1153 == 232544
+#guard accountBytesFor 1024 1024 128 == 150480
+#guard accountBytesFor 1024 1024 2049 == 427104
+#guard accountBytesFor 1024 1024 2177 == 445536
+#guard accountBytesFor 2048 2048 128 == 281552
+#guard accountBytesFor 2048 2048 4097 == 853088
+#guard accountBytesFor 2048 2048 4225 == 871520
+#guard accountBytesFor 4096 4096 128 == 543696
+#guard accountBytesFor 4096 4096 8193 == 1705056
+#guard accountBytesFor 4096 4096 8321 == 1723488
+#guard accountBytesFor 4 4 4 == 0
+#guard accountBytesFor 512 1024 128 == 0
+
+private partial def valHasDataWord (acc word : Nat) : ProofForge.Svm.Ops.Val → Bool
+  | .ext (.accDataWord actualAcc actualWord) _ => actualAcc == acc && actualWord == word
+  | .field base _ | .bitNot base => valHasDataWord acc word base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasDataWord acc word lhs || valHasDataWord acc word rhs
+  | .indexGet base _ index _ _ =>
+      valHasDataWord acc word base || valHasDataWord acc word index
+  | .select _ lhs rhs thenValue elseValue =>
+      valHasDataWord acc word lhs || valHasDataWord acc word rhs ||
+        valHasDataWord acc word thenValue || valHasDataWord acc word elseValue
+  | .ext _ operands => operands.any (valHasDataWord acc word)
+  | _ => false
+
+private partial def opsHaveDataWord (acc word : Nat) (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    let here :=
+      match op with
+      | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+      | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+          valHasDataWord acc word value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+      | .indexSet _ lhs rhs _ _ =>
+          valHasDataWord acc word lhs || valHasDataWord acc word rhs
+      | .invoke _ _ data _ bump =>
+          data.any (fun item => item.value?.any (valHasDataWord acc word)) ||
+            bump.any (valHasDataWord acc word)
+      | _ => false
+    here ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveDataWord acc word thenOps || opsHaveDataWord acc word elseOps
+      | .forBody _ body => opsHaveDataWord acc word body
+      | _ => false
+
+elab "#pf_guard_phoenix_v1_profile" : command => do
+  let env ← getEnv
+  let source ←
+    match ProofForge.Extract.extractModuleIR env `Projects.PhoenixV1Profile none with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let program ←
+    match ProofForge.Svm.IR.fromExtracted source with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  unless ProofForge.Svm.IR.dataLen program == 16 &&
+      ProofForge.Svm.IR.cpiAccountCount program == 2 do
+    throwError "Phoenix-v1 profile verifier account layout changed"
+  let some profile := program.methods.find? (·.ixName == "profileAccountBytes")
+    | throwError "missing profileAccountBytes"
+  let some seats := program.methods.find? (·.ixName == "headerSeats")
+    | throwError "missing headerSeats"
+  unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
+      opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
+      opsHaveDataWord 1 4 seats.ops do
+    throwError "Phoenix-v1 profile header reads are incomplete"
+  let asm ←
+    match ProofForge.Svm.Emit.emitAsm program with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless asm.contains "load walked acc1 data word 4" &&
+      asm.contains "ldxdw r2, [r1 + 80]" &&
+      asm.contains "jge r2, r3, ok_data_word_" &&
+      asm.contains "add64 r1, 88" && asm.contains "jlt r1, 2" do
+    throwError "Phoenix-v1 account data bounds gate is missing"
+
+#pf_guard_phoenix_v1_profile
+
+end Tests.PhoenixV1ProfileSpec

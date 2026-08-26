@@ -140,9 +140,12 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 49 SVM build、Mollusk 198/198 与 Anvil 12/12。跨四档逐样本只作
+  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 201/201 与 Anvil 12/12。跨四档逐样本只作
   host reference↔source fold，不宣称完整 chain refinement。
-- **未支持（P5/公网）**：公网部署、动态容量、runtime remaining accounts、
+- **部分支持（P5 profile gate）**：独立 verifier 已按 canonical program owner、576-byte
+  header/discriminant、12 个官方 capacity tuple 和 exact account length 选择预编译 profile；
+  最小 `(512,512,128)` 账户为 84,944 bytes。市场 body 仍 opaque。
+- **未支持（P5 body/公网）**：公网部署、动态 body 访问、runtime remaining accounts、
   Token-2022 extension 语义及完整 Phoenix-v1 账户兼容。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/
@@ -159,4 +162,5 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
 
-这是完整的 bounded N=4 Phoenix IOC 模型，不是完整 Phoenix-v1 动态账户实现。
+独立 `PhoenixV1Profile` 只验证官方账户头和预编译容量选择；这是完整的 bounded N=4
+Phoenix IOC 模型加 P5 profile gate，不是完整 Phoenix-v1 动态账户实现。

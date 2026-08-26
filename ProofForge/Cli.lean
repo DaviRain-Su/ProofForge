@@ -67,7 +67,7 @@ private def selectSvmNames (names : Array String) : Except String (Array String)
       | none => .error s!"unknown svm program {n}"
 
 /-- Programs whose source lives under `Projects.*` instead of `Examples.*`. -/
-def projectPrograms : Array String := #["Phoenix"]
+def projectPrograms : Array String := #["Phoenix", "PhoenixV1Profile"]
 
 def svmModuleName (name : String) : Lean.Name :=
   if projectPrograms.contains name then Lean.Name.str `Projects name

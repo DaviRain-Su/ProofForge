@@ -102,6 +102,7 @@
 | T-L5-17 | happy / fail | Phoenix persisted order topology | ask/bid 各 24 种插入顺序、24×4 单点删除/复用及 24×24 完整删除顺序 host 红黑不变量；抽取 IR 钉住 qualified nested-vector links/color/allocator writes；Mollusk 验证两边 root、best traversal 与满书 eviction 的 exact address reuse |
 | T-L5-18 | perf / fail | Phoenix Extract P0 资源门 | `postAsk` 全部嵌套 op 的 `IR.Val` 总节点 `< 200,000`、最大单树 `< 50,000`；单方法与全程序发射成功；state-loop continuation 解码失败不得只返回 scalar 或部分 commit |
 | T-L5-19 | happy / fail | Phoenix Surfpool Loader-v3 deployment | Surfpool 1.5.0 offline/headless；禁用 instant direct-state deployment；真实 buffer/write/deploy/authority transaction 输出；confirmed deploy signature；Program executable/owner/36-byte state、ProgramData 45-byte metadata + ELF exact bytes |
+| T-L5-20 | happy / fail | Phoenix-v1 canonical profile gate | 官方 owner/discriminant；12 个 `MarketSizeParams` tuple 与 exact account length；最小 profile 84,944 B；错误 owner/header/profile/length 不选择；短 data word 读 `Custom(1)` |
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
 refinement 仍未宣称。P0 探针口径递归统计 `select` 四个分支和 extension operands；当前

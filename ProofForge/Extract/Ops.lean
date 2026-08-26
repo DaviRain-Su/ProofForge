@@ -45,6 +45,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.accKeyWord (acc word : Nat) : Val := svmLeaf (.accKeyWord acc word)
 @[match_pattern] def Val.accOwnerWord (acc word : Nat) : Val :=
   svmLeaf (.accOwnerWord acc word)
+@[match_pattern] def Val.accDataWord (acc word : Nat) : Val :=
+  svmLeaf (.accDataWord acc word)
 @[match_pattern] def Val.accLamportsN (acc : Nat) : Val := svmLeaf (.accLamportsN acc)
 @[match_pattern] def Val.accDataLenN (acc : Nat) : Val := svmLeaf (.accDataLenN acc)
 @[match_pattern] def Val.isSignerN (acc : Nat) : Val := svmLeaf (.isSignerN acc)

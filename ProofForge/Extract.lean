@@ -766,6 +766,17 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let w := word.toNat
             if Svm.Ops.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
+        else if (endsWith e ".accDataWord" || isConstNamed e ``ProofForge.Svm.Runtime.accDataWord) &&
+            e.getAppArgs.size ≥ 2 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit word) =>
+            let a := acc.toNat
+            let w := word.toNat
+            if Svm.Ops.accInRange a && Svm.Ops.dataWordInRange w then
+              some (.accDataWord a w)
+            else none
+          | _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
           match strip e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -2162,6 +2173,7 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.keccak256Lit s) => some (.keccak256Lit s)
             | some (.accKeyWord a w) => some (.accKeyWord a w)
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
+            | some (.accDataWord a w) => some (.accDataWord a w)
             | some (.accLamportsN a) => some (.accLamportsN a)
             | some (.accDataLenN a) => some (.accDataLenN a)
             | some (.isSignerN a) => some (.isSignerN a)
@@ -4074,7 +4086,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .accLamports1 | .accOwner1 | .accDataLen1
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-    | .accKeyWord _ _ | .accOwnerWord _ _
+    | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
@@ -4968,7 +4980,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accLamports1 | .accOwner1 | .accDataLen1
       | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
       | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-      | .accKeyWord _ _ | .accOwnerWord _ _
+      | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
       | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
       | .checkPda s b => .checkPda s (flipVal fuel' b)
@@ -5251,7 +5263,7 @@ private def valFields : Ops.Val → Array String
   | .accLamports1 | .accOwner1 | .accDataLen1
   | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
   | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
-  | .accKeyWord _ _ | .accOwnerWord _ _
+  | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
   | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
   | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => #[]
   | .checkPda _ b => valFields b

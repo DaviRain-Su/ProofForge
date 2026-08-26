@@ -437,6 +437,45 @@ private def emitLoadAccWord (kind : String) (acc word stackOff : Nat) : String :
     let hdrOff := (if kind == "key" then 8 else 40) + byteOff
     emitLoadWalkedU64 acc hdrOff stackOff
 
+/-- Read one statically selected little-endian u64 from account data. Check `data_len` before
+forming the data pointer so a short or malformed account exits with `Custom(1)`. -/
+private def emitLoadAccDataWord (acc word stackOff : Nat) (scope : String) : String :=
+  let byteOff := 8 * word
+  let required := byteOff + 8
+  let ok := s!"ok_data_word_{scope}_{acc}_{word}_{stackOff}"
+  if acc == 0 then
+    s!"\
+  ; load acc0 data word {word}
+  ldxdw r2, [r6 + ACC0_DATA_LEN]
+  lddw r3, {required}
+  jge r2, r3, {ok}
+  lddw r0, 0x1
+  exit
+{ok}:
+  mov64 r1, r6
+  add64 r1, ACC0_DATA
+  lddw r2, {byteOff}
+  add64 r1, r2
+  ldxdw r1, [r1 + 0]
+  stxdw [r10 - {stackOff}], r1
+"
+  else
+    s!"\
+  ; load walked acc{acc} data word {word}
+  ldxdw r1, [r10 - {headerStack acc}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {required}
+  jge r2, r3, {ok}
+  lddw r0, 0x1
+  exit
+{ok}:
+  add64 r1, 88
+  lddw r2, {byteOff}
+  add64 r1, r2
+  ldxdw r1, [r1 + 0]
+  stxdw [r10 - {stackOff}], r1
+"
+
 /--
 账户 `acc` 的 header 字段。账户 0 走固定 Loader 偏移；≥1 走 walk。
 `kind`：lamports / dataLen / signer / writable / executable / key0。
@@ -870,6 +909,8 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadAccWord "key" acc word stackOff)
   | .ext (.accOwnerWord acc word) #[] =>
     .ok (emitLoadAccWord "owner" acc word stackOff)
+  | .ext (.accDataWord acc word) #[] =>
+    .ok (emitLoadAccDataWord acc word stackOff scope)
   | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
   | .ext (.accDataLenN acc) #[] =>

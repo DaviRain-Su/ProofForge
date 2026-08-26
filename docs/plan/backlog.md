@@ -58,9 +58,9 @@
 - SVM 异构 PDA seeds（ASCII/state key/account key）、完整 canonical key 校验和可续接 ignored CPI；Phoenix classic SPL Token 双 vault 全链路
 - SVM packed u8/u16/u32/u64 CPI words 与 canonical PDA 签名 raw self-entry；SelfLog 覆盖 self-CPI、续段写回和认证失败矩阵
 - Phoenix 官方形状 `AuditLogHeader` / Borsh event 通过 `"log"` PDA signed self-CPI 发布真实 `Program data`
-- SVM 49 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
+- SVM 50 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
-- GitHub CI 串行执行 Lake guards、49 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
+- GitHub CI 串行执行 Lake guards、50 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
 - Core 显式 basic-block CFG 第一阶段：block arguments、显式 branch/checked/exit、完整 checker、local CSE、线性共享 block；Phoenix 全方法已通过 lowering/validation
 - SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；当时 Phoenix 汇编由 4,109,725 B 降至 2,748,784 B（加入 trader topology 后当前为 3,314,430 B），全部 49 个 Mollusk 文件与 12 个 Anvil 程序通过
 - Solanalib CFG correspondence：Counter add/sub/mul/div/mod 的 Core operands / physical slot / success-overflow edge 必须一致；typed guards、multiply zero-path jump、`r10-24` scratch handoff、static store 由上游 small-step semantics 执行。普通 eq/ne/lt/le/gt/ge branch 保留 cmp/operands/then/else identity，exact decoded pair theorem 证明 edge selection 与内存不变
@@ -72,12 +72,13 @@
 
 ## 当前状态
 
-- `lake build Tests` 当前 190 jobs；69 个 imported test modules 含 815 个 `#guard` / `#guard_msgs`。
-- SVM registry 49 个程序 / 49 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
+- `lake build Tests` 当前 192 jobs；70 个 imported test modules 含 832 个 `#guard` / `#guard_msgs`。
+- SVM registry 50 个程序 / 50 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量 `pf build` 与 Mollusk 201/201 当前通过。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
 - P4 通用压缩 / Loader-v3 部署资格：Core `shareBlocks` 从相邻比较升级为全图 fingerprint 分桶 + 精确结构相等，已知 redirect 先归一化；collision 不会错误共享。Phoenix CFG 6,128 → 5,151 blocks；实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 10,642,331 bytes，ELF 3,429,336 bytes，IDL 19,626 bytes，比上一 checkpoint 再减 244,637 / 75,440 bytes。Assembler 按 Agave 4.0 Loader-v3 `ProgramData` 10 MiB、metadata 45 B，强制 ELF ≤ 10,485,715 B；当前 headroom 7,056,379 B。Surfpool 1.5.0 offline smoke 禁用 instant direct-state 路径，以 3,389 个 Loader write transactions + deploy + authority transfer 完成本地部署；confirmed signature、Program/ProgramData layout 与完整 ELF bytes 全部核对。本轮 `lake build Tests`、全 49 个 SVM `pf build`、Mollusk 198/198（含 Phoenix 8/8 与 Tree 2/2）及 Anvil 12/12 全绿；不作公网部署声明。
+- P5 第一段 profile gate 已完成：通用 `accDataWord acc word` 对编译期固定账户/word 做 `data_len` 边界检查；独立 `PhoenixV1Profile` verifier 验证官方 program owner、MarketHeader discriminant、12 个官方 `(bids, asks, seats)` tuple 与 exact account length，最小 profile 返回 84,944 B。它不读取 market body，也不宣称完整 Phoenix-v1 兼容。产物 ELF 26,064 B；12 个 tuple 全部进入 profile Mollusk 3/3，全量 Mollusk 201/201 与 Anvil 12/12 通过。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
@@ -92,17 +93,17 @@
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
-| P5 动态 Phoenix-v1 | 未支持、非当前目标 | 账户容量/profile、bounded CFG 策略与变长协议类型设计 | 明确账户上限和资源模型后另立规格；在此之前动态容量、remaining accounts、完整 Phoenix-v1 账户兼容均 fail closed |
+| P5 动态 Phoenix-v1 | 部分：官方 profile gate 已有，body 未支持 | 固定 offset data word；后续依赖 bounded CFG 策略与变长协议类型设计 | canonical owner/discriminant、12 个官方 tuple、exact account length 与短 data bounds 已进 Lean/Mollusk；动态 body 访问、runtime account index、remaining accounts 和完整 Phoenix-v1 兼容仍 fail closed |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。固定长度 32-byte / u128 /
-Borsh protocol types 可在 P4/P5 前置设计；当前 Pubkey 与 client id 仍以 `UInt64` limbs
-表达。P5 不是把运行时变长账户偷偷放进现有 profile，也不是 P0 的验收条件。
+Borsh protocol types 可在 P5 后续设计；当前 Pubkey 与 client id 仍以 `UInt64` limbs
+表达。P5 profile gate 不是把运行时变长账户偷偷放进现有 bounded model，也不是 P0 的验收条件。
 
 ## 明确保持 fail closed
 
 - 搬 PF 前端 / `HandlerIR.mk` 私有构造、新 DSL、无约束 Lean、FFI→asm。
 - 全 SVM `.so` / loader refinement 与公网部署声明；当前只宣称 Phoenix 本地 Surfpool transaction smoke。
-- 运行时 program id、变长 data、运行时 remaining accounts；编译期钉死的 CPI 已开。
+- 运行时 program id、运行时选择的 data offset / 变长 body、运行时 remaining accounts；编译期固定 offset 的 bounds-checked data word 与编译期钉死的 CPI 已开。
 - Token-2022 transfer hook / fee / TLV extension 语义，直到对应账户模型落地；当前 base-layout
   wrapper 用精确 data length 在 CPI 前拒绝全部 extension-bearing mint/account。
 - feature-gated blake3 / poseidon / curve25519 / alt_bn128 / `sol_get_sysvar`。

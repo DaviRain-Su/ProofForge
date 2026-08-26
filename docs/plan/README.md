@@ -82,6 +82,7 @@
 | [l5-005](tasks/l5-005.md) | done | 嵌套 structure / Vector element 摊平 + Mollusk |
 | [l5-006](tasks/l5-006.md) | done | Sokoban 节点 + allocator/free-list + 完整左右旋 |
 | [l5-007](tasks/l5-007.md) | done | Phoenix bounded N=4 bid lifecycle + sell IOC |
+| [l5-008](tasks/l5-008.md) | done | Phoenix-v1 canonical owner/header/profile/length gate |
 
 
 积压：[backlog.md](backlog.md)
