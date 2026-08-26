@@ -383,6 +383,33 @@ def extractedToken : IR.Program :=
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
+      mutEntry "Token" "burn" 1 #[32] #[
+        .ite .eq (ge256 callerBal 0) (.lit 1)
+          #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 0),
+            .evmLogTransfer256 (callerW 0) (callerW 1) (callerW 2)
+              (.lit 0) (.lit 0) (.lit 0)
+              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
+            .storeField "supply_w0" (.ext (.arith256 1 0) #[
+              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
+              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
+              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
+            .storeField "supply_w1" (.ext (.arith256 1 1) #[
+              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
+              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
+              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
+            .storeField "supply_w2" (.ext (.arith256 1 2) #[
+              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
+              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
+              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
+            .storeField "supply_w3" (.ext (.arith256 1 3) #[
+              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
+              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
+              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
+            .returnU64 (u256Field 0 "w0")]
+          #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
+              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
+            .returnU64 (callerBal 0)]
+      ],
       mutEntry "Token" "logApprove" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
           #[.evmLog "Approval" (.arg 0), .returnU64 (.arg 0)]

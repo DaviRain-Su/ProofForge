@@ -36,7 +36,7 @@ def mint (s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64
 def balanceOf (_s : State) (who : Addr20) : UInt256 :=
   evmMapGetAddr256 balBase who
 
-/-- 账户里的总量。mint 累加；transfer 不动。 -/
+/-- 账户里的总量。mint 累加；burn 相减；transfer 不动。 -/
 @[pf_entry]
 def totalSupply (s : State) : UInt256 :=
   s.supply
@@ -72,6 +72,19 @@ def approve (s : State) (spender : Addr20) (amt : UInt256) : Except Error (State
       evmLogApproval256 evmCaller20 spender amt)
   else
     .error .overflow
+
+/-- 从 caller 扣余额并减 totalSupply。不足 → `Insufficient(have,want)`。 -/
+@[pf_entry]
+def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
+  if evmGe256 (evmMapGetAddr256 balBase evmCaller20) amt then
+    let debit :=
+      evmMapSetAddr256 balBase evmCaller20
+        (evmSub256 (evmMapGetAddr256 balBase evmCaller20) amt)
+    .ok ({ dummy := debit, supply := evmSub256 s.supply amt },
+      evmLogTransfer256 evmCaller20 ⟨0, 0, 0⟩ amt)
+  else
+    .ok ({ dummy := s.dummy, supply := s.supply },
+      evmRevertInsufficient (evmMapGetAddr256 balBase evmCaller20) amt)
 
 /-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
