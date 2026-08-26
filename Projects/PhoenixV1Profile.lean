@@ -53,28 +53,18 @@ def lowUInt32 (word : UInt64) : UInt64 := word &&& 0xffffffff
 
 def highUInt32 (word : UInt64) : UInt64 := word >>> 32
 
-/-- Reverse one little-endian account limb so unsigned comparison follows the original eight key
-bytes. Four such limbs in order reproduce Rust `[u8; 32]` lexicographic `Ord`. -/
-def byteSwap64 (word : UInt64) : UInt64 :=
-  ((word &&& 0x00000000000000ff) <<< 56) |||
-  ((word &&& 0x000000000000ff00) <<< 40) |||
-  ((word &&& 0x0000000000ff0000) <<< 24) |||
-  ((word &&& 0x00000000ff000000) <<< 8) |||
-  ((word &&& 0x000000ff00000000) >>> 8) |||
-  ((word &&& 0x0000ff0000000000) >>> 24) |||
-  ((word &&& 0x00ff000000000000) >>> 40) |||
-  ((word &&& 0xff00000000000000) >>> 56)
-
+/-- Compare four little-endian account limbs in the original 32-byte key order. The compact SVM
+byte-swap intrinsic makes each unsigned limb comparison match Rust `[u8; 32]` lexicographic Ord. -/
 def key4Before
     (lhs0 lhs1 lhs2 lhs3 rhs0 rhs1 rhs2 rhs3 : UInt64) : Bool :=
-  let lhs0 := byteSwap64 lhs0
-  let lhs1 := byteSwap64 lhs1
-  let lhs2 := byteSwap64 lhs2
-  let lhs3 := byteSwap64 lhs3
-  let rhs0 := byteSwap64 rhs0
-  let rhs1 := byteSwap64 rhs1
-  let rhs2 := byteSwap64 rhs2
-  let rhs3 := byteSwap64 rhs3
+  let lhs0 := svmByteSwap64 lhs0
+  let lhs1 := svmByteSwap64 lhs1
+  let lhs2 := svmByteSwap64 lhs2
+  let lhs3 := svmByteSwap64 lhs3
+  let rhs0 := svmByteSwap64 rhs0
+  let rhs1 := svmByteSwap64 rhs1
+  let rhs2 := svmByteSwap64 rhs2
+  let rhs3 := svmByteSwap64 rhs3
   lhs0 < rhs0 || (lhs0 = rhs0 &&
     (lhs1 < rhs1 || (lhs1 = rhs1 &&
       (lhs2 < rhs2 || (lhs2 = rhs2 && lhs3 < rhs3)))))
@@ -82,6 +72,43 @@ def key4Before
 def key4Equal
     (lhs0 lhs1 lhs2 lhs3 rhs0 rhs1 rhs2 rhs3 : UInt64) : Bool :=
   lhs0 = rhs0 && lhs1 = rhs1 && lhs2 = rhs2 && lhs3 = rhs3
+
+/-- Canonical final topology selectors for third insertion cases: 1=LL, 2=LR,
+3=left-child/no-fix, 4=RR, 5=RL, 6=right-child/no-fix. -/
+def thirdRoot (caseTag : UInt64) : UInt64 :=
+  if caseTag = 1 || caseTag = 4 then 2
+  else if caseTag = 2 || caseTag = 5 then 3
+  else 1
+
+def thirdNode1Links (caseTag : UInt64) : UInt64 :=
+  if caseTag = 3 then 0x0000000300000002
+  else if caseTag = 6 then 0x0000000200000003
+  else 0
+
+def thirdNode1ParentColor (caseTag : UInt64) : UInt64 :=
+  if caseTag = 1 || caseTag = 4 then 0x0000000100000002
+  else if caseTag = 2 || caseTag = 5 then 0x0000000100000003
+  else 0
+
+def thirdNode2Links (caseTag : UInt64) : UInt64 :=
+  if caseTag = 1 then 0x0000000100000003
+  else if caseTag = 4 then 0x0000000300000001
+  else 0
+
+def thirdNode2ParentColor (caseTag : UInt64) : UInt64 :=
+  if caseTag = 2 || caseTag = 5 then 0x0000000100000003
+  else if caseTag = 3 || caseTag = 6 then 0x0000000100000001
+  else 0
+
+def thirdNode3Links (caseTag : UInt64) : UInt64 :=
+  if caseTag = 2 then 0x0000000100000002
+  else if caseTag = 5 then 0x0000000200000001
+  else 0
+
+def thirdNode3ParentColor (caseTag : UInt64) : UInt64 :=
+  if caseTag = 1 || caseTag = 4 then 0x0000000100000002
+  else if caseTag = 3 || caseTag = 6 then 0x0000000100000001
+  else 0
 
 /-- Validate the account-resident Sokoban allocator envelope without dereferencing a node.
 Indexes are one-based; zero is only the empty-tree sentinel, and `bumpIndex` is the next unused
@@ -683,13 +710,87 @@ def registerSecondTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
   else
     .error .overflow
 
+/--
+Perform the exact third distinct-key insertion from a canonical two-node trader tree. Address 3
+is bump-allocated and all six key placements are handled: two direct children of the black root,
+plus Sokoban's LL/LR/RR/RL recolor-and-rotation outcomes. The final topology is published only as
+fixed account slot indexes; no heap tree, node copy, or persistent pointer is constructed.
+-/
+@[pf_entry]
+def registerThirdTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error (State × UInt64) :=
+  let rootLinks := accDataWord 1 8314
+  let rootKey0 := accDataWord 1 8316
+  let rootKey1 := accDataWord 1 8317
+  let rootKey2 := accDataWord 1 8318
+  let rootKey3 := accDataWord 1 8319
+  let childKey0 := accDataWord 1 8334
+  let childKey1 := accDataWord 1 8335
+  let childKey2 := accDataWord 1 8336
+  let childKey3 := accDataWord 1 8337
+  let childIsLeft := rootLinks = 2
+  let existingOrderValid :=
+    if childIsLeft then
+      key4Before childKey0 childKey1 childKey2 childKey3
+        rootKey0 rootKey1 rootKey2 rootKey3
+    else
+      key4Before rootKey0 rootKey1 rootKey2 rootKey3
+        childKey0 childKey1 childKey2 childKey3
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 8310 = 1 && accDataWord 1 8311 = 0 &&
+      accDataWord 1 8312 = 2 && accDataWord 1 8313 = 0x0000000300000003 &&
+      (childIsLeft || rootLinks = 0x0000000200000000) &&
+      accDataWord 1 8315 = 0 && accDataWord 1 8332 = 0 &&
+      accDataWord 1 8333 = 0x0000000100000001 && existingOrderValid &&
+      !key4Equal key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3 &&
+      !key4Equal key0 key1 key2 key3 childKey0 childKey1 childKey2 childKey3 then
+    let newBeforeRoot :=
+      key4Before key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3
+    let newBeforeChild :=
+      key4Before key0 key1 key2 key3 childKey0 childKey1 childKey2 childKey3
+    let caseTag : UInt64 :=
+      if childIsLeft then
+        if newBeforeRoot then if newBeforeChild then 1 else 2 else 3
+      else
+        if newBeforeRoot then 6 else if newBeforeChild then 5 else 4
+    let _ := accDataWordSetAt 1 8313 1 1 0 0x0000000400000004
+    let _ := accDataWordSetAt 1 8314 18 128 2 (thirdNode3Links caseTag)
+    let _ := accDataWordSetAt 1 8315 18 128 2 (thirdNode3ParentColor caseTag)
+    let _ := accDataWordSetAt 1 8316 18 128 2 key0
+    let _ := accDataWordSetAt 1 8317 18 128 2 key1
+    let _ := accDataWordSetAt 1 8318 18 128 2 key2
+    let _ := accDataWordSetAt 1 8319 18 128 2 key3
+    let _ := accDataWordSetAt 1 8320 18 128 2 0
+    let _ := accDataWordSetAt 1 8321 18 128 2 0
+    let _ := accDataWordSetAt 1 8322 18 128 2 0
+    let _ := accDataWordSetAt 1 8323 18 128 2 0
+    let _ := accDataWordSetAt 1 8324 18 128 2 0
+    let _ := accDataWordSetAt 1 8325 18 128 2 0
+    let _ := accDataWordSetAt 1 8326 18 128 2 0
+    let _ := accDataWordSetAt 1 8327 18 128 2 0
+    let _ := accDataWordSetAt 1 8328 18 128 2 0
+    let _ := accDataWordSetAt 1 8329 18 128 2 0
+    let _ := accDataWordSetAt 1 8330 18 128 2 0
+    let _ := accDataWordSetAt 1 8331 18 128 2 0
+    let _ := accDataWordSetAt 1 8314 18 128 0 (thirdNode1Links caseTag)
+    let _ := accDataWordSetAt 1 8315 18 128 0 (thirdNode1ParentColor caseTag)
+    let _ := accDataWordSetAt 1 8314 18 128 1 (thirdNode2Links caseTag)
+    let _ := accDataWordSetAt 1 8315 18 128 1 (thirdNode2ParentColor caseTag)
+    let _ := accDataWordSetAt 1 8312 1 1 0 3
+    let _ := accDataWordSetAt 1 8310 1 1 0 (thirdRoot caseTag)
+    .ok ({ s with dummy := 0 }, 3)
+  else
+    .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=
   accDataWord 1 4
 
-attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32 byteSwap64
-  key4Before key4Equal
+attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
+  key4Before key4Equal thirdRoot thirdNode1Links thirdNode1ParentColor thirdNode2Links
+  thirdNode2ParentColor thirdNode3Links thirdNode3ParentColor
   allocatorHeaderValid threeAllocatorHeadersValid nodeIndexOrNullValid boundedBidRootPrice
   boundedNodeSlot bidKeyBefore boundedBidChildValid boundedBidRootNeighborhoodValid
   bidRootNeighborhood512 bidRootNeighborhood1024 bidRootNeighborhood2048

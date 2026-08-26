@@ -42,6 +42,21 @@ namespace ProofForge.Svm.Runtime
 @[irreducible] def slotsPerEpoch : UInt64 := 0
 
 /--
+Reverse the eight bytes of one `u64`. The source body gives host evaluation its exact semantics;
+the SVM extractor preserves the call as one value intrinsic and the emitter lowers it to sBPF
+`be64`. This uses registers and fixed stack scratch only; it does not allocate heap memory.
+-/
+def svmByteSwap64 (word : UInt64) : UInt64 :=
+  ((word &&& 0x00000000000000ff) <<< 56) |||
+  ((word &&& 0x000000000000ff00) <<< 40) |||
+  ((word &&& 0x0000000000ff0000) <<< 24) |||
+  ((word &&& 0x00000000ff000000) <<< 8) |||
+  ((word &&& 0x000000ff00000000) >>> 8) |||
+  ((word &&& 0x0000ff0000000000) >>> 24) |||
+  ((word &&& 0x00ff000000000000) >>> 40) |||
+  ((word &&& 0xff00000000000000) >>> 56)
+
+/--
 账户 0 公钥的第一个小端 `u64`（`ACC0_KEY+0`）。
 用到这个叶子的入口会检查 `is_signer`。
 

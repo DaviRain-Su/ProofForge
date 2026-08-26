@@ -23,13 +23,27 @@ open Lean Elab Command
 #guard boundedBodyEntryCount 512 128 1 2 3 == 6
 #guard boundedBodyEntryCount 512 128 513 2 3 == 0
 #guard boundedBodyEntryCount 512 128 1 2 129 == 0
-#guard byteSwap64 0x0706050403020100 == 0x0001020304050607
+#guard ProofForge.Svm.Runtime.svmByteSwap64 0x0706050403020100 == 0x0001020304050607
 #guard key4Before 0x0100000000000000 0 0 0 0x00000000000000ff 0 0 0
 #guard !key4Before 0x00000000000000ff 0 0 0 0x0100000000000000 0 0 0
 #guard key4Before 7 0x0100000000000000 9 10 7 0x00000000000000ff 1 2
 #guard !key4Before 7 0x00000000000000ff 1 2 7 0x0100000000000000 9 10
 #guard key4Equal 1 2 3 4 1 2 3 4
 #guard !key4Equal 1 2 3 4 1 2 3 5
+#guard thirdRoot 1 == 2 && thirdNode1ParentColor 1 == 0x0000000100000002 &&
+  thirdNode2Links 1 == 0x0000000100000003 && thirdNode3ParentColor 1 == 0x0000000100000002
+#guard thirdRoot 2 == 3 && thirdNode1ParentColor 2 == 0x0000000100000003 &&
+  thirdNode2ParentColor 2 == 0x0000000100000003 && thirdNode3Links 2 == 0x0000000100000002
+#guard thirdRoot 3 == 1 && thirdNode1Links 3 == 0x0000000300000002 &&
+  thirdNode2ParentColor 3 == 0x0000000100000001 &&
+  thirdNode3ParentColor 3 == 0x0000000100000001
+#guard thirdRoot 4 == 2 && thirdNode1ParentColor 4 == 0x0000000100000002 &&
+  thirdNode2Links 4 == 0x0000000300000001 && thirdNode3ParentColor 4 == 0x0000000100000002
+#guard thirdRoot 5 == 3 && thirdNode1ParentColor 5 == 0x0000000100000003 &&
+  thirdNode2ParentColor 5 == 0x0000000100000003 && thirdNode3Links 5 == 0x0000000200000001
+#guard thirdRoot 6 == 1 && thirdNode1Links 6 == 0x0000000200000003 &&
+  thirdNode2ParentColor 6 == 0x0000000100000001 &&
+  thirdNode3ParentColor 6 == 0x0000000100000001
 #guard allocatorHeaderValid 512 0 0 0 ((1 : UInt64) ||| ((1 : UInt64) <<< (32 : UInt64)))
 #guard allocatorHeaderValid 512 1 1 0 ((2 : UInt64) ||| ((2 : UInt64) <<< (32 : UInt64)))
 #guard !allocatorHeaderValid 512 1 0 0 ((2 : UInt64) ||| ((2 : UInt64) <<< (32 : UInt64)))
@@ -359,6 +373,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing registerFirstTrader128"
   let some registerSecond := program.methods.find? (·.ixName == "registerSecondTrader128")
     | throwError "missing registerSecondTrader128"
+  let some registerThird := program.methods.find? (·.ixName == "registerThirdTrader128")
+    | throwError "missing registerThirdTrader128"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -426,7 +442,19 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveDataWordSetAt 1 8313 1 1 registerSecond.ops &&
       (List.range 18).all (fun offset =>
         opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerSecond.ops) &&
-      countDataWordSetAt registerSecond.ops == 21 do
+      countDataWordSetAt registerSecond.ops == 21 &&
+      opsHaveDataWord 1 8314 registerThird.ops &&
+      opsHaveDataWord 1 8319 registerThird.ops &&
+      opsHaveDataWord 1 8332 registerThird.ops &&
+      opsHaveDataWord 1 8333 registerThird.ops &&
+      opsHaveDataWord 1 8334 registerThird.ops &&
+      opsHaveDataWord 1 8337 registerThird.ops &&
+      opsHaveDataWordSetAt 1 8310 1 1 registerThird.ops &&
+      opsHaveDataWordSetAt 1 8312 1 1 registerThird.ops &&
+      opsHaveDataWordSetAt 1 8313 1 1 registerThird.ops &&
+      (List.range 18).all (fun offset =>
+        opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerThird.ops) &&
+      countDataWordSetAt registerThird.ops == 25 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with

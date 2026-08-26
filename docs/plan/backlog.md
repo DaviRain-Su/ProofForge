@@ -137,6 +137,16 @@
   1,248,584 B，IDL 4,058 B；Surfpool 1.5.0 以 1,234 个 Loader write transactions
   部署并核对 exact 1,248,629-byte ProgramData。本轮 194-job Lean、50 个 SVM build、
   Mollusk 212/212 和 Anvil 12/12 全绿。
+- P5 第十四段 exact third trader registration 已完成：canonical two-node 128-seat tree 经
+  bump path 分配 address 3，完整覆盖第三个 144-byte slot，并按 Sokoban 0.3.0 精确产生
+  LL/LR/RR/RL rotation/recolor 与两个 no-fix topology。通用 `svmByteSwap64` 在宿主侧保持
+  纯语义，SVM 侧直接发射 `be64`，不引入 heap allocation；external-account write 只要出现
+  但任一 operand 无法解码，抽取就 fail closed，不再静默丢 effect。六种结果逐字节匹配并
+  通过 complete trader tree/allocator validator；duplicate/malformed/readonly/wrong owner
+  均原子失败。当前 digest `d9b9ee673526ff9f`，assembly 3,949,948 B，ELF 1,261,744 B，
+  IDL 4,392 B；Surfpool 1.5.0 以 1,247 个 Loader write transactions 部署并核对 exact
+  1,261,789-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 214/214 和
+  Anvil 12/12 全绿。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

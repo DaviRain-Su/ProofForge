@@ -717,6 +717,9 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             .select .eq value (.lit 0) (.lit 1) (.lit 0)
         else if isConstNamed e ``Decidable.decide && e.getAppArgs.size ≥ 2 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!
+        else if (endsWith e ".svmByteSwap64" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.svmByteSwap64) && e.getAppArgs.size ≥ 1 then
+          (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.byteSwap64
         else if let some (_, unfolded) := unfoldUserHelper env e then
           match env.find? n with
           | some (.defnInfo info) =>
@@ -2272,6 +2275,7 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.rentExemption n) => some (.rentExemption n)
             | some (.sha256Lit s) => some (.sha256Lit s)
             | some (.keccak256Lit s) => some (.keccak256Lit s)
+            | some (.byteSwap64 word) => some (.byteSwap64 word)
             | some (.accKeyWord a w) => some (.accKeyWord a w)
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
             | some (.accDataWord a w) => some (.accDataWord a w)
@@ -2647,6 +2651,18 @@ private def findAccDataWordSetAt (env : Environment) (fuel : Nat) (e : Expr) :
               findAccDataWordSetAt env fuel' fn <|> findAccDataWordSetAt env fuel' arg
           | _ => none
 
+/-- Distinguish an absent external-account write from one whose static shape or dynamic value
+failed to decode. Such a call is an effect and must fail extraction rather than disappear. -/
+private def mentionsAccDataWordSetAt (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
+  if e.getUsedConstantsAsSet.contains ``ProofForge.Svm.Runtime.accDataWordSetAt then true
+  else
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+        match unfoldUserHelper env e with
+        | some (_, unfolded) => mentionsAccDataWordSetAt env fuel' unfolded
+        | none => false
+
 /-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
 ignored call needs explicit sequencing: recursive invoke search would otherwise retain the CPI
 but silently discard a following state write. -/
@@ -2684,7 +2700,7 @@ private def substLetsPreservingInvokes (env : Environment) (fuel : Nat) (e : Exp
         (ty.consumeMData.getAppFn.constName?.map (isUserType env)).getD false &&
           ((unfoldUserHelper env value).isSome || (userCtorFields env value).isSome ||
             isIteExpr value)
-      if (findInvoke env 16 value).isSome || (findAccDataWordSetAt env 16 value).isSome ||
+      if (findInvoke env 16 value).isSome || mentionsAccDataWordSetAt env 16 value ||
           structuredState || scalarBinding then
         .letE n ty value body nd
       else substLetsPreservingInvokes env fuel' (body.instantiate1 value)
@@ -2711,26 +2727,27 @@ private def accDataWordSetAtOp (write : DecodedAccDataWordSetAt) : Ops.Op :=
   let (acc, baseWord, strideWords, capacity, index, value) := write
   .accDataWordSetAt acc baseWord strideWords capacity index value
 
-/-- Preserve consecutive ignored SVM effects before decoding their state/return continuation. -/
-private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × Expr :=
-  let rec go (fuel : Nat) (e : Expr) (effects : Array Ops.Op) : Array Ops.Op × Expr :=
+/-- Preserve consecutive ignored SVM effects before decoding their state/return continuation.
+The final flag reports an external-account write that was present but could not be decoded. -/
+private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × Expr × Bool :=
+  let rec go (fuel : Nat) (e : Expr) (effects : Array Ops.Op) : Array Ops.Op × Expr × Bool :=
     match fuel with
-    | 0 => (effects, e)
+    | 0 => (effects, e, false)
     | fuel' + 1 =>
       match strip e with
       | .letE _ _ value body _ =>
           if body.hasLooseBVar 0 then
             match asPdaSeeds value with
             | some _ => go fuel' (body.instantiate1 value) effects
-            | none => (effects, e)
+            | none => (effects, e, mentionsAccDataWordSetAt env 16 value)
           else
             match findInvoke env 16 value, findAccDataWordSetAt env 16 value with
             | some invoke, _ =>
                 go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
             | none, some write =>
                 go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
-            | none, none => (effects, e)
-      | _ => (effects, e)
+            | none, none => (effects, e, mentionsAccDataWordSetAt env 16 value)
+      | _ => (effects, e, false)
   go 32 e #[]
 
 /-- `.ok (state, ret)` 的第二元。找不到就 none。 -/
@@ -3573,7 +3590,8 @@ private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr 
     match strip e with
     | .letE _ _ value body _ =>
         let effectful :=
-          (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
+          (findInvoke env 16 value).isSome || mentionsAccDataWordSetAt env 16 value ||
+            (decodeEvmEffect env value).isSome ||
             (findForIn env value).isSome || (findForBodyExpr env value).isSome
         -- A scalar captured before a CPI must remain a local: substituting its state-field read
         -- through the call can move that read after a later state write.
@@ -4256,6 +4274,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .accLamports1 | .accOwner1 | .accDataLen1
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
+    | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .accDataParentPathValid ..
     | .accDataRbTreeValid ..
@@ -4358,7 +4377,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
-    let (effects, continuation) := leadingSvmEffects env e
+    let (effects, continuation, malformedWrite) := leadingSvmEffects env e
+    if malformedWrite then
+      return .error "extract/unsupported: external account write operands"
     if !effects.isEmpty then
       match decodeExpr env fuel' continuation (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth)
@@ -4379,7 +4400,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     match strip e with
     | .letE _ ty value body _ =>
       let effectful :=
-        (findInvoke env 16 value).isSome || (findAccDataWordSetAt env 16 value).isSome ||
+        (findInvoke env 16 value).isSome || mentionsAccDataWordSetAt env 16 value ||
           (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       if !effectful then
@@ -5175,6 +5196,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
       | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
+      | .byteSwap64 word => .byteSwap64 (flipVal fuel' word)
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
       | .accDataParentPathValid a l p s c d i r b =>
           .accDataParentPathValid a l p s c d
@@ -5471,6 +5493,7 @@ private def valFields : Ops.Val → Array String
   | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
   | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
   | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => #[]
+  | .byteSwap64 word => valFields word
   | .accDataWordAt _ _ _ _ i => valFields i
   | .accDataParentPathValid _ _ _ _ _ _ i r b =>
       valFields i ++ valFields r ++ valFields b

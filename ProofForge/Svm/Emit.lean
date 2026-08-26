@@ -800,6 +800,16 @@ private partial def emitLoadBitNot (p : IR.Program) (v : Ops.Val) (stackOff nonc
   stxdw [r10 - {stackOff}], r1
 "
 
+private partial def emitLoadByteSwap64 (p : IR.Program) (v : Ops.Val) (stackOff nonce : Nat)
+    (scope : String) : Except String String := do
+  let load ← loadVal p v (stackOff + 8) (nonce + 1) (scope ++ "_v")
+  return load ++
+    s!"\
+  ldxdw r1, [r10 - {stackOff + 8}]
+  be64 r1
+  stxdw [r10 - {stackOff}], r1
+"
+
 /-- Compact call site for `Nat.sub`, normalized as `select (lhs ≥ rhs) (lhs - rhs) 0`. -/
 private partial def emitLoadNatSub (p : IR.Program) (l r : Ops.Val)
     (stackOff nonce : Nat) (scope : String) : Except String String := do
@@ -916,6 +926,8 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadSha256Lit seed stackOff)
   | .ext (.keccak256Lit seed) #[] =>
     .ok (emitLoadKeccak256Lit seed stackOff)
+  | .ext .byteSwap64 #[word] =>
+    emitLoadByteSwap64 p word stackOff nonce scope
   | .ext (.accKeyWord acc word) #[] =>
     .ok (emitLoadAccWord "key" acc word stackOff)
   | .ext (.accOwnerWord acc word) #[] =>

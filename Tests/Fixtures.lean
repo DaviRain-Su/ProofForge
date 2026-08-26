@@ -1,4 +1,5 @@
 import Examples.Counter
+import ProofForge.Svm.Runtime
 
 namespace Tests.Fixtures
 
@@ -635,6 +636,13 @@ def choose (s : ChoiceState) (lhs rhs : UInt64) :
     Except Examples.Counter.Error (ChoiceState × UInt64) :=
   let chosen : UInt64 := if lhs < rhs then lhs else rhs
   .ok ({ s with chosen }, chosen)
+
+/-- Negative extractor fixture: external-account shape parameters must be compile-time constants.
+The dynamic account operand must reject extraction rather than silently dropping the write. -/
+def malformedExternalWrite (s : ChoiceState) (acc value : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let _ := ProofForge.Svm.Runtime.accDataWordSetAt acc 1 1 1 0 value
+  .ok ({ s with chosen := value }, value)
 
 def getChosen (s : ChoiceState) : UInt64 :=
   s.chosen

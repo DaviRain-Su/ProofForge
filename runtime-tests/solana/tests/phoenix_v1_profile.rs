@@ -355,6 +355,16 @@ fn market_with_first_trader(key: [u64; 4]) -> Account {
     )
 }
 
+fn market_with_two_traders(root_key: [u64; 4], child_key: [u64; 4]) -> Account {
+    run_market_write(
+        "registerSecondTrader128",
+        market_with_first_trader(root_key),
+        true,
+        &child_key,
+        &[Check::success(), Check::return_data(&2u64.to_le_bytes())],
+    )
+}
+
 #[test]
 fn all_official_profiles_select_exact_account_size() {
     for (bids, asks, seats, expected) in OFFICIAL_PROFILES {
@@ -1223,4 +1233,186 @@ fn second_trader_registration_uses_pubkey_byte_order_and_complete_red_node() {
     // Keep both directional outputs live through the end of the test.
     assert_eq!(read_word(&left_tree, 8314), 2);
     assert_eq!(read_word(&right_tree, 8314), 2u64 << 32);
+}
+
+#[test]
+fn third_trader_registration_matches_all_sokoban_fixup_topologies() {
+    const A: [u64; 4] = [0x10, 0, 0, 0];
+    const B: [u64; 4] = [0x20, 0, 0, 0];
+    const C: [u64; 4] = [0x30, 0, 0, 0];
+    const CURSOR_4_4: u64 = 0x0000_0004_0000_0004;
+
+    // (name, root key, existing child key, new key, final root, node topologies).
+    // Each topology entry is (links, parent/color) for addresses 1, 2, and 3.
+    let cases = [
+        (
+            "LL",
+            C,
+            B,
+            A,
+            2,
+            [
+                (0, packed_u32(2, 1)),
+                (packed_u32(3, 1), 0),
+                (0, packed_u32(2, 1)),
+            ],
+        ),
+        (
+            "LR",
+            C,
+            A,
+            B,
+            3,
+            [
+                (0, packed_u32(3, 1)),
+                (0, packed_u32(3, 1)),
+                (packed_u32(2, 1), 0),
+            ],
+        ),
+        (
+            "left child, new root-right",
+            B,
+            A,
+            C,
+            1,
+            [
+                (packed_u32(2, 3), 0),
+                (0, packed_u32(1, 1)),
+                (0, packed_u32(1, 1)),
+            ],
+        ),
+        (
+            "RR",
+            A,
+            B,
+            C,
+            2,
+            [
+                (0, packed_u32(2, 1)),
+                (packed_u32(1, 3), 0),
+                (0, packed_u32(2, 1)),
+            ],
+        ),
+        (
+            "RL",
+            A,
+            C,
+            B,
+            3,
+            [
+                (0, packed_u32(3, 1)),
+                (0, packed_u32(3, 1)),
+                (packed_u32(1, 2), 0),
+            ],
+        ),
+        (
+            "right child, new root-left",
+            B,
+            C,
+            A,
+            1,
+            [
+                (packed_u32(3, 2), 0),
+                (0, packed_u32(1, 1)),
+                (0, packed_u32(1, 1)),
+            ],
+        ),
+    ];
+
+    for (name, root_key, child_key, new_key, final_root, topology) in cases {
+        let mut two_nodes = market_with_two_traders(root_key, child_key);
+        // Existing TraderState belongs to the seats and must survive rotations unchanged.
+        write_word(&mut two_nodes, 8320, 0x1111);
+        write_word(&mut two_nodes, 8338, 0x2222);
+        // Address 3 is bump-allocated. Stale bytes prove the complete 144-byte slot is replaced.
+        for word in 8350..8368 {
+            write_word(&mut two_nodes, word, u64::MAX);
+        }
+
+        let mut expected = two_nodes.clone();
+        write_allocator_header(&mut expected, 8310, 3, final_root, 4, 4);
+        for word in 8350..8368 {
+            write_word(&mut expected, word, 0);
+        }
+        for (offset, value) in new_key.into_iter().enumerate() {
+            write_word(&mut expected, 8352 + offset, value);
+        }
+        for (index, (links, parent_color)) in topology.into_iter().enumerate() {
+            let slot_word = 8314 + 18 * index;
+            write_word(&mut expected, slot_word, links);
+            write_word(&mut expected, slot_word + 1, parent_color);
+        }
+
+        let registered = run_market_write(
+            "registerThirdTrader128",
+            two_nodes,
+            true,
+            &new_key,
+            &[Check::success(), Check::return_data(&3u64.to_le_bytes())],
+        );
+        assert_eq!(read_word(&registered, 8313), CURSOR_4_4, "{name}");
+        assert_eq!(read_word(&registered, 8320), 0x1111, "{name}");
+        assert_eq!(read_word(&registered, 8338), 0x2222, "{name}");
+        assert_eq!(registered.data, expected.data, "{name}");
+        run_view(
+            "bodyEntryCount",
+            registered.clone(),
+            &[Check::success(), Check::return_data(&3u64.to_le_bytes())],
+        );
+        run_view(
+            "traderTreeValid",
+            registered,
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+    }
+}
+
+#[test]
+fn third_trader_registration_rejects_noncanonical_inputs_atomically() {
+    const A: [u64; 4] = [0x10, 0, 0, 0];
+    const B: [u64; 4] = [0x20, 0, 0, 0];
+    const C: [u64; 4] = [0x30, 0, 0, 0];
+
+    let canonical = market_with_two_traders(A, B);
+    for duplicate in [A, B] {
+        let after_duplicate = run_market_write(
+            "registerThirdTrader128",
+            canonical.clone(),
+            true,
+            &duplicate,
+            &[Check::err(ProgramError::Custom(0x1001))],
+        );
+        assert_eq!(after_duplicate.data, canonical.data);
+    }
+
+    let after_readonly = run_market_write(
+        "registerThirdTrader128",
+        canonical.clone(),
+        false,
+        &C,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_readonly.data, canonical.data);
+
+    let mut wrong_owner = canonical.clone();
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "registerThirdTrader128",
+        wrong_owner.clone(),
+        true,
+        &C,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let mut malformed = canonical;
+    write_word(&mut malformed, 8314, 9);
+    let after_malformed = run_market_write(
+        "registerThirdTrader128",
+        malformed.clone(),
+        true,
+        &C,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
 }

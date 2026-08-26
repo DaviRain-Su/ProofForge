@@ -63,6 +63,7 @@ inductive ValKind where
   | clockEpoch
   | unixTime
   | slotsPerEpoch
+  | byteSwap64
   | signerKey0
   | accLamports0
   | accOwner0
@@ -107,6 +108,7 @@ inductive ValKind where
 
 def ValKind.arity : ValKind → Nat
   | .checkPda _ => 1
+  | .byteSwap64 => 1
   | .accDataWordAt .. => 1
   | .accDataParentPathValid .. => 3
   | .accDataRbTreeValid .. => 4
@@ -197,6 +199,7 @@ def rentExemption (dataLen : UInt64) : Val := leaf (.rentExemption dataLen)
 def cpiReturn : Val := leaf .cpiReturn
 def sha256Lit (seed : String) : Val := leaf (.sha256Lit seed)
 def keccak256Lit (seed : String) : Val := leaf (.keccak256Lit seed)
+def byteSwap64 (word : Val) : Val := .ext .byteSwap64 #[word]
 def accKeyWord (acc word : Nat) : Val := leaf (.accKeyWord acc word)
 def accOwnerWord (acc word : Nat) : Val := leaf (.accOwnerWord acc word)
 def accDataWord (acc word : Nat) : Val := leaf (.accDataWord acc word)

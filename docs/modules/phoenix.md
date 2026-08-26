@@ -156,12 +156,15 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   持久化 surface 以编译期固定的 account/base/stride/capacity 原位写最小 profile。首个
   `registerFirstTrader128` 把 canonical fresh trader allocator 原子变成单个黑根：完整覆盖
   144-byte slot、发布 root/size/bump/free；`registerSecondTrader128` 再按 raw 32-byte Pubkey
-  ordering 把完整 red slot 2 挂到 root 左或右侧。两个边界都让 complete validator 返回 1，
-  不会成功留下 detached node。当前 1,248,584-byte verifier ELF 通过 Surfpool 1.5.0 的
-  1,234 个 Loader write + deploy + authority transactions 完成本地部署和 exact
-  1,248,629-byte ProgramData 校验；不作公网声明。
-- **未支持（P5 remaining body/公网）**：公网部署、第三个/一般 key 插入、free-list reuse、
-  rotation/delete fixup、runtime remaining accounts、Token-2022 extension 语义及完整
+  ordering 把完整 red slot 2 挂到 root 左或右侧；`registerThirdTrader128` bump-alloc address 3，
+  完整覆盖新 slot，并精确执行 LL/LR/RR/RL rotation/recolor 与两个 no-fix 分支。三个边界
+  都让 complete validator 返回 1，不会成功留下 detached node。byte swap 是通用一元 SVM
+  value intrinsic，直接发射 sBPF `be64`，不分配 heap；抽取器遇到无法解码的 external-account
+  write 现在直接拒绝而不是静默丢弃。当前 1,261,744-byte verifier ELF 通过 Surfpool 1.5.0
+  的 1,247 个 Loader write + deploy + authority transactions 完成本地部署和 exact
+  1,261,789-byte ProgramData 校验；不作公网声明。
+- **未支持（P5 remaining body/公网）**：公网部署、第四个/一般 key 插入、free-list reuse、
+  一般 insertion/delete fixup、runtime remaining accounts、Token-2022 extension 语义及完整
   Phoenix-v1 账户兼容。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/
@@ -181,6 +184,7 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 独立 `PhoenixV1Profile` 验证官方账户头、预编译容量、固定 scalar/allocator metadata、
 有界 bid-root neighborhood 和 selected parent path；完整 bid/ask/trader validators 再用
 fixed bitmap/stack 证明三棵树的 RB/order invariants 与 live/free partition。写入侧已按固定
-128-seat shape 支持 topology words、fresh-empty → one-root 和 one-root → two-node 的 exact
-Sokoban transition；一般 allocator/tree transition 仍关闭。这是完整的 bounded N=4
+128-seat shape 支持 topology words、fresh-empty → one-root → two-node → three-node 的 exact
+Sokoban transition，包括第三次插入的全部 rotation/recolor；一般 allocator/tree transition
+仍关闭。这是完整的 bounded N=4
 Phoenix IOC 模型加 P5 bounded body read/write 基础，不是完整 Phoenix-v1 动态账户实现。

@@ -1021,6 +1021,17 @@ elab "#pf_guard_multi_seed_pda_account_check" : command => do
 
 #pf_guard_multi_seed_pda_account_check
 
+elab "#pf_guard_malformed_external_write_rejected" : command => do
+  let env ← getEnv
+  match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initChoice
+      ``Tests.Fixtures.malformedExternalWrite ``Tests.Fixtures.getChosen with
+  | .ok _ => throwError "dynamic external-account write was silently accepted"
+  | .error reason =>
+      unless reason.contains "external account write operands" do
+        throwError s!"unexpected malformed external-account write error: {reason}"
+
+#pf_guard_malformed_external_write_rejected
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 
 #pf_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag

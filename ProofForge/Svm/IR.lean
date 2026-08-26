@@ -491,6 +491,7 @@ private partial def valCanon : Ops.Val → String
   | .ext .cpiReturn #[] => "cret"
   | .ext (.sha256Lit seed) #[] => s!"sha.{seed}"
   | .ext (.keccak256Lit seed) #[] => s!"kec.{seed}"
+  | .ext .byteSwap64 #[word] => s!"bswap64({valCanon word})"
   | .ext (.accKeyWord acc word) #[] => s!"kw.{acc}.{word}"
   | .ext (.accOwnerWord acc word) #[] => s!"ow.{acc}.{word}"
   | .ext (.accDataWord acc word) #[] => s!"dw.{acc}.{word}"

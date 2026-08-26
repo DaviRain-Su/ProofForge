@@ -17,6 +17,15 @@ private def invalidSvmValue : ProofForge.Svm.Ops.Val :=
 #guard validSvmValue.wellFormed ProofForge.Svm.Ops.ValKind.arity
 #guard !invalidSvmValue.wellFormed ProofForge.Svm.Ops.ValKind.arity
 
+private def validByteSwap64Value : ProofForge.Svm.Ops.Val :=
+  ProofForge.Svm.Ops.byteSwap64 (.arg 0)
+
+private def malformedByteSwap64Value : ProofForge.Svm.Ops.Val :=
+  .ext .byteSwap64 #[]
+
+#guard validByteSwap64Value.wellFormed ProofForge.Svm.Ops.ValKind.arity
+#guard !malformedByteSwap64Value.wellFormed ProofForge.Svm.Ops.ValKind.arity
+
 private def validSvmOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 2
     #[{ acc := 0, signer := true, writable := true }]
