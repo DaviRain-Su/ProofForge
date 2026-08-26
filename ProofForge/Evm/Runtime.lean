@@ -69,17 +69,29 @@ def evmCaller20 : Addr20 :=
 def evmSelf20 : Addr20 :=
   { w0 := evmSelfW0, w1 := evmSelfW1, w2 := evmSelfW2 }
 
-/-- 构造期烘焙的 `uint64`。runtime `loadimmutable`。宿主返回 0。 -/
+/-- 构造期烘焙的 `uint64`。runtime `loadimmutable("imm0")`。宿主返回 0。 -/
 @[irreducible] def evmImmU64 : UInt64 := 0
 
-/-- 构造期烘焙的 Addr20 三叶。runtime `loadimmutable` 再拆。宿主返回 0。 -/
+/-- 第二套构造期 `uint64`。runtime `loadimmutable("imm1")`。宿主返回 0。 -/
+@[irreducible] def evmImmU64b : UInt64 := 0
+
+/-- 构造期烘焙的 Addr20 三叶。runtime `loadimmutable("immAddr")` 再拆。宿主返回 0。 -/
 @[irreducible] def evmImmW0 : UInt64 := 0
 @[irreducible] def evmImmW1 : UInt64 := 0
 @[irreducible] def evmImmW2 : UInt64 := 0
 
+/-- 第二套构造期 Addr20 三叶。runtime `loadimmutable("immAddr2")` 再拆。宿主返回 0。 -/
+@[irreducible] def evmImmX0 : UInt64 := 0
+@[irreducible] def evmImmX1 : UInt64 := 0
+@[irreducible] def evmImmX2 : UInt64 := 0
+
 /-- 完整构造期 Addr20。抽出认三叶。 -/
 def evmImm20 : Addr20 :=
   { w0 := evmImmW0, w1 := evmImmW1, w2 := evmImmW2 }
+
+/-- 第二套完整构造期 Addr20。抽出认三叶。 -/
+def evmImm20b : Addr20 :=
+  { w0 := evmImmX0, w1 := evmImmX1, w2 := evmImmX2 }
 
 /-- `eq(callvalue(), amt)`。入口因此 payable。宿主返回 amt。 -/
 @[irreducible] def evmDeposit (amt : UInt64) : UInt64 := amt

@@ -536,7 +536,9 @@ def hasEvmReceive (ops : Array Op) : Bool :=
   walk 16 ops fun | .evmReceive => true | _ => false
 
 private partial def valMentionsImm : Ops.Val → Bool
-  | .ext .immU64 #[] | .ext .immW0 #[] | .ext .immW1 #[] | .ext .immW2 #[] => true
+  | .ext .immU64 #[] | .ext .immU64b #[]
+  | .ext .immW0 #[] | .ext .immW1 #[] | .ext .immW2 #[]
+  | .ext .immX0 #[] | .ext .immX1 #[] | .ext .immX2 #[] => true
   | .field base _ | .bitNot base => valMentionsImm base
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
   | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
@@ -837,9 +839,13 @@ private partial def valCanon : Ops.Val → String
   | .ext .selfW1 #[] => "esw1"
   | .ext .selfW2 #[] => "esw2"
   | .ext .immU64 #[] => "eimm"
+  | .ext .immU64b #[] => "eimmb"
   | .ext .immW0 #[] => "eiw0"
   | .ext .immW1 #[] => "eiw1"
   | .ext .immW2 #[] => "eiw2"
+  | .ext .immX0 #[] => "eix0"
+  | .ext .immX1 #[] => "eix1"
+  | .ext .immX2 #[] => "eix2"
   | .bitAnd l r => s!"and({valCanon l},{valCanon r})"
   | .bitOr l r => s!"or({valCanon l},{valCanon r})"
   | .bitXor l r => s!"xor({valCanon l},{valCanon r})"

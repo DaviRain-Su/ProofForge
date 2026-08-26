@@ -172,9 +172,10 @@ partial def toLegacyVal : Val → Except String ProofForge.Ops.Val
   | .ext (.evm .selfW0) #[] => pure .evmSelfW0
   | .ext (.evm .selfW1) #[] => pure .evmSelfW1
   | .ext (.evm .selfW2) #[] => pure .evmSelfW2
-  | .ext (.evm .immU64) #[] =>
+  | .ext (.evm .immU64) #[] | .ext (.evm .immU64b) #[] =>
       throw "extract/unsupported: legacy adapter cannot represent immutable u64"
-  | .ext (.evm .immW0) #[] | .ext (.evm .immW1) #[] | .ext (.evm .immW2) #[] =>
+  | .ext (.evm .immW0) #[] | .ext (.evm .immW1) #[] | .ext (.evm .immW2) #[]
+  | .ext (.evm .immX0) #[] | .ext (.evm .immX1) #[] | .ext (.evm .immX2) #[] =>
       throw "extract/unsupported: legacy adapter cannot represent immutable Addr20"
   | .ext (.evm .eq20) _ =>
       throw "extract/unsupported: legacy adapter cannot represent Addr20 equality"

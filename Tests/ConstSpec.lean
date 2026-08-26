@@ -7,13 +7,15 @@ open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩
 
-#guard (init 7 sample).dummy == 0
-#guard get (init 7 sample) == 0
-#guard seedOf (init 7 sample) == 0
-#guard whoOf (init 7 sample) == ⟨0, 0, 0⟩
+#guard (init 7 3 sample sample).dummy == 0
+#guard get (init 7 3 sample sample) == 0
+#guard seedOf (init 7 3 sample sample) == 0
+#guard saltOf (init 7 3 sample sample) == 0
+#guard whoOf (init 7 3 sample sample) == ⟨0, 0, 0⟩
+#guard peerOf (init 7 3 sample sample) == ⟨0, 0, 0⟩
 
 #guard
-  match touch (init 7 sample) 9 with
+  match touch (init 7 3 sample sample) 9 with
   | .ok (st, ret) => st.dummy == 9 && ret == 9
   | .error _ => false
 
@@ -25,7 +27,9 @@ def sample : Addr20 := ⟨1, 2, 3⟩
       yul.contains "setimmutable" &&
         yul.contains "loadimmutable" &&
         yul.contains "imm0" &&
-        yul.contains "immAddr"
+        yul.contains "imm1" &&
+        yul.contains "immAddr" &&
+        yul.contains "immAddr2"
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedEvmCtx with

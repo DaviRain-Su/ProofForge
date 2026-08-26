@@ -181,9 +181,13 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .ext .selfW1 #[] => .ok (packAddrWord "address()" 1)
   | .ext .selfW2 #[] => .ok (packAddrWord "address()" 2)
   | .ext .immU64 #[] => .ok "loadimmutable(\"imm0\")"
+  | .ext .immU64b #[] => .ok "loadimmutable(\"imm1\")"
   | .ext .immW0 #[] => .ok (packAddrWord "loadimmutable(\"immAddr\")" 0)
   | .ext .immW1 #[] => .ok (packAddrWord "loadimmutable(\"immAddr\")" 1)
   | .ext .immW2 #[] => .ok (packAddrWord "loadimmutable(\"immAddr\")" 2)
+  | .ext .immX0 #[] => .ok (packAddrWord "loadimmutable(\"immAddr2\")" 0)
+  | .ext .immX1 #[] => .ok (packAddrWord "loadimmutable(\"immAddr2\")" 1)
+  | .ext .immX2 #[] => .ok (packAddrWord "loadimmutable(\"immAddr2\")" 2)
   | .bitAnd l r => do
       let lv ← loadVal p paramPrefix paramCount paramWidths l
       let rv ← loadVal p paramPrefix paramCount paramWidths r
@@ -2215,22 +2219,25 @@ private def renderCtorPrelude (objectName : String) (paramCount : Nat)
             revert0 ++ " }" ++ nl
     return out
 
-/-- Bake constructor arguments that are not stored: one `uint64` (`imm0`) and one `address` (`immAddr`).
+/-- Bake constructor arguments that are not stored: up to two `uint64`
+(`imm0`/`imm1`) and two `address` (`immAddr`/`immAddr2`) values.
 `setimmutable(offset, name, value)` patches runtime already copied to memory at `offset`. -/
 private def renderImmutableSets (paramCount : Nat) (paramWidths : Array Nat) : String :=
   Id.run do
     let mut out := ""
-    let mut usedU64 := false
-    let mut usedAddr := false
+    let mut usedU64 : Nat := 0
+    let mut usedAddr : Nat := 0
     for i in [0:paramCount] do
       let w := (paramWidths[i]?).getD 8
       let nm := "ctor_arg" ++ toString i
-      if w == 20 && !usedAddr then
-        out := out ++ "    setimmutable(0, \"immAddr\", " ++ nm ++ ")" ++ nl
-        usedAddr := true
-      else if (w == 8 || w == 1 || w == 2 || w == 4) && !usedU64 then
-        out := out ++ "    setimmutable(0, \"imm0\", " ++ nm ++ ")" ++ nl
-        usedU64 := true
+      if w == 20 && usedAddr < 2 then
+        let name := if usedAddr == 0 then "immAddr" else "immAddr2"
+        out := out ++ "    setimmutable(0, \"" ++ name ++ "\", " ++ nm ++ ")" ++ nl
+        usedAddr := usedAddr + 1
+      else if (w == 8 || w == 1 || w == 2 || w == 4) && usedU64 < 2 then
+        let name := if usedU64 == 0 then "imm0" else "imm1"
+        out := out ++ "    setimmutable(0, \"" ++ name ++ "\", " ++ nm ++ ")" ++ nl
+        usedU64 := usedU64 + 1
     return out
 
 private def hasPayableEntry (p : IR.Program) : Bool :=

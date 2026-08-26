@@ -605,8 +605,8 @@ def extractedConst : IR.Program :=
       kind := .init
       name := "Examples.Const.init"
       ixName := "initialize"
-      paramCount := 2
-      paramWidths := #[8, 20]
+      paramCount := 4
+      paramWidths := #[8, 8, 20, 20]
       ops := #[.returnState (.lit 0)]
     }
     entries := #[
@@ -621,6 +621,15 @@ def extractedConst : IR.Program :=
         ixName := "get"
         selector := Keccak.selectorOfWidths "get" #[]
         ops := #[.returnU64 (.field (.arg 0) "dummy")]
+        view := true
+      },
+      viewAddr20 "Const" "peerOf" (.ext .immX0 #[]) (.ext .immX1 #[]) (.ext .immX2 #[]),
+      {
+        kind := .get
+        name := "Examples.Const.saltOf"
+        ixName := "saltOf"
+        selector := Keccak.selectorOfWidths "saltOf" #[]
+        ops := #[.returnU64 (.ext .immU64b #[])]
         view := true
       },
       {

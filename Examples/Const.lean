@@ -13,9 +13,9 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-/-- ctor 参数 `seed`/`who` 烘焙进 bytecode。dummy 仍是 0。 -/
+/-- ctor 参数 `seed`/`salt`/`who`/`peer` 烘焙进 bytecode。dummy 仍是 0。 -/
 @[pf_entry]
-def init (_seed : UInt64) (_who : Addr20) : State :=
+def init (_seed _salt : UInt64) (_who _peer : Addr20) : State :=
   { dummy := 0 }
 
 /-- 写 dummy。immutable 不受影响。 -/
@@ -31,10 +31,20 @@ def touch (_s : State) (v : UInt64) : Except Error (State × UInt64) :=
 def seedOf (_s : State) : UInt64 :=
   evmImmU64
 
+/-- 第二套构造期 `uint64`。 -/
+@[pf_entry]
+def saltOf (_s : State) : UInt64 :=
+  evmImmU64b
+
 /-- 构造期 Addr20。不是 storage owner。 -/
 @[pf_entry]
 def whoOf (_s : State) : Addr20 :=
   evmImm20
+
+/-- 第二套构造期 Addr20。 -/
+@[pf_entry]
+def peerOf (_s : State) : Addr20 :=
+  evmImm20b
 
 @[pf_entry]
 def get (s : State) : UInt64 :=
