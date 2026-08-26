@@ -24,11 +24,17 @@ dest="$("$cast" wallet address --private-key "$other_key")"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
   0 "absent sender balance"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  0 "absent total supply"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'mint(address,uint256)' "$sender" 100 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
   100 "minted sender"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  100 "total supply after mint"
 
 topic_xfer="$("$cast" keccak 'Transfer(address,address,uint256)')"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
@@ -62,6 +68,9 @@ if data!=30:
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
   70 "sender after transfer"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  100 "total supply holds after transfer"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$dest")" \
   30 "dest after transfer"

@@ -11,8 +11,10 @@ def nine : UInt256 := ⟨9, 0, 0, 0⟩
 def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 
 #guard (init 0).dummy == 0
+#guard (init 0).supply == zero256
 #guard get (init 0) == 0
 #guard balanceOf (init 0) sample == zero256
+#guard totalSupply (init 0) == zero256
 #guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
@@ -71,7 +73,9 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.view) == some true &&
-    (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.retWidths) == some #[33]
+    (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.retWidths) == some #[33] &&
+    (p.entries.find? (·.ixName == "totalSupply")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "totalSupply")).map (·.retWidths) == some #[32]
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedToken with

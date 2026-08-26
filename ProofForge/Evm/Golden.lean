@@ -349,8 +349,27 @@ def extractedToken : IR.Program :=
   let pairAllow (limb : Nat) := getPairCaller256 limb 1 0
   {
     name := "Token"
-    slots := dummySlot
-    constructor := dummyCtor "Token"
+    slots := #[
+      { name := "dummy", index := 0, width := 8 },
+      { name := "supply_w0", index := 1, width := 8 },
+      { name := "supply_w1", index := 2, width := 8 },
+      { name := "supply_w2", index := 3, width := 8 },
+      { name := "supply_w3", index := 4, width := 8 }
+    ]
+    constructor := {
+      kind := .init
+      name := "Examples.Token.init"
+      ixName := "initialize"
+      paramCount := 1
+      paramWidths := #[8]
+      ops := #[
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0)
+      ]
+    }
     entries := #[
       mutEntry "Token" "approve" 2 #[20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
@@ -380,6 +399,22 @@ def extractedToken : IR.Program :=
             .evmLogTransfer256 (.lit 0) (.lit 0) (.lit 0)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            .storeField "supply_w0" (.ext (.arith256 0 0) #[
+              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+            .storeField "supply_w1" (.ext (.arith256 0 1) #[
+              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+            .storeField "supply_w2" (.ext (.arith256 0 2) #[
+              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+            .storeField "supply_w3" (.ext (.arith256 0 3) #[
+              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
@@ -438,7 +473,9 @@ def extractedToken : IR.Program :=
         retCount := 4
         ops := return256 fun limb => .ext (.domainSep256 limb) #[]
         view := true
-      }
+      },
+      view256 "Token" "totalSupply" 0 #[] (return256 fun limb =>
+        .field (.arg 0) s!"supply_{limbName limb}")
     ]
   }
 

@@ -2470,6 +2470,10 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                 match fieldTy? with
                 | some ty => isAddr20Type ty
                 | none => false
+              let isUInt256Field :=
+                match fieldTy? with
+                | some ty => isUInt256Type ty
+                | none => false
               if inheritedFromAppliedBase then
                 pure ()
               else if isAddr20Field then
@@ -2480,6 +2484,16 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                 unless looksUnchangedField w0 l0 do acc := acc.push (l0, w0)
                 unless looksUnchangedField w1 l1 do acc := acc.push (l1, w1)
                 unless looksUnchangedField w2 l2 do acc := acc.push (l2, w2)
+              else if isUInt256Field then
+                let (w0, w1, w2, w3) := uint256Leaves env nestedArg
+                let l0 := s!"{child}_w0"
+                let l1 := s!"{child}_w1"
+                let l2 := s!"{child}_w2"
+                let l3 := s!"{child}_w3"
+                unless looksUnchangedField w0 l0 do acc := acc.push (l0, w0)
+                unless looksUnchangedField w1 l1 do acc := acc.push (l1, w1)
+                unless looksUnchangedField w2 l2 do acc := acc.push (l2, w2)
+                unless looksUnchangedField w3 l3 do acc := acc.push (l3, w3)
               else if !nested.isEmpty then
                 acc := acc ++ nested.filter fun p => !looksUnchangedField p.2 p.1
               else if isVectorField then
@@ -2554,10 +2568,10 @@ private def asStoreFields (env : Environment) (e : Expr)
         let explicitSingle := includeSingle || containsUInt64NewtypeCtor env 16 st
         if leaves.isEmpty || (!explicitSingle && leaves.size == 1) then none
         else
+          let stores := leaves.map fun p => (.storeField p.1 p.2 : Ops.Op)
           match val env ret with
-          | none => none
-          | some rv =>
-            some ((leaves.map fun p => (.storeField p.1 p.2 : Ops.Op)).push (.okState rv))
+          | some rv => some (stores.push (.okState rv))
+          | none => some stores
       else none
     else none
   else none
@@ -5164,6 +5178,23 @@ private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Na
       (deepScalars := deepScalars)
     return stores.push (.okState value)
 
+private def mergeEvmStores (evmOps stores : Array Ops.Op) : Array Ops.Op :=
+  let evmHead :=
+    if evmOps.back?.any (fun | .returnU64 _ => true | _ => false) then evmOps.pop else evmOps
+  let wideStores := stores.filterMap fun
+    | .storeField name value =>
+      if name.endsWith "_w0" || name.endsWith "_w1" || name.endsWith "_w2" || name.endsWith "_w3" then
+        some (.storeField name value)
+      else none
+    | _ => none
+  if wideStores.isEmpty then evmOps
+  else
+    let tail : Array Ops.Op :=
+      match evmOps.back? with
+      | some op@(.returnU64 _) => #[op]
+      | _ => #[]
+    evmHead ++ wideStores ++ tail
+
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) (stateType? : Option Name := none) (deepScalars : Bool := false) :
     Except String (Array Ops.Op) :=
@@ -5171,7 +5202,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
   else if let some ops := decodeEvmEffect env e then
-    .ok ops
+    match asStoreFields env e true with
+    | some stores => .ok (mergeEvmStores ops stores)
+    | none => .ok ops
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
   else if let some result := asYieldStores env e localDepth stateType? deepScalars then
@@ -5495,7 +5528,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
     else if let some ops := decodeEvmEffect env e then
-      return .ok ops
+      match asStoreFields env e true with
+      | some stores => return .ok (mergeEvmStores ops stores)
+      | none => return .ok ops
     else if let some (n, addend) := findForIn env e then
       return .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
     else if let some (n, bodyE) := findForBodyExpr env e then
@@ -5620,8 +5655,12 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             match invokeOpsWithRet env t inv with
             | .ok ops => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
             | .error reason => return .error reason
-          | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
-            return .ok #[.ite cmp lv rv evmOps #[.errorOverflow]]
+          | some (cmp, lv, rv), none, some evmOps, _, stores?, _, _ =>
+            let ops :=
+              match stores? with
+              | some stores => mergeEvmStores evmOps stores
+              | none => evmOps
+            return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
             if structuredThen || hasNestedIte 64 t then
               match decodeExpr env fuel' t (stateful := stateful)
