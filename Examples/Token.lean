@@ -15,6 +15,7 @@ inductive Error where
 
 def balBase : UInt64 := 0
 def allowBase : UInt64 := 1
+def nonceBase : UInt64 := 2
 
 @[pf_entry]
 def init (_seed : UInt64) : State :=
@@ -36,6 +37,19 @@ def balanceOf (_s : State) (who : Addr20) : UInt256 :=
 @[pf_entry]
 def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
   evmMapGetPair256 allowBase owner spender
+
+@[pf_entry]
+def nonceOf (_s : State) (who : Addr20) : UInt256 :=
+  evmMapGetAddr256 nonceBase who
+
+/-- 封闭 EIP-2612 `permit`。name=`Token`，version=`1`。 -/
+@[pf_entry]
+def permit (_s : State) (owner spender : Addr20) (value deadline : UInt256)
+    (v : UInt8) (r s : Bytes32) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmPermit owner spender value deadline v r s)
+  else
+    .error .overflow
 
 /-- caller → spender 写额度，并 LOG3 `Approval(address,address,uint256)`。 -/
 @[pf_entry]

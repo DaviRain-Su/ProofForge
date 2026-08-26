@@ -23,6 +23,17 @@ structure UInt256 where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 /--
+32 字节哈希 / 签名半段。四叶布局同 `UInt256`。
+ABI 是 `bytes32`（抽出 width 33），不是 `uint256`。
+-/
+structure Bytes32 where
+  w0 : UInt64
+  w1 : UInt64
+  w2 : UInt64
+  w3 : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+/--
 `CALLER` 的低 8 字节：`and(caller(), 0xffffffffffffffff)`。
 这是 20 字节地址的末 8 字节，不是完整 address，也不是 `tx.origin`。
 SVM 发射器碰到这个叶子 fail closed。
@@ -226,5 +237,10 @@ def evmImm20 : Addr20 :=
 @[irreducible] def evmSwapExact3
     (_router _tokenA _tokenB _tokenC : Addr20) (amtIn _minOut : UInt256) : UInt64 :=
   amtIn.w0
+
+/-- 封闭 EIP-2612 `permit`。name=`Token`，version=`1`，nonce base=2，allowance base=1。失败 revert。宿主返回 `value.w0`。 -/
+@[irreducible] def evmPermit
+    (_owner _spender : Addr20) (value _deadline : UInt256) (_v : UInt8) (_r _s : Bytes32) : UInt64 :=
+  value.w0
 
 end ProofForge.Evm.Runtime

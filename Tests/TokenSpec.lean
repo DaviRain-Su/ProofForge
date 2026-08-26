@@ -20,6 +20,13 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .ok (_, ret) => ret == 9
   | .error _ => false
 
+#guard nonceOf (init 0) sample == zero256
+
+#guard
+  match permit (init 0) sample sample nine nine 27 ⟨1, 0, 0, 0⟩ ⟨2, 0, 0, 0⟩ with
+  | .ok (_, ret) => ret == 9
+  | .error _ => false
+
 #guard
   match logXfer (init 0) 4 with
   | .ok (_, ret) => ret == 4
@@ -45,7 +52,10 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"Transfer\"" &&
         abi.contains "\"name\":\"Approval\"" &&
         abi.contains "\"name\":\"Insufficient\"" &&
-        abi.contains "\"type\":\"error\""
+        abi.contains "\"name\":\"Expired\"" &&
+        abi.contains "\"type\":\"error\"" &&
+        yul.contains "staticcall(gas(), 1," &&
+        yul.contains "0x1901"
 
 #guard
   let p := ProofForge.Evm.Golden.extractedToken

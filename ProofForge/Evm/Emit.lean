@@ -151,6 +151,7 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       if i < paramCount then
         match uint256LeafOff name, (paramWidths[i]?).getD 8 with
         | some off, 32 => .ok (packU256Word s!"{paramPrefix}{i}" off)
+        | some off, 33 => .ok (packU256Word s!"{paramPrefix}{i}" off)
         | _, _ =>
           match addrLeafOff name with
           | some off => .ok (packAddrWord s!"{paramPrefix}{i}" off)
@@ -739,6 +740,135 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
 
 private def brace (inner : String) : String :=
   "{" ++ nl ++ inner ++ "}"
+
+private def emitPermit (p : IR.Program) (indent paramPrefix : String)
+    (paramCount : Nat) (paramWidths : Array Nat)
+    (o0 o1 o2 sA0 sA1 sA2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Ops.Val)
+    (st : Render) : Except String (String × Render) := do
+  let mut st := st
+  let (p0, ow0, st0) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st
+  let (p1, ow1, st1) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st0
+  let (p2, ow2, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st1
+  let (q0, sp0, st3) ← materializeVal p indent paramPrefix paramCount paramWidths sA0 st2
+  let (q1, sp1, st4) ← materializeVal p indent paramPrefix paramCount paramWidths sA1 st3
+  let (q2, sp2, st5) ← materializeVal p indent paramPrefix paramCount paramWidths sA2 st4
+  let (u0, n0, st6) ← materializeVal p indent paramPrefix paramCount paramWidths v0 st5
+  let (u1, n1, st7) ← materializeVal p indent paramPrefix paramCount paramWidths v1 st6
+  let (u2, n2, st8) ← materializeVal p indent paramPrefix paramCount paramWidths v2 st7
+  let (u3, n3, st9) ← materializeVal p indent paramPrefix paramCount paramWidths v3 st8
+  let (t0, k0, st10) ← materializeVal p indent paramPrefix paramCount paramWidths d0 st9
+  let (t1, k1, st11) ← materializeVal p indent paramPrefix paramCount paramWidths d1 st10
+  let (t2, k2, st12) ← materializeVal p indent paramPrefix paramCount paramWidths d2 st11
+  let (t3, k3, st13) ← materializeVal p indent paramPrefix paramCount paramWidths d3 st12
+  let (pv, vbyte, st14) ← materializeVal p indent paramPrefix paramCount paramWidths vv st13
+  let (x0, hr0, st15) ← materializeVal p indent paramPrefix paramCount paramWidths r0 st14
+  let (x1, hr1, st16) ← materializeVal p indent paramPrefix paramCount paramWidths r1 st15
+  let (x2, hr2, st17) ← materializeVal p indent paramPrefix paramCount paramWidths r2 st16
+  let (x3, hr3, st18) ← materializeVal p indent paramPrefix paramCount paramWidths r3 st17
+  let (y0, hs0, st19) ← materializeVal p indent paramPrefix paramCount paramWidths z0 st18
+  let (y1, hs1, st20) ← materializeVal p indent paramPrefix paramCount paramWidths z1 st19
+  let (y2, hs2, st21) ← materializeVal p indent paramPrefix paramCount paramWidths z2 st20
+  let (y3, hs3, st22) ← materializeVal p indent paramPrefix paramCount paramWidths z3 st21
+  let (own, st23) := fresh st22
+  let (spd, st24) := fresh st23
+  let (amt, st25) := fresh st24
+  let (dead, st26) := fresh st25
+  let (rword, st27) := fresh st26
+  let (sword, st28) := fresh st27
+  let (nslot, st29) := fresh st28
+  let (ntag, st30) := fresh st29
+  let (nonce, st31) := fresh st30
+  let (structH, st32) := fresh st31
+  let (nameH, st33) := fresh st32
+  let (verH, st34) := fresh st33
+  let (domainH, st35) := fresh st34
+  let (digest, st36) := fresh st35
+  let (signer, st37) := fresh st36
+  let (aslot, st38) := fresh st37
+  st := st38
+  let domainType := Keccak.keccak256HexOfString
+    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+  let permitType := Keccak.keccak256HexOfString
+    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+  let nameHash := Keccak.keccak256HexOfString "Token"
+  let versionHash := Keccak.keccak256HexOfString "1"
+  let expiredSel := Keccak.selector "Expired" #[]
+  let mut acc := ""
+  acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
+  u0 ++ u1 ++ u2 ++ u3 ++ t0 ++ t1 ++ t2 ++ t3 ++ pv ++
+  x0 ++ x1 ++ x2 ++ x3 ++ y0 ++ y1 ++ y2 ++ y3 ++
+  indent ++ "if shr(32, " ++ ow2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "if shr(32, " ++ sp2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "mstore(0, 0)" ++ nl ++
+  packAddrMstore8 indent ow0 ow1 ow2 ++
+  indent ++ "let " ++ own ++ " := mload(0)" ++ nl ++
+  indent ++ "mstore(0, 0)" ++ nl ++
+  packAddrMstore8 indent sp0 sp1 sp2 ++
+  indent ++ "let " ++ spd ++ " := mload(0)" ++ nl ++
+  indent ++ "let " ++ amt ++ " := " ++ packU256 n0 n1 n2 n3 ++ nl ++
+  indent ++ "let " ++ dead ++ " := " ++ packU256 k0 k1 k2 k3 ++ nl ++
+  indent ++ "let " ++ rword ++ " := " ++ packU256 hr0 hr1 hr2 hr3 ++ nl ++
+  indent ++ "let " ++ sword ++ " := " ++ packU256 hs0 hs1 hs2 hs3 ++ nl ++
+  indent ++ "if lt(" ++ dead ++ ", timestamp()) {" ++ nl ++
+  indent ++ "  mstore(0, shl(224, 0x" ++ expiredSel ++ "))" ++ nl ++
+  indent ++ "  revert(0, 4)" ++ nl ++
+  indent ++ "}" ++ nl ++
+  indent ++ "mstore(0, " ++ ow0 ++ ")" ++ nl ++
+  indent ++ "mstore(32, " ++ ow1 ++ ")" ++ nl ++
+  indent ++ "mstore(64, " ++ ow2 ++ ")" ++ nl ++
+  indent ++ "mstore(96, 2)" ++ nl ++
+  indent ++ "let " ++ nslot ++ " := keccak256(0, 128)" ++ nl ++
+  indent ++ "let " ++ ntag ++ " := sload(" ++ nslot ++ ")" ++ nl ++
+  indent ++ "if gt(" ++ ntag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "let " ++ nonce ++ " := 0" ++ nl ++
+  indent ++ "if " ++ ntag ++ " { " ++ nonce ++ " := sload(add(" ++ nslot ++ ", 1)) }" ++ nl ++
+  indent ++ "mstore(0, 0x" ++ permitType ++ ")" ++ nl ++
+  indent ++ "mstore(32, " ++ own ++ ")" ++ nl ++
+  indent ++ "mstore(64, " ++ spd ++ ")" ++ nl ++
+  indent ++ "mstore(96, " ++ amt ++ ")" ++ nl ++
+  indent ++ "mstore(128, " ++ nonce ++ ")" ++ nl ++
+  indent ++ "mstore(160, " ++ dead ++ ")" ++ nl ++
+  indent ++ "let " ++ structH ++ " := keccak256(0, 192)" ++ nl ++
+  indent ++ "let " ++ nameH ++ " := 0x" ++ nameHash ++ nl ++
+  indent ++ "let " ++ verH ++ " := 0x" ++ versionHash ++ nl ++
+  indent ++ "mstore(0, 0x" ++ domainType ++ ")" ++ nl ++
+  indent ++ "mstore(32, " ++ nameH ++ ")" ++ nl ++
+  indent ++ "mstore(64, " ++ verH ++ ")" ++ nl ++
+  indent ++ "mstore(96, chainid())" ++ nl ++
+  indent ++ "mstore(128, address())" ++ nl ++
+  indent ++ "let " ++ domainH ++ " := keccak256(0, 160)" ++ nl ++
+  indent ++ "mstore(0, 0x1901000000000000000000000000000000000000000000000000000000000000)" ++ nl ++
+  indent ++ "mstore(2, " ++ domainH ++ ")" ++ nl ++
+  indent ++ "mstore(34, " ++ structH ++ ")" ++ nl ++
+  indent ++ "let " ++ digest ++ " := keccak256(0, 66)" ++ nl ++
+  indent ++ "mstore(0, " ++ digest ++ ")" ++ nl ++
+  indent ++ "mstore(32, " ++ vbyte ++ ")" ++ nl ++
+  indent ++ "mstore(64, " ++ rword ++ ")" ++ nl ++
+  indent ++ "mstore(96, " ++ sword ++ ")" ++ nl ++
+  indent ++ "if iszero(staticcall(gas(), 1, 0, 128, 0, 32)) { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "let " ++ signer ++ " := mload(0)" ++ nl
+  acc := acc ++
+  indent ++ "if iszero(" ++ signer ++ ") { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "if iszero(eq(" ++ signer ++ ", " ++ own ++ ")) { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "sstore(" ++ nslot ++ ", 1)" ++ nl ++
+  indent ++ "sstore(add(" ++ nslot ++ ", 1), add(" ++ nonce ++ ", 1))" ++ nl ++
+  indent ++ "mstore(0, " ++ ow0 ++ ")" ++ nl ++
+  indent ++ "mstore(32, " ++ ow1 ++ ")" ++ nl ++
+  indent ++ "mstore(64, " ++ ow2 ++ ")" ++ nl ++
+  indent ++ "mstore(96, " ++ sp0 ++ ")" ++ nl ++
+  indent ++ "mstore(128, " ++ sp1 ++ ")" ++ nl ++
+  indent ++ "mstore(160, " ++ sp2 ++ ")" ++ nl ++
+  indent ++ "mstore(192, 1)" ++ nl ++
+  indent ++ "let " ++ aslot ++ " := keccak256(0, 224)" ++ nl ++
+  indent ++ "sstore(" ++ aslot ++ ", 1)" ++ nl ++
+  indent ++ "sstore(add(" ++ aslot ++ ", 1), " ++ amt ++ ")" ++ nl ++
+  indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
+  indent ++ "log3(0, 32, 0x" ++
+    Keccak.keccak256HexOfString "Approval(address,address,uint256)" ++
+    ", " ++ own ++ ", " ++ spd ++ ")" ++ nl
+  st := { st with last := some n0 }
+  return (acc, st)
+
 
 private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
     (paramCount : Nat) (paramWidths : Array Nat) (ops : Array IR.Op) (st : Render) :
@@ -1504,6 +1634,11 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ ok ++ " := call(gas(), " ++ tok ++ ", 0, 0, 292, 0, 0)" ++ nl ++
           indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some n0 }
+    | .evmPermit o0 o1 o2 sA0 sA1 sA2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+        let (txt, st') ← emitPermit p indent paramPrefix paramCount paramWidths
+          o0 o1 o2 sA0 sA1 sA2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 st
+        acc := acc ++ txt
+        st := st'
     | .storeField name v =>
         let destS ← slotOf p name
         let (pre, value, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st
@@ -1977,7 +2112,7 @@ private def renderCtorPrelude (objectName : String) (paramCount : Nat)
       let max := widthMask w
       out := out ++
         "    let ctor_arg" ++ toString i ++ " := mload(" ++ toString (i * 32) ++ ")" ++ nl
-      unless w == 32 do
+      unless w == 32 || w == 33 do
         out := out ++
           "    if gt(ctor_arg" ++ toString i ++ ", " ++ max ++ ") { " ++
             revert0 ++ " }" ++ nl
@@ -2028,7 +2163,7 @@ private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool
     let max := widthMask w
     head := head ++
       "        let arg" ++ toString i ++ " := calldataload(" ++ toString off ++ ")" ++ nl
-    unless w == 32 do
+    unless w == 32 || w == 33 do
       head := head ++
         "        if gt(arg" ++ toString i ++ ", " ++ max ++ ") { " ++
           revert0 ++ " }" ++ nl
@@ -2144,6 +2279,9 @@ private def errorAbiUnauthorized : String :=
 private def errorAbiZeroAddress : String :=
   "{\"type\":\"error\",\"name\":\"ZeroAddress\",\"inputs\":[]}"
 
+private def errorAbiExpired : String :=
+  "{\"type\":\"error\",\"name\":\"Expired\",\"inputs\":[]}"
+
 private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
   match fuel with
   | 0 => #[]
@@ -2182,12 +2320,15 @@ def emitAbi (p : IR.Program) : String :=
     hasErrorLeaf 8 (fun | .evmRevertUnauthorized .. => true | _ => false) m.ops)
   let needZero := p.entries.any (fun m =>
     hasErrorLeaf 8 (fun | .evmRevertZeroAddress => true | _ => false) m.ops)
+  let needExpired := p.entries.any (fun m =>
+    hasErrorLeaf 8 (fun | .evmPermit .. => true | _ => false) m.ops)
   let needRecv := p.entries.any (fun m => m.ixName == "receive")
   let items :=
     #[ctorAbi p] ++ evs.map eventAbi ++
       (if needIns then #[errorAbiInsufficient] else #[]) ++
       (if needUnauth then #[errorAbiUnauthorized] else #[]) ++
       (if needZero then #[errorAbiZeroAddress] else #[]) ++
+      (if needExpired then #[errorAbiExpired] else #[]) ++
       (if needRecv then #[receiveAbi] else #[]) ++
       p.entries.filterMap fun m =>
         if m.ixName == "receive" then none else some (entryAbi m)

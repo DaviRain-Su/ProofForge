@@ -49,6 +49,7 @@ inductive Op where
   | evmWethWithdraw256 (tw0 tw1 tw2 a0 a1 a2 a3 : Ops.Val)
   | evmSwapExact2 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : Ops.Val)
   | evmSwapExact3 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : Ops.Val)
+  | evmPermit (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Ops.Val)
   | storeField (name : String) (value : Ops.Val)
   | okState (value : Ops.Val)
   | errorOverflow
@@ -125,6 +126,8 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmSwapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3)
   | .ext (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3) =>
       pure (.evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3)
+  | .ext (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3) =>
+      pure (.evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
 
 where
   lowerOps (ops : Array Ops.Op) : Except String (Array Op) :=
@@ -190,6 +193,8 @@ private partial def Op.toSource : Op → Ops.Op
       .ext (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3)
   | .evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       .ext (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3)
+  | .evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      .ext (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
   | .storeField name value => .storeField name value
   | .okState value => .okState value
   | .errorOverflow => .errorOverflow
@@ -287,6 +292,14 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
         (mapValue c0) (mapValue c1) (mapValue c2)
         (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
         (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
+  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      .permit (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2)
+        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
+        (mapValue d0) (mapValue d1) (mapValue d2) (mapValue d3)
+        (mapValue vv)
+        (mapValue r0) (mapValue r1) (mapValue r2) (mapValue r3)
+        (mapValue z0) (mapValue z1) (mapValue z2) (mapValue z3)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .deposit amount | .log _ amount => #[amount]
@@ -330,6 +343,8 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3]
   | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3]
+  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -438,6 +453,14 @@ private def projectOpExt
             (← projectVal c0) (← projectVal c1) (← projectVal c2)
             (← projectVal i0) (← projectVal i1) (← projectVal i2) (← projectVal i3)
             (← projectVal m0) (← projectVal m1) (← projectVal m2) (← projectVal m3)
+      | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+          return .permit (← projectVal o0) (← projectVal o1) (← projectVal o2)
+            (← projectVal s0) (← projectVal s1) (← projectVal s2)
+            (← projectVal v0) (← projectVal v1) (← projectVal v2) (← projectVal v3)
+            (← projectVal d0) (← projectVal d1) (← projectVal d2) (← projectVal d3)
+            (← projectVal vv)
+            (← projectVal r0) (← projectVal r1) (← projectVal r2) (← projectVal r3)
+            (← projectVal z0) (← projectVal z1) (← projectVal z2) (← projectVal z3)
 
 /-- Static registration of the extractor-to-EVM projection. -/
 def extractRegistration :
@@ -884,6 +907,8 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"swap2({valCanon r0},{valCanon r1},{valCanon r2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon b0},{valCanon b1},{valCanon b2},{valCanon i0},{valCanon i1},{valCanon i2},{valCanon i3},{valCanon m0},{valCanon m1},{valCanon m2},{valCanon m3})"
     | .evmSwapExact3 r0 r1 r2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
         s!"swap3({valCanon r0},{valCanon r1},{valCanon r2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon b0},{valCanon b1},{valCanon b2},{valCanon c0},{valCanon c1},{valCanon c2},{valCanon i0},{valCanon i1},{valCanon i2},{valCanon i3},{valCanon m0},{valCanon m1},{valCanon m2},{valCanon m3})"
+    | .evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+        s!"permit({valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon v0},{valCanon v1},{valCanon v2},{valCanon v3},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3},{valCanon vv},{valCanon r0},{valCanon r1},{valCanon r2},{valCanon r3},{valCanon z0},{valCanon z1},{valCanon z2},{valCanon z3})"
     | .storeField n v => s!"st.{n}({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"

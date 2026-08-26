@@ -141,4 +141,67 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   15 "over-allowance holds remaining"
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient; engineering only)"
+deadline=9999999999
+typed="$(printf '%s' "{
+  \"types\": {
+    \"EIP712Domain\": [
+      {\"name\":\"name\",\"type\":\"string\"},
+      {\"name\":\"version\",\"type\":\"string\"},
+      {\"name\":\"chainId\",\"type\":\"uint256\"},
+      {\"name\":\"verifyingContract\",\"type\":\"address\"}
+    ],
+    \"Permit\": [
+      {\"name\":\"owner\",\"type\":\"address\"},
+      {\"name\":\"spender\",\"type\":\"address\"},
+      {\"name\":\"value\",\"type\":\"uint256\"},
+      {\"name\":\"nonce\",\"type\":\"uint256\"},
+      {\"name\":\"deadline\",\"type\":\"uint256\"}
+    ]
+  },
+  \"primaryType\": \"Permit\",
+  \"domain\": {
+    \"name\": \"Token\",
+    \"version\": \"1\",
+    \"chainId\": $chain_id,
+    \"verifyingContract\": \"$addr\"
+  },
+  \"message\": {
+    \"owner\": \"$sender\",
+    \"spender\": \"$dest\",
+    \"value\": \"10\",
+    \"nonce\": \"0\",
+    \"deadline\": \"$deadline\"
+  }
+}")"
+sig="$("$cast" wallet sign --data --private-key "$private_key" "$typed")"
+r="0x${sig:2:64}"
+s="0x${sig:66:64}"
+v="$((16#${sig:130:2}))"
+
+"$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+  "$addr" 'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)' \
+  "$sender" "$dest" 10 "$deadline" "$v" "$r" "$s" >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  10 "allowance after permit"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'nonceOf(address)(uint256)' "$sender")" \
+  1 "nonce after permit"
+
+"$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+  "$addr" 'transferFrom(address,address,uint256)' "$sender" "$dest" 10 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  55 "owner after permit transferFrom"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  0 "allowance after permit transferFrom"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)' \
+    "$sender" "$dest" 10 0 "$v" "$r" "$s" >/dev/null 2>&1; then
+  echo "FAIL: expired permit unexpectedly succeeded" >&2
+  exit 1
+fi
+
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit; engineering only)"

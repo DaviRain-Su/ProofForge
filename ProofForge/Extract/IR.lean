@@ -121,6 +121,14 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
         (mapValue c0) (mapValue c1) (mapValue c2)
         (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
         (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
+  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      .permit (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2)
+        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
+        (mapValue d0) (mapValue d1) (mapValue d2) (mapValue d3)
+        (mapValue vv)
+        (mapValue r0) (mapValue r1) (mapValue r2) (mapValue r3)
+        (mapValue z0) (mapValue z1) (mapValue z2) (mapValue z3)
 
 private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .deposit amount | .log _ amount => #[amount]
@@ -161,6 +169,8 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3]
   | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3]
+  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
 
 def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .svm payload => .svm (mapSvmPayload mapValue payload)
@@ -244,6 +254,9 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
         (·.wellFormed ValKind.arity)
   | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3].all
+        (·.wellFormed ValKind.arity)
+  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].all
         (·.wellFormed ValKind.arity)
 
 def OpExt.wellFormed : OpExt Val → Bool

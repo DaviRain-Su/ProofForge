@@ -369,6 +369,19 @@ def extractedToken : IR.Program :=
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
+      mutEntry "Token" "permit" 7 #[20, 20, 32, 32, 1, 33, 33] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmPermit
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
+              (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")
+              (u256Field 3 "w0") (u256Field 3 "w1") (u256Field 3 "w2") (u256Field 3 "w3")
+              (.arg 4)
+              (u256Field 5 "w0") (u256Field 5 "w1") (u256Field 5 "w2") (u256Field 5 "w3")
+              (u256Field 6 "w0") (u256Field 6 "w1") (u256Field 6 "w2") (u256Field 6 "w3"),
+            .returnU64 (u256Field 2 "w0")]
+          #[.errorOverflow]
+      ],
       mutEntry "Token" "transfer" 2 #[20, 32] #[
         .ite .eq (ge256 callerBal 1) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
@@ -400,7 +413,8 @@ def extractedToken : IR.Program :=
       ],
       view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
       view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
-      dummyGet "Token"
+      dummyGet "Token",
+      view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0)
     ]
   }
 

@@ -83,6 +83,8 @@ inductive OpExt (V : Type) where
   | wethWithdraw256 (tw0 tw1 tw2 a0 a1 a2 a3 : V)
   | swapExact2 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : V)
   | swapExact3 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : V)
+  /-- Closed EIP-2612 permit: owner, spender, value, deadline, v, r, s. -/
+  | permit (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -176,6 +178,9 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       allValuesWellFormed #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2,
         i0, i1, i2, i3, m0, m1, m2, m3]
+  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      allValuesWellFormed #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3,
+        vv, r0, r1, r2, r3, z0, z1, z2, z3]
 
 def Op.wellFormed (op : Op) : Bool :=
   ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op
