@@ -184,6 +184,9 @@ inductive OpExt (V : Type) where
   | accDataRbTreeKey4Insert
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : V)
+  | accDataRbTreeKey4Remove
+      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+      (key0 key1 key2 key3 : V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -344,6 +347,13 @@ def OpExt.wellFormed : OpExt Val → Bool
           strideWords capacity &&
         #[key0, key1, key2, key3].all fun key =>
           key.wellFormed ValKind.arity && staticPayloadsWellFormed key
+  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      acc > 0 && accInRange acc &&
+        rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity &&
+        #[key0, key1, key2, key3].all fun key =>
+          key.wellFormed ValKind.arity && staticPayloadsWellFormed key
 
 private partial def opStaticPayloadsWellFormed : Op → Bool
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
@@ -365,6 +375,8 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
       | .accDataWordSetAt _ _ _ _ index value =>
           staticPayloadsWellFormed index && staticPayloadsWellFormed value
       | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+          #[key0, key1, key2, key3].all staticPayloadsWellFormed
+      | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].all staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
@@ -474,7 +486,8 @@ private def OpExt.needsWalk : OpExt Val → Bool
       data.any CpiWord.needsWalk ||
         seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
         bump.any valNeedsWalk
-  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert .. => true
+  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert ..
+  | .accDataRbTreeKey4Remove .. => true
 
 private def OpExt.minAccounts : OpExt Val → Nat
   | .invoke _ _ data seeds bump =>
@@ -490,6 +503,9 @@ private def OpExt.minAccounts : OpExt Val → Nat
   | .accDataRbTreeKey4Insert acc _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
         Nat.max current (valMinAccounts key)
+  | .accDataRbTreeKey4Remove acc _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
+        Nat.max current (valMinAccounts key)
 
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
@@ -497,6 +513,8 @@ private def OpExt.hasSelect : OpExt Val → Bool
   | .accDataWordSetAt _ _ _ _ index value =>
       valHasSelect index || valHasSelect value
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3].any valHasSelect
+  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].any valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=

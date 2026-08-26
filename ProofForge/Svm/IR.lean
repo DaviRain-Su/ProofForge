@@ -22,6 +22,9 @@ inductive Op where
   | accDataRbTreeKey4Insert
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : Ops.Val)
+  | accDataRbTreeKey4Remove
+      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+      (key0 key1 key2 key3 : Ops.Val)
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -51,6 +54,10 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3) =>
       pure (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3)
+  | .ext (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3) =>
+      pure (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity key0 key1 key2 key3)
   | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
@@ -88,6 +95,10 @@ private partial def Op.toSource : Op → Ops.Op
       strideWords capacity key0 key1 key2 key3 =>
       .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity key0 key1 key2 key3)
+  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      .ext (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3)
   | .forAccum n addend resultLocal => .forAccum n addend resultLocal
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
@@ -117,6 +128,10 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
       strideWords capacity key0 key1 key2 key3 =>
       .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
+  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .invoke _ _ data _ bump =>
@@ -125,6 +140,8 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
         | none => #[]
   | .accDataWordSetAt _ _ _ _ index value => #[index, value]
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3]
+  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
@@ -160,6 +177,11 @@ private def projectOpExt
   | .svm (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3) =>
       return .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity (← projectVal key0) (← projectVal key1)
+          (← projectVal key2) (← projectVal key3)
+  | .svm (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3) =>
+      return .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity (← projectVal key0) (← projectVal key1)
           (← projectVal key2) (← projectVal key3)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
@@ -613,6 +635,11 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity key0 key1 key2 key3 =>
         s!"rb4i.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
+          s!"{strideWords}.{capacity}({valCanon key0},{valCanon key1}," ++
+          s!"{valCanon key2},{valCanon key3})"
+    | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3 =>
+        s!"rb4r.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
           s!"{strideWords}.{capacity}({valCanon key0},{valCanon key1}," ++
           s!"{valCanon key2},{valCanon key3})"
     | .forAccum n addend resultLocal =>

@@ -48,7 +48,7 @@ fn install_official_trader_tree(market: &mut Account, bytes: &[u8]) {
     market.data[offset..].copy_from_slice(bytes);
 }
 
-fn assert_trader_tree_bytes_eq(actual: &[u8], expected: &[u8], insertion: usize) {
+fn assert_trader_tree_bytes_eq(actual: &[u8], expected: &[u8], step: usize) {
     assert_eq!(actual.len(), expected.len());
     if let Some(offset) = actual
         .iter()
@@ -65,7 +65,7 @@ fn assert_trader_tree_bytes_eq(actual: &[u8], expected: &[u8], insertion: usize)
             .take(20)
             .collect();
         panic!(
-            "Sokoban bytes diverged after insertion {insertion}: byte {offset}, word {word}, actual={:02x?}, expected={:02x?}; actual header={:02x?}, expected header={:02x?}; first differences={differences:?}",
+            "Sokoban bytes diverged at step {step}: byte {offset}, word {word}, actual={:02x?}, expected={:02x?}; actual header={:02x?}, expected header={:02x?}; first differences={differences:?}",
             &actual[start..start + 8],
             &expected[start..start + 8],
             &actual[..32],
@@ -2017,6 +2017,155 @@ fn generic_trader_registration_reuses_free_head_and_fails_atomically() {
         malformed.clone(),
         true,
         &[0xff, 0, 0, 0],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
+}
+
+#[test]
+fn generic_trader_removal_matches_sokoban_through_empty_and_reuse() {
+    let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialTraderTree>()];
+    OfficialTraderTree::new_from_slice(&mut official_bytes);
+    let keys: Vec<[u64; 4]> = (0u64..128)
+        .map(|index| [(index * 73) % 128, 0, 0, 0])
+        .collect();
+    {
+        let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official tree bytes");
+        for (index, key) in keys.iter().copied().enumerate() {
+            let mut state = [0u64; 12];
+            state[0] = 0x1000 + index as u64;
+            state[11] = 0xf000 + index as u64;
+            assert!(official.insert(key_words_bytes(key), state).is_some());
+        }
+        assert!(official.is_valid_red_black_tree());
+    }
+    let mut market = empty_small_market();
+    install_official_trader_tree(&mut market, &official_bytes);
+
+    // Multiplication by another odd number permutes the 128 insertion positions. Removing this
+    // order exercises leaf/one-child/two-child predecessor transplants and every delete-fixup arm.
+    for step in 0..128 {
+        let key = keys[(step * 53) % 128];
+        {
+            let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+                .expect("aligned official tree bytes");
+            assert!(official.remove(&key_words_bytes(key)).is_some());
+            assert!(official.is_valid_red_black_tree());
+        }
+        let remaining = 127 - step;
+        market = run_market_write(
+            "removeTrader128",
+            market,
+            true,
+            &key,
+            &[
+                Check::success(),
+                Check::return_data(&(remaining as u64).to_le_bytes()),
+            ],
+        );
+        assert_trader_tree_bytes_eq(
+            &market.data[8 * TRADER_TREE_WORD..],
+            official_bytes.as_slice(),
+            step + 1,
+        );
+    }
+    run_view(
+        "traderTreeValid",
+        market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+
+    let empty = market.clone();
+    let missing = run_market_write(
+        "removeTrader128",
+        market.clone(),
+        true,
+        &keys[0],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(missing.data, empty.data);
+
+    // Reinsert into the official deletion free-list and require exact LIFO address reuse. A reused
+    // slot is fully reinitialized by insertion even though deletion leaves key/value bytes in place.
+    for index in 0u64..16 {
+        let key = [0x80 + index, 1, 0, 0];
+        {
+            let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+                .expect("aligned official tree bytes");
+            assert!(official.insert(key_words_bytes(key), [0; 12]).is_some());
+            assert!(official.is_valid_red_black_tree());
+        }
+        market = run_market_write(
+            "registerTrader128",
+            market,
+            true,
+            &key,
+            &[
+                Check::success(),
+                Check::return_data(&(index + 1).to_le_bytes()),
+            ],
+        );
+        assert_trader_tree_bytes_eq(
+            &market.data[8 * TRADER_TREE_WORD..],
+            official_bytes.as_slice(),
+            129 + index as usize,
+        );
+    }
+}
+
+#[test]
+fn generic_trader_removal_rejects_missing_and_noncanonical_inputs_atomically() {
+    let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialTraderTree>()];
+    OfficialTraderTree::new_from_slice(&mut official_bytes);
+    let keys: Vec<[u64; 4]> = (1u64..=31).map(|index| [index * 7, 0, 0, 0]).collect();
+    {
+        let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official tree bytes");
+        for key in keys.iter().copied() {
+            assert!(official.insert(key_words_bytes(key), [0; 12]).is_some());
+        }
+    }
+    let mut canonical = empty_small_market();
+    install_official_trader_tree(&mut canonical, &official_bytes);
+
+    let absent = [0xff, 0, 0, 0];
+    let after_absent = run_market_write(
+        "removeTrader128",
+        canonical.clone(),
+        true,
+        &absent,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_absent.data, canonical.data);
+
+    let after_readonly = run_market_write(
+        "removeTrader128",
+        canonical.clone(),
+        false,
+        &keys[12],
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_readonly.data, canonical.data);
+
+    let mut wrong_owner = canonical.clone();
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "removeTrader128",
+        wrong_owner.clone(),
+        true,
+        &keys[12],
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let mut malformed = canonical;
+    write_word(&mut malformed, 8315, 127);
+    let after_malformed = run_market_write(
+        "removeTrader128",
+        malformed.clone(),
+        true,
+        &keys[12],
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(after_malformed.data, malformed.data);

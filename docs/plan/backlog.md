@@ -180,6 +180,15 @@
   assembly 4,413,033 B，ELF 1,410,648 B，IDL 5,499 B；Surfpool 1.5.0 以 1,394 个
   Loader write transactions 部署并核对 exact 1,410,693-byte ProgramData。本轮
   194-job Lean、50 个 SVM build、Mollusk 220/220 和 Anvil 12/12 全绿。
+- P5 第十八段 general bounded trader removal 已完成：通用
+  `accDataRbTreeKey4Remove` 在完整 tree/free-list preflight 与 key lookup 后，按 Sokoban
+  0.3.0 原位执行 predecessor transplant、bounded delete-fixup 和 free-list push。128-key
+  tree 以独立 permutation 逐个删空，每一步完整 18,464 bytes 与官方实现一致；随后 16 次
+  insertion 也精确复用同一 LIFO free-list。持久状态仍只有 one-based index / `0` sentinel，
+  不使用 heap/Map、detached node 或 persistent pointer。当前 digest `74f755a74720a766`，
+  assembly 4,456,725 B，ELF 1,424,912 B，IDL 5,842 B；Surfpool 1.5.0 以 1,409 个 Loader
+  write transactions 部署并核对 exact 1,424,957-byte ProgramData。本轮 194-job Lean、
+  50 个 SVM build、Mollusk 222/222 和 Anvil 12/12 全绿。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
@@ -197,7 +206,7 @@
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
-| P5 动态 Phoenix-v1 | 部分：profile + complete tree/free-list validation + general bounded 128-seat trader insertion + 本地部署门已有 | 固定/固定-stride有界 account word、parent walk、fixed bitmap/stack、effect-safe guarded stores | canonical profile/allocator envelope/三树 invariants 已进 Lean/Mollusk；trader allocator 可按 Sokoban 0.3.0 原子填满 128 seats 并复用 free head，逐次完整 bytes differential 全绿；delete/delete-fixup、remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
+| P5 动态 Phoenix-v1 | 部分：profile + complete tree/free-list validation + general bounded 128-seat trader insertion/removal + 本地部署门已有 | 固定/固定-stride有界 account word、parent walk、fixed bitmap/stack、effect-safe guarded stores | canonical profile/allocator envelope/三树 invariants 已进 Lean/Mollusk；trader allocator 可按 Sokoban 0.3.0 原子填满并逐个删空 128 seats，完整 bytes differential、delete-fixup 与 free-head reuse 全绿；bid/ask mutation、remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
 | P6 SDK memory/protocol surface | 进行中：官方形状 transient heap 模型已有 | P5 的 account-resident 边界；后续需要 effect-safe lowering | 默认 32 KiB / 显式 32–256 KiB frame、OOM/no-op free 已建模；后续只开放 bounded scratch/container API，禁止持久 heap pointer。再分片补 32-byte/u128/Borsh、remaining accounts 和 Token-2022 extension semantics |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。P5 verifier 已能按账户原始

@@ -39,6 +39,10 @@ private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.O
       strideWords capacity key0 key1 key2 key3 =>
       .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
+  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
 
 private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
   | .invoke _ _ data _ bump =>
@@ -47,6 +51,8 @@ private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
         | none => #[]
   | .accDataWordSetAt _ _ _ _ index value => #[index, value]
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3]
+  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3]
 
 private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.Ops.OpExt Val
@@ -119,6 +125,12 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
         Svm.Ops.indexedDataWordsInRange baseWord strideWords capacity &&
         index.wellFormed ValKind.arity && value.wellFormed ValKind.arity
   | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      acc > 0 && Svm.Ops.accInRange acc &&
+        Svm.Ops.rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity &&
+        #[key0, key1, key2, key3].all (·.wellFormed ValKind.arity)
+  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3 =>
       acc > 0 && Svm.Ops.accInRange acc &&
         Svm.Ops.rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord

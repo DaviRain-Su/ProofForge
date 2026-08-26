@@ -190,6 +190,8 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
             valSignerAccs index ++ valSignerAccs value
         | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
             #[key0, key1, key2, key3].flatMap valSignerAccs
+        | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+            #[key0, key1, key2, key3].flatMap valSignerAccs
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -2156,6 +2158,8 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
           valUsesSigner index || valUsesSigner value
       | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].any valUsesSigner
+      | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+          #[key0, key1, key2, key3].any valUsesSigner
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -2506,6 +2510,268 @@ private def emitAccDataWordSetAt (p : IR.Program) (label : String)
   lddw r0, 0x1
   exit
 {done}:
+"
+
+/-- Local BPF-to-BPF rotations shared by one bounded account-resident mutation. The helper frame
+contains only scalar indexes and pointers derived from the current account-data base. -/
+private def emitRbTreeKey4RotationHelpers (tag : String)
+    (linksBaseBytes parentBaseBytes strideBytes : Nat) : String :=
+  let rotateLeft := "function_" ++ tag ++ "_rotate_left"
+  let rotateRight := "function_" ++ tag ++ "_rotate_right"
+  let leftHasGrand := tag ++ "_rotl_has_grand"
+  let leftGrandRight := tag ++ "_rotl_grand_right"
+  let leftGrandDone := tag ++ "_rotl_grand_done"
+  let leftNoChild := tag ++ "_rotl_no_child"
+  let rightHasGrand := tag ++ "_rotr_has_grand"
+  let rightGrandRight := tag ++ "_rotr_grand_right"
+  let rightGrandDone := tag ++ "_rotr_grand_done"
+  let rightNoChild := tag ++ "_rotr_no_child"
+  s!"\
+{rotateLeft}:
+  ; args: r1=data, r2=x, r3=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  lsh64 r1, 32
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {leftNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftNoChild}:
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {leftHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {leftGrandDone}
+{leftHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {leftGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {leftGrandDone}
+{leftGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
+
+{rotateRight}:
+  ; args: r1=data, r2=x, r3=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  lsh64 r2, 32
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {rightNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightNoChild}:
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {rightHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {rightGrandDone}
+{rightHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {rightGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {rightGrandDone}
+{rightGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
 "
 
 /-- Insert into a complete account-resident Sokoban red-black tree. Validation and every
@@ -3321,6 +3587,963 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   exit
 " ++ rotationHelpers ++ s!"{helpersDone}:\n"
 
+/-- Remove from a complete account-resident Sokoban red-black tree. Authentication, complete
+tree/free-list validation, and key lookup all precede the first store. The mutation follows
+Sokoban 0.3.0's predecessor transplant and delete-fixup exactly, then pushes the removed one-based
+slot onto the in-account free list without copying its key/value payload to transient heap. -/
+private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Ops.Val) : Except String String := do
+  let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
+  let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
+  let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
+  let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+  let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
+  let validate ← emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
+    keyBaseWord strideWords capacity
+    (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
+    (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
+    (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+    40 4 s!"{label}_preflight"
+  let strideBytes := 8 * strideWords
+  let linksBaseBytes := 8 * linksBaseWord
+  let parentBaseBytes := 8 * parentBaseWord
+  let keyBaseBytes := 8 * keyBaseWord
+  let rootBytes := 8 * rootWord
+  let finalWord := linksBaseWord + strideWords - 1 + strideWords * (capacity - 1)
+  let requiredBytes := 8 * (Nat.max (rootWord + 3) finalWord + 1)
+  let token := IR.u64Hex (Core.IR.fnv1a64
+    (s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+      s!"{strideWords}:{capacity}:remove"))
+  let tag := s!"rb4r_{token}"
+  let authFailure := tag ++ "_auth_failure"
+  let failure := tag ++ "_failure"
+  let dataOk := tag ++ "_data_ok"
+  let searchLoop := tag ++ "_search_loop"
+  let searchBefore := tag ++ "_search_before"
+  let searchAfter := tag ++ "_search_after"
+  let searchNext := tag ++ "_search_next"
+  let found := tag ++ "_found"
+  let leaf := tag ++ "_leaf"
+  let leafRoot := tag ++ "_leaf_root"
+  let leafRight := tag ++ "_leaf_right"
+  let leafReady := tag ++ "_leaf_ready"
+  let onlyRight := tag ++ "_only_right"
+  let onlyLeft := tag ++ "_only_left"
+  let twoChildren := tag ++ "_two_children"
+  let predLoop := tag ++ "_pred_loop"
+  let predFound := tag ++ "_pred_found"
+  let predDirect := tag ++ "_pred_direct"
+  let predHasChild := tag ++ "_pred_has_child"
+  let removeAllocator := tag ++ "_remove_allocator"
+  let fixRoot := tag ++ "_fix_root"
+  let fixInit := tag ++ "_fix_init"
+  let fixDerive := tag ++ "_fix_derive"
+  let fixDeriveRight := tag ++ "_fix_derive_right"
+  let fixLoop := tag ++ "_fix_loop"
+  let siblingRight := tag ++ "_sibling_right"
+  let siblingReady := tag ++ "_sibling_ready"
+  let siblingBlack := tag ++ "_sibling_black"
+  let noSiblingChildren := tag ++ "_no_sibling_children"
+  let redRotateRight := tag ++ "_red_rotate_right"
+  let redRotated := tag ++ "_red_rotated"
+  let childLeftZero := tag ++ "_child_left_zero"
+  let childLeftDone := tag ++ "_child_left_done"
+  let childRightZero := tag ++ "_child_right_zero"
+  let childRightDone := tag ++ "_child_right_done"
+  let notBothBlack := tag ++ "_not_both_black"
+  let bothBlack := tag ++ "_both_black"
+  let bothBlackNoSibling := tag ++ "_both_black_no_sibling"
+  let fixFarLeft := tag ++ "_fix_far_left"
+  let farReady := tag ++ "_far_ready"
+  let farRed := tag ++ "_far_red"
+  let nearRight := tag ++ "_near_right"
+  let nearReady := tag ++ "_near_ready"
+  let nearBlackDone := tag ++ "_near_black_done"
+  let nearRotateLeft := tag ++ "_near_rotate_left"
+  let nearRotated := tag ++ "_near_rotated"
+  let setSiblingColor := tag ++ "_set_sibling_color"
+  let farAfterLeft := tag ++ "_far_after_left"
+  let farAfterReady := tag ++ "_far_after_ready"
+  let farAfterBlack := tag ++ "_far_after_black"
+  let finalRotateRight := tag ++ "_final_rotate_right"
+  let finalRotated := tag ++ "_final_rotated"
+  let fixCheck := tag ++ "_fix_check"
+  let fixNextRight := tag ++ "_fix_next_right"
+  let fixNextReady := tag ++ "_fix_next_ready"
+  let fixBlacken := tag ++ "_fix_blacken"
+  let publish := tag ++ "_publish"
+  let helpersDone := tag ++ "_helpers_done"
+  let rotateLeft := "function_" ++ tag ++ "_rotate_left"
+  let rotateRight := "function_" ++ tag ++ "_rotate_right"
+  let transplant := "function_" ++ tag ++ "_transplant"
+  let transplantRoot := tag ++ "_transplant_root"
+  let transplantRight := tag ++ "_transplant_right"
+  let transplantLinked := tag ++ "_transplant_linked"
+  let transplantNoSource := tag ++ "_transplant_no_source"
+  let transplantDone := tag ++ "_transplant_done"
+  let rotationHelpers := emitRbTreeKey4RotationHelpers tag
+    linksBaseBytes parentBaseBytes strideBytes
+  let transplantHelper := s!"\
+{transplant}:
+  ; args: r1=data, r2=target, r3=source, r4=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  stxdw [r10 - 32], r4
+  sub64 r2, 1
+  lddw r5, {strideBytes}
+  mul64 r2, r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r5, [r5 + 0]
+  lsh64 r5, 32
+  rsh64 r5, 32
+  stxdw [r10 - 40], r5
+  jeq r5, 0, {transplantRoot}
+  sub64 r5, 1
+  lddw r2, {strideBytes}
+  mul64 r5, r2
+  add64 r1, {linksBaseBytes}
+  add64 r1, r5
+  ldxdw r2, [r1 + 0]
+  mov64 r4, r2
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  jne r4, r5, {transplantRight}
+  rsh64 r2, 32
+  lsh64 r2, 32
+  ldxdw r3, [r10 - 24]
+  or64 r2, r3
+  stxdw [r1 + 0], r2
+  ja {transplantLinked}
+{transplantRight}:
+  lsh64 r2, 32
+  rsh64 r2, 32
+  ldxdw r3, [r10 - 24]
+  lsh64 r3, 32
+  or64 r2, r3
+  stxdw [r1 + 0], r2
+{transplantLinked}:
+  ldxdw r3, [r10 - 24]
+  jeq r3, 0, {transplantNoSource}
+  sub64 r3, 1
+  lddw r2, {strideBytes}
+  mul64 r3, r2
+  ldxdw r1, [r10 - 8]
+  add64 r1, {parentBaseBytes}
+  add64 r1, r3
+  ldxdw r2, [r1 + 0]
+  rsh64 r2, 32
+  lsh64 r2, 32
+  ldxdw r5, [r10 - 40]
+  or64 r2, r5
+  stxdw [r1 + 0], r2
+{transplantNoSource}:
+  ldxdw r0, [r10 - 32]
+  exit
+{transplantRoot}:
+  ldxdw r3, [r10 - 24]
+  stxdw [r10 - 32], r3
+  jeq r3, 0, {transplantDone}
+  sub64 r3, 1
+  lddw r2, {strideBytes}
+  mul64 r3, r2
+  ldxdw r1, [r10 - 8]
+  add64 r1, {parentBaseBytes}
+  add64 r1, r3
+  ldxdw r2, [r1 + 0]
+  rsh64 r2, 32
+  lsh64 r2, 32
+  stxdw [r1 + 0], r2
+{transplantDone}:
+  ldxdw r0, [r10 - 32]
+  exit
+"
+  return loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3 ++ ownerCheck ++ s!"\
+  ; bounded account-resident four-word-key RB removal
+  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} key4={keyBaseWord} stride={strideWords} capacity={capacity}
+  ldxdw r1, [r10 - 216]
+  jne r1, 0, {authFailure}
+  ldxdw r8, [r10 - {headerStack acc}]
+  ldxb r1, [r8 + 2]
+  jeq r1, 0, {authFailure}
+  ldxdw r1, [r8 + 80]
+  lddw r2, {requiredBytes}
+  jge r1, r2, {dataOk}
+  ja {authFailure}
+{dataOk}:
+" ++ validate ++ s!"\
+  ldxdw r1, [r10 - 40]
+  jeq r1, 0, {failure}
+  ldxdw r8, [r10 - {headerStack acc}]
+  add64 r8, 88
+  stxdw [r10 - 248], r8
+  mov64 r9, r8
+  lddw r1, {rootBytes}
+  add64 r9, r1
+  ldxdw r1, [r9 + 0]
+  stxdw [r10 - 216], r1
+  stxdw [r10 - 256], r1
+  ldxdw r1, [r9 + 16]
+  stxdw [r10 - 224], r1
+  ldxdw r1, [r9 + 24]
+  mov64 r2, r1
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 232], r2
+  rsh64 r1, 32
+  stxdw [r10 - 240], r1
+  lddw r1, 0
+  stxdw [r10 - 264], r1
+{searchLoop}:
+  ldxdw r2, [r10 - 256]
+  jeq r2, 0, {failure}
+  ldxdw r1, [r10 - 264]
+  lddw r3, {rbTreeKey4TraversalDepth}
+  jge r1, r3, {failure}
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {linksBaseBytes}
+  add64 r9, r4
+  add64 r8, {keyBaseBytes}
+  add64 r8, r4
+  ldxdw r1, [r10 - 8]
+  be64 r1
+  ldxdw r3, [r8 + 0]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  be64 r1
+  ldxdw r3, [r8 + 8]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 24]
+  be64 r1
+  ldxdw r3, [r8 + 16]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 32]
+  be64 r1
+  ldxdw r3, [r8 + 24]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ja {found}
+{searchBefore}:
+  ldxdw r1, [r9 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  ja {searchNext}
+{searchAfter}:
+  ldxdw r1, [r9 + 0]
+  rsh64 r1, 32
+{searchNext}:
+  stxdw [r10 - 256], r1
+  ldxdw r1, [r10 - 264]
+  add64 r1, 1
+  stxdw [r10 - 264], r1
+  ja {searchLoop}
+{found}:
+  ldxdw r3, [r9 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 272], r1
+  rsh64 r3, 32
+  stxdw [r10 - 280], r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 288], r1
+  rsh64 r3, 32
+  stxdw [r10 - 296], r3
+  lddw r1, 0
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 272]
+  jne r1, 0, {twoChildren}
+  ldxdw r1, [r10 - 280]
+  jne r1, 0, {onlyRight}
+  ja {leaf}
+{twoChildren}:
+  ldxdw r1, [r10 - 280]
+  jeq r1, 0, {onlyLeft}
+  ; Find the predecessor (largest key in the left subtree).
+  ldxdw r1, [r10 - 272]
+  stxdw [r10 - 336], r1
+  lddw r1, 0
+  stxdw [r10 - 368], r1
+{predLoop}:
+  ldxdw r2, [r10 - 336]
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  rsh64 r1, 32
+  jeq r1, 0, {predFound}
+  stxdw [r10 - 336], r1
+  ldxdw r1, [r10 - 368]
+  add64 r1, 1
+  stxdw [r10 - 368], r1
+  lddw r2, {rbTreeKey4TraversalDepth}
+  jlt r1, r2, {predLoop}
+  ja {failure}
+{predFound}:
+  lsh64 r3, 32
+  rsh64 r3, 32
+  stxdw [r10 - 352], r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 344], r1
+  rsh64 r3, 32
+  stxdw [r10 - 360], r3
+  ldxdw r2, [r10 - 256]
+  jeq r1, r2, {predDirect}
+  ; Transplant predecessor with its only possible child.
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 336]
+  ldxdw r3, [r10 - 352]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ; predecessor.left = target.left, and target.left.parent = predecessor.
+  ldxdw r2, [r10 - 336]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 272]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 336]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 352]
+  jne r1, 0, {predHasChild}
+  lddw r1, 1
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 344]
+  stxdw [r10 - 312], r1
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+  ja {predHasChild}
+{predDirect}:
+  ldxdw r1, [r10 - 352]
+  jne r1, 0, {predHasChild}
+  lddw r1, 1
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 336]
+  stxdw [r10 - 312], r1
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+{predHasChild}:
+  ; Complete target -> predecessor transplant.
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  ldxdw r3, [r10 - 336]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ; predecessor.right = target.right, and target.right.parent = predecessor.
+  ldxdw r2, [r10 - 336]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 280]
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 280]
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 336]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ; predecessor takes the removed node's color while retaining its transplanted parent.
+  ldxdw r2, [r10 - 336]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 296]
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 352]
+  stxdw [r10 - 304], r1
+  ldxdw r1, [r10 - 360]
+  stxdw [r10 - 296], r1
+  ja {removeAllocator}
+{leaf}:
+  ldxdw r1, [r10 - 256]
+  ldxdw r2, [r10 - 216]
+  jeq r1, r2, {leafRoot}
+  lddw r1, 1
+  stxdw [r10 - 328], r1
+  ldxdw r1, [r10 - 288]
+  stxdw [r10 - 312], r1
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 256]
+  jne r3, r1, {leafRight}
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+  ja {leafReady}
+{leafRight}:
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+{leafReady}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  lddw r3, 0
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  lddw r1, 0
+  stxdw [r10 - 304], r1
+  ja {removeAllocator}
+{leafRoot}:
+  lddw r1, 0
+  stxdw [r10 - 216], r1
+  stxdw [r10 - 304], r1
+  ja {removeAllocator}
+{onlyRight}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  ldxdw r3, [r10 - 280]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 280]
+  stxdw [r10 - 304], r1
+  ja {removeAllocator}
+{onlyLeft}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 256]
+  ldxdw r3, [r10 - 272]
+  ldxdw r4, [r10 - 216]
+  call {transplant}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 272]
+  stxdw [r10 - 304], r1
+{removeAllocator}:
+  ; Clear all four registers, then push the removed address onto the free list. Key/value remain.
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  lddw r1, 0
+  stxdw [r9 + 0], r1
+  ldxdw r1, [r10 - 240]
+  stxdw [r8 + 0], r1
+  ldxdw r1, [r10 - 256]
+  stxdw [r10 - 240], r1
+  ldxdw r1, [r10 - 224]
+  sub64 r1, 1
+  stxdw [r10 - 224], r1
+  ldxdw r1, [r10 - 296]
+  jne r1, 0, {publish}
+  ldxdw r1, [r10 - 304]
+  ldxdw r2, [r10 - 216]
+  jeq r1, r2, {fixRoot}
+  ja {fixInit}
+{fixRoot}:
+  jeq r1, 0, {publish}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r8 + 0], r2
+  ja {publish}
+{fixInit}:
+  lddw r1, 0
+  stxdw [r10 - 368], r1
+  ldxdw r1, [r10 - 328]
+  jne r1, 0, {fixLoop}
+{fixDerive}:
+  ldxdw r2, [r10 - 304]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 312], r1
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 304]
+  jne r3, r1, {fixDeriveRight}
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+  ja {fixLoop}
+{fixDeriveRight}:
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+{fixLoop}:
+  ldxdw r1, [r10 - 368]
+  lddw r2, {rbTreeKey4TraversalDepth}
+  jge r1, r2, {failure}
+  add64 r1, 1
+  stxdw [r10 - 368], r1
+  ; sibling = parent.child(opposite(dir)).
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {siblingRight}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ja {siblingReady}
+{siblingRight}:
+  rsh64 r3, 32
+{siblingReady}:
+  stxdw [r10 - 376], r3
+  jeq r3, 0, {siblingBlack}
+  mov64 r2, r3
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  rsh64 r1, 32
+  jeq r1, 0, {siblingBlack}
+  ; Red sibling: sibling black, parent red, rotate parent toward the pivot.
+  lsh64 r3, 32
+  rsh64 r3, 32
+  stxdw [r8 + 0], r3
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r1, 1
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {redRotateRight}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {redRotated}
+{redRotateRight}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+{redRotated}:
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {siblingRight}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ja {siblingReady}
+{siblingBlack}:
+  ; Cache sibling children and their colors (sentinel is black).
+  ldxdw r2, [r10 - 376]
+  jeq r2, 0, {noSiblingChildren}
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 384], r1
+  rsh64 r3, 32
+  stxdw [r10 - 392], r3
+  jne r1, 0, {childLeftDone}
+{childLeftZero}:
+  lddw r1, 0
+  stxdw [r10 - 400], r1
+  ja {childRightZero}
+{childLeftDone}:
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r1, [r8 + 0]
+  rsh64 r1, 32
+  stxdw [r10 - 400], r1
+{childRightZero}:
+  ldxdw r1, [r10 - 392]
+  jne r1, 0, {childRightDone}
+  lddw r1, 0
+  stxdw [r10 - 408], r1
+  ja {notBothBlack}
+{childRightDone}:
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r1, [r8 + 0]
+  rsh64 r1, 32
+  stxdw [r10 - 408], r1
+  ja {notBothBlack}
+{noSiblingChildren}:
+  lddw r1, 0
+  stxdw [r10 - 384], r1
+  stxdw [r10 - 392], r1
+  stxdw [r10 - 400], r1
+  stxdw [r10 - 408], r1
+{notBothBlack}:
+  ldxdw r1, [r10 - 400]
+  jne r1, 0, {fixFarLeft}
+  ldxdw r1, [r10 - 408]
+  jne r1, 0, {fixFarLeft}
+  ja {bothBlack}
+{bothBlack}:
+  ldxdw r2, [r10 - 376]
+  jeq r2, 0, {bothBlackNoSibling}
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r1, 1
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+{bothBlackNoSibling}:
+  ldxdw r1, [r10 - 312]
+  stxdw [r10 - 304], r1
+  ja {fixCheck}
+{fixFarLeft}:
+  ; far child is sibling.child(opposite(dir)).
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {farReady}
+  ldxdw r1, [r10 - 408]
+  ja {farRed}
+{farReady}:
+  ldxdw r1, [r10 - 400]
+{farRed}:
+  jne r1, 0, {setSiblingColor}
+  ; Near child blackening and inner rotation.
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {nearRight}
+  ldxdw r1, [r10 - 384]
+  ja {nearReady}
+{nearRight}:
+  ldxdw r1, [r10 - 392]
+{nearReady}:
+  jeq r1, 0, {nearBlackDone}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r8 + 0], r2
+{nearBlackDone}:
+  ldxdw r2, [r10 - 376]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r1, 1
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {nearRotateLeft}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 376]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {nearRotated}
+{nearRotateLeft}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 376]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+{nearRotated}:
+  ; Refresh sibling after the inner rotation.
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jeq r1, 0, {siblingRight}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ja {siblingReady}
+{setSiblingColor}:
+  ; sibling.color = parent.color, parent becomes black.
+  ldxdw r2, [r10 - 312]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  rsh64 r1, 32
+  lsh64 r3, 32
+  rsh64 r3, 32
+  stxdw [r8 + 0], r3
+  ldxdw r2, [r10 - 376]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ; Blacken the refreshed far child.
+  ldxdw r2, [r10 - 376]
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {farAfterLeft}
+  rsh64 r3, 32
+  ja {farAfterReady}
+{farAfterLeft}:
+  lsh64 r3, 32
+  rsh64 r3, 32
+{farAfterReady}:
+  jeq r3, 0, {farAfterBlack}
+  sub64 r3, 1
+  lddw r1, {strideBytes}
+  mul64 r3, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r3
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r8 + 0], r1
+{farAfterBlack}:
+  ldxdw r1, [r10 - 320]
+  jne r1, 0, {finalRotateRight}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {finalRotated}
+{finalRotateRight}:
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 312]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+{finalRotated}:
+  ldxdw r1, [r10 - 216]
+  stxdw [r10 - 304], r1
+{fixCheck}:
+  ldxdw r1, [r10 - 304]
+  ldxdw r2, [r10 - 216]
+  jeq r1, r2, {fixBlacken}
+  jeq r1, 0, {fixBlacken}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  mov64 r1, r2
+  rsh64 r1, 32
+  jne r1, 0, {fixBlacken}
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 312], r2
+  sub64 r2, 1
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 304]
+  jne r3, r1, {fixNextRight}
+  lddw r1, 0
+  stxdw [r10 - 320], r1
+  ja {fixNextReady}
+{fixNextRight}:
+  lddw r1, 1
+  stxdw [r10 - 320], r1
+{fixNextReady}:
+  ja {fixLoop}
+{fixBlacken}:
+  ldxdw r1, [r10 - 304]
+  jeq r1, 0, {publish}
+  sub64 r1, 1
+  lddw r2, {strideBytes}
+  mul64 r1, r2
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r1
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r8 + 0], r2
+{publish}:
+  ldxdw r8, [r10 - 248]
+  lddw r1, {rootBytes}
+  add64 r8, r1
+  ldxdw r1, [r10 - 216]
+  stxdw [r8 + 0], r1
+  ldxdw r1, [r10 - 224]
+  stxdw [r8 + 16], r1
+  ldxdw r1, [r10 - 240]
+  lsh64 r1, 32
+  ldxdw r2, [r10 - 232]
+  or64 r1, r2
+  stxdw [r8 + 24], r1
+  ja {helpersDone}
+{authFailure}:
+  lddw r0, 0x1
+  exit
+{failure}:
+  lddw r0, {overflowCode}
+  exit
+" ++ transplantHelper ++ rotationHelpers ++ s!"{helpersDone}:\n"
+
 private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
     Except String String := do
   let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
@@ -3646,6 +4869,12 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let insertLabel := s!"{label}_{n}"
       n := n + 1
       acc := acc ++ (← emitAccDataRbTreeKey4Insert p insertLabel account rootWord
+        linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)
+    | .accDataRbTreeKey4Remove account rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3 =>
+      let removeLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++ (← emitAccDataRbTreeKey4Remove p removeLabel account rootWord
         linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)
     | .errorNamed name =>
       let code :=

@@ -692,6 +692,29 @@ node copy, raw pointer, or detached allocation is exposed.
   0
 
 /--
+Remove one dynamic four-word key from a statically shaped, account-resident red-black tree. The
+SVM target validates the complete tree and allocator partition before searching. It then performs
+the Sokoban predecessor transplant, bounded delete fixup, and free-list push in place. Persistent
+state remains one-based indexes plus the zero sentinel; the removed slot's key/value payload stays
+account-resident until a later bounded insertion reinitializes that slot.
+-/
+@[irreducible] def accDataRbTreeKey4Remove
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  0
+
+/--
 沿账户内 fixed-stride 节点的 parent 链验证一条有界路径。静态参数指定 links word、
 parent/color word、stride、capacity 和最多 64 步；运行时只提供起点、root 和 allocator
 `bumpIndex`。目标发射器逐步验证 index envelope、颜色、parent→child reciprocity，并要求
