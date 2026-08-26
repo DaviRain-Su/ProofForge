@@ -178,6 +178,15 @@ r="0x${sig:2:64}"
 s="0x${sig:66:64}"
 v="$((16#${sig:130:2}))"
 
+wrong_sig="$("$cast" wallet sign --data --private-key "$other_key" "$typed")"
+wrong_r="0x${wrong_sig:2:64}"
+wrong_s="0x${wrong_sig:66:64}"
+wrong_v="$((16#${wrong_sig:130:2}))"
+wrong_data="$("$cast" calldata 'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)' \
+  "$sender" "$dest" 10 "$deadline" "$wrong_v" "$wrong_r" "$wrong_s")"
+solana_lean_require_unauthorized "$addr" "$dest" "$wrong_data" "$dest" \
+  "permit signed by spender"
+
 "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
   "$addr" 'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)' \
   "$sender" "$dest" 10 "$deadline" "$v" "$r" "$s" >/dev/null

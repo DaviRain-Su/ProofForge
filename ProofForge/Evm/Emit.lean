@@ -870,7 +870,12 @@ private def emitPermit (p : IR.Program) (indent paramPrefix : String)
   indent ++ "let " ++ signer ++ " := mload(0)" ++ nl
   acc := acc ++
   indent ++ "if iszero(" ++ signer ++ ") { " ++ revert0 ++ " }" ++ nl ++
-  indent ++ "if iszero(eq(" ++ signer ++ ", " ++ own ++ ")) { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "if iszero(eq(" ++ signer ++ ", " ++ own ++ ")) {" ++ nl ++
+  indent ++ "  mstore(0, shl(224, 0x" ++
+    Keccak.selector "Unauthorized" #["address"] ++ "))" ++ nl ++
+  indent ++ "  mstore(4, " ++ signer ++ ")" ++ nl ++
+  indent ++ "  revert(0, 36)" ++ nl ++
+  indent ++ "}" ++ nl ++
   indent ++ "sstore(" ++ nslot ++ ", 1)" ++ nl ++
   indent ++ "sstore(add(" ++ nslot ++ ", 1), add(" ++ nonce ++ ", 1))" ++ nl ++
   indent ++ "mstore(0, " ++ ow0 ++ ")" ++ nl ++
@@ -2340,7 +2345,9 @@ def emitAbi (p : IR.Program) : String :=
   let needIns := p.entries.any (fun m =>
     hasErrorLeaf 8 (fun | .evmRevertInsufficient .. => true | _ => false) m.ops)
   let needUnauth := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun | .evmRevertUnauthorized .. => true | _ => false) m.ops)
+    hasErrorLeaf 8 (fun
+      | .evmRevertUnauthorized .. | .evmPermit .. => true
+      | _ => false) m.ops)
   let needZero := p.entries.any (fun m =>
     hasErrorLeaf 8 (fun | .evmRevertZeroAddress => true | _ => false) m.ops)
   let needExpired := p.entries.any (fun m =>

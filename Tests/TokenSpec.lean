@@ -54,7 +54,9 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"Approval\"" &&
         abi.contains "\"name\":\"Insufficient\"" &&
         abi.contains "\"name\":\"Expired\"" &&
+        abi.contains "\"name\":\"Unauthorized\"" &&
         abi.contains "\"type\":\"error\"" &&
+        yul.contains "revert(0, 36)" &&
         yul.contains "staticcall(gas(), 1," &&
         yul.contains "0x1901" &&
         yul.contains "keccak256(0, 160)" &&
