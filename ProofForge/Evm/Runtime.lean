@@ -211,4 +211,9 @@ def evmImm20 : Addr20 :=
 /-- 两份 Addr20 整值相等。Yul pack 成 address 再 `eq`。宿主返回 `true`。 -/
 @[irreducible] def evmEq20 (_a _b : Addr20) : Bool := true
 
+/-- 封闭 Uniswap V2 `swapExactTokensForTokens`，path 长度 2。`to` 是本合约，deadline 是 `uint256.max`。失败 revert。宿主返回 `amtIn.w0`。 -/
+@[irreducible] def evmSwapExact2
+    (_router _tokenA _tokenB : Addr20) (amtIn _minOut : UInt256) : UInt64 :=
+  amtIn.w0
+
 end ProofForge.Evm.Runtime

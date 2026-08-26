@@ -79,6 +79,7 @@ inductive OpExt (V : Type) where
   | tokenBalanceOfSelf (tw0 tw1 tw2 : V)
   | wethDeposit256 (tw0 tw1 tw2 a0 a1 a2 a3 : V)
   | wethWithdraw256 (tw0 tw1 tw2 a0 a1 a2 a3 : V)
+  | swapExact2 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -164,6 +165,9 @@ def OpExt.wellFormed : OpExt Val → Bool
       allValuesWellFormed #[tw0, tw1, tw2, a0, a1, a2, a3]
   | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
       allValuesWellFormed #[tw0, tw1, tw2, a0, a1, a2, a3]
+  | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      allValuesWellFormed #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2,
+        i0, i1, i2, i3, m0, m1, m2, m3]
 
 def Op.wellFormed (op : Op) : Bool :=
   ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op

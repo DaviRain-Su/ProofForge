@@ -106,6 +106,15 @@ def unwrap (_s : State) (weth : Addr20) (amt : UInt256) : Except Error (State ×
   else
     .error .overflow
 
+/-- 封闭 Uniswap V2 `swapExactTokensForTokens`，path 长度 2。 -/
+@[pf_entry]
+def swap2 (_s : State) (router tokenA tokenB : Addr20) (amtIn minOut : UInt256) :
+    Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmSwapExact2 router tokenA tokenB amtIn minOut)
+  else
+    .error .overflow
+
 @[pf_entry]
 def get (_s : State) : UInt64 :=
   0

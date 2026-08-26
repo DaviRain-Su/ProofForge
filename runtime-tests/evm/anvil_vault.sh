@@ -147,4 +147,29 @@ if "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 7 \
   exit 1
 fi
 
-echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom/weth; engineering only)"
+router_out="$root/build/evm/RouterMock.bin"
+"$solc_bin" --bin --optimize --overwrite -o "$root/build/evm" \
+  "$here/RouterMock.sol" >/dev/null
+[[ -f "$router_out" ]] || { echo "FAIL: missing RouterMock.bin" >&2; exit 1; }
+router_hex="$(tr -d '\n\r ' < "$router_out")"
+router_receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" --create "0x$router_hex")"
+router="$(printf '%s' "$router_receipt" | solana_lean_contract_address)"
+
+token_b_receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" --create "0x$mock_hex")"
+token_b="$(printf '%s' "$token_b_receipt" | solana_lean_contract_address)"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'setNoReturn(bool)' false >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'mint(address,uint256)' "$addr" 50 >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'grant(address,address,uint256)' "$token" "$router" 50 >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'swap2(address,address,address,uint256,uint256)' \
+  "$router" "$token" "$token_b" 30 1 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
+  870 "token A after swap2"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token_b")" \
+  30 "token B after swap2"
+
+echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom/weth/swap2; engineering only)"
