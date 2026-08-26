@@ -76,7 +76,8 @@
 - SVM registry 49 个程序 / 49 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
-- `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 11,936,344 bytes，ELF 3,582,192 bytes，IDL 19,626 bytes。
+- `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
+- P4 通用 SVM emit 压缩（非部署资格）：`indexGet` / `indexSet` 越界改成 in-bound 短前跳 `jlt`，OOB fallthrough `lddw r0, 0x1; exit`，去掉每站点独立 error label 和 `ja ok`。digest 不变。实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 10,886,968 bytes，ELF 3,504,776 bytes，IDL 19,626 bytes。Phoenix Mollusk 8/8、Tree 2/2、Window 3/3、Nested 1/1、Book 1/1。ELF 仍约 3.5 MB，部署体积未宣称。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
@@ -90,7 +91,7 @@
 | P1 bounded 产品语义 | 已有 | P0；固定 N=4 账户布局 | ask/bid/trader 三棵持久化树的 N=4 host/IR 门、24 种 topology、双向 IOC、TIF/self-trade/fee/事件与 exact address reuse 全绿 |
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 与 P4 部署体积仍未宣称 |
-| P4 产物资格/压缩 | 未支持 | P0 的稳定 CFG 和可测基线 | 在独立 milestone 中确定部署上限，做通用 CFG/shared-block/CSE；assembly/ELF 预算和 digest 更新后才能作部署体积声明 |
+| P4 产物资格/压缩 | 部分（压缩起步；部署资格未宣称） | P0 的稳定 CFG 和可测基线 | 通用 SVM emit 已倒置 `indexGet`/`indexSet` 越界布局。实测 Phoenix assembly 10,886,968 B / ELF 3,504,776 B，digest 不变。部署上限、shared-block/CSE 与部署体积声明仍未完成 |
 | P5 动态 Phoenix-v1 | 未支持、非当前目标 | 账户容量/profile、bounded CFG 策略与变长协议类型设计 | 明确账户上限和资源模型后另立规格；在此之前动态容量、remaining accounts、完整 Phoenix-v1 账户兼容均 fail closed |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。固定长度 32-byte / u128 /

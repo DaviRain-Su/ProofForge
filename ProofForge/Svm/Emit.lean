@@ -931,7 +931,10 @@ private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops
   ; indexGet {name}[{bound}]+{elemOff}
   ldxdw r2, [r10 - {stackOff + 8}]
   lddw r3, {bound}
-  jge r2, r3, err_idx_{tag}
+  jlt r2, r3, ok_idx_{tag}
+  lddw r0, 0x1
+  exit
+ok_idx_{tag}:
   mul64 r2, {stride}
   mov64 r1, r6
   add64 r1, ACC0_DATA
@@ -939,11 +942,6 @@ private partial def emitLoadIndexGet (p : IR.Program) (name : String) (idx : Ops
   add64 r1, r2
   {load} r1, [r1 + 0]
   stxdw [r10 - {stackOff}], r1
-  ja ok_idx_{tag}
-  err_idx_{tag}:
-  lddw r0, 0x1
-  exit
-  ok_idx_{tag}:
   "
 
 /--
@@ -1738,7 +1736,6 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let bound := IR.vectorLenOf p name len
       let bound := if bound == 0 then 1 else bound
       let stride := IR.vectorStride p name
-      let oob := s!"err_iset_{label}_{n}"
       let ok := s!"ok_iset_{label}_{n}"
       n := n + 1
       acc := acc ++ loadI ++ loadV ++
@@ -1746,7 +1743,10 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
   ; indexSet {name}[{bound}]+{elemOff}
   ldxdw r2, [r10 - 8]
   lddw r3, {bound}
-  jge r2, r3, {oob}
+  jlt r2, r3, {ok}
+  lddw r0, 0x1
+  exit
+{ok}:
   mul64 r2, {stride}
   mov64 r1, r6
   add64 r1, ACC0_DATA
@@ -1755,11 +1755,6 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
   ldxdw r3, [r10 - 16]
   {store} [r1 + 0], r3
   stxdw [r10 - 24], r3
-  ja {ok}
-{oob}:
-  lddw r0, 0x1
-  exit
-{ok}:
 "
     | .storeField name v =>
       let load ← loadVal p v 24 n s!"{label}_{n}_store"

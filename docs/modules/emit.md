@@ -13,7 +13,9 @@ fallthrough。全局 layout 对超过保守 12,000-instruction bound 的 edge �
 block，迭代到所有 sBPF signed-16-bit jump 都在安全范围；不再按嵌套 branch/loop 加特判。
 
 `.field _ name` 的 account-data byte offset、Vector base/stride 和 leaf width 已在 target IR
-物化，emitter 不扫描 frontend flattened names 猜布局。其余 Load 由 `Val` 决定：`.arg _` →
+物化，emitter 不扫描 frontend flattened names 猜布局。`indexGet` / `indexSet` 的定长向量越界
+走 in-bound 短前跳：`jlt r2, r3, ok_*`，越界 fallthrough `lddw r0, 0x1; exit`（Custom(1)），
+再落到 `ok_*` 后的 load/store。不给每个站点独立 error label，也不用 `ja ok` 绕过。其余 Load 由 `Val` 决定：`.arg _` →
 `INSTRUCTION_DATA+8`；`.clockSlot` → 40 字节栈缓冲 + `sol_get_clock_sysvar` + `ldxdw`
 第一字；`.signerKey0` → `ACC0_KEY+0`；`.accLamports0` / `.accOwner0` /
 `.accDataLen0` / `.accN` 读对应 header 字；`.isSigner0` / `.isWritable0` /
