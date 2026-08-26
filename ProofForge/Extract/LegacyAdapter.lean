@@ -374,6 +374,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       throw "extract/unsupported: legacy adapter cannot represent EIP-2612 permit"
   | .ext (.evm (.tokenPermit ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent external permit"
+  | .ext (.evm (.component ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent evm component"
 
 def toLegacyOps (ops : Array Op) : Except String (Array ProofForge.Ops.Op) :=
   ops.mapM toLegacyOp

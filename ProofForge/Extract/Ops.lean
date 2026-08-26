@@ -246,6 +246,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.evmTokenPermit
     (t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Val) : Op :=
   .ext (.evm (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3))
+@[match_pattern] def Op.evmComponent (call : Evm.Component.Call Val) : Op :=
+  .ext (.evm (.component call))
 
 private partial def walk (ops : Array Op) (predicate : Op → Bool) : Bool :=
   ops.any fun op =>
@@ -309,6 +311,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .ext (.svm (.component call)) => call.anyValue predicate
+  | .evmComponent call => call.anyValue predicate
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].any predicate
   | .evmSendEth256 w0 w1 w2 a0 a1 a2 a3 =>
@@ -363,7 +366,7 @@ private partial def isEvmContext : Val → Bool
        | .mapGetU64 | .mapGetAddr | .mapGetPair
        | .mapGetAddr256 _ | .mapGetPair256 _ | .tokenBalance256 _
        | .tokenAllowance256 _ | .callValue256 _ | .selfBalance256 _
-       | .domainSep256 _ | .ge256 | .eq20 => false
+       | .domainSep256 _ | .ge256 | .eq20 | .component _ => false
        | _ => true) || operands.any isEvmContext
   | .field base _ | .bitNot base => isEvmContext base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -397,7 +400,7 @@ def hasEvmEffect (ops : Array Op) : Bool :=
     | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenApprove256 ..
     | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf ..
     | .evmWethDeposit256 .. | .evmWethWithdraw256 .. | .evmSwapExact2 ..
-    | .evmSwapExact3 .. | .evmPermit .. | .evmTokenPermit .. => true
+    | .evmSwapExact3 .. | .evmPermit .. | .evmTokenPermit .. | .evmComponent .. => true
     | _ => false
 
 end ProofForge.Extract.Ops

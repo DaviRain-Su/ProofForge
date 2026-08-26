@@ -1,4 +1,5 @@
 import ProofForge.Core.Ops
+import ProofForge.Evm.Component
 
 namespace ProofForge.Evm.Ops
 
@@ -38,6 +39,8 @@ inductive ValKind where
   | eq20
   /-- Checked 256-bit `add`/`sub`/`mul`; `limb` is 0..3 (w0 lowest). Eight operands: a0..a3, b0..b3. -/
   | arith256 (op : Nat) (limb : Nat)
+  /-- Bounded EVM component query. New value vocabularies extend `Component.Query`. -/
+  | component (query : Component.Query)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
@@ -52,6 +55,7 @@ def ValKind.arity : ValKind → Nat
   | .ge256 => 8
   | .eq20 => 6
   | .arith256 _ _ => 8
+  | .component query => query.arity
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
@@ -91,6 +95,8 @@ inductive OpExt (V : Type) where
   | permit (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : V)
   /-- Closed external EIP-2612 permit CALL. -/
   | tokenPermit (t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : V)
+  /-- Bounded EVM component effect. New effect vocabularies extend `Component.Call`. -/
+  | component (call : Component.Call V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -195,6 +201,7 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       allValuesWellFormed #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3,
         d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
+  | .component call => call.wellFormed (·.wellFormed ValKind.arity)
 
 def Op.wellFormed (op : Op) : Bool :=
   ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op

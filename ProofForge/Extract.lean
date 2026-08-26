@@ -7247,6 +7247,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
             (flipVal fuel' vv)
             (flipVal fuel' r0) (flipVal fuel' r1) (flipVal fuel' r2) (flipVal fuel' r3)
             (flipVal fuel' z0) (flipVal fuel' z1) (flipVal fuel' z2) (flipVal fuel' z3)
+      | .evmComponent call => .evmComponent (call.mapValues (flipVal fuel'))
       | .errorOverflow => .errorOverflow
       | .errorNamed n => .errorNamed n
   let ops := ops0.map (flipOp 128)
@@ -7631,6 +7632,7 @@ private def opFields : Ops.Op → Array String
         valFields vv ++
         valFields r0 ++ valFields r1 ++ valFields r2 ++ valFields r3 ++
         valFields z0 ++ valFields z1 ++ valFields z2 ++ valFields z3
+  | .evmComponent call => call.values.flatMap valFields
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .errorNamed _ => #[]
@@ -7822,6 +7824,8 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
             (← normalizeVal vv)
             (← normalizeVal r0) (← normalizeVal r1) (← normalizeVal r2) (← normalizeVal r3)
             (← normalizeVal z0) (← normalizeVal z1) (← normalizeVal z2) (← normalizeVal z3)
+      | .evmComponent call =>
+          return .evmComponent (← call.mapValuesM normalizeVal)
   return { p with methods := ← p.methods.mapM fun m => do
     return { m with ops := ← m.ops.mapM (goOp 128) } }
 
@@ -7936,6 +7940,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].findSome?
         (valEscapedArg limit)
+  | .evmComponent call => call.values.findSome? (valEscapedArg limit)
   | .storeField _ v | .okState v | .returnU64 v | .returnState v => valEscapedArg limit v
   | .errorOverflow | .errorNamed _ => none
 

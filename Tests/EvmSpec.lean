@@ -24,6 +24,26 @@ open ProofForge.Evm
 
 #guard ProofForge.Evm.Keccak.selectorU64 "decrement" 1 == "f2df7647"
 
+#guard !ProofForge.Evm.Component.Query.wellFormed .empty
+#guard !ProofForge.Evm.Component.Call.wellFormed (fun _ => true) (.empty : ProofForge.Evm.Component.Call ProofForge.Evm.Ops.Val)
+#guard ProofForge.Evm.Ops.ValKind.arity (.component .empty) == 0
+#guard !(ProofForge.Evm.Ops.OpExt.wellFormed (.component (.empty : ProofForge.Evm.Component.Call ProofForge.Evm.Ops.Val)))
+
+#guard
+  match ProofForge.Evm.IR.ofSourceOps #[.ext (.component (.empty : ProofForge.Evm.Component.Call ProofForge.Evm.Ops.Val))] with
+  | .ok ops =>
+      match ops[0]! with
+      | .component call => call.canonical (fun _ => "x") == "evm.comp.empty"
+      | _ => false
+  | .error _ => false
+
+#guard
+  match ProofForge.Evm.Component.Emit.emitCall
+      { loadValue := fun _ => .ok "0" }
+      (.empty : ProofForge.Evm.Component.Call ProofForge.Evm.Ops.Val) with
+  | .error reason => reason.contains "empty component"
+  | .ok _ => false
+
 #guard
   match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedCounter with
   | .error _ => false

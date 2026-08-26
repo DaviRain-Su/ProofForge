@@ -14,6 +14,8 @@ import ProofForge.Svm.Ops
 import ProofForge.Svm.Runtime
 import ProofForge.Svm.Registry
 import ProofForge.Evm.Ops
+import ProofForge.Evm.Component
+import ProofForge.Evm.Component.Emit
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.Registry
 import ProofForge.Extract.LegacyGolden

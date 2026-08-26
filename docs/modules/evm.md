@@ -12,9 +12,24 @@
 | `Evm.Runtime` | 环境 opcode、`Addr20` / `UInt256`、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
+| `Evm.Component` | 稳定 Query/Call 桥、effects/value 遍历、component-owned emitter | 业务协议语义、任意 CALL |
 | `Evm.Emit` | Core CFG → Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance、event ABI、本合约 transfer/transferFrom | 任意 CALL / Token-2022 |
 | `Evm.Assemble` | locked `solc 0.8.34` 子进程 | FFI、PATH 随便一个 solc |
 | `Evm.Commands` | `#pf_evm_build` | 新 DSL |
+
+上层封闭能力经统一 component lowering：
+
+```text
+source semantic helper
+  → Evm.Component.Query / Call
+  → component-owned validation, effects and emitter
+  → Yul
+```
+
+因此 generic `Evm.Ops.ValKind/OpExt`、`Evm.IR.Op`、CFG payload traversal 和主 `Evm.Emit`
+各自只保留一个 `.component` case。新增 hashed-map 形状、LOG 配方或封闭 CALL 仍需要在
+`Evm.Component` 内注册自己的 bounded vocabulary 和 backend，但不再改动上述通用层。
+现有 hashed-map / permit / swap 叶仍走旧构造子，digest 不变；新能力才进这个口。
 
 输入是已通过 Profile 的 frontend `Core.IR.Program`。`Evm.IR.extractRegistration` 向
 `Core.Target` 注册 extension 投影、arity / well-formed / CFG 合同；`Evm.IR.fromExtracted`

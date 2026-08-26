@@ -1,5 +1,6 @@
 import ProofForge.Evm.Ops
 import ProofForge.Evm.IR
+import ProofForge.Evm.Component.Emit
 import ProofForge.Crypto.Keccak
 
 namespace ProofForge.Evm.Emit
@@ -228,9 +229,9 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
     .ext (.mapGetAddr256 _) _ | .ext (.mapGetPair256 _) _ |
     .ext (.tokenBalance256 _) _ | .ext (.tokenAllowance256 _) _ |
     .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext (.domainSep256 _) _ |
-    .ext .ge256 _ | .ext .eq20 _ =>
+    .ext .ge256 _ | .ext .eq20 _ | .ext (.component _) _ =>
       .error "extract/unsupported: evm map/arith val needs materialize"
-  | .ext _ _ => .error "extract/ir: malformed EVM value operands"
+    | .ext _ _ => .error "extract/ir: malformed EVM value operands"
 
 private def revert0 : String := "revert(0, 0)"
 
@@ -774,6 +775,13 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
             indent ++ "if " ++ overflow ++ " { " ++ revert0 ++ " }" ++ nl ++
             indent ++ "let " ++ nm ++ " := " ++ packU256Word rv limb ++ nl
           return (txt, nm, t7)
+    | .ext (.component query) operands =>
+        let context : Component.Emit.Context := {
+          loadValue := fun value =>
+            loadVal p paramPrefix paramCount paramWidths value
+        }
+        let txt ← Component.Emit.emitQuery context query operands
+        return (txt, "0", st)
     | _ =>
         let e ← loadVal p paramPrefix paramCount paramWidths v
         return ("", e, st)
@@ -1740,6 +1748,12 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           tw0 tw1 tw2 ow0 ow1 ow2 sw0 sw1 sw2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 st
         acc := acc ++ txt
         st := st'
+    | .component call =>
+        let context : Component.Emit.Context := {
+          loadValue := fun value =>
+            loadVal p paramPrefix paramCount paramWidths value
+        }
+        acc := acc ++ (← Component.Emit.emitCall context call)
     | .storeField name v =>
         let destS ← slotOf p name
         let (pre, value, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st

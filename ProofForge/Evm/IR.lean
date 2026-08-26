@@ -1,6 +1,7 @@
 import ProofForge.Extract.IR
 import ProofForge.Core.Target
 import ProofForge.Evm.Ops
+import ProofForge.Evm.Component
 import ProofForge.Crypto.Keccak
 
 namespace ProofForge.Evm.IR
@@ -51,6 +52,7 @@ inductive Op where
   | evmSwapExact3 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : Ops.Val)
   | evmPermit (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Ops.Val)
   | evmTokenPermit (t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Ops.Val)
+  | component (call : Component.Call Ops.Val)
   | storeField (name : String) (value : Ops.Val)
   | okState (value : Ops.Val)
   | errorOverflow
@@ -131,6 +133,7 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
   | .ext (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3) =>
       pure (.evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
+  | .ext (.component call) => pure (.component call)
 
 where
   lowerOps (ops : Array Ops.Op) : Except String (Array Op) :=
@@ -200,6 +203,7 @@ private partial def Op.toSource : Op → Ops.Op
       .ext (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
   | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       .ext (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
+  | .component call => .ext (.component call)
   | .storeField name value => .storeField name value
   | .okState value => .okState value
   | .errorOverflow => .errorOverflow
@@ -314,6 +318,7 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
         (mapValue vv)
         (mapValue r0) (mapValue r1) (mapValue r2) (mapValue r3)
         (mapValue z0) (mapValue z1) (mapValue z2) (mapValue z3)
+  | .component call => .component (call.mapValues mapValue)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .deposit amount | .log _ amount => #[amount]
@@ -361,6 +366,7 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
       #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
   | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
+  | .component call => call.values
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -486,6 +492,8 @@ private def projectOpExt
             (← projectVal vv)
             (← projectVal r0) (← projectVal r1) (← projectVal r2) (← projectVal r3)
             (← projectVal z0) (← projectVal z1) (← projectVal z2) (← projectVal z3)
+      | .component call =>
+          return .component (← call.mapValuesM projectVal)
 
 /-- Static registration of the extractor-to-EVM projection. -/
 def extractRegistration :
@@ -945,6 +953,7 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"permit({valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon v0},{valCanon v1},{valCanon v2},{valCanon v3},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3},{valCanon vv},{valCanon r0},{valCanon r1},{valCanon r2},{valCanon r3},{valCanon z0},{valCanon z1},{valCanon z2},{valCanon z3})"
     | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
         s!"tpermit({valCanon t0},{valCanon t1},{valCanon t2},{valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon v0},{valCanon v1},{valCanon v2},{valCanon v3},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3},{valCanon vv},{valCanon r0},{valCanon r1},{valCanon r2},{valCanon r3},{valCanon z0},{valCanon z1},{valCanon z2},{valCanon z3})"
+    | .component call => call.canonical valCanon
     | .storeField n v => s!"st.{n}({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"

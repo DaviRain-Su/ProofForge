@@ -140,6 +140,7 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
         (mapValue vv)
         (mapValue r0) (mapValue r1) (mapValue r2) (mapValue r3)
         (mapValue z0) (mapValue z1) (mapValue z2) (mapValue z3)
+  | .component call => .component (call.mapValues mapValue)
 
 private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .deposit amount | .log _ amount => #[amount]
@@ -184,6 +185,7 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
       #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
   | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
+  | .component call => call.values
 
 def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .svm payload => .svm (mapSvmPayload mapValue payload)
@@ -276,6 +278,7 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
   | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].all
         (·.wellFormed ValKind.arity)
+  | .component call => call.wellFormed (·.wellFormed ValKind.arity)
 
 def OpExt.wellFormed : OpExt Val → Bool
   | .svm payload => svmExtWellFormed payload
