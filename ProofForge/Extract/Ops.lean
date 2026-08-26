@@ -124,6 +124,11 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.svm (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
     sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
     lastValidSlot lastValidUnixTimestamp))
+@[match_pattern] def Op.accDataRbTreeOrderRemove
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
+      capacity : Nat) (bid : Bool) (price sequence : Val) : Op :=
+  .ext (.svm (.accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    sequenceBaseWord strideWords capacity bid price sequence))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.deposit amount))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=
@@ -217,6 +222,8 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       numBaseLots lastValidSlot lastValidUnixTimestamp)) =>
       #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
         lastValidUnixTimestamp].any predicate
+  | .ext (.svm (.accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence)) =>
+      #[price, sequence].any predicate
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
   | .mapGetU64 base key => #[base, key].any predicate

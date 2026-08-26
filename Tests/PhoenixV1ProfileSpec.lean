@@ -397,6 +397,28 @@ private partial def opsHaveRbTreeOrderInsert
             capacity bid body
       | _ => false
 
+private partial def opsHaveRbTreeOrderRemove
+    (acc rootWord linksBase parentBase keyBase sequenceBase stride capacity : Nat) (bid : Bool)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .accDataRbTreeOrderRemove actualAcc actualRoot actualLinks actualParent actualKey
+         actualSequence actualStride actualCapacity actualBid _ _ =>
+         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
+           actualParent == parentBase && actualKey == keyBase && actualSequence == sequenceBase &&
+           actualStride == stride && actualCapacity == capacity && actualBid == bid
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRbTreeOrderRemove acc rootWord linksBase parentBase keyBase sequenceBase stride
+              capacity bid thenOps ||
+            opsHaveRbTreeOrderRemove acc rootWord linksBase parentBase keyBase sequenceBase stride
+              capacity bid elseOps
+      | .forBody _ body =>
+          opsHaveRbTreeOrderRemove acc rootWord linksBase parentBase keyBase sequenceBase stride
+            capacity bid body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -452,6 +474,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing insertBid512"
   let some insertAsk := program.methods.find? (·.ixName == "insertAsk512")
     | throwError "missing insertAsk512"
+  let some removeBid := program.methods.find? (·.ixName == "removeBid512")
+    | throwError "missing removeBid512"
+  let some removeAsk := program.methods.find? (·.ixName == "removeAsk512")
+    | throwError "missing removeAsk512"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -566,7 +592,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       countDataWordSetAt insertBid.ops == 0 &&
       opsHaveDataWord 1 4211 insertAsk.ops &&
       opsHaveRbTreeOrderInsert 1 4210 4214 4215 4216 4217 8 512 false insertAsk.ops &&
-      countDataWordSetAt insertAsk.ops == 0 do
+      countDataWordSetAt insertAsk.ops == 0 &&
+      opsHaveDataWord 1 111 removeBid.ops &&
+      opsHaveRbTreeOrderRemove 1 110 114 115 116 117 8 512 true removeBid.ops &&
+      countDataWordSetAt removeBid.ops == 0 &&
+      opsHaveDataWord 1 4211 removeAsk.ops &&
+      opsHaveRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 false removeAsk.ops &&
+      countDataWordSetAt removeAsk.ops == 0 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
   unless idl.contains
@@ -581,6 +613,12 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   unless idl.contains
       "\"name\": \"insertAsk512\",\n      \"discriminator\": [243, 131, 134, 138, 16, 250, 118, 146],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
     throwError "insertAsk512 IDL account must be writable"
+  unless idl.contains
+      "\"name\": \"removeBid512\",\n      \"discriminator\": [137, 32, 120, 253, 28, 196, 175, 219],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
+    throwError "removeBid512 IDL account must be writable"
+  unless idl.contains
+      "\"name\": \"removeAsk512\",\n      \"discriminator\": [213, 48, 137, 162, 87, 173, 116, 53],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
+    throwError "removeAsk512 IDL account must be writable"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm
@@ -619,7 +657,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "Sokoban map semantics replace only the existing resting-order value" &&
       asm.contains "stxdw [r8 + 16], r1" && asm.contains "stxdw [r8 + 40], r1" &&
       asm.contains "rsh64 r1, 63" && asm.contains "jne r1, 1" && asm.contains "jne r1, 0" &&
-      asm.contains "function_rboi_" do
+      asm.contains "function_rboi_" &&
+      asm.contains "bounded account-resident Phoenix bid order RB removal" &&
+      asm.contains "bounded account-resident Phoenix ask order RB removal" &&
+      asm.contains "function_rbor_" && asm.contains "_transplant" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
 #pf_guard_phoenix_v1_profile

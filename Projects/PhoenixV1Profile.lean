@@ -1085,6 +1085,34 @@ def insertAsk512 (s : State) (price sequence traderIndex numBaseLots lastValidSl
   else
     .error .overflow
 
+/--
+Remove one encoded Phoenix bid from the smallest official 512-node book. The complete tree and
+free partition plus the bid sequence high-bit tag are validated before the first account store;
+the removed one-based slot is returned to the fixed in-account free list.
+-/
+@[pf_entry]
+def removeBid512 (s : State) (price sequence : UInt64) : Except Error (State × UInt64) :=
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 111 = 0 then
+    let size := accDataWord 1 112
+    let _ := accDataRbTreeOrderRemove 1 110 114 115 116 117 8 512 1 price sequence
+    .ok ({ s with dummy := 0 }, size)
+  else
+    .error .overflow
+
+/-- The ask-side twin of `removeBid512`; encoded ask sequence must have high bit zero. -/
+@[pf_entry]
+def removeAsk512 (s : State) (price sequence : UInt64) : Except Error (State × UInt64) :=
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 4211 = 0 then
+    let size := accDataWord 1 4212
+    let _ := accDataRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 0 price sequence
+    .ok ({ s with dummy := 0 }, size)
+  else
+    .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=

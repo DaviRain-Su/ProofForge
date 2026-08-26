@@ -2548,6 +2548,9 @@ private abbrev DecodedAccDataRbTreeOrderInsert :=
   Nat × Nat × Nat × Nat × Nat × Nat × Nat × Nat × Bool ×
     Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val
 
+private abbrev DecodedAccDataRbTreeOrderRemove :=
+  Nat × Nat × Nat × Nat × Nat × Nat × Nat × Nat × Bool × Ops.Val × Ops.Val
+
 /-- Extracted static program, metas, data, non-bump signer seeds, and optional bump. -/
 private def decodeInvokeArgs (env : Environment) (e : Expr) :
     Option DecodedInvoke :=
@@ -2791,6 +2794,51 @@ private def findAccDataRbTreeOrderInsert (env : Environment) (fuel : Nat) (e : E
                 findAccDataRbTreeOrderInsert env fuel' arg
           | _ => none
 
+private def decodeAccDataRbTreeOrderRemove (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeOrderRemove :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove &&
+      e.getAppArgs.size ≥ 11 then
+    let args := e.getAppArgs
+    match val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]! >>= natOfVal,
+        val env args[args.size - 5]! >>= natOfVal,
+        val env args[args.size - 4]! >>= natOfVal,
+        val env args[args.size - 3]! >>= natOfVal,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some sequenceBaseWord, some strideWords, some capacity, some bid, some price,
+        some sequence =>
+        if bid == 0 || bid == 1 then
+          some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, sequenceBaseWord,
+            strideWords, capacity, bid == 1, price, sequence)
+        else none
+    | _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeOrderRemove (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeOrderRemove :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeOrderRemove env e with
+      | some remove => some remove
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeOrderRemove env fuel' value <|>
+                findAccDataRbTreeOrderRemove env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeOrderRemove env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeOrderRemove env fuel' fn <|>
+                findAccDataRbTreeOrderRemove env fuel' arg
+          | _ => none
+
 /-- Distinguish an absent external-account effect from one whose static shape or dynamic value
 failed to decode. Such a call must fail extraction rather than disappear. -/
 private def mentionsSvmAccountEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
@@ -2798,7 +2846,8 @@ private def mentionsSvmAccountEffect (env : Environment) (fuel : Nat) (e : Expr)
   if constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAt ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Remove ||
-      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderInsert then true
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderInsert ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove then true
   else
     match fuel with
     | 0 => false
@@ -2891,6 +2940,12 @@ private def accDataRbTreeOrderInsertOp (insert : DecodedAccDataRbTreeOrderInsert
     strideWords capacity bid price sequence traderIndex numBaseLots lastValidSlot
     lastValidUnixTimestamp
 
+private def accDataRbTreeOrderRemoveOp (remove : DecodedAccDataRbTreeOrderRemove) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, sequenceBaseWord,
+    strideWords, capacity, bid, price, sequence) := remove
+  .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+    strideWords capacity bid price sequence
+
 /-- Preserve consecutive ignored SVM effects before decoding their state/return continuation.
 The final flag reports an external-account write that was present but could not be decoded. -/
 private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × Expr × Bool :=
@@ -2908,21 +2963,25 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
             match findInvoke env 16 value, findAccDataWordSetAt env 16 value,
                 findAccDataRbTreeKey4Insert env 16 value,
                 findAccDataRbTreeKey4Remove env 16 value,
-                findAccDataRbTreeOrderInsert env 16 value with
-            | some invoke, _, _, _, _ =>
+                findAccDataRbTreeOrderInsert env 16 value,
+                findAccDataRbTreeOrderRemove env 16 value with
+            | some invoke, _, _, _, _, _ =>
                 go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
-            | none, some write, _, _, _ =>
+            | none, some write, _, _, _, _ =>
                 go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
-            | none, none, some insert, _, _ =>
+            | none, none, some insert, _, _, _ =>
                 go fuel' (body.instantiate1 value)
                   (effects.push (accDataRbTreeKey4InsertOp insert))
-            | none, none, none, some remove, _ =>
+            | none, none, none, some remove, _, _ =>
                 go fuel' (body.instantiate1 value)
                   (effects.push (accDataRbTreeKey4RemoveOp remove))
-            | none, none, none, none, some insert =>
+            | none, none, none, none, some insert, _ =>
                 go fuel' (body.instantiate1 value)
                   (effects.push (accDataRbTreeOrderInsertOp insert))
-            | none, none, none, none, none =>
+            | none, none, none, none, none, some remove =>
+                go fuel' (body.instantiate1 value)
+                  (effects.push (accDataRbTreeOrderRemoveOp remove))
+            | none, none, none, none, none, none =>
                 (effects, e, mentionsSvmAccountEffect env 16 value)
       | _ => (effects, e, false)
   go 32 e #[]
@@ -4792,7 +4851,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               | fuel' + 1 => ops.any fun op =>
                   match op with
                   | .accDataWordSetAt .. | .accDataRbTreeKey4Insert ..
-                  | .accDataRbTreeKey4Remove .. | .accDataRbTreeOrderInsert .. => true
+                  | .accDataRbTreeKey4Remove .. | .accDataRbTreeOrderInsert ..
+                  | .accDataRbTreeOrderRemove .. => true
                   | .ite _ _ _ nestedThen nestedElse =>
                       hasAccDataWrite fuel' nestedThen || hasAccDataWrite fuel' nestedElse
                   | .forBody _ body => hasAccDataWrite fuel' body
@@ -5452,6 +5512,11 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
             sequenceBaseWord strideWords capacity bid (flipVal fuel' price)
             (flipVal fuel' sequence) (flipVal fuel' traderIndex) (flipVal fuel' numBaseLots)
             (flipVal fuel' lastValidSlot) (flipVal fuel' lastValidUnixTimestamp)
+      | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+          sequenceBaseWord strideWords capacity bid price sequence =>
+          .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+            sequenceBaseWord strideWords capacity bid (flipVal fuel' price)
+            (flipVal fuel' sequence)
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
@@ -5736,6 +5801,8 @@ private def opFields : Ops.Op → Array String
       lastValidSlot lastValidUnixTimestamp =>
       valFields price ++ valFields sequence ++ valFields traderIndex ++ valFields numBaseLots ++
         valFields lastValidSlot ++ valFields lastValidUnixTimestamp
+  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
+      valFields price ++ valFields sequence
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v
@@ -5862,6 +5929,11 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
             sequenceBaseWord strideWords capacity bid (← normalizeVal price)
             (← normalizeVal sequence) (← normalizeVal traderIndex) (← normalizeVal numBaseLots)
             (← normalizeVal lastValidSlot) (← normalizeVal lastValidUnixTimestamp)
+      | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+          sequenceBaseWord strideWords capacity bid price sequence =>
+          return .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+            sequenceBaseWord strideWords capacity bid (← normalizeVal price)
+            (← normalizeVal sequence)
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmSendEth a b c d =>
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
@@ -5955,6 +6027,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
       lastValidSlot lastValidUnixTimestamp =>
       #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
         lastValidUnixTimestamp].findSome? (valEscapedArg limit)
+  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
+      #[price, sequence].findSome? (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
   | .forBody _ body => body.findSome? (opEscapedArg limit)

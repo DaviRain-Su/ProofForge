@@ -196,6 +196,8 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
             lastValidSlot lastValidUnixTimestamp =>
             #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
               lastValidUnixTimestamp].flatMap valSignerAccs
+        | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
+            #[price, sequence].flatMap valSignerAccs
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -2168,6 +2170,8 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
           lastValidSlot lastValidUnixTimestamp =>
           #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
             lastValidUnixTimestamp].any valUsesSigner
+      | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
+          #[price, sequence].any valUsesSigner
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -3707,24 +3711,48 @@ private def emitAccDataRbTreeOrderInsert (p : IR.Program) (label : String)
       strideWords capacity (.order bid price sequence traderIndex numBaseLots lastValidSlot
         lastValidUnixTimestamp)
 
+private inductive RbTreeRemoveKey where
+  | key4 (key0 key1 key2 key3 : Ops.Val)
+  | order (bid : Bool) (price sequence : Ops.Val)
+
 /-- Remove from a complete account-resident Sokoban red-black tree. Authentication, complete
 tree/free-list validation, and key lookup all precede the first store. The mutation follows
 Sokoban 0.3.0's predecessor transplant and delete-fixup exactly, then pushes the removed one-based
 slot onto the in-account free list without copying its key/value payload to transient heap. -/
-private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
+private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-    (key0 key1 key2 key3 : Ops.Val) : Except String String := do
-  let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
-  let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
-  let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
-  let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+    (key : RbTreeRemoveKey) : Except String String := do
+  let loads ←
+    match key with
+    | .key4 key0 key1 key2 key3 => do
+        let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
+        let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
+        let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
+        let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+        pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3)
+    | .order _ price sequence => do
+        let loadPrice ← loadVal p price 8 0 s!"{label}_price"
+        let loadSequence ← loadVal p sequence 16 1 s!"{label}_sequence"
+        pure (loadPrice ++ loadSequence)
   let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
-  let validate ← emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
-    keyBaseWord strideWords capacity
-    (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
-    (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
-    (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
-    40 4 s!"{label}_preflight"
+  let validateStack := match key with | .key4 .. => 40 | .order .. => 24
+  let validateNonce := match key with | .key4 .. => 4 | .order .. => 2
+  let validate ←
+    match key with
+    | .key4 .. =>
+        emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
+          keyBaseWord strideWords capacity
+          (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
+          (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
+          (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+          validateStack validateNonce s!"{label}_preflight"
+    | .order bid .. =>
+        emitLoadAccDataRbTreeValid p acc linksBaseWord parentBaseWord keyBaseWord
+          (keyBaseWord + 1) strideWords capacity bid
+          (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
+          (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
+          (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+          validateStack validateNonce s!"{label}_preflight"
   let strideBytes := 8 * strideWords
   let linksBaseBytes := 8 * linksBaseWord
   let parentBaseBytes := 8 * parentBaseWord
@@ -3732,10 +3760,16 @@ private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
   let rootBytes := 8 * rootWord
   let finalWord := linksBaseWord + strideWords - 1 + strideWords * (capacity - 1)
   let requiredBytes := 8 * (Nat.max (rootWord + 3) finalWord + 1)
-  let token := IR.u64Hex (Core.IR.fnv1a64
-    (s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
-      s!"{strideWords}:{capacity}:remove"))
-  let tag := s!"rb4r_{token}"
+  let tokenText :=
+    match key with
+    | .key4 .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:remove"
+    | .order bid .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:order-remove:{bid}"
+  let token := IR.u64Hex (Core.IR.fnv1a64 tokenText)
+  let tag := match key with | .key4 .. => s!"rb4r_{token}" | .order .. => s!"rbor_{token}"
   let authFailure := tag ++ "_auth_failure"
   let failure := tag ++ "_failure"
   let dataOk := tag ++ "_data_ok"
@@ -3804,6 +3838,58 @@ private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
   let transplantDone := tag ++ "_transplant_done"
   let rotationHelpers := emitRbTreeKey4RotationHelpers tag
     linksBaseBytes parentBaseBytes strideBytes
+  let shapeComment :=
+    match key with
+    | .key4 .. => "four-word-key"
+    | .order true .. => "Phoenix bid order"
+    | .order false .. => "Phoenix ask order"
+  let keyComment := match key with | .key4 .. => "key4" | .order .. => "key"
+  let sideCheck :=
+    match key with
+    | .key4 .. => ""
+    | .order bid .. =>
+        s!"  ldxdw r1, [r10 - 16]\n  rsh64 r1, 63\n  jne r1, {if bid then 1 else 0}, {failure}\n"
+  let searchCompare :=
+    match key with
+    | .key4 .. => s!"\
+  ldxdw r1, [r10 - 8]
+  be64 r1
+  ldxdw r3, [r8 + 0]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  be64 r1
+  ldxdw r3, [r8 + 8]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 24]
+  be64 r1
+  ldxdw r3, [r8 + 16]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 32]
+  be64 r1
+  ldxdw r3, [r8 + 24]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+"
+    | .order bid .. =>
+        let keyBefore := if bid then "jgt" else "jlt"
+        let keyAfter := if bid then "jlt" else "jgt"
+        s!"\
+  ldxdw r1, [r10 - 8]
+  ldxdw r3, [r8 + 0]
+  {keyBefore} r1, r3, {searchBefore}
+  {keyAfter} r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  ldxdw r3, [r8 + 8]
+  {keyBefore} r1, r3, {searchBefore}
+  {keyAfter} r1, r3, {searchAfter}
+"
   let transplantHelper := s!"\
 {transplant}:
   ; args: r1=data, r2=target, r3=source, r4=root; result: r0=new root
@@ -3882,9 +3968,9 @@ private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
   ldxdw r0, [r10 - 32]
   exit
 "
-  return loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3 ++ ownerCheck ++ s!"\
-  ; bounded account-resident four-word-key RB removal
-  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} key4={keyBaseWord} stride={strideWords} capacity={capacity}
+  return loads ++ ownerCheck ++ s!"\
+  ; bounded account-resident {shapeComment} RB removal
+  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} {keyComment}={keyBaseWord} stride={strideWords} capacity={capacity}
   ldxdw r1, [r10 - 216]
   jne r1, 0, {authFailure}
   ldxdw r8, [r10 - {headerStack acc}]
@@ -3895,8 +3981,8 @@ private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
   jge r1, r2, {dataOk}
   ja {authFailure}
 {dataOk}:
-" ++ validate ++ s!"\
-  ldxdw r1, [r10 - 40]
+" ++ sideCheck ++ validate ++ s!"\
+  ldxdw r1, [r10 - {validateStack}]
   jeq r1, 0, {failure}
   ldxdw r8, [r10 - {headerStack acc}]
   add64 r8, 88
@@ -3934,32 +4020,7 @@ private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
   add64 r9, r4
   add64 r8, {keyBaseBytes}
   add64 r8, r4
-  ldxdw r1, [r10 - 8]
-  be64 r1
-  ldxdw r3, [r8 + 0]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ldxdw r1, [r10 - 16]
-  be64 r1
-  ldxdw r3, [r8 + 8]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ldxdw r1, [r10 - 24]
-  be64 r1
-  ldxdw r3, [r8 + 16]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ldxdw r1, [r10 - 32]
-  be64 r1
-  ldxdw r3, [r8 + 24]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ja {found}
-{searchBefore}:
+" ++ searchCompare ++ s!"  ja {found}\n{searchBefore}:
   ldxdw r1, [r9 + 0]
   lsh64 r1, 32
   rsh64 r1, 32
@@ -4664,6 +4725,21 @@ private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
   exit
 " ++ transplantHelper ++ rotationHelpers ++ s!"{helpersDone}:\n"
 
+private def emitAccDataRbTreeKey4Remove (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Ops.Val) : Except String String :=
+  emitAccDataRbTreeRemove p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity (.key4 key0 key1 key2 key3)
+
+private def emitAccDataRbTreeOrderRemove (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
+      capacity : Nat) (bid : Bool) (price sequence : Ops.Val) : Except String String :=
+  if keyBaseWord + 1 != sequenceBaseWord then
+    .error "extract/unsupported: Phoenix order key words must be contiguous"
+  else
+    emitAccDataRbTreeRemove p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity (.order bid price sequence)
+
 private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
     Except String String := do
   let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
@@ -5004,6 +5080,13 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       acc := acc ++ (← emitAccDataRbTreeOrderInsert p insertLabel account rootWord
         linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
         price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp)
+    | .accDataRbTreeOrderRemove account rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid price sequence =>
+      let removeLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++ (← emitAccDataRbTreeOrderRemove p removeLabel account rootWord
+        linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+        price sequence)
     | .errorNamed name =>
       let code :=
         match name with

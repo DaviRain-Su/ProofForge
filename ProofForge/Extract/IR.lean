@@ -50,6 +50,10 @@ private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.O
         sequenceBaseWord strideWords capacity bid (mapValue price) (mapValue sequence)
         (mapValue traderIndex) (mapValue numBaseLots) (mapValue lastValidSlot)
         (mapValue lastValidUnixTimestamp)
+  | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      sequenceBaseWord strideWords capacity bid price sequence =>
+      .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid (mapValue price) (mapValue sequence)
 
 private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
   | .invoke _ _ data _ bump =>
@@ -64,6 +68,7 @@ private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
   | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
       lastValidSlot lastValidUnixTimestamp =>
       #[price, sequence, traderIndex, numBaseLots, lastValidSlot, lastValidUnixTimestamp]
+  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence => #[price, sequence]
 
 private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.Ops.OpExt Val
   | .deposit amount => .deposit (mapValue amount)
@@ -150,10 +155,16 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
       sequenceBaseWord strideWords capacity _ price sequence traderIndex numBaseLots
       lastValidSlot lastValidUnixTimestamp =>
       acc > 0 && Svm.Ops.accInRange acc &&
-        Svm.Ops.rbTreeOrderInsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+        Svm.Ops.rbTreeOrderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
           sequenceBaseWord strideWords capacity &&
         #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
           lastValidUnixTimestamp].all (·.wellFormed ValKind.arity)
+  | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      sequenceBaseWord strideWords capacity _ price sequence =>
+      acc > 0 && Svm.Ops.accInRange acc &&
+        Svm.Ops.rbTreeOrderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+          sequenceBaseWord strideWords capacity &&
+        #[price, sequence].all (·.wellFormed ValKind.arity)
 
 private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
   | .deposit amount | .log _ amount => amount.wellFormed ValKind.arity

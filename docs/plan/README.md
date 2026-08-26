@@ -101,6 +101,7 @@
 | [l5-024](tasks/l5-024.md) | done | Phoenix-v1 general bounded trader insertion |
 | [l5-025](tasks/l5-025.md) | done | Phoenix-v1 general bounded trader removal |
 | [l5-026](tasks/l5-026.md) | done | Phoenix-v1 fixed-capacity bid/ask insertion |
+| [l5-027](tasks/l5-027.md) | done | Phoenix-v1 fixed-capacity bid/ask removal |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

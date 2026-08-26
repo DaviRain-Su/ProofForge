@@ -2203,6 +2203,162 @@ fn ask_insertion_matches_official_sokoban_through_capacity() {
     assert_order_insertion_matches_sokoban("insertAsk512", ASK_TREE_WORD, false);
 }
 
+fn full_official_order_tree(bid: bool) -> (Vec<u8>, Vec<(OfficialOrderId, [u64; 4])>) {
+    let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialOrderTree>()];
+    OfficialOrderTree::new_from_slice(&mut official_bytes);
+    let orders: Vec<_> = (0u64..512)
+        .map(|index| {
+            let raw_sequence = ((index * 313) % 512) + 1;
+            let sequence = if bid { !raw_sequence } else { raw_sequence };
+            (
+                OfficialOrderId {
+                    price_in_ticks: ((index * 257) % 97) + 1,
+                    order_sequence_number: sequence,
+                },
+                [
+                    index + 11,
+                    (index + 1) * 17,
+                    50_000 + index,
+                    1_800_000_000 + index,
+                ],
+            )
+        })
+        .collect();
+    {
+        let official = OfficialOrderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official order tree bytes");
+        for (key, value) in orders.iter().copied() {
+            assert!(official.insert(key, value).is_some());
+        }
+        assert!(official.is_valid_red_black_tree());
+    }
+    (official_bytes, orders)
+}
+
+fn assert_order_removal_matches_sokoban(
+    remove_method: &str,
+    insert_method: &str,
+    tree_valid_method: &str,
+    tree_word: usize,
+    bid: bool,
+) {
+    let (mut official_bytes, orders) = full_official_order_tree(bid);
+    let mut market = empty_small_market();
+    install_official_order_tree(&mut market, tree_word, &official_bytes);
+
+    // Independent odd permutation of insertion positions exercises leaf, one-child, two-child,
+    // predecessor-transplant, and all delete-fixup cases against the official Sokoban bytes.
+    for step in 0..512 {
+        let key = orders[(step * 197) % 512].0;
+        {
+            let official = OfficialOrderTree::load_mut_bytes(&mut official_bytes)
+                .expect("aligned official order tree bytes");
+            assert!(official.remove(&key).is_some());
+            assert!(official.is_valid_red_black_tree());
+        }
+        let remaining = 511 - step;
+        market = run_market_write(
+            remove_method,
+            market,
+            true,
+            &[key.price_in_ticks, key.order_sequence_number],
+            &[
+                Check::success(),
+                Check::return_data(&(remaining as u64).to_le_bytes()),
+            ],
+        );
+        assert_order_tree_bytes_eq(
+            &market,
+            tree_word,
+            &official_bytes,
+            if bid { "bid remove" } else { "ask remove" },
+            step + 1,
+        );
+    }
+    run_view(
+        tree_valid_method,
+        market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+
+    let empty = market.clone();
+    let missing_key = orders[0].0;
+    let missing = run_market_write(
+        remove_method,
+        market.clone(),
+        true,
+        &[
+            missing_key.price_in_ticks,
+            missing_key.order_sequence_number,
+        ],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(missing.data, empty.data);
+
+    // Exact bytes prove deletion's account-resident free-list is LIFO and insertion fully
+    // reinitializes each reused fixed slot without retaining a detached or heap-backed node.
+    for index in 0u64..16 {
+        let raw_sequence = 1_000 + index;
+        let key = OfficialOrderId {
+            price_in_ticks: 200 + ((index * 11) % 17),
+            order_sequence_number: if bid { !raw_sequence } else { raw_sequence },
+        };
+        let value = [index + 1, index + 101, index + 201, index + 301];
+        {
+            let official = OfficialOrderTree::load_mut_bytes(&mut official_bytes)
+                .expect("aligned official order tree bytes");
+            assert!(official.insert(key, value).is_some());
+            assert!(official.is_valid_red_black_tree());
+        }
+        market = run_market_write(
+            insert_method,
+            market,
+            true,
+            &[
+                key.price_in_ticks,
+                key.order_sequence_number,
+                value[0],
+                value[1],
+                value[2],
+                value[3],
+            ],
+            &[
+                Check::success(),
+                Check::return_data(&(index + 1).to_le_bytes()),
+            ],
+        );
+        assert_order_tree_bytes_eq(
+            &market,
+            tree_word,
+            &official_bytes,
+            if bid { "bid reuse" } else { "ask reuse" },
+            513 + index as usize,
+        );
+    }
+}
+
+#[test]
+fn bid_removal_matches_official_sokoban_through_empty_and_reuse() {
+    assert_order_removal_matches_sokoban(
+        "removeBid512",
+        "insertBid512",
+        "bidTreeValid",
+        BID_TREE_WORD,
+        true,
+    );
+}
+
+#[test]
+fn ask_removal_matches_official_sokoban_through_empty_and_reuse() {
+    assert_order_removal_matches_sokoban(
+        "removeAsk512",
+        "insertAsk512",
+        "askTreeValid",
+        ASK_TREE_WORD,
+        false,
+    );
+}
+
 #[test]
 fn order_insertion_rejects_noncanonical_inputs_atomically() {
     let fresh = empty_small_market();
@@ -2274,6 +2430,71 @@ fn order_insertion_rejects_noncanonical_inputs_atomically() {
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(after_malformed.data, malformed.data);
+}
+
+#[test]
+fn order_removal_rejects_missing_and_noncanonical_inputs_atomically() {
+    for (method, tree_word, bid) in [
+        ("removeBid512", BID_TREE_WORD, true),
+        ("removeAsk512", ASK_TREE_WORD, false),
+    ] {
+        let (official_bytes, orders) = full_official_order_tree(bid);
+        let mut canonical = empty_small_market();
+        install_official_order_tree(&mut canonical, tree_word, &official_bytes);
+        let key = orders[173].0;
+
+        let missing_sequence = if bid { !2_000u64 } else { 2_000u64 };
+        let missing = run_market_write(
+            method,
+            canonical.clone(),
+            true,
+            &[10_000, missing_sequence],
+            &[Check::err(ProgramError::Custom(0x1001))],
+        );
+        assert_eq!(missing.data, canonical.data);
+
+        let wrong_side_sequence = if bid { 1 } else { !1u64 };
+        let wrong_side = run_market_write(
+            method,
+            canonical.clone(),
+            true,
+            &[key.price_in_ticks, wrong_side_sequence],
+            &[Check::err(ProgramError::Custom(0x1001))],
+        );
+        assert_eq!(wrong_side.data, canonical.data);
+
+        let readonly = run_market_write(
+            method,
+            canonical.clone(),
+            false,
+            &[key.price_in_ticks, key.order_sequence_number],
+            &[Check::err(ProgramError::Custom(1))],
+        );
+        assert_eq!(readonly.data, canonical.data);
+
+        let mut wrong_owner = canonical.clone();
+        wrong_owner.owner = Pubkey::new_unique();
+        let after_wrong_owner = run_market_write(
+            method,
+            wrong_owner.clone(),
+            true,
+            &[key.price_in_ticks, key.order_sequence_number],
+            &[Check::err(ProgramError::Custom(1))],
+        );
+        assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+        let root = read_word(&canonical, tree_word) as usize;
+        let mut malformed = canonical;
+        write_word(&mut malformed, tree_word + 5 + (root - 1) * 8, root as u64);
+        let after_malformed = run_market_write(
+            method,
+            malformed.clone(),
+            true,
+            &[key.price_in_ticks, key.order_sequence_number],
+            &[Check::err(ProgramError::Custom(0x1001))],
+        );
+        assert_eq!(after_malformed.data, malformed.data);
+    }
 }
 
 #[test]
