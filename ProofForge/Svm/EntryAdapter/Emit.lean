@@ -5,8 +5,10 @@ namespace ProofForge.Svm.EntryAdapter.Emit
 structure Route where
   label : String
   tag : Nat
-  dataLen : Nat
-  exactLen : Bool := true
+  minDataLen : Nat
+  /-- `none` accepts every length at or above `minDataLen` (used only by the authenticated
+  self-entry sink). Raw methods always supply a finite maximum; equal bounds are exact. -/
+  maxDataLen : Option Nat
   deriving BEq, Repr, Inhabited
 
 /-- The generic adapter owns packed dispatch and raw preflight; the main emitter only supplies its
@@ -61,10 +63,17 @@ def emitRoute (routes : Array Route) (fallback err : String) : String := Id.run 
     let route := routes[i]!
     let next := s!"raw_route_next_{i}"
     let matched := s!"raw_route_match_{i}"
-    let lengthCmp := if route.exactLen then "jne" else "jlt"
+    let lengthCheck :=
+      match route.maxDataLen with
+      | some maxDataLen =>
+          if route.minDataLen == maxDataLen then
+            s!"  jne r2, {route.minDataLen}, {next}\n"
+          else
+            s!"  jlt r2, {route.minDataLen}, {next}\n  jgt r2, {maxDataLen}, {next}\n"
+      | none => s!"  jlt r2, {route.minDataLen}, {next}\n"
     out := out ++ s!"\
   ldxdw r2, [r8 + 0]
-  {lengthCmp} r2, {route.dataLen}, {next}
+{lengthCheck}\
   ldxb r1, [r8 + 8]
   jeq r1, {route.tag}, {matched}
 {next}:
@@ -84,7 +93,6 @@ private def loadInsn : Nat → Except String String
 private def emitProgramAccountCheck (context : Context) (entry : RawEntry)
     (err : String) : String :=
   let header := context.headerStack entry.programAccount
-  let endData := 8 + entry.dataLen
   s!"\
   ; authenticate the declared executable program account against the current program id
   ldxdw r3, [r10 - {header}]
@@ -92,7 +100,9 @@ private def emitProgramAccountCheck (context : Context) (entry : RawEntry)
   jeq r1, 0, {err}
   add64 r3, 8
   mov64 r2, r8
-  add64 r2, {endData}
+  ldxdw r4, [r8 + 0]
+  add64 r2, 8
+  add64 r2, r4
   ldxdw r1, [r3 + 0]
   ldxdw r4, [r2 + 0]
   jne r1, r4, {err}
@@ -124,12 +134,76 @@ private def emitPackedArgs (context : Context) (method : IR.Method)
     offset := offset + width
   return out
 
+private def emitBorshArgs (context : Context) (method : IR.Method)
+    (entry : RawEntry) (err : String) : Except String String := do
+  let base := method.rawArgLocalBase
+  let prefixCount := entry.fixedParamCount
+  let mut prefixBytes := 0
+  let mut out := ""
+  for i in [0:prefixCount] do
+    let width := entry.paramWidths[i]!
+    let load ← loadInsn width
+    let some localOff := context.scalarLocalStackOff (base + i)
+      | throw "extract/unsupported: raw entry exceeds scalar local scratch"
+    out := out ++ s!"\
+  {load} r1, [r8 + {9 + prefixBytes}]
+  stxdw [r10 - {localOff}], r1
+"
+    prefixBytes := prefixBytes + width
+  out := out ++ s!"\
+  ; decode a bounded Borsh Option suffix with exact cursor consumption
+  mov64 r7, r8
+  add64 r7, {9 + prefixBytes}
+  mov64 r9, r8
+  ldxdw r1, [r8 + 0]
+  add64 r9, 8
+  add64 r9, r1
+"
+  for i in [0:entry.optionWidths.size] do
+    let width := entry.optionWidths[i]!
+    let load ← loadInsn width
+    let presenceIndex := base + prefixCount + 2 * i
+    let valueIndex := presenceIndex + 1
+    let some presenceOff := context.scalarLocalStackOff presenceIndex
+      | throw "extract/unsupported: raw entry exceeds scalar local scratch"
+    let some valueOff := context.scalarLocalStackOff valueIndex
+      | throw "extract/unsupported: raw entry exceeds scalar local scratch"
+    let noneLabel := s!"raw_borsh_none_{method.ixName}_{i}"
+    let doneLabel := s!"raw_borsh_done_{method.ixName}_{i}"
+    out := out ++ s!"\
+  jge r7, r9, {err}
+  ldxb r1, [r7 + 0]
+  add64 r7, 1
+  jeq r1, 0, {noneLabel}
+  jne r1, 1, {err}
+  mov64 r2, r7
+  add64 r2, {width}
+  jgt r2, r9, {err}
+  lddw r1, 1
+  stxdw [r10 - {presenceOff}], r1
+  {load} r1, [r7 + 0]
+  stxdw [r10 - {valueOff}], r1
+  mov64 r7, r2
+  ja {doneLabel}
+{noneLabel}:
+  lddw r1, 0
+  stxdw [r10 - {presenceOff}], r1
+  stxdw [r10 - {valueOff}], r1
+{doneLabel}:
+"
+  return out ++ s!"  jne r7, r9, {err}\n"
+
 def emitHandler (context : Context) (method : IR.Method) (entry : RawEntry) :
     Except String String := do
   let label := if method.ixName.isEmpty then IR.ixNameOfLean (IR.lastName method.name)
     else method.ixName
   let err := s!"err_raw_{label}"
-  let packed ← emitPackedArgs context method entry
+  let packed ←
+    if entry.isExact then emitPackedArgs context method entry
+    else emitBorshArgs context method entry err
+  let lengthCheck :=
+    if entry.isExact then s!"  jne r1, {entry.minDataLen}, {err}\n"
+    else s!"  jlt r1, {entry.minDataLen}, {err}\n  jgt r1, {entry.maxDataLen}, {err}\n"
   return s!"\
 {label}:
   ldxdw r1, [r6 + NUM_ACCOUNTS]
@@ -139,7 +213,7 @@ def emitHandler (context : Context) (method : IR.Method) (entry : RawEntry) :
   ; self-CPI, and remaining outer accounts beyond the statically consumed prefix.
   stxdw [r10 - {context.headerStack entry.accountCount}], r8
   ldxdw r1, [r8 + 0]
-  jne r1, {entry.dataLen}, {err}
+{lengthCheck}\
   ldxb r1, [r8 + 8]
   jne r1, {entry.tag}, {err}
 {emitProgramAccountCheck context entry err}{packed}{context.signerChecks method.ops err}\

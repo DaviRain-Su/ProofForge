@@ -10,10 +10,37 @@ use {
 };
 
 const TAG: u8 = 7;
+const BORSH_TAG: u8 = 8;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
     data.extend_from_slice(&wide.to_le_bytes());
+    data
+}
+
+fn borsh_options_data(
+    side: u8,
+    tick: Option<u64>,
+    search: Option<u32>,
+    cancel: Option<u32>,
+) -> Vec<u8> {
+    let mut data = vec![BORSH_TAG, side];
+    match tick {
+        Some(value) => {
+            data.push(1);
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+        None => data.push(0),
+    }
+    for value in [search, cancel] {
+        match value {
+            Some(value) => {
+                data.push(1);
+                data.extend_from_slice(&value.to_le_bytes());
+            }
+            None => data.push(0),
+        }
+    }
     data
 }
 
@@ -41,7 +68,10 @@ fn raw_accounts(
     signer: Pubkey,
     trailing: Option<Pubkey>,
 ) -> Vec<(Pubkey, Account)> {
-    let mut accounts = vec![(protocol_program, program_account), (signer, plain_account())];
+    let mut accounts = vec![
+        (protocol_program, program_account),
+        (signer, plain_account()),
+    ];
     if let Some(key) = trailing {
         accounts.push((key, plain_account()));
     }
@@ -87,6 +117,64 @@ fn packed_u8_and_u64_are_widened_at_exact_offsets() {
         ),
         &[Check::success(), Check::return_data(&43u64.to_le_bytes())],
     );
+}
+
+#[test]
+fn variable_borsh_options_decode_all_presence_combinations() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    for tick_some in [false, true] {
+        for search_some in [false, true] {
+            for cancel_some in [false, true] {
+                let tick = tick_some.then_some(11);
+                let search = search_some.then_some(13);
+                let cancel = cancel_some.then_some(17);
+                let data = borsh_options_data(3, tick, search, cancel);
+                assert!((5..=21).contains(&data.len()));
+                let expected = 3
+                    + u64::from(tick_some)
+                    + tick.unwrap_or_default()
+                    + 2 * u64::from(search_some)
+                    + u64::from(search.unwrap_or_default())
+                    + 4 * u64::from(cancel_some)
+                    + u64::from(cancel.unwrap_or_default());
+                let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+                mollusk.process_and_validate_instruction(
+                    &ix,
+                    &raw_accounts(program_id, program_account.clone(), signer, None),
+                    &[
+                        Check::success(),
+                        Check::return_data(&expected.to_le_bytes()),
+                    ],
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn variable_borsh_options_reject_bad_discriminants_truncation_and_trailing_bytes() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let program_account = create_program_account_loader_v3(&program_id);
+    for malformed in [
+        vec![BORSH_TAG, 0, 2, 0, 0],
+        vec![BORSH_TAG, 0, 0, 2, 0],
+        vec![BORSH_TAG, 0, 0, 0, 2],
+        vec![BORSH_TAG, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+        vec![BORSH_TAG, 0, 0, 1, 0, 0, 0],
+        vec![BORSH_TAG, 0, 0, 0, 1, 0, 0, 0],
+        vec![BORSH_TAG, 0, 0, 0, 0, 0],
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &malformed,
+        );
+    }
 }
 
 #[test]

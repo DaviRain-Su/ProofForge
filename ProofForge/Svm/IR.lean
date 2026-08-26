@@ -467,7 +467,7 @@ private def validateEntryDisjointness (methods : Array Method) : Except String U
     | .raw entry =>
         for candidate in generated do
           let generatedLen := 8 + 8 * candidate.paramCount
-          if entry.dataLen == generatedLen &&
+          if entry.minDataLen ≤ generatedLen && generatedLen ≤ entry.maxDataLen &&
               entry.tag == ABI.discFirstByte candidate.ixName candidate.paramCount then
             throw s!"extract/unsupported: svm raw entry {method.ixName} overlaps generated instruction {candidate.ixName}"
 

@@ -4924,15 +4924,16 @@ def emitAsm (program : IR.Program) : Except String String := do
   let adapterRoutes := rawMethods.map fun (method, entry) => ({
     label := handlerLabel method
     tag := entry.tag
-    dataLen := entry.dataLen
+    minDataLen := entry.minDataLen
+    maxDataLen := some entry.maxDataLen
   } : EntryAdapter.Emit.Route)
   let adapterRoutes :=
     match rawSelfEntry with
     | some entry => adapterRoutes.push {
         label := "raw_self_entry"
         tag := entry.tag.toNat
-        dataLen := 1
-        exactLen := false
+        minDataLen := 1
+        maxDataLen := none
       }
     | none => adapterRoutes
   let generatedRoute ← emitGeneratedRoute generatedProgram "err_unknown_disc"

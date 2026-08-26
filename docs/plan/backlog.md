@@ -438,6 +438,20 @@
   `docs/plan/tasks/l5-044.md`。下一步在同一 component/entry-adapter 边界实现 tags 8/9
   CancelUpTo 的 Borsh Option payload 与 bounded side/price/search/cancel filter，不扩张顶层
   Ops/IR/主 Emit。
+- P5 第三十八段可复用变长 Borsh Option entry plan 已完成：新增
+  `@[pf_svm_raw_borsh_options ...]` / `svm.raw.v2`，将固定 scalar prefix 与编译期定宽的
+  `Option` 字段投影到 target-owned `EntryAdapter.RawEntry`，由 adapter 自己生成 finite
+  min/max route、canonical 0/1 discriminant、`Some` payload end-bound 和最终 exact cursor
+  consumption；invalid discriminant、truncated payload 与 trailing bytes 全部 fail closed。
+  executable current-program 检查按实际 instruction length 动态定位，fixed/variable wire
+  共用同一认证路径；generic Ops/IR/CFG/主 Emit 没有新增 codec op。`RawEntry` probe 覆盖
+  `side:u8 + Option<u64> + Option<u32> + Option<u32>` 的全部 8 种 presence 组合和完整 malformed
+  matrix，digest `74fced960b29aba0`，assembly 15,171 B、ELF 5,088 B、IDL 1,033 B，ELF
+  SHA-256 `dcb49ec81a41665c89101c84f91dc782edda062e3fde7f14c4ad51a10c17d763`。
+  207-job Lean、51 个 SVM build、RawEntry 8/8 与 Phoenix profile 51/51 全绿。Surfpool 1.5.0
+  以 6 个 Loader-v3 writes 部署同一 ELF，并核对 exact 5,133-byte ProgramData；未使用
+  `solana-test-validator`。详见 `docs/plan/tasks/l5-045.md`。下一步直接复用该 plan 与现有
+  `FifoCancel` component 实现 official Phoenix-v1 tags 8/9，不扩张顶层 Ops/IR/主 Emit。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

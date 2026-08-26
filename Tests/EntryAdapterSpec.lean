@@ -18,6 +18,11 @@ elab "#pf_guard_entry_adapter" : command => do
   unless sourcePacked.annotations == #["svm.raw.v1:7:2:0"] &&
       sourcePacked.paramWidths == #[1, 8] do
     throwError "wrong source adapter metadata"
+  let some sourceBorsh := source.methods.find? (·.ixName == "borshOptions")
+    | throwError "missing Borsh-option source method"
+  unless sourceBorsh.annotations == #["svm.raw.v2:8:2:0:1:8,4,4"] &&
+      sourceBorsh.paramWidths == #[1, 1, 8, 1, 4, 1, 4] do
+    throwError "wrong source Borsh-option adapter metadata"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -57,6 +62,16 @@ elab "#pf_guard_entry_adapter" : command => do
           entry.paramWidths == #[1, 8] && entry.dataLen == 10 do
         throwError s!"wrong projected adapter: {repr entry}"
   | .generated => throwError "packed method lost its raw adapter"
+  let some borsh := program.methods.find? (·.ixName == "borshOptions")
+    | throwError "missing projected Borsh-option method"
+  match borsh.entry with
+  | .raw entry =>
+      unless entry.tag == 8 && entry.accountCount == 2 && entry.programAccount == 0 &&
+          entry.paramWidths == #[1, 1, 8, 1, 4, 1, 4] &&
+          entry.optionWidths == #[8, 4, 4] && entry.fixedParamCount == 1 &&
+          entry.minDataLen == 5 && entry.maxDataLen == 21 do
+        throwError s!"wrong projected Borsh-option adapter: {repr entry}"
+  | .generated => throwError "Borsh-option method lost its raw adapter"
   unless IR.generatedAccountCount program == 1 do
     throwError "raw account geometry leaked into generated methods"
   let asm ←
@@ -64,10 +79,15 @@ elab "#pf_guard_entry_adapter" : command => do
     | .ok asm => pure asm
     | .error reason => throwError reason
   unless asm.contains "raw_walk_loop_route" &&
-      asm.contains "raw_route_match_0:\n  call packed" &&
+      asm.contains "call packed" && asm.contains "call borshOptions" &&
       asm.contains "authenticate the declared executable program account" &&
       asm.contains "ldxb r1, [r8 + 9]" &&
       asm.contains "ldxdw r1, [r8 + 10]" &&
+      asm.contains "jlt r2, 5, raw_route_next_" &&
+      asm.contains "jgt r2, 21, raw_route_next_" &&
+      asm.contains "decode a bounded Borsh Option suffix with exact cursor consumption" &&
+      asm.contains "jne r1, 1, err_raw_borshOptions" &&
+      asm.contains "jne r7, r9, err_raw_borshOptions" &&
       asm.contains "ja raw_generated_entry" &&
       asm.contains "call initialize" do
     throwError "packed and generated entry assembly paths are not both present"
@@ -91,9 +111,12 @@ private def accepts (result : Except String α) : Bool :=
   result.isOk
 
 #guard accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 8])
+#guard accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,4,4"] 7 #[1, 1, 8, 1, 4, 1, 4])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:256:2:0"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:2"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 3])
+#guard !accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,4,4"] 7 #[1, 1, 8, 1, 8, 1, 4])
+#guard !accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,3,4"] 7 #[1, 1, 8, 1, 4, 1, 4])
 #guard !accepts (EntryAdapter.validateUniqueTags #[
   .raw { tag := 7, accountCount := 2, programAccount := 0, paramWidths := #[1] },
   .raw { tag := 7, accountCount := 2, programAccount := 0, paramWidths := #[8] }

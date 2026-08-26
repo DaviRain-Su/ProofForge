@@ -66,6 +66,13 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   account prefix，要求指定 physical account executable 且 key 等于当前 program id，然后把
   参数零扩展到普通 scalar locals。raw method 不得访问 managed `State`；协议持久数据必须走
   explicit `AccountStorage`。该 annotation 不产生 Op，raw instruction 不进入 generated IDL。
+- `@[pf_svm_raw_borsh_options tag accountCount programAccount prefixParamCount [option widths]]`
+  — 声明 bounded variable-length raw 入口。前 `prefixParamCount` 个 scalar 保持 packed little-
+  endian；每个后续 Borsh `Option<T>` 在 source 参数中表示为 `(presence : UInt8, value : T)`，
+  width 由 annotation 静态给出。entry adapter 只接受 discriminant 0/1，在读取 `Some` payload
+  前检查动态 cursor end-bound，并要求最终 exact consumption；`None` 的 presence/value locals
+  均规范化为零。route 只覆盖静态可证的 `[minDataLen, maxDataLen]`，不分配 heap buffer，
+  不产生 generic codec Op，也不把 raw instruction 暴露进 generated IDL。
 - `let _ := invoke...` — 被忽略的 CPI 结果按效应顺序保留；无论普通或 signed、单条或多条，后续 state writes 都不能被抽取器吞掉。
 - lexical `let` 捕获的账户 read 在后续 account write/CPI 前 materialize；写前 snapshot
   不会因 substitution 在写后重读，源码明确放在写后的 read 则观察新值。

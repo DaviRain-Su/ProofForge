@@ -8,6 +8,9 @@ structure RawEntry where
   accountCount : Nat
   programAccount : Nat
   paramWidths : Array Nat
+  /-- Width of each Borsh `Option<T>` payload at the end of the wire plan. The corresponding method
+  parameters are `(u8 presence, T value)` pairs after the fixed prefix. -/
+  optionWidths : Array Nat := #[]
   deriving BEq, Repr, Inhabited
 
 inductive MethodEntry where
@@ -19,18 +22,33 @@ def MethodEntry.isGenerated : MethodEntry → Bool
   | .generated => true
   | .raw _ => false
 
-def RawEntry.dataLen (entry : RawEntry) : Nat :=
-  1 + entry.paramWidths.foldl (init := 0) (· + ·)
+def RawEntry.fixedParamCount (entry : RawEntry) : Nat :=
+  entry.paramWidths.size - 2 * entry.optionWidths.size
+
+def RawEntry.minDataLen (entry : RawEntry) : Nat :=
+  let fixedWidths := entry.paramWidths.extract 0 entry.fixedParamCount
+  1 + fixedWidths.foldl (init := 0) (· + ·) + entry.optionWidths.size
+
+def RawEntry.maxDataLen (entry : RawEntry) : Nat :=
+  entry.minDataLen + entry.optionWidths.foldl (init := 0) (· + ·)
+
+/-- Compatibility accessor for exact entries; variable entries report their maximum wire length. -/
+def RawEntry.dataLen (entry : RawEntry) : Nat := entry.maxDataLen
+
+def RawEntry.isExact (entry : RawEntry) : Bool := entry.optionWidths.isEmpty
 
 def RawEntry.canonical (entry : RawEntry) : String :=
   let widths := String.intercalate "," (entry.paramWidths.map toString).toList
-  s!"raw.u8.{entry.tag}.a{entry.accountCount}.p{entry.programAccount}.[{widths}]"
+  let base := s!"raw.u8.{entry.tag}.a{entry.accountCount}.p{entry.programAccount}.[{widths}]"
+  if entry.optionWidths.isEmpty then base
+  else
+    let options := String.intercalate "," (entry.optionWidths.map toString).toList
+    s!"{base}.borsh-options.[{options}]"
 
-private def decodeRaw (annotation : String) (paramCount : Nat)
-    (paramWidths : Array Nat) : Except String RawEntry := do
-  let parts := annotation.splitOn ":"
-  unless parts.length == 4 && parts[0]! == "svm.raw.v1" do
-    throw "extract/unsupported: malformed svm raw entry annotation"
+private def supportedWidth (width : Nat) : Bool :=
+  width == 1 || width == 2 || width == 4 || width == 8
+
+private def parseHeader (parts : List String) : Except String (Nat × Nat × Nat) := do
   let some tag := parts[1]!.toNat?
     | throw "extract/unsupported: malformed svm raw entry tag"
   let some accountCount := parts[2]!.toNat?
@@ -41,12 +59,43 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
     throw "extract/unsupported: svm raw entry tag must fit u8"
   unless 0 < accountCount && accountCount ≤ 64 && programAccount < accountCount do
     throw "extract/unsupported: svm raw entry account contract is invalid"
+  return (tag, accountCount, programAccount)
+
+private def decodeRaw (annotation : String) (paramCount : Nat)
+    (paramWidths : Array Nat) : Except String RawEntry := do
+  let parts := annotation.splitOn ":"
   unless paramWidths.size == paramCount do
     throw "extract/unsupported: svm raw entry parameter widths are incomplete"
-  unless paramWidths.all fun width => width == 1 || width == 2 || width == 4 || width == 8 do
+  unless paramWidths.all supportedWidth do
     throw "extract/unsupported: svm raw entry only supports u8/u16/u32/u64 parameters"
-  let entry := { tag, accountCount, programAccount, paramWidths }
-  unless entry.dataLen ≤ 1024 do
+  let (tag, accountCount, programAccount) ←
+    if parts.length ≥ 4 then parseHeader parts
+    else throw "extract/unsupported: malformed svm raw entry annotation"
+  let optionWidths ←
+    if parts.length == 4 && parts[0]! == "svm.raw.v1" then
+      pure #[]
+    else if parts.length == 6 && parts[0]! == "svm.raw.v2" then do
+      let some prefixParamCount := parts[4]!.toNat?
+        | throw "extract/unsupported: malformed svm raw fixed-prefix count"
+      let widthParts := parts[5]!.splitOn ","
+      let mut widths := #[]
+      for part in widthParts do
+        let some width := part.toNat?
+          | throw "extract/unsupported: malformed svm raw Borsh option width"
+        unless supportedWidth width do
+          throw "extract/unsupported: Borsh option payloads must be u8/u16/u32/u64"
+        widths := widths.push width
+      unless !widths.isEmpty && paramCount == prefixParamCount + 2 * widths.size do
+        throw "extract/unsupported: svm raw Borsh option parameter plan is incomplete"
+      for i in [0:widths.size] do
+        unless paramWidths[prefixParamCount + 2 * i]! == 1 &&
+            paramWidths[prefixParamCount + 2 * i + 1]! == widths[i]! do
+          throw "extract/unsupported: svm raw Borsh option parameters must be (u8 presence, payload) pairs"
+      pure widths
+    else
+      throw "extract/unsupported: malformed svm raw entry annotation"
+  let entry := { tag, accountCount, programAccount, paramWidths, optionWidths }
+  unless entry.maxDataLen ≤ 1024 do
     throw "extract/unsupported: svm raw entry data exceeds 1024 bytes"
   return entry
 
