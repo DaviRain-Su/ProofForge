@@ -34,11 +34,9 @@ def parentPathWordsInRange
 selected words cover Sokoban's links, parent/color, order-price, and order-sequence fields. -/
 def rbTreeWordsInRange
     (linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat) : Bool :=
-  capacity > 0 && capacity ≤ 4096 &&
-    indexedDataWordsInRange linksBaseWord strideWords capacity &&
-    indexedDataWordsInRange parentBaseWord strideWords capacity &&
-    indexedDataWordsInRange keyBaseWord strideWords capacity &&
-    indexedDataWordsInRange sequenceBaseWord strideWords capacity
+  (AccountStorage.Query.fifoRbTreeValidOneBased
+    0 linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity false).wellFormed
+      maxTxAccountLocks
 
 /-- A four-word-key complete tree scan uses a fixed 8321-bit bitmap and a fixed 64-entry
 traversal stack. The key words are consecutive and compared in original byte order. -/
@@ -123,9 +121,6 @@ inductive ValKind where
   | accDataWord (acc word : Nat)
   | accDataWordAt (acc baseWord strideWords capacity : Nat)
   | accountStorage (query : AccountStorage.Query)
-  | accDataRbTreeValid
-      (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
-      (bid : Bool)
   | accDataRbTreeKey4Valid
       (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
   | accLamportsN (acc : Nat)
@@ -144,7 +139,6 @@ def ValKind.arity : ValKind → Nat
   | .byteSwap64 => 1
   | .accDataWordAt .. => 1
   | .accountStorage query => query.arity
-  | .accDataRbTreeValid .. => 4
   | .accDataRbTreeKey4Valid .. => 4
   | _ => 0
 
@@ -262,9 +256,9 @@ def accDataParentPathValid
 def accDataRbTreeValid
     (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (root size bumpIndex freeListHead : Val) : Val :=
-  .ext (.accDataRbTreeValid
-    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)
-    #[root, size, bumpIndex, freeListHead]
+  .ext (.accountStorage (.fifoRbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))
+      #[root, size, bumpIndex, freeListHead]
 def accDataRbTreeKey4Valid
     (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (root size bumpIndex freeListHead : Val) : Val :=
@@ -328,12 +322,6 @@ private partial def staticPayloadsWellFormed : Val → Bool
         operands.all staticPayloadsWellFormed
   | .ext (.accountStorage query) operands =>
       query.wellFormed maxTxAccountLocks && operands.all staticPayloadsWellFormed
-  | .ext (.accDataRbTreeValid acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
-      strideWords capacity _) operands =>
-      accInRange acc &&
-        rbTreeWordsInRange linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
-          strideWords capacity &&
-        operands.all staticPayloadsWellFormed
   | .ext (.accDataRbTreeKey4Valid acc linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity) operands =>
       accInRange acc &&
@@ -464,7 +452,6 @@ partial def valNeedsWalk : Val → Bool
        | .isSigner1 | .isWritable1 | .isExecutable1 => true
        | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
        | .accDataWordAt acc _ _ _
-       | .accDataRbTreeValid acc _ _ _ _ _ _ _
        | .accDataRbTreeKey4Valid acc _ _ _ _ _
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
@@ -492,7 +479,6 @@ partial def valMinAccounts : Val → Nat
         | .isSigner1 | .isWritable1 | .isExecutable1 => 2
         | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
         | .accDataWordAt acc _ _ _
-        | .accDataRbTreeValid acc _ _ _ _ _ _ _
         | .accDataRbTreeKey4Valid acc _ _ _ _ _
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc

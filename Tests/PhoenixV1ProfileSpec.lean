@@ -225,11 +225,12 @@ private partial def valHasRbTree
         valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid rhs ||
         valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid thenValue ||
         valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid elseValue
-  | .ext (.accDataRbTreeValid actualAcc links parent key sequence stride actualCapacity bid)
-      operands =>
-      (actualAcc == 1 && links == linksBase && parent == parentBase && key == keyBase &&
-        sequence == sequenceBase && stride == 8 && actualCapacity == capacity &&
-        bid == expectedBid) ||
+  | .ext (.accountStorage (.fifoRbTreeValid tree)) operands =>
+      let region := tree.links.region
+      (region.account == 1 && tree.links.firstWord == linksBase &&
+        tree.parentColor.firstWord == parentBase && tree.price.firstWord == keyBase &&
+        tree.sequence.firstWord == sequenceBase && region.strideWords == 8 &&
+        region.capacity == capacity && tree.bid == expectedBid) ||
         operands.any
           (valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid)
   | .ext _ operands => operands.any

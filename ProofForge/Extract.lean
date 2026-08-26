@@ -2282,8 +2282,6 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.accDataWordAt a b s c i) => some (.accDataWordAt a b s c i)
             | some (.ext (.svm (.accountStorage query)) operands) =>
                 some (.ext (.svm (.accountStorage query)) operands)
-            | some (.accDataRbTreeValid a l p k q s c bid r n b f) =>
-                some (.accDataRbTreeValid a l p k q s c bid r n b f)
             | some (.accDataRbTreeKey4Valid a l p k s c r n b f) =>
                 some (.accDataRbTreeKey4Valid a l p k s c r n b f)
             | some (.accLamportsN a) => some (.accLamportsN a)
@@ -4572,7 +4570,6 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .ext (.svm (.accountStorage _)) _
-    | .accDataRbTreeValid ..
     | .accDataRbTreeKey4Valid ..
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
@@ -5498,9 +5495,6 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
       | .ext (.svm (.accountStorage query)) operands =>
           .ext (.svm (.accountStorage query)) (operands.map (flipVal fuel'))
-      | .accDataRbTreeValid a l p k q s c bid r n b f =>
-          .accDataRbTreeValid a l p k q s c bid
-            (flipVal fuel' r) (flipVal fuel' n) (flipVal fuel' b) (flipVal fuel' f)
       | .accDataRbTreeKey4Valid a l p k s c r n b f =>
           .accDataRbTreeKey4Valid a l p k s c
             (flipVal fuel' r) (flipVal fuel' n) (flipVal fuel' b) (flipVal fuel' f)
@@ -5820,8 +5814,6 @@ private partial def valFields : Ops.Val → Array String
   | .byteSwap64 word => valFields word
   | .accDataWordAt _ _ _ _ i => valFields i
   | .ext (.svm (.accountStorage _)) operands => operands.flatMap valFields
-  | .accDataRbTreeValid _ _ _ _ _ _ _ _ r s b f =>
-      valFields r ++ valFields s ++ valFields b ++ valFields f
   | .accDataRbTreeKey4Valid _ _ _ _ _ _ r s b f =>
       valFields r ++ valFields s ++ valFields b ++ valFields f
   | .checkPda _ b => valFields b

@@ -616,11 +616,6 @@ private partial def valCanon : Ops.Val → String
   | .ext (.accDataWordAt acc baseWord strideWords capacity) #[index] =>
       s!"dwi.{acc}.{baseWord}.{strideWords}.{capacity}({valCanon index})"
   | .ext (.accountStorage query) operands => query.canonical valCanon operands
-  | .ext (.accDataRbTreeValid acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
-      strideWords capacity bid) #[root, size, bumpIndex, freeListHead] =>
-      s!"drb.{acc}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}.{sequenceBaseWord}." ++
-        s!"{strideWords}.{capacity}.{bid}" ++
-        s!"({valCanon root},{valCanon size},{valCanon bumpIndex},{valCanon freeListHead})"
   | .ext (.accDataRbTreeKey4Valid acc linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity) #[root, size, bumpIndex, freeListHead] =>
       s!"drb4.{acc}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
