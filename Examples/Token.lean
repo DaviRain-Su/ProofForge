@@ -41,6 +41,11 @@ def balanceOf (_s : State) (who : Addr20) : UInt256 :=
 def totalSupply (s : State) : UInt256 :=
   s.supply
 
+/-- 编译期 `decimals()`。不是 storage，也不是动态 string。 -/
+@[pf_entry]
+def decimals (_s : State) : UInt8 :=
+  18
+
 @[pf_entry]
 def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
   evmMapGetPair256 allowBase owner spender

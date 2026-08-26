@@ -525,6 +525,15 @@ def extractedToken : IR.Program :=
       ],
       view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
       view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
+      {
+        kind := .get
+        name := "Examples.Token.decimals"
+        ixName := "decimals"
+        selector := Keccak.selectorOfWidths "decimals" #[]
+        retWidths := #[1]
+        ops := #[.returnU64 (.lit 18)]
+        view := true
+      },
       dummyGet "Token",
       view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0),
       {

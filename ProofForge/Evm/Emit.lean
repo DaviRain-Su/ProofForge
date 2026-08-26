@@ -2345,6 +2345,12 @@ private def outputsJson (m : IR.Method) : String :=
     "[{\"name\":\"\",\"type\":\"uint256\"}]"
   else if m.retWidths == #[33] then
     "[{\"name\":\"\",\"type\":\"bytes32\"}]"
+  else if m.retWidths == #[1] then
+    "[{\"name\":\"\",\"type\":\"uint8\"}]"
+  else if m.retWidths == #[2] then
+    "[{\"name\":\"\",\"type\":\"uint16\"}]"
+  else if m.retWidths == #[4] then
+    "[{\"name\":\"\",\"type\":\"uint32\"}]"
   else if m.retCount ≤ 1 then
     "[{\"name\":\"\",\"type\":\"uint64\"}]"
   else

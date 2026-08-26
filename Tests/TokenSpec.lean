@@ -15,6 +15,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 #guard get (init 0) == 0
 #guard balanceOf (init 0) sample == zero256
 #guard totalSupply (init 0) == zero256
+#guard decimals (init 0) == 18
 #guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
@@ -78,7 +79,9 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         yul.contains "0x1901" &&
         yul.contains "keccak256(0, 160)" &&
         abi.contains "\"name\":\"DOMAIN_SEPARATOR\"" &&
-        abi.contains "\"type\":\"bytes32\""
+        abi.contains "\"type\":\"bytes32\"" &&
+        abi.contains "\"name\":\"decimals\"" &&
+        abi.contains "\"type\":\"uint8\""
 
 #guard
   let p := ProofForge.Evm.Golden.extractedToken
@@ -93,7 +96,9 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.retWidths) == some #[33] &&
     (p.entries.find? (·.ixName == "totalSupply")).map (·.view) == some true &&
-    (p.entries.find? (·.ixName == "totalSupply")).map (·.retWidths) == some #[32]
+    (p.entries.find? (·.ixName == "totalSupply")).map (·.retWidths) == some #[32] &&
+    (p.entries.find? (·.ixName == "decimals")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "decimals")).map (·.retWidths) == some #[1]
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedToken with

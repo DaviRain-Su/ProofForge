@@ -27,6 +27,9 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
   0 "absent total supply"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'decimals()(uint8)')" \
+  18 "compile-time decimals"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'mint(address,uint256)' "$sender" 100 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
@@ -35,6 +38,9 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
   100 "total supply after mint"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'decimals()(uint8)')" \
+  18 "decimals holds after mint"
 
 topic_xfer="$("$cast" keccak 'Transfer(address,address,uint256)')"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
@@ -278,4 +284,4 @@ fi
 got_dom2="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
 solana_lean_require_equal "${got_dom2,,}" "${got_dom,,}" "DOMAIN_SEPARATOR holds after permit"
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/incdec; engineering only)"
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/incdec/decimals; engineering only)"

@@ -6385,6 +6385,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       if isAddr20Type retTy then #[20]
       else if isUInt256Type retTy then #[32]
       else if isBytes32Type retTy then #[33]
+      else if widthOfType retTy == some 1 then #[1]
+      else if widthOfType retTy == some 2 then #[2]
+      else if widthOfType retTy == some 4 then #[4]
       else #[]
     | _ => #[]
   let retCount :=
