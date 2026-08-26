@@ -264,6 +264,18 @@ def extractedVault : IR.Program :=
             .returnU64 (u256Field 3 "w0")]
           #[.errorOverflow]
       ],
+      mutEntry "Vault" "swap3" 6 #[20, 20, 20, 20, 32, 32] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmSwapExact3
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
+              (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")
+              (addrField 3 "w0") (addrField 3 "w1") (addrField 3 "w2")
+              (u256Field 4 "w0") (u256Field 4 "w1") (u256Field 4 "w2") (u256Field 4 "w3")
+              (u256Field 5 "w0") (u256Field 5 "w1") (u256Field 5 "w2") (u256Field 5 "w3"),
+            .returnU64 (u256Field 4 "w0")]
+          #[.errorOverflow]
+      ],
       mutEntry "Vault" "take" 4 #[20, 20, 20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
           #[.evmTokenTransferFrom256

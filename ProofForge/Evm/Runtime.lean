@@ -222,4 +222,9 @@ def evmImm20 : Addr20 :=
     (_router _tokenA _tokenB : Addr20) (amtIn _minOut : UInt256) : UInt64 :=
   amtIn.w0
 
+/-- 封闭 Uniswap V2 `swapExactTokensForTokens`，path 长度 3。`to` 是本合约，deadline 是 `uint256.max`。失败 revert。宿主返回 `amtIn.w0`。 -/
+@[irreducible] def evmSwapExact3
+    (_router _tokenA _tokenB _tokenC : Addr20) (amtIn _minOut : UInt256) : UInt64 :=
+  amtIn.w0
+
 end ProofForge.Evm.Runtime

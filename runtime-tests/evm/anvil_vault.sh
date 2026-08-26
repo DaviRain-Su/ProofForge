@@ -172,4 +172,15 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token_b")" \
   30 "token B after swap2"
 
-echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom/weth/swap2; engineering only)"
+token_c_receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" --create "0x$mock_hex")"
+token_c="$(printf '%s' "$token_c_receipt" | solana_lean_contract_address)"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'swap3(address,address,address,address,uint256,uint256)' \
+  "$router" "$token" "$token_b" "$token_c" 20 1 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
+  850 "token A after swap3"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token_c")" \
+  20 "token C after swap3"
+
+echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom/weth/swap2/swap3; engineering only)"

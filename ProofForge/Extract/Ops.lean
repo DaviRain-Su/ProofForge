@@ -152,6 +152,9 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.evmSwapExact2
     (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : Val) : Op :=
   .ext (.evm (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3))
+@[match_pattern] def Op.evmSwapExact3
+    (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : Val) : Op :=
+  .ext (.evm (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3))
 
 private partial def walk (ops : Array Op) (predicate : Op → Bool) : Bool :=
   ops.any fun op =>
@@ -254,6 +257,8 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       #[tw0, tw1, tw2, a0, a1, a2, a3].any predicate
   | .evmSwapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3].any predicate
+  | .evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3].any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
 
 private partial def isEvmContext : Val → Bool
@@ -295,7 +300,8 @@ def hasEvmEffect (ops : Array Op) : Bool :=
     | .mapSetAddr256 .. | .mapSetPair256 ..
     | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenApprove256 ..
     | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf ..
-    | .evmWethDeposit256 .. | .evmWethWithdraw256 .. | .evmSwapExact2 .. => true
+    | .evmWethDeposit256 .. | .evmWethWithdraw256 .. | .evmSwapExact2 ..
+    | .evmSwapExact3 .. => true
     | _ => false
 
 end ProofForge.Extract.Ops

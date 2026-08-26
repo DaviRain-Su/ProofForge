@@ -114,6 +114,13 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
         (mapValue b0) (mapValue b1) (mapValue b2)
         (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
         (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
+  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      .swapExact3 (mapValue rw0) (mapValue rw1) (mapValue rw2)
+        (mapValue a0) (mapValue a1) (mapValue a2)
+        (mapValue b0) (mapValue b1) (mapValue b2)
+        (mapValue c0) (mapValue c1) (mapValue c2)
+        (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
+        (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
 
 private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .deposit amount | .log _ amount => #[amount]
@@ -152,6 +159,8 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
       #[tw0, tw1, tw2, a0, a1, a2, a3]
   | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3]
+  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3]
 
 def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .svm payload => .svm (mapSvmPayload mapValue payload)
@@ -232,6 +241,9 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
       #[tw0, tw1, tw2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
   | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3].all
+        (·.wellFormed ValKind.arity)
+  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3].all
         (·.wellFormed ValKind.arity)
 
 def OpExt.wellFormed : OpExt Val → Bool

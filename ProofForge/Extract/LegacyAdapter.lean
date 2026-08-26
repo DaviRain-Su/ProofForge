@@ -365,6 +365,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       throw "extract/unsupported: legacy adapter cannot represent WETH withdraw"
   | .ext (.evm (.swapExact2 ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent Uniswap V2 swap"
+  | .ext (.evm (.swapExact3 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent Uniswap V2 path-3 swap"
 
 def toLegacyOps (ops : Array Op) : Except String (Array ProofForge.Ops.Op) :=
   ops.mapM toLegacyOp

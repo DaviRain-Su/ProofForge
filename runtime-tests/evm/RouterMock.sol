@@ -6,7 +6,7 @@ interface IERC20Lite {
     function mint(address to, uint256 amt) external;
 }
 
-/// Minimal Uniswap V2-shaped router for Vault Anvil. Path length 2 only.
+/// Minimal Uniswap V2-shaped router for Vault Anvil. Path length 2 or 3.
 contract RouterMock {
     function swapExactTokensForTokens(
         uint256 amountIn,
@@ -15,13 +15,13 @@ contract RouterMock {
         address to,
         uint256
     ) external returns (uint256[] memory amounts) {
-        require(path.length == 2, "path");
+        require(path.length == 2 || path.length == 3, "path");
         uint256 outAmt = amountIn;
         require(outAmt >= amountOutMin, "min");
         require(IERC20Lite(path[0]).transferFrom(msg.sender, address(this), amountIn), "in");
-        IERC20Lite(path[1]).mint(to, outAmt);
-        amounts = new uint256[](2);
+        IERC20Lite(path[path.length - 1]).mint(to, outAmt);
+        amounts = new uint256[](path.length);
         amounts[0] = amountIn;
-        amounts[1] = outAmt;
+        amounts[path.length - 1] = outAmt;
     }
 }

@@ -48,6 +48,7 @@ inductive Op where
   | evmWethDeposit256 (tw0 tw1 tw2 a0 a1 a2 a3 : Ops.Val)
   | evmWethWithdraw256 (tw0 tw1 tw2 a0 a1 a2 a3 : Ops.Val)
   | evmSwapExact2 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : Ops.Val)
+  | evmSwapExact3 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : Ops.Val)
   | storeField (name : String) (value : Ops.Val)
   | okState (value : Ops.Val)
   | errorOverflow
@@ -122,6 +123,8 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3)
   | .ext (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3) =>
       pure (.evmSwapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3)
+  | .ext (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3) =>
+      pure (.evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3)
 
 where
   lowerOps (ops : Array Ops.Op) : Except String (Array Op) :=
@@ -185,6 +188,8 @@ private partial def Op.toSource : Op → Ops.Op
       .ext (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3)
   | .evmSwapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       .ext (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3)
+  | .evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      .ext (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3)
   | .storeField name value => .storeField name value
   | .okState value => .okState value
   | .errorOverflow => .errorOverflow
@@ -275,6 +280,13 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
         (mapValue b0) (mapValue b1) (mapValue b2)
         (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
         (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
+  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      .swapExact3 (mapValue rw0) (mapValue rw1) (mapValue rw2)
+        (mapValue a0) (mapValue a1) (mapValue a2)
+        (mapValue b0) (mapValue b1) (mapValue b2)
+        (mapValue c0) (mapValue c1) (mapValue c2)
+        (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
+        (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .deposit amount | .log _ amount => #[amount]
@@ -316,6 +328,8 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
       #[tw0, tw1, tw2, a0, a1, a2, a3]
   | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3]
+  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -415,6 +429,13 @@ private def projectOpExt
           return .swapExact2 (← projectVal rw0) (← projectVal rw1) (← projectVal rw2)
             (← projectVal a0) (← projectVal a1) (← projectVal a2)
             (← projectVal b0) (← projectVal b1) (← projectVal b2)
+            (← projectVal i0) (← projectVal i1) (← projectVal i2) (← projectVal i3)
+            (← projectVal m0) (← projectVal m1) (← projectVal m2) (← projectVal m3)
+      | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+          return .swapExact3 (← projectVal rw0) (← projectVal rw1) (← projectVal rw2)
+            (← projectVal a0) (← projectVal a1) (← projectVal a2)
+            (← projectVal b0) (← projectVal b1) (← projectVal b2)
+            (← projectVal c0) (← projectVal c1) (← projectVal c2)
             (← projectVal i0) (← projectVal i1) (← projectVal i2) (← projectVal i3)
             (← projectVal m0) (← projectVal m1) (← projectVal m2) (← projectVal m3)
 
@@ -861,6 +882,8 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"wethwd({valCanon a},{valCanon b},{valCanon c},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3})"
     | .evmSwapExact2 r0 r1 r2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
         s!"swap2({valCanon r0},{valCanon r1},{valCanon r2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon b0},{valCanon b1},{valCanon b2},{valCanon i0},{valCanon i1},{valCanon i2},{valCanon i3},{valCanon m0},{valCanon m1},{valCanon m2},{valCanon m3})"
+    | .evmSwapExact3 r0 r1 r2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
+        s!"swap3({valCanon r0},{valCanon r1},{valCanon r2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon b0},{valCanon b1},{valCanon b2},{valCanon c0},{valCanon c1},{valCanon c2},{valCanon i0},{valCanon i1},{valCanon i2},{valCanon i3},{valCanon m0},{valCanon m1},{valCanon m2},{valCanon m3})"
     | .storeField n v => s!"st.{n}({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
