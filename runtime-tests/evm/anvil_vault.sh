@@ -41,11 +41,11 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'getU64(uint64
   0 "other key stays absent"
 
 sender="$("$cast" wallet address --private-key "$private_key")"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(address)(uint64)' "$sender")" \
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(address)(uint256)' "$sender")" \
   0 "absent share"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'credit(address,uint64)' "$sender" 11 >/dev/null
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(address)(uint64)' "$sender")" \
+  "$addr" 'credit(address,uint256)' "$sender" 11 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(address)(uint256)' "$sender")" \
   11 "share after credit"
 
 mock_hex="$(tr -d '\n\r ' < "$mock_out")"
@@ -54,30 +54,30 @@ token="$(printf '%s' "$receipt" | solana_lean_contract_address)"
 
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$token" 'mint(address,uint256)' "$addr" 1000 >/dev/null
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint64)' "$token")" \
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
   1000 "balanceOfSelf after mint"
 
 recipient="$("$cast" wallet address --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d)"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'pull(address,address,uint64)' "$token" "$recipient" 100 >/dev/null
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint64)' "$token")" \
+  "$addr" 'pull(address,address,uint256)' "$token" "$recipient" 100 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
   900 "balanceOfSelf after pull"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$token" 'balanceOf(address)(uint256)' "$recipient")" \
   100 "recipient token after pull"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-    "$addr" 'pull(address,address,uint64)' "$token" "$recipient" 10000 >/dev/null 2>&1; then
+    "$addr" 'pull(address,address,uint256)' "$token" "$recipient" 10000 >/dev/null 2>&1; then
   echo "FAIL: overdraw pull unexpectedly succeeded" >&2
   exit 1
 fi
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint64)' "$token")" \
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
   900 "overdraw holds vault token"
 
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$token" 'setNoReturn(bool)' true >/dev/null
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'pull(address,address,uint64)' "$token" "$recipient" 50 >/dev/null
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint64)' "$token")" \
+  "$addr" 'pull(address,address,uint256)' "$token" "$recipient" 50 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
   850 "USDT-style no-return transfer succeeds"
 
 echo "evm-anvil-vault: ok (map/share/token; engineering only)"

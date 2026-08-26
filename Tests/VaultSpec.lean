@@ -7,11 +7,13 @@ open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩
 
+def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
+
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
 #guard getU64 (init 0) 7 == 0
-#guard shareOf (init 0) sample == 0
-#guard held (init 0) sample == 0
+#guard shareOf (init 0) sample == zero256
+#guard held (init 0) sample == zero256
 
 #guard
   match setU64 (init 0) 7 9 with

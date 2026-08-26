@@ -99,13 +99,33 @@ def evmSelf20 : Addr20 :=
     (_base : UInt64) (_owner _spender : Addr20) (val : UInt64) : UInt64 :=
   val
 
-/-- 封闭 ERC-20 `transfer`。callee 20B；失败 / 假返回 revert。宿主返回 amt。 -/
-@[irreducible] def evmTokenTransfer
-    (_token _dest : Addr20) (amt : UInt64) : UInt64 :=
-  amt
+/-- hashed `Map Addr20 → UInt256` 读。缺席是 0。宿主返回 0。 -/
+@[irreducible] def evmMapGetAddr256 (_base : UInt64) (_key : Addr20) : UInt256 :=
+  ⟨0, 0, 0, 0⟩
 
-/-- 封闭 ERC-20 `balanceOf(address(this))`。超 UInt64 应 revert。宿主返回 0。 -/
-@[irreducible] def evmTokenBalanceOfSelf (_token : Addr20) : UInt64 := 0
+/-- hashed `Map Addr20 → UInt256` 写。宿主返回 `val.w0`。 -/
+@[irreducible] def evmMapSetAddr256
+    (_base : UInt64) (_key : Addr20) (val : UInt256) : UInt64 :=
+  val.w0
+
+/-- pair-key hashed Map 读 256-bit。缺席是 0。 -/
+@[irreducible] def evmMapGetPair256
+    (_base : UInt64) (_owner _spender : Addr20) : UInt256 :=
+  ⟨0, 0, 0, 0⟩
+
+/-- pair-key hashed Map 写 256-bit。宿主返回 `val.w0`。 -/
+@[irreducible] def evmMapSetPair256
+    (_base : UInt64) (_owner _spender : Addr20) (val : UInt256) : UInt64 :=
+  val.w0
+
+/-- 封闭 ERC-20 `transfer(address,uint256)`。失败 / 假返回 revert。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmTokenTransfer
+    (_token _dest : Addr20) (amt : UInt256) : UInt64 :=
+  amt.w0
+
+/-- 封闭 ERC-20 `balanceOf(address(this))`。完整 256-bit。宿主返回 0。 -/
+@[irreducible] def evmTokenBalanceOfSelf (_token : Addr20) : UInt256 :=
+  ⟨0, 0, 0, 0⟩
 
 /-- checked `a + b`。溢出 revert。宿主返回 `a`。 -/
 @[irreducible] def evmAdd256 (a b : UInt256) : UInt256 :=
@@ -118,5 +138,8 @@ def evmSelf20 : Addr20 :=
 /-- checked `a * b`。溢出 revert。宿主返回 `a`。 -/
 @[irreducible] def evmMul256 (a b : UInt256) : UInt256 :=
   let _ := b; a
+
+/-- `a ≥ b`。Yul 比打包后的 256-bit word。宿主返回 `true`。 -/
+@[irreducible] def evmGe256 (_a _b : UInt256) : Bool := true
 
 end ProofForge.Evm.Runtime

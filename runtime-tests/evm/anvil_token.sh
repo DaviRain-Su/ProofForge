@@ -22,17 +22,17 @@ other_key="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 dest="$("$cast" wallet address --private-key "$other_key")"
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$sender")" \
+  'balanceOf(address)(uint256)' "$sender")" \
   0 "absent sender balance"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'mint(address,uint64)' "$sender" 100 >/dev/null
+  "$addr" 'mint(address,uint256)' "$sender" 100 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$sender")" \
+  'balanceOf(address)(uint256)' "$sender")" \
   100 "minted sender"
 
 topic_xfer="$("$cast" keccak 'Transfer(uint64)')"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'transfer(address,uint64)' "$dest" 30)"
+  "$addr" 'transfer(address,uint256)' "$dest" 30)"
 printf '%s' "$receipt" | "$python" -I -S -c "
 import json,sys
 r=json.load(sys.stdin)
@@ -46,27 +46,27 @@ if int(data,16)!=30:
     raise SystemExit(f'FAIL: transfer log data {data} != 30')
 "
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$sender")" \
+  'balanceOf(address)(uint256)' "$sender")" \
   70 "sender after transfer"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$dest")" \
+  'balanceOf(address)(uint256)' "$dest")" \
   30 "dest after transfer"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-    "$addr" 'transfer(address,uint64)' "$dest" 1000 >/dev/null 2>&1; then
+    "$addr" 'transfer(address,uint256)' "$dest" 1000 >/dev/null 2>&1; then
   echo "FAIL: overdraw transfer unexpectedly succeeded" >&2
   exit 1
 fi
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$sender")" \
+  'balanceOf(address)(uint256)' "$sender")" \
   70 "overdraw holds sender"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$dest")" \
+  'balanceOf(address)(uint256)' "$dest")" \
   30 "overdraw holds dest"
 
 topic_appr="$("$cast" keccak 'Approval(uint64)')"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'approve(address,uint64)' "$dest" 20)"
+  "$addr" 'approve(address,uint256)' "$dest" 20)"
 printf '%s' "$receipt" | "$python" -I -S -c "
 import json,sys
 r=json.load(sys.stdin)
@@ -80,31 +80,31 @@ if int(data,16)!=20:
     raise SystemExit(f'FAIL: approval log data {data} != 20')
 "
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'allowanceOf(address,address)(uint64)' "$sender" "$dest")" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   20 "allowance after approve"
 
 "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
-  "$addr" 'transferFrom(address,address,uint64)' "$sender" "$dest" 5 >/dev/null
+  "$addr" 'transferFrom(address,address,uint256)' "$sender" "$dest" 5 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$sender")" \
+  'balanceOf(address)(uint256)' "$sender")" \
   65 "owner after transferFrom"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$dest")" \
+  'balanceOf(address)(uint256)' "$dest")" \
   35 "dest after transferFrom"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'allowanceOf(address,address)(uint64)' "$sender" "$dest")" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   15 "allowance after transferFrom"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
-    "$addr" 'transferFrom(address,address,uint64)' "$sender" "$dest" 100 >/dev/null 2>&1; then
+    "$addr" 'transferFrom(address,address,uint256)' "$sender" "$dest" 100 >/dev/null 2>&1; then
   echo "FAIL: over-allowance transferFrom unexpectedly succeeded" >&2
   exit 1
 fi
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'balanceOf(address)(uint64)' "$sender")" \
+  'balanceOf(address)(uint256)' "$sender")" \
   65 "over-allowance holds owner"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'allowanceOf(address,address)(uint64)' "$sender" "$dest")" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   15 "over-allowance holds remaining"
 
 echo "evm-anvil-token: ok (mint/transfer/allowance; engineering only)"

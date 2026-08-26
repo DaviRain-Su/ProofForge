@@ -324,6 +324,12 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       return .evmTokenTransfer (← toLegacyVal tw0) (← toLegacyVal tw1) (← toLegacyVal tw2)
         (← toLegacyVal dw0) (← toLegacyVal dw1) (← toLegacyVal dw2)
         (← toLegacyVal amount)
+  | .ext (.evm (.mapSetAddr256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit map writes"
+  | .ext (.evm (.mapSetPair256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit pair-map writes"
+  | .ext (.evm (.tokenTransfer256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit token transfer"
   | .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2)) =>
       return .evmTokenBalanceOfSelf (← toLegacyVal tw0) (← toLegacyVal tw1)
         (← toLegacyVal tw2)

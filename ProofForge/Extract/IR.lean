@@ -57,9 +57,20 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
   | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
       .mapSetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
         (mapValue s0) (mapValue s1) (mapValue s2) (mapValue value)
+  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
+      .mapSetAddr256 (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2)
+        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
+  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
+      .mapSetPair256 (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2)
+        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       .tokenTransfer (mapValue tw0) (mapValue tw1) (mapValue tw2)
         (mapValue dw0) (mapValue dw1) (mapValue dw2) (mapValue amount)
+  | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      .tokenTransfer256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue dw0) (mapValue dw1) (mapValue dw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
 
@@ -72,7 +83,12 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .mapSetAddr base w0 w1 w2 value => #[base, w0, w1, w2, value]
   | .mapGetPair base o0 o1 o2 s0 s1 s2 => #[base, o0, o1, o2, s0, s1, s2]
   | .mapSetPair base o0 o1 o2 s0 s1 s2 value => #[base, o0, o1, o2, s0, s1, s2, value]
+  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 => #[base, w0, w1, w2, v0, v1, v2, v3]
+  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
+      #[base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3]
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount => #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
+  | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3]
   | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
 
 def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
@@ -119,8 +135,14 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
       #[base, o0, o1, o2, s0, s1, s2].all (·.wellFormed ValKind.arity)
   | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
       #[base, o0, o1, o2, s0, s1, s2, value].all (·.wellFormed ValKind.arity)
+  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
+      #[base, w0, w1, w2, v0, v1, v2, v3].all (·.wellFormed ValKind.arity)
+  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
+      #[base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3].all (·.wellFormed ValKind.arity)
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, amount].all (·.wellFormed ValKind.arity)
+  | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       #[tw0, tw1, tw2].all (·.wellFormed ValKind.arity)
 

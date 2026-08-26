@@ -7,13 +7,16 @@ open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩
 
+def nine : UInt256 := ⟨9, 0, 0, 0⟩
+def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
+
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard balanceOf (init 0) sample == 0
-#guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == 0
+#guard balanceOf (init 0) sample == zero256
+#guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
-  match mint (init 0) sample 9 with
+  match mint (init 0) sample nine with
   | .ok (_, ret) => ret == 9
   | .error _ => false
 

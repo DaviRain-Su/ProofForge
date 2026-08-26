@@ -933,12 +933,58 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   some (.ext (.evm (.arith256 op limb.toNat)) #[a0, a1, a2, a3, b0, b1, b2, b3])
                 | _, _, _, _, _, _, _, _ => none
             | none =>
-              match asVal env fuel' baseE with
-              | some b => some (flattenField b leaf)
-              | none =>
-                match strip baseE with
-                | .bvar i => some (flattenField (.arg i) leaf)
-                | _ => none
+              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
+                  endsWith baseE ".evmMapGetAddr256" then
+                let gargs := baseE.getAppArgs
+                if gargs.size < 2 then none
+                else
+                  let base := asVal env fuel' gargs[gargs.size - 2]!
+                  let key := gargs[gargs.size - 1]!
+                  let k0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) key)
+                  let k1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) key)
+                  let k2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) key)
+                  match base, k0, k1, k2 with
+                  | some b, some a0, some a1, some a2 =>
+                    some (.ext (.evm (.mapGetAddr256 limb.toNat)) #[b, a0, a1, a2])
+                  | _, _, _, _ => none
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetPair256 ||
+                  endsWith baseE ".evmMapGetPair256" then
+                let gargs := baseE.getAppArgs
+                if gargs.size < 3 then none
+                else
+                  let base := asVal env fuel' gargs[gargs.size - 3]!
+                  let owner := gargs[gargs.size - 2]!
+                  let spender := gargs[gargs.size - 1]!
+                  let ow0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
+                  let ow1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
+                  let ow2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
+                  let sw0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
+                  let sw1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
+                  let sw2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
+                  match base, ow0, ow1, ow2, sw0, sw1, sw2 with
+                  | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
+                    some (.ext (.evm (.mapGetPair256 limb.toNat)) #[b, a0, a1, a2, b0, b1, b2])
+                  | _, _, _, _, _, _, _ => none
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf ||
+                  endsWith baseE ".evmTokenBalanceOfSelf" then
+                let gargs := baseE.getAppArgs
+                if gargs.isEmpty then none
+                else
+                  let token := gargs[gargs.size - 1]!
+                  let t0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) token)
+                  let t1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) token)
+                  let t2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) token)
+                  match t0, t1, t2 with
+                  | some a0, some a1, some a2 =>
+                    some (.ext (.evm (.tokenBalance256 limb.toNat)) #[a0, a1, a2])
+                  | _, _, _ => none
+              else
+                match asVal env fuel' baseE with
+                | some b => some (flattenField b leaf)
+                | none =>
+                  match strip baseE with
+                  | .bvar i => some (flattenField (.arg i) leaf)
+                  | _ => none
         else if let some leaf := addr20ProjLeaf n then
           let args := e.getAppArgs
           if args.isEmpty then none
@@ -991,6 +1037,24 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
               some (.mapGetPair b a0 a1 a2 b0 b1 b2)
             | _, _, _, _, _, _, _ => none
+        else if endsWith e ".evmGe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 then
+          let args := e.getAppArgs
+          if args.size < 2 then none
+          else
+            let aE := args[args.size - 2]!
+            let bE := args[args.size - 1]!
+            let limbConst : String → Name
+              | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
+              | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
+              | "w2" => ``ProofForge.Evm.Runtime.UInt256.w2
+              | _ => ``ProofForge.Evm.Runtime.UInt256.w3
+            let limbVal (base : Expr) (name : String) : Option Ops.Val :=
+              asVal env fuel' (mkApp (mkConst (limbConst name)) base)
+            match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
+                limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
+            | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
+              some (.ext (.evm .ge256) #[a0, a1, a2, a3, b0, b1, b2, b3])
+            | _, _, _, _, _, _, _, _ => none
         else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
           let args := e.getAppArgs
           let get (n : Nat) : Ops.Val :=
@@ -1538,6 +1602,10 @@ private def asCmpCoreWithFuel (env : Environment) (fuel : Nat) (e : Expr) :
       match asVal env fuel l, asVal env fuel r with
       | some lv, some rv => some (.ge, lv, rv)
       | _, _ => none
+    | none => none
+  else if isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 || endsWith e ".evmGe256" then
+    match asVal env fuel e with
+    | some v => some (.ne, v, .lit 0)
     | none => none
   else none
 
@@ -3432,6 +3500,100 @@ private def findEvmTokenBalance (env : Environment) (e : Expr) :
     | none => some (.arg 0, .arg 1, .arg 2)
   else none
 
+private def findEvmMapGetAddr256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapGetAddr256" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetAddr256
+        ".evmMapGetAddr256" with
+    | some app =>
+      let args := app.getAppArgs
+      let base := valAtEnd env args 1
+      match nthFromEnd args 0 with
+      | some key =>
+        let (w0, w1, w2) := addr20Leaves env key
+        some (base, w0, w1, w2)
+      | none => some (base, .arg 1, .arg 2, .arg 3)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+  else none
+
+private def findEvmMapGetPair256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapGetPair256" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetPair256
+        ".evmMapGetPair256" with
+    | some app =>
+      let args := app.getAppArgs
+      let base := valAtEnd env args 2
+      match nthFromEnd args 1, nthFromEnd args 0 with
+      | some owner, some spender =>
+        let (o0, o1, o2) := addr20Leaves env owner
+        let (s0, s1, s2) := addr20Leaves env spender
+        some (base, o0, o1, o2, s0, s1, s2)
+      | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+  else none
+
+private def findEvmMapSetAddr256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
+      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapSetAddr256" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetAddr256
+        ".evmMapSetAddr256" with
+    | some app =>
+      let args := app.getAppArgs
+      let base := valAtEnd env args 2
+      match nthFromEnd args 1, nthFromEnd args 0 with
+      | some key, some val =>
+        let (w0, w1, w2) := addr20Leaves env key
+        let (v0, v1, v2, v3) := uint256Leaves env val
+        some (base, w0, w1, w2, v0, v1, v2, v3)
+      | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7)
+  else none
+
+private def findEvmMapSetPair256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
+      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmMapSetPair256" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetPair256
+        ".evmMapSetPair256" with
+    | some app =>
+      let args := app.getAppArgs
+      let base := valAtEnd env args 3
+      match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+      | some owner, some spender, some val =>
+        let (o0, o1, o2) := addr20Leaves env owner
+        let (s0, s1, s2) := addr20Leaves env spender
+        let (v0, v1, v2, v3) := uint256Leaves env val
+        some (base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3)
+      | _, _, _ =>
+        some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6,
+          .arg 7, .arg 8, .arg 9, .arg 10)
+    | none =>
+      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6,
+        .arg 7, .arg 8, .arg 9, .arg 10)
+  else none
+
+private def findEvmTokenTransfer256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
+      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmTokenTransfer" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenTransfer
+        ".evmTokenTransfer" with
+    | some app =>
+      let args := app.getAppArgs
+      match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+      | some token, some dest, some amt =>
+        let (t0, t1, t2) := addr20Leaves env token
+        let (d0, d1, d2) := addr20Leaves env dest
+        let (a0, a1, a2, a3) := uint256Leaves env amt
+        some (t0, t1, t2, d0, d1, d2, a0, a1, a2, a3)
+      | _, _, _ =>
+        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7, .arg 8, .arg 9)
+    | none =>
+      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7, .arg 8, .arg 9)
+  else none
+
 private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   let args := app.getAppArgs
   if isConstNamed app ``ProofForge.Evm.Runtime.evmDeposit || endsWith app ".evmDeposit" then
@@ -3473,15 +3635,38 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
       let (s0, s1, s2) := addr20Leaves env spender
       some (.mapSetPair base o0 o1 o2 s0 s1 s2 val)
     | _, _ => some (.mapSetPair base (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6) val)
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetAddr256 ||
+      endsWith app ".evmMapSetAddr256" then
+    match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+    | some _base, some key, some val =>
+      let (w0, w1, w2) := addr20Leaves env key
+      let (v0, v1, v2, v3) := uint256Leaves env val
+      some (.mapSetAddr256 (valAtEnd env args 2) w0 w1 w2 v0 v1 v2 v3)
+    | _, _, _ =>
+      some (.mapSetAddr256 (valAtEnd env args 2) (.arg 1) (.arg 2) (.arg 3)
+        (.arg 4) (.arg 5) (.arg 6) (.arg 7))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetPair256 ||
+      endsWith app ".evmMapSetPair256" then
+    match nthFromEnd args 3, nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+    | some _base, some owner, some spender, some val =>
+      let (o0, o1, o2) := addr20Leaves env owner
+      let (s0, s1, s2) := addr20Leaves env spender
+      let (v0, v1, v2, v3) := uint256Leaves env val
+      some (.mapSetPair256 (valAtEnd env args 3) o0 o1 o2 s0 s1 s2 v0 v1 v2 v3)
+    | _, _, _, _ =>
+      some (.mapSetPair256 (valAtEnd env args 3) (.arg 1) (.arg 2) (.arg 3)
+        (.arg 4) (.arg 5) (.arg 6) (.arg 7) (.arg 8) (.arg 9) (.arg 10))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmTokenTransfer ||
       endsWith app ".evmTokenTransfer" then
-    let amt := valAtEnd env args 0
-    match nthFromEnd args 2, nthFromEnd args 1 with
-    | some token, some dest =>
+    match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+    | some token, some dest, some amt =>
       let (t0, t1, t2) := addr20Leaves env token
       let (d0, d1, d2) := addr20Leaves env dest
-      some (.evmTokenTransfer t0 t1 t2 d0 d1 d2 amt)
-    | _, _ => some (.evmTokenTransfer (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) amt)
+      let (a0, a1, a2, a3) := uint256Leaves env amt
+      some (.evmTokenTransfer256 t0 t1 t2 d0 d1 d2 a0 a1 a2 a3)
+    | _, _, _ =>
+      some (.evmTokenTransfer256 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5)
+        (.arg 6) (.arg 7) (.arg 8) (.arg 9))
   else none
 
 private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
@@ -3495,6 +3680,8 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
     (``ProofForge.Evm.Runtime.evmMapSetU64, ".evmMapSetU64"),
     (``ProofForge.Evm.Runtime.evmMapSetAddr, ".evmMapSetAddr"),
     (``ProofForge.Evm.Runtime.evmMapSetPair, ".evmMapSetPair"),
+    (``ProofForge.Evm.Runtime.evmMapSetAddr256, ".evmMapSetAddr256"),
+    (``ProofForge.Evm.Runtime.evmMapSetPair256, ".evmMapSetPair256"),
     (``ProofForge.Evm.Runtime.evmTokenTransfer, ".evmTokenTransfer")
   ]
   let rec walk (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
@@ -3523,7 +3710,10 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   | some (.mapSetU64 _ _ v) => v
   | some (.mapSetAddr _ _ _ _ v) => v
   | some (.mapSetPair _ _ _ _ _ _ _ v) => v
+  | some (.mapSetAddr256 _ _ _ _ v0 _ _ _) => v0
+  | some (.mapSetPair256 _ _ _ _ _ _ _ v0 _ _ _) => v0
   | some (.evmTokenTransfer _ _ _ _ _ _ v) => v
+  | some (.evmTokenTransfer256 _ _ _ _ _ _ a0 _ _ _) => a0
   | _ => .arg 0
 
 private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
@@ -3548,6 +3738,14 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.mapSetAddr b a0 a1 a2 v, .returnU64 v]
   else if let some (b, o0, o1, o2, s0, s1, s2, v) := findEvmMapSetPair env e then
     some #[.mapSetPair b o0 o1 o2 s0 s1 s2 v, .returnU64 v]
+  else if let some (b, a0, a1, a2, v0, v1, v2, v3) := findEvmMapSetAddr256 env e then
+    some #[.mapSetAddr256 b a0 a1 a2 v0 v1 v2 v3, .returnU64 v0]
+  else if let some (b, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3) :=
+      findEvmMapSetPair256 env e then
+    some #[.mapSetPair256 b o0 o1 o2 s0 s1 s2 v0 v1 v2 v3, .returnU64 v0]
+  else if let some (t0, t1, t2, d0, d1, d2, a0, a1, a2, a3) :=
+      findEvmTokenTransfer256 env e then
+    some #[.evmTokenTransfer256 t0 t1 t2 d0 d1 d2 a0 a1 a2 a3, .returnU64 a0]
   else if let some (t0, t1, t2, d0, d1, d2, amt) := findEvmTokenTransfer env e then
     some #[.evmTokenTransfer t0 t1 t2 d0 d1 d2 amt, .returnU64 amt]
   else if let some (b, k) := findEvmMapGetU64 env e then
@@ -3556,8 +3754,27 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.mapGetAddr b a0 a1 a2, .returnU64 a0]
   else if let some (b, o0, o1, o2, s0, s1, s2) := findEvmMapGetPair env e then
     some #[.mapGetPair b o0 o1 o2 s0 s1 s2, .returnU64 o0]
+  else if let some (b, a0, a1, a2) := findEvmMapGetAddr256 env e then
+    some #[
+      .returnU64 (.ext (.evm (.mapGetAddr256 0)) #[b, a0, a1, a2]),
+      .returnU64 (.ext (.evm (.mapGetAddr256 1)) #[b, a0, a1, a2]),
+      .returnU64 (.ext (.evm (.mapGetAddr256 2)) #[b, a0, a1, a2]),
+      .returnU64 (.ext (.evm (.mapGetAddr256 3)) #[b, a0, a1, a2])
+    ]
+  else if let some (b, o0, o1, o2, s0, s1, s2) := findEvmMapGetPair256 env e then
+    some #[
+      .returnU64 (.ext (.evm (.mapGetPair256 0)) #[b, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.mapGetPair256 1)) #[b, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.mapGetPair256 2)) #[b, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.mapGetPair256 3)) #[b, o0, o1, o2, s0, s1, s2])
+    ]
   else if let some (t0, t1, t2) := findEvmTokenBalance env e then
-    some #[.evmTokenBalanceOfSelf t0 t1 t2, .returnU64 t0]
+    some #[
+      .returnU64 (.ext (.evm (.tokenBalance256 0)) #[t0, t1, t2]),
+      .returnU64 (.ext (.evm (.tokenBalance256 1)) #[t0, t1, t2]),
+      .returnU64 (.ext (.evm (.tokenBalance256 2)) #[t0, t1, t2]),
+      .returnU64 (.ext (.evm (.tokenBalance256 3)) #[t0, t1, t2])
+    ]
   else none
 
 /-- A vector root is not a scalar slot. Mixed static/dynamic writeback can see an inline
@@ -5390,9 +5607,22 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           .mapSetPair (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
             (flipVal fuel' a2) (flipVal fuel' c0) (flipVal fuel' c1)
             (flipVal fuel' c2) (flipVal fuel' v)
+      | .mapSetAddr256 b a0 a1 a2 v0 v1 v2 v3 =>
+          .mapSetAddr256 (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
+            (flipVal fuel' a2) (flipVal fuel' v0) (flipVal fuel' v1)
+            (flipVal fuel' v2) (flipVal fuel' v3)
+      | .mapSetPair256 b a0 a1 a2 c0 c1 c2 v0 v1 v2 v3 =>
+          .mapSetPair256 (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
+            (flipVal fuel' a2) (flipVal fuel' c0) (flipVal fuel' c1)
+            (flipVal fuel' c2) (flipVal fuel' v0) (flipVal fuel' v1)
+            (flipVal fuel' v2) (flipVal fuel' v3)
       | .evmTokenTransfer a b c d e f g =>
           .evmTokenTransfer (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
             (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f) (flipVal fuel' g)
+      | .evmTokenTransfer256 a b c d e f g0 g1 g2 g3 =>
+          .evmTokenTransfer256 (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f)
+            (flipVal fuel' g0) (flipVal fuel' g1) (flipVal fuel' g2) (flipVal fuel' g3)
       | .evmTokenBalanceOfSelf a b c =>
           .evmTokenBalanceOfSelf (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
       | .errorOverflow => .errorOverflow
@@ -5694,9 +5924,20 @@ private def opFields : Ops.Op → Array String
   | .mapSetPair b a0 a1 a2 c0 c1 c2 v =>
       valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++
         valFields c0 ++ valFields c1 ++ valFields c2 ++ valFields v
+  | .mapSetAddr256 b a0 a1 a2 v0 v1 v2 v3 =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++
+        valFields v0 ++ valFields v1 ++ valFields v2 ++ valFields v3
+  | .mapSetPair256 b a0 a1 a2 c0 c1 c2 v0 v1 v2 v3 =>
+      valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2 ++
+        valFields c0 ++ valFields c1 ++ valFields c2 ++
+        valFields v0 ++ valFields v1 ++ valFields v2 ++ valFields v3
   | .evmTokenTransfer a b c d e f g =>
       valFields a ++ valFields b ++ valFields c ++ valFields d ++
         valFields e ++ valFields f ++ valFields g
+  | .evmTokenTransfer256 a b c d e f g0 g1 g2 g3 =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d ++
+        valFields e ++ valFields f ++ valFields g0 ++ valFields g1 ++
+        valFields g2 ++ valFields g3
   | .evmTokenBalanceOfSelf a b c => valFields a ++ valFields b ++ valFields c
   | .okState v => valFields v
   | .errorOverflow => #[]
@@ -5803,9 +6044,21 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
           return .mapSetPair (← normalizeVal b) (← normalizeVal a0) (← normalizeVal a1)
             (← normalizeVal a2) (← normalizeVal c0) (← normalizeVal c1) (← normalizeVal c2)
             (← normalizeVal v)
+      | .mapSetAddr256 b a0 a1 a2 v0 v1 v2 v3 =>
+          return .mapSetAddr256 (← normalizeVal b) (← normalizeVal a0) (← normalizeVal a1)
+            (← normalizeVal a2) (← normalizeVal v0) (← normalizeVal v1)
+            (← normalizeVal v2) (← normalizeVal v3)
+      | .mapSetPair256 b a0 a1 a2 c0 c1 c2 v0 v1 v2 v3 =>
+          return .mapSetPair256 (← normalizeVal b) (← normalizeVal a0) (← normalizeVal a1)
+            (← normalizeVal a2) (← normalizeVal c0) (← normalizeVal c1) (← normalizeVal c2)
+            (← normalizeVal v0) (← normalizeVal v1) (← normalizeVal v2) (← normalizeVal v3)
       | .evmTokenTransfer a b c d e f g =>
           return .evmTokenTransfer (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
             (← normalizeVal d) (← normalizeVal e) (← normalizeVal f) (← normalizeVal g)
+      | .evmTokenTransfer256 a b c d e f g0 g1 g2 g3 =>
+          return .evmTokenTransfer256 (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+            (← normalizeVal d) (← normalizeVal e) (← normalizeVal f)
+            (← normalizeVal g0) (← normalizeVal g1) (← normalizeVal g2) (← normalizeVal g3)
       | .evmTokenBalanceOfSelf a b c =>
           return .evmTokenBalanceOfSelf (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
   return { p with methods := ← p.methods.mapM fun m => do
@@ -5877,8 +6130,14 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
       #[a, b, c, d, e, f, g].findSome? (valEscapedArg limit)
   | .mapSetPair a b c d e f g h =>
       #[a, b, c, d, e, f, g, h].findSome? (valEscapedArg limit)
+  | .mapSetAddr256 a b c d e f g h =>
+      #[a, b, c, d, e, f, g, h].findSome? (valEscapedArg limit)
+  | .mapSetPair256 a b c d e f g h i j k =>
+      #[a, b, c, d, e, f, g, h, i, j, k].findSome? (valEscapedArg limit)
   | .evmTokenTransfer a b c d e f g =>
       #[a, b, c, d, e, f, g].findSome? (valEscapedArg limit)
+  | .evmTokenTransfer256 a b c d e f g h i j =>
+      #[a, b, c, d, e, f, g, h, i, j].findSome? (valEscapedArg limit)
   | .evmTokenBalanceOfSelf a b c =>
       #[a, b, c].findSome? (valEscapedArg limit)
   | .storeField _ v | .okState v | .returnU64 v | .returnState v => valEscapedArg limit v
