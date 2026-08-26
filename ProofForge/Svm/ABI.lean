@@ -25,6 +25,9 @@ def discPreimage (ixName : String) (paramCount : Nat) : String :=
 def discHexOf (ixName : String) (paramCount : Nat) : Except String String :=
   .ok s!"0x{Core.IR.u64Hex (Sha256.first8Le (discPreimage ixName paramCount))}"
 
+def discFirstByte (ixName : String) (paramCount : Nat) : Nat :=
+  (Sha256.first8Le (discPreimage ixName paramCount) &&& 255).toNat
+
 /-- Physical SVM field offset for target-neutral source slots. -/
 def fieldOffsetOf (slots : Array Core.IR.Slot) (name : String) : Option Nat :=
   Id.run do

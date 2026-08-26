@@ -370,6 +370,8 @@ def ofLegacyProgram (program : Legacy.Program) : Except String Program := do
 
 private def methodToLegacy (schema : Core.Schema) (method : Method) :
     Except String Legacy.Method := do
+  unless method.annotations.isEmpty do
+    throw s!"extract/unsupported: legacy adapter cannot preserve annotations on {method.ixName}"
   let ops ← toLegacyOps method.ops
   let evaluation ←
     if schema.isEmpty then pure {}

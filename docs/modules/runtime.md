@@ -14,6 +14,11 @@
 根层不再提供混合 façade。合约必须按 target 明确 `open ProofForge.Svm.Runtime` 或
 `open ProofForge.Evm.Runtime`，抽出器也只识别对应的具名 runtime。
 
+协议入口和持久容器分两层：`Svm.EntryAdapter` 负责 target-owned wire decode、physical
+account contract 与 raw/generated dispatch；`Svm.AccountStorage` 负责 fixed-capacity
+account-resident map/queue/allocator/tree routine。source 语义组合两层后进入普通 CFG，
+不为每个 Phoenix/Map/queue 功能增加顶层 Ops 或主 Emit case。
+
 ## Surface
 
 - `clockSlot : UInt64` — 链上 `sol_get_clock_sysvar` → `Clock.slot`（物理 slot）。宿主 `@[irreducible]` stub，值是 0，不要 unfold。
@@ -40,6 +45,11 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
 - `invokeSignedSeeds programIx metas data seeds bump` — 一组编译期定形的异构 signer seeds；支持 ASCII、state key 和静态 account key，运行时只提供 bump。
 - 首个 CPI word `.selfEntry tag seed` — 声明唯一 raw self-entry；只接受 canonical seed PDA 的 readonly signer，认证后把完整 payload 作为一个 `sol_log_data` field 发布。
+- `@[pf_svm_raw tag accountCount programAccount]` — 声明 target-owned packed 外部入口；tag
+  是首个 u8，后续参数按 source 的 u8/u16/u32/u64 width 精确小端解码。adapter 静态消费
+  account prefix，要求指定 physical account executable 且 key 等于当前 program id，然后把
+  参数零扩展到普通 scalar locals。raw method 不得访问 managed `State`；协议持久数据必须走
+  explicit `AccountStorage`。该 annotation 不产生 Op，raw instruction 不进入 generated IDL。
 - `let _ := invoke...` — 被忽略的 CPI 结果按效应顺序保留；无论普通或 signed、单条或多条，后续 state writes 都不能被抽取器吞掉。
 - init 中的静态 CPI 在账户初始化写回前执行；非 CPI init effect fail closed，不再静默省略。
 - `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `token2022TransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，按 Runtime 命名空间统一展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语，不维护 recipe 名白名单。Token-2022 包装只接收 82B mint / 165B token account。
@@ -119,5 +129,8 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/Tree.lean` + `runtime-tests/solana/tests/tree.rs`：红黑树插入布局，以及 black-leaf 删除 fixup、free-list 回收和精确地址复用。
 `Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
 `Examples/SelfLog.lean` + `runtime-tests/solana/tests/self_log.rs`：当前 program id 的 signed self-CPI，canonical `"log"` PDA raw 入口、packed Borsh integer words、续段状态写回，以及 signer/writable/tag/key 失败矩阵。
+`Examples/RawEntry.lean` + `runtime-tests/solana/tests/raw_entry.rs`：同一 ELF 的 generated/raw
+dispatch；`07 || u8 || u64` exact decode、bounded trailing account、program account authentication，
+以及 wrong tag/length、missing signer、wrong/non-executable program fail-closed matrix。
 `Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
 `Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 base/stride/capacity 的 bid root/child、32-edge parent path 和完整 bid/ask/trader tree/free-list partition；order tree 使用固定 4096-bit bitmap，trader tree 使用固定 8321-bit bitmap + 64-entry stack 并按原始 32-byte Pubkey 排序；bounded write surface 在 owner/writable/capacity/length 门后原位写 topology，五个 registration entry 再按 Sokoban exact 144-byte node layout 原子发布前五个 distinct trader，第三次覆盖 LL/LR/RR/RL rotation 和两个 no-fix 分支，第四次覆盖任意 canonical 三节点地址布局的 red-uncle recolor，第五次覆盖 black-parent 无修复和 black-uncle LL/LR/RL/RR rotation，失败不留下 detached node 或部分更新；最小 profile 84,944 B；短 header `Custom(1)`。

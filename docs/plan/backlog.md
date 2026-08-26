@@ -329,6 +329,16 @@
   `fdec3afb265a542`，assembly 6,548,227 B，ELF 2,081,880 B，IDL 9,011 B；196-job Lean、
   50 个 SVM build、Mollusk 232/232、Anvil 12/12 与 Surfpool 1.5.0 Loader-v3 smoke 全绿。
   下一步独立接 tag 5 wire/account/event adapter，再实现 tag 4 Token withdrawal。
+- P5 第三十一段 reusable packed SVM entry adapter 已完成：Core annotation 只携带 opaque
+  target metadata，不新增 executable Ops；`Svm.EntryAdapter` 在 target projection 后统一拥有
+  u8 tag dispatch、exact packed u8/u16/u32/u64 widening、bounded account-prefix walk、当前
+  executable program authentication 与 raw/generated route。raw 方法不得把 physical program
+  account 当 managed State，持久读写必须组合 `AccountStorage`；IDL 排除 protocol-owned raw
+  wire，Legacy downgrade 显式拒绝 metadata loss。`Examples.RawEntry` 的同一 ELF 验证 raw
+  与 generated ABI 共存；Mollusk 覆盖 exact/short/long/tag/signer/program/trailing-account
+  matrix，Surfpool 1.5.0 用 4 个 Loader write transactions 部署 3,064-byte ELF 并核对 exact
+  ProgramData；200-job Lean、51 个 SVM build、Mollusk 238/238、Anvil 12/12 全绿。下一步只用
+  这层组合 Phoenix tag 5 wire/account/event，不向主 Emit 添加 Phoenix 分支。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

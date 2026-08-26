@@ -52,6 +52,7 @@ import Examples.Nonce
 import Examples.TokenOwner
 import Examples.TokenMs
 import Examples.SelfLog
+import Examples.RawEntry
 import Projects.Phoenix
 import Projects.PhoenixV1Profile
 
@@ -149,6 +150,8 @@ import Projects.PhoenixV1Profile
 #pf_build Examples.TokenMs
 
 #pf_build Examples.SelfLog
+
+#pf_build Examples.RawEntry
 
 #pf_build Projects.Phoenix
 

@@ -1,5 +1,6 @@
 import ProofForge.Svm.IR
 import ProofForge.Svm.AccountStorage.Emit
+import ProofForge.Svm.EntryAdapter.Emit
 
 namespace ProofForge.Svm.Emit
 
@@ -4692,15 +4693,16 @@ private def emitHandler (p : IR.Program) (marker : String) (m : IR.Method) : Exc
     return s!"{label}:\n{head}{body}"
 
 private def emitDispatch (program : IR.Program) : Except String String := do
-  if program.methods.isEmpty then
+  let methods := program.methods.filter (·.entry.isGenerated)
+  if methods.isEmpty then
     throw "extract/unsupported: no methods"
   let mut out := "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n"
-  for i in [0:program.methods.size] do
-    let m := program.methods[i]!
+  for i in [0:methods.size] do
+    let m := methods[i]!
     let label := handlerLabel m
     let disc ← IR.discHex m
     let next :=
-      if i + 1 == program.methods.size then "err_unknown_disc"
+      if i + 1 == methods.size then "err_unknown_disc"
       else s!"dispatch_next_{label}"
     -- Conditional and unconditional jumps have a signed 16-bit instruction offset. Large
     -- programs can place handlers beyond that range, while local calls use a 32-bit offset.
@@ -4709,8 +4711,27 @@ private def emitDispatch (program : IR.Program) : Except String String := do
     if i == 0 then
       out := out ++ s!"  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
     else
-      out := out ++ s!"dispatch_next_{handlerLabel program.methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
+      out := out ++ s!"dispatch_next_{handlerLabel methods[i - 1]!}:\n  lddw r2, {disc}\n  jne r1, r2, {next}\n{jump}"
   return out
+
+/-- Raw adapters have already located the actual instruction-data pointer in `r8`. Route generated
+discriminators from that pointer as well, so malformed protocol input cannot make a generated
+handler read static offsets derived from an executable program account's unrelated data size. -/
+private def emitGeneratedRoute (program : IR.Program) (err : String) : Except String String := do
+  let methods := program.methods.filter (·.entry.isGenerated)
+  let mut out := s!"  ldxdw r2, [r8 + 0]\n  jlt r2, 8, {err}\n  ldxdw r1, [r8 + 8]\n"
+  for i in [0:methods.size] do
+    let method := methods[i]!
+    let next := s!"raw_generated_next_{i}"
+    let disc ← IR.discHex method
+    out := out ++ s!"\
+  lddw r2, {disc}
+  jne r1, r2, {next}
+  call {handlerLabel method}
+  exit
+{next}:
+"
+  return out ++ s!"  ja {err}\n"
 
 private def emitRawSelfHandler (entry : Ops.RawSelfEntry) : String :=
   let (seedBytes, _) :=
@@ -4781,15 +4802,39 @@ def emitAsm (program : IR.Program) : Except String String := do
   unless IR.isProgramShape program do
     throw "extract/unsupported: not program shape"
   let rawSelfEntry ← IR.rawSelfEntry? program
+  let rawMethods := program.methods.filterMap fun method =>
+    match method.entry with
+    | .generated => none
+    | .raw entry => some (method, entry)
+  if let some selfEntry := rawSelfEntry then
+    unless rawMethods.all (·.2.tag != selfEntry.tag.toNat) do
+      throw "extract/unsupported: raw method tag conflicts with signed self-entry tag"
+  let generatedProgram := IR.withAccountCount
+    { program with methods := program.methods.filter (·.entry.isGenerated) }
+    (IR.generatedAccountCount program)
   let marker ← IR.layoutMarkerHex program
-  let layout := IR.inputLayout program
-  let dispatch ← emitDispatch program
+  -- Static offsets only serve the generated ABI. Raw adapters always locate instruction data by
+  -- walking the actual bounded account list, so a program account never inherits state geometry.
+  let layout := IR.inputLayout generatedProgram
+  let dispatch ← emitDispatch generatedProgram
   let mut handlers := ""
   for m in program.methods do
-    handlers := handlers ++ (← emitHandler program marker m) ++ "\n"
+    match m.entry with
+    | .generated =>
+        handlers := handlers ++ (← emitHandler generatedProgram marker m) ++ "\n"
+    | .raw entry =>
+        let methodProgram := IR.withAccountCount { program with methods := #[m] } entry.accountCount
+        let body ← emitCFGBody methodProgram marker (handlerLabel m) m
+        let context : EntryAdapter.Emit.Context := {
+          headerStack
+          scalarLocalStackOff := scalarLocalStackOff methodProgram
+          walkAccounts := emitWalkAccounts
+          signerChecks := emitWalkSignerChecks
+        }
+        handlers := handlers ++ (← EntryAdapter.Emit.emitHandler context m entry) ++ body ++ "\n"
   let entryIx :=
-    if IR.usesWalk program then
-      let n := IR.cpiAccountCount program
+    if IR.usesWalk generatedProgram then
+      let n := IR.cpiAccountCount generatedProgram
       emitWalkAccounts n "entry" "err_unknown_disc" ++
         s!"  ldxdw r1, [r10 - {headerStack n}]\n  ldxdw r1, [r1 + 0]\n  jlt r1, 8, err_unknown_disc\n  ja dispatch_begin\n"
     else
@@ -4801,16 +4846,36 @@ def emitAsm (program : IR.Program) : Except String String := do
   ja dispatch_begin
 "
   let dispatchHead :=
-    if IR.usesWalk program then
-      s!"dispatch_begin:\n  ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount program)}]\n  add64 r1, 8\n  ldxdw r1, [r1 + 0]\n"
+    if IR.usesWalk generatedProgram then
+      s!"dispatch_begin:\n  ldxdw r1, [r10 - {headerStack (IR.cpiAccountCount generatedProgram)}]\n  add64 r1, 8\n  ldxdw r1, [r1 + 0]\n"
     else
       "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n"
   -- emitDispatch 自己写了 dispatch_begin 头；transfer 要换掉。
   let dispatchTxt :=
-    if IR.usesWalk program then
+    if IR.usesWalk generatedProgram then
       dispatch.replace "dispatch_begin:\n  ldxdw r1, [r6 + INSTRUCTION_DATA]\n" dispatchHead
     else dispatch
-  let rawJump := if rawSelfEntry.isSome then "  jeq r1, 1, raw_self_entry\n" else ""
+  let adapterRoutes := rawMethods.map fun (method, entry) => ({
+    label := handlerLabel method
+    tag := entry.tag
+    dataLen := entry.dataLen
+  } : EntryAdapter.Emit.Route)
+  let adapterRoutes :=
+    match rawSelfEntry with
+    | some entry => adapterRoutes.push {
+        label := "raw_self_entry"
+        tag := entry.tag.toNat
+        dataLen := 1
+        exactLen := false
+      }
+    | none => adapterRoutes
+  let generatedRoute ← emitGeneratedRoute generatedProgram "err_unknown_disc"
+  let entryHead :=
+    if rawMethods.isEmpty then entryIx
+    else EntryAdapter.Emit.emitRoute adapterRoutes "raw_generated_entry" "err_unknown_disc" ++
+      "raw_generated_entry:\n" ++ generatedRoute
+  let rawJump :=
+    if rawMethods.isEmpty && rawSelfEntry.isSome then "  jeq r1, 1, raw_self_entry\n" else ""
   let rawHandler := rawSelfEntry.map emitRawSelfHandler |>.getD ""
   return s!"\
 ; SOLANA-LEAN-SBPF-ASM v0 (CFG-driven handler bodies)
@@ -4835,7 +4900,7 @@ def emitAsm (program : IR.Program) : Except String String := do
 entrypoint:
   mov64 r6, r1
   ldxdw r1, [r6 + NUM_ACCOUNTS]
-{rawJump}{entryIx}{rawHandler}err_unknown_disc:
+{rawJump}{entryHead}{rawHandler}err_unknown_disc:
   lddw r0, 1
   exit
 {dispatchTxt}

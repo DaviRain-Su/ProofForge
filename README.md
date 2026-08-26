@@ -60,7 +60,10 @@ fixed-capacity Sokoban insertion/removal，并支持 trader get-or-register depo
 backend 另提供共用的 bounded Key4/FIFO lookup；Runtime source 可在 complete validator 后
 组合 lookup 与 one-based field read/write/remove，而不用增加顶层 Ops/IR/主 Emit 特判。
 最小 profile 已用这套组合实现 bid/ask `ReduceOrderWithFreeFunds` 的 partial/full、trader
-collateral unlock 与 checked preflight；raw Phoenix wire/event 和提款 Token CPI 仍分片推进。
+collateral unlock 与 checked preflight。target-owned `EntryAdapter` 已统一 packed wire decode、
+raw/generated dispatch 与账户合同，`AccountStorage` 继续统一 account-resident
+map/queue/allocator/tree；下一步组合两层接 Phoenix tag 5 wire/event，再独立实现 tag 4
+提款 Token CPI，不增加 Phoenix-specific 顶层 Ops/IR/主 Emit case。
 
 ## 入口
 

@@ -28,8 +28,10 @@ import ProofForge.Svm.ABICompat
 import ProofForge.Svm.Heap
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
+import ProofForge.Svm.EntryAdapter
 import ProofForge.Svm.IR
 import ProofForge.Svm.IRCompat
+import ProofForge.Svm.EntryAdapter.Emit
 import ProofForge.Svm.Solanalib
 import ProofForge.Svm.Emit
 import ProofForge.Svm.EmitCompat

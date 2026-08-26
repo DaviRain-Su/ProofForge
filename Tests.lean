@@ -69,3 +69,4 @@ import Tests.CFGSpec
 import Tests.NestedSpec
 import Tests.SeatSpec
 import Tests.TreeSpec
+import Tests.EntryAdapterSpec

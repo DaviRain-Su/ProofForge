@@ -112,6 +112,7 @@
 | [l5-035](tasks/l5-035.md) | done | Bounded Key4/FIFO account-storage RB map find |
 | [l5-036](tasks/l5-036.md) | done | Source-level bounded RB find + Phoenix validator composition |
 | [l5-037](tasks/l5-037.md) | done | Composed Phoenix ReduceOrderWithFreeFunds state transition |
+| [l5-038](tasks/l5-038.md) | done | Reusable packed SVM wire/account entry adapter |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

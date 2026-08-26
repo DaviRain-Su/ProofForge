@@ -142,10 +142,11 @@ def emitIdlOf (name : String) (accountCount : Nat)
 
 /-- Solana IDL spec 0.1.0 from the target-owned SVM program. -/
 def emitProgramIdl (p : IR.Program) : String :=
-  let methods := p.methods.map fun method =>
+  let generated := p.methods.filter (·.entry.isGenerated)
+  let methods := generated.map fun method =>
     (method.kind, method.ixName, method.paramCount)
-  let writes := p.methods.map fun method => writtenAccounts method.ops
-  emitIdlOfWrites p.name (IR.cpiAccountCount p) methods writes
+  let writes := generated.map fun method => writtenAccounts method.ops
+  emitIdlOfWrites p.name (IR.generatedAccountCount p) methods writes
     (sourceSlots p) (layoutDiscBytesProgram p)
 
 end ProofForge.Svm.Idl

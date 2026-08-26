@@ -108,6 +108,7 @@
 | T-L5-23 | happy / fail | Phoenix-v1 bounded root slot read | `accDataWordAt` 的 account/base/stride/capacity 编译期固定；运行时 slot 与最终 `data_len` 双边界；root index=2 读取真实 price；越界 child、非零 parent/红 root 返回 0；无 heap/Map |
 | T-L5-24 | happy / fail | Phoenix-v1 constant-memory bid-root neighborhood | 原位读取 root + 两个 child；bid side tag、child→parent reciprocity、color、index envelope 与 bid price/sequence ordering；错 parent/color/order 返回 0；不声明完整树验证 |
 | T-L5-25 | happy / fail | Phoenix-v1 verifier Surfpool deployment | 参数化 Surfpool 1.5.0 offline smoke；716,344 B ELF 经 708 个 Loader write + deploy + authority transactions；confirmed signature、Program/ProgramData layout、exact ELF bytes；不用 Test Validator |
+| T-L5-26 | happy / fail | reusable packed SVM entry adapter | 同一 ELF raw/generated dispatch；exact u8/u64 widening、bounded trailing account、当前 executable program 与 signer contract；wrong tag/short/long/program/non-executable 全部 fail closed；Surfpool Loader-v3 exact ProgramData |
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
 refinement 仍未宣称。P0 探针口径递归统计 `select` 四个分支和 extension operands；当前

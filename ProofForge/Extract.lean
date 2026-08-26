@@ -5660,9 +5660,13 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
         match op with | .returnU64 _ => acc + 1 | _ => acc
       if nRet = 0 then 1 else nRet
     | _ => 1
+  let annotations :=
+    match Attr.svmRawEntry? env n with
+    | some entry => #[entry.annotation]
+    | none => #[]
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
-    paramCount, paramWidths, retCount, sketch, ops
+    paramCount, paramWidths, retCount, annotations, sketch, ops
   }
 
 private def isUInt64Type (e : Expr) : Bool :=
