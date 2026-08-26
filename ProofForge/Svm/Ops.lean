@@ -82,7 +82,6 @@ inductive ValKind where
   | accKeyWord (acc word : Nat)
   | accOwnerWord (acc word : Nat)
   | accDataWord (acc word : Nat)
-  | accDataWordAt (acc baseWord strideWords capacity : Nat)
   | accountStorage (query : AccountStorage.Query)
   | accLamportsN (acc : Nat)
   | accDataLenN (acc : Nat)
@@ -98,7 +97,6 @@ inductive ValKind where
 def ValKind.arity : ValKind → Nat
   | .checkPda _ => 1
   | .byteSwap64 => 1
-  | .accDataWordAt .. => 1
   | .accountStorage query => query.arity
   | _ => 0
 
@@ -191,7 +189,7 @@ def accKeyWord (acc word : Nat) : Val := leaf (.accKeyWord acc word)
 def accOwnerWord (acc word : Nat) : Val := leaf (.accOwnerWord acc word)
 def accDataWord (acc word : Nat) : Val := leaf (.accDataWord acc word)
 def accDataWordAt (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
-  .ext (.accDataWordAt acc baseWord strideWords capacity) #[index]
+  .ext (.accountStorage (.readWordZeroBased acc baseWord strideWords capacity)) #[index]
 def accDataParentPathValid
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
     (index root bumpIndex : Val) : Val :=
@@ -261,9 +259,6 @@ private partial def staticPayloadsWellFormed : Val → Bool
         operands.all staticPayloadsWellFormed
   | .ext (.accDataWord acc word) operands =>
       accInRange acc && dataWordInRange word && operands.all staticPayloadsWellFormed
-  | .ext (.accDataWordAt acc baseWord strideWords capacity) operands =>
-      accInRange acc && indexedDataWordsInRange baseWord strideWords capacity &&
-        operands.all staticPayloadsWellFormed
   | .ext (.accountStorage query) operands =>
       query.wellFormed maxTxAccountLocks && operands.all staticPayloadsWellFormed
   | .ext _ operands => operands.all staticPayloadsWellFormed
@@ -341,7 +336,6 @@ partial def valNeedsWalk : Val → Bool
        | .accLamports1 | .accOwner1 | .accDataLen1
        | .isSigner1 | .isWritable1 | .isExecutable1 => true
        | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
-       | .accDataWordAt acc _ _ _
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
@@ -367,7 +361,6 @@ partial def valMinAccounts : Val → Nat
         | .accLamports1 | .accOwner1 | .accDataLen1
         | .isSigner1 | .isWritable1 | .isExecutable1 => 2
         | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
-        | .accDataWordAt acc _ _ _
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc
         | .signerKeyN acc | .ownerIsSelf acc => acc + 1

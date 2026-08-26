@@ -61,6 +61,28 @@ private def invalidIndexedDataWordOp : ProofForge.Svm.Ops.Op :=
 #guard validIndexedDataWordOp.wellFormed
 #guard !invalidIndexedDataWordOp.wellFormed
 
+private def validIndexedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
+  .readWordZeroBased 1 114 8 512
+
+private def validOneBasedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
+  .readWordOneBased 1 114 8 512
+
+private def invalidIndexedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
+  .readWordZeroBased 1 114 2305843009213693951 1
+
+#guard validIndexedDataWordQuery.wellFormed
+#guard validOneBasedDataWordQuery.wellFormed
+#guard !invalidIndexedDataWordQuery.wellFormed
+#guard validIndexedDataWordQuery.arity == 1
+#guard validIndexedDataWordQuery.effects.reads == #[1]
+#guard validIndexedDataWordQuery.effects.writes.isEmpty
+#guard validIndexedDataWordQuery.canonical
+    (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
+    (#[.arg 0] : Array ProofForge.Svm.Ops.Val) == "dwi.1.114.8.512(a0)"
+#guard validOneBasedDataWordQuery.canonical
+    (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
+    (#[.arg 0] : Array ProofForge.Svm.Ops.Val) == "dwi1.1.114.8.512(a0)"
+
 private def validParentPathOp : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataParentPathValid
     1 114 115 8 4096 32 (.arg 0) (.arg 1) (.arg 2))

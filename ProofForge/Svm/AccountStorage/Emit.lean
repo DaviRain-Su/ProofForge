@@ -24,6 +24,82 @@ structure MutationBackend where
   emitRemove : String → RbMap → Array Ops.Val → Except String String
   emitCheckedAdd : String → RbMap → Array Ops.Val → Array Ops.Val → Except String String
 
+/-- Read one runtime-selected element from a statically bounded account-data field. Zero-based
+and one-based indexes share the same routine; the latter reserves zero as the null sentinel. -/
+private def emitReadWord (context : Context) (field : Field) (index : Ops.Val)
+    (stackOff nonce : Nat) (scope : String) : Except String String := do
+  let region := field.region
+  let acc := region.account
+  let baseWord := field.firstWord
+  let strideWords := region.strideWords
+  let capacity := region.capacity
+  let loadIndex ← context.loadValue index (stackOff + 8) (nonce + 1) (scope ++ "_index")
+  let baseBytes := 8 * baseWord
+  let strideBytes := 8 * strideWords
+  let token := IR.u64Hex (Core.IR.fnv1a64
+    s!"{scope}:{stackOff}:{nonce}:{acc}:{baseWord}:{strideWords}:{capacity}")
+  let indexOk := s!"ok_data_index_{token}"
+  let indexNonzero := s!"nonzero_data_index_{token}"
+  let dataOk := s!"ok_indexed_data_word_{token}"
+  let indexCheck :=
+    match region.indexBase with
+    | .zero => s!"  lddw r3, {capacity}
+  jlt r2, r3, {indexOk}
+  lddw r0, 0x1
+  exit
+{indexOk}:
+"
+    | .one => s!"  jne r2, 0, {indexNonzero}
+  lddw r0, 0x1
+  exit
+{indexNonzero}:
+  lddw r3, {capacity}
+  jle r2, r3, {indexOk}
+  lddw r0, 0x1
+  exit
+{indexOk}:
+  sub64 r2, 1
+"
+  let account :=
+    if acc == 0 then
+      s!"\
+  ldxdw r4, [r6 + ACC0_DATA_LEN]
+  jge r4, r3, {dataOk}
+  lddw r0, 0x1
+  exit
+{dataOk}:
+  mov64 r1, r6
+  add64 r1, ACC0_DATA
+"
+    else
+      s!"\
+  ldxdw r1, [r10 - {context.headerStack acc}]
+  ldxdw r4, [r1 + 80]
+  jge r4, r3, {dataOk}
+  lddw r0, 0x1
+  exit
+{dataOk}:
+  add64 r1, 88
+"
+  return loadIndex ++
+    s!"\
+  ; load bounded acc{acc} data word base={baseWord} stride={strideWords} capacity={capacity}
+  ldxdw r2, [r10 - {stackOff + 8}]
+" ++ indexCheck ++
+    s!"  lddw r3, {strideBytes}
+  mul64 r2, r3
+  mov64 r3, r2
+  lddw r4, {baseBytes + 8}
+  add64 r3, r4
+" ++ account ++
+    s!"\
+  lddw r3, {baseBytes}
+  add64 r1, r3
+  add64 r1, r2
+  ldxdw r1, [r1 + 0]
+  stxdw [r10 - {stackOff}], r1
+"
+
 private def emitWriteWord (context : Context) (label : String)
     (field : Field) (index value : Ops.Val) : Except String String := do
   let region := field.region
@@ -1072,6 +1148,8 @@ private def emitKey4RbTreeValid (context : Context) (tree : Key4RbTree)
 def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
     (stackOff nonce : Nat) (scope : String) : Except String String :=
   match query, operands with
+  | .readWord field, #[index] =>
+      emitReadWord context field index stackOff nonce scope
   | .parentPathValid path, #[index, root, bumpIndex] =>
       emitParentPathValid context path index root bumpIndex stackOff nonce scope
   | .fifoRbTreeValid tree, #[root, size, bumpIndex, freeListHead] =>

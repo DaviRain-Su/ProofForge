@@ -51,7 +51,7 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   svmLeaf (.accDataWord acc word)
 @[match_pattern] def Val.accDataWordAt
     (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
-  .ext (.svm (.accDataWordAt acc baseWord strideWords capacity)) #[index]
+  .ext (.svm (.accountStorage (.readWordZeroBased acc baseWord strideWords capacity))) #[index]
 @[match_pattern] def Val.accDataParentPathValid
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
     (index root bumpIndex : Val) : Val :=

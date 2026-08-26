@@ -280,6 +280,18 @@
   pointer。196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool
   1.5.0 以 1,472 个 Loader write transactions 部署并核对 exact 1,489,133-byte
   ProgramData。下一步把 search/allocator/rotation/transplant/fixup assembly 实体迁入 backend。
+- P5 第二十七段 bounded account-storage field extractor 已完成：runtime-indexed
+  `accDataWordAt` 已从独立 SVM `ValKind` 和主 `loadVal` case 迁入
+  `AccountStorage.Query.readWord`。统一 `Field` descriptor 携带编译期固定 account/base/stride/
+  capacity 与 zero/one-based indexing；one-based 模式拒绝 `0` sentinel 后再归一化，供后续
+  map lookup 返回 index 直接组合。query 自己拥有 arity、read-only effects、account inference
+  与 `dwi`/`dwi1` canonical spelling，source helper 和 wire ABI 不变。实现只在 index 与最终
+  data length 检查后形成调用期 transient pointer，不分配 heap/Map、不复制 node、不开放
+  runtime geometry 或 persistent pointer。source digest `e9966de4a1795a47` 保持，迁移前后
+  4,652,144-byte assembly 逐字节相同；ELF 1,489,088 B、IDL 7,613 B 不变。196-job Lean、
+  50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool 1.5.0 以 1,472 个 Loader
+  write transactions 部署并核对 exact 1,489,133-byte ProgramData。下一步增加 bounded
+  Key4/FIFO map-find query，再组合 field read/write/remove 实现 ReduceOrder。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

@@ -108,9 +108,10 @@ private partial def opsHaveDataWord (acc word : Nat) (ops : Array ProofForge.Svm
 
 private partial def valHasIndexedDataWord
     (acc baseWord strideWords capacity : Nat) : ProofForge.Svm.Ops.Val → Bool
-  | .ext (.accDataWordAt actualAcc actualBase actualStride actualCapacity) operands =>
-      (actualAcc == acc && actualBase == baseWord && actualStride == strideWords &&
-        actualCapacity == capacity) ||
+  | .ext (.accountStorage (.readWord field)) operands =>
+      (field.region.account == acc && field.firstWord == baseWord &&
+        field.region.strideWords == strideWords && field.region.capacity == capacity &&
+        field.region.indexBase == .zero) ||
         operands.any (valHasIndexedDataWord acc baseWord strideWords capacity)
   | .field base _ | .bitNot base => valHasIndexedDataWord acc baseWord strideWords capacity base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs

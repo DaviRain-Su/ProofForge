@@ -40,7 +40,7 @@ def maxDataWord : Nat := 2305843009213693951
 
 def Region.wellFormed (region : Region) (accountLimit : Nat := 64) : Bool :=
   region.account < accountLimit && region.capacity > 0 && region.strideWords > 0 &&
-    region.baseWord < maxDataWord &&
+    region.strideWords < maxDataWord && region.baseWord < maxDataWord &&
     region.baseWord + region.strideWords * (region.capacity - 1) < maxDataWord
 
 def Field.wellFormed (field : Field) (accountLimit : Nat := 64) : Bool :=
@@ -155,17 +155,20 @@ def Key4RbTree.wellFormed (tree : Key4RbTree) (accountLimit : Nat := 64) : Bool 
 /-- Account-resident routines that return one scalar. Dynamic operands remain ordinary Core
 operands; this target-owned descriptor contains only static bounded geometry. -/
 inductive Query where
+  | readWord (field : Field)
   | parentPathValid (path : ParentPath)
   | fifoRbTreeValid (tree : FifoRbTree)
   | key4RbTreeValid (tree : Key4RbTree)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
+  | .readWord .. => 1
   | .parentPathValid .. => 3
   | .fifoRbTreeValid .. => 4
   | .key4RbTreeValid .. => 4
 
 def Query.effects : Query → EffectSummary
+  | .readWord field => EffectSummary.forField field
   | .parentPathValid path =>
       (EffectSummary.forField path.links).merge (EffectSummary.forField path.parentColor)
   | .fifoRbTreeValid tree =>
@@ -176,6 +179,9 @@ def Query.effects : Query → EffectSummary
         ((EffectSummary.forField tree.key).merge (EffectSummary.forField tree.lastKey))
 
 def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
+  | .readWord field =>
+      field.wellFormed accountLimit && field.widthWords == 1 &&
+        field.region.access == {}
   | .parentPathValid path => path.wellFormed accountLimit
   | .fifoRbTreeValid tree => tree.wellFormed accountLimit && tree.topology.hasAccess {}
   | .key4RbTreeValid tree => tree.wellFormed accountLimit && tree.topology.hasAccess {}
@@ -191,6 +197,11 @@ def Query.minAccounts (measure : V → Nat) (operands : Array V) (query : Query)
 /-- Stable target-IR spelling. The compatibility constructor below preserves the original
 `accDataParentPathValid` digest. -/
 def Query.canonical (renderValue : V → String) (operands : Array V) : Query → String
+  | .readWord field =>
+      let region := field.region
+      let opcode := match region.indexBase with | .zero => "dwi" | .one => "dwi1"
+      s!"{opcode}.{region.account}.{field.firstWord}.{region.strideWords}.{region.capacity}" ++
+        s!"({String.intercalate "," (operands.map renderValue).toList})"
   | .parentPathValid path =>
       let region := path.links.region
       s!"dpp.{region.account}.{path.links.firstWord}.{path.parentColor.firstWord}." ++
@@ -267,6 +278,20 @@ def Query.key4RbTreeValidOneBased
         { region :=
             { account, baseWord := keyBaseWord + 3, strideWords, capacity
               indexBase := .one, access } } }
+
+def Query.readWordZeroBased
+    (account baseWord strideWords capacity : Nat) : Query :=
+  .readWord
+    { region :=
+        { account, baseWord, strideWords, capacity
+          indexBase := .zero } }
+
+def Query.readWordOneBased
+    (account baseWord strideWords capacity : Nat) : Query :=
+  .readWord
+    { region :=
+        { account, baseWord, strideWords, capacity
+          indexBase := .one } }
 
 /-- Compile-time key ordering for a fixed-capacity account-resident map. Both variants use the
 same allocator and RB topology; only key fields and comparison policy differ. -/
