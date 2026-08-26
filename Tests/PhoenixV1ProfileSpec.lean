@@ -447,6 +447,47 @@ private partial def opsHaveRbTreeOrderRemove
             capacity bid body
       | _ => false
 
+private partial def valHasAccountQuery
+    (predicate : ProofForge.Svm.AccountStorage.Query → Bool) :
+    ProofForge.Svm.Ops.Val → Bool
+  | .ext (.accountStorage query) operands =>
+      predicate query || operands.any (valHasAccountQuery predicate)
+  | .field base _ | .bitNot base => valHasAccountQuery predicate base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasAccountQuery predicate lhs || valHasAccountQuery predicate rhs
+  | .indexGet base _ index _ _ =>
+      valHasAccountQuery predicate base || valHasAccountQuery predicate index
+  | .select _ lhs rhs thenValue elseValue =>
+      valHasAccountQuery predicate lhs || valHasAccountQuery predicate rhs ||
+        valHasAccountQuery predicate thenValue || valHasAccountQuery predicate elseValue
+  | .ext _ operands => operands.any (valHasAccountQuery predicate)
+  | _ => false
+
+private partial def opsHaveAccountQuery
+    (predicate : ProofForge.Svm.AccountStorage.Query → Bool)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    let has := valHasAccountQuery predicate
+    let here :=
+      match op with
+      | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+      | .storeField _ value | .okState value | .returnU64 value | .returnState value => has value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+      | .indexSet _ lhs rhs _ _ => has lhs || has rhs
+      | .invoke _ _ data _ bump =>
+          data.any (fun item => item.value?.any has) || bump.any has
+      | _ => false
+    here ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveAccountQuery predicate thenOps || opsHaveAccountQuery predicate elseOps
+      | .forBody _ body => opsHaveAccountQuery predicate body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -482,6 +523,12 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing askTreeValid"
   let some traderTree := program.methods.find? (·.ixName == "traderTreeValid")
     | throwError "missing traderTreeValid"
+  let some findTrader := program.methods.find? (·.ixName == "findTrader128")
+    | throwError "missing findTrader128"
+  let some findBid := program.methods.find? (·.ixName == "findBid512")
+    | throwError "missing findBid512"
+  let some findAsk := program.methods.find? (·.ixName == "findAsk512")
+    | throwError "missing findAsk512"
   let some writeTrader := program.methods.find? (·.ixName == "writeTraderTopology128")
     | throwError "missing writeTraderTopology128"
   let some registerFirst := program.methods.find? (·.ixName == "registerFirstTrader128")
@@ -631,9 +678,39 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       countDataWordSetAt removeBid.ops == 0 &&
       opsHaveDataWord 1 4211 removeAsk.ops &&
       opsHaveRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 false removeAsk.ops &&
-      countDataWordSetAt removeAsk.ops == 0 do
+      countDataWordSetAt removeAsk.ops == 0 &&
+      opsHaveRbTreeKey4 8314 8315 8316 128 findTrader.ops &&
+      opsHaveAccountQuery (fun
+        | .key4Find 8310 tree =>
+            tree.links.region.account == 1 && tree.links.firstWord == 8314 &&
+              tree.parentColor.firstWord == 8315 && tree.key.firstWord == 8316 &&
+              tree.links.region.strideWords == 18 && tree.links.region.capacity == 128
+        | _ => false) findTrader.ops &&
+      opsHaveRbTree 114 115 116 117 512 true findBid.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoFind 110 tree =>
+            tree.links.region.account == 1 && tree.links.firstWord == 114 &&
+              tree.parentColor.firstWord == 115 && tree.price.firstWord == 116 &&
+              tree.sequence.firstWord == 117 && tree.links.region.strideWords == 8 &&
+              tree.links.region.capacity == 512 && tree.bid
+        | _ => false) findBid.ops &&
+      opsHaveRbTree 4214 4215 4216 4217 512 false findAsk.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoFind 4210 tree =>
+            tree.links.region.account == 1 && tree.links.firstWord == 4214 &&
+              tree.parentColor.firstWord == 4215 && tree.price.firstWord == 4216 &&
+              tree.sequence.firstWord == 4217 && tree.links.region.strideWords == 8 &&
+              tree.links.region.capacity == 512 && !tree.bid
+        | _ => false) findAsk.ops do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
+  unless idl.contains
+      "\"name\": \"findTrader128\",\n      \"discriminator\": [193, 118, 199, 104, 63, 14, 34, 106],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" &&
+      idl.contains
+      "\"name\": \"findBid512\",\n      \"discriminator\": [245, 172, 68, 54, 84, 34, 9, 191],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" &&
+      idl.contains
+      "\"name\": \"findAsk512\",\n      \"discriminator\": [39, 230, 150, 167, 72, 52, 87, 13],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" do
+    throwError "bounded find methods must remain read-only in IDL"
   unless idl.contains
       "\"name\": \"registerTrader128\",\n      \"discriminator\": [90, 37, 2, 213, 222, 9, 17, 252],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
     throwError "registerTrader128 IDL account must be writable"
@@ -702,7 +779,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "function_rboi_" &&
       asm.contains "bounded account-resident Phoenix bid order RB removal" &&
       asm.contains "bounded account-resident Phoenix ask order RB removal" &&
-      asm.contains "function_rbor_" && asm.contains "_transplant" do
+      asm.contains "function_rbor_" && asm.contains "_transplant" &&
+      asm.contains "bounded one-based acc1 RB find root=8310 links=8314 stride=18 capacity=128" &&
+      asm.contains "bounded one-based acc1 RB find root=110 links=114 stride=8 capacity=512" &&
+      asm.contains "bounded one-based acc1 RB find root=4210 links=4214 stride=8 capacity=512" &&
+      asm.contains "rb_find_found_" && asm.contains "rb_find_missing_" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
 #pf_guard_phoenix_v1_profile

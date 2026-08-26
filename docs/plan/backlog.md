@@ -305,6 +305,18 @@
   产出 3,720 B / 3,480 B ELF；196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil
   12/12 与 Surfpool smoke 全绿。下一步接 Runtime/source intrinsic，再组合
   find/read/write/remove 实现 ReduceOrder。
+- P5 第二十九段 source-level bounded RB find 已完成：新增薄
+  `accDataRbTreeKey4Find` / `accDataRbTreeOrderFind` Runtime decoder，所有 account/root/field/
+  stride/capacity/bid geometry 必须是 extraction-time constant，dynamic 参数只有 Key4 四词或
+  FIFO `(price, sequence)`。decoder 直接构造 `AccountStorage.Query` 并复用 well-formed gate，
+  没有新增顶层 Op/IR/主 Emit case。PhoenixV1Profile 的 `findTrader128`、`findBid512`、
+  `findAsk512` 先组合 complete tree/free-list validator，再执行共同 64-level bounded search，
+  found 返回 exact one-based slot，missing 或 malformed topology 返回 `0`；三个 IDL account
+  metas 都是 read-only。Mollusk 覆盖 trader/bid/ask found/missing 与 malformed self-cycle；
+  持久状态仍无 heap Map、node copy、detached allocation 或 pointer。当前 digest
+  `b37d4fce03b21ff4`，assembly 5,638,878 B，ELF 1,799,856 B，IDL 8,370 B；196-job
+  Lean、50 个 SVM build、Mollusk 231/231、Anvil 12/12 与 Surfpool 1.5.0 Loader-v3 smoke
+  全绿。下一步组合 find/read/write/remove 实现 official ReduceOrder semantics。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

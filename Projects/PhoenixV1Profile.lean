@@ -611,6 +611,52 @@ def traderTreeValid (s : State) : UInt64 :=
     else
       0
 
+/-- Return the one-based trader slot for one 32-byte Pubkey key in the smallest official profile,
+or zero when absent/invalid. Complete tree/free-list validation runs before bounded search. -/
+@[pf_entry]
+def findTrader128 (s : State) (key0 key1 key2 key3 : UInt64) : UInt64 :=
+  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
+    let cursor := accDataWord 1 8313
+    let valid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128
+      (lowUInt32 (accDataWord 1 8310)) (accDataWord 1 8312)
+      (lowUInt32 cursor) (highUInt32 cursor)
+    if valid = 1 then
+      accDataRbTreeKey4Find 1 8310 8314 8315 8316 18 128 key0 key1 key2 key3
+    else
+      0
+  else
+    0
+
+/-- Return the one-based bid slot for an exact Phoenix FIFO key in the 512-node profile. -/
+@[pf_entry]
+def findBid512 (s : State) (price sequence : UInt64) : UInt64 :=
+  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
+    let cursor := accDataWord 1 113
+    let valid := accDataRbTreeValid 1 114 115 116 117 8 512 1
+      (lowUInt32 (accDataWord 1 110)) (accDataWord 1 112)
+      (lowUInt32 cursor) (highUInt32 cursor)
+    if valid = 1 then
+      accDataRbTreeOrderFind 1 110 114 115 116 117 8 512 1 price sequence
+    else
+      0
+  else
+    0
+
+/-- Return the one-based ask slot for an exact Phoenix FIFO key in the 512-node profile. -/
+@[pf_entry]
+def findAsk512 (s : State) (price sequence : UInt64) : UInt64 :=
+  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
+    let cursor := accDataWord 1 4213
+    let valid := accDataRbTreeValid 1 4214 4215 4216 4217 8 512 0
+      (lowUInt32 (accDataWord 1 4210)) (accDataWord 1 4212)
+      (lowUInt32 cursor) (highUInt32 cursor)
+    if valid = 1 then
+      accDataRbTreeOrderFind 1 4210 4214 4215 4216 4217 8 512 0 price sequence
+    else
+      0
+  else
+    0
+
 /--
 Write the links and parent/color words of one slot in the smallest official trader allocator.
 `slot` is zero-based relative to the first node. The target effect requires account 1 to be writable

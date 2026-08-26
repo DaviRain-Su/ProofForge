@@ -649,6 +649,53 @@ def createPda (lamports : UInt64) : UInt64 :=
   0
 
 /--
+Search a statically shaped account-resident red-black tree by a four-word key and return its
+one-based slot index, or zero when absent. Account/root/field geometry and capacity must be
+compile-time constants; only the key is dynamic. The target performs at most 64 checked links and
+byte-compares the original 32 key bytes. This lookup does not allocate, copy nodes, or expose a
+pointer; callers that require complete topology/allocator assurance compose it after
+`accDataRbTreeKey4Valid`.
+-/
+@[irreducible] def accDataRbTreeKey4Find
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  0
+
+/--
+Search a statically shaped Phoenix FIFO order tree by `(price, encoded_sequence)` and return its
+one-based slot index, or zero when absent. `bid=1` selects descending price/sequence ordering and
+`bid=0` ascending ordering. Geometry is compile-time fixed and traversal is bounded to 64 checked
+links; no heap map, node copy, raw pointer, or persistent allocation is created. Callers compose
+the complete FIFO tree validator when malformed topology must be rejected before business logic.
+-/
+@[irreducible] def accDataRbTreeOrderFind
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      price sequence : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := price
+  let _ := sequence
+  0
+
+/--
 Write one u64 in a fixed-stride slot of an external account. `acc ≥ 1`, `baseWord`,
 `strideWords`, and `capacity` must be compile-time constants; only the zero-based `index` and
 `value` are dynamic. The SVM target requires the account to be writable and owned by the current

@@ -510,6 +510,82 @@ fn market_with_four_traders(
 }
 
 #[test]
+fn bounded_map_find_returns_one_based_index_or_zero() {
+    let trader_key = [
+        0x0706_0504_0302_0100,
+        0x1716_1514_1312_1110,
+        0x2726_2524_2322_2120,
+        0x3736_3534_3332_3130,
+    ];
+    let trader_market = market_with_first_trader(trader_key);
+    run_view_args(
+        "findTrader128",
+        &trader_key,
+        trader_market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    let mut missing_trader = trader_key;
+    missing_trader[3] ^= 1;
+    run_view_args(
+        "findTrader128",
+        &missing_trader,
+        trader_market.clone(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let bid_key = [55, !7u64];
+    let bid_market = run_market_write(
+        "insertBid512",
+        empty_small_market(),
+        true,
+        &[bid_key[0], bid_key[1], 3, 9, 0, 0],
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    run_view_args(
+        "findBid512",
+        &bid_key,
+        bid_market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    run_view_args(
+        "findBid512",
+        &[56, !7u64],
+        bid_market,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let ask_key = [44, 8];
+    let ask_market = run_market_write(
+        "insertAsk512",
+        empty_small_market(),
+        true,
+        &[ask_key[0], ask_key[1], 4, 10, 0, 0],
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    run_view_args(
+        "findAsk512",
+        &ask_key,
+        ask_market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    run_view_args(
+        "findAsk512",
+        &[44, 9],
+        ask_market,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let mut malformed = trader_market;
+    write_word(&mut malformed, 8314, packed_u32(1, 0));
+    run_view_args(
+        "findTrader128",
+        &trader_key,
+        malformed,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+}
+
+#[test]
 fn all_official_profiles_select_exact_account_size() {
     for (bids, asks, seats, expected) in OFFICIAL_PROFILES {
         let mut market = market_account(
