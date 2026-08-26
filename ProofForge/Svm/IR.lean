@@ -19,6 +19,9 @@ inductive Op where
       (data : Array (Ops.CpiWord Ops.Val))
       (seeds : Array Ops.PdaSeed := #[]) (bump : Option Ops.Val := none)
   | accDataWordSetAt (acc baseWord strideWords capacity : Nat) (index value : Ops.Val)
+  | accDataRbTreeKey4Insert
+      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+      (key0 key1 key2 key3 : Ops.Val)
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -45,6 +48,10 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.invoke programIx metas data seed bump)
   | .ext (.accDataWordSetAt acc baseWord strideWords capacity index value) =>
       pure (.accDataWordSetAt acc baseWord strideWords capacity index value)
+  | .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3) =>
+      pure (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3)
   | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSetLeaf name _ _ _ leaf =>
@@ -77,6 +84,10 @@ private partial def Op.toSource : Op → Ops.Op
   | .invoke programIx metas data seed bump => .ext (.invoke programIx metas data seed bump)
   | .accDataWordSetAt acc baseWord strideWords capacity index value =>
       .ext (.accDataWordSetAt acc baseWord strideWords capacity index value)
+  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3)
   | .forAccum n addend resultLocal => .forAccum n addend resultLocal
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
@@ -102,6 +113,10 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
       .invoke programIx metas (data.map (Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
   | .accDataWordSetAt acc baseWord strideWords capacity index value =>
       .accDataWordSetAt acc baseWord strideWords capacity (mapValue index) (mapValue value)
+  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .invoke _ _ data _ bump =>
@@ -109,6 +124,8 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
         | some value => #[value]
         | none => #[]
   | .accDataWordSetAt _ _ _ _ index value => #[index, value]
+  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -140,6 +157,11 @@ private def projectOpExt
   | .svm (.accDataWordSetAt acc baseWord strideWords capacity index value) =>
       return .accDataWordSetAt acc baseWord strideWords capacity
         (← projectVal index) (← projectVal value)
+  | .svm (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3) =>
+      return .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity (← projectVal key0) (← projectVal key1)
+          (← projectVal key2) (← projectVal key3)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
 
 /-- Static registration of the extractor-to-SVM projection. -/
@@ -588,6 +610,11 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .accDataWordSetAt acc baseWord strideWords capacity index value =>
         s!"dws.{acc}.{baseWord}.{strideWords}.{capacity}" ++
           s!"({valCanon index},{valCanon value})"
+    | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3 =>
+        s!"rb4i.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
+          s!"{strideWords}.{capacity}({valCanon key0},{valCanon key1}," ++
+          s!"{valCanon key2},{valCanon key3})"
     | .forAccum n addend resultLocal =>
         s!"for.{resultLocal}({n},{valCanon addend})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"

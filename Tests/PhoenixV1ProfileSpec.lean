@@ -333,6 +333,27 @@ private partial def countDataWordSetAt (ops : Array ProofForge.Svm.IR.Op) : Nat 
     | .forBody _ body => countDataWordSetAt body
     | _ => 0
 
+private partial def opsHaveRbTreeKey4Insert
+    (acc rootWord linksBase parentBase keyBase stride capacity : Nat)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .accDataRbTreeKey4Insert actualAcc actualRoot actualLinks actualParent actualKey
+         actualStride actualCapacity _ _ _ _ =>
+         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
+           actualParent == parentBase && actualKey == keyBase && actualStride == stride &&
+           actualCapacity == capacity
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRbTreeKey4Insert acc rootWord linksBase parentBase keyBase stride capacity
+              thenOps ||
+            opsHaveRbTreeKey4Insert acc rootWord linksBase parentBase keyBase stride capacity
+              elseOps
+      | .forBody _ body =>
+          opsHaveRbTreeKey4Insert acc rootWord linksBase parentBase keyBase stride capacity body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -380,6 +401,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing registerFourthTrader128"
   let some registerFifth := program.methods.find? (·.ixName == "registerFifthTrader128")
     | throwError "missing registerFifthTrader128"
+  let some registerGeneric := program.methods.find? (·.ixName == "registerTrader128")
+    | throwError "missing registerTrader128"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -482,8 +505,15 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveDataWordSetAt 1 8313 1 1 registerFifth.ops &&
       (List.range 18).all (fun offset =>
         opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerFifth.ops) &&
-      countDataWordSetAt registerFifth.ops == 27 do
+      countDataWordSetAt registerFifth.ops == 27 &&
+      opsHaveDataWord 1 8311 registerGeneric.ops &&
+      opsHaveRbTreeKey4Insert 1 8310 8314 8315 8316 18 128 registerGeneric.ops &&
+      countDataWordSetAt registerGeneric.ops == 0 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
+  let idl := ProofForge.Svm.Idl.emitProgramIdl program
+  unless idl.contains
+      "\"name\": \"registerTrader128\",\n      \"discriminator\": [90, 37, 2, 213, 222, 9, 17, 252],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
+    throwError "registerTrader128 IDL account must be writable"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm
@@ -508,7 +538,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "fixed-stride external account word write acc=1 base=8315 stride=18 capacity=128" &&
       asm.contains "fixed-stride external account word write acc=1 base=8331 stride=18 capacity=128" &&
       asm.contains "fixed-stride external account word write acc=1 base=8310 stride=1 capacity=1" &&
-      asm.contains "ownerIsSelf acc=1" && asm.contains "dws_failure_" do
+      asm.contains "ownerIsSelf acc=1" && asm.contains "dws_failure_" &&
+      asm.contains "bounded account-resident four-word-key RB insertion" &&
+      asm.contains "root=8310 links=8314 parent=8315 key4=8316 stride=18 capacity=128" &&
+      asm.contains "function_rb4i_" && asm.contains "_rotate_left" &&
+      asm.contains "_rotate_right" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
 #pf_guard_phoenix_v1_profile

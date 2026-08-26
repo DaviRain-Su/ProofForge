@@ -50,6 +50,18 @@ def rbTreeKey4WordsInRange
     indexedDataWordsInRange keyBaseWord strideWords capacity &&
     indexedDataWordsInRange (keyBaseWord + 3) strideWords capacity
 
+/-- Static geometry for a complete in-place four-word-key tree insertion. The whole node stride is
+addressable because allocation initializes every word, while a modest stride cap bounds generated
+stores. The four-word tree header must precede the node array. -/
+def rbTreeKey4InsertWordsInRange
+    (rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Bool :=
+  rbTreeKey4WordsInRange linksBaseWord parentBaseWord keyBaseWord strideWords capacity &&
+    strideWords ≤ 256 && rootWord + 3 < linksBaseWord &&
+    linksBaseWord ≤ parentBaseWord && parentBaseWord < linksBaseWord + strideWords &&
+    linksBaseWord ≤ keyBaseWord && keyBaseWord + 3 < linksBaseWord + strideWords &&
+    dataWordInRange (rootWord + 3) &&
+    indexedDataWordsInRange (linksBaseWord + strideWords - 1) strideWords capacity
+
 /-- Static non-bump bytes in one PDA signer group. -/
 inductive PdaSeed where
   | ascii (value : String)
@@ -169,6 +181,9 @@ inductive OpExt (V : Type) where
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord V))
       (seeds : Array PdaSeed := #[]) (bump : Option V := none)
   | accDataWordSetAt (acc baseWord strideWords capacity : Nat) (index value : V)
+  | accDataRbTreeKey4Insert
+      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+      (key0 key1 key2 key3 : V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -322,6 +337,13 @@ def OpExt.wellFormed : OpExt Val → Bool
         indexedDataWordsInRange baseWord strideWords capacity &&
         index.wellFormed ValKind.arity && value.wellFormed ValKind.arity &&
         staticPayloadsWellFormed index && staticPayloadsWellFormed value
+  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 =>
+      acc > 0 && accInRange acc &&
+        rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity &&
+        #[key0, key1, key2, key3].all fun key =>
+          key.wellFormed ValKind.arity && staticPayloadsWellFormed key
 
 private partial def opStaticPayloadsWellFormed : Op → Bool
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
@@ -342,6 +364,8 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
             bump.all staticPayloadsWellFormed
       | .accDataWordSetAt _ _ _ _ index value =>
           staticPayloadsWellFormed index && staticPayloadsWellFormed value
+      | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+          #[key0, key1, key2, key3].all staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
 def Op.wellFormed (op : Op) : Bool :=
@@ -450,7 +474,7 @@ private def OpExt.needsWalk : OpExt Val → Bool
       data.any CpiWord.needsWalk ||
         seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
         bump.any valNeedsWalk
-  | .accDataWordSetAt .. => true
+  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert .. => true
 
 private def OpExt.minAccounts : OpExt Val → Nat
   | .invoke _ _ data seeds bump =>
@@ -463,12 +487,17 @@ private def OpExt.minAccounts : OpExt Val → Nat
       Nat.max (Nat.max fromData fromSeeds) (bump.map valMinAccounts |>.getD 0)
   | .accDataWordSetAt acc _ _ _ index value =>
       Nat.max (acc + 1) (Nat.max (valMinAccounts index) (valMinAccounts value))
+  | .accDataRbTreeKey4Insert acc _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
+        Nat.max current (valMinAccounts key)
 
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
       data.any CpiWord.hasSelect || bump.any valHasSelect
   | .accDataWordSetAt _ _ _ _ index value =>
       valHasSelect index || valHasSelect value
+  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3].any valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=
   walkOps ops fun | .ext (.invoke ..) => true | _ => false

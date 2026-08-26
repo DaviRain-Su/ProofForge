@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 hex = "0.4"
+lib-sokoban = "=0.3.0"
 mollusk-svm = "0.13.4"
 mollusk-svm-programs-memo = "0.13.4"
 mollusk-svm-programs-token = "0.13.4"

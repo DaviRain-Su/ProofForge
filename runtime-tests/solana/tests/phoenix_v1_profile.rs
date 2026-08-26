@@ -1,8 +1,12 @@
 mod common;
 
 use {
-    mollusk_svm::result::Check, solana_account::Account, solana_instruction::AccountMeta,
-    solana_native_token::LAMPORTS_PER_SOL, solana_program_error::ProgramError,
+    mollusk_svm::result::Check,
+    sokoban::{FromSlice, NodeAllocatorMap, RedBlackTree, ZeroCopy},
+    solana_account::Account,
+    solana_instruction::AccountMeta,
+    solana_native_token::LAMPORTS_PER_SOL,
+    solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
 };
 
@@ -26,6 +30,49 @@ const PHOENIX_PROGRAM: Pubkey = Pubkey::new_from_array([
     13, 120, 199, 140, 143, 36, 144, 159, 45, 74, 23, 85, 191, 50, 60, 30, 241, 134, 34, 139, 58,
     179, 231, 224, 138, 152, 105, 153, 121, 58, 159, 22,
 ]);
+const TRADER_TREE_WORD: usize = 8310;
+type OfficialTraderTree = RedBlackTree<[u8; 32], [u64; 12], 128>;
+
+fn key_words_bytes(key: [u64; 4]) -> [u8; 32] {
+    let mut bytes = [0u8; 32];
+    for (index, word) in key.into_iter().enumerate() {
+        bytes[index * 8..index * 8 + 8].copy_from_slice(&word.to_le_bytes());
+    }
+    bytes
+}
+
+fn install_official_trader_tree(market: &mut Account, bytes: &[u8]) {
+    let offset = 8 * TRADER_TREE_WORD;
+    assert_eq!(bytes.len(), std::mem::size_of::<OfficialTraderTree>());
+    assert_eq!(market.data.len() - offset, bytes.len());
+    market.data[offset..].copy_from_slice(bytes);
+}
+
+fn assert_trader_tree_bytes_eq(actual: &[u8], expected: &[u8], insertion: usize) {
+    assert_eq!(actual.len(), expected.len());
+    if let Some(offset) = actual
+        .iter()
+        .zip(expected)
+        .position(|(actual, expected)| actual != expected)
+    {
+        let word = offset / 8;
+        let start = word * 8;
+        let differences: Vec<_> = actual
+            .iter()
+            .zip(expected)
+            .enumerate()
+            .filter(|(_, (actual, expected))| actual != expected)
+            .take(20)
+            .collect();
+        panic!(
+            "Sokoban bytes diverged after insertion {insertion}: byte {offset}, word {word}, actual={:02x?}, expected={:02x?}; actual header={:02x?}, expected header={:02x?}; first differences={differences:?}",
+            &actual[start..start + 8],
+            &expected[start..start + 8],
+            &actual[..32],
+            &expected[..32],
+        );
+    }
+}
 
 fn market_account(
     owner: Pubkey,
@@ -1824,6 +1871,152 @@ fn fifth_trader_registration_rejects_noncanonical_inputs_atomically() {
         malformed.clone(),
         true,
         &E,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
+}
+
+#[test]
+fn generic_trader_registration_matches_sokoban_through_capacity() {
+    assert_eq!(std::mem::size_of::<OfficialTraderTree>(), 18_464);
+    let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialTraderTree>()];
+    OfficialTraderTree::new_from_slice(&mut official_bytes);
+    let mut market = empty_small_market();
+
+    // Multiplication by an odd number permutes all 128 first-byte values. This exercises general
+    // recursive red-uncle repair and both rotation directions rather than an insertion-count case.
+    let keys: Vec<[u64; 4]> = (0u64..128)
+        .map(|index| [(index * 73) % 128, 0, 0, 0])
+        .collect();
+    for (index, key) in keys.iter().copied().enumerate() {
+        {
+            let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+                .expect("aligned official tree bytes");
+            assert_eq!(
+                official.insert(key_words_bytes(key), [0; 12]),
+                Some(index as u32 + 1)
+            );
+            assert!(official.is_valid_red_black_tree());
+        }
+        market = run_market_write(
+            "registerTrader128",
+            market,
+            true,
+            &key,
+            &[
+                Check::success(),
+                Check::return_data(&((index as u64) + 1).to_le_bytes()),
+            ],
+        );
+        assert_trader_tree_bytes_eq(
+            &market.data[8 * TRADER_TREE_WORD..],
+            official_bytes.as_slice(),
+            index + 1,
+        );
+    }
+
+    run_view(
+        "traderTreeValid",
+        market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    let before_full = market.clone();
+    let after_full = run_market_write(
+        "registerTrader128",
+        market.clone(),
+        true,
+        &[128, 0, 0, 0],
+        &[Check::err(ProgramError::Custom(0x1003))],
+    );
+    assert_eq!(after_full.data, before_full.data);
+
+    // Duplicate detection precedes the capacity check and never applies Sokoban's map-style
+    // replacement behavior to a registered TraderState.
+    let after_duplicate = run_market_write(
+        "registerTrader128",
+        market.clone(),
+        true,
+        &keys[37],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_duplicate.data, market.data);
+}
+
+#[test]
+fn generic_trader_registration_reuses_free_head_and_fails_atomically() {
+    let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialTraderTree>()];
+    OfficialTraderTree::new_from_slice(&mut official_bytes);
+    let keys: Vec<[u64; 4]> = (0u64..24)
+        .map(|index| [((index * 17) % 29) + 1, 0, 0, 0])
+        .collect();
+    {
+        let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official tree bytes");
+        for (index, key) in keys.iter().copied().enumerate() {
+            let mut state = [0u64; 12];
+            state[0] = 0x1000 + index as u64;
+            assert!(official.insert(key_words_bytes(key), state).is_some());
+        }
+        assert!(official.remove(&key_words_bytes(keys[7])).is_some());
+        assert!(official.is_valid_red_black_tree());
+    }
+    let mut market = empty_small_market();
+    install_official_trader_tree(&mut market, &official_bytes);
+    let before_reuse = market.clone();
+    let replacement = [0xfe, 0, 0, 0];
+    {
+        let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official tree bytes");
+        assert!(official
+            .insert(key_words_bytes(replacement), [0; 12])
+            .is_some());
+        assert!(official.is_valid_red_black_tree());
+    }
+    let reused = run_market_write(
+        "registerTrader128",
+        market,
+        true,
+        &replacement,
+        &[Check::success(), Check::return_data(&24u64.to_le_bytes())],
+    );
+    assert_trader_tree_bytes_eq(
+        &reused.data[8 * TRADER_TREE_WORD..],
+        official_bytes.as_slice(),
+        24,
+    );
+    // Free-list reuse leaves the bump boundary unchanged while consuming the free head.
+    assert_eq!(
+        read_word(&reused, 8313) & 0xffff_ffff,
+        read_word(&before_reuse, 8313) & 0xffff_ffff
+    );
+
+    let readonly = run_market_write(
+        "registerTrader128",
+        reused.clone(),
+        false,
+        &[0xff, 0, 0, 0],
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(readonly.data, reused.data);
+
+    let mut wrong_owner = reused.clone();
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "registerTrader128",
+        wrong_owner.clone(),
+        true,
+        &[0xff, 0, 0, 0],
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let mut malformed = reused;
+    write_word(&mut malformed, 8315, 7);
+    let after_malformed = run_market_write(
+        "registerTrader128",
+        malformed.clone(),
+        true,
+        &[0xff, 0, 0, 0],
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(after_malformed.data, malformed.data);

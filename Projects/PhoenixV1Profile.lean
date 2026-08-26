@@ -1011,6 +1011,27 @@ def registerFifthTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
   else
     .error .overflow
 
+/--
+Insert any distinct trader key into the smallest official Phoenix allocator through the generic
+bounded account-resident red-black insertion effect. Static geometry fixes the four-word Sokoban
+header and 128 complete 18-word slots. The effect validates the whole current tree/free partition,
+then applies general search, bump/free-list allocation, and insertion fixup in place. It zeroes the
+entire allocated slot before publishing the new key, so TraderState starts canonical without a
+heap node, Map, persistent pointer, or count-specific topology case.
+-/
+@[pf_entry]
+def registerTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error (State × UInt64) :=
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 8311 = 0 then
+    let size := accDataWord 1 8312
+    let _ := accDataRbTreeKey4Insert 1 8310 8314 8315 8316 18 128
+      key0 key1 key2 key3
+    .ok ({ s with dummy := 0 }, size)
+  else
+    .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=

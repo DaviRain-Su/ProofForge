@@ -666,6 +666,32 @@ and occurs before this write. This is persistent account storage, not transient 
   0
 
 /--
+Insert one dynamic four-word key into a statically shaped, account-resident red-black tree. The
+tree header is four words (`root`, padding, `size`, packed bump/free cursor); node links,
+parent/color, key, stride, and capacity are compile-time constants. The SVM target first requires
+the external account to be writable and current-program-owned, then validates the complete tree
+and allocator partition before checking duplicate/full conditions. It performs bounded in-place
+search, Sokoban bump/free-list allocation, complete slot initialization, and general insertion
+fixup. Persistent state contains only one-based addresses and the zero sentinel; no heap, Map,
+node copy, raw pointer, or detached allocation is exposed.
+-/
+@[irreducible] def accDataRbTreeKey4Insert
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  0
+
+/--
 沿账户内 fixed-stride 节点的 parent 链验证一条有界路径。静态参数指定 links word、
 parent/color word、stride、capacity 和最多 64 步；运行时只提供起点、root 和 allocator
 `bumpIndex`。目标发射器逐步验证 index envelope、颜色、parent→child reciprocity，并要求

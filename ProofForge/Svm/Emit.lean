@@ -188,6 +188,8 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
               (match bump with | some v => valSignerAccs v | none => #[])
         | .accDataWordSetAt _ _ _ _ index value =>
             valSignerAccs index ++ valSignerAccs value
+        | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+            #[key0, key1, key2, key3].flatMap valSignerAccs
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -2152,6 +2154,8 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
               (match bump with | some v => valUsesSigner v | none => false)
       | .accDataWordSetAt _ _ _ _ index value =>
           valUsesSigner index || valUsesSigner value
+      | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+          #[key0, key1, key2, key3].any valUsesSigner
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -2504,6 +2508,819 @@ private def emitAccDataWordSetAt (p : IR.Program) (label : String)
 {done}:
 "
 
+/-- Insert into a complete account-resident Sokoban red-black tree. Validation and every
+duplicate/full check precede the first store. The insertion search and fixup retain only bounded
+scalar indexes; the two local rotation helpers receive the account-data pointer and one-based
+indexes, and never expose pointers to persistent state. -/
+private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Ops.Val) : Except String String := do
+  let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
+  let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
+  let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
+  let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+  let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
+  let validate ← emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
+    keyBaseWord strideWords capacity
+    (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
+    (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
+    (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+    40 4 s!"{label}_preflight"
+  let strideBytes := 8 * strideWords
+  let linksBaseBytes := 8 * linksBaseWord
+  let parentBaseBytes := 8 * parentBaseWord
+  let keyBaseBytes := 8 * keyBaseWord
+  let rootBytes := 8 * rootWord
+  let finalWord := linksBaseWord + strideWords - 1 + strideWords * (capacity - 1)
+  let requiredBytes := 8 * (Nat.max (rootWord + 3) finalWord + 1)
+  let keyRelativeBytes := keyBaseBytes - linksBaseBytes
+  let parentRelativeBytes := parentBaseBytes - linksBaseBytes
+  let clearNode := (List.range strideWords).foldl (init := "") fun text i =>
+    text ++ s!"  stxdw [r9 + {8 * i}], r1\n"
+  let token := IR.u64Hex (Core.IR.fnv1a64
+    (s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+      s!"{strideWords}:{capacity}"))
+  let tag := s!"rb4i_{token}"
+  let authFailure := tag ++ "_auth_failure"
+  let failure := tag ++ "_failure"
+  let full := tag ++ "_full"
+  let dataOk := tag ++ "_data_ok"
+  let searchLoop := tag ++ "_search_loop"
+  let searchBefore := tag ++ "_search_before"
+  let searchAfter := tag ++ "_search_after"
+  let searchNext := tag ++ "_search_next"
+  let searchDone := tag ++ "_search_done"
+  let freePath := tag ++ "_free_path"
+  let allocated := tag ++ "_allocated"
+  let attachRight := tag ++ "_attach_right"
+  let attached := tag ++ "_attached"
+  let firstRoot := tag ++ "_first_root"
+  let fixLoop := tag ++ "_fix_loop"
+  let fixLeft := tag ++ "_fix_left"
+  let fixRight := tag ++ "_fix_right"
+  let leftBlackUncle := tag ++ "_left_black_uncle"
+  let rightBlackUncle := tag ++ "_right_black_uncle"
+  let leftAligned := tag ++ "_left_aligned"
+  let rightAligned := tag ++ "_right_aligned"
+  let fixDone := tag ++ "_fix_done"
+  let publish := tag ++ "_publish"
+  let helpersDone := tag ++ "_helpers_done"
+  let rotateLeft := "function_" ++ tag ++ "_rotate_left"
+  let rotateRight := "function_" ++ tag ++ "_rotate_right"
+  let leftHasGrand := tag ++ "_rotl_has_grand"
+  let leftGrandRight := tag ++ "_rotl_grand_right"
+  let leftGrandDone := tag ++ "_rotl_grand_done"
+  let leftNoChild := tag ++ "_rotl_no_child"
+  let rightHasGrand := tag ++ "_rotr_has_grand"
+  let rightGrandRight := tag ++ "_rotr_grand_right"
+  let rightGrandDone := tag ++ "_rotr_grand_done"
+  let rightNoChild := tag ++ "_rotr_no_child"
+  let rotationHelpers := s!"\
+{rotateLeft}:
+  ; args: r1=data, r2=x, r3=root; result: r0=new root
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  ; Save x's old parent before connecting the pivot.
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  ; y links pointer and beta=y.left.
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  ; y.left=x.
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ; x.right=beta.
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  lsh64 r1, 32
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ; x.parent=y, preserving x color.
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ; beta.parent=x when beta is non-sentinel.
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {leftNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftNoChild}:
+  ; y.parent=old grandparent, preserving y color.
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {leftHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {leftGrandDone}
+{leftHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {leftGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {leftGrandDone}
+{leftGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{leftGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
+
+{rotateRight}:
+  ; symmetric right rotation
+  stxdw [r10 - 8], r1
+  stxdw [r10 - 16], r2
+  stxdw [r10 - 24], r3
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 32], r5
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r4
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 40], r4
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  lsh64 r4, 32
+  rsh64 r4, 32
+  stxdw [r10 - 48], r4
+  ; y links pointer and beta=y.right.
+  sub64 r4, 1
+  lddw r5, {strideBytes}
+  mul64 r4, r5
+  ldxdw r1, [r10 - 8]
+  mov64 r5, r1
+  add64 r5, {linksBaseBytes}
+  add64 r5, r4
+  stxdw [r10 - 56], r5
+  ldxdw r4, [r5 + 0]
+  mov64 r1, r4
+  rsh64 r1, 32
+  stxdw [r10 - 64], r1
+  ; y.right=x.
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r2, [r10 - 16]
+  lsh64 r2, 32
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  ; x.left=beta.
+  ldxdw r5, [r10 - 32]
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r1, [r10 - 64]
+  or64 r4, r1
+  stxdw [r5 + 0], r4
+  ; x.parent=y, preserving x color.
+  ldxdw r1, [r10 - 8]
+  ldxdw r2, [r10 - 16]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ; beta.parent=x when beta is non-sentinel.
+  ldxdw r2, [r10 - 64]
+  jeq r2, 0, {rightNoChild}
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {parentBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 16]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightNoChild}:
+  ; y.parent=old grandparent, preserving y color.
+  ldxdw r2, [r10 - 48]
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  mov64 r5, r1
+  add64 r5, {parentBaseBytes}
+  add64 r5, r2
+  ldxdw r4, [r5 + 0]
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r2, [r10 - 40]
+  or64 r4, r2
+  stxdw [r5 + 0], r4
+  jne r2, 0, {rightHasGrand}
+  ldxdw r2, [r10 - 48]
+  stxdw [r10 - 24], r2
+  ja {rightGrandDone}
+{rightHasGrand}:
+  sub64 r2, 1
+  lddw r4, {strideBytes}
+  mul64 r2, r4
+  add64 r2, {linksBaseBytes}
+  add64 r2, r1
+  ldxdw r4, [r2 + 0]
+  mov64 r5, r4
+  lsh64 r5, 32
+  rsh64 r5, 32
+  ldxdw r3, [r10 - 16]
+  jne r5, r3, {rightGrandRight}
+  rsh64 r4, 32
+  lsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+  ja {rightGrandDone}
+{rightGrandRight}:
+  lsh64 r4, 32
+  rsh64 r4, 32
+  ldxdw r5, [r10 - 48]
+  lsh64 r5, 32
+  or64 r4, r5
+  stxdw [r2 + 0], r4
+{rightGrandDone}:
+  ldxdw r0, [r10 - 24]
+  exit
+"
+  return loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3 ++ ownerCheck ++ s!"\
+  ; bounded account-resident four-word-key RB insertion
+  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} key4={keyBaseWord} stride={strideWords} capacity={capacity}
+  ldxdw r1, [r10 - 216]
+  jne r1, 0, {authFailure}
+  ldxdw r8, [r10 - {headerStack acc}]
+  ldxb r1, [r8 + 2]
+  jeq r1, 0, {authFailure}
+  ldxdw r1, [r8 + 80]
+  lddw r2, {requiredBytes}
+  jge r1, r2, {dataOk}
+  ja {authFailure}
+{dataOk}:
+" ++ validate ++ s!"\
+  ldxdw r1, [r10 - 40]
+  jeq r1, 0, {failure}
+  ldxdw r8, [r10 - {headerStack acc}]
+  add64 r8, 88
+  stxdw [r10 - 248], r8
+  mov64 r9, r8
+  lddw r1, {rootBytes}
+  add64 r9, r1
+  ldxdw r1, [r9 + 0]
+  stxdw [r10 - 216], r1
+  ldxdw r1, [r9 + 16]
+  stxdw [r10 - 224], r1
+  ldxdw r1, [r9 + 24]
+  mov64 r2, r1
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 232], r2
+  rsh64 r1, 32
+  stxdw [r10 - 240], r1
+  ldxdw r1, [r10 - 216]
+  stxdw [r10 - 256], r1
+  lddw r1, 0
+  stxdw [r10 - 264], r1
+  stxdw [r10 - 272], r1
+  stxdw [r10 - 296], r1
+{searchLoop}:
+  ldxdw r2, [r10 - 256]
+  jeq r2, 0, {searchDone}
+  ldxdw r1, [r10 - 296]
+  lddw r3, {rbTreeKey4TraversalDepth}
+  jge r1, r3, {failure}
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {linksBaseBytes}
+  add64 r9, r4
+  add64 r8, {keyBaseBytes}
+  add64 r8, r4
+  ldxdw r1, [r10 - 8]
+  be64 r1
+  ldxdw r3, [r8 + 0]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  be64 r1
+  ldxdw r3, [r8 + 8]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 24]
+  be64 r1
+  ldxdw r3, [r8 + 16]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 32]
+  be64 r1
+  ldxdw r3, [r8 + 24]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ; Duplicate registrations fail instead of replacing TraderState.
+  ja {failure}
+{searchBefore}:
+  lddw r1, 0
+  stxdw [r10 - 272], r1
+  ldxdw r1, [r9 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  ja {searchNext}
+{searchAfter}:
+  lddw r1, 1
+  stxdw [r10 - 272], r1
+  ldxdw r1, [r9 + 0]
+  rsh64 r1, 32
+{searchNext}:
+  stxdw [r10 - 264], r2
+  stxdw [r10 - 256], r1
+  ldxdw r1, [r10 - 296]
+  add64 r1, 1
+  stxdw [r10 - 296], r1
+  ja {searchLoop}
+{searchDone}:
+  ldxdw r1, [r10 - 224]
+  lddw r2, {capacity}
+  jge r1, r2, {full}
+  ldxdw r1, [r10 - 240]
+  ldxdw r2, [r10 - 232]
+  jne r1, r2, {freePath}
+  stxdw [r10 - 280], r2
+  add64 r2, 1
+  stxdw [r10 - 232], r2
+  stxdw [r10 - 240], r2
+  ja {allocated}
+{freePath}:
+  stxdw [r10 - 280], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 240], r1
+{allocated}:
+  ; Fully initialize the allocated slot before linking it into the tree.
+  ldxdw r2, [r10 - 280]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {linksBaseBytes}
+  add64 r9, r2
+  lddw r1, 0
+{clearNode}  ldxdw r1, [r10 - 8]
+  stxdw [r9 + {keyRelativeBytes}], r1
+  ldxdw r1, [r10 - 16]
+  stxdw [r9 + {keyRelativeBytes + 8}], r1
+  ldxdw r1, [r10 - 24]
+  stxdw [r9 + {keyRelativeBytes + 16}], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r9 + {keyRelativeBytes + 24}], r1
+  ldxdw r1, [r10 - 264]
+  lddw r3, 1
+  lsh64 r3, 32
+  or64 r1, r3
+  stxdw [r9 + {parentRelativeBytes}], r1
+  ldxdw r1, [r10 - 264]
+  jeq r1, 0, {firstRoot}
+  sub64 r1, 1
+  lddw r3, {strideBytes}
+  mul64 r1, r3
+  add64 r8, {linksBaseBytes}
+  add64 r8, r1
+  ldxdw r3, [r8 + 0]
+  ldxdw r1, [r10 - 272]
+  jne r1, 0, {attachRight}
+  rsh64 r3, 32
+  lsh64 r3, 32
+  ldxdw r1, [r10 - 280]
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+  ja {attached}
+{attachRight}:
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 280]
+  lsh64 r1, 32
+  or64 r3, r1
+  stxdw [r8 + 0], r3
+{attached}:
+  ldxdw r1, [r10 - 280]
+  stxdw [r10 - 256], r1
+  lddw r1, 0
+  stxdw [r10 - 296], r1
+  ja {fixLoop}
+{firstRoot}:
+  ldxdw r1, [r10 - 280]
+  stxdw [r10 - 216], r1
+  lddw r1, 0
+  stxdw [r9 + {parentRelativeBytes}], r1
+  ja {publish}
+{fixLoop}:
+  ldxdw r1, [r10 - 296]
+  lddw r2, {rbTreeKey4TraversalDepth}
+  jge r1, r2, {failure}
+  add64 r1, 1
+  stxdw [r10 - 296], r1
+  ; parent and color of z
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  mov64 r1, r3
+  lsh64 r1, 32
+  rsh64 r1, 32
+  jeq r1, 0, {fixDone}
+  stxdw [r10 - 264], r1
+  ; Continue only when parent p is red, then load its parent g.
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  mov64 r9, r8
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r3, [r9 + 0]
+  mov64 r4, r3
+  rsh64 r4, 32
+  jeq r4, 0, {fixDone}
+  lsh64 r3, 32
+  rsh64 r3, 32
+  jeq r3, 0, {fixDone}
+  stxdw [r10 - 288], r3
+  ; Determine whether p is grandparent.left.
+  sub64 r3, 1
+  lddw r4, {strideBytes}
+  mul64 r3, r4
+  add64 r8, {linksBaseBytes}
+  add64 r8, r3
+  ldxdw r4, [r8 + 0]
+  mov64 r2, r4
+  lsh64 r2, 32
+  rsh64 r2, 32
+  ldxdw r1, [r10 - 264]
+  jeq r1, r2, {fixLeft}
+  ja {fixRight}
+{fixLeft}:
+  ; Uncle is grandparent.right. Sentinel color is black.
+  rsh64 r4, 32
+  jeq r4, 0, {leftBlackUncle}
+  mov64 r2, r4
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r3, [r9 + 0]
+  rsh64 r3, 32
+  jeq r3, 0, {leftBlackUncle}
+  ; Red uncle: p and uncle black, grandparent red, then continue at grandparent.
+  ldxdw r1, [r10 - 288]
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  stxdw [r8 + 0], r1
+  stxdw [r9 + 0], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r2, 1
+  lsh64 r2, 32
+  or64 r3, r2
+  stxdw [r8 + 0], r3
+  stxdw [r10 - 256], r1
+  ja {fixLoop}
+{leftBlackUncle}:
+  ; Inner child: rotate p left and continue with z=old p.
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 256]
+  jne r1, r3, {leftAligned}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 264]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 264]
+  stxdw [r10 - 256], r1
+{leftAligned}:
+  ; Recompute p/g, recolor, and rotate g right.
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 264], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 288], r2
+  ; p becomes black while retaining g as its parent.
+  stxdw [r8 + 0], r2
+  ; g becomes red while retaining its own parent.
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r2, [r9 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  lddw r3, 1
+  lsh64 r3, 32
+  or64 r2, r3
+  stxdw [r9 + 0], r2
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 288]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+  ja {fixLoop}
+{fixRight}:
+  ; Uncle is grandparent.left. Sentinel color is black.
+  lsh64 r4, 32
+  rsh64 r4, 32
+  jeq r4, 0, {rightBlackUncle}
+  mov64 r2, r4
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r3, [r9 + 0]
+  rsh64 r3, 32
+  jeq r3, 0, {rightBlackUncle}
+  ldxdw r1, [r10 - 288]
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  stxdw [r8 + 0], r1
+  stxdw [r9 + 0], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  lddw r2, 1
+  lsh64 r2, 32
+  or64 r3, r2
+  stxdw [r8 + 0], r3
+  stxdw [r10 - 256], r1
+  ja {fixLoop}
+{rightBlackUncle}:
+  ; Inner child: rotate p right and continue with z=old p.
+  ldxdw r2, [r10 - 264]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {linksBaseBytes}
+  add64 r8, r2
+  ldxdw r3, [r8 + 0]
+  lsh64 r3, 32
+  rsh64 r3, 32
+  ldxdw r1, [r10 - 256]
+  jne r1, r3, {rightAligned}
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 264]
+  ldxdw r3, [r10 - 216]
+  call {rotateRight}
+  stxdw [r10 - 216], r0
+  ldxdw r1, [r10 - 264]
+  stxdw [r10 - 256], r1
+{rightAligned}:
+  ; Recompute p/g, recolor, and rotate g left.
+  ldxdw r2, [r10 - 256]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r1, [r8 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  stxdw [r10 - 264], r1
+  mov64 r2, r1
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  ldxdw r2, [r8 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  stxdw [r10 - 288], r2
+  ; p becomes black while retaining g as its parent.
+  stxdw [r8 + 0], r2
+  ; g becomes red while retaining its own parent.
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r9, [r10 - 248]
+  add64 r9, {parentBaseBytes}
+  add64 r9, r2
+  ldxdw r2, [r9 + 0]
+  lsh64 r2, 32
+  rsh64 r2, 32
+  lddw r3, 1
+  lsh64 r3, 32
+  or64 r2, r3
+  stxdw [r9 + 0], r2
+  ldxdw r1, [r10 - 248]
+  ldxdw r2, [r10 - 288]
+  ldxdw r3, [r10 - 216]
+  call {rotateLeft}
+  stxdw [r10 - 216], r0
+  ja {fixLoop}
+{fixDone}:
+  ; Root parent/color is always the packed black sentinel.
+  ldxdw r2, [r10 - 216]
+  sub64 r2, 1
+  lddw r3, {strideBytes}
+  mul64 r2, r3
+  ldxdw r8, [r10 - 248]
+  add64 r8, {parentBaseBytes}
+  add64 r8, r2
+  lddw r1, 0
+  stxdw [r8 + 0], r1
+{publish}:
+  ldxdw r8, [r10 - 248]
+  lddw r1, {rootBytes}
+  add64 r8, r1
+  ldxdw r1, [r10 - 216]
+  stxdw [r8 + 0], r1
+  ldxdw r1, [r10 - 224]
+  add64 r1, 1
+  stxdw [r8 + 16], r1
+  ldxdw r1, [r10 - 240]
+  lsh64 r1, 32
+  ldxdw r2, [r10 - 232]
+  or64 r1, r2
+  stxdw [r8 + 24], r1
+  ja {helpersDone}
+{authFailure}:
+  lddw r0, 0x1
+  exit
+{failure}:
+  lddw r0, {overflowCode}
+  exit
+{full}:
+  lddw r0, 0x1003
+  exit
+" ++ rotationHelpers ++ s!"{helpersDone}:\n"
+
 private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
     Except String String := do
   let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
@@ -2824,6 +3641,12 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       n := n + 1
       acc := acc ++
         (← emitAccDataWordSetAt p writeLabel account baseWord strideWords capacity index value)
+    | .accDataRbTreeKey4Insert account rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3 =>
+      let insertLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++ (← emitAccDataRbTreeKey4Insert p insertLabel account rootWord
+        linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)
     | .errorNamed name =>
       let code :=
         match name with

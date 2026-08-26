@@ -2539,6 +2539,9 @@ private abbrev DecodedInvoke :=
 private abbrev DecodedAccDataWordSetAt :=
   Nat × Nat × Nat × Nat × Ops.Val × Ops.Val
 
+private abbrev DecodedAccDataRbTreeKey4Insert :=
+  Nat × Nat × Nat × Nat × Nat × Nat × Nat × Ops.Val × Ops.Val × Ops.Val × Ops.Val
+
 /-- Extracted static program, metas, data, non-bump signer seeds, and optional bump. -/
 private def decodeInvokeArgs (env : Environment) (e : Expr) :
     Option DecodedInvoke :=
@@ -2651,16 +2654,59 @@ private def findAccDataWordSetAt (env : Environment) (fuel : Nat) (e : Expr) :
               findAccDataWordSetAt env fuel' fn <|> findAccDataWordSetAt env fuel' arg
           | _ => none
 
-/-- Distinguish an absent external-account write from one whose static shape or dynamic value
-failed to decode. Such a call is an effect and must fail extraction rather than disappear. -/
-private def mentionsAccDataWordSetAt (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
-  if e.getUsedConstantsAsSet.contains ``ProofForge.Svm.Runtime.accDataWordSetAt then true
+private def decodeAccDataRbTreeKey4Insert (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeKey4Insert :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert &&
+      e.getAppArgs.size ≥ 11 then
+    let args := e.getAppArgs
+    match val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]! >>= natOfVal,
+        val env args[args.size - 5]! >>= natOfVal,
+        val env args[args.size - 4]!, val env args[args.size - 3]!,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some strideWords, some capacity, some key0, some key1, some key2, some key3 =>
+        some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+          capacity, key0, key1, key2, key3)
+    | _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeKey4Insert (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeKey4Insert :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeKey4Insert env e with
+      | some insert => some insert
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeKey4Insert env fuel' value <|>
+                findAccDataRbTreeKey4Insert env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeKey4Insert env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeKey4Insert env fuel' fn <|>
+                findAccDataRbTreeKey4Insert env fuel' arg
+          | _ => none
+
+/-- Distinguish an absent external-account effect from one whose static shape or dynamic value
+failed to decode. Such a call must fail extraction rather than disappear. -/
+private def mentionsSvmAccountEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
+  let constants := e.getUsedConstantsAsSet
+  if constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAt ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert then true
   else
     match fuel with
     | 0 => false
     | fuel' + 1 =>
         match unfoldUserHelper env e with
-        | some (_, unfolded) => mentionsAccDataWordSetAt env fuel' unfolded
+        | some (_, unfolded) => mentionsSvmAccountEffect env fuel' unfolded
         | none => false
 
 /-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
@@ -2700,7 +2746,7 @@ private def substLetsPreservingInvokes (env : Environment) (fuel : Nat) (e : Exp
         (ty.consumeMData.getAppFn.constName?.map (isUserType env)).getD false &&
           ((unfoldUserHelper env value).isSome || (userCtorFields env value).isSome ||
             isIteExpr value)
-      if (findInvoke env 16 value).isSome || mentionsAccDataWordSetAt env 16 value ||
+      if (findInvoke env 16 value).isSome || mentionsSvmAccountEffect env 16 value ||
           structuredState || scalarBinding then
         .letE n ty value body nd
       else substLetsPreservingInvokes env fuel' (body.instantiate1 value)
@@ -2727,6 +2773,12 @@ private def accDataWordSetAtOp (write : DecodedAccDataWordSetAt) : Ops.Op :=
   let (acc, baseWord, strideWords, capacity, index, value) := write
   .accDataWordSetAt acc baseWord strideWords capacity index value
 
+private def accDataRbTreeKey4InsertOp (insert : DecodedAccDataRbTreeKey4Insert) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+    capacity, key0, key1, key2, key3) := insert
+  .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
+    capacity key0 key1 key2 key3
+
 /-- Preserve consecutive ignored SVM effects before decoding their state/return continuation.
 The final flag reports an external-account write that was present but could not be decoded. -/
 private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × Expr × Bool :=
@@ -2739,14 +2791,18 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
           if body.hasLooseBVar 0 then
             match asPdaSeeds value with
             | some _ => go fuel' (body.instantiate1 value) effects
-            | none => (effects, e, mentionsAccDataWordSetAt env 16 value)
+            | none => (effects, e, mentionsSvmAccountEffect env 16 value)
           else
-            match findInvoke env 16 value, findAccDataWordSetAt env 16 value with
-            | some invoke, _ =>
+            match findInvoke env 16 value, findAccDataWordSetAt env 16 value,
+                findAccDataRbTreeKey4Insert env 16 value with
+            | some invoke, _, _ =>
                 go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
-            | none, some write =>
+            | none, some write, _ =>
                 go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
-            | none, none => (effects, e, mentionsAccDataWordSetAt env 16 value)
+            | none, none, some insert =>
+                go fuel' (body.instantiate1 value)
+                  (effects.push (accDataRbTreeKey4InsertOp insert))
+            | none, none, none => (effects, e, mentionsSvmAccountEffect env 16 value)
       | _ => (effects, e, false)
   go 32 e #[]
 
@@ -3590,7 +3646,7 @@ private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr 
     match strip e with
     | .letE _ _ value body _ =>
         let effectful :=
-          (findInvoke env 16 value).isSome || mentionsAccDataWordSetAt env 16 value ||
+          (findInvoke env 16 value).isSome || mentionsSvmAccountEffect env 16 value ||
             (decodeEvmEffect env value).isSome ||
             (findForIn env value).isSome || (findForBodyExpr env value).isSome
         -- A scalar captured before a CPI must remain a local: substituting its state-field read
@@ -4400,7 +4456,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     match strip e with
     | .letE _ ty value body _ =>
       let effectful :=
-        (findInvoke env 16 value).isSome || mentionsAccDataWordSetAt env 16 value ||
+        (findInvoke env 16 value).isSome || mentionsSvmAccountEffect env 16 value ||
           (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       if !effectful then
@@ -4614,7 +4670,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               | 0 => false
               | fuel' + 1 => ops.any fun op =>
                   match op with
-                  | .accDataWordSetAt .. => true
+                  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert .. => true
                   | .ite _ _ _ nestedThen nestedElse =>
                       hasAccDataWrite fuel' nestedThen || hasAccDataWrite fuel' nestedElse
                   | .forBody _ body => hasAccDataWrite fuel' body
@@ -5257,6 +5313,11 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accDataWordSetAt acc baseWord strideWords capacity index value =>
           .accDataWordSetAt acc baseWord strideWords capacity
             (flipVal fuel' index) (flipVal fuel' value)
+      | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity key0 key1 key2 key3 =>
+          .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+            strideWords capacity (flipVal fuel' key0) (flipVal fuel' key1)
+              (flipVal fuel' key2) (flipVal fuel' key3)
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
@@ -5533,6 +5594,8 @@ private def opFields : Ops.Op → Array String
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
   | .accDataWordSetAt _ _ _ _ index value => valFields index ++ valFields value
+  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+      valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v
@@ -5642,6 +5705,11 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
       | .accDataWordSetAt acc baseWord strideWords capacity index value =>
           return .accDataWordSetAt acc baseWord strideWords capacity
             (← normalizeVal index) (← normalizeVal value)
+      | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity key0 key1 key2 key3 =>
+          return .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+            strideWords capacity (← normalizeVal key0) (← normalizeVal key1)
+              (← normalizeVal key2) (← normalizeVal key3)
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmSendEth a b c d =>
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
@@ -5727,6 +5795,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
         bump.bind (valEscapedArg limit)
   | .accDataWordSetAt _ _ _ _ index value =>
       #[index, value].findSome? (valEscapedArg limit)
+  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
+      #[key0, key1, key2, key3].findSome? (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
   | .forBody _ body => body.findSome? (opEscapedArg limit)

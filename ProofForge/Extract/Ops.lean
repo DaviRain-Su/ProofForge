@@ -107,6 +107,11 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.accDataWordSetAt
     (acc baseWord strideWords capacity : Nat) (index value : Val) : Op :=
   .ext (.svm (.accDataWordSetAt acc baseWord strideWords capacity index value))
+@[match_pattern] def Op.accDataRbTreeKey4Insert
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Val) : Op :=
+  .ext (.svm (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity key0 key1 key2 key3))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.deposit amount))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=
@@ -192,6 +197,8 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .accDataWordSetAt _ _ _ _ index value => predicate index || predicate value
+  | .ext (.svm (.accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3)) =>
+      #[key0, key1, key2, key3].any predicate
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
   | .mapGetU64 base key => #[base, key].any predicate
