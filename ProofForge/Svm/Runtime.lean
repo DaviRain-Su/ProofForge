@@ -679,6 +679,28 @@ Map，不复制节点；短账户在形成 data pointer 前 `Custom(1)`。
   0
 
 /--
+直接在账户数据中验证以四个连续 u64 存放 32-byte key 的 fixed-capacity red-black tree。
+key 按原始 unsigned bytes 做 strict lexicographic ascending 比较；目标发射器用固定
+8321-bit bitmap 和 64-entry traversal stack，不分配 heap/Map，不复制节点。除 red-black
+结构和 key ordering 外，它还验证 reachable live count 以及 allocator 的 exact live/free
+partition。
+-/
+@[irreducible] def accDataRbTreeKey4Valid
+    (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      root size bumpIndex freeListHead : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := root
+  let _ := size
+  let _ := bumpIndex
+  let _ := freeListHead
+  0
+
+/--
 账户 `acc` 的 lamports。`acc` 必须在抽出时是常量，且
 `acc < Svm.ABI.maxTxAccountLocks`（官方当前强制 64）。
 `acc ≥ 1` 走 walk。旧名 `accLamports0` / `accLamports1` 仍独立。

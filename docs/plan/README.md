@@ -89,6 +89,9 @@
 | [l5-012](tasks/l5-012.md) | done | Phoenix-v1 constant-memory bid-root child reciprocity/order gate |
 | [l5-013](tasks/l5-013.md) | done | Phoenix-v1 verifier Surfpool Loader-v3 transaction deployment |
 | [l5-014](tasks/l5-014.md) | done | Phoenix-v1 bounded parent-path reciprocity/cycle gate |
+| [l5-015](tasks/l5-015.md) | done | Phoenix-v1 fixed-memory whole bid tree + allocator partition |
+| [l5-016](tasks/l5-016.md) | done | Phoenix-v1 complete ask tree + ascending FIFO ordering |
+| [l5-017](tasks/l5-017.md) | done | Phoenix-v1 complete trader tree + 32-byte Pubkey ordering |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

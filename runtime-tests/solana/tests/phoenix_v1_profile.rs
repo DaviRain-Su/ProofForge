@@ -97,6 +97,30 @@ fn write_free_order_slot(account: &mut Account, tree_root_word: usize, index: us
     write_word(account, slot_word, u64::from(next));
 }
 
+fn write_trader_node(
+    account: &mut Account,
+    tree_root_word: usize,
+    index: usize,
+    left: u32,
+    right: u32,
+    parent: u32,
+    color: u32,
+    key: [u8; 32],
+) {
+    assert!(index > 0);
+    let slot_word = tree_root_word + 4 + 18 * (index - 1);
+    write_word(account, slot_word, packed_u32(left, right));
+    write_word(account, slot_word + 1, packed_u32(parent, color));
+    let key_offset = 8 * (slot_word + 2);
+    account.data[key_offset..key_offset + 32].copy_from_slice(&key);
+}
+
+fn write_free_trader_slot(account: &mut Account, tree_root_word: usize, index: usize, next: u32) {
+    assert!(index > 0);
+    let slot_word = tree_root_word + 4 + 18 * (index - 1);
+    write_word(account, slot_word, u64::from(next));
+}
+
 fn write_perfect_bid_tree(
     account: &mut Account,
     tree_root_word: usize,
@@ -164,6 +188,40 @@ fn write_perfect_ask_tree(
     }
 }
 
+fn write_perfect_trader_tree(
+    account: &mut Account,
+    tree_root_word: usize,
+    index: u32,
+    last_index: u32,
+    parent: u32,
+    rank: &mut u64,
+) {
+    let left = index.checked_mul(2).filter(|child| *child <= last_index);
+    let right = index
+        .checked_mul(2)
+        .and_then(|child| child.checked_add(1))
+        .filter(|child| *child <= last_index);
+    if let Some(left) = left {
+        write_perfect_trader_tree(account, tree_root_word, left, last_index, index, rank);
+    }
+    *rank += 1;
+    let mut key = [0u8; 32];
+    key[24..32].copy_from_slice(&rank.to_be_bytes());
+    write_trader_node(
+        account,
+        tree_root_word,
+        index as usize,
+        left.unwrap_or(0),
+        right.unwrap_or(0),
+        parent,
+        0,
+        key,
+    );
+    if let Some(right) = right {
+        write_perfect_trader_tree(account, tree_root_word, right, last_index, index, rank);
+    }
+}
+
 fn body_count_words(book_capacity: u64) -> (usize, usize) {
     match book_capacity {
         512 => (4212, 8312),
@@ -219,13 +277,23 @@ fn all_official_profiles_select_exact_account_size() {
         );
         let (ask_count_word, trader_count_word) = body_count_words(bids);
         let (ask_root_word, trader_root_word) = tree_root_words(bids);
+        let mut trader_left = [0u8; 32];
+        trader_left[0] = 1;
+        trader_left[1] = 255;
+        let mut trader_root = [0u8; 32];
+        trader_root[0] = 2;
+        let mut trader_right = [0u8; 32];
+        trader_right[0] = 3;
         write_word(&mut market, 106, 777);
         write_allocator_header(&mut market, 110, 1, 1, 2, 2);
         write_allocator_header(&mut market, ask_root_word, 2, 1, 3, 3);
-        write_allocator_header(&mut market, trader_root_word, 3, 1, 4, 4);
+        write_allocator_header(&mut market, trader_root_word, 3, 2, 4, 4);
         write_order_node(&mut market, 110, 1, 0, 0, 0, 0, 999, !1u64);
         write_order_node(&mut market, ask_root_word, 1, 0, 2, 0, 0, 100, 1);
         write_order_node(&mut market, ask_root_word, 2, 0, 0, 1, 1, 110, 2);
+        write_trader_node(&mut market, trader_root_word, 1, 0, 0, 2, 1, trader_left);
+        write_trader_node(&mut market, trader_root_word, 2, 1, 3, 0, 0, trader_root);
+        write_trader_node(&mut market, trader_root_word, 3, 0, 0, 2, 1, trader_right);
         assert_eq!(ask_count_word, ask_root_word + 2);
         assert_eq!(trader_count_word, trader_root_word + 2);
         run_view(
@@ -264,6 +332,11 @@ fn all_official_profiles_select_exact_account_size() {
         );
         run_view(
             "askTreeValid",
+            market.clone(),
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+        run_view(
+            "traderTreeValid",
             market.clone(),
             &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
         );
@@ -675,6 +748,98 @@ fn largest_ask_profile_validates_full_capacity_tree_with_fixed_memory() {
     assert_eq!(rank, 4095);
     run_view(
         "askTreeValid",
+        market,
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn trader_tree_uses_pubkey_byte_order_and_exact_allocator_partition() {
+    let mut market = market_account(
+        PHOENIX_PROGRAM,
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    write_allocator_header(&mut market, 110, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 4210, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 8310, 3, 2, 5, 4);
+
+    // Byte lexicographic order is left < root < right. Interpreting the first eight bytes as a
+    // little-endian u64 would incorrectly place `left` after `root`.
+    let mut left = [0u8; 32];
+    left[0] = 1;
+    left[1] = 255;
+    let mut root = [0u8; 32];
+    root[0] = 2;
+    let mut right = [0u8; 32];
+    right[0] = 3;
+    write_trader_node(&mut market, 8310, 1, 0, 0, 2, 1, left);
+    write_trader_node(&mut market, 8310, 2, 1, 3, 0, 0, root);
+    write_trader_node(&mut market, 8310, 3, 0, 0, 2, 1, right);
+    write_free_trader_slot(&mut market, 8310, 4, 5);
+    run_view(
+        "traderTreeValid",
+        market.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+
+    let mut duplicate_key = market.clone();
+    write_trader_node(&mut duplicate_key, 8310, 1, 0, 0, 2, 1, root);
+    run_view(
+        "traderTreeValid",
+        duplicate_key,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let mut wrong_parent = market.clone();
+    write_trader_node(&mut wrong_parent, 8310, 1, 0, 0, 3, 1, left);
+    run_view(
+        "traderTreeValid",
+        wrong_parent,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let mut live_free_overlap = market.clone();
+    write_allocator_header(&mut live_free_overlap, 8310, 3, 2, 5, 1);
+    run_view(
+        "traderTreeValid",
+        live_free_overlap,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let mut free_cycle = market;
+    write_free_trader_slot(&mut free_cycle, 8310, 4, 4);
+    run_view(
+        "traderTreeValid",
+        free_cycle,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn largest_trader_profile_validates_8191_live_and_130_free_slots_with_fixed_memory() {
+    let mut market = market_account(
+        PHOENIX_PROGRAM,
+        1_723_488,
+        MARKET_HEADER_DISCRIMINANT,
+        4096,
+        4096,
+        8321,
+    );
+    write_allocator_header(&mut market, 110, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 32882, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 65654, 8191, 1, 8322, 8192);
+    let mut rank = 0;
+    write_perfect_trader_tree(&mut market, 65654, 1, 8191, 0, &mut rank);
+    assert_eq!(rank, 8191);
+    for index in 8192..=8321 {
+        write_free_trader_slot(&mut market, 65654, index, (index + 1) as u32);
+    }
+    run_view(
+        "traderTreeValid",
         market,
         &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
     );

@@ -61,6 +61,12 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.svm (.accDataRbTreeValid
     acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))
     #[root, size, bumpIndex, freeListHead]
+@[match_pattern] def Val.accDataRbTreeKey4Valid
+    (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (root size bumpIndex freeListHead : Val) : Val :=
+  .ext (.svm (.accDataRbTreeKey4Valid
+    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity))
+    #[root, size, bumpIndex, freeListHead]
 @[match_pattern] def Val.accLamportsN (acc : Nat) : Val := svmLeaf (.accLamportsN acc)
 @[match_pattern] def Val.accDataLenN (acc : Nat) : Val := svmLeaf (.accDataLenN acc)
 @[match_pattern] def Val.isSignerN (acc : Nat) : Val := svmLeaf (.isSignerN acc)

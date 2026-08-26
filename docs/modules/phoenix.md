@@ -140,7 +140,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 207/207 与 Anvil 12/12。跨四档逐样本只作
+  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 209/209 与 Anvil 12/12。跨四档逐样本只作
   host reference↔source fold，不宣称完整 chain refinement。
 - **部分支持（P5 profile/body/root gate）**：独立 verifier 已按 canonical program
   owner、576-byte header/discriminant、12 个官方 capacity tuple 和 exact account length
@@ -148,14 +148,14 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   sequence、三棵账户内 Sokoban allocator size 及 root/padding/bump/free-list header envelope，
   并按 profile capacity fail closed。通用 bounded indexed word 只在编译期固定的
   base/stride/capacity 内 zero-copy 读取 bid root 及两个直接 child，验证 parent reciprocity、
-  color、bid side tag 与局部 price/sequence ordering。新增 whole-tree validator 以固定
-  4096-bit stack bitmap 原位验证完整 bid/ask RB invariants、各自 strict FIFO ordering、
-  reachable live count 与 exact free-list partition；两侧 4095-node 最大树均低于 853k CU，
-  不创建 Rust heap object、SVM Map 或节点副本。当前 1,050,952-byte verifier ELF 通过
-  Surfpool 1.5.0 的 1,039 个 Loader write + deploy + authority transactions 完成本地部署和
-  exact 1,050,997-byte ProgramData 校验；不作公网声明。
-- **未支持（P5 remaining body/公网）**：公网部署、trader whole-tree coverage、节点写入、
-  runtime remaining accounts、
+  color、bid side tag 与局部 price/sequence ordering。whole-tree validators 原位验证完整
+  bid/ask/trader RB invariants、各自 strict ordering、reachable live count 与 exact free-list
+  partition；order tree 用固定 4096-bit bitmap，trader tree 用固定 8321-bit bitmap +
+  64-entry stack，并按 Rust `[u8;32]` byte order 比较 Pubkey。最大 trader profile 的 8191
+  live + 130 free slots 消耗 1,344,959 CU；不创建 Rust heap object、SVM Map 或节点副本。
+  当前 1,194,760-byte verifier ELF 通过 Surfpool 1.5.0 的 1,181 个 Loader write + deploy +
+  authority transactions 完成本地部署和 exact 1,194,805-byte ProgramData 校验；不作公网声明。
+- **未支持（P5 remaining body/公网）**：公网部署、节点写入、runtime remaining accounts、
   Token-2022 extension 语义及完整 Phoenix-v1 账户兼容。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/
@@ -173,7 +173,7 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 | `Ladder` / `Vec` | 不定长 |
 
 独立 `PhoenixV1Profile` 验证官方账户头、预编译容量、固定 scalar/allocator metadata、
-有界 bid-root neighborhood 和 selected parent path；完整 bid/ask validator 再用 fixed
-stack bitmap 证明两侧 RB/FIFO invariants 与 live/free partition。这是完整的 bounded N=4
-Phoenix IOC 模型加 P5 order-book body gate，不是 trader/node-write 或完整 Phoenix-v1
+有界 bid-root neighborhood 和 selected parent path；完整 bid/ask/trader validators 再用
+fixed bitmap/stack 证明三棵树的 RB/order invariants 与 live/free partition。这是完整的
+bounded N=4 Phoenix IOC 模型加 P5 read-only body gate，不是 node-write 或完整 Phoenix-v1
 动态账户实现。

@@ -82,6 +82,24 @@ private def oversizedRbTreeOp : ProofForge.Svm.Ops.Op :=
 #guard !malformedRbTreeOp.wellFormed
 #guard !oversizedRbTreeOp.wellFormed
 
+private def validRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataRbTreeKey4Valid
+    1 65658 65659 65660 18 8321 (.arg 0) (.arg 1) (.arg 2) (.arg 3))
+
+private def malformedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
+  .returnU64 (.ext (.accDataRbTreeKey4Valid 1 65658 65659 65660 18 8321)
+    #[.arg 0, .arg 1, .arg 2])
+
+private def oversizedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataRbTreeKey4Valid
+    1 65658 65659 65660 18 8322 (.arg 0) (.arg 1) (.arg 2) (.arg 3))
+
+#guard ProofForge.Svm.Ops.rbTreeKey4WordsInRange 65658 65659 65660 18 8321
+#guard !ProofForge.Svm.Ops.rbTreeKey4WordsInRange 65658 65659 65660 18 8322
+#guard validRbTreeKey4Op.wellFormed
+#guard !malformedRbTreeKey4Op.wellFormed
+#guard !oversizedRbTreeKey4Op.wellFormed
+
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 63 #[] #[] #[] none)
 

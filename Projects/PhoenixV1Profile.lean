@@ -5,11 +5,11 @@ Phoenix v1 market-account profile gate.
 
 The official program does not accept arbitrary runtime capacities. Its 24-byte `MarketSizeParams`
 header selects one of twelve statically compiled `FIFOMarket<Pubkey, B, A, S>` layouts. This module
-validates that dispatch boundary, fixed scalar/allocator metadata, and both complete order trees
+validates that dispatch boundary, fixed scalar/allocator metadata, and all three complete trees
 plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 
 This is deliberately a separate verifier program whose ProofForge state is account 0 and candidate
-Phoenix market is account 1. It does not yet claim trader traversal or official instruction execution.
+Phoenix market is account 1. It does not yet claim node writes or official instruction execution.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -471,6 +471,83 @@ def askTreeValid (s : State) : UInt64 :=
       accDataRbTreeValid 1 32886 32887 32888 32889 8 4096 0
         (lowUInt32 (accDataWord 1 32882)) (accDataWord 1 32884)
         (lowUInt32 cursor) (highUInt32 cursor)
+    else
+      0
+
+/--
+Validate the complete registered-trader red-black tree and allocator partition directly in the
+Phoenix account. Trader keys are 32-byte Pubkeys ordered by Rust `[u8; 32]` lexicographic order,
+not four little-endian integer limbs. Each of the twelve official `(book, seats)` profiles selects
+literal node bases, 18-word stride, and capacity. The emitted traversal uses only a fixed bitmap
+and fixed-depth stack; it never creates a heap Map or stores pointers in account data.
+-/
+@[pf_entry]
+def traderTreeValid (s : State) : UInt64 :=
+  if profileAccountBytes s = 0 || allocatorHeadersValid s = 0 then
+    0
+  else
+    let bids := accDataWord 1 2
+    let seats := accDataWord 1 4
+    if bids = 512 then
+      let cursor := accDataWord 1 8313
+      let root := lowUInt32 (accDataWord 1 8310)
+      let size := accDataWord 1 8312
+      if seats = 128 then
+        accDataRbTreeKey4Valid 1 8314 8315 8316 18 128
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 1025 then
+        accDataRbTreeKey4Valid 1 8314 8315 8316 18 1025
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 1153 then
+        accDataRbTreeKey4Valid 1 8314 8315 8316 18 1153
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else
+        0
+    else if bids = 1024 then
+      let cursor := accDataWord 1 16505
+      let root := lowUInt32 (accDataWord 1 16502)
+      let size := accDataWord 1 16504
+      if seats = 128 then
+        accDataRbTreeKey4Valid 1 16506 16507 16508 18 128
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 2049 then
+        accDataRbTreeKey4Valid 1 16506 16507 16508 18 2049
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 2177 then
+        accDataRbTreeKey4Valid 1 16506 16507 16508 18 2177
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else
+        0
+    else if bids = 2048 then
+      let cursor := accDataWord 1 32889
+      let root := lowUInt32 (accDataWord 1 32886)
+      let size := accDataWord 1 32888
+      if seats = 128 then
+        accDataRbTreeKey4Valid 1 32890 32891 32892 18 128
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 4097 then
+        accDataRbTreeKey4Valid 1 32890 32891 32892 18 4097
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 4225 then
+        accDataRbTreeKey4Valid 1 32890 32891 32892 18 4225
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else
+        0
+    else if bids = 4096 then
+      let cursor := accDataWord 1 65657
+      let root := lowUInt32 (accDataWord 1 65654)
+      let size := accDataWord 1 65656
+      if seats = 128 then
+        accDataRbTreeKey4Valid 1 65658 65659 65660 18 128
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 8193 then
+        accDataRbTreeKey4Valid 1 65658 65659 65660 18 8193
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else if seats = 8321 then
+        accDataRbTreeKey4Valid 1 65658 65659 65660 18 8321
+          root size (lowUInt32 cursor) (highUInt32 cursor)
+      else
+        0
     else
       0
 

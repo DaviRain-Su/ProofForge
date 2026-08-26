@@ -237,6 +237,55 @@ private partial def opsHaveRbTree
           opsHaveRbTree linksBase parentBase keyBase sequenceBase capacity bid body
       | _ => false
 
+private partial def valHasRbTreeKey4
+    (linksBase parentBase keyBase capacity : Nat) : ProofForge.Svm.Ops.Val → Bool
+  | .field base _ | .bitNot base =>
+      valHasRbTreeKey4 linksBase parentBase keyBase capacity base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasRbTreeKey4 linksBase parentBase keyBase capacity lhs ||
+        valHasRbTreeKey4 linksBase parentBase keyBase capacity rhs
+  | .indexGet base _ index _ _ =>
+      valHasRbTreeKey4 linksBase parentBase keyBase capacity base ||
+        valHasRbTreeKey4 linksBase parentBase keyBase capacity index
+  | .select _ lhs rhs thenValue elseValue =>
+      valHasRbTreeKey4 linksBase parentBase keyBase capacity lhs ||
+        valHasRbTreeKey4 linksBase parentBase keyBase capacity rhs ||
+        valHasRbTreeKey4 linksBase parentBase keyBase capacity thenValue ||
+        valHasRbTreeKey4 linksBase parentBase keyBase capacity elseValue
+  | .ext (.accDataRbTreeKey4Valid actualAcc links parent key stride actualCapacity) operands =>
+      (actualAcc == 1 && links == linksBase && parent == parentBase && key == keyBase &&
+        stride == 18 && actualCapacity == capacity) ||
+        operands.any (valHasRbTreeKey4 linksBase parentBase keyBase capacity)
+  | .ext _ operands => operands.any
+      (valHasRbTreeKey4 linksBase parentBase keyBase capacity)
+  | _ => false
+
+private partial def opsHaveRbTreeKey4
+    (linksBase parentBase keyBase capacity : Nat)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    let has := valHasRbTreeKey4 linksBase parentBase keyBase capacity
+    let here :=
+      match op with
+      | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+      | .storeField _ value | .okState value | .returnU64 value | .returnState value => has value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+      | .indexSet _ lhs rhs _ _ => has lhs || has rhs
+      | .invoke _ _ data _ bump =>
+          data.any (fun item => item.value?.any has) || bump.any has
+      | _ => false
+    here ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRbTreeKey4 linksBase parentBase keyBase capacity thenOps ||
+            opsHaveRbTreeKey4 linksBase parentBase keyBase capacity elseOps
+      | .forBody _ body => opsHaveRbTreeKey4 linksBase parentBase keyBase capacity body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -270,6 +319,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing bidTreeValid"
   let some askTree := program.methods.find? (·.ixName == "askTreeValid")
     | throwError "missing askTreeValid"
+  let some traderTree := program.methods.find? (·.ixName == "traderTreeValid")
+    | throwError "missing traderTreeValid"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -306,7 +357,19 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRbTree 4214 4215 4216 4217 512 false askTree.ops &&
       opsHaveRbTree 8310 8311 8312 8313 1024 false askTree.ops &&
       opsHaveRbTree 16502 16503 16504 16505 2048 false askTree.ops &&
-      opsHaveRbTree 32886 32887 32888 32889 4096 false askTree.ops do
+      opsHaveRbTree 32886 32887 32888 32889 4096 false askTree.ops &&
+      opsHaveRbTreeKey4 8314 8315 8316 128 traderTree.ops &&
+      opsHaveRbTreeKey4 8314 8315 8316 1025 traderTree.ops &&
+      opsHaveRbTreeKey4 8314 8315 8316 1153 traderTree.ops &&
+      opsHaveRbTreeKey4 16506 16507 16508 128 traderTree.ops &&
+      opsHaveRbTreeKey4 16506 16507 16508 2049 traderTree.ops &&
+      opsHaveRbTreeKey4 16506 16507 16508 2177 traderTree.ops &&
+      opsHaveRbTreeKey4 32890 32891 32892 128 traderTree.ops &&
+      opsHaveRbTreeKey4 32890 32891 32892 4097 traderTree.ops &&
+      opsHaveRbTreeKey4 32890 32891 32892 4225 traderTree.ops &&
+      opsHaveRbTreeKey4 65658 65659 65660 128 traderTree.ops &&
+      opsHaveRbTreeKey4 65658 65659 65660 8193 traderTree.ops &&
+      opsHaveRbTreeKey4 65658 65659 65660 8321 traderTree.ops do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
@@ -323,7 +386,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "complete account-resident RB tree and allocator validation" &&
       asm.contains "stride=8 capacity=4096 bid=true" &&
       asm.contains "stride=8 capacity=4096 bid=false" && asm.contains "rb_free_loop_" &&
-      asm.contains "add64 r9, -4096" do
+      asm.contains "complete four-word-key account-resident RB tree" &&
+      asm.contains "key4=65660 stride=18 capacity=8321" && asm.contains "be64 r1" &&
+      asm.contains "rb4_free_loop_" && asm.contains "add64 r9, -4096" &&
+      asm.contains "add64 r9, -3000" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
 #pf_guard_phoenix_v1_profile
