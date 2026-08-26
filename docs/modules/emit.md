@@ -11,6 +11,10 @@ lower/optimize。Emitter 的 handler body 只遍历显式 basic block、edge、c
 exit，不重新递归解释 source `ite` / `forBody`。CFG block 全部显式跳转，不依赖物理
 fallthrough。全局 layout 对超过保守 12,000-instruction bound 的 edge 在物理中点插入 relay
 block，迭代到所有 sBPF signed-16-bit jump 都在安全范围；不再按嵌套 branch/loop 加特判。
+Core optimize 在 layout 前以结构 fingerprint 给全图 block 分桶，再做 params / instructions /
+terminator 精确相等确认，合并非相邻重复 block；fingerprint collision 只增加精确比较，不会
+错误共享 block。已知 redirect 在 lookup 前归一化，target extension 的静态 metadata 仍由
+`payloadEq` 精确确认。
 
 `.field _ name` 的 account-data byte offset、Vector base/stride 和 leaf width 已在 target IR
 物化，emitter 不扫描 frontend flattened names 猜布局。`indexGet` / `indexSet` 的定长向量越界

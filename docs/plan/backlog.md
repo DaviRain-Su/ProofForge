@@ -72,12 +72,12 @@
 
 ## 当前状态
 
-- `lake build Tests` 当前 190 jobs；69 个 imported test modules 含 809 个 `#guard` / `#guard_msgs`。
+- `lake build Tests` 当前 190 jobs；69 个 imported test modules 含 815 个 `#guard` / `#guard_msgs`。
 - SVM registry 49 个程序 / 49 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
-- P4 通用 SVM emit 压缩（非部署资格）：`indexGet` / `indexSet` 越界改成 in-bound 短前跳 `jlt`，OOB fallthrough `lddw r0, 0x1; exit`，去掉每站点独立 error label 和 `ja ok`。digest 不变。实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 10,886,968 bytes，ELF 3,504,776 bytes，IDL 19,626 bytes。Phoenix Mollusk 8/8、Tree 2/2、Window 3/3、Nested 1/1、Book 1/1。ELF 仍约 3.5 MB，部署体积未宣称。
+- P4 通用压缩 / Loader-v3 部署资格：Core `shareBlocks` 从相邻比较升级为全图 fingerprint 分桶 + 精确结构相等，已知 redirect 先归一化；collision 不会错误共享。Phoenix CFG 6,128 → 5,151 blocks；实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 10,642,331 bytes，ELF 3,429,336 bytes，IDL 19,626 bytes，比上一 checkpoint 再减 244,637 / 75,440 bytes。Assembler 按 Agave 4.0 Loader-v3 `ProgramData` 10 MiB、metadata 45 B，强制 ELF ≤ 10,485,715 B；当前 headroom 7,056,379 B。Surfpool 1.5.0 offline smoke 禁用 instant direct-state 路径，以 3,389 个 Loader write transactions + deploy + authority transfer 完成本地部署；confirmed signature、Program/ProgramData layout 与完整 ELF bytes 全部核对。本轮 `lake build Tests`、全 49 个 SVM `pf build`、Mollusk 198/198（含 Phoenix 8/8 与 Tree 2/2）及 Anvil 12/12 全绿；不作公网部署声明。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
@@ -90,8 +90,8 @@
 | P0 抽取收口 | 已有 | 通用 Extract state-loop/helper sequencing；SVM CFG/local 布局 | `postAsk` 值树预算、单方法发射、PhoenixSpec、可复现 assembly/ELF/IDL/digest；continuation 不得静默丢 aggregate scalar stores。已知 `postAskFunds` 缺口已关；值树 90,604 / 24,840 是缺口关闭前的探针，本 lowering 后未重测 |
 | P1 bounded 产品语义 | 已有 | P0；固定 N=4 账户布局 | ask/bid/trader 三棵持久化树的 N=4 host/IR 门、24 种 topology、双向 IOC、TIF/self-trade/fee/事件与 exact address reuse 全绿 |
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
-| P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 与 P4 部署体积仍未宣称 |
-| P4 产物资格/压缩 | 部分（压缩起步；部署资格未宣称） | P0 的稳定 CFG 和可测基线 | 通用 SVM emit 已倒置 `indexGet`/`indexSet` 越界布局。实测 Phoenix assembly 10,886,968 B / ELF 3,504,776 B，digest 不变。部署上限、shared-block/CSE 与部署体积声明仍未完成 |
+| P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
+| P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
 | P5 动态 Phoenix-v1 | 未支持、非当前目标 | 账户容量/profile、bounded CFG 策略与变长协议类型设计 | 明确账户上限和资源模型后另立规格；在此之前动态容量、remaining accounts、完整 Phoenix-v1 账户兼容均 fail closed |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。固定长度 32-byte / u128 /
@@ -101,7 +101,7 @@ Borsh protocol types 可在 P4/P5 前置设计；当前 Pubkey 与 client id 仍
 ## 明确保持 fail closed
 
 - 搬 PF 前端 / `HandlerIR.mk` 私有构造、新 DSL、无约束 Lean、FFI→asm。
-- `.so` / loader / 全 SVM refinement 与公网部署声明。
+- 全 SVM `.so` / loader refinement 与公网部署声明；当前只宣称 Phoenix 本地 Surfpool transaction smoke。
 - 运行时 program id、变长 data、运行时 remaining accounts；编译期钉死的 CPI 已开。
 - Token-2022 transfer hook / fee / TLV extension 语义，直到对应账户模型落地；当前 base-layout
   wrapper 用精确 data length 在 CPI 前拒绝全部 extension-bearing mint/account。

@@ -113,26 +113,36 @@ ordinal 及 u16 index 0 做 Borsh 窄编码。每个实际 event 是一个单-ev
 seed 导出的 readonly signer PDA。IR 门覆盖所有 header/event recipe，Mollusk 同时验证
 真实 `Program data`、错 executable self program 与错 log PDA 的原子失败。
 
-assembly 是带 local CSE/共享 basic block 的 target CFG 中间文本，不是部署文件。通用抽取器按 helper 的输入/输出类型区分 State transition 与纯结构 reader，
+assembly 是带 local CSE/全图共享 basic block 的 target CFG 中间文本，不是部署文件。Core
+以结构 fingerprint 分桶、精确相等确认来驻留非相邻重复 block；Phoenix 全方法 CFG 从
+6,128 blocks 降到 5,151 blocks。通用抽取器按 helper 的输入/输出类型区分 State transition 与纯结构 reader，
 并去重嵌套 state-helper 的祖先 transition，避免组合更新和 reader projection 被重复发射；
 完整 maker Pubkey 与 event/lastEvent 双写仍会展开 conditional values。
 P0 的递归值树门把 `postAsk` 钉在 total `< 200,000`、largest `< 50,000`；当前测量为
 90,604 / 24,840，单方法 assembly 3,755,860 bytes。完整 N=4 双边 topology 的全程序
-assembly 暂设 `< 12,000,000` bytes 回归门，并拒绝重复 label，同时断言 maker/taker
-ledger writes 和最宽 event leaf 都存在。该门防止重新膨胀，不是部署资格声明；ELF/IDL/
-digest 必须从同一 checkout 的实际 `pf build` 产物记录。当前同一构建产生 assembly
-10,886,968 bytes、ELF 3,504,776 bytes、IDL 19,626 bytes，SVM digest
-`7a969da7b60ead4`；这个 ELF 大小尚未通过 P4 部署资格门。链上 buy / sell 都是 19 phase，挂单是 17 phase；要显著缩小文件应在通用
+assembly 设 `< 10,800,000` bytes、CFG source block `< 5,300` 回归门，并拒绝重复 label，
+同时断言 maker/taker ledger writes 和最宽 event leaf 都存在。ELF/IDL/digest 必须从同一
+checkout 的实际 `pf build` 产物记录。当前同一构建产生 assembly 10,642,331 bytes、ELF
+3,429,336 bytes、IDL 19,626 bytes，SVM digest `7a969da7b60ead4`。相对上一 P4 checkpoint
+分别减少 244,637 / 75,440 bytes。Agave 4.0 Loader-v3 的 10 MiB `ProgramData` 上限扣除
+45-byte metadata 后允许 10,485,715-byte ELF；assembler 现会在最终落盘前强制该门，当前
+ELF 有 7,056,379 bytes headroom。Surfpool 1.5.0 smoke 明确关闭 instant direct-state
+deployment，以 3,389 个 Loader write transactions + deploy + authority transfer 将同一 ELF
+部署到本地 offline Surfnet；confirmed deploy signature、36-byte executable Program account、
+3,429,381-byte ProgramData 及完整 ELF bytes 均已核对。该证据不使用
+`solana-test-validator`，也不作公网部署声明。链上 buy / sell 都是 19 phase，挂单是 17 phase；要继续显著缩小文件应在通用
 IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter 加事件特判。
 
 ## 支持边界与路线
 
 - **已有（P1）**：固定 N=4 ask/bid/trader topology、双向 IOC、seat ledger、TIF、费用、
   typed event 与 classic SPL Token 双 vault 的 host/IR 语义。
+- **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
+  真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；仍需以当前产物重跑 Phoenix、Tree、全 SVM 与 EVM 回归。跨四档逐样本只作
+  矩阵已有；当前产物已通过全 49 SVM build、Mollusk 198/198 与 Anvil 12/12。跨四档逐样本只作
   host reference↔source fold，不宣称完整 chain refinement。
-- **未支持（P4/P5）**：当前 ELF 的部署资格、动态容量、runtime remaining accounts、
+- **未支持（P5/公网）**：公网部署、动态容量、runtime remaining accounts、
   Token-2022 extension 语义及完整 Phoenix-v1 账户兼容。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/

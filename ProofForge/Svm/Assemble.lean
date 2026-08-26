@@ -11,6 +11,18 @@ structure Result where
   idlPath : System.FilePath
   soBytes : ByteArray
 
+/-- Agave 4.0 Loader-v3 stores ELF bytes after 45 bytes of `ProgramData` metadata in an account
+whose protocol maximum is 10 MiB. Keep this pure boundary explicit so tests can pin both edges. -/
+def loaderV3ProgramDataMetadataBytes : Nat := 45
+
+def loaderV3MaxProgramDataBytes : Nat := 10 * 1024 * 1024
+
+def loaderV3MaxElfBytes : Nat :=
+  loaderV3MaxProgramDataBytes - loaderV3ProgramDataMetadataBytes
+
+def loaderV3SizeEligible (elfBytes : Nat) : Bool :=
+  loaderV3ProgramDataMetadataBytes + elfBytes ≤ loaderV3MaxProgramDataBytes
+
 /-- ELF 64-bit LSB shared object, eBPF：前 4 字节 `\x7fELF`，EI_CLASS=2。 -/
 def looksLikeElf (bytes : ByteArray) : Bool :=
   bytes.size ≥ 5 &&
@@ -61,6 +73,9 @@ private def assembleOutput (outDir : System.FilePath) (name asm idl : String) : 
     throw <| IO.userError "assemble/tool: output is not ELF"
   unless soBytes.size > 0 do
     throw <| IO.userError "assemble/tool: empty ELF"
+  unless loaderV3SizeEligible soBytes.size do
+    throw <| IO.userError
+      s!"assemble/size: ELF is {soBytes.size} bytes; Loader-v3 limit is {loaderV3MaxElfBytes}"
   let stagedAsm := outDir / s!"{name}.s"
   let stagedSo := outDir / soName
   let stagedIdl := outDir / s!"{name}.idl.json"

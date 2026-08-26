@@ -15,7 +15,7 @@ else
 fi
 
 step "Installing required system packages"
-packages=(build-essential elan)
+packages=(build-essential curl elan jq openssl python3)
 missing_packages=()
 for package in "${packages[@]}"; do
   if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq "install ok installed"; then
@@ -80,6 +80,27 @@ else
   echo "sbpf 0.2.2 is already installed."
 fi
 sbpf --version
+
+step "Installing pinned Surfpool 1.5.0"
+surfpool_version="1.5.0"
+surfpool_archive="surfpool-linux-x64.tar.gz"
+surfpool_url="https://github.com/solana-foundation/surfpool/releases/download/v${surfpool_version}/${surfpool_archive}"
+surfpool_sha256="5b20a3b46e60c4f819af7b4da5c3ea211f76041710617841cc23247d15887ddc"
+if [[ "$(surfpool --version 2>/dev/null || true)" != "surfpool ${surfpool_version}" ]]; then
+  surfpool_download="$(mktemp)"
+  surfpool_unpack="$(mktemp -d)"
+  trap 'rm -f "$surfpool_download"; rm -rf "$surfpool_unpack"' EXIT
+  curl --proto '=https' --tlsv1.2 -fsSL "$surfpool_url" -o "$surfpool_download"
+  echo "$surfpool_sha256  $surfpool_download" | sha256sum --check --status
+  tar -xzf "$surfpool_download" -C "$surfpool_unpack"
+  install -m 0755 "$surfpool_unpack/surfpool" "$HOME/.local/bin/surfpool"
+  rm -f "$surfpool_download"
+  rm -rf "$surfpool_unpack"
+  trap - EXIT
+else
+  echo "Surfpool $surfpool_version is already installed."
+fi
+surfpool --version
 
 step "Installing pinned solc 0.8.34"
 solc_url="https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"

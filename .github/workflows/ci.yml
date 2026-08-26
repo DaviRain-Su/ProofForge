@@ -57,6 +57,10 @@ jobs:
       - name: Run Mollusk integration suite
         run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml -- --test-threads=1
 
+      - name: Deploy Phoenix through Surfpool Loader-v3
+        timeout-minutes: 15
+        run: runtime-tests/surfpool/smoke.sh
+
       - name: Build all EVM programs
         run: lake exe pf -- build --target evm --out build/evm
 

@@ -1,0 +1,14 @@
+---
+name: proofforge-surfpool-smoke
+id: proofforge-surfpool-smoke
+runbooks:
+  - name: deployment
+    description: Deploy the ProofForge Phoenix artifact through Loader-v3 transactions
+    location: runbooks/deployment
+environments:
+  localnet:
+    network_id: localnet
+    rpc_api_url: http://127.0.0.1:8899
+    payer_keypair_json: ../../build/surfpool/payer.json
+    program_keypair_json: ../../build/surfpool/Phoenix-keypair.json
+    program_binary: ../../build/surfpool/Phoenix.so

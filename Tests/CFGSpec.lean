@@ -36,6 +36,45 @@ private def emptyArms : Array ProofForge.Extract.IR.Op := #[
           thenEdge.target == elseEdge.target
       | _ => false
 
+private def nonAdjacentDuplicateGraph : ProofForge.Extract.IR.CFG := {
+  entry := 0
+  blocks := #[
+    { id := 0, terminator := .branch .eq (.arg 0) (.lit 0) { target := 1 } { target := 2 } },
+    { id := 1, terminator := .exit .errorOverflow },
+    { id := 2, terminator := .branch .eq (.arg 1) (.lit 0) { target := 3 } { target := 4 } },
+    { id := 3, terminator := .exit (.returnU64 (.lit 7)) },
+    { id := 4, terminator := .exit .errorOverflow }
+  ]
+}
+
+-- Global interning finds equal blocks even when an unrelated block separates them.
+#guard
+  let graph := ProofForge.Core.CFG.shareBlocks ProofForge.Extract.IR.cfgDialect
+    nonAdjacentDuplicateGraph
+  graph.blocks.size == 4 && (graph.block? 4).isNone &&
+    (graph.block? 2).any fun block => match block.terminator with
+      | .branch _ _ _ _ elseEdge => elseEdge.target == 1
+      | _ => false
+
+private def payloadFingerprintCollisionGraph : ProofForge.Extract.IR.CFG := {
+  entry := 0
+  blocks := #[
+    { id := 0, terminator := .branch .eq (.arg 0) (.lit 0) { target := 1 } { target := 2 } },
+    { id := 1
+      instructions := #[.ext (.svm (.invoke 1 #[] #[]))]
+      terminator := .exit (.returnU64 (.lit 7)) },
+    { id := 2
+      instructions := #[.ext (.svm (.invoke 2 #[] #[]))]
+      terminator := .exit (.returnU64 (.lit 7)) }
+  ]
+}
+
+-- Extension metadata omitted from the cheap fingerprint is still compared exactly.
+#guard
+  let graph := ProofForge.Core.CFG.shareBlocks ProofForge.Extract.IR.cfgDialect
+    payloadFingerprintCollisionGraph
+  graph.blocks.size == 3 && (graph.block? 1).isSome && (graph.block? 2).isSome
+
 private def loopProgram : Array ProofForge.Extract.IR.Op := #[
   .forBody 3 #[.storeField "value" .loopIx],
   .returnState (.arg 0)

@@ -43,7 +43,13 @@ Mollusk（环境变量已改成 `PF_*_SO`）：
   cargo test --locked --test counter)
 ```
 
-Toolchain：`leanprover/lean4:v4.31.0`。
+Phoenix 的本地 Loader-v3 交易部署使用 Surfpool，不使用 `solana-test-validator`：
+
+```bash
+runtime-tests/surfpool/smoke.sh
+```
+
+Toolchain：`leanprover/lean4:v4.31.0`、`sbpf 0.2.2`、Surfpool `1.5.0`。
 
 ## 入口
 

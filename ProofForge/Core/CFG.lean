@@ -1,4 +1,5 @@
 import ProofForge.Core.Ops
+import Std.Data.HashMap
 
 namespace ProofForge.Core.CFG
 
@@ -590,24 +591,197 @@ private def instructionArraysEq [BEq ValExt] (dialect : Dialect ValExt OpExt)
   left.size == right.size && (List.zip left.toList right.toList).all fun pair =>
     instructionEq dialect pair.1 pair.2
 
-/-- Merge adjacent structurally identical blocks. The adjacency restriction keeps this pass linear
-on very large extracted contracts; a later layout pass can provide keyed global block interning. -/
+private def fingerprintMix (state value : UInt64) : UInt64 :=
+  (state ^^^ value) * 1099511628211
+
+private def fingerprintNat (state : UInt64) (value : Nat) : UInt64 :=
+  fingerprintMix state value.toUInt64
+
+private def fingerprintString (state : UInt64) (value : String) : UInt64 :=
+  fingerprintMix state (hash value)
+
+private def fingerprintCmp (state : UInt64) : Core.Ops.Cmp → UInt64
+  | .eq => fingerprintNat state 0
+  | .ne => fingerprintNat state 1
+  | .lt => fingerprintNat state 2
+  | .le => fingerprintNat state 3
+  | .gt => fingerprintNat state 4
+  | .ge => fingerprintNat state 5
+
+private partial def fingerprintValue (state : UInt64) : Val ValExt → UInt64
+  | .arg id => fingerprintNat (fingerprintNat state 0) id
+  | .local id => fingerprintNat (fingerprintNat state 1) id
+  | .field base name =>
+      fingerprintString (fingerprintValue (fingerprintNat state 2) base) name
+  | .lit value => fingerprintMix (fingerprintNat state 3) value
+  | .bitAnd lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 4) lhs) rhs
+  | .bitOr lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 5) lhs) rhs
+  | .bitXor lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 6) lhs) rhs
+  | .bitNot value => fingerprintValue (fingerprintNat state 7) value
+  | .shiftL lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 8) lhs) rhs
+  | .shiftR lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 9) lhs) rhs
+  | .indexGet base name index len elemOffset =>
+      fingerprintNat
+        (fingerprintNat
+          (fingerprintValue
+            (fingerprintString
+              (fingerprintValue (fingerprintNat state 10) base) name)
+            index)
+          len)
+        elemOffset
+  | .loopIx => fingerprintNat state 11
+  | .select cmp lhs rhs thenValue elseValue =>
+      fingerprintValue
+        (fingerprintValue
+          (fingerprintValue
+            (fingerprintValue (fingerprintCmp (fingerprintNat state 12) cmp) lhs) rhs)
+          thenValue)
+        elseValue
+  | .addU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 13) lhs) rhs
+  | .subU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 14) lhs) rhs
+  | .mulU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 15) lhs) rhs
+  | .divU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 16) lhs) rhs
+  | .modU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 17) lhs) rhs
+  | .ext _ operands =>
+      operands.foldl (init := fingerprintNat state 18) fingerprintValue
+
+private def fingerprintValues (state : UInt64) (values : Array (Val ValExt)) : UInt64 :=
+  values.foldl (init := fingerprintNat state values.size) fingerprintValue
+
+private def fingerprintEdge (state : UInt64) (next : Edge ValExt) : UInt64 :=
+  fingerprintValues (fingerprintNat state next.target) next.args
+
+private def fingerprintExit (state : UInt64) : Exit ValExt → UInt64
+  | .initialize values => fingerprintValues (fingerprintNat state 0) values
+  | .okState value => fingerprintValue (fingerprintNat state 1) value
+  | .errorOverflow => fingerprintNat state 2
+  | .errorNamed name => fingerprintString (fingerprintNat state 3) name
+  | .returnU64 value => fingerprintValue (fingerprintNat state 4) value
+  | .returnU64s values => fingerprintValues (fingerprintNat state 5) values
+  | .returnState value => fingerprintValue (fingerprintNat state 6) value
+
+private def fingerprintChecked (state : UInt64) : Checked ValExt → UInt64
+  | .addU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 0) lhs) rhs
+  | .subU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 1) lhs) rhs
+  | .mulU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 2) lhs) rhs
+  | .divU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 3) lhs) rhs
+  | .modU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 4) lhs) rhs
+  | .forAccum bound addend resultLocal =>
+      fingerprintNat
+        (fingerprintValue (fingerprintNat (fingerprintNat state 5) bound) addend)
+        resultLocal
+
+private def fingerprintTerminator (state : UInt64) : Terminator ValExt → UInt64
+  | .jump next => fingerprintEdge (fingerprintNat state 0) next
+  | .branch cmp lhs rhs thenEdge elseEdge =>
+      fingerprintEdge
+        (fingerprintEdge
+          (fingerprintValue
+            (fingerprintValue (fingerprintCmp (fingerprintNat state 1) cmp) lhs) rhs)
+          thenEdge)
+        elseEdge
+  | .checked operation success overflow =>
+      fingerprintEdge
+        (fingerprintEdge (fingerprintChecked (fingerprintNat state 2) operation) success)
+        overflow
+  | .exit result => fingerprintExit (fingerprintNat state 3) result
+  | .unreachable => fingerprintNat state 4
+
+private def fingerprintInstruction (dialect : Dialect ValExt OpExt) (state : UInt64) :
+    Op ValExt OpExt → UInt64
+  | .letLocal id value =>
+      fingerprintValue (fingerprintNat (fingerprintNat state 0) id) value
+  | .joinLocal id => fingerprintNat (fingerprintNat state 1) id
+  | .setLocal id value =>
+      fingerprintValue (fingerprintNat (fingerprintNat state 2) id) value
+  | .checkedAddU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 3) lhs) rhs
+  | .checkedSubU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 4) lhs) rhs
+  | .checkedMulU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 5) lhs) rhs
+  | .checkedDivU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 6) lhs) rhs
+  | .checkedModU64 lhs rhs =>
+      fingerprintValue (fingerprintValue (fingerprintNat state 7) lhs) rhs
+  | .ite .. | .forBody .. | .okState _ | .errorOverflow | .errorNamed _
+  | .returnU64 _ | .returnState _ => fingerprintNat state 8
+  | .forAccum bound addend resultLocal =>
+      fingerprintNat
+        (fingerprintValue (fingerprintNat (fingerprintNat state 9) bound) addend)
+        resultLocal
+  | .indexSetLeaf name index value len leaf =>
+      fingerprintString
+        (fingerprintNat
+          (fingerprintValue
+            (fingerprintValue (fingerprintString (fingerprintNat state 10) name) index) value)
+          len)
+        leaf
+  | .indexSet name index value len elemOffset =>
+      fingerprintNat
+        (fingerprintNat
+          (fingerprintValue
+            (fingerprintValue (fingerprintString (fingerprintNat state 11) name) index) value)
+          len)
+        elemOffset
+  | .storeField name value =>
+      fingerprintValue (fingerprintString (fingerprintNat state 12) name) value
+  | .ext payload =>
+      fingerprintValues (fingerprintNat state 13) (dialect.values payload)
+
+private def blockFingerprint (dialect : Dialect ValExt OpExt)
+    (block : Block ValExt OpExt) : UInt64 :=
+  let state := block.params.foldl (init := fingerprintNat 14695981039346656037 block.params.size)
+    fingerprintNat
+  let state := block.instructions.foldl
+    (init := fingerprintNat state block.instructions.size) (fingerprintInstruction dialect)
+  fingerprintTerminator state block.terminator
+
+private def blocksEq [BEq ValExt] (dialect : Dialect ValExt OpExt)
+    (left right : Block ValExt OpExt) : Bool :=
+  left.params == right.params &&
+    instructionArraysEq dialect left.instructions right.instructions &&
+    left.terminator == right.terminator
+
+/-- Merge structurally identical blocks across the whole graph. A structural fingerprint only
+selects a small candidate bucket; exact equality is still required, so hash collisions cannot
+change the CFG. Redirects already known at the current block are normalized before lookup. -/
 def shareBlocks [BEq ValExt] (dialect : Dialect ValExt OpExt)
     (graph : Graph ValExt OpExt) : Graph ValExt OpExt := Id.run do
   let some entry := graph.block? graph.entry | return graph
   let ordered := #[entry] ++ graph.blocks.filter (·.id != graph.entry)
   let mut kept : Array (Block ValExt OpExt) := #[]
   let mut redirects : Array (BlockId × BlockId) := #[]
+  let mut buckets : Std.HashMap UInt64 (Array Nat) :=
+    Std.HashMap.emptyWithCapacity ordered.size
   for block in ordered do
-    match kept.back? with
-    | some prior =>
-        if prior.params == block.params &&
-            instructionArraysEq dialect prior.instructions block.instructions &&
-            prior.terminator == block.terminator then
-          redirects := redirects.push (block.id, prior.id)
-        else
-          kept := kept.push block
-    | none => kept := kept.push block
+    let block := { block with terminator := redirectTerminator redirects block.terminator }
+    let fingerprint := blockFingerprint dialect block
+    let candidates := (buckets.get? fingerprint).getD #[]
+    let representative := candidates.findSome? fun index =>
+      match kept[index]? with
+      | some prior => if blocksEq dialect prior block then some prior.id else none
+      | none => none
+    match representative with
+    | some priorId => redirects := redirects.push (block.id, priorId)
+    | none =>
+        buckets := buckets.insert fingerprint (candidates.push kept.size)
+        kept := kept.push block
   return {
     entry := graph.entry
     blocks := kept.map fun block =>

@@ -101,10 +101,16 @@
 | T-L5-16 | happy / fail | Phoenix persisted trader topology | 24 种 key 插入顺序 × 每个删除 key 的 host 红黑不变量；抽取 IR 钉住动态 links/color/allocator writes；Mollusk 验证删除 root 后 surviving root/seat 与 address reuse |
 | T-L5-17 | happy / fail | Phoenix persisted order topology | ask/bid 各 24 种插入顺序、24×4 单点删除/复用及 24×24 完整删除顺序 host 红黑不变量；抽取 IR 钉住 qualified nested-vector links/color/allocator writes；Mollusk 验证两边 root、best traversal 与满书 eviction 的 exact address reuse |
 | T-L5-18 | perf / fail | Phoenix Extract P0 资源门 | `postAsk` 全部嵌套 op 的 `IR.Val` 总节点 `< 200,000`、最大单树 `< 50,000`；单方法与全程序发射成功；state-loop continuation 解码失败不得只返回 scalar 或部分 commit |
+| T-L5-19 | happy / fail | Phoenix Surfpool Loader-v3 deployment | Surfpool 1.5.0 offline/headless；禁用 instant direct-state deployment；真实 buffer/write/deploy/authority transaction 输出；confirmed deploy signature；Program executable/owner/36-byte state、ProgramData 45-byte metadata + ELF exact bytes |
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
 refinement 仍未宣称。P0 探针口径递归统计 `select` 四个分支和 extension operands；当前
 `postAsk` 为 total 90,604 / largest 24,840，单方法 assembly 3,755,860 bytes，完整程序
-assembly 设 `< 12,000,000` bytes 的有限回归门。完整 ELF/IDL/digest 只以当次
-`pf build --target svm Phoenix` 产物记录为准；当前为 assembly 10,886,968 bytes、ELF
-3,504,776 bytes、IDL 19,626 bytes、digest `7a969da7b60ead4`，不从旧 topology 快照外推。
+assembly 设 `< 10,800,000` bytes、CFG source block `< 5,300` 的有限回归门。完整
+ELF/IDL/digest 只以当次 `pf build --target svm Phoenix` 产物记录为准；当前为 assembly
+10,642,331 bytes、ELF 3,429,336 bytes、IDL 19,626 bytes、digest
+`7a969da7b60ead4`，不从旧 topology 快照外推。Assembler 另固定 Loader-v3
+`ProgramData=10 MiB`、metadata=45 bytes 的 exact boundary：10,485,715-byte ELF 接受，
+10,485,716-byte ELF 拒绝。T-L5-19 再把当前 3,429,336-byte Phoenix ELF 通过 3,389 个
+Loader write transactions 部署到本地 Surfnet；ProgramData 为 3,429,381 bytes，payload
+与本地产物逐字节一致。该结果是实际 Loader-v3 transaction 证明，但不冒充公网部署。

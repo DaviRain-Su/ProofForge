@@ -6,6 +6,7 @@ dist/
 *~
 .idea/
 .vscode/
+.surfpool/
 __pycache__/
 *.pyc
 /runtime-tests/**/target/

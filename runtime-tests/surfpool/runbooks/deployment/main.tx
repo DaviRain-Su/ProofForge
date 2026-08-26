@@ -1,0 +1,38 @@
+addon "svm" {
+  network_id = input.network_id
+  rpc_api_url = input.rpc_api_url
+}
+
+signer "payer" "svm::secret_key" {
+  keypair_json = input.payer_keypair_json
+}
+
+signer "authority" "svm::secret_key" {
+  keypair_json = input.payer_keypair_json
+}
+
+action "deploy_phoenix" "svm::deploy_program" {
+  description = "Deploy Phoenix through Upgradeable Loader-v3 transactions"
+  program = svm::get_program_from_native_project(
+    "Phoenix",
+    input.program_keypair_json,
+    null,
+    input.program_binary
+  )
+  authority = signer.authority
+  payer = signer.payer
+  auto_extend = true
+  instant_surfnet_deployment = false
+}
+
+output "program_id" {
+  value = action.deploy_phoenix.program_id
+}
+
+output "signatures" {
+  value = action.deploy_phoenix.signatures
+}
+
+output "slot" {
+  value = action.deploy_phoenix.slot
+}

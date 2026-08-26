@@ -99,10 +99,10 @@ elab "#pf_guard_phoenix_artifact" : command => do
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  -- Persisting both N=4 order-book topologies roughly doubles the emitted source relative to the
-  -- projection-only model. Keep a finite regression ceiling while the CFG/backend compaction
-  -- work remains a separate optimization milestone.
-  unless asm.toUTF8.size < 12000000 do
+  -- Global keyed block interning removes non-adjacent duplicate continuations while retaining a
+  -- finite margin above the measured artifact. This is a compaction regression gate, not a
+  -- deployment claim.
+  unless asm.toUTF8.size < 10800000 do
     throwError s!"Phoenix assembly budget exceeded: {asm.toUTF8.size} bytes"
   unless !asm.contains "\n\\\n" do
     throwError "Phoenix assembly contains a standalone backslash"
@@ -117,6 +117,9 @@ elab "#pf_guard_phoenix_artifact" : command => do
     if present && !duplicates.contains label then duplicates := duplicates.push label
   unless duplicates.isEmpty do
     throwError s!"Phoenix assembly contains duplicate labels: {duplicates}"
+  let cfgBlockLabels := labels.filter (·.contains "_block_")
+  unless cfgBlockLabels.length < 5300 do
+    throwError s!"Phoenix shared CFG block budget exceeded: {cfgBlockLabels.length}"
   unless ProofForge.Svm.IR.dataLen program == 1896 do
     throwError s!"Phoenix source account layout changed: {ProofForge.Svm.IR.dataLen program} bytes"
   unless ProofForge.Svm.IR.cpiAccountCount program == 11 do

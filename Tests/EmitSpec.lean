@@ -3,6 +3,11 @@ import Examples.Counter
 
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.get
 
+#guard ProofForge.Svm.Assemble.loaderV3MaxProgramDataBytes == 10485760
+#guard ProofForge.Svm.Assemble.loaderV3MaxElfBytes == 10485715
+#guard ProofForge.Svm.Assemble.loaderV3SizeEligible 10485715
+#guard !ProofForge.Svm.Assemble.loaderV3SizeEligible 10485716
+
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Extract.Legacy.counterProgram with
   | .error "extract/cfg: initialize: cfg/invalid: initializer has no state values" => true
