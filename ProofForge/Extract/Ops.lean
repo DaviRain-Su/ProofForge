@@ -92,6 +92,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.svm (.component (.accountStorage (.key4RbTreeValidOneBased
     acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity))))
       #[root, size, bumpIndex, freeListHead]
+@[match_pattern] def Val.fifoCancelResult (query : Svm.FifoCancel.Query) : Val :=
+  .ext (.svm (.component (.fifoCancel query))) #[]
 @[match_pattern] def Val.accLamportsN (acc : Nat) : Val := svmLeaf (.accLamportsN acc)
 @[match_pattern] def Val.accDataLenN (acc : Nat) : Val := svmLeaf (.accDataLenN acc)
 @[match_pattern] def Val.isSignerN (acc : Nat) : Val := svmLeaf (.isSignerN acc)

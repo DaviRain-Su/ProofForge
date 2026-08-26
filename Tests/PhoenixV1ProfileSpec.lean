@@ -6,6 +6,8 @@ namespace Tests.PhoenixV1ProfileSpec
 open Projects.PhoenixV1Profile
 open Lean Elab Command
 
+set_option maxRecDepth 2048
+
 #guard accountBytesFor 512 512 128 == 84944
 #guard accountBytesFor 512 512 1025 == 214112
 #guard accountBytesFor 512 512 1153 == 232544
@@ -641,6 +643,149 @@ private partial def opsHaveUncheckedTransfer
       | .forBody _ body => opsHaveUncheckedTransfer source destination authority seeds body
       | _ => false
 
+private partial def opsHaveFifoCancelCall
+    (predicate : ProofForge.Svm.FifoCancel.Call ProofForge.Svm.Ops.Val → Bool)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .component (.fifoCancel call) => predicate call
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveFifoCancelCall predicate thenOps || opsHaveFifoCancelCall predicate elseOps
+      | .forBody _ body => opsHaveFifoCancelCall predicate body
+      | _ => false
+
+private partial def valHasFifoCancelQuery
+    (predicate : ProofForge.Svm.FifoCancel.Query → Bool) : ProofForge.Svm.Ops.Val → Bool
+  | .field base _ | .bitNot base => valHasFifoCancelQuery predicate base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasFifoCancelQuery predicate lhs || valHasFifoCancelQuery predicate rhs
+  | .indexGet base _ index _ _ =>
+      valHasFifoCancelQuery predicate base || valHasFifoCancelQuery predicate index
+  | .select _ lhs rhs thenValue elseValue =>
+      valHasFifoCancelQuery predicate lhs || valHasFifoCancelQuery predicate rhs ||
+        valHasFifoCancelQuery predicate thenValue || valHasFifoCancelQuery predicate elseValue
+  | .ext (.component (.fifoCancel query)) operands =>
+      predicate query || operands.any (valHasFifoCancelQuery predicate)
+  | .ext _ operands => operands.any (valHasFifoCancelQuery predicate)
+  | _ => false
+
+private partial def opsHaveFifoCancelQuery
+    (predicate : ProofForge.Svm.FifoCancel.Query → Bool)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    let has := valHasFifoCancelQuery predicate
+    let here :=
+      match op with
+      | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+      | .storeField _ value | .okState value | .returnU64 value | .returnState value => has value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+      | .indexSet _ lhs rhs _ _ => has lhs || has rhs
+      | .invoke _ _ data _ bump =>
+          data.any (fun item => item.value?.any has) || bump.any has
+      | .component call => call.values.any has
+      | _ => false
+    here ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveFifoCancelQuery predicate thenOps || opsHaveFifoCancelQuery predicate elseOps
+      | .forBody _ body => opsHaveFifoCancelQuery predicate body
+      | _ => false
+
+private partial def opsHaveInvoke (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .invoke .. => true
+    | .ite _ _ _ thenOps elseOps => opsHaveInvoke thenOps || opsHaveInvoke elseOps
+    | .forBody _ body => opsHaveInvoke body
+    | _ => false
+
+private def fifoCancelSideMatches
+    (root links parent price sequence owner size locked free : Nat) (bid : Bool) :
+    ProofForge.Svm.FifoCancel.Call ProofForge.Svm.Ops.Val → Bool
+  | .cancelSide config _ =>
+      match config.map with
+      | .key4 .. => false
+      | .fifo actualRoot tree =>
+          actualRoot == root && tree.links.region.account == 2 &&
+            tree.links.firstWord == links && tree.parentColor.firstWord == parent &&
+            tree.price.firstWord == price && tree.sequence.firstWord == sequence &&
+            config.owner.firstWord == owner && config.size.firstWord == size &&
+            config.locked.firstWord == locked && config.free.firstWord == free &&
+            tree.links.region.strideWords == 8 && tree.links.region.capacity == 512 &&
+            tree.bid == bid && config.recorder.logAccount == 0 &&
+            config.recorder.selfEntryTag == 15 && config.recorder.maxRecords == 32 &&
+            config.collateral == if bid then .quote 104 105 else .base
+  | _ => false
+
+private partial def cancelTraceValue : ProofForge.Svm.Ops.Val → List Nat
+  | .field base _ | .bitNot base => cancelTraceValue base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs => cancelTraceValue lhs ++ cancelTraceValue rhs
+  | .indexGet base _ index _ _ => cancelTraceValue base ++ cancelTraceValue index
+  | .select _ lhs rhs thenValue elseValue =>
+      cancelTraceValue lhs ++ cancelTraceValue rhs ++ cancelTraceValue thenValue ++
+        cancelTraceValue elseValue
+  | .ext (.component (.accountStorage query)) operands =>
+      let marker := match query with
+        | .key4RbTreeValid tree => if tree.links.region.account == 2 then [1] else []
+        | .fifoRbTreeValid tree =>
+            if tree.links.region.account != 2 then [] else if tree.bid then [2] else [3]
+        | _ => []
+      marker ++ operands.toList.flatMap cancelTraceValue
+  | .ext (.component (.fifoCancel query)) operands =>
+      let marker := match query with
+        | .quoteReleased => [7]
+        | .baseReleased => [8]
+        | .eventCount => [9]
+      marker ++ operands.toList.flatMap cancelTraceValue
+  | .ext _ operands => operands.toList.flatMap cancelTraceValue
+  | _ => []
+
+private partial def cancelTraceOps (ops : Array ProofForge.Svm.IR.Op) : List Nat :=
+  ops.toList.flatMap fun op =>
+    match op with
+    | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+    | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+        cancelTraceValue value
+    | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+    | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .indexSet _ lhs rhs _ _ =>
+        cancelTraceValue lhs ++ cancelTraceValue rhs
+    | .ite _ lhs rhs thenOps elseOps =>
+        cancelTraceValue lhs ++ cancelTraceValue rhs ++ cancelTraceOps thenOps ++
+          cancelTraceOps elseOps
+    | .forBody _ body => cancelTraceOps body
+    | .component (.fifoCancel call) =>
+        match call with
+        | .begin => [4]
+        | .cancelSide config _ => if config.map.rootWord == 110 then [5] else [6]
+        | .finish => [13]
+    | .component (.batchRecorder (.finish _)) => [14]
+    | .component (.accountStorage (.writeWord field _ _)) =>
+        if field.firstWord == 8321 then [10]
+        else if field.firstWord == 8323 then [12]
+        else []
+    | .invoke _ metas data _ bump =>
+        let values := data.toList.flatMap fun word =>
+          word.value?.map cancelTraceValue |>.getD []
+        let values := values ++ (bump.map cancelTraceValue).getD []
+        let marker := match metas[0]? with
+          | some entry => if entry.acc == 6 then [11] else if entry.acc == 5 then [15] else []
+          | none => []
+        values ++ marker
+    | _ => []
+
+private def traceBefore (first second : Nat) : List Nat → Bool
+  | [] => false
+  | item :: rest => if item == first then rest.contains second else traceBefore first second rest
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -721,6 +866,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing raw ReduceOrderWithFreeFunds"
   let some reduceWithdrawRaw := program.methods.find? (·.ixName == "reduceOrder")
     | throwError "missing raw ReduceOrder"
+  let some cancelAllRaw := program.methods.find? (·.ixName == "cancelAllOrders")
+    | throwError "missing raw CancelAllOrders"
+  let some cancelAllFreeRaw :=
+      program.methods.find? (·.ixName == "cancelAllOrdersWithFreeFunds")
+    | throwError "missing raw CancelAllOrdersWithFreeFunds"
   match reduceRaw.entry with
   | .raw entry =>
       unless reduceRaw.kind == .get && entry.tag == 5 && entry.accountCount == 4 &&
@@ -735,6 +885,18 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.dataLen == 26 do
         throwError s!"wrong raw ReduceOrder adapter: {repr entry}"
   | .generated => throwError "ReduceOrder lost its raw adapter"
+  match cancelAllRaw.entry with
+  | .raw entry =>
+      unless cancelAllRaw.kind == .get && entry.tag == 6 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramWidths.isEmpty && entry.dataLen == 1 do
+        throwError s!"wrong raw CancelAllOrders adapter: {repr entry}"
+  | .generated => throwError "CancelAllOrders lost its raw adapter"
+  match cancelAllFreeRaw.entry with
+  | .raw entry =>
+      unless cancelAllFreeRaw.kind == .get && entry.tag == 7 && entry.accountCount == 4 &&
+          entry.programAccount == 0 && entry.paramWidths.isEmpty && entry.dataLen == 1 do
+        throwError s!"wrong raw CancelAllOrdersWithFreeFunds adapter: {repr entry}"
+  | .generated => throwError "CancelAllOrdersWithFreeFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops &&
       opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops &&
@@ -810,6 +972,62 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       s!"header={opsHaveRawReduceHeader 4 reduceWithdrawRaw.ops}, " ++
       s!"record={opsHaveRawReduceRecord reduceWithdrawRaw.ops}, " ++
       s!"finish={opsHaveRawReduceFinish reduceWithdrawRaw.ops}"
+  let hasCancelValidators (ops : Array ProofForge.Svm.IR.Op) :=
+    opsHaveAccountQuery (fun
+        | .key4RbTreeValid tree => tree.links.region.account == 2 &&
+            tree.links.firstWord == 8314 && tree.links.region.capacity == 128
+        | _ => false) ops &&
+      opsHaveAccountQuery (fun
+        | .fifoRbTreeValid tree => tree.links.region.account == 2 &&
+            tree.links.firstWord == 114 && tree.links.region.capacity == 512 && tree.bid
+        | _ => false) ops &&
+      opsHaveAccountQuery (fun
+        | .fifoRbTreeValid tree => tree.links.region.account == 2 &&
+            tree.links.firstWord == 4214 && tree.links.region.capacity == 512 && !tree.bid
+        | _ => false) ops
+  let hasCancelComponents (ops : Array ProofForge.Svm.IR.Op) :=
+    opsHaveFifoCancelCall (fun | .begin => true | _ => false) ops &&
+      opsHaveFifoCancelCall
+        (fifoCancelSideMatches 110 114 115 116 117 118 119 8320 8321 true) ops &&
+      opsHaveFifoCancelCall
+        (fifoCancelSideMatches 4210 4214 4215 4216 4217 4218 4219 8322 8323 false) ops &&
+      opsHaveFifoCancelCall (fun | .finish => true | _ => false) ops
+  unless hasCancelValidators cancelAllFreeRaw.ops && hasCancelComponents cancelAllFreeRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .key4Find 8310 tree => tree.links.region.account == 2
+        | _ => false) cancelAllFreeRaw.ops &&
+      opsHaveDataWordSetAt 2 106 1 1 cancelAllFreeRaw.ops &&
+      opsHaveRawReduceHeader 7 cancelAllFreeRaw.ops &&
+      opsHaveRawReduceFinish cancelAllFreeRaw.ops &&
+      !opsHaveInvoke cancelAllFreeRaw.ops && !opsHaveDataWord 2 1 cancelAllFreeRaw.ops do
+    throwError "raw CancelAllOrdersWithFreeFunds component composition is incomplete"
+  unless hasCancelValidators cancelAllRaw.ops && hasCancelComponents cancelAllRaw.ops &&
+      opsHaveFifoCancelQuery (· == .quoteReleased) cancelAllRaw.ops &&
+      opsHaveFifoCancelQuery (· == .baseReleased) cancelAllRaw.ops &&
+      opsHaveDataWord 2 1 cancelAllRaw.ops && opsHaveDataWord 2 14 cancelAllRaw.ops &&
+      opsHaveDataWord 2 24 cancelAllRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8321 18 128 cancelAllRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8323 18 128 cancelAllRaw.ops &&
+      opsHaveUncheckedTransfer 6 4 6 quoteSeeds cancelAllRaw.ops &&
+      opsHaveUncheckedTransfer 5 3 5 baseSeeds cancelAllRaw.ops &&
+      opsHaveRawReduceHeader 6 cancelAllRaw.ops &&
+      opsHaveRawReduceFinish cancelAllRaw.ops do
+    throwError "raw CancelAllOrders component/query/withdraw composition is incomplete"
+  let freeTrace := cancelTraceOps cancelAllFreeRaw.ops
+  unless traceBefore 1 2 freeTrace && traceBefore 2 3 freeTrace &&
+      traceBefore 3 4 freeTrace && traceBefore 4 5 freeTrace &&
+      traceBefore 5 6 freeTrace && traceBefore 6 13 freeTrace &&
+      traceBefore 13 14 freeTrace do
+    throwError s!"CancelAllOrdersWithFreeFunds order changed: {repr freeTrace}"
+  let withdrawTrace := cancelTraceOps cancelAllRaw.ops
+  unless traceBefore 1 2 withdrawTrace && traceBefore 2 3 withdrawTrace &&
+      traceBefore 3 4 withdrawTrace && traceBefore 4 5 withdrawTrace &&
+      traceBefore 5 6 withdrawTrace && traceBefore 6 7 withdrawTrace &&
+      traceBefore 7 8 withdrawTrace && traceBefore 8 10 withdrawTrace &&
+      traceBefore 10 11 withdrawTrace && traceBefore 11 12 withdrawTrace &&
+      traceBefore 12 15 withdrawTrace && traceBefore 15 13 withdrawTrace &&
+      traceBefore 13 14 withdrawTrace do
+    throwError s!"CancelAllOrders query/claim/withdraw order changed: {repr withdrawTrace}"
   match ProofForge.Svm.IR.rawSelfEntry? program with
   | .ok (some entry) =>
       unless entry.tag == 15 && entry.authoritySeed == "log" do
@@ -1071,19 +1289,28 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   unless asm.contains "jne r2, 26, raw_route_next_" &&
       asm.contains "jeq r1, 4, raw_route_match_" &&
       asm.contains "jeq r1, 5, raw_route_match_" &&
+      asm.contains "jne r2, 1, raw_route_next_" &&
+      asm.contains "jeq r1, 6, raw_route_match_" &&
+      asm.contains "jeq r1, 7, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
       asm.contains "; checkPdaSeeds account=0 count=1" &&
       asm.contains "fixed-stride external account word write acc=2 base=106 stride=1 capacity=1" &&
       asm.contains "bounded one-based acc2 RB find root=110 links=114 stride=8 capacity=512" &&
       asm.contains "bounded one-based acc2 RB find root=4210 links=4214 stride=8 capacity=512" &&
+      asm.contains
+        "bounded key-based acc2 FIFO cursor root=110 links=114 stride=8 capacity=512" &&
+      asm.contains
+        "bounded key-based acc2 FIFO cursor root=4210 links=4214 stride=8 capacity=512" &&
+      asm.contains "stxdw [r10 - 2056], r1" &&
+      asm.contains "jge r1, 65535, fifo_cancel_failure_" &&
       asm.contains "official Solana downward bump allocation bytes=1246 align=8" &&
       asm.contains "jge r1, 32, recorder_append_flush_" &&
       asm.contains "jgt r1, 1246, recorder_append_flush_" &&
       asm.contains "dynamic signed self CPI account=1 data<=1246" &&
       asm.contains "; invoke programIx=8 metas=3 dataLen=9" &&
       asm.contains "signer_seed_data_ok_" do
-    throwError "raw Phoenix reduce adapter/backend composition is incomplete"
+    throwError "raw Phoenix reduce/cancel adapter and component composition is incomplete"
   unless asm.contains "load walked acc1 data word 4" &&
       asm.contains "ldxdw r2, [r1 + 80]" &&
       asm.contains "jge r2, r3, ok_data_word_" &&

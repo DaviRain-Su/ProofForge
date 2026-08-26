@@ -231,6 +231,8 @@ def accDataRbTreeKey4Valid
   .ext (.component (.accountStorage (.key4RbTreeValidOneBased
     acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity)))
       #[root, size, bumpIndex, freeListHead]
+def fifoCancelResult (query : FifoCancel.Query) : Val :=
+  .ext (.component (.fifoCancel query)) #[]
 def accLamportsN (acc : Nat) : Val := leaf (.accLamportsN acc)
 def accDataLenN (acc : Nat) : Val := leaf (.accDataLenN acc)
 def isSignerN (acc : Nat) : Val := leaf (.isSignerN acc)

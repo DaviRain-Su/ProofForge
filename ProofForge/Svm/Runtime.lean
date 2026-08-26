@@ -197,6 +197,64 @@ append that would exceed either the configured byte bound or record-count bound.
   let _ := maxRecords
   0
 
+/-- Open the invocation-local accumulators used by bounded FIFO cancellation. Persistent order and
+trader state remains in account bytes; this handle contains only scalar cursor keys, event index,
+and released-lot totals. -/
+@[irreducible] def fifoCancelBegin : UInt64 :=
+  0
+
+/-- Cancel one statically described FIFO side in logical key order. All geometry and recorder
+arguments must extract to constants. The supplied trader index is one-based; zero is a successful
+no-op for the official missing-trader behavior. -/
+@[irreducible] def fifoCancelSide
+    (marketAccount rootWord linksWord parentWord priceWord sequenceWord ownerWord sizeWord
+      lockedWord freeWord orderStride orderCapacity traderStride traderCapacity bid
+      baseLotsPerBaseUnitWord tickSizeWord logAccount selfEntryTag : UInt64)
+    (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords traderIndex : UInt64) : UInt64 :=
+  let _ := marketAccount
+  let _ := rootWord
+  let _ := linksWord
+  let _ := parentWord
+  let _ := priceWord
+  let _ := sequenceWord
+  let _ := ownerWord
+  let _ := sizeWord
+  let _ := lockedWord
+  let _ := freeWord
+  let _ := orderStride
+  let _ := orderCapacity
+  let _ := traderStride
+  let _ := traderCapacity
+  let _ := bid
+  let _ := baseLotsPerBaseUnitWord
+  let _ := tickSizeWord
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := traderIndex
+  0
+
+/-- Read aggregate quote lots released by the active FIFO cancellation handle. -/
+@[irreducible] def fifoCancelQuoteReleased : UInt64 :=
+  0
+
+/-- Read aggregate base lots released by the active FIFO cancellation handle. -/
+@[irreducible] def fifoCancelBaseReleased : UInt64 :=
+  0
+
+/-- Read the global event index after both sides; automatic recorder flushes never reset it. -/
+@[irreducible] def fifoCancelEventCount : UInt64 :=
+  0
+
+/-- Close the invocation-local FIFO cancellation handle after its aggregate results were consumed. -/
+@[irreducible] def fifoCancelFinish : UInt64 :=
+  0
+
 /-- `system.transfer`：普通包装，不是抽出特例。 -/
 def systemTransfer (lamports : UInt64) : UInt64 :=
   invoke 2

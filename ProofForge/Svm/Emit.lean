@@ -2719,46 +2719,52 @@ private inductive RbTreeRemoveKey where
   | key4 (key0 key1 key2 key3 : Ops.Val)
   | order (bid : Bool) (price sequence : Ops.Val)
 
-/-- Remove from a complete account-resident Sokoban red-black tree. Authentication, complete
-tree/free-list validation, and key lookup all precede the first store. The mutation follows
-Sokoban 0.3.0's predecessor transplant and delete-fixup exactly, then pushes the removed one-based
-slot onto the in-account free list without copying its key/value payload to transient heap. -/
+/-- Remove from a complete account-resident Sokoban red-black tree. Authentication and key lookup
+precede the first store. Ordinary source calls also run complete tree/free-list validation;
+component-owned bounded loops may reuse one dominating validator through `prevalidated`. The
+mutation follows Sokoban 0.3.0's predecessor transplant and delete-fixup exactly, then pushes the
+removed one-based slot onto the in-account free list without copying its key/value payload. -/
 private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-    (key : RbTreeRemoveKey) : Except String String := do
+    (key : RbTreeRemoveKey) (prevalidated : Bool := false)
+    (valueLoader : Ops.Val → Nat → Nat → String → Except String String :=
+      fun value stackOff nonce scope => loadVal p value stackOff nonce scope) :
+    Except String String := do
   let loads ←
     match key with
     | .key4 key0 key1 key2 key3 => do
-        let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
-        let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
-        let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
-        let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+        let loadKey0 ← valueLoader key0 8 0 s!"{label}_key0"
+        let loadKey1 ← valueLoader key1 16 1 s!"{label}_key1"
+        let loadKey2 ← valueLoader key2 24 2 s!"{label}_key2"
+        let loadKey3 ← valueLoader key3 32 3 s!"{label}_key3"
         pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3)
     | .order _ price sequence => do
-        let loadPrice ← loadVal p price 8 0 s!"{label}_price"
-        let loadSequence ← loadVal p sequence 16 1 s!"{label}_sequence"
+        let loadPrice ← valueLoader price 8 0 s!"{label}_price"
+        let loadSequence ← valueLoader sequence 16 1 s!"{label}_sequence"
         pure (loadPrice ++ loadSequence)
   let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
   let validateStack := match key with | .key4 .. => 40 | .order .. => 24
   let validateNonce := match key with | .key4 .. => 4 | .order .. => 2
   let validate ←
-    match key with
-    | .key4 .. =>
-        AccountStorage.Emit.emitQuery (accountStorageContext p)
-          (.key4RbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
-            strideWords capacity)
-          #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
-            .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
-            .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
-          validateStack validateNonce s!"{label}_preflight"
-    | .order bid .. =>
-        AccountStorage.Emit.emitQuery (accountStorageContext p)
-          (.fifoRbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
-            (keyBaseWord + 1) strideWords capacity bid)
-          #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
-            .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
-            .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
-          validateStack validateNonce s!"{label}_preflight"
+    if prevalidated then pure ""
+    else
+      match key with
+      | .key4 .. =>
+          AccountStorage.Emit.emitQuery (accountStorageContext p)
+            (.key4RbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+              strideWords capacity)
+            #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+              .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+              .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
+            validateStack validateNonce s!"{label}_preflight"
+      | .order bid .. =>
+          AccountStorage.Emit.emitQuery (accountStorageContext p)
+            (.fifoRbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+              (keyBaseWord + 1) strideWords capacity bid)
+            #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+              .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+              .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
+            validateStack validateNonce s!"{label}_preflight"
   let strideBytes := 8 * strideWords
   let linksBaseBytes := 8 * linksBaseWord
   let parentBaseBytes := 8 * parentBaseWord
@@ -2778,6 +2784,9 @@ private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
   let tag := match key with | .key4 .. => s!"rb4r_{token}" | .order .. => s!"rbor_{token}"
   let authFailure := tag ++ "_auth_failure"
   let failure := tag ++ "_failure"
+  let validateCheck :=
+    if prevalidated then ""
+    else s!"  ldxdw r1, [r10 - {validateStack}]\n  jeq r1, 0, {failure}\n"
   let dataOk := tag ++ "_data_ok"
   let searchLoop := tag ++ "_search_loop"
   let searchBefore := tag ++ "_search_before"
@@ -2987,9 +2996,7 @@ private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
   jge r1, r2, {dataOk}
   ja {authFailure}
 {dataOk}:
-" ++ sideCheck ++ validate ++ s!"\
-  ldxdw r1, [r10 - {validateStack}]
-  jeq r1, 0, {failure}
+" ++ sideCheck ++ validate ++ validateCheck ++ s!"\
   ldxdw r8, [r10 - {headerStack acc}]
   add64 r8, 88
   stxdw [r10 - 248], r8
@@ -3776,6 +3783,19 @@ private def accountStorageMutationBackend (p : IR.Program) :
           tree.sequence.firstWord tree.links.region.strideWords tree.links.region.capacity tree.bid
           price sequence
     | _, _ => .error "extract/ir: malformed account-storage map remove"
+  emitRemoveValidated := fun valueLoader label map key =>
+    match map, key with
+    | .key4 rootWord tree, #[key0, key1, key2, key3] =>
+        emitAccDataRbTreeRemove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity (.key4 key0 key1 key2 key3) true
+          valueLoader
+    | .fifo rootWord tree, #[price, sequence] =>
+        emitAccDataRbTreeRemove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.price.firstWord
+          tree.links.region.strideWords tree.links.region.capacity
+          (.order tree.bid price sequence) true valueLoader
+    | _, _ => .error "extract/ir: malformed validated account-storage map remove"
   emitCheckedAdd := fun label map key delta =>
     match map, key, delta with
     | .key4 rootWord tree, #[key0, key1, key2, key3], #[delta0, delta1] =>

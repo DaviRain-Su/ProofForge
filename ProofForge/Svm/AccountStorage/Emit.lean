@@ -22,6 +22,11 @@ structure MutationBackend where
   emitInsert : String → RbMap → Array Ops.Val → Array Ops.Val → ExistingValuePolicy →
     Except String String
   emitRemove : String → RbMap → Array Ops.Val → Except String String
+  /-- Internal composition hook for a loop that has already run the complete map validator.
+  Source-level calls never select this path directly. -/
+  emitRemoveValidated :
+    (Ops.Val → Nat → Nat → String → Except String String) →
+      String → RbMap → Array Ops.Val → Except String String
   emitCheckedAdd : String → RbMap → Array Ops.Val → Array Ops.Val → Except String String
 
 /-- Read one runtime-selected element from a statically bounded account-data field. Zero-based

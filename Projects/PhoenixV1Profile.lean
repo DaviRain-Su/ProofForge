@@ -11,8 +11,9 @@ plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 This is deliberately a separate verifier/profile program. Generated probes keep ProofForge state in
 account 0 and the candidate market in account 1; the official raw adapter instead authenticates a
 physical program prefix and mutates the market in account 2. Its fixed-shape Sokoban routines are
-composed through `AccountStorage`; official instruction coverage currently includes tag 4
-`ReduceOrder` and tag 5 `ReduceOrderWithFreeFunds`, not the complete Phoenix instruction set.
+composed through bounded target-owned components; official instruction coverage currently includes
+tags 4–7 (`ReduceOrder`, `ReduceOrderWithFreeFunds`, `CancelAllOrders`, and
+`CancelAllOrdersWithFreeFunds`), not the complete Phoenix instruction set.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -1463,6 +1464,127 @@ def withdrawReleasedAt (side atoms : UInt64) : UInt64 :=
     let seeds : Array PdaSeed := #[.ascii "vault", .accKey 1, .accData 1 48 32]
     tokenTransferSignedIx 7 5 3 5 atoms seeds (highUInt32 (accDataWord 2 5))
 
+/-- Complete dominating validation required by the component-owned CancelAll mutation loop. The
+three fixed allocators, trader key tree, and both FIFO trees are validated before the recorder can
+emit or any account byte can change. A missing trader remains distinct: this function succeeds and
+the subsequent bounded find returns the zero sentinel. -/
+def cancelAllStorageValid512At (marketAccount : UInt64) : UInt64 :=
+  if profileAccountBytesAt marketAccount = 84944 &&
+      accDataWord marketAccount 106 ≠ 0 &&
+      allocatorHeadersValidAt marketAccount = 1 then
+    let traderCursor := accDataWord marketAccount 8313
+    let bidCursor := accDataWord marketAccount 113
+    let askCursor := accDataWord marketAccount 4213
+    let traderValid := accDataRbTreeKey4Valid marketAccount 8314 8315 8316 18 128
+      (lowUInt32 (accDataWord marketAccount 8310)) (accDataWord marketAccount 8312)
+      (lowUInt32 traderCursor) (highUInt32 traderCursor)
+    let bidValid := accDataRbTreeValid marketAccount 114 115 116 117 8 512 1
+      (lowUInt32 (accDataWord marketAccount 110)) (accDataWord marketAccount 112)
+      (lowUInt32 bidCursor) (highUInt32 bidCursor)
+    let askValid := accDataRbTreeValid marketAccount 4214 4215 4216 4217 8 512 0
+      (lowUInt32 (accDataWord marketAccount 4210)) (accDataWord marketAccount 4212)
+      (lowUInt32 askCursor) (highUInt32 askCursor)
+    if traderValid = 1 && bidValid = 1 && askValid = 1 then 1 else 0
+  else
+    0
+
+/-- Find the official one-based trader slot after `cancelAllStorageValid512At` has dominated the
+operation. Zero is the account-resident null sentinel and implements missing-trader success. -/
+def cancelAllTraderIndex512At (marketAccount traderAccount : UInt64) : UInt64 :=
+  accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
+    (signerKey traderAccount) (accKeyWord traderAccount 1)
+    (accKeyWord traderAccount 2) (accKeyWord traderAccount 3)
+
+/-- Open the invocation-local scalar accumulator shared by both FIFO passes. -/
+def beginCancelAll : UInt64 := fifoCancelBegin
+
+/-- Cancel owned bids in Phoenix logical FIFO order. Static account geometry, collateral math, and
+audit recording are owned by the bounded component rather than the generic SVM operation set. -/
+def cancelAllBids512At (marketAccount traderIndex : UInt64) : UInt64 :=
+  fifoCancelSide marketAccount 110 114 115 116 117 118 119 8320 8321
+    8 512 18 128 1 104 105 0 15 "log" 1246 93 91 32 traderIndex
+
+/-- Cancel owned asks after the bid pass, preserving one invocation-global event index. -/
+def cancelAllAsks512At (marketAccount traderIndex : UInt64) : UInt64 :=
+  fifoCancelSide marketAccount 4210 4214 4215 4216 4217 4218 4219 8322 8323
+    8 512 18 128 0 104 105 0 15 "log" 1246 93 91 32 traderIndex
+
+/-- Close the FIFO accumulator after all aggregate results have been consumed. -/
+def finishCancelAll : UInt64 := fifoCancelFinish
+
+/-- Shared official Token-context gate for tags 4 and 6. It authenticates the fixed raw account
+shape, market status, classic SPL Token program, trader destinations, vault keys, mints, and vault
+authorities before either storage mutation or CPI can occur. -/
+def cancelWithdrawContextValid : UInt64 :=
+  if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
+      isWritable 4 = 0 || isWritable 5 = 0 || isWritable 6 = 0 || isWritable 7 = 0 ||
+      isWritable 8 ≠ 0 || checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
+    0
+  else if profileAccountBytesAt 2 ≠ 84944 then
+    0
+  else if reduceStatusValidAt 2 = 0 then
+    0
+  else if splTokenProgramValidAt 8 = 0 then
+    0
+  else if accDataLen 4 ≠ 165 || !key4Equal
+      (accOwnerWord 4 0) (accOwnerWord 4 1) (accOwnerWord 4 2) (accOwnerWord 4 3)
+      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
+    0
+  else if !key4Equal
+      (accDataWord 4 0) (accDataWord 4 1) (accDataWord 4 2) (accDataWord 4 3)
+      (accDataWord 2 6) (accDataWord 2 7) (accDataWord 2 8) (accDataWord 2 9) then
+    0
+  else if !key4Equal
+      (accDataWord 4 4) (accDataWord 4 5) (accDataWord 4 6) (accDataWord 4 7)
+      (accKeyWord 3 0) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3) then
+    0
+  else if accDataLen 5 ≠ 165 || !key4Equal
+      (accOwnerWord 5 0) (accOwnerWord 5 1) (accOwnerWord 5 2) (accOwnerWord 5 3)
+      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
+    0
+  else if !key4Equal
+      (accDataWord 5 0) (accDataWord 5 1) (accDataWord 5 2) (accDataWord 5 3)
+      (accDataWord 2 16) (accDataWord 2 17) (accDataWord 2 18) (accDataWord 2 19) then
+    0
+  else if !key4Equal
+      (accDataWord 5 4) (accDataWord 5 5) (accDataWord 5 6) (accDataWord 5 7)
+      (accKeyWord 3 0) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3) then
+    0
+  else if !key4Equal
+      (accKeyWord 6 0) (accKeyWord 6 1) (accKeyWord 6 2) (accKeyWord 6 3)
+      (accDataWord 2 10) (accDataWord 2 11) (accDataWord 2 12) (accDataWord 2 13) then
+    0
+  else if accDataLen 6 ≠ 165 || !key4Equal
+      (accOwnerWord 6 0) (accOwnerWord 6 1) (accOwnerWord 6 2) (accOwnerWord 6 3)
+      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
+    0
+  else if !key4Equal
+      (accDataWord 6 0) (accDataWord 6 1) (accDataWord 6 2) (accDataWord 6 3)
+      (accDataWord 2 6) (accDataWord 2 7) (accDataWord 2 8) (accDataWord 2 9) then
+    0
+  else if !key4Equal
+      (accDataWord 6 4) (accDataWord 6 5) (accDataWord 6 6) (accDataWord 6 7)
+      (accKeyWord 6 0) (accKeyWord 6 1) (accKeyWord 6 2) (accKeyWord 6 3) then
+    0
+  else if !key4Equal
+      (accKeyWord 7 0) (accKeyWord 7 1) (accKeyWord 7 2) (accKeyWord 7 3)
+      (accDataWord 2 20) (accDataWord 2 21) (accDataWord 2 22) (accDataWord 2 23) then
+    0
+  else if accDataLen 7 ≠ 165 || !key4Equal
+      (accOwnerWord 7 0) (accOwnerWord 7 1) (accOwnerWord 7 2) (accOwnerWord 7 3)
+      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
+    0
+  else if !key4Equal
+      (accDataWord 7 0) (accDataWord 7 1) (accDataWord 7 2) (accDataWord 7 3)
+      (accDataWord 2 16) (accDataWord 2 17) (accDataWord 2 18) (accDataWord 2 19) then
+    0
+  else if !key4Equal
+      (accDataWord 7 4) (accDataWord 7 5) (accDataWord 7 6) (accDataWord 7 7)
+      (accKeyWord 7 0) (accKeyWord 7 1) (accKeyWord 7 2) (accKeyWord 7 3) then
+    0
+  else
+    1
+
 /-- Historical generated adapters retain their existing account geometry and IDL. -/
 @[pf_entry]
 def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
@@ -1522,71 +1644,7 @@ sequence, and emits the same Reduce record with origin 4.
 @[pf_entry, pf_svm_raw 4 9 0]
 def reduceOrder (_s : State) (side : UInt8)
     (price sequence requested : UInt64) : Except Error (State × UInt64) := do
-  if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
-      isWritable 4 = 0 || isWritable 5 = 0 || isWritable 6 = 0 || isWritable 7 = 0 ||
-      isWritable 8 ≠ 0 || checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
-    .error .overflow
-  else if profileAccountBytesAt 2 ≠ 84944 then
-    .error .overflow
-  else if reduceStatusValidAt 2 = 0 then
-    .error .overflow
-  else if splTokenProgramValidAt 8 = 0 then
-    .error .overflow
-  else if accDataLen 4 ≠ 165 || !key4Equal
-      (accOwnerWord 4 0) (accOwnerWord 4 1) (accOwnerWord 4 2) (accOwnerWord 4 3)
-      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 4 0) (accDataWord 4 1) (accDataWord 4 2) (accDataWord 4 3)
-      (accDataWord 2 6) (accDataWord 2 7) (accDataWord 2 8) (accDataWord 2 9) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 4 4) (accDataWord 4 5) (accDataWord 4 6) (accDataWord 4 7)
-      (accKeyWord 3 0) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3) then
-    .error .overflow
-  else if accDataLen 5 ≠ 165 || !key4Equal
-      (accOwnerWord 5 0) (accOwnerWord 5 1) (accOwnerWord 5 2) (accOwnerWord 5 3)
-      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 5 0) (accDataWord 5 1) (accDataWord 5 2) (accDataWord 5 3)
-      (accDataWord 2 16) (accDataWord 2 17) (accDataWord 2 18) (accDataWord 2 19) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 5 4) (accDataWord 5 5) (accDataWord 5 6) (accDataWord 5 7)
-      (accKeyWord 3 0) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3) then
-    .error .overflow
-  else if !key4Equal
-      (accKeyWord 6 0) (accKeyWord 6 1) (accKeyWord 6 2) (accKeyWord 6 3)
-      (accDataWord 2 10) (accDataWord 2 11) (accDataWord 2 12) (accDataWord 2 13) then
-    .error .overflow
-  else if accDataLen 6 ≠ 165 || !key4Equal
-      (accOwnerWord 6 0) (accOwnerWord 6 1) (accOwnerWord 6 2) (accOwnerWord 6 3)
-      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 6 0) (accDataWord 6 1) (accDataWord 6 2) (accDataWord 6 3)
-      (accDataWord 2 6) (accDataWord 2 7) (accDataWord 2 8) (accDataWord 2 9) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 6 4) (accDataWord 6 5) (accDataWord 6 6) (accDataWord 6 7)
-      (accKeyWord 6 0) (accKeyWord 6 1) (accKeyWord 6 2) (accKeyWord 6 3) then
-    .error .overflow
-  else if !key4Equal
-      (accKeyWord 7 0) (accKeyWord 7 1) (accKeyWord 7 2) (accKeyWord 7 3)
-      (accDataWord 2 20) (accDataWord 2 21) (accDataWord 2 22) (accDataWord 2 23) then
-    .error .overflow
-  else if accDataLen 7 ≠ 165 || !key4Equal
-      (accOwnerWord 7 0) (accOwnerWord 7 1) (accOwnerWord 7 2) (accOwnerWord 7 3)
-      (accKeyWord 8 0) (accKeyWord 8 1) (accKeyWord 8 2) (accKeyWord 8 3) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 7 0) (accDataWord 7 1) (accDataWord 7 2) (accDataWord 7 3)
-      (accDataWord 2 16) (accDataWord 2 17) (accDataWord 2 18) (accDataWord 2 19) then
-    .error .overflow
-  else if !key4Equal
-      (accDataWord 7 4) (accDataWord 7 5) (accDataWord 7 6) (accDataWord 7 7)
-      (accKeyWord 7 0) (accKeyWord 7 1) (accKeyWord 7 2) (accKeyWord 7 3) then
+  if cancelWithdrawContextValid = 0 then
     .error .overflow
   else
     let side := side.toUInt64
@@ -1630,6 +1688,72 @@ def reduceOrder (_s : State) (side : UInt8)
         else
           .error .overflow
 
+/--
+Official Phoenix `CancelAllOrdersWithFreeFunds` tag 7 has no payload and uses the four-account
+cancel-only context. Complete trader/bid/ask validation dominates two component-owned bounded
+passes. Bids are canceled before asks, missing traders and empty books still advance sequence and
+emit one header-only batch, and no Token CPI is possible.
+-/
+@[pf_entry, pf_svm_raw 7 4 0]
+def cancelAllOrdersWithFreeFunds (_s : State) : Except Error (State × UInt64) := do
+  if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
+      checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
+    .error .overflow
+  else if cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let traderIndex := cancelAllTraderIndex512At 2 3
+    let marketSequence := accDataWord 2 106
+    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let _ := beginReduceBatchAt 7 2 2 marketSequence
+    let _ := beginCancelAll
+    let _ := cancelAllBids512At 2 traderIndex
+    let _ := cancelAllAsks512At 2 traderIndex
+    let _ := finishCancelAll
+    let _ := finishReduceBatch
+    .ok (_s, 0)
+
+/--
+Official Phoenix `CancelAllOrders` tag 6 composes the same bounded bid/ask passes with the shared
+tag-4 Token context. The component reports only lots released by this invocation; the adapter
+claims exactly those deltas, preserves pre-existing free balances, and performs quote withdrawal
+before base withdrawal as required by Phoenix-v1.
+-/
+@[pf_entry, pf_svm_raw 6 9 0]
+def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
+  if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let traderIndex := cancelAllTraderIndex512At 2 3
+    let marketSequence := accDataWord 2 106
+    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let _ := beginReduceBatchAt 6 2 2 marketSequence
+    let _ := beginCancelAll
+    let _ := cancelAllBids512At 2 traderIndex
+    let _ := cancelAllAsks512At 2 traderIndex
+    let quoteReleased := fifoCancelQuoteReleased
+    let baseReleased := fifoCancelBaseReleased
+    let quoteLotSize := accDataWord 2 24
+    let baseLotSize := accDataWord 2 14
+    let quoteDivisor := if quoteReleased = 0 then 1 else quoteReleased
+    let baseDivisor := if baseReleased = 0 then 1 else baseReleased
+    if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+      let quoteAtoms := quoteReleased * quoteLotSize
+      let baseAtoms := baseReleased * baseLotSize
+      let _ ←
+        if traderIndex = 0 then .ok 0
+        else claimReleasedFunds512At 2 traderIndex 0 quoteReleased
+      let _ := withdrawReleasedAt 0 quoteAtoms
+      let _ ←
+        if traderIndex = 0 then .ok 0
+        else claimReleasedFunds512At 2 traderIndex 1 baseReleased
+      let _ := withdrawReleasedAt 1 baseAtoms
+      let _ := finishCancelAll
+      let _ := finishReduceBatch
+      .ok (_s, 0)
+    else
+      .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=
@@ -1645,6 +1769,8 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   bidRootNeighborhood4096 profileAccountBytesAt profileAccountBytes allocatorHeadersValidAt
   allocatorHeadersValid reduceAskFreeFunds512At reduceBidFreeFunds512At reduceFreeFunds512At
   quoteLotsReleased512At claimReleasedFunds512At beginReduceBatchAt recordReduceAt
-  finishReduceBatch withdrawReleasedAt
+  finishReduceBatch withdrawReleasedAt cancelAllStorageValid512At cancelAllTraderIndex512At
+  beginCancelAll cancelAllBids512At cancelAllAsks512At finishCancelAll
+  cancelWithdrawContextValid
 
 end Projects.PhoenixV1Profile

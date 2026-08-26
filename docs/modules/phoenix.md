@@ -140,9 +140,10 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 51 SVM build、Mollusk 246/246 与 Anvil 12/12。跨四档逐样本只作
-  host reference↔source fold，不宣称完整 chain refinement。
-- **部分支持（P5 fixed account profile + official tag 4/5）**：独立 profile 按 canonical
+  矩阵已有；当前产物已通过全 51 SVM build、Phoenix-v1 profile 51/51、全 Mollusk
+  255/255 与 Anvil 12/12。跨四档逐样本只作 host reference↔source fold，不宣称完整
+  chain refinement。
+- **部分支持（P5 fixed account profile + official tags 4–7）**：独立 profile 按 canonical
   owner、576-byte header、12 个 capacity tuple 与 exact length 选择静态 geometry；完整
   bid/ask/trader validator、Key4/FIFO find、one-based field access、allocator 与 RB mutation
   都由 `AccountStorage` 在 account bytes 上有界执行。最小 `(512,512,128)` profile 组合了
@@ -156,9 +157,15 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   authenticated audit 由 component-owned bounded recorder 组合：93-byte header、35-byte Reduce、
   32-record/1,246-byte 双 bound、append 前自动 flush、empty finish header-only。payload 使用
   官方 SDK 固定 32 KiB downward bump cursor，不把 pointer 写入 market account。
+  tags 6/7 的 exact one-byte no-payload wire 复用同一入口和 recorder，再由 component-owned
+  `FifoCancel` 组合 cursor、validated RB removal、owner/size field、checked locked→free 与
+  aggregate release。完整 trader/bid/ask validator 在任何 sequence/store/CPI 前 dominate；
+  bids 先于 asks，各侧保持 FIFO，event index 跨 32-record flush 连续。missing trader/empty
+  book 仍 sequence+1 并发 header-only。tag 7 无 Token/status gate；tag 6 只 claim 本次释放量，
+  保留 pre-existing free，并按 quote claim/withdraw → base claim/withdraw 排序。
   Phoenix source 只做组合；没有新增 Phoenix-specific 顶层 Ops/IR/主 Emit case，也不创建
   heap Map、node copy 或 persistent pointer。
-- **未支持（P5 remaining instructions/公网）**：cancel-all/cancel-up-to/by-id、matching/
+- **未支持（P5 remaining instructions/公网）**：cancel-up-to/by-id、matching/
   placement wire、runtime remaining accounts、Token-2022 extension 语义、全部 Phoenix-v1
   指令兼容与公网部署。
 
@@ -177,7 +184,7 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 | `Ladder` / `Vec` | 不定长 |
 
 独立 `PhoenixV1Profile` 是预编译 fixed-capacity account profile，不是运行时动态容器。
-`EntryAdapter → AccountStorage → target-owned SVM backend` 已贯通 official tag 4/5 与 ordered
-cursor/bounded audit recorder；下一片组合无 payload 的 tag 6/7 CancelAll pair，以检验新增
-协议能力不再扩张顶层 Ops/IR/主 Emit。完整 Phoenix-v1 指令集和
+`EntryAdapter → Component(FifoCancel/BatchRecorder/AccountStorage) → target-owned SVM backend`
+已贯通 official tags 4–7；下一片在相同稳定边界上增加 tags 8/9 CancelUpTo 的 bounded filter，
+而不是再改顶层 Ops/IR/主 Emit。完整 Phoenix-v1 指令集和
 动态 remaining accounts 仍关闭。

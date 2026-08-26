@@ -778,6 +778,15 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let w := word.toNat
             if Svm.Ops.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
           | _, _ => none
+        else if endsWith e ".fifoCancelQuoteReleased" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelQuoteReleased then
+          some (.fifoCancelResult .quoteReleased)
+        else if endsWith e ".fifoCancelBaseReleased" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelBaseReleased then
+          some (.fifoCancelResult .baseReleased)
+        else if endsWith e ".fifoCancelEventCount" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelEventCount then
+          some (.fifoCancelResult .eventCount)
         else if (endsWith e ".accDataWord" || isConstNamed e ``ProofForge.Svm.Runtime.accDataWord) &&
             e.getAppArgs.size ≥ 2 then
           match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -2699,16 +2708,74 @@ private def decodeBatchRecorderCall (env : Environment) (e : Expr) :
       return .batchRecorder (.finish config)
   else none
 
-/-- Find a component recorder call through ordinary source wrappers without exposing its
-constructors to the generic extraction IR. -/
-private def findBatchRecorderCall (env : Environment) (fuel : Nat) (e : Expr) :
+private def decodeFifoCancelCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelBegin ||
+      endsWith e ".fifoCancelBegin" then
+    some (.fifoCancel .begin)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelFinish ||
+      endsWith e ".fifoCancelFinish" then
+    some (.fifoCancel .finish)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelSide ||
+      endsWith e ".fifoCancelSide" then
+    if args.size < 25 then none else do
+      let marketAccount ← val env args[args.size - 25]! >>= natOfVal
+      let rootWord ← val env args[args.size - 24]! >>= natOfVal
+      let linksWord ← val env args[args.size - 23]! >>= natOfVal
+      let parentWord ← val env args[args.size - 22]! >>= natOfVal
+      let priceWord ← val env args[args.size - 21]! >>= natOfVal
+      let sequenceWord ← val env args[args.size - 20]! >>= natOfVal
+      let ownerWord ← val env args[args.size - 19]! >>= natOfVal
+      let sizeWord ← val env args[args.size - 18]! >>= natOfVal
+      let lockedWord ← val env args[args.size - 17]! >>= natOfVal
+      let freeWord ← val env args[args.size - 16]! >>= natOfVal
+      let orderStride ← val env args[args.size - 15]! >>= natOfVal
+      let orderCapacity ← val env args[args.size - 14]! >>= natOfVal
+      let traderStride ← val env args[args.size - 13]! >>= natOfVal
+      let traderCapacity ← val env args[args.size - 12]! >>= natOfVal
+      let bid ← val env args[args.size - 11]! >>= natOfVal
+      let baseLotsPerBaseUnitWord ← val env args[args.size - 10]! >>= natOfVal
+      let tickSizeWord ← val env args[args.size - 9]! >>= natOfVal
+      let recorder ← decodeBatchRecorderConfig env
+        args[args.size - 8]! args[args.size - 7]! args[args.size - 6]!
+        args[args.size - 5]! args[args.size - 4]! args[args.size - 3]! args[args.size - 2]!
+      let traderIndex ← val env args[args.size - 1]!
+      if bid != 0 && bid != 1 then none else
+      let bid := bid == 1
+      let access : Svm.AccountStorage.Access :=
+        { writable := true, currentProgramOwned := true }
+      let field (baseWord strideWords capacity : Nat) : Svm.AccountStorage.Field :=
+        { region :=
+            { account := marketAccount, baseWord, strideWords, capacity
+              indexBase := .one, access } }
+      let config : Svm.FifoCancel.Config :=
+        { map := .fifoOneBased marketAccount rootWord linksWord parentWord priceWord sequenceWord
+            orderStride orderCapacity bid
+          owner := field ownerWord orderStride orderCapacity
+          size := field sizeWord orderStride orderCapacity
+          locked := field lockedWord traderStride traderCapacity
+          free := field freeWord traderStride traderCapacity
+          collateral := if bid then .quote baseLotsPerBaseUnitWord tickSizeWord else .base
+          recorder }
+      if config.wellFormed then some (.fifoCancel (.cancelSide config traderIndex)) else none
+  else none
+
+private def decodeComponentCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e
+
+/-- Find a bounded component call through ordinary source wrappers without exposing concrete
+component constructors to the generic extraction IR. -/
+private def findComponentCall (env : Environment) (fuel : Nat) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
   let rec go (fuel : Nat) (e : Expr) : Option (Svm.Component.Call Ops.Val) :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
       let e := e.consumeMData
-      match decodeBatchRecorderCall env e with
+      match decodeComponentCall env e with
       | some call => some call
       | none =>
         let unfolded :=
@@ -3102,7 +3169,10 @@ private def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove ||
       constants.contains ``ProofForge.Svm.Runtime.batchRecorderBegin ||
       constants.contains ``ProofForge.Svm.Runtime.batchRecorderAppend ||
-      constants.contains ``ProofForge.Svm.Runtime.batchRecorderFinish then true
+      constants.contains ``ProofForge.Svm.Runtime.batchRecorderFinish ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelBegin ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelSide ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelFinish then true
   else
     match fuel with
     | 0 => false
@@ -3224,7 +3294,7 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
             | some _ => go fuel' (body.instantiate1 value) effects
             | none => (effects, e, mentionsSvmEffect env 16 value)
           else
-            match findBatchRecorderCall env 16 value with
+            match findComponentCall env 16 value with
             | some call =>
                 go fuel' (body.instantiate1 value) (effects.push (.component call))
             | none =>
@@ -4719,7 +4789,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) (stateType? : Option Name := none) (deepScalars : Bool := false) :
     Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
-  if let some call := findBatchRecorderCall env 16 e then
+  if let some call := findComponentCall env 16 e then
     .ok #[.component call, .returnU64 (.lit 0)]
   else if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
@@ -5064,7 +5134,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
       -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
-    else if let some call := findBatchRecorderCall env 16 e then
+    else if let some call := findComponentCall env 16 e then
       return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
@@ -5409,7 +5479,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           return .error (if stateful then s!"state loop else: {r}" else s!"ite else: {r}")
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
-    else if let some call := decodeBatchRecorderCall env e <|> findBatchRecorderCall env 8 e then
+    else if let some call := decodeComponentCall env e <|> findComponentCall env 8 e then
       return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       return invokeOpsWithRet env e inv

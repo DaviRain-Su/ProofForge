@@ -363,6 +363,47 @@ private def phoenixRecorderConfig : ProofForge.Svm.BatchRecorder.Config :=
     countOffset := 91
     maxRecords := 32 }
 
+private def mutableOneBasedField (account baseWord strideWords capacity : Nat) :
+    ProofForge.Svm.AccountStorage.Field :=
+  { region :=
+      { account, baseWord, strideWords, capacity
+        indexBase := .one
+        access := { writable := true, currentProgramOwned := true } } }
+
+private def phoenixAskCancelConfig : ProofForge.Svm.FifoCancel.Config :=
+  { map := .fifoOneBased 1 4210 4214 4215 4216 4217 8 512 false
+    owner := mutableOneBasedField 1 4218 8 512
+    size := mutableOneBasedField 1 4219 8 512
+    locked := mutableOneBasedField 1 8322 18 128
+    free := mutableOneBasedField 1 8323 18 128
+    collateral := .base
+    recorder := phoenixRecorderConfig }
+
+private def phoenixAskCancel : ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
+  .fifoCancel (.cancelSide phoenixAskCancelConfig (.arg 0))
+
+private def fifoEventCountQuery : ProofForge.Svm.Component.Query :=
+  .fifoCancel .eventCount
+
+#guard phoenixAskCancelConfig.wellFormed
+#guard !({ phoenixAskCancelConfig with collateral := .quote 104 105 }).wellFormed
+#guard phoenixAskCancel.values == #[.arg 0]
+#guard phoenixAskCancel.effects.reads == #[1]
+#guard phoenixAskCancel.effects.writes == #[1]
+#guard phoenixAskCancel.minAccounts (fun _ => 0) == 2
+#guard phoenixAskCancel.usesCpi
+#guard phoenixAskCancel.stackScratchEnd == ProofForge.Svm.BatchRecorder.stackScratchEnd
+#guard phoenixAskCancel.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
+  "fcs.1.4210.4214.4215.4216.4217.4218.4219.8322.8323.8.512.b.a0"
+#guard fifoEventCountQuery.arity == 0
+#guard fifoEventCountQuery.effects.reads.isEmpty && fifoEventCountQuery.effects.writes.isEmpty
+#guard fifoEventCountQuery.wellFormed
+#guard fifoEventCountQuery.canonical (fun _ : ProofForge.Svm.Ops.Val => "v") #[] == "fcqe"
+#guard fifoEventCountQuery.canonical (fun _ : ProofForge.Svm.Ops.Val => "v") #[.lit 1] ==
+  "invalid-fcqe-1"
+#guard ProofForge.Svm.FifoCancel.eventIndexStack > 2048
+#guard ProofForge.Svm.FifoCancel.queryScratchEnd ≤ 4096
+
 private def phoenixRecorderHeader :
     Array (ProofForge.Svm.BatchRecorder.Word ProofForge.Svm.Ops.Val) :=
   #[.u8le (.lit 1), .u8le (.lit 5),
@@ -448,6 +489,7 @@ private def unusedStorageBackend : ProofForge.Svm.Component.Emit.Backend :=
   { accountStorage :=
       { emitInsert := fun _ _ _ _ _ => .error "unused storage insert"
         emitRemove := fun _ _ _ => .error "unused storage remove"
+        emitRemoveValidated := fun _ _ _ _ => .error "unused validated storage remove"
         emitCheckedAdd := fun _ _ _ _ => .error "unused storage checked add" } }
 
 private def recorderBeginAssembly :=
@@ -461,6 +503,25 @@ private def recorderAppendAssembly :=
 private def recorderFinishAssembly :=
   ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext unusedStorageBackend
     "recorder_finish_test" recorderFinish
+
+private def fifoCancelBackend : ProofForge.Svm.Component.Emit.Backend :=
+  { accountStorage :=
+      { emitInsert := fun _ _ _ _ _ => .error "unused FIFO insert"
+        emitRemove := fun _ _ _ => .ok "  ; ordinary-remove-hook\n"
+        emitRemoveValidated := fun _ _ _ _ => .ok "  ; validated-remove-hook\n"
+        emitCheckedAdd := fun _ _ _ _ => .error "unused FIFO checked add" } }
+
+private def fifoCancelBeginAssembly :=
+  ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext fifoCancelBackend
+    "fifo_cancel_begin_test" (.fifoCancel .begin)
+
+private def fifoCancelSideAssembly :=
+  ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext fifoCancelBackend
+    "fifo_cancel_side_test" phoenixAskCancel
+
+private def fifoEventCountAssembly :=
+  ProofForge.Svm.Component.Emit.emitQuery recorderComponentEmitContext fifoEventCountQuery #[]
+    160 0 "fifo_event_count_test"
 
 #guard ProofForge.Svm.Heap.startAddress == 0x300000000
 #guard ProofForge.Svm.Heap.defaultFrameBytes == 32 * 1024
@@ -486,6 +547,32 @@ private def recorderFinishAssembly :=
   | .ok assembly =>
       assembly.contains "dynamic signed self CPI account=1 data<=1246" &&
         assembly.contains "lddw r1, 93" && assembly.contains "stxdw [r10 - 448], r1"
+  | .error _ => false
+#guard
+  match fifoCancelBeginAssembly with
+  | .ok assembly =>
+      assembly.contains "open bounded FIFO cancellation accumulator" &&
+        assembly.contains "stxdw [r10 - 2056], r1" &&
+        assembly.contains "stxdw [r10 - 2072], r1" &&
+        assembly.contains "stxdw [r10 - 2184], r1"
+  | .error _ => false
+#guard
+  match fifoCancelSideAssembly with
+  | .ok assembly =>
+      assembly.contains
+          "bounded key-based acc1 FIFO cursor root=4210 links=4214 stride=8 capacity=512" &&
+        assembly.contains "; validated-remove-hook" &&
+        !assembly.contains "; ordinary-remove-hook" && !assembly.contains "_preflight" &&
+        assembly.contains "ldxdw r1, [r10 - 2056]" &&
+        assembly.contains "jge r1, 65535, fifo_cancel_failure_fifo_cancel_side_test" &&
+        assembly.contains "dynamic signed self CPI account=1 data<=1246"
+  | .error _ => false
+#guard
+  match fifoEventCountAssembly with
+  | .ok assembly =>
+      assembly.contains "fifo_cancel_active_fifo_event_count_test" &&
+        assembly.contains "ldxdw r1, [r10 - 2056]" &&
+        assembly.contains "stxdw [r10 - 160], r1"
   | .error _ => false
 
 #guard

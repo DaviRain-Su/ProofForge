@@ -66,15 +66,19 @@ map/queue/allocator/tree；后者现在从稳定的 `Svm.Component.Query/Call` b
 Ops、IR、CFG 与主 Emit 只 dispatch 一次 `component`，组件自己拥有 operand traversal、effects、
 geometry、canonical spelling、scratch boundary 与 emitter dispatch。以后增加 bounded queue、
 recorder 或 transient allocator 只扩 component-owned 模块，不再横向修改整条通用编译链。
-官方 Phoenix tag 4/5 wire、账户合同及 tag 4 classic Token vault withdrawal 已由两层组合完成。
+官方 Phoenix tag 4–7 wire/account contract 已由两层组合完成：tag 6/7 的 bounded
+`FifoCancel` component 在完整 trader/bid/ask validator 后按 bids→asks 和各侧 FIFO 顺序
+原位取消，owner 过滤、collateral unlock、global event index 与 released-lot accumulator 都不再
+向通用 Ops/IR/主 Emit 泄漏；tag 6 再按 quote→base 顺序 claim/withdraw 本次释放量，tag 7
+完全不进入 Token CPI。
 authenticated audit 已迁入 `BatchRecorder.begin/append/finish`：payload 使用官方 SDK
 `0x300000000` / 固定 32 KiB downward bump cursor，32 条 35-byte Reduce records 后在第 33 条前
 自动 flush，empty finish 仍发 93-byte header-only batch；heap 地址不进入 source 或账户。
 PDA mint seed 直接引用
 经过认证的 MarketHeader 固定 byte slice，不创建 heap buffer。storage-owned FIFO cursor 只
 保留 `(price, sequence)` scalar key，每次从账户 root 做有界 strict upper-bound，因此删除后
-不保存 node address，也不收集 heap `Vec`。下一步直接组合无 payload 的 tag 6/7 CancelAll
-pair，不增加 Phoenix-specific 顶层 Ops/IR/主 Emit case。
+不保存 node address，也不收集 heap `Vec`。下一步在同一 component boundary 上增加 tags 8/9
+CancelUpTo 的静态过滤条件，而不是重新扩张底层指令集。
 
 ## 入口
 

@@ -1,5 +1,6 @@
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.BatchRecorder
+import ProofForge.Svm.FifoCancel
 
 namespace ProofForge.Svm.Component
 
@@ -15,44 +16,58 @@ and the main emitter traverse this wrapper once; component-specific query vocabu
 their owning modules. -/
 inductive Query where
   | accountStorage (query : AccountStorage.Query)
+  | fifoCancel (query : FifoCancel.Query)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
   | .accountStorage query => query.arity
+  | .fifoCancel _ => 0
 
 def Query.effects : Query → EffectSummary
   | .accountStorage query => query.effects
+  | .fifoCancel _ => {}
 
 def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
   | .accountStorage query => query.wellFormed accountLimit
+  | .fifoCancel _ => true
 
 def Query.needsWalk : Query → Bool
   | .accountStorage query => query.needsWalk
+  | .fifoCancel _ => false
 
 def Query.minAccounts (measure : V → Nat) (operands : Array V) : Query → Nat
   | .accountStorage query => query.minAccounts measure operands
+  | .fifoCancel _ => operands.foldl (init := 0) fun current value =>
+      Nat.max current (measure value)
 
 def Query.canonical (renderValue : V → String) (operands : Array V) : Query → String
   | .accountStorage query => query.canonical renderValue operands
+  | .fifoCancel query =>
+      if operands.isEmpty then query.canonical
+      else s!"invalid-{query.canonical}-{operands.size}"
 
 /-- Stable effect bridge for target-owned bounded components. New queue, map, allocator, recorder,
 or codec components extend this layer instead of adding top-level SVM Ops/IR/main-emitter cases. -/
 inductive Call (V : Type) where
   | accountStorage (call : AccountStorage.Call V)
   | batchRecorder (call : BatchRecorder.Call V)
+  | fifoCancel (call : FifoCancel.Call V)
   deriving BEq, Repr, Inhabited
 
 def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .accountStorage call => .accountStorage (call.mapValues mapValue)
   | .batchRecorder call => .batchRecorder (call.mapValues mapValue)
+  | .fifoCancel call => .fifoCancel (call.mapValues mapValue)
 
 def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .accountStorage call => return .accountStorage (← call.mapValuesM mapValue)
   | .batchRecorder call => return .batchRecorder (← call.mapValuesM mapValue)
+  | .fifoCancel call => return .fifoCancel (← call.mapValuesM mapValue)
 
 def Call.values : Call V → Array V
   | .accountStorage call => call.values
   | .batchRecorder call => call.values
+  | .fifoCancel call => call.values
 
 def Call.anyValue (predicate : V → Bool) (call : Call V) : Bool :=
   call.values.any predicate
@@ -63,29 +78,36 @@ def Call.allValues (predicate : V → Bool) (call : Call V) : Bool :=
 def Call.effects : Call V → EffectSummary
   | .accountStorage call => call.effects
   | .batchRecorder call => call.effects
+  | .fifoCancel call => call.effects
 
 def Call.minAccounts (measure : V → Nat) : Call V → Nat
   | .accountStorage call => call.minAccounts measure
   | .batchRecorder call => call.minAccounts measure
+  | .fifoCancel call => call.minAccounts measure
 
 def Call.wellFormed (valueWellFormed : V → Bool) (accountLimit : Nat := 64) : Call V → Bool
   | .accountStorage call => call.wellFormed valueWellFormed accountLimit
   | .batchRecorder call => call.wellFormed valueWellFormed accountLimit
+  | .fifoCancel call => call.wellFormed valueWellFormed accountLimit
 
 def Call.canonical (renderValue : V → String) : Call V → String
   | .accountStorage call => call.canonical renderValue
   | .batchRecorder call => call.canonical renderValue
+  | .fifoCancel call => call.canonical renderValue
 
 def Call.usesCpi : Call V → Bool
   | .accountStorage _ => false
   | .batchRecorder call => call.usesCpi
+  | .fifoCancel call => call.usesCpi
 
 def Call.stackScratchEnd : Call V → Nat
   | .accountStorage _ => Component.stackScratchEnd
   | .batchRecorder call => call.stackScratchEnd
+  | .fifoCancel call => call.stackScratchEnd
 
 def Call.rawSelfEntries : Call V → Array (Nat × String)
   | .accountStorage _ => #[]
   | .batchRecorder call => call.rawSelfEntries
+  | .fifoCancel call => call.rawSelfEntries
 
 end ProofForge.Svm.Component
