@@ -140,7 +140,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 211/211 与 Anvil 12/12。跨四档逐样本只作
+  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 212/212 与 Anvil 12/12。跨四档逐样本只作
   host reference↔source fold，不宣称完整 chain refinement。
 - **部分支持（P5 profile/body/root gate）**：独立 verifier 已按 canonical program
   owner、576-byte header/discriminant、12 个官方 capacity tuple 和 exact account length
@@ -155,11 +155,12 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   live + 130 free slots 消耗 1,344,959 CU；不创建 Rust heap object、SVM Map 或节点副本。
   持久化 surface 以编译期固定的 account/base/stride/capacity 原位写最小 profile。首个
   `registerFirstTrader128` 把 canonical fresh trader allocator 原子变成单个黑根：完整覆盖
-  144-byte slot、发布 root/size/bump/free，并让 complete validator 返回 1；不会成功留下
-  detached node。当前 1,209,400-byte verifier ELF 通过 Surfpool 1.5.0 的 1,196 个 Loader
-  write + deploy + authority transactions 完成本地部署和 exact 1,209,445-byte ProgramData
-  校验；不作公网声明。
-- **未支持（P5 remaining body/公网）**：公网部署、第二个/一般 key 插入、free-list reuse、
+  144-byte slot、发布 root/size/bump/free；`registerSecondTrader128` 再按 raw 32-byte Pubkey
+  ordering 把完整 red slot 2 挂到 root 左或右侧。两个边界都让 complete validator 返回 1，
+  不会成功留下 detached node。当前 1,248,584-byte verifier ELF 通过 Surfpool 1.5.0 的
+  1,234 个 Loader write + deploy + authority transactions 完成本地部署和 exact
+  1,248,629-byte ProgramData 校验；不作公网声明。
+- **未支持（P5 remaining body/公网）**：公网部署、第三个/一般 key 插入、free-list reuse、
   rotation/delete fixup、runtime remaining accounts、Token-2022 extension 语义及完整
   Phoenix-v1 账户兼容。
 
@@ -180,6 +181,6 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 独立 `PhoenixV1Profile` 验证官方账户头、预编译容量、固定 scalar/allocator metadata、
 有界 bid-root neighborhood 和 selected parent path；完整 bid/ask/trader validators 再用
 fixed bitmap/stack 证明三棵树的 RB/order invariants 与 live/free partition。写入侧已按固定
-128-seat shape 支持 topology words 和 fresh-empty → one-root 的 exact Sokoban transition；
-一般 allocator/tree transition 仍关闭。这是完整的 bounded N=4 Phoenix IOC 模型加 P5
-bounded body read/write 基础，不是完整 Phoenix-v1 动态账户实现。
+128-seat shape 支持 topology words、fresh-empty → one-root 和 one-root → two-node 的 exact
+Sokoban transition；一般 allocator/tree transition 仍关闭。这是完整的 bounded N=4
+Phoenix IOC 模型加 P5 bounded body read/write 基础，不是完整 Phoenix-v1 动态账户实现。

@@ -23,6 +23,13 @@ open Lean Elab Command
 #guard boundedBodyEntryCount 512 128 1 2 3 == 6
 #guard boundedBodyEntryCount 512 128 513 2 3 == 0
 #guard boundedBodyEntryCount 512 128 1 2 129 == 0
+#guard byteSwap64 0x0706050403020100 == 0x0001020304050607
+#guard key4Before 0x0100000000000000 0 0 0 0x00000000000000ff 0 0 0
+#guard !key4Before 0x00000000000000ff 0 0 0 0x0100000000000000 0 0 0
+#guard key4Before 7 0x0100000000000000 9 10 7 0x00000000000000ff 1 2
+#guard !key4Before 7 0x00000000000000ff 1 2 7 0x0100000000000000 9 10
+#guard key4Equal 1 2 3 4 1 2 3 4
+#guard !key4Equal 1 2 3 4 1 2 3 5
 #guard allocatorHeaderValid 512 0 0 0 ((1 : UInt64) ||| ((1 : UInt64) <<< (32 : UInt64)))
 #guard allocatorHeaderValid 512 1 1 0 ((2 : UInt64) ||| ((2 : UInt64) <<< (32 : UInt64)))
 #guard !allocatorHeaderValid 512 1 0 0 ((2 : UInt64) ||| ((2 : UInt64) <<< (32 : UInt64)))
@@ -350,6 +357,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing writeTraderTopology128"
   let some registerFirst := program.methods.find? (·.ixName == "registerFirstTrader128")
     | throwError "missing registerFirstTrader128"
+  let some registerSecond := program.methods.find? (·.ixName == "registerSecondTrader128")
+    | throwError "missing registerSecondTrader128"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -408,7 +417,16 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveDataWordSetAt 1 8313 1 1 registerFirst.ops &&
       (List.range 18).all (fun offset =>
         opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerFirst.ops) &&
-      countDataWordSetAt registerFirst.ops == 21 do
+      countDataWordSetAt registerFirst.ops == 21 &&
+      opsHaveDataWord 1 8314 registerSecond.ops &&
+      opsHaveDataWord 1 8315 registerSecond.ops &&
+      opsHaveDataWord 1 8316 registerSecond.ops &&
+      opsHaveDataWord 1 8319 registerSecond.ops &&
+      opsHaveDataWordSetAt 1 8312 1 1 registerSecond.ops &&
+      opsHaveDataWordSetAt 1 8313 1 1 registerSecond.ops &&
+      (List.range 18).all (fun offset =>
+        opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerSecond.ops) &&
+      countDataWordSetAt registerSecond.ops == 21 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with

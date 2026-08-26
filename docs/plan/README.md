@@ -94,6 +94,7 @@
 | [l5-017](tasks/l5-017.md) | done | Phoenix-v1 complete trader tree + 32-byte Pubkey ordering |
 | [l5-018](tasks/l5-018.md) | done | Phoenix-v1 bounded account-resident topology-word writes |
 | [l5-019](tasks/l5-019.md) | done | Phoenix-v1 exact first trader registration |
+| [l5-020](tasks/l5-020.md) | done | Phoenix-v1 exact second trader registration |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

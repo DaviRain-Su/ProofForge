@@ -330,6 +330,31 @@ fn run_topology_write(
     )
 }
 
+fn empty_small_market() -> Account {
+    let mut market = market_account(
+        PHOENIX_PROGRAM,
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    write_allocator_header(&mut market, 110, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 4210, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 8310, 0, 0, 1, 1);
+    market
+}
+
+fn market_with_first_trader(key: [u64; 4]) -> Account {
+    run_market_write(
+        "registerFirstTrader128",
+        empty_small_market(),
+        true,
+        &key,
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    )
+}
+
 #[test]
 fn all_official_profiles_select_exact_account_size() {
     for (bids, asks, seats, expected) in OFFICIAL_PROFILES {
@@ -1015,17 +1040,7 @@ fn first_trader_registration_commits_a_complete_sokoban_root() {
     const CURSOR_1_1: u64 = 0x0000_0001_0000_0001;
     const CURSOR_2_2: u64 = 0x0000_0002_0000_0002;
 
-    let mut fresh = market_account(
-        PHOENIX_PROGRAM,
-        SMALLEST_MARKET_BYTES,
-        MARKET_HEADER_DISCRIMINANT,
-        512,
-        512,
-        128,
-    );
-    write_allocator_header(&mut fresh, 110, 0, 0, 1, 1);
-    write_allocator_header(&mut fresh, 4210, 0, 0, 1, 1);
-    write_allocator_header(&mut fresh, 8310, 0, 0, 1, 1);
+    let mut fresh = empty_small_market();
     assert_eq!(read_word(&fresh, 8313), CURSOR_1_1);
     // A canonical fresh allocator obtains zeroed pages, but initialize the slot with stale bytes
     // to prove this entry point publishes a complete node rather than relying on heap-like reuse.
@@ -1106,4 +1121,106 @@ fn first_trader_registration_commits_a_complete_sokoban_root() {
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(after_malformed.data, malformed.data);
+}
+
+#[test]
+fn second_trader_registration_uses_pubkey_byte_order_and_complete_red_node() {
+    // BYTE_SMALL is numerically greater as a little-endian u64, but its first raw byte is 0x00;
+    // BYTE_LARGE starts with 0xff. This distinguishes Pubkey byte ordering from limb ordering.
+    const BYTE_SMALL: [u64; 4] = [0x0100_0000_0000_0000, 1, 2, 3];
+    const BYTE_LARGE: [u64; 4] = [0x0000_0000_0000_00ff, 1, 2, 3];
+    const CURSOR_3_3: u64 = 0x0000_0003_0000_0003;
+    const RED_CHILD_OF_ROOT: u64 = 0x0000_0001_0000_0001;
+
+    let run_direction = |root_key: [u64; 4], key: [u64; 4], root_links: u64| {
+        let mut one_root = market_with_first_trader(root_key);
+        // Existing TraderState is not part of registration and must remain in place.
+        write_word(&mut one_root, 8320, 77);
+        // Prove that every byte in the newly bump-allocated slot is initialized before publish.
+        for word in 8332..8350 {
+            write_word(&mut one_root, word, u64::MAX);
+        }
+
+        let mut expected = one_root.clone();
+        write_allocator_header(&mut expected, 8310, 2, 1, 3, 3);
+        write_word(&mut expected, 8314, root_links);
+        for word in 8332..8350 {
+            write_word(&mut expected, word, 0);
+        }
+        write_word(&mut expected, 8333, RED_CHILD_OF_ROOT);
+        for (offset, value) in key.into_iter().enumerate() {
+            write_word(&mut expected, 8334 + offset, value);
+        }
+
+        let registered = run_market_write(
+            "registerSecondTrader128",
+            one_root,
+            true,
+            &key,
+            &[Check::success(), Check::return_data(&2u64.to_le_bytes())],
+        );
+        assert_eq!(read_word(&registered, 8313), CURSOR_3_3);
+        assert_eq!(read_word(&registered, 8320), 77);
+        assert_eq!(registered.data, expected.data);
+        run_view(
+            "bodyEntryCount",
+            registered.clone(),
+            &[Check::success(), Check::return_data(&2u64.to_le_bytes())],
+        );
+        run_view(
+            "traderTreeValid",
+            registered.clone(),
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+        registered
+    };
+
+    let left_tree = run_direction(BYTE_LARGE, BYTE_SMALL, 2);
+    let right_tree = run_direction(BYTE_SMALL, BYTE_LARGE, 2u64 << 32);
+
+    let duplicate_start = market_with_first_trader(BYTE_SMALL);
+    let after_duplicate = run_market_write(
+        "registerSecondTrader128",
+        duplicate_start.clone(),
+        true,
+        &BYTE_SMALL,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_duplicate.data, duplicate_start.data);
+
+    let readonly_start = market_with_first_trader(BYTE_SMALL);
+    let after_readonly = run_market_write(
+        "registerSecondTrader128",
+        readonly_start.clone(),
+        false,
+        &BYTE_LARGE,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_readonly.data, readonly_start.data);
+
+    let mut wrong_owner = market_with_first_trader(BYTE_SMALL);
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "registerSecondTrader128",
+        wrong_owner.clone(),
+        true,
+        &BYTE_LARGE,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let mut malformed = market_with_first_trader(BYTE_SMALL);
+    write_word(&mut malformed, 8314, 9);
+    let after_malformed = run_market_write(
+        "registerSecondTrader128",
+        malformed.clone(),
+        true,
+        &BYTE_LARGE,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
+
+    // Keep both directional outputs live through the end of the test.
+    assert_eq!(read_word(&left_tree, 8314), 2);
+    assert_eq!(read_word(&right_tree, 8314), 2u64 << 32);
 }

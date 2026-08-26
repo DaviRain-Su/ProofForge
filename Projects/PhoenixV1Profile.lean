@@ -9,8 +9,8 @@ validates that dispatch boundary, fixed scalar/allocator metadata, and all three
 plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 
 This is deliberately a separate verifier program whose ProofForge state is account 0 and candidate
-Phoenix market is account 1. Its first write surface is limited to fixed-shape topology words; it
-does not yet claim allocator/tree mutation algorithms or official instruction execution.
+Phoenix market is account 1. Its write surface only publishes complete fixed-shape Sokoban tree
+transitions; it does not yet claim general allocator/tree mutation or official instruction execution.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -52,6 +52,36 @@ def boundedBodyEntryCount (bookCapacity seats bidCount askCount traderCount : UI
 def lowUInt32 (word : UInt64) : UInt64 := word &&& 0xffffffff
 
 def highUInt32 (word : UInt64) : UInt64 := word >>> 32
+
+/-- Reverse one little-endian account limb so unsigned comparison follows the original eight key
+bytes. Four such limbs in order reproduce Rust `[u8; 32]` lexicographic `Ord`. -/
+def byteSwap64 (word : UInt64) : UInt64 :=
+  ((word &&& 0x00000000000000ff) <<< 56) |||
+  ((word &&& 0x000000000000ff00) <<< 40) |||
+  ((word &&& 0x0000000000ff0000) <<< 24) |||
+  ((word &&& 0x00000000ff000000) <<< 8) |||
+  ((word &&& 0x000000ff00000000) >>> 8) |||
+  ((word &&& 0x0000ff0000000000) >>> 24) |||
+  ((word &&& 0x00ff000000000000) >>> 40) |||
+  ((word &&& 0xff00000000000000) >>> 56)
+
+def key4Before
+    (lhs0 lhs1 lhs2 lhs3 rhs0 rhs1 rhs2 rhs3 : UInt64) : Bool :=
+  let lhs0 := byteSwap64 lhs0
+  let lhs1 := byteSwap64 lhs1
+  let lhs2 := byteSwap64 lhs2
+  let lhs3 := byteSwap64 lhs3
+  let rhs0 := byteSwap64 rhs0
+  let rhs1 := byteSwap64 rhs1
+  let rhs2 := byteSwap64 rhs2
+  let rhs3 := byteSwap64 rhs3
+  lhs0 < rhs0 || (lhs0 = rhs0 &&
+    (lhs1 < rhs1 || (lhs1 = rhs1 &&
+      (lhs2 < rhs2 || (lhs2 = rhs2 && lhs3 < rhs3)))))
+
+def key4Equal
+    (lhs0 lhs1 lhs2 lhs3 rhs0 rhs1 rhs2 rhs3 : UInt64) : Bool :=
+  lhs0 = rhs0 && lhs1 = rhs1 && lhs2 = rhs2 && lhs3 = rhs3
 
 /-- Validate the account-resident Sokoban allocator envelope without dereferencing a node.
 Indexes are one-based; zero is only the empty-tree sentinel, and `bumpIndex` is the next unused
@@ -603,12 +633,63 @@ def registerFirstTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
   else
     .error .overflow
 
+/--
+Perform the exact second distinct-key insertion into the canonical one-root 128-seat trader tree.
+Sokoban's bump allocator returns one-based address 2, the new node is red with parent 1, and the
+existing black root receives address 2 as either its left or right child according to raw Pubkey
+byte order. A second insertion never rotates because its parent is the black root.
+-/
+@[pf_entry]
+def registerSecondTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error (State × UInt64) :=
+  let rootKey0 := accDataWord 1 8316
+  let rootKey1 := accDataWord 1 8317
+  let rootKey2 := accDataWord 1 8318
+  let rootKey3 := accDataWord 1 8319
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 8310 = 1 && accDataWord 1 8311 = 0 &&
+      accDataWord 1 8312 = 1 && accDataWord 1 8313 = 0x0000000200000002 &&
+      accDataWord 1 8314 = 0 && accDataWord 1 8315 = 0 &&
+      !key4Equal key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3 then
+    let rootLinks :=
+      if key4Before key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3 then
+        2
+      else
+        0x0000000200000000
+    -- NodeAllocator.add_node bump path advances address 2 to the next unused address 3.
+    let _ := accDataWordSetAt 1 8313 1 1 0 0x0000000300000003
+    let _ := accDataWordSetAt 1 8314 18 128 1 0
+    let _ := accDataWordSetAt 1 8315 18 128 1 0x0000000100000001
+    let _ := accDataWordSetAt 1 8316 18 128 1 key0
+    let _ := accDataWordSetAt 1 8317 18 128 1 key1
+    let _ := accDataWordSetAt 1 8318 18 128 1 key2
+    let _ := accDataWordSetAt 1 8319 18 128 1 key3
+    let _ := accDataWordSetAt 1 8320 18 128 1 0
+    let _ := accDataWordSetAt 1 8321 18 128 1 0
+    let _ := accDataWordSetAt 1 8322 18 128 1 0
+    let _ := accDataWordSetAt 1 8323 18 128 1 0
+    let _ := accDataWordSetAt 1 8324 18 128 1 0
+    let _ := accDataWordSetAt 1 8325 18 128 1 0
+    let _ := accDataWordSetAt 1 8326 18 128 1 0
+    let _ := accDataWordSetAt 1 8327 18 128 1 0
+    let _ := accDataWordSetAt 1 8328 18 128 1 0
+    let _ := accDataWordSetAt 1 8329 18 128 1 0
+    let _ := accDataWordSetAt 1 8330 18 128 1 0
+    let _ := accDataWordSetAt 1 8331 18 128 1 0
+    let _ := accDataWordSetAt 1 8314 18 128 0 rootLinks
+    let _ := accDataWordSetAt 1 8312 1 1 0 2
+    .ok ({ s with dummy := 0 }, 2)
+  else
+    .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=
   accDataWord 1 4
 
-attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
+attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32 byteSwap64
+  key4Before key4Equal
   allocatorHeaderValid threeAllocatorHeadersValid nodeIndexOrNullValid boundedBidRootPrice
   boundedNodeSlot bidKeyBefore boundedBidChildValid boundedBidRootNeighborhoodValid
   bidRootNeighborhood512 bidRootNeighborhood1024 bidRootNeighborhood2048
