@@ -24,7 +24,7 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 def init (owner : Addr20) : State :=
   { owner := owner, value := 0 }
 
-/-- 只有 owner 能加。非 owner → `unauthorized`。整值 `evmEq20`，不把 Addr20 当单一 UInt64。 -/
+/-- 只有 owner 能加。非 owner → `Unauthorized(caller)`。整值 `evmEq20`。 -/
 @[pf_entry]
 def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if evmEq20 evmCaller20 s.owner then
@@ -34,7 +34,15 @@ def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
     else
       .error .overflow
   else
-    .error .unauthorized
+    .ok ({ owner := s.owner, value := s.value }, evmRevertUnauthorized evmCaller20)
+
+/-- `who` 是零地址 → `ZeroAddress()`。成功只回 `who.w0`，不改 storage。 -/
+@[pf_entry]
+def guardZero (s : State) (who : Addr20) : Except Error (State × UInt64) :=
+  if evmEq20 who ⟨0, 0, 0⟩ then
+    .ok (s, evmRevertZeroAddress)
+  else
+    .ok (s, who.w0)
 
 /-- LOG1 `Incremented(uint64)`。 -/
 @[pf_entry]

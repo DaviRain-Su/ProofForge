@@ -61,6 +61,9 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
   | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       .revertInsufficient (mapValue h0) (mapValue h1) (mapValue h2) (mapValue h3)
         (mapValue w0) (mapValue w1) (mapValue w2) (mapValue w3)
+  | .revertUnauthorized w0 w1 w2 =>
+      .revertUnauthorized (mapValue w0) (mapValue w1) (mapValue w2)
+  | .revertZeroAddress => .revertZeroAddress
   | .receive => .receive
   | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
   | .mapSetU64 base key value => .mapSetU64 (mapValue base) (mapValue key) (mapValue value)
@@ -123,6 +126,8 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
       #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3]
   | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       #[h0, h1, h2, h3, w0, w1, w2, w3]
+  | .revertUnauthorized w0 w1 w2 => #[w0, w1, w2]
+  | .revertZeroAddress => #[]
   | .receive => #[]
   | .mapGetU64 base key => #[base, key]
   | .mapSetU64 base key value => #[base, key, value]
@@ -193,6 +198,9 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
       #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
   | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       #[h0, h1, h2, h3, w0, w1, w2, w3].all (·.wellFormed ValKind.arity)
+  | .revertUnauthorized w0 w1 w2 =>
+      #[w0, w1, w2].all (·.wellFormed ValKind.arity)
+  | .revertZeroAddress => true
   | .receive => true
   | .mapGetU64 base key => #[base, key].all (·.wellFormed ValKind.arity)
   | .mapSetU64 base key value => #[base, key, value].all (·.wellFormed ValKind.arity)

@@ -26,6 +26,8 @@ inductive Op where
   | evmLogTransfer256 (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : Ops.Val)
   | evmLogApproval256 (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : Ops.Val)
   | evmRevertInsufficient (h0 h1 h2 h3 w0 w1 w2 w3 : Ops.Val)
+  | evmRevertUnauthorized (w0 w1 w2 : Ops.Val)
+  | evmRevertZeroAddress
   | evmReceive
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
@@ -88,6 +90,9 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3)
   | .ext (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3) =>
       pure (.evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3)
+  | .ext (.revertUnauthorized w0 w1 w2) =>
+      pure (.evmRevertUnauthorized w0 w1 w2)
+  | .ext .revertZeroAddress => pure .evmRevertZeroAddress
   | .ext .receive => pure .evmReceive
   | .ext (.mapGetU64 base key) => pure (.mapGetU64 base key)
   | .ext (.mapSetU64 base key value) => pure (.mapSetU64 base key value)
@@ -147,6 +152,9 @@ private partial def Op.toSource : Op → Ops.Op
       .ext (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3)
   | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       .ext (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3)
+  | .evmRevertUnauthorized w0 w1 w2 =>
+      .ext (.revertUnauthorized w0 w1 w2)
+  | .evmRevertZeroAddress => .ext .revertZeroAddress
   | .evmReceive => .ext .receive
   | .forAccum bound addend resultLocal => .forAccum bound addend resultLocal
   | .forBody bound body => .forBody bound (toSourceOps body)
@@ -213,6 +221,9 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
   | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       .revertInsufficient (mapValue h0) (mapValue h1) (mapValue h2) (mapValue h3)
         (mapValue w0) (mapValue w1) (mapValue w2) (mapValue w3)
+  | .revertUnauthorized w0 w1 w2 =>
+      .revertUnauthorized (mapValue w0) (mapValue w1) (mapValue w2)
+  | .revertZeroAddress => .revertZeroAddress
   | .receive => .receive
   | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
   | .mapSetU64 base key value =>
@@ -276,6 +287,8 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
       #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3]
   | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       #[h0, h1, h2, h3, w0, w1, w2, w3]
+  | .revertUnauthorized w0 w1 w2 => #[w0, w1, w2]
+  | .revertZeroAddress => #[]
   | .receive => #[]
   | .mapGetU64 base key => #[base, key]
   | .mapSetU64 base key value => #[base, key, value]
@@ -342,6 +355,9 @@ private def projectOpExt
           return .revertInsufficient (← projectVal h0) (← projectVal h1)
             (← projectVal h2) (← projectVal h3) (← projectVal w0) (← projectVal w1)
             (← projectVal w2) (← projectVal w3)
+      | .revertUnauthorized w0 w1 w2 =>
+          return .revertUnauthorized (← projectVal w0) (← projectVal w1) (← projectVal w2)
+      | .revertZeroAddress => return .revertZeroAddress
       | .receive => return .receive
       | .mapGetU64 base key => return .mapGetU64 (← projectVal base) (← projectVal key)
       | .mapSetU64 base key value =>
@@ -806,6 +822,9 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"elog3.Approval({valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"
     | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
         s!"err.Insufficient({valCanon h0},{valCanon h1},{valCanon h2},{valCanon h3},{valCanon w0},{valCanon w1},{valCanon w2},{valCanon w3})"
+    | .evmRevertUnauthorized w0 w1 w2 =>
+        s!"err.Unauthorized({valCanon w0},{valCanon w1},{valCanon w2})"
+    | .evmRevertZeroAddress => "err.ZeroAddress"
     | .evmReceive => "erecv"
     | .forAccum n v resultLocal => s!"for.{resultLocal}({n},{valCanon v})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"

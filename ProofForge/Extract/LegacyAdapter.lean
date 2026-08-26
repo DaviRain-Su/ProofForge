@@ -319,6 +319,10 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       throw "extract/unsupported: legacy adapter cannot represent LOG3 Approval"
   | .ext (.evm (.revertInsufficient ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent parameterized Insufficient"
+  | .ext (.evm (.revertUnauthorized ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent parameterized Unauthorized"
+  | .ext (.evm .revertZeroAddress) =>
+      throw "extract/unsupported: legacy adapter cannot represent ZeroAddress"
   | .ext (.evm .receive) =>
       throw "extract/unsupported: legacy adapter cannot represent receive"
   | .ext (.evm (.mapGetU64 base key)) =>

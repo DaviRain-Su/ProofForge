@@ -63,6 +63,8 @@ inductive OpExt (V : Type) where
   | logTransfer256 (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : V)
   | logApproval256 (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : V)
   | revertInsufficient (h0 h1 h2 h3 w0 w1 w2 w3 : V)
+  | revertUnauthorized (w0 w1 w2 : V)
+  | revertZeroAddress
   | receive
   | mapGetU64 (base key : V)
   | mapSetU64 (base key value : V)
@@ -139,6 +141,8 @@ def OpExt.wellFormed : OpExt Val → Bool
       allValuesWellFormed #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3]
   | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       allValuesWellFormed #[h0, h1, h2, h3, w0, w1, w2, w3]
+  | .revertUnauthorized w0 w1 w2 => allValuesWellFormed #[w0, w1, w2]
+  | .revertZeroAddress => true
   | .receive => true
   | .mapGetU64 base key => allValuesWellFormed #[base, key]
   | .mapSetU64 base key value => allValuesWellFormed #[base, key, value]

@@ -32,7 +32,7 @@ def sample : Addr20 := ⟨1, 2, 3⟩
   | .ok yul =>
       yul.contains "keccak256(0, 224)" &&
         yul.contains "log1(0, 32, 0x" &&
-        yul.contains "revert(0, 4)" &&
+        yul.contains "revert(0, 36)" &&
         yul.contains "eq(" &&
         yul.contains "sstore(0," &&
         yul.contains "sstore(1," &&

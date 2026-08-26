@@ -27,6 +27,9 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'get()(uint64)
   3 "owner bump"
 
 other_key="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+other="$("$cast" wallet address --private-key "$other_key")"
+bump_data="$("$cast" calldata 'bump(uint64)' 1)"
+solana_lean_require_unauthorized "$addr" "$other" "$bump_data" "$other" "non-owner bump"
 if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
     "$addr" 'bump(uint64)' 1 >/dev/null 2>&1; then
   echo "FAIL: non-owner bump unexpectedly succeeded" >&2
@@ -34,6 +37,13 @@ if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
 fi
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'get()(uint64)')" \
   3 "non-owner bump holds"
+
+zero="0x0000000000000000000000000000000000000000"
+zero_data="$("$cast" calldata 'guardZero(address)' "$zero")"
+solana_lean_require_zero_address "$addr" "$sender" "$zero_data" "zero address"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'guardZero(address)(uint64)' "$sender")" \
+  "$("$python" -I -S -c "print(int.from_bytes(bytes.fromhex('${sender#0x}'[:16]), 'little'))")" \
+  "guardZero non-zero returns Addr20.w0"
 
 topic="$("$cast" keccak 'Incremented(uint64)')"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \

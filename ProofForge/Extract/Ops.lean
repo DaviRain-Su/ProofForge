@@ -108,6 +108,10 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.evmRevertInsufficient
     (h0 h1 h2 h3 w0 w1 w2 w3 : Val) : Op :=
   .ext (.evm (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3))
+@[match_pattern] def Op.evmRevertUnauthorized (w0 w1 w2 : Val) : Op :=
+  .ext (.evm (.revertUnauthorized w0 w1 w2))
+@[match_pattern] def Op.evmRevertZeroAddress : Op :=
+  .ext (.evm .revertZeroAddress)
 @[match_pattern] def Op.evmReceive : Op :=
   .ext (.evm .receive)
 @[match_pattern] def Op.mapGetU64 (base key : Val) : Op :=
@@ -221,6 +225,8 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3].any predicate
   | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       #[h0, h1, h2, h3, w0, w1, w2, w3].any predicate
+  | .evmRevertUnauthorized w0 w1 w2 => #[w0, w1, w2].any predicate
+  | .evmRevertZeroAddress => false
   | .evmReceive => false
   | .mapGetU64 base key => #[base, key].any predicate
   | .mapSetU64 base key value => #[base, key, value].any predicate
@@ -282,7 +288,8 @@ def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmLeaf ops || walk ops fun
     | .evmDeposit .. | .evmDeposit256 .. | .evmSendEth .. | .evmSendEth256 .. | .evmLog ..
     | .evmLogTransfer256 .. | .evmLogApproval256 ..
-    | .evmRevertInsufficient .. | .evmReceive
+    | .evmRevertInsufficient .. | .evmRevertUnauthorized .. | .evmRevertZeroAddress
+    | .evmReceive
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
     | .mapGetPair .. | .mapSetPair ..
     | .mapSetAddr256 .. | .mapSetPair256 ..

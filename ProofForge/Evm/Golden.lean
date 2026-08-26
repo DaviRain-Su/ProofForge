@@ -490,9 +490,19 @@ def extractedOwnable : IR.Program :=
             #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
               .okState (.field (.arg 1) "value"),
               .errorOverflow]
-            #[.errorNamed "unauthorized"]
+            #[.evmRevertUnauthorized (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[]),
+              .returnU64 (.ext .callerW0 #[])]
         ]
       },
+      mutEntry "Ownable" "guardZero" 1 #[20] #[
+        .ite .eq
+          (.ext .eq20 #[
+            addrField 0 "w0", addrField 0 "w1", addrField 0 "w2",
+            .lit 0, .lit 0, .lit 0])
+          (.lit 1)
+          #[.evmRevertZeroAddress, .returnU64 (.lit 0)]
+          #[.returnU64 (addrField 0 "w0")]
+      ],
       mutEntry "Ownable" "logInc" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
           #[.evmLog "Incremented" (.arg 0), .returnU64 (.arg 0)]

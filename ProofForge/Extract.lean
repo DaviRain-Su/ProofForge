@@ -3903,6 +3903,16 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
     | _, _ =>
       some (.evmRevertInsufficient (.arg 0) (.arg 1) (.arg 2) (.arg 3)
         (.arg 4) (.arg 5) (.arg 6) (.arg 7))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmRevertUnauthorized ||
+      endsWith app ".evmRevertUnauthorized" then
+    match nthFromEnd args 0 with
+    | some who =>
+      let (w0, w1, w2) := addr20Leaves env who
+      some (.evmRevertUnauthorized w0 w1 w2)
+    | none => some (.evmRevertUnauthorized (.arg 0) (.arg 1) (.arg 2))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmRevertZeroAddress ||
+      endsWith app ".evmRevertZeroAddress" then
+    some .evmRevertZeroAddress
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmReceive || endsWith app ".evmReceive" then
     some .evmReceive
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
@@ -4027,6 +4037,8 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
     (``ProofForge.Evm.Runtime.evmLogTransfer256, ".evmLogTransfer256"),
     (``ProofForge.Evm.Runtime.evmLogApproval256, ".evmLogApproval256"),
     (``ProofForge.Evm.Runtime.evmRevertInsufficient, ".evmRevertInsufficient"),
+    (``ProofForge.Evm.Runtime.evmRevertUnauthorized, ".evmRevertUnauthorized"),
+    (``ProofForge.Evm.Runtime.evmRevertZeroAddress, ".evmRevertZeroAddress"),
     (``ProofForge.Evm.Runtime.evmReceive, ".evmReceive"),
     (``ProofForge.Evm.Runtime.evmMapSetU64, ".evmMapSetU64"),
     (``ProofForge.Evm.Runtime.evmMapSetAddr, ".evmMapSetAddr"),
@@ -4068,6 +4080,8 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   | some (.evmLogTransfer256 _ _ _ _ _ _ a0 _ _ _) => a0
   | some (.evmLogApproval256 _ _ _ _ _ _ a0 _ _ _) => a0
   | some (.evmRevertInsufficient h0 _ _ _ _ _ _ _) => h0
+  | some (.evmRevertUnauthorized w0 _ _) => w0
+  | some .evmRevertZeroAddress => .lit 0
   | some .evmReceive => .lit 0
   | some (.mapSetU64 _ _ v) => v
   | some (.mapSetAddr _ _ _ _ v) => v
@@ -6008,6 +6022,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           .evmRevertInsufficient (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
             (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f)
             (flipVal fuel' g) (flipVal fuel' h)
+      | .evmRevertUnauthorized a b c =>
+          .evmRevertUnauthorized (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+      | .evmRevertZeroAddress => .evmRevertZeroAddress
       | .evmReceive => .evmReceive
       | .forAccum n v resultLocal => .forAccum n (flipVal fuel' v) resultLocal
       | .forBody n body => .forBody n (body.map (flipOp fuel'))
@@ -6367,6 +6384,8 @@ private def opFields : Ops.Op → Array String
   | .evmRevertInsufficient a b c d e f g h =>
       valFields a ++ valFields b ++ valFields c ++ valFields d ++
         valFields e ++ valFields f ++ valFields g ++ valFields h
+  | .evmRevertUnauthorized a b c => valFields a ++ valFields b ++ valFields c
+  | .evmRevertZeroAddress => #[]
   | .evmReceive => #[]
   | .forAccum _ v _ => valFields v
   | .forBody _ body => body.flatMap opFields
@@ -6525,6 +6544,9 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
           return .evmRevertInsufficient (← normalizeVal a) (← normalizeVal b)
             (← normalizeVal c) (← normalizeVal d) (← normalizeVal e) (← normalizeVal f)
             (← normalizeVal g) (← normalizeVal h)
+      | .evmRevertUnauthorized a b c =>
+          return .evmRevertUnauthorized (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+      | .evmRevertZeroAddress => pure .evmRevertZeroAddress
       | .evmReceive => pure .evmReceive
       | .mapGetU64 b k => return .mapGetU64 (← normalizeVal b) (← normalizeVal k)
       | .mapSetU64 b k v =>
@@ -6648,6 +6670,9 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
       #[a, b, c, d, e, f, g, h, i, j].findSome? (valEscapedArg limit)
   | .evmRevertInsufficient a b c d e f g h =>
       #[a, b, c, d, e, f, g, h].findSome? (valEscapedArg limit)
+  | .evmRevertUnauthorized a b c =>
+      #[a, b, c].findSome? (valEscapedArg limit)
+  | .evmRevertZeroAddress => none
   | .evmReceive => none
   | .forBody _ body => body.findSome? (opEscapedArg limit)
   | .indexSetLeaf _ i v _ _ | .indexSet _ i v _ _ | .mapGetU64 i v =>

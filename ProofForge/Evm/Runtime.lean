@@ -115,6 +115,12 @@ def evmImm20 : Addr20 :=
 /-- 参数化 `Insufficient(uint256,uint256)`。宿主返回 `have.w0`。 -/
 @[irreducible] def evmRevertInsufficient (_have _want : UInt256) : UInt64 := 0
 
+/-- 参数化 `Unauthorized(address)`。宿主返回 0。 -/
+@[irreducible] def evmRevertUnauthorized (_who : Addr20) : UInt64 := 0
+
+/-- 无参 `ZeroAddress()`。宿主返回 0。 -/
+@[irreducible] def evmRevertZeroAddress : UInt64 := 0
+
 /-- 无 calldata 的 payable `receive()`。宿主返回 `callvalue`。 -/
 @[irreducible] def evmReceive : UInt64 := 0
 

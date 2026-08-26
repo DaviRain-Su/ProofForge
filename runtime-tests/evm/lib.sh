@@ -223,6 +223,79 @@ if have != int('$have') or want != int('$want'):
 "
 }
 
+# eth_call must revert with ABI error Unauthorized(address).
+solana_lean_require_unauthorized() {
+  local addr="$1" from="$2" data="$3" who="$4" message="$5"
+  local sel
+  sel="$("$cast" keccak 'Unauthorized(address)')"
+  sel="${sel#0x}"
+  sel="$(printf '%s' "$sel" | cut -c1-8 | tr 'A-Z' 'a-z')"
+  who="$(printf '%s' "$who" | tr 'A-Z' 'a-z')"
+  who="${who#0x}"
+  "$python" -I -S -c "
+import json, urllib.request, urllib.error
+rpc='$rpc'
+payload={
+  'jsonrpc':'2.0','id':1,'method':'eth_call',
+  'params':[{'to':'$addr','from':'$from','data':'$data'}, 'latest']
+}
+req=urllib.request.Request(rpc, data=json.dumps(payload).encode(),
+  headers={'Content-Type':'application/json'})
+try:
+    raw=urllib.request.urlopen(req).read().decode()
+except urllib.error.HTTPError as e:
+    raw=e.read().decode()
+resp=json.loads(raw)
+err=resp.get('error') or {}
+blob=(err.get('data') or '')
+if isinstance(blob, dict):
+    blob=blob.get('data') or blob.get('raw') or ''
+blob=str(blob).lower()
+if blob.startswith('0x'):
+    blob=blob[2:]
+sel='$sel'
+if len(blob) < 8+64 or not blob.startswith(sel):
+    raise SystemExit('FAIL: $message: missing Unauthorized(who) (got '+repr(err)+')')
+got=blob[8+24:8+64]
+if got != '$who':
+    raise SystemExit(f'FAIL: $message: Unauthorized(0x{got}) != 0x$who')
+"
+}
+
+# eth_call must revert with ABI error ZeroAddress().
+solana_lean_require_zero_address() {
+  local addr="$1" from="$2" data="$3" message="$4"
+  local sel
+  sel="$("$cast" keccak 'ZeroAddress()')"
+  sel="${sel#0x}"
+  sel="$(printf '%s' "$sel" | cut -c1-8 | tr 'A-Z' 'a-z')"
+  "$python" -I -S -c "
+import json, urllib.request, urllib.error
+rpc='$rpc'
+payload={
+  'jsonrpc':'2.0','id':1,'method':'eth_call',
+  'params':[{'to':'$addr','from':'$from','data':'$data'}, 'latest']
+}
+req=urllib.request.Request(rpc, data=json.dumps(payload).encode(),
+  headers={'Content-Type':'application/json'})
+try:
+    raw=urllib.request.urlopen(req).read().decode()
+except urllib.error.HTTPError as e:
+    raw=e.read().decode()
+resp=json.loads(raw)
+err=resp.get('error') or {}
+blob=(err.get('data') or '')
+if isinstance(blob, dict):
+    blob=blob.get('data') or blob.get('raw') or ''
+blob=str(blob).lower()
+if blob.startswith('0x'):
+    blob=blob[2:]
+sel='$sel'
+if len(blob) < 8 or not blob.startswith(sel):
+    raise SystemExit('FAIL: $message: missing ZeroAddress() (got '+repr(err)+')')
+"
+}
+
 solana_lean_deploy_ctor_address() {
   local bytecode="$1"
   local addr="$2"

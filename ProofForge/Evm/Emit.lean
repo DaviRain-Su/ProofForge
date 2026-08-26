@@ -958,6 +958,26 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "mstore(36, " ++ packU256 y0 y1 y2 y3 ++ ")" ++ nl ++
           indent ++ "revert(0, 68)" ++ nl
         st := { st with last := some x0 }
+    | .evmRevertUnauthorized w0 w1 w2 =>
+        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st
+        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths w1 s0
+        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths w2 s1
+        let sel := Keccak.selector "Unauthorized" #["address"]
+        st := s2
+        acc := acc ++ p0 ++ p1 ++ p2 ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent a0 a1 a2 ++
+          indent ++ "let pf_who := mload(0)" ++ nl ++
+          indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
+          indent ++ "mstore(4, pf_who)" ++ nl ++
+          indent ++ "revert(0, 36)" ++ nl
+        st := { st with last := some a0 }
+    | .evmRevertZeroAddress =>
+        let sel := Keccak.selector "ZeroAddress" #[]
+        acc := acc ++
+          indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
+          indent ++ "revert(0, 4)" ++ nl
+        st := { st with last := some "0" }
     | .evmReceive =>
         acc := acc ++ indent ++ "let pf_recv := callvalue()" ++ nl
         st := { st with last := some "pf_recv" }
@@ -2059,10 +2079,17 @@ private def eventAbi (name : String) : String :=
     "{\"type\":\"event\",\"name\":\"" ++ escapeJson name ++
       "\",\"inputs\":[{\"name\":\"amt\",\"type\":\"uint64\",\"indexed\":false}],\"anonymous\":false}"
 
-private def errorAbi : String :=
+private def errorAbiInsufficient : String :=
   "{\"type\":\"error\",\"name\":\"Insufficient\",\"inputs\":[" ++
     "{\"name\":\"have\",\"type\":\"uint256\"}," ++
     "{\"name\":\"want\",\"type\":\"uint256\"}]}"
+
+private def errorAbiUnauthorized : String :=
+  "{\"type\":\"error\",\"name\":\"Unauthorized\",\"inputs\":[" ++
+    "{\"name\":\"who\",\"type\":\"address\"}]}"
+
+private def errorAbiZeroAddress : String :=
+  "{\"type\":\"error\",\"name\":\"ZeroAddress\",\"inputs\":[]}"
 
 private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
   match fuel with
@@ -2078,14 +2105,15 @@ private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
           if acc.contains n then acc else acc.push n
       | _ => acc
 
-private def hasInsufficient (fuel : Nat) (ops : Array IR.Op) : Bool :=
+private def hasErrorLeaf (fuel : Nat) (pred : IR.Op → Bool) (ops : Array IR.Op) : Bool :=
   match fuel with
   | 0 => false
   | fuel' + 1 =>
-    ops.any fun
-      | .evmRevertInsufficient .. => true
-      | .ite _ _ _ t f => hasInsufficient fuel' t || hasInsufficient fuel' f
-      | _ => false
+    ops.any fun op =>
+      pred op ||
+        match op with
+        | .ite _ _ _ t f => hasErrorLeaf fuel' pred t || hasErrorLeaf fuel' pred f
+        | _ => false
 
 private def receiveAbi : String :=
   "{\"type\":\"receive\",\"stateMutability\":\"payable\"}"
@@ -2095,11 +2123,18 @@ def emitAbi (p : IR.Program) : String :=
     p.entries.foldl (init := #[]) fun acc m =>
       (collectLogNames 8 m.ops).foldl (init := acc) fun acc n =>
         if acc.contains n then acc else acc.push n
-  let needErr := p.entries.any (fun m => hasInsufficient 8 m.ops)
+  let needIns := p.entries.any (fun m =>
+    hasErrorLeaf 8 (fun | .evmRevertInsufficient .. => true | _ => false) m.ops)
+  let needUnauth := p.entries.any (fun m =>
+    hasErrorLeaf 8 (fun | .evmRevertUnauthorized .. => true | _ => false) m.ops)
+  let needZero := p.entries.any (fun m =>
+    hasErrorLeaf 8 (fun | .evmRevertZeroAddress => true | _ => false) m.ops)
   let needRecv := p.entries.any (fun m => m.ixName == "receive")
   let items :=
     #[ctorAbi p] ++ evs.map eventAbi ++
-      (if needErr then #[errorAbi] else #[]) ++
+      (if needIns then #[errorAbiInsufficient] else #[]) ++
+      (if needUnauth then #[errorAbiUnauthorized] else #[]) ++
+      (if needZero then #[errorAbiZeroAddress] else #[]) ++
       (if needRecv then #[receiveAbi] else #[]) ++
       p.entries.filterMap fun m =>
         if m.ixName == "receive" then none else some (entryAbi m)
