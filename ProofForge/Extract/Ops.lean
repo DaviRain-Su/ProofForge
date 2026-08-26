@@ -135,6 +135,12 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.evm (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3))
 @[match_pattern] def Op.evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val) : Op :=
   .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2))
+@[match_pattern] def Op.evmWethDeposit256
+    (tw0 tw1 tw2 a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3))
+@[match_pattern] def Op.evmWethWithdraw256
+    (tw0 tw1 tw2 a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3))
 
 private partial def walk (ops : Array Op) (predicate : Op → Bool) : Bool :=
   ops.any fun op =>
@@ -229,6 +235,10 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3].any predicate
   | .evmTokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2].any predicate
+  | .evmWethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3].any predicate
+  | .evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3].any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
 
 private partial def isEvmContext : Val → Bool
@@ -268,7 +278,8 @@ def hasEvmEffect (ops : Array Op) : Bool :=
     | .mapGetPair .. | .mapSetPair ..
     | .mapSetAddr256 .. | .mapSetPair256 ..
     | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenApprove256 ..
-    | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf .. => true
+    | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf ..
+    | .evmWethDeposit256 .. | .evmWethWithdraw256 .. => true
     | _ => false
 
 end ProofForge.Extract.Ops

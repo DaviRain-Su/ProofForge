@@ -244,6 +244,11 @@ def extractedVault : IR.Program :=
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
       ],
+      payEntry "Vault" "receive" 0 #[] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmReceive, .returnU64 (.lit 0)]
+          #[.errorOverflow]
+      ],
       mutEntry "Vault" "setU64" 2 #[8, 8] #[
         .ite .ne (.lit 0) (.lit 1)
           #[.mapSetU64 (.lit 0) (.arg 0) (.arg 1), .returnU64 (.arg 1)]
@@ -257,6 +262,24 @@ def extractedVault : IR.Program :=
               (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")
               (u256Field 3 "w0") (u256Field 3 "w1") (u256Field 3 "w2") (u256Field 3 "w3"),
             .returnU64 (u256Field 3 "w0")]
+          #[.errorOverflow]
+      ],
+      mutEntry "Vault" "unwrap" 2 #[20, 32] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmWethWithdraw256
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            .returnU64 (u256Field 1 "w0")]
+          #[.errorOverflow]
+      ],
+      payEntry "Vault" "wrap" 2 #[20, 32] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmDeposit256 (u256Field 1 "w0") (u256Field 1 "w1")
+              (u256Field 1 "w2") (u256Field 1 "w3"),
+            .evmWethDeposit256
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
       view256 "Vault" "allowed" 3 #[20, 20, 20] (return256 fun limb =>

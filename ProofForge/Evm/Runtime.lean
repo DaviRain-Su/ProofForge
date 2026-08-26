@@ -171,6 +171,16 @@ def evmSelf20 : Addr20 :=
     (_token _owner _spender : Addr20) : UInt256 :=
   ⟨0, 0, 0, 0⟩
 
+/-- 封闭 WETH `deposit()`。value CALL，selector `0xd0e30db0`，calldata 4 字节。失败 revert。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmWethDeposit
+    (_weth : Addr20) (amt : UInt256) : UInt64 :=
+  amt.w0
+
+/-- 封闭 WETH `withdraw(uint256)`。CALL，selector `0x2e1a7d4d`，36 字节 calldata，value 0。失败 / 假返回 revert。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmWethWithdraw
+    (_weth : Addr20) (amt : UInt256) : UInt64 :=
+  amt.w0
+
 /-- checked `a + b`。溢出 revert。宿主返回 `a`。 -/
 @[irreducible] def evmAdd256 (a b : UInt256) : UInt256 :=
   let _ := b; a

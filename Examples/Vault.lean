@@ -82,6 +82,30 @@ def take (_s : State) (token owner dest : Addr20) (amt : UInt256) :
 def allowed (_s : State) (token owner spender : Addr20) : UInt256 :=
   evmTokenAllowanceOf token owner spender
 
+/-- 无 calldata 的 payable `receive()`。WETH `withdraw` 把 ETH 打回来时需要。 -/
+@[pf_entry]
+def receive (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmReceive)
+  else
+    .error .overflow
+
+/-- 封闭 WETH `deposit()`。入口 payable：先 `eq(callvalue(), amt)`，再 value CALL。 -/
+@[pf_entry]
+def wrap (_s : State) (weth : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := evmDeposit256 amt }, evmWethDeposit weth amt)
+  else
+    .error .overflow
+
+/-- 封闭 WETH `withdraw(uint256)`。ETH 回到本合约。 -/
+@[pf_entry]
+def unwrap (_s : State) (weth : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmWethWithdraw weth amt)
+  else
+    .error .overflow
+
 @[pf_entry]
 def get (_s : State) : UInt64 :=
   0

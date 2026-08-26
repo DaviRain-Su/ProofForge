@@ -27,6 +27,21 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .error _ => false
 
 #guard
+  match wrap (init 0) sample ⟨5, 0, 0, 0⟩ with
+  | .ok (_, ret) => ret == 5
+  | .error _ => false
+
+#guard
+  match unwrap (init 0) sample ⟨6, 0, 0, 0⟩ with
+  | .ok (_, ret) => ret == 6
+  | .error _ => false
+
+#guard
+  match receive (init 0) with
+  | .ok (_, ret) => ret == 0
+  | .error _ => false
+
+#guard
   let p := ProofForge.Evm.Golden.extractedVault
   match ProofForge.Evm.Emit.emitYul p with
   | .error _ => false
@@ -38,6 +53,8 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         yul.contains "0x23b872dd" &&
         yul.contains "0xdd62ed3e" &&
         yul.contains "0x70a08231" &&
+        yul.contains "0xd0e30db0" &&
+        yul.contains "0x2e1a7d4d" &&
         yul.contains "staticcall(gas()" &&
         yul.contains "returndatasize()"
 

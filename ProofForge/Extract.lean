@@ -1313,7 +1313,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             (endsWith e ".evmTokenBalanceOfSelf" ||
             isConstNamed e ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf) ||
             (endsWith e ".evmTokenAllowanceOf" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenAllowanceOf)) &&
+            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenAllowanceOf) ||
+            (endsWith e ".evmWethDeposit" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmWethDeposit) ||
+            (endsWith e ".evmWethWithdraw" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmWethWithdraw)) &&
             e.getAppArgs.size ≥ 1 then
             if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
             let args := e.getAppArgs
@@ -3709,6 +3713,42 @@ private def findEvmTokenTransferFrom256 (env : Environment) (e : Expr) :
         .arg 8, .arg 9, .arg 10, .arg 11, .arg 12)
   else none
 
+private def findEvmWethDeposit256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmWethDeposit" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmWethDeposit
+        ".evmWethDeposit" with
+    | some app =>
+      let args := app.getAppArgs
+      match nthFromEnd args 1, nthFromEnd args 0 with
+      | some weth, some amt =>
+        let (t0, t1, t2) := addr20Leaves env weth
+        let (a0, a1, a2, a3) := uint256Leaves env amt
+        some (t0, t1, t2, a0, a1, a2, a3)
+      | _, _ =>
+        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+    | none =>
+      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+  else none
+
+private def findEvmWethWithdraw256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmWethWithdraw" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmWethWithdraw
+        ".evmWethWithdraw" with
+    | some app =>
+      let args := app.getAppArgs
+      match nthFromEnd args 1, nthFromEnd args 0 with
+      | some weth, some amt =>
+        let (t0, t1, t2) := addr20Leaves env weth
+        let (a0, a1, a2, a3) := uint256Leaves env amt
+        some (t0, t1, t2, a0, a1, a2, a3)
+      | _, _ =>
+        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+    | none =>
+      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+  else none
+
 private def findEvmTokenAllowance (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val) :=
@@ -3872,6 +3912,24 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
     | _, _, _, _ =>
       some (.evmTokenTransferFrom256 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5)
         (.arg 6) (.arg 7) (.arg 8) (.arg 9) (.arg 10) (.arg 11) (.arg 12))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmWethDeposit ||
+      endsWith app ".evmWethDeposit" then
+    match nthFromEnd args 1, nthFromEnd args 0 with
+    | some weth, some amt =>
+      let (t0, t1, t2) := addr20Leaves env weth
+      let (a0, a1, a2, a3) := uint256Leaves env amt
+      some (.evmWethDeposit256 t0 t1 t2 a0 a1 a2 a3)
+    | _, _ =>
+      some (.evmWethDeposit256 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmWethWithdraw ||
+      endsWith app ".evmWethWithdraw" then
+    match nthFromEnd args 1, nthFromEnd args 0 with
+    | some weth, some amt =>
+      let (t0, t1, t2) := addr20Leaves env weth
+      let (a0, a1, a2, a3) := uint256Leaves env amt
+      some (.evmWethWithdraw256 t0 t1 t2 a0 a1 a2 a3)
+    | _, _ =>
+      some (.evmWethWithdraw256 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6))
   else none
 
 private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
@@ -3895,7 +3953,9 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
     (``ProofForge.Evm.Runtime.evmMapSetPair256, ".evmMapSetPair256"),
     (``ProofForge.Evm.Runtime.evmTokenTransfer, ".evmTokenTransfer"),
     (``ProofForge.Evm.Runtime.evmTokenApprove, ".evmTokenApprove"),
-    (``ProofForge.Evm.Runtime.evmTokenTransferFrom, ".evmTokenTransferFrom")
+    (``ProofForge.Evm.Runtime.evmTokenTransferFrom, ".evmTokenTransferFrom"),
+    (``ProofForge.Evm.Runtime.evmWethDeposit, ".evmWethDeposit"),
+    (``ProofForge.Evm.Runtime.evmWethWithdraw, ".evmWethWithdraw")
   ]
   let rec walk (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
     match fuel with
@@ -3935,6 +3995,8 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   | some (.evmTokenTransfer256 _ _ _ _ _ _ a0 _ _ _) => a0
   | some (.evmTokenApprove256 _ _ _ _ _ _ a0 _ _ _) => a0
   | some (.evmTokenTransferFrom256 _ _ _ _ _ _ _ _ _ a0 _ _ _) => a0
+  | some (.evmWethDeposit256 _ _ _ a0 _ _ _) => a0
+  | some (.evmWethWithdraw256 _ _ _ a0 _ _ _) => a0
   | _ => .arg 0
 
 private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
@@ -3977,6 +4039,10 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
   else if let some (t0, t1, t2, o0, o1, o2, d0, d1, d2, a0, a1, a2, a3) :=
       findEvmTokenTransferFrom256 env e then
     some #[.evmTokenTransferFrom256 t0 t1 t2 o0 o1 o2 d0 d1 d2 a0 a1 a2 a3, .returnU64 a0]
+  else if let some (t0, t1, t2, a0, a1, a2, a3) := findEvmWethDeposit256 env e then
+    some #[.evmWethDeposit256 t0 t1 t2 a0 a1 a2 a3, .returnU64 a0]
+  else if let some (t0, t1, t2, a0, a1, a2, a3) := findEvmWethWithdraw256 env e then
+    some #[.evmWethWithdraw256 t0 t1 t2 a0 a1 a2 a3, .returnU64 a0]
   else if let some (t0, t1, t2, d0, d1, d2, amt) := findEvmTokenTransfer env e then
     some #[.evmTokenTransfer t0 t1 t2 d0 d1 d2 amt, .returnU64 amt]
   else if let some (b, k) := findEvmMapGetU64 env e then
@@ -5904,6 +5970,12 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
             (flipVal fuel' j) (flipVal fuel' k) (flipVal fuel' l) (flipVal fuel' m)
       | .evmTokenBalanceOfSelf a b c =>
           .evmTokenBalanceOfSelf (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+      | .evmWethDeposit256 a b c d0 d1 d2 d3 =>
+          .evmWethDeposit256 (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d0) (flipVal fuel' d1) (flipVal fuel' d2) (flipVal fuel' d3)
+      | .evmWethWithdraw256 a b c d0 d1 d2 d3 =>
+          .evmWethWithdraw256 (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d0) (flipVal fuel' d1) (flipVal fuel' d2) (flipVal fuel' d3)
       | .errorOverflow => .errorOverflow
       | .errorNamed n => .errorNamed n
   let ops := ops0.map (flipOp 128)
@@ -6241,6 +6313,12 @@ private def opFields : Ops.Op → Array String
         valFields e ++ valFields f ++ valFields g ++ valFields h ++
         valFields i ++ valFields j ++ valFields k ++ valFields l ++ valFields m
   | .evmTokenBalanceOfSelf a b c => valFields a ++ valFields b ++ valFields c
+  | .evmWethDeposit256 a b c d0 d1 d2 d3 =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d0 ++
+        valFields d1 ++ valFields d2 ++ valFields d3
+  | .evmWethWithdraw256 a b c d0 d1 d2 d3 =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d0 ++
+        valFields d1 ++ valFields d2 ++ valFields d3
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .errorNamed _ => #[]
@@ -6391,6 +6469,12 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
             (← normalizeVal j) (← normalizeVal k) (← normalizeVal l) (← normalizeVal m)
       | .evmTokenBalanceOfSelf a b c =>
           return .evmTokenBalanceOfSelf (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+      | .evmWethDeposit256 a b c d0 d1 d2 d3 =>
+          return .evmWethDeposit256 (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+            (← normalizeVal d0) (← normalizeVal d1) (← normalizeVal d2) (← normalizeVal d3)
+      | .evmWethWithdraw256 a b c d0 d1 d2 d3 =>
+          return .evmWethWithdraw256 (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+            (← normalizeVal d0) (← normalizeVal d1) (← normalizeVal d2) (← normalizeVal d3)
   return { p with methods := ← p.methods.mapM fun m => do
     return { m with ops := ← m.ops.mapM (goOp 128) } }
 
@@ -6484,6 +6568,10 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
       #[a, b, c, d, e, f, g, h, i, j, k, l, m].findSome? (valEscapedArg limit)
   | .evmTokenBalanceOfSelf a b c =>
       #[a, b, c].findSome? (valEscapedArg limit)
+  | .evmWethDeposit256 a b c d0 d1 d2 d3 =>
+      #[a, b, c, d0, d1, d2, d3].findSome? (valEscapedArg limit)
+  | .evmWethWithdraw256 a b c d0 d1 d2 d3 =>
+      #[a, b, c, d0, d1, d2, d3].findSome? (valEscapedArg limit)
   | .storeField _ v | .okState v | .returnU64 v | .returnState v => valEscapedArg limit v
   | .errorOverflow | .errorNamed _ => none
 

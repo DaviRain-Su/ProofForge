@@ -1310,6 +1310,57 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ ret ++ " := mload(0)" ++ nl ++
           indent ++ "if shr(64, " ++ ret ++ ") { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some ret }
+    | .evmWethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+        let (p0, t0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
+        let (p1, t1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 s0
+        let (p2, t2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths tw2 s1
+        let (r0, x0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s2
+        let (r1, x1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s3
+        let (r2, x2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s4
+        let (r3, x3, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s5
+        let (tok, s7) := fresh s6
+        let (amt, s8) := fresh s7
+        let (ok, s9) := fresh s8
+        st := s9
+        acc := acc ++ p0 ++ p1 ++ p2 ++ r0 ++ r1 ++ r2 ++ r3 ++
+          indent ++ "if shr(32, " ++ t2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent t0 t1 t2 ++
+          indent ++ "let " ++ tok ++ " := mload(0)" ++ nl ++
+          indent ++ "mstore(0, 0xd0e30db000000000000000000000000000000000000000000000000000000000)" ++ nl ++
+          indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
+          indent ++ "let " ++ ok ++ " := call(gas(), " ++ tok ++ ", " ++ amt ++
+            ", 0, 4, 0, 0)" ++ nl ++
+          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
+        st := { st with last := some x0 }
+    | .evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+        let (p0, t0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
+        let (p1, t1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 s0
+        let (p2, t2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths tw2 s1
+        let (r0, x0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s2
+        let (r1, x1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s3
+        let (r2, x2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s4
+        let (r3, x3, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s5
+        let (tok, s7) := fresh s6
+        let (amt, s8) := fresh s7
+        let (ok, s9) := fresh s8
+        let (rds, s10) := fresh s9
+        st := s10
+        acc := acc ++ p0 ++ p1 ++ p2 ++ r0 ++ r1 ++ r2 ++ r3 ++
+          indent ++ "if shr(32, " ++ t2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent t0 t1 t2 ++
+          indent ++ "let " ++ tok ++ " := mload(0)" ++ nl ++
+          indent ++ "mstore(0, 0x2e1a7d4d00000000000000000000000000000000000000000000000000000000)" ++ nl ++
+          indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
+          indent ++ "mstore(4, " ++ amt ++ ")" ++ nl ++
+          indent ++ "let " ++ ok ++ " := call(gas(), " ++ tok ++ ", 0, 0, 36, 0, 32)" ++ nl ++
+          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ rds ++ " := returndatasize()" ++ nl ++
+          indent ++ "if and(iszero(eq(" ++ rds ++ ", 0)), iszero(eq(" ++ rds ++
+            ", 32))) { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "if eq(" ++ rds ++ ", 32) { if iszero(mload(0)) { " ++ revert0 ++ " } }" ++ nl
+        st := { st with last := some x0 }
     | .storeField name v =>
         let destS ← slotOf p name
         let (pre, value, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st

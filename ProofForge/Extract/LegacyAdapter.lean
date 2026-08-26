@@ -349,6 +349,10 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
   | .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2)) =>
       return .evmTokenBalanceOfSelf (← toLegacyVal tw0) (← toLegacyVal tw1)
         (← toLegacyVal tw2)
+  | .ext (.evm (.wethDeposit256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent WETH deposit"
+  | .ext (.evm (.wethWithdraw256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent WETH withdraw"
 
 def toLegacyOps (ops : Array Op) : Except String (Array ProofForge.Ops.Op) :=
   ops.mapM toLegacyOp

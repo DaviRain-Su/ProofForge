@@ -115,4 +115,36 @@ if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   exit 1
 fi
 
-echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom; engineering only)"
+weth_out="$root/build/evm/WETHMock.bin"
+"$solc_bin" --bin --optimize --overwrite -o "$root/build/evm" \
+  "$here/WETHMock.sol" >/dev/null
+[[ -f "$weth_out" ]] || { echo "FAIL: missing WETHMock.bin" >&2; exit 1; }
+weth_hex="$(tr -d '\n\r ' < "$weth_out")"
+weth_receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" --create "0x$weth_hex")"
+weth="$(printf '%s' "$weth_receipt" | solana_lean_contract_address)"
+
+before_eth="$("$cast" balance --rpc-url "$rpc" "$addr")"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 40 \
+  "$addr" 'wrap(address,uint256)' "$weth" 40 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$weth")" \
+  40 "held WETH after wrap"
+after_wrap_eth="$("$cast" balance --rpc-url "$rpc" "$addr")"
+solana_lean_require_uint "$after_wrap_eth" "$(solana_lean_to_dec "$before_eth")" \
+  "wrap must send ETH into WETH, not keep it"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'unwrap(address,uint256)' "$weth" 15 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$weth")" \
+  25 "held WETH after unwrap"
+after_unwrap_eth="$("$cast" balance --rpc-url "$rpc" "$addr")"
+solana_lean_require_uint "$after_unwrap_eth" \
+  "$("$python" -I -S -c "print(int('$(solana_lean_to_dec "$before_eth")') + 15)")" \
+  "unwrap must credit ETH back to vault"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 7 \
+    "$addr" 'wrap(address,uint256)' "$weth" 40 >/dev/null 2>&1; then
+  echo "FAIL: wrong-value wrap unexpectedly succeeded" >&2
+  exit 1
+fi
+
+echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom/weth; engineering only)"

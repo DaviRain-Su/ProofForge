@@ -43,6 +43,8 @@ inductive Op where
   | evmTokenApprove256 (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : Ops.Val)
   | evmTokenTransferFrom256 (tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 : Ops.Val)
   | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Ops.Val)
+  | evmWethDeposit256 (tw0 tw1 tw2 a0 a1 a2 a3 : Ops.Val)
+  | evmWethWithdraw256 (tw0 tw1 tw2 a0 a1 a2 a3 : Ops.Val)
   | storeField (name : String) (value : Ops.Val)
   | okState (value : Ops.Val)
   | errorOverflow
@@ -108,6 +110,10 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3)
   | .ext (.tokenBalanceOfSelf tw0 tw1 tw2) =>
       pure (.evmTokenBalanceOfSelf tw0 tw1 tw2)
+  | .ext (.wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3) =>
+      pure (.evmWethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3)
+  | .ext (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3) =>
+      pure (.evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3)
 
 where
   lowerOps (ops : Array Ops.Op) : Except String (Array Op) :=
@@ -162,6 +168,10 @@ private partial def Op.toSource : Op → Ops.Op
   | .evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       .ext (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3)
   | .evmTokenBalanceOfSelf tw0 tw1 tw2 => .ext (.tokenBalanceOfSelf tw0 tw1 tw2)
+  | .evmWethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      .ext (.wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3)
+  | .evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      .ext (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3)
   | .storeField name value => .storeField name value
   | .okState value => .okState value
   | .errorOverflow => .errorOverflow
@@ -237,6 +247,12 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
         (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
+  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      .wethDeposit256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      .wethWithdraw256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .deposit amount | .log _ amount => #[amount]
@@ -270,6 +286,10 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3]
   | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
+  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3]
+  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -354,6 +374,14 @@ private def projectOpExt
       | .tokenBalanceOfSelf tw0 tw1 tw2 =>
           return .tokenBalanceOfSelf (← projectVal tw0) (← projectVal tw1)
             (← projectVal tw2)
+      | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+          return .wethDeposit256 (← projectVal tw0) (← projectVal tw1)
+            (← projectVal tw2) (← projectVal a0) (← projectVal a1)
+            (← projectVal a2) (← projectVal a3)
+      | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+          return .wethWithdraw256 (← projectVal tw0) (← projectVal tw1)
+            (← projectVal tw2) (← projectVal a0) (← projectVal a1)
+            (← projectVal a2) (← projectVal a3)
 
 /-- Static registration of the extractor-to-EVM projection. -/
 def extractRegistration :
@@ -758,6 +786,10 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"ttxferfrom256({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g},{valCanon h},{valCanon i},{valCanon j},{valCanon k},{valCanon l},{valCanon m})"
     | .evmTokenBalanceOfSelf a b c =>
         s!"tbal({valCanon a},{valCanon b},{valCanon c})"
+    | .evmWethDeposit256 a b c d0 d1 d2 d3 =>
+        s!"wethdep({valCanon a},{valCanon b},{valCanon c},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3})"
+    | .evmWethWithdraw256 a b c d0 d1 d2 d3 =>
+        s!"wethwd({valCanon a},{valCanon b},{valCanon c},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3})"
     | .storeField n v => s!"st.{n}({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"

@@ -99,6 +99,12 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
         (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
+  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      .wethDeposit256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      .wethWithdraw256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
 
 private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .deposit amount | .log _ amount => #[amount]
@@ -129,6 +135,10 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3]
   | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
+  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3]
+  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3]
 
 def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .svm payload => .svm (mapSvmPayload mapValue payload)
@@ -200,6 +210,10 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
         (·.wellFormed ValKind.arity)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       #[tw0, tw1, tw2].all (·.wellFormed ValKind.arity)
+  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
+  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
 
 def OpExt.wellFormed : OpExt Val → Bool
   | .svm payload => svmExtWellFormed payload
