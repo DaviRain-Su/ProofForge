@@ -488,6 +488,25 @@
   `docs/plan/tasks/l5-047.md`。下一步在固定 bridge 上实现 official tag 3 的严格
   PostOnly/no-TIF/deposited-funds-only 子集，再把完整 OrderPacket enum/option decoding
   收敛成 EntryAdapter schema 数据，而不是新增 codec opcode。
+- P5 第四十一段 official Phoenix-v1 tag 3 严格 PostOnly placement 已完成：新增 exact
+  40-byte `OrderPacket::PostOnly` wire 与五账户认证，canonical log/seat PDA、Phoenix-owned
+  128-byte approved seat 及其 market/trader identity 在任何 storage effect 前 fail closed。
+  成功路径组合既有 complete trader/bid/ask validator、one-based trader find、FIFO
+  find/insert、balance word-store 与 BatchRecorder；买单复用共享 quote-lot geometry 把 free
+  quote 转 locked，卖单把 free base 转 locked。当前严格边界要求 Active/PostOnly status、
+  opposite book empty、selected book 有容量、无 TIF、deposited funds only、hard funds failure，
+  因而不伪装 matching/reprice/expiry/eviction。word 106 只生成并递增 FIFO order sequence，
+  word 34 独立生成 audit sequence；43-byte Place record 保留 u128 client id 的两个 LE limbs。
+  generic Ops/IR/CFG/主 Emit 与 Component vocabulary 均未新增 case，持久状态继续只有 account
+  bytes、one-based index 和 `0` sentinel。当前 digest `4a74bafb995ad60a`，assembly
+  12,636,870 B、ELF 3,960,464 B、IDL 9,537 B，ELF SHA-256
+  `abdd4b5af17be9e6b363a52365ce200f3a1ee8d2fc759c2cd7b5b2a0c5665311`。207-job Lean、
+  51 个 SVM build、Phoenix profile 65/65、全 Mollusk 271/271 与 Anvil 12/12 全绿；
+  Surfpool 1.5.0 以 3,914 个 Loader-v3 writes 部署 byte-identical ELF，并核对 exact
+  3,960,509-byte ProgramData；未使用 `solana-test-validator`。详见
+  `docs/plan/tasks/l5-048.md`。下一步先把 effectful raw scalar return 泛化成 bounded scalar
+  tuple，直接复用现有 CFG `returnU64s` / SVM `sol_set_return_data`，补齐 tag 3 官方
+  16-byte `(price, sequence)` return；随后把完整 OrderPacket 继续收敛成 EntryAdapter schema。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
@@ -505,7 +524,7 @@
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
-| P5 动态 Phoenix-v1 | 部分：profile + complete tree/free-list validation + bounded trader/order insertion/removal + generic component/account-storage boundary + ordered cursor/audit recorder + official tags 4–9 + 本地部署门已有 | 固定/固定-stride有界 account region、parent walk、fixed bitmap/stack、effect-safe guarded stores | canonical profile/allocator envelope/三树 invariants 已进 Lean/Mollusk；trader allocator 与 bid/ask books 均可按 Sokoban 0.3.0 填满并逐个删空；word-store、parent path、FIFO/Pubkey RB validators/mutation/key-based cursor 均已迁入 `Component → AccountStorage` bridge；bounded recorder 以 SDK 32 KiB cursor 提供 1,246-byte pre-flush 与 header-only finish，official tags 4–9 通过 `EntryAdapter + Component` 组合。下一步识别并组合 matching/placement ABI；remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
+| P5 动态 Phoenix-v1 | 部分：profile + complete tree/free-list validation + bounded trader/order insertion/removal + generic component/account-storage boundary + ordered cursor/audit recorder + strict tag 3 PostOnly slice + official tags 4–9 + 本地部署门已有 | 固定/固定-stride有界 account region、parent walk、fixed bitmap/stack、effect-safe guarded stores | canonical profile/allocator envelope/三树 invariants 已进 Lean/Mollusk；trader allocator 与 bid/ask books 均可按 Sokoban 0.3.0 填满并逐个删空；word-store、parent path、FIFO/Pubkey RB validators/mutation/key-based cursor 均已迁入 `Component → AccountStorage` bridge；bounded recorder 以 SDK 32 KiB cursor 提供 1,246-byte pre-flush 与 header-only finish，strict tag 3 与 official tags 4–9 通过 `EntryAdapter + Component` 组合。下一步补 effectful tuple return，再扩 OrderPacket/matching；remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
 | P6 SDK memory/protocol surface | 进行中：官方形状 transient heap 模型和 recorder lowering 已有 | P5 的 account-resident 边界；后续需要 effect-safe lowering | VM frame 可显式建模 32–256 KiB，但官方 SDK global allocator 固定使用 32 KiB；recorder 遵守同一 cursor/OOM/no-op free。后续只开放 bounded scratch/container API，禁止持久 heap pointer。再分片补 32-byte/u128/Borsh、remaining accounts 和 Token-2022 extension semantics |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。P5 verifier 已能按账户原始

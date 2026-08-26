@@ -11,9 +11,9 @@ plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 This is deliberately a separate verifier/profile program. Generated probes keep ProofForge state in
 account 0 and the candidate market in account 1; the official raw adapter instead authenticates a
 physical program prefix and mutates the market in account 2. Its fixed-shape Sokoban routines are
-composed through bounded target-owned components; official instruction coverage currently includes
-tags 4–7 (`ReduceOrder`, `ReduceOrderWithFreeFunds`, `CancelAllOrders`, and
-`CancelAllOrdersWithFreeFunds`), not the complete Phoenix instruction set.
+composed through bounded target-owned components; official instruction coverage includes tags 4–9
+plus a strict PostOnly/no-TIF/deposited-funds-only slice of tag 3, not the complete Phoenix
+instruction set.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -30,8 +30,10 @@ def splTokenProgram2 : UInt64 := 10463932726783620124
 def splTokenProgram3 : UInt64 := 12178014311288245306
 
 def marketHeaderDiscriminant : UInt64 := 8167313896524341111
+def seatDiscriminant : UInt64 := 2002603505298356104
 def marketHeaderBytes : UInt64 := 576
 def u64Max : UInt64 := 0xffffffffffffffff
+def maxOrderSequence : UInt64 := 0x7fffffffffffffff
 
 /-- Full account bytes: 576-byte header + `400 + 64 * (bids + asks) + 144 * seats` body. -/
 def accountBytesFor (bids asks seats : UInt64) : UInt64 :=
@@ -1432,7 +1434,7 @@ def claimReleasedFunds512At (marketAccount traderIndex side released : UInt64) :
 /-- Open Phoenix's bounded audit batch. `traderCpiAccount` is external-relative because it is
 embedded as a CPI data key; market reads remain physical indexes. The 92-byte payload below plus
 the component-owned raw-entry byte is Phoenix's 93-byte audit header. -/
-def beginReduceBatchAt (origin marketAccount traderCpiAccount marketSequence : UInt64) : UInt64 :=
+def beginMarketBatchAt (origin marketAccount traderCpiAccount marketSequence : UInt64) : UInt64 :=
   batchRecorderBegin 0 15 "log" 1246 93 91 32
     #[.u8le 1, .u8le origin,
       .u64le marketSequence, .u64le unixTime, .u64le clockSlot,
@@ -1442,14 +1444,21 @@ def beginReduceBatchAt (origin marketAccount traderCpiAccount marketSequence : U
     (findPda "log")
 
 /-- Append one canonical 35-byte Phoenix Reduce record. `orderIndex = 0` disables the append while
-leaving `finishReduceBatch` responsible for the required header-only CPI. -/
+leaving `finishMarketBatch` responsible for the required header-only CPI. -/
 def recordReduceAt (orderIndex orderSequence price removed remaining : UInt64) : UInt64 :=
   batchRecorderAppend 0 15 "log" 1246 93 91 32 orderIndex
     #[.u8le 4, .u16le 0, .u64le orderSequence, .u64le price,
       .u64le removed, .u64le remaining]
 
+/-- Append one canonical 43-byte Phoenix Place record. The two client-id words preserve the
+original little-endian u128 wire order without introducing a dynamic byte buffer in source code. -/
+def recordPlaceAt (orderSequence clientIdLow clientIdHigh price baseLots : UInt64) : UInt64 :=
+  batchRecorderAppend 0 15 "log" 1246 93 91 32 1
+    #[.u8le 3, .u16le 0, .u64le orderSequence, .u64le clientIdLow,
+      .u64le clientIdHigh, .u64le price, .u64le baseLots]
+
 /-- Flush Phoenix's current batch, including an empty header-only batch, and close the recorder. -/
-def finishReduceBatch : UInt64 :=
+def finishMarketBatch : UInt64 :=
   batchRecorderFinish 0 15 "log" 1246 93 91 32
 
 /-- Execute only the side-selected nonzero classic Token withdrawal. The mint seed points directly
@@ -1600,6 +1609,111 @@ def cancelWithdrawContextValid : UInt64 :=
   else
     1
 
+/-- Authenticate the five-account tag-3 context. PDA indexes are relative to the external region
+after the executable program prefix: log is 0, market is 1, trader is 2, and seat is 3. The seat
+itself remains a fixed 128-byte Phoenix-owned record and carries no heap-backed identity. -/
+def placeFreeFundsContextValid : UInt64 :=
+  if isWritable 0 ≠ 0 || isWritable 1 ≠ 0 || isWritable 2 = 0 ||
+      isWritable 3 ≠ 0 || isWritable 4 ≠ 0 ||
+      checkPdaSeeds 0 #[.ascii "log"] ≠ 0 ||
+      checkPdaSeeds 3 #[.ascii "seat", .accKey 1, .accKey 2] ≠ 0 then
+    0
+  else if accDataLen 4 ≠ 128 || ownerIsSelf 4 ≠ 0 ||
+      accDataWord 4 0 ≠ seatDiscriminant || accDataWord 4 9 ≠ 1 then
+    0
+  else if !key4Equal
+      (accDataWord 4 1) (accDataWord 4 2) (accDataWord 4 3) (accDataWord 4 4)
+      (accKeyWord 2 0) (accKeyWord 2 1) (accKeyWord 2 2) (accKeyWord 2 3) then
+    0
+  else if !key4Equal
+      (accDataWord 4 5) (accDataWord 4 6) (accDataWord 4 7) (accDataWord 4 8)
+      (accKeyWord 3 0) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3) then
+    0
+  else
+    1
+
+/--
+Place the bounded tag-3 subset after the entry adapter has authenticated its fixed wire and seat.
+The opposite book must be empty and the selected book must have spare capacity, so PostOnly never
+matches, reprices, expires, or evicts. The complete trader/bid/ask envelope dominates every write;
+the live trader supplies all collateral, the FIFO key consumes word 106 exactly once, and audit
+sequencing consumes header word 34 independently. Persistent state remains account-resident
+one-based indexes plus the zero sentinel.
+-/
+def placePostOnlyFreeFunds512At (marketAccount traderAccount side price baseLots clientIdLow
+    clientIdHigh : UInt64) : Except Error UInt64 := do
+  if cancelAllStorageValid512At marketAccount = 0 || price = 0 || baseLots = 0 then
+    .error .overflow
+  else
+    let status := accDataWord marketAccount 1
+    let bid := side = 0
+    let selectedSize :=
+      if bid then accDataWord marketAccount 112 else accDataWord marketAccount 4212
+    let oppositeSize :=
+      if bid then accDataWord marketAccount 4212 else accDataWord marketAccount 112
+    let orderSequence := accDataWord marketAccount 106
+    let marketSequence := accDataWord marketAccount 34
+    if (status ≠ 1 && status ≠ 2) || selectedSize ≥ 512 || oppositeSize ≠ 0 ||
+        orderSequence = 0 || orderSequence ≥ maxOrderSequence || marketSequence = u64Max then
+      .error .overflow
+    else
+      let traderIndex := accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
+        (signerKey traderAccount) (accKeyWord traderAccount 1)
+        (accKeyWord traderAccount 2) (accKeyWord traderAccount 3)
+      if traderIndex = 0 then
+        .error .overflow
+      else
+        let encodedSequence := if bid then ~~~orderSequence else orderSequence
+        let duplicate :=
+          if bid then
+            accDataRbTreeOrderFind marketAccount 110 114 115 116 117 8 512 1
+              price encodedSequence
+          else
+            accDataRbTreeOrderFind marketAccount 4210 4214 4215 4216 4217 8 512 0
+              price encodedSequence
+        if duplicate ≠ 0 then
+          .error .overflow
+        else if bid then
+          let quoteLots ← quoteLotsReleased512At marketAccount price baseLots
+          if quoteLots = 0 then
+            .error .overflow
+          else
+            let locked := accDataWordAtOneBased marketAccount 8320 18 128 traderIndex
+            let free := accDataWordAtOneBased marketAccount 8321 18 128 traderIndex
+            if quoteLots > free || locked > u64Max - quoteLots then
+              .error .overflow
+            else
+              let _ := accDataRbTreeOrderInsert marketAccount 110 114 115 116 117 8 512 1
+                price encodedSequence traderIndex baseLots 0 0
+              let _ := accDataWordSetAtOneBased marketAccount 8320 18 128
+                traderIndex (locked + quoteLots)
+              let _ := accDataWordSetAtOneBased marketAccount 8321 18 128
+                traderIndex (free - quoteLots)
+              let _ := accDataWordSetAt marketAccount 106 1 1 0 (orderSequence + 1)
+              let _ := accDataWordSetAt marketAccount 34 1 1 0 (marketSequence + 1)
+              let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
+              let _ := recordPlaceAt encodedSequence clientIdLow clientIdHigh price baseLots
+              let _ := finishMarketBatch
+              .ok encodedSequence
+        else
+          let locked := accDataWordAtOneBased marketAccount 8322 18 128 traderIndex
+          let free := accDataWordAtOneBased marketAccount 8323 18 128 traderIndex
+          if baseLots > free || locked > u64Max - baseLots then
+            .error .overflow
+          else
+            let _ := accDataRbTreeOrderInsert marketAccount 4210 4214 4215 4216 4217 8 512 0
+              price encodedSequence traderIndex baseLots 0 0
+            let _ := accDataWordSetAtOneBased marketAccount 8322 18 128
+              traderIndex (locked + baseLots)
+            let _ := accDataWordSetAtOneBased marketAccount 8323 18 128
+              traderIndex (free - baseLots)
+            let _ := accDataWordSetAt marketAccount 106 1 1 0 (orderSequence + 1)
+            let _ := accDataWordSetAt marketAccount 34 1 1 0 (marketSequence + 1)
+            let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
+            let _ := recordPlaceAt encodedSequence clientIdLow clientIdHigh price baseLots
+            let _ := finishMarketBatch
+            .ok encodedSequence
+
 /-- Historical generated adapters retain their existing account geometry and IDL. -/
 @[pf_entry]
 def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
@@ -1612,6 +1726,29 @@ def reduceBidFreeFunds512 (s : State) (price sequence requested : UInt64) :
     Except Error (State × UInt64) := do
   let removed ← reduceBidFreeFunds512At 1 0 (accKeyWord 0 0) price sequence requested
   .ok (s, removed)
+
+/--
+Official tag-3 wire, restricted to `OrderPacket::PostOnly`, two canonical `None` time-in-force
+markers, deposited funds only, and hard insufficient-funds failure:
+`03 || 00 || side || price:u64 || base:u64 || client:u128 || reject || 01 || 00 || 00 || 00`.
+The bounded storage transition accepts either canonical reject flag because the opposite book must
+be empty. This slice returns the encoded sequence scalar; a subsequent generic raw-return plan will
+extend it to Phoenix's complete 16-byte `(price, sequence)` return without adding a protocol opcode.
+-/
+@[pf_entry, pf_svm_raw 3 5 0]
+def placeLimitOrderWithFreeFunds (_s : State) (variant side : UInt8)
+    (price baseLots clientIdLow clientIdHigh : UInt64)
+    (rejectPostOnly useOnlyDepositedFunds lastValidSlot lastValidUnixTimestamp
+      failSilentlyOnInsufficientFunds : UInt8) : Except Error (State × UInt64) := do
+  if variant ≠ 0 || (side ≠ 0 && side ≠ 1) ||
+      (rejectPostOnly ≠ 0 && rejectPostOnly ≠ 1) || useOnlyDepositedFunds ≠ 1 ||
+      lastValidSlot ≠ 0 || lastValidUnixTimestamp ≠ 0 ||
+      failSilentlyOnInsufficientFunds ≠ 0 || placeFreeFundsContextValid = 0 then
+    .error .overflow
+  else
+    let encodedSequence ← placePostOnlyFreeFunds512At 2 3 side.toUInt64 price baseLots
+      clientIdLow clientIdHigh
+    .ok (_s, encodedSequence)
 
 /--
 Official Phoenix `ReduceOrderWithFreeFunds` wire for the smallest static profile:
@@ -1645,9 +1782,9 @@ def reduceOrderWithFreeFunds (_s : State) (side : UInt8)
       let marketSequence := accDataWord 2 34
       let remaining := resting - removed
       let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
-      let _ := beginReduceBatchAt 5 2 2 marketSequence
+      let _ := beginMarketBatchAt 5 2 2 marketSequence
       let _ := recordReduceAt orderIndex sequence price removed remaining
-      let _ := finishReduceBatch
+      let _ := finishMarketBatch
       .ok (_s, removed)
 
 /--
@@ -1696,9 +1833,9 @@ def reduceOrder (_s : State) (side : UInt8)
             let _ := withdrawReleasedAt side atoms
             let marketSequence := accDataWord 2 34
             let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
-            let _ := beginReduceBatchAt 4 2 2 marketSequence
+            let _ := beginMarketBatchAt 4 2 2 marketSequence
             let _ := recordReduceAt orderIndex sequence price actual (resting - actual)
-            let _ := finishReduceBatch
+            let _ := finishMarketBatch
             .ok (_s, actual)
         else
           .error .overflow
@@ -1720,12 +1857,12 @@ def cancelAllOrdersWithFreeFunds (_s : State) : Except Error (State × UInt64) :
     let traderIndex := cancelAllTraderIndex512At 2 3
     let marketSequence := accDataWord 2 34
     let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
-    let _ := beginReduceBatchAt 7 2 2 marketSequence
+    let _ := beginMarketBatchAt 7 2 2 marketSequence
     let _ := beginCancelAll
     let _ := cancelAllBids512At 2 traderIndex
     let _ := cancelAllAsks512At 2 traderIndex
     let _ := finishCancelAll
-    let _ := finishReduceBatch
+    let _ := finishMarketBatch
     .ok (_s, 0)
 
 /--
@@ -1742,7 +1879,7 @@ def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
     let traderIndex := cancelAllTraderIndex512At 2 3
     let marketSequence := accDataWord 2 34
     let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
-    let _ := beginReduceBatchAt 6 2 2 marketSequence
+    let _ := beginMarketBatchAt 6 2 2 marketSequence
     let _ := beginCancelAll
     let _ := cancelAllBids512At 2 traderIndex
     let _ := cancelAllAsks512At 2 traderIndex
@@ -1764,7 +1901,7 @@ def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
         else claimReleasedFunds512At 2 traderIndex 1 baseReleased
       let _ := withdrawReleasedAt 1 baseAtoms
       let _ := finishCancelAll
-      let _ := finishReduceBatch
+      let _ := finishMarketBatch
       .ok (_s, 0)
     else
       .error .overflow
@@ -1796,17 +1933,17 @@ def cancelUpToOrdersWithFreeFunds (_s : State) (side tickPresent : UInt8) (tick 
     let traderIndex := cancelAllTraderIndex512At 2 3
     let marketSequence := accDataWord 2 34
     let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
-    let _ := beginReduceBatchAt 9 2 2 marketSequence
+    let _ := beginMarketBatchAt 9 2 2 marketSequence
     let _ := beginCancelAll
     if bid then
       let _ := cancelUpToBids512At 2 traderIndex tickLimit searchLimit cancelLimit 0
       let _ := finishCancelAll
-      let _ := finishReduceBatch
+      let _ := finishMarketBatch
       .ok (_s, 0)
     else
       let _ := cancelUpToAsks512At 2 traderIndex tickLimit searchLimit cancelLimit 0
       let _ := finishCancelAll
-      let _ := finishReduceBatch
+      let _ := finishMarketBatch
       .ok (_s, 0)
 
 /--
@@ -1831,7 +1968,7 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
     let traderIndex := cancelAllTraderIndex512At 2 3
     let marketSequence := accDataWord 2 34
     let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
-    let _ := beginReduceBatchAt 8 2 2 marketSequence
+    let _ := beginMarketBatchAt 8 2 2 marketSequence
     let _ := beginCancelAll
     if bid then
       let _ := cancelUpToBids512At 2 traderIndex tickLimit searchLimit cancelLimit 1
@@ -1842,7 +1979,7 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
         let atoms := released * lotSize
         let _ := withdrawReleasedAt 0 atoms
         let _ := finishCancelAll
-        let _ := finishReduceBatch
+        let _ := finishMarketBatch
         .ok (_s, 0)
       else
         .error .overflow
@@ -1855,7 +1992,7 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
         let atoms := released * lotSize
         let _ := withdrawReleasedAt 1 atoms
         let _ := finishCancelAll
-        let _ := finishReduceBatch
+        let _ := finishMarketBatch
         .ok (_s, 0)
       else
         .error .overflow
@@ -1874,10 +2011,10 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   bidRootNeighborhood512 bidRootNeighborhood1024 bidRootNeighborhood2048
   bidRootNeighborhood4096 profileAccountBytesAt profileAccountBytes allocatorHeadersValidAt
   allocatorHeadersValid reduceAskFreeFunds512At reduceBidFreeFunds512At reduceFreeFunds512At
-  quoteLotsReleased512At claimReleasedFunds512At beginReduceBatchAt recordReduceAt
-  finishReduceBatch withdrawReleasedAt cancelAllStorageValid512At cancelAllTraderIndex512At
+  quoteLotsReleased512At claimReleasedFunds512At beginMarketBatchAt recordReduceAt recordPlaceAt
+  finishMarketBatch withdrawReleasedAt cancelAllStorageValid512At cancelAllTraderIndex512At
   beginCancelAll cancelAllBids512At cancelAllAsks512At cancelUpToBids512At
   cancelUpToAsks512At finishCancelAll
-  cancelWithdrawContextValid
+  cancelWithdrawContextValid placeFreeFundsContextValid placePostOnlyFreeFunds512At
 
 end Projects.PhoenixV1Profile

@@ -587,6 +587,26 @@ private partial def opsHaveRawReduceRecord
       | .forBody _ body => opsHaveRawReduceRecord body
       | _ => false
 
+private partial def opsHaveRawPlaceRecord
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .component (.batchRecorder (.append config enabled record)) =>
+         isPhoenixRecorderConfig config && enabled == .lit 1 && record.size == 7 &&
+           record[0]? == some (.u8le (.lit 3)) &&
+           (match record[1]? with
+            | some (ProofForge.Svm.BatchRecorder.Word.u16le _) => true | _ => false) &&
+           (List.range 5).all fun index =>
+             match record[index + 2]? with
+             | some (ProofForge.Svm.BatchRecorder.Word.u64le _) => true
+             | _ => false
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRawPlaceRecord thenOps || opsHaveRawPlaceRecord elseOps
+      | .forBody _ body => opsHaveRawPlaceRecord body
+      | _ => false
+
 private partial def opsHaveRawReduceHeader (origin : UInt64)
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
@@ -876,6 +896,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing reduceAskFreeFunds512"
   let some reduceBid := program.methods.find? (·.ixName == "reduceBidFreeFunds512")
     | throwError "missing reduceBidFreeFunds512"
+  let some placeRaw := program.methods.find? (·.ixName == "placeLimitOrderWithFreeFunds")
+    | throwError s!"missing raw PlaceLimitOrderWithFreeFunds: {repr (program.methods.map (·.ixName))}"
   let some reduceRaw := program.methods.find? (·.ixName == "reduceOrderWithFreeFunds")
     | throwError "missing raw ReduceOrderWithFreeFunds"
   let some reduceWithdrawRaw := program.methods.find? (·.ixName == "reduceOrder")
@@ -890,6 +912,14 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   let some cancelUpToFreeRaw :=
       program.methods.find? (·.ixName == "cancelUpToOrdersWithFreeFunds")
     | throwError "missing raw CancelUpToWithFreeFunds"
+  match placeRaw.entry with
+  | .raw entry =>
+      unless placeRaw.kind == .get && entry.tag == 3 && entry.accountCount == 5 &&
+          entry.programAccount == 0 &&
+          entry.paramWidths == #[1, 1, 8, 8, 8, 8, 1, 1, 1, 1, 1] &&
+          entry.dataLen == 40 do
+        throwError s!"wrong raw PlaceLimitOrderWithFreeFunds adapter: {repr entry}"
+  | .generated => throwError "PlaceLimitOrderWithFreeFunds lost its raw adapter"
   match reduceRaw.entry with
   | .raw entry =>
       unless reduceRaw.kind == .get && entry.tag == 5 && entry.accountCount == 4 &&
@@ -932,6 +962,44 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.minDataLen == 5 && entry.maxDataLen == 21 do
         throwError s!"wrong raw CancelUpToWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "CancelUpToWithFreeFunds lost its raw adapter"
+  unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 1) placeRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 3) placeRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 4) placeRaw.ops &&
+      opsHaveIntrinsic (· == .ownerIsSelf 4) placeRaw.ops &&
+      opsHaveIntrinsic (· == .signerKeyN 3) placeRaw.ops &&
+      opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) placeRaw.ops &&
+      opsHaveIntrinsic
+        (· == .checkPdaSeeds 3 #[.ascii "seat", .accKey 1, .accKey 2]) placeRaw.ops &&
+      opsHaveDataWord 4 0 placeRaw.ops && opsHaveDataWord 4 9 placeRaw.ops &&
+      opsHaveDataWord 2 34 placeRaw.ops && opsHaveDataWord 2 106 placeRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .key4RbTreeValid tree => tree.links.region.account == 2
+        | _ => false) placeRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoRbTreeValid tree => tree.links.region.account == 2 && tree.bid
+        | _ => false) placeRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoRbTreeValid tree => tree.links.region.account == 2 && !tree.bid
+        | _ => false) placeRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .key4Find 8310 tree => tree.links.region.account == 2
+        | _ => false) placeRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoFind 110 tree => tree.links.region.account == 2 && tree.bid
+        | .fifoFind 4210 tree => tree.links.region.account == 2 && !tree.bid
+        | _ => false) placeRaw.ops &&
+      opsHaveRbTreeOrderInsert 2 110 114 115 116 117 8 512 true placeRaw.ops &&
+      opsHaveRbTreeOrderInsert 2 4210 4214 4215 4216 4217 8 512 false placeRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8320 18 128 placeRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8321 18 128 placeRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8322 18 128 placeRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8323 18 128 placeRaw.ops &&
+      opsHaveDataWordSetAt 2 106 1 1 placeRaw.ops &&
+      opsHaveDataWordSetAt 2 34 1 1 placeRaw.ops &&
+      opsHaveRawReduceHeader 3 placeRaw.ops && opsHaveRawPlaceRecord placeRaw.ops &&
+      opsHaveRawReduceFinish placeRaw.ops && !opsHaveInvoke placeRaw.ops do
+    throwError "raw PlaceLimitOrderWithFreeFunds bounded composition is incomplete"
   unless opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops &&
       opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops &&
@@ -1320,9 +1388,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
         | _ => false) cursorAsk.ops do
     throwError "Phoenix-v1 bounded FIFO cursor composition is incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
-  if idl.contains "\"name\": \"reduceOrderWithFreeFunds\"" ||
+  if idl.contains "\"name\": \"placeLimitOrderWithFreeFunds\"" ||
+      idl.contains "\"name\": \"reduceOrderWithFreeFunds\"" ||
       idl.contains "\"name\": \"reduceOrder\"" then
-    throwError "raw Phoenix reduce adapter leaked into the generated IDL"
+    throwError "raw Phoenix protocol adapter leaked into the generated IDL"
   unless idl.contains
       "\"name\": \"findTrader128\",\n      \"discriminator\": [193, 118, 199, 104, 63, 14, 34, 106],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" &&
       idl.contains
@@ -1365,7 +1434,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.contains "jne r2, 26, raw_route_next_" &&
+  unless asm.contains "jne r2, 40, raw_route_next_" &&
+      asm.contains "jeq r1, 3, raw_route_match_" &&
+      asm.contains "jne r2, 26, raw_route_next_" &&
       asm.contains "jeq r1, 4, raw_route_match_" &&
       asm.contains "jeq r1, 5, raw_route_match_" &&
       asm.contains "jne r2, 1, raw_route_next_" &&
@@ -1374,7 +1445,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
       asm.contains "; checkPdaSeeds account=0 count=1" &&
+      asm.contains "; checkPdaSeeds account=3 count=3" &&
+      asm.contains "; ownerIsSelf acc=4" &&
       asm.contains "fixed-stride external account word write acc=2 base=34 stride=1 capacity=1" &&
+      asm.contains "fixed-stride external account word write acc=2 base=106 stride=1 capacity=1" &&
       asm.contains "bounded one-based acc2 RB find root=110 links=114 stride=8 capacity=512" &&
       asm.contains "bounded one-based acc2 RB find root=4210 links=4214 stride=8 capacity=512" &&
       asm.contains

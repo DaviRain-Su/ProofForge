@@ -16,6 +16,7 @@ use {
 };
 
 const MARKET_HEADER_DISCRIMINANT: u64 = 8_167_313_896_524_341_111;
+const SEAT_DISCRIMINANT: u64 = 2_002_603_505_298_356_104;
 const SMALLEST_MARKET_BYTES: usize = 84_944;
 const OFFICIAL_PROFILES: [(u64, u64, u64, usize); 12] = [
     (512, 512, 128, 84_944),
@@ -528,6 +529,24 @@ fn market_with_signer_trader() -> Account {
     market
 }
 
+fn raw_place_data(
+    side: u8,
+    price: u64,
+    base_lots: u64,
+    client_id_low: u64,
+    client_id_high: u64,
+) -> Vec<u8> {
+    let mut data = vec![3, 0, side];
+    data.extend_from_slice(&price.to_le_bytes());
+    data.extend_from_slice(&base_lots.to_le_bytes());
+    data.extend_from_slice(&client_id_low.to_le_bytes());
+    data.extend_from_slice(&client_id_high.to_le_bytes());
+    // reject_post_only=false, use_only_deposited_funds=true, no TIF, and hard funds failure.
+    data.extend_from_slice(&[0, 1, 0, 0, 0]);
+    assert_eq!(data.len(), 40);
+    data
+}
+
 fn raw_reduce_data(side: u8, price: u64, sequence: u64, size: u64) -> Vec<u8> {
     raw_reduce_data_for_tag(5, side, price, sequence, size)
 }
@@ -615,6 +634,64 @@ fn raw_reduce_instruction(
             trader_meta,
         ],
     )
+}
+
+fn seat_account(market_key: Pubkey, trader_key: Pubkey) -> Account {
+    let mut seat = Account::new(1, 128, &PHOENIX_PROGRAM);
+    write_word(&mut seat, 0, SEAT_DISCRIMINANT);
+    write_pubkey(&mut seat, 8, market_key);
+    write_pubkey(&mut seat, 40, trader_key);
+    write_word(&mut seat, 9, 1);
+    seat
+}
+
+fn raw_place_instruction(
+    data: &[u8],
+    program_account: Pubkey,
+    log_key: Pubkey,
+    market_key: Pubkey,
+    market_writable: bool,
+    trader_key: Pubkey,
+    trader_signer: bool,
+    seat_key: Pubkey,
+) -> Instruction {
+    let market_meta = if market_writable {
+        AccountMeta::new(market_key, false)
+    } else {
+        AccountMeta::new_readonly(market_key, false)
+    };
+    Instruction::new_with_bytes(
+        PHOENIX_PROGRAM,
+        data,
+        vec![
+            AccountMeta::new_readonly(program_account, false),
+            AccountMeta::new_readonly(log_key, false),
+            market_meta,
+            AccountMeta::new_readonly(trader_key, trader_signer),
+            AccountMeta::new_readonly(seat_key, false),
+        ],
+    )
+}
+
+fn raw_place_accounts(
+    program_account: Pubkey,
+    log_key: Pubkey,
+    market_key: Pubkey,
+    market: Account,
+    trader_key: Pubkey,
+    seat_key: Pubkey,
+    seat: Account,
+) -> Vec<(Pubkey, Account)> {
+    vec![
+        (
+            program_account,
+            mollusk_svm::program::create_program_account_loader_v3(&program_account),
+        ),
+        (log_key, common::plain_account()),
+        (market_key, market),
+        (trader_key, common::plain_account()),
+        (seat_key, seat),
+    ]
 }
 
 fn raw_reduce_harness() -> (Mollusk, Pubkey) {
@@ -822,6 +899,32 @@ fn assert_reduce_record(
     assert_eq!(&payload[104..112], &price.to_le_bytes());
     assert_eq!(&payload[112..120], &removed.to_le_bytes());
     assert_eq!(&payload[120..128], &remaining.to_le_bytes());
+}
+
+fn assert_place_record(
+    payload: &[u8],
+    market_sequence: u64,
+    market_key: Pubkey,
+    trader_key: Pubkey,
+    order_sequence: u64,
+    client_id_low: u64,
+    client_id_high: u64,
+    price: u64,
+    base_lots: u64,
+) {
+    assert_eq!(payload.len(), 136);
+    assert_eq!(&payload[..3], &[15, 1, 3]);
+    assert_eq!(&payload[3..11], &market_sequence.to_le_bytes());
+    assert_eq!(&payload[27..59], market_key.as_ref());
+    assert_eq!(&payload[59..91], trader_key.as_ref());
+    assert_eq!(&payload[91..93], &1u16.to_le_bytes());
+    assert_eq!(payload[93], 3);
+    assert_eq!(&payload[94..96], &0u16.to_le_bytes());
+    assert_eq!(&payload[96..104], &order_sequence.to_le_bytes());
+    assert_eq!(&payload[104..112], &client_id_low.to_le_bytes());
+    assert_eq!(&payload[112..120], &client_id_high.to_le_bytes());
+    assert_eq!(&payload[120..128], &price.to_le_bytes());
+    assert_eq!(&payload[128..136], &base_lots.to_le_bytes());
 }
 
 fn assert_cancel_all_batch(
@@ -1202,6 +1305,335 @@ fn reduce_order_with_free_funds_composes_bounded_storage_primitives() {
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(overflow_after.data, overflow_market.data);
+}
+
+#[test]
+fn official_raw_place_post_only_bid_locks_quote_and_emits_exact_record() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 2);
+    write_word(&mut market, 105, 3);
+    write_word(&mut market, ORDER_SEQUENCE_WORD, 12);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 300);
+    write_word(&mut market, 8320, 7);
+    write_word(&mut market, 8321, 100);
+    let client_id_low = 0x0706_0504_0302_0100;
+    let client_id_high = 0x1716_1514_1312_1110;
+    let data = raw_place_data(0, 5, 4, client_id_low, client_id_high);
+    let instruction = raw_place_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        market_key,
+        true,
+        trader_key,
+        true,
+        seat_key,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_place_accounts(
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market,
+            trader_key,
+            seat_key,
+            seat_account(market_key, trader_key),
+        ),
+        &[
+            Check::success(),
+            Check::return_data(&(!12u64).to_le_bytes()),
+        ],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 116), 5);
+    assert_eq!(read_word(&market, 117), !12u64);
+    assert_eq!(read_word(&market, 118), 1);
+    assert_eq!(read_word(&market, 119), 4);
+    assert_eq!(read_word(&market, 8320), 37);
+    assert_eq!(read_word(&market, 8321), 70);
+    assert_eq!(read_word(&market, ORDER_SEQUENCE_WORD), 13);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 301);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_place_record(
+        &payloads[0],
+        300,
+        market_key,
+        trader_key,
+        !12u64,
+        client_id_low,
+        client_id_high,
+        5,
+        4,
+    );
+}
+
+#[test]
+fn official_raw_place_post_only_ask_locks_base_and_keeps_sequence_domains_separate() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, ORDER_SEQUENCE_WORD, 7);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 310);
+    write_word(&mut market, 8322, 2);
+    write_word(&mut market, 8323, 20);
+    let data = raw_place_data(1, 9, 6, 44, 55);
+    let instruction = raw_place_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        market_key,
+        true,
+        trader_key,
+        true,
+        seat_key,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_place_accounts(
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market,
+            trader_key,
+            seat_key,
+            seat_account(market_key, trader_key),
+        ),
+        &[Check::success(), Check::return_data(&7u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, 4216), 9);
+    assert_eq!(read_word(&market, 4217), 7);
+    assert_eq!(read_word(&market, 4218), 1);
+    assert_eq!(read_word(&market, 4219), 6);
+    assert_eq!(read_word(&market, 8322), 8);
+    assert_eq!(read_word(&market, 8323), 14);
+    assert_eq!(read_word(&market, ORDER_SEQUENCE_WORD), 8);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 311);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_place_record(&payloads[0], 310, market_key, trader_key, 7, 44, 55, 9, 6);
+}
+
+#[test]
+fn official_raw_place_rejects_noncanonical_wire_before_storage_or_audit() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 8321, 100);
+    let before = market.data.clone();
+    let canonical = raw_place_data(0, 5, 4, 1, 2);
+    let mut cases = vec![canonical[..39].to_vec(), {
+        let mut data = canonical.clone();
+        data.push(0);
+        data
+    }];
+    for (offset, value) in [(1, 1), (2, 2), (35, 2), (36, 0), (37, 1), (38, 1), (39, 1)] {
+        let mut data = canonical.clone();
+        data[offset] = value;
+        cases.push(data);
+    }
+    for data in cases {
+        let (mollusk, log_key) = raw_reduce_harness();
+        let instruction = raw_place_instruction(
+            &data,
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            true,
+            trader_key,
+            true,
+            seat_key,
+        );
+        let result = mollusk.process_instruction(
+            &instruction,
+            &raw_place_accounts(
+                PHOENIX_PROGRAM,
+                log_key,
+                market_key,
+                market.clone(),
+                trader_key,
+                seat_key,
+                seat_account(market_key, trader_key),
+            ),
+        );
+        assert!(
+            result.raw_result.is_err(),
+            "noncanonical wire succeeded: {data:?}"
+        );
+        assert_eq!(resulting_account(&result, &market_key).data, before);
+        assert!(phoenix_data_payloads(&mollusk).is_empty());
+    }
+}
+
+#[test]
+fn official_raw_place_strict_slice_rejects_crossing_and_inactive_markets_atomically() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let data = raw_place_data(0, 5, 4, 1, 2);
+
+    let mut crossing = market_with_signer_trader();
+    write_word(&mut crossing, 8321, 100);
+    crossing = run_market_write(
+        "insertAsk512",
+        crossing,
+        true,
+        &[6, 1, 1, 1, 0, 0],
+        &[Check::success()],
+    );
+    let mut inactive = market_with_signer_trader();
+    write_word(&mut inactive, 1, 0);
+    write_word(&mut inactive, 8321, 100);
+
+    for market in [crossing, inactive] {
+        let before = market.data.clone();
+        let (mollusk, log_key) = raw_reduce_harness();
+        let instruction = raw_place_instruction(
+            &data,
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            true,
+            trader_key,
+            true,
+            seat_key,
+        );
+        let result = mollusk.process_instruction(
+            &instruction,
+            &raw_place_accounts(
+                PHOENIX_PROGRAM,
+                log_key,
+                market_key,
+                market,
+                trader_key,
+                seat_key,
+                seat_account(market_key, trader_key),
+            ),
+        );
+        assert!(result.raw_result.is_err());
+        assert_eq!(resulting_account(&result, &market_key).data, before);
+        assert!(phoenix_data_payloads(&mollusk).is_empty());
+    }
+}
+
+#[test]
+fn official_raw_place_authenticates_seat_and_fails_atomically_without_collateral() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let data = raw_place_data(0, 5, 4, 1, 2);
+
+    let mut invalid_seats = Vec::new();
+    let mut wrong_discriminator = seat_account(market_key, trader_key);
+    write_word(&mut wrong_discriminator, 0, 0);
+    invalid_seats.push((seat_key, wrong_discriminator, true, true));
+    let mut unapproved = seat_account(market_key, trader_key);
+    write_word(&mut unapproved, 9, 0);
+    invalid_seats.push((seat_key, unapproved, true, true));
+    let mut wrong_trader = seat_account(market_key, trader_key);
+    write_pubkey(&mut wrong_trader, 40, Pubkey::new_unique());
+    invalid_seats.push((seat_key, wrong_trader, true, true));
+    let mut wrong_owner = seat_account(market_key, trader_key);
+    wrong_owner.owner = Pubkey::new_unique();
+    invalid_seats.push((seat_key, wrong_owner, true, true));
+    invalid_seats.push((
+        Pubkey::new_unique(),
+        seat_account(market_key, trader_key),
+        true,
+        true,
+    ));
+    invalid_seats.push((seat_key, seat_account(market_key, trader_key), false, true));
+    invalid_seats.push((seat_key, seat_account(market_key, trader_key), true, false));
+
+    for (actual_seat_key, seat, trader_signer, market_writable) in invalid_seats {
+        let mut market = market_with_signer_trader();
+        write_word(&mut market, 8321, 100);
+        let before = market.data.clone();
+        let (mollusk, log_key) = raw_reduce_harness();
+        let instruction = raw_place_instruction(
+            &data,
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market_writable,
+            trader_key,
+            trader_signer,
+            actual_seat_key,
+        );
+        let result = mollusk.process_instruction(
+            &instruction,
+            &raw_place_accounts(
+                PHOENIX_PROGRAM,
+                log_key,
+                market_key,
+                market,
+                trader_key,
+                actual_seat_key,
+                seat,
+            ),
+        );
+        assert!(result.raw_result.is_err());
+        assert_eq!(resulting_account(&result, &market_key).data, before);
+        assert!(phoenix_data_payloads(&mollusk).is_empty());
+    }
+
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 320);
+    let before = market.data.clone();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let instruction = raw_place_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        market_key,
+        true,
+        trader_key,
+        true,
+        seat_key,
+    );
+    let result = mollusk.process_instruction(
+        &instruction,
+        &raw_place_accounts(
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market,
+            trader_key,
+            seat_key,
+            seat_account(market_key, trader_key),
+        ),
+    );
+    assert!(result.raw_result.is_err());
+    assert_eq!(resulting_account(&result, &market_key).data, before);
+    assert!(phoenix_data_payloads(&mollusk).is_empty());
 }
 
 #[test]
