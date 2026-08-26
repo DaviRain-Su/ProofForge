@@ -49,6 +49,16 @@ def totalSupply (s : State) : UInt256 :=
 def decimals (_s : State) : UInt8 :=
   18
 
+/-- 编译期 `name()`，右填充 ASCII `"Token"`。不是动态 string。 -/
+@[pf_entry]
+def name (_s : State) : Bytes32 :=
+  ⟨0x546f6b656e, 0, 0, 0⟩
+
+/-- 编译期 `symbol()`，右填充 ASCII `"PF"`。不是动态 string。 -/
+@[pf_entry]
+def symbol (_s : State) : Bytes32 :=
+  ⟨0x5046, 0, 0, 0⟩
+
 @[pf_entry]
 def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
   evmMapGetPair256 allowBase owner spender

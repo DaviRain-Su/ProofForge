@@ -565,6 +565,16 @@ def extractedToken : IR.Program :=
               (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
             .returnU64 (pairAllow 0)]
       ]),
+      {
+        kind := .get
+        name := "Examples.Token.DOMAIN_SEPARATOR"
+        ixName := "DOMAIN_SEPARATOR"
+        selector := Keccak.selectorOfWidths "DOMAIN_SEPARATOR" #[]
+        retWidths := #[33]
+        retCount := 4
+        ops := return256 fun limb => .ext (.domainSep256 limb) #[]
+        view := true
+      },
       view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
       view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
       {
@@ -577,15 +587,35 @@ def extractedToken : IR.Program :=
         view := true
       },
       dummyGet "Token",
+      {
+        kind := .get
+        name := "Examples.Token.name"
+        ixName := "name"
+        selector := Keccak.selectorOfWidths "name" #[]
+        retWidths := #[33]
+        retCount := 4
+        ops := #[
+          .returnU64 (.lit 362646562158),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0)
+        ]
+        view := true
+      },
       view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0),
       {
         kind := .get
-        name := "Examples.Token.DOMAIN_SEPARATOR"
-        ixName := "DOMAIN_SEPARATOR"
-        selector := Keccak.selectorOfWidths "DOMAIN_SEPARATOR" #[]
+        name := "Examples.Token.symbol"
+        ixName := "symbol"
+        selector := Keccak.selectorOfWidths "symbol" #[]
         retWidths := #[33]
         retCount := 4
-        ops := return256 fun limb => .ext (.domainSep256 limb) #[]
+        ops := #[
+          .returnU64 (.lit 20550),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0)
+        ]
         view := true
       },
       view256 "Token" "totalSupply" 0 #[] (return256 fun limb =>

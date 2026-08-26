@@ -1552,15 +1552,20 @@ private def uint256Leaves (env : Environment) (e : Expr) :
     | _ => ``ProofForge.Evm.Runtime.UInt256.w3
   let proj (name : String) : Ops.Val :=
     (val env (mkApp (mkConst (projConst name)) e)).getD (flattenField (.arg 0) name)
-  if (uint256CtorFields env e).isSome ||
-      isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
-      isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
-      isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" then
-    (proj "w0", proj "w1", proj "w2", proj "w3")
-  else
-    match val env e with
-    | some v => (flattenField v "w0", flattenField v "w1", flattenField v "w2", flattenField v "w3")
-    | none => (proj "w0", proj "w1", proj "w2", proj "w3")
+  match uint256CtorFields env e with
+  | some fields =>
+    let leaf (i : Nat) : Ops.Val := (val env fields[i]!).getD (proj s!"w{i}")
+    (leaf 0, leaf 1, leaf 2, leaf 3)
+  | none =>
+    if isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" then
+      (proj "w0", proj "w1", proj "w2", proj "w3")
+    else
+      match val env e with
+      | some v =>
+        (flattenField v "w0", flattenField v "w1", flattenField v "w2", flattenField v "w3")
+      | none => (proj "w0", proj "w1", proj "w2", proj "w3")
 
 private def bytes32Leaves (env : Environment) (e : Expr) :
     Ops.Val × Ops.Val × Ops.Val × Ops.Val :=
@@ -1571,9 +1576,11 @@ private def bytes32Leaves (env : Environment) (e : Expr) :
     | _ => ``ProofForge.Evm.Runtime.Bytes32.w3
   let proj (name : String) : Ops.Val :=
     (val env (mkApp (mkConst (projConst name)) e)).getD (flattenField (.arg 0) name)
-  if (uint256CtorFields env e).isSome then
-    (proj "w0", proj "w1", proj "w2", proj "w3")
-  else
+  match uint256CtorFields env e with
+  | some fields =>
+    let leaf (i : Nat) : Ops.Val := (val env fields[i]!).getD (proj s!"w{i}")
+    (leaf 0, leaf 1, leaf 2, leaf 3)
+  | none =>
     match val env e with
     | some v => (flattenField v "w0", flattenField v "w1", flattenField v "w2", flattenField v "w3")
     | none => (proj "w0", proj "w1", proj "w2", proj "w3")
@@ -1894,6 +1901,7 @@ private def asEqZero (env : Environment) (e : Expr) : Option Ops.Val :=
 private def asStateMk (env : Environment) (e : Expr) (preferLast := false) : Option Ops.Val :=
   let e := strip e
   if isConstNamed e ``Prod.mk || endsWith e ".Prod.mk" then none
+  else if (uint256CtorFields env e).isSome then none
   else if endsWith e ".State.mk" || endsWith e ".mk" then
     let args := e.getAppArgs
     if args.size = 0 then none

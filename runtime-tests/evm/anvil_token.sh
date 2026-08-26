@@ -30,6 +30,12 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'decimals()(uint8)')" \
   18 "compile-time decimals"
+want_name="0x000000000000000000000000000000000000000000000000000000546f6b656e"
+want_symbol="0x0000000000000000000000000000000000000000000000000000000000005046"
+got_name="$("$cast" call --rpc-url "$rpc" "$addr" 'name()(bytes32)')"
+got_symbol="$("$cast" call --rpc-url "$rpc" "$addr" 'symbol()(bytes32)')"
+solana_lean_require_equal "${got_name,,}" "$want_name" "compile-time name"
+solana_lean_require_equal "${got_symbol,,}" "$want_symbol" "compile-time symbol"
 
 zero="0x0000000000000000000000000000000000000000"
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
@@ -55,6 +61,10 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'decimals()(uint8)')" \
   18 "decimals holds after mint"
+got_name2="$("$cast" call --rpc-url "$rpc" "$addr" 'name()(bytes32)')"
+got_symbol2="$("$cast" call --rpc-url "$rpc" "$addr" 'symbol()(bytes32)')"
+solana_lean_require_equal "${got_name2,,}" "$want_name" "name holds after mint"
+solana_lean_require_equal "${got_symbol2,,}" "$want_symbol" "symbol holds after mint"
 
 topic_xfer="$("$cast" keccak 'Transfer(address,address,uint256)')"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
@@ -349,4 +359,4 @@ fi
 got_dom2="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
 solana_lean_require_equal "${got_dom2,,}" "${got_dom,,}" "DOMAIN_SEPARATOR holds after permit"
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals/zero; engineering only)"
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals/zero/name; engineering only)"

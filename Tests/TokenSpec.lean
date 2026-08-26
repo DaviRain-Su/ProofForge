@@ -17,6 +17,8 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 #guard balanceOf (init 0) sample == zero256
 #guard totalSupply (init 0) == zero256
 #guard decimals (init 0) == 18
+#guard name (init 0) == ⟨0x546f6b656e, 0, 0, 0⟩
+#guard symbol (init 0) == ⟨0x5046, 0, 0, 0⟩
 #guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
@@ -93,7 +95,10 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"DOMAIN_SEPARATOR\"" &&
         abi.contains "\"type\":\"bytes32\"" &&
         abi.contains "\"name\":\"decimals\"" &&
-        abi.contains "\"type\":\"uint8\""
+        abi.contains "\"type\":\"uint8\"" &&
+        abi.contains "\"name\":\"name\"" &&
+        abi.contains "\"name\":\"symbol\"" &&
+        abi.contains "\"type\":\"bytes32\""
 
 #guard
   let p := ProofForge.Evm.Golden.extractedToken
@@ -111,7 +116,11 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "totalSupply")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "totalSupply")).map (·.retWidths) == some #[32] &&
     (p.entries.find? (·.ixName == "decimals")).map (·.view) == some true &&
-    (p.entries.find? (·.ixName == "decimals")).map (·.retWidths) == some #[1]
+    (p.entries.find? (·.ixName == "decimals")).map (·.retWidths) == some #[1] &&
+    (p.entries.find? (·.ixName == "name")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "name")).map (·.retWidths) == some #[33] &&
+    (p.entries.find? (·.ixName == "symbol")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "symbol")).map (·.retWidths) == some #[33]
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedToken with
