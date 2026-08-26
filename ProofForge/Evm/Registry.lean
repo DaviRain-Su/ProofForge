@@ -14,11 +14,11 @@ def entries : Array Entry := #[
   { name := "Flag", digest := "6056d4920876b4f7" },
   { name := "Maybe", digest := "6b602a44477483ee" },
   { name := "EvmCtx", digest := "3214848828e0e590" },
-  { name := "TipJar", digest := "54e2ac6083d0820b" },
+  { name := "TipJar", digest := "d5be4c4a43771005" },
   { name := "Lang", digest := "d2a43e6bf208bff0" },
-  { name := "Vault", digest := "afd331572631e6e2" },
-  { name := "Ownable", digest := "7dc4a3ba2bb470b2" },
-  { name := "Token", digest := "8db43ef123b7e9a9" }
+  { name := "Vault", digest := "76bbe2020a90730b" },
+  { name := "Ownable", digest := "25bf329e90f170d9" },
+  { name := "Token", digest := "37e40784b6dce87e" }
 ]
 
 def names : Array String := entries.map (·.name)

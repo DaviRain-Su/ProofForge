@@ -4,11 +4,9 @@ namespace Examples.Ownable
 
 open ProofForge.Evm.Runtime
 
-/-- owner 三槽 + 一个计数。allowance 走 hashed pair map，不占槽。 -/
+/-- owner 一颗 Addr20（storage 三槽）+ 一个计数。allowance 走 hashed pair map。 -/
 structure State where
-  owner0 : UInt64
-  owner1 : UInt64
-  owner2 : UInt64
+  owner : Addr20
   value : UInt64
   deriving Repr, DecidableEq, Inhabited
 
@@ -23,18 +21,18 @@ def allowBase : UInt64 := 0
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
 @[pf_entry]
-def init (o0 o1 o2 : UInt64) : State :=
-  { owner0 := o0, owner1 := o1, owner2 := o2, value := 0 }
+def init (owner : Addr20) : State :=
+  { owner := owner, value := 0 }
 
-/-- 只有 owner 能加。非 owner → `unauthorized`。 -/
+/-- 只有 owner 能加。非 owner → `unauthorized`。身份比三叶，不把 Addr20 当单一 UInt64。 -/
 @[pf_entry]
 def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
-  if evmCallerW0 = s.owner0 then
-    if evmCallerW1 = s.owner1 then
-      if evmCallerW2 = s.owner2 then
+  if evmCaller20.w0 = s.owner.w0 then
+    if evmCaller20.w1 = s.owner.w1 then
+      if evmCaller20.w2 = s.owner.w2 then
         if s.value ≤ u64Max - delta then
           let next := s.value + delta
-          .ok ({ owner0 := s.owner0, owner1 := s.owner1, owner2 := s.owner2, value := next }, next)
+          .ok ({ owner := s.owner, value := next }, next)
         else
           .error .overflow
       else
@@ -48,45 +46,37 @@ def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def logInc (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ owner0 := 0, owner1 := 0, owner2 := 0, value := 0 }, evmLogIncremented amt)
+    .ok ({ owner := ⟨0, 0, 0⟩, value := 0 }, evmLogIncremented amt)
   else
     .error .overflow
 
 /-- pair-key `approve(owner, spender) = amt`。 -/
 @[pf_entry]
-def approve (_s : State) (o0 o1 o2 s0 s1 s2 amt : UInt64) :
+def approve (_s : State) (owner spender : Addr20) (amt : UInt64) :
     Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ owner0 := 0, owner1 := 0, owner2 := 0, value := 0 },
-      evmMapSetPair allowBase o0 o1 o2 s0 s1 s2 amt)
+    .ok ({ owner := ⟨0, 0, 0⟩, value := 0 },
+      evmMapSetPair allowBase owner spender amt)
   else
     .error .overflow
 
 /-- 把 pair-key 额度写成 `amt`。不是 ERC-20 `transferFrom` 减法。 -/
 @[pf_entry]
-def spend (_s : State) (o0 o1 o2 s0 s1 s2 amt : UInt64) :
+def spend (_s : State) (owner spender : Addr20) (amt : UInt64) :
     Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ owner0 := 0, owner1 := 0, owner2 := 0, value := 0 },
-      evmMapSetPair allowBase o0 o1 o2 s0 s1 s2 amt)
+    .ok ({ owner := ⟨0, 0, 0⟩, value := 0 },
+      evmMapSetPair allowBase owner spender amt)
   else
     .error .overflow
 
 @[pf_entry]
-def allowance (_s : State) (o0 o1 o2 s0 s1 s2 : UInt64) : UInt64 :=
-  evmMapGetPair allowBase o0 o1 o2 s0 s1 s2
+def allowance (_s : State) (owner spender : Addr20) : UInt64 :=
+  evmMapGetPair allowBase owner spender
 
 @[pf_entry]
-def ownerW0 (s : State) : UInt64 :=
-  s.owner0
-
-@[pf_entry]
-def ownerW1 (s : State) : UInt64 :=
-  s.owner1
-
-@[pf_entry]
-def ownerW2 (s : State) : UInt64 :=
-  s.owner2
+def ownerOf (s : State) : Addr20 :=
+  s.owner
 
 @[pf_entry]
 def get (s : State) : UInt64 :=

@@ -5,13 +5,15 @@ namespace Tests.TokenSpec
 open Examples.Token
 open ProofForge.Evm.Runtime
 
+def sample : Addr20 := ⟨1, 2, 3⟩
+
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard balanceOf (init 0) 1 2 3 == 0
-#guard allowanceOf (init 0) 1 2 3 4 5 6 == 0
+#guard balanceOf (init 0) sample == 0
+#guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == 0
 
 #guard
-  match mint (init 0) 1 2 3 9 with
+  match mint (init 0) sample 9 with
   | .ok (_, ret) => ret == 9
   | .error _ => false
 

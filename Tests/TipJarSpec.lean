@@ -18,6 +18,8 @@ open ProofForge.Evm.Runtime
 #guard selfW0 (init 0) == evmSelfW0
 #guard selfW1 (init 0) == evmSelfW1
 #guard selfW2 (init 0) == evmSelfW2
+#guard caller20 (init 0) == evmCaller20
+#guard self20 (init 0) == evmSelf20
 
 #guard
   match deposit (init 0) 9 with
@@ -25,7 +27,7 @@ open ProofForge.Evm.Runtime
   | .error _ => false
 
 #guard
-  match payout (init 0) 1 2 3 4 with
+  match payout (init 0) ⟨1, 2, 3⟩ 4 with
   | .ok (st, ret) => st.dummy == 0 && ret == 4
   | .error _ => false
 

@@ -17,9 +17,11 @@ structure Method where
   ixName : String := ""
   /-- instruction data 里参数个数（不含 8 字节 disc）。 -/
   paramCount : Nat := 0
-  /-- 每个参数的物理宽：1/2/4/8。默认全 8。 -/
+  /-- 每个参数的物理宽：1/2/4/8/20。默认全 8。20 = ABI `address`。 -/
   paramWidths : Array Nat := #[]
-  /-- view 返回叶数。1 = 单 `uint*`；2 = `(uint64,uint64)`。 -/
+  /-- ABI 返回宽。空 = `retCount` 个 `uint64`；`#[20]` = 一个 `address`。 -/
+  retWidths : Array Nat := #[]
+  /-- view 返回叶数。1 = 单 `uint*`；2 = `(uint64,uint64)`；address 仍是 3 叶。 -/
   retCount : Nat := 1
   sketch : Array String := #[]
   ops : Array Ops.Op := #[]

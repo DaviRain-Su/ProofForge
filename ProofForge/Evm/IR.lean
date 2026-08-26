@@ -284,6 +284,7 @@ structure Method where
   selector : String := ""
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
+  retWidths : Array Nat := #[]
   retCount : Nat := 1
   ops : Array Op := #[]
   evaluation : Core.Evaluation Ops.ValKind := {}
@@ -456,6 +457,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     selector := ""
     paramCount := ctorSrc.paramCount
     paramWidths := ctorSrc.paramWidths
+    retWidths := ctorSrc.retWidths
     retCount := 1
     ops := ctorOps
     evaluation := ctorEvaluation
@@ -479,6 +481,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       selector := sel
       paramCount := m.paramCount
       paramWidths := widths
+      retWidths := m.retWidths
       retCount := m.retCount
       ops
       evaluation
@@ -599,11 +602,16 @@ def canonical (p : Program) : String :=
     (p.entries.qsort (fun a b => a.ixName < b.ixName)).toList.map fun m =>
       let tag := if m.view then "view" else if m.payable then "pay" else "mut"
       let base := s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:[{opsCanon m.ops}]"
-      if (m.paramWidths.isEmpty || m.paramWidths.all (· == 8)) && m.retCount == 1 then
+      if (m.paramWidths.isEmpty || m.paramWidths.all (· == 8)) &&
+          m.retCount == 1 && m.retWidths.isEmpty then
         base
       else
         let widths := String.intercalate "," (m.paramWidths.map toString).toList
-        s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:{widths}:r{m.retCount}:[{opsCanon m.ops}]"
+        if m.retWidths.isEmpty then
+          s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:{widths}:r{m.retCount}:[{opsCanon m.ops}]"
+        else
+          let rws := String.intercalate "," (m.retWidths.map toString).toList
+          s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:{widths}:r{m.retCount}:{rws}:[{opsCanon m.ops}]"
   s!"evm|{p.name}|{slots}|{ctor}|{String.intercalate "/" entries}"
 
 def digestHex (p : Program) : String :=

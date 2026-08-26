@@ -20,6 +20,22 @@ def sketchOfExpr (e : Expr) : Array String :=
 private def isConstNamed (e : Expr) (n : Name) : Bool :=
   e.consumeMData.getAppFn.constName? == some n
 
+private def addr20Name : Name := ``ProofForge.Evm.Runtime.Addr20
+
+private def isAddr20Type (e : Expr) : Bool :=
+  e.consumeMData.getAppFn.constName? == some addr20Name
+
+private def addr20ProjLeaf (n : Name) : Option String :=
+  let last := Core.IR.lastName n.toString
+  if n == ``ProofForge.Evm.Runtime.Addr20.w0 || n.toString.endsWith ".Addr20.w0" then some "w0"
+  else if n == ``ProofForge.Evm.Runtime.Addr20.w1 || n.toString.endsWith ".Addr20.w1" then some "w1"
+  else if n == ``ProofForge.Evm.Runtime.Addr20.w2 || n.toString.endsWith ".Addr20.w2" then some "w2"
+  else if last == "w0" || last == "w1" || last == "w2" then
+    match n with
+    | .str p _ => if p == addr20Name || p.toString.endsWith ".Addr20" then some last else none
+    | _ => none
+  else none
+
 private def isVectorSet (e : Expr) : Bool :=
   isConstNamed e ``Vector.set ||
     (e.getAppFn.constName?.map (·.toString.endsWith "Vector.set")).getD false
@@ -696,10 +712,18 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             else if isConstNamed e ``LE.le then .le
             else if isConstNamed e ``GT.gt then .gt
             else .ge
-          match asVal env fuel' args[args.size - 2]!,
-              asVal env fuel' args[args.size - 1]! with
-          | some lhs, some rhs => some (.select cmp lhs rhs (.lit 1) (.lit 0))
-          | _, _ => none
+          let lhsE := args[args.size - 2]!
+          let rhsE := args[args.size - 1]!
+          if isAddr20Type (lhsE) || isAddr20Type (rhsE) ||
+              isConstNamed lhsE ``ProofForge.Evm.Runtime.evmCaller20 ||
+              isConstNamed rhsE ``ProofForge.Evm.Runtime.evmCaller20 ||
+              isConstNamed lhsE ``ProofForge.Evm.Runtime.evmSelf20 ||
+              isConstNamed rhsE ``ProofForge.Evm.Runtime.evmSelf20 then
+            none
+          else
+            match asVal env fuel' lhsE, asVal env fuel' rhsE with
+            | some lhs, some rhs => some (.select cmp lhs rhs (.lit 1) (.lit 0))
+            | _, _ => none
         else if isConstNamed e ``Bool.or && e.getAppArgs.size ≥ 2 then
           let args := e.getAppArgs
           match asVal env fuel' args[args.size - 2]!,
@@ -856,18 +880,58 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.ownerIsSelf a) else none
           | _ => none
+        else if let some leaf := addr20ProjLeaf n then
+          let args := e.getAppArgs
+          if args.isEmpty then none
+          else
+            let baseE := args[args.size - 1]!
+            if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCaller20 ||
+                endsWith baseE ".evmCaller20" then
+              some (match leaf with
+                | "w0" => .evmCallerW0 | "w1" => .evmCallerW1 | _ => .evmCallerW2)
+            else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelf20 ||
+                endsWith baseE ".evmSelf20" then
+              some (match leaf with
+                | "w0" => .evmSelfW0 | "w1" => .evmSelfW1 | _ => .evmSelfW2)
+            else
+              match asVal env fuel' baseE with
+              | some b => some (flattenField b leaf)
+              | none =>
+                match strip baseE with
+                | .bvar i => some (flattenField (.arg i) leaf)
+                | _ => none
+        else if endsWith e ".evmCaller20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 then
+          none
+        else if endsWith e ".evmSelf20" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 then
+          none
         else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
           let args := e.getAppArgs
-          let get (n : Nat) : Ops.Val :=
-            if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
-            else .arg n
-          some (.mapGetAddr (get 3) (get 2) (get 1) (get 0))
+          if args.size < 2 then none
+          else
+            let base := asVal env fuel' args[args.size - 2]!
+            let k0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) args[args.size - 1]!)
+            let k1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) args[args.size - 1]!)
+            let k2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) args[args.size - 1]!)
+            match base, k0, k1, k2 with
+            | some b, some a0, some a1, some a2 => some (.mapGetAddr b a0 a1 a2)
+            | _, _, _, _ => none
         else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair then
           let args := e.getAppArgs
-          let get (n : Nat) : Ops.Val :=
-            if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
-            else .arg n
-          some (.mapGetPair (get 6) (get 5) (get 4) (get 3) (get 2) (get 1) (get 0))
+          if args.size < 3 then none
+          else
+            let base := asVal env fuel' args[args.size - 3]!
+            let owner := args[args.size - 2]!
+            let spender := args[args.size - 1]!
+            let ow0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
+            let ow1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
+            let ow2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
+            let sw0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
+            let sw1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
+            let sw2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
+            match base, ow0, ow1, ow2, sw0, sw1, sw2 with
+            | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
+              some (.mapGetPair b a0 a1 a2 b0 b1 b2)
+            | _, _, _, _, _, _, _ => none
         else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
           let args := e.getAppArgs
           let get (n : Nat) : Ops.Val :=
@@ -1205,6 +1269,34 @@ private def val (env : Environment) (e : Expr) : Option Ops.Val :=
   -- `GetElem`/`toNat` wrappers are deeper than ordinary scalar expressions, but still finite.
   asVal env 32 e
 
+private def addr20Leaves (env : Environment) (e : Expr) : Ops.Val × Ops.Val × Ops.Val :=
+  if isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" then
+    (.evmCallerW0, .evmCallerW1, .evmCallerW2)
+  else if isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" then
+    (.evmSelfW0, .evmSelfW1, .evmSelfW2)
+  else
+    let w0 := val env (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) e)
+    let w1 := val env (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) e)
+    let w2 := val env (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) e)
+    match w0, w1, w2 with
+    | some a, some b, some c => (a, b, c)
+    | _, _, _ =>
+      match val env e with
+      | some v => (flattenField v "w0", flattenField v "w1", flattenField v "w2")
+      | none => (.field (.arg 0) "w0", .field (.arg 0) "w1", .field (.arg 0) "w2")
+
+private def addr20CtorFields (env : Environment) (e : Expr) : Option (Array Expr) :=
+  let e := peelLets (strip e)
+  match e.getAppFn.constName? with
+  | none => none
+  | some n =>
+    match env.find? n with
+    | some (.ctorInfo c) =>
+      if c.induct == addr20Name && e.getAppArgs.size ≥ 3 then
+        some (e.getAppArgs.extract (e.getAppArgs.size - 3) e.getAppArgs.size)
+      else none
+    | _ => none
+
 /-- Decode a scalar binding through one explicitly-inline helper boundary before substituting it.
 This preserves a shared helper result without increasing the global value-decoder fuel. -/
 private partial def valNodeCount : Ops.Val → Nat
@@ -1298,15 +1390,29 @@ private def binArgs (e : Expr) : Option (Expr × Expr) :=
   let args := e.getAppArgs
   if args.size ≥ 2 then some (args[args.size - 2]!, args[args.size - 1]!) else none
 
+private def looksAddr20Expr (env : Environment) (e : Expr) : Bool :=
+  isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" ||
+    isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" ||
+    (addr20CtorFields env e).isSome ||
+    (match e.getAppFn.constName? with
+      | some n =>
+        match env.find? n with
+        | some info =>
+          (resultType 16 info.type).consumeMData.getAppFn.constName? == some addr20Name
+        | none => false
+      | none => false)
+
 private def asCmpCoreWithFuel (env : Environment) (fuel : Nat) (e : Expr) :
     Option (Ops.Cmp × Ops.Val × Ops.Val) :=
   let e := strip e
   if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then
     match binArgs e with
     | some (l, r) =>
-      match asVal env fuel l, asVal env fuel r with
-      | some lv, some rv => some (.eq, lv, rv)
-      | _, _ => none
+      if looksAddr20Expr env l || looksAddr20Expr env r then none
+      else
+        match asVal env fuel l, asVal env fuel r with
+        | some lv, some rv => some (.eq, lv, rv)
+        | _, _ => none
     | none => none
   else if isConstNamed e ``Ne then
     match binArgs e with
@@ -1886,6 +1992,9 @@ private partial def flattenInitValue (env : Environment) (fuel : Nat) (ty e : Ex
       if tyName? == some ``UInt64 || tyName? == some ``UInt32 ||
           tyName? == some ``UInt16 || tyName? == some ``UInt8 then
         (val env e).map (#[·])
+      else if tyName? == some addr20Name then
+        let (w0, w1, w2) := addr20Leaves env e
+        some #[w0, w1, w2]
       else if tyName? == some ``Bool then
         if isConstNamed e ``Bool.true || endsWith e ".true" then some #[.lit 1]
         else if isConstNamed e ``Bool.false || endsWith e ".false" then some #[.lit 0]
@@ -1945,6 +2054,7 @@ private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val
   let fields ← userCtorFields env (substLets 32 e)
   let ctor ← (substLets 32 e).getAppFn.constName?
   let .ctorInfo info ← env.find? ctor | none
+  if info.induct == addr20Name then none else pure ()
   let names := getStructureFields env info.induct
   if fields.size != names.size then none else pure ()
   let mut values : Array Ops.Val := #[]
@@ -2011,6 +2121,18 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
         | none => #[]
       prev ++ here
     | _ => #[]
+  else if let some fields := addr20CtorFields env e then
+    Id.run do
+      let mut acc : Array (String × Ops.Val) := #[]
+      let names := #["w0", "w1", "w2"]
+      for i in [0:3] do
+        if h : i < fields.size then
+          let fname := names[i]!
+          let child := if base.isEmpty then fname else s!"{base}_{fname}"
+          match val env fields[i] with
+          | some v => acc := acc.push (child, v)
+          | none => pure ()
+      acc
   else if let some fields := userCtorFields env e then
     match e.getAppFn.constName? with
     | none => #[]
@@ -2051,8 +2173,21 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
               -- Inner transitions represented by `appliedBases` were already lowered. A direct
               -- projection only inherits that field; reducing it through the constructor would
               -- replay a transition rather than describe an outer write.
+              let fieldTy? := fieldTypeExpr env c.induct names[i]
+              let isAddr20Field :=
+                match fieldTy? with
+                | some ty => isAddr20Type ty
+                | none => false
               if inheritedFromAppliedBase then
                 pure ()
+              else if isAddr20Field then
+                let (w0, w1, w2) := addr20Leaves env nestedArg
+                let l0 := s!"{child}_w0"
+                let l1 := s!"{child}_w1"
+                let l2 := s!"{child}_w2"
+                unless looksUnchangedField w0 l0 do acc := acc.push (l0, w0)
+                unless looksUnchangedField w1 l1 do acc := acc.push (l1, w1)
+                unless looksUnchangedField w2 l2 do acc := acc.push (l2, w2)
               else if !nested.isEmpty then
                 acc := acc ++ nested.filter fun p => !looksUnchangedField p.2 p.1
               else if isVectorField then
@@ -3069,7 +3204,12 @@ private def findEvmSendEth (env : Environment) (e : Expr) :
     match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmSendEth ".evmSendEth" with
     | some app =>
       let args := app.getAppArgs
-      some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+      let amt := valAtEnd env args 0
+      match nthFromEnd args 1 with
+      | some dst =>
+        let (w0, w1, w2) := addr20Leaves env dst
+        some (w0, w1, w2, amt)
+      | none => some (.arg 0, .arg 1, .arg 2, amt)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
   else none
 
@@ -3110,7 +3250,12 @@ private def findEvmMapGetAddr (env : Environment) (e : Expr) :
     match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetAddr ".evmMapGetAddr" with
     | some app =>
       let args := app.getAppArgs
-      some (valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+      let base := valAtEnd env args 1
+      match nthFromEnd args 0 with
+      | some key =>
+        let (w0, w1, w2) := addr20Leaves env key
+        some (base, w0, w1, w2)
+      | none => some (base, .arg 1, .arg 2, .arg 3)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
   else none
 
@@ -3120,8 +3265,13 @@ private def findEvmMapSetAddr (env : Environment) (e : Expr) :
     match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetAddr ".evmMapSetAddr" with
     | some app =>
       let args := app.getAppArgs
-      some (valAtEnd env args 4, valAtEnd env args 3, valAtEnd env args 2,
-        valAtEnd env args 1, valAtEnd env args 0)
+      let val := valAtEnd env args 0
+      let base := valAtEnd env args 2
+      match nthFromEnd args 1 with
+      | some key =>
+        let (w0, w1, w2) := addr20Leaves env key
+        some (base, w0, w1, w2, val)
+      | none => some (base, .arg 1, .arg 2, .arg 3, val)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4)
   else none
 
@@ -3131,8 +3281,13 @@ private def findEvmMapGetPair (env : Environment) (e : Expr) :
     match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetPair ".evmMapGetPair" with
     | some app =>
       let args := app.getAppArgs
-      some (valAtEnd env args 6, valAtEnd env args 5, valAtEnd env args 4,
-        valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+      let base := valAtEnd env args 2
+      match nthFromEnd args 1, nthFromEnd args 0 with
+      | some owner, some spender =>
+        let (o0, o1, o2) := addr20Leaves env owner
+        let (s0, s1, s2) := addr20Leaves env spender
+        some (base, o0, o1, o2, s0, s1, s2)
+      | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
   else none
 
@@ -3142,9 +3297,14 @@ private def findEvmMapSetPair (env : Environment) (e : Expr) :
     match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetPair ".evmMapSetPair" with
     | some app =>
       let args := app.getAppArgs
-      some (valAtEnd env args 7, valAtEnd env args 6, valAtEnd env args 5,
-        valAtEnd env args 4, valAtEnd env args 3, valAtEnd env args 2,
-        valAtEnd env args 1, valAtEnd env args 0)
+      let val := valAtEnd env args 0
+      let base := valAtEnd env args 3
+      match nthFromEnd args 2, nthFromEnd args 1 with
+      | some owner, some spender =>
+        let (o0, o1, o2) := addr20Leaves env owner
+        let (s0, s1, s2) := addr20Leaves env spender
+        some (base, o0, o1, o2, s0, s1, s2, val)
+      | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, val)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7)
   else none
 
@@ -3154,23 +3314,42 @@ private def findEvmTokenTransfer (env : Environment) (e : Expr) :
     match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenTransfer ".evmTokenTransfer" with
     | some app =>
       let args := app.getAppArgs
-      some (valAtEnd env args 6, valAtEnd env args 5, valAtEnd env args 4,
-        valAtEnd env args 3, valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
+      let amt := valAtEnd env args 0
+      match nthFromEnd args 2, nthFromEnd args 1 with
+      | some token, some dest =>
+        let (t0, t1, t2) := addr20Leaves env token
+        let (d0, d1, d2) := addr20Leaves env dest
+        some (t0, t1, t2, d0, d1, d2, amt)
+      | _, _ => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, amt)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
   else none
 
 private def findEvmTokenBalance (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val) :=
-  findTernaryRuntime env ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf
-    ".evmTokenBalanceOfSelf" e
+  if mentionsRuntime e "evmTokenBalanceOfSelf" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf
+        ".evmTokenBalanceOfSelf" with
+    | some app =>
+      let args := app.getAppArgs
+      match nthFromEnd args 0 with
+      | some token =>
+        let (t0, t1, t2) := addr20Leaves env token
+        some (t0, t1, t2)
+      | none => some (.arg 0, .arg 1, .arg 2)
+    | none => some (.arg 0, .arg 1, .arg 2)
+  else none
 
 private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   let args := app.getAppArgs
   if isConstNamed app ``ProofForge.Evm.Runtime.evmDeposit || endsWith app ".evmDeposit" then
     some (.evmDeposit (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmSendEth || endsWith app ".evmSendEth" then
-    some (.evmSendEth (valAtEnd env args 3) (valAtEnd env args 2)
-      (valAtEnd env args 1) (valAtEnd env args 0))
+    let amt := valAtEnd env args 0
+    match nthFromEnd args 1 with
+    | some dst =>
+      let (w0, w1, w2) := addr20Leaves env dst
+      some (.evmSendEth w0 w1 w2 amt)
+    | none => some (.evmSendEth (.arg 0) (.arg 1) (.arg 2) amt)
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogTipped || endsWith app ".evmLogTipped" then
     some (.evmLog "Tipped" (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogIncremented ||
@@ -3185,16 +3364,31 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
     some (.mapSetU64 (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetAddr || endsWith app ".evmMapSetAddr" then
-    some (.mapSetAddr (valAtEnd env args 4) (valAtEnd env args 3) (valAtEnd env args 2)
-      (valAtEnd env args 1) (valAtEnd env args 0))
+    let val := valAtEnd env args 0
+    let base := valAtEnd env args 2
+    match nthFromEnd args 1 with
+    | some key =>
+      let (w0, w1, w2) := addr20Leaves env key
+      some (.mapSetAddr base w0 w1 w2 val)
+    | none => some (.mapSetAddr base (.arg 1) (.arg 2) (.arg 3) val)
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetPair || endsWith app ".evmMapSetPair" then
-    some (.mapSetPair (valAtEnd env args 7) (valAtEnd env args 6) (valAtEnd env args 5)
-      (valAtEnd env args 4) (valAtEnd env args 3) (valAtEnd env args 2)
-      (valAtEnd env args 1) (valAtEnd env args 0))
+    let val := valAtEnd env args 0
+    let base := valAtEnd env args 3
+    match nthFromEnd args 2, nthFromEnd args 1 with
+    | some owner, some spender =>
+      let (o0, o1, o2) := addr20Leaves env owner
+      let (s0, s1, s2) := addr20Leaves env spender
+      some (.mapSetPair base o0 o1 o2 s0 s1 s2 val)
+    | _, _ => some (.mapSetPair base (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6) val)
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmTokenTransfer ||
       endsWith app ".evmTokenTransfer" then
-    some (.evmTokenTransfer (valAtEnd env args 6) (valAtEnd env args 5) (valAtEnd env args 4)
-      (valAtEnd env args 3) (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
+    let amt := valAtEnd env args 0
+    match nthFromEnd args 2, nthFromEnd args 1 with
+    | some token, some dest =>
+      let (t0, t1, t2) := addr20Leaves env token
+      let (d0, d1, d2) := addr20Leaves env dest
+      some (.evmTokenTransfer t0 t1 t2 d0 d1 d2 amt)
+    | _, _ => some (.evmTokenTransfer (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) amt)
   else none
 
 private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
@@ -4093,6 +4287,18 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
           val env e.getAppArgs[e.getAppArgs.size - 1]! with
     | some a, some b => .ok #[.returnU64 a, .returnU64 b]
     | _, _ => .error "extract/unsupported: pair return"
+  else if isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" ||
+      (addr20CtorFields env e).isSome ||
+      (match e.getAppFn.constName? with
+        | some n =>
+          match env.find? n with
+          | some info =>
+            (resultType 16 info.type).consumeMData.getAppFn.constName? == some addr20Name
+          | none => false
+        | none => false) then
+    let (w0, w1, w2) := addr20Leaves env e
+    .ok #[.returnU64 w0, .returnU64 w1, .returnU64 w2]
   else if let some v := val env e then
     match v with
     | .field _ _ => .ok #[.returnU64 v]
@@ -4834,7 +5040,8 @@ private def widthOfType (e : Expr) : Option Nat :=
   | some ``UInt16 => some 2
   | some ``UInt32 => some 4
   | some ``UInt64 => some 8
-  | _ => none
+  | some n => if n == addr20Name then some 20 else none
+  | none => none
 
 /-- 用户参数宽。init 全算；mutate/view 丢掉第一个 state。 -/
 private def inferParamWidths (_env : Environment) (e : Expr) (kind : Core.IR.MethodKind) :
@@ -5087,16 +5294,23 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | .init => if nLams = 0 then 1 else nLams
     | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
   let paramWidths := inferParamWidths env e kind
+  let retTy := peelForalls info.type
+  let retWidths :=
+    match kind with
+    | .get => if isAddr20Type retTy then #[20] else #[]
+    | _ => #[]
   let retCount :=
     match kind with
     | .get =>
-      let nRet := ops.foldl (init := 0) fun acc op =>
-        match op with | .returnU64 _ => acc + 1 | _ => acc
-      if nRet = 0 then 1 else nRet
+      if isAddr20Type retTy then 3
+      else
+        let nRet := ops.foldl (init := 0) fun acc op =>
+          match op with | .returnU64 _ => acc + 1 | _ => acc
+        if nRet = 0 then 1 else nRet
     | _ => 1
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
-    paramCount, paramWidths, retCount, sketch, ops
+    paramCount, paramWidths, retWidths, retCount, sketch, ops
   }
 
 private def isUInt64Type (e : Expr) : Bool :=
@@ -5145,6 +5359,14 @@ private def leafSchema (env : Environment) (fuel : Nat) (name : String)
       .ok (scalarFragment name place (.uint 16))
     else if ty.getAppFn.constName? == some ``UInt8 then
       .ok (scalarFragment name place (.uint 8))
+    else if ty.getAppFn.constName? == some addr20Name then
+      .ok {
+        leaves := #[
+          { place := place.push (.field "Addr20" 0 "w0"), name := s!"{name}_w0", ty := .uint 64 },
+          { place := place.push (.field "Addr20" 1 "w1"), name := s!"{name}_w1", ty := .uint 64 },
+          { place := place.push (.field "Addr20" 2 "w2"), name := s!"{name}_w2", ty := .uint 64 }
+        ]
+      }
     else if ty.getAppFn.constName? == some ``Option then
       let args := ty.getAppArgs
       if args.size ≥ 1 && args[args.size - 1]!.consumeMData.getAppFn.constName? == some ``UInt64 then
@@ -5273,6 +5495,10 @@ def inferFields (env : Environment) (initName : Name) : Except String (Array Str
   return (← inferSlots env initName).map (·.name)
 
 private def valFields : Ops.Val → Array String
+  | .field (.arg _) n =>
+      if n == "w0" || n == "w1" || n == "w2" then #[] else #[n]
+  | .field (.local _) n =>
+      if n == "w0" || n == "w1" || n == "w2" then #[] else #[n]
   | .field _ n => #[n]
   | .arg _ => #[]
   | .local _ => #[]
@@ -5585,13 +5811,13 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
   let ret := peelForalls info.type
   if isExceptType ret then
     return .increment
-  if isUInt64Type ret || (widthOfType ret).isSome then
+  if isUInt64Type ret || (widthOfType ret).isSome || isAddr20Type ret then
     return .get
   if ret.getAppFn.constName? == some ``Prod then
     return .get
   if let some structName := ret.getAppFn.constName? then
     if isStructure env structName && structName != ``UInt64 &&
-        structName != ``Prod then
+        structName != ``Prod && structName != addr20Name then
       return .init
   throw s!"extract/unsupported: cannot classify {n}"
 

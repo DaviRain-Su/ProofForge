@@ -94,7 +94,7 @@ print(word(0,8), word(8,8), word(16,4))
 ")"
 rw0="${rw%% *}"; rrest="${rw#* }"; rw1="${rrest%% *}"; rw2="${rrest#* }"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'payout(uint64,uint64,uint64,uint64)' "$rw0" "$rw1" "$rw2" 3 >/dev/null
+  "$addr" 'payout(address,uint64)' "$recipient" 3 >/dev/null
 after="$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$recipient")")"
 want="$("$python" -I -S -c "print(int('$before') + 3)")"
 solana_lean_require_equal "$after" "$want" "payout must credit recipient"

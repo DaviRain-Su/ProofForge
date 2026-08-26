@@ -101,7 +101,14 @@ private def widthMask (width : Nat) : String :=
   | 1 => "0xff"
   | 2 => "0xffff"
   | 4 => "0xffffffff"
+  | 20 => "0xffffffffffffffffffffffffffffffffffffffff"
   | _ => u64MaxYul
+
+private def addrLeafOff : String → Option Nat
+  | "w0" => some 0
+  | "w1" => some 1
+  | "w2" => some 2
+  | _ => none
 
 private def maskExpr (width : Nat) (value : String) : String :=
   if width == 8 then value else "and(" ++ value ++ ", " ++ widthMask width ++ ")"
@@ -116,7 +123,7 @@ private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
   | .ge => s!"iszero(lt({l}, {r}))"
 
 private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
-    (v : Ops.Val) : Except String String :=
+    (paramWidths : Array Nat) (v : Ops.Val) : Except String String :=
   match v with
   | .lit n => .ok (yulLit n)
   | .arg i =>
@@ -125,6 +132,19 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       else
         .error "extract/unsupported: evm arg is implicit state"
   | .local i => .ok s!"l{i}"
+  | .field (.arg i) name =>
+      match addrLeafOff name with
+      | some off =>
+        if i < paramCount then
+          .ok (packAddrWord s!"{paramPrefix}{i}" off)
+        else do
+          let slot ← slotOf p name
+          let w := (IR.slotWidth p name).getD 8
+          return maskExpr w s!"sload({slot})"
+      | none => do
+          let slot ← slotOf p name
+          let w := (IR.slotWidth p name).getD 8
+          return maskExpr w s!"sload({slot})"
   | .field _ name => do
       let slot ← slotOf p name
       let w := (IR.slotWidth p name).getD 8
@@ -143,30 +163,30 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .ext .selfW1 #[] => .ok (packAddrWord "address()" 1)
   | .ext .selfW2 #[] => .ok (packAddrWord "address()" 2)
   | .bitAnd l r => do
-      let lv ← loadVal p paramPrefix paramCount l
-      let rv ← loadVal p paramPrefix paramCount r
+      let lv ← loadVal p paramPrefix paramCount paramWidths l
+      let rv ← loadVal p paramPrefix paramCount paramWidths r
       return "and(" ++ lv ++ ", " ++ rv ++ ")"
   | .bitOr l r => do
-      let lv ← loadVal p paramPrefix paramCount l
-      let rv ← loadVal p paramPrefix paramCount r
+      let lv ← loadVal p paramPrefix paramCount paramWidths l
+      let rv ← loadVal p paramPrefix paramCount paramWidths r
       return "or(" ++ lv ++ ", " ++ rv ++ ")"
   | .bitXor l r => do
-      let lv ← loadVal p paramPrefix paramCount l
-      let rv ← loadVal p paramPrefix paramCount r
+      let lv ← loadVal p paramPrefix paramCount paramWidths l
+      let rv ← loadVal p paramPrefix paramCount paramWidths r
       return "xor(" ++ lv ++ ", " ++ rv ++ ")"
   | .bitNot v => do
-      let ev ← loadVal p paramPrefix paramCount v
+      let ev ← loadVal p paramPrefix paramCount paramWidths v
       return "and(not(" ++ ev ++ "), " ++ u64MaxYul ++ ")"
   | .shiftL l r => do
-      let lv ← loadVal p paramPrefix paramCount l
-      let rv ← loadVal p paramPrefix paramCount r
+      let lv ← loadVal p paramPrefix paramCount paramWidths l
+      let rv ← loadVal p paramPrefix paramCount paramWidths r
       return "and(shl(and(" ++ rv ++ ", 63), " ++ lv ++ "), " ++ u64MaxYul ++ ")"
   | .shiftR l r => do
-      let lv ← loadVal p paramPrefix paramCount l
-      let rv ← loadVal p paramPrefix paramCount r
+      let lv ← loadVal p paramPrefix paramCount paramWidths l
+      let rv ← loadVal p paramPrefix paramCount paramWidths r
       return "shr(and(" ++ rv ++ ", 63), " ++ lv ++ ")"
   | .indexGet _ name idx _len off => do
-      let iv ← loadVal p paramPrefix paramCount idx
+      let iv ← loadVal p paramPrefix paramCount paramWidths idx
       let some base := IR.vectorBaseSlot p name
         | throw s!"extract/unsupported: unknown vector {name}"
       let some width := IR.vectorLeafWidth p name off
@@ -222,7 +242,7 @@ private def bindChecked (indent name expr : String) : String :=
 
 /-- 环境 opcode / 移位 / 下标必须先检查再当值用。 -/
 private def materializeVal (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (v : Ops.Val) (st : Render) :
+    (paramCount : Nat) (paramWidths : Array Nat) (v : Ops.Val) (st : Render) :
     Except String (String × String × Render) := do
   let checked? : Option String :=
     match v with
@@ -239,8 +259,8 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
   | none =>
     match v with
     | .bitAnd l r | .bitOr l r | .bitXor l r =>
-        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths r st1
         let (nm, st3) := fresh st2
         let op :=
           match v with
@@ -252,14 +272,14 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
         return (txt, nm, st3)
     | .bitNot value =>
         let (pre, valueExpr, st1) ←
-          materializeVal p indent paramPrefix paramCount value st
+          materializeVal p indent paramPrefix paramCount paramWidths value st
         let (nm, st2) := fresh st1
         let txt := pre ++ indent ++ "let " ++ nm ++ " := and(not(" ++ valueExpr ++
           "), " ++ u64MaxYul ++ ")" ++ nl
         return (txt, nm, st2)
     | .shiftL l r | .shiftR l r =>
-        let (preR, rv, st1) ← materializeVal p indent paramPrefix paramCount r st
-        let (preL, lv, st2) ← materializeVal p indent paramPrefix paramCount l st1
+        let (preR, rv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths r st
+        let (preL, lv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths l st1
         let (nm, st3) := fresh st2
         let op := if match v with | .shiftL .. => true | _ => false then "shl" else "shr"
         let shifted := op ++ "(and(" ++ rv ++ ", 63), " ++ lv ++ ")"
@@ -269,11 +289,11 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := " ++ value ++ nl
         return (txt, nm, st3)
     | .select c l r t f =>
-        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths r st1
         let (nm, st3) := fresh st2
-        let (preT, tv, st4) ← materializeVal p (indent ++ "  ") paramPrefix paramCount t st3
-        let (preF, fv, st5) ← materializeVal p (indent ++ "  ") paramPrefix paramCount f st4
+        let (preT, tv, st4) ← materializeVal p (indent ++ "  ") paramPrefix paramCount paramWidths t st3
+        let (preF, fv, st5) ← materializeVal p (indent ++ "  ") paramPrefix paramCount paramWidths f st4
         let cond := cmpYul c lv rv
         let txt := preL ++ preR ++
           indent ++ "let " ++ nm ++ " := 0" ++ nl ++
@@ -287,7 +307,7 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           match idx with
           | .loopIx =>
               pure ("", st.loopIx.getD "i", st)
-          | _ => materializeVal p indent paramPrefix paramCount idx st
+          | _ => materializeVal p indent paramPrefix paramCount paramWidths idx st
         let some base := IR.vectorBaseSlot p name
           | throw s!"extract/unsupported: unknown vector {name}"
         let some width := IR.vectorLeafWidth p name off
@@ -304,8 +324,8 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
     | .loopIx =>
         return ("", st.loopIx.getD "i", st)
     | .addU64 l r =>
-        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths r st1
         let (nm, st3) := fresh st2
         let txt := preL ++ preR ++
           indent ++ "if gt(" ++ lv ++ ", sub(" ++ u64MaxYul ++ ", " ++ rv ++
@@ -313,16 +333,16 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := add(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
     | .subU64 l r =>
-        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths r st1
         let (nm, st3) := fresh st2
         let txt := preL ++ preR ++
           indent ++ "if lt(" ++ lv ++ ", " ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := sub(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
     | .mulU64 l r =>
-        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths r st1
         let (nm, st3) := fresh st2
         let txt := preL ++ preR ++
           indent ++ "if and(" ++ rv ++ ", gt(" ++ lv ++ ", div(" ++ u64MaxYul ++
@@ -330,24 +350,24 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := mul(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
     | .divU64 l r =>
-        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths r st1
         let (nm, st3) := fresh st2
         let txt := preL ++ preR ++
           indent ++ "if iszero(" ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := div(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
     | .modU64 l r =>
-        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount r st1
+        let (preL, lv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths r st1
         let (nm, st3) := fresh st2
         let txt := preL ++ preR ++
           indent ++ "if iszero(" ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := mod(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
     | .ext .mapGetU64 #[base, key] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount paramWidths key st1
         let (slot, st3) := fresh st2
         let (tag, st4) := fresh st3
         let (pay, st5) := fresh st4
@@ -364,10 +384,10 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "}" ++ nl
         return (txt, pay, st5)
     | .ext .mapGetAddr #[base, w0, w1, w2] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount w2 st3
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
         let (slot, st5) := fresh st4
         let (tag, st6) := fresh st5
         let (pay, st7) := fresh st6
@@ -386,13 +406,13 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "}" ++ nl
         return (txt, pay, st7)
     | .ext .mapGetPair #[base, o0, o1, o2, s0, s1, s2] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount s2 st6
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
+        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
+        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
+        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
         let (slot, st8) := fresh st7
         let (tag, st9) := fresh st8
         let (pay, st10) := fresh st9
@@ -414,14 +434,14 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "}" ++ nl
         return (txt, pay, st10)
     | _ =>
-        let e ← loadVal p paramPrefix paramCount v
+        let e ← loadVal p paramPrefix paramCount paramWidths v
         return ("", e, st)
 
 private def brace (inner : String) : String :=
   "{" ++ nl ++ inner ++ "}"
 
 private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (ops : Array IR.Op) (st : Render) :
+    (paramCount : Nat) (paramWidths : Array Nat) (ops : Array IR.Op) (st : Render) :
     Except String (String × Render) := do
   let destSlot0 ← slotOf p (destHint p ops)
   let nStates := returnStateCount ops
@@ -433,7 +453,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
   for op in ops do
     match op with
     | .letLocal i value =>
-        let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount value st
+        let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount paramWidths value st
         st := { st' with last := some s!"l{i}" }
         let binding := if st.predeclaredLocals then s!"l{i} := " else s!"let l{i} := "
         acc := acc ++ pre ++ indent ++ binding ++ valueExpr ++ nl
@@ -442,12 +462,12 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         let binding := if st.predeclaredLocals then s!"l{i} := 0" else s!"let l{i} := 0"
         acc := acc ++ indent ++ binding ++ nl
     | .setLocal i value =>
-        let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount value st
+        let (pre, valueExpr, st') ← materializeVal p indent paramPrefix paramCount paramWidths value st
         st := { st' with last := some s!"l{i}" }
         acc := acc ++ pre ++ indent ++ s!"l{i} := {valueExpr}" ++ nl
     | .checkedAddU64 l r =>
-        let lv ← loadVal p paramPrefix paramCount l
-        let rv ← loadVal p paramPrefix paramCount r
+        let lv ← loadVal p paramPrefix paramCount paramWidths l
+        let rv ← loadVal p paramPrefix paramCount paramWidths r
         let (nm, st') := fresh st
         st := st'
         acc := acc ++
@@ -456,8 +476,8 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := add(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         st := { st with last := some nm }
     | .checkedSubU64 l r =>
-        let lv ← loadVal p paramPrefix paramCount l
-        let rv ← loadVal p paramPrefix paramCount r
+        let lv ← loadVal p paramPrefix paramCount paramWidths l
+        let rv ← loadVal p paramPrefix paramCount paramWidths r
         let (nm, st') := fresh st
         st := st'
         acc := acc ++
@@ -465,8 +485,8 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := sub(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         st := { st with last := some nm }
     | .checkedMulU64 l r =>
-        let lv ← loadVal p paramPrefix paramCount l
-        let rv ← loadVal p paramPrefix paramCount r
+        let lv ← loadVal p paramPrefix paramCount paramWidths l
+        let rv ← loadVal p paramPrefix paramCount paramWidths r
         let (nm, st') := fresh st
         st := st'
         acc := acc ++
@@ -474,8 +494,8 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if gt(" ++ nm ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some nm }
     | .checkedDivU64 l r =>
-        let lv ← loadVal p paramPrefix paramCount l
-        let rv ← loadVal p paramPrefix paramCount r
+        let lv ← loadVal p paramPrefix paramCount paramWidths l
+        let rv ← loadVal p paramPrefix paramCount paramWidths r
         let (nm, st') := fresh st
         st := st'
         acc := acc ++
@@ -483,8 +503,8 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := div(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         st := { st with last := some nm }
     | .checkedModU64 l r =>
-        let lv ← loadVal p paramPrefix paramCount l
-        let rv ← loadVal p paramPrefix paramCount r
+        let lv ← loadVal p paramPrefix paramCount paramWidths l
+        let rv ← loadVal p paramPrefix paramCount paramWidths r
         let (nm, st') := fresh st
         st := st'
         acc := acc ++
@@ -492,28 +512,28 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := mod(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         st := { st with last := some nm }
     | .ite c l r thn els =>
-        let (preL, lv, stL) ← materializeVal p indent paramPrefix paramCount l st
-        let (preR, rv, stR) ← materializeVal p indent paramPrefix paramCount r stL
+        let (preL, lv, stL) ← materializeVal p indent paramPrefix paramCount paramWidths l st
+        let (preR, rv, stR) ← materializeVal p indent paramPrefix paramCount paramWidths r stL
         let (nm, st') := fresh stR
         st := st'
-        let (thenTxt, st1) ← emitOps p (indent ++ "  ") paramPrefix paramCount thn st
-        let (elseTxt, st2) ← emitOps p (indent ++ "  ") paramPrefix paramCount els st1
+        let (thenTxt, st1) ← emitOps p (indent ++ "  ") paramPrefix paramCount paramWidths thn st
+        let (elseTxt, st2) ← emitOps p (indent ++ "  ") paramPrefix paramCount paramWidths els st1
         st := { st2 with last := none }
         acc := acc ++ preL ++ preR ++
           indent ++ "let " ++ nm ++ " := " ++ cmpYul c lv rv ++ nl ++
           indent ++ "if " ++ nm ++ " " ++ brace thenTxt ++ nl ++
           indent ++ "if iszero(" ++ nm ++ ") " ++ brace elseTxt ++ nl
     | .evmDeposit amount =>
-        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount amount st
+        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount paramWidths amount st
         st := st'
         acc := acc ++ pre ++
           indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some amt }
     | .evmSendEth w0 w1 w2 amount =>
-        let (p0, a0, st0) ← materializeVal p indent paramPrefix paramCount w0 st
-        let (p1, a1, st1) ← materializeVal p indent paramPrefix paramCount w1 st0
-        let (p2, a2, st2) ← materializeVal p indent paramPrefix paramCount w2 st1
-        let (p3, amt, st3) ← materializeVal p indent paramPrefix paramCount amount st2
+        let (p0, a0, st0) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st
+        let (p1, a1, st1) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st0
+        let (p2, a2, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st1
+        let (p3, amt, st3) ← materializeVal p indent paramPrefix paramCount paramWidths amount st2
         st := st3
         let (ok, st') := fresh st
         st := st'
@@ -526,7 +546,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some amt }
     | .evmLog name amount =>
-        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount amount st
+        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount paramWidths amount st
         st := st'
         acc := acc ++ pre ++
           indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
@@ -538,7 +558,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         let (iN, st2) := fresh st
         let innerSt := { st2 with loopIx := some iN }
         let (pre, addE, st3) ←
-          materializeVal p (indent ++ "  ") paramPrefix paramCount addend innerSt
+          materializeVal p (indent ++ "  ") paramPrefix paramCount paramWidths addend innerSt
         st := { st3 with loopIx := none }
         acc := acc ++
           indent ++ "let " ++ accN ++ " := 0" ++ nl ++
@@ -554,7 +574,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         let (iN, st1) := fresh st
         let innerSt := { st1 with loopIx := some iN }
         let (bodyTxt, st2) ←
-          emitOps p (indent ++ "  ") paramPrefix paramCount body innerSt
+          emitOps p (indent ++ "  ") paramPrefix paramCount paramWidths body innerSt
         st := { st2 with loopIx := none }
         acc := acc ++
           indent ++ "for { let " ++ iN ++ " := 0 } lt(" ++ iN ++ ", " ++ toString n ++
@@ -562,8 +582,8 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           bodyTxt ++
           indent ++ "}" ++ nl
     | .indexSet name idx value len elemOff =>
-        let (preI, iv, st1) ← materializeVal p indent paramPrefix paramCount idx st
-        let (preV, vv, st2) ← materializeVal p indent paramPrefix paramCount value st1
+        let (preI, iv, st1) ← materializeVal p indent paramPrefix paramCount paramWidths idx st
+        let (preV, vv, st2) ← materializeVal p indent paramPrefix paramCount paramWidths value st1
         st := st2
         let some base := IR.vectorBaseSlot p name
           | throw s!"extract/unsupported: unknown vector {name}"
@@ -579,8 +599,8 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
             toString stride ++ ")), " ++ stored ++ ")" ++ nl
         st := { st with last := some stored }
     | .mapGetU64 base key =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount paramWidths key st1
         let (slot, st3) := fresh st2
         let (tag, st4) := fresh st3
         let (pay, st5) := fresh st4
@@ -598,9 +618,9 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "}" ++ nl
         st := { st with last := some pay }
     | .mapSetU64 base key value =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount key st1
-        let (pv, v, st3) ← materializeVal p indent paramPrefix paramCount value st2
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount paramWidths key st1
+        let (pv, v, st3) ← materializeVal p indent paramPrefix paramCount paramWidths value st2
         let (slot, st4) := fresh st3
         st := st4
         acc := acc ++ pb ++ pk ++ pv ++
@@ -611,10 +631,10 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
         st := { st with last := some v }
     | .mapGetAddr base w0 w1 w2 =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount w2 st3
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
         let (slot, st5) := fresh st4
         let (tag, st6) := fresh st5
         let (pay, st7) := fresh st6
@@ -634,11 +654,11 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "}" ++ nl
         st := { st with last := some pay }
     | .mapSetAddr base w0 w1 w2 value =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount w2 st3
-        let (pv, v, st5) ← materializeVal p indent paramPrefix paramCount value st4
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
+        let (pv, v, st5) ← materializeVal p indent paramPrefix paramCount paramWidths value st4
         let (slot, st6) := fresh st5
         st := st6
         acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ pv ++
@@ -651,13 +671,13 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
         st := { st with last := some v }
     | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount s2 st6
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
+        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
+        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
+        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
         let (slot, st8) := fresh st7
         let (tag, st9) := fresh st8
         let (pay, st10) := fresh st9
@@ -680,14 +700,14 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "}" ++ nl
         st := { st with last := some pay }
     | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount s2 st6
-        let (pv, v, st8) ← materializeVal p indent paramPrefix paramCount value st7
+        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
+        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
+        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
+        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
+        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
+        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
+        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
+        let (pv, v, st8) ← materializeVal p indent paramPrefix paramCount paramWidths value st7
         let (slot, st9) := fresh st8
         st := st9
         acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ pv ++
@@ -703,13 +723,13 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
         st := { st with last := some v }
     | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount tw0 st
-        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount tw1 s0
-        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount tw2 s1
-        let (q0, d0, s3) ← materializeVal p indent paramPrefix paramCount dw0 s2
-        let (q1, d1, s4) ← materializeVal p indent paramPrefix paramCount dw1 s3
-        let (q2, d2, s5) ← materializeVal p indent paramPrefix paramCount dw2 s4
-        let (pa, amt, s6) ← materializeVal p indent paramPrefix paramCount amount s5
+        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
+        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 s0
+        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths tw2 s1
+        let (q0, d0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths dw0 s2
+        let (q1, d1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths dw1 s3
+        let (q2, d2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths dw2 s4
+        let (pa, amt, s6) ← materializeVal p indent paramPrefix paramCount paramWidths amount s5
         let (tok, s7) := fresh s6
         let (ok, s8) := fresh s7
         let (rds, s9) := fresh s8
@@ -731,9 +751,9 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if eq(" ++ rds ++ ", 32) { if iszero(mload(0)) { " ++ revert0 ++ " } }" ++ nl
         st := { st with last := some amt }
     | .evmTokenBalanceOfSelf tw0 tw1 tw2 =>
-        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount tw0 st
-        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount tw1 s0
-        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount tw2 s1
+        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
+        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 s0
+        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths tw2 s1
         let (tok, s3) := fresh s2
         let (ok, s4) := fresh s3
         let (ret, s5) := fresh s4
@@ -753,7 +773,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         st := { st with last := some ret }
     | .storeField name v =>
         let destS ← slotOf p name
-        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount v st
+        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st
         st := st'
         let w := (IR.slotWidth p name).getD 8
         acc := acc ++ pre ++ storeSlot indent destS (maskExpr w value)
@@ -763,7 +783,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           let (pre, value, st') ←
             match st.last with
             | some nm => pure ("", nm, { st with last := none })
-            | none => materializeVal p indent paramPrefix paramCount v st
+            | none => materializeVal p indent paramPrefix paramCount paramWidths v st
           st := st'
           acc := acc ++ pre ++ returnWord indent value
         else if IR.hasIndexSet ops then
@@ -781,7 +801,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
               acc := acc ++ (← storeNamed p indent payN (yulLit k))
               acc := acc ++ returnWord indent (yulLit k)
           | _ =>
-              let (pre, payload, st') ← materializeVal p indent paramPrefix paramCount v st
+              let (pre, payload, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st
               st := st'
               acc := acc ++ pre
               acc := acc ++ (← storeNamed p indent tagN "1")
@@ -797,13 +817,13 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
                 match v with
                 | .field _ fname =>
                     if fname.contains '_' && (IR.slotIndex p fname).isSome then
-                      loadVal p paramPrefix paramCount (.arg 0)
+                      loadVal p paramPrefix paramCount paramWidths (.arg 0)
                     else if IR.hasCheckedArith ops then
-                      loadVal p paramPrefix paramCount v
+                      loadVal p paramPrefix paramCount paramWidths v
                     else
-                      loadVal p paramPrefix paramCount (.arg 0)
+                      loadVal p paramPrefix paramCount paramWidths (.arg 0)
                 | _ =>
-                    let (pre, e, st') ← materializeVal p indent paramPrefix paramCount v st
+                    let (pre, e, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st
                     st := st'
                     acc := acc ++ pre
                     pure e
@@ -820,7 +840,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         let (pre, value, st') ←
           match st.last with
           | some nm => pure ("", nm, { st with last := none })
-          | none => materializeVal p indent paramPrefix paramCount v st
+          | none => materializeVal p indent paramPrefix paramCount paramWidths v st
         st := st'
         acc := acc ++ pre
         if nRets > 1 then
@@ -832,7 +852,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         else
           acc := acc ++ returnWord indent value
     | .returnState v =>
-        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount v st
+        let (pre, value, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st
         st := st'
         acc := acc ++ pre
         if nStates > 1 then
@@ -933,18 +953,18 @@ private def cfgDefinedLocals (graph : Core.CFG.Graph Ops.ValKind Ops.OpExt) : Ar
   ids.toList.eraseDups.toArray
 
 private def emitCFGOkState (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (value : Ops.Val) (last : Option String)
+    (paramCount : Nat) (paramWidths : Array Nat) (value : Ops.Val) (last : Option String)
     (hint : CFGResultHint) (st : Render) : Except String (String × Render) := do
   let mut body := ""
   let mut st := st
   if hint == .stored then
-    let (pre, result, next) ← materializeVal p indent paramPrefix paramCount value st
+    let (pre, result, next) ← materializeVal p indent paramPrefix paramCount paramWidths value st
     st := next
     body := body ++ pre ++ returnWord indent result
   else if hint == .conflict then
     match value with
     | .field _ _ =>
-        let (pre, result, next) ← materializeVal p indent paramPrefix paramCount value st
+        let (pre, result, next) ← materializeVal p indent paramPrefix paramCount paramWidths value st
         st := next
         body := body ++ pre ++ returnWord indent result
     | _ => throw "evm/cfg: ambiguous implicit result at state exit"
@@ -960,7 +980,7 @@ private def emitCFGOkState (p : IR.Program) (indent paramPrefix : String)
         body := body ++ (← storeNamed p indent payloadName (yulLit literal))
         body := body ++ returnWord indent (yulLit literal)
     | _ =>
-        let (pre, payload, next) ← materializeVal p indent paramPrefix paramCount value st
+        let (pre, payload, next) ← materializeVal p indent paramPrefix paramCount paramWidths value st
         st := next
         body := body ++ pre ++ (← storeNamed p indent tagName "1")
         body := body ++ (← storeNamed p indent payloadName payload)
@@ -975,10 +995,10 @@ private def emitCFGOkState (p : IR.Program) (indent paramPrefix : String)
       | none =>
           if cfgHintHasLast hint then pure "pf_last"
           else match value with
-            | .field _ _ => loadVal p paramPrefix paramCount (.arg 0)
+            | .field _ _ => loadVal p paramPrefix paramCount paramWidths (.arg 0)
             | _ =>
                 let (pre, expression, next) ←
-                  materializeVal p indent paramPrefix paramCount value st
+                  materializeVal p indent paramPrefix paramCount paramWidths value st
                 st := next
                 body := body ++ pre
                 pure expression
@@ -987,13 +1007,13 @@ private def emitCFGOkState (p : IR.Program) (indent paramPrefix : String)
   return (body, st)
 
 private def emitCFGChecked (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (operation : Core.CFG.Checked Ops.ValKind)
+    (paramCount : Nat) (paramWidths : Array Nat) (operation : Core.CFG.Checked Ops.ValKind)
     (success overflow : Nat) (st : Render) : Except String (String × Render) := do
   match operation with
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
   | .divU64 lhs rhs | .modU64 lhs rhs =>
-      let (preL, left, st1) ← materializeVal p indent paramPrefix paramCount lhs st
-      let (preR, right, st2) ← materializeVal p indent paramPrefix paramCount rhs st1
+      let (preL, left, st1) ← materializeVal p indent paramPrefix paramCount paramWidths lhs st
+      let (preR, right, st2) ← materializeVal p indent paramPrefix paramCount paramWidths rhs st1
       let (resultName, st3) := fresh st2
       let (failedName, st4) := fresh st3
       let (result, failed) := match operation with
@@ -1020,7 +1040,7 @@ private def emitCFGChecked (p : IR.Program) (indent paramPrefix : String)
       let (failedName, st2) := fresh st1
       let inner := { st2 with loopIx := some loopName }
       let (pre, addendExpr, st3) ←
-        materializeVal p (indent ++ "  ") paramPrefix paramCount addend inner
+        materializeVal p (indent ++ "  ") paramPrefix paramCount paramWidths addend inner
       let accumulator := s!"l{resultLocal}"
       let text :=
         indent ++ accumulator ++ " := 0" ++ nl ++
@@ -1059,7 +1079,7 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
   for sourceInstruction in block.instructions do
     let instruction ← IR.ofSourceOps #[sourceInstruction]
     let (text, next) ←
-      emitOps p indent "arg" method.paramCount instruction afterInstructions
+      emitOps p indent "arg" method.paramCount method.paramWidths instruction afterInstructions
     instructionText := instructionText ++ text
     if cfgInstructionProducesEffectResult sourceInstruction then
       let some expression := next.last
@@ -1076,8 +1096,10 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
   | .branch cmp lhs rhs thenEdge elseEdge =>
       unless thenEdge.args.isEmpty && elseEdge.args.isEmpty do
         throw s!"evm/cfg: branch arguments remain at block {block.id}"
-      let (preL, left, st1) ← materializeVal p indent "arg" method.paramCount lhs finalState
-      let (preR, right, st2) ← materializeVal p indent "arg" method.paramCount rhs st1
+      let (preL, left, st1) ←
+        materializeVal p indent "arg" method.paramCount method.paramWidths lhs finalState
+      let (preR, right, st2) ←
+        materializeVal p indent "arg" method.paramCount method.paramWidths rhs st1
       let (condition, st3) := fresh st2
       finalState := st3
       body := body ++ preL ++ preR ++ indent ++ "let " ++ condition ++ " := " ++
@@ -1088,16 +1110,16 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
   | .checked operation success overflow =>
       unless success.args.isEmpty && overflow.args.isEmpty do
         throw s!"evm/cfg: checked arguments remain at block {block.id}"
-      let (checkedText, next) ← emitCFGChecked p indent "arg" method.paramCount operation
-        success.target overflow.target finalState
+      let (checkedText, next) ← emitCFGChecked p indent "arg" method.paramCount method.paramWidths
+        operation success.target overflow.target finalState
       body := body ++ checkedText
       finalState := { next with last := none }
   | .exit result =>
       match result with
       | .initialize _ => throw "evm/cfg: initializer reached runtime entry"
       | .okState value =>
-          let (exitText, next) ← emitCFGOkState p indent "arg" method.paramCount value
-            none afterHint finalState
+          let (exitText, next) ← emitCFGOkState p indent "arg" method.paramCount method.paramWidths
+            value none afterHint finalState
           body := body ++ exitText
           finalState := next
       | .errorOverflow => body := body ++ indent ++ revert0 ++ nl
@@ -1105,21 +1127,34 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
       | .returnU64 value =>
           let (pre, expression, next) ←
             if cfgHintHasLast afterHint then pure ("", "pf_last", finalState)
-            else materializeVal p indent "arg" method.paramCount value finalState
+            else materializeVal p indent "arg" method.paramCount method.paramWidths value finalState
           body := body ++ pre ++ returnWord indent expression
           finalState := next
       | .returnU64s values =>
           if values.isEmpty then throw "evm/cfg: empty return tuple"
-          for i in [0:values.size] do
-            let (pre, expression, next) ←
-              materializeVal p indent "arg" method.paramCount values[i]! finalState
-            finalState := next
-            body := body ++ pre ++ indent ++ "mstore(" ++ toString (i * 32) ++ ", " ++
-              expression ++ ")" ++ nl
-          body := body ++ indent ++ "return(0, " ++ toString (values.size * 32) ++ ")" ++ nl
+          if method.retWidths == #[20] && values.size == 3 then
+            let (p0, a0, s0) ←
+              materializeVal p indent "arg" method.paramCount method.paramWidths values[0]! finalState
+            let (p1, a1, s1) ←
+              materializeVal p indent "arg" method.paramCount method.paramWidths values[1]! s0
+            let (p2, a2, s2) ←
+              materializeVal p indent "arg" method.paramCount method.paramWidths values[2]! s1
+            finalState := s2
+            body := body ++ p0 ++ p1 ++ p2 ++
+              indent ++ "mstore(0, 0)" ++ nl ++
+              packAddrMstore8 indent a0 a1 a2 ++
+              indent ++ "return(0, 32)" ++ nl
+          else
+            for i in [0:values.size] do
+              let (pre, expression, next) ←
+                materializeVal p indent "arg" method.paramCount method.paramWidths values[i]! finalState
+              finalState := next
+              body := body ++ pre ++ indent ++ "mstore(" ++ toString (i * 32) ++ ", " ++
+                expression ++ ")" ++ nl
+            body := body ++ indent ++ "return(0, " ++ toString (values.size * 32) ++ ")" ++ nl
       | .returnState value =>
           let (pre, expression, next) ←
-            materializeVal p indent "arg" method.paramCount value finalState
+            materializeVal p indent "arg" method.paramCount method.paramWidths value finalState
           finalState := next
           let destination := (p.slots[0]?.map (·.name)).getD "slot0"
           let slot ← slotOf p destination
@@ -1174,13 +1209,14 @@ private def emitConstructorStores (p : IR.Program) : Except String String := do
   let mut i : Nat := 0
   for s in p.slots do
     if h : i < vs.size then
-      let v ← loadVal p "ctor_arg" p.constructor.paramCount vs[i]
+      let v ← loadVal p "ctor_arg" p.constructor.paramCount p.constructor.paramWidths vs[i]
       unless v == "0" do
         body := body ++ storeSlot "    " s.index (maskExpr s.width v)
     i := i + 1
   return body
 
-private def renderCtorPrelude (objectName : String) (paramCount : Nat) : String :=
+private def renderCtorPrelude (objectName : String) (paramCount : Nat)
+    (paramWidths : Array Nat) : String :=
   Id.run do
     let argumentBytes := paramCount * 32
     let mut out :=
@@ -1191,9 +1227,11 @@ private def renderCtorPrelude (objectName : String) (paramCount : Nat) : String 
     if argumentBytes > 0 then
       out := out ++ "    codecopy(0, programSize, " ++ toString argumentBytes ++ ")" ++ nl
     for i in [0:paramCount] do
+      let w := (paramWidths[i]?).getD 8
+      let max := widthMask w
       out := out ++
         "    let ctor_arg" ++ toString i ++ " := mload(" ++ toString (i * 32) ++ ")" ++ nl ++
-        "    if gt(ctor_arg" ++ toString i ++ ", " ++ u64MaxYul ++ ") { " ++
+        "    if gt(ctor_arg" ++ toString i ++ ", " ++ max ++ ") { " ++
           revert0 ++ " }" ++ nl
     return out
 
@@ -1232,7 +1270,7 @@ def emitYul (p : IR.Program) : Except String String := do
   if p.entries.isEmpty then
     throw "extract/unsupported: evm wants at least one entry"
   let runtimeName := p.name ++ "_runtime"
-  let ctorHead := renderCtorPrelude p.name p.constructor.paramCount
+  let ctorHead := renderCtorPrelude p.name p.constructor.paramCount p.constructor.paramWidths
   let ctorStores ← emitConstructorStores p
   let anyPay := hasPayableEntry p
   let mut entries := ""
@@ -1277,7 +1315,9 @@ private def ctorAbi (p : IR.Program) : String :=
     paramsJsonOf p.constructor.paramWidths p.constructor.paramCount ++ "]}"
 
 private def outputsJson (m : IR.Method) : String :=
-  if m.retCount ≤ 1 then
+  if m.retWidths == #[20] then
+    "[{\"name\":\"\",\"type\":\"address\"}]"
+  else if m.retCount ≤ 1 then
     "[{\"name\":\"\",\"type\":\"uint64\"}]"
   else
     "[" ++ String.intercalate "," ((List.range m.retCount).map fun _ =>

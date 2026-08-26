@@ -351,6 +351,7 @@ private def methodOfLegacy (schema : Core.Schema) (method : Legacy.Method) :
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
+    retWidths := method.retWidths
     retCount := method.retCount
     sketch := method.sketch
     ops
@@ -378,6 +379,7 @@ private def methodToLegacy (schema : Core.Schema) (method : Method) :
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
+    retWidths := method.retWidths
     retCount := method.retCount
     sketch := method.sketch
     ops

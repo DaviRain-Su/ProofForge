@@ -132,6 +132,7 @@ def abiTypeOfWidth : Nat → String
   | 1 => "uint8"
   | 2 => "uint16"
   | 4 => "uint32"
+  | 20 => "address"
   | _ => "uint64"
 
 def selectorOfWidths (name : String) (widths : Array Nat) : String :=

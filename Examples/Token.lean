@@ -24,56 +24,56 @@ def init (_seed : UInt64) : State :=
 
 /-- 给 Addr20 记余额。测试用铸币，不是权限模型。 -/
 @[pf_entry]
-def mint (_s : State) (w0 w1 w2 v : UInt64) : Except Error (State × UInt64) :=
+def mint (_s : State) (to : Addr20) (v : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmMapSetAddr balBase w0 w1 w2 v)
+    .ok ({ dummy := 0 }, evmMapSetAddr balBase to v)
   else
     .error .overflow
 
 @[pf_entry]
-def balanceOf (_s : State) (w0 w1 w2 : UInt64) : UInt64 :=
-  evmMapGetAddr balBase w0 w1 w2
+def balanceOf (_s : State) (who : Addr20) : UInt64 :=
+  evmMapGetAddr balBase who
 
 @[pf_entry]
-def allowanceOf (_s : State) (o0 o1 o2 s0 s1 s2 : UInt64) : UInt64 :=
-  evmMapGetPair allowBase o0 o1 o2 s0 s1 s2
+def allowanceOf (_s : State) (owner spender : Addr20) : UInt64 :=
+  evmMapGetPair allowBase owner spender
 
 /-- caller → spender 写额度，并 LOG `Approval(uint64)`。 -/
 @[pf_entry]
-def approve (_s : State) (s0 s1 s2 amt : UInt64) : Except Error (State × UInt64) :=
+def approve (_s : State) (spender : Addr20) (amt : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     .ok ({ dummy :=
-        evmMapSetPair allowBase evmCallerW0 evmCallerW1 evmCallerW2 s0 s1 s2 amt },
+        evmMapSetPair allowBase evmCaller20 spender amt },
       evmLogApproval amt)
   else
     .error .overflow
 
 /-- 从 caller 扣、给 dest 加。不足 → `insufficient`。 -/
 @[pf_entry]
-def transfer (_s : State) (d0 d1 d2 amt : UInt64) : Except Error (State × UInt64) :=
-  if evmMapGetAddr balBase evmCallerW0 evmCallerW1 evmCallerW2 ≥ amt then
+def transfer (_s : State) (dest : Addr20) (amt : UInt64) : Except Error (State × UInt64) :=
+  if evmMapGetAddr balBase evmCaller20 ≥ amt then
     .ok ({ dummy :=
-        (evmMapSetAddr balBase evmCallerW0 evmCallerW1 evmCallerW2
-          (evmMapGetAddr balBase evmCallerW0 evmCallerW1 evmCallerW2 - amt)) |||
-        (evmMapSetAddr balBase d0 d1 d2
-          (evmMapGetAddr balBase d0 d1 d2 + amt)) },
+        (evmMapSetAddr balBase evmCaller20
+          (evmMapGetAddr balBase evmCaller20 - amt)) |||
+        (evmMapSetAddr balBase dest
+          (evmMapGetAddr balBase dest + amt)) },
       evmLogTransfer amt)
   else
     .error .insufficient
 
 /-- 查 pair 额度；不足 → `insufficient`。成功则改余额并写剩余额度。 -/
 @[pf_entry]
-def transferFrom (_s : State) (o0 o1 o2 d0 d1 d2 amt : UInt64) :
+def transferFrom (_s : State) (owner dest : Addr20) (amt : UInt64) :
     Except Error (State × UInt64) :=
-  if evmMapGetPair allowBase o0 o1 o2 evmCallerW0 evmCallerW1 evmCallerW2 ≥ amt then
-    if evmMapGetAddr balBase o0 o1 o2 ≥ amt then
+  if evmMapGetPair allowBase owner evmCaller20 ≥ amt then
+    if evmMapGetAddr balBase owner ≥ amt then
       .ok ({ dummy :=
-          (evmMapSetAddr balBase o0 o1 o2
-            (evmMapGetAddr balBase o0 o1 o2 - amt)) |||
-          (evmMapSetAddr balBase d0 d1 d2
-            (evmMapGetAddr balBase d0 d1 d2 + amt)) |||
-          (evmMapSetPair allowBase o0 o1 o2 evmCallerW0 evmCallerW1 evmCallerW2
-            (evmMapGetPair allowBase o0 o1 o2 evmCallerW0 evmCallerW1 evmCallerW2 - amt)) },
+          (evmMapSetAddr balBase owner
+            (evmMapGetAddr balBase owner - amt)) |||
+          (evmMapSetAddr balBase dest
+            (evmMapGetAddr balBase dest + amt)) |||
+          (evmMapSetPair allowBase owner evmCaller20
+            (evmMapGetPair allowBase owner evmCaller20 - amt)) },
         evmLogTransfer amt)
     else
       .error .insufficient

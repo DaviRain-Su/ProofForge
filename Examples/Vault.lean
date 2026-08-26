@@ -34,30 +34,30 @@ def setU64 (_s : State) (k v : UInt64) : Except Error (State × UInt64) :=
 
 /-- hashed `Map Addr20 UInt64` 读份额。 -/
 @[pf_entry]
-def shareOf (_s : State) (w0 w1 w2 : UInt64) : UInt64 :=
-  evmMapGetAddr shareBase w0 w1 w2
+def shareOf (_s : State) (who : Addr20) : UInt64 :=
+  evmMapGetAddr shareBase who
 
 /-- 把份额记到 Addr20。 -/
 @[pf_entry]
-def credit (_s : State) (w0 w1 w2 v : UInt64) : Except Error (State × UInt64) :=
+def credit (_s : State) (who : Addr20) (v : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmMapSetAddr shareBase w0 w1 w2 v)
+    .ok ({ dummy := 0 }, evmMapSetAddr shareBase who v)
   else
     .error .overflow
 
 /-- 封闭 ERC-20 `transfer`。 -/
 @[pf_entry]
-def pull (_s : State) (tw0 tw1 tw2 dw0 dw1 dw2 amt : UInt64) :
+def pull (_s : State) (token dest : Addr20) (amt : UInt64) :
     Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amt)
+    .ok ({ dummy := 0 }, evmTokenTransfer token dest amt)
   else
     .error .overflow
 
 /-- 封闭 ERC-20 `balanceOf(address(this))`。 -/
 @[pf_entry]
-def held (_s : State) (tw0 tw1 tw2 : UInt64) : UInt64 :=
-  evmTokenBalanceOfSelf tw0 tw1 tw2
+def held (_s : State) (token : Addr20) : UInt64 :=
+  evmTokenBalanceOfSelf token
 
 @[pf_entry]
 def get (_s : State) : UInt64 :=

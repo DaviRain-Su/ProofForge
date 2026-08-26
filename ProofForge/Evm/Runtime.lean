@@ -1,6 +1,16 @@
 namespace ProofForge.Evm.Runtime
 
 /--
+20 字节地址，三个 `UInt64` 叶：w0/w1 各 8 字节，w2 只低 4 字节。
+小端装地址字节 0..19。ABI 是一个 `address`，storage 仍三槽。
+-/
+structure Addr20 where
+  w0 : UInt64
+  w1 : UInt64
+  w2 : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+/--
 `CALLER` 的低 8 字节：`and(caller(), 0xffffffffffffffff)`。
 这是 20 字节地址的末 8 字节，不是完整 address，也不是 `tx.origin`。
 SVM 发射器碰到这个叶子 fail closed。
@@ -15,7 +25,7 @@ SVM 发射器碰到这个叶子 fail closed。
 
 @[irreducible] def evmTimestamp : UInt64 := 0
 @[irreducible] def evmChainId : UInt64 := 0
-/-- `ADDRESS` 低 8 字节。完整 20B 用 `evmSelfW*`。 -/
+/-- `ADDRESS` 低 8 字节。完整 20B 用 `evmSelf20`。 -/
 @[irreducible] def evmSelf : UInt64 := 0
 @[irreducible] def evmCallValue : UInt64 := 0
 @[irreducible] def evmSelfBalance : UInt64 := 0
@@ -28,12 +38,20 @@ SVM 发射器碰到这个叶子 fail closed。
 @[irreducible] def evmSelfW1 : UInt64 := 0
 @[irreducible] def evmSelfW2 : UInt64 := 0
 
+/-- 完整 `CALLER`。抽出认三叶，不把 Addr20 当单一 UInt64。 -/
+def evmCaller20 : Addr20 :=
+  { w0 := evmCallerW0, w1 := evmCallerW1, w2 := evmCallerW2 }
+
+/-- 完整 `ADDRESS`。 -/
+def evmSelf20 : Addr20 :=
+  { w0 := evmSelfW0, w1 := evmSelfW1, w2 := evmSelfW2 }
+
 /-- `eq(callvalue(), amt)`。入口因此 payable。宿主返回 amt。 -/
 @[irreducible] def evmDeposit (amt : UInt64) : UInt64 := amt
 
 /-- value CALL 到 20B 地址。失败应 revert。重入不进参考语义。宿主返回 amt。 -/
-@[irreducible] def evmSendEth (w0 w1 w2 amt : UInt64) : UInt64 :=
-  let _ := w0; let _ := w1; let _ := w2; amt
+@[irreducible] def evmSendEth (dst : Addr20) (amt : UInt64) : UInt64 :=
+  let _ := dst; amt
 
 /-- LOG1 `Tipped(uint64)`。宿主返回 amt。 -/
 @[irreducible] def evmLogTipped (amt : UInt64) : UInt64 := amt
@@ -54,36 +72,27 @@ SVM 发射器碰到这个叶子 fail closed。
 @[irreducible] def evmMapSetU64 (_base _key val : UInt64) : UInt64 := val
 
 /-- hashed `Map Addr20` 读。缺席是 0。 -/
-@[irreducible] def evmMapGetAddr (_base w0 w1 w2 : UInt64) : UInt64 :=
-  let _ := w0; let _ := w1; let _ := w2; 0
+@[irreducible] def evmMapGetAddr (_base : UInt64) (_key : Addr20) : UInt64 := 0
 
 /-- hashed `Map Addr20` 写。 -/
-@[irreducible] def evmMapSetAddr (_base w0 w1 w2 val : UInt64) : UInt64 :=
-  let _ := w0; let _ := w1; let _ := w2; val
+@[irreducible] def evmMapSetAddr (_base : UInt64) (_key : Addr20) (val : UInt64) : UInt64 :=
+  val
 
-/-- pair-key hashed Map 读：owner 三叶 + spender 三叶。缺席是 0。 -/
+/-- pair-key hashed Map 读：owner + spender。缺席是 0。 -/
 @[irreducible] def evmMapGetPair
-    (_base o0 o1 o2 s0 s1 s2 : UInt64) : UInt64 :=
-  let _ := o0; let _ := o1; let _ := o2
-  let _ := s0; let _ := s1; let _ := s2
-  0
+    (_base : UInt64) (_owner _spender : Addr20) : UInt64 := 0
 
 /-- pair-key hashed Map 写。 -/
 @[irreducible] def evmMapSetPair
-    (_base o0 o1 o2 s0 s1 s2 val : UInt64) : UInt64 :=
-  let _ := o0; let _ := o1; let _ := o2
-  let _ := s0; let _ := s1; let _ := s2
+    (_base : UInt64) (_owner _spender : Addr20) (val : UInt64) : UInt64 :=
   val
 
 /-- 封闭 ERC-20 `transfer`。callee 20B；失败 / 假返回 revert。宿主返回 amt。 -/
 @[irreducible] def evmTokenTransfer
-    (tw0 tw1 tw2 dw0 dw1 dw2 amt : UInt64) : UInt64 :=
-  let _ := tw0; let _ := tw1; let _ := tw2
-  let _ := dw0; let _ := dw1; let _ := dw2
+    (_token _dest : Addr20) (amt : UInt64) : UInt64 :=
   amt
 
 /-- 封闭 ERC-20 `balanceOf(address(this))`。超 UInt64 应 revert。宿主返回 0。 -/
-@[irreducible] def evmTokenBalanceOfSelf (tw0 tw1 tw2 : UInt64) : UInt64 :=
-  let _ := tw0; let _ := tw1; let _ := tw2; 0
+@[irreducible] def evmTokenBalanceOfSelf (_token : Addr20) : UInt64 := 0
 
 end ProofForge.Evm.Runtime

@@ -25,11 +25,11 @@ def deposit (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-/-- value CALL 到 20B（三叶 Addr20）。失败 revert。重入不进参考语义。 -/
+/-- value CALL 到 20B Addr20。失败 revert。重入不进参考语义。 -/
 @[pf_entry]
-def payout (_s : State) (w0 w1 w2 amt : UInt64) : Except Error (State × UInt64) :=
+def payout (_s : State) (dst : Addr20) (amt : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmSendEth w0 w1 w2 amt)
+    .ok ({ dummy := 0 }, evmSendEth dst amt)
   else
     .error .overflow
 
@@ -49,7 +49,7 @@ def chainId (_s : State) : UInt64 :=
 def timestamp (_s : State) : UInt64 :=
   evmTimestamp
 
-/-- `ADDRESS` 低 8 字节。完整 20B 用 `selfW*`。 -/
+/-- `ADDRESS` 低 8 字节。完整 20B 用 `self20`。 -/
 @[pf_entry]
 def selfLow (_s : State) : UInt64 :=
   evmSelf
@@ -62,6 +62,14 @@ def selfBal (_s : State) : UInt64 :=
 @[pf_entry]
 def callValue (_s : State) : UInt64 :=
   evmCallValue
+
+@[pf_entry]
+def caller20 (_s : State) : Addr20 :=
+  evmCaller20
+
+@[pf_entry]
+def self20 (_s : State) : Addr20 :=
+  evmSelf20
 
 @[pf_entry]
 def callerW0 (_s : State) : UInt64 :=

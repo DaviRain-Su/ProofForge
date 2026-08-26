@@ -5,20 +5,20 @@ namespace Tests.OwnableSpec
 open Examples.Ownable
 open ProofForge.Evm.Runtime
 
-#guard (init 1 2 3).owner0 == 1
-#guard (init 1 2 3).owner1 == 2
-#guard (init 1 2 3).owner2 == 3
-#guard get (init 1 2 3) == 0
-#guard ownerW0 (init 1 2 3) == 1
-#guard allowance (init 1 2 3) 1 2 3 4 5 6 == 0
+def sample : Addr20 := ⟨1, 2, 3⟩
+
+#guard (init sample).owner == sample
+#guard get (init sample) == 0
+#guard ownerOf (init sample) == sample
+#guard allowance (init sample) sample ⟨4, 5, 6⟩ == 0
 
 #guard
-  match logInc (init 0 0 0) 9 with
+  match logInc (init ⟨0, 0, 0⟩) 9 with
   | .ok (_, ret) => ret == 9
   | .error _ => false
 
 #guard
-  match approve (init 0 0 0) 1 2 3 4 5 6 7 with
+  match approve (init ⟨0, 0, 0⟩) ⟨1, 2, 3⟩ ⟨4, 5, 6⟩ 7 with
   | .ok (_, ret) => ret == 7
   | .error _ => false
 

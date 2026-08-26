@@ -16,6 +16,8 @@ structure Method (ValExt : Type) (OpExt : Type → Type) where
   ixName : String := ""
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
+  /-- ABI return widths. Empty means `retCount` consecutive `uint64` words. `#[20]` is one `address`. -/
+  retWidths : Array Nat := #[]
   retCount : Nat := 1
   sketch : Array String := #[]
   ops : Array (Core.Ops.Op ValExt OpExt) := #[]

@@ -402,14 +402,19 @@ def extractedTipJar : Program :=
             #[.evmLog "Tipped" (.arg 0), .returnU64 (.arg 0)]
             #[.errorOverflow]
         ] },
-      { kind := .increment, name := "Examples.TipJar.payout", ixName := "payout", paramCount := 4
+      { kind := .increment, name := "Examples.TipJar.payout", ixName := "payout", paramCount := 2
+        paramWidths := #[20, 8]
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.evmSendEth (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.evmSendEth (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                (.field (.arg 0) "w2") (.arg 1), .returnU64 (.arg 1)]
             #[.errorOverflow]
         ] },
       { kind := .get, name := "Examples.TipJar.callValue", ixName := "callValue", paramCount := 0
         ops := #[.returnU64 .evmCallValue] },
+      { kind := .get, name := "Examples.TipJar.caller20", ixName := "caller20", paramCount := 0
+        retWidths := #[20], retCount := 3
+        ops := #[.returnU64 .evmCallerW0, .returnU64 .evmCallerW1, .returnU64 .evmCallerW2] },
       { kind := .get, name := "Examples.TipJar.callerW0", ixName := "callerW0", paramCount := 0
         ops := #[.returnU64 .evmCallerW0] },
       { kind := .get, name := "Examples.TipJar.callerW1", ixName := "callerW1", paramCount := 0
@@ -420,6 +425,9 @@ def extractedTipJar : Program :=
         ops := #[.returnU64 .evmChainId] },
       { kind := .get, name := "Examples.TipJar.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.lit 0)] },
+      { kind := .get, name := "Examples.TipJar.self20", ixName := "self20", paramCount := 0
+        retWidths := #[20], retCount := 3
+        ops := #[.returnU64 .evmSelfW0, .returnU64 .evmSelfW1, .returnU64 .evmSelfW2] },
       { kind := .get, name := "Examples.TipJar.selfBal", ixName := "selfBal", paramCount := 0
         ops := #[.returnU64 .evmSelfBalance] },
       { kind := .get, name := "Examples.TipJar.selfLow", ixName := "selfLow", paramCount := 0
@@ -491,17 +499,22 @@ def extractedVault : Program :=
     methods := #[
       { kind := .init, name := "Examples.Vault.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.lit 0)] },
-      { kind := .increment, name := "Examples.Vault.credit", ixName := "credit", paramCount := 4
+      { kind := .increment, name := "Examples.Vault.credit", ixName := "credit", paramCount := 2
+        paramWidths := #[20, 8]
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.mapSetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                (.field (.arg 0) "w2") (.arg 1), .returnU64 (.arg 1)]
             #[.errorOverflow]
         ] },
-      { kind := .increment, name := "Examples.Vault.pull", ixName := "pull", paramCount := 7
+      { kind := .increment, name := "Examples.Vault.pull", ixName := "pull", paramCount := 3
+        paramWidths := #[20, 20, 8]
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.evmTokenTransfer (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
-              .returnU64 (.arg 6)]
+            #[.evmTokenTransfer (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                (.field (.arg 0) "w2") (.field (.arg 1) "w0") (.field (.arg 1) "w1")
+                (.field (.arg 1) "w2") (.arg 2),
+              .returnU64 (.arg 2)]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Vault.setU64", ixName := "setU64", paramCount := 2
@@ -514,36 +527,44 @@ def extractedVault : Program :=
         ops := #[.returnU64 (.lit 0)] },
       { kind := .get, name := "Examples.Vault.getU64", ixName := "getU64", paramCount := 1
         ops := #[.mapGetU64 (.lit 0) (.arg 0), .returnU64 (.arg 0)] },
-      { kind := .get, name := "Examples.Vault.held", ixName := "held", paramCount := 3
-        ops := #[.evmTokenBalanceOfSelf (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] },
-      { kind := .get, name := "Examples.Vault.shareOf", ixName := "shareOf", paramCount := 3
-        ops := #[.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] }
+      { kind := .get, name := "Examples.Vault.held", ixName := "held", paramCount := 1
+        paramWidths := #[20]
+        ops := #[.evmTokenBalanceOfSelf (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+            (.field (.arg 0) "w2"), .returnU64 (.field (.arg 0) "w0")] },
+      { kind := .get, name := "Examples.Vault.shareOf", ixName := "shareOf", paramCount := 1
+        paramWidths := #[20]
+        ops := #[.mapGetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+            (.field (.arg 0) "w2"), .returnU64 (.field (.arg 0) "w0")] }
     ] }
 
 def extractedOwnable : Program :=
   { name := "Ownable"
     slots := #[
-      { name := "owner0" }, { name := "owner1" },
-      { name := "owner2" }, { name := "value" }
+      { name := "owner_w0" }, { name := "owner_w1" },
+      { name := "owner_w2" }, { name := "value" }
     ]
     methods := #[
-      { kind := .init, name := "Examples.Ownable.init", ixName := "initialize", paramCount := 3
+      { kind := .init, name := "Examples.Ownable.init", ixName := "initialize", paramCount := 1
+        paramWidths := #[20]
         ops := #[
-          .returnState (.arg 0), .returnState (.arg 1),
-          .returnState (.arg 2), .returnState (.lit 0)
+          .returnState (.field (.arg 0) "w0"), .returnState (.field (.arg 0) "w1"),
+          .returnState (.field (.arg 0) "w2"), .returnState (.lit 0)
         ] },
-      { kind := .increment, name := "Examples.Ownable.approve", ixName := "approve", paramCount := 7
+      { kind := .increment, name := "Examples.Ownable.approve", ixName := "approve", paramCount := 3
+        paramWidths := #[20, 20, 8]
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.mapSetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
-              .returnU64 (.arg 6)]
+            #[.mapSetPair (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                (.field (.arg 0) "w2") (.field (.arg 1) "w0") (.field (.arg 1) "w1")
+                (.field (.arg 1) "w2") (.arg 2),
+              .returnU64 (.arg 2)]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Ownable.bump", ixName := "bump", paramCount := 1
         ops := #[
-          .ite .eq .evmCallerW0 (.field (.arg 1) "owner0")
-            #[.ite .eq .evmCallerW1 (.field (.arg 1) "owner1")
-              #[.ite .eq .evmCallerW2 (.field (.arg 1) "owner2")
+          .ite .eq .evmCallerW0 (.field (.arg 1) "owner_w0")
+            #[.ite .eq .evmCallerW1 (.field (.arg 1) "owner_w1")
+              #[.ite .eq .evmCallerW2 (.field (.arg 1) "owner_w2")
                 #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
                   .okState (.field (.arg 1) "value"), .errorOverflow]
                 #[.errorNamed "unauthorized"]]
@@ -556,26 +577,33 @@ def extractedOwnable : Program :=
             #[.evmLog "Incremented" (.arg 0), .returnU64 (.arg 0)]
             #[.errorOverflow]
         ] },
-      { kind := .increment, name := "Examples.Ownable.spend", ixName := "spend", paramCount := 7
+      { kind := .increment, name := "Examples.Ownable.spend", ixName := "spend", paramCount := 3
+        paramWidths := #[20, 20, 8]
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.mapSetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6),
-              .returnU64 (.arg 6)]
+            #[.mapSetPair (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                (.field (.arg 0) "w2") (.field (.arg 1) "w0") (.field (.arg 1) "w1")
+                (.field (.arg 1) "w2") (.arg 2),
+              .returnU64 (.arg 2)]
             #[.errorOverflow]
         ] },
-      { kind := .get, name := "Examples.Ownable.allowance", ixName := "allowance", paramCount := 6
+      { kind := .get, name := "Examples.Ownable.allowance", ixName := "allowance", paramCount := 2
+        paramWidths := #[20, 20]
         ops := #[
-          .mapGetPair (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5),
-          .returnU64 (.arg 0)
+          .mapGetPair (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+            (.field (.arg 0) "w2") (.field (.arg 1) "w0") (.field (.arg 1) "w1")
+            (.field (.arg 1) "w2"),
+          .returnU64 (.field (.arg 0) "w0")
         ] },
       { kind := .get, name := "Examples.Ownable.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "value")] },
-      { kind := .get, name := "Examples.Ownable.ownerW0", ixName := "ownerW0", paramCount := 0
-        ops := #[.returnU64 (.field (.arg 0) "owner0")] },
-      { kind := .get, name := "Examples.Ownable.ownerW1", ixName := "ownerW1", paramCount := 0
-        ops := #[.returnU64 (.field (.arg 0) "owner1")] },
-      { kind := .get, name := "Examples.Ownable.ownerW2", ixName := "ownerW2", paramCount := 0
-        ops := #[.returnU64 (.field (.arg 0) "owner2")] }
+      { kind := .get, name := "Examples.Ownable.ownerOf", ixName := "ownerOf", paramCount := 0
+        retWidths := #[20], retCount := 3
+        ops := #[
+          .returnU64 (.field (.arg 0) "owner_w0"),
+          .returnU64 (.field (.arg 0) "owner_w1"),
+          .returnU64 (.field (.arg 0) "owner_w2")
+        ] }
       ] }
 
 def extractedToken : Program :=
@@ -584,12 +612,13 @@ def extractedToken : Program :=
     methods := #[
       { kind := .init, name := "Examples.Token.init", ixName := "initialize", paramCount := 1
         ops := #[.returnState (.lit 0)] },
-      { kind := .increment, name := "Examples.Token.approve", ixName := "approve", paramCount := 4
+      { kind := .increment, name := "Examples.Token.approve", ixName := "approve", paramCount := 2
+        paramWidths := #[20, 8]
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
             #[.mapSetPair (.lit 1) .evmCallerW0 .evmCallerW1 .evmCallerW2
-                (.arg 0) (.arg 1) (.arg 2) (.arg 3),
-              .evmLog "Approval" (.arg 3), .returnU64 (.arg 3)]
+                (.field (.arg 0) "w0") (.field (.arg 0) "w1") (.field (.arg 0) "w2") (.arg 1),
+              .evmLog "Approval" (.arg 1), .returnU64 (.arg 1)]
             #[.errorOverflow]
         ] },
       { kind := .increment, name := "Examples.Token.logApprove", ixName := "logApprove", paramCount := 1
@@ -604,51 +633,67 @@ def extractedToken : Program :=
             #[.evmLog "Transfer" (.arg 0), .returnU64 (.arg 0)]
             #[.errorOverflow]
         ] },
-      { kind := .increment, name := "Examples.Token.mint", ixName := "mint", paramCount := 4
+      { kind := .increment, name := "Examples.Token.mint", ixName := "mint", paramCount := 2
+        paramWidths := #[20, 8]
         ops := #[
           .ite .ne (.lit 0) (.lit 1)
-            #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 3)]
+            #[.mapSetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                (.field (.arg 0) "w2") (.arg 1), .returnU64 (.arg 1)]
             #[.errorOverflow]
         ] },
-      { kind := .increment, name := "Examples.Token.transfer", ixName := "transfer", paramCount := 4
+      { kind := .increment, name := "Examples.Token.transfer", ixName := "transfer", paramCount := 2
+        paramWidths := #[20, 8]
         ops := #[
           .ite .ge
-            (.mapGetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 3)
+            (.mapGetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 1)
             #[.mapSetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2
-                (.subU64 (.mapGetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 3)),
-              .mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)
-                (.addU64 (.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)) (.arg 3)),
-              .evmLog "Transfer" (.arg 3), .returnU64 (.arg 3)]
+                (.subU64 (.mapGetAddr (.lit 0) .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 1)),
+              .mapSetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                (.field (.arg 0) "w2")
+                (.addU64 (.mapGetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                    (.field (.arg 0) "w2")) (.arg 1)),
+              .evmLog "Transfer" (.arg 1), .returnU64 (.arg 1)]
             #[.errorNamed "insufficient"]
         ] },
       { kind := .increment, name := "Examples.Token.transferFrom", ixName := "transferFrom",
-        paramCount := 7
+        paramCount := 3
+        paramWidths := #[20, 20, 8]
         ops := #[
           .ite .ge
-            (.mapGetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2)
-              .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 6)
+            (.mapGetPair (.lit 1) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+              (.field (.arg 0) "w2") .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 2)
             #[.ite .ge
-                (.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)) (.arg 6)
-                #[.mapSetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)
-                    (.subU64 (.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2)) (.arg 6)),
-                  .mapSetAddr (.lit 0) (.arg 3) (.arg 4) (.arg 5)
-                    (.addU64 (.mapGetAddr (.lit 0) (.arg 3) (.arg 4) (.arg 5)) (.arg 6)),
-                  .mapSetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2)
-                    .evmCallerW0 .evmCallerW1 .evmCallerW2
+                (.mapGetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                  (.field (.arg 0) "w2")) (.arg 2)
+                #[.mapSetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                    (.field (.arg 0) "w2")
+                    (.subU64 (.mapGetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                        (.field (.arg 0) "w2")) (.arg 2)),
+                  .mapSetAddr (.lit 0) (.field (.arg 1) "w0") (.field (.arg 1) "w1")
+                    (.field (.arg 1) "w2")
+                    (.addU64 (.mapGetAddr (.lit 0) (.field (.arg 1) "w0") (.field (.arg 1) "w1")
+                        (.field (.arg 1) "w2")) (.arg 2)),
+                  .mapSetPair (.lit 1) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                    (.field (.arg 0) "w2") .evmCallerW0 .evmCallerW1 .evmCallerW2
                     (.subU64
-                      (.mapGetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2)
-                        .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 6)),
-                  .evmLog "Transfer" (.arg 6), .returnU64 (.arg 6)]
+                      (.mapGetPair (.lit 1) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+                        (.field (.arg 0) "w2") .evmCallerW0 .evmCallerW1 .evmCallerW2) (.arg 2)),
+                  .evmLog "Transfer" (.arg 2), .returnU64 (.arg 2)]
                 #[.errorNamed "insufficient"]]
             #[.errorNamed "insufficient"]
         ] },
-      { kind := .get, name := "Examples.Token.allowanceOf", ixName := "allowanceOf", paramCount := 6
+      { kind := .get, name := "Examples.Token.allowanceOf", ixName := "allowanceOf", paramCount := 2
+        paramWidths := #[20, 20]
         ops := #[
-          .mapGetPair (.lit 1) (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5),
-          .returnU64 (.arg 0)
+          .mapGetPair (.lit 1) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+            (.field (.arg 0) "w2") (.field (.arg 1) "w0") (.field (.arg 1) "w1")
+            (.field (.arg 1) "w2"),
+          .returnU64 (.field (.arg 0) "w0")
         ] },
-      { kind := .get, name := "Examples.Token.balanceOf", ixName := "balanceOf", paramCount := 3
-        ops := #[.mapGetAddr (.lit 0) (.arg 0) (.arg 1) (.arg 2), .returnU64 (.arg 0)] },
+      { kind := .get, name := "Examples.Token.balanceOf", ixName := "balanceOf", paramCount := 1
+        paramWidths := #[20]
+        ops := #[.mapGetAddr (.lit 0) (.field (.arg 0) "w0") (.field (.arg 0) "w1")
+            (.field (.arg 0) "w2"), .returnU64 (.field (.arg 0) "w0")] },
       { kind := .get, name := "Examples.Token.get", ixName := "get", paramCount := 0
         ops := #[.returnU64 (.lit 0)] }
     ] }
