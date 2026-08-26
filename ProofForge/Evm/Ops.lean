@@ -20,6 +20,8 @@ inductive ValKind where
   | mapGetAddr256 (limb : Nat)
   | mapGetPair256 (limb : Nat)
   | tokenBalance256 (limb : Nat)
+  /-- 256-bit ERC-20 `allowance` limb; nine operands: token, owner, spender. -/
+  | tokenAllowance256 (limb : Nat)
   /-- `a ≥ b` on packed 256-bit words. Eight operands: a0..a3, b0..b3. -/
   | ge256
   /-- Checked 256-bit `add`/`sub`/`mul`; `limb` is 0..3 (w0 lowest). Eight operands: a0..a3, b0..b3. -/
@@ -33,6 +35,7 @@ def ValKind.arity : ValKind → Nat
   | .mapGetAddr256 _ => 4
   | .mapGetPair256 _ => 7
   | .tokenBalance256 _ => 3
+  | .tokenAllowance256 _ => 9
   | .ge256 => 8
   | .arith256 _ _ => 8
   | _ => 0
@@ -59,6 +62,8 @@ inductive OpExt (V : Type) where
   | mapSetPair256 (base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 : V)
   | tokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : V)
   | tokenTransfer256 (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : V)
+  | tokenApprove256 (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : V)
+  | tokenTransferFrom256 (tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 : V)
   | tokenBalanceOfSelf (tw0 tw1 tw2 : V)
   deriving BEq, Repr, Inhabited
 
@@ -89,6 +94,8 @@ def mapGetPair256 (limb : Nat) (base o0 o1 o2 s0 s1 s2 : Val) : Val :=
   .ext (.mapGetPair256 limb) #[base, o0, o1, o2, s0, s1, s2]
 def tokenBalance256 (limb : Nat) (tw0 tw1 tw2 : Val) : Val :=
   .ext (.tokenBalance256 limb) #[tw0, tw1, tw2]
+def tokenAllowance256 (limb : Nat) (tw0 tw1 tw2 o0 o1 o2 s0 s1 s2 : Val) : Val :=
+  .ext (.tokenAllowance256 limb) #[tw0, tw1, tw2, o0, o1, o2, s0, s1, s2]
 def ge256 (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext .ge256 #[a0, a1, a2, a3, b0, b1, b2, b3]
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
@@ -123,6 +130,10 @@ def OpExt.wellFormed : OpExt Val → Bool
       allValuesWellFormed #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       allValuesWellFormed #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3]
+  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      allValuesWellFormed #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3]
+  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      allValuesWellFormed #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3]
   | .tokenBalanceOfSelf tw0 tw1 tw2 => allValuesWellFormed #[tw0, tw1, tw2]
 
 def Op.wellFormed (op : Op) : Bool :=

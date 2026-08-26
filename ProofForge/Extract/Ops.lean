@@ -123,6 +123,12 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.evmTokenTransfer256
     (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : Val) : Op :=
   .ext (.evm (.tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3))
+@[match_pattern] def Op.evmTokenApprove256
+    (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3))
+@[match_pattern] def Op.evmTokenTransferFrom256
+    (tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3))
 @[match_pattern] def Op.evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val) : Op :=
   .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2))
 
@@ -211,6 +217,10 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       #[tw0, tw1, tw2, dw0, dw1, dw2, amount].any predicate
   | .evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3].any predicate
+  | .evmTokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3].any predicate
+  | .evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3].any predicate
   | .evmTokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2].any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
 
@@ -218,7 +228,8 @@ private partial def isEvmContext : Val → Bool
   | .ext (.evm kind) operands =>
       (match kind with
        | .mapGetU64 | .mapGetAddr | .mapGetPair
-       | .mapGetAddr256 _ | .mapGetPair256 _ | .tokenBalance256 _ | .ge256 => false
+       | .mapGetAddr256 _ | .mapGetPair256 _ | .tokenBalance256 _
+       | .tokenAllowance256 _ | .ge256 => false
        | _ => true) || operands.any isEvmContext
   | .field base _ | .bitNot base => isEvmContext base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -248,7 +259,8 @@ def hasEvmEffect (ops : Array Op) : Bool :=
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
     | .mapGetPair .. | .mapSetPair ..
     | .mapSetAddr256 .. | .mapSetPair256 ..
-    | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenBalanceOfSelf .. => true
+    | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenApprove256 ..
+    | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf .. => true
     | _ => false
 
 end ProofForge.Extract.Ops

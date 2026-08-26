@@ -83,6 +83,15 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
       .tokenTransfer256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
         (mapValue dw0) (mapValue dw1) (mapValue dw2)
         (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      .tokenApprove256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue sw0) (mapValue sw1) (mapValue sw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      .tokenTransferFrom256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue ow0) (mapValue ow1) (mapValue ow2)
+        (mapValue dw0) (mapValue dw1) (mapValue dw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
 
@@ -108,6 +117,10 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount => #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3]
+  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3]
+  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3]
   | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
 
 def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
@@ -169,6 +182,11 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
       #[tw0, tw1, tw2, dw0, dw1, dw2, amount].all (·.wellFormed ValKind.arity)
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
+  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
+  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3].all
+        (·.wellFormed ValKind.arity)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       #[tw0, tw1, tw2].all (·.wellFormed ValKind.arity)
 

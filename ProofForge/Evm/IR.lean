@@ -38,6 +38,8 @@ inductive Op where
   | mapSetPair256 (base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 : Ops.Val)
   | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Ops.Val)
   | evmTokenTransfer256 (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : Ops.Val)
+  | evmTokenApprove256 (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : Ops.Val)
+  | evmTokenTransferFrom256 (tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 : Ops.Val)
   | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Ops.Val)
   | storeField (name : String) (value : Ops.Val)
   | okState (value : Ops.Val)
@@ -95,6 +97,10 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
   | .ext (.tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3) =>
       pure (.evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3)
+  | .ext (.tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3) =>
+      pure (.evmTokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3)
+  | .ext (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3) =>
+      pure (.evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3)
   | .ext (.tokenBalanceOfSelf tw0 tw1 tw2) =>
       pure (.evmTokenBalanceOfSelf tw0 tw1 tw2)
 
@@ -144,6 +150,10 @@ private partial def Op.toSource : Op → Ops.Op
       .ext (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
   | .evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       .ext (.tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3)
+  | .evmTokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      .ext (.tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3)
+  | .evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      .ext (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3)
   | .evmTokenBalanceOfSelf tw0 tw1 tw2 => .ext (.tokenBalanceOfSelf tw0 tw1 tw2)
   | .storeField name value => .storeField name value
   | .okState value => .okState value
@@ -204,6 +214,15 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
       .tokenTransfer256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
         (mapValue dw0) (mapValue dw1) (mapValue dw2)
         (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      .tokenApprove256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue sw0) (mapValue sw1) (mapValue sw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      .tokenTransferFrom256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
+        (mapValue ow0) (mapValue ow1) (mapValue ow2)
+        (mapValue dw0) (mapValue dw1) (mapValue dw2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .tokenBalanceOfSelf tw0 tw1 tw2 =>
       .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
 
@@ -232,6 +251,10 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
       #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3]
+  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3]
+  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+      #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3]
   | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
@@ -297,6 +320,15 @@ private def projectOpExt
             (← projectVal amount)
       | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
           return .tokenTransfer256 (← projectVal tw0) (← projectVal tw1) (← projectVal tw2)
+            (← projectVal dw0) (← projectVal dw1) (← projectVal dw2)
+            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
+      | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
+          return .tokenApprove256 (← projectVal tw0) (← projectVal tw1) (← projectVal tw2)
+            (← projectVal sw0) (← projectVal sw1) (← projectVal sw2)
+            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
+      | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
+          return .tokenTransferFrom256 (← projectVal tw0) (← projectVal tw1)
+            (← projectVal tw2) (← projectVal ow0) (← projectVal ow1) (← projectVal ow2)
             (← projectVal dw0) (← projectVal dw1) (← projectVal dw2)
             (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
       | .tokenBalanceOfSelf tw0 tw1 tw2 =>
@@ -694,6 +726,10 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
     | .evmTokenTransfer256 a b c d e f g0 g1 g2 g3 =>
         s!"ttxfer256({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g0},{valCanon g1},{valCanon g2},{valCanon g3})"
+    | .evmTokenApprove256 a b c d e f g0 g1 g2 g3 =>
+        s!"tapprove256({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g0},{valCanon g1},{valCanon g2},{valCanon g3})"
+    | .evmTokenTransferFrom256 a b c d e f g h i j k l m =>
+        s!"ttxferfrom256({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g},{valCanon h},{valCanon i},{valCanon j},{valCanon k},{valCanon l},{valCanon m})"
     | .evmTokenBalanceOfSelf a b c =>
         s!"tbal({valCanon a},{valCanon b},{valCanon c})"
     | .storeField n v => s!"st.{n}({valCanon v})"

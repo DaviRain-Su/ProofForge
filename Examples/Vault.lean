@@ -59,6 +59,29 @@ def pull (_s : State) (token dest : Addr20) (amt : UInt256) :
 def held (_s : State) (token : Addr20) : UInt256 :=
   evmTokenBalanceOfSelf token
 
+/-- 封闭 ERC-20 `approve(address,uint256)`。 -/
+@[pf_entry]
+def grant (_s : State) (token spender : Addr20) (amt : UInt256) :
+    Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmTokenApprove token spender amt)
+  else
+    .error .overflow
+
+/-- 封闭 ERC-20 `transferFrom(address,address,uint256)`。 -/
+@[pf_entry]
+def take (_s : State) (token owner dest : Addr20) (amt : UInt256) :
+    Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmTokenTransferFrom token owner dest amt)
+  else
+    .error .overflow
+
+/-- 封闭 ERC-20 `allowance(owner,spender)`。 -/
+@[pf_entry]
+def allowed (_s : State) (token owner spender : Addr20) : UInt256 :=
+  evmTokenAllowanceOf token owner spender
+
 @[pf_entry]
 def get (_s : State) : UInt64 :=
   0

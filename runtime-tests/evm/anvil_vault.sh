@@ -80,4 +80,39 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
   850 "USDT-style no-return transfer succeeds"
 
-echo "evm-anvil-vault: ok (map/share/token; engineering only)"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowed(address,address,address)(uint256)' "$token" "$addr" "$recipient")" \
+  0 "absent allowance"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'grant(address,address,uint256)' "$token" "$recipient" 40 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$token" \
+  'allowance(address,address)(uint256)' "$addr" "$recipient")" \
+  40 "token allowance after grant"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowed(address,address,address)(uint256)' "$token" "$addr" "$recipient")" \
+  40 "vault allowed after grant"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'mint(address,uint256)' "$sender" 200 >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'approve(address,uint256)' "$addr" 80 >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'take(address,address,address,uint256)' "$token" "$sender" "$recipient" 25 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$token" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  175 "owner after vault take"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$token" \
+  'balanceOf(address)(uint256)' "$recipient")" \
+  175 "recipient after vault take"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$token" \
+  'allowance(address,address)(uint256)' "$sender" "$addr")" \
+  55 "remaining allowance after take"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'take(address,address,address,uint256)' "$token" "$sender" "$recipient" 1000 >/dev/null 2>&1; then
+  echo "FAIL: over-allowance take unexpectedly succeeded" >&2
+  exit 1
+fi
+
+echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom; engineering only)"

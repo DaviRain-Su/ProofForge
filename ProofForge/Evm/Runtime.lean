@@ -143,6 +143,21 @@ def evmSelf20 : Addr20 :=
 @[irreducible] def evmTokenBalanceOfSelf (_token : Addr20) : UInt256 :=
   ⟨0, 0, 0, 0⟩
 
+/-- 封闭 ERC-20 `approve(address,uint256)`。失败 / 假返回 revert。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmTokenApprove
+    (_token _spender : Addr20) (amt : UInt256) : UInt64 :=
+  amt.w0
+
+/-- 封闭 ERC-20 `transferFrom(address,address,uint256)`。失败 / 假返回 revert。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmTokenTransferFrom
+    (_token _owner _dest : Addr20) (amt : UInt256) : UInt64 :=
+  amt.w0
+
+/-- 封闭 ERC-20 `allowance(owner,spender)`。完整 256-bit。宿主返回 0。 -/
+@[irreducible] def evmTokenAllowanceOf
+    (_token _owner _spender : Addr20) : UInt256 :=
+  ⟨0, 0, 0, 0⟩
+
 /-- checked `a + b`。溢出 revert。宿主返回 `a`。 -/
 @[irreducible] def evmAdd256 (a b : UInt256) : UInt256 :=
   let _ := b; a
