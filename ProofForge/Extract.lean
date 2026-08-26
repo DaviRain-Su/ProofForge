@@ -3616,6 +3616,40 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogApproval ||
       endsWith app ".evmLogApproval" then
     some (.evmLog "Approval" (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogTransfer256 ||
+      endsWith app ".evmLogTransfer256" then
+    match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+    | some src, some dest, some amt =>
+      let (f0, f1, f2) := addr20Leaves env src
+      let (t0, t1, t2) := addr20Leaves env dest
+      let (a0, a1, a2, a3) := uint256Leaves env amt
+      some (.evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3)
+    | _, _, _ =>
+      some (.evmLogTransfer256 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5)
+        (.arg 6) (.arg 7) (.arg 8) (.arg 9))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogApproval256 ||
+      endsWith app ".evmLogApproval256" then
+    match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+    | some owner, some spender, some amt =>
+      let (o0, o1, o2) := addr20Leaves env owner
+      let (s0, s1, s2) := addr20Leaves env spender
+      let (a0, a1, a2, a3) := uint256Leaves env amt
+      some (.evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3)
+    | _, _, _ =>
+      some (.evmLogApproval256 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5)
+        (.arg 6) (.arg 7) (.arg 8) (.arg 9))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmRevertInsufficient ||
+      endsWith app ".evmRevertInsufficient" then
+    match nthFromEnd args 1, nthFromEnd args 0 with
+    | some haveAmt, some wantAmt =>
+      let (h0, h1, h2, h3) := uint256Leaves env haveAmt
+      let (w0, w1, w2, w3) := uint256Leaves env wantAmt
+      some (.evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3)
+    | _, _ =>
+      some (.evmRevertInsufficient (.arg 0) (.arg 1) (.arg 2) (.arg 3)
+        (.arg 4) (.arg 5) (.arg 6) (.arg 7))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmReceive || endsWith app ".evmReceive" then
+    some .evmReceive
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
     some (.mapSetU64 (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetAddr || endsWith app ".evmMapSetAddr" then
@@ -3677,6 +3711,10 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
     (``ProofForge.Evm.Runtime.evmLogIncremented, ".evmLogIncremented"),
     (``ProofForge.Evm.Runtime.evmLogTransfer, ".evmLogTransfer"),
     (``ProofForge.Evm.Runtime.evmLogApproval, ".evmLogApproval"),
+    (``ProofForge.Evm.Runtime.evmLogTransfer256, ".evmLogTransfer256"),
+    (``ProofForge.Evm.Runtime.evmLogApproval256, ".evmLogApproval256"),
+    (``ProofForge.Evm.Runtime.evmRevertInsufficient, ".evmRevertInsufficient"),
+    (``ProofForge.Evm.Runtime.evmReceive, ".evmReceive"),
     (``ProofForge.Evm.Runtime.evmMapSetU64, ".evmMapSetU64"),
     (``ProofForge.Evm.Runtime.evmMapSetAddr, ".evmMapSetAddr"),
     (``ProofForge.Evm.Runtime.evmMapSetPair, ".evmMapSetPair"),
@@ -3707,6 +3745,10 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   | some (.evmDeposit v) => v
   | some (.evmSendEth _ _ _ v) => v
   | some (.evmLog _ v) => v
+  | some (.evmLogTransfer256 _ _ _ _ _ _ a0 _ _ _) => a0
+  | some (.evmLogApproval256 _ _ _ _ _ _ a0 _ _ _) => a0
+  | some (.evmRevertInsufficient h0 _ _ _ _ _ _ _) => h0
+  | some .evmReceive => .lit 0
   | some (.mapSetU64 _ _ v) => v
   | some (.mapSetAddr _ _ _ _ v) => v
   | some (.mapSetPair _ _ _ _ _ _ _ v) => v
@@ -5586,6 +5628,19 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
       | .evmLog n v => .evmLog n (flipVal fuel' v)
+      | .evmLogTransfer256 a b c d e f g0 g1 g2 g3 =>
+          .evmLogTransfer256 (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f)
+            (flipVal fuel' g0) (flipVal fuel' g1) (flipVal fuel' g2) (flipVal fuel' g3)
+      | .evmLogApproval256 a b c d e f g0 g1 g2 g3 =>
+          .evmLogApproval256 (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f)
+            (flipVal fuel' g0) (flipVal fuel' g1) (flipVal fuel' g2) (flipVal fuel' g3)
+      | .evmRevertInsufficient a b c d e f g h =>
+          .evmRevertInsufficient (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d) (flipVal fuel' e) (flipVal fuel' f)
+            (flipVal fuel' g) (flipVal fuel' h)
+      | .evmReceive => .evmReceive
       | .forAccum n v resultLocal => .forAccum n (flipVal fuel' v) resultLocal
       | .forBody n body => .forBody n (body.map (flipOp fuel'))
       | .indexSetLeaf n i v k leaf =>
@@ -5909,6 +5964,16 @@ private def opFields : Ops.Op → Array String
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v
+  | .evmLogTransfer256 a b c d e f g0 g1 g2 g3 =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d ++ valFields e ++
+        valFields f ++ valFields g0 ++ valFields g1 ++ valFields g2 ++ valFields g3
+  | .evmLogApproval256 a b c d e f g0 g1 g2 g3 =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d ++ valFields e ++
+        valFields f ++ valFields g0 ++ valFields g1 ++ valFields g2 ++ valFields g3
+  | .evmRevertInsufficient a b c d e f g h =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d ++
+        valFields e ++ valFields f ++ valFields g ++ valFields h
+  | .evmReceive => #[]
   | .forAccum _ v _ => valFields v
   | .forBody _ body => body.flatMap opFields
   | .indexSetLeaf _ i v _ _ | .indexSet _ i v _ _ => valFields i ++ valFields v
@@ -6028,6 +6093,19 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
             (← normalizeVal c) (← normalizeVal d)
       | .evmLog n v => return .evmLog n (← normalizeVal v)
+      | .evmLogTransfer256 a b c d e f g0 g1 g2 g3 =>
+          return .evmLogTransfer256 (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+            (← normalizeVal d) (← normalizeVal e) (← normalizeVal f)
+            (← normalizeVal g0) (← normalizeVal g1) (← normalizeVal g2) (← normalizeVal g3)
+      | .evmLogApproval256 a b c d e f g0 g1 g2 g3 =>
+          return .evmLogApproval256 (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+            (← normalizeVal d) (← normalizeVal e) (← normalizeVal f)
+            (← normalizeVal g0) (← normalizeVal g1) (← normalizeVal g2) (← normalizeVal g3)
+      | .evmRevertInsufficient a b c d e f g h =>
+          return .evmRevertInsufficient (← normalizeVal a) (← normalizeVal b)
+            (← normalizeVal c) (← normalizeVal d) (← normalizeVal e) (← normalizeVal f)
+            (← normalizeVal g) (← normalizeVal h)
+      | .evmReceive => pure .evmReceive
       | .mapGetU64 b k => return .mapGetU64 (← normalizeVal b) (← normalizeVal k)
       | .mapSetU64 b k v =>
           return .mapSetU64 (← normalizeVal b) (← normalizeVal k) (← normalizeVal v)
@@ -6120,6 +6198,13 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
         bump.bind (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
+  | .evmLogTransfer256 a b c d e f g h i j =>
+      #[a, b, c, d, e, f, g, h, i, j].findSome? (valEscapedArg limit)
+  | .evmLogApproval256 a b c d e f g h i j =>
+      #[a, b, c, d, e, f, g, h, i, j].findSome? (valEscapedArg limit)
+  | .evmRevertInsufficient a b c d e f g h =>
+      #[a, b, c, d, e, f, g, h].findSome? (valEscapedArg limit)
+  | .evmReceive => none
   | .forBody _ body => body.findSome? (opEscapedArg limit)
   | .indexSetLeaf _ i v _ _ | .indexSet _ i v _ _ | .mapGetU64 i v =>
       #[i, v].findSome? (valEscapedArg limit)

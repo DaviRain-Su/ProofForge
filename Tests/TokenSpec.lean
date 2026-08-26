@@ -28,30 +28,32 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 #guard ProofForge.Evm.Keccak.keccak256HexOfString "Transfer(uint64)" !=
   ProofForge.Evm.Keccak.keccak256HexOfString "Approval(uint64)"
 
-#guard
-  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedToken with
-  | .error _ => false
-  | .ok p =>
-      match ProofForge.Evm.Emit.emitYul p, ProofForge.Evm.Emit.emitAbi p with
-      | .error _, _ => false
-      | .ok yul, abi =>
-          yul.contains "keccak256(0, 128)" &&
-            yul.contains "keccak256(0, 224)" &&
-            yul.contains "log1(0, 32, 0x" &&
-            yul.contains "revert(0, 4)" &&
-            abi.contains "\"type\":\"event\"" &&
-            abi.contains "\"name\":\"Transfer\"" &&
-            abi.contains "\"name\":\"Approval\""
+#guard ProofForge.Evm.Keccak.keccak256HexOfString "Transfer(address,address,uint256)" !=
+  ProofForge.Evm.Keccak.keccak256HexOfString "Transfer(uint64)"
 
 #guard
-  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedToken with
-  | .error _ => false
-  | .ok p =>
-      (p.entries.find? (·.ixName == "transfer")).isSome &&
-        (p.entries.find? (·.ixName == "transferFrom")).isSome &&
-        (p.entries.find? (·.ixName == "approve")).isSome &&
-        (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&
-        (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true
+  let p := ProofForge.Evm.Golden.extractedToken
+  match ProofForge.Evm.Emit.emitYul p, ProofForge.Evm.Emit.emitAbi p with
+  | .error _, _ => false
+  | .ok yul, abi =>
+      yul.contains "keccak256(0, 128)" &&
+        yul.contains "keccak256(0, 224)" &&
+        yul.contains "log1(0, 32, 0x" &&
+        yul.contains "log3(0, 32, 0x" &&
+        yul.contains "revert(0, 68)" &&
+        abi.contains "\"type\":\"event\"" &&
+        abi.contains "\"name\":\"Transfer\"" &&
+        abi.contains "\"name\":\"Approval\"" &&
+        abi.contains "\"name\":\"Insufficient\"" &&
+        abi.contains "\"type\":\"error\""
+
+#guard
+  let p := ProofForge.Evm.Golden.extractedToken
+  (p.entries.find? (·.ixName == "transfer")).isSome &&
+    (p.entries.find? (·.ixName == "transferFrom")).isSome &&
+    (p.entries.find? (·.ixName == "approve")).isSome &&
+    (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedToken with

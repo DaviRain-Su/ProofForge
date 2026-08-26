@@ -764,6 +764,82 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "log1(0, 32, 0x" ++
             Keccak.keccak256HexOfString (name ++ "(uint64)") ++ ")" ++ nl
         st := { st with last := some amt }
+    | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths f0 st
+        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths f1 s0
+        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths f2 s1
+        let (q0, y0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths t0 s2
+        let (q1, y1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths t1 s3
+        let (q2, y2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths t2 s4
+        let (r0, z0, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s5
+        let (r1, z1, s7) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s6
+        let (r2, z2, s8) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s7
+        let (r3, z3, s9) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s8
+        let (fromT, s10) := fresh s9
+        let (toT, s11) := fresh s10
+        let (amt, s12) := fresh s11
+        st := s12
+        acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ r0 ++ r1 ++ r2 ++ r3 ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent x0 x1 x2 ++
+          indent ++ "let " ++ fromT ++ " := mload(0)" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent y0 y1 y2 ++
+          indent ++ "let " ++ toT ++ " := mload(0)" ++ nl ++
+          indent ++ "let " ++ amt ++ " := " ++ packU256 z0 z1 z2 z3 ++ nl ++
+          indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
+          indent ++ "log3(0, 32, 0x" ++
+            Keccak.keccak256HexOfString "Transfer(address,address,uint256)" ++
+            ", " ++ fromT ++ ", " ++ toT ++ ")" ++ nl
+        st := { st with last := some z0 }
+    | .evmLogApproval256 o0 o1 o2 sp0 sp1 sp2 a0 a1 a2 a3 =>
+        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st
+        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths o1 s0
+        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths o2 s1
+        let (q0, y0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths sp0 s2
+        let (q1, y1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths sp1 s3
+        let (q2, y2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths sp2 s4
+        let (r0, z0, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s5
+        let (r1, z1, s7) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s6
+        let (r2, z2, s8) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s7
+        let (r3, z3, s9) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s8
+        let (ownT, s10) := fresh s9
+        let (spdT, s11) := fresh s10
+        let (amt, s12) := fresh s11
+        st := s12
+        acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ r0 ++ r1 ++ r2 ++ r3 ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent x0 x1 x2 ++
+          indent ++ "let " ++ ownT ++ " := mload(0)" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent y0 y1 y2 ++
+          indent ++ "let " ++ spdT ++ " := mload(0)" ++ nl ++
+          indent ++ "let " ++ amt ++ " := " ++ packU256 z0 z1 z2 z3 ++ nl ++
+          indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
+          indent ++ "log3(0, 32, 0x" ++
+            Keccak.keccak256HexOfString "Approval(address,address,uint256)" ++
+            ", " ++ ownT ++ ", " ++ spdT ++ ")" ++ nl
+        st := { st with last := some z0 }
+    | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths h0 st
+        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths h1 s0
+        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths h2 s1
+        let (p3, x3, s3) ← materializeVal p indent paramPrefix paramCount paramWidths h3 s2
+        let (q0, y0, s4) ← materializeVal p indent paramPrefix paramCount paramWidths w0 s3
+        let (q1, y1, s5) ← materializeVal p indent paramPrefix paramCount paramWidths w1 s4
+        let (q2, y2, s6) ← materializeVal p indent paramPrefix paramCount paramWidths w2 s5
+        let (q3, y3, s7) ← materializeVal p indent paramPrefix paramCount paramWidths w3 s6
+        st := s7
+        let sel := Keccak.selector "Insufficient" #["uint256", "uint256"]
+        acc := acc ++ p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
+          indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
+          indent ++ "mstore(4, " ++ packU256 x0 x1 x2 x3 ++ ")" ++ nl ++
+          indent ++ "mstore(36, " ++ packU256 y0 y1 y2 y3 ++ ")" ++ nl ++
+          indent ++ "revert(0, 68)" ++ nl
+        st := { st with last := some x0 }
+    | .evmReceive =>
+        acc := acc ++ indent ++ "let pf_recv := callvalue()" ++ nl
+        st := { st with last := some "pf_recv" }
     | .forAccum n addend resultLocal =>
         let accN := s!"l{resultLocal}"
         let (iN, st2) := fresh st
@@ -1551,6 +1627,15 @@ private def renderRuntimeCopy (runtimeName : String) : String :=
 private def hasPayableEntry (p : IR.Program) : Bool :=
   p.entries.any (·.payable)
 
+private def renderReceive (p : IR.Program) (m : IR.Method) : Except String String := do
+  if !IR.hasEvmReceive m.ops then
+    throw s!"extract/unsupported: receive missing evmReceive in {m.ixName}"
+  match emitCFGEntry p m with
+  | .error reason => throw s!"{reason} in {m.ixName}"
+  | .ok "" => throw s!"extract/unsupported: empty ops {m.ixName}"
+  | .ok body =>
+      pure ("      if iszero(calldatasize()) {" ++ nl ++ body ++ "      }" ++ nl)
+
 private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool) :
     Except String String := do
   let calldataBytes := 4 + m.paramCount * 32
@@ -1584,9 +1669,13 @@ def emitYul (p : IR.Program) : Except String String := do
   let ctorHead := renderCtorPrelude p.name p.constructor.paramCount p.constructor.paramWidths
   let ctorStores ← emitConstructorStores p
   let anyPay := hasPayableEntry p
+  let mut receiveTxt := ""
   let mut entries := ""
   for m in p.entries do
-    entries := entries ++ (← renderEntry p m anyPay)
+    if m.ixName == "receive" then
+      receiveTxt := receiveTxt ++ (← renderReceive p m)
+    else
+      entries := entries ++ (← renderEntry p m anyPay)
   let globalGuard :=
     if anyPay then ""
     else "      if callvalue() { " ++ revert0 ++ " }" ++ nl
@@ -1600,6 +1689,7 @@ def emitYul (p : IR.Program) : Except String String := do
     "  object " ++ q runtimeName ++ " {" ++ nl ++
     "    code {" ++ nl ++
     globalGuard ++
+    receiveTxt ++
     "      if lt(calldatasize(), 4) { " ++ revert0 ++ " }" ++ nl ++
     "      switch shr(224, calldataload(0))" ++ nl ++
     entries ++
@@ -1644,8 +1734,24 @@ private def entryAbi (m : IR.Method) : String :=
     "],\"outputs\":" ++ outputsJson m ++ "}"
 
 private def eventAbi (name : String) : String :=
-  "{\"type\":\"event\",\"name\":\"" ++ escapeJson name ++
-    "\",\"inputs\":[{\"name\":\"amt\",\"type\":\"uint64\",\"indexed\":false}],\"anonymous\":false}"
+  if name == "Transfer256" then
+    "{\"type\":\"event\",\"name\":\"Transfer\",\"inputs\":[" ++
+      "{\"name\":\"from\",\"type\":\"address\",\"indexed\":true}," ++
+      "{\"name\":\"to\",\"type\":\"address\",\"indexed\":true}," ++
+      "{\"name\":\"value\",\"type\":\"uint256\",\"indexed\":false}],\"anonymous\":false}"
+  else if name == "Approval256" then
+    "{\"type\":\"event\",\"name\":\"Approval\",\"inputs\":[" ++
+      "{\"name\":\"owner\",\"type\":\"address\",\"indexed\":true}," ++
+      "{\"name\":\"spender\",\"type\":\"address\",\"indexed\":true}," ++
+      "{\"name\":\"value\",\"type\":\"uint256\",\"indexed\":false}],\"anonymous\":false}"
+  else
+    "{\"type\":\"event\",\"name\":\"" ++ escapeJson name ++
+      "\",\"inputs\":[{\"name\":\"amt\",\"type\":\"uint64\",\"indexed\":false}],\"anonymous\":false}"
+
+private def errorAbi : String :=
+  "{\"type\":\"error\",\"name\":\"Insufficient\",\"inputs\":[" ++
+    "{\"name\":\"have\",\"type\":\"uint256\"}," ++
+    "{\"name\":\"want\",\"type\":\"uint256\"}]}"
 
 private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
   match fuel with
@@ -1654,18 +1760,43 @@ private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
     ops.foldl (init := #[]) fun acc op =>
       match op with
       | .evmLog n _ => if acc.contains n then acc else acc.push n
+      | .evmLogTransfer256 .. => if acc.contains "Transfer256" then acc else acc.push "Transfer256"
+      | .evmLogApproval256 .. => if acc.contains "Approval256" then acc else acc.push "Approval256"
       | .ite _ _ _ t f =>
         (collectLogNames fuel' t ++ collectLogNames fuel' f).foldl (init := acc) fun acc n =>
           if acc.contains n then acc else acc.push n
       | _ => acc
+
+private def hasInsufficient (fuel : Nat) (ops : Array IR.Op) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel' + 1 =>
+    ops.any fun
+      | .evmRevertInsufficient .. => true
+      | .ite _ _ _ t f => hasInsufficient fuel' t || hasInsufficient fuel' f
+      | _ => false
+
+private def receiveAbi : String :=
+  "{\"type\":\"receive\",\"stateMutability\":\"payable\"}"
 
 def emitAbi (p : IR.Program) : String :=
   let evs :=
     p.entries.foldl (init := #[]) fun acc m =>
       (collectLogNames 8 m.ops).foldl (init := acc) fun acc n =>
         if acc.contains n then acc else acc.push n
-  let items := #[ctorAbi p] ++ evs.map eventAbi ++ p.entries.map entryAbi
-  "[\n  " ++ String.intercalate ",\n  " items.toList ++ "\n]\n"
+  let needErr := p.entries.any (fun m => hasInsufficient 8 m.ops)
+  let needRecv := p.entries.any (fun m => m.ixName == "receive")
+  let items :=
+    #[ctorAbi p] ++ evs.map eventAbi ++
+      (if needErr then #[errorAbi] else #[]) ++
+      (if needRecv then #[receiveAbi] else #[]) ++
+      p.entries.filterMap fun m =>
+        if m.ixName == "receive" then none else some (entryAbi m)
+  "[
+  " ++ String.intercalate ",
+  " items.toList ++ "
+]
+"
 
 def emit (p : IR.Program) : Except String (String × String) := do
   let yul ← emitYul p

@@ -21,6 +21,10 @@ inductive Op where
   | evmDeposit (amount : Ops.Val)
   | evmSendEth (w0 w1 w2 amount : Ops.Val)
   | evmLog (name : String) (amount : Ops.Val)
+  | evmLogTransfer256 (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : Ops.Val)
+  | evmLogApproval256 (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : Ops.Val)
+  | evmRevertInsufficient (h0 h1 h2 h3 w0 w1 w2 w3 : Ops.Val)
+  | evmReceive
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -68,6 +72,13 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .ext (.deposit amount) => pure (.evmDeposit amount)
   | .ext (.sendEth w0 w1 w2 amount) => pure (.evmSendEth w0 w1 w2 amount)
   | .ext (.log name amount) => pure (.evmLog name amount)
+  | .ext (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3) =>
+      pure (.evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3)
+  | .ext (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3) =>
+      pure (.evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3)
+  | .ext (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3) =>
+      pure (.evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3)
+  | .ext .receive => pure .evmReceive
   | .ext (.mapGetU64 base key) => pure (.mapGetU64 base key)
   | .ext (.mapSetU64 base key value) => pure (.mapSetU64 base key value)
   | .ext (.mapGetAddr base w0 w1 w2) => pure (.mapGetAddr base w0 w1 w2)
@@ -108,6 +119,13 @@ private partial def Op.toSource : Op → Ops.Op
   | .evmDeposit amount => .ext (.deposit amount)
   | .evmSendEth w0 w1 w2 amount => .ext (.sendEth w0 w1 w2 amount)
   | .evmLog name amount => .ext (.log name amount)
+  | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+      .ext (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3)
+  | .evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+      .ext (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3)
+  | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+      .ext (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3)
+  | .evmReceive => .ext .receive
   | .forAccum bound addend resultLocal => .forAccum bound addend resultLocal
   | .forBody bound body => .forBody bound (toSourceOps body)
   | .indexSet name index value len elemOff => .indexSet name index value len elemOff
@@ -147,6 +165,18 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
   | .sendEth w0 w1 w2 amount =>
       .sendEth (mapValue w0) (mapValue w1) (mapValue w2) (mapValue amount)
   | .log name amount => .log name (mapValue amount)
+  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+      .logTransfer256 (mapValue f0) (mapValue f1) (mapValue f2)
+        (mapValue t0) (mapValue t1) (mapValue t2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+      .logApproval256 (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+      .revertInsufficient (mapValue h0) (mapValue h1) (mapValue h2) (mapValue h3)
+        (mapValue w0) (mapValue w1) (mapValue w2) (mapValue w3)
+  | .receive => .receive
   | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
   | .mapSetU64 base key value =>
       .mapSetU64 (mapValue base) (mapValue key) (mapValue value)
@@ -180,6 +210,13 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .deposit amount | .log _ amount => #[amount]
   | .sendEth w0 w1 w2 amount => #[w0, w1, w2, amount]
+  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+      #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3]
+  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+      #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3]
+  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+      #[h0, h1, h2, h3, w0, w1, w2, w3]
+  | .receive => #[]
   | .mapGetU64 base key => #[base, key]
   | .mapSetU64 base key value => #[base, key, value]
   | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2]
@@ -217,6 +254,19 @@ private def projectOpExt
           return .sendEth (← projectVal w0) (← projectVal w1) (← projectVal w2)
             (← projectVal amount)
       | .log name amount => return .log name (← projectVal amount)
+      | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+          return .logTransfer256 (← projectVal f0) (← projectVal f1) (← projectVal f2)
+            (← projectVal t0) (← projectVal t1) (← projectVal t2)
+            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
+      | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+          return .logApproval256 (← projectVal o0) (← projectVal o1) (← projectVal o2)
+            (← projectVal s0) (← projectVal s1) (← projectVal s2)
+            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
+      | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+          return .revertInsufficient (← projectVal h0) (← projectVal h1)
+            (← projectVal h2) (← projectVal h3) (← projectVal w0) (← projectVal w1)
+            (← projectVal w2) (← projectVal w3)
+      | .receive => return .receive
       | .mapGetU64 base key => return .mapGetU64 (← projectVal base) (← projectVal key)
       | .mapSetU64 base key value =>
           return .mapSetU64 (← projectVal base) (← projectVal key) (← projectVal value)
@@ -295,6 +345,9 @@ def hasCheckedArith (ops : Array Op) : Bool :=
 
 def hasEvmDeposit (ops : Array Op) : Bool :=
   walk 16 ops fun | .evmDeposit _ => true | _ => false
+
+def hasEvmReceive (ops : Array Op) : Bool :=
+  walk 16 ops fun | .evmReceive => true | _ => false
 
 structure Slot where
   place : Option Core.Place := none
@@ -530,7 +583,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       ops
       evaluation
       view
-      payable := !view && hasEvmDeposit ops
+      payable := !view && (hasEvmDeposit ops || hasEvmReceive ops)
     }
   let slots := source.slots.mapIdx fun i s =>
     { place := (source.schema.leaves[i]?).map (·.place), name := s.name, index := i,
@@ -611,6 +664,13 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
     | .evmLog n v => s!"elog.{n}({valCanon v})"
+    | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+        s!"elog3.Transfer({valCanon f0},{valCanon f1},{valCanon f2},{valCanon t0},{valCanon t1},{valCanon t2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"
+    | .evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+        s!"elog3.Approval({valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"
+    | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+        s!"err.Insufficient({valCanon h0},{valCanon h1},{valCanon h2},{valCanon h3},{valCanon w0},{valCanon w1},{valCanon w2},{valCanon w3})"
+    | .evmReceive => "erecv"
     | .forAccum n v resultLocal => s!"for.{resultLocal}({n},{valCanon v})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
     | .indexSet n i v k off =>

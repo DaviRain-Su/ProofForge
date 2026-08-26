@@ -17,7 +17,6 @@ def sources : Array Extract.Legacy.Program := #[
   ProofForge.Golden.extractedFlag,
   ProofForge.Golden.extractedMaybe,
   ProofForge.Golden.extractedEvmCtx,
-  ProofForge.Golden.extractedTipJar,
   ProofForge.Golden.extractedLang,
   ProofForge.Golden.extractedOwnable
 ]
@@ -91,6 +90,32 @@ private def dummyGet (mod : String) : IR.Method :=
     ixName := "get"
     selector := Keccak.selectorOfWidths "get" #[]
     ops := #[.returnU64 (.lit 0)]
+    view := true
+  }
+
+private def payEntry (mod ix : String) (paramCount : Nat) (widths : Array Nat)
+    (ops : Array IR.Op) : IR.Method :=
+  { mutEntry mod ix paramCount widths ops with payable := true }
+
+private def viewEnv (mod ix : String) (v : Ops.Val) : IR.Method :=
+  {
+    kind := .get
+    name := s!"Examples.{mod}.{ix}"
+    ixName := ix
+    selector := Keccak.selectorOfWidths ix #[]
+    ops := #[.returnU64 v]
+    view := true
+  }
+
+private def viewAddr20 (mod ix : String) (w0 w1 w2 : Ops.Val) : IR.Method :=
+  {
+    kind := .get
+    name := s!"Examples.{mod}.{ix}"
+    ixName := ix
+    selector := Keccak.selectorOfWidths ix #[]
+    retWidths := #[20]
+    retCount := 3
+    ops := #[.returnU64 w0, .returnU64 w1, .returnU64 w2]
     view := true
   }
 
@@ -250,7 +275,9 @@ def extractedToken : IR.Program :=
               (callerW 0) (callerW 1) (callerW 2)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
-            .evmLog "Approval" (u256Field 1 "w0"),
+            .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
@@ -267,6 +294,9 @@ def extractedToken : IR.Program :=
       mutEntry "Token" "mint" 2 #[20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
           #[setAddr256 0 0 (fun limb => u256Field 1 (limbName limb)),
+            .evmLogTransfer256 (.lit 0) (.lit 0) (.lit 0)
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
@@ -274,9 +304,13 @@ def extractedToken : IR.Program :=
         .ite .eq (ge256 callerBal 1) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
             setAddr256 0 0 (fun limb => arithGet 0 limb destBal 1),
-            .evmLog "Transfer" (u256Field 1 "w0"),
+            .evmLogTransfer256 (callerW 0) (callerW 1) (callerW 2)
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
             .returnU64 (u256Field 1 "w0")]
-          #[.errorNamed "insufficient"]
+          #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            .returnU64 (callerBal 0)]
       ],
       mutEntry "Token" "transferFrom" 3 #[20, 20, 32] #[
         .ite .eq (ge256 pairAllow 2) (.lit 1)
@@ -284,10 +318,16 @@ def extractedToken : IR.Program :=
               #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 2),
                 setAddr256 0 1 (fun limb => arithGet 0 limb destFrom 2),
                 setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 2),
-                .evmLog "Transfer" (u256Field 2 "w0"),
+                .evmLogTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+                  (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
+                  (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
                 .returnU64 (u256Field 2 "w0")]
-              #[.errorNamed "insufficient"]]
-          #[.errorNamed "insufficient"]
+              #[.evmRevertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3)
+                  (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
+                .returnU64 (ownerBal 0)]]
+          #[.evmRevertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3)
+              (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
+            .returnU64 (pairAllow 0)]
       ],
       view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
       view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
@@ -295,11 +335,56 @@ def extractedToken : IR.Program :=
     ]
   }
 
+/-- Live extract of `Examples.TipJar`; Legacy IR cannot represent `receive()`. -/
+def extractedTipJar : IR.Program :=
+  {
+    name := "TipJar"
+    slots := dummySlot
+    constructor := dummyCtor "TipJar"
+    entries := #[
+      payEntry "TipJar" "deposit" 1 #[8] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmDeposit (.arg 0), .returnU64 (.arg 0)]
+          #[.errorOverflow]
+      ],
+      mutEntry "TipJar" "logTip" 1 #[8] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmLog "Tipped" (.arg 0), .returnU64 (.arg 0)]
+          #[.errorOverflow]
+      ],
+      mutEntry "TipJar" "payout" 2 #[20, 8] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmSendEth (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (.arg 1),
+            .returnU64 (.arg 1)]
+          #[.errorOverflow]
+      ],
+      payEntry "TipJar" "receive" 0 #[] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmReceive, .returnU64 (.lit 0)]
+          #[.errorOverflow]
+      ],
+      viewEnv "TipJar" "callValue" (.ext .callValue #[]),
+      viewAddr20 "TipJar" "caller20" (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[]),
+      viewEnv "TipJar" "callerW0" (.ext .callerW0 #[]),
+      viewEnv "TipJar" "callerW1" (.ext .callerW1 #[]),
+      viewEnv "TipJar" "callerW2" (.ext .callerW2 #[]),
+      viewEnv "TipJar" "chainId" (.ext .chainId #[]),
+      dummyGet "TipJar",
+      viewAddr20 "TipJar" "self20" (.ext .selfW0 #[]) (.ext .selfW1 #[]) (.ext .selfW2 #[]),
+      viewEnv "TipJar" "selfBal" (.ext .selfBalance #[]),
+      viewEnv "TipJar" "selfLow" (.ext .self #[]),
+      viewEnv "TipJar" "selfW0" (.ext .selfW0 #[]),
+      viewEnv "TipJar" "selfW1" (.ext .selfW1 #[]),
+      viewEnv "TipJar" "selfW2" (.ext .selfW2 #[]),
+      viewEnv "TipJar" "timestamp" (.ext .timestamp #[])
+    ]
+  }
+
 def programs : Array IR.Program :=
   (sources.filterMap fun src =>
     match IR.fromProgram src with
     | .ok p => some p
-    | .error _ => none) ++ #[extractedVault, extractedToken, extractedWide]
+    | .error _ => none) ++ #[extractedTipJar, extractedVault, extractedToken, extractedWide]
 
 def digestOf (name : String) : Option String :=
   (programs.find? (·.name == name)).map IR.digestHex

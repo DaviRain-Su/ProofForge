@@ -41,6 +41,14 @@ def logTip (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+/-- 无 calldata 的 payable `receive()`。 -/
+@[pf_entry]
+def receive (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmReceive)
+  else
+    .error .overflow
+
 @[pf_entry]
 def chainId (_s : State) : UInt64 :=
   evmChainId

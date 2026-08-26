@@ -11,7 +11,6 @@ structure State where
 
 inductive Error where
   | overflow
-  | insufficient
   deriving Repr, DecidableEq, Inhabited, BEq
 
 def balBase : UInt64 := 0
@@ -25,7 +24,8 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def mint (_s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmMapSetAddr256 balBase to v)
+    .ok ({ dummy := evmMapSetAddr256 balBase to v },
+      evmLogTransfer256 ⟨0, 0, 0⟩ to v)
   else
     .error .overflow
 
@@ -37,17 +37,17 @@ def balanceOf (_s : State) (who : Addr20) : UInt256 :=
 def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
   evmMapGetPair256 allowBase owner spender
 
-/-- caller → spender 写额度，并 LOG `Approval(uint64)`。 -/
+/-- caller → spender 写额度，并 LOG3 `Approval(address,address,uint256)`。 -/
 @[pf_entry]
 def approve (_s : State) (spender : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     .ok ({ dummy :=
         evmMapSetPair256 allowBase evmCaller20 spender amt },
-      evmLogApproval amt.w0)
+      evmLogApproval256 evmCaller20 spender amt)
   else
     .error .overflow
 
-/-- 从 caller 扣、给 dest 加。不足 → `insufficient`。 -/
+/-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
 def transfer (_s : State) (dest : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
   if evmGe256 (evmMapGetAddr256 balBase evmCaller20) amt then
@@ -56,11 +56,12 @@ def transfer (_s : State) (dest : Addr20) (amt : UInt256) : Except Error (State 
           (evmSub256 (evmMapGetAddr256 balBase evmCaller20) amt)) |||
         (evmMapSetAddr256 balBase dest
           (evmAdd256 (evmMapGetAddr256 balBase dest) amt)) },
-      evmLogTransfer amt.w0)
+      evmLogTransfer256 evmCaller20 dest amt)
   else
-    .error .insufficient
+    .ok ({ dummy := 0 },
+      evmRevertInsufficient (evmMapGetAddr256 balBase evmCaller20) amt)
 
-/-- 查 pair 额度；不足 → `insufficient`。成功则改余额并写剩余额度。 -/
+/-- 查 pair 额度；不足 → `Insufficient`。成功则改余额并写剩余额度。 -/
 @[pf_entry]
 def transferFrom (_s : State) (owner dest : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
@@ -73,11 +74,13 @@ def transferFrom (_s : State) (owner dest : Addr20) (amt : UInt256) :
             (evmAdd256 (evmMapGetAddr256 balBase dest) amt)) |||
           (evmMapSetPair256 allowBase owner evmCaller20
             (evmSub256 (evmMapGetPair256 allowBase owner evmCaller20) amt)) },
-        evmLogTransfer amt.w0)
+        evmLogTransfer256 owner dest amt)
     else
-      .error .insufficient
+      .ok ({ dummy := 0 },
+        evmRevertInsufficient (evmMapGetAddr256 balBase owner) amt)
   else
-    .error .insufficient
+    .ok ({ dummy := 0 },
+      evmRevertInsufficient (evmMapGetPair256 allowBase owner evmCaller20) amt)
 
 /-- LOG1 `Transfer(uint64)`。 -/
 @[pf_entry]

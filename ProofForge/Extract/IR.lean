@@ -45,6 +45,18 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
   | .sendEth w0 w1 w2 amount => .sendEth (mapValue w0) (mapValue w1) (mapValue w2)
       (mapValue amount)
   | .log name amount => .log name (mapValue amount)
+  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+      .logTransfer256 (mapValue f0) (mapValue f1) (mapValue f2)
+        (mapValue t0) (mapValue t1) (mapValue t2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+      .logApproval256 (mapValue o0) (mapValue o1) (mapValue o2)
+        (mapValue s0) (mapValue s1) (mapValue s2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
+  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+      .revertInsufficient (mapValue h0) (mapValue h1) (mapValue h2) (mapValue h3)
+        (mapValue w0) (mapValue w1) (mapValue w2) (mapValue w3)
+  | .receive => .receive
   | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
   | .mapSetU64 base key value => .mapSetU64 (mapValue base) (mapValue key) (mapValue value)
   | .mapGetAddr base w0 w1 w2 =>
@@ -77,6 +89,13 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
 private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .deposit amount | .log _ amount => #[amount]
   | .sendEth w0 w1 w2 amount => #[w0, w1, w2, amount]
+  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+      #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3]
+  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+      #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3]
+  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+      #[h0, h1, h2, h3, w0, w1, w2, w3]
+  | .receive => #[]
   | .mapGetU64 base key => #[base, key]
   | .mapSetU64 base key value => #[base, key, value]
   | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2]
@@ -126,6 +145,13 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
   | .deposit amount | .log _ amount => amount.wellFormed ValKind.arity
   | .sendEth w0 w1 w2 amount =>
       #[w0, w1, w2, amount].all (·.wellFormed ValKind.arity)
+  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+      #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
+  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+      #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
+  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+      #[h0, h1, h2, h3, w0, w1, w2, w3].all (·.wellFormed ValKind.arity)
+  | .receive => true
   | .mapGetU64 base key => #[base, key].all (·.wellFormed ValKind.arity)
   | .mapSetU64 base key value => #[base, key, value].all (·.wellFormed ValKind.arity)
   | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2].all (·.wellFormed ValKind.arity)

@@ -185,6 +185,44 @@ solana_lean_deploy_ctor_u64x3() {
   printf '%s' "$receipt" | solana_lean_contract_address
 }
 
+# eth_call must revert with ABI error Insufficient(uint256,uint256).
+solana_lean_require_insufficient() {
+  local addr="$1" from="$2" data="$3" have="$4" want="$5" message="$6"
+  local sel
+  sel="$("$cast" keccak 'Insufficient(uint256,uint256)')"
+  sel="${sel#0x}"
+  sel="$(printf '%s' "$sel" | cut -c1-8 | tr 'A-Z' 'a-z')"
+  "$python" -I -S -c "
+import json, urllib.request, urllib.error
+rpc='$rpc'
+payload={
+  'jsonrpc':'2.0','id':1,'method':'eth_call',
+  'params':[{'to':'$addr','from':'$from','data':'$data'}, 'latest']
+}
+req=urllib.request.Request(rpc, data=json.dumps(payload).encode(),
+  headers={'Content-Type':'application/json'})
+try:
+    raw=urllib.request.urlopen(req).read().decode()
+except urllib.error.HTTPError as e:
+    raw=e.read().decode()
+resp=json.loads(raw)
+err=resp.get('error') or {}
+blob=(err.get('data') or '')
+if isinstance(blob, dict):
+    blob=blob.get('data') or blob.get('raw') or ''
+blob=str(blob).lower()
+if blob.startswith('0x'):
+    blob=blob[2:]
+sel='$sel'
+if len(blob) < 8+64+64 or not blob.startswith(sel):
+    raise SystemExit('FAIL: $message: missing Insufficient(have,want) (got '+repr(err)+' result='+repr(resp.get('result'))+')')
+have=int(blob[8:72], 16)
+want=int(blob[72:136], 16)
+if have != int('$have') or want != int('$want'):
+    raise SystemExit(f'FAIL: $message: Insufficient({have},{want}) != ($have,$want)')
+"
+}
+
 solana_lean_deploy_ctor_address() {
   local bytecode="$1"
   local addr="$2"

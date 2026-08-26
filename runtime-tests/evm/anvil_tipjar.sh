@@ -117,4 +117,26 @@ if int(data, 16) != 11:
     raise SystemExit(f'FAIL: log data {data} != 11')
 "
 
-echo "evm-anvil-tipjar: ok (env/deposit/payout/log; engineering only)"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'notAFunction()' >/dev/null 2>&1; then
+  echo "FAIL: unknown selector unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$addr")")" \
+  4 "unknown selector must not keep ETH"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 1 \
+    --data 0x1234 "$addr" >/dev/null 2>&1; then
+  echo "FAIL: short calldata unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$addr")")" \
+  4 "short calldata must not keep ETH"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 2 --data 0x "$addr" >/dev/null
+solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$addr")")" \
+  6 "empty-calldata receive must credit contract"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfBal()(uint64)')" \
+  6 "evmSelfBalance after receive"
+
+echo "evm-anvil-tipjar: ok (env/deposit/payout/log/receive; engineering only)"

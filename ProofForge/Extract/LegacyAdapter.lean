@@ -303,6 +303,14 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       return .evmSendEth (← toLegacyVal w0) (← toLegacyVal w1)
         (← toLegacyVal w2) (← toLegacyVal amount)
   | .ext (.evm (.log name amount)) => return .evmLog name (← toLegacyVal amount)
+  | .ext (.evm (.logTransfer256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent LOG3 Transfer"
+  | .ext (.evm (.logApproval256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent LOG3 Approval"
+  | .ext (.evm (.revertInsufficient ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent parameterized Insufficient"
+  | .ext (.evm .receive) =>
+      throw "extract/unsupported: legacy adapter cannot represent receive"
   | .ext (.evm (.mapGetU64 base key)) =>
       return .mapGetU64 (← toLegacyVal base) (← toLegacyVal key)
   | .ext (.evm (.mapSetU64 base key value)) =>

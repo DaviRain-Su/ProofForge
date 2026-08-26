@@ -77,6 +77,22 @@ def evmSelf20 : Addr20 :=
 /-- LOG1 `Approval(uint64)`。宿主返回 amt。 -/
 @[irreducible] def evmLogApproval (amt : UInt64) : UInt64 := amt
 
+/-- LOG3 `Transfer(address,address,uint256)`。indexed from/to，data 是金额。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmLogTransfer256
+    (_from _to : Addr20) (amt : UInt256) : UInt64 :=
+  amt.w0
+
+/-- LOG3 `Approval(address,address,uint256)`。indexed owner/spender。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmLogApproval256
+    (_owner _spender : Addr20) (amt : UInt256) : UInt64 :=
+  amt.w0
+
+/-- 参数化 `Insufficient(uint256,uint256)`。宿主返回 `have.w0`。 -/
+@[irreducible] def evmRevertInsufficient (_have _want : UInt256) : UInt64 := 0
+
+/-- 无 calldata 的 payable `receive()`。宿主返回 `callvalue`。 -/
+@[irreducible] def evmReceive : UInt64 := 0
+
 /-- hashed `Map` 读 payload。缺席是 0。宿主返回 0。 -/
 @[irreducible] def evmMapGetU64 (_base _key : UInt64) : UInt64 := 0
 

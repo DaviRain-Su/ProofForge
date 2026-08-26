@@ -91,6 +91,17 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.evm (.sendEth w0 w1 w2 amount))
 @[match_pattern] def Op.evmLog (name : String) (amount : Val) : Op :=
   .ext (.evm (.log name amount))
+@[match_pattern] def Op.evmLogTransfer256
+    (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3))
+@[match_pattern] def Op.evmLogApproval256
+    (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3))
+@[match_pattern] def Op.evmRevertInsufficient
+    (h0 h1 h2 h3 w0 w1 w2 w3 : Val) : Op :=
+  .ext (.evm (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3))
+@[match_pattern] def Op.evmReceive : Op :=
+  .ext (.evm .receive)
 @[match_pattern] def Op.mapGetU64 (base key : Val) : Op :=
   .ext (.evm (.mapGetU64 base key))
 @[match_pattern] def Op.mapSetU64 (base key value : Val) : Op :=
@@ -178,6 +189,13 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
+  | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
+      #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3].any predicate
+  | .evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
+      #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3].any predicate
+  | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
+      #[h0, h1, h2, h3, w0, w1, w2, w3].any predicate
+  | .evmReceive => false
   | .mapGetU64 base key => #[base, key].any predicate
   | .mapSetU64 base key value => #[base, key, value].any predicate
   | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2].any predicate
@@ -225,6 +243,8 @@ def hasLangOp (ops : Array Op) : Bool :=
 def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmLeaf ops || walk ops fun
     | .evmDeposit .. | .evmSendEth .. | .evmLog ..
+    | .evmLogTransfer256 .. | .evmLogApproval256 ..
+    | .evmRevertInsufficient .. | .evmReceive
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
     | .mapGetPair .. | .mapSetPair ..
     | .mapSetAddr256 .. | .mapSetPair256 ..
