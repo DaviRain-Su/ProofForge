@@ -4903,10 +4903,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               | 0 => false
               | fuel' + 1 => ops.any fun op =>
                   match op with
-                  | .ext (.svm (.accountStorage ..)) | .accDataRbTreeKey4Insert ..
-                  | .accDataRbTreeKey4Remove .. | .accDataRbTreeTraderDeposit ..
-                  | .accDataRbTreeOrderInsert ..
-                  | .accDataRbTreeOrderRemove .. => true
+                  | .ext (.svm (.accountStorage ..)) => true
                   | .ite _ _ _ nestedThen nestedElse =>
                       hasAccDataWrite fuel' nestedThen || hasAccDataWrite fuel' nestedElse
                   | .forBody _ body => hasAccDataWrite fuel' body
@@ -5541,34 +5538,6 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           seed (bump.map (flipVal fuel'))
       | .ext (.svm (.accountStorage call)) =>
           .ext (.svm (.accountStorage (call.mapValues (flipVal fuel'))))
-      | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity key0 key1 key2 key3 =>
-          .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            strideWords capacity (flipVal fuel' key0) (flipVal fuel' key1)
-              (flipVal fuel' key2) (flipVal fuel' key3)
-      | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity key0 key1 key2 key3 =>
-          .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            strideWords capacity (flipVal fuel' key0) (flipVal fuel' key1)
-              (flipVal fuel' key2) (flipVal fuel' key3)
-      | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-          .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            strideWords capacity (flipVal fuel' key0) (flipVal fuel' key1)
-              (flipVal fuel' key2) (flipVal fuel' key3) (flipVal fuel' quoteLots)
-              (flipVal fuel' baseLots)
-      | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-          lastValidSlot lastValidUnixTimestamp =>
-          .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            sequenceBaseWord strideWords capacity bid (flipVal fuel' price)
-            (flipVal fuel' sequence) (flipVal fuel' traderIndex) (flipVal fuel' numBaseLots)
-            (flipVal fuel' lastValidSlot) (flipVal fuel' lastValidUnixTimestamp)
-      | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity bid price sequence =>
-          .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            sequenceBaseWord strideWords capacity bid (flipVal fuel' price)
-            (flipVal fuel' sequence)
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
@@ -5840,19 +5809,6 @@ private def opFields : Ops.Op → Array String
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
   | .ext (.svm (.accountStorage call)) => call.values.flatMap valFields
-  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3
-  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3
-  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-      valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3 ++
-        valFields quoteLots ++ valFields baseLots
-  | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      valFields price ++ valFields sequence ++ valFields traderIndex ++ valFields numBaseLots ++
-        valFields lastValidSlot ++ valFields lastValidUnixTimestamp
-  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
-      valFields price ++ valFields sequence
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v
@@ -5961,34 +5917,6 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
       | .ext (.svm (.accountStorage call)) =>
           return .ext (.svm (.accountStorage (← call.mapValuesM normalizeVal)))
-      | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity key0 key1 key2 key3 =>
-          return .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            strideWords capacity (← normalizeVal key0) (← normalizeVal key1)
-              (← normalizeVal key2) (← normalizeVal key3)
-      | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity key0 key1 key2 key3 =>
-          return .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            strideWords capacity (← normalizeVal key0) (← normalizeVal key1)
-              (← normalizeVal key2) (← normalizeVal key3)
-      | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-          return .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            strideWords capacity (← normalizeVal key0) (← normalizeVal key1)
-              (← normalizeVal key2) (← normalizeVal key3) (← normalizeVal quoteLots)
-              (← normalizeVal baseLots)
-      | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-          lastValidSlot lastValidUnixTimestamp =>
-          return .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            sequenceBaseWord strideWords capacity bid (← normalizeVal price)
-            (← normalizeVal sequence) (← normalizeVal traderIndex) (← normalizeVal numBaseLots)
-            (← normalizeVal lastValidSlot) (← normalizeVal lastValidUnixTimestamp)
-      | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity bid price sequence =>
-          return .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-            sequenceBaseWord strideWords capacity bid (← normalizeVal price)
-            (← normalizeVal sequence)
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmSendEth a b c d =>
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
@@ -6074,18 +6002,6 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
         bump.bind (valEscapedArg limit)
   | .ext (.svm (.accountStorage call)) =>
       call.values.findSome? (valEscapedArg limit)
-  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3].findSome? (valEscapedArg limit)
-  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3].findSome? (valEscapedArg limit)
-  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-      #[key0, key1, key2, key3, quoteLots, baseLots].findSome? (valEscapedArg limit)
-  | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-        lastValidUnixTimestamp].findSome? (valEscapedArg limit)
-  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
-      #[price, sequence].findSome? (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
   | .forBody _ body => body.findSome? (opEscapedArg limit)

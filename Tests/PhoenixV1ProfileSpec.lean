@@ -342,11 +342,11 @@ private partial def opsHaveRbTreeKey4Insert
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accDataRbTreeKey4Insert actualAcc actualRoot actualLinks actualParent actualKey
-         actualStride actualCapacity _ _ _ _ =>
-         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
-           actualParent == parentBase && actualKey == keyBase && actualStride == stride &&
-           actualCapacity == capacity
+     | .accountStorage (.rbMapInsert (.key4 actualRoot tree) _ _ .reject) =>
+         tree.links.region.account == acc && actualRoot == rootWord &&
+           tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
+           tree.key.firstWord == keyBase && tree.links.region.strideWords == stride &&
+           tree.links.region.capacity == capacity
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
@@ -363,11 +363,11 @@ private partial def opsHaveRbTreeKey4Remove
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accDataRbTreeKey4Remove actualAcc actualRoot actualLinks actualParent actualKey
-         actualStride actualCapacity _ _ _ _ =>
-         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
-           actualParent == parentBase && actualKey == keyBase && actualStride == stride &&
-           actualCapacity == capacity
+     | .accountStorage (.rbMapRemove (.key4 actualRoot tree) _) =>
+         tree.links.region.account == acc && actualRoot == rootWord &&
+           tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
+           tree.key.firstWord == keyBase && tree.links.region.strideWords == stride &&
+           tree.links.region.capacity == capacity
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
@@ -384,11 +384,11 @@ private partial def opsHaveRbTreeTraderDeposit
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accDataRbTreeTraderDeposit actualAcc actualRoot actualLinks actualParent actualKey
-         actualStride actualCapacity _ _ _ _ _ _ =>
-         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
-           actualParent == parentBase && actualKey == keyBase && actualStride == stride &&
-           actualCapacity == capacity
+     | .accountStorage (.rbMapCheckedAdd (.key4 actualRoot tree) _ _) =>
+         tree.links.region.account == acc && actualRoot == rootWord &&
+           tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
+           tree.key.firstWord == keyBase && tree.links.region.strideWords == stride &&
+           tree.links.region.capacity == capacity
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
@@ -405,11 +405,12 @@ private partial def opsHaveRbTreeOrderInsert
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accDataRbTreeOrderInsert actualAcc actualRoot actualLinks actualParent actualKey
-         actualSequence actualStride actualCapacity actualBid _ _ _ _ _ _ =>
-         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
-           actualParent == parentBase && actualKey == keyBase && actualSequence == sequenceBase &&
-           actualStride == stride && actualCapacity == capacity && actualBid == bid
+     | .accountStorage (.rbMapInsert (.fifo actualRoot tree) _ _ .replace) =>
+         tree.links.region.account == acc && actualRoot == rootWord &&
+           tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
+           tree.price.firstWord == keyBase && tree.sequence.firstWord == sequenceBase &&
+           tree.links.region.strideWords == stride && tree.links.region.capacity == capacity &&
+           tree.bid == bid
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
@@ -427,11 +428,12 @@ private partial def opsHaveRbTreeOrderRemove
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accDataRbTreeOrderRemove actualAcc actualRoot actualLinks actualParent actualKey
-         actualSequence actualStride actualCapacity actualBid _ _ =>
-         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
-           actualParent == parentBase && actualKey == keyBase && actualSequence == sequenceBase &&
-           actualStride == stride && actualCapacity == capacity && actualBid == bid
+     | .accountStorage (.rbMapRemove (.fifo actualRoot tree) _) =>
+         tree.links.region.account == acc && actualRoot == rootWord &&
+           tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
+           tree.price.firstWord == keyBase && tree.sequence.firstWord == sequenceBase &&
+           tree.links.region.strideWords == stride && tree.links.region.capacity == capacity &&
+           tree.bid == bid
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>

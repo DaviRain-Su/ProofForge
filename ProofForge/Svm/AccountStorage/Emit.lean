@@ -15,6 +15,15 @@ structure Context where
   loadOwnerIsSelf : Nat → Nat → String → String
   headerStack : Nat → Nat
 
+/-- Mutation algorithms are supplied by the storage backend implementation while the stable Call
+dispatcher owns the reusable map vocabulary. This keeps generic SVM Ops/IR independent of map
+shapes and lets the assembly bodies migrate behind the boundary without changing callers. -/
+structure MutationBackend where
+  emitInsert : String → RbMap → Array Ops.Val → Array Ops.Val → ExistingValuePolicy →
+    Except String String
+  emitRemove : String → RbMap → Array Ops.Val → Except String String
+  emitCheckedAdd : String → RbMap → Array Ops.Val → Array Ops.Val → Except String String
+
 private def emitWriteWord (context : Context) (label : String)
     (field : Field) (index value : Ops.Val) : Except String String := do
   let region := field.region
@@ -1071,7 +1080,12 @@ def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
       emitKey4RbTreeValid context tree root size bumpIndex freeListHead stackOff nonce scope
   | _, _ => .error "extract/ir: malformed account-storage query operands"
 
-def emitCall (context : Context) (label : String) : Call Ops.Val → Except String String
+def emitCall (context : Context) (mutations : MutationBackend) (label : String) :
+    Call Ops.Val → Except String String
   | .writeWord field index value => emitWriteWord context label field index value
+  | .rbMapInsert map key value existing =>
+      mutations.emitInsert label map key value existing
+  | .rbMapRemove map key => mutations.emitRemove label map key
+  | .rbMapCheckedAdd map key delta => mutations.emitCheckedAdd label map key delta
 
 end ProofForge.Svm.AccountStorage.Emit

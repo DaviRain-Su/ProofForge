@@ -45,40 +45,6 @@ def rbTreeKey4WordsInRange
   (AccountStorage.Query.key4RbTreeValidOneBased
     0 linksBaseWord parentBaseWord keyBaseWord strideWords capacity).wellFormed maxTxAccountLocks
 
-/-- Static geometry for a complete in-place four-word-key tree insertion. The whole node stride is
-addressable because allocation initializes every word, while a modest stride cap bounds generated
-stores. The four-word tree header must precede the node array. -/
-def rbTreeKey4InsertWordsInRange
-    (rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Bool :=
-  rbTreeKey4WordsInRange linksBaseWord parentBaseWord keyBaseWord strideWords capacity &&
-    strideWords ≤ 256 && rootWord + 3 < linksBaseWord &&
-    linksBaseWord ≤ parentBaseWord && parentBaseWord < linksBaseWord + strideWords &&
-    linksBaseWord ≤ keyBaseWord && keyBaseWord + 3 < linksBaseWord + strideWords &&
-    dataWordInRange (rootWord + 3) &&
-    indexedDataWordsInRange (linksBaseWord + strideWords - 1) strideWords capacity
-
-/-- Exact static geometry for Phoenix's `Pubkey → TraderState` map. Each 18-word node contains
-links, parent/color, four Pubkey words, four balance words, and eight reserved words. -/
-def rbTreeTraderWordsInRange
-    (rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Bool :=
-  rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
-      capacity &&
-    strideWords == 18 && linksBaseWord + 1 == parentBaseWord &&
-    linksBaseWord + 2 == keyBaseWord && keyBaseWord + 15 < linksBaseWord + strideWords
-
-/-- Static geometry for Phoenix FIFO order mutation. The key and four-word resting-order value
-must occupy the official contiguous eight-word Sokoban node layout. -/
-def rbTreeOrderWordsInRange
-    (rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat) :
-    Bool :=
-  rbTreeWordsInRange linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
-      strideWords capacity &&
-    strideWords == 8 && rootWord + 3 < linksBaseWord &&
-    linksBaseWord + 1 == parentBaseWord && parentBaseWord + 1 == keyBaseWord &&
-    keyBaseWord + 1 == sequenceBaseWord &&
-    dataWordInRange (rootWord + 3) &&
-    indexedDataWordsInRange (linksBaseWord + strideWords - 1) strideWords capacity
-
 /-- Static non-bump bytes in one PDA signer group. -/
 inductive PdaSeed where
   | ascii (value : String)
@@ -190,22 +156,6 @@ inductive OpExt (V : Type) where
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord V))
       (seeds : Array PdaSeed := #[]) (bump : Option V := none)
   | accountStorage (call : AccountStorage.Call V)
-  | accDataRbTreeKey4Insert
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-      (key0 key1 key2 key3 : V)
-  | accDataRbTreeTraderDeposit
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-      (key0 key1 key2 key3 quoteLots baseLots : V)
-  | accDataRbTreeKey4Remove
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-      (key0 key1 key2 key3 : V)
-  | accDataRbTreeOrderInsert
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
-        capacity : Nat) (bid : Bool)
-      (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : V)
-  | accDataRbTreeOrderRemove
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
-        capacity : Nat) (bid : Bool) (price sequence : V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -343,43 +293,6 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .accountStorage call =>
       call.wellFormed (fun value =>
         value.wellFormed ValKind.arity && staticPayloadsWellFormed value) maxTxAccountLocks
-  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      acc > 0 && accInRange acc &&
-        rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity &&
-        #[key0, key1, key2, key3].all fun key =>
-          key.wellFormed ValKind.arity && staticPayloadsWellFormed key
-  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-      acc > 0 && accInRange acc &&
-        rbTreeTraderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity &&
-        #[key0, key1, key2, key3, quoteLots, baseLots].all fun value =>
-          value.wellFormed ValKind.arity && staticPayloadsWellFormed value
-  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      acc > 0 && accInRange acc &&
-        rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity &&
-        #[key0, key1, key2, key3].all fun key =>
-          key.wellFormed ValKind.arity && staticPayloadsWellFormed key
-  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      acc > 0 && accInRange acc &&
-        rbTreeOrderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity &&
-        #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-          lastValidUnixTimestamp].all fun value =>
-          value.wellFormed ValKind.arity && staticPayloadsWellFormed value
-  | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity _ price sequence =>
-      acc > 0 && accInRange acc &&
-        rbTreeOrderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity &&
-        #[price, sequence].all fun value =>
-          value.wellFormed ValKind.arity && staticPayloadsWellFormed value
 
 private partial def opStaticPayloadsWellFormed : Op → Bool
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
@@ -399,18 +312,6 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
           data.all (fun word => word.value?.all staticPayloadsWellFormed) &&
             bump.all staticPayloadsWellFormed
       | .accountStorage call => call.allValues staticPayloadsWellFormed
-      | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-          #[key0, key1, key2, key3].all staticPayloadsWellFormed
-      | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-          #[key0, key1, key2, key3, quoteLots, baseLots].all staticPayloadsWellFormed
-      | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-          #[key0, key1, key2, key3].all staticPayloadsWellFormed
-      | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex
-          numBaseLots lastValidSlot lastValidUnixTimestamp =>
-          #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-            lastValidUnixTimestamp].all staticPayloadsWellFormed
-      | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
-          #[price, sequence].all staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
 def Op.wellFormed (op : Op) : Bool :=
@@ -517,9 +418,7 @@ private def OpExt.needsWalk : OpExt Val → Bool
       data.any CpiWord.needsWalk ||
         seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
         bump.any valNeedsWalk
-  | .accountStorage .. | .accDataRbTreeKey4Insert .. | .accDataRbTreeTraderDeposit ..
-  | .accDataRbTreeKey4Remove .. | .accDataRbTreeOrderInsert ..
-  | .accDataRbTreeOrderRemove .. => true
+  | .accountStorage .. => true
 
 private def OpExt.minAccounts : OpExt Val → Nat
   | .invoke _ _ data seeds bump =>
@@ -531,40 +430,11 @@ private def OpExt.minAccounts : OpExt Val → Nat
         | _ => current
       Nat.max (Nat.max fromData fromSeeds) (bump.map valMinAccounts |>.getD 0)
   | .accountStorage call => call.minAccounts valMinAccounts
-  | .accDataRbTreeKey4Insert acc _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
-        Nat.max current (valMinAccounts key)
-  | .accDataRbTreeTraderDeposit acc _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-      #[key0, key1, key2, key3, quoteLots, baseLots].foldl (init := acc + 1)
-        fun current value => Nat.max current (valMinAccounts value)
-  | .accDataRbTreeKey4Remove acc _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
-        Nat.max current (valMinAccounts key)
-  | .accDataRbTreeOrderInsert acc _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-        lastValidUnixTimestamp].foldl (init := acc + 1) fun current value =>
-        Nat.max current (valMinAccounts value)
-  | .accDataRbTreeOrderRemove acc _ _ _ _ _ _ _ _ price sequence =>
-      #[price, sequence].foldl (init := acc + 1) fun current value =>
-        Nat.max current (valMinAccounts value)
 
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
       data.any CpiWord.hasSelect || bump.any valHasSelect
   | .accountStorage call => call.anyValue valHasSelect
-  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3].any valHasSelect
-  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-      #[key0, key1, key2, key3, quoteLots, baseLots].any valHasSelect
-  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3].any valHasSelect
-  | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-        lastValidUnixTimestamp].any valHasSelect
-  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
-      #[price, sequence].any valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=
   walkOps ops fun | .ext (.invoke ..) => true | _ => false

@@ -111,30 +111,30 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.accDataRbTreeKey4Insert
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Op :=
-  .ext (.svm (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-    strideWords capacity key0 key1 key2 key3))
+  .ext (.svm (.accountStorage (.rbMapInsertKey4OneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)))
 @[match_pattern] def Op.accDataRbTreeTraderDeposit
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 quoteLots baseLots : Val) : Op :=
-  .ext (.svm (.accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-    strideWords capacity key0 key1 key2 key3 quoteLots baseLots))
+  .ext (.svm (.accountStorage (.rbMapCheckedAddKey4OneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3 quoteLots baseLots)))
 @[match_pattern] def Op.accDataRbTreeKey4Remove
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Op :=
-  .ext (.svm (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-    strideWords capacity key0 key1 key2 key3))
+  .ext (.svm (.accountStorage (.rbMapRemoveKey4OneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)))
 @[match_pattern] def Op.accDataRbTreeOrderInsert
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool)
     (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : Val) : Op :=
-  .ext (.svm (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-    sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-    lastValidSlot lastValidUnixTimestamp))
+  .ext (.svm (.accountStorage (.rbMapInsertFifoOneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid price sequence
+    traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp)))
 @[match_pattern] def Op.accDataRbTreeOrderRemove
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool) (price sequence : Val) : Op :=
-  .ext (.svm (.accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-    sequenceBaseWord strideWords capacity bid price sequence))
+  .ext (.svm (.accountStorage (.rbMapRemoveFifoOneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid price sequence)))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.deposit amount))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=
@@ -220,19 +220,6 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .ext (.svm (.accountStorage call)) => call.anyValue predicate
-  | .ext (.svm (.accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3)) =>
-      #[key0, key1, key2, key3].any predicate
-  | .ext (.svm (.accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3
-      quoteLots baseLots)) =>
-      #[key0, key1, key2, key3, quoteLots, baseLots].any predicate
-  | .ext (.svm (.accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3)) =>
-      #[key0, key1, key2, key3].any predicate
-  | .ext (.svm (.accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex
-      numBaseLots lastValidSlot lastValidUnixTimestamp)) =>
-      #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-        lastValidUnixTimestamp].any predicate
-  | .ext (.svm (.accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence)) =>
-      #[price, sequence].any predicate
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
   | .mapGetU64 base key => #[base, key].any predicate

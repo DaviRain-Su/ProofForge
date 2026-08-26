@@ -188,6 +188,36 @@ private def oneBasedTraderWrite :
         field.region.indexBase == .zero
   | _ => false
 
+private def validKey4MapInsert :
+    ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
+  .rbMapInsertKey4OneBased 1 8310 8314 8315 8316 18 128
+    (.arg 0) (.arg 1) (.arg 2) (.arg 3)
+
+private def malformedKey4MapInsert :
+    ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
+  .rbMapInsert (.key4OneBased 1 8310 8314 8315 8316 18 128) #[.arg 0] #[] .reject
+
+private def validFifoMapInsert :
+    ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
+  .rbMapInsertFifoOneBased 1 110 114 115 116 117 8 512 true
+    (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.lit 0) (.lit 0)
+
+private def malformedFifoMapInsert :
+    ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
+  .rbMapInsert (.fifoOneBased 1 110 114 115 116 118 8 512 true)
+    #[.arg 0, .arg 1] #[.arg 2, .arg 3, .lit 0, .lit 0] .replace
+
+#guard validKey4MapInsert.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard !malformedKey4MapInsert.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard validFifoMapInsert.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard !malformedFifoMapInsert.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard validKey4MapInsert.effects.reads == #[1]
+#guard validKey4MapInsert.effects.writes == #[1]
+#guard validKey4MapInsert.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
+  "rb4i.1.8310.8314.8315.8316.18.128(a0,a1,a2,a3)"
+#guard validFifoMapInsert.canonical (fun | .arg i => s!"a{i}" | .lit n => s!"{n}" | _ => "v") ==
+  "rboi.1.110.114.115.116.117.8.512.true(a0,a1,a2,a3,0,0)"
+
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 63 #[] #[] #[] none)
 

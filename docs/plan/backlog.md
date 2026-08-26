@@ -268,6 +268,18 @@
   SVM build、Mollusk 230/230、Anvil 12/12 全绿，Surfpool 1.5.0 以 1,472 个 Loader write
   transactions 部署并核对 exact 1,489,133-byte ProgramData。下一步把 bounded search、
   allocator acquire/release、rotation/transplant/fixup 迁为 storage mutation routines。
+- P5 第二十六段 bounded account-storage map mutation vocabulary 已完成：原 five 个
+  trader/order bespoke mutation constructors 已从顶层 `Svm.OpExt`、`Svm.IR.Op` 和主 emitter
+  dispatch 删除，收敛为 `AccountStorage.Call` 的 `rbMapInsert`、`rbMapRemove` 与
+  `rbMapCheckedAdd`。`RbMap` descriptor 统一拥有编译期固定 account/header/topology/key/value
+  geometry、capacity、one-based indexing、writable/current-owner access 与 duplicate policy；
+  extraction、CFG、signer/account inference、IDL writable inference 和 canonicalization 只遍历
+  generic values/effects。现有原位 assembly 由 storage mutation backend adapter 复用，source
+  digest `e9966de4a1795a47`、assembly 4,652,144 B、ELF 1,489,088 B 与 IDL 7,613 B 均不变。
+  持久状态仍不使用 heap/Map、runtime geometry、node copy、detached node 或 persistent
+  pointer。196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool
+  1.5.0 以 1,472 个 Loader write transactions 部署并核对 exact 1,489,133-byte
+  ProgramData。下一步把 search/allocator/rotation/transplant/fixup assembly 实体迁入 backend。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

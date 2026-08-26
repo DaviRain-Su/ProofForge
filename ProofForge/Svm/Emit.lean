@@ -180,18 +180,6 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
             (data.flatMap fun word => word.value?.map valSignerAccs |>.getD #[]) ++
               (match bump with | some v => valSignerAccs v | none => #[])
         | .accountStorage call => call.values.flatMap valSignerAccs
-        | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-            #[key0, key1, key2, key3].flatMap valSignerAccs
-        | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-            #[key0, key1, key2, key3].flatMap valSignerAccs
-        | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-            #[key0, key1, key2, key3, quoteLots, baseLots].flatMap valSignerAccs
-        | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-            lastValidSlot lastValidUnixTimestamp =>
-            #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-              lastValidUnixTimestamp].flatMap valSignerAccs
-        | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
-            #[price, sequence].flatMap valSignerAccs
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -1187,18 +1175,6 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
             data.any (fun word => word.value?.any valUsesSigner) ||
               (match bump with | some v => valUsesSigner v | none => false)
       | .accountStorage call => call.values.any valUsesSigner
-      | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-          #[key0, key1, key2, key3].any valUsesSigner
-      | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-          #[key0, key1, key2, key3].any valUsesSigner
-      | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-          #[key0, key1, key2, key3, quoteLots, baseLots].any valUsesSigner
-      | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-          lastValidSlot lastValidUnixTimestamp =>
-          #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-            lastValidUnixTimestamp].any valUsesSigner
-      | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence =>
-          #[price, sequence].any valUsesSigner
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -3782,6 +3758,44 @@ private def emitAccDataRbTreeOrderRemove (p : IR.Program) (label : String)
     emitAccDataRbTreeRemove p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity (.order bid price sequence)
 
+/-- Compatibility adapter from the stable account-storage map vocabulary to the current in-place
+assembly routines. Operand shape is validated before emission; generic SVM Ops/IR never sees a
+trader/order-specific constructor. -/
+private def accountStorageMutationBackend (p : IR.Program) :
+    AccountStorage.Emit.MutationBackend where
+  emitInsert := fun label map key value existing =>
+    match map, key, value, existing with
+    | .key4 rootWord tree, #[key0, key1, key2, key3], #[], .reject =>
+        emitAccDataRbTreeKey4Insert p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity key0 key1 key2 key3
+    | .fifo rootWord tree, #[price, sequence],
+        #[traderIndex, numBaseLots, lastValidSlot, lastValidUnixTimestamp], .replace =>
+        emitAccDataRbTreeOrderInsert p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.price.firstWord
+          tree.sequence.firstWord tree.links.region.strideWords tree.links.region.capacity tree.bid
+          price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp
+    | _, _, _, _ => .error "extract/ir: malformed account-storage map insert"
+  emitRemove := fun label map key =>
+    match map, key with
+    | .key4 rootWord tree, #[key0, key1, key2, key3] =>
+        emitAccDataRbTreeKey4Remove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity key0 key1 key2 key3
+    | .fifo rootWord tree, #[price, sequence] =>
+        emitAccDataRbTreeOrderRemove p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.price.firstWord
+          tree.sequence.firstWord tree.links.region.strideWords tree.links.region.capacity tree.bid
+          price sequence
+    | _, _ => .error "extract/ir: malformed account-storage map remove"
+  emitCheckedAdd := fun label map key delta =>
+    match map, key, delta with
+    | .key4 rootWord tree, #[key0, key1, key2, key3], #[delta0, delta1] =>
+        emitAccDataRbTreeTraderDeposit p label tree.links.region.account rootWord
+          tree.links.firstWord tree.parentColor.firstWord tree.key.firstWord
+          tree.links.region.strideWords tree.links.region.capacity key0 key1 key2 key3 delta0 delta1
+    | _, _, _ => .error "extract/ir: malformed account-storage checked add"
+
 private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
     Except String String := do
   let vs := ops.filterMap (fun | .returnState v => some v | _ => none)
@@ -4105,41 +4119,8 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
             loadVal p value stackOff nonce scope
           loadOwnerIsSelf := emitLoadOwnerIsSelf p
           headerStack }
+        (accountStorageMutationBackend p)
         storageLabel call)
-    | .accDataRbTreeKey4Insert account rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 =>
-      let insertLabel := s!"{label}_{n}"
-      n := n + 1
-      acc := acc ++ (← emitAccDataRbTreeKey4Insert p insertLabel account rootWord
-        linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)
-    | .accDataRbTreeKey4Remove account rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 =>
-      let removeLabel := s!"{label}_{n}"
-      n := n + 1
-      acc := acc ++ (← emitAccDataRbTreeKey4Remove p removeLabel account rootWord
-        linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)
-    | .accDataRbTreeTraderDeposit account rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-      let depositLabel := s!"{label}_{n}"
-      n := n + 1
-      acc := acc ++ (← emitAccDataRbTreeTraderDeposit p depositLabel account rootWord
-        linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3
-        quoteLots baseLots)
-    | .accDataRbTreeOrderInsert account rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-        lastValidSlot lastValidUnixTimestamp =>
-      let insertLabel := s!"{label}_{n}"
-      n := n + 1
-      acc := acc ++ (← emitAccDataRbTreeOrderInsert p insertLabel account rootWord
-        linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
-        price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp)
-    | .accDataRbTreeOrderRemove account rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence =>
-      let removeLabel := s!"{label}_{n}"
-      n := n + 1
-      acc := acc ++ (← emitAccDataRbTreeOrderRemove p removeLabel account rootWord
-        linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
-        price sequence)
     | .errorNamed name =>
       let code :=
         match name with

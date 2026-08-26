@@ -34,30 +34,6 @@ private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.O
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Svm.Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
   | .accountStorage call => .accountStorage (call.mapValues mapValue)
-  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
-  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
-  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-      .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
-        (mapValue quoteLots) (mapValue baseLots)
-  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid (mapValue price) (mapValue sequence)
-        (mapValue traderIndex) (mapValue numBaseLots) (mapValue lastValidSlot)
-        (mapValue lastValidUnixTimestamp)
-  | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence =>
-      .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid (mapValue price) (mapValue sequence)
 
 private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
   | .invoke _ _ data _ bump =>
@@ -65,16 +41,6 @@ private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
         | some value => #[value]
         | none => #[]
   | .accountStorage call => call.values
-  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3]
-  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3]
-  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-      #[key0, key1, key2, key3, quoteLots, baseLots]
-  | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      #[price, sequence, traderIndex, numBaseLots, lastValidSlot, lastValidUnixTimestamp]
-  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence => #[price, sequence]
 
 private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.Ops.OpExt Val
   | .deposit amount => .deposit (mapValue amount)
@@ -143,38 +109,6 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
       | none => true
   | .accountStorage call =>
       call.wellFormed (·.wellFormed ValKind.arity) Svm.Ops.maxTxAccountLocks
-  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      acc > 0 && Svm.Ops.accInRange acc &&
-        Svm.Ops.rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity &&
-        #[key0, key1, key2, key3].all (·.wellFormed ValKind.arity)
-  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      acc > 0 && Svm.Ops.accInRange acc &&
-        Svm.Ops.rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity &&
-        #[key0, key1, key2, key3].all (·.wellFormed ValKind.arity)
-  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-      acc > 0 && Svm.Ops.accInRange acc &&
-        Svm.Ops.rbTreeTraderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          strideWords capacity &&
-        #[key0, key1, key2, key3, quoteLots, baseLots].all (·.wellFormed ValKind.arity)
-  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      acc > 0 && Svm.Ops.accInRange acc &&
-        Svm.Ops.rbTreeOrderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity &&
-        #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
-          lastValidUnixTimestamp].all (·.wellFormed ValKind.arity)
-  | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity _ price sequence =>
-      acc > 0 && Svm.Ops.accInRange acc &&
-        Svm.Ops.rbTreeOrderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
-          sequenceBaseWord strideWords capacity &&
-        #[price, sequence].all (·.wellFormed ValKind.arity)
 
 private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
   | .deposit amount | .log _ amount => amount.wellFormed ValKind.arity

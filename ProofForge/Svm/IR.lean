@@ -20,22 +20,6 @@ inductive Op where
       (data : Array (Ops.CpiWord Ops.Val))
       (seeds : Array Ops.PdaSeed := #[]) (bump : Option Ops.Val := none)
   | accountStorage (call : AccountStorage.Call Ops.Val)
-  | accDataRbTreeKey4Insert
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-      (key0 key1 key2 key3 : Ops.Val)
-  | accDataRbTreeKey4Remove
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-      (key0 key1 key2 key3 : Ops.Val)
-  | accDataRbTreeTraderDeposit
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-      (key0 key1 key2 key3 quoteLots baseLots : Ops.Val)
-  | accDataRbTreeOrderInsert
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
-        capacity : Nat) (bid : Bool)
-      (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : Ops.Val)
-  | accDataRbTreeOrderRemove
-      (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
-        capacity : Nat) (bid : Bool) (price sequence : Ops.Val)
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -61,28 +45,6 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .ext (.invoke programIx metas data seed bump) =>
       pure (.invoke programIx metas data seed bump)
   | .ext (.accountStorage call) => pure (.accountStorage call)
-  | .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3) =>
-      pure (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3)
-  | .ext (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3) =>
-      pure (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3)
-  | .ext (.accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 quoteLots baseLots) =>
-      pure (.accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 quoteLots baseLots)
-  | .ext (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp) =>
-      pure (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-        lastValidSlot lastValidUnixTimestamp)
-  | .ext (.accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence) =>
-      pure (.accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence)
   | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSetLeaf name _ _ _ leaf =>
@@ -114,28 +76,6 @@ private partial def Op.toSource : Op → Ops.Op
   | .ite cmp lhs rhs thn els => .ite cmp lhs rhs (toSourceOps thn) (toSourceOps els)
   | .invoke programIx metas data seed bump => .ext (.invoke programIx metas data seed bump)
   | .accountStorage call => .ext (.accountStorage call)
-  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      .ext (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3)
-  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      .ext (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3)
-  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-      .ext (.accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 quoteLots baseLots)
-  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      .ext (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-        lastValidSlot lastValidUnixTimestamp)
-  | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence =>
-      .ext (.accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence)
   | .forAccum n addend resultLocal => .forAccum n addend resultLocal
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
@@ -160,30 +100,6 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
   | .accountStorage call => .accountStorage (call.mapValues mapValue)
-  | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
-  | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 =>
-      .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
-  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-      .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
-        (mapValue quoteLots) (mapValue baseLots)
-  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid (mapValue price) (mapValue sequence)
-        (mapValue traderIndex) (mapValue numBaseLots) (mapValue lastValidSlot)
-        (mapValue lastValidUnixTimestamp)
-  | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence =>
-      .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid (mapValue price) (mapValue sequence)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .invoke _ _ data _ bump =>
@@ -191,16 +107,6 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
         | some value => #[value]
         | none => #[]
   | .accountStorage call => call.values
-  | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3]
-  | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
-      #[key0, key1, key2, key3]
-  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
-      #[key0, key1, key2, key3, quoteLots, baseLots]
-  | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp =>
-      #[price, sequence, traderIndex, numBaseLots, lastValidSlot, lastValidUnixTimestamp]
-  | .accDataRbTreeOrderRemove _ _ _ _ _ _ _ _ _ price sequence => #[price, sequence]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -231,33 +137,6 @@ private def projectOpExt
         seeds (← bump.mapM projectVal)
   | .svm (.accountStorage call) =>
       return .accountStorage (← call.mapValuesM projectVal)
-  | .svm (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3) =>
-      return .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (← projectVal key0) (← projectVal key1)
-          (← projectVal key2) (← projectVal key3)
-  | .svm (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3) =>
-      return .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (← projectVal key0) (← projectVal key1)
-          (← projectVal key2) (← projectVal key3)
-  | .svm (.accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity key0 key1 key2 key3 quoteLots baseLots) =>
-      return .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity (← projectVal key0) (← projectVal key1)
-          (← projectVal key2) (← projectVal key3) (← projectVal quoteLots)
-          (← projectVal baseLots)
-  | .svm (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-      lastValidSlot lastValidUnixTimestamp) =>
-      return .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid (← projectVal price) (← projectVal sequence)
-        (← projectVal traderIndex) (← projectVal numBaseLots) (← projectVal lastValidSlot)
-        (← projectVal lastValidUnixTimestamp)
-  | .svm (.accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-      sequenceBaseWord strideWords capacity bid price sequence) =>
-      return .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid (← projectVal price) (← projectVal sequence)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
 
 /-- Static registration of the extractor-to-SVM projection. -/
@@ -691,34 +570,6 @@ private partial def opsCanon (ops : Array Op) : String :=
           | _, none => ""
         s!"inv({programIx},[{metaCanon}],[{dataCanon}]{signer})"
     | .accountStorage call => call.canonical valCanon
-    | .accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 =>
-        s!"rb4i.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
-          s!"{strideWords}.{capacity}({valCanon key0},{valCanon key1}," ++
-          s!"{valCanon key2},{valCanon key3})"
-    | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 =>
-        s!"rb4r.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
-          s!"{strideWords}.{capacity}({valCanon key0},{valCanon key1}," ++
-          s!"{valCanon key2},{valCanon key3})"
-    | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
-        s!"rbtd.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
-          s!"{strideWords}.{capacity}({valCanon key0},{valCanon key1}," ++
-          s!"{valCanon key2},{valCanon key3},{valCanon quoteLots},{valCanon baseLots})"
-    | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
-        lastValidSlot lastValidUnixTimestamp =>
-        s!"rboi.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
-          s!"{sequenceBaseWord}.{strideWords}.{capacity}.{bid}" ++
-          s!"({valCanon price},{valCanon sequence},{valCanon traderIndex}," ++
-          s!"{valCanon numBaseLots},{valCanon lastValidSlot}," ++
-          s!"{valCanon lastValidUnixTimestamp})"
-    | .accDataRbTreeOrderRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
-        sequenceBaseWord strideWords capacity bid price sequence =>
-        s!"rbor.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
-          s!"{sequenceBaseWord}.{strideWords}.{capacity}.{bid}" ++
-          s!"({valCanon price},{valCanon sequence})"
     | .forAccum n addend resultLocal =>
         s!"for.{resultLocal}({n},{valCanon addend})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
