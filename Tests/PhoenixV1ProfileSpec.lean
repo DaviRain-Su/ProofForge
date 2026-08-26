@@ -144,6 +144,7 @@ private partial def opsHaveIndexedDataWord
       | .indexSet _ lhs rhs _ _ => has lhs || has rhs
       | .invoke _ _ data _ bump =>
           data.any (fun item => item.value?.any has) || bump.any has
+      | .component call => call.values.any has
       | _ => false
     here ||
       match op with
@@ -197,6 +198,7 @@ private partial def opsHaveParentPath
       | .indexSet _ lhs rhs _ _ => has lhs || has rhs
       | .invoke _ _ data _ bump =>
           data.any (fun item => item.value?.any has) || bump.any has
+      | .component call => call.values.any has
       | _ => false
     here ||
       match op with
@@ -500,6 +502,7 @@ private partial def opsHaveAccountQuery
       | .indexSet _ lhs rhs _ _ => has lhs || has rhs
       | .invoke _ _ data _ bump =>
           data.any (fun item => item.value?.any has) || bump.any has
+      | .component call => call.values.any has
       | _ => false
     here ||
       match op with
@@ -538,6 +541,7 @@ private partial def opsHaveIntrinsic
       | .indexSet _ lhs rhs _ _ => has lhs || has rhs
       | .invoke _ _ data _ bump =>
           data.any (fun item => item.value?.any has) || bump.any has
+      | .component call => call.values.any has
       | _ => false
     here ||
       match op with
@@ -546,49 +550,72 @@ private partial def opsHaveIntrinsic
       | .forBody _ body => opsHaveIntrinsic predicate body
       | _ => false
 
-private partial def opsHaveRawReduceRecord (origin : UInt64)
+private def isPhoenixRecorderConfig (config : ProofForge.Svm.BatchRecorder.Config) : Bool :=
+  config == {
+    logAccount := 0
+    selfEntryTag := 15
+    authoritySeed := "log"
+    maxBytes := 1246
+    headerBytes := 93
+    countOffset := 91
+    maxRecords := 32
+  }
+
+private partial def opsHaveRawReduceRecord
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .invoke programIx metas data seeds bump =>
-         programIx == 0 && metas == #[{ acc := 0, signer := true, writable := false }] &&
-           seeds == #[.ascii "log"] &&
-           bump == some (.ext (.findPda "log") #[]) && data.size == 18 &&
-           data[0]? == some (.selfEntry 15 "log") &&
-           data[1]? == some (.u8le (.lit 1)) && data[2]? == some (.u8le (.lit origin)) &&
-           data[4]? == some (.u64le (.ext .unixTime #[])) &&
-           data[5]? == some (.u64le (.ext .clockSlot #[])) &&
-           data[6]? == some (.u64le (.ext (.accKeyWord 2 0) #[])) &&
-           data[7]? == some (.u64le (.ext (.accKeyWord 2 1) #[])) &&
-           data[8]? == some (.u64le (.ext (.accKeyWord 2 2) #[])) &&
-           data[9]? == some (.u64le (.ext (.accKeyWord 2 3) #[])) &&
-           data[10]? == some (.accKey 2) && data[11]? == some (.u16le (.lit 1)) &&
-           data[12]? == some (.u8le (.lit 4)) && data[13]? == some (.u16le (.lit 0))
+     | .component (.batchRecorder (.append config _ record)) =>
+         isPhoenixRecorderConfig config && record.size == 6 &&
+           record[0]? == some (.u8le (.lit 4)) &&
+           (match record[1]? with
+            | some (ProofForge.Svm.BatchRecorder.Word.u16le _) => true | _ => false) &&
+           (match record[2]? with
+            | some (ProofForge.Svm.BatchRecorder.Word.u64le _) => true | _ => false) &&
+           (match record[3]? with
+            | some (ProofForge.Svm.BatchRecorder.Word.u64le _) => true | _ => false) &&
+           (match record[4]? with
+            | some (ProofForge.Svm.BatchRecorder.Word.u64le _) => true | _ => false) &&
+           (match record[5]? with
+            | some (ProofForge.Svm.BatchRecorder.Word.u64le _) => true | _ => false)
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
-          opsHaveRawReduceRecord origin thenOps || opsHaveRawReduceRecord origin elseOps
-      | .forBody _ body => opsHaveRawReduceRecord origin body
+          opsHaveRawReduceRecord thenOps || opsHaveRawReduceRecord elseOps
+      | .forBody _ body => opsHaveRawReduceRecord body
       | _ => false
 
 private partial def opsHaveRawReduceHeader (origin : UInt64)
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .invoke programIx metas data seeds bump =>
-         programIx == 0 && metas == #[{ acc := 0, signer := true, writable := false }] &&
-           seeds == #[.ascii "log"] &&
-           bump == some (.ext (.findPda "log") #[]) && data.size == 12 &&
-           data[0]? == some (.selfEntry 15 "log") &&
-           data[1]? == some (.u8le (.lit 1)) && data[2]? == some (.u8le (.lit origin)) &&
-           data[4]? == some (.u64le (.ext .unixTime #[])) &&
-           data[5]? == some (.u64le (.ext .clockSlot #[])) &&
-           data[10]? == some (.accKey 2) && data[11]? == some (.u16le (.lit 0))
+     | .component (.batchRecorder (.begin config header bump)) =>
+         isPhoenixRecorderConfig config && bump == .ext (.findPda "log") #[] &&
+           header.size == 11 && header[0]? == some (.u8le (.lit 1)) &&
+           header[1]? == some (.u8le (.lit origin)) &&
+           header[3]? == some (.u64le (.ext .unixTime #[])) &&
+           header[4]? == some (.u64le (.ext .clockSlot #[])) &&
+           header[5]? == some (.u64le (.ext (.accKeyWord 2 0) #[])) &&
+           header[6]? == some (.u64le (.ext (.accKeyWord 2 1) #[])) &&
+           header[7]? == some (.u64le (.ext (.accKeyWord 2 2) #[])) &&
+           header[8]? == some (.u64le (.ext (.accKeyWord 2 3) #[])) &&
+           header[9]? == some (.accountKey 2) && header[10]? == some (.u16le (.lit 0))
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
           opsHaveRawReduceHeader origin thenOps || opsHaveRawReduceHeader origin elseOps
       | .forBody _ body => opsHaveRawReduceHeader origin body
+      | _ => false
+
+private partial def opsHaveRawReduceFinish (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .component (.batchRecorder (.finish config)) => isPhoenixRecorderConfig config
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRawReduceFinish thenOps || opsHaveRawReduceFinish elseOps
+      | .forBody _ body => opsHaveRawReduceFinish body
       | _ => false
 
 private partial def opsHaveUncheckedTransfer
@@ -728,7 +755,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveOneBasedDataWordSetAt 2 119 8 512 reduceRaw.ops &&
       opsHaveOneBasedDataWordSetAt 2 4219 8 512 reduceRaw.ops &&
       opsHaveDataWordSetAt 2 106 1 1 reduceRaw.ops &&
-      opsHaveRawReduceHeader 5 reduceRaw.ops && opsHaveRawReduceRecord 5 reduceRaw.ops do
+      opsHaveRawReduceHeader 5 reduceRaw.ops && opsHaveRawReduceRecord reduceRaw.ops &&
+      opsHaveRawReduceFinish reduceRaw.ops do
     throwError s!"raw ReduceOrderWithFreeFunds composition incomplete: " ++
       s!"w1={opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops}, " ++
       s!"w3={opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops}, " ++
@@ -739,7 +767,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       s!"bidRemove={opsHaveRbTreeOrderRemove 2 110 114 115 116 117 8 512 true reduceRaw.ops}, " ++
       s!"askRemove={opsHaveRbTreeOrderRemove 2 4210 4214 4215 4216 4217 8 512 false reduceRaw.ops}, " ++
       s!"header={opsHaveRawReduceHeader 5 reduceRaw.ops}, " ++
-      s!"record={opsHaveRawReduceRecord 5 reduceRaw.ops}"
+      s!"record={opsHaveRawReduceRecord reduceRaw.ops}, " ++
+      s!"finish={opsHaveRawReduceFinish reduceRaw.ops}"
   let baseSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
     #[.ascii "vault", .accKey 1, .accData 1 48 32]
   let quoteSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
@@ -760,7 +789,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveUncheckedTransfer 5 3 5 baseSeeds reduceWithdrawRaw.ops &&
       opsHaveUncheckedTransfer 6 4 6 quoteSeeds reduceWithdrawRaw.ops &&
       opsHaveRawReduceHeader 4 reduceWithdrawRaw.ops &&
-      opsHaveRawReduceRecord 4 reduceWithdrawRaw.ops do
+      opsHaveRawReduceRecord reduceWithdrawRaw.ops &&
+      opsHaveRawReduceFinish reduceWithdrawRaw.ops do
     throwError s!"raw ReduceOrder composition incomplete: " ++
       s!"w8={opsHaveIntrinsic (· == .isWritableN 8) reduceWithdrawRaw.ops}, " ++
       s!"exec8={opsHaveIntrinsic (· == .isExecutableN 8) reduceWithdrawRaw.ops}, " ++
@@ -778,7 +808,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       s!"baseTransfer={opsHaveUncheckedTransfer 5 3 5 baseSeeds reduceWithdrawRaw.ops}, " ++
       s!"quoteTransfer={opsHaveUncheckedTransfer 6 4 6 quoteSeeds reduceWithdrawRaw.ops}, " ++
       s!"header={opsHaveRawReduceHeader 4 reduceWithdrawRaw.ops}, " ++
-      s!"record={opsHaveRawReduceRecord 4 reduceWithdrawRaw.ops}"
+      s!"record={opsHaveRawReduceRecord reduceWithdrawRaw.ops}, " ++
+      s!"finish={opsHaveRawReduceFinish reduceWithdrawRaw.ops}"
   match ProofForge.Svm.IR.rawSelfEntry? program with
   | .ok (some entry) =>
       unless entry.tag == 15 && entry.authoritySeed == "log" do
@@ -1046,8 +1077,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "fixed-stride external account word write acc=2 base=106 stride=1 capacity=1" &&
       asm.contains "bounded one-based acc2 RB find root=110 links=114 stride=8 capacity=512" &&
       asm.contains "bounded one-based acc2 RB find root=4210 links=4214 stride=8 capacity=512" &&
-      asm.contains "; invoke programIx=1 metas=1 dataLen=93" &&
-      asm.contains "; invoke programIx=1 metas=1 dataLen=128" &&
+      asm.contains "official Solana downward bump allocation bytes=1246 align=8" &&
+      asm.contains "jge r1, 32, recorder_append_flush_" &&
+      asm.contains "jgt r1, 1246, recorder_append_flush_" &&
+      asm.contains "dynamic signed self CPI account=1 data<=1246" &&
       asm.contains "; invoke programIx=8 metas=3 dataLen=9" &&
       asm.contains "signer_seed_data_ok_" do
     throwError "raw Phoenix reduce adapter/backend composition is incomplete"

@@ -1,7 +1,9 @@
 import ProofForge.Svm.Ops
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
+import ProofForge.Svm.BatchRecorder.Emit
 import ProofForge.Svm.Component.Emit
+import ProofForge.Svm.Heap
 import ProofForge.Svm.IR
 import ProofForge.Evm.Ops
 import ProofForge.Evm.IR
@@ -351,6 +353,141 @@ private def oneBasedTraderComponent :
 #guard oneBasedTraderComponent.effects == oneBasedTraderWrite.effects
 #guard oneBasedTraderComponent.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
   "dws1.1.8314.18.128(a0,a1)"
+
+private def phoenixRecorderConfig : ProofForge.Svm.BatchRecorder.Config :=
+  { logAccount := 0
+    selfEntryTag := 15
+    authoritySeed := "log"
+    maxBytes := 1246
+    headerBytes := 93
+    countOffset := 91
+    maxRecords := 32 }
+
+private def phoenixRecorderHeader :
+    Array (ProofForge.Svm.BatchRecorder.Word ProofForge.Svm.Ops.Val) :=
+  #[.u8le (.lit 1), .u8le (.lit 5),
+    .u64le (.arg 0), .u64le (.lit 2), .u64le (.lit 3),
+    .u64le (.lit 4), .u64le (.lit 5), .u64le (.lit 6), .u64le (.lit 7),
+    .accountKey 2, .u16le (.lit 0)]
+
+private def phoenixReduceRecord :
+    Array (ProofForge.Svm.BatchRecorder.Word ProofForge.Svm.Ops.Val) :=
+  #[.u8le (.lit 4), .u16le (.arg 1), .u64le (.arg 2), .u64le (.arg 3),
+    .u64le (.arg 4), .u64le (.arg 5)]
+
+private def recorderBegin : ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
+  .batchRecorder (.begin phoenixRecorderConfig phoenixRecorderHeader (.arg 6))
+
+private def recorderAppend : ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
+  .batchRecorder (.append phoenixRecorderConfig (.arg 7) phoenixReduceRecord)
+
+private def recorderFinish : ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
+  .batchRecorder (.finish phoenixRecorderConfig)
+
+private def malformedRecorderBegin : ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
+  .batchRecorder (.begin phoenixRecorderConfig (phoenixRecorderHeader.pop) (.arg 6))
+
+#guard phoenixRecorderConfig.wellFormed
+#guard !({ phoenixRecorderConfig with maxBytes := 1247 }).wellFormed
+#guard ProofForge.Svm.BatchRecorder.wordsByteSize phoenixRecorderHeader == 92
+#guard ProofForge.Svm.BatchRecorder.wordsByteSize phoenixReduceRecord == 35
+#guard 93 + 32 * 35 == 1213
+#guard 93 + 33 * 35 > ProofForge.Svm.BatchRecorder.maxInnerDataBytes
+#guard recorderBegin.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard recorderAppend.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard recorderFinish.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard !malformedRecorderBegin.wellFormed (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard recorderBegin.effects.reads == #[1, 3]
+#guard recorderBegin.effects.writes.isEmpty
+#guard recorderBegin.minAccounts (fun _ => 0) == 4
+#guard recorderBegin.usesCpi && recorderAppend.usesCpi && recorderFinish.usesCpi
+#guard recorderBegin.stackScratchEnd == ProofForge.Svm.BatchRecorder.activeStack
+#guard recorderBegin.rawSelfEntries == #[(15, "log")]
+#guard recorderAppend.rawSelfEntries.isEmpty && recorderFinish.rawSelfEntries.isEmpty
+#guard recorderAppend.canonical (fun | .arg i => s!"a{i}" | .lit n => s!"{n}" | _ => "v") ==
+  "bra.0.15.log.1246.93.91.32(a7,[b1:4,b2:a1,b8:a2,b8:a3,b8:a4,b8:a5])"
+
+private def recorderProgram : ProofForge.Svm.IR.Program :=
+  { name := "Recorder"
+    slots := #[]
+    methods := #[{
+      kind := .increment
+      name := "Recorder.record"
+      ixName := "record"
+      paramCount := 8
+      ops := #[.component recorderBegin, .component recorderAppend, .component recorderFinish]
+    }] }
+
+#guard ProofForge.Svm.IR.usesCpi recorderProgram
+#guard ProofForge.Svm.IR.componentStackScratchEnd recorderProgram ==
+  ProofForge.Svm.BatchRecorder.activeStack
+#guard ProofForge.Svm.IR.cpiAccountCount recorderProgram == 4
+#guard
+  match ProofForge.Svm.IR.rawSelfEntry? recorderProgram with
+  | .ok (some entry) => entry.tag == 15 && entry.authoritySeed == "log"
+  | _ => false
+
+private def recorderEmitContext : ProofForge.Svm.BatchRecorder.Emit.Context :=
+  { loadValue := fun value stackOff _ _ =>
+      match value with
+      | .lit literal =>
+          .ok s!"  lddw r1, {literal}\n  stxdw [r10 - {stackOff}], r1\n"
+      | .arg index =>
+          .ok s!"  lddw r1, {index}\n  stxdw [r10 - {stackOff}], r1\n"
+      | _ => .error "unexpected recorder test value"
+    headerStack := fun account => 512 + 8 * account
+    accountCount := 4 }
+
+private def recorderComponentEmitContext : ProofForge.Svm.Component.Emit.Context :=
+  { loadValue := recorderEmitContext.loadValue
+    loadOwnerIsSelf := fun _ _ _ => ""
+    headerStack := recorderEmitContext.headerStack
+    accountCount := recorderEmitContext.accountCount }
+
+private def unusedStorageBackend : ProofForge.Svm.Component.Emit.Backend :=
+  { accountStorage :=
+      { emitInsert := fun _ _ _ _ _ => .error "unused storage insert"
+        emitRemove := fun _ _ _ => .error "unused storage remove"
+        emitCheckedAdd := fun _ _ _ _ => .error "unused storage checked add" } }
+
+private def recorderBeginAssembly :=
+  ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext unusedStorageBackend
+    "recorder_begin_test" recorderBegin
+
+private def recorderAppendAssembly :=
+  ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext unusedStorageBackend
+    "recorder_append_test" recorderAppend
+
+private def recorderFinishAssembly :=
+  ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext unusedStorageBackend
+    "recorder_finish_test" recorderFinish
+
+#guard ProofForge.Svm.Heap.startAddress == 0x300000000
+#guard ProofForge.Svm.Heap.defaultFrameBytes == 32 * 1024
+#guard
+  match recorderBeginAssembly with
+  | .ok assembly =>
+      assembly.contains "official Solana downward bump allocation bytes=1246 align=8" &&
+        assembly.contains "lddw r4, 12884901888" &&
+        assembly.contains "lddw r2, 12884934656" &&
+        assembly.contains "lddw r3, 0xfffffffffffffff8" &&
+        assembly.contains "stxdw [r10 - 416], r2" &&
+        assembly.contains "stxdw [r10 - 448], r1"
+  | .error _ => false
+#guard
+  match recorderAppendAssembly with
+  | .ok assembly =>
+      assembly.contains "jge r1, 32, recorder_append_flush_recorder_append_test" &&
+        assembly.contains "add64 r1, 35" && assembly.contains "jgt r1, 1246" &&
+        assembly.contains "dynamic signed self CPI account=1 data<=1246"
+  | .error _ => false
+#guard
+  match recorderFinishAssembly with
+  | .ok assembly =>
+      assembly.contains "dynamic signed self CPI account=1 data<=1246" &&
+        assembly.contains "lddw r1, 93" && assembly.contains "stxdw [r10 - 448], r1"
+  | .error _ => false
+
 #guard
   match ProofForge.Svm.IR.ofSourceOps #[validAccDataWordSetAtOp] with
   | .ok #[.component (.accountStorage (.writeWord field (.arg 0) (.arg 1)))] =>

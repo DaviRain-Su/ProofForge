@@ -2637,6 +2637,101 @@ private def asAsciiLit (e : Expr) : Option String :=
   | .lit (.strVal s) => if s.isEmpty then none else some s
   | _ => none
 
+private def asBatchRecorderWord : Ops.CpiWord → Option (Svm.BatchRecorder.Word Ops.Val)
+  | .u8le value => some (.u8le value)
+  | .u16le value => some (.u16le value)
+  | .u32le value => some (.u32le value)
+  | .u64le value => some (.u64le value)
+  | .ascii value => some (.ascii value)
+  | .programId => some .programId
+  | .accKey account => some (.accountKey account)
+  | .selfEntry .. => none
+
+private def decodeBatchRecorderWords (env : Environment) (e : Expr) :
+    Option (Array (Svm.BatchRecorder.Word Ops.Val)) := do
+  let expressions ← asArrayElems e
+  let mut words := #[]
+  for expression in expressions do
+    let word ← asCpiWord env expression >>= asBatchRecorderWord
+    words := words.push word
+  return words
+
+private def decodeBatchRecorderConfig (env : Environment)
+    (logAccountE selfEntryTagE authoritySeedE maxBytesE headerBytesE countOffsetE
+      maxRecordsE : Expr) : Option Svm.BatchRecorder.Config := do
+  let logAccount ← val env logAccountE >>= natOfVal
+  let selfEntryTag ← val env selfEntryTagE >>= natOfVal
+  let authoritySeed ← asAsciiLit authoritySeedE
+  let maxBytes ← val env maxBytesE >>= natOfVal
+  let headerBytes ← val env headerBytesE >>= natOfVal
+  let countOffset ← val env countOffsetE >>= natOfVal
+  let maxRecords ← val env maxRecordsE >>= natOfVal
+  return { logAccount, selfEntryTag, authoritySeed, maxBytes, headerBytes, countOffset, maxRecords }
+
+private def decodeBatchRecorderCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.batchRecorderBegin ||
+      endsWith e ".batchRecorderBegin" then
+    if args.size < 9 then none else do
+      let config ← decodeBatchRecorderConfig env
+        args[args.size - 9]! args[args.size - 8]! args[args.size - 7]!
+        args[args.size - 6]! args[args.size - 5]! args[args.size - 4]! args[args.size - 3]!
+      let header ← decodeBatchRecorderWords env args[args.size - 2]!
+      let bump ← val env args[args.size - 1]!
+      return .batchRecorder (.begin config header bump)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.batchRecorderAppend ||
+      endsWith e ".batchRecorderAppend" then
+    if args.size < 9 then none else do
+      let config ← decodeBatchRecorderConfig env
+        args[args.size - 9]! args[args.size - 8]! args[args.size - 7]!
+        args[args.size - 6]! args[args.size - 5]! args[args.size - 4]! args[args.size - 3]!
+      let enabled ← val env args[args.size - 2]!
+      let record ← decodeBatchRecorderWords env args[args.size - 1]!
+      return .batchRecorder (.append config enabled record)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.batchRecorderFinish ||
+      endsWith e ".batchRecorderFinish" then
+    if args.size < 7 then none else do
+      let config ← decodeBatchRecorderConfig env
+        args[args.size - 7]! args[args.size - 6]! args[args.size - 5]!
+        args[args.size - 4]! args[args.size - 3]! args[args.size - 2]! args[args.size - 1]!
+      return .batchRecorder (.finish config)
+  else none
+
+/-- Find a component recorder call through ordinary source wrappers without exposing its
+constructors to the generic extraction IR. -/
+private def findBatchRecorderCall (env : Environment) (fuel : Nat) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let rec go (fuel : Nat) (e : Expr) : Option (Svm.Component.Call Ops.Val) :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      match decodeBatchRecorderCall env e with
+      | some call => some call
+      | none =>
+        let unfolded :=
+          match e.getAppFn.constName? with
+          | none => none
+          | some name =>
+            if name.getRoot != `ProofForge && !Attr.isInline env name then none
+            else
+              match env.find? name with
+              | some (.defnInfo info) =>
+                  if e.getAppArgs.isEmpty then some info.value
+                  else some (info.value.beta e.getAppArgs)
+              | _ => none
+        match unfolded with
+        | some body => go fuel' body
+        | none =>
+          match e with
+          | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+          | .lam _ _ body _ => go fuel' body
+          | .app fn arg => go fuel' fn <|> go fuel' arg
+          | _ => none
+  go fuel e
+
 private abbrev DecodedInvoke :=
   Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Array Ops.PdaSeed × Option Ops.Val
 
@@ -2994,9 +3089,9 @@ private def findAccDataRbTreeOrderRemove (env : Environment) (fuel : Nat) (e : E
                 findAccDataRbTreeOrderRemove env fuel' arg
           | _ => none
 
-/-- Distinguish an absent external-account effect from one whose static shape or dynamic value
-failed to decode. Such a call must fail extraction rather than disappear. -/
-private def mentionsSvmAccountEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
+/-- Distinguish an absent SVM component effect from one whose static shape or dynamic value failed
+to decode. Such a call must fail extraction rather than disappear. -/
+private def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
   let constants := e.getUsedConstantsAsSet
   if constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAt ||
       constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAtOneBased ||
@@ -3004,13 +3099,16 @@ private def mentionsSvmAccountEffect (env : Environment) (fuel : Nat) (e : Expr)
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Remove ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeTraderDeposit ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderInsert ||
-      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove then true
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove ||
+      constants.contains ``ProofForge.Svm.Runtime.batchRecorderBegin ||
+      constants.contains ``ProofForge.Svm.Runtime.batchRecorderAppend ||
+      constants.contains ``ProofForge.Svm.Runtime.batchRecorderFinish then true
   else
     match fuel with
     | 0 => false
     | fuel' + 1 =>
         match unfoldUserHelper env e with
-        | some (_, unfolded) => mentionsSvmAccountEffect env fuel' unfolded
+        | some (_, unfolded) => mentionsSvmEffect env fuel' unfolded
         | none => false
 
 /-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
@@ -3050,7 +3148,7 @@ private def substLetsPreservingInvokes (env : Environment) (fuel : Nat) (e : Exp
         (ty.consumeMData.getAppFn.constName?.map (isUserType env)).getD false &&
           ((unfoldUserHelper env value).isSome || (userCtorFields env value).isSome ||
             isIteExpr value)
-      if (findInvoke env 16 value).isSome || mentionsSvmAccountEffect env 16 value ||
+      if (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
           structuredState || scalarBinding then
         .letE n ty value body nd
       else substLetsPreservingInvokes env fuel' (body.instantiate1 value)
@@ -3124,35 +3222,39 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
           if body.hasLooseBVar 0 then
             match asPdaSeeds value with
             | some _ => go fuel' (body.instantiate1 value) effects
-            | none => (effects, e, mentionsSvmAccountEffect env 16 value)
+            | none => (effects, e, mentionsSvmEffect env 16 value)
           else
-            match findInvoke env 16 value, findAccDataWordSetAt env 16 value,
-                findAccDataRbTreeKey4Insert env 16 value,
-                findAccDataRbTreeKey4Remove env 16 value,
-                findAccDataRbTreeTraderDeposit env 16 value,
-                findAccDataRbTreeOrderInsert env 16 value,
-                findAccDataRbTreeOrderRemove env 16 value with
-            | some invoke, _, _, _, _, _, _ =>
-                go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
-            | none, some write, _, _, _, _, _ =>
-                go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
-            | none, none, some insert, _, _, _, _ =>
-                go fuel' (body.instantiate1 value)
-                  (effects.push (accDataRbTreeKey4InsertOp insert))
-            | none, none, none, some remove, _, _, _ =>
-                go fuel' (body.instantiate1 value)
-                  (effects.push (accDataRbTreeKey4RemoveOp remove))
-            | none, none, none, none, some deposit, _, _ =>
-                go fuel' (body.instantiate1 value)
-                  (effects.push (accDataRbTreeTraderDepositOp deposit))
-            | none, none, none, none, none, some insert, _ =>
-                go fuel' (body.instantiate1 value)
-                  (effects.push (accDataRbTreeOrderInsertOp insert))
-            | none, none, none, none, none, none, some remove =>
-                go fuel' (body.instantiate1 value)
-                  (effects.push (accDataRbTreeOrderRemoveOp remove))
-            | none, none, none, none, none, none, none =>
-                (effects, e, mentionsSvmAccountEffect env 16 value)
+            match findBatchRecorderCall env 16 value with
+            | some call =>
+                go fuel' (body.instantiate1 value) (effects.push (.component call))
+            | none =>
+              match findInvoke env 16 value, findAccDataWordSetAt env 16 value,
+                  findAccDataRbTreeKey4Insert env 16 value,
+                  findAccDataRbTreeKey4Remove env 16 value,
+                  findAccDataRbTreeTraderDeposit env 16 value,
+                  findAccDataRbTreeOrderInsert env 16 value,
+                  findAccDataRbTreeOrderRemove env 16 value with
+              | some invoke, _, _, _, _, _, _ =>
+                  go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
+              | none, some write, _, _, _, _, _ =>
+                  go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
+              | none, none, some insert, _, _, _, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeKey4InsertOp insert))
+              | none, none, none, some remove, _, _, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeKey4RemoveOp remove))
+              | none, none, none, none, some deposit, _, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeTraderDepositOp deposit))
+              | none, none, none, none, none, some insert, _ =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeOrderInsertOp insert))
+              | none, none, none, none, none, none, some remove =>
+                  go fuel' (body.instantiate1 value)
+                    (effects.push (accDataRbTreeOrderRemoveOp remove))
+              | none, none, none, none, none, none, none =>
+                  (effects, e, mentionsSvmEffect env 16 value)
       | _ => (effects, e, false)
   go 32 e #[]
 
@@ -4000,7 +4102,7 @@ private def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr 
     match strip e with
     | .letE _ _ value body _ =>
         let effectful :=
-          (findInvoke env 16 value).isSome || mentionsSvmAccountEffect env 16 value ||
+          (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
             (decodeEvmEffect env value).isSome ||
             (findForIn env value).isSome || (findForBodyExpr env value).isSome
         -- A scalar captured before a CPI must remain a local: substituting its state-field read
@@ -4617,7 +4719,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) (stateType? : Option Name := none) (deepScalars : Bool := false) :
     Except String (Array Ops.Op) :=
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
-  if let some inv := findInvoke env 16 e then
+  if let some call := findBatchRecorderCall env 16 e then
+    .ok #[.component call, .returnU64 (.lit 0)]
+  else if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
   else if let some ops := decodeEvmEffect env e then
     .ok ops
@@ -4832,7 +4936,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           match unfoldUserHelper env value with
           | some (_, unfolded) =>
               mentionsSvmRuntime unfolded || (findInvoke env 64 unfolded).isSome ||
-                mentionsSvmAccountEffect env 64 unfolded
+                mentionsSvmEffect env 64 unfolded
           | none => false
       if ignoredInlineEffect then
         match decodeExpr env fuel' value (preserveLocals := preserveLocals)
@@ -4847,7 +4951,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             return .error s!"extract/unsupported: inline effect helper: {reason}"
         | _, .error reason => return .error reason
       let effectful :=
-        (findInvoke env 16 value).isSome || mentionsSvmAccountEffect env 16 value ||
+        (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
           (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       if !effectful then
@@ -4960,6 +5064,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
       -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
+    else if let some call := findBatchRecorderCall env 16 e then
+      return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
     else if let some ops := decodeEvmEffect env e then
@@ -5303,6 +5409,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           return .error (if stateful then s!"state loop else: {r}" else s!"ite else: {r}")
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
+    else if let some call := decodeBatchRecorderCall env e <|> findBatchRecorderCall env 8 e then
+      return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       return invokeOpsWithRet env e inv
     else if let some (name, unfolded) := unfoldUserHelper env e then
@@ -5439,7 +5547,7 @@ def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false)
   -- Account effects need the same lexical boundary: a value captured before a write or CPI must
   -- not be substituted into that later effect and re-read after the mutation.
   let hasStructuredState := containsStructuredStateLet env 128 body
-  let hasSequencedSvmEffects := mentionsSvmAccountEffect env 128 body
+  let hasSequencedSvmEffects := mentionsSvmEffect env 128 body
   let retainLets := hasStructuredState || hasSequencedSvmEffects
   let fullySubstituted := if retainLets then body else substLets 256 body
   let body :=

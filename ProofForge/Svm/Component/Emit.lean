@@ -1,5 +1,6 @@
 import ProofForge.Svm.Component
 import ProofForge.Svm.AccountStorage.Emit
+import ProofForge.Svm.BatchRecorder.Emit
 
 namespace ProofForge.Svm.Component.Emit
 
@@ -17,6 +18,11 @@ private def Context.accountStorage (context : Context) : AccountStorage.Emit.Con
     loadOwnerIsSelf := context.loadOwnerIsSelf
     headerStack := context.headerStack }
 
+private def Context.batchRecorder (context : Context) : BatchRecorder.Emit.Context :=
+  { loadValue := context.loadValue
+    headerStack := context.headerStack
+    accountCount := context.accountCount }
+
 /-- Backend implementations needed by component-owned dispatch. The main emitter supplies this
 record once and remains independent of individual component call constructors. -/
 structure Backend where
@@ -32,5 +38,7 @@ def emitCall (context : Context) (backend : Backend) (label : String) :
     Component.Call Ops.Val → Except String String
   | .accountStorage call =>
       AccountStorage.Emit.emitCall context.accountStorage backend.accountStorage label call
+  | .batchRecorder call =>
+      BatchRecorder.Emit.emitCall context.batchRecorder label call
 
 end ProofForge.Svm.Component.Emit

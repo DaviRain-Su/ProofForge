@@ -104,7 +104,7 @@ The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PD
 scratch owns 2048..4096. This single frame contract prevents composed target effects from
 clobbering source locals without giving individual intrinsics ad-hoc spill rules. -/
 private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
-  let base := max (Component.stackScratchEnd + 8)
+  let base := max (IR.componentStackScratchEnd p + 8)
     (headerStack (IR.cpiAccountCount p) + 8)
   let offset := base + i * 8
   if offset < 1024 then some offset else none

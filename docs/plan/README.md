@@ -113,6 +113,11 @@
 | [l5-036](tasks/l5-036.md) | done | Source-level bounded RB find + Phoenix validator composition |
 | [l5-037](tasks/l5-037.md) | done | Composed Phoenix ReduceOrderWithFreeFunds state transition |
 | [l5-038](tasks/l5-038.md) | done | Reusable packed SVM wire/account entry adapter |
+| [l5-039](tasks/l5-039.md) | done | Official Phoenix-v1 tag 5 ReduceOrderWithFreeFunds adapter |
+| [l5-040](tasks/l5-040.md) | done | Official Phoenix-v1 tag 4 ReduceOrder + Token withdrawal |
+| [l5-041](tasks/l5-041.md) | done | Storage-owned scalar-key ordered FIFO cursor |
+| [l5-042](tasks/l5-042.md) | done | Stable bounded SVM component bridge |
+| [l5-043](tasks/l5-043.md) | done | Bounded invocation-local audit recorder/batching |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

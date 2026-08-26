@@ -13,6 +13,7 @@
 | `Svm.ABI` | account limits、discriminator、Loader V3/account byte layout、CPI account count | EVM storage |
 | `Svm.Heap` | 32–256 KiB transient downward bump allocator 模型 | account data allocator、持久 pointer、无限 heap |
 | `Svm.AccountStorage` | 固定 Region/Field/index、bounded account-resident map/queue/tree routine | transient heap object、runtime geometry |
+| `Svm.BatchRecorder` | bounded begin/append/finish、SDK heap payload、dynamic signed self-CPI sink | persistent event container、source-visible pointer |
 | `Svm.Component` | 稳定 Query/Call bridge、effects/value traversal、component-owned emitter/scratch boundary | 业务协议语义、任意动态分配 |
 | `Svm.IR` | SVM-only `Op`、account-data byte offset、Vector byte stride | EVM storage slot / EVM effect |
 | `Svm.Solanalib` | bounded typed ALU/static-store semantics bridge | Loader、syscall、ELF、完整 emitter refinement |
@@ -42,12 +43,16 @@ source semantic helper
 `Svm.Component` 内注册自己的 bounded vocabulary 和 backend，但不再改动上述通用层。
 `AccountStorage` 是第一个 component backend：它组合 compile-time `Region/Field`、显式
 zero/one-based index、checked load/store 与有界 tree walk，而不是把每种容器做成新的底层
-opcode。
+opcode。`BatchRecorder` 是第二个 backend：固定 header/record recipe 经 begin/append/finish
+写入 invocation-local payload，达到 record/byte bound 就在 append 前 flush，finish 即使空 batch
+也发 signed self-CPI。CPI detection、raw self-entry 和 scratch 需求都由 component capability
+提供，generic IR/Emit 不枚举 recorder constructor。
 
 `Svm.Heap` 单独建模官方 `BumpAllocator`：heap 映射在 `0x300000000`，默认 32 KiB，
 compute-budget 上限 256 KiB；首 8 字节保存 bump，allocation 向下并向下对齐，OOM 返回
 空，deallocation 不回收。这里的 transient heap 只活一个 invocation；账户内 Sokoban/Phoenix
 allocator 仍是固定容量、index/offset based 的持久字节布局，绝不能保存 heap pointer。
+SDK global allocator 本身仍固定使用 32 KiB；`BatchRecorder` 因此不假设 Agave 可选的大 frame。
 
 ## API
 

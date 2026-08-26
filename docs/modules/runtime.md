@@ -47,6 +47,10 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   `Custom(1)` 退出。未设置时不改变既有 recipe / digest。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
 - `invokeSignedSeeds programIx metas data seeds bump` — 一组编译期定形的异构 signer seeds；支持 ASCII、state key 和静态 account key，运行时只提供 bump。
+- `batchRecorderBegin` / `batchRecorderAppend` / `batchRecorderFinish` — 不可约 source stubs；
+  static sink/header/count geometry 与 `Array CpiWord` 抽成 `Svm.Component.Call.batchRecorder`。
+  buffer 只在 invocation-local SDK 32 KiB bump heap 中；append 在 record/byte bound 前 flush，
+  finish 必发（允许 header-only），不返回或持久化 pointer。
 - `PdaSeed.accData account offset length` — 直接引用 external account data 的编译期固定
   byte slice；`1 ≤ length ≤ 32`，形成 descriptor 前检查 `data_len ≥ offset+length`。seed
   指向本次 invocation 的 serialized account buffer，不复制、不分配，也不能持久化 pointer。

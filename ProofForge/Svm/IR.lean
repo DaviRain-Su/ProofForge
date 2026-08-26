@@ -326,6 +326,9 @@ private partial def rawSelfEntriesIn (ops : Array Op) :
     | .ite _ _ _ thn els =>
         result := result ++ (← rawSelfEntriesIn thn) ++ (← rawSelfEntriesIn els)
     | .forBody _ body => result := result ++ (← rawSelfEntriesIn body)
+    | .component call =>
+        for (tag, authoritySeed) in call.rawSelfEntries do
+          result := result.push { tag := UInt64.ofNat tag, authoritySeed }
     | _ => pure ()
   return result
 
@@ -560,6 +563,22 @@ def isProgramShape (p : Program) : Bool :=
 
 def usesCpi (p : Program) : Bool :=
   p.methods.any (hasInvoke ·.ops)
+
+private partial def componentStackScratchEndIn (ops : Array Op) : Nat :=
+  ops.foldl (init := Component.stackScratchEnd) fun current op =>
+    match op with
+    | .component call => Nat.max current call.stackScratchEnd
+    | .ite _ _ _ thn els =>
+        Nat.max current (Nat.max (componentStackScratchEndIn thn) (componentStackScratchEndIn els))
+    | .forBody _ body => Nat.max current (componentStackScratchEndIn body)
+    | _ => current
+
+/-- Highest fixed stack cell required by any component used by this program. Keeping this
+capability-driven preserves the established scalar-local layout for programs that do not use a
+larger component. -/
+def componentStackScratchEnd (p : Program) : Nat :=
+  p.methods.foldl (init := Component.stackScratchEnd) fun current method =>
+    Nat.max current (componentStackScratchEndIn method.ops)
 
 def usesWalk (p : Program) : Bool :=
   usesCpi p || p.methods.any fun method => Ops.hasAcc1 (toSourceOps method.ops)

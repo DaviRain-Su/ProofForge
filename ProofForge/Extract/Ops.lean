@@ -127,6 +127,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.invoke (programIx : Nat) (metas : Array CpiMeta)
     (data : Array CpiWord) (seeds : Array PdaSeed := #[]) (bump : Option Val := none) : Op :=
   .ext (.svm (.invoke programIx metas data seeds bump))
+@[match_pattern] def Op.component (call : Svm.Component.Call Val) : Op :=
+  .ext (.svm (.component call))
 @[match_pattern] def Op.accDataWordSetAt
     (acc baseWord strideWords capacity : Nat) (index value : Val) : Op :=
   .ext (.svm (.component (.accountStorage

@@ -146,6 +146,57 @@ the extractor or emitter about a particular Program.
   let _ := bump
   0
 
+/--
+Open a bounded invocation-local recorder. Static arguments describe the sink and byte geometry;
+`header` excludes the one-byte raw self-entry tag, which the component prepends. Extraction lowers
+this to a component call backed by Solana's 32 KiB downward bump allocator. No heap address is
+observable in source code or persistent account data.
+-/
+@[irreducible] def batchRecorderBegin
+    (logAccount selfEntryTag : UInt64) (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords : UInt64)
+    (header : Array CpiWord) (bump : UInt64) : UInt64 :=
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := header
+  let _ := bump
+  0
+
+/-- Append one compile-time-shaped record when `enabled != 0`. The component flushes before an
+append that would exceed either the configured byte bound or record-count bound. -/
+@[irreducible] def batchRecorderAppend
+    (logAccount selfEntryTag : UInt64) (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords : UInt64)
+    (enabled : UInt64) (record : Array CpiWord) : UInt64 :=
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := enabled
+  let _ := record
+  0
+
+/-- Flush and close a bounded recorder. A header-only batch is emitted when no record was appended. -/
+@[irreducible] def batchRecorderFinish
+    (logAccount selfEntryTag : UInt64) (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords : UInt64) : UInt64 :=
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  0
+
 /-- `system.transfer`：普通包装，不是抽出特例。 -/
 def systemTransfer (lamports : UInt64) : UInt64 :=
   invoke 2

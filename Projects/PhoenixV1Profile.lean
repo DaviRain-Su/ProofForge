@@ -1428,30 +1428,28 @@ def claimReleasedFunds512At (marketAccount traderIndex side released : UInt64) :
     else
       .error .overflow
 
-/-- Emit Phoenix's initial audit batch even when no Reduce event was added. `traderCpiAccount` is
-external-relative because it is embedded as a CPI data key; market reads remain physical indexes. -/
-def recordReduceAt (origin marketAccount traderCpiAccount marketSequence orderIndex
-    orderSequence price removed remaining : UInt64) : UInt64 :=
-  if orderIndex = 0 then
-    invokeSigned 0
-      #[{ acc := 0, signer := true, writable := false }]
-      #[.selfEntry 15 "log", .u8le 1, .u8le origin,
-        .u64le marketSequence, .u64le unixTime, .u64le clockSlot,
-        .u64le (accKeyWord marketAccount 0), .u64le (accKeyWord marketAccount 1),
-        .u64le (accKeyWord marketAccount 2), .u64le (accKeyWord marketAccount 3),
-        .accKey traderCpiAccount, .u16le 0]
-      "log" (findPda "log")
-  else
-    invokeSigned 0
-      #[{ acc := 0, signer := true, writable := false }]
-      #[.selfEntry 15 "log", .u8le 1, .u8le origin,
-        .u64le marketSequence, .u64le unixTime, .u64le clockSlot,
-        .u64le (accKeyWord marketAccount 0), .u64le (accKeyWord marketAccount 1),
-        .u64le (accKeyWord marketAccount 2), .u64le (accKeyWord marketAccount 3),
-        .accKey traderCpiAccount, .u16le 1,
-        .u8le 4, .u16le 0, .u64le orderSequence, .u64le price,
-        .u64le removed, .u64le remaining]
-      "log" (findPda "log")
+/-- Open Phoenix's bounded audit batch. `traderCpiAccount` is external-relative because it is
+embedded as a CPI data key; market reads remain physical indexes. The 92-byte payload below plus
+the component-owned raw-entry byte is Phoenix's 93-byte audit header. -/
+def beginReduceBatchAt (origin marketAccount traderCpiAccount marketSequence : UInt64) : UInt64 :=
+  batchRecorderBegin 0 15 "log" 1246 93 91 32
+    #[.u8le 1, .u8le origin,
+      .u64le marketSequence, .u64le unixTime, .u64le clockSlot,
+      .u64le (accKeyWord marketAccount 0), .u64le (accKeyWord marketAccount 1),
+      .u64le (accKeyWord marketAccount 2), .u64le (accKeyWord marketAccount 3),
+      .accKey traderCpiAccount, .u16le 0]
+    (findPda "log")
+
+/-- Append one canonical 35-byte Phoenix Reduce record. `orderIndex = 0` disables the append while
+leaving `finishReduceBatch` responsible for the required header-only CPI. -/
+def recordReduceAt (orderIndex orderSequence price removed remaining : UInt64) : UInt64 :=
+  batchRecorderAppend 0 15 "log" 1246 93 91 32 orderIndex
+    #[.u8le 4, .u16le 0, .u64le orderSequence, .u64le price,
+      .u64le removed, .u64le remaining]
+
+/-- Flush Phoenix's current batch, including an empty header-only batch, and close the recorder. -/
+def finishReduceBatch : UInt64 :=
+  batchRecorderFinish 0 15 "log" 1246 93 91 32
 
 /-- Execute only the side-selected nonzero classic Token withdrawal. The mint seed points directly
 at the authenticated fixed MarketHeader field; no mint account, heap buffer, or copied seed exists. -/
@@ -1510,7 +1508,9 @@ def reduceOrderWithFreeFunds (_s : State) (side : UInt8)
       let marketSequence := accDataWord 2 106
       let remaining := resting - removed
       let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
-      let _ := recordReduceAt 5 2 2 marketSequence orderIndex sequence price removed remaining
+      let _ := beginReduceBatchAt 5 2 2 marketSequence
+      let _ := recordReduceAt orderIndex sequence price removed remaining
+      let _ := finishReduceBatch
       .ok (_s, removed)
 
 /--
@@ -1623,8 +1623,9 @@ def reduceOrder (_s : State) (side : UInt8)
             let _ := withdrawReleasedAt side atoms
             let marketSequence := accDataWord 2 106
             let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
-            let _ := recordReduceAt 4 2 2 marketSequence orderIndex sequence price actual
-              (resting - actual)
+            let _ := beginReduceBatchAt 4 2 2 marketSequence
+            let _ := recordReduceAt orderIndex sequence price actual (resting - actual)
+            let _ := finishReduceBatch
             .ok (_s, actual)
         else
           .error .overflow
@@ -1643,6 +1644,7 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   bidRootNeighborhood512 bidRootNeighborhood1024 bidRootNeighborhood2048
   bidRootNeighborhood4096 profileAccountBytesAt profileAccountBytes allocatorHeadersValidAt
   allocatorHeadersValid reduceAskFreeFunds512At reduceBidFreeFunds512At reduceFreeFunds512At
-  quoteLotsReleased512At claimReleasedFunds512At recordReduceAt withdrawReleasedAt
+  quoteLotsReleased512At claimReleasedFunds512At beginReduceBatchAt recordReduceAt
+  finishReduceBatch withdrawReleasedAt
 
 end Projects.PhoenixV1Profile

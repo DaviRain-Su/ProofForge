@@ -458,7 +458,10 @@ private def OpExt.hasSelect : OpExt Val → Bool
   | .component call => call.anyValue valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=
-  walkOps ops fun | .ext (.invoke ..) => true | _ => false
+  walkOps ops fun
+    | .ext (.invoke ..) => true
+    | .ext (.component call) => call.usesCpi
+    | _ => false
 
 def hasStoreField (ops : Array Op) : Bool :=
   walkOps ops fun | .storeField .. => true | _ => false

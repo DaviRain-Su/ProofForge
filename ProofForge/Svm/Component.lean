@@ -1,4 +1,5 @@
 import ProofForge.Svm.AccountStorage
+import ProofForge.Svm.BatchRecorder
 
 namespace ProofForge.Svm.Component
 
@@ -38,16 +39,20 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
 or codec components extend this layer instead of adding top-level SVM Ops/IR/main-emitter cases. -/
 inductive Call (V : Type) where
   | accountStorage (call : AccountStorage.Call V)
+  | batchRecorder (call : BatchRecorder.Call V)
   deriving BEq, Repr, Inhabited
 
 def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .accountStorage call => .accountStorage (call.mapValues mapValue)
+  | .batchRecorder call => .batchRecorder (call.mapValues mapValue)
 
 def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .accountStorage call => return .accountStorage (← call.mapValuesM mapValue)
+  | .batchRecorder call => return .batchRecorder (← call.mapValuesM mapValue)
 
 def Call.values : Call V → Array V
   | .accountStorage call => call.values
+  | .batchRecorder call => call.values
 
 def Call.anyValue (predicate : V → Bool) (call : Call V) : Bool :=
   call.values.any predicate
@@ -57,14 +62,30 @@ def Call.allValues (predicate : V → Bool) (call : Call V) : Bool :=
 
 def Call.effects : Call V → EffectSummary
   | .accountStorage call => call.effects
+  | .batchRecorder call => call.effects
 
 def Call.minAccounts (measure : V → Nat) : Call V → Nat
   | .accountStorage call => call.minAccounts measure
+  | .batchRecorder call => call.minAccounts measure
 
 def Call.wellFormed (valueWellFormed : V → Bool) (accountLimit : Nat := 64) : Call V → Bool
   | .accountStorage call => call.wellFormed valueWellFormed accountLimit
+  | .batchRecorder call => call.wellFormed valueWellFormed accountLimit
 
 def Call.canonical (renderValue : V → String) : Call V → String
   | .accountStorage call => call.canonical renderValue
+  | .batchRecorder call => call.canonical renderValue
+
+def Call.usesCpi : Call V → Bool
+  | .accountStorage _ => false
+  | .batchRecorder call => call.usesCpi
+
+def Call.stackScratchEnd : Call V → Nat
+  | .accountStorage _ => Component.stackScratchEnd
+  | .batchRecorder call => call.stackScratchEnd
+
+def Call.rawSelfEntries : Call V → Array (Nat × String)
+  | .accountStorage _ => #[]
+  | .batchRecorder call => call.rawSelfEntries
 
 end ProofForge.Svm.Component

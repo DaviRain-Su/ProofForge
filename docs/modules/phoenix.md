@@ -153,6 +153,9 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   Transfer；tag 5 没有 tag-4 reduce-status gate。`EntryAdapter` 负责协议入口，storage 层负责
   持久容器。storage-owned ordered cursor 以 scalar `(price, sequence)` 做 ask 升序/bid 降序
   strict upper-bound，每次 mutation 后从 root 重查，不保留 node address 或收集 heap `Vec`。
+  authenticated audit 由 component-owned bounded recorder 组合：93-byte header、35-byte Reduce、
+  32-record/1,246-byte 双 bound、append 前自动 flush、empty finish header-only。payload 使用
+  官方 SDK 固定 32 KiB downward bump cursor，不把 pointer 写入 market account。
   Phoenix source 只做组合；没有新增 Phoenix-specific 顶层 Ops/IR/主 Emit case，也不创建
   heap Map、node copy 或 persistent pointer。
 - **未支持（P5 remaining instructions/公网）**：cancel-all/cancel-up-to/by-id、matching/
@@ -175,6 +178,6 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 
 独立 `PhoenixV1Profile` 是预编译 fixed-capacity account profile，不是运行时动态容器。
 `EntryAdapter → AccountStorage → target-owned SVM backend` 已贯通 official tag 4/5 与 ordered
-cursor；下一片先在同一边界补 bounded audit recorder/batching，再组合无 payload 的 tag 6/7
-CancelAll pair，以检验新增协议能力不再扩张顶层 Ops/IR/主 Emit。完整 Phoenix-v1 指令集和
+cursor/bounded audit recorder；下一片组合无 payload 的 tag 6/7 CancelAll pair，以检验新增
+协议能力不再扩张顶层 Ops/IR/主 Emit。完整 Phoenix-v1 指令集和
 动态 remaining accounts 仍关闭。
