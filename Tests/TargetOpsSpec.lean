@@ -122,8 +122,8 @@ private def validRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
     1 65658 65659 65660 18 8321 (.arg 0) (.arg 1) (.arg 2) (.arg 3))
 
 private def malformedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
-  .returnU64 (.ext (.accDataRbTreeKey4Valid 1 65658 65659 65660 18 8321)
-    #[.arg 0, .arg 1, .arg 2])
+  .returnU64 (.ext (.accountStorage (.key4RbTreeValidOneBased
+    1 65658 65659 65660 18 8321)) #[.arg 0, .arg 1, .arg 2])
 
 private def oversizedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataRbTreeKey4Valid
@@ -134,6 +134,18 @@ private def oversizedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
 #guard validRbTreeKey4Op.wellFormed
 #guard !malformedRbTreeKey4Op.wellFormed
 #guard !oversizedRbTreeKey4Op.wellFormed
+
+private def validRbTreeKey4Query : ProofForge.Svm.AccountStorage.Query :=
+  .key4RbTreeValidOneBased 1 65658 65659 65660 18 8321
+
+#guard validRbTreeKey4Query.wellFormed
+#guard validRbTreeKey4Query.arity == 4
+#guard validRbTreeKey4Query.effects.reads == #[1]
+#guard validRbTreeKey4Query.effects.writes.isEmpty
+#guard validRbTreeKey4Query.canonical
+    (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
+    (#[.arg 0, .arg 1, .arg 2, .arg 3] : Array ProofForge.Svm.Ops.Val) ==
+  "drb4.1.65658.65659.65660.18.8321(a0,a1,a2,a3)"
 
 private def validAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
   .ext (.accountStorage (.writeWordZeroBased 1 8314 18 128 (.arg 0) (.arg 1)))

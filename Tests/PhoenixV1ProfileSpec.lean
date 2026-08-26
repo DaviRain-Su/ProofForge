@@ -279,9 +279,11 @@ private partial def valHasRbTreeKey4
         valHasRbTreeKey4 linksBase parentBase keyBase capacity rhs ||
         valHasRbTreeKey4 linksBase parentBase keyBase capacity thenValue ||
         valHasRbTreeKey4 linksBase parentBase keyBase capacity elseValue
-  | .ext (.accDataRbTreeKey4Valid actualAcc links parent key stride actualCapacity) operands =>
-      (actualAcc == 1 && links == linksBase && parent == parentBase && key == keyBase &&
-        stride == 18 && actualCapacity == capacity) ||
+  | .ext (.accountStorage (.key4RbTreeValid tree)) operands =>
+      let region := tree.links.region
+      (region.account == 1 && tree.links.firstWord == linksBase &&
+        tree.parentColor.firstWord == parentBase && tree.key.firstWord == keyBase &&
+        region.strideWords == 18 && region.capacity == capacity) ||
         operands.any (valHasRbTreeKey4 linksBase parentBase keyBase capacity)
   | .ext _ operands => operands.any
       (valHasRbTreeKey4 linksBase parentBase keyBase capacity)

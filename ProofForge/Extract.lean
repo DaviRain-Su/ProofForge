@@ -2282,8 +2282,6 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.accDataWordAt a b s c i) => some (.accDataWordAt a b s c i)
             | some (.ext (.svm (.accountStorage query)) operands) =>
                 some (.ext (.svm (.accountStorage query)) operands)
-            | some (.accDataRbTreeKey4Valid a l p k s c r n b f) =>
-                some (.accDataRbTreeKey4Valid a l p k s c r n b f)
             | some (.accLamportsN a) => some (.accLamportsN a)
             | some (.accDataLenN a) => some (.accDataLenN a)
             | some (.isSignerN a) => some (.isSignerN a)
@@ -4570,7 +4568,6 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .ext (.svm (.accountStorage _)) _
-    | .accDataRbTreeKey4Valid ..
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
@@ -5495,9 +5492,6 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
       | .ext (.svm (.accountStorage query)) operands =>
           .ext (.svm (.accountStorage query)) (operands.map (flipVal fuel'))
-      | .accDataRbTreeKey4Valid a l p k s c r n b f =>
-          .accDataRbTreeKey4Valid a l p k s c
-            (flipVal fuel' r) (flipVal fuel' n) (flipVal fuel' b) (flipVal fuel' f)
       | .checkPda s b => .checkPda s (flipVal fuel' b)
       | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
       | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
@@ -5814,8 +5808,6 @@ private partial def valFields : Ops.Val → Array String
   | .byteSwap64 word => valFields word
   | .accDataWordAt _ _ _ _ i => valFields i
   | .ext (.svm (.accountStorage _)) operands => operands.flatMap valFields
-  | .accDataRbTreeKey4Valid _ _ _ _ _ _ r s b f =>
-      valFields r ++ valFields s ++ valFields b ++ valFields f
   | .checkPda _ b => valFields b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valFields l ++ valFields r

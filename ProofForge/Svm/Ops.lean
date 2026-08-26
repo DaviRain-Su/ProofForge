@@ -42,11 +42,8 @@ def rbTreeWordsInRange
 traversal stack. The key words are consecutive and compared in original byte order. -/
 def rbTreeKey4WordsInRange
     (linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Bool :=
-  capacity > 0 && capacity ≤ 8321 &&
-    indexedDataWordsInRange linksBaseWord strideWords capacity &&
-    indexedDataWordsInRange parentBaseWord strideWords capacity &&
-    indexedDataWordsInRange keyBaseWord strideWords capacity &&
-    indexedDataWordsInRange (keyBaseWord + 3) strideWords capacity
+  (AccountStorage.Query.key4RbTreeValidOneBased
+    0 linksBaseWord parentBaseWord keyBaseWord strideWords capacity).wellFormed maxTxAccountLocks
 
 /-- Static geometry for a complete in-place four-word-key tree insertion. The whole node stride is
 addressable because allocation initializes every word, while a modest stride cap bounds generated
@@ -121,8 +118,6 @@ inductive ValKind where
   | accDataWord (acc word : Nat)
   | accDataWordAt (acc baseWord strideWords capacity : Nat)
   | accountStorage (query : AccountStorage.Query)
-  | accDataRbTreeKey4Valid
-      (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
   | accLamportsN (acc : Nat)
   | accDataLenN (acc : Nat)
   | isSignerN (acc : Nat)
@@ -139,7 +134,6 @@ def ValKind.arity : ValKind → Nat
   | .byteSwap64 => 1
   | .accDataWordAt .. => 1
   | .accountStorage query => query.arity
-  | .accDataRbTreeKey4Valid .. => 4
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
@@ -262,9 +256,9 @@ def accDataRbTreeValid
 def accDataRbTreeKey4Valid
     (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (root size bumpIndex freeListHead : Val) : Val :=
-  .ext (.accDataRbTreeKey4Valid
-    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity)
-    #[root, size, bumpIndex, freeListHead]
+  .ext (.accountStorage (.key4RbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity))
+      #[root, size, bumpIndex, freeListHead]
 def accLamportsN (acc : Nat) : Val := leaf (.accLamportsN acc)
 def accDataLenN (acc : Nat) : Val := leaf (.accDataLenN acc)
 def isSignerN (acc : Nat) : Val := leaf (.isSignerN acc)
@@ -322,11 +316,6 @@ private partial def staticPayloadsWellFormed : Val → Bool
         operands.all staticPayloadsWellFormed
   | .ext (.accountStorage query) operands =>
       query.wellFormed maxTxAccountLocks && operands.all staticPayloadsWellFormed
-  | .ext (.accDataRbTreeKey4Valid acc linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity) operands =>
-      accInRange acc &&
-        rbTreeKey4WordsInRange linksBaseWord parentBaseWord keyBaseWord strideWords capacity &&
-        operands.all staticPayloadsWellFormed
   | .ext _ operands => operands.all staticPayloadsWellFormed
   | _ => true
 
@@ -452,7 +441,6 @@ partial def valNeedsWalk : Val → Bool
        | .isSigner1 | .isWritable1 | .isExecutable1 => true
        | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
        | .accDataWordAt acc _ _ _
-       | .accDataRbTreeKey4Valid acc _ _ _ _ _
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
@@ -479,7 +467,6 @@ partial def valMinAccounts : Val → Nat
         | .isSigner1 | .isWritable1 | .isExecutable1 => 2
         | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
         | .accDataWordAt acc _ _ _
-        | .accDataRbTreeKey4Valid acc _ _ _ _ _
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc
         | .signerKeyN acc | .ownerIsSelf acc => acc + 1

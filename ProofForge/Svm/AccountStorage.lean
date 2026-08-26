@@ -93,39 +93,71 @@ def ParentPath.wellFormed (path : ParentPath) (accountLimit : Nat := 64) : Bool 
     !path.links.region.access.currentProgramOwned &&
     path.maxDepth > 0 && path.maxDepth ≤ 64
 
+/-- Shared account-resident red-black-tree topology. Links and packed parent/color fields use the
+same one-based fixed-capacity region; key shape and traversal policy are supplied by a query. -/
+structure RbTree where
+  links : Field
+  parentColor : Field
+  deriving BEq, Repr, Inhabited
+
+/-- Fixed traversal bound shared by account-resident RB search and validation routines. -/
+def rbTreeTraversalDepth : Nat := 64
+
+def RbTree.wellFormed (tree : RbTree) (maxCapacity : Nat) (accountLimit : Nat := 64) : Bool :=
+  tree.links.wellFormed accountLimit && tree.parentColor.wellFormed accountLimit &&
+    tree.links.widthWords == 1 && tree.parentColor.widthWords == 1 &&
+    tree.links.region.sameShape tree.parentColor.region &&
+    tree.links.region.strideWords < maxDataWord &&
+    tree.links.region.indexBase == .one && !tree.links.region.access.writable &&
+    !tree.links.region.access.currentProgramOwned && tree.links.region.capacity ≤ maxCapacity
+
 /-- Static fields of a fixed-capacity Phoenix FIFO red-black tree. The validator traverses live
 nodes in place and then follows the allocator free list; neither phase allocates or copies nodes. -/
 structure FifoRbTree where
-  links : Field
-  parentColor : Field
+  topology : RbTree
   price : Field
   sequence : Field
   bid : Bool
   deriving BEq, Repr, Inhabited
 
+def FifoRbTree.links (tree : FifoRbTree) : Field := tree.topology.links
+def FifoRbTree.parentColor (tree : FifoRbTree) : Field := tree.topology.parentColor
+
 def FifoRbTree.wellFormed (tree : FifoRbTree) (accountLimit : Nat := 64) : Bool :=
-  tree.links.wellFormed accountLimit && tree.parentColor.wellFormed accountLimit &&
-    tree.price.wellFormed accountLimit && tree.sequence.wellFormed accountLimit &&
-    tree.links.widthWords == 1 && tree.parentColor.widthWords == 1 &&
+  tree.topology.wellFormed 4096 accountLimit && tree.price.wellFormed accountLimit &&
+    tree.sequence.wellFormed accountLimit &&
     tree.price.widthWords == 1 && tree.sequence.widthWords == 1 &&
-    tree.links.region.sameShape tree.parentColor.region &&
     tree.links.region.sameShape tree.price.region &&
-    tree.links.region.sameShape tree.sequence.region &&
-    tree.links.region.strideWords < maxDataWord &&
-    tree.links.region.indexBase == .one && !tree.links.region.access.writable &&
-    !tree.links.region.access.currentProgramOwned &&
-    tree.links.region.capacity ≤ 4096
+    tree.links.region.sameShape tree.sequence.region
+
+/-- Static fields of a fixed-capacity red-black tree ordered by four consecutive account words. -/
+structure Key4RbTree where
+  topology : RbTree
+  key : Field
+  lastKey : Field
+  deriving BEq, Repr, Inhabited
+
+def Key4RbTree.links (tree : Key4RbTree) : Field := tree.topology.links
+def Key4RbTree.parentColor (tree : Key4RbTree) : Field := tree.topology.parentColor
+
+def Key4RbTree.wellFormed (tree : Key4RbTree) (accountLimit : Nat := 64) : Bool :=
+  tree.topology.wellFormed 8321 accountLimit && tree.key.wellFormed accountLimit &&
+    tree.lastKey.wellFormed accountLimit && tree.key.widthWords == 1 &&
+    tree.lastKey.widthWords == 1 && tree.links.region.sameShape tree.key.region &&
+    tree.links.region.sameShape tree.lastKey.region && tree.key.firstWord + 3 == tree.lastKey.firstWord
 
 /-- Account-resident routines that return one scalar. Dynamic operands remain ordinary Core
 operands; this target-owned descriptor contains only static bounded geometry. -/
 inductive Query where
   | parentPathValid (path : ParentPath)
   | fifoRbTreeValid (tree : FifoRbTree)
+  | key4RbTreeValid (tree : Key4RbTree)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
   | .parentPathValid .. => 3
   | .fifoRbTreeValid .. => 4
+  | .key4RbTreeValid .. => 4
 
 def Query.effects : Query → EffectSummary
   | .parentPathValid path =>
@@ -133,10 +165,14 @@ def Query.effects : Query → EffectSummary
   | .fifoRbTreeValid tree =>
       ((EffectSummary.forField tree.links).merge (EffectSummary.forField tree.parentColor)).merge
         ((EffectSummary.forField tree.price).merge (EffectSummary.forField tree.sequence))
+  | .key4RbTreeValid tree =>
+      ((EffectSummary.forField tree.links).merge (EffectSummary.forField tree.parentColor)).merge
+        ((EffectSummary.forField tree.key).merge (EffectSummary.forField tree.lastKey))
 
 def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
   | .parentPathValid path => path.wellFormed accountLimit
   | .fifoRbTreeValid tree => tree.wellFormed accountLimit
+  | .key4RbTreeValid tree => tree.wellFormed accountLimit
 
 def Query.needsWalk (query : Query) : Bool :=
   query.effects.reads.any (· ≥ 1)
@@ -160,6 +196,11 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
         s!"{tree.price.firstWord}.{tree.sequence.firstWord}." ++
         s!"{region.strideWords}.{region.capacity}.{tree.bid}" ++
         s!"({String.intercalate "," (operands.map renderValue).toList})"
+  | .key4RbTreeValid tree =>
+      let region := tree.links.region
+      s!"drb4.{region.account}.{tree.links.firstWord}.{tree.parentColor.firstWord}." ++
+        s!"{tree.key.firstWord}.{region.strideWords}.{region.capacity}" ++
+        s!"({String.intercalate "," (operands.map renderValue).toList})"
 
 def Query.parentPathValidOneBased
     (account linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat) : Query :=
@@ -180,14 +221,15 @@ def Query.fifoRbTreeValidOneBased
     (bid : Bool) : Query :=
   let access : Access := {}
   .fifoRbTreeValid
-    { links :=
-        { region :=
-            { account, baseWord := linksBaseWord, strideWords, capacity
-              indexBase := .one, access } }
-      parentColor :=
-        { region :=
-            { account, baseWord := parentBaseWord, strideWords, capacity
-              indexBase := .one, access } }
+    { topology :=
+        { links :=
+            { region :=
+                { account, baseWord := linksBaseWord, strideWords, capacity
+                  indexBase := .one, access } }
+          parentColor :=
+            { region :=
+                { account, baseWord := parentBaseWord, strideWords, capacity
+                  indexBase := .one, access } } }
       price :=
         { region :=
             { account, baseWord := priceBaseWord, strideWords, capacity
@@ -197,6 +239,28 @@ def Query.fifoRbTreeValidOneBased
             { account, baseWord := sequenceBaseWord, strideWords, capacity
               indexBase := .one, access } }
       bid }
+
+def Query.key4RbTreeValidOneBased
+    (account linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Query :=
+  let access : Access := {}
+  .key4RbTreeValid
+    { topology :=
+        { links :=
+            { region :=
+                { account, baseWord := linksBaseWord, strideWords, capacity
+                  indexBase := .one, access } }
+          parentColor :=
+            { region :=
+                { account, baseWord := parentBaseWord, strideWords, capacity
+                  indexBase := .one, access } } }
+      key :=
+        { region :=
+            { account, baseWord := keyBaseWord, strideWords, capacity
+              indexBase := .one, access } }
+      lastKey :=
+        { region :=
+            { account, baseWord := keyBaseWord + 3, strideWords, capacity
+              indexBase := .one, access } } }
 
 /-- Stable SVM-to-storage bridge. New bounded allocators, trees, maps, and queues extend this
 target-owned call vocabulary instead of adding another top-level SVM IR constructor and another

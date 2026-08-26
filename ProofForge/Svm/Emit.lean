@@ -12,11 +12,6 @@ private def sysvarProgramIdScratch : Nat := 3104
 It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
 PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
 private def pdaSeedsScratch : Nat := 4096
-/-- Four-word-key trees reach 8321 slots. Their 1048-byte bitmap and 512-byte traversal stack
-remain disjoint in the bottom half of the fixed 4096-byte SVM frame. -/
-private def rbTreeKey4BitmapScratch : Nat := 4096
-private def rbTreeKey4TraversalScratch : Nat := 3000
-private def rbTreeKey4TraversalDepth : Nat := 64
 /-- Loop control must not overlap expression temporaries (8..), scalar locals (320..), or
 walked-account headers (512..). -/
 private def loopCounterScratch : Nat := 304
@@ -952,10 +947,6 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
         loadOwnerIsSelf := emitLoadOwnerIsSelf p
         headerStack }
       query operands stackOff nonce scope
-  | .ext (.accDataRbTreeKey4Valid acc linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity) #[root, size, bumpIndex, freeListHead] =>
-    emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord keyBaseWord
-      strideWords capacity root size bumpIndex freeListHead stackOff nonce scope
   | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
   | .ext (.accDataLenN acc) #[] =>
@@ -1084,391 +1075,6 @@ private partial def emitLoadAccDataWordAt (p : IR.Program) (acc baseWord strideW
   add64 r1, r2
   ldxdw r1, [r1 + 0]
   stxdw [r10 - {stackOff}], r1
-"
-
-/-- Validate a fixed-capacity account-resident red-black tree whose key is four consecutive words.
-The traversal marks each live node once on descent, uses a fixed stack for in-order visitation, and
-then reuses the bitmap for the allocator free list. `be64` turns each loaded little-endian word into
-the unsigned byte-lexicographic limb used by `[u8; 32]` ordering. -/
-private partial def emitLoadAccDataRbTreeKey4Valid (p : IR.Program)
-    (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-    (root size bumpIndex freeListHead : Ops.Val)
-    (stackOff nonce : Nat) (scope : String) : Except String String := do
-  let loadRoot ← loadVal p root (stackOff + 8) (nonce + 1) (scope ++ "_root")
-  let loadSize ← loadVal p size (stackOff + 16) (nonce + 2) (scope ++ "_size")
-  let loadBump ← loadVal p bumpIndex (stackOff + 24) (nonce + 3) (scope ++ "_bump")
-  let loadFree ← loadVal p freeListHead (stackOff + 32) (nonce + 4) (scope ++ "_free")
-  let strideBytes := 8 * strideWords
-  let linksBaseBytes := 8 * linksBaseWord
-  let parentBaseBytes := 8 * parentBaseWord
-  let keyBaseBytes := 8 * keyBaseWord
-  let finalWord :=
-    Nat.max linksBaseWord (Nat.max parentBaseWord (keyBaseWord + 3)) +
-      strideWords * (capacity - 1)
-  let requiredBytes := 8 * (finalWord + 1)
-  let bitmapWords := (capacity + 63) / 64
-  let clearBitmap := (List.range bitmapWords).foldl (init := "") fun text i =>
-    text ++ s!"  stxdw [r9 + {8 * i}], r1\n"
-  let token := IR.u64Hex (Core.IR.fnv1a64
-    (s!"{scope}:{stackOff}:{nonce}:{acc}:{linksBaseWord}:{parentBaseWord}:" ++
-      s!"{keyBaseWord}:{strideWords}:{capacity}"))
-  let dataOk := s!"rb4_data_ok_{token}"
-  let nonEmpty := s!"rb4_nonempty_{token}"
-  let startLive := s!"rb4_start_live_{token}"
-  let liveLoop := s!"rb4_live_loop_{token}"
-  let nonRoot := s!"rb4_nonroot_{token}"
-  let parentOk := s!"rb4_parent_ok_{token}"
-  let depthReady := s!"rb4_depth_ready_{token}"
-  let nullChild := s!"rb4_null_{token}"
-  let blackHeightSet := s!"rb4_bh_set_{token}"
-  let blackHeightOk := s!"rb4_bh_ok_{token}"
-  let firstKey := s!"rb4_first_key_{token}"
-  let keyLimb1 := s!"rb4_key_limb1_{token}"
-  let keyLimb2 := s!"rb4_key_limb2_{token}"
-  let keyLimb3 := s!"rb4_key_limb3_{token}"
-  let keyOk := s!"rb4_key_ok_{token}"
-  let storeKey := s!"rb4_store_key_{token}"
-  let rightNull := s!"rb4_right_null_{token}"
-  let afterLive := s!"rb4_after_live_{token}"
-  let startFree := s!"rb4_start_free_{token}"
-  let freeLoop := s!"rb4_free_loop_{token}"
-  let freeDone := s!"rb4_free_done_{token}"
-  let success := s!"rb4_success_{token}"
-  let failure := s!"rb4_failure_{token}"
-  let done := s!"rb4_done_{token}"
-  let account :=
-    if acc == 0 then
-      s!"\
-  ldxdw r1, [r6 + ACC0_DATA_LEN]
-  lddw r2, {requiredBytes}
-  jge r1, r2, {dataOk}
-  lddw r0, 0x1
-  exit
-{dataOk}:
-  mov64 r5, r6
-  add64 r5, ACC0_DATA
-"
-    else
-      s!"\
-  ldxdw r1, [r10 - {headerStack acc}]
-  ldxdw r2, [r1 + 80]
-  lddw r3, {requiredBytes}
-  jge r2, r3, {dataOk}
-  lddw r0, 0x1
-  exit
-{dataOk}:
-  mov64 r5, r1
-  add64 r5, 88
-"
-  return loadRoot ++ loadSize ++ loadBump ++ loadFree ++ account ++
-    s!"\
-  ; complete four-word-key account-resident RB tree and allocator validation
-  ; links={linksBaseWord} parent={parentBaseWord} key4={keyBaseWord} stride={strideWords} capacity={capacity}
-  ; r7 remains the walked instruction-data base outside this intrinsic.
-  stxdw [r10 - {stackOff + 168}], r7
-  ldxdw r2, [r10 - {stackOff + 16}]
-  lddw r1, {capacity}
-  jgt r2, r1, {failure}
-  ldxdw r4, [r10 - {stackOff + 24}]
-  jeq r4, 0, {failure}
-  lddw r1, {capacity + 1}
-  jgt r4, r1, {failure}
-  jge r2, r4, {failure}
-  ldxdw r1, [r10 - {stackOff + 32}]
-  jeq r1, 0, {failure}
-  jgt r1, r4, {failure}
-  ldxdw r3, [r10 - {stackOff + 8}]
-  jne r2, 0, {nonEmpty}
-  jne r3, 0, {failure}
-  ja {startLive}
-{nonEmpty}:
-  jeq r3, 0, {failure}
-  lddw r1, {capacity}
-  jgt r3, r1, {failure}
-  jge r3, r4, {failure}
-{startLive}:
-  ; bitmap: r10-4096 .. r10-3049; traversal stack: r10-3000 .. r10-2489.
-  mov64 r9, r10
-  add64 r9, -{rbTreeKey4BitmapScratch}
-  lddw r1, 0
-{clearBitmap}  lddw r1, 0
-  stxdw [r10 - {stackOff + 40}], r1
-  stxdw [r10 - {stackOff + 48}], r1
-  stxdw [r10 - {stackOff + 64}], r1
-  stxdw [r10 - {stackOff + 72}], r1
-  stxdw [r10 - {stackOff + 80}], r1
-  stxdw [r10 - {stackOff + 88}], r1
-  stxdw [r10 - {stackOff + 96}], r1
-  stxdw [r10 - {stackOff + 56}], r3
-{liveLoop}:
-  ; Descend once into each live node. Current/depth/expected-parent/parent-color are fixed scalars.
-  ldxdw r2, [r10 - {stackOff + 56}]
-  jeq r2, 0, {nullChild}
-  ldxdw r4, [r10 - {stackOff + 24}]
-  jge r2, r4, {failure}
-  lddw r1, {capacity}
-  jgt r2, r1, {failure}
-  mov64 r7, r2
-  sub64 r7, 1
-  lddw r1, {strideBytes}
-  mul64 r7, r1
-  mov64 r9, r5
-  lddw r1, {parentBaseBytes}
-  add64 r9, r1
-  add64 r9, r7
-  ldxdw r8, [r9 + 0]
-  mov64 r4, r8
-  rsh64 r4, 32
-  jgt r4, 1, {failure}
-  mov64 r1, r8
-  lsh64 r1, 32
-  rsh64 r1, 32
-  ldxdw r9, [r10 - {stackOff + 72}]
-  jne r9, 0, {nonRoot}
-  ldxdw r3, [r10 - {stackOff + 8}]
-  jne r2, r3, {failure}
-  jne r8, 0, {failure}
-  ja {parentOk}
-{nonRoot}:
-  jne r1, r9, {failure}
-  ldxdw r9, [r10 - {stackOff + 80}]
-  jeq r9, 0, {parentOk}
-  jne r4, 0, {failure}
-{parentOk}:
-  ; A shared child, structural cycle, or live/free overlap reuses a bitmap bit and fails.
-  mov64 r8, r2
-  sub64 r8, 1
-  mov64 r9, r8
-  and64 r9, 63
-  lddw r0, 1
-  lsh64 r0, r9
-  rsh64 r8, 6
-  lsh64 r8, 3
-  mov64 r9, r10
-  add64 r9, -{rbTreeKey4BitmapScratch}
-  add64 r9, r8
-  ldxdw r8, [r9 + 0]
-  mov64 r1, r8
-  and64 r1, r0
-  jne r1, 0, {failure}
-  or64 r8, r0
-  stxdw [r9 + 0], r8
-  ldxdw r1, [r10 - {stackOff + 40}]
-  add64 r1, 1
-  stxdw [r10 - {stackOff + 40}], r1
-  ldxdw r8, [r10 - {stackOff + 16}]
-  jgt r1, r8, {failure}
-  ; Black depth includes the current node. A red parent may only reach a black child.
-  ldxdw r1, [r10 - {stackOff + 64}]
-  jne r4, 0, {depthReady}
-  add64 r1, 1
-{depthReady}:
-  stxdw [r10 - {stackOff + 64}], r1
-  ; One packed stack word stores low-u32 node index and high-u32 black depth.
-  ldxdw r8, [r10 - {stackOff + 88}]
-  lddw r9, {rbTreeKey4TraversalDepth}
-  jge r8, r9, {failure}
-  mov64 r9, r10
-  add64 r9, -{rbTreeKey4TraversalScratch}
-  mov64 r0, r8
-  lsh64 r0, 3
-  add64 r9, r0
-  mov64 r0, r1
-  lsh64 r0, 32
-  or64 r0, r2
-  stxdw [r9 + 0], r0
-  add64 r8, 1
-  stxdw [r10 - {stackOff + 88}], r8
-  stxdw [r10 - {stackOff + 72}], r2
-  stxdw [r10 - {stackOff + 80}], r4
-  mov64 r9, r5
-  lddw r1, {linksBaseBytes}
-  add64 r9, r1
-  add64 r9, r7
-  ldxdw r1, [r9 + 0]
-  lsh64 r1, 32
-  rsh64 r1, 32
-  stxdw [r10 - {stackOff + 56}], r1
-  ja {liveLoop}
-{nullChild}:
-  ; Every sentinel leaf must observe the same black depth.
-  ldxdw r1, [r10 - {stackOff + 64}]
-  ldxdw r8, [r10 - {stackOff + 48}]
-  jeq r8, 0, {blackHeightSet}
-  jne r1, r8, {failure}
-  ja {blackHeightOk}
-{blackHeightSet}:
-  stxdw [r10 - {stackOff + 48}], r1
-{blackHeightOk}:
-  ldxdw r8, [r10 - {stackOff + 88}]
-  jeq r8, 0, {afterLive}
-  sub64 r8, 1
-  stxdw [r10 - {stackOff + 88}], r8
-  mov64 r9, r10
-  add64 r9, -{rbTreeKey4TraversalScratch}
-  mov64 r1, r8
-  lsh64 r1, 3
-  add64 r9, r1
-  ldxdw r8, [r9 + 0]
-  mov64 r2, r8
-  lsh64 r2, 32
-  rsh64 r2, 32
-  rsh64 r8, 32
-  stxdw [r10 - {stackOff + 64}], r8
-  stxdw [r10 - {stackOff + 72}], r2
-  ; Load the current key once, byte-swap each storage word, then compare lexicographically.
-  mov64 r7, r2
-  sub64 r7, 1
-  lddw r1, {strideBytes}
-  mul64 r7, r1
-  mov64 r9, r5
-  lddw r1, {keyBaseBytes}
-  add64 r9, r1
-  add64 r9, r7
-  ldxdw r1, [r9 + 0]
-  be64 r1
-  stxdw [r10 - {stackOff + 136}], r1
-  ldxdw r1, [r9 + 8]
-  be64 r1
-  stxdw [r10 - {stackOff + 144}], r1
-  ldxdw r1, [r9 + 16]
-  be64 r1
-  stxdw [r10 - {stackOff + 152}], r1
-  ldxdw r1, [r9 + 24]
-  be64 r1
-  stxdw [r10 - {stackOff + 160}], r1
-  ldxdw r8, [r10 - {stackOff + 96}]
-  jeq r8, 0, {firstKey}
-  ldxdw r1, [r10 - {stackOff + 136}]
-  ldxdw r2, [r10 - {stackOff + 104}]
-  jgt r1, r2, {keyOk}
-  jne r1, r2, {failure}
-  ja {keyLimb1}
-{keyLimb1}:
-  ldxdw r1, [r10 - {stackOff + 144}]
-  ldxdw r2, [r10 - {stackOff + 112}]
-  jgt r1, r2, {keyOk}
-  jne r1, r2, {failure}
-  ja {keyLimb2}
-{keyLimb2}:
-  ldxdw r1, [r10 - {stackOff + 152}]
-  ldxdw r2, [r10 - {stackOff + 120}]
-  jgt r1, r2, {keyOk}
-  jne r1, r2, {failure}
-  ja {keyLimb3}
-{keyLimb3}:
-  ldxdw r1, [r10 - {stackOff + 160}]
-  ldxdw r2, [r10 - {stackOff + 128}]
-  jgt r1, r2, {keyOk}
-  ja {failure}
-{firstKey}:
-  lddw r8, 1
-  stxdw [r10 - {stackOff + 96}], r8
-  ja {storeKey}
-{keyOk}:
-  ja {storeKey}
-{storeKey}:
-  ldxdw r1, [r10 - {stackOff + 136}]
-  stxdw [r10 - {stackOff + 104}], r1
-  ldxdw r1, [r10 - {stackOff + 144}]
-  stxdw [r10 - {stackOff + 112}], r1
-  ldxdw r1, [r10 - {stackOff + 152}]
-  stxdw [r10 - {stackOff + 120}], r1
-  ldxdw r1, [r10 - {stackOff + 160}]
-  stxdw [r10 - {stackOff + 128}], r1
-  ; Continue into the right child with this node's depth and color.
-  ldxdw r2, [r10 - {stackOff + 72}]
-  mov64 r9, r5
-  lddw r1, {linksBaseBytes}
-  add64 r9, r1
-  add64 r9, r7
-  ldxdw r1, [r9 + 0]
-  rsh64 r1, 32
-  jeq r1, 0, {rightNull}
-  stxdw [r10 - {stackOff + 56}], r1
-  mov64 r9, r5
-  lddw r1, {parentBaseBytes}
-  add64 r9, r1
-  add64 r9, r7
-  ldxdw r1, [r9 + 0]
-  rsh64 r1, 32
-  stxdw [r10 - {stackOff + 80}], r1
-  ja {liveLoop}
-{rightNull}:
-  lddw r1, 0
-  stxdw [r10 - {stackOff + 56}], r1
-  ja {liveLoop}
-{afterLive}:
-  ldxdw r1, [r10 - {stackOff + 40}]
-  ldxdw r2, [r10 - {stackOff + 16}]
-  jne r1, r2, {failure}
-  ; Exact free cardinality plus the shared bitmap proves the full pre-bump partition.
-  ldxdw r4, [r10 - {stackOff + 24}]
-  sub64 r4, 1
-  sub64 r4, r2
-  lddw r1, 0
-  stxdw [r10 - {stackOff + 40}], r1
-  ldxdw r2, [r10 - {stackOff + 32}]
-  jne r4, 0, {startFree}
-  ldxdw r1, [r10 - {stackOff + 24}]
-  jeq r2, r1, {success}
-  ja {failure}
-{startFree}:
-  ldxdw r1, [r10 - {stackOff + 24}]
-  jeq r2, r1, {failure}
-{freeLoop}:
-  jeq r2, 0, {failure}
-  ldxdw r1, [r10 - {stackOff + 24}]
-  jge r2, r1, {failure}
-  lddw r1, {capacity}
-  jgt r2, r1, {failure}
-  mov64 r8, r2
-  sub64 r8, 1
-  mov64 r9, r8
-  and64 r9, 63
-  lddw r0, 1
-  lsh64 r0, r9
-  rsh64 r8, 6
-  lsh64 r8, 3
-  mov64 r9, r10
-  add64 r9, -{rbTreeKey4BitmapScratch}
-  add64 r9, r8
-  ldxdw r8, [r9 + 0]
-  mov64 r1, r8
-  and64 r1, r0
-  jne r1, 0, {failure}
-  or64 r8, r0
-  stxdw [r9 + 0], r8
-  ldxdw r1, [r10 - {stackOff + 40}]
-  add64 r1, 1
-  stxdw [r10 - {stackOff + 40}], r1
-  jgt r1, r4, {failure}
-  mov64 r8, r2
-  sub64 r8, 1
-  lddw r1, {strideBytes}
-  mul64 r8, r1
-  mov64 r9, r5
-  lddw r1, {linksBaseBytes}
-  add64 r9, r1
-  add64 r9, r8
-  ldxdw r2, [r9 + 0]
-  lsh64 r2, 32
-  rsh64 r2, 32
-  jeq r2, 0, {failure}
-  ldxdw r1, [r10 - {stackOff + 24}]
-  jne r2, r1, {freeLoop}
-{freeDone}:
-  ldxdw r1, [r10 - {stackOff + 40}]
-  jne r1, r4, {failure}
-{success}:
-  lddw r1, 1
-  stxdw [r10 - {stackOff}], r1
-  ja {done}
-{failure}:
-  lddw r1, 0
-  stxdw [r10 - {stackOff}], r1
-{done}:
-  ldxdw r7, [r10 - {stackOff + 168}]
 "
 
 /--
@@ -2204,11 +1810,12 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
   let validate ←
     match payload with
     | .key4 .. | .traderDeposit .. =>
-        emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
-          keyBaseWord strideWords capacity
-          (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
-          (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
-          (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+        AccountStorage.Emit.emitQuery (accountStorageContext p)
+          (.key4RbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+            strideWords capacity)
+          #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+            .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+            .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
           validateStack validateNonce s!"{label}_preflight"
     | .order bid .. =>
         AccountStorage.Emit.emitQuery (accountStorageContext p)
@@ -2710,7 +2317,7 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
   ldxdw r2, [r10 - 256]
   jeq r2, 0, {searchDone}
   ldxdw r1, [r10 - 296]
-  lddw r3, {rbTreeKey4TraversalDepth}
+  lddw r3, {AccountStorage.rbTreeTraversalDepth}
   jge r1, r3, {failure}
   mov64 r4, r2
   sub64 r4, 1
@@ -2820,7 +2427,7 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
   ja {publish}
 {fixLoop}:
   ldxdw r1, [r10 - 296]
-  lddw r2, {rbTreeKey4TraversalDepth}
+  lddw r2, {AccountStorage.rbTreeTraversalDepth}
   jge r1, r2, {failure}
   add64 r1, 1
   stxdw [r10 - 296], r1
@@ -3173,11 +2780,12 @@ private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
   let validate ←
     match key with
     | .key4 .. =>
-        emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
-          keyBaseWord strideWords capacity
-          (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
-          (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
-          (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+        AccountStorage.Emit.emitQuery (accountStorageContext p)
+          (.key4RbTreeValidOneBased acc linksBaseWord parentBaseWord keyBaseWord
+            strideWords capacity)
+          #[Ops.accDataWord acc rootWord, Ops.accDataWord acc (rootWord + 2),
+            .bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff),
+            .shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32)]
           validateStack validateNonce s!"{label}_preflight"
     | .order bid .. =>
         AccountStorage.Emit.emitQuery (accountStorageContext p)
@@ -3442,7 +3050,7 @@ private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
   ldxdw r2, [r10 - 256]
   jeq r2, 0, {failure}
   ldxdw r1, [r10 - 264]
-  lddw r3, {rbTreeKey4TraversalDepth}
+  lddw r3, {AccountStorage.rbTreeTraversalDepth}
   jge r1, r3, {failure}
   mov64 r4, r2
   sub64 r4, 1
@@ -3518,7 +3126,7 @@ private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
   ldxdw r1, [r10 - 368]
   add64 r1, 1
   stxdw [r10 - 368], r1
-  lddw r2, {rbTreeKey4TraversalDepth}
+  lddw r2, {AccountStorage.rbTreeTraversalDepth}
   jlt r1, r2, {predLoop}
   ja {failure}
 {predFound}:
@@ -3779,7 +3387,7 @@ private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
   stxdw [r10 - 320], r1
 {fixLoop}:
   ldxdw r1, [r10 - 368]
-  lddw r2, {rbTreeKey4TraversalDepth}
+  lddw r2, {AccountStorage.rbTreeTraversalDepth}
   jge r1, r2, {failure}
   add64 r1, 1
   stxdw [r10 - 368], r1
