@@ -25,6 +25,10 @@ inductive Op where
   | accDataRbTreeKey4Remove
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : Ops.Val)
+  | accDataRbTreeOrderInsert
+      (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
+        capacity : Nat) (bid : Bool)
+      (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : Ops.Val)
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -59,6 +63,12 @@ private partial def lowerOp : Ops.Op → Except String Op
       strideWords capacity key0 key1 key2 key3) =>
       pure (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity key0 key1 key2 key3)
+  | .ext (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp) =>
+      pure (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+        lastValidSlot lastValidUnixTimestamp)
   | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSetLeaf name _ _ _ leaf =>
@@ -99,6 +109,12 @@ private partial def Op.toSource : Op → Ops.Op
       strideWords capacity key0 key1 key2 key3 =>
       .ext (.accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity key0 key1 key2 key3)
+  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp =>
+      .ext (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+        lastValidSlot lastValidUnixTimestamp)
   | .forAccum n addend resultLocal => .forAccum n addend resultLocal
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
@@ -132,6 +148,13 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
       strideWords capacity key0 key1 key2 key3 =>
       .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
+  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp =>
+      .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid (mapValue price) (mapValue sequence)
+        (mapValue traderIndex) (mapValue numBaseLots) (mapValue lastValidSlot)
+        (mapValue lastValidUnixTimestamp)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .invoke _ _ data _ bump =>
@@ -143,6 +166,9 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
       #[key0, key1, key2, key3]
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3]
+  | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp =>
+      #[price, sequence, traderIndex, numBaseLots, lastValidSlot, lastValidUnixTimestamp]
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -184,6 +210,13 @@ private def projectOpExt
       return .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity (← projectVal key0) (← projectVal key1)
           (← projectVal key2) (← projectVal key3)
+  | .svm (.accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp) =>
+      return .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid (← projectVal price) (← projectVal sequence)
+        (← projectVal traderIndex) (← projectVal numBaseLots) (← projectVal lastValidSlot)
+        (← projectVal lastValidUnixTimestamp)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
 
 /-- Static registration of the extractor-to-SVM projection. -/
@@ -642,6 +675,14 @@ private partial def opsCanon (ops : Array Op) : String :=
         s!"rb4r.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
           s!"{strideWords}.{capacity}({valCanon key0},{valCanon key1}," ++
           s!"{valCanon key2},{valCanon key3})"
+    | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+        lastValidSlot lastValidUnixTimestamp =>
+        s!"rboi.{acc}.{rootWord}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}." ++
+          s!"{sequenceBaseWord}.{strideWords}.{capacity}.{bid}" ++
+          s!"({valCanon price},{valCanon sequence},{valCanon traderIndex}," ++
+          s!"{valCanon numBaseLots},{valCanon lastValidSlot}," ++
+          s!"{valCanon lastValidUnixTimestamp})"
     | .forAccum n addend resultLocal =>
         s!"for.{resultLocal}({n},{valCanon addend})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"

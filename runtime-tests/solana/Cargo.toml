@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+bytemuck = { version = "=1.25.2", features = ["derive"] }
 hex = "0.4"
 lib-sokoban = "=0.3.0"
 mollusk-svm = "0.13.4"

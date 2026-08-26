@@ -300,7 +300,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         seed (← bump.mapM toLegacyVal)
   | .ext (.svm (.accDataWordSetAt ..))
   | .ext (.svm (.accDataRbTreeKey4Insert ..))
-  | .ext (.svm (.accDataRbTreeKey4Remove ..)) =>
+  | .ext (.svm (.accDataRbTreeKey4Remove ..))
+  | .ext (.svm (.accDataRbTreeOrderInsert ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent external account writes"
   | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)
   | .ext (.evm (.sendEth w0 w1 w2 amount)) =>

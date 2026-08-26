@@ -61,7 +61,7 @@ private partial def writtenAccounts (ops : Array IR.Op) : Array Nat :=
       | .invoke _ metas _ _ _ =>
           metas.filterMap fun entry => if entry.writable then some (entry.acc + 1) else none
       | .accDataWordSetAt acc .. | .accDataRbTreeKey4Insert acc ..
-      | .accDataRbTreeKey4Remove acc .. => #[acc]
+      | .accDataRbTreeKey4Remove acc .. | .accDataRbTreeOrderInsert acc .. => #[acc]
       | _ => #[]
     let nested :=
       match op with

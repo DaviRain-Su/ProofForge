@@ -715,6 +715,36 @@ account-resident until a later bounded insertion reinitializes that slot.
   0
 
 /--
+Insert one Phoenix FIFO order into a statically shaped, account-resident Sokoban red-black tree.
+The two-word key is `(price_in_ticks, encoded_sequence)` and `bid` selects Phoenix's descending
+bid ordering or ascending ask ordering. The four value words are the exact `FIFORestingOrder`
+payload. The SVM target validates the complete tree/free partition and incoming side tag before
+the first store, supports Sokoban's in-place duplicate-value replacement, and otherwise performs
+bounded bump/free-list allocation plus insertion fixup. No persistent pointer or heap container is
+created.
+-/
+@[irreducible] def accDataRbTreeOrderInsert
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : UInt64) :
+    UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := price
+  let _ := sequence
+  let _ := traderIndex
+  let _ := numBaseLots
+  let _ := lastValidSlot
+  let _ := lastValidUnixTimestamp
+  0
+
+/--
 沿账户内 fixed-stride 节点的 parent 链验证一条有界路径。静态参数指定 links word、
 parent/color word、stride、capacity 和最多 64 步；运行时只提供起点、root 和 allocator
 `bumpIndex`。目标发射器逐步验证 index envelope、颜色、parent→child reciprocity，并要求

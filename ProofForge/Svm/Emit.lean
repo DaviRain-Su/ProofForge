@@ -192,6 +192,10 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
             #[key0, key1, key2, key3].flatMap valSignerAccs
         | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
             #[key0, key1, key2, key3].flatMap valSignerAccs
+        | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
+            lastValidSlot lastValidUnixTimestamp =>
+            #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
+              lastValidUnixTimestamp].flatMap valSignerAccs
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -2160,6 +2164,10 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
           #[key0, key1, key2, key3].any valUsesSigner
       | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].any valUsesSigner
+      | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
+          lastValidSlot lastValidUnixTimestamp =>
+          #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
+            lastValidUnixTimestamp].any valUsesSigner
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -2774,24 +2782,53 @@ private def emitRbTreeKey4RotationHelpers (tag : String)
   exit
 "
 
+private inductive RbTreeInsertPayload where
+  | key4 (key0 key1 key2 key3 : Ops.Val)
+  | order (bid : Bool) (price sequence traderIndex numBaseLots lastValidSlot
+      lastValidUnixTimestamp : Ops.Val)
+
 /-- Insert into a complete account-resident Sokoban red-black tree. Validation and every
 duplicate/full check precede the first store. The insertion search and fixup retain only bounded
 scalar indexes; the two local rotation helpers receive the account-data pointer and one-based
 indexes, and never expose pointers to persistent state. -/
-private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
+private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
-    (key0 key1 key2 key3 : Ops.Val) : Except String String := do
-  let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
-  let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
-  let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
-  let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+    (payload : RbTreeInsertPayload) : Except String String := do
+  let loads ←
+    match payload with
+    | .key4 key0 key1 key2 key3 => do
+        let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
+        let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
+        let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
+        let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+        pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3)
+    | .order _ price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp => do
+        let loadPrice ← loadVal p price 8 0 s!"{label}_price"
+        let loadSequence ← loadVal p sequence 16 1 s!"{label}_sequence"
+        let loadTrader ← loadVal p traderIndex 24 2 s!"{label}_trader"
+        let loadLots ← loadVal p numBaseLots 32 3 s!"{label}_lots"
+        let loadSlot ← loadVal p lastValidSlot 40 4 s!"{label}_slot"
+        let loadTimestamp ← loadVal p lastValidUnixTimestamp 48 5 s!"{label}_timestamp"
+        pure (loadPrice ++ loadSequence ++ loadTrader ++ loadLots ++ loadSlot ++ loadTimestamp)
   let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
-  let validate ← emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
-    keyBaseWord strideWords capacity
-    (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
-    (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
-    (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
-    40 4 s!"{label}_preflight"
+  let validateStack := match payload with | .key4 .. => 40 | .order .. => 56
+  let validateNonce := match payload with | .key4 .. => 4 | .order .. => 6
+  let validate ←
+    match payload with
+    | .key4 .. =>
+        emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
+          keyBaseWord strideWords capacity
+          (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
+          (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
+          (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+          validateStack validateNonce s!"{label}_preflight"
+    | .order bid .. =>
+        emitLoadAccDataRbTreeValid p acc linksBaseWord parentBaseWord keyBaseWord
+          (keyBaseWord + 1) strideWords capacity bid
+          (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
+          (.bitAnd (Ops.accDataWord acc (rootWord + 3)) (.lit 0xffffffff))
+          (.shiftR (Ops.accDataWord acc (rootWord + 3)) (.lit 32))
+          validateStack validateNonce s!"{label}_preflight"
   let strideBytes := 8 * strideWords
   let linksBaseBytes := 8 * linksBaseWord
   let parentBaseBytes := 8 * parentBaseWord
@@ -2803,10 +2840,16 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   let parentRelativeBytes := parentBaseBytes - linksBaseBytes
   let clearNode := (List.range strideWords).foldl (init := "") fun text i =>
     text ++ s!"  stxdw [r9 + {8 * i}], r1\n"
-  let token := IR.u64Hex (Core.IR.fnv1a64
-    (s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
-      s!"{strideWords}:{capacity}"))
-  let tag := s!"rb4i_{token}"
+  let tokenText :=
+    match payload with
+    | .key4 .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}"
+    | .order bid .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:order:{bid}"
+  let token := IR.u64Hex (Core.IR.fnv1a64 tokenText)
+  let tag := match payload with | .key4 .. => s!"rb4i_{token}" | .order .. => s!"rboi_{token}"
   let authFailure := tag ++ "_auth_failure"
   let failure := tag ++ "_failure"
   let full := tag ++ "_full"
@@ -2831,6 +2874,98 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   let fixDone := tag ++ "_fix_done"
   let publish := tag ++ "_publish"
   let helpersDone := tag ++ "_helpers_done"
+  let shapeComment :=
+    match payload with
+    | .key4 .. => "four-word-key"
+    | .order true .. => "Phoenix bid order"
+    | .order false .. => "Phoenix ask order"
+  let sideCheck :=
+    match payload with
+    | .key4 .. => ""
+    | .order bid .. =>
+        s!"  ldxdw r1, [r10 - 16]\n  rsh64 r1, 63\n  jne r1, {if bid then 1 else 0}, {failure}\n"
+  let searchCompare :=
+    match payload with
+    | .key4 .. => s!"\
+  ldxdw r1, [r10 - 8]
+  be64 r1
+  ldxdw r3, [r8 + 0]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  be64 r1
+  ldxdw r3, [r8 + 8]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 24]
+  be64 r1
+  ldxdw r3, [r8 + 16]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 32]
+  be64 r1
+  ldxdw r3, [r8 + 24]
+  be64 r3
+  jlt r1, r3, {searchBefore}
+  jgt r1, r3, {searchAfter}
+"
+    | .order bid .. =>
+        let priceBefore := if bid then "jgt" else "jlt"
+        let priceAfter := if bid then "jlt" else "jgt"
+        s!"\
+  ldxdw r1, [r10 - 8]
+  ldxdw r3, [r8 + 0]
+  {priceBefore} r1, r3, {searchBefore}
+  {priceAfter} r1, r3, {searchAfter}
+  ldxdw r1, [r10 - 16]
+  ldxdw r3, [r8 + 8]
+  {priceBefore} r1, r3, {searchBefore}
+  {priceAfter} r1, r3, {searchAfter}
+"
+  let duplicate :=
+    match payload with
+    | .key4 .. => s!"  ; Duplicate registrations fail instead of replacing TraderState.\n  ja {failure}\n"
+    | .order .. => s!"\
+  ; Sokoban map semantics replace only the existing resting-order value.
+  ldxdw r1, [r10 - 24]
+  stxdw [r8 + 16], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r8 + 24], r1
+  ldxdw r1, [r10 - 40]
+  stxdw [r8 + 32], r1
+  ldxdw r1, [r10 - 48]
+  stxdw [r8 + 40], r1
+  ja {helpersDone}
+"
+  let initializePayload :=
+    match payload with
+    | .key4 .. => s!"\
+  ldxdw r1, [r10 - 8]
+  stxdw [r9 + {keyRelativeBytes}], r1
+  ldxdw r1, [r10 - 16]
+  stxdw [r9 + {keyRelativeBytes + 8}], r1
+  ldxdw r1, [r10 - 24]
+  stxdw [r9 + {keyRelativeBytes + 16}], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r9 + {keyRelativeBytes + 24}], r1
+"
+    | .order .. => s!"\
+  ldxdw r1, [r10 - 8]
+  stxdw [r9 + {keyRelativeBytes}], r1
+  ldxdw r1, [r10 - 16]
+  stxdw [r9 + {keyRelativeBytes + 8}], r1
+  ldxdw r1, [r10 - 24]
+  stxdw [r9 + {keyRelativeBytes + 16}], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r9 + {keyRelativeBytes + 24}], r1
+  ldxdw r1, [r10 - 40]
+  stxdw [r9 + {keyRelativeBytes + 32}], r1
+  ldxdw r1, [r10 - 48]
+  stxdw [r9 + {keyRelativeBytes + 40}], r1
+"
   let rotateLeft := "function_" ++ tag ++ "_rotate_left"
   let rotateRight := "function_" ++ tag ++ "_rotate_right"
   let leftHasGrand := tag ++ "_rotl_has_grand"
@@ -3101,9 +3236,9 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   ldxdw r0, [r10 - 24]
   exit
 "
-  return loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3 ++ ownerCheck ++ s!"\
-  ; bounded account-resident four-word-key RB insertion
-  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} key4={keyBaseWord} stride={strideWords} capacity={capacity}
+  return loads ++ ownerCheck ++ s!"\
+  ; bounded account-resident {shapeComment} RB insertion
+  ; root={rootWord} links={linksBaseWord} parent={parentBaseWord} key={keyBaseWord} stride={strideWords} capacity={capacity}
   ldxdw r1, [r10 - 216]
   jne r1, 0, {authFailure}
   ldxdw r8, [r10 - {headerStack acc}]
@@ -3114,8 +3249,8 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   jge r1, r2, {dataOk}
   ja {authFailure}
 {dataOk}:
-" ++ validate ++ s!"\
-  ldxdw r1, [r10 - 40]
+" ++ sideCheck ++ validate ++ s!"\
+  ldxdw r1, [r10 - {validateStack}]
   jeq r1, 0, {failure}
   ldxdw r8, [r10 - {headerStack acc}]
   add64 r8, 88
@@ -3156,33 +3291,7 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   add64 r9, r4
   add64 r8, {keyBaseBytes}
   add64 r8, r4
-  ldxdw r1, [r10 - 8]
-  be64 r1
-  ldxdw r3, [r8 + 0]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ldxdw r1, [r10 - 16]
-  be64 r1
-  ldxdw r3, [r8 + 8]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ldxdw r1, [r10 - 24]
-  be64 r1
-  ldxdw r3, [r8 + 16]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ldxdw r1, [r10 - 32]
-  be64 r1
-  ldxdw r3, [r8 + 24]
-  be64 r3
-  jlt r1, r3, {searchBefore}
-  jgt r1, r3, {searchAfter}
-  ; Duplicate registrations fail instead of replacing TraderState.
-  ja {failure}
-{searchBefore}:
+" ++ searchCompare ++ duplicate ++ s!"{searchBefore}:
   lddw r1, 0
   stxdw [r10 - 272], r1
   ldxdw r1, [r9 + 0]
@@ -3237,14 +3346,7 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   add64 r9, {linksBaseBytes}
   add64 r9, r2
   lddw r1, 0
-{clearNode}  ldxdw r1, [r10 - 8]
-  stxdw [r9 + {keyRelativeBytes}], r1
-  ldxdw r1, [r10 - 16]
-  stxdw [r9 + {keyRelativeBytes + 8}], r1
-  ldxdw r1, [r10 - 24]
-  stxdw [r9 + {keyRelativeBytes + 16}], r1
-  ldxdw r1, [r10 - 32]
-  stxdw [r9 + {keyRelativeBytes + 24}], r1
+{clearNode}" ++ initializePayload ++ s!"\
   ldxdw r1, [r10 - 264]
   lddw r3, 1
   lsh64 r3, 32
@@ -3586,6 +3688,24 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
   lddw r0, 0x1003
   exit
 " ++ rotationHelpers ++ s!"{helpersDone}:\n"
+
+private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 : Ops.Val) : Except String String :=
+  emitAccDataRbTreeInsert p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity (.key4 key0 key1 key2 key3)
+
+private def emitAccDataRbTreeOrderInsert (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
+      capacity : Nat) (bid : Bool)
+    (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : Ops.Val) :
+    Except String String :=
+  if sequenceBaseWord != keyBaseWord + 1 then
+    .error "extract/unsupported: noncontiguous order key"
+  else
+    emitAccDataRbTreeInsert p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity (.order bid price sequence traderIndex numBaseLots lastValidSlot
+        lastValidUnixTimestamp)
 
 /-- Remove from a complete account-resident Sokoban red-black tree. Authentication, complete
 tree/free-list validation, and key lookup all precede the first store. The mutation follows
@@ -4876,6 +4996,14 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       n := n + 1
       acc := acc ++ (← emitAccDataRbTreeKey4Remove p removeLabel account rootWord
         linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)
+    | .accDataRbTreeOrderInsert account rootWord linksBaseWord parentBaseWord keyBaseWord
+        sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
+        lastValidSlot lastValidUnixTimestamp =>
+      let insertLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++ (← emitAccDataRbTreeOrderInsert p insertLabel account rootWord
+        linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+        price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp)
     | .errorNamed name =>
       let code :=
         match name with

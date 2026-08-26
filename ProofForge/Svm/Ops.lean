@@ -62,6 +62,19 @@ def rbTreeKey4InsertWordsInRange
     dataWordInRange (rootWord + 3) &&
     indexedDataWordsInRange (linksBaseWord + strideWords - 1) strideWords capacity
 
+/-- Static geometry for Phoenix FIFO order insertion. The key and four-word resting-order value
+must occupy the official contiguous eight-word Sokoban node layout. -/
+def rbTreeOrderInsertWordsInRange
+    (rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat) :
+    Bool :=
+  rbTreeWordsInRange linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+      strideWords capacity &&
+    strideWords == 8 && rootWord + 3 < linksBaseWord &&
+    linksBaseWord + 1 == parentBaseWord && parentBaseWord + 1 == keyBaseWord &&
+    keyBaseWord + 1 == sequenceBaseWord &&
+    dataWordInRange (rootWord + 3) &&
+    indexedDataWordsInRange (linksBaseWord + strideWords - 1) strideWords capacity
+
 /-- Static non-bump bytes in one PDA signer group. -/
 inductive PdaSeed where
   | ascii (value : String)
@@ -187,6 +200,10 @@ inductive OpExt (V : Type) where
   | accDataRbTreeKey4Remove
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : V)
+  | accDataRbTreeOrderInsert
+      (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
+        capacity : Nat) (bid : Bool)
+      (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -354,6 +371,15 @@ def OpExt.wellFormed : OpExt Val → Bool
           strideWords capacity &&
         #[key0, key1, key2, key3].all fun key =>
           key.wellFormed ValKind.arity && staticPayloadsWellFormed key
+  | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      sequenceBaseWord strideWords capacity _ price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp =>
+      acc > 0 && accInRange acc &&
+        rbTreeOrderInsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+          sequenceBaseWord strideWords capacity &&
+        #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
+          lastValidUnixTimestamp].all fun value =>
+          value.wellFormed ValKind.arity && staticPayloadsWellFormed value
 
 private partial def opStaticPayloadsWellFormed : Op → Bool
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
@@ -378,6 +404,10 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
           #[key0, key1, key2, key3].all staticPayloadsWellFormed
       | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].all staticPayloadsWellFormed
+      | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex
+          numBaseLots lastValidSlot lastValidUnixTimestamp =>
+          #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
+            lastValidUnixTimestamp].all staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
 def Op.wellFormed (op : Op) : Bool :=
@@ -487,7 +517,7 @@ private def OpExt.needsWalk : OpExt Val → Bool
         seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
         bump.any valNeedsWalk
   | .accDataWordSetAt .. | .accDataRbTreeKey4Insert ..
-  | .accDataRbTreeKey4Remove .. => true
+  | .accDataRbTreeKey4Remove .. | .accDataRbTreeOrderInsert .. => true
 
 private def OpExt.minAccounts : OpExt Val → Nat
   | .invoke _ _ data seeds bump =>
@@ -506,6 +536,11 @@ private def OpExt.minAccounts : OpExt Val → Nat
   | .accDataRbTreeKey4Remove acc _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
         Nat.max current (valMinAccounts key)
+  | .accDataRbTreeOrderInsert acc _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp =>
+      #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
+        lastValidUnixTimestamp].foldl (init := acc + 1) fun current value =>
+        Nat.max current (valMinAccounts value)
 
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
@@ -516,6 +551,10 @@ private def OpExt.hasSelect : OpExt Val → Bool
       #[key0, key1, key2, key3].any valHasSelect
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].any valHasSelect
+  | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
+      lastValidSlot lastValidUnixTimestamp =>
+      #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
+        lastValidUnixTimestamp].any valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=
   walkOps ops fun | .ext (.invoke ..) => true | _ => false
