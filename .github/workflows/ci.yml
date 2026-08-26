@@ -59,7 +59,11 @@ jobs:
 
       - name: Deploy Phoenix through Surfpool Loader-v3
         timeout-minutes: 15
-        run: runtime-tests/surfpool/smoke.sh
+        run: runtime-tests/surfpool/smoke.sh Phoenix
+
+      - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
+        timeout-minutes: 15
+        run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 
       - name: Build all EVM programs
         run: lake exe pf -- build --target evm --out build/evm

@@ -103,6 +103,11 @@
 | T-L5-18 | perf / fail | Phoenix Extract P0 资源门 | `postAsk` 全部嵌套 op 的 `IR.Val` 总节点 `< 200,000`、最大单树 `< 50,000`；单方法与全程序发射成功；state-loop continuation 解码失败不得只返回 scalar 或部分 commit |
 | T-L5-19 | happy / fail | Phoenix Surfpool Loader-v3 deployment | Surfpool 1.5.0 offline/headless；禁用 instant direct-state deployment；真实 buffer/write/deploy/authority transaction 输出；confirmed deploy signature；Program executable/owner/36-byte state、ProgramData 45-byte metadata + ELF exact bytes |
 | T-L5-20 | happy / fail | Phoenix-v1 canonical profile gate | 官方 owner/discriminant；12 个 `MarketSizeParams` tuple 与 exact account length；最小 profile 84,944 B；错误 owner/header/profile/length 不选择；短 data word 读 `Custom(1)` |
+| T-L5-21 | happy / fail | Phoenix-v1 account-resident body metadata | 不建 heap/Map；四组静态 allocator offset 覆盖 12 个 profile；sequence 与 bids/asks/traders size 真实读取；任一 count 超 capacity 返回 0 |
+| T-L5-22 | happy / fail | Phoenix-v1 allocator header envelope | 三棵树 root/padding/size/bump/free-list 的 1-based index 与 capacity 关系；root、padding、cursor 任一非法返回 0 |
+| T-L5-23 | happy / fail | Phoenix-v1 bounded root slot read | `accDataWordAt` 的 account/base/stride/capacity 编译期固定；运行时 slot 与最终 `data_len` 双边界；root index=2 读取真实 price；越界 child、非零 parent/红 root 返回 0；无 heap/Map |
+| T-L5-24 | happy / fail | Phoenix-v1 constant-memory bid-root neighborhood | 原位读取 root + 两个 child；bid side tag、child→parent reciprocity、color、index envelope 与 bid price/sequence ordering；错 parent/color/order 返回 0；不声明完整树验证 |
+| T-L5-25 | happy / fail | Phoenix-v1 verifier Surfpool deployment | 参数化 Surfpool 1.5.0 offline smoke；716,344 B ELF 经 708 个 Loader write + deploy + authority transactions；confirmed signature、Program/ProgramData layout、exact ELF bytes；不用 Test Validator |
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
 refinement 仍未宣称。P0 探针口径递归统计 `select` 四个分支和 extension operands；当前

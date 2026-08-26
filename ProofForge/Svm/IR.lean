@@ -483,6 +483,8 @@ private partial def valCanon : Ops.Val → String
   | .ext (.accKeyWord acc word) #[] => s!"kw.{acc}.{word}"
   | .ext (.accOwnerWord acc word) #[] => s!"ow.{acc}.{word}"
   | .ext (.accDataWord acc word) #[] => s!"dw.{acc}.{word}"
+  | .ext (.accDataWordAt acc baseWord strideWords capacity) #[index] =>
+      s!"dwi.{acc}.{baseWord}.{strideWords}.{capacity}({valCanon index})"
   | .ext (.accLamportsN acc) #[] => s!"lpN.{acc}"
   | .ext (.accDataLenN acc) #[] => s!"dlN.{acc}"
   | .ext (.isSignerN acc) #[] => s!"sgN.{acc}"

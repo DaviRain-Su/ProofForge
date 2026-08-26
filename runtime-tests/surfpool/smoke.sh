@@ -9,6 +9,15 @@ surfpool_version="1.5.0"
 rpc_url="http://127.0.0.1:8899"
 out_dir="build/surfpool"
 manifest="runtime-tests/surfpool/txtx.yml"
+program_name="${1:-Phoenix}"
+
+case "$program_name" in
+  Phoenix|PhoenixV1Profile) ;;
+  *)
+    echo "surfpool-smoke: supported programs: Phoenix, PhoenixV1Profile" >&2
+    exit 1
+    ;;
+esac
 
 for tool in curl jq lake openssl python3 surfpool; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -72,10 +81,11 @@ rpc() {
 rm -rf "$out_dir"
 mkdir -p "$out_dir"
 generate_keypair "$out_dir/payer.json"
-generate_keypair "$out_dir/Phoenix-keypair.json"
-program_id="$(keypair_pubkey "$out_dir/Phoenix-keypair.json")"
+generate_keypair "$out_dir/Program-keypair.json"
+program_id="$(keypair_pubkey "$out_dir/Program-keypair.json")"
 
-lake exe pf -- build --target svm --out "$out_dir" Phoenix
+lake exe pf -- build --target svm --out "$out_dir" "$program_name"
+cp "$out_dir/${program_name}.so" "$out_dir/Program.so"
 
 surfpool start \
   --offline \
@@ -95,7 +105,7 @@ cleanup() {
   local status=$?
   kill "$surfpool_pid" 2>/dev/null || true
   wait "$surfpool_pid" 2>/dev/null || true
-  rm -f "$out_dir/payer.json" "$out_dir/Phoenix-keypair.json" "$out_dir/deployment.log"
+  rm -f "$out_dir/payer.json" "$out_dir/Program-keypair.json" "$out_dir/deployment.log"
   return "$status"
 }
 trap cleanup EXIT
@@ -200,7 +210,7 @@ programdata_request="$(jq -nc --arg programdata "$programdata_id" '{
   params: [$programdata, {encoding: "base64", commitment: "confirmed"}]
 }')"
 rpc "$programdata_request" >"$out_dir/programdata-account.json"
-python3 - "$out_dir/programdata-account.json" "$out_dir/Phoenix.so" <<'PY'
+python3 - "$out_dir/programdata-account.json" "$out_dir/Program.so" <<'PY'
 import base64
 import json
 import pathlib
@@ -219,7 +229,7 @@ elf = pathlib.Path(sys.argv[2]).read_bytes()
 if value["space"] != len(elf) + 45 or data[:4] != (3).to_bytes(4, "little"):
     raise SystemExit("ProgramData account has the wrong Loader-v3 layout")
 if data[45:] != elf:
-    raise SystemExit("deployed ProgramData bytes differ from Phoenix.so")
+    raise SystemExit("deployed ProgramData bytes differ from Program.so")
 PY
 
 signature_request="$(jq -nc --arg signature "$deploy_signature" '{
@@ -240,9 +250,10 @@ jq '.' <<<"$signature_status" >"$out_dir/deploy-signature-status.json"
 
 echo "surfpool-smoke: ok"
 echo "surfpool-smoke: version=$(surfpool --version)"
+echo "surfpool-smoke: program=$program_name"
 echo "surfpool-smoke: program_id=$program_id"
 echo "surfpool-smoke: programdata_id=$programdata_id"
-echo "surfpool-smoke: elf_bytes=$(wc -c <"$out_dir/Phoenix.so")"
+echo "surfpool-smoke: elf_bytes=$(wc -c <"$out_dir/Program.so")"
 echo "surfpool-smoke: loader_writes=$(jq '.signatures.value.write_to_buffer | length' \
   "$out_dir/deployment-output.json")"
 echo "surfpool-smoke: deploy_signature=$deploy_signature"

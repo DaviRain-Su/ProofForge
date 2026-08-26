@@ -83,6 +83,11 @@
 | [l5-006](tasks/l5-006.md) | done | Sokoban 节点 + allocator/free-list + 完整左右旋 |
 | [l5-007](tasks/l5-007.md) | done | Phoenix bounded N=4 bid lifecycle + sell IOC |
 | [l5-008](tasks/l5-008.md) | done | Phoenix-v1 canonical owner/header/profile/length gate |
+| [l5-009](tasks/l5-009.md) | done | Phoenix-v1 account-resident scalar/allocator-size gate；无 heap/Map |
+| [l5-010](tasks/l5-010.md) | done | Phoenix-v1 Sokoban root/bump/free-list header envelope |
+| [l5-011](tasks/l5-011.md) | done | Phoenix-v1 bounded account-resident bid-root slot read |
+| [l5-012](tasks/l5-012.md) | done | Phoenix-v1 constant-memory bid-root child reciprocity/order gate |
+| [l5-013](tasks/l5-013.md) | done | Phoenix-v1 verifier Surfpool Loader-v3 transaction deployment |
 
 
 积压：[backlog.md](backlog.md)

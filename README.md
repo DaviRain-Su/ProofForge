@@ -43,10 +43,12 @@ Mollusk（环境变量已改成 `PF_*_SO`）：
   cargo test --locked --test counter)
 ```
 
-Phoenix 的本地 Loader-v3 交易部署使用 Surfpool，不使用 `solana-test-validator`：
+Phoenix 与 Phoenix-v1 profile verifier 的本地 Loader-v3 交易部署使用 Surfpool，不使用
+`solana-test-validator`：
 
 ```bash
 runtime-tests/surfpool/smoke.sh
+runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 ```
 
 Toolchain：`leanprover/lean4:v4.31.0`、`sbpf 0.2.2`、Surfpool `1.5.0`。

@@ -619,6 +619,21 @@ def createPda (lamports : UInt64) : UInt64 :=
   0
 
 /--
+账户 `acc` 的固定 stride 槽中第 `index` 个 u64。`acc`、`baseWord`、`strideWords` 和
+`capacity` 必须在抽出时是常量，只有零基 `index` 可在运行时选择。目标发射器先检查
+`index < capacity`，再检查计算出的 word 位于账户 `data_len` 内；任一失败都以
+`Custom(1)` fail closed。这是账户内 zero-copy 读取，不分配或复制槽数组。
+-/
+@[irreducible] def accDataWordAt
+    (acc baseWord strideWords capacity index : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := baseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := index
+  0
+
+/--
 账户 `acc` 的 lamports。`acc` 必须在抽出时是常量，且
 `acc < Svm.ABI.maxTxAccountLocks`（官方当前强制 64）。
 `acc ≥ 1` 走 walk。旧名 `accLamports0` / `accLamports1` 仍独立。

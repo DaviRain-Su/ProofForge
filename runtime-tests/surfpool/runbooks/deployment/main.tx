@@ -11,10 +11,10 @@ signer "authority" "svm::secret_key" {
   keypair_json = input.payer_keypair_json
 }
 
-action "deploy_phoenix" "svm::deploy_program" {
-  description = "Deploy Phoenix through Upgradeable Loader-v3 transactions"
+action "deploy_program" "svm::deploy_program" {
+  description = "Deploy a ProofForge program through Upgradeable Loader-v3 transactions"
   program = svm::get_program_from_native_project(
-    "Phoenix",
+    "ProofForgeProgram",
     input.program_keypair_json,
     null,
     input.program_binary
@@ -26,13 +26,13 @@ action "deploy_phoenix" "svm::deploy_program" {
 }
 
 output "program_id" {
-  value = action.deploy_phoenix.program_id
+  value = action.deploy_program.program_id
 }
 
 output "signatures" {
-  value = action.deploy_phoenix.signatures
+  value = action.deploy_program.signatures
 }
 
 output "slot" {
-  value = action.deploy_phoenix.slot
+  value = action.deploy_program.slot
 }
