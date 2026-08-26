@@ -485,6 +485,10 @@ private partial def valCanon : Ops.Val → String
   | .ext (.accDataWord acc word) #[] => s!"dw.{acc}.{word}"
   | .ext (.accDataWordAt acc baseWord strideWords capacity) #[index] =>
       s!"dwi.{acc}.{baseWord}.{strideWords}.{capacity}({valCanon index})"
+  | .ext (.accDataParentPathValid
+      acc linksBaseWord parentBaseWord strideWords capacity maxDepth) #[index, root, bumpIndex] =>
+      s!"dpp.{acc}.{linksBaseWord}.{parentBaseWord}.{strideWords}.{capacity}.{maxDepth}" ++
+        s!"({valCanon index},{valCanon root},{valCanon bumpIndex})"
   | .ext (.accLamportsN acc) #[] => s!"lpN.{acc}"
   | .ext (.accDataLenN acc) #[] => s!"dlN.{acc}"
   | .ext (.isSignerN acc) #[] => s!"sgN.{acc}"

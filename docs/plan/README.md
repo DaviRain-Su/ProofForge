@@ -88,6 +88,7 @@
 | [l5-011](tasks/l5-011.md) | done | Phoenix-v1 bounded account-resident bid-root slot read |
 | [l5-012](tasks/l5-012.md) | done | Phoenix-v1 constant-memory bid-root child reciprocity/order gate |
 | [l5-013](tasks/l5-013.md) | done | Phoenix-v1 verifier Surfpool Loader-v3 transaction deployment |
+| [l5-014](tasks/l5-014.md) | done | Phoenix-v1 bounded parent-path reciprocity/cycle gate |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

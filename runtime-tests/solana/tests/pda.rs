@@ -80,8 +80,7 @@ fn so_path() -> PathBuf {
     }))
 }
 
-fn harness() -> (Pubkey, Mollusk) {
-    let program_id = Pubkey::new_unique();
+fn harness_for(program_id: Pubkey) -> (Pubkey, Mollusk) {
     let elf = fs::read(so_path()).unwrap_or_else(|e| panic!("read Pda.so: {e}"));
     let mut mollusk = Mollusk::default();
     mollusk.add_program_with_loader_and_elf(
@@ -90,6 +89,10 @@ fn harness() -> (Pubkey, Mollusk) {
         &elf,
     );
     (program_id, mollusk)
+}
+
+fn harness() -> (Pubkey, Mollusk) {
+    harness_for(Pubkey::new_unique())
 }
 
 fn state_account(program_id: &Pubkey, data: Vec<u8>) -> Account {
@@ -152,10 +155,7 @@ fn bump_is_stable_across_two_calls() {
     let first = mollusk.process_and_validate_instruction(
         &ix,
         &[(state_key, state_account(&program_id, pre.clone()))],
-        &[
-            Check::success(),
-            Check::return_data(&bump.to_le_bytes()),
-        ],
+        &[Check::success(), Check::return_data(&bump.to_le_bytes())],
     );
     let after = first
         .resulting_accounts
@@ -194,7 +194,11 @@ fn check_accepts_canonical_bump() {
 
 #[test]
 fn check_rejects_bump_zero() {
-    let (program_id, mollusk) = harness();
+    let program_id = (0..256)
+        .map(|_| Pubkey::new_unique())
+        .find(|program_id| Pubkey::create_program_address(&[b"vault", &[0]], program_id).is_err())
+        .expect("find a program id for which bump zero is invalid");
+    let (program_id, mollusk) = harness_for(program_id);
     let state_key = Pubkey::new_unique();
     let disc = instruction_discriminator("checkBad", 0);
     let ix = build_ix(program_id, state_key, &disc, &[], false, false);

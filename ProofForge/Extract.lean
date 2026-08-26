@@ -794,6 +794,31 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               some (.accDataWordAt a b s c index)
             else none
           | _, _, _, _, _ => none
+        else if (endsWith e ".accDataParentPathValid" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataParentPathValid) &&
+            e.getAppArgs.size ≥ 9 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+              some (.lit strideWords), some (.lit capacity), some (.lit maxDepth),
+              some index, some root, some bumpIndex =>
+            let a := acc.toNat
+            let l := linksBaseWord.toNat
+            let p := parentBaseWord.toNat
+            let s := strideWords.toNat
+            let c := capacity.toNat
+            let d := maxDepth.toNat
+            if Svm.Ops.accInRange a && Svm.Ops.parentPathWordsInRange l p s c d then
+              some (.accDataParentPathValid a l p s c d index root bumpIndex)
+            else none
+          | _, _, _, _, _, _, _, _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
           match strip e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -2192,6 +2217,8 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
             | some (.accDataWord a w) => some (.accDataWord a w)
             | some (.accDataWordAt a b s c i) => some (.accDataWordAt a b s c i)
+            | some (.accDataParentPathValid a l p s c d i r b) =>
+                some (.accDataParentPathValid a l p s c d i r b)
             | some (.accLamportsN a) => some (.accLamportsN a)
             | some (.accDataLenN a) => some (.accDataLenN a)
             | some (.isSignerN a) => some (.isSignerN a)
@@ -4105,6 +4132,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .isSigner1 | .isWritable1 | .isExecutable1 | .findPda _
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
+    | .accDataParentPathValid ..
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
@@ -5002,6 +5030,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
       | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
+      | .accDataParentPathValid a l p s c d i r b =>
+          .accDataParentPathValid a l p s c d
+            (flipVal fuel' i) (flipVal fuel' r) (flipVal fuel' b)
       | .checkPda s b => .checkPda s (flipVal fuel' b)
       | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
       | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
@@ -5286,6 +5317,8 @@ private def valFields : Ops.Val → Array String
   | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
   | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => #[]
   | .accDataWordAt _ _ _ _ i => valFields i
+  | .accDataParentPathValid _ _ _ _ _ _ i r b =>
+      valFields i ++ valFields r ++ valFields b
   | .checkPda _ b => valFields b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valFields l ++ valFields r

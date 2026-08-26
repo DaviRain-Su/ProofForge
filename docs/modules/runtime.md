@@ -54,6 +54,10 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - `accKeyWord acc word` / `accOwnerWord acc word` — 账户 `acc < IR.maxTxAccountLocks` 的 32B key / owner 第 `word`∈{0..=3} 个小端 u64。抽出时必须是常量。`acc≥1` 走 walk，不强制入口签名。不是 `signerKey0`。
 - `accDataWord acc word` — 账户 data 第 `word` 个小端 u64；账户和 word 均为编译期常量。发射器在形成 data pointer 前检查 `data_len ≥ 8*(word+1)`，短账户 `Custom(1)`。
 - `accDataWordAt acc base stride capacity index` — `acc/base/stride/capacity` 编译期固定，零基 `index` 可运行时选择；发射器先检查 `index < capacity`，再检查计算出的 word 位于 `data_len` 内。只做账户内 zero-copy u64 读取，不分配或复制动态数组。
+- `accDataParentPathValid acc linksBase parentBase stride capacity maxDepth index root bump` —
+  static shape + 最多 64 步的账户内 parent walk；运行时 index/root/bump 先过 1-based
+  envelope，每步验证 color、parent 和 parent→child reciprocity，root 外 cycle 到界返回 0。
+  只用常量 memory；不是 whole-tree 或 free-list membership proof。
 - `accLamports` / `accDataLen` / `isSigner` / `isWritable` / `isExecutable` `acc` — 账户 `acc < IR.maxTxAccountLocks`（官方当前 64）header。旧名 `accLamports0` 等仍独立。
 - `signerKey acc` — 该账户 key 首 u64；入口强制该账户 `is_signer`。旧名 `signerKey0` 仍独立。
 - `ownerIsSelf acc` — owner 32B 是否等于当前 program id；相等 0 / 不等 1。
@@ -102,4 +106,4 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
 `Examples/SelfLog.lean` + `runtime-tests/solana/tests/self_log.rs`：当前 program id 的 signed self-CPI，canonical `"log"` PDA raw 入口、packed Borsh integer words、续段状态写回，以及 signer/writable/tag/key 失败矩阵。
 `Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
-`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 base/stride/capacity 的 bid root/直接 child zero-copy 读取；最小 profile 84,944 B；短 header `Custom(1)`。
+`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 base/stride/capacity 的 bid root/直接 child zero-copy 读取和 32-edge parent-path；最小 profile 84,944 B；短 header `Custom(1)`。

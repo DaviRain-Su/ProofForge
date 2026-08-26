@@ -33,6 +33,9 @@ private def validSvmOp : ProofForge.Svm.Ops.Op :=
 #guard !ProofForge.Svm.Ops.indexedDataWordsInRange 114 0 4096
 #guard !ProofForge.Svm.Ops.indexedDataWordsInRange 114 8 0
 #guard !ProofForge.Svm.Ops.indexedDataWordsInRange 0 2305843009213693951 1
+#guard ProofForge.Svm.Ops.parentPathWordsInRange 114 115 8 4096 32
+#guard !ProofForge.Svm.Ops.parentPathWordsInRange 114 115 8 4096 0
+#guard !ProofForge.Svm.Ops.parentPathWordsInRange 114 115 8 4096 65
 
 private def invalidDataWordOp : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataWord 1 2305843009213693951)
@@ -47,6 +50,21 @@ private def invalidIndexedDataWordOp : ProofForge.Svm.Ops.Op :=
 
 #guard validIndexedDataWordOp.wellFormed
 #guard !invalidIndexedDataWordOp.wellFormed
+
+private def validParentPathOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataParentPathValid
+    1 114 115 8 4096 32 (.arg 0) (.arg 1) (.arg 2))
+
+private def malformedParentPathOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (.ext (.accDataParentPathValid 1 114 115 8 4096 32) #[.arg 0, .arg 1])
+
+private def unboundedParentPathOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataParentPathValid
+    1 114 115 8 4096 65 (.arg 0) (.arg 1) (.arg 2))
+
+#guard validParentPathOp.wellFormed
+#guard !malformedParentPathOp.wellFormed
+#guard !unboundedParentPathOp.wellFormed
 
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 63 #[] #[] #[] none)

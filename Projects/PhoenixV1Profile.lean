@@ -380,6 +380,34 @@ def bidRootNeighborhoodValid (s : State) : UInt64 :=
     else
       0
 
+/--
+Validate one caller-selected bid node's parent path in account-resident storage. The emitted loop
+keeps only current index and depth, validates each parent/color word and parent→child reciprocal
+edge, and must reach the canonical root in at most 32 edges. A valid red-black tree with at most
+4096 nodes has height below this bound. This proves one path, not whole-tree coverage or live/free
+partition membership.
+-/
+@[pf_entry]
+def bidParentPathValid (s : State) (index : UInt64) : UInt64 :=
+  if profileAccountBytes s = 0 || allocatorHeadersValid s = 0 then
+    0
+  else
+    let bids := accDataWord 1 2
+    let root := lowUInt32 (accDataWord 1 110)
+    let bumpIndex := lowUInt32 (accDataWord 1 113)
+    if root = 0 then
+      if index = 0 then 1 else 0
+    else if bids = 512 then
+      accDataParentPathValid 1 114 115 8 512 32 index root bumpIndex
+    else if bids = 1024 then
+      accDataParentPathValid 1 114 115 8 1024 32 index root bumpIndex
+    else if bids = 2048 then
+      accDataParentPathValid 1 114 115 8 2048 32 index root bumpIndex
+    else if bids = 4096 then
+      accDataParentPathValid 1 114 115 8 4096 32 index root bumpIndex
+    else
+      0
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=

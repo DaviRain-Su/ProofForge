@@ -634,6 +634,27 @@ def createPda (lamports : UInt64) : UInt64 :=
   0
 
 /--
+沿账户内 fixed-stride 节点的 parent 链验证一条有界路径。静态参数指定 links word、
+parent/color word、stride、capacity 和最多 64 步；运行时只提供起点、root 和 allocator
+`bumpIndex`。目标发射器逐步验证 index envelope、颜色、parent→child reciprocity，并要求
+在 `maxDepth` 内到达 parent/color=0 的 root。它只保留当前 index/depth，不分配 visited
+Map，不复制节点；短账户在形成 data pointer 前 `Custom(1)`。
+-/
+@[irreducible] def accDataParentPathValid
+    (acc linksBaseWord parentBaseWord strideWords capacity maxDepth
+      index root bumpIndex : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := maxDepth
+  let _ := index
+  let _ := root
+  let _ := bumpIndex
+  0
+
+/--
 账户 `acc` 的 lamports。`acc` 必须在抽出时是常量，且
 `acc < Svm.ABI.maxTxAccountLocks`（官方当前强制 64）。
 `acc ≥ 1` 走 walk。旧名 `accLamports0` / `accLamports1` 仍独立。

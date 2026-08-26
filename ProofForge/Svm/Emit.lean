@@ -913,6 +913,11 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadAccDataWord acc word stackOff scope)
   | .ext (.accDataWordAt acc baseWord strideWords capacity) #[index] =>
     emitLoadAccDataWordAt p acc baseWord strideWords capacity index stackOff nonce scope
+  | .ext (.accDataParentPathValid
+      acc linksBaseWord parentBaseWord strideWords capacity maxDepth)
+      #[index, root, bumpIndex] =>
+    emitLoadAccDataParentPathValid p acc linksBaseWord parentBaseWord strideWords capacity
+      maxDepth index root bumpIndex stackOff nonce scope
   | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
   | .ext (.accDataLenN acc) #[] =>
@@ -1041,6 +1046,136 @@ private partial def emitLoadAccDataWordAt (p : IR.Program) (acc baseWord strideW
   add64 r1, r2
   ldxdw r1, [r1 + 0]
   stxdw [r10 - {stackOff}], r1
+"
+
+/-- Follow one account-resident parent path with constant memory. Every dereference is selected
+from a compile-time fixed region, while index/root/bump and the final account length are checked
+before pointer formation. A cycle that excludes the root exhausts `maxDepth` and returns zero. -/
+private partial def emitLoadAccDataParentPathValid (p : IR.Program)
+    (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
+    (index root bumpIndex : Ops.Val) (stackOff nonce : Nat) (scope : String) :
+    Except String String := do
+  let loadIndex ← loadVal p index (stackOff + 8) (nonce + 1) (scope ++ "_index")
+  let loadRoot ← loadVal p root (stackOff + 16) (nonce + 2) (scope ++ "_root")
+  let loadBump ← loadVal p bumpIndex (stackOff + 24) (nonce + 3) (scope ++ "_bump")
+  let strideBytes := 8 * strideWords
+  let linksBaseBytes := 8 * linksBaseWord
+  let parentBaseBytes := 8 * parentBaseWord
+  let finalWord := Nat.max linksBaseWord parentBaseWord + strideWords * (capacity - 1)
+  let requiredBytes := 8 * (finalWord + 1)
+  let token := IR.u64Hex (Core.IR.fnv1a64
+    (s!"{scope}:{stackOff}:{nonce}:{acc}:{linksBaseWord}:{parentBaseWord}:" ++
+      s!"{strideWords}:{capacity}:{maxDepth}"))
+  let dataOk := s!"ok_parent_path_data_{token}"
+  let loop := s!"parent_path_loop_{token}"
+  let edgeOk := s!"parent_path_edge_{token}"
+  let rootCheck := s!"parent_path_root_{token}"
+  let success := s!"parent_path_success_{token}"
+  let failure := s!"parent_path_failure_{token}"
+  let done := s!"parent_path_done_{token}"
+  let account :=
+    if acc == 0 then
+      s!"\
+  ldxdw r1, [r6 + ACC0_DATA_LEN]
+  lddw r2, {requiredBytes}
+  jge r1, r2, {dataOk}
+  lddw r0, 0x1
+  exit
+{dataOk}:
+  mov64 r5, r6
+  add64 r5, ACC0_DATA
+"
+    else
+      s!"\
+  ldxdw r1, [r10 - {headerStack acc}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {requiredBytes}
+  jge r2, r3, {dataOk}
+  lddw r0, 0x1
+  exit
+{dataOk}:
+  mov64 r5, r1
+  add64 r5, 88
+"
+  return loadIndex ++ loadRoot ++ loadBump ++ account ++
+    s!"\
+  ; validate bounded acc{acc} parent path links={linksBaseWord} parent={parentBaseWord} stride={strideWords} capacity={capacity} depth={maxDepth}
+  ldxdw r2, [r10 - {stackOff + 8}]
+  ldxdw r3, [r10 - {stackOff + 16}]
+  ldxdw r4, [r10 - {stackOff + 24}]
+  jeq r4, 0, {failure}
+  lddw r1, {capacity + 1}
+  jgt r4, r1, {failure}
+  jeq r3, 0, {failure}
+  lddw r1, {capacity}
+  jgt r3, r1, {failure}
+  jge r3, r4, {failure}
+  jeq r2, 0, {failure}
+  jgt r2, r1, {failure}
+  jge r2, r4, {failure}
+  lddw r7, 0
+{loop}:
+  jeq r2, r3, {rootCheck}
+  lddw r1, {maxDepth}
+  jge r7, r1, {failure}
+  mov64 r8, r2
+  sub64 r8, 1
+  lddw r1, {strideBytes}
+  mul64 r8, r1
+  mov64 r9, r5
+  lddw r1, {parentBaseBytes}
+  add64 r9, r1
+  add64 r9, r8
+  ldxdw r8, [r9 + 0]
+  mov64 r9, r8
+  rsh64 r8, 32
+  jgt r8, 1, {failure}
+  lsh64 r9, 32
+  rsh64 r9, 32
+  jeq r9, 0, {failure}
+  lddw r1, {capacity}
+  jgt r9, r1, {failure}
+  jge r9, r4, {failure}
+  jeq r9, r2, {failure}
+  mov64 r1, r9
+  sub64 r1, 1
+  lddw r8, {strideBytes}
+  mul64 r1, r8
+  mov64 r8, r5
+  lddw r0, {linksBaseBytes}
+  add64 r8, r0
+  add64 r8, r1
+  ldxdw r8, [r8 + 0]
+  mov64 r1, r8
+  lsh64 r1, 32
+  rsh64 r1, 32
+  jeq r1, r2, {edgeOk}
+  rsh64 r8, 32
+  jne r8, r2, {failure}
+{edgeOk}:
+  mov64 r2, r9
+  add64 r7, 1
+  ja {loop}
+{rootCheck}:
+  mov64 r8, r3
+  sub64 r8, 1
+  lddw r1, {strideBytes}
+  mul64 r8, r1
+  mov64 r9, r5
+  lddw r1, {parentBaseBytes}
+  add64 r9, r1
+  add64 r9, r8
+  ldxdw r8, [r9 + 0]
+  jeq r8, 0, {success}
+  ja {failure}
+{success}:
+  lddw r1, 1
+  stxdw [r10 - {stackOff}], r1
+  ja {done}
+{failure}:
+  lddw r1, 0
+  stxdw [r10 - {stackOff}], r1
+{done}:
 "
 
 /--

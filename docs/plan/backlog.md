@@ -72,8 +72,8 @@
 
 ## 当前状态
 
-- `lake build Tests` 当前 192 jobs；70 个 imported test modules 含 860 个 `#guard` / `#guard_msgs`。
-- SVM registry 50 个程序 / 50 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量 `pf build` 与 Mollusk 202/202 当前通过。
+- `lake build Tests` 当前 194 jobs；71 个 imported test modules 含 890 个 `#guard` / `#guard_msgs`。
+- SVM registry 50 个程序 / 50 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量 `pf build` 与 Mollusk 203/203 当前通过。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
@@ -84,6 +84,11 @@
 - P5 第四段 bounded root slot 已完成：通用 `accDataWordAt` 只允许运行时 slot，account/base/stride/capacity 均编译期固定，并做 slot + 最终 data-length 双边界。bid root index=2 的 links/parent/color/price 直接从账户读取；无 heap/Map/节点复制。当前 digest `b2519600b8cfe99f`，assembly 878,132 B，ELF 282,536 B；profile Mollusk 4/4。
 - P5 第五段 constant-memory root neighborhood 已完成：四档 profile 原位读取 bid root 与两个直接 child，验证 bid side tag、child→parent reciprocity、color、index envelope 及局部 price/sequence ordering；不分配节点容器，也不声明全树验证。当前 digest `7952977f008911a8`，assembly 2,171,011 B，ELF 716,344 B；profile Mollusk 4/4。
 - P5 第六段本地部署门已完成：Surfpool smoke 参数化为 Phoenix / PhoenixV1Profile 两个显式目标；P5 verifier 的 716,344 B ELF 经 708 个 Loader write + deploy + authority transactions 落入 exact 716,389-byte ProgramData，confirmed signature 与完整 bytes 已核对。默认 Phoenix 3,389-write 路径也重跑通过；不用 `solana-test-validator`，不声明公网部署。
+- P5 第七段 bounded parent path 已完成：通用 `accDataParentPathValid` 以静态
+  base/stride/capacity/max-depth 逐步读取账户内 parent path，验证 color、index envelope、
+  parent→child reciprocity，并在 32 edge 内要求到 root；root 外 reciprocal cycle 有界返回 0。
+  当前 digest `381c728318e7fe26`，assembly 2,509,900 B，ELF 821,576 B；无 heap/Map；
+  Surfpool 1.5.0 以 812 个 Loader write transactions 部署并核对 exact ProgramData。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
@@ -101,7 +106,7 @@
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
-| P5 动态 Phoenix-v1 | 部分：profile + metadata/header + bid root neighborhood 与本地部署门已有，完整 traversal 未支持 | 固定/固定-stride有界 account word；后续依赖 parent-pointer constant-memory traversal | canonical profile、sequence、allocator envelope、bid root/child reciprocity 与局部 ordering 已进 Lean/Mollusk；当前 verifier 另经 Surfpool Loader-v3 transaction 部署；完整 tree/free-list 遍历、节点写入、remaining accounts 和完整 Phoenix-v1 兼容仍 fail closed |
+| P5 动态 Phoenix-v1 | 部分：profile + metadata/header + bid root neighborhood + bounded parent path 与本地部署门已有，whole-tree traversal 未支持 | 固定/固定-stride有界 account word 与 O(1)-memory parent walk | canonical profile、sequence、allocator envelope、bid root/child reciprocity、局部 ordering 和 ≤32-edge selected path 已进 Lean/Mollusk；完整 tree/free-list coverage、节点写入、remaining accounts 和完整 Phoenix-v1 兼容仍 fail closed |
 | P6 SDK memory/protocol surface | 进行中：官方形状 transient heap 模型已有 | P5 的 account-resident 边界；后续需要 effect-safe lowering | 默认 32 KiB / 显式 32–256 KiB frame、OOM/no-op free 已建模；后续只开放 bounded scratch/container API，禁止持久 heap pointer。再分片补 32-byte/u128/Borsh、remaining accounts 和 Token-2022 extension semantics |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。固定长度 32-byte / u128 /

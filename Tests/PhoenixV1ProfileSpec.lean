@@ -130,6 +130,59 @@ private partial def opsHaveIndexedDataWord
       | .forBody _ body => opsHaveIndexedDataWord acc baseWord strideWords capacity body
       | _ => false
 
+private partial def valHasParentPath
+    (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat) :
+    ProofForge.Svm.Ops.Val → Bool
+  | .ext (.accDataParentPathValid actualAcc actualLinks actualParent actualStride
+      actualCapacity actualDepth) operands =>
+      (actualAcc == acc && actualLinks == linksBaseWord && actualParent == parentBaseWord &&
+        actualStride == strideWords && actualCapacity == capacity && actualDepth == maxDepth) ||
+        operands.any (valHasParentPath
+          acc linksBaseWord parentBaseWord strideWords capacity maxDepth)
+  | .field base _ | .bitNot base =>
+      valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth lhs ||
+        valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth rhs
+  | .indexGet base _ index _ _ =>
+      valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth base ||
+        valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth index
+  | .select _ lhs rhs thenValue elseValue =>
+      valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth lhs ||
+        valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth rhs ||
+        valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth thenValue ||
+        valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth elseValue
+  | .ext _ operands => operands.any
+      (valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth)
+  | _ => false
+
+private partial def opsHaveParentPath
+    (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    let has := valHasParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth
+    let here :=
+      match op with
+      | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+      | .storeField _ value | .okState value | .returnU64 value | .returnState value => has value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+      | .indexSet _ lhs rhs _ _ => has lhs || has rhs
+      | .invoke _ _ data _ bump =>
+          data.any (fun item => item.value?.any has) || bump.any has
+      | _ => false
+    here ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth thenOps ||
+            opsHaveParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth elseOps
+      | .forBody _ body =>
+          opsHaveParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -157,6 +210,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing bidRootPrice"
   let some neighborhood := program.methods.find? (·.ixName == "bidRootNeighborhoodValid")
     | throwError "missing bidRootNeighborhoodValid"
+  let some parentPath := program.methods.find? (·.ixName == "bidParentPathValid")
+    | throwError "missing bidParentPathValid"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -181,7 +236,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveIndexedDataWord 1 117 8 512 neighborhood.ops &&
       opsHaveIndexedDataWord 1 117 8 1024 neighborhood.ops &&
       opsHaveIndexedDataWord 1 117 8 2048 neighborhood.ops &&
-      opsHaveIndexedDataWord 1 117 8 4096 neighborhood.ops do
+      opsHaveIndexedDataWord 1 117 8 4096 neighborhood.ops &&
+      opsHaveParentPath 1 114 115 8 512 32 parentPath.ops &&
+      opsHaveParentPath 1 114 115 8 1024 32 parentPath.ops &&
+      opsHaveParentPath 1 114 115 8 2048 32 parentPath.ops &&
+      opsHaveParentPath 1 114 115 8 4096 32 parentPath.ops do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
@@ -192,7 +251,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jge r2, r3, ok_data_word_" &&
       asm.contains "add64 r1, 88" && asm.contains "jlt r1, 2" &&
       asm.contains "load bounded acc1 data word base=116 stride=8 capacity=4096" &&
-      asm.contains "mul64 r2, r3" do
+      asm.contains "mul64 r2, r3" &&
+      asm.contains "validate bounded acc1 parent path links=114 parent=115 stride=8 capacity=4096 depth=32" &&
+      asm.contains "parent_path_loop_" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
 #pf_guard_phoenix_v1_profile

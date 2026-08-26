@@ -106,7 +106,7 @@ fn tree_root_words(book_capacity: u64) -> (usize, usize) {
     (ask_count - 2, trader_count - 2)
 }
 
-fn run_view(name: &str, market: Account, checks: &[Check]) {
+fn run_view_args(name: &str, args: &[u64], market: Account, checks: &[Check]) {
     let (program_id, mollusk) = common::harness("PhoenixV1Profile", "PF_PHOENIX_V1_PROFILE_SO");
     let state_key = common::dummy_state_key(&program_id);
     let market_key = Pubkey::new_unique();
@@ -114,7 +114,7 @@ fn run_view(name: &str, market: Account, checks: &[Check]) {
         program_id,
         state_key,
         name,
-        &[],
+        args,
         false,
         false,
         vec![AccountMeta::new_readonly(market_key, false)],
@@ -127,6 +127,10 @@ fn run_view(name: &str, market: Account, checks: &[Check]) {
         ],
         checks,
     );
+}
+
+fn run_view(name: &str, market: Account, checks: &[Check]) {
+    run_view_args(name, &[], market, checks);
 }
 
 #[test]
@@ -169,6 +173,12 @@ fn all_official_profiles_select_exact_account_size() {
         );
         run_view(
             "allocatorHeadersValid",
+            market.clone(),
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+        run_view_args(
+            "bidParentPathValid",
+            &[1],
             market.clone(),
             &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
         );
@@ -347,6 +357,61 @@ fn bid_root_uses_bounded_account_resident_slot_index() {
     write_order_node(&mut market, 110, 1, 0, 0, 2, 1, 80, !2u64);
     run_view(
         "bidRootNeighborhoodValid",
+        market,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn bid_parent_path_is_bounded_and_reciprocal() {
+    let mut market = market_account(
+        PHOENIX_PROGRAM,
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    write_allocator_header(&mut market, 110, 3, 2, 4, 4);
+    write_allocator_header(&mut market, 4210, 0, 0, 1, 1);
+    write_allocator_header(&mut market, 8310, 0, 0, 1, 1);
+    write_order_node(&mut market, 110, 1, 0, 0, 2, 1, 110, !2u64);
+    write_order_node(&mut market, 110, 2, 1, 3, 0, 0, 100, !1u64);
+    write_order_node(&mut market, 110, 3, 0, 0, 2, 0, 90, !3u64);
+
+    for index in [1, 2, 3] {
+        run_view_args(
+            "bidParentPathValid",
+            &[index],
+            market.clone(),
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+    }
+    for index in [0, 4] {
+        run_view_args(
+            "bidParentPathValid",
+            &[index],
+            market.clone(),
+            &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+        );
+    }
+
+    write_order_node(&mut market, 110, 1, 0, 0, 3, 1, 110, !2u64);
+    run_view_args(
+        "bidParentPathValid",
+        &[1],
+        market.clone(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    // A reciprocal 1 ↔ 3 parent cycle excludes root 2. It cannot loop forever: the emitted
+    // constant-memory walk returns zero after its static 32-edge bound.
+    write_order_node(&mut market, 110, 1, 3, 0, 3, 1, 110, !2u64);
+    write_order_node(&mut market, 110, 2, 0, 0, 0, 0, 100, !1u64);
+    write_order_node(&mut market, 110, 3, 1, 0, 1, 0, 90, !3u64);
+    run_view_args(
+        "bidParentPathValid",
+        &[1],
         market,
         &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
     );
