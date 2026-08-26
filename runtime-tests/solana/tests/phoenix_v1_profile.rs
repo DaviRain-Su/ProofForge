@@ -379,6 +379,21 @@ fn market_with_three_traders(
     )
 }
 
+fn market_with_four_traders(
+    first_key: [u64; 4],
+    second_key: [u64; 4],
+    third_key: [u64; 4],
+    fourth_key: [u64; 4],
+) -> Account {
+    run_market_write(
+        "registerFourthTrader128",
+        market_with_three_traders(first_key, second_key, third_key),
+        true,
+        &fourth_key,
+        &[Check::success(), Check::return_data(&4u64.to_le_bytes())],
+    )
+}
+
 #[test]
 fn all_official_profiles_select_exact_account_size() {
     for (bids, asks, seats, expected) in OFFICIAL_PROFILES {
@@ -1593,6 +1608,222 @@ fn fourth_trader_registration_rejects_noncanonical_inputs_atomically() {
         malformed.clone(),
         true,
         &D,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
+}
+
+#[test]
+fn fifth_trader_registration_matches_black_parent_and_all_black_uncle_fixups() {
+    const K02: [u64; 4] = [0x02, 0, 0, 0];
+    const K05: [u64; 4] = [0x05, 0, 0, 0];
+    const A: [u64; 4] = [0x10, 0, 0, 0];
+    const K14: [u64; 4] = [0x14, 0, 0, 0];
+    const K18: [u64; 4] = [0x18, 0, 0, 0];
+    const B: [u64; 4] = [0x20, 0, 0, 0];
+    const K28: [u64; 4] = [0x28, 0, 0, 0];
+    const K2C: [u64; 4] = [0x2c, 0, 0, 0];
+    const C: [u64; 4] = [0x30, 0, 0, 0];
+    const K40: [u64; 4] = [0x40, 0, 0, 0];
+    const K50: [u64; 4] = [0x50, 0, 0, 0];
+    const CURSOR_6_6: u64 = 0x0000_0006_0000_0006;
+
+    // Each case starts from the official first-through-fourth bump path. Together they cover all
+    // six address layouts, LL/LR/RL/RR black-uncle repair, and black-parent insertion both beside
+    // the red leaf's grandparent and below the opposite black sibling.
+    let cases = [
+        (
+            "LL below red address 4",
+            [C, B, A, K05, K02],
+            2,
+            [
+                (0, packed_u32(2, 0)),
+                (packed_u32(4, 1), 0),
+                (0, packed_u32(4, 1)),
+                (packed_u32(5, 3), packed_u32(2, 0)),
+                (0, packed_u32(4, 1)),
+            ],
+        ),
+        (
+            "RL below red address 4",
+            [C, A, B, K18, K14],
+            3,
+            [
+                (0, packed_u32(3, 0)),
+                (0, packed_u32(5, 1)),
+                (packed_u32(5, 1), 0),
+                (0, packed_u32(5, 1)),
+                (packed_u32(2, 4), packed_u32(3, 0)),
+            ],
+        ),
+        (
+            "LR below red address 4",
+            [B, A, C, K28, K2C],
+            1,
+            [
+                (packed_u32(2, 5), 0),
+                (0, packed_u32(1, 0)),
+                (0, packed_u32(5, 1)),
+                (0, packed_u32(5, 1)),
+                (packed_u32(4, 3), packed_u32(1, 0)),
+            ],
+        ),
+        (
+            "RR below red address 4",
+            [A, B, C, K40, K50],
+            2,
+            [
+                (0, packed_u32(2, 0)),
+                (packed_u32(1, 4), 0),
+                (0, packed_u32(4, 1)),
+                (packed_u32(3, 5), packed_u32(2, 0)),
+                (0, packed_u32(4, 1)),
+            ],
+        ),
+        (
+            "black grandparent missing right",
+            [A, C, B, K05, K18],
+            3,
+            [
+                (packed_u32(4, 5), packed_u32(3, 0)),
+                (0, packed_u32(3, 0)),
+                (packed_u32(1, 2), 0),
+                (0, packed_u32(1, 1)),
+                (0, packed_u32(1, 1)),
+            ],
+        ),
+        (
+            "black grandparent missing left",
+            [B, C, A, K40, K28],
+            1,
+            [
+                (packed_u32(3, 2), 0),
+                (packed_u32(5, 4), packed_u32(1, 0)),
+                (0, packed_u32(1, 0)),
+                (0, packed_u32(2, 1)),
+                (0, packed_u32(2, 1)),
+            ],
+        ),
+        (
+            "opposite black sibling missing left",
+            [C, B, A, K05, K28],
+            2,
+            [
+                (packed_u32(5, 0), packed_u32(2, 0)),
+                (packed_u32(3, 1), 0),
+                (packed_u32(4, 0), packed_u32(2, 0)),
+                (0, packed_u32(3, 1)),
+                (0, packed_u32(1, 1)),
+            ],
+        ),
+        (
+            "opposite black sibling missing right",
+            [A, B, C, K40, K18],
+            2,
+            [
+                (packed_u32(0, 5), packed_u32(2, 0)),
+                (packed_u32(1, 3), 0),
+                (packed_u32(0, 4), packed_u32(2, 0)),
+                (0, packed_u32(3, 1)),
+                (0, packed_u32(1, 1)),
+            ],
+        ),
+    ];
+
+    for (name, keys, final_root, topology) in cases {
+        let mut four_nodes = market_with_four_traders(keys[0], keys[1], keys[2], keys[3]);
+        for (address, value) in [0x1111, 0x2222, 0x3333, 0x4444].into_iter().enumerate() {
+            write_word(&mut four_nodes, 8320 + 18 * address, value);
+        }
+        for word in 8386..8404 {
+            write_word(&mut four_nodes, word, u64::MAX);
+        }
+
+        let mut expected = four_nodes.clone();
+        write_allocator_header(&mut expected, 8310, 5, final_root, 6, 6);
+        for word in 8386..8404 {
+            write_word(&mut expected, word, 0);
+        }
+        for (offset, value) in keys[4].into_iter().enumerate() {
+            write_word(&mut expected, 8388 + offset, value);
+        }
+        for (index, (links, parent_color)) in topology.into_iter().enumerate() {
+            write_word(&mut expected, 8314 + 18 * index, links);
+            write_word(&mut expected, 8315 + 18 * index, parent_color);
+        }
+
+        let registered = run_market_write(
+            "registerFifthTrader128",
+            four_nodes,
+            true,
+            &keys[4],
+            &[Check::success(), Check::return_data(&5u64.to_le_bytes())],
+        );
+        assert_eq!(read_word(&registered, 8313), CURSOR_6_6, "{name}");
+        for (address, value) in [0x1111, 0x2222, 0x3333, 0x4444].into_iter().enumerate() {
+            assert_eq!(read_word(&registered, 8320 + 18 * address), value, "{name}");
+        }
+        assert_eq!(registered.data, expected.data, "{name}");
+        run_view(
+            "bodyEntryCount",
+            registered.clone(),
+            &[Check::success(), Check::return_data(&5u64.to_le_bytes())],
+        );
+        run_view(
+            "traderTreeValid",
+            registered,
+            &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+        );
+    }
+}
+
+#[test]
+fn fifth_trader_registration_rejects_noncanonical_inputs_atomically() {
+    const A: [u64; 4] = [0x10, 0, 0, 0];
+    const B: [u64; 4] = [0x20, 0, 0, 0];
+    const C: [u64; 4] = [0x30, 0, 0, 0];
+    const D: [u64; 4] = [0x40, 0, 0, 0];
+    const E: [u64; 4] = [0x50, 0, 0, 0];
+
+    let canonical = market_with_four_traders(A, B, C, D);
+    for duplicate in [A, B, C, D] {
+        let after_duplicate = run_market_write(
+            "registerFifthTrader128",
+            canonical.clone(),
+            true,
+            &duplicate,
+            &[Check::err(ProgramError::Custom(0x1001))],
+        );
+        assert_eq!(after_duplicate.data, canonical.data);
+    }
+
+    let after_readonly = run_market_write(
+        "registerFifthTrader128",
+        canonical.clone(),
+        false,
+        &E,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_readonly.data, canonical.data);
+
+    let mut wrong_owner = canonical.clone();
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "registerFifthTrader128",
+        wrong_owner.clone(),
+        true,
+        &E,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let mut malformed = canonical;
+    write_word(&mut malformed, 8369, 3);
+    let after_malformed = run_market_write(
+        "registerFifthTrader128",
+        malformed.clone(),
+        true,
+        &E,
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(after_malformed.data, malformed.data);

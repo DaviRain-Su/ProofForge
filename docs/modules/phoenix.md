@@ -140,7 +140,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 216/216 与 Anvil 12/12。跨四档逐样本只作
+  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 218/218 与 Anvil 12/12。跨四档逐样本只作
   host reference↔source fold，不宣称完整 chain refinement。
 - **部分支持（P5 profile/body/root gate）**：独立 verifier 已按 canonical program
   owner、576-byte header/discriminant、12 个官方 capacity tuple 和 exact account length
@@ -159,14 +159,16 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   ordering 把完整 red slot 2 挂到 root 左或右侧；`registerThirdTrader128` bump-alloc address 3，
   完整覆盖新 slot，并精确执行 LL/LR/RR/RL rotation/recolor 与两个 no-fix 分支；
   `registerFourthTrader128` 再从任意 canonical 三节点地址布局 bump-alloc address 4，挂到
-  selected red parent 并把两个 existing leaves recolor black。四个边界都让 complete
+  selected red parent 并把两个 existing leaves recolor black；`registerFifthTrader128`
+  bump-alloc address 5，覆盖 black-parent 无修复路径及 black-uncle LL/LR/RL/RR local
+  rotation/recolor，保持最上层 black root 地址不变。五个边界都让 complete
   validator 返回 1，不会成功留下 detached node；fixed-memory validator 保存/恢复 walked
   ABI 的 instruction-data base，后续参数读取不受 traversal scratch 影响。byte swap 是通用一元 SVM
   value intrinsic，直接发射 sBPF `be64`，不分配 heap；抽取器遇到无法解码的 external-account
-  write 现在直接拒绝而不是静默丢弃。当前 verifier digest `a2c228178be89985`，assembly
-  4,078,543 B、ELF 1,300,352 B、IDL 4,727 B；Surfpool 1.5.0 用 1,285 个 Loader write
-  transactions 完成本地部署，并核对 exact 1,300,397-byte ProgramData；不作公网声明。
-- **未支持（P5 remaining body/公网）**：公网部署、第五个/一般 key 插入、free-list reuse、
+  write 现在直接拒绝而不是静默丢弃。当前 verifier digest `9140326aef66cbdc`，assembly
+  4,378,054 B、ELF 1,399,096 B、IDL 5,061 B；Surfpool 1.5.0 用 1,383 个 Loader write
+  transactions 完成本地部署，并核对 exact 1,399,141-byte ProgramData；不作公网声明。
+- **未支持（P5 remaining body/公网）**：公网部署、第六个/一般 key 插入、free-list reuse、
   一般 insertion/delete fixup、runtime remaining accounts、Token-2022 extension 语义及完整
   Phoenix-v1 账户兼容。
 
@@ -188,7 +190,7 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 有界 bid-root neighborhood 和 selected parent path；完整 bid/ask/trader validators 再用
 fixed bitmap/stack 证明三棵树的 RB/order invariants 与 live/free partition。写入侧已按固定
 128-seat shape 支持 topology words、fresh-empty → one-root → two-node → three-node → four-node
-的 exact Sokoban transition，包括第三次插入的全部 rotation/recolor 和第四次 red-uncle
-recolor；一般 allocator/tree transition
+→ five-node 的 exact Sokoban transition，包括第三次插入的全部 rotation/recolor、第四次
+red-uncle recolor 和第五次 black-parent/black-uncle 路径；一般 allocator/tree transition
 仍关闭。这是完整的 bounded N=4
 Phoenix IOC 模型加 P5 bounded body read/write 基础，不是完整 Phoenix-v1 动态账户实现。

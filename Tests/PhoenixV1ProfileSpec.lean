@@ -23,6 +23,7 @@ open Lean Elab Command
 #guard boundedBodyEntryCount 512 128 1 2 3 == 6
 #guard boundedBodyEntryCount 512 128 513 2 3 == 0
 #guard boundedBodyEntryCount 512 128 1 2 129 == 0
+#guard packUInt32 0x89abcdef 0x01234567 == 0x0123456789abcdef
 #guard ProofForge.Svm.Runtime.svmByteSwap64 0x0706050403020100 == 0x0001020304050607
 #guard key4Before 0x0100000000000000 0 0 0 0x00000000000000ff 0 0 0
 #guard !key4Before 0x00000000000000ff 0 0 0 0x0100000000000000 0 0 0
@@ -377,6 +378,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing registerThirdTrader128"
   let some registerFourth := program.methods.find? (·.ixName == "registerFourthTrader128")
     | throwError "missing registerFourthTrader128"
+  let some registerFifth := program.methods.find? (·.ixName == "registerFifthTrader128")
+    | throwError "missing registerFifthTrader128"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -467,7 +470,19 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveDataWordSetAt 1 8313 1 1 registerFourth.ops &&
       (List.range 18).all (fun offset =>
         opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerFourth.ops) &&
-      countDataWordSetAt registerFourth.ops == 23 do
+      countDataWordSetAt registerFourth.ops == 23 &&
+      opsHaveIndexedDataWord 1 8314 18 128 registerFifth.ops &&
+      opsHaveIndexedDataWord 1 8315 18 128 registerFifth.ops &&
+      opsHaveIndexedDataWord 1 8316 18 128 registerFifth.ops &&
+      opsHaveIndexedDataWord 1 8317 18 128 registerFifth.ops &&
+      opsHaveIndexedDataWord 1 8318 18 128 registerFifth.ops &&
+      opsHaveIndexedDataWord 1 8319 18 128 registerFifth.ops &&
+      opsHaveRbTreeKey4 8314 8315 8316 128 registerFifth.ops &&
+      opsHaveDataWordSetAt 1 8312 1 1 registerFifth.ops &&
+      opsHaveDataWordSetAt 1 8313 1 1 registerFifth.ops &&
+      (List.range 18).all (fun offset =>
+        opsHaveDataWordSetAt 1 (8314 + offset) 18 128 registerFifth.ops) &&
+      countDataWordSetAt registerFifth.ops == 27 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with

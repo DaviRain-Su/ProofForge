@@ -53,6 +53,8 @@ def lowUInt32 (word : UInt64) : UInt64 := word &&& 0xffffffff
 
 def highUInt32 (word : UInt64) : UInt64 := word >>> 32
 
+def packUInt32 (low high : UInt64) : UInt64 := low ||| (high <<< 32)
+
 /-- Compare four little-endian account limbs in the original 32-byte key order. The compact SVM
 byte-swap intrinsic makes each unsigned limb comparison match Rust `[u8; 32]` lexicographic Ord. -/
 def key4Before
@@ -857,12 +859,164 @@ def registerFourthTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
   else
     .error .overflow
 
+/--
+Insert a fifth distinct key into a canonical four-node 128-seat trader tree. Address 5 is allocated
+from the account-resident bump cursor. If its parent is black, only that parent's missing link is
+filled. If its parent is the unique red address-4 leaf, the black-uncle LL/LR/RL/RR path rotates
+the local subtree below the unchanged black root. All persisted references remain one-based slot
+indexes; no heap tree, map, node copy, or persistent pointer is constructed.
+-/
+@[pf_entry]
+def registerFifthTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error (State × UInt64) :=
+  let root := lowUInt32 (accDataWord 1 8310)
+  let rootSlot := boundedNodeSlot 128 root
+  let rootLinks := accDataWordAt 1 8314 18 128 rootSlot
+  let left := lowUInt32 rootLinks
+  let right := highUInt32 rootLinks
+  let leftSlot := boundedNodeSlot 128 left
+  let rightSlot := boundedNodeSlot 128 right
+  let leftLinks := accDataWordAt 1 8314 18 128 leftSlot
+  let rightLinks := accDataWordAt 1 8314 18 128 rightSlot
+  let node4Links := accDataWordAt 1 8314 18 128 3
+  let node4ParentColor := accDataWordAt 1 8315 18 128 3
+  let redGrand := lowUInt32 node4ParentColor
+  let grandLinks := if redGrand = left then leftLinks else rightLinks
+  let rootKey0 := accDataWordAt 1 8316 18 128 rootSlot
+  let rootKey1 := accDataWordAt 1 8317 18 128 rootSlot
+  let rootKey2 := accDataWordAt 1 8318 18 128 rootSlot
+  let rootKey3 := accDataWordAt 1 8319 18 128 rootSlot
+  let leftKey0 := accDataWordAt 1 8316 18 128 leftSlot
+  let leftKey1 := accDataWordAt 1 8317 18 128 leftSlot
+  let leftKey2 := accDataWordAt 1 8318 18 128 leftSlot
+  let leftKey3 := accDataWordAt 1 8319 18 128 leftSlot
+  let rightKey0 := accDataWordAt 1 8316 18 128 rightSlot
+  let rightKey1 := accDataWordAt 1 8317 18 128 rightSlot
+  let rightKey2 := accDataWordAt 1 8318 18 128 rightSlot
+  let rightKey3 := accDataWordAt 1 8319 18 128 rightSlot
+  let node4Key0 := accDataWordAt 1 8316 18 128 3
+  let node4Key1 := accDataWordAt 1 8317 18 128 3
+  let node4Key2 := accDataWordAt 1 8318 18 128 3
+  let node4Key3 := accDataWordAt 1 8319 18 128 3
+  let newBeforeRoot :=
+    key4Before key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3
+  let selected := if newBeforeRoot then left else right
+  let selectedLinks := if newBeforeRoot then leftLinks else rightLinks
+  let selectedKey0 := if newBeforeRoot then leftKey0 else rightKey0
+  let selectedKey1 := if newBeforeRoot then leftKey1 else rightKey1
+  let selectedKey2 := if newBeforeRoot then leftKey2 else rightKey2
+  let selectedKey3 := if newBeforeRoot then leftKey3 else rightKey3
+  let newBeforeSelected :=
+    key4Before key0 key1 key2 key3
+      selectedKey0 selectedKey1 selectedKey2 selectedKey3
+  let selectedChild :=
+    if newBeforeSelected then lowUInt32 selectedLinks else highUInt32 selectedLinks
+  let parent := if selectedChild = 0 then selected else selectedChild
+  let fixNeeded := parent = 4
+  let redIsLeft := lowUInt32 grandLinks = 4
+  let newBeforeNode4 :=
+    key4Before key0 key1 key2 key3 node4Key0 node4Key1 node4Key2 node4Key3
+  let aligned := if redIsLeft then newBeforeNode4 else !newBeforeNode4
+  let promoted := if aligned then 4 else 5
+  let noFixParentLinks :=
+    if newBeforeSelected then
+      packUInt32 5 (highUInt32 selectedLinks)
+    else
+      packUInt32 (lowUInt32 selectedLinks) 5
+  let rootLinksAfterFix :=
+    if redGrand = left then packUInt32 promoted right else packUInt32 left promoted
+  let node4LinksAfterFix :=
+    if aligned then
+      if redIsLeft then packUInt32 5 redGrand else packUInt32 redGrand 5
+    else
+      0
+  let node4ParentColorAfterFix :=
+    if aligned then packUInt32 root 0 else packUInt32 5 1
+  let node5LinksAfterFix :=
+    if aligned then
+      0
+    else if redIsLeft then
+      packUInt32 4 redGrand
+    else
+      packUInt32 redGrand 4
+  let node5ParentColorAfterFix :=
+    if aligned then packUInt32 4 1 else packUInt32 root 0
+  let finalRootLinks := if fixNeeded then rootLinksAfterFix else rootLinks
+  let finalLeftLinks :=
+    if fixNeeded then
+      if redGrand = left then 0 else leftLinks
+    else if parent = left then
+      noFixParentLinks
+    else
+      leftLinks
+  let finalLeftParentColor :=
+    if fixNeeded && redGrand = left then packUInt32 promoted 1 else packUInt32 root 0
+  let finalRightLinks :=
+    if fixNeeded then
+      if redGrand = right then 0 else rightLinks
+    else if parent = right then
+      noFixParentLinks
+    else
+      rightLinks
+  let finalRightParentColor :=
+    if fixNeeded && redGrand = right then packUInt32 promoted 1 else packUInt32 root 0
+  let finalNode4Links := if fixNeeded then node4LinksAfterFix else node4Links
+  let finalNode4ParentColor :=
+    if fixNeeded then node4ParentColorAfterFix else node4ParentColor
+  let finalNode5Links := if fixNeeded then node5LinksAfterFix else 0
+  let finalNode5ParentColor :=
+    if fixNeeded then node5ParentColorAfterFix else packUInt32 parent 1
+  let treeValid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128 root 4 5 5
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 8311 = 0 && accDataWord 1 8312 = 4 &&
+      accDataWord 1 8313 = 0x0000000500000005 && treeValid = 1 &&
+      left ≠ 0 && right ≠ 0 && node4Links = 0 &&
+      (redGrand = left || redGrand = right) &&
+      node4ParentColor = packUInt32 redGrand 1 &&
+      (lowUInt32 grandLinks = 4 || highUInt32 grandLinks = 4) &&
+      (selectedChild = 0 || selectedChild = 4) &&
+      !key4Equal key0 key1 key2 key3 rootKey0 rootKey1 rootKey2 rootKey3 &&
+      !key4Equal key0 key1 key2 key3 leftKey0 leftKey1 leftKey2 leftKey3 &&
+      !key4Equal key0 key1 key2 key3 rightKey0 rightKey1 rightKey2 rightKey3 &&
+      !key4Equal key0 key1 key2 key3 node4Key0 node4Key1 node4Key2 node4Key3 then
+    let _ := accDataWordSetAt 1 8313 1 1 0 0x0000000600000006
+    let _ := accDataWordSetAt 1 8314 18 128 4 finalNode5Links
+    let _ := accDataWordSetAt 1 8315 18 128 4 finalNode5ParentColor
+    let _ := accDataWordSetAt 1 8316 18 128 4 key0
+    let _ := accDataWordSetAt 1 8317 18 128 4 key1
+    let _ := accDataWordSetAt 1 8318 18 128 4 key2
+    let _ := accDataWordSetAt 1 8319 18 128 4 key3
+    let _ := accDataWordSetAt 1 8320 18 128 4 0
+    let _ := accDataWordSetAt 1 8321 18 128 4 0
+    let _ := accDataWordSetAt 1 8322 18 128 4 0
+    let _ := accDataWordSetAt 1 8323 18 128 4 0
+    let _ := accDataWordSetAt 1 8324 18 128 4 0
+    let _ := accDataWordSetAt 1 8325 18 128 4 0
+    let _ := accDataWordSetAt 1 8326 18 128 4 0
+    let _ := accDataWordSetAt 1 8327 18 128 4 0
+    let _ := accDataWordSetAt 1 8328 18 128 4 0
+    let _ := accDataWordSetAt 1 8329 18 128 4 0
+    let _ := accDataWordSetAt 1 8330 18 128 4 0
+    let _ := accDataWordSetAt 1 8331 18 128 4 0
+    let _ := accDataWordSetAt 1 8314 18 128 rootSlot finalRootLinks
+    let _ := accDataWordSetAt 1 8314 18 128 leftSlot finalLeftLinks
+    let _ := accDataWordSetAt 1 8315 18 128 leftSlot finalLeftParentColor
+    let _ := accDataWordSetAt 1 8314 18 128 rightSlot finalRightLinks
+    let _ := accDataWordSetAt 1 8315 18 128 rightSlot finalRightParentColor
+    let _ := accDataWordSetAt 1 8314 18 128 3 finalNode4Links
+    let _ := accDataWordSetAt 1 8315 18 128 3 finalNode4ParentColor
+    let _ := accDataWordSetAt 1 8312 1 1 0 5
+    .ok ({ s with dummy := 0 }, 5)
+  else
+    .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=
   accDataWord 1 4
 
-attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
+attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32 packUInt32
   key4Before key4Equal thirdRoot thirdNode1Links thirdNode1ParentColor thirdNode2Links
   thirdNode2ParentColor thirdNode3Links thirdNode3ParentColor
   allocatorHeaderValid threeAllocatorHeadersValid nodeIndexOrNullValid boundedBidRootPrice

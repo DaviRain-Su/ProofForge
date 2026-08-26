@@ -97,6 +97,7 @@
 | [l5-020](tasks/l5-020.md) | done | Phoenix-v1 exact second trader registration |
 | [l5-021](tasks/l5-021.md) | done | Phoenix-v1 exact third trader registration + full insertion fixups |
 | [l5-022](tasks/l5-022.md) | done | Phoenix-v1 exact fourth trader registration + red-uncle recolor |
+| [l5-023](tasks/l5-023.md) | done | Phoenix-v1 exact fifth trader registration + black-uncle rotations |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

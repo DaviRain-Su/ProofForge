@@ -53,9 +53,10 @@ runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 
 Toolchain：`leanprover/lean4:v4.31.0`、`sbpf 0.2.2`、Surfpool `1.5.0`。
 
-`PhoenixV1Profile` 当前在 128-seat 固定账户内支持前四个 distinct trader 的 exact
-Sokoban insertion，包括第三次的 LL/LR/RR/RL rotation 和第四次的 red-uncle recolor；
-持久状态只保存 one-based slot index，不使用 heap `Map` 或账户外 pointer。
+`PhoenixV1Profile` 当前在 128-seat 固定账户内支持前五个 distinct trader 的 exact
+Sokoban insertion，包括第三次的 LL/LR/RR/RL rotation、第四次的 red-uncle recolor，
+以及第五次的 black-parent/black-uncle 路径；持久状态只保存 one-based slot index，
+不使用 heap `Map` 或账户外 pointer。
 
 ## 入口
 
