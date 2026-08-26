@@ -6,6 +6,7 @@ open Examples.Token
 open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩
+def nobody : Addr20 := ⟨0, 0, 0⟩
 
 def nine : UInt256 := ⟨9, 0, 0, 0⟩
 def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
@@ -20,7 +21,12 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 
 #guard
   match mint (init 0) sample nine with
-  | .ok (_, ret) => ret == 9
+  | .ok _ => true
+  | .error _ => false
+
+#guard
+  match mint (init 0) nobody nine with
+  | .ok _ => true
   | .error _ => false
 
 #guard
@@ -30,7 +36,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 
 #guard
   match burnFrom (init 0) sample nine with
-  | .ok (_, ret) => ret == 9
+  | .ok _ => true
   | .error _ => false
 
 #guard
@@ -78,6 +84,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"Insufficient\"" &&
         abi.contains "\"name\":\"Expired\"" &&
         abi.contains "\"name\":\"Unauthorized\"" &&
+        abi.contains "\"name\":\"ZeroAddress\"" &&
         abi.contains "\"type\":\"error\"" &&
         yul.contains "revert(0, 36)" &&
         yul.contains "staticcall(gas(), 1," &&

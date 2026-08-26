@@ -30,6 +30,20 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'decimals()(uint8)')" \
   18 "compile-time decimals"
+
+zero="0x0000000000000000000000000000000000000000"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'mint(address,uint256)' "$zero" 1 >/dev/null 2>&1; then
+  echo "FAIL: mint to zero unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_zero_address "$addr" "$sender" \
+  "$("$cast" calldata 'mint(address,uint256)' "$zero" 1)" \
+  "mint to zero"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  0 "mint to zero holds supply"
+
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'mint(address,uint256)' "$sender" 100 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
@@ -80,6 +94,27 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$dest")" \
   30 "dest after transfer"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'transfer(address,uint256)' "$zero" 1 >/dev/null 2>&1; then
+  echo "FAIL: transfer to zero unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_zero_address "$addr" "$sender" \
+  "$("$cast" calldata 'transfer(address,uint256)' "$zero" 1)" \
+  "transfer to zero"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  70 "transfer to zero holds sender"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'approve(address,uint256)' "$zero" 1 >/dev/null 2>&1; then
+  echo "FAIL: approve zero unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_zero_address "$addr" "$sender" \
+  "$("$cast" calldata 'approve(address,uint256)' "$zero" 1)" \
+  "approve zero"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
     "$addr" 'transfer(address,uint256)' "$dest" 1000 >/dev/null 2>&1; then
@@ -314,4 +349,4 @@ fi
 got_dom2="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
 solana_lean_require_equal "${got_dom2,,}" "${got_dom,,}" "DOMAIN_SEPARATOR holds after permit"
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals; engineering only)"
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals/zero; engineering only)"
