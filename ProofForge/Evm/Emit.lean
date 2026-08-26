@@ -217,7 +217,8 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. |
     .ext .mapGetU64 _ | .ext .mapGetAddr _ | .ext .mapGetPair _ |
     .ext (.mapGetAddr256 _) _ | .ext (.mapGetPair256 _) _ |
-    .ext (.tokenBalance256 _) _ | .ext (.tokenAllowance256 _) _ | .ext .ge256 _ =>
+    .ext (.tokenBalance256 _) _ | .ext (.tokenAllowance256 _) _ |
+    .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext .ge256 _ =>
       .error "extract/unsupported: evm map/arith val needs materialize"
   | .ext _ _ => .error "extract/ir: malformed EVM value operands"
 
@@ -584,6 +585,32 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
             indent ++ "let " ++ ret ++ " := mload(0)" ++ nl ++
             indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl
           return (txt, nm, s6)
+    | .ext (.callValue256 limb) #[] =>
+        let cacheKey := "cval256"
+        match lookupWide st cacheKey with
+        | some ret =>
+          let (nm, st') := fresh st
+          return (indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl, nm, st')
+        | none =>
+          let (ret, st1) := fresh st
+          let (nm, st2) := fresh (rememberWide st1 cacheKey ret)
+          let txt :=
+            indent ++ "let " ++ ret ++ " := callvalue()" ++ nl ++
+            indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl
+          return (txt, nm, st2)
+    | .ext (.selfBalance256 limb) #[] =>
+        let cacheKey := "sbal256"
+        match lookupWide st cacheKey with
+        | some ret =>
+          let (nm, st') := fresh st
+          return (indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl, nm, st')
+        | none =>
+          let (ret, st1) := fresh st
+          let (nm, st2) := fresh (rememberWide st1 cacheKey ret)
+          let txt :=
+            indent ++ "let " ++ ret ++ " := selfbalance()" ++ nl ++
+            indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl
+          return (txt, nm, st2)
     | .ext (.tokenAllowance256 limb) #[tw0, tw1, tw2, o0, o1, o2, s0, s1, s2] =>
         let (p0, a0, st0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
         let (p1, a1, st1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 st0
@@ -780,6 +807,17 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         acc := acc ++ pre ++
           indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some amt }
+    | .evmDeposit256 a0 a1 a2 a3 =>
+        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
+        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0
+        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s1
+        let (p3, x3, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s2
+        let (amt, s4) := fresh s3
+        st := s4
+        acc := acc ++ p0 ++ p1 ++ p2 ++ p3 ++
+          indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
+          indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
+        st := { st with last := some x0 }
     | .evmSendEth w0 w1 w2 amount =>
         let (p0, a0, st0) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st
         let (p1, a1, st1) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st0
@@ -796,6 +834,26 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
             ", 0, 0, 0, 0)" ++ nl ++
           indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
         st := { st with last := some amt }
+    | .evmSendEth256 w0 w1 w2 a0 a1 a2 a3 =>
+        let (p0, d0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st
+        let (p1, d1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths w1 s0
+        let (p2, d2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths w2 s1
+        let (q0, x0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s2
+        let (q1, x1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s3
+        let (q2, x2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s4
+        let (q3, x3, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s5
+        let (amt, s7) := fresh s6
+        let (ok, s8) := fresh s7
+        st := s8
+        acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ q3 ++
+          indent ++ "if shr(32, " ++ d2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent d0 d1 d2 ++
+          indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
+          indent ++ "let " ++ ok ++ " := call(gas(), mload(0), " ++ amt ++
+            ", 0, 0, 0, 0)" ++ nl ++
+          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
+        st := { st with last := some x0 }
     | .evmLog name amount =>
         let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount paramWidths amount st
         st := st'

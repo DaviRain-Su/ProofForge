@@ -17,19 +17,19 @@ inductive Error where
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
-/-- `eq(callvalue(), amt)`。入口因此 payable。不是 `systemTransfer`。 -/
+/-- `eq(callvalue(), packed uint256)`。入口因此 payable。不是 `systemTransfer`。 -/
 @[pf_entry]
-def deposit (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
+def deposit (_s : State) (amt : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmDeposit amt)
+    .ok ({ dummy := 0 }, evmDeposit256 amt)
   else
     .error .overflow
 
-/-- value CALL 到 20B Addr20。失败 revert。重入不进参考语义。 -/
+/-- value CALL 到 20B Addr20，金额是 packed wei。失败 revert。重入不进参考语义。 -/
 @[pf_entry]
-def payout (_s : State) (dst : Addr20) (amt : UInt64) : Except Error (State × UInt64) :=
+def payout (_s : State) (dst : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmSendEth dst amt)
+    .ok ({ dummy := 0 }, evmSendEth256 dst amt)
   else
     .error .overflow
 
@@ -63,13 +63,13 @@ def selfLow (_s : State) : UInt64 :=
   evmSelf
 
 @[pf_entry]
-def selfBal (_s : State) : UInt64 :=
-  evmSelfBalance
+def selfBal (_s : State) : UInt256 :=
+  evmSelfBalance256
 
-/-- view：`STATICCALL` 下恒为 0。 -/
+/-- view：`STATICCALL` 下恒为 0。完整 wei。 -/
 @[pf_entry]
-def callValue (_s : State) : UInt64 :=
-  evmCallValue
+def callValue (_s : State) : UInt256 :=
+  evmCallValue256
 
 @[pf_entry]
 def caller20 (_s : State) : Addr20 :=

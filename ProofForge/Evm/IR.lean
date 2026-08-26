@@ -19,7 +19,9 @@ inductive Op where
   | checkedModU64 (lhs rhs : Ops.Val)
   | ite (cmp : Ops.Cmp) (lhs rhs : Ops.Val) (thn els : Array Op)
   | evmDeposit (amount : Ops.Val)
+  | evmDeposit256 (a0 a1 a2 a3 : Ops.Val)
   | evmSendEth (w0 w1 w2 amount : Ops.Val)
+  | evmSendEth256 (w0 w1 w2 a0 a1 a2 a3 : Ops.Val)
   | evmLog (name : String) (amount : Ops.Val)
   | evmLogTransfer256 (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : Ops.Val)
   | evmLogApproval256 (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : Ops.Val)
@@ -72,7 +74,10 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .returnU64 value => pure (.returnU64 value)
   | .returnState value => pure (.returnState value)
   | .ext (.deposit amount) => pure (.evmDeposit amount)
+  | .ext (.deposit256 a0 a1 a2 a3) => pure (.evmDeposit256 a0 a1 a2 a3)
   | .ext (.sendEth w0 w1 w2 amount) => pure (.evmSendEth w0 w1 w2 amount)
+  | .ext (.sendEth256 w0 w1 w2 a0 a1 a2 a3) =>
+      pure (.evmSendEth256 w0 w1 w2 a0 a1 a2 a3)
   | .ext (.log name amount) => pure (.evmLog name amount)
   | .ext (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3) =>
       pure (.evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3)
@@ -123,7 +128,9 @@ private partial def Op.toSource : Op → Ops.Op
   | .ite cmp lhs rhs thenOps elseOps =>
       .ite cmp lhs rhs (toSourceOps thenOps) (toSourceOps elseOps)
   | .evmDeposit amount => .ext (.deposit amount)
+  | .evmDeposit256 a0 a1 a2 a3 => .ext (.deposit256 a0 a1 a2 a3)
   | .evmSendEth w0 w1 w2 amount => .ext (.sendEth w0 w1 w2 amount)
+  | .evmSendEth256 w0 w1 w2 a0 a1 a2 a3 => .ext (.sendEth256 w0 w1 w2 a0 a1 a2 a3)
   | .evmLog name amount => .ext (.log name amount)
   | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       .ext (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3)
@@ -172,8 +179,13 @@ abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
 private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
     Ops.OpExt Ops.Val → Ops.OpExt Ops.Val
   | .deposit amount => .deposit (mapValue amount)
+  | .deposit256 a0 a1 a2 a3 =>
+      .deposit256 (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .sendEth w0 w1 w2 amount =>
       .sendEth (mapValue w0) (mapValue w1) (mapValue w2) (mapValue amount)
+  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
+      .sendEth256 (mapValue w0) (mapValue w1) (mapValue w2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .log name amount => .log name (mapValue amount)
   | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       .logTransfer256 (mapValue f0) (mapValue f1) (mapValue f2)
@@ -228,7 +240,9 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .deposit amount | .log _ amount => #[amount]
+  | .deposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3]
   | .sendEth w0 w1 w2 amount => #[w0, w1, w2, amount]
+  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 => #[w0, w1, w2, a0, a1, a2, a3]
   | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3]
   | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
@@ -273,9 +287,15 @@ private def projectOpExt
   | .evm payload =>
       match payload with
       | .deposit amount => return .deposit (← projectVal amount)
+      | .deposit256 a0 a1 a2 a3 =>
+          return .deposit256 (← projectVal a0) (← projectVal a1)
+            (← projectVal a2) (← projectVal a3)
       | .sendEth w0 w1 w2 amount =>
           return .sendEth (← projectVal w0) (← projectVal w1) (← projectVal w2)
             (← projectVal amount)
+      | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
+          return .sendEth256 (← projectVal w0) (← projectVal w1) (← projectVal w2)
+            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
       | .log name amount => return .log name (← projectVal amount)
       | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
           return .logTransfer256 (← projectVal f0) (← projectVal f1) (← projectVal f2)
@@ -376,7 +396,9 @@ def hasCheckedArith (ops : Array Op) : Bool :=
     | _ => false
 
 def hasEvmDeposit (ops : Array Op) : Bool :=
-  walk 16 ops fun | .evmDeposit _ => true | _ => false
+  walk 16 ops fun
+    | .evmDeposit _ | .evmDeposit256 .. => true
+    | _ => false
 
 def hasEvmReceive (ops : Array Op) : Bool :=
   walk 16 ops fun | .evmReceive => true | _ => false
@@ -693,8 +715,12 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
     | .evmDeposit v => s!"edep({valCanon v})"
+    | .evmDeposit256 a0 a1 a2 a3 =>
+        s!"edep256({valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"
     | .evmSendEth a b c d =>
         s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
+    | .evmSendEth256 a b c d0 d1 d2 d3 =>
+        s!"esend256({valCanon a},{valCanon b},{valCanon c},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3})"
     | .evmLog n v => s!"elog.{n}({valCanon v})"
     | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
         s!"elog3.Transfer({valCanon f0},{valCanon f1},{valCanon f2},{valCanon t0},{valCanon t1},{valCanon t2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"

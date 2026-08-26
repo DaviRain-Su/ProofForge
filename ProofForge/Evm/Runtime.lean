@@ -65,6 +65,19 @@ def evmSelf20 : Addr20 :=
 @[irreducible] def evmSendEth (dst : Addr20) (amt : UInt64) : UInt64 :=
   let _ := dst; amt
 
+/-- 完整 `CALLVALUE`。抽出认四叶，不把 wei 当单一 UInt64。宿主返回 0。 -/
+@[irreducible] def evmCallValue256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- 完整 `SELFBALANCE`。超宽不截断。宿主返回 0。 -/
+@[irreducible] def evmSelfBalance256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- `eq(callvalue(), packed uint256)`。入口因此 payable。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmDeposit256 (amt : UInt256) : UInt64 := amt.w0
+
+/-- value CALL，金额是 packed wei。失败 revert。重入不进参考语义。宿主返回 `amt.w0`。 -/
+@[irreducible] def evmSendEth256 (dst : Addr20) (amt : UInt256) : UInt64 :=
+  let _ := dst; amt.w0
+
 /-- LOG1 `Tipped(uint64)`。宿主返回 amt。 -/
 @[irreducible] def evmLogTipped (amt : UInt64) : UInt64 := amt
 

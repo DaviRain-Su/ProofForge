@@ -299,9 +299,13 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       return .invoke programIx (← metas.mapM metaToLegacy) (← data.mapM wordToLegacy)
         seed (← bump.mapM toLegacyVal)
   | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)
+  | .ext (.evm (.deposit256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit deposit"
   | .ext (.evm (.sendEth w0 w1 w2 amount)) =>
       return .evmSendEth (← toLegacyVal w0) (← toLegacyVal w1)
         (← toLegacyVal w2) (← toLegacyVal amount)
+  | .ext (.evm (.sendEth256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit sendEth"
   | .ext (.evm (.log name amount)) => return .evmLog name (← toLegacyVal amount)
   | .ext (.evm (.logTransfer256 ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent LOG3 Transfer"

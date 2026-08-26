@@ -42,8 +42,13 @@ private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
 
 private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.Ops.OpExt Val
   | .deposit amount => .deposit (mapValue amount)
+  | .deposit256 a0 a1 a2 a3 =>
+      .deposit256 (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .sendEth w0 w1 w2 amount => .sendEth (mapValue w0) (mapValue w1) (mapValue w2)
       (mapValue amount)
+  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
+      .sendEth256 (mapValue w0) (mapValue w1) (mapValue w2)
+        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
   | .log name amount => .log name (mapValue amount)
   | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       .logTransfer256 (mapValue f0) (mapValue f1) (mapValue f2)
@@ -97,7 +102,9 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
 
 private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .deposit amount | .log _ amount => #[amount]
+  | .deposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3]
   | .sendEth w0 w1 w2 amount => #[w0, w1, w2, amount]
+  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 => #[w0, w1, w2, a0, a1, a2, a3]
   | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3]
   | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
@@ -156,8 +163,12 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
 
 private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
   | .deposit amount | .log _ amount => amount.wellFormed ValKind.arity
+  | .deposit256 a0 a1 a2 a3 =>
+      #[a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
   | .sendEth w0 w1 w2 amount =>
       #[w0, w1, w2, amount].all (·.wellFormed ValKind.arity)
+  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
+      #[w0, w1, w2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
   | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3].all (·.wellFormed ValKind.arity)
   | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>

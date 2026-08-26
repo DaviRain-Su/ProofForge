@@ -10,8 +10,8 @@ open ProofForge.Evm.Runtime
 #guard chainId (init 0) == evmChainId
 #guard timestamp (init 0) == evmTimestamp
 #guard selfLow (init 0) == evmSelf
-#guard selfBal (init 0) == evmSelfBalance
-#guard callValue (init 0) == evmCallValue
+#guard selfBal (init 0) == evmSelfBalance256
+#guard callValue (init 0) == evmCallValue256
 #guard callerW0 (init 0) == evmCallerW0
 #guard callerW1 (init 0) == evmCallerW1
 #guard callerW2 (init 0) == evmCallerW2
@@ -22,12 +22,12 @@ open ProofForge.Evm.Runtime
 #guard self20 (init 0) == evmSelf20
 
 #guard
-  match deposit (init 0) 9 with
+  match deposit (init 0) ⟨9, 0, 0, 0⟩ with
   | .ok (st, ret) => st.dummy == 0 && ret == 9
   | .error _ => false
 
 #guard
-  match payout (init 0) ⟨1, 2, 3⟩ 4 with
+  match payout (init 0) ⟨1, 2, 3⟩ ⟨4, 0, 0, 0⟩ with
   | .ok (st, ret) => st.dummy == 0 && ret == 4
   | .error _ => false
 

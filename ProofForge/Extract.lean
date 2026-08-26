@@ -1000,6 +1000,12 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                     some (.ext (.evm (.tokenAllowance256 limb.toNat))
                       #[a0, a1, a2, b0, b1, b2, c0, c1, c2])
                   | _, _, _, _, _, _, _, _, _ => none
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCallValue256 ||
+                  endsWith baseE ".evmCallValue256" then
+                some (.ext (.evm (.callValue256 limb.toNat)) #[])
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelfBalance256 ||
+                  endsWith baseE ".evmSelfBalance256" then
+                some (.ext (.evm (.selfBalance256 limb.toNat)) #[])
               else
                 match asVal env fuel' baseE with
                 | some b => some (flattenField b leaf)
@@ -1272,6 +1278,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some (.lit 0)
         else if ((endsWith e ".evmDeposit" ||
             isConstNamed e ``ProofForge.Evm.Runtime.evmDeposit) ||
+            (endsWith e ".evmDeposit256" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmDeposit256) ||
             (endsWith e ".evmLogTipped" ||
             isConstNamed e ``ProofForge.Evm.Runtime.evmLogTipped) ||
             (endsWith e ".evmLogIncremented" ||
@@ -1282,6 +1290,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             isConstNamed e ``ProofForge.Evm.Runtime.evmLogApproval) ||
             (endsWith e ".evmSendEth" ||
             isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth) ||
+            (endsWith e ".evmSendEth256" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth256) ||
             (endsWith e ".evmMapGetU64" ||
             isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64) ||
             (endsWith e ".evmMapSetU64" ||
@@ -3375,6 +3385,40 @@ private def valAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val
 private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
   findUnaryRuntime env ``ProofForge.Evm.Runtime.evmDeposit ".evmDeposit" e
 
+private def findEvmDeposit256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmDeposit256" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmDeposit256 ".evmDeposit256" with
+    | some app =>
+      match nthFromEnd app.getAppArgs 0 with
+      | some amt =>
+        let (a0, a1, a2, a3) := uint256Leaves env amt
+        some (a0, a1, a2, a3)
+      | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
+  else none
+
+private def findEvmSendEth256 (env : Environment) (e : Expr) :
+    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
+  if mentionsRuntime e "evmSendEth256" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmSendEth256 ".evmSendEth256" with
+    | some app =>
+      let args := app.getAppArgs
+      match nthFromEnd args 1, nthFromEnd args 0 with
+      | some dst, some amt =>
+        let (w0, w1, w2) := addr20Leaves env dst
+        let (a0, a1, a2, a3) := uint256Leaves env amt
+        some (w0, w1, w2, a0, a1, a2, a3)
+      | _, _ => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
+  else none
+
+private def findEvmCallValue256 (_env : Environment) (e : Expr) : Bool :=
+  mentionsRuntime e "evmCallValue256"
+
+private def findEvmSelfBalance256 (_env : Environment) (e : Expr) : Bool :=
+  mentionsRuntime e "evmSelfBalance256"
+
 private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
   findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogTipped ".evmLogTipped" e
 
@@ -3689,6 +3733,12 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   let args := app.getAppArgs
   if isConstNamed app ``ProofForge.Evm.Runtime.evmDeposit || endsWith app ".evmDeposit" then
     some (.evmDeposit (valAtEnd env args 0))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmDeposit256 || endsWith app ".evmDeposit256" then
+    match nthFromEnd args 0 with
+    | some amt =>
+      let (a0, a1, a2, a3) := uint256Leaves env amt
+      some (.evmDeposit256 a0 a1 a2 a3)
+    | none => some (.evmDeposit256 (.arg 0) (.arg 1) (.arg 2) (.arg 3))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmSendEth || endsWith app ".evmSendEth" then
     let amt := valAtEnd env args 0
     match nthFromEnd args 1 with
@@ -3696,6 +3746,13 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
       let (w0, w1, w2) := addr20Leaves env dst
       some (.evmSendEth w0 w1 w2 amt)
     | none => some (.evmSendEth (.arg 0) (.arg 1) (.arg 2) amt)
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmSendEth256 || endsWith app ".evmSendEth256" then
+    match nthFromEnd args 1, nthFromEnd args 0 with
+    | some dst, some amt =>
+      let (w0, w1, w2) := addr20Leaves env dst
+      let (a0, a1, a2, a3) := uint256Leaves env amt
+      some (.evmSendEth256 w0 w1 w2 a0 a1 a2 a3)
+    | _, _ => some (.evmSendEth256 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5) (.arg 6))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogTipped || endsWith app ".evmLogTipped" then
     some (.evmLog "Tipped" (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmLogIncremented ||
@@ -3820,7 +3877,9 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
 private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
   let specs : Array (Name × String) := #[
     (``ProofForge.Evm.Runtime.evmDeposit, ".evmDeposit"),
+    (``ProofForge.Evm.Runtime.evmDeposit256, ".evmDeposit256"),
     (``ProofForge.Evm.Runtime.evmSendEth, ".evmSendEth"),
+    (``ProofForge.Evm.Runtime.evmSendEth256, ".evmSendEth256"),
     (``ProofForge.Evm.Runtime.evmLogTipped, ".evmLogTipped"),
     (``ProofForge.Evm.Runtime.evmLogIncremented, ".evmLogIncremented"),
     (``ProofForge.Evm.Runtime.evmLogTransfer, ".evmLogTransfer"),
@@ -3859,7 +3918,9 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
 private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   match ops.back? with
   | some (.evmDeposit v) => v
+  | some (.evmDeposit256 a0 _ _ _) => a0
   | some (.evmSendEth _ _ _ v) => v
+  | some (.evmSendEth256 _ _ _ a0 _ _ _) => a0
   | some (.evmLog _ v) => v
   | some (.evmLogTransfer256 _ _ _ _ _ _ a0 _ _ _) => a0
   | some (.evmLogApproval256 _ _ _ _ _ _ a0 _ _ _) => a0
@@ -3882,8 +3943,12 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some (writes.push (.returnU64 (retOfEvmOps writes)))
   else if let some amount := findEvmDeposit env e then
     some #[.evmDeposit amount, .returnU64 amount]
+  else if let some (a0, a1, a2, a3) := findEvmDeposit256 env e then
+    some #[.evmDeposit256 a0 a1 a2 a3, .returnU64 a0]
   else if let some (w0, w1, w2, amt) := findEvmSendEth env e then
     some #[.evmSendEth w0 w1 w2 amt, .returnU64 amt]
+  else if let some (w0, w1, w2, a0, a1, a2, a3) := findEvmSendEth256 env e then
+    some #[.evmSendEth256 w0 w1 w2 a0 a1 a2 a3, .returnU64 a0]
   else if let some amount := findEvmLogTipped env e then
     some #[.evmLog "Tipped" amount, .returnU64 amount]
   else if let some amount := findEvmLogIncremented env e then
@@ -3947,6 +4012,20 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
       .returnU64 (.ext (.evm (.tokenAllowance256 1)) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
       .returnU64 (.ext (.evm (.tokenAllowance256 2)) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
       .returnU64 (.ext (.evm (.tokenAllowance256 3)) #[t0, t1, t2, o0, o1, o2, s0, s1, s2])
+    ]
+  else if findEvmCallValue256 env e then
+    some #[
+      .returnU64 (.ext (.evm (.callValue256 0)) #[]),
+      .returnU64 (.ext (.evm (.callValue256 1)) #[]),
+      .returnU64 (.ext (.evm (.callValue256 2)) #[]),
+      .returnU64 (.ext (.evm (.callValue256 3)) #[])
+    ]
+  else if findEvmSelfBalance256 env e then
+    some #[
+      .returnU64 (.ext (.evm (.selfBalance256 0)) #[]),
+      .returnU64 (.ext (.evm (.selfBalance256 1)) #[]),
+      .returnU64 (.ext (.evm (.selfBalance256 2)) #[]),
+      .returnU64 (.ext (.evm (.selfBalance256 3)) #[])
     ]
   else none
 
@@ -5756,8 +5835,13 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
         .invoke prog metas (data.map (·.map (flipVal fuel')))
           seed (bump.map (flipVal fuel'))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
+      | .evmDeposit256 a0 a1 a2 a3 =>
+          .evmDeposit256 (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2) (flipVal fuel' a3)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
+      | .evmSendEth256 a b c d0 d1 d2 d3 =>
+          .evmSendEth256 (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
+            (flipVal fuel' d0) (flipVal fuel' d1) (flipVal fuel' d2) (flipVal fuel' d3)
       | .evmLog n v => .evmLog n (flipVal fuel' v)
       | .evmLogTransfer256 a b c d e f g0 g1 g2 g3 =>
           .evmLogTransfer256 (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
@@ -6102,7 +6186,12 @@ private def opFields : Ops.Op → Array String
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
   | .evmDeposit v => valFields v
+  | .evmDeposit256 a0 a1 a2 a3 =>
+      valFields a0 ++ valFields a1 ++ valFields a2 ++ valFields a3
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
+  | .evmSendEth256 a b c d0 d1 d2 d3 =>
+      valFields a ++ valFields b ++ valFields c ++ valFields d0 ++
+        valFields d1 ++ valFields d2 ++ valFields d3
   | .evmLog _ v => valFields v
   | .evmLogTransfer256 a b c d e f g0 g1 g2 g3 =>
       valFields a ++ valFields b ++ valFields c ++ valFields d ++ valFields e ++
@@ -6237,9 +6326,15 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
                 pure (word.map fun _ => normalized)
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
+      | .evmDeposit256 a0 a1 a2 a3 =>
+          return .evmDeposit256 (← normalizeVal a0) (← normalizeVal a1)
+            (← normalizeVal a2) (← normalizeVal a3)
       | .evmSendEth a b c d =>
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
             (← normalizeVal c) (← normalizeVal d)
+      | .evmSendEth256 a b c d0 d1 d2 d3 =>
+          return .evmSendEth256 (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
+            (← normalizeVal d0) (← normalizeVal d1) (← normalizeVal d2) (← normalizeVal d3)
       | .evmLog n v => return .evmLog n (← normalizeVal v)
       | .evmLogTransfer256 a b c d e f g0 g1 g2 g3 =>
           return .evmLogTransfer256 (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
@@ -6354,7 +6449,10 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
       (data.findSome? fun word => word.value?.bind (valEscapedArg limit)) <|>
         bump.bind (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
+  | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].findSome? (valEscapedArg limit)
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
+  | .evmSendEth256 a b c d0 d1 d2 d3 =>
+      #[a, b, c, d0, d1, d2, d3].findSome? (valEscapedArg limit)
   | .evmLogTransfer256 a b c d e f g h i j =>
       #[a, b, c, d, e, f, g, h, i, j].findSome? (valEscapedArg limit)
   | .evmLogApproval256 a b c d e f g h i j =>

@@ -366,9 +366,11 @@ def extractedTipJar : IR.Program :=
     slots := dummySlot
     constructor := dummyCtor "TipJar"
     entries := #[
-      payEntry "TipJar" "deposit" 1 #[8] #[
+      payEntry "TipJar" "deposit" 1 #[32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmDeposit (.arg 0), .returnU64 (.arg 0)]
+          #[.evmDeposit256 (u256Field 0 "w0") (u256Field 0 "w1")
+              (u256Field 0 "w2") (u256Field 0 "w3"),
+            .returnU64 (u256Field 0 "w0")]
           #[.errorOverflow]
       ],
       mutEntry "TipJar" "logTip" 1 #[8] #[
@@ -376,10 +378,11 @@ def extractedTipJar : IR.Program :=
           #[.evmLog "Tipped" (.arg 0), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
-      mutEntry "TipJar" "payout" 2 #[20, 8] #[
+      mutEntry "TipJar" "payout" 2 #[20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmSendEth (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (.arg 1),
-            .returnU64 (.arg 1)]
+          #[.evmSendEth256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
       payEntry "TipJar" "receive" 0 #[] #[
@@ -387,7 +390,7 @@ def extractedTipJar : IR.Program :=
           #[.evmReceive, .returnU64 (.lit 0)]
           #[.errorOverflow]
       ],
-      viewEnv "TipJar" "callValue" (.ext .callValue #[]),
+      view256 "TipJar" "callValue" 0 #[] (return256 fun limb => .ext (.callValue256 limb) #[]),
       viewAddr20 "TipJar" "caller20" (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[]),
       viewEnv "TipJar" "callerW0" (.ext .callerW0 #[]),
       viewEnv "TipJar" "callerW1" (.ext .callerW1 #[]),
@@ -395,7 +398,7 @@ def extractedTipJar : IR.Program :=
       viewEnv "TipJar" "chainId" (.ext .chainId #[]),
       dummyGet "TipJar",
       viewAddr20 "TipJar" "self20" (.ext .selfW0 #[]) (.ext .selfW1 #[]) (.ext .selfW2 #[]),
-      viewEnv "TipJar" "selfBal" (.ext .selfBalance #[]),
+      view256 "TipJar" "selfBal" 0 #[] (return256 fun limb => .ext (.selfBalance256 limb) #[]),
       viewEnv "TipJar" "selfLow" (.ext .self #[]),
       viewEnv "TipJar" "selfW0" (.ext .selfW0 #[]),
       viewEnv "TipJar" "selfW1" (.ext .selfW1 #[]),

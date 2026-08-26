@@ -22,6 +22,10 @@ inductive ValKind where
   | tokenBalance256 (limb : Nat)
   /-- 256-bit ERC-20 `allowance` limb; nine operands: token, owner, spender. -/
   | tokenAllowance256 (limb : Nat)
+  /-- packed `callvalue()` limb; `limb` is 0..3 (w0 lowest). -/
+  | callValue256 (limb : Nat)
+  /-- packed `selfbalance()` limb; `limb` is 0..3 (w0 lowest). -/
+  | selfBalance256 (limb : Nat)
   /-- `a ≥ b` on packed 256-bit words. Eight operands: a0..a3, b0..b3. -/
   | ge256
   /-- Checked 256-bit `add`/`sub`/`mul`; `limb` is 0..3 (w0 lowest). Eight operands: a0..a3, b0..b3. -/
@@ -36,6 +40,7 @@ def ValKind.arity : ValKind → Nat
   | .mapGetPair256 _ => 7
   | .tokenBalance256 _ => 3
   | .tokenAllowance256 _ => 9
+  | .callValue256 _ | .selfBalance256 _ => 0
   | .ge256 => 8
   | .arith256 _ _ => 8
   | _ => 0
@@ -46,7 +51,9 @@ abbrev Cmp := ProofForge.Core.Ops.Cmp
 /-- EVM-only source effects. -/
 inductive OpExt (V : Type) where
   | deposit (amount : V)
+  | deposit256 (a0 a1 a2 a3 : V)
   | sendEth (w0 w1 w2 amount : V)
+  | sendEth256 (w0 w1 w2 a0 a1 a2 a3 : V)
   | log (name : String) (amount : V)
   | logTransfer256 (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : V)
   | logApproval256 (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : V)
@@ -96,6 +103,8 @@ def tokenBalance256 (limb : Nat) (tw0 tw1 tw2 : Val) : Val :=
   .ext (.tokenBalance256 limb) #[tw0, tw1, tw2]
 def tokenAllowance256 (limb : Nat) (tw0 tw1 tw2 o0 o1 o2 s0 s1 s2 : Val) : Val :=
   .ext (.tokenAllowance256 limb) #[tw0, tw1, tw2, o0, o1, o2, s0, s1, s2]
+def callValue256 (limb : Nat) : Val := .ext (.callValue256 limb) #[]
+def selfBalance256 (limb : Nat) : Val := .ext (.selfBalance256 limb) #[]
 def ge256 (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext .ge256 #[a0, a1, a2, a3, b0, b1, b2, b3]
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
@@ -106,7 +115,10 @@ private def allValuesWellFormed (values : Array Val) : Bool :=
 
 def OpExt.wellFormed : OpExt Val → Bool
   | .deposit amount | .log _ amount => allValuesWellFormed #[amount]
+  | .deposit256 a0 a1 a2 a3 => allValuesWellFormed #[a0, a1, a2, a3]
   | .sendEth w0 w1 w2 amount => allValuesWellFormed #[w0, w1, w2, amount]
+  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
+      allValuesWellFormed #[w0, w1, w2, a0, a1, a2, a3]
   | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       allValuesWellFormed #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3]
   | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>

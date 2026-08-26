@@ -87,8 +87,12 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.svm (.invoke programIx metas data seeds bump))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.deposit amount))
+@[match_pattern] def Op.evmDeposit256 (a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.deposit256 a0 a1 a2 a3))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=
   .ext (.evm (.sendEth w0 w1 w2 amount))
+@[match_pattern] def Op.evmSendEth256 (w0 w1 w2 a0 a1 a2 a3 : Val) : Op :=
+  .ext (.evm (.sendEth256 w0 w1 w2 a0 a1 a2 a3))
 @[match_pattern] def Op.evmLog (name : String) (amount : Val) : Op :=
   .ext (.evm (.log name amount))
 @[match_pattern] def Op.evmLogTransfer256
@@ -194,6 +198,9 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .evmDeposit value | .evmLog _ value => predicate value
+  | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].any predicate
+  | .evmSendEth256 w0 w1 w2 a0 a1 a2 a3 =>
+      #[w0, w1, w2, a0, a1, a2, a3].any predicate
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
   | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
       #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3].any predicate
@@ -229,7 +236,8 @@ private partial def isEvmContext : Val → Bool
       (match kind with
        | .mapGetU64 | .mapGetAddr | .mapGetPair
        | .mapGetAddr256 _ | .mapGetPair256 _ | .tokenBalance256 _
-       | .tokenAllowance256 _ | .ge256 => false
+       | .tokenAllowance256 _ | .callValue256 _ | .selfBalance256 _
+       | .ge256 => false
        | _ => true) || operands.any isEvmContext
   | .field base _ | .bitNot base => isEvmContext base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -253,7 +261,7 @@ def hasLangOp (ops : Array Op) : Bool :=
 
 def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmLeaf ops || walk ops fun
-    | .evmDeposit .. | .evmSendEth .. | .evmLog ..
+    | .evmDeposit .. | .evmDeposit256 .. | .evmSendEth .. | .evmSendEth256 .. | .evmLog ..
     | .evmLogTransfer256 .. | .evmLogApproval256 ..
     | .evmRevertInsufficient .. | .evmReceive
     | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
