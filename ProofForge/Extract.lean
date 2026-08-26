@@ -797,6 +797,23 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               some (.accDataWordAt a b s c index)
             else none
           | _, _, _, _, _ => none
+        else if (endsWith e ".accDataWordAtOneBased" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAtOneBased) &&
+            e.getAppArgs.size ≥ 5 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
+              some (.lit capacity), some index =>
+            let query := Svm.AccountStorage.Query.readWordOneBased acc.toNat baseWord.toNat
+              strideWords.toNat capacity.toNat
+            if query.wellFormed then
+              some (.accDataWordAtOneBased acc.toNat baseWord.toNat strideWords.toNat
+                capacity.toNat index)
+            else none
+          | _, _, _, _, _ => none
         else if (endsWith e ".accDataRbTreeKey4Find" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Find) &&
             e.getAppArgs.size ≥ 11 then
@@ -2586,7 +2603,7 @@ private abbrev DecodedInvoke :=
   Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Array Ops.PdaSeed × Option Ops.Val
 
 private abbrev DecodedAccDataWordSetAt :=
-  Nat × Nat × Nat × Nat × Ops.Val × Ops.Val
+  Svm.AccountStorage.IndexBase × Nat × Nat × Nat × Nat × Ops.Val × Ops.Val
 
 private abbrev DecodedAccDataRbTreeKey4Insert :=
   Nat × Nat × Nat × Nat × Nat × Nat × Nat × Ops.Val × Ops.Val × Ops.Val × Ops.Val
@@ -2687,7 +2704,11 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
 private def decodeAccDataWordSetAt (env : Environment) (e : Expr) :
     Option DecodedAccDataWordSetAt :=
   let e := strip e
-  if isConstNamed e ``ProofForge.Svm.Runtime.accDataWordSetAt && e.getAppArgs.size ≥ 6 then
+  let indexBase : Option Svm.AccountStorage.IndexBase :=
+    if isConstNamed e ``ProofForge.Svm.Runtime.accDataWordSetAtOneBased then some .one
+    else if isConstNamed e ``ProofForge.Svm.Runtime.accDataWordSetAt then some .zero
+    else none
+  if indexBase.isSome && e.getAppArgs.size ≥ 6 then
     let args := e.getAppArgs
     match val env args[args.size - 6]! >>= natOfVal,
         val env args[args.size - 5]! >>= natOfVal,
@@ -2695,7 +2716,7 @@ private def decodeAccDataWordSetAt (env : Environment) (e : Expr) :
         val env args[args.size - 3]! >>= natOfVal,
         val env args[args.size - 2]!, val env args[args.size - 1]! with
     | some acc, some baseWord, some strideWords, some capacity, some index, some value =>
-        some (acc, baseWord, strideWords, capacity, index, value)
+        some (indexBase.get!, acc, baseWord, strideWords, capacity, index, value)
     | _, _, _, _, _, _ => none
   else
     none
@@ -2940,6 +2961,7 @@ failed to decode. Such a call must fail extraction rather than disappear. -/
 private def mentionsSvmAccountEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
   let constants := e.getUsedConstantsAsSet
   if constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAt ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAtOneBased ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Remove ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeTraderDeposit ||
@@ -3014,8 +3036,10 @@ private def invokeOp (inv : DecodedInvoke) : Ops.Op :=
   .invoke prog metas data seeds bump
 
 private def accDataWordSetAtOp (write : DecodedAccDataWordSetAt) : Ops.Op :=
-  let (acc, baseWord, strideWords, capacity, index, value) := write
-  .accDataWordSetAt acc baseWord strideWords capacity index value
+  let (indexBase, acc, baseWord, strideWords, capacity, index, value) := write
+  match indexBase with
+  | .zero => .accDataWordSetAt acc baseWord strideWords capacity index value
+  | .one => .accDataWordSetAtOneBased acc baseWord strideWords capacity index value
 
 private def accDataRbTreeKey4InsertOp (insert : DecodedAccDataRbTreeKey4Insert) : Ops.Op :=
   let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,

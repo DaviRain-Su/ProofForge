@@ -59,8 +59,12 @@ private def validIndexedDataWordOp : ProofForge.Svm.Ops.Op :=
 private def invalidIndexedDataWordOp : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataWordAt 1 114 0 512 (.arg 0))
 
+private def validOneBasedDataWordOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataWordAtOneBased 1 114 8 512 (.arg 0))
+
 #guard validIndexedDataWordOp.wellFormed
 #guard !invalidIndexedDataWordOp.wellFormed
+#guard validOneBasedDataWordOp.wellFormed
 
 private def validIndexedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
   .readWordZeroBased 1 114 8 512
@@ -278,7 +282,7 @@ private def oneBasedTraderLinks : ProofForge.Svm.AccountStorage.Field :=
 
 private def oneBasedTraderWrite :
     ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
-  .writeWord oneBasedTraderLinks (.arg 0) (.arg 1)
+  .writeWordOneBased 1 8314 18 128 (.arg 0) (.arg 1)
 
 #guard oneBasedTraderLinks.wellFormed
 #guard oneBasedTraderWrite.wellFormed
@@ -293,6 +297,14 @@ private def oneBasedTraderWrite :
       field.region.account == 1 && field.firstWord == 8314 &&
         field.region.strideWords == 18 && field.region.capacity == 128 &&
         field.region.indexBase == .zero
+  | _ => false
+#guard
+  match ProofForge.Svm.IR.ofSourceOps
+      #[.ext (.accountStorage (.writeWordOneBased 1 8314 18 128 (.arg 0) (.arg 1)))] with
+  | .ok #[.accountStorage (.writeWord field (.arg 0) (.arg 1))] =>
+      field.region.account == 1 && field.firstWord == 8314 &&
+        field.region.strideWords == 18 && field.region.capacity == 128 &&
+        field.region.indexBase == .one
   | _ => false
 
 private def validKey4MapInsert :

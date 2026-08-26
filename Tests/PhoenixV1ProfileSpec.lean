@@ -329,6 +329,24 @@ private partial def opsHaveDataWordSetAt
       | .forBody _ body => opsHaveDataWordSetAt acc baseWord strideWords capacity body
       | _ => false
 
+private partial def opsHaveOneBasedDataWordSetAt
+    (acc baseWord strideWords capacity : Nat)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .accountStorage (.writeWord field _ _) =>
+         field.region.account == acc && field.firstWord == baseWord &&
+           field.region.strideWords == strideWords && field.region.capacity == capacity &&
+           field.region.indexBase == .one
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveOneBasedDataWordSetAt acc baseWord strideWords capacity thenOps ||
+            opsHaveOneBasedDataWordSetAt acc baseWord strideWords capacity elseOps
+      | .forBody _ body =>
+          opsHaveOneBasedDataWordSetAt acc baseWord strideWords capacity body
+      | _ => false
+
 private partial def countDataWordSetAt (ops : Array ProofForge.Svm.IR.Op) : Nat :=
   ops.foldl (init := 0) fun count op =>
     count + match op with
@@ -555,6 +573,17 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing removeBid512"
   let some removeAsk := program.methods.find? (·.ixName == "removeAsk512")
     | throwError "missing removeAsk512"
+  let some reduceAsk := program.methods.find? (·.ixName == "reduceAskFreeFunds512")
+    | throwError "missing reduceAskFreeFunds512"
+  let some reduceBid := program.methods.find? (·.ixName == "reduceBidFreeFunds512")
+    | throwError "missing reduceBidFreeFunds512"
+  let hasOneBasedRead (word stride capacity : Nat) (ops : Array ProofForge.Svm.IR.Op) :=
+    opsHaveAccountQuery (fun
+      | .readWord field =>
+          field.region.account == 1 && field.firstWord == word &&
+            field.region.strideWords == stride && field.region.capacity == capacity &&
+            field.region.indexBase == .one
+      | _ => false) ops
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -701,7 +730,42 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
               tree.parentColor.firstWord == 4215 && tree.price.firstWord == 4216 &&
               tree.sequence.firstWord == 4217 && tree.links.region.strideWords == 8 &&
               tree.links.region.capacity == 512 && !tree.bid
-        | _ => false) findAsk.ops do
+        | _ => false) findAsk.ops &&
+      opsHaveRbTreeKey4 8314 8315 8316 128 reduceAsk.ops &&
+      opsHaveRbTree 4214 4215 4216 4217 512 false reduceAsk.ops &&
+      opsHaveAccountQuery (fun
+        | .key4Find 8310 tree => tree.links.region.account == 1
+        | _ => false) reduceAsk.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoFind 4210 tree => !tree.bid
+        | _ => false) reduceAsk.ops &&
+      hasOneBasedRead 4218 8 512 reduceAsk.ops &&
+      hasOneBasedRead 4219 8 512 reduceAsk.ops &&
+      hasOneBasedRead 8322 18 128 reduceAsk.ops &&
+      hasOneBasedRead 8323 18 128 reduceAsk.ops &&
+      opsHaveRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 false reduceAsk.ops &&
+      opsHaveOneBasedDataWordSetAt 1 4219 8 512 reduceAsk.ops &&
+      opsHaveOneBasedDataWordSetAt 1 8322 18 128 reduceAsk.ops &&
+      opsHaveOneBasedDataWordSetAt 1 8323 18 128 reduceAsk.ops &&
+      countDataWordSetAt reduceAsk.ops == 5 &&
+      opsHaveRbTreeKey4 8314 8315 8316 128 reduceBid.ops &&
+      opsHaveRbTree 114 115 116 117 512 true reduceBid.ops &&
+      opsHaveDataWord 1 104 reduceBid.ops && opsHaveDataWord 1 105 reduceBid.ops &&
+      opsHaveAccountQuery (fun
+        | .key4Find 8310 tree => tree.links.region.account == 1
+        | _ => false) reduceBid.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoFind 110 tree => tree.bid
+        | _ => false) reduceBid.ops &&
+      hasOneBasedRead 118 8 512 reduceBid.ops &&
+      hasOneBasedRead 119 8 512 reduceBid.ops &&
+      hasOneBasedRead 8320 18 128 reduceBid.ops &&
+      hasOneBasedRead 8321 18 128 reduceBid.ops &&
+      opsHaveRbTreeOrderRemove 1 110 114 115 116 117 8 512 true reduceBid.ops &&
+      opsHaveOneBasedDataWordSetAt 1 119 8 512 reduceBid.ops &&
+      opsHaveOneBasedDataWordSetAt 1 8320 18 128 reduceBid.ops &&
+      opsHaveOneBasedDataWordSetAt 1 8321 18 128 reduceBid.ops &&
+      countDataWordSetAt reduceBid.ops == 5 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
   unless idl.contains
@@ -732,6 +796,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   unless idl.contains
       "\"name\": \"removeAsk512\",\n      \"discriminator\": [213, 48, 137, 162, 87, 173, 116, 53],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
     throwError "removeAsk512 IDL account must be writable"
+  unless idl.contains
+      "\"name\": \"reduceAskFreeFunds512\",\n      \"discriminator\": [228, 184, 178, 59, 45, 204, 248, 224],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" &&
+      idl.contains
+      "\"name\": \"reduceBidFreeFunds512\",\n      \"discriminator\": [163, 196, 27, 177, 151, 214, 69, 27],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
+    throwError "ReduceOrderWithFreeFunds adapters must write the market account"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm

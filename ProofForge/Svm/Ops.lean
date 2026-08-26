@@ -190,6 +190,8 @@ def accOwnerWord (acc word : Nat) : Val := leaf (.accOwnerWord acc word)
 def accDataWord (acc word : Nat) : Val := leaf (.accDataWord acc word)
 def accDataWordAt (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
   .ext (.accountStorage (.readWordZeroBased acc baseWord strideWords capacity)) #[index]
+def accDataWordAtOneBased (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
+  .ext (.accountStorage (.readWordOneBased acc baseWord strideWords capacity)) #[index]
 def accDataRbTreeKey4Find
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Val :=

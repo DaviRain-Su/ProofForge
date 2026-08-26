@@ -80,6 +80,17 @@ fn key_words_bytes(key: [u64; 4]) -> [u8; 32] {
     bytes
 }
 
+fn pubkey_words(key: Pubkey) -> [u64; 4] {
+    let bytes = key.to_bytes();
+    std::array::from_fn(|index| {
+        u64::from_le_bytes(
+            bytes[index * 8..index * 8 + 8]
+                .try_into()
+                .expect("pubkey word"),
+        )
+    })
+}
+
 fn install_official_trader_tree(market: &mut Account, bytes: &[u8]) {
     let offset = 8 * TRADER_TREE_WORD;
     assert_eq!(bytes.len(), std::mem::size_of::<OfficialTraderTree>());
@@ -470,6 +481,19 @@ fn market_with_first_trader(key: [u64; 4]) -> Account {
     )
 }
 
+fn market_with_signer_trader() -> Account {
+    let trader = pubkey_words(common::dummy_state_key(&PHOENIX_PROGRAM));
+    let mut args = trader.to_vec();
+    args.extend([0, 0]);
+    run_market_write(
+        "depositTrader128",
+        empty_small_market(),
+        true,
+        &args,
+        &[Check::success()],
+    )
+}
+
 fn market_with_two_traders(root_key: [u64; 4], child_key: [u64; 4]) -> Account {
     run_market_write(
         "registerSecondTrader128",
@@ -583,6 +607,134 @@ fn bounded_map_find_returns_one_based_index_or_zero() {
         malformed,
         &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
     );
+}
+
+#[test]
+fn reduce_order_with_free_funds_composes_bounded_storage_primitives() {
+    // Ask partial reduction moves exact base lots from locked to free while retaining the node.
+    let mut ask_market = market_with_signer_trader();
+    write_word(&mut ask_market, 8322, 10);
+    write_word(&mut ask_market, 8323, 2);
+    ask_market = run_market_write(
+        "insertAsk512",
+        ask_market,
+        true,
+        &[7, 11, 1, 10, 0, 0],
+        &[Check::success()],
+    );
+    let ask_before_zero = ask_market.clone();
+    ask_market = run_market_write(
+        "reduceAskFreeFunds512",
+        ask_market,
+        true,
+        &[7, 11, 0],
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    assert_eq!(ask_market.data, ask_before_zero.data);
+    ask_market = run_market_write(
+        "reduceAskFreeFunds512",
+        ask_market,
+        true,
+        &[7, 11, 4],
+        &[Check::success(), Check::return_data(&4u64.to_le_bytes())],
+    );
+    assert_eq!(read_word(&ask_market, 4219), 6);
+    assert_eq!(read_word(&ask_market, 8322), 6);
+    assert_eq!(read_word(&ask_market, 8323), 6);
+
+    // Oversized reduction uses min(requested, resting), removes the map node, and releases all
+    // remaining collateral through the same one-based trader slot.
+    ask_market = run_market_write(
+        "reduceAskFreeFunds512",
+        ask_market,
+        true,
+        &[7, 11, 100],
+        &[Check::success(), Check::return_data(&6u64.to_le_bytes())],
+    );
+    assert_eq!(read_word(&ask_market, ASK_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&ask_market, 8322), 0);
+    assert_eq!(read_word(&ask_market, 8323), 12);
+    run_view(
+        "askTreeValid",
+        ask_market,
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+
+    // Bid collateral follows price * tick * removed / base-lots-per-unit. For 5 * 3 * 4 / 2,
+    // exactly 30 quote lots move from locked to free.
+    let mut bid_market = market_with_signer_trader();
+    write_word(&mut bid_market, 104, 2);
+    write_word(&mut bid_market, 105, 3);
+    write_word(&mut bid_market, 8320, 100);
+    write_word(&mut bid_market, 8321, 7);
+    bid_market = run_market_write(
+        "insertBid512",
+        bid_market,
+        true,
+        &[5, !12u64, 1, 10, 0, 0],
+        &[Check::success()],
+    );
+    bid_market = run_market_write(
+        "reduceBidFreeFunds512",
+        bid_market,
+        true,
+        &[5, !12u64, 4],
+        &[Check::success(), Check::return_data(&4u64.to_le_bytes())],
+    );
+    assert_eq!(read_word(&bid_market, 119), 6);
+    assert_eq!(read_word(&bid_market, 8320), 70);
+    assert_eq!(read_word(&bid_market, 8321), 37);
+
+    // Missing orders are successful no-ops even when later bid arithmetic would be invalid.
+    write_word(&mut bid_market, 104, 0);
+    let missing_before = bid_market.clone();
+    bid_market = run_market_write(
+        "reduceBidFreeFunds512",
+        bid_market,
+        true,
+        &[6, !99u64, 1],
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    assert_eq!(bid_market.data, missing_before.data);
+
+    // An existing order owned by a different trader is a hard failure and remains atomic.
+    let wrong_trader_market = run_market_write(
+        "insertAsk512",
+        market_with_signer_trader(),
+        true,
+        &[9, 13, 2, 3, 0, 0],
+        &[Check::success()],
+    );
+    let wrong_trader_after = run_market_write(
+        "reduceAskFreeFunds512",
+        wrong_trader_market.clone(),
+        true,
+        &[9, 13, 1],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(wrong_trader_after.data, wrong_trader_market.data);
+
+    // Multiplication overflow is detected before the partial order quantity or trader balances
+    // can be stored.
+    let mut overflow_market = market_with_signer_trader();
+    write_word(&mut overflow_market, 104, 1);
+    write_word(&mut overflow_market, 105, 2);
+    write_word(&mut overflow_market, 8320, u64::MAX);
+    overflow_market = run_market_write(
+        "insertBid512",
+        overflow_market,
+        true,
+        &[u64::MAX, !17u64, 1, 2, 0, 0],
+        &[Check::success()],
+    );
+    let overflow_after = run_market_write(
+        "reduceBidFreeFunds512",
+        overflow_market.clone(),
+        true,
+        &[u64::MAX, !17u64, 1],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(overflow_after.data, overflow_market.data);
 }
 
 #[test]

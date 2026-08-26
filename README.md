@@ -58,7 +58,9 @@ fixed-capacity Sokoban insertion/removal，并支持 trader get-or-register depo
 持久结构都直接驻留在账户 bytes 中，只保存 one-based slot index（`0` 为 sentinel），
 不使用 heap `Map`、detached node、copied tree 或账户外 pointer。底层 account-storage
 backend 另提供共用的 bounded Key4/FIFO lookup；Runtime source 可在 complete validator 后
-组合 lookup 与 field read/write/remove，而不用增加顶层 Ops/IR/主 Emit 特判。
+组合 lookup 与 one-based field read/write/remove，而不用增加顶层 Ops/IR/主 Emit 特判。
+最小 profile 已用这套组合实现 bid/ask `ReduceOrderWithFreeFunds` 的 partial/full、trader
+collateral unlock 与 checked preflight；raw Phoenix wire/event 和提款 Token CPI 仍分片推进。
 
 ## 入口
 

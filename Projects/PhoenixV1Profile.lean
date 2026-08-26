@@ -23,6 +23,7 @@ def phoenixProgramOwner3 : UInt64 := 1630085884070697098
 
 def marketHeaderDiscriminant : UInt64 := 8167313896524341111
 def marketHeaderBytes : UInt64 := 576
+def u64Max : UInt64 := 0xffffffffffffffff
 
 /-- Full account bytes: 576-byte header + `400 + 64 * (bids + asks) + 144 * seats` body. -/
 def accountBytesFor (bids asks seats : UInt64) : UInt64 :=
@@ -1176,6 +1177,138 @@ def removeAsk512 (s : State) (price sequence : UInt64) : Except Error (State × 
     let size := accDataWord 1 4212
     let _ := accDataRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 0 price sequence
     .ok ({ s with dummy := 0 }, size)
+  else
+    .error .overflow
+
+/--
+Apply the account-state transition of Phoenix `ReduceOrderWithFreeFunds` to one resting ask in the
+smallest official profile. Account 0's signer key selects the trader; the complete trader and ask
+tree/free-list partitions are validated before bounded lookup. Missing orders are successful
+no-ops, a mismatched trader fails, and `min(requested, resting)` base lots move from locked to free.
+Partial reductions update the fixed order field by its one-based index; full reductions compose the
+generic map removal routine. All subtraction/addition bounds are checked before the first store.
+-/
+@[pf_entry]
+def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
+    Except Error (State × UInt64) :=
+  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
+    let traderCursor := accDataWord 1 8313
+    let askCursor := accDataWord 1 4213
+    let traderValid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128
+      (lowUInt32 (accDataWord 1 8310)) (accDataWord 1 8312)
+      (lowUInt32 traderCursor) (highUInt32 traderCursor)
+    let askValid := accDataRbTreeValid 1 4214 4215 4216 4217 8 512 0
+      (lowUInt32 (accDataWord 1 4210)) (accDataWord 1 4212)
+      (lowUInt32 askCursor) (highUInt32 askCursor)
+    if traderValid = 1 && askValid = 1 then
+      let traderIndex := accDataRbTreeKey4Find 1 8310 8314 8315 8316 18 128
+        (accKeyWord 0 0) (accKeyWord 0 1) (accKeyWord 0 2) (accKeyWord 0 3)
+      if traderIndex = 0 then
+        .error .overflow
+      else
+        let orderIndex := accDataRbTreeOrderFind 1 4210 4214 4215 4216 4217 8 512 0
+          price sequence
+        if orderIndex = 0 then
+          .ok (s, 0)
+        else
+          let orderTrader := accDataWordAtOneBased 1 4218 8 512 orderIndex
+          let resting := accDataWordAtOneBased 1 4219 8 512 orderIndex
+          if orderTrader ≠ traderIndex then
+            .error .overflow
+          else
+            let removed := if requested ≤ resting then requested else resting
+            let locked := accDataWordAtOneBased 1 8322 18 128 traderIndex
+            let free := accDataWordAtOneBased 1 8323 18 128 traderIndex
+            if removed ≤ locked && free ≤ u64Max - removed then
+              let remaining := resting - removed
+              let nextLocked := locked - removed
+              let nextFree := free + removed
+              if remaining = 0 then
+                let _ := accDataRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 0
+                  price sequence
+                let _ := accDataWordSetAtOneBased 1 8322 18 128 traderIndex nextLocked
+                let _ := accDataWordSetAtOneBased 1 8323 18 128 traderIndex nextFree
+                .ok (s, removed)
+              else
+                let _ := accDataWordSetAtOneBased 1 4219 8 512 orderIndex remaining
+                let _ := accDataWordSetAtOneBased 1 8322 18 128 traderIndex nextLocked
+                let _ := accDataWordSetAtOneBased 1 8323 18 128 traderIndex nextFree
+                .ok (s, removed)
+            else
+              .error .overflow
+    else
+      .error .overflow
+  else
+    .error .overflow
+
+/--
+Bid-side `ReduceOrderWithFreeFunds` state transition. Released quote lots are computed as
+`price × tickSize × removed / baseLotsPerBaseUnit`, using MarketData words 104/105 from the
+official fixed layout. Both multiplications, the nonzero divisor, and trader locked/free balance
+bounds are preflighted before either the order tree or TraderState is changed.
+-/
+@[pf_entry]
+def reduceBidFreeFunds512 (s : State) (price sequence requested : UInt64) :
+    Except Error (State × UInt64) :=
+  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
+    let traderCursor := accDataWord 1 8313
+    let bidCursor := accDataWord 1 113
+    let traderValid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128
+      (lowUInt32 (accDataWord 1 8310)) (accDataWord 1 8312)
+      (lowUInt32 traderCursor) (highUInt32 traderCursor)
+    let bidValid := accDataRbTreeValid 1 114 115 116 117 8 512 1
+      (lowUInt32 (accDataWord 1 110)) (accDataWord 1 112)
+      (lowUInt32 bidCursor) (highUInt32 bidCursor)
+    if traderValid = 1 && bidValid = 1 then
+      let traderIndex := accDataRbTreeKey4Find 1 8310 8314 8315 8316 18 128
+        (accKeyWord 0 0) (accKeyWord 0 1) (accKeyWord 0 2) (accKeyWord 0 3)
+      if traderIndex = 0 then
+        .error .overflow
+      else
+        let orderIndex := accDataRbTreeOrderFind 1 110 114 115 116 117 8 512 1
+          price sequence
+        if orderIndex = 0 then
+          .ok (s, 0)
+        else
+          let orderTrader := accDataWordAtOneBased 1 118 8 512 orderIndex
+          let resting := accDataWordAtOneBased 1 119 8 512 orderIndex
+          if orderTrader ≠ traderIndex then
+            .error .overflow
+          else
+            let removed := if requested ≤ resting then requested else resting
+            let baseLotsPerBaseUnit := accDataWord 1 104
+            let tickSize := accDataWord 1 105
+            if baseLotsPerBaseUnit = 0 then
+              .error .overflow
+            else if price = 0 || tickSize ≤ u64Max / price then
+              let quotePerBase := price * tickSize
+              if removed = 0 || quotePerBase ≤ u64Max / removed then
+                let unlocked := (quotePerBase * removed) / baseLotsPerBaseUnit
+                let locked := accDataWordAtOneBased 1 8320 18 128 traderIndex
+                let free := accDataWordAtOneBased 1 8321 18 128 traderIndex
+                if unlocked ≤ locked && free ≤ u64Max - unlocked then
+                  let remaining := resting - removed
+                  let nextLocked := locked - unlocked
+                  let nextFree := free + unlocked
+                  if remaining = 0 then
+                    let _ := accDataRbTreeOrderRemove 1 110 114 115 116 117 8 512 1
+                      price sequence
+                    let _ := accDataWordSetAtOneBased 1 8320 18 128 traderIndex nextLocked
+                    let _ := accDataWordSetAtOneBased 1 8321 18 128 traderIndex nextFree
+                    .ok (s, removed)
+                  else
+                    let _ := accDataWordSetAtOneBased 1 119 8 512 orderIndex remaining
+                    let _ := accDataWordSetAtOneBased 1 8320 18 128 traderIndex nextLocked
+                    let _ := accDataWordSetAtOneBased 1 8321 18 128 traderIndex nextFree
+                    .ok (s, removed)
+                else
+                  .error .overflow
+              else
+                .error .overflow
+            else
+              .error .overflow
+    else
+      .error .overflow
   else
     .error .overflow
 

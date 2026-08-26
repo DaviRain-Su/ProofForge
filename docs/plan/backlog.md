@@ -317,6 +317,18 @@
   `b37d4fce03b21ff4`，assembly 5,638,878 B，ELF 1,799,856 B，IDL 8,370 B；196-job
   Lean、50 个 SVM build、Mollusk 231/231、Anvil 12/12 与 Surfpool 1.5.0 Loader-v3 smoke
   全绿。下一步组合 find/read/write/remove 实现 official ReduceOrder semantics。
+- P5 第三十段 composed ReduceOrderWithFreeFunds state transition 已完成：source 新增薄
+  `accDataWordAtOneBased` / `accDataWordSetAtOneBased`，直接落入既有 AccountStorage
+  read/write descriptor，不新增顶层 ValKind/Op/IR/主 Emit case。最小 official profile 的
+  ask/bid reducer 组合 complete trader/order validator、signer Pubkey Key4 find、FIFO find、
+  one-based field read/write 与 full `rbMapRemove`；missing 成功 no-op，wrong trader 失败，
+  partial 原位改 quantity，full 回收固定节点。ask 解锁 base lots；bid 按
+  `price × tick × removed / baseLotsPerBaseUnit` 解锁 quote lots，所有除零、乘法、余额
+  subtraction/addition 在第一条 store 前 preflight。持久状态仍只有 one-based index / `0`
+  sentinel，无 heap Map、node copy、detached allocation 或 persistent pointer。当前 digest
+  `fdec3afb265a542`，assembly 6,548,227 B，ELF 2,081,880 B，IDL 9,011 B；196-job Lean、
+  50 个 SVM build、Mollusk 232/232、Anvil 12/12 与 Surfpool 1.5.0 Loader-v3 smoke 全绿。
+  下一步独立接 tag 5 wire/account/event adapter，再实现 tag 4 Token withdrawal。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

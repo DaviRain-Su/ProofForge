@@ -649,6 +649,21 @@ def createPda (lamports : UInt64) : UInt64 :=
   0
 
 /--
+Read one u64 field by the one-based index returned from an account-resident map lookup. Static
+geometry has the same constraints as `accDataWordAt`, but index zero is the null sentinel and is
+rejected before normalization. This lets source code compose `map find → field read` without
+forming a pointer or manually translating persistent indexes.
+-/
+@[irreducible] def accDataWordAtOneBased
+    (acc baseWord strideWords capacity index : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := baseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := index
+  0
+
+/--
 Search a statically shaped account-resident red-black tree by a four-word key and return its
 one-based slot index, or zero when absent. Account/root/field geometry and capacity must be
 compile-time constants; only the key is dynamic. The target performs at most 64 checked links and
@@ -703,6 +718,22 @@ program, then checks both the capacity and final `data_len` before storing. Fail
 and occurs before this write. This is persistent account storage, not transient heap allocation.
 -/
 @[irreducible] def accDataWordSetAt
+    (acc baseWord strideWords capacity index value : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := baseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := index
+  let _ := value
+  0
+
+/--
+Write one u64 field by a one-based account-resident map index. Index zero is rejected as the null
+sentinel; account geometry remains compile-time fixed and the target still requires a writable,
+current-program-owned external account. This is the mutation twin of
+`accDataWordAtOneBased`, not a heap or pointer store.
+-/
+@[irreducible] def accDataWordSetAtOneBased
     (acc baseWord strideWords capacity index value : UInt64) : UInt64 :=
   let _ := acc
   let _ := baseWord

@@ -531,6 +531,15 @@ def Call.writeWordZeroBased (account baseWord strideWords capacity : Nat)
           access := { writable := true, currentProgramOwned := true } } }
     index value
 
+def Call.writeWordOneBased (account baseWord strideWords capacity : Nat)
+    (index value : V) : Call V :=
+  .writeWord
+    { region :=
+        { account, baseWord, strideWords, capacity
+          indexBase := .one
+          access := { writable := true, currentProgramOwned := true } } }
+    index value
+
 def Call.rbMapInsertKey4OneBased
     (account rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : V) : Call V :=

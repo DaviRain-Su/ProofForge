@@ -52,6 +52,9 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.accDataWordAt
     (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
   .ext (.svm (.accountStorage (.readWordZeroBased acc baseWord strideWords capacity))) #[index]
+@[match_pattern] def Val.accDataWordAtOneBased
+    (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
+  .ext (.svm (.accountStorage (.readWordOneBased acc baseWord strideWords capacity))) #[index]
 @[match_pattern] def Val.accDataRbTreeKey4Find
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Val :=
@@ -120,6 +123,10 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
     (acc baseWord strideWords capacity : Nat) (index value : Val) : Op :=
   .ext (.svm (.accountStorage
     (.writeWordZeroBased acc baseWord strideWords capacity index value)))
+@[match_pattern] def Op.accDataWordSetAtOneBased
+    (acc baseWord strideWords capacity : Nat) (index value : Val) : Op :=
+  .ext (.svm (.accountStorage
+    (.writeWordOneBased acc baseWord strideWords capacity index value)))
 @[match_pattern] def Op.accDataRbTreeKey4Insert
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Op :=
