@@ -186,6 +186,8 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
         | .invoke _ _ data _ bump =>
             (data.flatMap fun word => word.value?.map valSignerAccs |>.getD #[]) ++
               (match bump with | some v => valSignerAccs v | none => #[])
+        | .accDataWordSetAt _ _ _ _ index value =>
+            valSignerAccs index ++ valSignerAccs value
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -2130,6 +2132,8 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
           (seeds.isEmpty && metas.any (·.signer)) ||
             data.any (fun word => word.value?.any valUsesSigner) ||
               (match bump with | some v => valUsesSigner v | none => false)
+      | .accDataWordSetAt _ _ _ _ index value =>
+          valUsesSigner index || valUsesSigner value
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -2428,6 +2432,58 @@ private def emitInvoke (p : IR.Program) (label : String)
   jeq r0, 0, xfer_ok_{label}
   exit
 xfer_ok_{label}:
+"
+
+/-- Store one u64 in a statically shaped external-account slot. All authorization and bounds
+checks precede the store, so failure cannot expose a partial write from this effect. -/
+private def emitAccDataWordSetAt (p : IR.Program) (label : String)
+    (acc baseWord strideWords capacity : Nat) (index value : Ops.Val) :
+    Except String String := do
+  let loadIndex ← loadVal p index 8 0 s!"{label}_index"
+  let loadValue ← loadVal p value 16 1 s!"{label}_value"
+  let ownerCheck := emitLoadOwnerIsSelf p acc 24 s!"{label}_owner"
+  let baseBytes := 8 * baseWord
+  let strideBytes := 8 * strideWords
+  let writable := s!"dws_writable_{label}"
+  let ownerOk := s!"dws_owner_ok_{label}"
+  let indexOk := s!"dws_index_ok_{label}"
+  let dataOk := s!"dws_data_ok_{label}"
+  let done := s!"dws_done_{label}"
+  let failure := s!"dws_failure_{label}"
+  return loadIndex ++ loadValue ++ ownerCheck ++ s!"\
+  ; fixed-stride external account word write acc={acc} base={baseWord} stride={strideWords} capacity={capacity}
+  ldxdw r8, [r10 - {headerStack acc}]
+  ldxb r1, [r8 + 2]
+  jne r1, 0, {writable}
+  ja {failure}
+{writable}:
+  ldxdw r1, [r10 - 24]
+  jeq r1, 0, {ownerOk}
+  ja {failure}
+{ownerOk}:
+  ldxdw r2, [r10 - 8]
+  lddw r1, {capacity}
+  jlt r2, r1, {indexOk}
+  ja {failure}
+{indexOk}:
+  lddw r1, {strideBytes}
+  mul64 r2, r1
+  add64 r2, {baseBytes}
+  mov64 r3, r2
+  add64 r3, 8
+  ldxdw r1, [r8 + 80]
+  jge r1, r3, {dataOk}
+  ja {failure}
+{dataOk}:
+  add64 r8, 88
+  add64 r8, r2
+  ldxdw r1, [r10 - 16]
+  stxdw [r8 + 0], r1
+  ja {done}
+{failure}:
+  lddw r0, 0x1
+  exit
+{done}:
 "
 
 private def emitInitBody (p : IR.Program) (marker : String) (label : String) (ops : Array IR.Op) :
@@ -2745,6 +2801,11 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let invokeLabel := s!"{label}_{n}"
       n := n + 1
       acc := acc ++ (← emitInvoke p invokeLabel prog metas data seed bump)
+    | .accDataWordSetAt account baseWord strideWords capacity index value =>
+      let writeLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++
+        (← emitAccDataWordSetAt p writeLabel account baseWord strideWords capacity index value)
     | .errorNamed name =>
       let code :=
         match name with

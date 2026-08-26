@@ -73,7 +73,7 @@
 ## 当前状态
 
 - `lake build Tests` 当前 194 jobs；71 个 imported test modules 含 898 个 `#guard` / `#guard_msgs`。
-- SVM registry 50 个程序 / 50 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量 `pf build` 与 Mollusk 209/209 当前通过。
+- SVM registry 50 个程序 / 50 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量 `pf build` 与 Mollusk 210/210 当前通过。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
@@ -110,6 +110,16 @@
   free slots 消耗 1,344,959 / 1,400,000 CU。当前 digest `6d8e6cbb2d5dd163`，assembly
   3,703,126 B，ELF 1,194,760 B；Surfpool 1.5.0 以 1,181 个 Loader write transactions
   部署并核对 exact 1,194,805-byte ProgramData。
+- P5 第十一段 bounded account-resident write 基础已完成：通用 `accDataWordSetAt` 把
+  account/base/stride/capacity 固定在编译期，只让运行时选择 slot 和 u64 value；只写外部
+  writable、current-program-owned account，并在 store 前检查 account count、capacity 和
+  最终 data length。它是有序 target effect / CFG CSE barrier，不返回或持久化 pointer。
+  `writeTraderTopology128` 连续原位写最小 profile 的 links 与 parent/color；readonly、错误
+  owner、slot 128 和“第一字可写、第二字越界”的短账户均 `Custom(1)` 且原子回滚。
+  当前 digest `f77c4fc2ca622dc9`，assembly 3,709,362 B，ELF 1,196,400 B，IDL 3,386 B；
+  Surfpool 1.5.0 以 1,183 个 Loader write transactions 完成本地部署并核对 exact
+  1,196,445-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 210/210 和
+  Anvil 12/12 全绿。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
@@ -127,7 +137,7 @@
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
-| P5 动态 Phoenix-v1 | 部分：profile + metadata/header + complete bid/ask/trader tree/free-list + 本地部署门已有 | 固定/固定-stride有界 account word、parent walk、fixed bitmap/stack | canonical profile、sequence、allocator envelope，以及三棵树的 ordering/RB invariants/exact live-free partition 已进 Lean/Mollusk；节点写入、remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
+| P5 动态 Phoenix-v1 | 部分：profile + metadata/header + complete bid/ask/trader tree/free-list + 首个 bounded topology write + 本地部署门已有 | 固定/固定-stride有界 account word、parent walk、fixed bitmap/stack、effect-safe store | canonical profile、sequence、allocator envelope，以及三棵树的 ordering/RB invariants/exact live-free partition 已进 Lean/Mollusk；最小 profile 的两个 topology words 已有 owner/writable/capacity/length 门和原子失败矩阵；allocator/tree mutation、remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
 | P6 SDK memory/protocol surface | 进行中：官方形状 transient heap 模型已有 | P5 的 account-resident 边界；后续需要 effect-safe lowering | 默认 32 KiB / 显式 32–256 KiB frame、OOM/no-op free 已建模；后续只开放 bounded scratch/container API，禁止持久 heap pointer。再分片补 32-byte/u128/Borsh、remaining accounts 和 Token-2022 extension semantics |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。P5 verifier 已能按账户原始

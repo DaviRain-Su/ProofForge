@@ -54,6 +54,11 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - `accKeyWord acc word` / `accOwnerWord acc word` — 账户 `acc < IR.maxTxAccountLocks` 的 32B key / owner 第 `word`∈{0..=3} 个小端 u64。抽出时必须是常量。`acc≥1` 走 walk，不强制入口签名。不是 `signerKey0`。
 - `accDataWord acc word` — 账户 data 第 `word` 个小端 u64；账户和 word 均为编译期常量。发射器在形成 data pointer 前检查 `data_len ≥ 8*(word+1)`，短账户 `Custom(1)`。
 - `accDataWordAt acc base stride capacity index` — `acc/base/stride/capacity` 编译期固定，零基 `index` 可运行时选择；发射器先检查 `index < capacity`，再检查计算出的 word 位于 `data_len` 内。只做账户内 zero-copy u64 读取，不分配或复制动态数组。
+- `accDataWordSetAt acc base stride capacity index value` — 同一固定形状的账户内 u64
+  写入 effect；只接受外部账户，要求 writable 且 owner 等于当前 program，并在 store 前
+  检查账户数、`index < capacity` 和最终 `data_len`。连续 ignored writes 保持源码顺序；
+  失败以 `Custom(1)` 退出并由 SVM 回滚整条 instruction。它不返回或持久化 pointer，
+  也不把 transient heap 当账户 allocator。
 - `accDataParentPathValid acc linksBase parentBase stride capacity maxDepth index root bump` —
   static shape + 最多 64 步的账户内 parent walk；运行时 index/root/bump 先过 1-based
   envelope，每步验证 color、parent 和 parent→child reciprocity，root 外 cycle 到界返回 0。
@@ -106,4 +111,4 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
 `Examples/SelfLog.lean` + `runtime-tests/solana/tests/self_log.rs`：当前 program id 的 signed self-CPI，canonical `"log"` PDA raw 入口、packed Borsh integer words、续段状态写回，以及 signer/writable/tag/key 失败矩阵。
 `Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
-`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 base/stride/capacity 的 bid root/child、32-edge parent path 和完整 bid/ask/trader tree/free-list partition；order tree 使用固定 4096-bit bitmap，trader tree 使用固定 8321-bit bitmap + 64-entry stack 并按原始 32-byte Pubkey 排序；最小 profile 84,944 B；短 header `Custom(1)`。
+`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 base/stride/capacity 的 bid root/child、32-edge parent path 和完整 bid/ask/trader tree/free-list partition；order tree 使用固定 4096-bit bitmap，trader tree 使用固定 8321-bit bitmap + 64-entry stack 并按原始 32-byte Pubkey 排序；首个 write surface 在 owner/writable/capacity/length 门后原位写 128-seat profile 的 links 与 parent/color，且失败不留下部分更新；最小 profile 84,944 B；短 header `Custom(1)`。

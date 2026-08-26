@@ -2532,6 +2532,9 @@ private def asAsciiLit (e : Expr) : Option String :=
 private abbrev DecodedInvoke :=
   Nat × Array Ops.CpiMeta × Array Ops.CpiWord × Array Ops.PdaSeed × Option Ops.Val
 
+private abbrev DecodedAccDataWordSetAt :=
+  Nat × Nat × Nat × Nat × Ops.Val × Ops.Val
+
 /-- Extracted static program, metas, data, non-bump signer seeds, and optional bump. -/
 private def decodeInvokeArgs (env : Environment) (e : Expr) :
     Option DecodedInvoke :=
@@ -2612,6 +2615,38 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
     go fuel e
   else none
 
+private def decodeAccDataWordSetAt (env : Environment) (e : Expr) :
+    Option DecodedAccDataWordSetAt :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataWordSetAt && e.getAppArgs.size ≥ 6 then
+    let args := e.getAppArgs
+    match val env args[args.size - 6]! >>= natOfVal,
+        val env args[args.size - 5]! >>= natOfVal,
+        val env args[args.size - 4]! >>= natOfVal,
+        val env args[args.size - 3]! >>= natOfVal,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some baseWord, some strideWords, some capacity, some index, some value =>
+        some (acc, baseWord, strideWords, capacity, index, value)
+    | _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataWordSetAt (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataWordSetAt :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataWordSetAt env e with
+      | some write => some write
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataWordSetAt env fuel' value <|> findAccDataWordSetAt env fuel' body
+          | .lam _ _ body _ => findAccDataWordSetAt env fuel' body
+          | .app fn arg =>
+              findAccDataWordSetAt env fuel' fn <|> findAccDataWordSetAt env fuel' arg
+          | _ => none
+
 /-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
 ignored call needs explicit sequencing: recursive invoke search would otherwise retain the CPI
 but silently discard a following state write. -/
@@ -2649,7 +2684,8 @@ private def substLetsPreservingInvokes (env : Environment) (fuel : Nat) (e : Exp
         (ty.consumeMData.getAppFn.constName?.map (isUserType env)).getD false &&
           ((unfoldUserHelper env value).isSome || (userCtorFields env value).isSome ||
             isIteExpr value)
-      if (findInvoke env 16 value).isSome || structuredState || scalarBinding then
+      if (findInvoke env 16 value).isSome || (findAccDataWordSetAt env 16 value).isSome ||
+          structuredState || scalarBinding then
         .letE n ty value body nd
       else substLetsPreservingInvokes env fuel' (body.instantiate1 value)
     | .lam n ty body bi => .lam n ty (substLetsPreservingInvokes env fuel' body) bi
@@ -2670,6 +2706,32 @@ private def invokeOps
 private def invokeOp (inv : DecodedInvoke) : Ops.Op :=
   let (prog, metas, data, seeds, bump) := inv
   .invoke prog metas data seeds bump
+
+private def accDataWordSetAtOp (write : DecodedAccDataWordSetAt) : Ops.Op :=
+  let (acc, baseWord, strideWords, capacity, index, value) := write
+  .accDataWordSetAt acc baseWord strideWords capacity index value
+
+/-- Preserve consecutive ignored SVM effects before decoding their state/return continuation. -/
+private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × Expr :=
+  let rec go (fuel : Nat) (e : Expr) (effects : Array Ops.Op) : Array Ops.Op × Expr :=
+    match fuel with
+    | 0 => (effects, e)
+    | fuel' + 1 =>
+      match strip e with
+      | .letE _ _ value body _ =>
+          if body.hasLooseBVar 0 then
+            match asPdaSeeds value with
+            | some _ => go fuel' (body.instantiate1 value) effects
+            | none => (effects, e)
+          else
+            match findInvoke env 16 value, findAccDataWordSetAt env 16 value with
+            | some invoke, _ =>
+                go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
+            | none, some write =>
+                go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
+            | none, none => (effects, e)
+      | _ => (effects, e)
+  go 32 e #[]
 
 /-- `.ok (state, ret)` 的第二元。找不到就 none。 -/
 private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
@@ -4296,8 +4358,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
-    let (invokes, continuation) := leadingInvokes env e
-    if !invokes.isEmpty then
+    let (effects, continuation) := leadingSvmEffects env e
+    if !effects.isEmpty then
       match decodeExpr env fuel' continuation (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth)
           (stateType? := stateType?) (deepScalars := deepScalars) with
@@ -4305,9 +4367,9 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let continuationOps :=
             if Ops.hasStoreField decodedOps || Ops.hasIndexSet decodedOps then decodedOps
             else (asStoreFields env continuation true).getD decodedOps
-          return .ok (invokes.map invokeOp ++ continuationOps)
+          return .ok (effects ++ continuationOps)
       | .error reason =>
-          return .error s!"extract/unsupported: invoke sequence continuation: {reason}"
+          return .error s!"extract/unsupported: SVM effect sequence continuation: {reason}"
     let stripped := strip e
     if isConstNamed stripped ``Id.run then
       if let some guarded := guardedRunBody? 64 stripped then
@@ -4317,7 +4379,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     match strip e with
     | .letE _ ty value body _ =>
       let effectful :=
-        (findInvoke env 16 value).isSome || (decodeEvmEffect env value).isSome ||
+        (findInvoke env 16 value).isSome || (findAccDataWordSetAt env 16 value).isSome ||
+          (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       if !effectful then
         if let some source := sequentialStateSource? env ty value stateType? then
@@ -5151,6 +5214,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .invoke prog metas data seed bump =>
         .invoke prog metas (data.map (·.map (flipVal fuel')))
           seed (bump.map (flipVal fuel'))
+      | .accDataWordSetAt acc baseWord strideWords capacity index value =>
+          .accDataWordSetAt acc baseWord strideWords capacity
+            (flipVal fuel' index) (flipVal fuel' value)
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
@@ -5425,6 +5491,7 @@ private def opFields : Ops.Op → Array String
   | .invoke _ _ data _ bump =>
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
+  | .accDataWordSetAt _ _ _ _ index value => valFields index ++ valFields value
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v
@@ -5531,6 +5598,9 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
                 let normalized ← normalizeVal value
                 pure (word.map fun _ => normalized)
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
+      | .accDataWordSetAt acc baseWord strideWords capacity index value =>
+          return .accDataWordSetAt acc baseWord strideWords capacity
+            (← normalizeVal index) (← normalizeVal value)
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmSendEth a b c d =>
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
@@ -5614,6 +5684,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .invoke _ _ data _ bump =>
       (data.findSome? fun word => word.value?.bind (valEscapedArg limit)) <|>
         bump.bind (valEscapedArg limit)
+  | .accDataWordSetAt _ _ _ _ index value =>
+      #[index, value].findSome? (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)
   | .forBody _ body => body.findSome? (opEscapedArg limit)

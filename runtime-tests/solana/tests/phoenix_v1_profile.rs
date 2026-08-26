@@ -264,6 +264,51 @@ fn run_view(name: &str, market: Account, checks: &[Check]) {
     run_view_args(name, &[], market, checks);
 }
 
+fn run_topology_write(
+    market: Account,
+    writable: bool,
+    slot: u64,
+    links: u64,
+    parent_color: u64,
+    checks: &[Check],
+) -> Account {
+    let (program_id, mollusk) = common::harness_at(
+        "PhoenixV1Profile",
+        "PF_PHOENIX_V1_PROFILE_SO",
+        PHOENIX_PROGRAM,
+    );
+    let state_key = common::dummy_state_key(&program_id);
+    let market_key = Pubkey::new_unique();
+    let market_meta = if writable {
+        AccountMeta::new(market_key, false)
+    } else {
+        AccountMeta::new_readonly(market_key, false)
+    };
+    let instruction = common::instruction(
+        program_id,
+        state_key,
+        "writeTraderTopology128",
+        &[slot, links, parent_color],
+        false,
+        false,
+        vec![market_meta],
+    );
+    mollusk
+        .process_and_validate_instruction(
+            &instruction,
+            &[
+                (state_key, common::dummy_state_account(&program_id)),
+                (market_key, market),
+            ],
+            checks,
+        )
+        .resulting_accounts
+        .into_iter()
+        .find(|(key, _)| key == &market_key)
+        .expect("market after topology write")
+        .1
+}
+
 #[test]
 fn all_official_profiles_select_exact_account_size() {
     for (bids, asks, seats, expected) in OFFICIAL_PROFILES {
@@ -843,4 +888,97 @@ fn largest_trader_profile_validates_8191_live_and_130_free_slots_with_fixed_memo
         market,
         &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
     );
+}
+
+#[test]
+fn trader_topology_write_is_fixed_capacity_owned_and_atomic() {
+    const SLOT: u64 = 7;
+    const LINKS: u64 = 0x0000_0009_0000_0003;
+    const PARENT_COLOR: u64 = 0x0000_0001_0000_0005;
+    let links_word = 8314 + 18 * SLOT as usize;
+    let parent_color_word = links_word + 1;
+
+    let market = market_account(
+        PHOENIX_PROGRAM,
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    let mut expected = market.clone();
+    write_word(&mut expected, links_word, LINKS);
+    write_word(&mut expected, parent_color_word, PARENT_COLOR);
+    let written = run_topology_write(
+        market,
+        true,
+        SLOT,
+        LINKS,
+        PARENT_COLOR,
+        &[
+            Check::success(),
+            Check::return_data(&PARENT_COLOR.to_le_bytes()),
+        ],
+    );
+    assert_eq!(written.data, expected.data);
+
+    let readonly = expected.clone();
+    let after_readonly = run_topology_write(
+        readonly.clone(),
+        false,
+        SLOT,
+        1,
+        2,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_readonly.data, readonly.data);
+
+    let wrong_owner = market_account(
+        Pubkey::new_unique(),
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    let after_wrong_owner = run_topology_write(
+        wrong_owner.clone(),
+        true,
+        SLOT,
+        LINKS,
+        PARENT_COLOR,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let bounded = expected.clone();
+    let after_oob = run_topology_write(
+        bounded.clone(),
+        true,
+        128,
+        LINKS,
+        PARENT_COLOR,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_oob.data, bounded.data);
+
+    // The first word fits and the second does not. The failed instruction must roll back the first
+    // store rather than exposing a partially updated persistent node.
+    let short = market_account(
+        PHOENIX_PROGRAM,
+        (links_word + 1) * 8,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    let after_short = run_topology_write(
+        short.clone(),
+        true,
+        SLOT,
+        LINKS,
+        PARENT_COLOR,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_short.data, short.data);
 }

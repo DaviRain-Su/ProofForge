@@ -9,7 +9,8 @@ validates that dispatch boundary, fixed scalar/allocator metadata, and all three
 plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 
 This is deliberately a separate verifier program whose ProofForge state is account 0 and candidate
-Phoenix market is account 1. It does not yet claim node writes or official instruction execution.
+Phoenix market is account 1. Its first write surface is limited to fixed-shape topology words; it
+does not yet claim allocator/tree mutation algorithms or official instruction execution.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -550,6 +551,17 @@ def traderTreeValid (s : State) : UInt64 :=
         0
     else
       0
+
+/--
+Write the links and parent/color words of one slot in the smallest official trader allocator.
+`slot` is zero-based relative to the first node. The target effect requires account 1 to be writable
+and owned by the executing program, then bounds both stores to the static 128 × 18-word shape.
+-/
+@[pf_entry]
+def writeTraderTopology128 (_s : State) (slot links parentColor : UInt64) : UInt64 :=
+  let _ := accDataWordSetAt 1 8314 18 128 slot links
+  let _ := accDataWordSetAt 1 8315 18 128 slot parentColor
+  parentColor
 
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]

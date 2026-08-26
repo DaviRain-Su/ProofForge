@@ -634,6 +634,23 @@ def createPda (lamports : UInt64) : UInt64 :=
   0
 
 /--
+Write one u64 in a fixed-stride slot of an external account. `acc ≥ 1`, `baseWord`,
+`strideWords`, and `capacity` must be compile-time constants; only the zero-based `index` and
+`value` are dynamic. The SVM target requires the account to be writable and owned by the current
+program, then checks both the capacity and final `data_len` before storing. Failure is `Custom(1)`
+and occurs before this write. This is persistent account storage, not transient heap allocation.
+-/
+@[irreducible] def accDataWordSetAt
+    (acc baseWord strideWords capacity index value : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := baseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := index
+  let _ := value
+  0
+
+/--
 沿账户内 fixed-stride 节点的 parent 链验证一条有界路径。静态参数指定 links word、
 parent/color word、stride、capacity 和最多 64 步；运行时只提供起点、root 和 allocator
 `bumpIndex`。目标发射器逐步验证 index envelope、颜色、parent→child reciprocity，并要求

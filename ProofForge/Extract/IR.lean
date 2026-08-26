@@ -33,12 +33,15 @@ abbrev CFG := Core.CFG.Graph ValKind OpExt
 private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.Ops.OpExt Val
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Svm.Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
+  | .accDataWordSetAt acc baseWord strideWords capacity index value =>
+      .accDataWordSetAt acc baseWord strideWords capacity (mapValue index) (mapValue value)
 
 private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
   | .invoke _ _ data _ bump =>
       data.filterMap Svm.Ops.CpiWord.value? ++ match bump with
         | some value => #[value]
         | none => #[]
+  | .accDataWordSetAt _ _ _ _ index value => #[index, value]
 
 private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.Ops.OpExt Val
   | .deposit amount => .deposit (mapValue amount)
@@ -105,6 +108,10 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
       match bump with
       | some value => value.wellFormed ValKind.arity
       | none => true
+  | .accDataWordSetAt acc baseWord strideWords capacity index value =>
+      acc > 0 && Svm.Ops.accInRange acc &&
+        Svm.Ops.indexedDataWordsInRange baseWord strideWords capacity &&
+        index.wellFormed ValKind.arity && value.wellFormed ValKind.arity
 
 private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
   | .deposit amount | .log _ amount => amount.wellFormed ValKind.arity

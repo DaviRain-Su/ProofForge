@@ -286,6 +286,22 @@ private partial def opsHaveRbTreeKey4
       | .forBody _ body => opsHaveRbTreeKey4 linksBase parentBase keyBase capacity body
       | _ => false
 
+private partial def opsHaveDataWordSetAt
+    (acc baseWord strideWords capacity : Nat)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .accDataWordSetAt actualAcc actualBase actualStride actualCapacity _ _ =>
+         actualAcc == acc && actualBase == baseWord && actualStride == strideWords &&
+           actualCapacity == capacity
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveDataWordSetAt acc baseWord strideWords capacity thenOps ||
+            opsHaveDataWordSetAt acc baseWord strideWords capacity elseOps
+      | .forBody _ body => opsHaveDataWordSetAt acc baseWord strideWords capacity body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -321,6 +337,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing askTreeValid"
   let some traderTree := program.methods.find? (·.ixName == "traderTreeValid")
     | throwError "missing traderTreeValid"
+  let some writeTrader := program.methods.find? (·.ixName == "writeTraderTopology128")
+    | throwError "missing writeTraderTopology128"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -369,7 +387,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRbTreeKey4 32890 32891 32892 4225 traderTree.ops &&
       opsHaveRbTreeKey4 65658 65659 65660 128 traderTree.ops &&
       opsHaveRbTreeKey4 65658 65659 65660 8193 traderTree.ops &&
-      opsHaveRbTreeKey4 65658 65659 65660 8321 traderTree.ops do
+      opsHaveRbTreeKey4 65658 65659 65660 8321 traderTree.ops &&
+      opsHaveDataWordSetAt 1 8314 18 128 writeTrader.ops &&
+      opsHaveDataWordSetAt 1 8315 18 128 writeTrader.ops do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
@@ -389,7 +409,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "complete four-word-key account-resident RB tree" &&
       asm.contains "key4=65660 stride=18 capacity=8321" && asm.contains "be64 r1" &&
       asm.contains "rb4_free_loop_" && asm.contains "add64 r9, -4096" &&
-      asm.contains "add64 r9, -3000" do
+      asm.contains "add64 r9, -3000" &&
+      asm.contains "fixed-stride external account word write acc=1 base=8314 stride=18 capacity=128" &&
+      asm.contains "fixed-stride external account word write acc=1 base=8315 stride=18 capacity=128" &&
+      asm.contains "ownerIsSelf acc=1" && asm.contains "dws_failure_" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
 #pf_guard_phoenix_v1_profile

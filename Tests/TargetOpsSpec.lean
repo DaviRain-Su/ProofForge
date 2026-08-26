@@ -100,6 +100,19 @@ private def oversizedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
 #guard !malformedRbTreeKey4Op.wellFormed
 #guard !oversizedRbTreeKey4Op.wellFormed
 
+private def validAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
+  .ext (.accDataWordSetAt 1 8314 18 128 (.arg 0) (.arg 1))
+
+private def stateAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
+  .ext (.accDataWordSetAt 0 1 1 1 (.arg 0) (.arg 1))
+
+private def unboundedAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
+  .ext (.accDataWordSetAt 1 8314 0 128 (.arg 0) (.arg 1))
+
+#guard validAccDataWordSetAtOp.wellFormed
+#guard !stateAccDataWordSetAtOp.wellFormed
+#guard !unboundedAccDataWordSetAtOp.wellFormed
+
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 63 #[] #[] #[] none)
 

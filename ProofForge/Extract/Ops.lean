@@ -102,6 +102,9 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.invoke (programIx : Nat) (metas : Array CpiMeta)
     (data : Array CpiWord) (seeds : Array PdaSeed := #[]) (bump : Option Val := none) : Op :=
   .ext (.svm (.invoke programIx metas data seeds bump))
+@[match_pattern] def Op.accDataWordSetAt
+    (acc baseWord strideWords capacity : Nat) (index value : Val) : Op :=
+  .ext (.svm (.accDataWordSetAt acc baseWord strideWords capacity index value))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.deposit amount))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=
@@ -186,6 +189,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .indexSetLeaf _ lhs rhs _ _ | .indexSet _ lhs rhs _ _ => predicate lhs || predicate rhs
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
+  | .accDataWordSetAt _ _ _ _ index value => predicate index || predicate value
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
   | .mapGetU64 base key => #[base, key].any predicate
