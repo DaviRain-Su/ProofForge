@@ -670,6 +670,23 @@ private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
   lddw r1, 32
   stxdw [r8 + {descriptor + 8}], r1
 "
+    | .accData account offset length =>
+        let ok := s!"find_pda_data_ok_{scope}_{i}"
+        descriptors := descriptors ++ s!"\
+  ldxdw r1, [r10 - {headerStack (account + 1)}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {offset + length}
+  jge r2, r3, {ok}
+  lddw r0, 0x1
+  exit
+{ok}:
+  add64 r1, 88
+  lddw r2, {offset}
+  add64 r1, r2
+  stxdw [r8 + {descriptor}], r1
+  lddw r1, {length}
+  stxdw [r8 + {descriptor + 8}], r1
+"
   let progId :=
     if IR.usesWalk p then
       s!"\
@@ -1330,6 +1347,23 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
   add64 r1, 8
   stxdw [r9 + {seedsArr + 16 * i}], r1
   lddw r1, 32
+  stxdw [r9 + {seedsArr + 16 * i + 8}], r1
+"
+      | .accData account offset length =>
+          let ok := s!"signer_seed_data_ok_{scope}_{i}"
+          entries := entries ++ s!"\
+  ldxdw r1, [r10 - {headerStack (account + 1)}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {offset + length}
+  jge r2, r3, {ok}
+  lddw r0, 0x1
+  exit
+{ok}:
+  add64 r1, 88
+  lddw r2, {offset}
+  add64 r1, r2
+  stxdw [r9 + {seedsArr + 16 * i}], r1
+  lddw r1, {length}
   stxdw [r9 + {seedsArr + 16 * i + 8}], r1
 "
     let bumpEntry := seedsArr + 16 * seeds.size

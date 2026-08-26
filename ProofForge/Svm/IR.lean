@@ -629,6 +629,7 @@ private def pdaSeedCanon : Ops.PdaSeed → String
   | .ascii value => s!"s.{value}"
   | .stateKey => "state"
   | .accKey i => s!"k.{i}"
+  | .accData i offset length => s!"d.{i}.{offset}.{length}"
 
 private partial def valCanon : Ops.Val → String
   | .arg i => s!"a{i}"

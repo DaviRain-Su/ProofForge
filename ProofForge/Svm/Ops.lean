@@ -50,6 +50,8 @@ inductive PdaSeed where
   | ascii (value : String)
   | stateKey
   | accKey (i : Nat)
+  /-- Fixed byte slice of an external account's data, used directly as one PDA seed. -/
+  | accData (i offset length : Nat)
   deriving BEq, Repr, Inhabited
 
 /-- SVM-only source value intrinsics. Recursive operands live in `Core.Ops.Val.ext`. -/
@@ -248,6 +250,9 @@ def PdaSeed.wellFormed : PdaSeed → Bool
   | .ascii value => asciiSeedWellFormed value
   | .stateKey => true
   | .accKey acc => cpiAccInRange acc
+  | .accData acc offset length =>
+      cpiAccInRange acc && 0 < length && length ≤ 32 &&
+        offset ≤ 18446744073709551615 - length
 
 /-- Solana permits at most 16 seeds of at most 32 bytes each. The emitter appends the bump, so
 the statically declared non-bump group is nonempty and contains at most 15 seeds. -/
@@ -353,7 +358,8 @@ partial def valNeedsWalk : Val → Bool
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
-       | .findPdaSeeds seeds => seeds.any fun | .stateKey | .accKey _ => true | _ => false
+       | .findPdaSeeds seeds =>
+           seeds.any fun | .stateKey | .accKey _ | .accData .. => true | _ => false
        | .accountStorage query => query.needsWalk
        | .checkPdaSeeds _ _ => true
        | _ => false) || operands.any valNeedsWalk
@@ -381,12 +387,12 @@ partial def valMinAccounts : Val → Nat
         | .accountStorage query => query.minAccounts valMinAccounts operands
         | .findPdaSeeds seeds => seeds.foldl (init := 0) fun current seed =>
             match seed with
-            | .accKey acc => Nat.max current (acc + 2)
+            | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
             | _ => current
         | .checkPdaSeeds account seeds =>
             seeds.foldl (init := account + 2) fun current seed =>
               match seed with
-              | .accKey acc => Nat.max current (acc + 2)
+              | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
               | _ => current
         | _ => 0
       match kind with
@@ -423,7 +429,7 @@ private def CpiWord.hasSelect : CpiWord Val → Bool
 private def OpExt.needsWalk : OpExt Val → Bool
   | .invoke _ _ data seeds bump =>
       data.any CpiWord.needsWalk ||
-        seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
+        seeds.any (fun | .stateKey | .accKey _ | .accData .. => true | _ => false) ||
         bump.any valNeedsWalk
   | .accountStorage .. => true
 
@@ -433,7 +439,7 @@ private def OpExt.minAccounts : OpExt Val → Nat
         Nat.max current word.minAccounts
       let fromSeeds := seeds.foldl (init := 0) fun current seed =>
         match seed with
-        | .accKey acc => Nat.max current (acc + 2)
+        | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
         | _ => current
       Nat.max (Nat.max fromData fromSeeds) (bump.map valMinAccounts |>.getD 0)
   | .accountStorage call => call.minAccounts valMinAccounts

@@ -62,9 +62,10 @@ backend 另提供共用的 bounded Key4/FIFO lookup；Runtime source 可在 comp
 最小 profile 已用这套组合实现 bid/ask `ReduceOrderWithFreeFunds` 的 partial/full、trader
 collateral unlock 与 checked preflight。target-owned `EntryAdapter` 已统一 packed wire decode、
 raw/generated dispatch 与账户合同，`AccountStorage` 继续统一 account-resident
-map/queue/allocator/tree；官方 Phoenix tag 5 wire、账户合同与 128-byte authenticated Reduce
-record 已由两层组合完成。下一步独立实现 tag 4 提款 Token CPI，不增加 Phoenix-specific
-顶层 Ops/IR/主 Emit case。
+map/queue/allocator/tree；官方 Phoenix tag 4/5 wire、账户合同、93/128-byte authenticated
+audit，以及 tag 4 classic Token vault withdrawal 已由两层组合完成。PDA mint seed 直接引用
+经过认证的 MarketHeader 固定 byte slice，不创建 heap buffer。下一步继续组合无 payload 的
+tag 6/7 CancelAll pair，不增加 Phoenix-specific 顶层 Ops/IR/主 Emit case。
 
 ## 入口
 

@@ -544,7 +544,8 @@ private partial def opsHaveIntrinsic
       | .forBody _ body => opsHaveIntrinsic predicate body
       | _ => false
 
-private partial def opsHaveRawReduceRecord (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+private partial def opsHaveRawReduceRecord (origin : UInt64)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
      | .invoke programIx metas data seeds bump =>
@@ -552,7 +553,7 @@ private partial def opsHaveRawReduceRecord (ops : Array ProofForge.Svm.IR.Op) : 
            seeds == #[.ascii "log"] &&
            bump == some (.ext (.findPda "log") #[]) && data.size == 18 &&
            data[0]? == some (.selfEntry 15 "log") &&
-           data[1]? == some (.u8le (.lit 1)) && data[2]? == some (.u8le (.lit 5)) &&
+           data[1]? == some (.u8le (.lit 1)) && data[2]? == some (.u8le (.lit origin)) &&
            data[4]? == some (.u64le (.ext .unixTime #[])) &&
            data[5]? == some (.u64le (.ext .clockSlot #[])) &&
            data[6]? == some (.u64le (.ext (.accKeyWord 2 0) #[])) &&
@@ -564,8 +565,51 @@ private partial def opsHaveRawReduceRecord (ops : Array ProofForge.Svm.IR.Op) : 
      | _ => false) ||
       match op with
       | .ite _ _ _ thenOps elseOps =>
-          opsHaveRawReduceRecord thenOps || opsHaveRawReduceRecord elseOps
-      | .forBody _ body => opsHaveRawReduceRecord body
+          opsHaveRawReduceRecord origin thenOps || opsHaveRawReduceRecord origin elseOps
+      | .forBody _ body => opsHaveRawReduceRecord origin body
+      | _ => false
+
+private partial def opsHaveRawReduceHeader (origin : UInt64)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .invoke programIx metas data seeds bump =>
+         programIx == 0 && metas == #[{ acc := 0, signer := true, writable := false }] &&
+           seeds == #[.ascii "log"] &&
+           bump == some (.ext (.findPda "log") #[]) && data.size == 12 &&
+           data[0]? == some (.selfEntry 15 "log") &&
+           data[1]? == some (.u8le (.lit 1)) && data[2]? == some (.u8le (.lit origin)) &&
+           data[4]? == some (.u64le (.ext .unixTime #[])) &&
+           data[5]? == some (.u64le (.ext .clockSlot #[])) &&
+           data[10]? == some (.accKey 2) && data[11]? == some (.u16le (.lit 0))
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRawReduceHeader origin thenOps || opsHaveRawReduceHeader origin elseOps
+      | .forBody _ body => opsHaveRawReduceHeader origin body
+      | _ => false
+
+private partial def opsHaveUncheckedTransfer
+    (source destination authority : Nat) (seeds : Array ProofForge.Svm.Ops.PdaSeed)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .invoke programIx metas data actualSeeds (some _) =>
+         programIx == 7 &&
+           metas == #[{ acc := source, signer := false, writable := true },
+             { acc := destination, signer := false, writable := true },
+             { acc := authority, signer := true, writable := false }] &&
+           data.size == 2 && data[0]? == some (.u8le (.lit 3)) &&
+           (match data[1]? with
+            | some (ProofForge.Svm.Ops.CpiWord.u64le _) => true
+            | _ => false) &&
+           actualSeeds == seeds
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveUncheckedTransfer source destination authority seeds thenOps ||
+            opsHaveUncheckedTransfer source destination authority seeds elseOps
+      | .forBody _ body => opsHaveUncheckedTransfer source destination authority seeds body
       | _ => false
 
 elab "#pf_guard_phoenix_v1_profile" : command => do
@@ -580,7 +624,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | .error reason => throwError reason
   unless ProofForge.Svm.IR.dataLen program == 16 &&
       ProofForge.Svm.IR.generatedAccountCount program == 2 &&
-      ProofForge.Svm.IR.cpiAccountCount program == 4 do
+      ProofForge.Svm.IR.cpiAccountCount program == 9 do
     throwError "Phoenix-v1 profile verifier account layout changed"
   let some profile := program.methods.find? (·.ixName == "profileAccountBytes")
     | throwError "missing profileAccountBytes"
@@ -642,6 +686,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing reduceBidFreeFunds512"
   let some reduceRaw := program.methods.find? (·.ixName == "reduceOrderWithFreeFunds")
     | throwError "missing raw ReduceOrderWithFreeFunds"
+  let some reduceWithdrawRaw := program.methods.find? (·.ixName == "reduceOrder")
+    | throwError "missing raw ReduceOrder"
   match reduceRaw.entry with
   | .raw entry =>
       unless reduceRaw.kind == .get && entry.tag == 5 && entry.accountCount == 4 &&
@@ -649,6 +695,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.dataLen == 26 do
         throwError s!"wrong raw ReduceOrderWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "ReduceOrderWithFreeFunds lost its raw adapter"
+  match reduceWithdrawRaw.entry with
+  | .raw entry =>
+      unless reduceWithdrawRaw.kind == .get && entry.tag == 4 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramWidths == #[1, 8, 8, 8] &&
+          entry.dataLen == 26 do
+        throwError s!"wrong raw ReduceOrder adapter: {repr entry}"
+  | .generated => throwError "ReduceOrder lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops &&
       opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops &&
@@ -669,7 +722,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveOneBasedDataWordSetAt 2 119 8 512 reduceRaw.ops &&
       opsHaveOneBasedDataWordSetAt 2 4219 8 512 reduceRaw.ops &&
       opsHaveDataWordSetAt 2 106 1 1 reduceRaw.ops &&
-      opsHaveRawReduceRecord reduceRaw.ops do
+      opsHaveRawReduceHeader 5 reduceRaw.ops && opsHaveRawReduceRecord 5 reduceRaw.ops do
     throwError s!"raw ReduceOrderWithFreeFunds composition incomplete: " ++
       s!"w1={opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops}, " ++
       s!"w3={opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops}, " ++
@@ -679,7 +732,47 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       s!"seqWrite={opsHaveDataWordSetAt 2 106 1 1 reduceRaw.ops}, " ++
       s!"bidRemove={opsHaveRbTreeOrderRemove 2 110 114 115 116 117 8 512 true reduceRaw.ops}, " ++
       s!"askRemove={opsHaveRbTreeOrderRemove 2 4210 4214 4215 4216 4217 8 512 false reduceRaw.ops}, " ++
-      s!"record={opsHaveRawReduceRecord reduceRaw.ops}"
+      s!"header={opsHaveRawReduceHeader 5 reduceRaw.ops}, " ++
+      s!"record={opsHaveRawReduceRecord 5 reduceRaw.ops}"
+  let baseSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
+    #[.ascii "vault", .accKey 1, .accData 1 48 32]
+  let quoteSeeds : Array ProofForge.Svm.Ops.PdaSeed :=
+    #[.ascii "vault", .accKey 1, .accData 1 128 32]
+  unless opsHaveIntrinsic (· == .isWritableN 8) reduceWithdrawRaw.ops &&
+      opsHaveIntrinsic (· == .isExecutableN 8) reduceWithdrawRaw.ops &&
+      opsHaveIntrinsic (· == .signerKeyN 3) reduceWithdrawRaw.ops &&
+      opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) reduceWithdrawRaw.ops &&
+      opsHaveDataWord 2 1 reduceWithdrawRaw.ops &&
+      opsHaveDataWord 2 5 reduceWithdrawRaw.ops &&
+      opsHaveDataWord 2 6 reduceWithdrawRaw.ops &&
+      opsHaveDataWord 2 14 reduceWithdrawRaw.ops &&
+      opsHaveDataWord 2 15 reduceWithdrawRaw.ops &&
+      opsHaveDataWord 2 16 reduceWithdrawRaw.ops &&
+      opsHaveDataWord 2 24 reduceWithdrawRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8321 18 128 reduceWithdrawRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 8323 18 128 reduceWithdrawRaw.ops &&
+      opsHaveUncheckedTransfer 5 3 5 baseSeeds reduceWithdrawRaw.ops &&
+      opsHaveUncheckedTransfer 6 4 6 quoteSeeds reduceWithdrawRaw.ops &&
+      opsHaveRawReduceHeader 4 reduceWithdrawRaw.ops &&
+      opsHaveRawReduceRecord 4 reduceWithdrawRaw.ops do
+    throwError s!"raw ReduceOrder composition incomplete: " ++
+      s!"w8={opsHaveIntrinsic (· == .isWritableN 8) reduceWithdrawRaw.ops}, " ++
+      s!"exec8={opsHaveIntrinsic (· == .isExecutableN 8) reduceWithdrawRaw.ops}, " ++
+      s!"signer={opsHaveIntrinsic (· == .signerKeyN 3) reduceWithdrawRaw.ops}, " ++
+      s!"pda={opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) reduceWithdrawRaw.ops}, " ++
+      s!"status={opsHaveDataWord 2 1 reduceWithdrawRaw.ops}, " ++
+      s!"baseBump={opsHaveDataWord 2 5 reduceWithdrawRaw.ops}, " ++
+      s!"baseMint={opsHaveDataWord 2 6 reduceWithdrawRaw.ops}, " ++
+      s!"baseLot={opsHaveDataWord 2 14 reduceWithdrawRaw.ops}, " ++
+      s!"quoteBump={opsHaveDataWord 2 15 reduceWithdrawRaw.ops}, " ++
+      s!"quoteMint={opsHaveDataWord 2 16 reduceWithdrawRaw.ops}, " ++
+      s!"quoteLot={opsHaveDataWord 2 24 reduceWithdrawRaw.ops}, " ++
+      s!"claimBase={opsHaveOneBasedDataWordSetAt 2 8321 18 128 reduceWithdrawRaw.ops}, " ++
+      s!"claimQuote={opsHaveOneBasedDataWordSetAt 2 8323 18 128 reduceWithdrawRaw.ops}, " ++
+      s!"baseTransfer={opsHaveUncheckedTransfer 5 3 5 baseSeeds reduceWithdrawRaw.ops}, " ++
+      s!"quoteTransfer={opsHaveUncheckedTransfer 6 4 6 quoteSeeds reduceWithdrawRaw.ops}, " ++
+      s!"header={opsHaveRawReduceHeader 4 reduceWithdrawRaw.ops}, " ++
+      s!"record={opsHaveRawReduceRecord 4 reduceWithdrawRaw.ops}"
   match ProofForge.Svm.IR.rawSelfEntry? program with
   | .ok (some entry) =>
       unless entry.tag == 15 && entry.authoritySeed == "log" do
@@ -876,8 +969,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       countDataWordSetAt reduceBid.ops == 5 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
-  if idl.contains "\"name\": \"reduceOrderWithFreeFunds\"" then
-    throwError "raw Phoenix tag 5 leaked into the generated IDL"
+  if idl.contains "\"name\": \"reduceOrderWithFreeFunds\"" ||
+      idl.contains "\"name\": \"reduceOrder\"" then
+    throwError "raw Phoenix reduce adapter leaked into the generated IDL"
   unless idl.contains
       "\"name\": \"findTrader128\",\n      \"discriminator\": [193, 118, 199, 104, 63, 14, 34, 106],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" &&
       idl.contains
@@ -916,6 +1010,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | .ok asm => pure asm
     | .error reason => throwError reason
   unless asm.contains "jne r2, 26, raw_route_next_" &&
+      asm.contains "jeq r1, 4, raw_route_match_" &&
       asm.contains "jeq r1, 5, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
@@ -923,8 +1018,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "fixed-stride external account word write acc=2 base=106 stride=1 capacity=1" &&
       asm.contains "bounded one-based acc2 RB find root=110 links=114 stride=8 capacity=512" &&
       asm.contains "bounded one-based acc2 RB find root=4210 links=4214 stride=8 capacity=512" &&
-      asm.contains "; invoke programIx=1 metas=1 dataLen=128" do
-    throwError "raw Phoenix tag-5 adapter/backend composition is incomplete"
+      asm.contains "; invoke programIx=1 metas=1 dataLen=93" &&
+      asm.contains "; invoke programIx=1 metas=1 dataLen=128" &&
+      asm.contains "; invoke programIx=8 metas=3 dataLen=9" &&
+      asm.contains "signer_seed_data_ok_" do
+    throwError "raw Phoenix reduce adapter/backend composition is incomplete"
   unless asm.contains "load walked acc1 data word 4" &&
       asm.contains "ldxdw r2, [r1 + 80]" &&
       asm.contains "jge r2, r3, ok_data_word_" &&

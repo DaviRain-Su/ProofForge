@@ -353,6 +353,11 @@ private def invalidSeedCountOp : ProofForge.Svm.Ops.Op :=
 
 #guard !invalidSeedCountOp.wellFormed
 
+#guard (ProofForge.Svm.Ops.PdaSeed.accData 1 48 32).wellFormed
+#guard !(ProofForge.Svm.Ops.PdaSeed.accData 1 48 0).wellFormed
+#guard !(ProofForge.Svm.Ops.PdaSeed.accData 1 48 33).wellFormed
+#guard !(ProofForge.Svm.Ops.PdaSeed.accData 63 48 32).wellFormed
+
 private def accKeySizedProgram : ProofForge.Svm.IR.Program :=
   { name := "AccKeySized"
     schema := {}
@@ -374,6 +379,17 @@ private def seedAccKeySizedProgram : ProofForge.Svm.IR.Program :=
     ] }
 
 #guard ProofForge.Svm.IR.cpiAccountCount seedAccKeySizedProgram == 7
+
+private def seedAccDataSizedProgram : ProofForge.Svm.IR.Program :=
+  { name := "SeedAccDataSized"
+    schema := {}
+    slots := #[]
+    methods := #[
+      { kind := .increment, name := "SeedAccDataSized.call", ixName := "call", paramCount := 0
+        ops := #[.invoke 1 #[] #[] #[.accData 5 48 32] (some (.lit 1))] }
+    ] }
+
+#guard ProofForge.Svm.IR.cpiAccountCount seedAccDataSizedProgram == 7
 
 private def validEvmValue : ProofForge.Evm.Ops.Val :=
   ProofForge.Evm.Ops.mapGetU64 ProofForge.Evm.Ops.self (.lit 7)

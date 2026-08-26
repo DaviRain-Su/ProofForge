@@ -1032,6 +1032,39 @@ elab "#pf_guard_malformed_external_write_rejected" : command => do
 
 #pf_guard_malformed_external_write_rejected
 
+elab "#pf_guard_account_effect_lexical_reads" : command => do
+  let env ← getEnv
+  let extract (mutation : Name) := do
+    let program ←
+      match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initChoice mutation
+          ``Tests.Fixtures.getChosen with
+      | .ok program => pure program
+      | .error reason => throwError reason
+    match ProofForge.Svm.IR.fromExtracted program with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let beforeProgram ← extract ``Tests.Fixtures.accountReadBeforeWrite
+  let afterProgram ← extract ``Tests.Fixtures.accountReadAfterWrite
+  let some before := beforeProgram.methods.find? (·.ixName == "accountReadBeforeWrite")
+    | throwError "missing accountReadBeforeWrite"
+  let some after := afterProgram.methods.find? (·.ixName == "accountReadAfterWrite")
+    | throwError "missing accountReadAfterWrite"
+  match before.ops with
+  | #[.letLocal snapshot (.ext (.accDataWord 1 0) #[]),
+      .accountStorage (.writeWord field (.lit 0) (.arg 0)),
+      .storeField "chosen" (.arg 0), .okState (.local result)] =>
+        unless snapshot == result && field.region.account == 1 && field.firstWord == 0 do
+          throwError s!"pre-write account snapshot mismatch: {repr before.ops}"
+  | _ => throwError s!"pre-write account snapshot reordered: {repr before.ops}"
+  match after.ops with
+  | #[.accountStorage (.writeWord field (.lit 0) (.arg 0)),
+      .storeField "chosen" (.arg 0), .okState (.ext (.accDataWord 1 0) #[])] =>
+        unless field.region.account == 1 && field.firstWord == 0 do
+          throwError s!"post-write account read mismatch: {repr after.ops}"
+  | _ => throwError s!"post-write account read reordered: {repr after.ops}"
+
+#pf_guard_account_effect_lexical_reads
+
 #pf_extract Examples.Counter.init Examples.Counter.increment Examples.Counter.nonzero
 
 #pf_extract Examples.Flag.init Examples.Flag.setFlag Examples.Flag.getFlag

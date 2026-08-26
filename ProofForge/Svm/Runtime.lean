@@ -91,14 +91,17 @@ inductive CpiWord where
   deriving Repr, Inhabited
 
 /--
-One compile-time-shaped PDA seed. `stateKey` is physical account 0; `accKey i` is relative to
-the external-account region after state, matching `CpiMeta.acc`. The final bump is supplied
-separately so one representation serves both PDA discovery and signed CPI.
+One compile-time-shaped PDA seed. `stateKey` is physical account 0; `accKey i` and
+`accData i offset length` are relative to the external-account region after state, matching
+`CpiMeta.acc`. Account-data slices are bounded to Solana's 32-byte seed maximum and point directly
+into the serialized account input; they do not allocate or copy persistent data. The final bump is
+supplied separately so one representation serves both PDA discovery and signed CPI.
 -/
 inductive PdaSeed where
   | ascii (s : String)
   | stateKey
   | accKey (i : UInt64)
+  | accData (i offset length : UInt64)
   deriving Repr, Inhabited
 
 /--
@@ -307,6 +310,22 @@ def tokenTransferCheckedSignedIx
       { acc := destinationIx, signer := false, writable := true },
       { acc := authorityIx, signer := true, writable := false }]
     #[.u8le 12, .u64le amount, .u8le decimals]
+    seeds bump
+
+/--
+Statically indexed classic SPL Token `Transfer` whose authority is a PDA signer group. This is the
+unchecked tag-3 wire used by protocols whose authenticated account header already fixes the mint;
+unlike `TransferChecked`, its account metas are source / destination / authority and no mint account
+or decimals byte is present. `seeds` remains compile-time-shaped and does not include the bump.
+-/
+def tokenTransferSignedIx
+    (programIx sourceIx destinationIx authorityIx amount : UInt64)
+    (seeds : Array PdaSeed) (bump : UInt64) : UInt64 :=
+  invokeSignedSeeds programIx
+    #[{ acc := sourceIx, signer := false, writable := true },
+      { acc := destinationIx, signer := false, writable := true },
+      { acc := authorityIx, signer := true, writable := false }]
+    #[.u8le 3, .u64le amount]
     seeds bump
 
 /--

@@ -644,6 +644,20 @@ def malformedExternalWrite (s : ChoiceState) (acc value : UInt64) :
   let _ := ProofForge.Svm.Runtime.accDataWordSetAt acc 1 1 1 0 value
   .ok ({ s with chosen := value }, value)
 
+/-- A lexical account read before a write must remain a pre-mutation snapshot. -/
+def accountReadBeforeWrite (s : ChoiceState) (value : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let before := ProofForge.Svm.Runtime.accDataWord 1 0
+  let _ := ProofForge.Svm.Runtime.accDataWordSetAt 1 0 1 1 0 value
+  .ok ({ s with chosen := value }, before)
+
+/-- A source read placed after a write must observe the post-mutation account word. -/
+def accountReadAfterWrite (s : ChoiceState) (value : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let _ := ProofForge.Svm.Runtime.accDataWordSetAt 1 0 1 1 0 value
+  let after := ProofForge.Svm.Runtime.accDataWord 1 0
+  .ok ({ s with chosen := value }, after)
+
 def getChosen (s : ChoiceState) : UInt64 :=
   s.chosen
 

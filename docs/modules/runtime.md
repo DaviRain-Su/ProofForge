@@ -44,6 +44,9 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   `Custom(1)` 退出。未设置时不改变既有 recipe / digest。
 - `invokeSigned programIx metas data seed bump` — 同一条发射器，一组 signer seeds。
 - `invokeSignedSeeds programIx metas data seeds bump` — 一组编译期定形的异构 signer seeds；支持 ASCII、state key 和静态 account key，运行时只提供 bump。
+- `PdaSeed.accData account offset length` — 直接引用 external account data 的编译期固定
+  byte slice；`1 ≤ length ≤ 32`，形成 descriptor 前检查 `data_len ≥ offset+length`。seed
+  指向本次 invocation 的 serialized account buffer，不复制、不分配，也不能持久化 pointer。
 - 首个 CPI word `.selfEntry tag seed` — 声明唯一 raw self-entry；只接受 canonical seed PDA 的 readonly signer，认证后把完整 payload 作为一个 `sol_log_data` field 发布。
 - `@[pf_svm_raw tag accountCount programAccount]` — 声明 target-owned packed 外部入口；tag
   是首个 u8，后续参数按 source 的 u8/u16/u32/u64 width 精确小端解码。adapter 静态消费
@@ -51,8 +54,10 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   参数零扩展到普通 scalar locals。raw method 不得访问 managed `State`；协议持久数据必须走
   explicit `AccountStorage`。该 annotation 不产生 Op，raw instruction 不进入 generated IDL。
 - `let _ := invoke...` — 被忽略的 CPI 结果按效应顺序保留；无论普通或 signed、单条或多条，后续 state writes 都不能被抽取器吞掉。
+- lexical `let` 捕获的账户 read 在后续 account write/CPI 前 materialize；写前 snapshot
+  不会因 substitution 在写后重读，源码明确放在写后的 read 则观察新值。
 - init 中的静态 CPI 在账户初始化写回前执行；非 CPI init effect fail closed，不再静默省略。
-- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `token2022TransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，按 Runtime 命名空间统一展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语，不维护 recipe 名白名单。Token-2022 包装只接收 82B mint / 165B token account。
+- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `token2022TransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenTransferSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，按 Runtime 命名空间统一展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语，不维护 recipe 名白名单。Token-2022 包装只接收 82B mint / 165B token account。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
 - `accLamports1` / `accOwner1` / `accDataLen1` / `isSigner1` / `isWritable1` / `isExecutable1` — 账户 1 只读 header。读到这些叶子就 walk，不强制 acc0 signer。
@@ -136,4 +141,4 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 dispatch；`07 || u8 || u64` exact decode、bounded trailing account、program account authentication，
 以及 wrong tag/length、missing signer、wrong/non-executable program fail-closed matrix。
 `Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
-`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 geometry 的完整 bid/ask/trader tree/free-list partition；通用 `AccountStorage` 提供 bounded Key4/FIFO find、one-based field read/write、Sokoban insertion/removal/deposit，持久状态不使用 heap Map 或账户外 pointer。官方 raw tag 5 再组合 `EntryAdapter`：exact 26-byte wire、current program / `"log"` PDA / writable market / readonly trader signer 合同，ask/bid collateral reduction、missing-order sequence advance 和 exact 128-byte authenticated Reduce record；malformed wire/account/owner 原子失败。最小 profile 84,944 B；短 header `Custom(1)`。
+`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 geometry 的完整 bid/ask/trader tree/free-list partition；通用 `AccountStorage` 提供 bounded Key4/FIFO find、one-based field read/write、Sokoban insertion/removal/deposit，持久状态不使用 heap Map 或账户外 pointer。官方 raw tag 4/5 再组合 `EntryAdapter`：两者共享 exact 26-byte reduce wire、current program / `"log"` PDA / writable market / readonly trader signer 合同，以及 ask/bid collateral reduction；tag 5 保留 free funds，tag 4 额外验证 classic Token accounts/vaults/status，并用 `["vault", market, mint, bump]` 对本次释放量执行 unchecked tag-3 transfer。existing/missing order 分别发 exact 128/93-byte authenticated audit，header 使用 pre-increment sequence；malformed wire/account/token context 原子失败。最小 profile 84,944 B；短 header `Custom(1)`。

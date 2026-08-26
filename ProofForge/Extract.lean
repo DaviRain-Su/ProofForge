@@ -610,6 +610,15 @@ private def asPdaSeed (e : Expr) : Option Ops.PdaSeed :=
       | some (.lit i) => some (.accKey i.toNat)
       | _ => none
     else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.PdaSeed.accData || endsWith e ".accData" then
+    if e.getAppArgs.size ≥ 3 then
+      let args := e.getAppArgs
+      match asLit 8 args[args.size - 3]!, asLit 8 args[args.size - 2]!,
+          asLit 8 args[args.size - 1]! with
+      | some (.lit account), some (.lit offset), some (.lit length) =>
+          some (.accData account.toNat offset.toNat length.toNat)
+      | _, _, _ => none
+    else none
   else none
 
 private def asPdaSeeds (e : Expr) : Option (Array Ops.PdaSeed) := do
@@ -1377,10 +1386,11 @@ private partial def valNodeCount : Ops.Val → Nat
   | .ext _ operands =>
       1 + operands.foldl (init := 0) fun total operand => total + valNodeCount operand
 
-/-- Materialize scalar source values whose substitution would duplicate bounded control flow. -/
+/-- Materialize scalar source values whose substitution would duplicate bounded control flow or
+re-evaluate a target read after a later effect. -/
 private def shouldMaterializeLocal (_type : Expr) (value : Ops.Val) : Bool :=
   match value with
-  | .field .. | .indexGet .. | .select .. => true
+  | .field .. | .indexGet .. | .select .. | .ext .. => true
   | value => valNodeCount value ≥ 1024
 
 private def localScalarValue? (env : Environment) (fuel : Nat) (value : Expr) : Option Ops.Val :=
@@ -3164,6 +3174,8 @@ private def invokeRet
   -- the token program may occupy any authenticated external account index.
   | (_, _, #[.u8le (.lit 12), .u64le amount, .u8le _], #[], none) => .ok amount
   | (_, _, #[.u8le (.lit 12), .u64le amount, .u8le _], _, some _) => .ok amount
+  | (_, _, #[.u8le (.lit 3), .u64le amount], #[], none) => .ok amount
+  | (_, _, #[.u8le (.lit 3), .u64le amount], _, some _) => .ok amount
   | (3, _, #[.u8le (.lit 14), .u64le amount, .u8le _], #[], none) => .ok amount
   | (3, _, #[.u8le (.lit 15), .u64le amount, .u8le _], #[], none) => .ok amount
   | (3, _, #[.u8le (.lit 18), .accKey 0], #[], none) => .ok (.lit 0)
@@ -3176,8 +3188,10 @@ private def invokeRet
   | (2, _, #[.u8le (.lit 21)], #[], none) => .ok .cpiReturn
   | (1, _, #[.ascii "ok"], #[], none) => .ok (.lit 0)
   | (6, _, #[.u8le (.lit 1)], #[], none) => .ok (.lit 0)
-  | (programIx, _, _, _, _) =>
-      .error s!"extract/unsupported: unknown CPI return semantics for program {programIx}"
+  | (programIx, _, data, _, _) =>
+      match data[0]? with
+      | some (ProofForge.Svm.Ops.CpiWord.selfEntry ..) => .ok (.lit 0)
+      | _ => .error s!"extract/unsupported: unknown CPI return semantics for program {programIx}"
 
 private def invokeOpsWithRet
     (env : Environment) (e : Expr)
@@ -4717,6 +4731,17 @@ private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
     | _ => return none
   return some (lowered, hadSuccess, false)
 
+/-- The return of an ignored scalar helper is not a method return. Keep its branch structure and
+effects, but splice the caller's continuation after every successful helper path. -/
+private partial def dropIgnoredScalarTerminals (ops : Array Ops.Op) : Array Ops.Op :=
+  ops.filterMap fun op =>
+    match op with
+    | .returnU64 _ | .okState _ => none
+    | .ite cmp lhs rhs thn els =>
+        some (.ite cmp lhs rhs (dropIgnoredScalarTerminals thn) (dropIgnoredScalarTerminals els))
+    | .forBody n body => some (.forBody n (dropIgnoredScalarTerminals body))
+    | op => some op
+
 /-- A bind enclosing a loop belongs to the surrounding monadic control flow and must be decoded
 before loop discovery. Binds inside the callback body are part of that iteration and do not hide
 the state loop itself. -/
@@ -4747,6 +4772,10 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
   match fuel with
   | 0 => .error "extract/unsupported: ite depth"
   | fuel' + 1 => Id.run do
+    -- Do-notation over a branch-selected inline helper can leave a head beta redex after the bind
+    -- result is replaced by a lexical marker. Normalize that language-level composition before
+    -- looking for effects or control flow; this keeps helper composition out of target Ops/Emit.
+    let e := e.headBeta
     let (effects, continuation, malformedWrite) := leadingSvmEffects env e
     if malformedWrite then
       return .error "extract/unsupported: external account write operands"
@@ -4769,6 +4798,26 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           (stateType? := stateType?) (deepScalars := deepScalars)
     match strip e with
     | .letE _ ty value body _ =>
+      let ignoredInlineEffect :=
+        if body.hasLooseBVar 0 then false
+        else
+          match unfoldUserHelper env value with
+          | some (_, unfolded) =>
+              mentionsSvmRuntime unfolded || (findInvoke env 64 unfolded).isSome ||
+                mentionsSvmAccountEffect env 64 unfolded
+          | none => false
+      if ignoredInlineEffect then
+        match decodeExpr env fuel' value (preserveLocals := preserveLocals)
+              (localDepth := localDepth) (stateType? := stateType?)
+              (deepScalars := deepScalars),
+            decodeExpr env fuel' (body.instantiate1 value) (stateful := stateful)
+              (preserveLocals := preserveLocals) (localDepth := localDepth)
+              (stateType? := stateType?) (deepScalars := deepScalars) with
+        | .ok helperOps, .ok continuationOps =>
+            return .ok (dropIgnoredScalarTerminals helperOps ++ continuationOps)
+        | .error reason, _ =>
+            return .error s!"extract/unsupported: inline effect helper: {reason}"
+        | _, .error reason => return .error reason
       let effectful :=
         (findInvoke env 16 value).isSome || mentionsSvmAccountEffect env 16 value ||
           (decodeEvmEffect env value).isSome ||
@@ -5119,6 +5168,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           | some (lhs, rhs), .error _, none, some v =>
             let dest := match lhs with | .field .. => lhs | _ => v
             return .ok #[.checkedMulU64 lhs rhs, .okState dest, .errorOverflow]
+          | some _, .error reason, none, none =>
+            return .error s!"extract/unsupported: checked-mul continuation: {reason}"
           | _, _, _, _ => return .error "extract/unsupported: ite then/mul"
         else if let some condE := findBy args (fun a =>
             checkedSubMatches a && (collectIndexSets env t).isEmpty) then
@@ -5357,15 +5408,18 @@ def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false)
   -- Canonicalize syntax-only aliases around control flow before shape decoding.
   -- A method with structured-State sequencing also retains adjacent scalar lets so `decodeExpr`
   -- can materialize bounded lookups instead of duplicating them through every later projection.
-  -- Ordinary mutating methods keep their established zeta-normalized Core identity.
+  -- Account effects need the same lexical boundary: a value captured before a write or CPI must
+  -- not be substituted into that later effect and re-read after the mutation.
   let hasStructuredState := containsStructuredStateLet env 128 body
-  let retainLets := hasStructuredState
+  let hasSequencedSvmEffects := mentionsSvmAccountEffect env 128 body
+  let retainLets := hasStructuredState || hasSequencedSvmEffects
   let fullySubstituted := if retainLets then body else substLets 256 body
   let body :=
     if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
     else if retainLets then body else zetaPureHeadLets env 32 body
   let body := if retainLets then body else substIteLets 256 body
-  decodeExpr env 128 body (preserveLocals := preserveLocals) (stateType? := stateType?)
+  decodeExpr env 128 body (preserveLocals := preserveLocals || hasSequencedSvmEffects)
+    (stateType? := stateType?)
 
 private def writesOptionLeaf (fuel : Nat) (ops : Array Ops.Op) : Bool :=
   match fuel with
