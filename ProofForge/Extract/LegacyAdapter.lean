@@ -301,6 +301,7 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
   | .ext (.svm (.accDataWordSetAt ..))
   | .ext (.svm (.accDataRbTreeKey4Insert ..))
   | .ext (.svm (.accDataRbTreeKey4Remove ..))
+  | .ext (.svm (.accDataRbTreeTraderDeposit ..))
   | .ext (.svm (.accDataRbTreeOrderInsert ..))
   | .ext (.svm (.accDataRbTreeOrderRemove ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent external account writes"

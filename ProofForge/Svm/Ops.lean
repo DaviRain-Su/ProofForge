@@ -62,6 +62,15 @@ def rbTreeKey4InsertWordsInRange
     dataWordInRange (rootWord + 3) &&
     indexedDataWordsInRange (linksBaseWord + strideWords - 1) strideWords capacity
 
+/-- Exact static geometry for Phoenix's `Pubkey → TraderState` map. Each 18-word node contains
+links, parent/color, four Pubkey words, four balance words, and eight reserved words. -/
+def rbTreeTraderWordsInRange
+    (rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Bool :=
+  rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
+      capacity &&
+    strideWords == 18 && linksBaseWord + 1 == parentBaseWord &&
+    linksBaseWord + 2 == keyBaseWord && keyBaseWord + 15 < linksBaseWord + strideWords
+
 /-- Static geometry for Phoenix FIFO order mutation. The key and four-word resting-order value
 must occupy the official contiguous eight-word Sokoban node layout. -/
 def rbTreeOrderWordsInRange
@@ -197,6 +206,9 @@ inductive OpExt (V : Type) where
   | accDataRbTreeKey4Insert
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : V)
+  | accDataRbTreeTraderDeposit
+      (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+      (key0 key1 key2 key3 quoteLots baseLots : V)
   | accDataRbTreeKey4Remove
       (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
       (key0 key1 key2 key3 : V)
@@ -367,6 +379,13 @@ def OpExt.wellFormed : OpExt Val → Bool
           strideWords capacity &&
         #[key0, key1, key2, key3].all fun key =>
           key.wellFormed ValKind.arity && staticPayloadsWellFormed key
+  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
+      acc > 0 && accInRange acc &&
+        rbTreeTraderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity &&
+        #[key0, key1, key2, key3, quoteLots, baseLots].all fun value =>
+          value.wellFormed ValKind.arity && staticPayloadsWellFormed value
   | .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity key0 key1 key2 key3 =>
       acc > 0 && accInRange acc &&
@@ -412,6 +431,8 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
           staticPayloadsWellFormed index && staticPayloadsWellFormed value
       | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].all staticPayloadsWellFormed
+      | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+          #[key0, key1, key2, key3, quoteLots, baseLots].all staticPayloadsWellFormed
       | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].all staticPayloadsWellFormed
       | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex
@@ -528,7 +549,7 @@ private def OpExt.needsWalk : OpExt Val → Bool
       data.any CpiWord.needsWalk ||
         seeds.any (fun | .stateKey | .accKey _ => true | _ => false) ||
         bump.any valNeedsWalk
-  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert ..
+  | .accDataWordSetAt .. | .accDataRbTreeKey4Insert .. | .accDataRbTreeTraderDeposit ..
   | .accDataRbTreeKey4Remove .. | .accDataRbTreeOrderInsert ..
   | .accDataRbTreeOrderRemove .. => true
 
@@ -546,6 +567,9 @@ private def OpExt.minAccounts : OpExt Val → Nat
   | .accDataRbTreeKey4Insert acc _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
         Nat.max current (valMinAccounts key)
+  | .accDataRbTreeTraderDeposit acc _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+      #[key0, key1, key2, key3, quoteLots, baseLots].foldl (init := acc + 1)
+        fun current value => Nat.max current (valMinAccounts value)
   | .accDataRbTreeKey4Remove acc _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].foldl (init := acc + 1) fun current key =>
         Nat.max current (valMinAccounts key)
@@ -565,6 +589,8 @@ private def OpExt.hasSelect : OpExt Val → Bool
       valHasSelect index || valHasSelect value
   | .accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].any valHasSelect
+  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+      #[key0, key1, key2, key3, quoteLots, baseLots].any valHasSelect
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].any valHasSelect
   | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots

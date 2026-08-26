@@ -1033,6 +1033,26 @@ def registerTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
     .error .overflow
 
 /--
+Apply Phoenix's fixed-capacity trader get-or-register deposit primitive to the smallest official
+market. Existing traders receive checked additions to quote/base free lots; absent traders receive
+a canonical zeroed 96-byte `TraderState` whose free balances are initialized from the deposit.
+Both paths mutate the account-resident 128-seat Sokoban tree directly, with no heap Map, copied
+tree, persistent pointer, or runtime capacity.
+-/
+@[pf_entry]
+def depositTrader128 (s : State) (key0 key1 key2 key3 quoteLots baseLots : UInt64) :
+    Except Error (State × UInt64) :=
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 8311 = 0 then
+    let size := accDataWord 1 8312
+    let _ := accDataRbTreeTraderDeposit 1 8310 8314 8315 8316 18 128
+      key0 key1 key2 key3 quoteLots baseLots
+    .ok ({ s with dummy := 0 }, size)
+  else
+    .error .overflow
+
+/--
 Remove a registered trader key from the smallest official Phoenix allocator through the generic
 bounded account-resident red-black deletion effect. The effect validates the complete tree/free
 partition before mutation, applies Sokoban 0.3.0 predecessor transplant and delete-fixup, and

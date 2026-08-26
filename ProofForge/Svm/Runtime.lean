@@ -692,6 +692,30 @@ node copy, raw pointer, or detached allocation is exposed.
   0
 
 /--
+Deposit Phoenix quote/base lots into a trader keyed by four little-endian Pubkey limbs. The SVM
+target validates the fixed account-resident trader tree, then either checked-adds to an existing
+TraderState's quote/base free balances or inserts a canonical zeroed TraderState with those free
+balances. No heap map or persistent pointer is created.
+-/
+@[irreducible] def accDataRbTreeTraderDeposit
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
+      key0 key1 key2 key3 quoteLots baseLots : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := key0
+  let _ := key1
+  let _ := key2
+  let _ := key3
+  let _ := quoteLots
+  let _ := baseLots
+  0
+
+/--
 Remove one dynamic four-word key from a statically shaped, account-resident red-black tree. The
 SVM target validates the complete tree and allocator partition before searching. It then performs
 the Sokoban predecessor transplant, bounded delete fixup, and free-list push in place. Persistent

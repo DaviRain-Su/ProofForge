@@ -192,6 +192,8 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
             #[key0, key1, key2, key3].flatMap valSignerAccs
         | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
             #[key0, key1, key2, key3].flatMap valSignerAccs
+        | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+            #[key0, key1, key2, key3, quoteLots, baseLots].flatMap valSignerAccs
         | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
             lastValidSlot lastValidUnixTimestamp =>
             #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
@@ -2166,6 +2168,8 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
           #[key0, key1, key2, key3].any valUsesSigner
       | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
           #[key0, key1, key2, key3].any valUsesSigner
+      | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+          #[key0, key1, key2, key3, quoteLots, baseLots].any valUsesSigner
       | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
           lastValidSlot lastValidUnixTimestamp =>
           #[price, sequence, traderIndex, numBaseLots, lastValidSlot,
@@ -2788,6 +2792,7 @@ private def emitRbTreeKey4RotationHelpers (tag : String)
 
 private inductive RbTreeInsertPayload where
   | key4 (key0 key1 key2 key3 : Ops.Val)
+  | traderDeposit (key0 key1 key2 key3 quoteLots baseLots : Ops.Val)
   | order (bid : Bool) (price sequence traderIndex numBaseLots lastValidSlot
       lastValidUnixTimestamp : Ops.Val)
 
@@ -2806,6 +2811,14 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
         let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
         let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
         pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3)
+    | .traderDeposit key0 key1 key2 key3 quoteLots baseLots => do
+        let loadKey0 ← loadVal p key0 8 0 s!"{label}_key0"
+        let loadKey1 ← loadVal p key1 16 1 s!"{label}_key1"
+        let loadKey2 ← loadVal p key2 24 2 s!"{label}_key2"
+        let loadKey3 ← loadVal p key3 32 3 s!"{label}_key3"
+        let loadQuote ← loadVal p quoteLots 40 4 s!"{label}_quote"
+        let loadBase ← loadVal p baseLots 48 5 s!"{label}_base"
+        pure (loadKey0 ++ loadKey1 ++ loadKey2 ++ loadKey3 ++ loadQuote ++ loadBase)
     | .order _ price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp => do
         let loadPrice ← loadVal p price 8 0 s!"{label}_price"
         let loadSequence ← loadVal p sequence 16 1 s!"{label}_sequence"
@@ -2815,11 +2828,17 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
         let loadTimestamp ← loadVal p lastValidUnixTimestamp 48 5 s!"{label}_timestamp"
         pure (loadPrice ++ loadSequence ++ loadTrader ++ loadLots ++ loadSlot ++ loadTimestamp)
   let ownerCheck := emitLoadOwnerIsSelf p acc 216 s!"{label}_owner"
-  let validateStack := match payload with | .key4 .. => 40 | .order .. => 56
-  let validateNonce := match payload with | .key4 .. => 4 | .order .. => 6
+  let validateStack :=
+    match payload with
+    | .key4 .. => 40
+    | .traderDeposit .. | .order .. => 56
+  let validateNonce :=
+    match payload with
+    | .key4 .. => 4
+    | .traderDeposit .. | .order .. => 6
   let validate ←
     match payload with
-    | .key4 .. =>
+    | .key4 .. | .traderDeposit .. =>
         emitLoadAccDataRbTreeKey4Valid p acc linksBaseWord parentBaseWord
           keyBaseWord strideWords capacity
           (Ops.accDataWord acc rootWord) (Ops.accDataWord acc (rootWord + 2))
@@ -2849,11 +2868,18 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
     | .key4 .. =>
         s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
           s!"{strideWords}:{capacity}"
+    | .traderDeposit .. =>
+        s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
+          s!"{strideWords}:{capacity}:trader-deposit"
     | .order bid .. =>
         s!"{label}:{acc}:{rootWord}:{linksBaseWord}:{parentBaseWord}:{keyBaseWord}:" ++
           s!"{strideWords}:{capacity}:order:{bid}"
   let token := IR.u64Hex (Core.IR.fnv1a64 tokenText)
-  let tag := match payload with | .key4 .. => s!"rb4i_{token}" | .order .. => s!"rboi_{token}"
+  let tag :=
+    match payload with
+    | .key4 .. => s!"rb4i_{token}"
+    | .traderDeposit .. => s!"rbtd_{token}"
+    | .order .. => s!"rboi_{token}"
   let authFailure := tag ++ "_auth_failure"
   let failure := tag ++ "_failure"
   let full := tag ++ "_full"
@@ -2881,16 +2907,17 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
   let shapeComment :=
     match payload with
     | .key4 .. => "four-word-key"
+    | .traderDeposit .. => "Phoenix trader deposit"
     | .order true .. => "Phoenix bid order"
     | .order false .. => "Phoenix ask order"
   let sideCheck :=
     match payload with
-    | .key4 .. => ""
+    | .key4 .. | .traderDeposit .. => ""
     | .order bid .. =>
         s!"  ldxdw r1, [r10 - 16]\n  rsh64 r1, 63\n  jne r1, {if bid then 1 else 0}, {failure}\n"
   let searchCompare :=
     match payload with
-    | .key4 .. => s!"\
+    | .key4 .. | .traderDeposit .. => s!"\
   ldxdw r1, [r10 - 8]
   be64 r1
   ldxdw r3, [r8 + 0]
@@ -2932,6 +2959,26 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
   let duplicate :=
     match payload with
     | .key4 .. => s!"  ; Duplicate registrations fail instead of replacing TraderState.\n  ja {failure}\n"
+    | .traderDeposit .. => s!"\
+  ; Existing trader: validate both additions before mutating either free balance.
+  ldxdw r1, [r8 + 40]
+  ldxdw r2, [r10 - 40]
+  mov64 r3, r1
+  add64 r3, r2
+  jlt r3, r1, {failure}
+  stxdw [r10 - 56], r3
+  ldxdw r1, [r8 + 56]
+  ldxdw r2, [r10 - 48]
+  mov64 r3, r1
+  add64 r3, r2
+  jlt r3, r1, {failure}
+  stxdw [r10 - 64], r3
+  ldxdw r1, [r10 - 56]
+  stxdw [r8 + 40], r1
+  ldxdw r1, [r10 - 64]
+  stxdw [r8 + 56], r1
+  ja {helpersDone}
+"
     | .order .. => s!"\
   ; Sokoban map semantics replace only the existing resting-order value.
   ldxdw r1, [r10 - 24]
@@ -2955,6 +3002,20 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
   stxdw [r9 + {keyRelativeBytes + 16}], r1
   ldxdw r1, [r10 - 32]
   stxdw [r9 + {keyRelativeBytes + 24}], r1
+"
+    | .traderDeposit .. => s!"\
+  ldxdw r1, [r10 - 8]
+  stxdw [r9 + {keyRelativeBytes}], r1
+  ldxdw r1, [r10 - 16]
+  stxdw [r9 + {keyRelativeBytes + 8}], r1
+  ldxdw r1, [r10 - 24]
+  stxdw [r9 + {keyRelativeBytes + 16}], r1
+  ldxdw r1, [r10 - 32]
+  stxdw [r9 + {keyRelativeBytes + 24}], r1
+  ldxdw r1, [r10 - 40]
+  stxdw [r9 + {keyRelativeBytes + 40}], r1
+  ldxdw r1, [r10 - 48]
+  stxdw [r9 + {keyRelativeBytes + 56}], r1
 "
     | .order .. => s!"\
   ldxdw r1, [r10 - 8]
@@ -3698,6 +3759,12 @@ private def emitAccDataRbTreeKey4Insert (p : IR.Program) (label : String)
     (key0 key1 key2 key3 : Ops.Val) : Except String String :=
   emitAccDataRbTreeInsert p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
     strideWords capacity (.key4 key0 key1 key2 key3)
+
+private def emitAccDataRbTreeTraderDeposit (p : IR.Program) (label : String)
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 quoteLots baseLots : Ops.Val) : Except String String :=
+  emitAccDataRbTreeInsert p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity (.traderDeposit key0 key1 key2 key3 quoteLots baseLots)
 
 private def emitAccDataRbTreeOrderInsert (p : IR.Program) (label : String)
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
@@ -5072,6 +5139,13 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       n := n + 1
       acc := acc ++ (← emitAccDataRbTreeKey4Remove p removeLabel account rootWord
         linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)
+    | .accDataRbTreeTraderDeposit account rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
+      let depositLabel := s!"{label}_{n}"
+      n := n + 1
+      acc := acc ++ (← emitAccDataRbTreeTraderDeposit p depositLabel account rootWord
+        linksBaseWord parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3
+        quoteLots baseLots)
     | .accDataRbTreeOrderInsert account rootWord linksBaseWord parentBaseWord keyBaseWord
         sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
         lastValidSlot lastValidUnixTimestamp =>

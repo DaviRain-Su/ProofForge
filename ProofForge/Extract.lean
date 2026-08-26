@@ -2544,6 +2544,10 @@ private abbrev DecodedAccDataRbTreeKey4Insert :=
 
 private abbrev DecodedAccDataRbTreeKey4Remove := DecodedAccDataRbTreeKey4Insert
 
+private abbrev DecodedAccDataRbTreeTraderDeposit :=
+  Nat × Nat × Nat × Nat × Nat × Nat × Nat × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
+    Ops.Val × Ops.Val
+
 private abbrev DecodedAccDataRbTreeOrderInsert :=
   Nat × Nat × Nat × Nat × Nat × Nat × Nat × Nat × Bool ×
     Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val
@@ -2745,6 +2749,49 @@ private def findAccDataRbTreeKey4Remove (env : Environment) (fuel : Nat) (e : Ex
                 findAccDataRbTreeKey4Remove env fuel' arg
           | _ => none
 
+private def decodeAccDataRbTreeTraderDeposit (env : Environment) (e : Expr) :
+    Option DecodedAccDataRbTreeTraderDeposit :=
+  let e := strip e
+  if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeTraderDeposit &&
+      e.getAppArgs.size ≥ 13 then
+    let args := e.getAppArgs
+    match val env args[args.size - 13]! >>= natOfVal,
+        val env args[args.size - 12]! >>= natOfVal,
+        val env args[args.size - 11]! >>= natOfVal,
+        val env args[args.size - 10]! >>= natOfVal,
+        val env args[args.size - 9]! >>= natOfVal,
+        val env args[args.size - 8]! >>= natOfVal,
+        val env args[args.size - 7]! >>= natOfVal,
+        val env args[args.size - 6]!, val env args[args.size - 5]!,
+        val env args[args.size - 4]!, val env args[args.size - 3]!,
+        val env args[args.size - 2]!, val env args[args.size - 1]! with
+    | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
+        some strideWords, some capacity, some key0, some key1, some key2, some key3,
+        some quoteLots, some baseLots =>
+        some (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+          capacity, key0, key1, key2, key3, quoteLots, baseLots)
+    | _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+  else
+    none
+
+private def findAccDataRbTreeTraderDeposit (env : Environment) (fuel : Nat) (e : Expr) :
+    Option DecodedAccDataRbTreeTraderDeposit :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      match decodeAccDataRbTreeTraderDeposit env e with
+      | some deposit => some deposit
+      | none =>
+          match e.consumeMData with
+          | .letE _ _ value body _ =>
+              findAccDataRbTreeTraderDeposit env fuel' value <|>
+                findAccDataRbTreeTraderDeposit env fuel' body
+          | .lam _ _ body _ => findAccDataRbTreeTraderDeposit env fuel' body
+          | .app fn arg =>
+              findAccDataRbTreeTraderDeposit env fuel' fn <|>
+                findAccDataRbTreeTraderDeposit env fuel' arg
+          | _ => none
+
 private def decodeAccDataRbTreeOrderInsert (env : Environment) (e : Expr) :
     Option DecodedAccDataRbTreeOrderInsert :=
   let e := strip e
@@ -2846,6 +2893,7 @@ private def mentionsSvmAccountEffect (env : Environment) (fuel : Nat) (e : Expr)
   if constants.contains ``ProofForge.Svm.Runtime.accDataWordSetAt ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeKey4Remove ||
+      constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeTraderDeposit ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderInsert ||
       constants.contains ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove then true
   else
@@ -2932,6 +2980,13 @@ private def accDataRbTreeKey4RemoveOp (remove : DecodedAccDataRbTreeKey4Remove) 
   .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
     capacity key0 key1 key2 key3
 
+private def accDataRbTreeTraderDepositOp
+    (deposit : DecodedAccDataRbTreeTraderDeposit) : Ops.Op :=
+  let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, strideWords,
+    capacity, key0, key1, key2, key3, quoteLots, baseLots) := deposit
+  .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords
+    capacity key0 key1 key2 key3 quoteLots baseLots
+
 private def accDataRbTreeOrderInsertOp (insert : DecodedAccDataRbTreeOrderInsert) : Ops.Op :=
   let (acc, rootWord, linksBaseWord, parentBaseWord, keyBaseWord, sequenceBaseWord,
     strideWords, capacity, bid, price, sequence, traderIndex, numBaseLots, lastValidSlot,
@@ -2963,25 +3018,29 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
             match findInvoke env 16 value, findAccDataWordSetAt env 16 value,
                 findAccDataRbTreeKey4Insert env 16 value,
                 findAccDataRbTreeKey4Remove env 16 value,
+                findAccDataRbTreeTraderDeposit env 16 value,
                 findAccDataRbTreeOrderInsert env 16 value,
                 findAccDataRbTreeOrderRemove env 16 value with
-            | some invoke, _, _, _, _, _ =>
+            | some invoke, _, _, _, _, _, _ =>
                 go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
-            | none, some write, _, _, _, _ =>
+            | none, some write, _, _, _, _, _ =>
                 go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
-            | none, none, some insert, _, _, _ =>
+            | none, none, some insert, _, _, _, _ =>
                 go fuel' (body.instantiate1 value)
                   (effects.push (accDataRbTreeKey4InsertOp insert))
-            | none, none, none, some remove, _, _ =>
+            | none, none, none, some remove, _, _, _ =>
                 go fuel' (body.instantiate1 value)
                   (effects.push (accDataRbTreeKey4RemoveOp remove))
-            | none, none, none, none, some insert, _ =>
+            | none, none, none, none, some deposit, _, _ =>
+                go fuel' (body.instantiate1 value)
+                  (effects.push (accDataRbTreeTraderDepositOp deposit))
+            | none, none, none, none, none, some insert, _ =>
                 go fuel' (body.instantiate1 value)
                   (effects.push (accDataRbTreeOrderInsertOp insert))
-            | none, none, none, none, none, some remove =>
+            | none, none, none, none, none, none, some remove =>
                 go fuel' (body.instantiate1 value)
                   (effects.push (accDataRbTreeOrderRemoveOp remove))
-            | none, none, none, none, none, none =>
+            | none, none, none, none, none, none, none =>
                 (effects, e, mentionsSvmAccountEffect env 16 value)
       | _ => (effects, e, false)
   go 32 e #[]
@@ -4851,7 +4910,8 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               | fuel' + 1 => ops.any fun op =>
                   match op with
                   | .accDataWordSetAt .. | .accDataRbTreeKey4Insert ..
-                  | .accDataRbTreeKey4Remove .. | .accDataRbTreeOrderInsert ..
+                  | .accDataRbTreeKey4Remove .. | .accDataRbTreeTraderDeposit ..
+                  | .accDataRbTreeOrderInsert ..
                   | .accDataRbTreeOrderRemove .. => true
                   | .ite _ _ _ nestedThen nestedElse =>
                       hasAccDataWrite fuel' nestedThen || hasAccDataWrite fuel' nestedElse
@@ -5505,6 +5565,12 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
             strideWords capacity (flipVal fuel' key0) (flipVal fuel' key1)
               (flipVal fuel' key2) (flipVal fuel' key3)
+      | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
+          .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+            strideWords capacity (flipVal fuel' key0) (flipVal fuel' key1)
+              (flipVal fuel' key2) (flipVal fuel' key3) (flipVal fuel' quoteLots)
+              (flipVal fuel' baseLots)
       | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
           sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
           lastValidSlot lastValidUnixTimestamp =>
@@ -5797,6 +5863,9 @@ private def opFields : Ops.Op → Array String
       valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3
+  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+      valFields key0 ++ valFields key1 ++ valFields key2 ++ valFields key3 ++
+        valFields quoteLots ++ valFields baseLots
   | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
       lastValidSlot lastValidUnixTimestamp =>
       valFields price ++ valFields sequence ++ valFields traderIndex ++ valFields numBaseLots ++
@@ -5922,6 +5991,12 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
           return .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
             strideWords capacity (← normalizeVal key0) (← normalizeVal key1)
               (← normalizeVal key2) (← normalizeVal key3)
+      | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
+          return .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+            strideWords capacity (← normalizeVal key0) (← normalizeVal key1)
+              (← normalizeVal key2) (← normalizeVal key3) (← normalizeVal quoteLots)
+              (← normalizeVal baseLots)
       | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
           sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
           lastValidSlot lastValidUnixTimestamp =>
@@ -6023,6 +6098,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
       #[key0, key1, key2, key3].findSome? (valEscapedArg limit)
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3].findSome? (valEscapedArg limit)
+  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+      #[key0, key1, key2, key3, quoteLots, baseLots].findSome? (valEscapedArg limit)
   | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
       lastValidSlot lastValidUnixTimestamp =>
       #[price, sequence, traderIndex, numBaseLots, lastValidSlot,

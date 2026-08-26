@@ -2090,6 +2090,204 @@ fn generic_trader_registration_reuses_free_head_and_fails_atomically() {
     assert_eq!(after_malformed.data, malformed.data);
 }
 
+#[test]
+fn trader_deposit_matches_official_sokoban_through_capacity() {
+    assert_eq!(std::mem::size_of::<OfficialTraderTree>(), 18_464);
+    let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialTraderTree>()];
+    OfficialTraderTree::new_from_slice(&mut official_bytes);
+    let mut market = empty_small_market();
+    let keys: Vec<[u64; 4]> = (0u64..128)
+        .map(|index| [(index * 73) % 128, index << 8, 0, 0])
+        .collect();
+
+    for (index, key) in keys.iter().copied().enumerate() {
+        let quote = 0x1000 + index as u64 * 11;
+        let base = 0x2000 + index as u64 * 13;
+        {
+            let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+                .expect("aligned official tree bytes");
+            let mut trader_state = [0u64; 12];
+            trader_state[1] = quote;
+            trader_state[3] = base;
+            assert_eq!(
+                official.insert(key_words_bytes(key), trader_state),
+                Some(index as u32 + 1)
+            );
+            assert!(official.is_valid_red_black_tree());
+        }
+        let mut args = key.to_vec();
+        args.extend([quote, base]);
+        market = run_market_write(
+            "depositTrader128",
+            market,
+            true,
+            &args,
+            &[
+                Check::success(),
+                Check::return_data(&((index as u64) + 1).to_le_bytes()),
+            ],
+        );
+        assert_trader_tree_bytes_eq(
+            &market.data[8 * TRADER_TREE_WORD..],
+            official_bytes.as_slice(),
+            index * 2 + 1,
+        );
+
+        // Repeated deposits exercise get-without-allocation at every allocator size. Both free
+        // balances change while locked/reserved words and topology stay byte-identical to Sokoban.
+        let extra_quote = 3 + index as u64;
+        let extra_base = 5 + index as u64;
+        {
+            let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+                .expect("aligned official tree bytes");
+            let address = official.get_addr(&key_words_bytes(key));
+            assert_ne!(address, 0);
+            let value = &mut official.get_node_mut(address).value;
+            value[1] = value[1].checked_add(extra_quote).expect("quote free lots");
+            value[3] = value[3].checked_add(extra_base).expect("base free lots");
+            assert!(official.is_valid_red_black_tree());
+        }
+        let mut args = key.to_vec();
+        args.extend([extra_quote, extra_base]);
+        market = run_market_write(
+            "depositTrader128",
+            market,
+            true,
+            &args,
+            &[
+                Check::success(),
+                Check::return_data(&((index as u64) + 1).to_le_bytes()),
+            ],
+        );
+        assert_trader_tree_bytes_eq(
+            &market.data[8 * TRADER_TREE_WORD..],
+            official_bytes.as_slice(),
+            index * 2 + 2,
+        );
+    }
+
+    // Existing lookup precedes the capacity check. A genuinely absent trader still returns full.
+    let existing = keys[37];
+    {
+        let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official tree bytes");
+        let address = official.get_addr(&key_words_bytes(existing));
+        let value = &mut official.get_node_mut(address).value;
+        value[1] += 17;
+        value[3] += 19;
+        assert!(official.is_valid_red_black_tree());
+    }
+    let mut existing_args = existing.to_vec();
+    existing_args.extend([17, 19]);
+    market = run_market_write(
+        "depositTrader128",
+        market,
+        true,
+        &existing_args,
+        &[Check::success(), Check::return_data(&128u64.to_le_bytes())],
+    );
+    assert_trader_tree_bytes_eq(
+        &market.data[8 * TRADER_TREE_WORD..],
+        official_bytes.as_slice(),
+        257,
+    );
+    let before_full = market.clone();
+    let after_full = run_market_write(
+        "depositTrader128",
+        market,
+        true,
+        &[0xff, 0xff, 0, 0, 1, 1],
+        &[Check::err(ProgramError::Custom(0x1003))],
+    );
+    assert_eq!(after_full.data, before_full.data);
+}
+
+#[test]
+fn trader_deposit_overflow_and_invalid_accounts_are_atomic() {
+    let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialTraderTree>()];
+    OfficialTraderTree::new_from_slice(&mut official_bytes);
+    let keys: Vec<[u64; 4]> = (1u64..=31).map(|index| [index * 7, 0, 0, 0]).collect();
+    {
+        let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official tree bytes");
+        for key in keys.iter().copied() {
+            let mut trader_state = [0u64; 12];
+            trader_state[1] = 100;
+            trader_state[3] = 200;
+            assert!(official
+                .insert(key_words_bytes(key), trader_state)
+                .is_some());
+        }
+    }
+    let mut canonical = empty_small_market();
+    install_official_trader_tree(&mut canonical, &official_bytes);
+    let key = keys[12];
+    let args = [key[0], key[1], key[2], key[3], 1, 1];
+
+    let readonly = run_market_write(
+        "depositTrader128",
+        canonical.clone(),
+        false,
+        &args,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(readonly.data, canonical.data);
+
+    let mut wrong_owner = canonical.clone();
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "depositTrader128",
+        wrong_owner.clone(),
+        true,
+        &args,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let mut malformed = canonical.clone();
+    write_word(&mut malformed, 8315, 127);
+    let after_malformed = run_market_write(
+        "depositTrader128",
+        malformed.clone(),
+        true,
+        &args,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
+
+    let address = {
+        let official = OfficialTraderTree::load_mut_bytes(&mut official_bytes)
+            .expect("aligned official tree bytes");
+        official.get_addr(&key_words_bytes(key))
+    } as usize;
+    assert_ne!(address, 0);
+    // Node words 7 and 9 are quote/base free. Either overflow must leave the whole account intact.
+    let quote_free_word = TRADER_TREE_WORD + 4 + 7 + (address - 1) * 18;
+    let mut quote_overflow = canonical.clone();
+    write_word(&mut quote_overflow, quote_free_word, u64::MAX);
+    let after_quote_overflow = run_market_write(
+        "depositTrader128",
+        quote_overflow.clone(),
+        true,
+        &args,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_quote_overflow.data, quote_overflow.data);
+
+    // Quote succeeds in registers, but base overflow is discovered before the first store.
+    let base_free_word = TRADER_TREE_WORD + 4 + 9 + (address - 1) * 18;
+    let mut base_overflow = canonical;
+    write_word(&mut base_overflow, base_free_word, u64::MAX);
+    let after_base_overflow = run_market_write(
+        "depositTrader128",
+        base_overflow.clone(),
+        true,
+        &[key[0], key[1], key[2], key[3], 10, 1],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_base_overflow.data, base_overflow.data);
+}
+
 fn assert_order_insertion_matches_sokoban(method: &str, tree_word: usize, bid: bool) {
     assert_eq!(std::mem::size_of::<OfficialOrderTree>(), 32_800);
     let mut official_bytes = vec![0u8; std::mem::size_of::<OfficialOrderTree>()];

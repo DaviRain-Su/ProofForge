@@ -112,6 +112,11 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
     (key0 key1 key2 key3 : Val) : Op :=
   .ext (.svm (.accDataRbTreeKey4Insert acc rootWord linksBaseWord parentBaseWord keyBaseWord
     strideWords capacity key0 key1 key2 key3))
+@[match_pattern] def Op.accDataRbTreeTraderDeposit
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (key0 key1 key2 key3 quoteLots baseLots : Val) : Op :=
+  .ext (.svm (.accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+    strideWords capacity key0 key1 key2 key3 quoteLots baseLots))
 @[match_pattern] def Op.accDataRbTreeKey4Remove
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Op :=
@@ -216,6 +221,9 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .accDataWordSetAt _ _ _ _ index value => predicate index || predicate value
   | .ext (.svm (.accDataRbTreeKey4Insert _ _ _ _ _ _ _ key0 key1 key2 key3)) =>
       #[key0, key1, key2, key3].any predicate
+  | .ext (.svm (.accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3
+      quoteLots baseLots)) =>
+      #[key0, key1, key2, key3, quoteLots, baseLots].any predicate
   | .ext (.svm (.accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3)) =>
       #[key0, key1, key2, key3].any predicate
   | .ext (.svm (.accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex

@@ -43,6 +43,11 @@ private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.O
       strideWords capacity key0 key1 key2 key3 =>
       .accDataRbTreeKey4Remove acc rootWord linksBaseWord parentBaseWord keyBaseWord
         strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
+  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
+      .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+        strideWords capacity (mapValue key0) (mapValue key1) (mapValue key2) (mapValue key3)
+        (mapValue quoteLots) (mapValue baseLots)
   | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       sequenceBaseWord strideWords capacity bid price sequence traderIndex numBaseLots
       lastValidSlot lastValidUnixTimestamp =>
@@ -65,6 +70,8 @@ private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
       #[key0, key1, key2, key3]
   | .accDataRbTreeKey4Remove _ _ _ _ _ _ _ key0 key1 key2 key3 =>
       #[key0, key1, key2, key3]
+  | .accDataRbTreeTraderDeposit _ _ _ _ _ _ _ key0 key1 key2 key3 quoteLots baseLots =>
+      #[key0, key1, key2, key3, quoteLots, baseLots]
   | .accDataRbTreeOrderInsert _ _ _ _ _ _ _ _ _ price sequence traderIndex numBaseLots
       lastValidSlot lastValidUnixTimestamp =>
       #[price, sequence, traderIndex, numBaseLots, lastValidSlot, lastValidUnixTimestamp]
@@ -151,6 +158,12 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
         Svm.Ops.rbTreeKey4InsertWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
           strideWords capacity &&
         #[key0, key1, key2, key3].all (·.wellFormed ValKind.arity)
+  | .accDataRbTreeTraderDeposit acc rootWord linksBaseWord parentBaseWord keyBaseWord
+      strideWords capacity key0 key1 key2 key3 quoteLots baseLots =>
+      acc > 0 && Svm.Ops.accInRange acc &&
+        Svm.Ops.rbTreeTraderWordsInRange rootWord linksBaseWord parentBaseWord keyBaseWord
+          strideWords capacity &&
+        #[key0, key1, key2, key3, quoteLots, baseLots].all (·.wellFormed ValKind.arity)
   | .accDataRbTreeOrderInsert acc rootWord linksBaseWord parentBaseWord keyBaseWord
       sequenceBaseWord strideWords capacity _ price sequence traderIndex numBaseLots
       lastValidSlot lastValidUnixTimestamp =>

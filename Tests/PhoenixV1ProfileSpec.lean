@@ -375,6 +375,27 @@ private partial def opsHaveRbTreeKey4Remove
           opsHaveRbTreeKey4Remove acc rootWord linksBase parentBase keyBase stride capacity body
       | _ => false
 
+private partial def opsHaveRbTreeTraderDeposit
+    (acc rootWord linksBase parentBase keyBase stride capacity : Nat)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .accDataRbTreeTraderDeposit actualAcc actualRoot actualLinks actualParent actualKey
+         actualStride actualCapacity _ _ _ _ _ _ =>
+         actualAcc == acc && actualRoot == rootWord && actualLinks == linksBase &&
+           actualParent == parentBase && actualKey == keyBase && actualStride == stride &&
+           actualCapacity == capacity
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRbTreeTraderDeposit acc rootWord linksBase parentBase keyBase stride capacity
+              thenOps ||
+            opsHaveRbTreeTraderDeposit acc rootWord linksBase parentBase keyBase stride capacity
+              elseOps
+      | .forBody _ body =>
+          opsHaveRbTreeTraderDeposit acc rootWord linksBase parentBase keyBase stride capacity body
+      | _ => false
+
 private partial def opsHaveRbTreeOrderInsert
     (acc rootWord linksBase parentBase keyBase sequenceBase stride capacity : Nat) (bid : Bool)
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
@@ -468,6 +489,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing registerFifthTrader128"
   let some registerGeneric := program.methods.find? (·.ixName == "registerTrader128")
     | throwError "missing registerTrader128"
+  let some depositTrader := program.methods.find? (·.ixName == "depositTrader128")
+    | throwError "missing depositTrader128"
   let some removeGeneric := program.methods.find? (·.ixName == "removeTrader128")
     | throwError "missing removeTrader128"
   let some insertBid := program.methods.find? (·.ixName == "insertBid512")
@@ -584,6 +607,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveDataWord 1 8311 registerGeneric.ops &&
       opsHaveRbTreeKey4Insert 1 8310 8314 8315 8316 18 128 registerGeneric.ops &&
       countDataWordSetAt registerGeneric.ops == 0 &&
+      opsHaveDataWord 1 8311 depositTrader.ops &&
+      opsHaveRbTreeTraderDeposit 1 8310 8314 8315 8316 18 128 depositTrader.ops &&
+      countDataWordSetAt depositTrader.ops == 0 &&
       opsHaveDataWord 1 8311 removeGeneric.ops &&
       opsHaveRbTreeKey4Remove 1 8310 8314 8315 8316 18 128 removeGeneric.ops &&
       countDataWordSetAt removeGeneric.ops == 0 &&
@@ -604,6 +630,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   unless idl.contains
       "\"name\": \"registerTrader128\",\n      \"discriminator\": [90, 37, 2, 213, 222, 9, 17, 252],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
     throwError "registerTrader128 IDL account must be writable"
+  unless idl.contains
+      "\"name\": \"depositTrader128\",\n      \"discriminator\": [135, 20, 238, 244, 5, 95, 239, 55],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
+    throwError "depositTrader128 IDL account must be writable"
   unless idl.contains
       "\"name\": \"removeTrader128\",\n      \"discriminator\": [250, 180, 99, 67, 51, 160, 35, 171],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
     throwError "removeTrader128 IDL account must be writable"
@@ -648,6 +677,12 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "root=8310 links=8314 parent=8315 key4=8316 stride=18 capacity=128" &&
       asm.contains "function_rb4i_" && asm.contains "_rotate_left" &&
       asm.contains "_rotate_right" &&
+      asm.contains "bounded account-resident Phoenix trader deposit RB insertion" &&
+      asm.contains "function_rbtd_" &&
+      asm.contains "Existing trader: validate both additions before mutating either free balance" &&
+      asm.contains "ldxdw r1, [r8 + 40]" && asm.contains "ldxdw r1, [r8 + 56]" &&
+      asm.contains "jlt r3, r1, rbtd_" && asm.contains "stxdw [r10 - 56], r3" &&
+      asm.contains "stxdw [r10 - 64], r3" &&
       asm.contains "bounded account-resident four-word-key RB removal" &&
       asm.contains "function_rb4r_" && asm.contains "_transplant" &&
       asm.contains "bounded account-resident Phoenix bid order RB insertion" &&

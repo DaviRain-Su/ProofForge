@@ -211,6 +211,17 @@
   7,210 B；Surfpool 1.5.0 以 1,460 个 Loader write transactions 部署并核对 exact
   1,477,389-byte ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 228/228 和
   Anvil 12/12 全绿。
+- P5 第二十一段 fixed-capacity trader deposit 已完成：通用
+  `accDataRbTreeTraderDeposit` 按官方 18-word node / 12-word `TraderState` 布局，在完整
+  tree/free-list preflight 后执行 Pubkey get-or-register。已有 trader 的 quote/base free
+  lots 在两个 checked-add 均成功后才一起写回；新 trader 的完整 slot 先清零再初始化，
+  满树 existing-key 仍成功而 absent-key 返回 full。128 个 trader 在每个 allocator size
+  重复 deposit，每一步完整 18,464 bytes 均与 `lib-sokoban 0.3.0` 一致；两类 overflow、
+  malformed/readonly/wrong owner 全部原子失败。持久状态只有 one-based index / `0`
+  sentinel，不使用 heap/Map、detached node 或 persistent pointer。当前 digest
+  `e9966de4a1795a47`，assembly 4,652,382 B，ELF 1,489,088 B，IDL 7,613 B；Surfpool
+  1.5.0 以 1,472 个 Loader write transactions 部署并核对 exact 1,489,133-byte
+  ProgramData。本轮 194-job Lean、50 个 SVM build、Mollusk 230/230 和 Anvil 12/12 全绿。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
