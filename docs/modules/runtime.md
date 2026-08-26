@@ -69,7 +69,9 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - `accDataParentPathValid acc linksBase parentBase stride capacity maxDepth index root bump` —
   static shape + 最多 64 步的账户内 parent walk；运行时 index/root/bump 先过 1-based
   envelope，每步验证 color、parent 和 parent→child reciprocity，root 外 cycle 到界返回 0。
-  只用常量 memory；不是 whole-tree 或 free-list membership proof。
+  只用常量 memory；不是 whole-tree 或 free-list membership proof。target 内部表示为
+  `AccountStorage.Query.parentPathValid`：query 自己携带 static fields、arity、read effects、
+  geometry 与 canonicalization，主 value emitter 只做 generic query dispatch。
 - `accLamports` / `accDataLen` / `isSigner` / `isWritable` / `isExecutable` `acc` — 账户 `acc < IR.maxTxAccountLocks`（官方当前 64）header。旧名 `accLamports0` 等仍独立。
 - `signerKey acc` — 该账户 key 首 u64；入口强制该账户 `is_signer`。旧名 `signerKey0` 仍独立。
 - `ownerIsSelf acc` — owner 32B 是否等于当前 program id；相等 0 / 不等 1。

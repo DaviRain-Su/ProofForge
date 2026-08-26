@@ -55,8 +55,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.accDataParentPathValid
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
     (index root bumpIndex : Val) : Val :=
-  .ext (.svm (.accDataParentPathValid
-    acc linksBaseWord parentBaseWord strideWords capacity maxDepth)) #[index, root, bumpIndex]
+  .ext (.svm (.accountStorage (.parentPathValidOneBased
+    acc linksBaseWord parentBaseWord strideWords capacity maxDepth))) #[index, root, bumpIndex]
 @[match_pattern] def Val.accDataRbTreeValid
     (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (root size bumpIndex freeListHead : Val) : Val :=

@@ -27,9 +27,8 @@ compile-time loop bound. Keeping the bound at most 64 prevents an intrinsic from
 unbounded account scan. -/
 def parentPathWordsInRange
     (linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat) : Bool :=
-  maxDepth > 0 && maxDepth ≤ 64 &&
-    indexedDataWordsInRange linksBaseWord strideWords capacity &&
-    indexedDataWordsInRange parentBaseWord strideWords capacity
+  (AccountStorage.Query.parentPathValidOneBased
+    0 linksBaseWord parentBaseWord strideWords capacity maxDepth).wellFormed maxTxAccountLocks
 
 /-- A complete account-resident red-black tree scan uses one fixed 4096-bit stack bitmap. The
 selected words cover Sokoban's links, parent/color, order-price, and order-sequence fields. -/
@@ -123,8 +122,7 @@ inductive ValKind where
   | accOwnerWord (acc word : Nat)
   | accDataWord (acc word : Nat)
   | accDataWordAt (acc baseWord strideWords capacity : Nat)
-  | accDataParentPathValid
-      (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
+  | accountStorage (query : AccountStorage.Query)
   | accDataRbTreeValid
       (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
       (bid : Bool)
@@ -145,7 +143,7 @@ def ValKind.arity : ValKind → Nat
   | .checkPda _ => 1
   | .byteSwap64 => 1
   | .accDataWordAt .. => 1
-  | .accDataParentPathValid .. => 3
+  | .accountStorage query => query.arity
   | .accDataRbTreeValid .. => 4
   | .accDataRbTreeKey4Valid .. => 4
   | _ => 0
@@ -259,8 +257,8 @@ def accDataWordAt (acc baseWord strideWords capacity : Nat) (index : Val) : Val 
 def accDataParentPathValid
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
     (index root bumpIndex : Val) : Val :=
-  .ext (.accDataParentPathValid
-    acc linksBaseWord parentBaseWord strideWords capacity maxDepth) #[index, root, bumpIndex]
+  .ext (.accountStorage (.parentPathValidOneBased
+    acc linksBaseWord parentBaseWord strideWords capacity maxDepth)) #[index, root, bumpIndex]
 def accDataRbTreeValid
     (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (root size bumpIndex freeListHead : Val) : Val :=
@@ -328,11 +326,8 @@ private partial def staticPayloadsWellFormed : Val → Bool
   | .ext (.accDataWordAt acc baseWord strideWords capacity) operands =>
       accInRange acc && indexedDataWordsInRange baseWord strideWords capacity &&
         operands.all staticPayloadsWellFormed
-  | .ext (.accDataParentPathValid
-      acc linksBaseWord parentBaseWord strideWords capacity maxDepth) operands =>
-      accInRange acc &&
-        parentPathWordsInRange linksBaseWord parentBaseWord strideWords capacity maxDepth &&
-        operands.all staticPayloadsWellFormed
+  | .ext (.accountStorage query) operands =>
+      query.wellFormed maxTxAccountLocks && operands.all staticPayloadsWellFormed
   | .ext (.accDataRbTreeValid acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
       strideWords capacity _) operands =>
       accInRange acc &&
@@ -469,13 +464,13 @@ partial def valNeedsWalk : Val → Bool
        | .isSigner1 | .isWritable1 | .isExecutable1 => true
        | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
        | .accDataWordAt acc _ _ _
-       | .accDataParentPathValid acc _ _ _ _ _
        | .accDataRbTreeValid acc _ _ _ _ _ _ _
        | .accDataRbTreeKey4Valid acc _ _ _ _ _
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
        | .findPdaSeeds seeds => seeds.any fun | .stateKey | .accKey _ => true | _ => false
+       | .accountStorage query => query.needsWalk
        | .checkPdaSeeds _ _ => true
        | _ => false) || operands.any valNeedsWalk
 
@@ -497,12 +492,12 @@ partial def valMinAccounts : Val → Nat
         | .isSigner1 | .isWritable1 | .isExecutable1 => 2
         | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
         | .accDataWordAt acc _ _ _
-        | .accDataParentPathValid acc _ _ _ _ _
         | .accDataRbTreeValid acc _ _ _ _ _ _ _
         | .accDataRbTreeKey4Valid acc _ _ _ _ _
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc
         | .signerKeyN acc | .ownerIsSelf acc => acc + 1
+        | .accountStorage query => query.minAccounts valMinAccounts operands
         | .findPdaSeeds seeds => seeds.foldl (init := 0) fun current seed =>
             match seed with
             | .accKey acc => Nat.max current (acc + 2)
@@ -513,8 +508,10 @@ partial def valMinAccounts : Val → Nat
               | .accKey acc => Nat.max current (acc + 2)
               | _ => current
         | _ => 0
-      operands.foldl (init := here) fun current operand =>
-        Nat.max current (valMinAccounts operand)
+      match kind with
+      | .accountStorage _ => here
+      | _ => operands.foldl (init := here) fun current operand =>
+          Nat.max current (valMinAccounts operand)
 
 partial def valHasSelect : Val → Bool
   | .select .. => true

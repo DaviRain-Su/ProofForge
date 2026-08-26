@@ -70,6 +70,76 @@ def EffectSummary.forField (field : Field) : EffectSummary :=
   { reads := #[account]
     writes := if field.region.access.writable then #[account] else #[] }
 
+/-- Two fixed-stride one-based fields traversed as a bounded parent path. The fields may begin at
+different static words but must describe the same account, stride, capacity, indexing, and access
+requirements. -/
+structure ParentPath where
+  links : Field
+  parentColor : Field
+  maxDepth : Nat
+  deriving BEq, Repr, Inhabited
+
+private def Region.sameShape (left right : Region) : Bool :=
+  left.account == right.account && left.strideWords == right.strideWords &&
+    left.capacity == right.capacity && left.indexBase == right.indexBase &&
+    left.access == right.access
+
+def ParentPath.wellFormed (path : ParentPath) (accountLimit : Nat := 64) : Bool :=
+  path.links.wellFormed accountLimit && path.parentColor.wellFormed accountLimit &&
+    path.links.widthWords == 1 && path.parentColor.widthWords == 1 &&
+    path.links.region.sameShape path.parentColor.region &&
+    path.links.region.strideWords < maxDataWord &&
+    path.links.region.indexBase == .one && !path.links.region.access.writable &&
+    !path.links.region.access.currentProgramOwned &&
+    path.maxDepth > 0 && path.maxDepth ≤ 64
+
+/-- Account-resident routines that return one scalar. Dynamic operands remain ordinary Core
+operands; this target-owned descriptor contains only static bounded geometry. -/
+inductive Query where
+  | parentPathValid (path : ParentPath)
+  deriving BEq, Repr, Inhabited
+
+def Query.arity : Query → Nat
+  | .parentPathValid .. => 3
+
+def Query.effects : Query → EffectSummary
+  | .parentPathValid path =>
+      (EffectSummary.forField path.links).merge (EffectSummary.forField path.parentColor)
+
+def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
+  | .parentPathValid path => path.wellFormed accountLimit
+
+def Query.needsWalk (query : Query) : Bool :=
+  query.effects.reads.any (· ≥ 1)
+
+def Query.minAccounts (measure : V → Nat) (operands : Array V) (query : Query) : Nat :=
+  let fromRegions := query.effects.reads.foldl (init := 0) fun current account =>
+    Nat.max current (account + 1)
+  operands.foldl (init := fromRegions) fun current value => Nat.max current (measure value)
+
+/-- Stable target-IR spelling. The compatibility constructor below preserves the original
+`accDataParentPathValid` digest. -/
+def Query.canonical (renderValue : V → String) (operands : Array V) : Query → String
+  | .parentPathValid path =>
+      let region := path.links.region
+      s!"dpp.{region.account}.{path.links.firstWord}.{path.parentColor.firstWord}." ++
+        s!"{region.strideWords}.{region.capacity}.{path.maxDepth}" ++
+        s!"({String.intercalate "," (operands.map renderValue).toList})"
+
+def Query.parentPathValidOneBased
+    (account linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat) : Query :=
+  let access : Access := {}
+  .parentPathValid
+    { links :=
+        { region :=
+            { account, baseWord := linksBaseWord, strideWords, capacity
+              indexBase := .one, access } }
+      parentColor :=
+        { region :=
+            { account, baseWord := parentBaseWord, strideWords, capacity
+              indexBase := .one, access } }
+      maxDepth }
+
 /-- Stable SVM-to-storage bridge. New bounded allocators, trees, maps, and queues extend this
 target-owned call vocabulary instead of adding another top-level SVM IR constructor and another
 case to the main emitter. -/

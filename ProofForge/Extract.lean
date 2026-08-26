@@ -2280,8 +2280,8 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
             | some (.accDataWord a w) => some (.accDataWord a w)
             | some (.accDataWordAt a b s c i) => some (.accDataWordAt a b s c i)
-            | some (.accDataParentPathValid a l p s c d i r b) =>
-                some (.accDataParentPathValid a l p s c d i r b)
+            | some (.ext (.svm (.accountStorage query)) operands) =>
+                some (.ext (.svm (.accountStorage query)) operands)
             | some (.accDataRbTreeValid a l p k q s c bid r n b f) =>
                 some (.accDataRbTreeValid a l p k q s c bid r n b f)
             | some (.accDataRbTreeKey4Valid a l p k s c r n b f) =>
@@ -4571,7 +4571,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
     | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
-    | .accDataParentPathValid ..
+    | .ext (.svm (.accountStorage _)) _
     | .accDataRbTreeValid ..
     | .accDataRbTreeKey4Valid ..
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
@@ -5496,9 +5496,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
       | .byteSwap64 word => .byteSwap64 (flipVal fuel' word)
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
-      | .accDataParentPathValid a l p s c d i r b =>
-          .accDataParentPathValid a l p s c d
-            (flipVal fuel' i) (flipVal fuel' r) (flipVal fuel' b)
+      | .ext (.svm (.accountStorage query)) operands =>
+          .ext (.svm (.accountStorage query)) (operands.map (flipVal fuel'))
       | .accDataRbTreeValid a l p k q s c bid r n b f =>
           .accDataRbTreeValid a l p k q s c bid
             (flipVal fuel' r) (flipVal fuel' n) (flipVal fuel' b) (flipVal fuel' f)
@@ -5805,7 +5804,7 @@ def inferSlots (env : Environment) (initName : Name) : Except String (Array Core
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
   return (← inferSlots env initName).map (·.name)
 
-private def valFields : Ops.Val → Array String
+private partial def valFields : Ops.Val → Array String
   | .field _ n => #[n]
   | .arg _ => #[]
   | .local _ => #[]
@@ -5820,8 +5819,7 @@ private def valFields : Ops.Val → Array String
   | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => #[]
   | .byteSwap64 word => valFields word
   | .accDataWordAt _ _ _ _ i => valFields i
-  | .accDataParentPathValid _ _ _ _ _ _ i r b =>
-      valFields i ++ valFields r ++ valFields b
+  | .ext (.svm (.accountStorage _)) operands => operands.flatMap valFields
   | .accDataRbTreeValid _ _ _ _ _ _ _ _ r s b f =>
       valFields r ++ valFields s ++ valFields b ++ valFields f
   | .accDataRbTreeKey4Valid _ _ _ _ _ _ r s b f =>

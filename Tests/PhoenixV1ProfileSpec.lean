@@ -155,10 +155,11 @@ private partial def opsHaveIndexedDataWord
 private partial def valHasParentPath
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat) :
     ProofForge.Svm.Ops.Val → Bool
-  | .ext (.accDataParentPathValid actualAcc actualLinks actualParent actualStride
-      actualCapacity actualDepth) operands =>
-      (actualAcc == acc && actualLinks == linksBaseWord && actualParent == parentBaseWord &&
-        actualStride == strideWords && actualCapacity == capacity && actualDepth == maxDepth) ||
+  | .ext (.accountStorage (.parentPathValid path)) operands =>
+      (path.links.region.account == acc && path.links.firstWord == linksBaseWord &&
+        path.parentColor.firstWord == parentBaseWord &&
+        path.links.region.strideWords == strideWords &&
+        path.links.region.capacity == capacity && path.maxDepth == maxDepth) ||
         operands.any (valHasParentPath
           acc linksBaseWord parentBaseWord strideWords capacity maxDepth)
   | .field base _ | .bitNot base =>

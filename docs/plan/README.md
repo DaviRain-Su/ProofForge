@@ -104,6 +104,7 @@
 | [l5-027](tasks/l5-027.md) | done | Phoenix-v1 fixed-capacity bid/ask removal |
 | [l5-028](tasks/l5-028.md) | done | Phoenix-v1 fixed-capacity trader get-or-register deposit |
 | [l5-029](tasks/l5-029.md) | done | SVM account-resident storage backend boundary + word-store migration |
+| [l5-030](tasks/l5-030.md) | done | Bounded account-storage query bridge + parent-path migration |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

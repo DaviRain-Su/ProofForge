@@ -72,7 +72,7 @@
 
 ## 当前状态
 
-- `lake build Tests` 当前 196 jobs；71 个 imported test modules 含 923 个 `#guard` / `#guard_msgs`。
+- `lake build Tests` 当前 196 jobs；71 个 imported test modules 含 928 个 `#guard` / `#guard_msgs`。
 - SVM registry 50 个程序 / 50 个 Mollusk integration 文件；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量 `pf build` 与 Mollusk 230/230 当前通过。
 - EVM registry 12 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault / Ownable / Token / Window / Phase 的 Anvil 总门 12/12。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
@@ -233,6 +233,17 @@
   Lean、50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool 1.5.0 以 1,472 个
   Loader write transactions 部署并核对 exact 1,489,133-byte ProgramData。下一步先迁移
   bounded parent-path，再收拢 RB search/allocator/rotation/transplant/fixup。
+- P5 第二十三段 bounded account-storage query bridge 已完成：
+  `accDataParentPathValid` 迁入 `AccountStorage.Query.parentPathValid`；两个 fixed-stride
+  `Field` 统一声明 one-based region、read-only effects、三参数 arity、geometry/depth bound、
+  account walk 与 canonical spelling。SVM `ValKind`、generic extraction traversal、IR digest
+  与主 `loadVal` 都只保留单一 `.accountStorage query` bridge，原 138 行 parent-path emitter
+  已移入 storage backend。source 名称与 digest `e9966de4a1795a47` 保持；assembly
+  4,652,144 B、ELF 1,489,088 B、IDL 7,613 B 均不变。路径仍只保存当前 one-based index、
+  depth 和 account-derived transient pointer，不使用 heap/Map、visited collection、node copy
+  或 persistent pointer。本轮 196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil
+  12/12 全绿；Surfpool 1.5.0 以 1,472 个 Loader write transactions 部署并核对 exact
+  1,489,133-byte ProgramData。下一步迁移 complete RB validator 的共同 envelope 与内部例程。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

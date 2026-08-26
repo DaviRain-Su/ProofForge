@@ -66,7 +66,8 @@ private def validParentPathOp : ProofForge.Svm.Ops.Op :=
     1 114 115 8 4096 32 (.arg 0) (.arg 1) (.arg 2))
 
 private def malformedParentPathOp : ProofForge.Svm.Ops.Op :=
-  .returnU64 (.ext (.accDataParentPathValid 1 114 115 8 4096 32) #[.arg 0, .arg 1])
+  .returnU64 (.ext (.accountStorage (.parentPathValidOneBased 1 114 115 8 4096 32))
+    #[.arg 0, .arg 1])
 
 private def unboundedParentPathOp : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataParentPathValid
@@ -75,6 +76,18 @@ private def unboundedParentPathOp : ProofForge.Svm.Ops.Op :=
 #guard validParentPathOp.wellFormed
 #guard !malformedParentPathOp.wellFormed
 #guard !unboundedParentPathOp.wellFormed
+
+private def validParentPathQuery : ProofForge.Svm.AccountStorage.Query :=
+  .parentPathValidOneBased 1 114 115 8 4096 32
+
+#guard validParentPathQuery.wellFormed
+#guard validParentPathQuery.arity == 3
+#guard validParentPathQuery.effects.reads == #[1]
+#guard validParentPathQuery.effects.writes.isEmpty
+#guard validParentPathQuery.canonical
+    (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
+    (#[.arg 0, .arg 1, .arg 2] : Array ProofForge.Svm.Ops.Val) ==
+  "dpp.1.114.115.8.4096.32(a0,a1,a2)"
 
 private def validRbTreeOp : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataRbTreeValid
