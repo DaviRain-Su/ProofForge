@@ -84,6 +84,9 @@
 - P5 第四段 bounded root slot 已完成：通用 `accDataWordAt` 只允许运行时 slot，account/base/stride/capacity 均编译期固定，并做 slot + 最终 data-length 双边界。bid root index=2 的 links/parent/color/price 直接从账户读取；无 heap/Map/节点复制。当前 digest `b2519600b8cfe99f`，assembly 878,132 B，ELF 282,536 B；profile Mollusk 4/4。
 - P5 第五段 constant-memory root neighborhood 已完成：四档 profile 原位读取 bid root 与两个直接 child，验证 bid side tag、child→parent reciprocity、color、index envelope 及局部 price/sequence ordering；不分配节点容器，也不声明全树验证。当前 digest `7952977f008911a8`，assembly 2,171,011 B，ELF 716,344 B；profile Mollusk 4/4。
 - P5 第六段本地部署门已完成：Surfpool smoke 参数化为 Phoenix / PhoenixV1Profile 两个显式目标；P5 verifier 的 716,344 B ELF 经 708 个 Loader write + deploy + authority transactions 落入 exact 716,389-byte ProgramData，confirmed signature 与完整 bytes 已核对。默认 Phoenix 3,389-write 路径也重跑通过；不用 `solana-test-validator`，不声明公网部署。
+- P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
+  `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
+  deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
 - `l5-003` 与 Phoenix 双 vault adapter 已完成：Seat 初始化和 Phoenix 同一入口的 canonical PDA 校验、classic SPL Token CPI 成功/失败路径都进 Mollusk。
 - `l5-004` Token-2022 classic-compatible program-id 切片已完成；TLV extension 语义仍保持 fail closed。
 - `l5-005` 已完成；任务状态已同步为 done。
@@ -99,10 +102,16 @@
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
 | P5 动态 Phoenix-v1 | 部分：profile + metadata/header + bid root neighborhood 与本地部署门已有，完整 traversal 未支持 | 固定/固定-stride有界 account word；后续依赖 parent-pointer constant-memory traversal | canonical profile、sequence、allocator envelope、bid root/child reciprocity 与局部 ordering 已进 Lean/Mollusk；当前 verifier 另经 Surfpool Loader-v3 transaction 部署；完整 tree/free-list 遍历、节点写入、remaining accounts 和完整 Phoenix-v1 兼容仍 fail closed |
+| P6 SDK memory/protocol surface | 进行中：官方形状 transient heap 模型已有 | P5 的 account-resident 边界；后续需要 effect-safe lowering | 默认 32 KiB / 显式 32–256 KiB frame、OOM/no-op free 已建模；后续只开放 bounded scratch/container API，禁止持久 heap pointer。再分片补 32-byte/u128/Borsh、remaining accounts 和 Token-2022 extension semantics |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。固定长度 32-byte / u128 /
 Borsh protocol types 可在 P5 后续设计；当前 Pubkey 与 client id 仍以 `UInt64` limbs
 表达。P5 profile gate 不是把运行时变长账户偷偷放进现有 bounded model，也不是 P0 的验收条件。
+
+Solana Rust 允许 `Vec`/`Box` 等调用期 allocation，但默认 allocator 是有界 bump heap，
+不是通用进程 heap；`dealloc` 不回收，pointer 不能跨 invocation 或写入 account。普通
+`HashMap` 也不作为 SVM SDK 的默认能力。ProofForge 后续 transient container lowering 必须
+携带静态/运行时容量门和显式 OOM，不得把它用于 P5 持久树的全量复制。
 
 ## 明确保持 fail closed
 

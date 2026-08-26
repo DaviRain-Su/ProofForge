@@ -11,6 +11,7 @@
 |---|---|---|
 | `Svm.Runtime` | sysvar / AccountInfo / CPI / PDA 宿主 stub | EVM opcode |
 | `Svm.ABI` | account limits、discriminator、Loader V3/account byte layout、CPI account count | EVM storage |
+| `Svm.Heap` | 32–256 KiB transient downward bump allocator 模型 | account data allocator、持久 pointer、无限 heap |
 | `Svm.IR` | SVM-only `Op`、account-data byte offset、Vector byte stride | EVM storage slot / EVM effect |
 | `Svm.Solanalib` | bounded typed ALU/static-store semantics bridge | Loader、syscall、ELF、完整 emitter refinement |
 | `Svm.Emit` | Loader V3 单账户 `.s`；checked 算术、CPI、sysvar | Yul、EVM opcode |
@@ -24,6 +25,11 @@
 `Extract.IR` 不再拥有 SVM conversion，`Svm.Emit` 只消费 SVM target `Program` / `Op`。位运算、命名
 错误、有界 for / Vector 下标、wrapping add view 已开。disc / layout 域仍是
 `proof-forge-solana-v1:` / `proof-forge-solana-layout-v1:`，不改现有 `.so` 字节。
+
+`Svm.Heap` 单独建模官方 `BumpAllocator`：heap 映射在 `0x300000000`，默认 32 KiB，
+compute-budget 上限 256 KiB；首 8 字节保存 bump，allocation 向下并向下对齐，OOM 返回
+空，deallocation 不回收。这里的 transient heap 只活一个 invocation；账户内 Sokoban/Phoenix
+allocator 仍是固定容量、index/offset based 的持久字节布局，绝不能保存 heap pointer。
 
 ## API
 
@@ -41,4 +47,5 @@
 
 ## Tests
 
-`Tests/EmitSpec.lean`、`Tests/IdlSpec.lean`、`Tests/BuildSpec.lean`。汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。
+`Tests/EmitSpec.lean`、`Tests/IdlSpec.lean`、`Tests/BuildSpec.lean`、
+`Tests/SvmHeapSpec.lean`。汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。
