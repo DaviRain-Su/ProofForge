@@ -30,6 +30,16 @@ def parentPathWordsInRange
     indexedDataWordsInRange linksBaseWord strideWords capacity &&
     indexedDataWordsInRange parentBaseWord strideWords capacity
 
+/-- A complete account-resident red-black tree scan uses one fixed 4096-bit stack bitmap. The
+selected words cover Sokoban's links, parent/color, order-price, and order-sequence fields. -/
+def rbTreeWordsInRange
+    (linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat) : Bool :=
+  capacity > 0 && capacity ≤ 4096 &&
+    indexedDataWordsInRange linksBaseWord strideWords capacity &&
+    indexedDataWordsInRange parentBaseWord strideWords capacity &&
+    indexedDataWordsInRange keyBaseWord strideWords capacity &&
+    indexedDataWordsInRange sequenceBaseWord strideWords capacity
+
 /-- Static non-bump bytes in one PDA signer group. -/
 inductive PdaSeed where
   | ascii (value : String)
@@ -69,6 +79,9 @@ inductive ValKind where
   | accDataWordAt (acc baseWord strideWords capacity : Nat)
   | accDataParentPathValid
       (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
+  | accDataRbTreeValid
+      (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
+      (bid : Bool)
   | accLamportsN (acc : Nat)
   | accDataLenN (acc : Nat)
   | isSignerN (acc : Nat)
@@ -84,6 +97,7 @@ def ValKind.arity : ValKind → Nat
   | .checkPda _ => 1
   | .accDataWordAt .. => 1
   | .accDataParentPathValid .. => 3
+  | .accDataRbTreeValid .. => 4
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
@@ -179,6 +193,12 @@ def accDataParentPathValid
     (index root bumpIndex : Val) : Val :=
   .ext (.accDataParentPathValid
     acc linksBaseWord parentBaseWord strideWords capacity maxDepth) #[index, root, bumpIndex]
+def accDataRbTreeValid
+    (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
+    (bid : Bool) (root size bumpIndex freeListHead : Val) : Val :=
+  .ext (.accDataRbTreeValid
+    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)
+    #[root, size, bumpIndex, freeListHead]
 def accLamportsN (acc : Nat) : Val := leaf (.accLamportsN acc)
 def accDataLenN (acc : Nat) : Val := leaf (.accDataLenN acc)
 def isSignerN (acc : Nat) : Val := leaf (.isSignerN acc)
@@ -238,6 +258,12 @@ private partial def staticPayloadsWellFormed : Val → Bool
       acc linksBaseWord parentBaseWord strideWords capacity maxDepth) operands =>
       accInRange acc &&
         parentPathWordsInRange linksBaseWord parentBaseWord strideWords capacity maxDepth &&
+        operands.all staticPayloadsWellFormed
+  | .ext (.accDataRbTreeValid acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+      strideWords capacity _) operands =>
+      accInRange acc &&
+        rbTreeWordsInRange linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+          strideWords capacity &&
         operands.all staticPayloadsWellFormed
   | .ext _ operands => operands.all staticPayloadsWellFormed
   | _ => true
@@ -312,6 +338,7 @@ partial def valNeedsWalk : Val → Bool
        | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
        | .accDataWordAt acc _ _ _
        | .accDataParentPathValid acc _ _ _ _ _
+       | .accDataRbTreeValid acc _ _ _ _ _ _ _
        | .accLamportsN acc | .accDataLenN acc
        | .isSignerN acc | .isWritableN acc | .isExecutableN acc
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
@@ -338,6 +365,7 @@ partial def valMinAccounts : Val → Nat
         | .accKeyWord acc _ | .accOwnerWord acc _ | .accDataWord acc _
         | .accDataWordAt acc _ _ _
         | .accDataParentPathValid acc _ _ _ _ _
+        | .accDataRbTreeValid acc _ _ _ _ _ _ _
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc
         | .signerKeyN acc | .ownerIsSelf acc => acc + 1

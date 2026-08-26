@@ -66,6 +66,22 @@ private def unboundedParentPathOp : ProofForge.Svm.Ops.Op :=
 #guard !malformedParentPathOp.wellFormed
 #guard !unboundedParentPathOp.wellFormed
 
+private def validRbTreeOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataRbTreeValid
+    1 114 115 116 117 8 4096 true (.arg 0) (.arg 1) (.arg 2) (.arg 3))
+
+private def malformedRbTreeOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (.ext (.accDataRbTreeValid 1 114 115 116 117 8 4096 true)
+    #[.arg 0, .arg 1, .arg 2])
+
+private def oversizedRbTreeOp : ProofForge.Svm.Ops.Op :=
+  .returnU64 (ProofForge.Svm.Ops.accDataRbTreeValid
+    1 114 115 116 117 8 4097 true (.arg 0) (.arg 1) (.arg 2) (.arg 3))
+
+#guard validRbTreeOp.wellFormed
+#guard !malformedRbTreeOp.wellFormed
+#guard !oversizedRbTreeOp.wellFormed
+
 private def invalidCpiAccountOp : ProofForge.Svm.Ops.Op :=
   .ext (.invoke 63 #[] #[] #[] none)
 

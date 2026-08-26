@@ -655,6 +655,30 @@ Map，不复制节点；短账户在形成 data pointer 前 `Custom(1)`。
   0
 
 /--
+直接在账户数据中验证完整的 fixed-capacity Sokoban red-black tree 及 allocator partition。
+静态参数选择 links、parent/color、price、sequence word 和槽布局；`bid=1` 使用 Phoenix bid
+降序，`bid=0` 使用 ask 升序。目标发射器使用固定的 4096-bit 栈 bitmap，不分配 Map、
+不复制节点；它验证树结构、颜色/black height、FIFO key 顺序、live count，以及 free-list
+与所有 pre-bump 槽的精确分区。
+-/
+@[irreducible] def accDataRbTreeValid
+    (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      root size bumpIndex freeListHead : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := root
+  let _ := size
+  let _ := bumpIndex
+  let _ := freeListHead
+  0
+
+/--
 账户 `acc` 的 lamports。`acc` 必须在抽出时是常量，且
 `acc < Svm.ABI.maxTxAccountLocks`（官方当前强制 64）。
 `acc ≥ 1` 走 walk。旧名 `accLamports0` / `accLamports1` 仍独立。

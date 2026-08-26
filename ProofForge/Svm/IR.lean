@@ -489,6 +489,11 @@ private partial def valCanon : Ops.Val → String
       acc linksBaseWord parentBaseWord strideWords capacity maxDepth) #[index, root, bumpIndex] =>
       s!"dpp.{acc}.{linksBaseWord}.{parentBaseWord}.{strideWords}.{capacity}.{maxDepth}" ++
         s!"({valCanon index},{valCanon root},{valCanon bumpIndex})"
+  | .ext (.accDataRbTreeValid acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+      strideWords capacity bid) #[root, size, bumpIndex, freeListHead] =>
+      s!"drb.{acc}.{linksBaseWord}.{parentBaseWord}.{keyBaseWord}.{sequenceBaseWord}." ++
+        s!"{strideWords}.{capacity}.{bid}" ++
+        s!"({valCanon root},{valCanon size},{valCanon bumpIndex},{valCanon freeListHead})"
   | .ext (.accLamportsN acc) #[] => s!"lpN.{acc}"
   | .ext (.accDataLenN acc) #[] => s!"dlN.{acc}"
   | .ext (.isSignerN acc) #[] => s!"sgN.{acc}"

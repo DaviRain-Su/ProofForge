@@ -819,6 +819,38 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               some (.accDataParentPathValid a l p s c d index root bumpIndex)
             else none
           | _, _, _, _, _, _, _, _, _ => none
+        else if (endsWith e ".accDataRbTreeValid" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeValid) &&
+            e.getAppArgs.size ≥ 12 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+              some (.lit keyBaseWord), some (.lit sequenceBaseWord), some (.lit strideWords),
+              some (.lit capacity), some (.lit bid), some root, some size, some bumpIndex,
+              some freeListHead =>
+            let a := acc.toNat
+            let l := linksBaseWord.toNat
+            let p := parentBaseWord.toNat
+            let k := keyBaseWord.toNat
+            let q := sequenceBaseWord.toNat
+            let s := strideWords.toNat
+            let c := capacity.toNat
+            if Svm.Ops.accInRange a &&
+                Svm.Ops.rbTreeWordsInRange l p k q s c && (bid == 0 || bid == 1) then
+              some (.accDataRbTreeValid a l p k q s c (bid == 1)
+                root size bumpIndex freeListHead)
+            else none
+          | _, _, _, _, _, _, _, _, _, _, _, _ => none
         else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
             e.getAppArgs.size ≥ 2 then
           match strip e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -2219,6 +2251,8 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.accDataWordAt a b s c i) => some (.accDataWordAt a b s c i)
             | some (.accDataParentPathValid a l p s c d i r b) =>
                 some (.accDataParentPathValid a l p s c d i r b)
+            | some (.accDataRbTreeValid a l p k q s c bid r n b f) =>
+                some (.accDataRbTreeValid a l p k q s c bid r n b f)
             | some (.accLamportsN a) => some (.accLamportsN a)
             | some (.accDataLenN a) => some (.accDataLenN a)
             | some (.isSignerN a) => some (.isSignerN a)
@@ -4133,6 +4167,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .accDataParentPathValid ..
+    | .accDataRbTreeValid ..
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
@@ -5033,6 +5068,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accDataParentPathValid a l p s c d i r b =>
           .accDataParentPathValid a l p s c d
             (flipVal fuel' i) (flipVal fuel' r) (flipVal fuel' b)
+      | .accDataRbTreeValid a l p k q s c bid r n b f =>
+          .accDataRbTreeValid a l p k q s c bid
+            (flipVal fuel' r) (flipVal fuel' n) (flipVal fuel' b) (flipVal fuel' f)
       | .checkPda s b => .checkPda s (flipVal fuel' b)
       | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
       | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
@@ -5319,6 +5357,8 @@ private def valFields : Ops.Val → Array String
   | .accDataWordAt _ _ _ _ i => valFields i
   | .accDataParentPathValid _ _ _ _ _ _ i r b =>
       valFields i ++ valFields r ++ valFields b
+  | .accDataRbTreeValid _ _ _ _ _ _ _ _ r s b f =>
+      valFields r ++ valFields s ++ valFields b ++ valFields f
   | .checkPda _ b => valFields b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valFields l ++ valFields r

@@ -183,6 +183,46 @@ private partial def opsHaveParentPath
           opsHaveParentPath acc linksBaseWord parentBaseWord strideWords capacity maxDepth body
       | _ => false
 
+private partial def valHasRbTree (capacity : Nat) : ProofForge.Svm.Ops.Val → Bool
+  | .field base _ | .bitNot base => valHasRbTree capacity base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasRbTree capacity lhs || valHasRbTree capacity rhs
+  | .indexGet base _ index _ _ => valHasRbTree capacity base || valHasRbTree capacity index
+  | .select _ lhs rhs thenValue elseValue =>
+      valHasRbTree capacity lhs || valHasRbTree capacity rhs ||
+        valHasRbTree capacity thenValue || valHasRbTree capacity elseValue
+  | .ext (.accDataRbTreeValid actualAcc links parent key sequence stride actualCapacity bid)
+      operands =>
+      (actualAcc == 1 && links == 114 && parent == 115 && key == 116 && sequence == 117 &&
+        stride == 8 && actualCapacity == capacity && bid) ||
+        operands.any (valHasRbTree capacity)
+  | .ext _ operands => operands.any (valHasRbTree capacity)
+  | _ => false
+
+private partial def opsHaveRbTree (capacity : Nat)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    let has := valHasRbTree capacity
+    let here :=
+      match op with
+      | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+      | .storeField _ value | .okState value | .returnU64 value | .returnState value => has value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+      | .indexSet _ lhs rhs _ _ => has lhs || has rhs
+      | .invoke _ _ data _ bump =>
+          data.any (fun item => item.value?.any has) || bump.any has
+      | _ => false
+    here ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRbTree capacity thenOps || opsHaveRbTree capacity elseOps
+      | .forBody _ body => opsHaveRbTree capacity body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -212,6 +252,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing bidRootNeighborhoodValid"
   let some parentPath := program.methods.find? (·.ixName == "bidParentPathValid")
     | throwError "missing bidParentPathValid"
+  let some bidTree := program.methods.find? (·.ixName == "bidTreeValid")
+    | throwError "missing bidTreeValid"
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
       opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
@@ -240,7 +282,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveParentPath 1 114 115 8 512 32 parentPath.ops &&
       opsHaveParentPath 1 114 115 8 1024 32 parentPath.ops &&
       opsHaveParentPath 1 114 115 8 2048 32 parentPath.ops &&
-      opsHaveParentPath 1 114 115 8 4096 32 parentPath.ops do
+      opsHaveParentPath 1 114 115 8 4096 32 parentPath.ops &&
+      opsHaveRbTree 512 bidTree.ops && opsHaveRbTree 1024 bidTree.ops &&
+      opsHaveRbTree 2048 bidTree.ops && opsHaveRbTree 4096 bidTree.ops do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
@@ -253,7 +297,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "load bounded acc1 data word base=116 stride=8 capacity=4096" &&
       asm.contains "mul64 r2, r3" &&
       asm.contains "validate bounded acc1 parent path links=114 parent=115 stride=8 capacity=4096 depth=32" &&
-      asm.contains "parent_path_loop_" do
+      asm.contains "parent_path_loop_" &&
+      asm.contains "complete account-resident RB tree and allocator validation" &&
+      asm.contains "stride=8 capacity=4096 bid=true" && asm.contains "rb_free_loop_" &&
+      asm.contains "add64 r9, -4096" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
 #pf_guard_phoenix_v1_profile

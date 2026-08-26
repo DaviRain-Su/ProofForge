@@ -5,11 +5,12 @@ Phoenix v1 market-account profile gate.
 
 The official program does not accept arbitrary runtime capacities. Its 24-byte `MarketSizeParams`
 header selects one of twelve statically compiled `FIFOMarket<Pubkey, B, A, S>` layouts. This module
-validates that dispatch boundary, fixed scalar/allocator metadata, and one bounded bid-root slot
-read against the pinned Sokoban 0.3.0 layout.
+validates that dispatch boundary, fixed scalar/allocator metadata, and the complete bid tree plus
+allocator partition against the pinned Sokoban 0.3.0 layout.
 
 This is deliberately a separate verifier program whose ProofForge state is account 0 and candidate
-Phoenix market is account 1. It does not claim full body traversal or official instruction execution.
+Phoenix market is account 1. It does not yet claim ask/trader traversal or official instruction
+execution.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -405,6 +406,38 @@ def bidParentPathValid (s : State) (index : UInt64) : UInt64 :=
       accDataParentPathValid 1 114 115 8 2048 32 index root bumpIndex
     else if bids = 4096 then
       accDataParentPathValid 1 114 115 8 4096 32 index root bumpIndex
+    else
+      0
+
+/--
+Validate the complete bid red-black tree and the bid allocator's free list in account-resident
+storage. The emitted iterative traversal enforces reciprocal links, red/black rules, equal black
+height, strict Phoenix bid FIFO ordering, exact live size, and an exact disjoint partition of every
+slot below `bumpIndex`. It uses a fixed 4096-bit stack bitmap and never allocates or copies nodes.
+-/
+@[pf_entry]
+def bidTreeValid (s : State) : UInt64 :=
+  if profileAccountBytes s = 0 || allocatorHeadersValid s = 0 then
+    0
+  else
+    let bids := accDataWord 1 2
+    let root := lowUInt32 (accDataWord 1 110)
+    let size := accDataWord 1 112
+    let cursor := accDataWord 1 113
+    let bumpIndex := lowUInt32 cursor
+    let freeListHead := highUInt32 cursor
+    if bids = 512 then
+      accDataRbTreeValid 1 114 115 116 117 8 512 1
+        root size bumpIndex freeListHead
+    else if bids = 1024 then
+      accDataRbTreeValid 1 114 115 116 117 8 1024 1
+        root size bumpIndex freeListHead
+    else if bids = 2048 then
+      accDataRbTreeValid 1 114 115 116 117 8 2048 1
+        root size bumpIndex freeListHead
+    else if bids = 4096 then
+      accDataRbTreeValid 1 114 115 116 117 8 4096 1
+        root size bumpIndex freeListHead
     else
       0
 
