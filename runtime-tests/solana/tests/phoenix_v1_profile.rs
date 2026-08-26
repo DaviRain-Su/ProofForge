@@ -50,6 +50,11 @@ fn write_word(account: &mut Account, word: usize, value: u64) {
     account.data[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
 }
 
+fn read_word(account: &Account, word: usize) -> u64 {
+    let offset = 8 * word;
+    u64::from_le_bytes(account.data[offset..offset + 8].try_into().expect("word"))
+}
+
 fn packed_u32(low: u32, high: u32) -> u64 {
     u64::from(low) | (u64::from(high) << 32)
 }
@@ -264,12 +269,11 @@ fn run_view(name: &str, market: Account, checks: &[Check]) {
     run_view_args(name, &[], market, checks);
 }
 
-fn run_topology_write(
+fn run_market_write(
+    name: &str,
     market: Account,
     writable: bool,
-    slot: u64,
-    links: u64,
-    parent_color: u64,
+    args: &[u64],
     checks: &[Check],
 ) -> Account {
     let (program_id, mollusk) = common::harness_at(
@@ -287,9 +291,9 @@ fn run_topology_write(
     let instruction = common::instruction(
         program_id,
         state_key,
-        "writeTraderTopology128",
-        &[slot, links, parent_color],
-        false,
+        name,
+        args,
+        true,
         false,
         vec![market_meta],
     );
@@ -307,6 +311,23 @@ fn run_topology_write(
         .find(|(key, _)| key == &market_key)
         .expect("market after topology write")
         .1
+}
+
+fn run_topology_write(
+    market: Account,
+    writable: bool,
+    slot: u64,
+    links: u64,
+    parent_color: u64,
+    checks: &[Check],
+) -> Account {
+    run_market_write(
+        "writeTraderTopology128",
+        market,
+        writable,
+        &[slot, links, parent_color],
+        checks,
+    )
 }
 
 #[test]
@@ -981,4 +1002,108 @@ fn trader_topology_write_is_fixed_capacity_owned_and_atomic() {
         &[Check::err(ProgramError::Custom(1))],
     );
     assert_eq!(after_short.data, short.data);
+}
+
+#[test]
+fn first_trader_registration_commits_a_complete_sokoban_root() {
+    const KEY: [u64; 4] = [
+        0x0706_0504_0302_0100,
+        0x0f0e_0d0c_0b0a_0908,
+        0x1716_1514_1312_1110,
+        0x1f1e_1d1c_1b1a_1918,
+    ];
+    const CURSOR_1_1: u64 = 0x0000_0001_0000_0001;
+    const CURSOR_2_2: u64 = 0x0000_0002_0000_0002;
+
+    let mut fresh = market_account(
+        PHOENIX_PROGRAM,
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        128,
+    );
+    write_allocator_header(&mut fresh, 110, 0, 0, 1, 1);
+    write_allocator_header(&mut fresh, 4210, 0, 0, 1, 1);
+    write_allocator_header(&mut fresh, 8310, 0, 0, 1, 1);
+    assert_eq!(read_word(&fresh, 8313), CURSOR_1_1);
+    // A canonical fresh allocator obtains zeroed pages, but initialize the slot with stale bytes
+    // to prove this entry point publishes a complete node rather than relying on heap-like reuse.
+    for word in 8314..8332 {
+        write_word(&mut fresh, word, u64::MAX);
+    }
+
+    let mut expected = fresh.clone();
+    write_allocator_header(&mut expected, 8310, 1, 1, 2, 2);
+    for word in 8314..8332 {
+        write_word(&mut expected, word, 0);
+    }
+    for (offset, value) in KEY.into_iter().enumerate() {
+        write_word(&mut expected, 8316 + offset, value);
+    }
+    let registered = run_market_write(
+        "registerFirstTrader128",
+        fresh.clone(),
+        true,
+        &KEY,
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    assert_eq!(read_word(&registered, 8313), CURSOR_2_2);
+    assert_eq!(registered.data, expected.data);
+    run_view(
+        "bodyEntryCount",
+        registered.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    run_view(
+        "traderTreeValid",
+        registered.clone(),
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+
+    let after_nonempty = run_market_write(
+        "registerFirstTrader128",
+        registered.clone(),
+        true,
+        &KEY,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_nonempty.data, registered.data);
+
+    let after_readonly = run_market_write(
+        "registerFirstTrader128",
+        fresh.clone(),
+        false,
+        &KEY,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_readonly.data, fresh.data);
+
+    let mut wrong_owner = fresh.clone();
+    wrong_owner.owner = Pubkey::new_unique();
+    let after_wrong_owner = run_market_write(
+        "registerFirstTrader128",
+        wrong_owner.clone(),
+        true,
+        &KEY,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(after_wrong_owner.data, wrong_owner.data);
+
+    let malformed = market_account(
+        PHOENIX_PROGRAM,
+        SMALLEST_MARKET_BYTES,
+        MARKET_HEADER_DISCRIMINANT,
+        512,
+        512,
+        129,
+    );
+    let after_malformed = run_market_write(
+        "registerFirstTrader128",
+        malformed.clone(),
+        true,
+        &KEY,
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    assert_eq!(after_malformed.data, malformed.data);
 }

@@ -4588,6 +4588,24 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           let structuredThen := containsStructuredStateLet env 2048 t ||
             containsInlineStateTransition env 2048 t
           if let .ok thn := decodedThen then
+            let rec hasAccDataWrite (fuel : Nat) (ops : Array Ops.Op) : Bool :=
+              match fuel with
+              | 0 => false
+              | fuel' + 1 => ops.any fun op =>
+                  match op with
+                  | .accDataWordSetAt .. => true
+                  | .ite _ _ _ nestedThen nestedElse =>
+                      hasAccDataWrite fuel' nestedThen || hasAccDataWrite fuel' nestedElse
+                  | .forBody _ body => hasAccDataWrite fuel' body
+                  | _ => false
+            -- A decoded external-account write is the branch's observable effect. Prefer the
+            -- recursively decoded sequence over `asStoreFields`, which only sees the final state
+            -- value and would otherwise erase ignored writes preceding `.ok`.
+            if hasAccDataWrite 8 thn then
+              match asCmp env condE with
+              | some (cmp, lv, rv) =>
+                  return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+              | none => pure ()
             let rec invokeCount (fuel : Nat) (ops : Array Ops.Op) : Nat :=
               match fuel with
               | 0 => 0

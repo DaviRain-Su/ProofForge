@@ -563,6 +563,46 @@ def writeTraderTopology128 (_s : State) (slot links parentColor : UInt64) : UInt
   let _ := accDataWordSetAt 1 8315 18 128 slot parentColor
   parentColor
 
+/--
+Perform Sokoban's exact first insertion into a freshly initialized 128-seat trader allocator.
+The account must have the smallest Phoenix body shape and canonical empty trader header. The
+instruction initializes the complete 144-byte node (including zeroed TraderState/padding), then
+publishes size and root. No detached allocated node can survive a successful instruction.
+-/
+@[pf_entry]
+def registerFirstTrader128 (s : State) (key0 key1 key2 key3 : UInt64) :
+    Except Error (State × UInt64) :=
+  if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
+      accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
+      accDataWord 1 8310 = 0 && accDataWord 1 8311 = 0 &&
+      accDataWord 1 8312 = 0 && accDataWord 1 8313 = 0x0000000100000001 then
+    -- NodeAllocator.add_node bump path: advance bump/free boundary before initializing slot 1.
+    let _ := accDataWordSetAt 1 8313 1 1 0 0x0000000200000002
+    let _ := accDataWordSetAt 1 8314 18 128 0 0
+    let _ := accDataWordSetAt 1 8315 18 128 0 0
+    let _ := accDataWordSetAt 1 8316 18 128 0 key0
+    let _ := accDataWordSetAt 1 8317 18 128 0 key1
+    let _ := accDataWordSetAt 1 8318 18 128 0 key2
+    let _ := accDataWordSetAt 1 8319 18 128 0 key3
+    -- TraderState has four u64 balances followed by eight reserved u64 words.
+    let _ := accDataWordSetAt 1 8320 18 128 0 0
+    let _ := accDataWordSetAt 1 8321 18 128 0 0
+    let _ := accDataWordSetAt 1 8322 18 128 0 0
+    let _ := accDataWordSetAt 1 8323 18 128 0 0
+    let _ := accDataWordSetAt 1 8324 18 128 0 0
+    let _ := accDataWordSetAt 1 8325 18 128 0 0
+    let _ := accDataWordSetAt 1 8326 18 128 0 0
+    let _ := accDataWordSetAt 1 8327 18 128 0 0
+    let _ := accDataWordSetAt 1 8328 18 128 0 0
+    let _ := accDataWordSetAt 1 8329 18 128 0 0
+    let _ := accDataWordSetAt 1 8330 18 128 0 0
+    let _ := accDataWordSetAt 1 8331 18 128 0 0
+    let _ := accDataWordSetAt 1 8312 1 1 0 1
+    let _ := accDataWordSetAt 1 8310 1 1 0 1
+    .ok ({ s with dummy := 0 }, 1)
+  else
+    .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=
