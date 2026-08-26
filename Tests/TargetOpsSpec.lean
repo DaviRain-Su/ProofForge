@@ -382,6 +382,9 @@ private def phoenixAskCancelConfig : ProofForge.Svm.FifoCancel.Config :=
 private def phoenixAskCancel : ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
   .fifoCancel (.cancelSide phoenixAskCancelConfig (.arg 0))
 
+private def phoenixAskCancelUpTo : ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
+  .fifoCancel (.cancelUpTo phoenixAskCancelConfig (.arg 0) (.arg 1) (.arg 2) (.arg 3) true)
+
 private def fifoEventCountQuery : ProofForge.Svm.Component.Query :=
   .fifoCancel .eventCount
 
@@ -395,6 +398,11 @@ private def fifoEventCountQuery : ProofForge.Svm.Component.Query :=
 #guard phoenixAskCancel.stackScratchEnd == ProofForge.Svm.BatchRecorder.stackScratchEnd
 #guard phoenixAskCancel.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
   "fcs.1.4210.4214.4215.4216.4217.4218.4219.8322.8323.8.512.b.a0"
+#guard phoenixAskCancelUpTo.values == #[.arg 0, .arg 1, .arg 2, .arg 3]
+#guard phoenixAskCancelUpTo.effects == phoenixAskCancel.effects
+#guard phoenixAskCancelUpTo.usesCpi
+#guard phoenixAskCancelUpTo.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
+  "fcu.1.4210.4214.4215.4216.4217.4218.4219.8322.8323.8.512.b.c.a0.a1.a2.a3"
 #guard fifoEventCountQuery.arity == 0
 #guard fifoEventCountQuery.effects.reads.isEmpty && fifoEventCountQuery.effects.writes.isEmpty
 #guard fifoEventCountQuery.wellFormed
@@ -519,6 +527,10 @@ private def fifoCancelSideAssembly :=
   ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext fifoCancelBackend
     "fifo_cancel_side_test" phoenixAskCancel
 
+private def fifoCancelUpToAssembly :=
+  ProofForge.Svm.Component.Emit.emitCall recorderComponentEmitContext fifoCancelBackend
+    "fifo_cancel_up_to_test" phoenixAskCancelUpTo
+
 private def fifoEventCountAssembly :=
   ProofForge.Svm.Component.Emit.emitQuery recorderComponentEmitContext fifoEventCountQuery #[]
     160 0 "fifo_event_count_test"
@@ -566,6 +578,19 @@ private def fifoEventCountAssembly :=
         assembly.contains "ldxdw r1, [r10 - 2056]" &&
         assembly.contains "jge r1, 65535, fifo_cancel_failure_fifo_cancel_side_test" &&
         assembly.contains "dynamic signed self CPI account=1 data<=1246"
+  | .error _ => false
+#guard
+  match fifoCancelUpToAssembly with
+  | .ok assembly =>
+      assembly.contains "stxdw [r10 - 2264], r1" &&
+        assembly.contains "stxdw [r10 - 2272], r1" &&
+        assembly.contains "stxdw [r10 - 2280], r1" &&
+        assembly.contains "ldxdw r1, [r10 - 2288]" &&
+        assembly.contains "ldxdw r1, [r10 - 2296]" &&
+        assembly.contains "jle r1, r2, fifo_cancel_price_matched_fifo_cancel_up_to_test" &&
+        assembly.contains "; claim exactly this order's released collateral" &&
+        assembly.contains "; validated-remove-hook" &&
+        !assembly.contains "; ordinary-remove-hook"
   | .error _ => false
 #guard
   match fifoEventCountAssembly with

@@ -24,7 +24,12 @@ def queryTempStack : Nat := 2168
 def loopStack : Nat := 2176
 def activeStack : Nat := 2184
 def orderIndexStack : Nat := 2200
-def queryScratchEnd : Nat := 2256
+def tickLimitStack : Nat := 2264
+def searchLimitStack : Nat := 2272
+def cancelLimitStack : Nat := 2280
+def scannedStack : Nat := 2288
+def canceledStack : Nat := 2296
+def queryScratchEnd : Nat := 2304
 
 /-- Highest low-bank offset used transitively by the embedded recorder. Deep component scratch is
 outside scalar-local planning and must not move account headers into the CPI bank. -/
@@ -93,26 +98,37 @@ stored owner equals the supplied one-based trader index. -/
 inductive Call (V : Type) where
   | begin
   | cancelSide (config : Config) (traderIndex : V)
+  | cancelUpTo (config : Config) (traderIndex tickLimit searchLimit cancelLimit : V)
+      (claimImmediately : Bool)
   | finish
   deriving BEq, Repr, Inhabited
 
 def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .begin => .begin
   | .cancelSide config traderIndex => .cancelSide config (mapValue traderIndex)
+  | .cancelUpTo config traderIndex tickLimit searchLimit cancelLimit claimImmediately =>
+      .cancelUpTo config (mapValue traderIndex) (mapValue tickLimit) (mapValue searchLimit)
+        (mapValue cancelLimit) claimImmediately
   | .finish => .finish
 
 def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .begin => return .begin
   | .cancelSide config traderIndex => return .cancelSide config (← mapValue traderIndex)
+  | .cancelUpTo config traderIndex tickLimit searchLimit cancelLimit claimImmediately =>
+      return .cancelUpTo config (← mapValue traderIndex) (← mapValue tickLimit)
+        (← mapValue searchLimit) (← mapValue cancelLimit) claimImmediately
   | .finish => return .finish
 
 def Call.values : Call V → Array V
   | .begin | .finish => #[]
   | .cancelSide _ traderIndex => #[traderIndex]
+  | .cancelUpTo _ traderIndex tickLimit searchLimit cancelLimit _ =>
+      #[traderIndex, tickLimit, searchLimit, cancelLimit]
 
 def Call.effects : Call V → AccountStorage.EffectSummary
   | .begin | .finish => {}
   | .cancelSide config _ => config.effects
+  | .cancelUpTo config .. => config.effects
 
 def Call.minAccounts (measure : V → Nat) (call : Call V) : Nat :=
   let fromEffects := call.effects.reads.foldl (init := 0) fun current account =>
@@ -123,6 +139,9 @@ def Call.wellFormed (valueWellFormed : V → Bool) (accountLimit : Nat := 64) : 
   | .begin | .finish => true
   | .cancelSide config traderIndex =>
       config.wellFormed accountLimit && valueWellFormed traderIndex
+  | .cancelUpTo config traderIndex tickLimit searchLimit cancelLimit _ =>
+      config.wellFormed accountLimit && valueWellFormed traderIndex &&
+        valueWellFormed tickLimit && valueWellFormed searchLimit && valueWellFormed cancelLimit
 
 def Call.canonical (renderValue : V → String) : Call V → String
   | .begin => "fcb"
@@ -140,10 +159,25 @@ def Call.canonical (renderValue : V → String) : Call V → String
             s!"{config.owner.firstWord}.{config.size.firstWord}.{config.locked.firstWord}." ++
             s!"{config.free.firstWord}.{region.strideWords}.{region.capacity}.{collateral}." ++
             s!"{renderValue traderIndex}"
+  | .cancelUpTo config traderIndex tickLimit searchLimit cancelLimit claimImmediately =>
+      match config.map with
+      | .key4 .. => "invalid-fifo-cancel-up-to"
+      | .fifo rootWord tree =>
+          let region := tree.links.region
+          let collateral := match config.collateral with
+            | .base => "b"
+            | .quote baseWord tickWord => s!"q{baseWord}.{tickWord}"
+          let claim := if claimImmediately then "c" else "f"
+          s!"fcu.{region.account}.{rootWord}.{tree.links.firstWord}." ++
+            s!"{tree.parentColor.firstWord}.{tree.price.firstWord}.{tree.sequence.firstWord}." ++
+            s!"{config.owner.firstWord}.{config.size.firstWord}.{config.locked.firstWord}." ++
+            s!"{config.free.firstWord}.{region.strideWords}.{region.capacity}.{collateral}.{claim}." ++
+            s!"{renderValue traderIndex}.{renderValue tickLimit}." ++
+            s!"{renderValue searchLimit}.{renderValue cancelLimit}"
 
 def Call.usesCpi : Call V → Bool
   | .begin | .finish => false
-  | .cancelSide .. => true
+  | .cancelSide .. | .cancelUpTo .. => true
 
 def Call.stackScratchEnd : Call V → Nat
   | _ => FifoCancel.stackScratchEnd

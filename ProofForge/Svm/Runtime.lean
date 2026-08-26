@@ -239,6 +239,48 @@ no-op for the official missing-trader behavior. -/
   let _ := traderIndex
   0
 
+/-- Cancel at most `cancelLimit` owned orders among the first `searchLimit` orders on one statically
+described FIFO side, subject to the side's inclusive tick limit. `claimImmediately` is static:
+withdrawal variants claim each released balance before returning, while free-funds variants retain
+it in the trader slot. The traversal remains account-resident and bounded by fixed capacity. -/
+@[irreducible] def fifoCancelUpToSide
+    (marketAccount rootWord linksWord parentWord priceWord sequenceWord ownerWord sizeWord
+      lockedWord freeWord orderStride orderCapacity traderStride traderCapacity bid
+      baseLotsPerBaseUnitWord tickSizeWord logAccount selfEntryTag : UInt64)
+    (authoritySeed : String)
+    (maxBytes headerBytes countOffset maxRecords traderIndex tickLimit searchLimit cancelLimit
+      claimImmediately : UInt64) : UInt64 :=
+  let _ := marketAccount
+  let _ := rootWord
+  let _ := linksWord
+  let _ := parentWord
+  let _ := priceWord
+  let _ := sequenceWord
+  let _ := ownerWord
+  let _ := sizeWord
+  let _ := lockedWord
+  let _ := freeWord
+  let _ := orderStride
+  let _ := orderCapacity
+  let _ := traderStride
+  let _ := traderCapacity
+  let _ := bid
+  let _ := baseLotsPerBaseUnitWord
+  let _ := tickSizeWord
+  let _ := logAccount
+  let _ := selfEntryTag
+  let _ := authoritySeed
+  let _ := maxBytes
+  let _ := headerBytes
+  let _ := countOffset
+  let _ := maxRecords
+  let _ := traderIndex
+  let _ := tickLimit
+  let _ := searchLimit
+  let _ := cancelLimit
+  let _ := claimImmediately
+  0
+
 /-- Read aggregate quote lots released by the active FIFO cancellation handle. -/
 @[irreducible] def fifoCancelQuoteReleased : UInt64 :=
   0

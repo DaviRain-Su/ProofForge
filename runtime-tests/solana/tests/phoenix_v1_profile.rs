@@ -538,6 +538,35 @@ fn raw_cancel_all_data(tag: u8) -> Vec<u8> {
     vec![tag]
 }
 
+fn raw_cancel_up_to_data(
+    tag: u8,
+    side: u8,
+    tick_limit: Option<u64>,
+    search_limit: Option<u32>,
+    cancel_limit: Option<u32>,
+) -> Vec<u8> {
+    assert!(tag == 8 || tag == 9);
+    let mut data = vec![tag, side];
+    match tick_limit {
+        Some(value) => {
+            data.push(1);
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+        None => data.push(0),
+    }
+    for limit in [search_limit, cancel_limit] {
+        match limit {
+            Some(value) => {
+                data.push(1);
+                data.extend_from_slice(&value.to_le_bytes());
+            }
+            None => data.push(0),
+        }
+    }
+    assert!((5..=21).contains(&data.len()));
+    data
+}
+
 fn raw_reduce_data_for_tag(tag: u8, side: u8, price: u64, sequence: u64, size: u64) -> Vec<u8> {
     let mut data = vec![tag, side];
     data.extend_from_slice(&price.to_le_bytes());
@@ -1512,6 +1541,461 @@ fn official_raw_cancel_all_rejects_invalid_token_context_atomically() {
     let mut fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
     write_word(&mut fixture.market, 1, 0);
     assert_raw_reduce_token_rejected(&fixture, fixture.instruction(&raw_cancel_all_data(6)));
+}
+
+#[test]
+fn official_raw_cancel_up_to_searches_before_filters_and_honors_bid_tick_and_cancel_caps() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let foreign_key = Pubkey::new_unique();
+    let market_key = Pubkey::new_unique();
+    let mut market = run_market_write(
+        "registerSecondTrader128",
+        market_with_signer_trader(),
+        true,
+        &pubkey_words(foreign_key),
+        &[Check::success(), Check::return_data(&2u64.to_le_bytes())],
+    );
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, 106, 160);
+    write_word(&mut market, 8320, 70);
+    write_word(&mut market, 8321, 5);
+    write_word(&mut market, 8322, 4);
+    for args in [
+        [10, !1u64, 2, 1, 0, 0],
+        [9, !2u64, 1, 2, 0, 0],
+        [8, !3u64, 1, 3, 0, 0],
+    ] {
+        market = run_market_write("insertBid512", market, true, &args, &[Check::success()]);
+    }
+    market = run_market_write(
+        "insertAsk512",
+        market,
+        true,
+        &[1, 4, 1, 4, 0, 0],
+        &[Check::success()],
+    );
+
+    let (mollusk, log_key) = raw_reduce_harness();
+    let data = raw_cancel_up_to_data(9, 0, Some(9), Some(2), Some(2));
+    let instruction = raw_reduce_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    // The foreign best order consumes one search slot. The inclusive price-9 owned order is the
+    // only cancellation; price 8 and the unselected ask side remain.
+    assert_eq!(read_word(&market, 106), 161);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 2);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, 8320), 52);
+    assert_eq!(read_word(&market, 8321), 23);
+    assert_eq!(read_word(&market, 8322), 4);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_cancel_all_batch(
+        &payloads[0],
+        9,
+        160,
+        market_key,
+        trader_key,
+        &[(0, !2u64, 9, 2)],
+    );
+}
+
+#[test]
+fn official_raw_cancel_up_to_none_defaults_cancel_only_the_selected_side() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    // Tag 9 does not enter the CancelOrWithdraw status gate.
+    write_word(&mut market, 1, 0);
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, 106, 170);
+    write_word(&mut market, 8320, 5);
+    write_word(&mut market, 8322, 5);
+    write_word(&mut market, 8323, 6);
+    market = run_market_write(
+        "insertBid512",
+        market,
+        true,
+        &[5, !1u64, 1, 1, 0, 0],
+        &[Check::success()],
+    );
+    for args in [[3, 1, 1, 2, 0, 0], [4, 2, 1, 3, 0, 0]] {
+        market = run_market_write("insertAsk512", market, true, &args, &[Check::success()]);
+    }
+
+    let (mollusk, log_key) = raw_reduce_harness();
+    let data = raw_cancel_up_to_data(9, 1, None, None, None);
+    let instruction = raw_reduce_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8320), 5);
+    assert_eq!(read_word(&market, 8322), 0);
+    assert_eq!(read_word(&market, 8323), 11);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_cancel_all_batch(
+        &payloads[0],
+        9,
+        170,
+        market_key,
+        trader_key,
+        &[(0, 1, 3, 2), (1, 2, 4, 3)],
+    );
+}
+
+#[test]
+fn official_raw_cancel_up_to_cancel_cap_preserves_equal_price_fifo() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, 106, 175);
+    write_word(&mut market, 8320, 10);
+    for args in [[5, !1u64, 1, 1, 0, 0], [5, !2u64, 1, 1, 0, 0]] {
+        market = run_market_write("insertBid512", market, true, &args, &[Check::success()]);
+    }
+
+    let (mollusk, log_key) = raw_reduce_harness();
+    let data = raw_cancel_up_to_data(9, 0, Some(5), None, Some(1));
+    let instruction = raw_reduce_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success()],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, 8320), 5);
+    assert_eq!(read_word(&market, 8321), 5);
+    assert_cancel_all_batch(
+        &phoenix_data_payloads(&mollusk)[0],
+        9,
+        175,
+        market_key,
+        trader_key,
+        &[(0, !1u64, 5, 1)],
+    );
+}
+
+#[test]
+fn official_raw_cancel_up_to_ask_tick_is_inclusive() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 106, 180);
+    write_word(&mut market, 8322, 6);
+    for args in [[3, 1, 1, 1, 0, 0], [4, 2, 1, 2, 0, 0], [5, 3, 1, 3, 0, 0]] {
+        market = run_market_write("insertAsk512", market, true, &args, &[Check::success()]);
+    }
+
+    let (mollusk, log_key) = raw_reduce_harness();
+    let data = raw_cancel_up_to_data(9, 1, Some(4), None, None);
+    let instruction = raw_reduce_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success()],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, 8322), 3);
+    assert_eq!(read_word(&market, 8323), 3);
+    assert_cancel_all_batch(
+        &phoenix_data_payloads(&mollusk)[0],
+        9,
+        180,
+        market_key,
+        trader_key,
+        &[(0, 1, 3, 1), (1, 2, 4, 2)],
+    );
+}
+
+#[test]
+fn official_raw_cancel_up_to_some_zero_limits_are_header_only() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    for (sequence, search, cancel) in [(190, Some(0), None), (191, None, Some(0))] {
+        let market_key = Pubkey::new_unique();
+        let mut market = market_with_signer_trader();
+        write_word(&mut market, 104, 1);
+        write_word(&mut market, 105, 1);
+        write_word(&mut market, 106, sequence);
+        write_word(&mut market, 8320, 5);
+        market = run_market_write(
+            "insertBid512",
+            market,
+            true,
+            &[5, !1u64, 1, 1, 0, 0],
+            &[Check::success()],
+        );
+        let before = market.data.clone();
+        let (mollusk, log_key) = raw_reduce_harness();
+        let data = raw_cancel_up_to_data(9, 0, None, search, cancel);
+        let instruction = raw_reduce_instruction(
+            &data,
+            PHOENIX_PROGRAM,
+            log_key,
+            false,
+            market_key,
+            true,
+            trader_key,
+            true,
+            false,
+        );
+        let result = mollusk.process_and_validate_instruction(
+            &instruction,
+            &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+            &[Check::success()],
+        );
+        let market = resulting_account(&result, &market_key);
+        assert_eq!(read_word(&market, 106), sequence + 1);
+        assert_eq!(read_word(&market, BID_TREE_WORD + 2), 1);
+        assert_eq!(&market.data[0..106 * 8], &before[0..106 * 8]);
+        let payloads = phoenix_data_payloads(&mollusk);
+        assert_eq!(payloads.len(), 1);
+        assert_reduce_header(&payloads[0], 9, sequence, market_key, trader_key);
+    }
+}
+
+#[test]
+fn official_raw_cancel_up_to_withdraw_claims_each_order_and_preserves_free_funds() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, 106, 200);
+    write_word(&mut market, 8320, 14);
+    write_word(&mut market, 8321, 7);
+    for args in [[5, !1u64, 1, 2, 0, 0], [2, !2u64, 1, 2, 0, 0]] {
+        market = run_market_write("insertBid512", market, true, &args, &[Check::success()]);
+    }
+    let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
+    let (mollusk, _) = raw_reduce_harness();
+    let data = raw_cancel_up_to_data(8, 0, None, None, None);
+    let result = mollusk.process_and_validate_instruction(
+        &fixture.instruction(&data),
+        &fixture.accounts(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, 106), 201);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8320), 0);
+    assert_eq!(read_word(&market, 8321), 7);
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.quote_vault_key)),
+        958
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_quote_key)),
+        62
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.base_vault_key)),
+        1_000
+    );
+    assert_cancel_all_batch(
+        &phoenix_data_payloads(&mollusk)[0],
+        8,
+        200,
+        market_key,
+        trader_key,
+        &[(0, !1u64, 5, 2), (1, !2u64, 2, 2)],
+    );
+}
+
+#[test]
+fn official_raw_cancel_up_to_missing_trader_and_no_price_match_are_header_only() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    for (sequence, mut market, tick) in [
+        (210, empty_small_market(), None),
+        (211, market_with_signer_trader(), Some(6)),
+    ] {
+        let market_key = Pubkey::new_unique();
+        write_word(&mut market, 104, 1);
+        write_word(&mut market, 105, 1);
+        write_word(&mut market, 106, sequence);
+        if tick.is_some() {
+            write_word(&mut market, 8320, 5);
+            market = run_market_write(
+                "insertBid512",
+                market,
+                true,
+                &[5, !1u64, 1, 1, 0, 0],
+                &[Check::success()],
+            );
+        }
+        let (mollusk, log_key) = raw_reduce_harness();
+        let data = raw_cancel_up_to_data(9, 0, tick, None, None);
+        let instruction = raw_reduce_instruction(
+            &data,
+            PHOENIX_PROGRAM,
+            log_key,
+            false,
+            market_key,
+            true,
+            trader_key,
+            true,
+            false,
+        );
+        let result = mollusk.process_and_validate_instruction(
+            &instruction,
+            &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+            &[Check::success()],
+        );
+        assert_eq!(
+            read_word(&resulting_account(&result, &market_key), 106),
+            sequence + 1
+        );
+        let payloads = phoenix_data_payloads(&mollusk);
+        assert_eq!(payloads.len(), 1);
+        assert_reduce_header(&payloads[0], 9, sequence, market_key, trader_key);
+    }
+}
+
+#[test]
+fn official_raw_cancel_up_to_rejects_noncanonical_borsh_and_invalid_side_atomically() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 106, 220);
+    let before = market.data.clone();
+    for data in [
+        vec![9, 0, 2, 0, 0],
+        vec![9, 0, 0, 2, 0],
+        vec![9, 0, 0, 0, 2],
+        vec![9, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+        vec![9, 0, 0, 1, 0, 0, 0],
+        vec![9, 0, 0, 0, 1, 0, 0, 0],
+        vec![9, 0, 0, 0, 0, 0],
+        raw_cancel_up_to_data(9, 2, None, None, None),
+    ] {
+        let (mollusk, log_key) = raw_reduce_harness();
+        let instruction = raw_reduce_instruction(
+            &data,
+            PHOENIX_PROGRAM,
+            log_key,
+            false,
+            market_key,
+            true,
+            trader_key,
+            true,
+            false,
+        );
+        let result = mollusk.process_instruction(
+            &instruction,
+            &raw_reduce_accounts(
+                PHOENIX_PROGRAM,
+                log_key,
+                market_key,
+                market.clone(),
+                trader_key,
+            ),
+        );
+        assert!(result.raw_result.is_err());
+        assert_eq!(resulting_account(&result, &market_key).data, before);
+        assert!(phoenix_data_payloads(&mollusk).is_empty());
+    }
+}
+
+#[test]
+fn official_raw_cancel_up_to_rejects_malformed_storage_and_token_context_atomically() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 106, 230);
+    write_word(&mut market, 8320, 1);
+    market = run_market_write(
+        "insertBid512",
+        market,
+        true,
+        &[1, !1u64, 1, 1, 0, 0],
+        &[Check::success()],
+    );
+    write_word(&mut market, 115, 1);
+    let before = market.data.clone();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let data = raw_cancel_up_to_data(9, 0, None, None, None);
+    let instruction = raw_reduce_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+    );
+    assert!(result.raw_result.is_err());
+    assert_eq!(resulting_account(&result, &market_key).data, before);
+    assert!(phoenix_data_payloads(&mollusk).is_empty());
+
+    let token_market_key = Pubkey::new_unique();
+    let mut token_market = market_with_signer_trader();
+    write_word(&mut token_market, 106, 231);
+    let mut fixture = RawReduceTokenFixture::new(token_market_key, trader_key, token_market);
+    write_word(&mut fixture.market, 1, 0);
+    assert_raw_reduce_token_rejected(
+        &fixture,
+        fixture.instruction(&raw_cancel_up_to_data(8, 0, None, None, None)),
+    );
 }
 
 #[test]

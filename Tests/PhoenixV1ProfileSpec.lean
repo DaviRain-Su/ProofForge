@@ -705,22 +705,35 @@ private partial def opsHaveInvoke (ops : Array ProofForge.Svm.IR.Op) : Bool :=
     | .forBody _ body => opsHaveInvoke body
     | _ => false
 
+private def fifoCancelConfigMatches
+    (root links parent price sequence owner size locked free : Nat) (bid : Bool)
+    (config : ProofForge.Svm.FifoCancel.Config) : Bool :=
+  match config.map with
+  | .key4 .. => false
+  | .fifo actualRoot tree =>
+      actualRoot == root && tree.links.region.account == 2 &&
+        tree.links.firstWord == links && tree.parentColor.firstWord == parent &&
+        tree.price.firstWord == price && tree.sequence.firstWord == sequence &&
+        config.owner.firstWord == owner && config.size.firstWord == size &&
+        config.locked.firstWord == locked && config.free.firstWord == free &&
+        tree.links.region.strideWords == 8 && tree.links.region.capacity == 512 &&
+        tree.bid == bid && config.recorder.logAccount == 0 &&
+        config.recorder.selfEntryTag == 15 && config.recorder.maxRecords == 32 &&
+        config.collateral == if bid then .quote 104 105 else .base
+
 private def fifoCancelSideMatches
     (root links parent price sequence owner size locked free : Nat) (bid : Bool) :
     ProofForge.Svm.FifoCancel.Call ProofForge.Svm.Ops.Val → Bool
   | .cancelSide config _ =>
-      match config.map with
-      | .key4 .. => false
-      | .fifo actualRoot tree =>
-          actualRoot == root && tree.links.region.account == 2 &&
-            tree.links.firstWord == links && tree.parentColor.firstWord == parent &&
-            tree.price.firstWord == price && tree.sequence.firstWord == sequence &&
-            config.owner.firstWord == owner && config.size.firstWord == size &&
-            config.locked.firstWord == locked && config.free.firstWord == free &&
-            tree.links.region.strideWords == 8 && tree.links.region.capacity == 512 &&
-            tree.bid == bid && config.recorder.logAccount == 0 &&
-            config.recorder.selfEntryTag == 15 && config.recorder.maxRecords == 32 &&
-            config.collateral == if bid then .quote 104 105 else .base
+      fifoCancelConfigMatches root links parent price sequence owner size locked free bid config
+  | _ => false
+
+private def fifoCancelUpToMatches
+    (root links parent price sequence owner size locked free : Nat) (bid claim : Bool) :
+    ProofForge.Svm.FifoCancel.Call ProofForge.Svm.Ops.Val → Bool
+  | .cancelUpTo config _ _ _ _ actualClaim =>
+      actualClaim == claim &&
+        fifoCancelConfigMatches root links parent price sequence owner size locked free bid config
   | _ => false
 
 private partial def cancelTraceValue : ProofForge.Svm.Ops.Val → List Nat
@@ -766,6 +779,7 @@ private partial def cancelTraceOps (ops : Array ProofForge.Svm.IR.Op) : List Nat
         match call with
         | .begin => [4]
         | .cancelSide config _ => if config.map.rootWord == 110 then [5] else [6]
+        | .cancelUpTo config .. => if config.map.rootWord == 110 then [16] else [17]
         | .finish => [13]
     | .component (.batchRecorder (.finish _)) => [14]
     | .component (.accountStorage (.writeWord field _ _)) =>
@@ -871,6 +885,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   let some cancelAllFreeRaw :=
       program.methods.find? (·.ixName == "cancelAllOrdersWithFreeFunds")
     | throwError "missing raw CancelAllOrdersWithFreeFunds"
+  let some cancelUpToRaw := program.methods.find? (·.ixName == "cancelUpToOrders")
+    | throwError "missing raw CancelUpTo"
+  let some cancelUpToFreeRaw :=
+      program.methods.find? (·.ixName == "cancelUpToOrdersWithFreeFunds")
+    | throwError "missing raw CancelUpToWithFreeFunds"
   match reduceRaw.entry with
   | .raw entry =>
       unless reduceRaw.kind == .get && entry.tag == 5 && entry.accountCount == 4 &&
@@ -897,6 +916,22 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.programAccount == 0 && entry.paramWidths.isEmpty && entry.dataLen == 1 do
         throwError s!"wrong raw CancelAllOrdersWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "CancelAllOrdersWithFreeFunds lost its raw adapter"
+  match cancelUpToRaw.entry with
+  | .raw entry =>
+      unless cancelUpToRaw.kind == .get && entry.tag == 8 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramWidths == #[1, 1, 8, 1, 4, 1, 4] &&
+          entry.optionWidths == #[8, 4, 4] && entry.fixedParamCount == 1 &&
+          entry.minDataLen == 5 && entry.maxDataLen == 21 do
+        throwError s!"wrong raw CancelUpTo adapter: {repr entry}"
+  | .generated => throwError "CancelUpTo lost its raw adapter"
+  match cancelUpToFreeRaw.entry with
+  | .raw entry =>
+      unless cancelUpToFreeRaw.kind == .get && entry.tag == 9 && entry.accountCount == 4 &&
+          entry.programAccount == 0 && entry.paramWidths == #[1, 1, 8, 1, 4, 1, 4] &&
+          entry.optionWidths == #[8, 4, 4] && entry.fixedParamCount == 1 &&
+          entry.minDataLen == 5 && entry.maxDataLen == 21 do
+        throwError s!"wrong raw CancelUpToWithFreeFunds adapter: {repr entry}"
+  | .generated => throwError "CancelUpToWithFreeFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops &&
       opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops &&
@@ -992,6 +1027,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveFifoCancelCall
         (fifoCancelSideMatches 4210 4214 4215 4216 4217 4218 4219 8322 8323 false) ops &&
       opsHaveFifoCancelCall (fun | .finish => true | _ => false) ops
+  let hasCancelUpToComponents (claim : Bool) (ops : Array ProofForge.Svm.IR.Op) :=
+    opsHaveFifoCancelCall (fun | .begin => true | _ => false) ops &&
+      opsHaveFifoCancelCall
+        (fifoCancelUpToMatches 110 114 115 116 117 118 119 8320 8321 true claim) ops &&
+      opsHaveFifoCancelCall
+        (fifoCancelUpToMatches 4210 4214 4215 4216 4217 4218 4219 8322 8323 false claim) ops &&
+      opsHaveFifoCancelCall (fun | .finish => true | _ => false) ops
   unless hasCancelValidators cancelAllFreeRaw.ops && hasCancelComponents cancelAllFreeRaw.ops &&
       opsHaveAccountQuery (fun
         | .key4Find 8310 tree => tree.links.region.account == 2
@@ -1013,6 +1055,43 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRawReduceHeader 6 cancelAllRaw.ops &&
       opsHaveRawReduceFinish cancelAllRaw.ops do
     throwError "raw CancelAllOrders component/query/withdraw composition is incomplete"
+  unless hasCancelValidators cancelUpToFreeRaw.ops &&
+      hasCancelUpToComponents false cancelUpToFreeRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .key4Find 8310 tree => tree.links.region.account == 2
+        | _ => false) cancelUpToFreeRaw.ops &&
+      opsHaveDataWord 2 112 cancelUpToFreeRaw.ops &&
+      opsHaveDataWord 2 4212 cancelUpToFreeRaw.ops &&
+      opsHaveDataWordSetAt 2 106 1 1 cancelUpToFreeRaw.ops &&
+      opsHaveRawReduceHeader 9 cancelUpToFreeRaw.ops &&
+      opsHaveRawReduceFinish cancelUpToFreeRaw.ops &&
+      !opsHaveInvoke cancelUpToFreeRaw.ops && !opsHaveDataWord 2 1 cancelUpToFreeRaw.ops do
+    throwError s!"raw CancelUpToWithFreeFunds bounded component composition is incomplete: " ++
+      s!"validators={hasCancelValidators cancelUpToFreeRaw.ops}, " ++
+      s!"components={hasCancelUpToComponents false cancelUpToFreeRaw.ops}, " ++
+      s!"begin={opsHaveFifoCancelCall (fun | .begin => true | _ => false) cancelUpToFreeRaw.ops}, " ++
+      s!"bid={opsHaveFifoCancelCall (fifoCancelUpToMatches 110 114 115 116 117 118 119 8320 8321 true false) cancelUpToFreeRaw.ops}, " ++
+      s!"ask={opsHaveFifoCancelCall (fifoCancelUpToMatches 4210 4214 4215 4216 4217 4218 4219 8322 8323 false false) cancelUpToFreeRaw.ops}, " ++
+      s!"close={opsHaveFifoCancelCall (fun | .finish => true | _ => false) cancelUpToFreeRaw.ops}, " ++
+      s!"sizeBid={opsHaveDataWord 2 112 cancelUpToFreeRaw.ops}, " ++
+      s!"sizeAsk={opsHaveDataWord 2 4212 cancelUpToFreeRaw.ops}, " ++
+      s!"seq={opsHaveDataWordSetAt 2 106 1 1 cancelUpToFreeRaw.ops}, " ++
+      s!"header={opsHaveRawReduceHeader 9 cancelUpToFreeRaw.ops}, " ++
+      s!"finish={opsHaveRawReduceFinish cancelUpToFreeRaw.ops}, " ++
+      s!"invoke={opsHaveInvoke cancelUpToFreeRaw.ops}, status={opsHaveDataWord 2 1 cancelUpToFreeRaw.ops}"
+  unless hasCancelValidators cancelUpToRaw.ops &&
+      hasCancelUpToComponents true cancelUpToRaw.ops &&
+      opsHaveFifoCancelQuery (· == .quoteReleased) cancelUpToRaw.ops &&
+      opsHaveFifoCancelQuery (· == .baseReleased) cancelUpToRaw.ops &&
+      opsHaveDataWord 2 1 cancelUpToRaw.ops && opsHaveDataWord 2 14 cancelUpToRaw.ops &&
+      opsHaveDataWord 2 24 cancelUpToRaw.ops &&
+      !opsHaveOneBasedDataWordSetAt 2 8321 18 128 cancelUpToRaw.ops &&
+      !opsHaveOneBasedDataWordSetAt 2 8323 18 128 cancelUpToRaw.ops &&
+      opsHaveUncheckedTransfer 6 4 6 quoteSeeds cancelUpToRaw.ops &&
+      opsHaveUncheckedTransfer 5 3 5 baseSeeds cancelUpToRaw.ops &&
+      opsHaveRawReduceHeader 8 cancelUpToRaw.ops &&
+      opsHaveRawReduceFinish cancelUpToRaw.ops do
+    throwError "raw CancelUpTo bounded component/query/withdraw composition is incomplete"
   let freeTrace := cancelTraceOps cancelAllFreeRaw.ops
   unless traceBefore 1 2 freeTrace && traceBefore 2 3 freeTrace &&
       traceBefore 3 4 freeTrace && traceBefore 4 5 freeTrace &&

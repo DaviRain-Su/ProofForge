@@ -51,12 +51,16 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   static sink/header/count geometry 与 `Array CpiWord` 抽成 `Svm.Component.Call.batchRecorder`。
   buffer 只在 invocation-local SDK 32 KiB bump heap 中；append 在 record/byte bound 前 flush，
   finish 必发（允许 header-only），不返回或持久化 pointer。
-- `fifoCancelBegin` / `fifoCancelSide` / `fifoCancelFinish` 及三个 aggregate query — 不可约
-  source stubs；抽成 `Svm.Component.Call/Query.fifoCancel`。组件自己组合 static one-based
-  FIFO map、owner/size/trader balance fields、checked collateral、key cursor 与 recorder，按
-  fixed capacity 从 root 反复找 strict successor；跨 automatic recorder flush 只保留 scalar
-  event index 与 released-lot totals。完整 tree/free-list validator 必须在 source 中先行并由
-  IR guard 钉住；source 不能直接选择内部 validated-remove backend。
+- `fifoCancelBegin` / `fifoCancelSide` / `fifoCancelUpToSide` / `fifoCancelFinish` 及三个
+  aggregate query — 不可约 source stubs；抽成 `Svm.Component.Call/Query.fifoCancel`。组件自己
+  组合 static one-based FIFO map、owner/size/trader balance fields、checked collateral、key
+  cursor 与 recorder，按 fixed capacity 从 root 反复找 strict successor；跨 automatic
+  recorder flush 只保留 scalar event index 与 released-lot totals。`fifoCancelUpToSide` 另外以
+  capacity/search/cancel 三重 bound 遍历：每个 cursor result 在 owner/price filter 前计入
+  search，只有 selected order 计入 cancel；bid/ask tick 均 inclusive，equal-price FIFO 不变，
+  可静态选择逐单 claim 或保留
+  free funds。完整 tree/free-list validator 必须在 source 中先行并由 IR guard 钉住；source
+  不能直接选择内部 validated-remove backend。
 - `PdaSeed.accData account offset length` — 直接引用 external account data 的编译期固定
   byte slice；`1 ≤ length ≤ 32`，形成 descriptor 前检查 `data_len ≥ offset+length`。seed
   指向本次 invocation 的 serialized account buffer，不复制、不分配，也不能持久化 pointer。
@@ -162,4 +166,4 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 dispatch；`07 || u8 || u64` exact decode、bounded trailing account、program account authentication，
 以及 wrong tag/length、missing signer、wrong/non-executable program fail-closed matrix。
 `Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
-`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 geometry 的完整 bid/ask/trader tree/free-list partition；通用 `AccountStorage` 提供 bounded Key4/FIFO find、one-based field read/write、Sokoban insertion/removal/deposit，以及只保留 scalar key、删除后从 root 重查 strict upper-bound 的 ordered FIFO cursor，持久状态不使用 heap Map/Vec 或账户外 pointer。官方 raw tags 4–7 再组合 `EntryAdapter + Component`：tag 4/5 共享 exact 26-byte reduce wire；tag 6/7 是 exact one-byte no-payload CancelAll wire，在 complete validator 后由 `FifoCancel` 按 bids→asks、各侧 FIFO、owner-filter 顺序原位取消。tag 5/7 保留 free funds且无 Token CPI；tag 4/6 验证 9-account classic Token context，tag 6 只 claim 本次 aggregate release 并按 quote→base 提款。audit header 使用 pre-increment sequence，global u16 event index 跨 32-record flush 不重置；missing trader/empty book 发 exact 93-byte header-only batch。malformed tree/token context 在 sequence/store/CPI 前原子失败。最小 profile 84,944 B；短 header `Custom(1)`。
+`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 geometry 的完整 bid/ask/trader tree/free-list partition；通用 `AccountStorage` 提供 bounded Key4/FIFO find、one-based field read/write、Sokoban insertion/removal/deposit，以及只保留 scalar key、删除后从 root 重查 strict upper-bound 的 ordered FIFO cursor，持久状态不使用 heap Map/Vec 或账户外 pointer。官方 raw tags 4–9 再组合 `EntryAdapter + Component`：tag 4/5 共享 exact 26-byte reduce wire；tag 6/7 是 exact one-byte no-payload CancelAll wire，在 complete validator 后由 `FifoCancel` 按 bids→asks、各侧 FIFO、owner-filter 顺序原位取消；tag 8/9 是 5..21-byte `side + Option<tick/search/cancel>` CancelUpTo wire，search-before-filter、side-inclusive tick、cancel cap 与 equal-price FIFO 都在同一 bounded component 中。tag 5/7/9 保留 free funds且无 Token CPI；tag 4/6 验证 9-account classic Token context，tag 6 只 claim 本次 aggregate release 并按 quote→base 提款；tag 8 逐单 claim 后只提款 selected side aggregate，保留 pre-existing free。audit header 使用 pre-increment sequence，global u16 event index 跨 32-record flush 不重置；missing trader/empty/no-match/zero-limit 发 exact 93-byte header-only batch。malformed tree/Borsh/token context 在 sequence/store/CPI 前原子失败。最小 profile 84,944 B；短 header `Custom(1)`。

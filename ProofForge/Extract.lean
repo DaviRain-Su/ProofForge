@@ -2760,6 +2760,55 @@ private def decodeFifoCancelCall (env : Environment) (e : Expr) :
           collateral := if bid then .quote baseLotsPerBaseUnitWord tickSizeWord else .base
           recorder }
       if config.wellFormed then some (.fifoCancel (.cancelSide config traderIndex)) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelUpToSide ||
+      endsWith e ".fifoCancelUpToSide" then
+    if args.size < 29 then none else do
+      let marketAccount ← val env args[args.size - 29]! >>= natOfVal
+      let rootWord ← val env args[args.size - 28]! >>= natOfVal
+      let linksWord ← val env args[args.size - 27]! >>= natOfVal
+      let parentWord ← val env args[args.size - 26]! >>= natOfVal
+      let priceWord ← val env args[args.size - 25]! >>= natOfVal
+      let sequenceWord ← val env args[args.size - 24]! >>= natOfVal
+      let ownerWord ← val env args[args.size - 23]! >>= natOfVal
+      let sizeWord ← val env args[args.size - 22]! >>= natOfVal
+      let lockedWord ← val env args[args.size - 21]! >>= natOfVal
+      let freeWord ← val env args[args.size - 20]! >>= natOfVal
+      let orderStride ← val env args[args.size - 19]! >>= natOfVal
+      let orderCapacity ← val env args[args.size - 18]! >>= natOfVal
+      let traderStride ← val env args[args.size - 17]! >>= natOfVal
+      let traderCapacity ← val env args[args.size - 16]! >>= natOfVal
+      let bid ← val env args[args.size - 15]! >>= natOfVal
+      let baseLotsPerBaseUnitWord ← val env args[args.size - 14]! >>= natOfVal
+      let tickSizeWord ← val env args[args.size - 13]! >>= natOfVal
+      let recorder ← decodeBatchRecorderConfig env
+        args[args.size - 12]! args[args.size - 11]! args[args.size - 10]!
+        args[args.size - 9]! args[args.size - 8]! args[args.size - 7]! args[args.size - 6]!
+      let traderIndex ← val env args[args.size - 5]!
+      let tickLimit ← val env args[args.size - 4]!
+      let searchLimit ← val env args[args.size - 3]!
+      let cancelLimit ← val env args[args.size - 2]!
+      let claimImmediately ← val env args[args.size - 1]! >>= natOfVal
+      if (bid != 0 && bid != 1) || (claimImmediately != 0 && claimImmediately != 1) then none else
+      let bid := bid == 1
+      let access : Svm.AccountStorage.Access :=
+        { writable := true, currentProgramOwned := true }
+      let field (baseWord strideWords capacity : Nat) : Svm.AccountStorage.Field :=
+        { region :=
+            { account := marketAccount, baseWord, strideWords, capacity
+              indexBase := .one, access } }
+      let config : Svm.FifoCancel.Config :=
+        { map := .fifoOneBased marketAccount rootWord linksWord parentWord priceWord sequenceWord
+            orderStride orderCapacity bid
+          owner := field ownerWord orderStride orderCapacity
+          size := field sizeWord orderStride orderCapacity
+          locked := field lockedWord traderStride traderCapacity
+          free := field freeWord traderStride traderCapacity
+          collateral := if bid then .quote baseLotsPerBaseUnitWord tickSizeWord else .base
+          recorder }
+      if config.wellFormed then
+        some (.fifoCancel (.cancelUpTo config traderIndex tickLimit searchLimit cancelLimit
+          (claimImmediately == 1)))
+      else none
   else none
 
 private def decodeComponentCall (env : Environment) (e : Expr) :
@@ -3172,6 +3221,7 @@ private def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool
       constants.contains ``ProofForge.Svm.Runtime.batchRecorderFinish ||
       constants.contains ``ProofForge.Svm.Runtime.fifoCancelBegin ||
       constants.contains ``ProofForge.Svm.Runtime.fifoCancelSide ||
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelUpToSide ||
       constants.contains ``ProofForge.Svm.Runtime.fifoCancelFinish then true
   else
     match fuel with

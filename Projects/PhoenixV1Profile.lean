@@ -1509,6 +1509,21 @@ def cancelAllAsks512At (marketAccount traderIndex : UInt64) : UInt64 :=
   fifoCancelSide marketAccount 4210 4214 4215 4216 4217 4218 4219 8322 8323
     8 512 18 128 0 104 105 0 15 "log" 1246 93 91 32 traderIndex
 
+/-- Cancel a bounded bid prefix. Search counts every traversed order before owner/price filters;
+cancel counts only selected orders. `claimImmediately` is a compile-time adapter choice. -/
+def cancelUpToBids512At (marketAccount traderIndex tickLimit searchLimit cancelLimit
+    claimImmediately : UInt64) : UInt64 :=
+  fifoCancelUpToSide marketAccount 110 114 115 116 117 118 119 8320 8321
+    8 512 18 128 1 104 105 0 15 "log" 1246 93 91 32
+    traderIndex tickLimit searchLimit cancelLimit claimImmediately
+
+/-- Cancel a bounded ask prefix with the same account-resident cursor contract. -/
+def cancelUpToAsks512At (marketAccount traderIndex tickLimit searchLimit cancelLimit
+    claimImmediately : UInt64) : UInt64 :=
+  fifoCancelUpToSide marketAccount 4210 4214 4215 4216 4217 4218 4219 8322 8323
+    8 512 18 128 0 104 105 0 15 "log" 1246 93 91 32
+    traderIndex tickLimit searchLimit cancelLimit claimImmediately
+
 /-- Close the FIFO accumulator after all aggregate results have been consumed. -/
 def finishCancelAll : UInt64 := fifoCancelFinish
 
@@ -1754,6 +1769,97 @@ def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
     else
       .error .overflow
 
+/--
+Official Phoenix `CancelUpToWithFreeFunds` tag 9 wire:
+`09 || side:u8 || Option<u64> || Option<u32> || Option<u32>`. None uses the side-extreme tick and
+the selected book's current length. Search is counted before owner/price filters, tick comparison is
+inclusive, and only qualifying orders count toward the cancel cap. This four-account path keeps
+released collateral in free funds and has no Token/status gate.
+-/
+@[pf_entry, pf_svm_raw_borsh_options 9 4 0 1 [8, 4, 4]]
+def cancelUpToOrdersWithFreeFunds (_s : State) (side tickPresent : UInt8) (tick : UInt64)
+    (searchPresent : UInt8) (search : UInt32) (cancelPresent : UInt8)
+    (cancel : UInt32) : Except Error (State × UInt64) := do
+  if side ≠ 0 && side ≠ 1 then
+    .error .overflow
+  else if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
+      checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
+    .error .overflow
+  else if cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let bid := side = 0
+    let bookSize := if bid then accDataWord 2 112 else accDataWord 2 4212
+    let tickLimit := if tickPresent = 0 then if bid then 0 else u64Max else tick
+    let searchLimit := if searchPresent = 0 then bookSize else search.toUInt64
+    let cancelLimit := if cancelPresent = 0 then bookSize else cancel.toUInt64
+    let traderIndex := cancelAllTraderIndex512At 2 3
+    let marketSequence := accDataWord 2 106
+    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let _ := beginReduceBatchAt 9 2 2 marketSequence
+    let _ := beginCancelAll
+    if bid then
+      let _ := cancelUpToBids512At 2 traderIndex tickLimit searchLimit cancelLimit 0
+      let _ := finishCancelAll
+      let _ := finishReduceBatch
+      .ok (_s, 0)
+    else
+      let _ := cancelUpToAsks512At 2 traderIndex tickLimit searchLimit cancelLimit 0
+      let _ := finishCancelAll
+      let _ := finishReduceBatch
+      .ok (_s, 0)
+
+/--
+Official Phoenix `CancelUpTo` tag 8 uses the same bounded selection, but claims each selected
+order's released collateral inside the component and withdraws the aggregate through the shared
+nine-account classic Token context. Pre-existing free balances are therefore preserved.
+-/
+@[pf_entry, pf_svm_raw_borsh_options 8 9 0 1 [8, 4, 4]]
+def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
+    (searchPresent : UInt8) (search : UInt32) (cancelPresent : UInt8)
+    (cancel : UInt32) : Except Error (State × UInt64) := do
+  if side ≠ 0 && side ≠ 1 then
+    .error .overflow
+  else if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let bid := side = 0
+    let bookSize := if bid then accDataWord 2 112 else accDataWord 2 4212
+    let tickLimit := if tickPresent = 0 then if bid then 0 else u64Max else tick
+    let searchLimit := if searchPresent = 0 then bookSize else search.toUInt64
+    let cancelLimit := if cancelPresent = 0 then bookSize else cancel.toUInt64
+    let traderIndex := cancelAllTraderIndex512At 2 3
+    let marketSequence := accDataWord 2 106
+    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let _ := beginReduceBatchAt 8 2 2 marketSequence
+    let _ := beginCancelAll
+    if bid then
+      let _ := cancelUpToBids512At 2 traderIndex tickLimit searchLimit cancelLimit 1
+      let released := fifoCancelQuoteReleased
+      let lotSize := accDataWord 2 24
+      let divisor := if released = 0 then 1 else released
+      if lotSize ≤ u64Max / divisor then
+        let atoms := released * lotSize
+        let _ := withdrawReleasedAt 0 atoms
+        let _ := finishCancelAll
+        let _ := finishReduceBatch
+        .ok (_s, 0)
+      else
+        .error .overflow
+    else
+      let _ := cancelUpToAsks512At 2 traderIndex tickLimit searchLimit cancelLimit 1
+      let released := fifoCancelBaseReleased
+      let lotSize := accDataWord 2 14
+      let divisor := if released = 0 then 1 else released
+      if lotSize ≤ u64Max / divisor then
+        let atoms := released * lotSize
+        let _ := withdrawReleasedAt 1 atoms
+        let _ := finishCancelAll
+        let _ := finishReduceBatch
+        .ok (_s, 0)
+      else
+        .error .overflow
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=
@@ -1770,7 +1876,8 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   allocatorHeadersValid reduceAskFreeFunds512At reduceBidFreeFunds512At reduceFreeFunds512At
   quoteLotsReleased512At claimReleasedFunds512At beginReduceBatchAt recordReduceAt
   finishReduceBatch withdrawReleasedAt cancelAllStorageValid512At cancelAllTraderIndex512At
-  beginCancelAll cancelAllBids512At cancelAllAsks512At finishCancelAll
+  beginCancelAll cancelAllBids512At cancelAllAsks512At cancelUpToBids512At
+  cancelUpToAsks512At finishCancelAll
   cancelWithdrawContextValid
 
 end Projects.PhoenixV1Profile

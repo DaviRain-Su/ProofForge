@@ -136,8 +136,15 @@ private def emitReleased (context : Context) (config : FifoCancel.Config)
   stxdw [r10 - {FifoCancel.releasedStack}], r2
 "
 
+private structure UpTo where
+  tickLimit : Ops.Val
+  searchLimit : Ops.Val
+  cancelLimit : Ops.Val
+  claimImmediately : Bool
+
 private def emitCancelSide (context : Context) (backend : AccountStorage.Emit.MutationBackend)
-    (label : String) (config : FifoCancel.Config) (traderIndex : Ops.Val) :
+    (label : String) (config : FifoCancel.Config) (traderIndex : Ops.Val)
+    (upTo? : Option UpTo := none) :
     Except String String := do
   let (.fifo rootWord tree) := config.map
     | throw "extract/ir: FIFO cancel requires a FIFO map"
@@ -166,6 +173,8 @@ private def emitCancelSide (context : Context) (backend : AccountStorage.Emit.Mu
     markerTraderIndex markerLocked
   let writeFree ← emitWriteField context backend s!"{label}_free_write" config.free
     markerTraderIndex markerFree
+  let writeClaimedFree ← emitWriteField context backend s!"{label}_claimed_free_write" config.free
+    markerTraderIndex markerFree
   let append ← BatchRecorder.Emit.emitCall context.batchRecorder s!"{label}_record"
     (.append config.recorder (.lit 1)
       #[.u8le (.lit 4), .u16le (marker markerEventIndex),
@@ -178,7 +187,85 @@ private def emitCancelSide (context : Context) (backend : AccountStorage.Emit.Mu
   let next := s!"fifo_cancel_next_{label}"
   let done := s!"fifo_cancel_done_{label}"
   let owned := s!"fifo_cancel_owned_{label}"
-  return emitRequireActive label ++ loadTrader ++ s!"\
+  let priceMatched := s!"fifo_cancel_price_matched_{label}"
+  let loadLimits ←
+    match upTo? with
+    | none => pure ""
+    | some upTo => do
+        let tick ← context.loadValue upTo.tickLimit FifoCancel.tickLimitStack 30
+          s!"{label}_tick_limit"
+        let search ← context.loadValue upTo.searchLimit FifoCancel.searchLimitStack 31
+          s!"{label}_search_limit"
+        let cancel ← context.loadValue upTo.cancelLimit FifoCancel.cancelLimitStack 32
+          s!"{label}_cancel_limit"
+        pure (tick ++ search ++ cancel)
+  let limitInit :=
+    match upTo? with
+    | none => ""
+    | some _ => s!"\
+  stxdw [r10 - {FifoCancel.scannedStack}], r1
+  stxdw [r10 - {FifoCancel.canceledStack}], r1
+"
+  let limitTop :=
+    match upTo? with
+    | none => ""
+    | some _ => s!"\
+  ldxdw r1, [r10 - {FifoCancel.scannedStack}]
+  ldxdw r2, [r10 - {FifoCancel.searchLimitStack}]
+  jge r1, r2, {done}
+  ldxdw r1, [r10 - {FifoCancel.canceledStack}]
+  ldxdw r2, [r10 - {FifoCancel.cancelLimitStack}]
+  jge r1, r2, {done}
+"
+  let scanned :=
+    match upTo? with
+    | none => ""
+    | some _ => s!"\
+  ldxdw r1, [r10 - {FifoCancel.scannedStack}]
+  add64 r1, 1
+  stxdw [r10 - {FifoCancel.scannedStack}], r1
+"
+  let priceFilter :=
+    match upTo? with
+    | none => ""
+    | some _ =>
+        if tree.bid then s!"\
+  ldxdw r1, [r10 - {FifoCancel.priceStack}]
+  ldxdw r2, [r10 - {FifoCancel.tickLimitStack}]
+  jge r1, r2, {priceMatched}
+  ja {next}
+{priceMatched}:
+"
+        else s!"\
+  ldxdw r1, [r10 - {FifoCancel.priceStack}]
+  ldxdw r2, [r10 - {FifoCancel.tickLimitStack}]
+  jle r1, r2, {priceMatched}
+  ja {next}
+{priceMatched}:
+"
+  let beforeMutation := if upTo?.isSome then append else ""
+  let afterMutation := if upTo?.isSome then "" else append
+  let claimReleased :=
+    match upTo? with
+    | some upTo =>
+        if upTo.claimImmediately then s!"\
+  ; claim exactly this order's released collateral, preserving pre-existing free funds
+  ldxdw r1, [r10 - {FifoCancel.releasedStack}]
+  ldxdw r2, [r10 - {FifoCancel.freeStack}]
+  sub64 r2, r1
+  stxdw [r10 - {FifoCancel.freeStack}], r2
+{writeClaimedFree}"
+        else ""
+    | none => ""
+  let canceled :=
+    match upTo? with
+    | none => ""
+    | some _ => s!"\
+  ldxdw r1, [r10 - {FifoCancel.canceledStack}]
+  add64 r1, 1
+  stxdw [r10 - {FifoCancel.canceledStack}], r1
+"
+  return emitRequireActive label ++ loadTrader ++ loadLimits ++ s!"\
   ldxdw r1, [r10 - {FifoCancel.traderIndexStack}]
   jeq r1, 0, {done}
   lddw r1, 0
@@ -186,10 +273,11 @@ private def emitCancelSide (context : Context) (backend : AccountStorage.Emit.Mu
   stxdw [r10 - {FifoCancel.cursorPriceStack}], r1
   stxdw [r10 - {FifoCancel.cursorSequenceStack}], r1
   stxdw [r10 - {FifoCancel.loopStack}], r1
+{limitInit}\
 {loop}:
   ldxdw r1, [r10 - {FifoCancel.loopStack}]
   jge r1, {config.map.capacity}, {done}
-{cursor}\
+{limitTop}{cursor}\
   ldxdw r1, [r10 - {FifoCancel.orderIndexStack}]
   jeq r1, 0, {done}
 {readPrice}{readSequence}{readOwner}{readSize}\
@@ -199,6 +287,7 @@ private def emitCancelSide (context : Context) (backend : AccountStorage.Emit.Mu
   stxdw [r10 - {FifoCancel.cursorPriceStack}], r1
   ldxdw r1, [r10 - {FifoCancel.sequenceStack}]
   stxdw [r10 - {FifoCancel.cursorSequenceStack}], r1
+{scanned}\
   ldxdw r1, [r10 - {FifoCancel.sizeStack}]
   jeq r1, 0, {next}
   ldxdw r1, [r10 - {FifoCancel.ownerStack}]
@@ -206,7 +295,7 @@ private def emitCancelSide (context : Context) (backend : AccountStorage.Emit.Mu
   jeq r1, r2, {owned}
   ja {next}
 {owned}:
-{released}{readLocked}{readFree}\
+{priceFilter}{beforeMutation}{released}{readLocked}{readFree}\
   ldxdw r1, [r10 - {FifoCancel.releasedStack}]
   ldxdw r2, [r10 - {FifoCancel.lockedStack}]
   jgt r1, r2, fifo_cancel_failure_{label}
@@ -224,11 +313,12 @@ private def emitCancelSide (context : Context) (backend : AccountStorage.Emit.Mu
   jgt r2, r3, fifo_cancel_failure_{label}
   add64 r2, r1
   stxdw [r10 - {accumulatorStack}], r2
-{remove}{writeLocked}{writeFree}{append}\
+{remove}{writeLocked}{writeFree}{claimReleased}{afterMutation}\
   ldxdw r1, [r10 - {FifoCancel.eventIndexStack}]
   jge r1, 65535, fifo_cancel_failure_{label}
   add64 r1, 1
   stxdw [r10 - {FifoCancel.eventIndexStack}], r1
+{canceled}\
 {next}:
   ldxdw r1, [r10 - {FifoCancel.loopStack}]
   add64 r1, 1
@@ -248,6 +338,9 @@ def emitCall (context : Context) (backend : AccountStorage.Emit.MutationBackend)
     (label : String) : FifoCancel.Call Ops.Val → Except String String
   | .begin => .ok emitBegin
   | .cancelSide config traderIndex => emitCancelSide context backend label config traderIndex
+  | .cancelUpTo config traderIndex tickLimit searchLimit cancelLimit claimImmediately =>
+      emitCancelSide context backend label config traderIndex
+        (some { tickLimit, searchLimit, cancelLimit, claimImmediately })
   | .finish => .ok (emitFinish label)
 
 end ProofForge.Svm.FifoCancel.Emit
