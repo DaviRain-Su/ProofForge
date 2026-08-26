@@ -73,6 +73,31 @@ def approve (s : State) (spender : Addr20) (amt : UInt256) : Except Error (State
   else
     .error .overflow
 
+/-- caller → spender 现额度加上 `added`，并 LOG3 Approval。溢出 revert。 -/
+@[pf_entry]
+def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
+    Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let next := evmAdd256 (evmMapGetPair256 allowBase evmCaller20 spender) added
+    .ok ({ dummy := evmMapSetPair256 allowBase evmCaller20 spender next,
+           supply := s.supply },
+      evmLogApproval256 evmCaller20 spender next)
+  else
+    .error .overflow
+
+/-- caller → spender 现额度减去 `subtracted`。不够 → `Insufficient(have,want)`。 -/
+@[pf_entry]
+def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
+    Except Error (State × UInt64) :=
+  if evmGe256 (evmMapGetPair256 allowBase evmCaller20 spender) subtracted then
+    let next := evmSub256 (evmMapGetPair256 allowBase evmCaller20 spender) subtracted
+    .ok ({ dummy := evmMapSetPair256 allowBase evmCaller20 spender next,
+           supply := s.supply },
+      evmLogApproval256 evmCaller20 spender next)
+  else
+    .ok ({ dummy := s.dummy, supply := s.supply },
+      evmRevertInsufficient (evmMapGetPair256 allowBase evmCaller20 spender) subtracted)
+
 /-- 从 caller 扣余额并减 totalSupply。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
 def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=

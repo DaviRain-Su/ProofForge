@@ -141,6 +141,13 @@ private def getPairCaller256 (limb : Nat) (base owner : Nat) : Ops.Val :=
     callerW 0, callerW 1, callerW 2
   ]
 
+private def getPairCallerSpender256 (limb : Nat) (base spender : Nat) : Ops.Val :=
+  .ext (.mapGetPair256 limb) #[
+    .lit (UInt64.ofNat base),
+    callerW 0, callerW 1, callerW 2,
+    addrField spender "w0", addrField spender "w1", addrField spender "w2"
+  ]
+
 private def arithGet (op limb : Nat) (lhs : Nat → Ops.Val) (rhs : Nat) : Ops.Val :=
   .ext (.arith256 op limb) #[
     lhs 0, lhs 1, lhs 2, lhs 3,
@@ -166,6 +173,12 @@ private def setPairCaller256 (base owner : Nat) (val : Nat → Ops.Val) : IR.Op 
   .mapSetPair256 (.lit (UInt64.ofNat base))
     (addrField owner "w0") (addrField owner "w1") (addrField owner "w2")
     (callerW 0) (callerW 1) (callerW 2)
+    (val 0) (val 1) (val 2) (val 3)
+
+private def setPairCallerSpender256 (base spender : Nat) (val : Nat → Ops.Val) : IR.Op :=
+  .mapSetPair256 (.lit (UInt64.ofNat base))
+    (callerW 0) (callerW 1) (callerW 2)
+    (addrField spender "w0") (addrField spender "w1") (addrField spender "w2")
     (val 0) (val 1) (val 2) (val 3)
 
 /-- Live extract of `Examples.Wide`; Legacy IR has no `arith256` leaf. -/
@@ -347,6 +360,7 @@ def extractedToken : IR.Program :=
   let ownerBal (limb : Nat) := getAddr256 limb 0 0
   let destFrom (limb : Nat) := getAddr256 limb 0 1
   let pairAllow (limb : Nat) := getPairCaller256 limb 1 0
+  let pairSelf (limb : Nat) := getPairCallerSpender256 limb 1 0
   {
     name := "Token"
     slots := #[
@@ -409,6 +423,28 @@ def extractedToken : IR.Program :=
           #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
               (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
             .returnU64 (callerBal 0)]
+      ],
+      mutEntry "Token" "decreaseAllowance" 2 #[20, 32] #[
+        .ite .eq (ge256 pairSelf 1) (.lit 1)
+          #[setPairCallerSpender256 1 0 (fun limb => arithGet 1 limb pairSelf 1),
+            .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (arithGet 1 0 pairSelf 1) (arithGet 1 1 pairSelf 1)
+              (arithGet 1 2 pairSelf 1) (arithGet 1 3 pairSelf 1),
+            .returnU64 (arithGet 1 0 pairSelf 1)]
+          #[.evmRevertInsufficient (pairSelf 0) (pairSelf 1) (pairSelf 2) (pairSelf 3)
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            .returnU64 (pairSelf 0)]
+      ],
+      mutEntry "Token" "increaseAllowance" 2 #[20, 32] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[setPairCallerSpender256 1 0 (fun limb => arithGet 0 limb pairSelf 1),
+            .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (arithGet 0 0 pairSelf 1) (arithGet 0 1 pairSelf 1)
+              (arithGet 0 2 pairSelf 1) (arithGet 0 3 pairSelf 1),
+            .returnU64 (arithGet 0 0 pairSelf 1)]
+          #[.errorOverflow]
       ],
       mutEntry "Token" "logApprove" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)

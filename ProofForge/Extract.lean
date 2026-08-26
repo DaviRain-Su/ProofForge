@@ -3462,7 +3462,7 @@ private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : Strin
         some e
       else
         match e with
-        | .letE _ _ value body _ => go fuel' value <|> go fuel' body
+        | .letE _ _ value body _ => go fuel' value <|> go fuel' (body.instantiate1 value)
         | .lam _ _ body _ => go fuel' body
         | .app f a => go fuel' f <|> go fuel' a
         | _ => none
@@ -4261,7 +4261,8 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
         | none => acc
       else
         match e with
-        | .letE _ _ value body _ => walk fuel' body (walk fuel' value acc)
+        | .letE _ _ value body _ =>
+          walk fuel' (body.instantiate1 value) (walk fuel' value acc)
         | .lam _ _ body _ => walk fuel' body acc
         | .app f a => walk fuel' a (walk fuel' f acc)
         | _ => acc

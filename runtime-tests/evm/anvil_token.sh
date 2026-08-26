@@ -123,6 +123,30 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   20 "allowance after approve"
 
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'increaseAllowance(address,uint256)' "$dest" 5 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  25 "allowance after increase"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'decreaseAllowance(address,uint256)' "$dest" 10 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  15 "allowance after decrease"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'decreaseAllowance(address,uint256)' "$dest" 100 >/dev/null 2>&1; then
+  echo "FAIL: over-decrease unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_insufficient "$addr" "$sender" \
+  "$("$cast" calldata 'decreaseAllowance(address,uint256)' "$dest" 100)" \
+  15 100 "over-decrease allowance"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  15 "over-decrease holds remaining"
+
 "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
   "$addr" 'transferFrom(address,address,uint256)' "$sender" "$dest" 5 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
@@ -133,7 +157,7 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   35 "dest after transferFrom"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
-  15 "allowance after transferFrom"
+  10 "allowance after transferFrom"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
     "$addr" 'transferFrom(address,address,uint256)' "$sender" "$dest" 100 >/dev/null 2>&1; then
@@ -142,13 +166,13 @@ if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
 fi
 solana_lean_require_insufficient "$addr" "$dest" \
   "$("$cast" calldata 'transferFrom(address,address,uint256)' "$sender" "$dest" 100)" \
-  15 100 "over-allowance transferFrom"
+  10 100 "over-allowance transferFrom"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
   65 "over-allowance holds owner"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
-  15 "over-allowance holds remaining"
+  10 "over-allowance holds remaining"
 
 deadline=9999999999
 typed="$(printf '%s' "{
@@ -254,4 +278,4 @@ fi
 got_dom2="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
 solana_lean_require_equal "${got_dom2,,}" "${got_dom,,}" "DOMAIN_SEPARATOR holds after permit"
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn; engineering only)"
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/incdec; engineering only)"

@@ -27,6 +27,16 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .ok (_, ret) => ret == 9
   | .error _ => false
 
+#guard
+  match increaseAllowance (init 0) sample nine with
+  | .ok _ => true
+  | .error _ => false
+
+#guard
+  match decreaseAllowance (init 0) sample nine with
+  | .ok _ => true
+  | .error _ => false
+
 #guard nonceOf (init 0) sample == zero256
 #guard DOMAIN_SEPARATOR (init 0) == ⟨0, 0, 0, 0⟩
 
@@ -76,6 +86,8 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "transferFrom")).isSome &&
     (p.entries.find? (·.ixName == "approve")).isSome &&
     (p.entries.find? (·.ixName == "burn")).isSome &&
+    (p.entries.find? (·.ixName == "increaseAllowance")).isSome &&
+    (p.entries.find? (·.ixName == "decreaseAllowance")).isSome &&
     (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.view) == some true &&
