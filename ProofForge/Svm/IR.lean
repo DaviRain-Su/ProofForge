@@ -379,17 +379,36 @@ private def lowerVectors (src : Core.IR.Program Ops.ValKind Ops.OpExt)
       leaves
     }
 
+private partial def scalarizeRawOp : Op → Op
+  | .ite cmp lhs rhs thn els =>
+      .ite cmp lhs rhs (thn.map scalarizeRawOp) (els.map scalarizeRawOp)
+  | .forBody count body => .forBody count (body.map scalarizeRawOp)
+  | .okState value => .returnU64 value
+  | op => op
+
 private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String Method := do
+  let entry ← EntryAdapter.decode method.annotations method.paramCount method.paramWidths
+  let ops ← ofSourceOps method.ops
+  let (kind, ops) ←
+    match entry with
+    | .generated => pure (method.kind, ops)
+    | .raw _ =>
+        unless method.kind == .get || method.kind == .increment do
+          throw s!"extract/unsupported: svm raw entry {method.ixName} must return a scalar result"
+        -- `Except Error (State × UInt64)` is the source-level spelling for an effectful scalar
+        -- protocol handler. Its success terminator already carries only the scalar return value;
+        -- external account effects stay in place and no managed-State writeback is introduced.
+        pure (.get, ops.map scalarizeRawOp)
   return {
-    kind := method.kind
+    kind
     name := method.name
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
     retCount := method.retCount
-    entry := ← EntryAdapter.decode method.annotations method.paramCount method.paramWidths
-    ops := ← ofSourceOps method.ops
+    entry
+    ops
     evaluation := method.evaluation
   }
 

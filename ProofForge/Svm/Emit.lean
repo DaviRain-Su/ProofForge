@@ -13,9 +13,14 @@ private def sysvarProgramIdScratch : Nat := 3104
 It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
 PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
 private def pdaSeedsScratch : Nat := 4096
-/-- Loop control must not overlap expression temporaries (8..), scalar locals (320..), or
-walked-account headers (512..). -/
+/-- Loop control must not overlap expression temporaries, scalar locals, or walked-account
+headers. Account-storage mutation scratch owns the remainder through offset 408. -/
 private def loopCounterScratch : Nat := 304
+/-- Inline account-storage routines own fixed frame offsets through this boundary. -/
+private def accountStorageScratchEnd : Nat := 408
+/-- CPI material grows upward from `r10-2048` and may use at most this many bytes. Keeping it in
+the 1024..2048 stack-offset bank makes it disjoint from account headers and scalar locals. -/
+private def cpiScratchBytes : Nat := 1024
 
 private def handlerLabel (m : IR.Method) : String :=
   if m.ixName != "" then m.ixName else IR.ixNameOfLean (IR.lastName m.name)
@@ -91,19 +96,20 @@ walk_al_{tag}:
   mov64 r8, r5
 "
 
-/-- Account headers live above expression temporaries and scalar locals. The instruction-data
-length pointer follows the final account header. -/
+/-- Account headers live above account-storage scratch. The instruction-data pointer follows the
+final account header. -/
 private def headerStack (i : Nat) : Nat :=
   512 + 8 * i
 
-/-- Keep the first 24 scalar locals in the legacy compact window. Additional locals live above
-the walked-account headers (at most 64) and below CPI scratch, so they remain live across invokes
-without overlapping expression temporaries or account traversal state. -/
+/-- Scalar locals start after both the static account-header prefix and account-storage scratch.
+The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PDA/sysvar/storage
+scratch owns 2048..4096. This single frame contract prevents composed target effects from
+clobbering source locals without giving individual intrinsics ad-hoc spill rules. -/
 private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
-  let offset :=
-    if i < 24 then 320 + i * 8
-    else max 1024 (headerStack (IR.cpiAccountCount p) + 8) + (i - 24) * 8
-  if offset < 2048 then some offset else none
+  let base := max (accountStorageScratchEnd + 8)
+    (headerStack (IR.cpiAccountCount p) + 8)
+  let offset := base + i * 8
+  if offset < 1024 then some offset else none
 
 private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
   Id.run do
@@ -1280,7 +1286,8 @@ private def emitCpiDataLenChecks (label : String) (metas : Array Ops.CpiMeta) : 
 "
 
 private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
-    (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) : Except String (String × String) :=
+    (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) :
+    Except String (String × String × Nat) :=
   match bump with
   | some b => do
     if seeds.isEmpty then
@@ -1344,10 +1351,10 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
 "
     let regs :=
       s!"  mov64 r4, r9\n  add64 r4, {groupOff}\n  lddw r5, 1\n"
-    return (txt, regs)
+    return (txt, regs, groupOff + 16)
   | none =>
     if seeds.isEmpty then
-      return ("", "  lddw r4, 0\n  lddw r5, 0\n")
+      return ("", "  lddw r4, 0\n  lddw r5, 0\n", 0)
     else
       throw "extract/unsupported: invoke signer seeds require a bump"
 
@@ -1363,7 +1370,12 @@ private def emitInvoke (p : IR.Program) (label : String)
   let (dataTxt, dataLen) ← emitCpiData p label dataOff data
   let infoOff := dataOff + ((dataLen + 7) / 8) * 8
   let seedOff := infoOff + 56 * n
-  let (seedTxt, seedRegs) ← emitSignerSeeds p label seedOff seeds bump
+  let (seedTxt, seedRegs, seedEnd) ← emitSignerSeeds p label seedOff seeds bump
+  -- `emitCpiData` clears a full 64-byte data window even for shorter payloads. Account infos and
+  -- signer descriptors may extend farther; all three must remain in the dedicated CPI bank.
+  let frameEnd := max (dataOff + 64) (max (infoOff + 56 * n) seedEnd)
+  if frameEnd > cpiScratchBytes then
+    throw s!"extract/unsupported: invoke scratch requires {frameEnd} bytes, maximum is {cpiScratchBytes}"
   let mut metasTxt := ""
   for i in [0:metas.size] do
     metasTxt := metasTxt ++ emitOneMeta i metas[i]!

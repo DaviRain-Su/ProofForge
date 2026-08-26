@@ -4710,6 +4710,10 @@ private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
     | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
     | .checkedDivU64 .. | .checkedModU64 .. =>
         lowered := lowered.push op
+    | .ext _ =>
+        -- Target effects can precede a scalar success just like checked arithmetic. Preserve
+        -- them in order; their own backend contracts fail closed before the join continuation.
+        lowered := lowered.push op
     | _ => return none
   return some (lowered, hadSuccess, false)
 

@@ -31,6 +31,24 @@ elab "#pf_guard_entry_adapter" : command => do
       unless reason.contains "external account storage, not managed State" do
         throwError s!"wrong managed-state rejection: {reason}"
   | .ok _ => throwError "raw entry was allowed to reinterpret its program account as State"
+  let effectful := { source with methods := source.methods.map fun method =>
+    if method.ixName == "packed" then
+      { method with kind := .increment, ops := #[
+          .ite .eq (.arg 0) (.lit 0)
+            #[.okState (.arg 1)] #[.errorNamed "rejected"]
+        ] }
+    else method }
+  let effectfulProgram ←
+    match IR.fromExtracted effectful with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some effectfulPacked := effectfulProgram.methods.find? (·.ixName == "packed")
+    | throwError "missing effectful packed method"
+  unless effectfulPacked.kind == .get && effectfulPacked.ops == #[
+      .ite .eq (.arg 0) (.lit 0)
+        #[.returnU64 (.arg 1)] #[.errorNamed "rejected"]
+    ] do
+    throwError "effectful raw scalar result was not normalized away from managed State"
   let some packed := program.methods.find? (·.ixName == "packed")
     | throwError "missing packed SVM method"
   match packed.entry with

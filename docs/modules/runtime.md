@@ -58,7 +58,10 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - `accLamports1` / `accOwner1` / `accDataLen1` / `isSigner1` / `isWritable1` / `isExecutable1` — 账户 1 只读 header。读到这些叶子就 walk，不强制 acc0 signer。
 - `findPda seed` — 当前 program id + 一条 ASCII 种子；链上 `sol_try_find_program_address`，返回 bump。
 - `findPdaSeeds seeds` — 当前 program id + 编译期定形的异构 seed 列表；返回 canonical bump。
-- `checkPdaSeeds account seeds` — 推导 canonical PDA 并比较目标账户完整 32-byte key；相等 0，否则 1。
+- `checkPdaSeeds account seeds` — 推导 canonical PDA 并比较目标账户完整 32-byte key；相等
+  0，否则 1。`account` 与 CPI meta / `PdaSeed.accKey` 一样按 external-account region 编号；
+  raw adapter 声明的 physical program prefix 不计入该编号，因此 tag 5 的 external `0` 是
+  physical log account `1`。
 - `sha256Lit seed` — 编译期 ASCII 字面量；链上 `sol_sha256`，返回 digest 第一个小端 u64。完整 32B / 多切片 / blake3 fail closed。
 - `keccak256Lit seed` — 同形；链上 `sol_keccak256`（Ethereum Keccak，不是 FIPS SHA3-256）。blake3 / poseidon 仍 FC。
 - `accKeyWord acc word` / `accOwnerWord acc word` — 账户 `acc < IR.maxTxAccountLocks` 的 32B key / owner 第 `word`∈{0..=3} 个小端 u64。抽出时必须是常量。`acc≥1` 走 walk，不强制入口签名。不是 `signerKey0`。
@@ -133,4 +136,4 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 dispatch；`07 || u8 || u64` exact decode、bounded trailing account、program account authentication，
 以及 wrong tag/length、missing signer、wrong/non-executable program fail-closed matrix。
 `Projects/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
-`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 base/stride/capacity 的 bid root/child、32-edge parent path 和完整 bid/ask/trader tree/free-list partition；order tree 使用固定 4096-bit bitmap，trader tree 使用固定 8321-bit bitmap + 64-entry stack 并按原始 32-byte Pubkey 排序；bounded write surface 在 owner/writable/capacity/length 门后原位写 topology，五个 registration entry 再按 Sokoban exact 144-byte node layout 原子发布前五个 distinct trader，第三次覆盖 LL/LR/RR/RL rotation 和两个 no-fix 分支，第四次覆盖任意 canonical 三节点地址布局的 red-uncle recolor，第五次覆盖 black-parent 无修复和 black-uncle LL/LR/RL/RR rotation，失败不留下 detached node 或部分更新；最小 profile 84,944 B；短 header `Custom(1)`。
+`Projects/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 geometry 的完整 bid/ask/trader tree/free-list partition；通用 `AccountStorage` 提供 bounded Key4/FIFO find、one-based field read/write、Sokoban insertion/removal/deposit，持久状态不使用 heap Map 或账户外 pointer。官方 raw tag 5 再组合 `EntryAdapter`：exact 26-byte wire、current program / `"log"` PDA / writable market / readonly trader signer 合同，ask/bid collateral reduction、missing-order sequence advance 和 exact 128-byte authenticated Reduce record；malformed wire/account/owner 原子失败。最小 profile 84,944 B；短 header `Custom(1)`。

@@ -140,37 +140,21 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 50 SVM build、Mollusk 218/218 与 Anvil 12/12。跨四档逐样本只作
+  矩阵已有；当前产物已通过全 51 SVM build、Mollusk 242/242 与 Anvil 12/12。跨四档逐样本只作
   host reference↔source fold，不宣称完整 chain refinement。
-- **部分支持（P5 profile/body/root gate）**：独立 verifier 已按 canonical program
-  owner、576-byte header/discriminant、12 个官方 capacity tuple 和 exact account length
-  选择预编译 profile；最小 `(512,512,128)` 账户为 84,944 bytes。固定 word 继续读取
-  sequence、三棵账户内 Sokoban allocator size 及 root/padding/bump/free-list header envelope，
-  并按 profile capacity fail closed。通用 bounded indexed word 只在编译期固定的
-  base/stride/capacity 内 zero-copy 读取 bid root 及两个直接 child，验证 parent reciprocity、
-  color、bid side tag 与局部 price/sequence ordering。whole-tree validators 原位验证完整
-  bid/ask/trader RB invariants、各自 strict ordering、reachable live count 与 exact free-list
-  partition；order tree 用固定 4096-bit bitmap，trader tree 用固定 8321-bit bitmap +
-  64-entry stack，并按 Rust `[u8;32]` byte order 比较 Pubkey。最大 trader profile 的 8191
-  live + 130 free slots 消耗 1,344,959 CU；不创建 Rust heap object、SVM Map 或节点副本。
-  持久化 surface 以编译期固定的 account/base/stride/capacity 原位写最小 profile。首个
-  `registerFirstTrader128` 把 canonical fresh trader allocator 原子变成单个黑根：完整覆盖
-  144-byte slot、发布 root/size/bump/free；`registerSecondTrader128` 再按 raw 32-byte Pubkey
-  ordering 把完整 red slot 2 挂到 root 左或右侧；`registerThirdTrader128` bump-alloc address 3，
-  完整覆盖新 slot，并精确执行 LL/LR/RR/RL rotation/recolor 与两个 no-fix 分支；
-  `registerFourthTrader128` 再从任意 canonical 三节点地址布局 bump-alloc address 4，挂到
-  selected red parent 并把两个 existing leaves recolor black；`registerFifthTrader128`
-  bump-alloc address 5，覆盖 black-parent 无修复路径及 black-uncle LL/LR/RL/RR local
-  rotation/recolor，保持最上层 black root 地址不变。五个边界都让 complete
-  validator 返回 1，不会成功留下 detached node；fixed-memory validator 保存/恢复 walked
-  ABI 的 instruction-data base，后续参数读取不受 traversal scratch 影响。byte swap 是通用一元 SVM
-  value intrinsic，直接发射 sBPF `be64`，不分配 heap；抽取器遇到无法解码的 external-account
-  write 现在直接拒绝而不是静默丢弃。当前 verifier digest `9140326aef66cbdc`，assembly
-  4,378,054 B、ELF 1,399,096 B、IDL 5,061 B；Surfpool 1.5.0 用 1,383 个 Loader write
-  transactions 完成本地部署，并核对 exact 1,399,141-byte ProgramData；不作公网声明。
-- **未支持（P5 remaining body/公网）**：公网部署、第六个/一般 key 插入、free-list reuse、
-  一般 insertion/delete fixup、runtime remaining accounts、Token-2022 extension 语义及完整
-  Phoenix-v1 账户兼容。
+- **部分支持（P5 fixed account profile + official tag 5）**：独立 profile 按 canonical
+  owner、576-byte header、12 个 capacity tuple 与 exact length 选择静态 geometry；完整
+  bid/ask/trader validator、Key4/FIFO find、one-based field access、allocator 与 RB mutation
+  都由 `AccountStorage` 在 account bytes 上有界执行。最小 `(512,512,128)` profile 已能组合
+  official tag 5 `ReduceOrderWithFreeFunds`：26-byte packed wire、current program / canonical
+  `"log"` PDA / writable market / readonly signer 四账户合同，ask/bid partial/full collateral
+  unlock、missing-order sequence advance 与 exact 128-byte authenticated Reduce record。
+  `EntryAdapter` 负责协议入口，storage 层负责持久容器，Phoenix source 只做组合；没有新增
+  Phoenix-specific 顶层 Ops/IR/主 Emit case，也不创建 heap Map、node copy 或 persistent
+  pointer。
+- **未支持（P5 remaining instructions/公网）**：official tag 4 Token withdrawal、matching/
+  placement wire、runtime remaining accounts、Token-2022 extension 语义、全部 Phoenix-v1
+  指令兼容与公网部署。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/
 全仓回归 → P4 通用 CFG/产物资格；P5 动态模型另立 profile。任何 helper/state-loop
@@ -186,11 +170,6 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 | `_padding: [u64; 32]` | 不进账户 |
 | `Ladder` / `Vec` | 不定长 |
 
-独立 `PhoenixV1Profile` 验证官方账户头、预编译容量、固定 scalar/allocator metadata、
-有界 bid-root neighborhood 和 selected parent path；完整 bid/ask/trader validators 再用
-fixed bitmap/stack 证明三棵树的 RB/order invariants 与 live/free partition。写入侧已按固定
-128-seat shape 支持 topology words、fresh-empty → one-root → two-node → three-node → four-node
-→ five-node 的 exact Sokoban transition，包括第三次插入的全部 rotation/recolor、第四次
-red-uncle recolor 和第五次 black-parent/black-uncle 路径；一般 allocator/tree transition
-仍关闭。这是完整的 bounded N=4
-Phoenix IOC 模型加 P5 bounded body read/write 基础，不是完整 Phoenix-v1 动态账户实现。
+独立 `PhoenixV1Profile` 是预编译 fixed-capacity account profile，不是运行时动态容器。
+`EntryAdapter → AccountStorage → target-owned SVM backend` 已贯通 official tag 5；下一片在同一
+边界上实现 tag 4 Token withdrawal。完整 Phoenix-v1 指令集和动态 remaining accounts 仍关闭。

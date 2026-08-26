@@ -62,8 +62,9 @@ backend 另提供共用的 bounded Key4/FIFO lookup；Runtime source 可在 comp
 最小 profile 已用这套组合实现 bid/ask `ReduceOrderWithFreeFunds` 的 partial/full、trader
 collateral unlock 与 checked preflight。target-owned `EntryAdapter` 已统一 packed wire decode、
 raw/generated dispatch 与账户合同，`AccountStorage` 继续统一 account-resident
-map/queue/allocator/tree；下一步组合两层接 Phoenix tag 5 wire/event，再独立实现 tag 4
-提款 Token CPI，不增加 Phoenix-specific 顶层 Ops/IR/主 Emit case。
+map/queue/allocator/tree；官方 Phoenix tag 5 wire、账户合同与 128-byte authenticated Reduce
+record 已由两层组合完成。下一步独立实现 tag 4 提款 Token CPI，不增加 Phoenix-specific
+顶层 Ops/IR/主 Emit case。
 
 ## 入口
 

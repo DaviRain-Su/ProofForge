@@ -109,6 +109,7 @@
 | T-L5-24 | happy / fail | Phoenix-v1 constant-memory bid-root neighborhood | 原位读取 root + 两个 child；bid side tag、child→parent reciprocity、color、index envelope 与 bid price/sequence ordering；错 parent/color/order 返回 0；不声明完整树验证 |
 | T-L5-25 | happy / fail | Phoenix-v1 verifier Surfpool deployment | 参数化 Surfpool 1.5.0 offline smoke；716,344 B ELF 经 708 个 Loader write + deploy + authority transactions；confirmed signature、Program/ProgramData layout、exact ELF bytes；不用 Test Validator |
 | T-L5-26 | happy / fail | reusable packed SVM entry adapter | 同一 ELF raw/generated dispatch；exact u8/u64 widening、bounded trailing account、当前 executable program 与 signer contract；wrong tag/short/long/program/non-executable 全部 fail closed；Surfpool Loader-v3 exact ProgramData |
+| T-L5-27 | happy / fail | Phoenix-v1 official tag 5 composition | exact `05 || side:u8 || price/sequence/size:u64-le`；program/log/market/trader 四账户合同；ask zero/partial/full、bid collateral、missing sequence/no-event、exact 128-byte authenticated Reduce record；错 side/length/PDA/program/signer/writable/owner 原子失败；既有 Phoenix CPI frame 回归 |
 
 T-L5-11 已覆盖主要单档链上生命周期；T-L5-03 的跨四档逐样本 host↔chain
 refinement 仍未宣称。P0 探针口径递归统计 `select` 四个分支和 extension operands；当前

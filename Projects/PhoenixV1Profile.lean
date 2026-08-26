@@ -8,9 +8,11 @@ header selects one of twelve statically compiled `FIFOMarket<Pubkey, B, A, S>` l
 validates that dispatch boundary, fixed scalar/allocator metadata, and all three complete trees
 plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 
-This is deliberately a separate verifier program whose ProofForge state is account 0 and candidate
-Phoenix market is account 1. Its write surface only publishes complete fixed-shape Sokoban tree
-transitions; it does not yet claim general allocator/tree mutation or official instruction execution.
+This is deliberately a separate verifier/profile program. Generated probes keep ProofForge state in
+account 0 and the candidate market in account 1; the official raw adapter instead authenticates a
+physical program prefix and mutates the market in account 2. Its fixed-shape Sokoban routines are
+composed through `AccountStorage`; official instruction coverage currently includes tag 5
+`ReduceOrderWithFreeFunds`, not the complete Phoenix instruction set.
 -/
 namespace Projects.PhoenixV1Profile
 
@@ -289,26 +291,31 @@ def touch (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def get (_s : State) : UInt64 := 0
 
-/-- Return the exact selected profile size, or zero when account 1 is not a canonical Phoenix-v1
-market account. Header words are read only after the generic data-length gate proves 576 bytes. -/
-@[pf_entry]
-def profileAccountBytes (_s : State) : UInt64 :=
-  if accDataLen 1 < marketHeaderBytes then
+/-- Return the exact selected profile size, or zero when `marketAccount` is not a canonical
+Phoenix-v1 market. The account index must become a literal through `pf_inline`; no runtime account
+selection or geometry is introduced. -/
+def profileAccountBytesAt (marketAccount : UInt64) : UInt64 :=
+  if accDataLen marketAccount < marketHeaderBytes then
     0
   else
-    let bids := accDataWord 1 2
-    let asks := accDataWord 1 3
-    let seats := accDataWord 1 4
+    let bids := accDataWord marketAccount 2
+    let asks := accDataWord marketAccount 3
+    let seats := accDataWord marketAccount 4
     let expected := accountBytesFor bids asks seats
-    if accOwnerWord 1 0 = phoenixProgramOwner0 &&
-        accOwnerWord 1 1 = phoenixProgramOwner1 &&
-        accOwnerWord 1 2 = phoenixProgramOwner2 &&
-        accOwnerWord 1 3 = phoenixProgramOwner3 &&
-        accDataWord 1 0 = marketHeaderDiscriminant &&
-        expected ≠ 0 && accDataLen 1 = expected then
+    if accOwnerWord marketAccount 0 = phoenixProgramOwner0 &&
+        accOwnerWord marketAccount 1 = phoenixProgramOwner1 &&
+        accOwnerWord marketAccount 2 = phoenixProgramOwner2 &&
+        accOwnerWord marketAccount 3 = phoenixProgramOwner3 &&
+        accDataWord marketAccount 0 = marketHeaderDiscriminant &&
+        expected ≠ 0 && accDataLen marketAccount = expected then
       expected
     else
       0
+
+/-- Generated verifier adapter for the historical state/market account geometry. -/
+@[pf_entry]
+def profileAccountBytes (_s : State) : UInt64 :=
+  profileAccountBytesAt 1
 
 /-- Return the Phoenix market sequence scalar at absolute account word 106. The body starts after
 the 576-byte header and its first 32 words are padding, so this offset is profile-independent. -/
@@ -341,40 +348,52 @@ def bodyEntryCount (s : State) : UInt64 :=
     else
       0
 
-/--
-Validate the fixed tree headers before any future node reader follows `root`, child, or free-list
-indexes. Each profile selects literal account words for the three headers. This reads the packed
-u32 metadata in place; it does not allocate, copy nodes, or calculate a runtime data offset.
--/
-@[pf_entry]
-def allocatorHeadersValid (s : State) : UInt64 :=
-  if profileAccountBytes s = 0 then
+/-- Validate all three fixed allocator headers on one compile-time-selected market account. -/
+def allocatorHeadersValidAt (marketAccount : UInt64) : UInt64 :=
+  if profileAccountBytesAt marketAccount = 0 then
     0
   else
-    let bids := accDataWord 1 2
-    let seats := accDataWord 1 4
+    let bids := accDataWord marketAccount 2
+    let seats := accDataWord marketAccount 4
     if bids = 512 then
       threeAllocatorHeadersValid 512 seats
-        (accDataWord 1 110) (accDataWord 1 111) (accDataWord 1 112) (accDataWord 1 113)
-        (accDataWord 1 4210) (accDataWord 1 4211) (accDataWord 1 4212) (accDataWord 1 4213)
-        (accDataWord 1 8310) (accDataWord 1 8311) (accDataWord 1 8312) (accDataWord 1 8313)
+        (accDataWord marketAccount 110) (accDataWord marketAccount 111)
+        (accDataWord marketAccount 112) (accDataWord marketAccount 113)
+        (accDataWord marketAccount 4210) (accDataWord marketAccount 4211)
+        (accDataWord marketAccount 4212) (accDataWord marketAccount 4213)
+        (accDataWord marketAccount 8310) (accDataWord marketAccount 8311)
+        (accDataWord marketAccount 8312) (accDataWord marketAccount 8313)
     else if bids = 1024 then
       threeAllocatorHeadersValid 1024 seats
-        (accDataWord 1 110) (accDataWord 1 111) (accDataWord 1 112) (accDataWord 1 113)
-        (accDataWord 1 8306) (accDataWord 1 8307) (accDataWord 1 8308) (accDataWord 1 8309)
-        (accDataWord 1 16502) (accDataWord 1 16503) (accDataWord 1 16504) (accDataWord 1 16505)
+        (accDataWord marketAccount 110) (accDataWord marketAccount 111)
+        (accDataWord marketAccount 112) (accDataWord marketAccount 113)
+        (accDataWord marketAccount 8306) (accDataWord marketAccount 8307)
+        (accDataWord marketAccount 8308) (accDataWord marketAccount 8309)
+        (accDataWord marketAccount 16502) (accDataWord marketAccount 16503)
+        (accDataWord marketAccount 16504) (accDataWord marketAccount 16505)
     else if bids = 2048 then
       threeAllocatorHeadersValid 2048 seats
-        (accDataWord 1 110) (accDataWord 1 111) (accDataWord 1 112) (accDataWord 1 113)
-        (accDataWord 1 16498) (accDataWord 1 16499) (accDataWord 1 16500) (accDataWord 1 16501)
-        (accDataWord 1 32886) (accDataWord 1 32887) (accDataWord 1 32888) (accDataWord 1 32889)
+        (accDataWord marketAccount 110) (accDataWord marketAccount 111)
+        (accDataWord marketAccount 112) (accDataWord marketAccount 113)
+        (accDataWord marketAccount 16498) (accDataWord marketAccount 16499)
+        (accDataWord marketAccount 16500) (accDataWord marketAccount 16501)
+        (accDataWord marketAccount 32886) (accDataWord marketAccount 32887)
+        (accDataWord marketAccount 32888) (accDataWord marketAccount 32889)
     else if bids = 4096 then
       threeAllocatorHeadersValid 4096 seats
-        (accDataWord 1 110) (accDataWord 1 111) (accDataWord 1 112) (accDataWord 1 113)
-        (accDataWord 1 32882) (accDataWord 1 32883) (accDataWord 1 32884) (accDataWord 1 32885)
-        (accDataWord 1 65654) (accDataWord 1 65655) (accDataWord 1 65656) (accDataWord 1 65657)
+        (accDataWord marketAccount 110) (accDataWord marketAccount 111)
+        (accDataWord marketAccount 112) (accDataWord marketAccount 113)
+        (accDataWord marketAccount 32882) (accDataWord marketAccount 32883)
+        (accDataWord marketAccount 32884) (accDataWord marketAccount 32885)
+        (accDataWord marketAccount 65654) (accDataWord marketAccount 65655)
+        (accDataWord marketAccount 65656) (accDataWord marketAccount 65657)
     else
       0
+
+/-- Generated verifier adapter for account 1. -/
+@[pf_entry]
+def allocatorHeadersValid (_s : State) : UInt64 :=
+  allocatorHeadersValidAt 1
 
 /--
 Read the bid root's price directly from its account-resident 64-byte Sokoban slot. The root index
@@ -1180,60 +1199,64 @@ def removeAsk512 (s : State) (price sequence : UInt64) : Except Error (State × 
   else
     .error .overflow
 
-/--
-Apply the account-state transition of Phoenix `ReduceOrderWithFreeFunds` to one resting ask in the
-smallest official profile. Account 0's signer key selects the trader; the complete trader and ask
-tree/free-list partitions are validated before bounded lookup. Missing orders are successful
-no-ops, a mismatched trader fails, and `min(requested, resting)` base lots move from locked to free.
-Partial reductions update the fixed order field by its one-based index; full reductions compose the
-generic map removal routine. All subtraction/addition bounds are checked before the first store.
+/-!
+These two reducers are account-index-parametric only at extraction time. Generated verifier methods
+instantiate `(market, trader) = (1, 0)`; the official raw adapter instantiates `(2, 3)`. Every
+resulting `AccountStorage` descriptor still has literal account/base/stride/capacity geometry.
 -/
-@[pf_entry]
-def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
-    Except Error (State × UInt64) :=
-  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
-    let traderCursor := accDataWord 1 8313
-    let askCursor := accDataWord 1 4213
-    let traderValid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128
-      (lowUInt32 (accDataWord 1 8310)) (accDataWord 1 8312)
+
+def reduceAskFreeFunds512At (marketAccount traderAccount traderKey0 price sequence requested :
+    UInt64) : Except Error UInt64 :=
+  if profileAccountBytesAt marketAccount = 84944 &&
+      allocatorHeadersValidAt marketAccount = 1 then
+    let traderCursor := accDataWord marketAccount 8313
+    let askCursor := accDataWord marketAccount 4213
+    let traderValid := accDataRbTreeKey4Valid marketAccount 8314 8315 8316 18 128
+      (lowUInt32 (accDataWord marketAccount 8310)) (accDataWord marketAccount 8312)
       (lowUInt32 traderCursor) (highUInt32 traderCursor)
-    let askValid := accDataRbTreeValid 1 4214 4215 4216 4217 8 512 0
-      (lowUInt32 (accDataWord 1 4210)) (accDataWord 1 4212)
+    let askValid := accDataRbTreeValid marketAccount 4214 4215 4216 4217 8 512 0
+      (lowUInt32 (accDataWord marketAccount 4210)) (accDataWord marketAccount 4212)
       (lowUInt32 askCursor) (highUInt32 askCursor)
     if traderValid = 1 && askValid = 1 then
-      let traderIndex := accDataRbTreeKey4Find 1 8310 8314 8315 8316 18 128
-        (accKeyWord 0 0) (accKeyWord 0 1) (accKeyWord 0 2) (accKeyWord 0 3)
+      let traderIndex := accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
+        traderKey0 (accKeyWord traderAccount 1) (accKeyWord traderAccount 2)
+        (accKeyWord traderAccount 3)
       if traderIndex = 0 then
         .error .overflow
       else
-        let orderIndex := accDataRbTreeOrderFind 1 4210 4214 4215 4216 4217 8 512 0
-          price sequence
+        let orderIndex := accDataRbTreeOrderFind marketAccount 4210 4214 4215 4216 4217
+          8 512 0 price sequence
         if orderIndex = 0 then
-          .ok (s, 0)
+          .ok 0
         else
-          let orderTrader := accDataWordAtOneBased 1 4218 8 512 orderIndex
-          let resting := accDataWordAtOneBased 1 4219 8 512 orderIndex
+          let orderTrader := accDataWordAtOneBased marketAccount 4218 8 512 orderIndex
+          let resting := accDataWordAtOneBased marketAccount 4219 8 512 orderIndex
           if orderTrader ≠ traderIndex then
             .error .overflow
           else
             let removed := if requested ≤ resting then requested else resting
-            let locked := accDataWordAtOneBased 1 8322 18 128 traderIndex
-            let free := accDataWordAtOneBased 1 8323 18 128 traderIndex
+            let locked := accDataWordAtOneBased marketAccount 8322 18 128 traderIndex
+            let free := accDataWordAtOneBased marketAccount 8323 18 128 traderIndex
             if removed ≤ locked && free ≤ u64Max - removed then
               let remaining := resting - removed
               let nextLocked := locked - removed
               let nextFree := free + removed
               if remaining = 0 then
-                let _ := accDataRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 0
-                  price sequence
-                let _ := accDataWordSetAtOneBased 1 8322 18 128 traderIndex nextLocked
-                let _ := accDataWordSetAtOneBased 1 8323 18 128 traderIndex nextFree
-                .ok (s, removed)
+                let _ := accDataRbTreeOrderRemove marketAccount 4210 4214 4215 4216 4217
+                  8 512 0 price sequence
+                let _ := accDataWordSetAtOneBased marketAccount 8322 18 128
+                  traderIndex nextLocked
+                let _ := accDataWordSetAtOneBased marketAccount 8323 18 128
+                  traderIndex nextFree
+                .ok removed
               else
-                let _ := accDataWordSetAtOneBased 1 4219 8 512 orderIndex remaining
-                let _ := accDataWordSetAtOneBased 1 8322 18 128 traderIndex nextLocked
-                let _ := accDataWordSetAtOneBased 1 8323 18 128 traderIndex nextFree
-                .ok (s, removed)
+                let _ := accDataWordSetAtOneBased marketAccount 4219 8 512
+                  orderIndex remaining
+                let _ := accDataWordSetAtOneBased marketAccount 8322 18 128
+                  traderIndex nextLocked
+                let _ := accDataWordSetAtOneBased marketAccount 8323 18 128
+                  traderIndex nextFree
+                .ok removed
             else
               .error .overflow
     else
@@ -1241,66 +1264,66 @@ def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
   else
     .error .overflow
 
-/--
-Bid-side `ReduceOrderWithFreeFunds` state transition. Released quote lots are computed as
-`price × tickSize × removed / baseLotsPerBaseUnit`, using MarketData words 104/105 from the
-official fixed layout. Both multiplications, the nonzero divisor, and trader locked/free balance
-bounds are preflighted before either the order tree or TraderState is changed.
--/
-@[pf_entry]
-def reduceBidFreeFunds512 (s : State) (price sequence requested : UInt64) :
-    Except Error (State × UInt64) :=
-  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
-    let traderCursor := accDataWord 1 8313
-    let bidCursor := accDataWord 1 113
-    let traderValid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128
-      (lowUInt32 (accDataWord 1 8310)) (accDataWord 1 8312)
+def reduceBidFreeFunds512At (marketAccount traderAccount traderKey0 price sequence requested :
+    UInt64) : Except Error UInt64 :=
+  if profileAccountBytesAt marketAccount = 84944 &&
+      allocatorHeadersValidAt marketAccount = 1 then
+    let traderCursor := accDataWord marketAccount 8313
+    let bidCursor := accDataWord marketAccount 113
+    let traderValid := accDataRbTreeKey4Valid marketAccount 8314 8315 8316 18 128
+      (lowUInt32 (accDataWord marketAccount 8310)) (accDataWord marketAccount 8312)
       (lowUInt32 traderCursor) (highUInt32 traderCursor)
-    let bidValid := accDataRbTreeValid 1 114 115 116 117 8 512 1
-      (lowUInt32 (accDataWord 1 110)) (accDataWord 1 112)
+    let bidValid := accDataRbTreeValid marketAccount 114 115 116 117 8 512 1
+      (lowUInt32 (accDataWord marketAccount 110)) (accDataWord marketAccount 112)
       (lowUInt32 bidCursor) (highUInt32 bidCursor)
     if traderValid = 1 && bidValid = 1 then
-      let traderIndex := accDataRbTreeKey4Find 1 8310 8314 8315 8316 18 128
-        (accKeyWord 0 0) (accKeyWord 0 1) (accKeyWord 0 2) (accKeyWord 0 3)
+      let traderIndex := accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
+        traderKey0 (accKeyWord traderAccount 1) (accKeyWord traderAccount 2)
+        (accKeyWord traderAccount 3)
       if traderIndex = 0 then
         .error .overflow
       else
-        let orderIndex := accDataRbTreeOrderFind 1 110 114 115 116 117 8 512 1
-          price sequence
+        let orderIndex := accDataRbTreeOrderFind marketAccount 110 114 115 116 117
+          8 512 1 price sequence
         if orderIndex = 0 then
-          .ok (s, 0)
+          .ok 0
         else
-          let orderTrader := accDataWordAtOneBased 1 118 8 512 orderIndex
-          let resting := accDataWordAtOneBased 1 119 8 512 orderIndex
+          let orderTrader := accDataWordAtOneBased marketAccount 118 8 512 orderIndex
+          let resting := accDataWordAtOneBased marketAccount 119 8 512 orderIndex
           if orderTrader ≠ traderIndex then
             .error .overflow
           else
             let removed := if requested ≤ resting then requested else resting
-            let baseLotsPerBaseUnit := accDataWord 1 104
-            let tickSize := accDataWord 1 105
+            let baseLotsPerBaseUnit := accDataWord marketAccount 104
+            let tickSize := accDataWord marketAccount 105
             if baseLotsPerBaseUnit = 0 then
               .error .overflow
             else if price = 0 || tickSize ≤ u64Max / price then
               let quotePerBase := price * tickSize
               if removed = 0 || quotePerBase ≤ u64Max / removed then
                 let unlocked := (quotePerBase * removed) / baseLotsPerBaseUnit
-                let locked := accDataWordAtOneBased 1 8320 18 128 traderIndex
-                let free := accDataWordAtOneBased 1 8321 18 128 traderIndex
+                let locked := accDataWordAtOneBased marketAccount 8320 18 128 traderIndex
+                let free := accDataWordAtOneBased marketAccount 8321 18 128 traderIndex
                 if unlocked ≤ locked && free ≤ u64Max - unlocked then
                   let remaining := resting - removed
                   let nextLocked := locked - unlocked
                   let nextFree := free + unlocked
                   if remaining = 0 then
-                    let _ := accDataRbTreeOrderRemove 1 110 114 115 116 117 8 512 1
-                      price sequence
-                    let _ := accDataWordSetAtOneBased 1 8320 18 128 traderIndex nextLocked
-                    let _ := accDataWordSetAtOneBased 1 8321 18 128 traderIndex nextFree
-                    .ok (s, removed)
+                    let _ := accDataRbTreeOrderRemove marketAccount 110 114 115 116 117
+                      8 512 1 price sequence
+                    let _ := accDataWordSetAtOneBased marketAccount 8320 18 128
+                      traderIndex nextLocked
+                    let _ := accDataWordSetAtOneBased marketAccount 8321 18 128
+                      traderIndex nextFree
+                    .ok removed
                   else
-                    let _ := accDataWordSetAtOneBased 1 119 8 512 orderIndex remaining
-                    let _ := accDataWordSetAtOneBased 1 8320 18 128 traderIndex nextLocked
-                    let _ := accDataWordSetAtOneBased 1 8321 18 128 traderIndex nextFree
-                    .ok (s, removed)
+                    let _ := accDataWordSetAtOneBased marketAccount 119 8 512
+                      orderIndex remaining
+                    let _ := accDataWordSetAtOneBased marketAccount 8320 18 128
+                      traderIndex nextLocked
+                    let _ := accDataWordSetAtOneBased marketAccount 8321 18 128
+                      traderIndex nextFree
+                    .ok removed
                 else
                   .error .overflow
               else
@@ -1311,6 +1334,77 @@ def reduceBidFreeFunds512 (s : State) (price sequence requested : UInt64) :
       .error .overflow
   else
     .error .overflow
+
+/-- Select the fixed-capacity bid/ask reducer before protocol-adapter sequencing. Keeping side
+dispatch inside this reusable account-storage component gives generated and raw adapters the same
+bounded mutation contract. -/
+def reduceFreeFunds512At (marketAccount traderAccount traderKey0 side price sequence requested :
+    UInt64) : Except Error UInt64 :=
+  if side = 0 then
+    reduceBidFreeFunds512At marketAccount traderAccount traderKey0 price sequence requested
+  else
+    reduceAskFreeFunds512At marketAccount traderAccount traderKey0 price sequence requested
+
+/-- Historical generated adapters retain their existing account geometry and IDL. -/
+@[pf_entry]
+def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
+    Except Error (State × UInt64) := do
+  let removed ← reduceAskFreeFunds512At 1 0 (accKeyWord 0 0) price sequence requested
+  .ok (s, removed)
+
+@[pf_entry]
+def reduceBidFreeFunds512 (s : State) (price sequence requested : UInt64) :
+    Except Error (State × UInt64) := do
+  let removed ← reduceBidFreeFunds512At 1 0 (accKeyWord 0 0) price sequence requested
+  .ok (s, removed)
+
+/--
+Official Phoenix `ReduceOrderWithFreeFunds` wire for the smallest static profile:
+`05 || side:u8 || price:u64 || sequence:u64 || size:u64`. Physical accounts are current program,
+canonical `"log"` PDA, writable market, and readonly signer. Missing orders emit no event but still
+advance the market-header sequence; existing orders emit one canonical 35-byte Reduce event through
+the authenticated signed self-CPI log entry. No Token account or withdrawal CPI is involved.
+-/
+@[pf_entry, pf_svm_raw 5 4 0]
+def reduceOrderWithFreeFunds (_s : State) (side : UInt8)
+    (price sequence requested : UInt64) : Except Error (State × UInt64) := do
+  if isWritable 1 ≠ 0 || isWritable 3 ≠ 0 ||
+      checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
+    .error .overflow
+  else
+    let side := side.toUInt64
+    if side ≠ 0 && side ≠ 1 then
+      .error .overflow
+    else
+      let orderIndex :=
+        if side = 0 then
+          accDataRbTreeOrderFind 2 110 114 115 116 117 8 512 1 price sequence
+        else
+          accDataRbTreeOrderFind 2 4210 4214 4215 4216 4217 8 512 0 price sequence
+      let resting :=
+        if orderIndex = 0 then 0
+        else if side = 0 then accDataWordAtOneBased 2 119 8 512 orderIndex
+        else accDataWordAtOneBased 2 4219 8 512 orderIndex
+      let traderKey0 := signerKey 3
+      let removed ← reduceFreeFunds512At 2 3 traderKey0 side price sequence requested
+      let marketSequence := accDataWord 2 106
+      if orderIndex = 0 then
+        let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+        .ok (_s, removed)
+      else
+        let remaining := resting - removed
+        let _ := invokeSigned 0
+          #[{ acc := 0, signer := true, writable := false }]
+          #[.selfEntry 15 "log", .u8le 1, .u8le 5,
+            .u64le marketSequence, .u64le unixTime, .u64le clockSlot,
+            .u64le (accKeyWord 2 0), .u64le (accKeyWord 2 1),
+            .u64le (accKeyWord 2 2), .u64le (accKeyWord 2 3),
+            .accKey 2, .u16le 1,
+            .u8le 4, .u16le 0, .u64le sequence, .u64le price,
+            .u64le removed, .u64le remaining]
+          "log" (findPda "log")
+        let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+        .ok (_s, removed)
 
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
@@ -1323,6 +1417,7 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   allocatorHeaderValid threeAllocatorHeadersValid nodeIndexOrNullValid boundedBidRootPrice
   boundedNodeSlot bidKeyBefore boundedBidChildValid boundedBidRootNeighborhoodValid
   bidRootNeighborhood512 bidRootNeighborhood1024 bidRootNeighborhood2048
-  bidRootNeighborhood4096 profileAccountBytes allocatorHeadersValid
+  bidRootNeighborhood4096 profileAccountBytesAt profileAccountBytes allocatorHeadersValidAt
+  allocatorHeadersValid reduceAskFreeFunds512At reduceBidFreeFunds512At reduceFreeFunds512At
 
 end Projects.PhoenixV1Profile

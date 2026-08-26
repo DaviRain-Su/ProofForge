@@ -506,6 +506,68 @@ private partial def opsHaveAccountQuery
       | .forBody _ body => opsHaveAccountQuery predicate body
       | _ => false
 
+private partial def valHasIntrinsic
+    (predicate : ProofForge.Svm.Ops.ValKind → Bool) : ProofForge.Svm.Ops.Val → Bool
+  | .field base _ | .bitNot base => valHasIntrinsic predicate base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasIntrinsic predicate lhs || valHasIntrinsic predicate rhs
+  | .indexGet base _ index _ _ =>
+      valHasIntrinsic predicate base || valHasIntrinsic predicate index
+  | .select _ lhs rhs thenValue elseValue =>
+      valHasIntrinsic predicate lhs || valHasIntrinsic predicate rhs ||
+        valHasIntrinsic predicate thenValue || valHasIntrinsic predicate elseValue
+  | .ext kind operands => predicate kind || operands.any (valHasIntrinsic predicate)
+  | _ => false
+
+private partial def opsHaveIntrinsic
+    (predicate : ProofForge.Svm.Ops.ValKind → Bool)
+    (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    let has := valHasIntrinsic predicate
+    let here :=
+      match op with
+      | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+      | .storeField _ value | .okState value | .returnU64 value | .returnState value => has value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+      | .indexSet _ lhs rhs _ _ => has lhs || has rhs
+      | .invoke _ _ data _ bump =>
+          data.any (fun item => item.value?.any has) || bump.any has
+      | _ => false
+    here ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveIntrinsic predicate thenOps || opsHaveIntrinsic predicate elseOps
+      | .forBody _ body => opsHaveIntrinsic predicate body
+      | _ => false
+
+private partial def opsHaveRawReduceRecord (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .invoke programIx metas data seeds bump =>
+         programIx == 0 && metas == #[{ acc := 0, signer := true, writable := false }] &&
+           seeds == #[.ascii "log"] &&
+           bump == some (.ext (.findPda "log") #[]) && data.size == 18 &&
+           data[0]? == some (.selfEntry 15 "log") &&
+           data[1]? == some (.u8le (.lit 1)) && data[2]? == some (.u8le (.lit 5)) &&
+           data[4]? == some (.u64le (.ext .unixTime #[])) &&
+           data[5]? == some (.u64le (.ext .clockSlot #[])) &&
+           data[6]? == some (.u64le (.ext (.accKeyWord 2 0) #[])) &&
+           data[7]? == some (.u64le (.ext (.accKeyWord 2 1) #[])) &&
+           data[8]? == some (.u64le (.ext (.accKeyWord 2 2) #[])) &&
+           data[9]? == some (.u64le (.ext (.accKeyWord 2 3) #[])) &&
+           data[10]? == some (.accKey 2) && data[11]? == some (.u16le (.lit 1)) &&
+           data[12]? == some (.u8le (.lit 4)) && data[13]? == some (.u16le (.lit 0))
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveRawReduceRecord thenOps || opsHaveRawReduceRecord elseOps
+      | .forBody _ body => opsHaveRawReduceRecord body
+      | _ => false
+
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
@@ -517,7 +579,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | .ok program => pure program
     | .error reason => throwError reason
   unless ProofForge.Svm.IR.dataLen program == 16 &&
-      ProofForge.Svm.IR.cpiAccountCount program == 2 do
+      ProofForge.Svm.IR.generatedAccountCount program == 2 &&
+      ProofForge.Svm.IR.cpiAccountCount program == 4 do
     throwError "Phoenix-v1 profile verifier account layout changed"
   let some profile := program.methods.find? (·.ixName == "profileAccountBytes")
     | throwError "missing profileAccountBytes"
@@ -577,6 +640,51 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing reduceAskFreeFunds512"
   let some reduceBid := program.methods.find? (·.ixName == "reduceBidFreeFunds512")
     | throwError "missing reduceBidFreeFunds512"
+  let some reduceRaw := program.methods.find? (·.ixName == "reduceOrderWithFreeFunds")
+    | throwError "missing raw ReduceOrderWithFreeFunds"
+  match reduceRaw.entry with
+  | .raw entry =>
+      unless reduceRaw.kind == .get && entry.tag == 5 && entry.accountCount == 4 &&
+          entry.programAccount == 0 && entry.paramWidths == #[1, 8, 8, 8] &&
+          entry.dataLen == 26 do
+        throwError s!"wrong raw ReduceOrderWithFreeFunds adapter: {repr entry}"
+  | .generated => throwError "ReduceOrderWithFreeFunds lost its raw adapter"
+  unless opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops &&
+      opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops &&
+      opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) reduceRaw.ops &&
+      opsHaveDataWord 2 106 reduceRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .key4RbTreeValid tree => tree.links.region.account == 2
+        | _ => false) reduceRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .key4Find 8310 tree => tree.links.region.account == 2
+        | _ => false) reduceRaw.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoFind 110 tree => tree.links.region.account == 2 && tree.bid
+        | .fifoFind 4210 tree => tree.links.region.account == 2 && !tree.bid
+        | _ => false) reduceRaw.ops &&
+      opsHaveRbTreeOrderRemove 2 110 114 115 116 117 8 512 true reduceRaw.ops &&
+      opsHaveRbTreeOrderRemove 2 4210 4214 4215 4216 4217 8 512 false reduceRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 119 8 512 reduceRaw.ops &&
+      opsHaveOneBasedDataWordSetAt 2 4219 8 512 reduceRaw.ops &&
+      opsHaveDataWordSetAt 2 106 1 1 reduceRaw.ops &&
+      opsHaveRawReduceRecord reduceRaw.ops do
+    throwError s!"raw ReduceOrderWithFreeFunds composition incomplete: " ++
+      s!"w1={opsHaveIntrinsic (· == .isWritableN 1) reduceRaw.ops}, " ++
+      s!"w3={opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops}, " ++
+      s!"signer={opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops}, " ++
+      s!"pda={opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) reduceRaw.ops}, " ++
+      s!"seq={opsHaveDataWord 2 106 reduceRaw.ops}, " ++
+      s!"seqWrite={opsHaveDataWordSetAt 2 106 1 1 reduceRaw.ops}, " ++
+      s!"bidRemove={opsHaveRbTreeOrderRemove 2 110 114 115 116 117 8 512 true reduceRaw.ops}, " ++
+      s!"askRemove={opsHaveRbTreeOrderRemove 2 4210 4214 4215 4216 4217 8 512 false reduceRaw.ops}, " ++
+      s!"record={opsHaveRawReduceRecord reduceRaw.ops}"
+  match ProofForge.Svm.IR.rawSelfEntry? program with
+  | .ok (some entry) =>
+      unless entry.tag == 15 && entry.authoritySeed == "log" do
+        throwError s!"wrong Phoenix-v1 raw log entry: {repr entry}"
+  | result => throwError s!"Phoenix-v1 raw log entry is missing: {repr result}"
   let hasOneBasedRead (word stride capacity : Nat) (ops : Array ProofForge.Svm.IR.Op) :=
     opsHaveAccountQuery (fun
       | .readWord field =>
@@ -768,6 +876,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       countDataWordSetAt reduceBid.ops == 5 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
+  if idl.contains "\"name\": \"reduceOrderWithFreeFunds\"" then
+    throwError "raw Phoenix tag 5 leaked into the generated IDL"
   unless idl.contains
       "\"name\": \"findTrader128\",\n      \"discriminator\": [193, 118, 199, 104, 63, 14, 34, 106],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" &&
       idl.contains
@@ -805,6 +915,16 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm
     | .error reason => throwError reason
+  unless asm.contains "jne r2, 26, raw_route_next_" &&
+      asm.contains "jeq r1, 5, raw_route_match_" &&
+      asm.contains "jlt r2, 1, raw_route_next_" &&
+      asm.contains "jeq r1, 15, raw_route_match_" &&
+      asm.contains "; checkPdaSeeds account=0 count=1" &&
+      asm.contains "fixed-stride external account word write acc=2 base=106 stride=1 capacity=1" &&
+      asm.contains "bounded one-based acc2 RB find root=110 links=114 stride=8 capacity=512" &&
+      asm.contains "bounded one-based acc2 RB find root=4210 links=4214 stride=8 capacity=512" &&
+      asm.contains "; invoke programIx=1 metas=1 dataLen=128" do
+    throwError "raw Phoenix tag-5 adapter/backend composition is incomplete"
   unless asm.contains "load walked acc1 data word 4" &&
       asm.contains "ldxdw r2, [r1 + 80]" &&
       asm.contains "jge r2, r3, ok_data_word_" &&

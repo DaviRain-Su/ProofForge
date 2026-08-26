@@ -1,14 +1,16 @@
 mod common;
 
 use {
+    base64::{engine::general_purpose::STANDARD as BASE64, Engine as _},
     bytemuck::{Pod, Zeroable},
-    mollusk_svm::result::Check,
+    mollusk_svm::{result::Check, Mollusk},
     sokoban::{FromSlice, NodeAllocatorMap, RedBlackTree, ZeroCopy},
     solana_account::Account,
-    solana_instruction::AccountMeta,
+    solana_instruction::{AccountMeta, Instruction},
     solana_native_token::LAMPORTS_PER_SOL,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
+    solana_svm_log_collector::LogCollector,
 };
 
 const MARKET_HEADER_DISCRIMINANT: u64 = 8_167_313_896_524_341_111;
@@ -494,6 +496,130 @@ fn market_with_signer_trader() -> Account {
     )
 }
 
+fn raw_reduce_data(side: u8, price: u64, sequence: u64, size: u64) -> Vec<u8> {
+    let mut data = vec![5, side];
+    data.extend_from_slice(&price.to_le_bytes());
+    data.extend_from_slice(&sequence.to_le_bytes());
+    data.extend_from_slice(&size.to_le_bytes());
+    assert_eq!(data.len(), 26);
+    data
+}
+
+fn raw_reduce_instruction(
+    data: &[u8],
+    program_account: Pubkey,
+    log_key: Pubkey,
+    log_writable: bool,
+    market_key: Pubkey,
+    market_writable: bool,
+    trader_key: Pubkey,
+    trader_signer: bool,
+    trader_writable: bool,
+) -> Instruction {
+    let log_meta = if log_writable {
+        AccountMeta::new(log_key, false)
+    } else {
+        AccountMeta::new_readonly(log_key, false)
+    };
+    let market_meta = if market_writable {
+        AccountMeta::new(market_key, false)
+    } else {
+        AccountMeta::new_readonly(market_key, false)
+    };
+    let trader_meta = if trader_writable {
+        AccountMeta::new(trader_key, trader_signer)
+    } else {
+        AccountMeta::new_readonly(trader_key, trader_signer)
+    };
+    Instruction::new_with_bytes(
+        PHOENIX_PROGRAM,
+        data,
+        vec![
+            AccountMeta::new_readonly(program_account, false),
+            log_meta,
+            market_meta,
+            trader_meta,
+        ],
+    )
+}
+
+fn raw_reduce_harness() -> (Mollusk, Pubkey) {
+    let (_, mut mollusk) = common::harness_at(
+        "PhoenixV1Profile",
+        "PF_PHOENIX_V1_PROFILE_SO",
+        PHOENIX_PROGRAM,
+    );
+    mollusk.logger = Some(LogCollector::new_ref_with_limit(None));
+    let (log_key, _) = Pubkey::find_program_address(&[b"log"], &PHOENIX_PROGRAM);
+    (mollusk, log_key)
+}
+
+fn raw_reduce_accounts(
+    program_account: Pubkey,
+    log_key: Pubkey,
+    market_key: Pubkey,
+    market: Account,
+    trader_key: Pubkey,
+) -> Vec<(Pubkey, Account)> {
+    vec![
+        (
+            program_account,
+            mollusk_svm::program::create_program_account_loader_v3(&program_account),
+        ),
+        (log_key, common::plain_account()),
+        (market_key, market),
+        (trader_key, common::plain_account()),
+    ]
+}
+
+fn resulting_account(result: &mollusk_svm::result::InstructionResult, key: &Pubkey) -> Account {
+    result
+        .resulting_accounts
+        .iter()
+        .find(|(actual, _)| actual == key)
+        .unwrap_or_else(|| panic!("missing resulting account {key}"))
+        .1
+        .clone()
+}
+
+fn phoenix_data_payloads(mollusk: &Mollusk) -> Vec<Vec<u8>> {
+    mollusk
+        .logger
+        .as_ref()
+        .expect("raw fixture logger")
+        .borrow()
+        .get_recorded_content()
+        .iter()
+        .filter_map(|message| message.strip_prefix("Program data: "))
+        .map(|encoded| BASE64.decode(encoded).expect("base64 program data"))
+        .collect()
+}
+
+fn assert_reduce_record(
+    payload: &[u8],
+    market_sequence: u64,
+    market_key: Pubkey,
+    trader_key: Pubkey,
+    order_sequence: u64,
+    price: u64,
+    removed: u64,
+    remaining: u64,
+) {
+    assert_eq!(payload.len(), 128);
+    assert_eq!(&payload[..3], &[15, 1, 5]);
+    assert_eq!(&payload[3..11], &market_sequence.to_le_bytes());
+    // Bytes 11..27 are the runtime clock's unix timestamp and slot.
+    assert_eq!(&payload[27..59], market_key.as_ref());
+    assert_eq!(&payload[59..91], trader_key.as_ref());
+    assert_eq!(&payload[91..93], &1u16.to_le_bytes());
+    assert_eq!(payload[93], 4);
+    assert_eq!(&payload[94..96], &0u16.to_le_bytes());
+    assert_eq!(&payload[96..104], &order_sequence.to_le_bytes());
+    assert_eq!(&payload[104..112], &price.to_le_bytes());
+    assert_eq!(&payload[112..120], &removed.to_le_bytes());
+    assert_eq!(&payload[120..128], &remaining.to_le_bytes());
+}
+
 fn market_with_two_traders(root_key: [u64; 4], child_key: [u64; 4]) -> Account {
     run_market_write(
         "registerSecondTrader128",
@@ -735,6 +861,274 @@ fn reduce_order_with_free_funds_composes_bounded_storage_primitives() {
         &[Check::err(ProgramError::Custom(0x1001))],
     );
     assert_eq!(overflow_after.data, overflow_market.data);
+}
+
+#[test]
+fn official_raw_reduce_ask_emits_exact_records_and_advances_sequence() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 106, 70);
+    write_word(&mut market, 8322, 10);
+    market = run_market_write(
+        "insertAsk512",
+        market,
+        true,
+        &[7, 11, 1, 10, 0, 0],
+        &[Check::success()],
+    );
+    assert_eq!(&market.data[8316 * 8..8316 * 8 + 32], trader_key.as_ref());
+
+    for (requested, removed, remaining, market_sequence) in
+        [(0u64, 0u64, 10u64, 70u64), (4, 4, 6, 71), (100, 6, 0, 72)]
+    {
+        let (mollusk, log_key) = raw_reduce_harness();
+        let instruction = raw_reduce_instruction(
+            &raw_reduce_data(1, 7, 11, requested),
+            PHOENIX_PROGRAM,
+            log_key,
+            false,
+            market_key,
+            true,
+            trader_key,
+            true,
+            false,
+        );
+        let result = mollusk.process_and_validate_instruction(
+            &instruction,
+            &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+            &[Check::success(), Check::return_data(&removed.to_le_bytes())],
+        );
+        market = resulting_account(&result, &market_key);
+        assert_eq!(read_word(&market, 106), market_sequence + 1);
+        if remaining != 0 {
+            assert_eq!(read_word(&market, 4219), remaining);
+        }
+        let payloads = phoenix_data_payloads(&mollusk);
+        assert_eq!(payloads.len(), 1);
+        assert_reduce_record(
+            &payloads[0],
+            market_sequence,
+            market_key,
+            trader_key,
+            11,
+            7,
+            removed,
+            remaining,
+        );
+    }
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8322), 0);
+    assert_eq!(read_word(&market, 8323), 10);
+}
+
+#[test]
+fn official_raw_reduce_bid_uses_quote_collateral_and_canonical_event() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let sequence = !12u64;
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 2);
+    write_word(&mut market, 105, 3);
+    write_word(&mut market, 106, 90);
+    write_word(&mut market, 8320, 100);
+    write_word(&mut market, 8321, 7);
+    market = run_market_write(
+        "insertBid512",
+        market,
+        true,
+        &[5, sequence, 1, 10, 0, 0],
+        &[Check::success()],
+    );
+
+    let (mollusk, log_key) = raw_reduce_harness();
+    let instruction = raw_reduce_instruction(
+        &raw_reduce_data(0, 5, sequence, 4),
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success(), Check::return_data(&4u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, 106), 91);
+    assert_eq!(read_word(&market, 119), 6);
+    assert_eq!(read_word(&market, 8320), 70);
+    assert_eq!(read_word(&market, 8321), 37);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_reduce_record(&payloads[0], 90, market_key, trader_key, sequence, 5, 4, 6);
+}
+
+#[test]
+fn official_raw_reduce_missing_order_advances_sequence_without_event() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 106, 99);
+    let (mollusk, log_key) = raw_reduce_harness();
+    let instruction = raw_reduce_instruction(
+        &raw_reduce_data(1, 77, 123, 9),
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    assert_eq!(
+        read_word(&resulting_account(&result, &market_key), 106),
+        100
+    );
+    assert!(phoenix_data_payloads(&mollusk).is_empty());
+}
+
+#[test]
+fn official_raw_reduce_rejects_malformed_adapter_inputs_atomically() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut canonical_market = market_with_signer_trader();
+    write_word(&mut canonical_market, 106, 44);
+    let (canonical_log, _) = Pubkey::find_program_address(&[b"log"], &PHOENIX_PROGRAM);
+    let canonical_data = raw_reduce_data(1, 77, 123, 9);
+
+    let assert_rejected = |data: Vec<u8>,
+                           program_account: Pubkey,
+                           log_key: Pubkey,
+                           log_writable: bool,
+                           market: Account,
+                           market_writable: bool,
+                           signer: bool,
+                           trader_writable: bool| {
+        let (mollusk, _) = raw_reduce_harness();
+        let before = market.data.clone();
+        let instruction = raw_reduce_instruction(
+            &data,
+            program_account,
+            log_key,
+            log_writable,
+            market_key,
+            market_writable,
+            trader_key,
+            signer,
+            trader_writable,
+        );
+        let result = mollusk.process_instruction(
+            &instruction,
+            &raw_reduce_accounts(program_account, log_key, market_key, market, trader_key),
+        );
+        assert!(result.raw_result.is_err(), "malformed raw reduce succeeded");
+        assert_eq!(resulting_account(&result, &market_key).data, before);
+    };
+
+    let mut wrong_side = canonical_data.clone();
+    wrong_side[1] = 2;
+    assert_rejected(
+        wrong_side,
+        PHOENIX_PROGRAM,
+        canonical_log,
+        false,
+        canonical_market.clone(),
+        true,
+        true,
+        false,
+    );
+    assert_rejected(
+        canonical_data[..25].to_vec(),
+        PHOENIX_PROGRAM,
+        canonical_log,
+        false,
+        canonical_market.clone(),
+        true,
+        true,
+        false,
+    );
+    assert_rejected(
+        canonical_data.clone(),
+        PHOENIX_PROGRAM,
+        Pubkey::new_unique(),
+        false,
+        canonical_market.clone(),
+        true,
+        true,
+        false,
+    );
+    assert_rejected(
+        canonical_data.clone(),
+        Pubkey::new_unique(),
+        canonical_log,
+        false,
+        canonical_market.clone(),
+        true,
+        true,
+        false,
+    );
+    assert_rejected(
+        canonical_data.clone(),
+        PHOENIX_PROGRAM,
+        canonical_log,
+        false,
+        canonical_market.clone(),
+        true,
+        false,
+        false,
+    );
+    assert_rejected(
+        canonical_data.clone(),
+        PHOENIX_PROGRAM,
+        canonical_log,
+        true,
+        canonical_market.clone(),
+        true,
+        true,
+        false,
+    );
+    assert_rejected(
+        canonical_data.clone(),
+        PHOENIX_PROGRAM,
+        canonical_log,
+        false,
+        canonical_market.clone(),
+        true,
+        true,
+        true,
+    );
+    assert_rejected(
+        canonical_data.clone(),
+        PHOENIX_PROGRAM,
+        canonical_log,
+        false,
+        canonical_market.clone(),
+        false,
+        true,
+        false,
+    );
+    canonical_market.owner = Pubkey::new_unique();
+    assert_rejected(
+        canonical_data,
+        PHOENIX_PROGRAM,
+        canonical_log,
+        false,
+        canonical_market,
+        true,
+        true,
+        false,
+    );
 }
 
 #[test]

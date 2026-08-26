@@ -514,8 +514,10 @@ alternate program ids remain fail closed.
 
 /--
 Check that one statically indexed external account is the canonical PDA for a compile-time-shaped
-seed list under the current program id. Returns 0 on equality and 1 otherwise. The full 32-byte
-key comparison is emitted by the SVM backend; the host definition is an irreducible stub.
+seed list under the current program id. Like CPI metas and `PdaSeed.accKey`, `accountIx` is relative
+to the external-account region: physical account 0 is the generated state account or a raw
+adapter's declared program account. Returns 0 on equality and 1 otherwise. The full 32-byte key
+comparison is emitted by the SVM backend; the host definition is an irreducible stub.
 -/
 @[irreducible] def checkPdaSeeds (accountIx : UInt64) (seeds : Array PdaSeed) : UInt64 :=
   let _ := accountIx
