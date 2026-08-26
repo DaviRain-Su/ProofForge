@@ -6,8 +6,8 @@
 ## 已做
 
 - **当前可验证基线（2026-08-26）**：Lean 汇总 207 jobs；SVM manifest 全 51 programs；
-  Phoenix-v1 profile 51/51、全 Mollusk 255/255；Anvil 12/12；Surfpool 1.5.0 的当前
-  Phoenix-v1 profile Loader-v3 部署门见 P5 第三十七段记录。
+  Phoenix-v1 profile 60/60、全 Mollusk 266/266；Anvil 12/12；Surfpool 1.5.0 的当前
+  Phoenix-v1 profile Loader-v3 部署门见 P5 第四十段记录。
 - S0–S5：普通 Lean Counter 竖切到 Mollusk
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
@@ -472,6 +472,22 @@
   `docs/plan/tasks/l5-046.md`。下一步保持 component bridge 不变，分片识别并组合
   matching/placement ABI；remaining accounts 作为独立 bounded adapter capability，不把协议
   语义或持久容器下沉成新的顶层 opcode。
+- P5 第四十段 Phoenix sequence domain correction 已完成：官方
+  `MarketHeader.market_sequence_number` 位于 absolute account word 34，而 FIFO body 的
+  `order_sequence_number` 位于 word 106；此前 tags 4–9 错把后者当成 market sequence，既会
+  污染后续挂单 key，也会让 audit header 携带错误序列。本切片把 profile view、六个 raw
+  reduce/cancel route 的 pre-increment audit sequence 与写回统一迁到 word 34，并用独立
+  fixtures 证明每条 route 都只递增 market sequence、保持 word 106 不变。word 106 仍由
+  storage envelope 验证为已初始化 FIFO order sequence；修正不改变 EntryAdapter、Component、
+  AccountStorage 或 generic Ops/IR/CFG/主 Emit 边界。当前 digest `ad2734feeb8c49dd`，assembly
+  12,091,190 B、ELF 3,796,416 B、IDL 9,537 B，ELF SHA-256
+  `96086af4bbcaaff2aa05b1ad92635ff4ea3576714433bd3986e00c3bfdce0821`。207-job Lean、
+  51 个 SVM build、Phoenix profile 60/60、全 Mollusk 266/266 与 Anvil 12/12 全绿；
+  Surfpool 1.5.0 以 3,752 个 Loader-v3 writes 部署 byte-identical ELF，并核对 exact
+  3,796,461-byte ProgramData；未使用 `solana-test-validator`。详见
+  `docs/plan/tasks/l5-047.md`。下一步在固定 bridge 上实现 official tag 3 的严格
+  PostOnly/no-TIF/deposited-funds-only 子集，再把完整 OrderPacket enum/option decoding
+  收敛成 EntryAdapter schema 数据，而不是新增 codec opcode。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

@@ -936,7 +936,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops &&
       opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops &&
       opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) reduceRaw.ops &&
-      opsHaveDataWord 2 106 reduceRaw.ops &&
+      opsHaveDataWord 2 34 reduceRaw.ops &&
       opsHaveAccountQuery (fun
         | .key4RbTreeValid tree => tree.links.region.account == 2
         | _ => false) reduceRaw.ops &&
@@ -951,7 +951,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRbTreeOrderRemove 2 4210 4214 4215 4216 4217 8 512 false reduceRaw.ops &&
       opsHaveOneBasedDataWordSetAt 2 119 8 512 reduceRaw.ops &&
       opsHaveOneBasedDataWordSetAt 2 4219 8 512 reduceRaw.ops &&
-      opsHaveDataWordSetAt 2 106 1 1 reduceRaw.ops &&
+      opsHaveDataWordSetAt 2 34 1 1 reduceRaw.ops &&
       opsHaveRawReduceHeader 5 reduceRaw.ops && opsHaveRawReduceRecord reduceRaw.ops &&
       opsHaveRawReduceFinish reduceRaw.ops do
     throwError s!"raw ReduceOrderWithFreeFunds composition incomplete: " ++
@@ -959,8 +959,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       s!"w3={opsHaveIntrinsic (· == .isWritableN 3) reduceRaw.ops}, " ++
       s!"signer={opsHaveIntrinsic (· == .signerKeyN 3) reduceRaw.ops}, " ++
       s!"pda={opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) reduceRaw.ops}, " ++
-      s!"seq={opsHaveDataWord 2 106 reduceRaw.ops}, " ++
-      s!"seqWrite={opsHaveDataWordSetAt 2 106 1 1 reduceRaw.ops}, " ++
+      s!"seq={opsHaveDataWord 2 34 reduceRaw.ops}, " ++
+      s!"seqWrite={opsHaveDataWordSetAt 2 34 1 1 reduceRaw.ops}, " ++
       s!"bidRemove={opsHaveRbTreeOrderRemove 2 110 114 115 116 117 8 512 true reduceRaw.ops}, " ++
       s!"askRemove={opsHaveRbTreeOrderRemove 2 4210 4214 4215 4216 4217 8 512 false reduceRaw.ops}, " ++
       s!"header={opsHaveRawReduceHeader 5 reduceRaw.ops}, " ++
@@ -1038,7 +1038,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveAccountQuery (fun
         | .key4Find 8310 tree => tree.links.region.account == 2
         | _ => false) cancelAllFreeRaw.ops &&
-      opsHaveDataWordSetAt 2 106 1 1 cancelAllFreeRaw.ops &&
+      opsHaveDataWordSetAt 2 34 1 1 cancelAllFreeRaw.ops &&
       opsHaveRawReduceHeader 7 cancelAllFreeRaw.ops &&
       opsHaveRawReduceFinish cancelAllFreeRaw.ops &&
       !opsHaveInvoke cancelAllFreeRaw.ops && !opsHaveDataWord 2 1 cancelAllFreeRaw.ops do
@@ -1062,7 +1062,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
         | _ => false) cancelUpToFreeRaw.ops &&
       opsHaveDataWord 2 112 cancelUpToFreeRaw.ops &&
       opsHaveDataWord 2 4212 cancelUpToFreeRaw.ops &&
-      opsHaveDataWordSetAt 2 106 1 1 cancelUpToFreeRaw.ops &&
+      opsHaveDataWordSetAt 2 34 1 1 cancelUpToFreeRaw.ops &&
       opsHaveRawReduceHeader 9 cancelUpToFreeRaw.ops &&
       opsHaveRawReduceFinish cancelUpToFreeRaw.ops &&
       !opsHaveInvoke cancelUpToFreeRaw.ops && !opsHaveDataWord 2 1 cancelUpToFreeRaw.ops do
@@ -1075,7 +1075,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       s!"close={opsHaveFifoCancelCall (fun | .finish => true | _ => false) cancelUpToFreeRaw.ops}, " ++
       s!"sizeBid={opsHaveDataWord 2 112 cancelUpToFreeRaw.ops}, " ++
       s!"sizeAsk={opsHaveDataWord 2 4212 cancelUpToFreeRaw.ops}, " ++
-      s!"seq={opsHaveDataWordSetAt 2 106 1 1 cancelUpToFreeRaw.ops}, " ++
+      s!"seq={opsHaveDataWordSetAt 2 34 1 1 cancelUpToFreeRaw.ops}, " ++
       s!"header={opsHaveRawReduceHeader 9 cancelUpToFreeRaw.ops}, " ++
       s!"finish={opsHaveRawReduceFinish cancelUpToFreeRaw.ops}, " ++
       s!"invoke={opsHaveInvoke cancelUpToFreeRaw.ops}, status={opsHaveDataWord 2 1 cancelUpToFreeRaw.ops}"
@@ -1121,7 +1121,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       | _ => false) ops
   unless opsHaveDataWord 1 0 profile.ops && opsHaveDataWord 1 2 profile.ops &&
       opsHaveDataWord 1 3 profile.ops && opsHaveDataWord 1 4 profile.ops &&
-      opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 106 sequence.ops &&
+      opsHaveDataWord 1 4 seats.ops && opsHaveDataWord 1 34 sequence.ops &&
       opsHaveDataWord 1 112 bodyCount.ops && opsHaveDataWord 1 4212 bodyCount.ops &&
       opsHaveDataWord 1 8312 bodyCount.ops && opsHaveDataWord 1 8308 bodyCount.ops &&
       opsHaveDataWord 1 16504 bodyCount.ops && opsHaveDataWord 1 16500 bodyCount.ops &&
@@ -1374,7 +1374,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
       asm.contains "; checkPdaSeeds account=0 count=1" &&
-      asm.contains "fixed-stride external account word write acc=2 base=106 stride=1 capacity=1" &&
+      asm.contains "fixed-stride external account word write acc=2 base=34 stride=1 capacity=1" &&
       asm.contains "bounded one-based acc2 RB find root=110 links=114 stride=8 capacity=512" &&
       asm.contains "bounded one-based acc2 RB find root=4210 links=4214 stride=8 capacity=512" &&
       asm.contains

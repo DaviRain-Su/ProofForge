@@ -334,11 +334,11 @@ def profileAccountBytesAt (marketAccount : UInt64) : UInt64 :=
 def profileAccountBytes (_s : State) : UInt64 :=
   profileAccountBytesAt 1
 
-/-- Return the Phoenix market sequence scalar at absolute account word 106. The body starts after
-the 576-byte header and its first 32 words are padding, so this offset is profile-independent. -/
+/-- Return `MarketHeader.market_sequence_number` at absolute account word 34. This is distinct
+from the FIFO body's `order_sequence_number` at word 106. -/
 @[pf_entry]
 def marketSequence (s : State) : UInt64 :=
-  if profileAccountBytes s = 0 then 0 else accDataWord 1 106
+  if profileAccountBytes s = 0 then 0 else accDataWord 1 34
 
 /--
 Read only the three account-resident Sokoban allocator `size` words. The bid allocator starts at
@@ -1642,9 +1642,9 @@ def reduceOrderWithFreeFunds (_s : State) (side : UInt8)
         else accDataWordAtOneBased 2 4219 8 512 orderIndex
       let traderKey0 := signerKey 3
       let removed ← reduceFreeFunds512At 2 3 traderKey0 side price sequence requested
-      let marketSequence := accDataWord 2 106
+      let marketSequence := accDataWord 2 34
       let remaining := resting - removed
-      let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+      let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
       let _ := beginReduceBatchAt 5 2 2 marketSequence
       let _ := recordReduceAt orderIndex sequence price removed remaining
       let _ := finishReduceBatch
@@ -1694,8 +1694,8 @@ def reduceOrder (_s : State) (side : UInt8)
           else
             let _ ← claimReleasedFunds512At 2 traderIndex side released
             let _ := withdrawReleasedAt side atoms
-            let marketSequence := accDataWord 2 106
-            let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+            let marketSequence := accDataWord 2 34
+            let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
             let _ := beginReduceBatchAt 4 2 2 marketSequence
             let _ := recordReduceAt orderIndex sequence price actual (resting - actual)
             let _ := finishReduceBatch
@@ -1718,8 +1718,8 @@ def cancelAllOrdersWithFreeFunds (_s : State) : Except Error (State × UInt64) :
     .error .overflow
   else
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 106
-    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let marketSequence := accDataWord 2 34
+    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
     let _ := beginReduceBatchAt 7 2 2 marketSequence
     let _ := beginCancelAll
     let _ := cancelAllBids512At 2 traderIndex
@@ -1740,8 +1740,8 @@ def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
     .error .overflow
   else
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 106
-    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let marketSequence := accDataWord 2 34
+    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
     let _ := beginReduceBatchAt 6 2 2 marketSequence
     let _ := beginCancelAll
     let _ := cancelAllBids512At 2 traderIndex
@@ -1794,8 +1794,8 @@ def cancelUpToOrdersWithFreeFunds (_s : State) (side tickPresent : UInt8) (tick 
     let searchLimit := if searchPresent = 0 then bookSize else search.toUInt64
     let cancelLimit := if cancelPresent = 0 then bookSize else cancel.toUInt64
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 106
-    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let marketSequence := accDataWord 2 34
+    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
     let _ := beginReduceBatchAt 9 2 2 marketSequence
     let _ := beginCancelAll
     if bid then
@@ -1829,8 +1829,8 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
     let searchLimit := if searchPresent = 0 then bookSize else search.toUInt64
     let cancelLimit := if cancelPresent = 0 then bookSize else cancel.toUInt64
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 106
-    let _ := accDataWordSetAt 2 106 1 1 0 (marketSequence + 1)
+    let marketSequence := accDataWord 2 34
+    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
     let _ := beginReduceBatchAt 8 2 2 marketSequence
     let _ := beginCancelAll
     if bid then

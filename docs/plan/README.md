@@ -118,6 +118,10 @@
 | [l5-041](tasks/l5-041.md) | done | Storage-owned scalar-key ordered FIFO cursor |
 | [l5-042](tasks/l5-042.md) | done | Stable bounded SVM component bridge |
 | [l5-043](tasks/l5-043.md) | done | Bounded invocation-local audit recorder/batching |
+| [l5-044](tasks/l5-044.md) | done | Official Phoenix-v1 tags 6/7 CancelAll composition |
+| [l5-045](tasks/l5-045.md) | done | Bounded Borsh Option entry plans |
+| [l5-046](tasks/l5-046.md) | done | Official Phoenix-v1 tags 8/9 CancelUpTo composition |
+| [l5-047](tasks/l5-047.md) | done | Correct Phoenix market/order sequence domains |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 
