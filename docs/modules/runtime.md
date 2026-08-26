@@ -23,7 +23,7 @@
 - `rentExemption n` — 链上 `sol_get_rent_sysvar` → `lamports_per_byte * (128 + n)`。`n` 抽出时必须是常量。宿主 stub。
 - `signerKey0 : UInt64` — 链上 `ACC0_KEY+0` 第一个小端 u64。用到该叶子的入口检查 `is_signer`。不是 `tx.origin`。
 - `systemTransfer lamports` — 封闭 `system.transfer`。三账户 payer/recipient/System，`sol_invoke_signed_c`，无 signer seeds。
-- EVM 叶（SVM 发射器一律拒）：`evmTimestamp` / `evmChainId` / `evmSelf` / `evmCallValue` / `evmSelfBalance` / `evmCaller`（低 8B）/ `evmBlockNumber` / `structure Addr20`（w0/w1/w2，w2 仅低 4 字节）/ `evmCaller20` / `evmSelf20`。ABI 上 `Addr20` 是一个 `address`。
+- EVM 叶（SVM 发射器一律拒）：`evmTimestamp` / `evmChainId` / `evmSelf` / `evmCallValue` / `evmSelfBalance` / `evmCaller`（低 8B）/ `evmBlockNumber` / `structure Addr20`（w0/w1/w2，w2 仅低 4 字节）/ `evmCaller20` / `evmSelf20` / `structure UInt256`（w0 最低）/ `evmAdd256` / `evmSub256` / `evmMul256`。ABI 上 `Addr20` 是一个 `address`，`UInt256` 是一个 `uint256`。默认算术仍是 `UInt64`。
 - `evmDeposit amt` — `eq(callvalue(), amt)`，入口变 payable。
 - `evmSendEth dst amt` — `dst : Addr20`，组装 20B 后 value `CALL`，失败 revert。重入不进参考语义。
 - `evmLogTipped amt` — LOG1 topic = keccak(`Tipped(uint64)`)。

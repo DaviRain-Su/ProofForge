@@ -18,7 +18,8 @@ def entries : Array Entry := #[
   { name := "Lang", digest := "d2a43e6bf208bff0" },
   { name := "Vault", digest := "76bbe2020a90730b" },
   { name := "Ownable", digest := "25bf329e90f170d9" },
-  { name := "Token", digest := "37e40784b6dce87e" }
+  { name := "Token", digest := "37e40784b6dce87e" },
+  { name := "Wide", digest := "e3e24b62274618ce" }
 ]
 
 def names : Array String := entries.map (·.name)

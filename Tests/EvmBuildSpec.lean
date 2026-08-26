@@ -14,6 +14,7 @@ import Examples.Lang
 import Examples.Vault
 import Examples.Ownable
 import Examples.Token
+import Examples.Wide
 import Tests.Fixtures
 
 #pf_evm_build Examples.Counter
@@ -39,6 +40,8 @@ import Tests.Fixtures
 #pf_evm_build Examples.Ownable
 
 #pf_evm_build Examples.Token
+
+#pf_evm_build Examples.Wide
 
 /--
 error: extract/unsupported: evm rejects svm leaf in stamp

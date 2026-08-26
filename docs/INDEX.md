@@ -24,4 +24,4 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 
-当前阶段：**L4 + EVM**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。E-ADDR 已并入：`Addr20` 是一等类型，ABI 编成 `address`。SVM 名不翻译。
+当前阶段：**L4 + EVM**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。E-ADDR / E-U256 已并入：`Addr20` 是 `address`，`UInt256` 是显式 `uint256`。SVM 名不翻译。

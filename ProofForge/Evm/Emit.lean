@@ -102,6 +102,7 @@ private def widthMask (width : Nat) : String :=
   | 2 => "0xffff"
   | 4 => "0xffffffff"
   | 20 => "0xffffffffffffffffffffffffffffffffffffffff"
+  | 32 => "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
   | _ => u64MaxYul
 
 private def addrLeafOff : String → Option Nat
@@ -109,6 +110,20 @@ private def addrLeafOff : String → Option Nat
   | "w1" => some 1
   | "w2" => some 2
   | _ => none
+
+private def uint256LeafOff : String → Option Nat
+  | "w0" => some 0
+  | "w1" => some 1
+  | "w2" => some 2
+  | "w3" => some 3
+  | _ => none
+
+/-- Little-endian 64-bit limb `word` of a 256-bit ABI/storage word. -/
+private def packU256Word (src : String) (word : Nat) : String :=
+  "and(shr(" ++ toString (64 * word) ++ ", " ++ src ++ "), " ++ u64MaxYul ++ ")"
+
+private def packU256 (w0 w1 w2 w3 : String) : String :=
+  "or(or(" ++ w0 ++ ", shl(64, " ++ w1 ++ ")), or(shl(128, " ++ w2 ++ "), shl(192, " ++ w3 ++ ")))"
 
 private def maskExpr (width : Nat) (value : String) : String :=
   if width == 8 then value else "and(" ++ value ++ ", " ++ widthMask width ++ ")"
@@ -133,18 +148,20 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
         .error "extract/unsupported: evm arg is implicit state"
   | .local i => .ok s!"l{i}"
   | .field (.arg i) name =>
-      match addrLeafOff name with
-      | some off =>
-        if i < paramCount then
-          .ok (packAddrWord s!"{paramPrefix}{i}" off)
-        else do
-          let slot ← slotOf p name
-          let w := (IR.slotWidth p name).getD 8
-          return maskExpr w s!"sload({slot})"
-      | none => do
-          let slot ← slotOf p name
-          let w := (IR.slotWidth p name).getD 8
-          return maskExpr w s!"sload({slot})"
+      if i < paramCount then
+        match uint256LeafOff name, (paramWidths[i]?).getD 8 with
+        | some off, 32 => .ok (packU256Word s!"{paramPrefix}{i}" off)
+        | _, _ =>
+          match addrLeafOff name with
+          | some off => .ok (packAddrWord s!"{paramPrefix}{i}" off)
+          | none => do
+              let slot ← slotOf p name
+              let w := (IR.slotWidth p name).getD 8
+              return maskExpr w s!"sload({slot})"
+      else do
+        let slot ← slotOf p name
+        let w := (IR.slotWidth p name).getD 8
+        return maskExpr w s!"sload({slot})"
   | .field _ name => do
       let slot ← slotOf p name
       let w := (IR.slotWidth p name).getD 8
@@ -433,6 +450,38 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "}" ++ nl
         return (txt, pay, st10)
+    | .ext (.arith256 op limb) #[a0, a1, a2, a3, b0, b1, b2, b3] =>
+        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
+        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0
+        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s1
+        let (p3, x3, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s2
+        let (q0, y0, t0) ← materializeVal p indent paramPrefix paramCount paramWidths b0 s3
+        let (q1, y1, t1) ← materializeVal p indent paramPrefix paramCount paramWidths b1 t0
+        let (q2, y2, t2) ← materializeVal p indent paramPrefix paramCount paramWidths b2 t1
+        let (q3, y3, t3) ← materializeVal p indent paramPrefix paramCount paramWidths b3 t2
+        let (av, t4) := fresh t3
+        let (bv, t5) := fresh t4
+        let (rv, t6) := fresh t5
+        let (nm, t7) := fresh t6
+        let packedA := packU256 x0 x1 x2 x3
+        let packedB := packU256 y0 y1 y2 y3
+        let overflow :=
+          match op with
+          | 0 => "lt(" ++ rv ++ ", " ++ av ++ ")"
+          | 1 => "gt(" ++ bv ++ ", " ++ av ++ ")"
+          | _ => "and(iszero(iszero(" ++ bv ++ ")), iszero(eq(" ++ av ++ ", div(" ++ rv ++ ", " ++ bv ++ "))))"
+        let arith :=
+          match op with
+          | 0 => "add(" ++ av ++ ", " ++ bv ++ ")"
+          | 1 => "sub(" ++ av ++ ", " ++ bv ++ ")"
+          | _ => "mul(" ++ av ++ ", " ++ bv ++ ")"
+        let txt := p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
+          indent ++ "let " ++ av ++ " := " ++ packedA ++ nl ++
+          indent ++ "let " ++ bv ++ " := " ++ packedB ++ nl ++
+          indent ++ "let " ++ rv ++ " := " ++ arith ++ nl ++
+          indent ++ "if " ++ overflow ++ " { " ++ revert0 ++ " }" ++ nl ++
+          indent ++ "let " ++ nm ++ " := " ++ packU256Word rv limb ++ nl
+        return (txt, nm, t7)
     | _ =>
         let e ← loadVal p paramPrefix paramCount paramWidths v
         return ("", e, st)
@@ -1132,7 +1181,20 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
           finalState := next
       | .returnU64s values =>
           if values.isEmpty then throw "evm/cfg: empty return tuple"
-          if method.retWidths == #[20] && values.size == 3 then
+          if method.retWidths == #[32] && values.size == 4 then
+            let (p0, a0, s0) ←
+              materializeVal p indent "arg" method.paramCount method.paramWidths values[0]! finalState
+            let (p1, a1, s1) ←
+              materializeVal p indent "arg" method.paramCount method.paramWidths values[1]! s0
+            let (p2, a2, s2) ←
+              materializeVal p indent "arg" method.paramCount method.paramWidths values[2]! s1
+            let (p3, a3, s3) ←
+              materializeVal p indent "arg" method.paramCount method.paramWidths values[3]! s2
+            finalState := s3
+            body := body ++ p0 ++ p1 ++ p2 ++ p3 ++
+              indent ++ "mstore(0, " ++ packU256 a0 a1 a2 a3 ++ ")" ++ nl ++
+              indent ++ "return(0, 32)" ++ nl
+          else if method.retWidths == #[20] && values.size == 3 then
             let (p0, a0, s0) ←
               materializeVal p indent "arg" method.paramCount method.paramWidths values[0]! finalState
             let (p1, a1, s1) ←
@@ -1230,9 +1292,11 @@ private def renderCtorPrelude (objectName : String) (paramCount : Nat)
       let w := (paramWidths[i]?).getD 8
       let max := widthMask w
       out := out ++
-        "    let ctor_arg" ++ toString i ++ " := mload(" ++ toString (i * 32) ++ ")" ++ nl ++
-        "    if gt(ctor_arg" ++ toString i ++ ", " ++ max ++ ") { " ++
-          revert0 ++ " }" ++ nl
+        "    let ctor_arg" ++ toString i ++ " := mload(" ++ toString (i * 32) ++ ")" ++ nl
+      unless w == 32 do
+        out := out ++
+          "    if gt(ctor_arg" ++ toString i ++ ", " ++ max ++ ") { " ++
+            revert0 ++ " }" ++ nl
     return out
 
 private def renderRuntimeCopy (runtimeName : String) : String :=
@@ -1256,9 +1320,11 @@ private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool
     let w := (m.paramWidths[i]?).getD 8
     let max := widthMask w
     head := head ++
-      "        let arg" ++ toString i ++ " := calldataload(" ++ toString off ++ ")" ++ nl ++
-      "        if gt(arg" ++ toString i ++ ", " ++ max ++ ") { " ++
-        revert0 ++ " }" ++ nl
+      "        let arg" ++ toString i ++ " := calldataload(" ++ toString off ++ ")" ++ nl
+    unless w == 32 do
+      head := head ++
+        "        if gt(arg" ++ toString i ++ ", " ++ max ++ ") { " ++
+          revert0 ++ " }" ++ nl
   let body ← match emitCFGEntry p m with
     | .ok body => pure body
     | .error reason => throw s!"{reason} in {m.ixName}"
@@ -1317,6 +1383,8 @@ private def ctorAbi (p : IR.Program) : String :=
 private def outputsJson (m : IR.Method) : String :=
   if m.retWidths == #[20] then
     "[{\"name\":\"\",\"type\":\"address\"}]"
+  else if m.retWidths == #[32] then
+    "[{\"name\":\"\",\"type\":\"uint256\"}]"
   else if m.retCount ≤ 1 then
     "[{\"name\":\"\",\"type\":\"uint64\"}]"
   else

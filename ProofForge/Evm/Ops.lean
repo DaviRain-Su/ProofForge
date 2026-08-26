@@ -16,12 +16,15 @@ inductive ValKind where
   | mapGetU64
   | mapGetAddr
   | mapGetPair
+  /-- Checked 256-bit `add`/`sub`/`mul`; `limb` is 0..3 (w0 lowest). Eight operands: a0..a3, b0..b3. -/
+  | arith256 (op : Nat) (limb : Nat)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
   | .mapGetU64 => 2
   | .mapGetAddr => 4
   | .mapGetPair => 7
+  | .arith256 _ _ => 8
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
@@ -63,6 +66,8 @@ def mapGetU64 (base key : Val) : Val := .ext .mapGetU64 #[base, key]
 def mapGetAddr (base w0 w1 w2 : Val) : Val := .ext .mapGetAddr #[base, w0, w1, w2]
 def mapGetPair (base o0 o1 o2 s0 s1 s2 : Val) : Val :=
   .ext .mapGetPair #[base, o0, o1, o2, s0, s1, s2]
+def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
+  .ext (.arith256 op limb) #[a0, a1, a2, a3, b0, b1, b2, b3]
 
 private def allValuesWellFormed (values : Array Val) : Bool :=
   values.all (·.wellFormed ValKind.arity)

@@ -11,6 +11,18 @@ structure Addr20 where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 /--
+256 位金额，四个 `UInt64` 叶：w0 最低 64 位，w3 最高。
+ABI / 单次 calldata word 是一个 `uint256`；storage 仍四槽。
+默认算术还是 `UInt64`。溢出在 Yul 里 `revert(0,0)`，宿主 stub 不模拟溢出。
+-/
+structure UInt256 where
+  w0 : UInt64
+  w1 : UInt64
+  w2 : UInt64
+  w3 : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+/--
 `CALLER` 的低 8 字节：`and(caller(), 0xffffffffffffffff)`。
 这是 20 字节地址的末 8 字节，不是完整 address，也不是 `tx.origin`。
 SVM 发射器碰到这个叶子 fail closed。
@@ -94,5 +106,17 @@ def evmSelf20 : Addr20 :=
 
 /-- 封闭 ERC-20 `balanceOf(address(this))`。超 UInt64 应 revert。宿主返回 0。 -/
 @[irreducible] def evmTokenBalanceOfSelf (_token : Addr20) : UInt64 := 0
+
+/-- checked `a + b`。溢出 revert。宿主返回 `a`。 -/
+@[irreducible] def evmAdd256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
+
+/-- checked `a - b`。不足 revert。宿主返回 `a`。 -/
+@[irreducible] def evmSub256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
+
+/-- checked `a * b`。溢出 revert。宿主返回 `a`。 -/
+@[irreducible] def evmMul256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
 
 end ProofForge.Evm.Runtime

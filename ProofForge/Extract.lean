@@ -21,9 +21,13 @@ private def isConstNamed (e : Expr) (n : Name) : Bool :=
   e.consumeMData.getAppFn.constName? == some n
 
 private def addr20Name : Name := ``ProofForge.Evm.Runtime.Addr20
+private def uint256Name : Name := ``ProofForge.Evm.Runtime.UInt256
 
 private def isAddr20Type (e : Expr) : Bool :=
   e.consumeMData.getAppFn.constName? == some addr20Name
+
+private def isUInt256Type (e : Expr) : Bool :=
+  e.consumeMData.getAppFn.constName? == some uint256Name
 
 private def addr20ProjLeaf (n : Name) : Option String :=
   let last := Core.IR.lastName n.toString
@@ -35,6 +39,21 @@ private def addr20ProjLeaf (n : Name) : Option String :=
     | .str p _ => if p == addr20Name || p.toString.endsWith ".Addr20" then some last else none
     | _ => none
   else none
+
+private def uint256ProjLeaf (n : Name) : Option String :=
+  let last := Core.IR.lastName n.toString
+  if n == ``ProofForge.Evm.Runtime.UInt256.w0 || n.toString.endsWith ".UInt256.w0" then some "w0"
+  else if n == ``ProofForge.Evm.Runtime.UInt256.w1 || n.toString.endsWith ".UInt256.w1" then some "w1"
+  else if n == ``ProofForge.Evm.Runtime.UInt256.w2 || n.toString.endsWith ".UInt256.w2" then some "w2"
+  else if n == ``ProofForge.Evm.Runtime.UInt256.w3 || n.toString.endsWith ".UInt256.w3" then some "w3"
+  else if last == "w0" || last == "w1" || last == "w2" || last == "w3" then
+    match n with
+    | .str p _ => if p == uint256Name || p.toString.endsWith ".UInt256" then some last else none
+    | _ => none
+  else none
+
+private def uint256LimbLit : String → UInt64
+  | "w0" => 0 | "w1" => 1 | "w2" => 2 | _ => 3
 
 private def isVectorSet (e : Expr) : Bool :=
   isConstNamed e ``Vector.set ||
@@ -880,6 +899,46 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.ownerIsSelf a) else none
           | _ => none
+        else if let some leaf := uint256ProjLeaf n then
+          let args := e.getAppArgs
+          if args.isEmpty then none
+          else
+            let baseE := args[args.size - 1]!
+            let limb := uint256LimbLit leaf
+            let arith? :=
+              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
+                  endsWith baseE ".evmAdd256" then some 0
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSub256 ||
+                  endsWith baseE ".evmSub256" then some 1
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMul256 ||
+                  endsWith baseE ".evmMul256" then some 2
+              else none
+            match arith? with
+            | some op =>
+              let bargs := baseE.getAppArgs
+              if bargs.size < 2 then none
+              else
+                let aE := bargs[bargs.size - 2]!
+                let bE := bargs[bargs.size - 1]!
+                let limbConst : String → Name
+                  | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
+                  | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
+                  | "w2" => ``ProofForge.Evm.Runtime.UInt256.w2
+                  | _ => ``ProofForge.Evm.Runtime.UInt256.w3
+                let limbVal (base : Expr) (name : String) : Option Ops.Val :=
+                  asVal env fuel' (mkApp (mkConst (limbConst name)) base)
+                match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
+                    limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
+                | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
+                  some (.ext (.evm (.arith256 op limb.toNat)) #[a0, a1, a2, a3, b0, b1, b2, b3])
+                | _, _, _, _, _, _, _, _ => none
+            | none =>
+              match asVal env fuel' baseE with
+              | some b => some (flattenField b leaf)
+              | none =>
+                match strip baseE with
+                | .bvar i => some (flattenField (.arg i) leaf)
+                | _ => none
         else if let some leaf := addr20ProjLeaf n then
           let args := e.getAppArgs
           if args.isEmpty then none
@@ -1296,6 +1355,37 @@ private def addr20CtorFields (env : Environment) (e : Expr) : Option (Array Expr
         some (e.getAppArgs.extract (e.getAppArgs.size - 3) e.getAppArgs.size)
       else none
     | _ => none
+
+private def uint256CtorFields (env : Environment) (e : Expr) : Option (Array Expr) :=
+  let e := peelLets (strip e)
+  match e.getAppFn.constName? with
+  | none => none
+  | some n =>
+    match env.find? n with
+    | some (.ctorInfo c) =>
+      if c.induct == uint256Name && e.getAppArgs.size ≥ 4 then
+        some (e.getAppArgs.extract (e.getAppArgs.size - 4) e.getAppArgs.size)
+      else none
+    | _ => none
+
+private def uint256Leaves (env : Environment) (e : Expr) :
+    Ops.Val × Ops.Val × Ops.Val × Ops.Val :=
+  let projConst : String → Name
+    | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
+    | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
+    | "w2" => ``ProofForge.Evm.Runtime.UInt256.w2
+    | _ => ``ProofForge.Evm.Runtime.UInt256.w3
+  let proj (name : String) : Ops.Val :=
+    (val env (mkApp (mkConst (projConst name)) e)).getD (flattenField (.arg 0) name)
+  if (uint256CtorFields env e).isSome ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" then
+    (proj "w0", proj "w1", proj "w2", proj "w3")
+  else
+    match val env e with
+    | some v => (flattenField v "w0", flattenField v "w1", flattenField v "w2", flattenField v "w3")
+    | none => (proj "w0", proj "w1", proj "w2", proj "w3")
 
 /-- Decode a scalar binding through one explicitly-inline helper boundary before substituting it.
 This preserves a shared helper result without increasing the global value-decoder fuel. -/
@@ -1995,6 +2085,9 @@ private partial def flattenInitValue (env : Environment) (fuel : Nat) (ty e : Ex
       else if tyName? == some addr20Name then
         let (w0, w1, w2) := addr20Leaves env e
         some #[w0, w1, w2]
+      else if tyName? == some uint256Name then
+        let (w0, w1, w2, w3) := uint256Leaves env e
+        some #[w0, w1, w2, w3]
       else if tyName? == some ``Bool then
         if isConstNamed e ``Bool.true || endsWith e ".true" then some #[.lit 1]
         else if isConstNamed e ``Bool.false || endsWith e ".false" then some #[.lit 0]
@@ -2054,7 +2147,7 @@ private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val
   let fields ← userCtorFields env (substLets 32 e)
   let ctor ← (substLets 32 e).getAppFn.constName?
   let .ctorInfo info ← env.find? ctor | none
-  if info.induct == addr20Name then none else pure ()
+  if info.induct == addr20Name || info.induct == uint256Name then none else pure ()
   let names := getStructureFields env info.induct
   if fields.size != names.size then none else pure ()
   let mut values : Array Ops.Val := #[]
@@ -4299,6 +4392,19 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
         | none => false) then
     let (w0, w1, w2) := addr20Leaves env e
     .ok #[.returnU64 w0, .returnU64 w1, .returnU64 w2]
+  else if (uint256CtorFields env e).isSome ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" ||
+      (match e.getAppFn.constName? with
+        | some n =>
+          match env.find? n with
+          | some info =>
+            (resultType 16 info.type).consumeMData.getAppFn.constName? == some uint256Name
+          | none => false
+        | none => false) then
+    let (w0, w1, w2, w3) := uint256Leaves env e
+    .ok #[.returnU64 w0, .returnU64 w1, .returnU64 w2, .returnU64 w3]
   else if let some v := val env e then
     match v with
     | .field _ _ => .ok #[.returnU64 v]
@@ -5040,7 +5146,10 @@ private def widthOfType (e : Expr) : Option Nat :=
   | some ``UInt16 => some 2
   | some ``UInt32 => some 4
   | some ``UInt64 => some 8
-  | some n => if n == addr20Name then some 20 else none
+  | some n =>
+      if n == addr20Name then some 20
+      else if n == uint256Name then some 32
+      else none
   | none => none
 
 /-- 用户参数宽。init 全算；mutate/view 丢掉第一个 state。 -/
@@ -5232,7 +5341,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
           .mapGetPair (flipVal fuel' b) (flipVal fuel' a0) (flipVal fuel' a1)
             (flipVal fuel' a2) (flipVal fuel' c0) (flipVal fuel' c1) (flipVal fuel' c2)
-      | v => v
+      | .ext kind operands => .ext kind (operands.map (flipVal fuel'))
   let rec flipOp (fuel : Nat) (op : Ops.Op) : Ops.Op :=
     match fuel with
     | 0 => op
@@ -5289,6 +5398,17 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .errorOverflow => .errorOverflow
       | .errorNamed n => .errorNamed n
   let ops := ops0.map (flipOp 128)
+  let expandWide (ops : Array Ops.Op) (width : Nat) : Array Ops.Op :=
+    match ops.toList with
+    | [.returnU64 v] =>
+      let names := if width == 32 then #["w0", "w1", "w2", "w3"] else #["w0", "w1", "w2"]
+      names.map fun n => .returnU64 (flattenField v n)
+    | _ => ops
+  let ops :=
+    let retTy := peelForalls info.type
+    if isUInt256Type retTy then expandWide ops 32
+    else if isAddr20Type retTy then expandWide ops 20
+    else ops
   let paramCount :=
     match kind with
     | .init => if nLams = 0 then 1 else nLams
@@ -5297,12 +5417,16 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
   let retTy := peelForalls info.type
   let retWidths :=
     match kind with
-    | .get => if isAddr20Type retTy then #[20] else #[]
+    | .get =>
+      if isAddr20Type retTy then #[20]
+      else if isUInt256Type retTy then #[32]
+      else #[]
     | _ => #[]
   let retCount :=
     match kind with
     | .get =>
       if isAddr20Type retTy then 3
+      else if isUInt256Type retTy then 4
       else
         let nRet := ops.foldl (init := 0) fun acc op =>
           match op with | .returnU64 _ => acc + 1 | _ => acc
@@ -5365,6 +5489,15 @@ private def leafSchema (env : Environment) (fuel : Nat) (name : String)
           { place := place.push (.field "Addr20" 0 "w0"), name := s!"{name}_w0", ty := .uint 64 },
           { place := place.push (.field "Addr20" 1 "w1"), name := s!"{name}_w1", ty := .uint 64 },
           { place := place.push (.field "Addr20" 2 "w2"), name := s!"{name}_w2", ty := .uint 64 }
+        ]
+      }
+    else if ty.getAppFn.constName? == some uint256Name then
+      .ok {
+        leaves := #[
+          { place := place.push (.field "UInt256" 0 "w0"), name := s!"{name}_w0", ty := .uint 64 },
+          { place := place.push (.field "UInt256" 1 "w1"), name := s!"{name}_w1", ty := .uint 64 },
+          { place := place.push (.field "UInt256" 2 "w2"), name := s!"{name}_w2", ty := .uint 64 },
+          { place := place.push (.field "UInt256" 3 "w3"), name := s!"{name}_w3", ty := .uint 64 }
         ]
       }
     else if ty.getAppFn.constName? == some ``Option then
@@ -5496,9 +5629,9 @@ def inferFields (env : Environment) (initName : Name) : Except String (Array Str
 
 private def valFields : Ops.Val → Array String
   | .field (.arg _) n =>
-      if n == "w0" || n == "w1" || n == "w2" then #[] else #[n]
+      if n == "w0" || n == "w1" || n == "w2" || n == "w3" then #[] else #[n]
   | .field (.local _) n =>
-      if n == "w0" || n == "w1" || n == "w2" then #[] else #[n]
+      if n == "w0" || n == "w1" || n == "w2" || n == "w3" then #[] else #[n]
   | .field _ n => #[n]
   | .arg _ => #[]
   | .local _ => #[]
@@ -5811,13 +5944,13 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
   let ret := peelForalls info.type
   if isExceptType ret then
     return .increment
-  if isUInt64Type ret || (widthOfType ret).isSome || isAddr20Type ret then
+  if isUInt64Type ret || (widthOfType ret).isSome || isAddr20Type ret || isUInt256Type ret then
     return .get
   if ret.getAppFn.constName? == some ``Prod then
     return .get
   if let some structName := ret.getAppFn.constName? then
     if isStructure env structName && structName != ``UInt64 &&
-        structName != ``Prod && structName != addr20Name then
+        structName != ``Prod && structName != addr20Name && structName != uint256Name then
       return .init
   throw s!"extract/unsupported: cannot classify {n}"
 
