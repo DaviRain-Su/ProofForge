@@ -1,5 +1,5 @@
 import ProofForge.Core.Ops
-import ProofForge.Svm.AccountStorage
+import ProofForge.Svm.Component
 
 namespace ProofForge.Svm.Ops
 
@@ -84,7 +84,7 @@ inductive ValKind where
   | accKeyWord (acc word : Nat)
   | accOwnerWord (acc word : Nat)
   | accDataWord (acc word : Nat)
-  | accountStorage (query : AccountStorage.Query)
+  | component (query : Component.Query)
   | accLamportsN (acc : Nat)
   | accDataLenN (acc : Nat)
   | isSignerN (acc : Nat)
@@ -99,7 +99,7 @@ inductive ValKind where
 def ValKind.arity : ValKind → Nat
   | .checkPda _ => 1
   | .byteSwap64 => 1
-  | .accountStorage query => query.arity
+  | .component query => query.arity
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
@@ -155,7 +155,7 @@ def CpiWord.rawSelfEntry? : CpiWord V → Option RawSelfEntry
 inductive OpExt (V : Type) where
   | invoke (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord V))
       (seeds : Array PdaSeed := #[]) (bump : Option V := none)
-  | accountStorage (call : AccountStorage.Call V)
+  | component (call : Component.Call V)
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
@@ -191,43 +191,45 @@ def accKeyWord (acc word : Nat) : Val := leaf (.accKeyWord acc word)
 def accOwnerWord (acc word : Nat) : Val := leaf (.accOwnerWord acc word)
 def accDataWord (acc word : Nat) : Val := leaf (.accDataWord acc word)
 def accDataWordAt (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
-  .ext (.accountStorage (.readWordZeroBased acc baseWord strideWords capacity)) #[index]
+  .ext (.component (.accountStorage
+    (.readWordZeroBased acc baseWord strideWords capacity))) #[index]
 def accDataWordAtOneBased (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
-  .ext (.accountStorage (.readWordOneBased acc baseWord strideWords capacity)) #[index]
+  .ext (.component (.accountStorage
+    (.readWordOneBased acc baseWord strideWords capacity))) #[index]
 def accDataRbTreeKey4Find
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Val :=
-  .ext (.accountStorage (.key4FindOneBased
-    acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity))
+  .ext (.component (.accountStorage (.key4FindOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity)))
       #[key0, key1, key2, key3]
 def accDataRbTreeOrderFind
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (price sequence : Val) : Val :=
-  .ext (.accountStorage (.fifoFindOneBased
-    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))
+  .ext (.component (.accountStorage (.fifoFindOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
       #[price, sequence]
 def accDataRbTreeOrderCursor
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (hasCursor price sequence : Val) : Val :=
-  .ext (.accountStorage (.fifoCursorOneBased
-    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))
+  .ext (.component (.accountStorage (.fifoCursorOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
       #[hasCursor, price, sequence]
 def accDataParentPathValid
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
     (index root bumpIndex : Val) : Val :=
-  .ext (.accountStorage (.parentPathValidOneBased
-    acc linksBaseWord parentBaseWord strideWords capacity maxDepth)) #[index, root, bumpIndex]
+  .ext (.component (.accountStorage (.parentPathValidOneBased
+    acc linksBaseWord parentBaseWord strideWords capacity maxDepth))) #[index, root, bumpIndex]
 def accDataRbTreeValid
     (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (root size bumpIndex freeListHead : Val) : Val :=
-  .ext (.accountStorage (.fifoRbTreeValidOneBased
-    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))
+  .ext (.component (.accountStorage (.fifoRbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
       #[root, size, bumpIndex, freeListHead]
 def accDataRbTreeKey4Valid
     (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (root size bumpIndex freeListHead : Val) : Val :=
-  .ext (.accountStorage (.key4RbTreeValidOneBased
-    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity))
+  .ext (.component (.accountStorage (.key4RbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity)))
       #[root, size, bumpIndex, freeListHead]
 def accLamportsN (acc : Nat) : Val := leaf (.accLamportsN acc)
 def accDataLenN (acc : Nat) : Val := leaf (.accDataLenN acc)
@@ -284,7 +286,7 @@ private partial def staticPayloadsWellFormed : Val → Bool
         operands.all staticPayloadsWellFormed
   | .ext (.accDataWord acc word) operands =>
       accInRange acc && dataWordInRange word && operands.all staticPayloadsWellFormed
-  | .ext (.accountStorage query) operands =>
+  | .ext (.component query) operands =>
       query.wellFormed maxTxAccountLocks && operands.all staticPayloadsWellFormed
   | .ext _ operands => operands.all staticPayloadsWellFormed
   | _ => true
@@ -310,7 +312,7 @@ def OpExt.wellFormed : OpExt Val → Bool
           (PdaSeed.groupWellFormed seeds && bump.isSome)) &&
         bump.all fun value =>
           value.wellFormed ValKind.arity && staticPayloadsWellFormed value
-  | .accountStorage call =>
+  | .component call =>
       call.wellFormed (fun value =>
         value.wellFormed ValKind.arity && staticPayloadsWellFormed value) maxTxAccountLocks
 
@@ -331,7 +333,7 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
       | .invoke _ _ data _ bump =>
           data.all (fun word => word.value?.all staticPayloadsWellFormed) &&
             bump.all staticPayloadsWellFormed
-      | .accountStorage call => call.allValues staticPayloadsWellFormed
+      | .component call => call.allValues staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
 def Op.wellFormed (op : Op) : Bool :=
@@ -366,7 +368,7 @@ partial def valNeedsWalk : Val → Bool
        | .signerKeyN acc | .ownerIsSelf acc => acc ≥ 1
        | .findPdaSeeds seeds =>
            seeds.any fun | .stateKey | .accKey _ | .accData .. => true | _ => false
-       | .accountStorage query => query.needsWalk
+       | .component query => query.needsWalk
        | .checkPdaSeeds _ _ => true
        | _ => false) || operands.any valNeedsWalk
 
@@ -390,7 +392,7 @@ partial def valMinAccounts : Val → Nat
         | .accLamportsN acc | .accDataLenN acc
         | .isSignerN acc | .isWritableN acc | .isExecutableN acc
         | .signerKeyN acc | .ownerIsSelf acc => acc + 1
-        | .accountStorage query => query.minAccounts valMinAccounts operands
+        | .component query => query.minAccounts valMinAccounts operands
         | .findPdaSeeds seeds => seeds.foldl (init := 0) fun current seed =>
             match seed with
             | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
@@ -402,7 +404,7 @@ partial def valMinAccounts : Val → Nat
               | _ => current
         | _ => 0
       match kind with
-      | .accountStorage _ => here
+      | .component _ => here
       | _ => operands.foldl (init := here) fun current operand =>
           Nat.max current (valMinAccounts operand)
 
@@ -437,7 +439,7 @@ private def OpExt.needsWalk : OpExt Val → Bool
       data.any CpiWord.needsWalk ||
         seeds.any (fun | .stateKey | .accKey _ | .accData .. => true | _ => false) ||
         bump.any valNeedsWalk
-  | .accountStorage .. => true
+  | .component .. => true
 
 private def OpExt.minAccounts : OpExt Val → Nat
   | .invoke _ _ data seeds bump =>
@@ -448,12 +450,12 @@ private def OpExt.minAccounts : OpExt Val → Nat
         | .accKey acc | .accData acc .. => Nat.max current (acc + 2)
         | _ => current
       Nat.max (Nat.max fromData fromSeeds) (bump.map valMinAccounts |>.getD 0)
-  | .accountStorage call => call.minAccounts valMinAccounts
+  | .component call => call.minAccounts valMinAccounts
 
 private def OpExt.hasSelect : OpExt Val → Bool
   | .invoke _ _ data _ bump =>
       data.any CpiWord.hasSelect || bump.any valHasSelect
-  | .accountStorage call => call.anyValue valHasSelect
+  | .component call => call.anyValue valHasSelect
 
 def hasInvoke (ops : Array Op) : Bool :=
   walkOps ops fun | .ext (.invoke ..) => true | _ => false

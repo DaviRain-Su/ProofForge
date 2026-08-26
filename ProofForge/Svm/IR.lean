@@ -1,7 +1,7 @@
 import ProofForge.Extract.IR
 import ProofForge.Core.Target
 import ProofForge.Svm.ABI
-import ProofForge.Svm.AccountStorage
+import ProofForge.Svm.Component
 import ProofForge.Svm.EntryAdapter
 
 namespace ProofForge.Svm.IR
@@ -20,7 +20,7 @@ inductive Op where
   | invoke (programIx : Nat) (metas : Array Ops.CpiMeta)
       (data : Array (Ops.CpiWord Ops.Val))
       (seeds : Array Ops.PdaSeed := #[]) (bump : Option Ops.Val := none)
-  | accountStorage (call : AccountStorage.Call Ops.Val)
+  | component (call : Component.Call Ops.Val)
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -45,7 +45,7 @@ private partial def lowerOp : Ops.Op → Except String Op
       return .ite cmp lhs rhs (← lowerOps thn) (← lowerOps els)
   | .ext (.invoke programIx metas data seed bump) =>
       pure (.invoke programIx metas data seed bump)
-  | .ext (.accountStorage call) => pure (.accountStorage call)
+  | .ext (.component call) => pure (.component call)
   | .forAccum n addend resultLocal => pure (.forAccum n addend resultLocal)
   | .forBody n body => return .forBody n (← lowerOps body)
   | .indexSetLeaf name _ _ _ leaf =>
@@ -76,7 +76,7 @@ private partial def Op.toSource : Op → Ops.Op
   | .checkedModU64 lhs rhs => .checkedModU64 lhs rhs
   | .ite cmp lhs rhs thn els => .ite cmp lhs rhs (toSourceOps thn) (toSourceOps els)
   | .invoke programIx metas data seed bump => .ext (.invoke programIx metas data seed bump)
-  | .accountStorage call => .ext (.accountStorage call)
+  | .component call => .ext (.component call)
   | .forAccum n addend resultLocal => .forAccum n addend resultLocal
   | .forBody n body => .forBody n (toSourceOps body)
   | .indexSet name idx value len elemOff => .indexSet name idx value len elemOff
@@ -100,14 +100,14 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
     Ops.OpExt Ops.Val → Ops.OpExt Ops.Val
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
-  | .accountStorage call => .accountStorage (call.mapValues mapValue)
+  | .component call => .component (call.mapValues mapValue)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .invoke _ _ data _ bump =>
       data.filterMap Ops.CpiWord.value? ++ match bump with
         | some value => #[value]
         | none => #[]
-  | .accountStorage call => call.values
+  | .component call => call.values
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
   mapValues := mapCfgPayload
@@ -136,8 +136,8 @@ private def projectOpExt
   | .svm (.invoke programIx metas data seeds bump) =>
       return .invoke programIx metas (← data.mapM (projectCpiWord projectVal))
         seeds (← bump.mapM projectVal)
-  | .svm (.accountStorage call) =>
-      return .accountStorage (← call.mapValuesM projectVal)
+  | .svm (.component call) =>
+      return .component (← call.mapValuesM projectVal)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
 
 /-- Static registration of the extractor-to-SVM projection. -/
@@ -442,7 +442,7 @@ private partial def rawOpsUseManagedState (paramCount : Nat) (ops : Array Op) : 
           rawOpsUseManagedState paramCount els
     | .invoke _ _ data _ bump =>
         data.any (fun word => word.value?.any uses) || bump.any uses
-    | .accountStorage call => call.values.any uses
+    | .component call => call.values.any uses
     | .forBody _ body => rawOpsUseManagedState paramCount body
     | .joinLocal _ | .errorOverflow | .errorNamed _ => false
 
@@ -664,7 +664,7 @@ private partial def valCanon : Ops.Val → String
   | .ext (.accKeyWord acc word) #[] => s!"kw.{acc}.{word}"
   | .ext (.accOwnerWord acc word) #[] => s!"ow.{acc}.{word}"
   | .ext (.accDataWord acc word) #[] => s!"dw.{acc}.{word}"
-  | .ext (.accountStorage query) operands => query.canonical valCanon operands
+  | .ext (.component query) operands => query.canonical valCanon operands
   | .ext (.accLamportsN acc) #[] => s!"lpN.{acc}"
   | .ext (.accDataLenN acc) #[] => s!"dlN.{acc}"
   | .ext (.isSignerN acc) #[] => s!"sgN.{acc}"
@@ -739,7 +739,7 @@ private partial def opsCanon (ops : Array Op) : String :=
               s!",s.[{seedCanon}]:{valCanon valueBump}"
           | _, none => ""
         s!"inv({programIx},[{metaCanon}],[{dataCanon}]{signer})"
-    | .accountStorage call => call.canonical valCanon
+    | .component call => call.canonical valCanon
     | .forAccum n addend resultLocal =>
         s!"for.{resultLocal}({n},{valCanon addend})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"

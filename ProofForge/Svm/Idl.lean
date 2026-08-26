@@ -60,7 +60,7 @@ private partial def writtenAccounts (ops : Array IR.Op) : Array Nat :=
       match op with
       | .invoke _ metas _ _ _ =>
           metas.filterMap fun entry => if entry.writable then some (entry.acc + 1) else none
-      | .accountStorage call => call.effects.writes
+      | .component call => call.effects.writes
       | _ => #[]
     let nested :=
       match op with

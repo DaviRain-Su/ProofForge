@@ -62,7 +62,11 @@ backend 另提供共用的 bounded Key4/FIFO lookup；Runtime source 可在 comp
 最小 profile 已用这套组合实现 bid/ask `ReduceOrderWithFreeFunds` 的 partial/full、trader
 collateral unlock 与 checked preflight。target-owned `EntryAdapter` 已统一 packed wire decode、
 raw/generated dispatch 与账户合同，`AccountStorage` 继续统一 account-resident
-map/queue/allocator/tree；官方 Phoenix tag 4/5 wire、账户合同、93/128-byte authenticated
+map/queue/allocator/tree；后者现在从稳定的 `Svm.Component.Query/Call` bridge 降低：generic
+Ops、IR、CFG 与主 Emit 只 dispatch 一次 `component`，组件自己拥有 operand traversal、effects、
+geometry、canonical spelling、scratch boundary 与 emitter dispatch。以后增加 bounded queue、
+recorder 或 transient allocator 只扩 component-owned 模块，不再横向修改整条通用编译链。
+官方 Phoenix tag 4/5 wire、账户合同、93/128-byte authenticated
 audit，以及 tag 4 classic Token vault withdrawal 已由两层组合完成。PDA mint seed 直接引用
 经过认证的 MarketHeader 固定 byte slice，不创建 heap buffer。storage-owned FIFO cursor 只
 保留 `(price, sequence)` scalar key，每次从账户 root 做有界 strict upper-bound，因此删除后

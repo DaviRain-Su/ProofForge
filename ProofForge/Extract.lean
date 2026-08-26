@@ -2388,8 +2388,8 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.accOwnerWord a w) => some (.accOwnerWord a w)
             | some (.accDataWord a w) => some (.accDataWord a w)
             | some (.accDataWordAt a b s c i) => some (.accDataWordAt a b s c i)
-            | some (.ext (.svm (.accountStorage query)) operands) =>
-                some (.ext (.svm (.accountStorage query)) operands)
+            | some (.ext (.svm (.component query)) operands) =>
+                some (.ext (.svm (.component query)) operands)
             | some (.accLamportsN a) => some (.accLamportsN a)
             | some (.accDataLenN a) => some (.accDataLenN a)
             | some (.isSignerN a) => some (.isSignerN a)
@@ -4686,7 +4686,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .checkPda _ _ | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
     | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
-    | .ext (.svm (.accountStorage _)) _
+    | .ext (.svm (.component _)) _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
@@ -5061,7 +5061,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
               | 0 => false
               | fuel' + 1 => ops.any fun op =>
                   match op with
-                  | .ext (.svm (.accountStorage ..)) => true
+                  | .ext (.svm (.component call)) => !call.effects.writes.isEmpty
                   | .ite _ _ _ nestedThen nestedElse =>
                       hasAccDataWrite fuel' nestedThen || hasAccDataWrite fuel' nestedElse
                   | .forBody _ body => hasAccDataWrite fuel' body
@@ -5650,8 +5650,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
       | .byteSwap64 word => .byteSwap64 (flipVal fuel' word)
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
-      | .ext (.svm (.accountStorage query)) operands =>
-          .ext (.svm (.accountStorage query)) (operands.map (flipVal fuel'))
+      | .ext (.svm (.component query)) operands =>
+          .ext (.svm (.component query)) (operands.map (flipVal fuel'))
       | .checkPda s b => .checkPda s (flipVal fuel' b)
       | .bitAnd l r => .bitAnd (flipVal fuel' l) (flipVal fuel' r)
       | .bitOr l r => .bitOr (flipVal fuel' l) (flipVal fuel' r)
@@ -5699,8 +5699,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .invoke prog metas data seed bump =>
         .invoke prog metas (data.map (·.map (flipVal fuel')))
           seed (bump.map (flipVal fuel'))
-      | .ext (.svm (.accountStorage call)) =>
-          .ext (.svm (.accountStorage (call.mapValues (flipVal fuel'))))
+      | .ext (.svm (.component call)) =>
+          .ext (.svm (.component (call.mapValues (flipVal fuel'))))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmSendEth a b c d =>
           .evmSendEth (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c) (flipVal fuel' d)
@@ -5943,7 +5943,7 @@ private partial def valFields : Ops.Val → Array String
   | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => #[]
   | .byteSwap64 word => valFields word
   | .accDataWordAt _ _ _ _ i => valFields i
-  | .ext (.svm (.accountStorage _)) operands => operands.flatMap valFields
+  | .ext (.svm (.component _)) operands => operands.flatMap valFields
   | .checkPda _ b => valFields b
   | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
       valFields l ++ valFields r
@@ -5975,7 +5975,7 @@ private def opFields : Ops.Op → Array String
   | .invoke _ _ data _ bump =>
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
-  | .ext (.svm (.accountStorage call)) => call.values.flatMap valFields
+  | .ext (.svm (.component call)) => call.values.flatMap valFields
   | .evmDeposit v => valFields v
   | .evmSendEth a b c d => valFields a ++ valFields b ++ valFields c ++ valFields d
   | .evmLog _ v => valFields v
@@ -6082,8 +6082,8 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
                 let normalized ← normalizeVal value
                 pure (word.map fun _ => normalized)
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
-      | .ext (.svm (.accountStorage call)) =>
-          return .ext (.svm (.accountStorage (← call.mapValuesM normalizeVal)))
+      | .ext (.svm (.component call)) =>
+          return .ext (.svm (.component (← call.mapValuesM normalizeVal)))
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmSendEth a b c d =>
           return .evmSendEth (← normalizeVal a) (← normalizeVal b)
@@ -6167,7 +6167,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .invoke _ _ data _ bump =>
       (data.findSome? fun word => word.value?.bind (valEscapedArg limit)) <|>
         bump.bind (valEscapedArg limit)
-  | .ext (.svm (.accountStorage call)) =>
+  | .ext (.svm (.component call)) =>
       call.values.findSome? (valEscapedArg limit)
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)

@@ -1,6 +1,7 @@
 import ProofForge.Svm.Ops
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
+import ProofForge.Svm.Component.Emit
 import ProofForge.Svm.IR
 import ProofForge.Evm.Ops
 import ProofForge.Evm.IR
@@ -72,6 +73,9 @@ private def validIndexedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
 private def validOneBasedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
   .readWordOneBased 1 114 8 512
 
+private def validReadComponentQuery : ProofForge.Svm.Component.Query :=
+  .accountStorage validOneBasedDataWordQuery
+
 private def invalidIndexedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
   .readWordZeroBased 1 114 2305843009213693951 1
 
@@ -81,6 +85,9 @@ private def invalidIndexedDataWordQuery : ProofForge.Svm.AccountStorage.Query :=
 #guard validIndexedDataWordQuery.arity == 1
 #guard validIndexedDataWordQuery.effects.reads == #[1]
 #guard validIndexedDataWordQuery.effects.writes.isEmpty
+#guard validReadComponentQuery.arity == validOneBasedDataWordQuery.arity
+#guard validReadComponentQuery.effects == validOneBasedDataWordQuery.effects
+#guard validReadComponentQuery.wellFormed
 #guard validIndexedDataWordQuery.canonical
     (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
     (#[.arg 0] : Array ProofForge.Svm.Ops.Val) == "dwi.1.114.8.512(a0)"
@@ -93,7 +100,8 @@ private def validParentPathOp : ProofForge.Svm.Ops.Op :=
     1 114 115 8 4096 32 (.arg 0) (.arg 1) (.arg 2))
 
 private def malformedParentPathOp : ProofForge.Svm.Ops.Op :=
-  .returnU64 (.ext (.accountStorage (.parentPathValidOneBased 1 114 115 8 4096 32))
+  .returnU64 (.ext (.component (.accountStorage
+    (.parentPathValidOneBased 1 114 115 8 4096 32)))
     #[.arg 0, .arg 1])
 
 private def unboundedParentPathOp : ProofForge.Svm.Ops.Op :=
@@ -121,8 +129,8 @@ private def validRbTreeOp : ProofForge.Svm.Ops.Op :=
     1 114 115 116 117 8 4096 true (.arg 0) (.arg 1) (.arg 2) (.arg 3))
 
 private def malformedRbTreeOp : ProofForge.Svm.Ops.Op :=
-  .returnU64 (.ext (.accountStorage (.fifoRbTreeValidOneBased
-    1 114 115 116 117 8 4096 true)) #[.arg 0, .arg 1, .arg 2])
+  .returnU64 (.ext (.component (.accountStorage (.fifoRbTreeValidOneBased
+    1 114 115 116 117 8 4096 true))) #[.arg 0, .arg 1, .arg 2])
 
 private def oversizedRbTreeOp : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataRbTreeValid
@@ -149,8 +157,8 @@ private def validRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
     1 65658 65659 65660 18 8321 (.arg 0) (.arg 1) (.arg 2) (.arg 3))
 
 private def malformedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
-  .returnU64 (.ext (.accountStorage (.key4RbTreeValidOneBased
-    1 65658 65659 65660 18 8321)) #[.arg 0, .arg 1, .arg 2])
+  .returnU64 (.ext (.component (.accountStorage (.key4RbTreeValidOneBased
+    1 65658 65659 65660 18 8321))) #[.arg 0, .arg 1, .arg 2])
 
 private def oversizedRbTreeKey4Op : ProofForge.Svm.Ops.Op :=
   .returnU64 (ProofForge.Svm.Ops.accDataRbTreeKey4Valid
@@ -249,6 +257,15 @@ private def stateFindAssembly :=
   ProofForge.Svm.AccountStorage.Emit.emitQuery findEmitContext stateKey4FindQuery
     #[.arg 0, .arg 1, .arg 2, .arg 3] 160 0 "state_find_test"
 
+private def componentFifoCursorAssembly :=
+  ProofForge.Svm.Component.Emit.emitQuery
+    { loadValue := findEmitContext.loadValue
+      loadOwnerIsSelf := findEmitContext.loadOwnerIsSelf
+      headerStack := findEmitContext.headerStack
+      accountCount := 2 }
+    (.accountStorage validFifoCursorQuery) #[.arg 0, .arg 1, .arg 2]
+    160 0 "fifo_cursor_test"
+
 #guard
   match key4FindAssembly with
   | .ok assembly =>
@@ -277,6 +294,12 @@ private def stateFindAssembly :=
   | .error _ => false
 
 #guard
+  match componentFifoCursorAssembly, fifoCursorAssembly with
+  | .ok componentAssembly, .ok storageAssembly => componentAssembly == storageAssembly
+  | .error componentError, .error storageError => componentError == storageError
+  | _, _ => false
+
+#guard
   match stateFindAssembly with
   | .ok assembly =>
       assembly.contains "ldxdw r1, [r6 + ACC0_DATA_LEN]" &&
@@ -285,13 +308,16 @@ private def stateFindAssembly :=
   | .error _ => false
 
 private def validAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
-  .ext (.accountStorage (.writeWordZeroBased 1 8314 18 128 (.arg 0) (.arg 1)))
+  .ext (.component (.accountStorage
+    (.writeWordZeroBased 1 8314 18 128 (.arg 0) (.arg 1))))
 
 private def stateAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
-  .ext (.accountStorage (.writeWordZeroBased 0 1 1 1 (.arg 0) (.arg 1)))
+  .ext (.component (.accountStorage
+    (.writeWordZeroBased 0 1 1 1 (.arg 0) (.arg 1))))
 
 private def unboundedAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
-  .ext (.accountStorage (.writeWordZeroBased 1 8314 0 128 (.arg 0) (.arg 1)))
+  .ext (.component (.accountStorage
+    (.writeWordZeroBased 1 8314 0 128 (.arg 0) (.arg 1))))
 
 #guard validAccDataWordSetAtOp.wellFormed
 #guard !stateAccDataWordSetAtOp.wellFormed
@@ -310,6 +336,10 @@ private def oneBasedTraderWrite :
     ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
   .writeWordOneBased 1 8314 18 128 (.arg 0) (.arg 1)
 
+private def oneBasedTraderComponent :
+    ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
+  .accountStorage oneBasedTraderWrite
+
 #guard oneBasedTraderLinks.wellFormed
 #guard oneBasedTraderWrite.wellFormed
   (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
@@ -317,17 +347,22 @@ private def oneBasedTraderWrite :
 #guard oneBasedTraderWrite.effects.writes == #[1]
 #guard oneBasedTraderWrite.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
   "dws1.1.8314.18.128(a0,a1)"
+#guard oneBasedTraderComponent.values == #[.arg 0, .arg 1]
+#guard oneBasedTraderComponent.effects == oneBasedTraderWrite.effects
+#guard oneBasedTraderComponent.canonical (fun | .arg i => s!"a{i}" | _ => "v") ==
+  "dws1.1.8314.18.128(a0,a1)"
 #guard
   match ProofForge.Svm.IR.ofSourceOps #[validAccDataWordSetAtOp] with
-  | .ok #[.accountStorage (.writeWord field (.arg 0) (.arg 1))] =>
+  | .ok #[.component (.accountStorage (.writeWord field (.arg 0) (.arg 1)))] =>
       field.region.account == 1 && field.firstWord == 8314 &&
         field.region.strideWords == 18 && field.region.capacity == 128 &&
         field.region.indexBase == .zero
   | _ => false
 #guard
   match ProofForge.Svm.IR.ofSourceOps
-      #[.ext (.accountStorage (.writeWordOneBased 1 8314 18 128 (.arg 0) (.arg 1)))] with
-  | .ok #[.accountStorage (.writeWord field (.arg 0) (.arg 1))] =>
+      #[.ext (.component (.accountStorage
+        (.writeWordOneBased 1 8314 18 128 (.arg 0) (.arg 1))))] with
+  | .ok #[.component (.accountStorage (.writeWord field (.arg 0) (.arg 1)))] =>
       field.region.account == 1 && field.firstWord == 8314 &&
         field.region.strideWords == 18 && field.region.capacity == 128 &&
         field.region.indexBase == .one

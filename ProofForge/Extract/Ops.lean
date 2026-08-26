@@ -51,44 +51,46 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   svmLeaf (.accDataWord acc word)
 @[match_pattern] def Val.accDataWordAt
     (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
-  .ext (.svm (.accountStorage (.readWordZeroBased acc baseWord strideWords capacity))) #[index]
+  .ext (.svm (.component (.accountStorage
+    (.readWordZeroBased acc baseWord strideWords capacity)))) #[index]
 @[match_pattern] def Val.accDataWordAtOneBased
     (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
-  .ext (.svm (.accountStorage (.readWordOneBased acc baseWord strideWords capacity))) #[index]
+  .ext (.svm (.component (.accountStorage
+    (.readWordOneBased acc baseWord strideWords capacity)))) #[index]
 @[match_pattern] def Val.accDataRbTreeKey4Find
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Val :=
-  .ext (.svm (.accountStorage (.key4FindOneBased
-    acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity)))
+  .ext (.svm (.component (.accountStorage (.key4FindOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity))))
       #[key0, key1, key2, key3]
 @[match_pattern] def Val.accDataRbTreeOrderFind
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (price sequence : Val) : Val :=
-  .ext (.svm (.accountStorage (.fifoFindOneBased
-    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
+  .ext (.svm (.component (.accountStorage (.fifoFindOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))))
       #[price, sequence]
 @[match_pattern] def Val.accDataRbTreeOrderCursor
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (hasCursor price sequence : Val) : Val :=
-  .ext (.svm (.accountStorage (.fifoCursorOneBased
-    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
+  .ext (.svm (.component (.accountStorage (.fifoCursorOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))))
       #[hasCursor, price, sequence]
 @[match_pattern] def Val.accDataParentPathValid
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
     (index root bumpIndex : Val) : Val :=
-  .ext (.svm (.accountStorage (.parentPathValidOneBased
-    acc linksBaseWord parentBaseWord strideWords capacity maxDepth))) #[index, root, bumpIndex]
+  .ext (.svm (.component (.accountStorage (.parentPathValidOneBased
+    acc linksBaseWord parentBaseWord strideWords capacity maxDepth)))) #[index, root, bumpIndex]
 @[match_pattern] def Val.accDataRbTreeValid
     (acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (root size bumpIndex freeListHead : Val) : Val :=
-  .ext (.svm (.accountStorage (.fifoRbTreeValidOneBased
-    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
+  .ext (.svm (.component (.accountStorage (.fifoRbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid))))
       #[root, size, bumpIndex, freeListHead]
 @[match_pattern] def Val.accDataRbTreeKey4Valid
     (acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (root size bumpIndex freeListHead : Val) : Val :=
-  .ext (.svm (.accountStorage (.key4RbTreeValidOneBased
-    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity)))
+  .ext (.svm (.component (.accountStorage (.key4RbTreeValidOneBased
+    acc linksBaseWord parentBaseWord keyBaseWord strideWords capacity))))
       #[root, size, bumpIndex, freeListHead]
 @[match_pattern] def Val.accLamportsN (acc : Nat) : Val := svmLeaf (.accLamportsN acc)
 @[match_pattern] def Val.accDataLenN (acc : Nat) : Val := svmLeaf (.accDataLenN acc)
@@ -127,39 +129,39 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.svm (.invoke programIx metas data seeds bump))
 @[match_pattern] def Op.accDataWordSetAt
     (acc baseWord strideWords capacity : Nat) (index value : Val) : Op :=
-  .ext (.svm (.accountStorage
-    (.writeWordZeroBased acc baseWord strideWords capacity index value)))
+  .ext (.svm (.component (.accountStorage
+    (.writeWordZeroBased acc baseWord strideWords capacity index value))))
 @[match_pattern] def Op.accDataWordSetAtOneBased
     (acc baseWord strideWords capacity : Nat) (index value : Val) : Op :=
-  .ext (.svm (.accountStorage
-    (.writeWordOneBased acc baseWord strideWords capacity index value)))
+  .ext (.svm (.component (.accountStorage
+    (.writeWordOneBased acc baseWord strideWords capacity index value))))
 @[match_pattern] def Op.accDataRbTreeKey4Insert
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Op :=
-  .ext (.svm (.accountStorage (.rbMapInsertKey4OneBased acc rootWord linksBaseWord
-    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)))
+  .ext (.svm (.component (.accountStorage (.rbMapInsertKey4OneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3))))
 @[match_pattern] def Op.accDataRbTreeTraderDeposit
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 quoteLots baseLots : Val) : Op :=
-  .ext (.svm (.accountStorage (.rbMapCheckedAddKey4OneBased acc rootWord linksBaseWord
-    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3 quoteLots baseLots)))
+  .ext (.svm (.component (.accountStorage (.rbMapCheckedAddKey4OneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3 quoteLots baseLots))))
 @[match_pattern] def Op.accDataRbTreeKey4Remove
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Op :=
-  .ext (.svm (.accountStorage (.rbMapRemoveKey4OneBased acc rootWord linksBaseWord
-    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3)))
+  .ext (.svm (.component (.accountStorage (.rbMapRemoveKey4OneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord strideWords capacity key0 key1 key2 key3))))
 @[match_pattern] def Op.accDataRbTreeOrderInsert
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool)
     (price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp : Val) : Op :=
-  .ext (.svm (.accountStorage (.rbMapInsertFifoOneBased acc rootWord linksBaseWord
+  .ext (.svm (.component (.accountStorage (.rbMapInsertFifoOneBased acc rootWord linksBaseWord
     parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid price sequence
-    traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp)))
+    traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp))))
 @[match_pattern] def Op.accDataRbTreeOrderRemove
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool) (price sequence : Val) : Op :=
-  .ext (.svm (.accountStorage (.rbMapRemoveFifoOneBased acc rootWord linksBaseWord
-    parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid price sequence)))
+  .ext (.svm (.component (.accountStorage (.rbMapRemoveFifoOneBased acc rootWord linksBaseWord
+    parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid price sequence))))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.deposit amount))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=
@@ -244,7 +246,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .indexSetLeaf _ lhs rhs _ _ | .indexSet _ lhs rhs _ _ => predicate lhs || predicate rhs
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
-  | .ext (.svm (.accountStorage call)) => call.anyValue predicate
+  | .ext (.svm (.component call)) => call.anyValue predicate
   | .evmDeposit value | .evmLog _ value => predicate value
   | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
   | .mapGetU64 base key => #[base, key].any predicate

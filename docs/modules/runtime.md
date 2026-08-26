@@ -16,8 +16,11 @@
 
 协议入口和持久容器分两层：`Svm.EntryAdapter` 负责 target-owned wire decode、physical
 account contract 与 raw/generated dispatch；`Svm.AccountStorage` 负责 fixed-capacity
-account-resident map/queue/allocator/tree routine。source 语义组合两层后进入普通 CFG，
-不为每个 Phoenix/Map/queue 功能增加顶层 Ops 或主 Emit case。
+account-resident map/queue/allocator/tree routine。两层通过 `Svm.Component.Query/Call` 的稳定
+lowering bridge 进入普通 CFG；generic Ops、IR 与主 Emit 只认识一个 `.component` case。
+Queue、Map、Allocator 与 audit recorder 组合固定 Region/Field/index、有界循环、checked
+load/store、bounded scratch 与 CPI sink；新增组件只扩 component-owned vocabulary/backend，
+不为每个 Phoenix/Map/queue 功能横向增加顶层 Ops、IR 与主 Emit case。
 
 ## Surface
 
@@ -78,12 +81,13 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   guarded `Except` success branch 也保留完整 effect sequence，不会被最终 state projection
   消除。失败以 `Custom(1)` 退出并由 SVM 回滚整条 instruction。它不返回或持久化
   pointer，也不把 transient heap 当账户 allocator。
-- 该写入在 target 内部通过 `Svm.AccountStorage.Call` lowering：`Region/Field` 固定
+- 该写入在 target 内部通过 `Svm.Component.Call.accountStorage` lowering：底层
+  `Svm.AccountStorage.Call` 的 `Region/Field` 固定
   account/base/stride/capacity，显式记录 zero/one-based indexing，并统一提供 value
   traversal、geometry validation、canonical digest 与 read/write effect。主 SVM IR/emitter
-  只看一个 generic storage bridge；allocator/tree/map/queue 的 bounded routine 应继续进入
-  这一层，而不是增加新的顶层 store emitter。它是 account-resident zero-copy backend，
-  不是 Rust transient heap 或普通 `HashMap`。
+  只看一个 generic component bridge；allocator/tree/map/queue 的 bounded routine 应继续
+  进入 component-owned backend，而不是增加新的顶层 store emitter。它是 account-resident
+  zero-copy backend，不是 Rust transient heap 或普通 `HashMap`。
 - `accDataParentPathValid acc linksBase parentBase stride capacity maxDepth index root bump` —
   static shape + 最多 64 步的账户内 parent walk；运行时 index/root/bump 先过 1-based
   envelope，每步验证 color、parent 和 parent→child reciprocity，root 外 cycle 到界返回 0。

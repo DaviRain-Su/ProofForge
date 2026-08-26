@@ -33,14 +33,14 @@ abbrev CFG := Core.CFG.Graph ValKind OpExt
 private def mapSvmPayload (mapValue : Val → Val) : Svm.Ops.OpExt Val → Svm.Ops.OpExt Val
   | .invoke programIx metas data seeds bump =>
       .invoke programIx metas (data.map (Svm.Ops.CpiWord.map mapValue)) seeds (bump.map mapValue)
-  | .accountStorage call => .accountStorage (call.mapValues mapValue)
+  | .component call => .component (call.mapValues mapValue)
 
 private def svmPayloadValues : Svm.Ops.OpExt Val → Array Val
   | .invoke _ _ data _ bump =>
       data.filterMap Svm.Ops.CpiWord.value? ++ match bump with
         | some value => #[value]
         | none => #[]
-  | .accountStorage call => call.values
+  | .component call => call.values
 
 private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.Ops.OpExt Val
   | .deposit amount => .deposit (mapValue amount)
@@ -107,7 +107,7 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
       match bump with
       | some value => value.wellFormed ValKind.arity
       | none => true
-  | .accountStorage call =>
+  | .component call =>
       call.wellFormed (·.wellFormed ValKind.arity) Svm.Ops.maxTxAccountLocks
 
 private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool

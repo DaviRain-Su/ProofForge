@@ -108,7 +108,7 @@ private partial def opsHaveDataWord (acc word : Nat) (ops : Array ProofForge.Svm
 
 private partial def valHasIndexedDataWord
     (acc baseWord strideWords capacity : Nat) : ProofForge.Svm.Ops.Val → Bool
-  | .ext (.accountStorage (.readWord field)) operands =>
+  | .ext (.component (.accountStorage (.readWord field))) operands =>
       (field.region.account == acc && field.firstWord == baseWord &&
         field.region.strideWords == strideWords && field.region.capacity == capacity &&
         field.region.indexBase == .zero) ||
@@ -156,7 +156,7 @@ private partial def opsHaveIndexedDataWord
 private partial def valHasParentPath
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat) :
     ProofForge.Svm.Ops.Val → Bool
-  | .ext (.accountStorage (.parentPathValid path)) operands =>
+  | .ext (.component (.accountStorage (.parentPathValid path))) operands =>
       (path.links.region.account == acc && path.links.firstWord == linksBaseWord &&
         path.parentColor.firstWord == parentBaseWord &&
         path.links.region.strideWords == strideWords &&
@@ -226,7 +226,7 @@ private partial def valHasRbTree
         valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid rhs ||
         valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid thenValue ||
         valHasRbTree linksBase parentBase keyBase sequenceBase capacity expectedBid elseValue
-  | .ext (.accountStorage (.fifoRbTreeValid tree)) operands =>
+  | .ext (.component (.accountStorage (.fifoRbTreeValid tree))) operands =>
       let region := tree.links.region
       (region.account == 1 && tree.links.firstWord == linksBase &&
         tree.parentColor.firstWord == parentBase && tree.price.firstWord == keyBase &&
@@ -280,7 +280,7 @@ private partial def valHasRbTreeKey4
         valHasRbTreeKey4 linksBase parentBase keyBase capacity rhs ||
         valHasRbTreeKey4 linksBase parentBase keyBase capacity thenValue ||
         valHasRbTreeKey4 linksBase parentBase keyBase capacity elseValue
-  | .ext (.accountStorage (.key4RbTreeValid tree)) operands =>
+  | .ext (.component (.accountStorage (.key4RbTreeValid tree))) operands =>
       let region := tree.links.region
       (region.account == 1 && tree.links.firstWord == linksBase &&
         tree.parentColor.firstWord == parentBase && tree.key.firstWord == keyBase &&
@@ -318,7 +318,7 @@ private partial def opsHaveDataWordSetAt
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accountStorage (.writeWord field _ _) =>
+     | .component (.accountStorage (.writeWord field _ _)) =>
          field.region.account == acc && field.firstWord == baseWord &&
            field.region.strideWords == strideWords && field.region.capacity == capacity
      | _ => false) ||
@@ -334,7 +334,7 @@ private partial def opsHaveOneBasedDataWordSetAt
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accountStorage (.writeWord field _ _) =>
+     | .component (.accountStorage (.writeWord field _ _)) =>
          field.region.account == acc && field.firstWord == baseWord &&
            field.region.strideWords == strideWords && field.region.capacity == capacity &&
            field.region.indexBase == .one
@@ -350,7 +350,7 @@ private partial def opsHaveOneBasedDataWordSetAt
 private partial def countDataWordSetAt (ops : Array ProofForge.Svm.IR.Op) : Nat :=
   ops.foldl (init := 0) fun count op =>
     count + match op with
-    | .accountStorage (.writeWord ..) => 1
+    | .component (.accountStorage (.writeWord ..)) => 1
     | .ite _ _ _ thenOps elseOps =>
         countDataWordSetAt thenOps + countDataWordSetAt elseOps
     | .forBody _ body => countDataWordSetAt body
@@ -361,7 +361,8 @@ private partial def opsHaveRbTreeKey4Insert
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accountStorage (.rbMapInsert (.key4 actualRoot tree) _ _ .reject) =>
+     | .component (.accountStorage
+         (.rbMapInsert (.key4 actualRoot tree) _ _ .reject)) =>
          tree.links.region.account == acc && actualRoot == rootWord &&
            tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
            tree.key.firstWord == keyBase && tree.links.region.strideWords == stride &&
@@ -382,7 +383,7 @@ private partial def opsHaveRbTreeKey4Remove
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accountStorage (.rbMapRemove (.key4 actualRoot tree) _) =>
+     | .component (.accountStorage (.rbMapRemove (.key4 actualRoot tree) _)) =>
          tree.links.region.account == acc && actualRoot == rootWord &&
            tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
            tree.key.firstWord == keyBase && tree.links.region.strideWords == stride &&
@@ -403,7 +404,7 @@ private partial def opsHaveRbTreeTraderDeposit
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accountStorage (.rbMapCheckedAdd (.key4 actualRoot tree) _ _) =>
+     | .component (.accountStorage (.rbMapCheckedAdd (.key4 actualRoot tree) _ _)) =>
          tree.links.region.account == acc && actualRoot == rootWord &&
            tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
            tree.key.firstWord == keyBase && tree.links.region.strideWords == stride &&
@@ -424,7 +425,8 @@ private partial def opsHaveRbTreeOrderInsert
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accountStorage (.rbMapInsert (.fifo actualRoot tree) _ _ .replace) =>
+     | .component (.accountStorage
+         (.rbMapInsert (.fifo actualRoot tree) _ _ .replace)) =>
          tree.links.region.account == acc && actualRoot == rootWord &&
            tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
            tree.price.firstWord == keyBase && tree.sequence.firstWord == sequenceBase &&
@@ -447,7 +449,7 @@ private partial def opsHaveRbTreeOrderRemove
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
   ops.any fun op =>
     (match op with
-     | .accountStorage (.rbMapRemove (.fifo actualRoot tree) _) =>
+     | .component (.accountStorage (.rbMapRemove (.fifo actualRoot tree) _)) =>
          tree.links.region.account == acc && actualRoot == rootWord &&
            tree.links.firstWord == linksBase && tree.parentColor.firstWord == parentBase &&
            tree.price.firstWord == keyBase && tree.sequence.firstWord == sequenceBase &&
@@ -468,7 +470,7 @@ private partial def opsHaveRbTreeOrderRemove
 private partial def valHasAccountQuery
     (predicate : ProofForge.Svm.AccountStorage.Query → Bool) :
     ProofForge.Svm.Ops.Val → Bool
-  | .ext (.accountStorage query) operands =>
+  | .ext (.component (.accountStorage query)) operands =>
       predicate query || operands.any (valHasAccountQuery predicate)
   | .field base _ | .bitNot base => valHasAccountQuery predicate base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs

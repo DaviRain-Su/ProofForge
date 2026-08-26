@@ -1,5 +1,5 @@
 import ProofForge.Svm.IR
-import ProofForge.Svm.AccountStorage.Emit
+import ProofForge.Svm.Component.Emit
 import ProofForge.Svm.EntryAdapter.Emit
 
 namespace ProofForge.Svm.Emit
@@ -14,10 +14,8 @@ It reuses the bottom of the frame with sysvar scratch, whose contents are never 
 PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
 private def pdaSeedsScratch : Nat := 4096
 /-- Loop control must not overlap expression temporaries, scalar locals, or walked-account
-headers. Account-storage mutation scratch owns the remainder through offset 408. -/
+headers. Bounded components publish one shared fixed-scratch boundary. -/
 private def loopCounterScratch : Nat := 304
-/-- Inline account-storage routines own fixed frame offsets through this boundary. -/
-private def accountStorageScratchEnd : Nat := 408
 /-- CPI material grows upward from `r10-2048` and may use at most this many bytes. Keeping it in
 the 1024..2048 stack-offset bank makes it disjoint from account headers and scalar locals. -/
 private def cpiScratchBytes : Nat := 1024
@@ -96,17 +94,17 @@ walk_al_{tag}:
   mov64 r8, r5
 "
 
-/-- Account headers live above account-storage scratch. The instruction-data pointer follows the
+/-- Account headers live above component scratch. The instruction-data pointer follows the
 final account header. -/
 private def headerStack (i : Nat) : Nat :=
   512 + 8 * i
 
-/-- Scalar locals start after both the static account-header prefix and account-storage scratch.
-The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PDA/sysvar/storage
+/-- Scalar locals start after both the static account-header prefix and component scratch.
+The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PDA/sysvar/component
 scratch owns 2048..4096. This single frame contract prevents composed target effects from
 clobbering source locals without giving individual intrinsics ad-hoc spill rules. -/
 private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
-  let base := max (accountStorageScratchEnd + 8)
+  let base := max (Component.stackScratchEnd + 8)
     (headerStack (IR.cpiAccountCount p) + 8)
   let offset := base + i * 8
   if offset < 1024 then some offset else none
@@ -186,7 +184,7 @@ private partial def walkSignerAccs (ops : Array IR.Op) : Array Nat :=
         | .invoke _ _ data _ bump =>
             (data.flatMap fun word => word.value?.map valSignerAccs |>.getD #[]) ++
               (match bump with | some v => valSignerAccs v | none => #[])
-        | .accountStorage call => call.values.flatMap valSignerAccs
+        | .component call => call.values.flatMap valSignerAccs
         | .okState v | .returnU64 v | .returnState v | .storeField _ v => valSignerAccs v
         | .errorOverflow | .errorNamed _ => #[]
         | .forAccum _ v _ => valSignerAccs v
@@ -950,12 +948,13 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
     .ok (emitLoadAccWord "owner" acc word stackOff)
   | .ext (.accDataWord acc word) #[] =>
     .ok (emitLoadAccDataWord acc word stackOff scope)
-  | .ext (.accountStorage query) operands =>
-    AccountStorage.Emit.emitQuery
+  | .ext (.component query) operands =>
+    Component.Emit.emitQuery
       { loadValue := fun value valueStackOff valueNonce valueScope =>
           loadVal p value valueStackOff valueNonce valueScope
         loadOwnerIsSelf := emitLoadOwnerIsSelf p
-        headerStack }
+        headerStack
+        accountCount := IR.cpiAccountCount p }
       query operands stackOff nonce scope
   | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
@@ -1140,7 +1139,7 @@ private partial def walkUsesSigner (ops : Array IR.Op) : Bool :=
           (seeds.isEmpty && metas.any (·.signer)) ||
             data.any (fun word => word.value?.any valUsesSigner) ||
               (match bump with | some v => valUsesSigner v | none => false)
-      | .accountStorage call => call.values.any valUsesSigner
+      | .component call => call.values.any valUsesSigner
       | .okState v => valUsesSigner v
       | .returnU64 v => valUsesSigner v
       | .returnState v => valUsesSigner v
@@ -4100,15 +4099,16 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
       let invokeLabel := s!"{label}_{n}"
       n := n + 1
       acc := acc ++ (← emitInvoke p invokeLabel prog metas data seed bump)
-    | .accountStorage call =>
+    | .component call =>
       let storageLabel := s!"{label}_{n}"
       n := n + 1
-      acc := acc ++ (← AccountStorage.Emit.emitCall
+      acc := acc ++ (← Component.Emit.emitCall
         { loadValue := fun value stackOff nonce scope =>
             loadVal p value stackOff nonce scope
           loadOwnerIsSelf := emitLoadOwnerIsSelf p
-          headerStack }
-        (accountStorageMutationBackend p)
+          headerStack
+          accountCount := IR.cpiAccountCount p }
+        { accountStorage := accountStorageMutationBackend p }
         storageLabel call)
     | .errorNamed name =>
       let code :=

@@ -298,8 +298,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         | _ => throw "extract/unsupported: legacy adapter cannot represent multi-seed CPI"
       return .invoke programIx (← metas.mapM metaToLegacy) (← data.mapM wordToLegacy)
         seed (← bump.mapM toLegacyVal)
-  | .ext (.svm (.accountStorage ..)) =>
-      throw "extract/unsupported: legacy adapter cannot represent external account writes"
+  | .ext (.svm (.component ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent bounded SVM components"
   | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)
   | .ext (.evm (.sendEth w0 w1 w2 amount)) =>
       return .evmSendEth (← toLegacyVal w0) (← toLegacyVal w1)
