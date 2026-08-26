@@ -1032,6 +1032,17 @@ elab "#pf_guard_malformed_external_write_rejected" : command => do
 
 #pf_guard_malformed_external_write_rejected
 
+elab "#pf_guard_dynamic_cursor_geometry_rejected" : command => do
+  let env ← getEnv
+  match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initChoice
+      ``Tests.Fixtures.malformedOrderCursor ``Tests.Fixtures.getChosen with
+  | .ok _ => throwError "dynamic account-storage cursor geometry was silently accepted"
+  | .error reason =>
+      unless reason.contains "extract/unsupported: body" do
+        throwError s!"unexpected dynamic cursor geometry error: {reason}"
+
+#pf_guard_dynamic_cursor_geometry_rejected
+
 elab "#pf_guard_account_effect_lexical_reads" : command => do
   let env ← getEnv
   let extract (mutation : Name) := do

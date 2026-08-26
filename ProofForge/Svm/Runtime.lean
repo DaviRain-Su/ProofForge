@@ -732,6 +732,29 @@ the complete FIFO tree validator when malformed topology must be rejected before
   0
 
 /--
+Return the first Phoenix FIFO order slot when `hasCursor=0`, or the strict logical successor of
+`(price, sequence)` when `hasCursor=1`. The result is a one-based slot index or zero at the end.
+Every call restarts from the fixed account-resident root, so callers retain only the scalar key
+across removals; no node pointer, heap collection, or runtime geometry is created.
+-/
+@[irreducible] def accDataRbTreeOrderCursor
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
+      hasCursor price sequence : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := hasCursor
+  let _ := price
+  let _ := sequence
+  0
+
+/--
 Write one u64 in a fixed-stride slot of an external account. `acc ≥ 1`, `baseWord`,
 `strideWords`, and `capacity` must be compile-time constants; only the zero-based `index` and
 `value` are dynamic. The SVM target requires the account to be writable and owned by the current

@@ -204,6 +204,7 @@ inductive Query where
   | readWord (field : Field)
   | parentPathValid (path : ParentPath)
   | fifoFind (rootWord : Nat) (tree : FifoRbTree)
+  | fifoCursor (rootWord : Nat) (tree : FifoRbTree)
   | key4Find (rootWord : Nat) (tree : Key4RbTree)
   | fifoRbTreeValid (tree : FifoRbTree)
   | key4RbTreeValid (tree : Key4RbTree)
@@ -213,6 +214,7 @@ def Query.arity : Query → Nat
   | .readWord .. => 1
   | .parentPathValid .. => 3
   | .fifoFind .. => 2
+  | .fifoCursor .. => 3
   | .key4Find .. => 4
   | .fifoRbTreeValid .. => 4
   | .key4RbTreeValid .. => 4
@@ -222,6 +224,9 @@ def Query.effects : Query → EffectSummary
   | .parentPathValid path =>
       (EffectSummary.forField path.links).merge (EffectSummary.forField path.parentColor)
   | .fifoFind _ tree =>
+      (EffectSummary.forField tree.links).merge
+        ((EffectSummary.forField tree.price).merge (EffectSummary.forField tree.sequence))
+  | .fifoCursor _ tree =>
       (EffectSummary.forField tree.links).merge
         ((EffectSummary.forField tree.price).merge (EffectSummary.forField tree.sequence))
   | .key4Find _ tree =>
@@ -240,6 +245,9 @@ def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
         field.region.access == {}
   | .parentPathValid path => path.wellFormed accountLimit
   | .fifoFind rootWord tree =>
+      rootBeforeTree rootWord tree.links && tree.wellFormed accountLimit &&
+        tree.topology.hasAccess {}
+  | .fifoCursor rootWord tree =>
       rootBeforeTree rootWord tree.links && tree.wellFormed accountLimit &&
         tree.topology.hasAccess {}
   | .key4Find rootWord tree =>
@@ -272,6 +280,12 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
   | .fifoFind rootWord tree =>
       let region := tree.links.region
       s!"rbof.{region.account}.{rootWord}.{tree.links.firstWord}." ++
+        s!"{tree.price.firstWord}.{tree.sequence.firstWord}.{region.strideWords}." ++
+        s!"{region.capacity}.{tree.bid}" ++
+        s!"({String.intercalate "," (operands.map renderValue).toList})"
+  | .fifoCursor rootWord tree =>
+      let region := tree.links.region
+      s!"rboc.{region.account}.{rootWord}.{tree.links.firstWord}." ++
         s!"{tree.price.firstWord}.{tree.sequence.firstWord}.{region.strideWords}." ++
         s!"{region.capacity}.{tree.bid}" ++
         s!"({String.intercalate "," (operands.map renderValue).toList})"
@@ -322,6 +336,13 @@ def Query.fifoFindOneBased
     (account rootWord linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool) : Query :=
   .fifoFind rootWord
+    (.oneBased account linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords
+      capacity bid)
+
+def Query.fifoCursorOneBased
+    (account rootWord linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords
+      capacity : Nat) (bid : Bool) : Query :=
+  .fifoCursor rootWord
     (.oneBased account linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords
       capacity bid)
 

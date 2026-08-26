@@ -64,8 +64,10 @@ collateral unlock 与 checked preflight。target-owned `EntryAdapter` 已统一 
 raw/generated dispatch 与账户合同，`AccountStorage` 继续统一 account-resident
 map/queue/allocator/tree；官方 Phoenix tag 4/5 wire、账户合同、93/128-byte authenticated
 audit，以及 tag 4 classic Token vault withdrawal 已由两层组合完成。PDA mint seed 直接引用
-经过认证的 MarketHeader 固定 byte slice，不创建 heap buffer。下一步继续组合无 payload 的
-tag 6/7 CancelAll pair，不增加 Phoenix-specific 顶层 Ops/IR/主 Emit case。
+经过认证的 MarketHeader 固定 byte slice，不创建 heap buffer。storage-owned FIFO cursor 只
+保留 `(price, sequence)` scalar key，每次从账户 root 做有界 strict upper-bound，因此删除后
+不保存 node address，也不收集 heap `Vec`。下一步补 reusable bounded audit batching，再组合
+无 payload 的 tag 6/7 CancelAll pair，不增加 Phoenix-specific 顶层 Ops/IR/主 Emit case。
 
 ## 入口
 

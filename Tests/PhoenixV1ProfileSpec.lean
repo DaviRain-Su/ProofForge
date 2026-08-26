@@ -654,6 +654,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing findBid512"
   let some findAsk := program.methods.find? (·.ixName == "findAsk512")
     | throwError "missing findAsk512"
+  let some cursorBid := program.methods.find? (·.ixName == "cursorBid512")
+    | throwError "missing cursorBid512"
+  let some cursorAsk := program.methods.find? (·.ixName == "cursorAsk512")
+    | throwError "missing cursorAsk512"
   let some writeTrader := program.methods.find? (·.ixName == "writeTraderTopology128")
     | throwError "missing writeTraderTopology128"
   let some registerFirst := program.methods.find? (·.ixName == "registerFirstTrader128")
@@ -968,6 +972,23 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveOneBasedDataWordSetAt 1 8321 18 128 reduceBid.ops &&
       countDataWordSetAt reduceBid.ops == 5 do
     throwError "Phoenix-v1 profile/body header reads are incomplete"
+  unless opsHaveRbTree 114 115 116 117 512 true cursorBid.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoCursor 110 tree =>
+            tree.links.region.account == 1 && tree.links.firstWord == 114 &&
+              tree.parentColor.firstWord == 115 && tree.price.firstWord == 116 &&
+              tree.sequence.firstWord == 117 && tree.links.region.strideWords == 8 &&
+              tree.links.region.capacity == 512 && tree.bid
+        | _ => false) cursorBid.ops &&
+      opsHaveRbTree 4214 4215 4216 4217 512 false cursorAsk.ops &&
+      opsHaveAccountQuery (fun
+        | .fifoCursor 4210 tree =>
+            tree.links.region.account == 1 && tree.links.firstWord == 4214 &&
+              tree.parentColor.firstWord == 4215 && tree.price.firstWord == 4216 &&
+              tree.sequence.firstWord == 4217 && tree.links.region.strideWords == 8 &&
+              tree.links.region.capacity == 512 && !tree.bid
+        | _ => false) cursorAsk.ops do
+    throwError "Phoenix-v1 bounded FIFO cursor composition is incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
   if idl.contains "\"name\": \"reduceOrderWithFreeFunds\"" ||
       idl.contains "\"name\": \"reduceOrder\"" then
@@ -979,6 +1000,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       idl.contains
       "\"name\": \"findAsk512\",\n      \"discriminator\": [39, 230, 150, 167, 72, 52, 87, 13],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" do
     throwError "bounded find methods must remain read-only in IDL"
+  unless idl.contains
+      "\"name\": \"cursorBid512\",\n      \"discriminator\": [205, 145, 51, 166, 88, 155, 49, 83],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" &&
+      idl.contains
+      "\"name\": \"cursorAsk512\",\n      \"discriminator\": [35, 69, 96, 252, 35, 19, 247, 46],\n      \"accounts\": [{\"name\":\"state\"}, {\"name\":\"acc1\"}]" do
+    throwError "bounded cursor methods must remain read-only in the generated IDL"
   unless idl.contains
       "\"name\": \"registerTrader128\",\n      \"discriminator\": [90, 37, 2, 213, 222, 9, 17, 252],\n      \"accounts\": [{\"name\":\"state\",\"writable\":true,\"signer\":true}, {\"name\":\"acc1\",\"writable\":true}]" do
     throwError "registerTrader128 IDL account must be writable"
@@ -1070,6 +1096,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "bounded one-based acc1 RB find root=8310 links=8314 stride=18 capacity=128" &&
       asm.contains "bounded one-based acc1 RB find root=110 links=114 stride=8 capacity=512" &&
       asm.contains "bounded one-based acc1 RB find root=4210 links=4214 stride=8 capacity=512" &&
+      asm.contains "bounded key-based acc1 FIFO cursor root=110 links=114 stride=8 capacity=512" &&
+      asm.contains "bounded key-based acc1 FIFO cursor root=4210 links=4214 stride=8 capacity=512" &&
       asm.contains "rb_find_found_" && asm.contains "rb_find_missing_" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 

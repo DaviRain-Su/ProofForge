@@ -903,6 +903,118 @@ fn bounded_map_find_returns_one_based_index_or_zero() {
 }
 
 #[test]
+fn key_based_order_cursor_follows_fifo_priority_without_retaining_node_addresses() {
+    run_view_args(
+        "cursorBid512",
+        &[0, 0, 0],
+        empty_small_market(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+
+    let mut bid_market = empty_small_market();
+    for (slot, [price, sequence]) in [[50, !3u64], [60, !5u64], [50, !1u64], [40, !7u64]]
+        .into_iter()
+        .enumerate()
+    {
+        bid_market = run_market_write(
+            "insertBid512",
+            bid_market,
+            true,
+            &[price, sequence, 1, 1, 0, 0],
+            &[
+                Check::success(),
+                Check::return_data(&((slot + 1) as u64).to_le_bytes()),
+            ],
+        );
+    }
+    // Bid priority is descending price, then descending encoded sequence. A key between two
+    // existing prices proves this is strict upper-bound lookup rather than exact-find + pointer.
+    for (args, expected_slot) in [
+        ([0, 0, 0], 2u64),
+        ([1, 60, !5u64], 3),
+        ([1, 55, 0], 3),
+        ([1, 50, !1u64], 1),
+        ([1, 50, !3u64], 4),
+        ([1, 40, !7u64], 0),
+    ] {
+        run_view_args(
+            "cursorBid512",
+            &args,
+            bid_market.clone(),
+            &[
+                Check::success(),
+                Check::return_data(&expected_slot.to_le_bytes()),
+            ],
+        );
+    }
+    run_view_args(
+        "cursorBid512",
+        &[2, 0, 0],
+        bid_market.clone(),
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    bid_market = run_market_write(
+        "removeBid512",
+        bid_market,
+        true,
+        &[60, !5u64],
+        &[Check::success(), Check::return_data(&3u64.to_le_bytes())],
+    );
+    // Sokoban's two-child removal transplants another node and changes the tree topology.
+    // Re-querying from the removed scalar key still finds the strict logical successor.
+    run_view_args(
+        "cursorBid512",
+        &[1, 60, !5u64],
+        bid_market.clone(),
+        &[Check::success(), Check::return_data(&3u64.to_le_bytes())],
+    );
+
+    let mut ask_market = empty_small_market();
+    for (slot, [price, sequence]) in [[50, 3], [40, 5], [50, 1], [60, 7]].into_iter().enumerate() {
+        ask_market = run_market_write(
+            "insertAsk512",
+            ask_market,
+            true,
+            &[price, sequence, 1, 1, 0, 0],
+            &[
+                Check::success(),
+                Check::return_data(&((slot + 1) as u64).to_le_bytes()),
+            ],
+        );
+    }
+    // Ask priority is ascending price, then ascending sequence.
+    for (args, expected_slot) in [
+        ([0, 0, 0], 2u64),
+        ([1, 40, 5], 3),
+        ([1, 45, 0], 3),
+        ([1, 50, 1], 1),
+        ([1, 50, 3], 4),
+        ([1, 60, 7], 0),
+    ] {
+        run_view_args(
+            "cursorAsk512",
+            &args,
+            ask_market.clone(),
+            &[
+                Check::success(),
+                Check::return_data(&expected_slot.to_le_bytes()),
+            ],
+        );
+    }
+
+    // The composed profile validator rejects a cycle before the cursor can follow it forever.
+    let root = read_word(&bid_market, BID_TREE_WORD) as usize;
+    let root_links_word = BID_TREE_WORD + 4 + 8 * (root - 1);
+    write_word(&mut bid_market, root_links_word, packed_u32(root as u32, 0));
+    run_view_args(
+        "cursorBid512",
+        &[0, 0, 0],
+        bid_market,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+}
+
+#[test]
 fn reduce_order_with_free_funds_composes_bounded_storage_primitives() {
     // Ask partial reduction moves exact base lots from locked to free while retaining the node.
     let mut ask_market = market_with_signer_trader();

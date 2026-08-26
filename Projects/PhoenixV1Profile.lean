@@ -693,6 +693,39 @@ def findAsk512 (s : State) (price sequence : UInt64) : UInt64 :=
   else
     0
 
+/-- Return the first bid when `hasCursor=0`, or the strict successor of the supplied FIFO key.
+Only the key is retained between calls; the one-based slot result is for immediate field reads. -/
+@[pf_entry]
+def cursorBid512 (s : State) (hasCursor price sequence : UInt64) : UInt64 :=
+  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
+    let cursor := accDataWord 1 113
+    let valid := accDataRbTreeValid 1 114 115 116 117 8 512 1
+      (lowUInt32 (accDataWord 1 110)) (accDataWord 1 112)
+      (lowUInt32 cursor) (highUInt32 cursor)
+    if valid = 1 then
+      accDataRbTreeOrderCursor 1 110 114 115 116 117 8 512 1
+        hasCursor price sequence
+    else
+      0
+  else
+    0
+
+/-- Return the first ask when `hasCursor=0`, or the strict successor of the supplied FIFO key. -/
+@[pf_entry]
+def cursorAsk512 (s : State) (hasCursor price sequence : UInt64) : UInt64 :=
+  if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
+    let cursor := accDataWord 1 4213
+    let valid := accDataRbTreeValid 1 4214 4215 4216 4217 8 512 0
+      (lowUInt32 (accDataWord 1 4210)) (accDataWord 1 4212)
+      (lowUInt32 cursor) (highUInt32 cursor)
+    if valid = 1 then
+      accDataRbTreeOrderCursor 1 4210 4214 4215 4216 4217 8 512 0
+        hasCursor price sequence
+    else
+      0
+  else
+    0
+
 /--
 Write the links and parent/color words of one slot in the smallest official trader allocator.
 `slot` is zero-based relative to the first node. The target effect requires account 1 to be writable

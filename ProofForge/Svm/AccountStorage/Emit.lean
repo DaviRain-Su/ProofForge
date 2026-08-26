@@ -423,6 +423,133 @@ private def emitRbFind (context : Context) (rootWord : Nat) (tree : RbTree)
 {done}:
 "
 
+/-- Return the first FIFO key or the strict logical successor of a scalar cursor key. The caller
+keeps only `(price, sequence)` across mutations; every query restarts at the root, so RB rotations
+or predecessor transplants have no retained node address to invalidate. -/
+private def emitFifoCursor (context : Context) (rootWord : Nat) (tree : FifoRbTree)
+    (hasCursor price sequence : Ops.Val) (stackOff nonce : Nat) (scope : String) :
+    Except String String := do
+  let region := tree.links.region
+  let acc := region.account
+  let linksBaseWord := tree.links.firstWord
+  let strideWords := region.strideWords
+  let capacity := region.capacity
+  let loadHasCursor ← context.loadValue hasCursor (stackOff + 8) (nonce + 1)
+    (scope ++ "_has_cursor")
+  let loadPrice ← context.loadValue price (stackOff + 16) (nonce + 2) (scope ++ "_price")
+  let loadSequence ← context.loadValue sequence (stackOff + 24) (nonce + 3)
+    (scope ++ "_sequence")
+  let strideBytes := 8 * strideWords
+  let linksBaseBytes := 8 * linksBaseWord
+  let maxKeyWord := Nat.max tree.price.firstWord tree.sequence.firstWord
+  let finalTreeWord := Nat.max linksBaseWord maxKeyWord + strideWords * (capacity - 1)
+  let requiredBytes := 8 * (Nat.max rootWord finalTreeWord + 1)
+  let token := IR.u64Hex (Core.IR.fnv1a64
+    (s!"{scope}:{stackOff}:{nonce}:{acc}:{rootWord}:{linksBaseWord}:" ++
+      s!"{tree.price.firstWord}:{tree.sequence.firstWord}:{strideWords}:" ++
+      s!"{capacity}:{tree.bid}"))
+  let dataOk := s!"rb_cursor_data_ok_{token}"
+  let loop := s!"rb_cursor_loop_{token}"
+  let before := s!"rb_cursor_before_{token}"
+  let after := s!"rb_cursor_after_{token}"
+  let next := s!"rb_cursor_next_{token}"
+  let result := s!"rb_cursor_result_{token}"
+  let failure := s!"rb_cursor_failure_{token}"
+  let done := s!"rb_cursor_done_{token}"
+  let beforeOp := if tree.bid then "jgt" else "jlt"
+  let afterOp := if tree.bid then "jlt" else "jgt"
+  let mut compare := ""
+  for (keyWord, operandOff) in #[(tree.price.firstWord, stackOff + 16),
+      (tree.sequence.firstWord, stackOff + 24)] do
+    compare := compare ++ s!"\
+  ldxdw r1, [r10 - {operandOff}]
+  mov64 r8, r5
+  lddw r3, {8 * keyWord}
+  add64 r8, r3
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+  {beforeOp} r1, r3, {before}
+  {afterOp} r1, r3, {after}
+"
+  let account :=
+    if acc == 0 then
+      s!"\
+  ldxdw r1, [r6 + ACC0_DATA_LEN]
+  lddw r2, {requiredBytes}
+  jge r1, r2, {dataOk}
+  ja {failure}
+{dataOk}:
+  mov64 r5, r6
+  add64 r5, ACC0_DATA
+"
+    else
+      s!"\
+  ldxdw r1, [r10 - {context.headerStack acc}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {requiredBytes}
+  jge r2, r3, {dataOk}
+  ja {failure}
+{dataOk}:
+  mov64 r5, r1
+  add64 r5, 88
+"
+  return loadHasCursor ++ loadPrice ++ loadSequence ++ account ++ s!"\
+  ; bounded key-based acc{acc} FIFO cursor root={rootWord} links={linksBaseWord} stride={strideWords} capacity={capacity}
+  ldxdw r1, [r10 - {stackOff + 8}]
+  lddw r2, 1
+  jgt r1, r2, {failure}
+  mov64 r9, r5
+  lddw r1, {8 * rootWord}
+  add64 r9, r1
+  ldxdw r2, [r9 + 0]
+  stxdw [r10 - {stackOff + 40}], r2
+  lddw r1, 0
+  stxdw [r10 - {stackOff + 48}], r1
+  stxdw [r10 - {stackOff + 56}], r1
+{loop}:
+  ldxdw r2, [r10 - {stackOff + 40}]
+  jeq r2, 0, {result}
+  lddw r1, {capacity}
+  jgt r2, r1, {failure}
+  ldxdw r1, [r10 - {stackOff + 56}]
+  lddw r3, {rbTreeTraversalDepth}
+  jge r1, r3, {failure}
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  mov64 r9, r5
+  lddw r1, {linksBaseBytes}
+  add64 r9, r1
+  add64 r9, r4
+  ldxdw r1, [r10 - {stackOff + 8}]
+  jeq r1, 0, {before}
+{compare}  ja {after}
+{before}:
+  stxdw [r10 - {stackOff + 48}], r2
+  ldxdw r1, [r9 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  ja {next}
+{after}:
+  ldxdw r1, [r9 + 0]
+  rsh64 r1, 32
+{next}:
+  stxdw [r10 - {stackOff + 40}], r1
+  ldxdw r1, [r10 - {stackOff + 56}]
+  add64 r1, 1
+  stxdw [r10 - {stackOff + 56}], r1
+  ja {loop}
+{result}:
+  ldxdw r1, [r10 - {stackOff + 48}]
+  stxdw [r10 - {stackOff}], r1
+  ja {done}
+{failure}:
+  lddw r0, 0x1
+  exit
+{done}:
+"
+
 /-- Validate every live node and every released slot in a fixed-capacity Sokoban allocator. The
 tree walk is iterative and follows parent pointers. A fixed stack bitmap proves that live and free
 indices are disjoint and exactly partition `[1, bumpIndex)`, without heap allocation or node copies. -/
@@ -1280,6 +1407,8 @@ def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
   | .fifoFind rootWord tree, #[price, sequence] =>
       emitRbFind context rootWord tree.topology #[tree.price.firstWord, tree.sequence.firstWord]
         false tree.bid #[price, sequence] stackOff nonce scope
+  | .fifoCursor rootWord tree, #[hasCursor, price, sequence] =>
+      emitFifoCursor context rootWord tree hasCursor price sequence stackOff nonce scope
   | .key4Find rootWord tree, #[key0, key1, key2, key3] =>
       emitRbFind context rootWord tree.topology
         #[tree.key.firstWord, tree.key.firstWord + 1, tree.key.firstWord + 2,

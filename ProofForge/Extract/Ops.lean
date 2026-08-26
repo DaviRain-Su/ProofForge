@@ -67,6 +67,12 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.svm (.accountStorage (.fifoFindOneBased
     acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
       #[price, sequence]
+@[match_pattern] def Val.accDataRbTreeOrderCursor
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity : Nat)
+    (bid : Bool) (hasCursor price sequence : Val) : Val :=
+  .ext (.svm (.accountStorage (.fifoCursorOneBased
+    acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid)))
+      #[hasCursor, price, sequence]
 @[match_pattern] def Val.accDataParentPathValid
     (acc linksBaseWord parentBaseWord strideWords capacity maxDepth : Nat)
     (index root bumpIndex : Val) : Val :=

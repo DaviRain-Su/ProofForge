@@ -876,6 +876,34 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 capacity.toNat (bid == 1) price sequence)
             else none
           | _, _, _, _, _, _, _, _, _, _, _ => none
+        else if (endsWith e ".accDataRbTreeOrderCursor" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderCursor) &&
+            e.getAppArgs.size ≥ 12 then
+          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
+              some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit sequenceBaseWord),
+              some (.lit strideWords), some (.lit capacity), some (.lit bid),
+              some hasCursor, some price, some sequence =>
+            let query := Svm.AccountStorage.Query.fifoCursorOneBased acc.toNat rootWord.toNat
+              linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat
+              strideWords.toNat capacity.toNat (bid == 1)
+            if (bid == 0 || bid == 1) && query.wellFormed then
+              some (.accDataRbTreeOrderCursor acc.toNat rootWord.toNat linksBaseWord.toNat
+                parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat strideWords.toNat
+                capacity.toNat (bid == 1) hasCursor price sequence)
+            else none
+          | _, _, _, _, _, _, _, _, _, _, _, _ => none
         else if (endsWith e ".accDataParentPathValid" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataParentPathValid) &&
             e.getAppArgs.size ≥ 9 then

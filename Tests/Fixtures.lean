@@ -644,6 +644,12 @@ def malformedExternalWrite (s : ChoiceState) (acc value : UInt64) :
   let _ := ProofForge.Svm.Runtime.accDataWordSetAt acc 1 1 1 0 value
   .ok ({ s with chosen := value }, value)
 
+/-- Negative extractor fixture: persistent-container geometry may not come from a runtime value. -/
+def malformedOrderCursor (s : ChoiceState) (acc hasCursor price sequence : UInt64) : UInt64 :=
+  let _ := s
+  ProofForge.Svm.Runtime.accDataRbTreeOrderCursor
+    acc 110 114 115 116 117 8 512 1 hasCursor price sequence
+
 /-- A lexical account read before a write must remain a pre-mutation snapshot. -/
 def accountReadBeforeWrite (s : ChoiceState) (value : UInt64) :
     Except Examples.Counter.Error (ChoiceState × UInt64) :=
