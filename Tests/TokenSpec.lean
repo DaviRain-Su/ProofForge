@@ -29,6 +29,11 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .error _ => false
 
 #guard
+  match burnFrom (init 0) sample nine with
+  | .ok (_, ret) => ret == 9
+  | .error _ => false
+
+#guard
   match increaseAllowance (init 0) sample nine with
   | .ok _ => true
   | .error _ => false
@@ -89,6 +94,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "transferFrom")).isSome &&
     (p.entries.find? (·.ixName == "approve")).isSome &&
     (p.entries.find? (·.ixName == "burn")).isSome &&
+    (p.entries.find? (·.ixName == "burnFrom")).isSome &&
     (p.entries.find? (·.ixName == "increaseAllowance")).isSome &&
     (p.entries.find? (·.ixName == "decreaseAllowance")).isSome &&
     (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&

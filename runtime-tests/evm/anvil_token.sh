@@ -180,6 +180,36 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   10 "over-allowance holds remaining"
 
+"$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+  "$addr" 'burnFrom(address,uint256)' "$sender" 5 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  60 "owner after burnFrom"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  5 "allowance after burnFrom"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  95 "total supply after burnFrom"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'burnFrom(address,uint256)' "$sender" 100 >/dev/null 2>&1; then
+  echo "FAIL: over-allowance burnFrom unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_insufficient "$addr" "$dest" \
+  "$("$cast" calldata 'burnFrom(address,uint256)' "$sender" 100)" \
+  5 100 "over-allowance burnFrom"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  60 "over-allowance burnFrom holds owner"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  5 "over-allowance burnFrom holds remaining"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  95 "over-allowance burnFrom holds supply"
+
 deadline=9999999999
 typed="$(printf '%s' "{
   \"types\": {
@@ -240,7 +270,7 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'transferFrom(address,address,uint256)' "$sender" "$dest" 10 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
-  55 "owner after permit transferFrom"
+  50 "owner after permit transferFrom"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   0 "allowance after permit transferFrom"
@@ -249,10 +279,10 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'burn(uint256)' 10 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
-  45 "owner after burn"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  40 "owner after burn"
+  solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
-  90 "total supply after burn"
+  85 "total supply after burn"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
     "$addr" 'burn(uint256)' 1000 >/dev/null 2>&1; then
@@ -261,13 +291,13 @@ if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
 fi
 solana_lean_require_insufficient "$addr" "$sender" \
   "$("$cast" calldata 'burn(uint256)' 1000)" \
-  45 1000 "overdraw burn"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  40 1000 "overdraw burn"
+  solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
-  45 "overdraw burn holds owner"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  40 "overdraw burn holds owner"
+  solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
-  90 "overdraw burn holds supply"
+  85 "overdraw burn holds supply"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
     "$addr" 'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)' \
@@ -284,4 +314,4 @@ fi
 got_dom2="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
 solana_lean_require_equal "${got_dom2,,}" "${got_dom,,}" "DOMAIN_SEPARATOR holds after permit"
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/incdec/decimals; engineering only)"
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals; engineering only)"

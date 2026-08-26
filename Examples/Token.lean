@@ -116,6 +116,26 @@ def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
     .ok ({ dummy := s.dummy, supply := s.supply },
       evmRevertInsufficient (evmMapGetAddr256 balBase evmCaller20) amt)
 
+/-- caller 用额度烧掉 owner 的币。额度或余额不够 → `Insufficient`。 -/
+@[pf_entry]
+def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
+    Except Error (State × UInt64) :=
+  if evmGe256 (evmMapGetPair256 allowBase owner evmCaller20) amt then
+    if evmGe256 (evmMapGetAddr256 balBase owner) amt then
+      let debit :=
+        (evmMapSetAddr256 balBase owner
+          (evmSub256 (evmMapGetAddr256 balBase owner) amt)) |||
+        (evmMapSetPair256 allowBase owner evmCaller20
+          (evmSub256 (evmMapGetPair256 allowBase owner evmCaller20) amt))
+      .ok ({ dummy := debit, supply := evmSub256 s.supply amt },
+        evmLogTransfer256 owner ⟨0, 0, 0⟩ amt)
+    else
+      .ok ({ dummy := s.dummy, supply := s.supply },
+        evmRevertInsufficient (evmMapGetAddr256 balBase owner) amt)
+  else
+    .ok ({ dummy := s.dummy, supply := s.supply },
+      evmRevertInsufficient (evmMapGetPair256 allowBase owner evmCaller20) amt)
+
 /-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
 def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=

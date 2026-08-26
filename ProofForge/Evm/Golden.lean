@@ -423,8 +423,40 @@ def extractedToken : IR.Program :=
           #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
               (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
             .returnU64 (callerBal 0)]
-      ],
-      mutEntry "Token" "decreaseAllowance" 2 #[20, 32] #[
+          ],
+          mutEntry "Token" "burnFrom" 2 #[20, 32] #[
+          .ite .eq (ge256 pairAllow 1) (.lit 1)
+          #[.ite .eq (ge256 ownerBal 1) (.lit 1)
+              #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 1),
+                setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 1),
+                .evmLogTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+                  (.lit 0) (.lit 0) (.lit 0)
+                  (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                .storeField "supply_w0" (.ext (.arith256 1 0) #[
+                  .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                  .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                  u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                .storeField "supply_w1" (.ext (.arith256 1 1) #[
+                  .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                  .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                  u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                .storeField "supply_w2" (.ext (.arith256 1 2) #[
+                  .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                  .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                  u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                .storeField "supply_w3" (.ext (.arith256 1 3) #[
+                  .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                  .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                  u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                .returnU64 (u256Field 1 "w0")]
+              #[.evmRevertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3)
+                  (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                .returnU64 (ownerBal 0)]]
+          #[.evmRevertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3)
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            .returnU64 (pairAllow 0)]
+          ],
+          mutEntry "Token" "decreaseAllowance" 2 #[20, 32] #[
         .ite .eq (ge256 pairSelf 1) (.lit 1)
           #[setPairCallerSpender256 1 0 (fun limb => arithGet 1 limb pairSelf 1),
             .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
