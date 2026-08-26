@@ -895,6 +895,72 @@ private def emitPermit (p : IR.Program) (indent paramPrefix : String)
   st := { st with last := some n0 }
   return (acc, st)
 
+private def emitTokenPermit (p : IR.Program) (indent paramPrefix : String)
+    (paramCount : Nat) (paramWidths : Array Nat)
+    (tw0 tw1 tw2 ow0 ow1 ow2 sw0 sw1 sw2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Ops.Val)
+    (st : Render) : Except String (String × Render) := do
+  let (p0, t0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
+  let (p1, t1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 s0
+  let (p2, t2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths tw2 s1
+  let (q0, o0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths ow0 s2
+  let (q1, o1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths ow1 s3
+  let (q2, o2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths ow2 s4
+  let (rA0, a0, s6) ← materializeVal p indent paramPrefix paramCount paramWidths sw0 s5
+  let (rA1, a1, s7) ← materializeVal p indent paramPrefix paramCount paramWidths sw1 s6
+  let (rA2, a2, s8) ← materializeVal p indent paramPrefix paramCount paramWidths sw2 s7
+  let (u0, n0, s9) ← materializeVal p indent paramPrefix paramCount paramWidths v0 s8
+  let (u1, n1, s10) ← materializeVal p indent paramPrefix paramCount paramWidths v1 s9
+  let (u2, n2, s11) ← materializeVal p indent paramPrefix paramCount paramWidths v2 s10
+  let (u3, n3, s12) ← materializeVal p indent paramPrefix paramCount paramWidths v3 s11
+  let (k0p, k0, s13) ← materializeVal p indent paramPrefix paramCount paramWidths d0 s12
+  let (k1p, k1, s14) ← materializeVal p indent paramPrefix paramCount paramWidths d1 s13
+  let (k2p, k2, s15) ← materializeVal p indent paramPrefix paramCount paramWidths d2 s14
+  let (k3p, k3, s16) ← materializeVal p indent paramPrefix paramCount paramWidths d3 s15
+  let (pv, vbyte, s17) ← materializeVal p indent paramPrefix paramCount paramWidths vv s16
+  let (x0, hr0, s18) ← materializeVal p indent paramPrefix paramCount paramWidths r0 s17
+  let (x1, hr1, s19) ← materializeVal p indent paramPrefix paramCount paramWidths r1 s18
+  let (x2, hr2, s20) ← materializeVal p indent paramPrefix paramCount paramWidths r2 s19
+  let (x3, hr3, s21) ← materializeVal p indent paramPrefix paramCount paramWidths r3 s20
+  let (y0, hs0, s22) ← materializeVal p indent paramPrefix paramCount paramWidths z0 s21
+  let (y1, hs1, s23) ← materializeVal p indent paramPrefix paramCount paramWidths z1 s22
+  let (y2, hs2, s24) ← materializeVal p indent paramPrefix paramCount paramWidths z2 s23
+  let (y3, hs3, s25) ← materializeVal p indent paramPrefix paramCount paramWidths z3 s24
+  let (tok, s26) := fresh s25
+  let (amt, s27) := fresh s26
+  let (dead, s28) := fresh s27
+  let (rword, s29) := fresh s28
+  let (sword, s30) := fresh s29
+  let (ok, s31) := fresh s30
+  let (rds, s32) := fresh s31
+  let acc :=
+    p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ rA0 ++ rA1 ++ rA2 ++
+    u0 ++ u1 ++ u2 ++ u3 ++ k0p ++ k1p ++ k2p ++ k3p ++ pv ++
+    x0 ++ x1 ++ x2 ++ x3 ++ y0 ++ y1 ++ y2 ++ y3 ++
+    indent ++ "if shr(32, " ++ t2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+    indent ++ "if shr(32, " ++ o2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+    indent ++ "if shr(32, " ++ a2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
+    indent ++ "mstore(0, 0)" ++ nl ++
+    packAddrMstore8 indent t0 t1 t2 ++
+    indent ++ "let " ++ tok ++ " := mload(0)" ++ nl ++
+    indent ++ "mstore(0, 0xd505accf00000000000000000000000000000000000000000000000000000000)" ++ nl ++
+    packAddrAt indent 16 o0 o1 o2 ++
+    packAddrAt indent 48 a0 a1 a2 ++
+    indent ++ "let " ++ amt ++ " := " ++ packU256 n0 n1 n2 n3 ++ nl ++
+    indent ++ "mstore(68, " ++ amt ++ ")" ++ nl ++
+    indent ++ "let " ++ dead ++ " := " ++ packU256 k0 k1 k2 k3 ++ nl ++
+    indent ++ "mstore(100, " ++ dead ++ ")" ++ nl ++
+    indent ++ "mstore(132, " ++ vbyte ++ ")" ++ nl ++
+    indent ++ "let " ++ rword ++ " := " ++ packU256 hr0 hr1 hr2 hr3 ++ nl ++
+    indent ++ "mstore(164, " ++ rword ++ ")" ++ nl ++
+    indent ++ "let " ++ sword ++ " := " ++ packU256 hs0 hs1 hs2 hs3 ++ nl ++
+    indent ++ "mstore(196, " ++ sword ++ ")" ++ nl ++
+    indent ++ "let " ++ ok ++ " := call(gas(), " ++ tok ++ ", 0, 0, 228, 0, 32)" ++ nl ++
+    indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl ++
+    indent ++ "let " ++ rds ++ " := returndatasize()" ++ nl ++
+    indent ++ "if and(iszero(eq(" ++ rds ++ ", 0)), iszero(eq(" ++ rds ++
+      ", 32))) { " ++ revert0 ++ " }" ++ nl ++
+    indent ++ "if eq(" ++ rds ++ ", 32) { if iszero(mload(0)) { " ++ revert0 ++ " } }" ++ nl
+  return (acc, { s32 with last := some n0 })
 
 private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
     (paramCount : Nat) (paramWidths : Array Nat) (ops : Array IR.Op) (st : Render) :
@@ -1663,6 +1729,11 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
     | .evmPermit o0 o1 o2 sA0 sA1 sA2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
         let (txt, st') ← emitPermit p indent paramPrefix paramCount paramWidths
           o0 o1 o2 sA0 sA1 sA2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 st
+        acc := acc ++ txt
+        st := st'
+    | .evmTokenPermit tw0 tw1 tw2 ow0 ow1 ow2 sw0 sw1 sw2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+        let (txt, st') ← emitTokenPermit p indent paramPrefix paramCount paramWidths
+          tw0 tw1 tw2 ow0 ow1 ow2 sw0 sw1 sw2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 st
         acc := acc ++ txt
         st := st'
     | .storeField name v =>

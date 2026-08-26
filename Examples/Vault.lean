@@ -68,6 +68,15 @@ def grant (_s : State) (token spender : Addr20) (amt : UInt256) :
   else
     .error .overflow
 
+/-- 封闭外部 EIP-2612 `permit(address,address,uint256,uint256,uint8,bytes32,bytes32)`。 -/
+@[pf_entry]
+def permit (_s : State) (token owner spender : Addr20) (value deadline : UInt256)
+    (v : UInt8) (r s : Bytes32) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ dummy := 0 }, evmTokenPermit token owner spender value deadline v r s)
+  else
+    .error .overflow
+
 /-- 封闭 ERC-20 `transferFrom(address,address,uint256)`。 -/
 @[pf_entry]
 def take (_s : State) (token owner dest : Addr20) (amt : UInt256) :

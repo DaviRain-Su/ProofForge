@@ -234,6 +234,20 @@ def extractedVault : IR.Program :=
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
       ],
+      mutEntry "Vault" "permit" 8 #[20, 20, 20, 32, 32, 1, 33, 33] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmTokenPermit
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
+              (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")
+              (u256Field 3 "w0") (u256Field 3 "w1") (u256Field 3 "w2") (u256Field 3 "w3")
+              (u256Field 4 "w0") (u256Field 4 "w1") (u256Field 4 "w2") (u256Field 4 "w3")
+              (.arg 5)
+              (u256Field 6 "w0") (u256Field 6 "w1") (u256Field 6 "w2") (u256Field 6 "w3")
+              (u256Field 7 "w0") (u256Field 7 "w1") (u256Field 7 "w2") (u256Field 7 "w3"),
+            .returnU64 (u256Field 3 "w0")]
+          #[.errorOverflow]
+      ],
       mutEntry "Vault" "pull" 3 #[20, 20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
           #[.evmTokenTransfer256

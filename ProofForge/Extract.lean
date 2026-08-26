@@ -1365,6 +1365,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             isConstNamed e ``ProofForge.Evm.Runtime.evmSwapExact2) ||
             (endsWith e ".evmSwapExact3" ||
             isConstNamed e ``ProofForge.Evm.Runtime.evmSwapExact3) ||
+            (endsWith e ".evmTokenPermit" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenPermit) ||
             (endsWith e ".evmPermit" ||
             isConstNamed e ``ProofForge.Evm.Runtime.evmPermit)) &&
             e.getAppArgs.size ≥ 1 then
@@ -3878,8 +3880,32 @@ private def findEvmSwapExact3 (env : Environment) (e : Expr) :
         .arg 16, .arg 17, .arg 18, .arg 19)
   else none
 
+private def findEvmTokenPermit (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
+  if mentionsRuntime e "evmTokenPermit" then
+    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenPermit ".evmTokenPermit" with
+    | some app =>
+      let args := app.getAppArgs
+      match nthFromEnd args 7, nthFromEnd args 6, nthFromEnd args 5, nthFromEnd args 4,
+          nthFromEnd args 3, nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+      | some token, some owner, some spender, some value, some deadline, some _v, some r, some s =>
+        let (t0, t1, t2) := addr20Leaves env token
+        let (o0, o1, o2) := addr20Leaves env owner
+        let (sp0, sp1, sp2) := addr20Leaves env spender
+        let (v0, v1, v2, v3) := uint256Leaves env value
+        let (d0, d1, d2, d3) := uint256Leaves env deadline
+        let vv := valAtEnd env args 2
+        let (r0, r1, r2, r3) := bytes32Leaves env r
+        let (z0, z1, z2, z3) := bytes32Leaves env s
+        some #[t0, t1, t2, o0, o1, o2, sp0, sp1, sp2, v0, v1, v2, v3, d0, d1, d2, d3,
+          vv, r0, r1, r2, r3, z0, z1, z2, z3]
+      | _, _, _, _, _, _, _, _ =>
+        some ((List.range 26).toArray.map fun i => .arg i)
+    | none =>
+      some ((List.range 26).toArray.map fun i => .arg i)
+  else none
+
 private def findEvmPermit (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
-  if mentionsRuntime e "evmPermit" then
+  if mentionsRuntime e "evmPermit" && !(mentionsRuntime e "evmTokenPermit") then
     match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmPermit ".evmPermit" with
     | some app =>
       let args := app.getAppArgs
@@ -4122,6 +4148,26 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
       some (.evmSwapExact3 (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5)
         (.arg 6) (.arg 7) (.arg 8) (.arg 9) (.arg 10) (.arg 11) (.arg 12)
         (.arg 13) (.arg 14) (.arg 15) (.arg 16) (.arg 17) (.arg 18) (.arg 19))
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmTokenPermit ||
+      endsWith app ".evmTokenPermit" then
+    match nthFromEnd args 7, nthFromEnd args 6, nthFromEnd args 5, nthFromEnd args 4,
+        nthFromEnd args 3, nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
+    | some token, some owner, some spender, some value, some deadline, some _v, some r, some s =>
+      let (t0, t1, t2) := addr20Leaves env token
+      let (o0, o1, o2) := addr20Leaves env owner
+      let (s0, s1, s2) := addr20Leaves env spender
+      let (v0, v1, v2, v3) := uint256Leaves env value
+      let (d0, d1, d2, d3) := uint256Leaves env deadline
+      let vv := valAtEnd env args 2
+      let (r0, r1, r2, r3) := bytes32Leaves env r
+      let (z0, z1, z2, z3) := bytes32Leaves env s
+      some (.evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3
+        vv r0 r1 r2 r3 z0 z1 z2 z3)
+    | _, _, _, _, _, _, _, _ =>
+      some (.evmTokenPermit (.arg 0) (.arg 1) (.arg 2) (.arg 3) (.arg 4) (.arg 5)
+        (.arg 6) (.arg 7) (.arg 8) (.arg 9) (.arg 10) (.arg 11) (.arg 12)
+        (.arg 13) (.arg 14) (.arg 15) (.arg 16) (.arg 17) (.arg 18) (.arg 19)
+        (.arg 20) (.arg 21) (.arg 22) (.arg 23) (.arg 24) (.arg 25))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmPermit ||
       endsWith app ".evmPermit" then
     match nthFromEnd args 6, nthFromEnd args 5, nthFromEnd args 4,
@@ -4170,8 +4216,9 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
     (``ProofForge.Evm.Runtime.evmWethWithdraw, ".evmWethWithdraw"),
     (``ProofForge.Evm.Runtime.evmSwapExact2, ".evmSwapExact2"),
     (``ProofForge.Evm.Runtime.evmSwapExact3, ".evmSwapExact3"),
+    (``ProofForge.Evm.Runtime.evmTokenPermit, ".evmTokenPermit"),
     (``ProofForge.Evm.Runtime.evmPermit, ".evmPermit")
-  ]
+    ]
   let rec walk (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
     match fuel with
     | 0 => acc
@@ -4217,6 +4264,7 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   | some (.evmSwapExact2 _ _ _ _ _ _ _ _ _ i0 _ _ _ _ _ _ _) => i0
   | some (.evmSwapExact3 _ _ _ _ _ _ _ _ _ _ _ _ i0 _ _ _ _ _ _ _) => i0
   | some (.evmPermit _ _ _ _ _ _ v0 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => v0
+  | some (.evmTokenPermit _ _ _ _ _ _ _ _ _ v0 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => v0
   | _ => .arg 0
 
 private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
@@ -4269,6 +4317,12 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
   else if let some (r0, r1, r2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3) :=
       findEvmSwapExact3 env e then
     some #[.evmSwapExact3 r0 r1 r2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3, .returnU64 i0]
+  else if let some xs := findEvmTokenPermit env e then
+    if xs.size == 26 then
+      some #[.evmTokenPermit xs[0]! xs[1]! xs[2]! xs[3]! xs[4]! xs[5]! xs[6]! xs[7]! xs[8]!
+        xs[9]! xs[10]! xs[11]! xs[12]! xs[13]! xs[14]! xs[15]! xs[16]! xs[17]! xs[18]!
+        xs[19]! xs[20]! xs[21]! xs[22]! xs[23]! xs[24]! xs[25]!, .returnU64 xs[9]!]
+    else none
   else if let some xs := findEvmPermit env e then
     if xs.size == 23 then
       some #[.evmPermit xs[0]! xs[1]! xs[2]! xs[3]! xs[4]! xs[5]! xs[6]! xs[7]! xs[8]! xs[9]!
@@ -6240,6 +6294,15 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
             (flipVal fuel' vv)
             (flipVal fuel' r0) (flipVal fuel' r1) (flipVal fuel' r2) (flipVal fuel' r3)
             (flipVal fuel' z0) (flipVal fuel' z1) (flipVal fuel' z2) (flipVal fuel' z3)
+      | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+          .evmTokenPermit (flipVal fuel' t0) (flipVal fuel' t1) (flipVal fuel' t2)
+            (flipVal fuel' o0) (flipVal fuel' o1) (flipVal fuel' o2)
+            (flipVal fuel' s0) (flipVal fuel' s1) (flipVal fuel' s2)
+            (flipVal fuel' v0) (flipVal fuel' v1) (flipVal fuel' v2) (flipVal fuel' v3)
+            (flipVal fuel' d0) (flipVal fuel' d1) (flipVal fuel' d2) (flipVal fuel' d3)
+            (flipVal fuel' vv)
+            (flipVal fuel' r0) (flipVal fuel' r1) (flipVal fuel' r2) (flipVal fuel' r3)
+            (flipVal fuel' z0) (flipVal fuel' z1) (flipVal fuel' z2) (flipVal fuel' z3)
       | .errorOverflow => .errorOverflow
       | .errorNamed n => .errorNamed n
   let ops := ops0.map (flipOp 128)
@@ -6608,6 +6671,15 @@ private def opFields : Ops.Op → Array String
         valFields vv ++
         valFields r0 ++ valFields r1 ++ valFields r2 ++ valFields r3 ++
         valFields z0 ++ valFields z1 ++ valFields z2 ++ valFields z3
+  | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      valFields t0 ++ valFields t1 ++ valFields t2 ++
+        valFields o0 ++ valFields o1 ++ valFields o2 ++
+        valFields s0 ++ valFields s1 ++ valFields s2 ++
+        valFields v0 ++ valFields v1 ++ valFields v2 ++ valFields v3 ++
+        valFields d0 ++ valFields d1 ++ valFields d2 ++ valFields d3 ++
+        valFields vv ++
+        valFields r0 ++ valFields r1 ++ valFields r2 ++ valFields r3 ++
+        valFields z0 ++ valFields z1 ++ valFields z2 ++ valFields z3
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .errorNamed _ => #[]
@@ -6788,6 +6860,15 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
             (← normalizeVal vv)
             (← normalizeVal r0) (← normalizeVal r1) (← normalizeVal r2) (← normalizeVal r3)
             (← normalizeVal z0) (← normalizeVal z1) (← normalizeVal z2) (← normalizeVal z3)
+      | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+          return .evmTokenPermit (← normalizeVal t0) (← normalizeVal t1) (← normalizeVal t2)
+            (← normalizeVal o0) (← normalizeVal o1) (← normalizeVal o2)
+            (← normalizeVal s0) (← normalizeVal s1) (← normalizeVal s2)
+            (← normalizeVal v0) (← normalizeVal v1) (← normalizeVal v2) (← normalizeVal v3)
+            (← normalizeVal d0) (← normalizeVal d1) (← normalizeVal d2) (← normalizeVal d3)
+            (← normalizeVal vv)
+            (← normalizeVal r0) (← normalizeVal r1) (← normalizeVal r2) (← normalizeVal r3)
+            (← normalizeVal z0) (← normalizeVal z1) (← normalizeVal z2) (← normalizeVal z3)
   return { p with methods := ← p.methods.mapM fun m => do
     return { m with ops := ← m.ops.mapM (goOp 128) } }
 
@@ -6896,6 +6977,9 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
         (valEscapedArg limit)
   | .evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].findSome?
+        (valEscapedArg limit)
+  | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].findSome?
         (valEscapedArg limit)
   | .storeField _ v | .okState v | .returnU64 v | .returnState v => valEscapedArg limit v
   | .errorOverflow | .errorNamed _ => none

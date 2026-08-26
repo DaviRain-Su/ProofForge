@@ -183,4 +183,65 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token_c")" \
   20 "token C after swap3"
 
-echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom/weth/swap2/swap3; engineering only)"
+internal_bin="$root/build/evm/Token.bin"
+solana_lean_ensure_bin "$internal_bin"
+internal_hex="$(tr -d '\n\r ' < "$internal_bin")"
+internal="$(solana_lean_deploy_ctor_u64 "$internal_hex" 0)"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$internal" 'mint(address,uint256)' "$sender" 80 >/dev/null
+deadline=9999999999
+typed="$(printf '%s' "{
+  \"types\": {
+    \"EIP712Domain\": [
+      {\"name\":\"name\",\"type\":\"string\"},
+      {\"name\":\"version\",\"type\":\"string\"},
+      {\"name\":\"chainId\",\"type\":\"uint256\"},
+      {\"name\":\"verifyingContract\",\"type\":\"address\"}
+    ],
+    \"Permit\": [
+      {\"name\":\"owner\",\"type\":\"address\"},
+      {\"name\":\"spender\",\"type\":\"address\"},
+      {\"name\":\"value\",\"type\":\"uint256\"},
+      {\"name\":\"nonce\",\"type\":\"uint256\"},
+      {\"name\":\"deadline\",\"type\":\"uint256\"}
+    ]
+  },
+  \"primaryType\": \"Permit\",
+  \"domain\": {
+    \"name\": \"Token\",
+    \"version\": \"1\",
+    \"chainId\": $chain_id,
+    \"verifyingContract\": \"$internal\"
+  },
+  \"message\": {
+    \"owner\": \"$sender\",
+    \"spender\": \"$addr\",
+    \"value\": \"12\",
+    \"nonce\": \"0\",
+    \"deadline\": \"$deadline\"
+  }
+}")"
+sig="$("$cast" wallet sign --data --private-key "$private_key" "$typed")"
+r="0x${sig:2:64}"
+s="0x${sig:66:64}"
+v="$((16#${sig:130:2}))"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'permit(address,address,address,uint256,uint256,uint8,bytes32,bytes32)' \
+  "$internal" "$sender" "$addr" 12 "$deadline" "$v" "$r" "$s" >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$internal" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$addr")" \
+  12 "internal token allowance after vault permit"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'take(address,address,address,uint256)' \
+  "$internal" "$sender" "$recipient" 12 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$internal" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  68 "owner after vault permit take"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$internal" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$addr")" \
+  0 "allowance after vault permit take"
+
+echo "evm-anvil-vault: ok (map/share/token/approve/transferFrom/weth/swap2/swap3/permit; engineering only)"

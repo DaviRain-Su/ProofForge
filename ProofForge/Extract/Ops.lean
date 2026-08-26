@@ -158,6 +158,9 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.evmPermit
     (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Val) : Op :=
   .ext (.evm (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3))
+@[match_pattern] def Op.evmTokenPermit
+    (t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Val) : Op :=
+  .ext (.evm (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3))
 
 private partial def walk (ops : Array Op) (predicate : Op → Bool) : Bool :=
   ops.any fun op =>
@@ -264,6 +267,8 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3].any predicate
   | .evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
       #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].any predicate
+  | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
+      #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
 
 private partial def isEvmContext : Val → Bool
@@ -306,7 +311,7 @@ def hasEvmEffect (ops : Array Op) : Bool :=
     | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenApprove256 ..
     | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf ..
     | .evmWethDeposit256 .. | .evmWethWithdraw256 .. | .evmSwapExact2 ..
-    | .evmSwapExact3 .. | .evmPermit .. => true
+    | .evmSwapExact3 .. | .evmPermit .. | .evmTokenPermit .. => true
     | _ => false
 
 end ProofForge.Extract.Ops

@@ -47,6 +47,12 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .error _ => false
 
 #guard
+  match permit (init 0) sample sample sample ⟨10, 0, 0, 0⟩ ⟨11, 0, 0, 0⟩
+      27 ⟨1, 2, 3, 4⟩ ⟨5, 6, 7, 8⟩ with
+  | .ok (_, ret) => ret == 10
+  | .error _ => false
+
+#guard
   match receive (init 0) with
   | .ok (_, ret) => ret == 0
   | .error _ => false
@@ -66,6 +72,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         yul.contains "0xd0e30db0" &&
         yul.contains "0x2e1a7d4d" &&
         yul.contains "0x38ed1739" &&
+        yul.contains "0xd505accf" &&
         yul.contains "mstore(164, 3)" &&
         yul.contains "call(gas(), " &&
         yul.contains "staticcall(gas()" &&
