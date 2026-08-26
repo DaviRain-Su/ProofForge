@@ -292,6 +292,19 @@
   50 个 SVM build、Mollusk 230/230、Anvil 12/12 全绿；Surfpool 1.5.0 以 1,472 个 Loader
   write transactions 部署并核对 exact 1,489,133-byte ProgramData。下一步增加 bounded
   Key4/FIFO map-find query，再组合 field read/write/remove 实现 ReduceOrder。
+- P5 第二十八段 bounded account-storage RB map find 已完成：`Query.fifoFind` 与
+  `Query.key4Find` 复用同一个 storage-owned `emitRbFind`，按编译期固定 root/links/key/
+  stride/capacity 在 account bytes 中直接搜索，返回 one-based node index 或 `0`。Key4 用
+  `be64` 保持 `[u8;32]` byte ordering；FIFO ask 升序、bid 降序。每个 dereference 都检查
+  `1..capacity`，统一 64-level bound 拒绝 cycle/过深输入；account 0 与 walked external
+  account 都先做覆盖 root/links/key 的 data-length gate。validator/find/mutable map 现在共用
+  `FifoRbTree.oneBased` / `Key4RbTree.oneBased` layout constructors；query 自己拥有 arity、
+  read-only effects、account inference 与 `rbof`/`rb4f` canonical spelling，主 `loadVal` 没有
+  新 case。实现只保留 scalar index/depth 和调用期 transient pointer，不分配 heap/Map、
+  bitmap，不复制 node，不开放 runtime geometry。isolated Key4/FIFO programs 经 `sbpf build`
+  产出 3,720 B / 3,480 B ELF；196-job Lean、50 个 SVM build、Mollusk 230/230、Anvil
+  12/12 与 Surfpool smoke 全绿。下一步接 Runtime/source intrinsic，再组合
+  find/read/write/remove 实现 ReduceOrder。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

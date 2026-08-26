@@ -298,6 +298,131 @@ private def emitParentPathValid (context : Context) (path : ParentPath)
   ldxdw r7, [r10 - {stackOff + 32}]
 "
 
+/-- Search one fixed-capacity, one-based account-resident RB tree without allocating or copying
+nodes. The full validator proves topology and allocator invariants; this composable query still
+checks every selected index and caps traversal so malformed or cyclic input cannot escape the
+declared account region. -/
+private def emitRbFind (context : Context) (rootWord : Nat) (tree : RbTree)
+    (keyWords : Array Nat) (byteLex descending : Bool) (keys : Array Ops.Val)
+    (stackOff nonce : Nat) (scope : String) : Except String String := do
+  let region := tree.links.region
+  let acc := region.account
+  let linksBaseWord := tree.links.firstWord
+  let strideWords := region.strideWords
+  let capacity := region.capacity
+  let mut loadKeys := ""
+  for i in [0:keys.size] do
+    loadKeys := loadKeys ++
+      (← context.loadValue keys[i]! (stackOff + 8 * (i + 1)) (nonce + i + 1)
+        s!"{scope}_key_{i}")
+  let strideBytes := 8 * strideWords
+  let linksBaseBytes := 8 * linksBaseWord
+  let maxKeyWord := keyWords.foldl Nat.max 0
+  let finalTreeWord := Nat.max linksBaseWord maxKeyWord + strideWords * (capacity - 1)
+  let requiredBytes := 8 * (Nat.max rootWord finalTreeWord + 1)
+  let token := IR.u64Hex (Core.IR.fnv1a64
+    (s!"{scope}:{stackOff}:{nonce}:{acc}:{rootWord}:{linksBaseWord}:" ++
+      s!"{String.intercalate "," (keyWords.map toString).toList}:" ++
+      s!"{strideWords}:{capacity}:{byteLex}:{descending}"))
+  let dataOk := s!"rb_find_data_ok_{token}"
+  let loop := s!"rb_find_loop_{token}"
+  let before := s!"rb_find_before_{token}"
+  let after := s!"rb_find_after_{token}"
+  let next := s!"rb_find_next_{token}"
+  let found := s!"rb_find_found_{token}"
+  let missing := s!"rb_find_missing_{token}"
+  let failure := s!"rb_find_failure_{token}"
+  let done := s!"rb_find_done_{token}"
+  let beforeOp := if descending then "jgt" else "jlt"
+  let afterOp := if descending then "jlt" else "jgt"
+  let mut compare := ""
+  for i in [0:keyWords.size] do
+    let transform := if byteLex then "  be64 r1\n  be64 r3\n" else ""
+    compare := compare ++ s!"\
+  ldxdw r1, [r10 - {stackOff + 8 * (i + 1)}]
+  mov64 r8, r5
+  lddw r3, {8 * keyWords[i]!}
+  add64 r8, r3
+  add64 r8, r4
+  ldxdw r3, [r8 + 0]
+{transform}  {beforeOp} r1, r3, {before}
+  {afterOp} r1, r3, {after}
+"
+  let account :=
+    if acc == 0 then
+      s!"\
+  ldxdw r1, [r6 + ACC0_DATA_LEN]
+  lddw r2, {requiredBytes}
+  jge r1, r2, {dataOk}
+  ja {failure}
+{dataOk}:
+  mov64 r5, r6
+  add64 r5, ACC0_DATA
+"
+    else
+      s!"\
+  ldxdw r1, [r10 - {context.headerStack acc}]
+  ldxdw r2, [r1 + 80]
+  lddw r3, {requiredBytes}
+  jge r2, r3, {dataOk}
+  ja {failure}
+{dataOk}:
+  mov64 r5, r1
+  add64 r5, 88
+"
+  return loadKeys ++ account ++ s!"\
+  ; bounded one-based acc{acc} RB find root={rootWord} links={linksBaseWord} stride={strideWords} capacity={capacity}
+  mov64 r9, r5
+  lddw r1, {8 * rootWord}
+  add64 r9, r1
+  ldxdw r2, [r9 + 0]
+  stxdw [r10 - {stackOff + 40}], r2
+  lddw r1, 0
+  stxdw [r10 - {stackOff + 48}], r1
+{loop}:
+  ldxdw r2, [r10 - {stackOff + 40}]
+  jeq r2, 0, {missing}
+  lddw r1, {capacity}
+  jgt r2, r1, {failure}
+  ldxdw r1, [r10 - {stackOff + 48}]
+  lddw r3, {rbTreeTraversalDepth}
+  jge r1, r3, {failure}
+  mov64 r4, r2
+  sub64 r4, 1
+  lddw r1, {strideBytes}
+  mul64 r4, r1
+  mov64 r9, r5
+  lddw r1, {linksBaseBytes}
+  add64 r9, r1
+  add64 r9, r4
+{compare}  ja {found}
+{before}:
+  ldxdw r1, [r9 + 0]
+  lsh64 r1, 32
+  rsh64 r1, 32
+  ja {next}
+{after}:
+  ldxdw r1, [r9 + 0]
+  rsh64 r1, 32
+{next}:
+  stxdw [r10 - {stackOff + 40}], r1
+  ldxdw r1, [r10 - {stackOff + 48}]
+  add64 r1, 1
+  stxdw [r10 - {stackOff + 48}], r1
+  ja {loop}
+{found}:
+  stxdw [r10 - {stackOff}], r2
+  ja {done}
+{missing}:
+  lddw r1, 0
+  stxdw [r10 - {stackOff}], r1
+  ja {done}
+{failure}:
+  lddw r0, 0x1
+  exit
+{done}:
+"
+
 /-- Validate every live node and every released slot in a fixed-capacity Sokoban allocator. The
 tree walk is iterative and follows parent pointers. A fixed stack bitmap proves that live and free
 indices are disjoint and exactly partition `[1, bumpIndex)`, without heap allocation or node copies. -/
@@ -1152,6 +1277,14 @@ def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
       emitReadWord context field index stackOff nonce scope
   | .parentPathValid path, #[index, root, bumpIndex] =>
       emitParentPathValid context path index root bumpIndex stackOff nonce scope
+  | .fifoFind rootWord tree, #[price, sequence] =>
+      emitRbFind context rootWord tree.topology #[tree.price.firstWord, tree.sequence.firstWord]
+        false tree.bid #[price, sequence] stackOff nonce scope
+  | .key4Find rootWord tree, #[key0, key1, key2, key3] =>
+      emitRbFind context rootWord tree.topology
+        #[tree.key.firstWord, tree.key.firstWord + 1, tree.key.firstWord + 2,
+          tree.key.firstWord + 3]
+        true false #[key0, key1, key2, key3] stackOff nonce scope
   | .fifoRbTreeValid tree, #[root, size, bumpIndex, freeListHead] =>
       emitFifoRbTreeValid context tree root size bumpIndex freeListHead stackOff nonce scope
   | .key4RbTreeValid tree, #[root, size, bumpIndex, freeListHead] =>

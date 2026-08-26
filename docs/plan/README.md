@@ -109,6 +109,7 @@
 | [l5-032](tasks/l5-032.md) | done | Pubkey RB-tree validator migration + shared bounded topology |
 | [l5-033](tasks/l5-033.md) | done | Bounded account-storage map mutation vocabulary |
 | [l5-034](tasks/l5-034.md) | done | Bounded zero/one-based account-storage field reads |
+| [l5-035](tasks/l5-035.md) | done | Bounded Key4/FIFO account-storage RB map find |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 

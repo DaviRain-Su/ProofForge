@@ -1,5 +1,6 @@
 import ProofForge.Svm.Ops
 import ProofForge.Svm.AccountStorage
+import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.IR
 import ProofForge.Evm.Ops
 import ProofForge.Evm.IR
@@ -168,6 +169,90 @@ private def validRbTreeKey4Query : ProofForge.Svm.AccountStorage.Query :=
     (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
     (#[.arg 0, .arg 1, .arg 2, .arg 3] : Array ProofForge.Svm.Ops.Val) ==
   "drb4.1.65658.65659.65660.18.8321(a0,a1,a2,a3)"
+
+private def validFifoFindQuery : ProofForge.Svm.AccountStorage.Query :=
+  .fifoFindOneBased 1 110 114 115 116 117 8 4096 true
+
+private def validKey4FindQuery : ProofForge.Svm.AccountStorage.Query :=
+  .key4FindOneBased 1 8310 8314 8315 8316 18 128
+
+private def stateKey4FindQuery : ProofForge.Svm.AccountStorage.Query :=
+  .key4FindOneBased 0 1 4 5 6 10 4
+
+private def invalidFindRootQuery : ProofForge.Svm.AccountStorage.Query :=
+  .key4FindOneBased 1 8314 8314 8315 8316 18 128
+
+private def unboundedFifoFindQuery : ProofForge.Svm.AccountStorage.Query :=
+  .fifoFindOneBased 1 110 114 115 116 117 8 4097 true
+
+private def writableKey4FindQuery : ProofForge.Svm.AccountStorage.Query :=
+  .key4Find 8310 (.oneBased 1 8314 8315 8316 18 128
+    { writable := true, currentProgramOwned := true })
+
+#guard validFifoFindQuery.wellFormed
+#guard validKey4FindQuery.wellFormed
+#guard stateKey4FindQuery.wellFormed
+#guard !invalidFindRootQuery.wellFormed
+#guard !unboundedFifoFindQuery.wellFormed
+#guard !writableKey4FindQuery.wellFormed
+#guard validFifoFindQuery.arity == 2
+#guard validKey4FindQuery.arity == 4
+#guard validFifoFindQuery.effects.reads == #[1]
+#guard validFifoFindQuery.effects.writes.isEmpty
+#guard validKey4FindQuery.effects.reads == #[1]
+#guard validKey4FindQuery.effects.writes.isEmpty
+#guard validFifoFindQuery.canonical
+    (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
+    (#[.arg 0, .arg 1] : Array ProofForge.Svm.Ops.Val) ==
+  "rbof.1.110.114.116.117.8.4096.true(a0,a1)"
+#guard validKey4FindQuery.canonical
+    (fun value : ProofForge.Svm.Ops.Val => match value with | .arg i => s!"a{i}" | _ => "v")
+    (#[.arg 0, .arg 1, .arg 2, .arg 3] : Array ProofForge.Svm.Ops.Val) ==
+  "rb4f.1.8310.8314.8316.18.128(a0,a1,a2,a3)"
+
+private def findEmitContext : ProofForge.Svm.AccountStorage.Emit.Context :=
+  { loadValue := fun value stackOff _ _ =>
+      match value with
+      | .arg i => .ok s!"  lddw r1, {i}\n  stxdw [r10 - {stackOff}], r1\n"
+      | _ => .error "unexpected test value"
+    loadOwnerIsSelf := fun _ _ _ => ""
+    headerStack := fun account => 512 + 8 * account }
+
+private def key4FindAssembly :=
+  ProofForge.Svm.AccountStorage.Emit.emitQuery findEmitContext validKey4FindQuery
+    #[.arg 0, .arg 1, .arg 2, .arg 3] 160 0 "key4_find_test"
+
+private def fifoFindAssembly :=
+  ProofForge.Svm.AccountStorage.Emit.emitQuery findEmitContext validFifoFindQuery
+    #[.arg 0, .arg 1] 160 0 "fifo_find_test"
+
+private def stateFindAssembly :=
+  ProofForge.Svm.AccountStorage.Emit.emitQuery findEmitContext stateKey4FindQuery
+    #[.arg 0, .arg 1, .arg 2, .arg 3] 160 0 "state_find_test"
+
+#guard
+  match key4FindAssembly with
+  | .ok assembly =>
+      assembly.contains "bounded one-based acc1 RB find root=8310 links=8314 stride=18 capacity=128" &&
+        assembly.contains "be64 r1" && assembly.contains "rb_find_found_" &&
+        assembly.contains "rb_find_missing_" && assembly.contains "lddw r3, 64"
+  | .error _ => false
+
+#guard
+  match fifoFindAssembly with
+  | .ok assembly =>
+      assembly.contains "bounded one-based acc1 RB find root=110 links=114 stride=8 capacity=4096" &&
+        assembly.contains "jgt r1, r3, rb_find_before_" &&
+        assembly.contains "jlt r1, r3, rb_find_after_" && !assembly.contains "be64 r1"
+  | .error _ => false
+
+#guard
+  match stateFindAssembly with
+  | .ok assembly =>
+      assembly.contains "ldxdw r1, [r6 + ACC0_DATA_LEN]" &&
+        assembly.contains "add64 r5, ACC0_DATA" &&
+        assembly.contains "bounded one-based acc0 RB find root=1 links=4 stride=10 capacity=4"
+  | .error _ => false
 
 private def validAccDataWordSetAtOp : ProofForge.Svm.Ops.Op :=
   .ext (.accountStorage (.writeWordZeroBased 1 8314 18 128 (.arg 0) (.arg 1)))

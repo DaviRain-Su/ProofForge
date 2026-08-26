@@ -134,6 +134,28 @@ def FifoRbTree.wellFormed (tree : FifoRbTree) (accountLimit : Nat := 64) : Bool 
     tree.links.region.sameShape tree.price.region &&
     tree.links.region.sameShape tree.sequence.region
 
+def FifoRbTree.oneBased
+    (account linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords capacity : Nat)
+    (bid : Bool) (access : Access := {}) : FifoRbTree :=
+  { topology :=
+      { links :=
+          { region :=
+              { account, baseWord := linksBaseWord, strideWords, capacity
+                indexBase := .one, access } }
+        parentColor :=
+          { region :=
+              { account, baseWord := parentBaseWord, strideWords, capacity
+                indexBase := .one, access } } }
+    price :=
+      { region :=
+          { account, baseWord := priceBaseWord, strideWords, capacity
+            indexBase := .one, access } }
+    sequence :=
+      { region :=
+          { account, baseWord := sequenceBaseWord, strideWords, capacity
+            indexBase := .one, access } }
+    bid }
+
 /-- Static fields of a fixed-capacity red-black tree ordered by four consecutive account words. -/
 structure Key4RbTree where
   topology : RbTree
@@ -152,11 +174,37 @@ def Key4RbTree.wellFormed (tree : Key4RbTree) (accountLimit : Nat := 64) : Bool 
     tree.links.firstWord ≤ tree.key.firstWord &&
     tree.lastKey.firstWord < tree.links.firstWord + tree.links.region.strideWords
 
+def Key4RbTree.oneBased
+    (account linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
+    (access : Access := {}) : Key4RbTree :=
+  { topology :=
+      { links :=
+          { region :=
+              { account, baseWord := linksBaseWord, strideWords, capacity
+                indexBase := .one, access } }
+        parentColor :=
+          { region :=
+              { account, baseWord := parentBaseWord, strideWords, capacity
+                indexBase := .one, access } } }
+    key :=
+      { region :=
+          { account, baseWord := keyBaseWord, strideWords, capacity
+            indexBase := .one, access } }
+    lastKey :=
+      { region :=
+          { account, baseWord := keyBaseWord + 3, strideWords, capacity
+            indexBase := .one, access } } }
+
+private def rootBeforeTree (rootWord : Nat) (links : Field) : Bool :=
+  rootWord < links.firstWord && rootWord < maxDataWord
+
 /-- Account-resident routines that return one scalar. Dynamic operands remain ordinary Core
 operands; this target-owned descriptor contains only static bounded geometry. -/
 inductive Query where
   | readWord (field : Field)
   | parentPathValid (path : ParentPath)
+  | fifoFind (rootWord : Nat) (tree : FifoRbTree)
+  | key4Find (rootWord : Nat) (tree : Key4RbTree)
   | fifoRbTreeValid (tree : FifoRbTree)
   | key4RbTreeValid (tree : Key4RbTree)
   deriving BEq, Repr, Inhabited
@@ -164,6 +212,8 @@ inductive Query where
 def Query.arity : Query → Nat
   | .readWord .. => 1
   | .parentPathValid .. => 3
+  | .fifoFind .. => 2
+  | .key4Find .. => 4
   | .fifoRbTreeValid .. => 4
   | .key4RbTreeValid .. => 4
 
@@ -171,6 +221,12 @@ def Query.effects : Query → EffectSummary
   | .readWord field => EffectSummary.forField field
   | .parentPathValid path =>
       (EffectSummary.forField path.links).merge (EffectSummary.forField path.parentColor)
+  | .fifoFind _ tree =>
+      (EffectSummary.forField tree.links).merge
+        ((EffectSummary.forField tree.price).merge (EffectSummary.forField tree.sequence))
+  | .key4Find _ tree =>
+      (EffectSummary.forField tree.links).merge
+        ((EffectSummary.forField tree.key).merge (EffectSummary.forField tree.lastKey))
   | .fifoRbTreeValid tree =>
       ((EffectSummary.forField tree.links).merge (EffectSummary.forField tree.parentColor)).merge
         ((EffectSummary.forField tree.price).merge (EffectSummary.forField tree.sequence))
@@ -183,6 +239,12 @@ def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
       field.wellFormed accountLimit && field.widthWords == 1 &&
         field.region.access == {}
   | .parentPathValid path => path.wellFormed accountLimit
+  | .fifoFind rootWord tree =>
+      rootBeforeTree rootWord tree.links && tree.wellFormed accountLimit &&
+        tree.topology.hasAccess {}
+  | .key4Find rootWord tree =>
+      rootBeforeTree rootWord tree.links && tree.wellFormed accountLimit &&
+        tree.topology.hasAccess {}
   | .fifoRbTreeValid tree => tree.wellFormed accountLimit && tree.topology.hasAccess {}
   | .key4RbTreeValid tree => tree.wellFormed accountLimit && tree.topology.hasAccess {}
 
@@ -206,6 +268,17 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
       let region := path.links.region
       s!"dpp.{region.account}.{path.links.firstWord}.{path.parentColor.firstWord}." ++
         s!"{region.strideWords}.{region.capacity}.{path.maxDepth}" ++
+        s!"({String.intercalate "," (operands.map renderValue).toList})"
+  | .fifoFind rootWord tree =>
+      let region := tree.links.region
+      s!"rbof.{region.account}.{rootWord}.{tree.links.firstWord}." ++
+        s!"{tree.price.firstWord}.{tree.sequence.firstWord}.{region.strideWords}." ++
+        s!"{region.capacity}.{tree.bid}" ++
+        s!"({String.intercalate "," (operands.map renderValue).toList})"
+  | .key4Find rootWord tree =>
+      let region := tree.links.region
+      s!"rb4f.{region.account}.{rootWord}.{tree.links.firstWord}.{tree.key.firstWord}." ++
+        s!"{region.strideWords}.{region.capacity}" ++
         s!"({String.intercalate "," (operands.map renderValue).toList})"
   | .fifoRbTreeValid tree =>
       let region := tree.links.region
@@ -236,48 +309,26 @@ def Query.parentPathValidOneBased
 def Query.fifoRbTreeValidOneBased
     (account linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) : Query :=
-  let access : Access := {}
   .fifoRbTreeValid
-    { topology :=
-        { links :=
-            { region :=
-                { account, baseWord := linksBaseWord, strideWords, capacity
-                  indexBase := .one, access } }
-          parentColor :=
-            { region :=
-                { account, baseWord := parentBaseWord, strideWords, capacity
-                  indexBase := .one, access } } }
-      price :=
-        { region :=
-            { account, baseWord := priceBaseWord, strideWords, capacity
-              indexBase := .one, access } }
-      sequence :=
-        { region :=
-            { account, baseWord := sequenceBaseWord, strideWords, capacity
-              indexBase := .one, access } }
-      bid }
+    (.oneBased account linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords
+      capacity bid)
 
 def Query.key4RbTreeValidOneBased
     (account linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Query :=
-  let access : Access := {}
   .key4RbTreeValid
-    { topology :=
-        { links :=
-            { region :=
-                { account, baseWord := linksBaseWord, strideWords, capacity
-                  indexBase := .one, access } }
-          parentColor :=
-            { region :=
-                { account, baseWord := parentBaseWord, strideWords, capacity
-                  indexBase := .one, access } } }
-      key :=
-        { region :=
-            { account, baseWord := keyBaseWord, strideWords, capacity
-              indexBase := .one, access } }
-      lastKey :=
-        { region :=
-            { account, baseWord := keyBaseWord + 3, strideWords, capacity
-              indexBase := .one, access } } }
+    (.oneBased account linksBaseWord parentBaseWord keyBaseWord strideWords capacity)
+
+def Query.fifoFindOneBased
+    (account rootWord linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords
+      capacity : Nat) (bid : Bool) : Query :=
+  .fifoFind rootWord
+    (.oneBased account linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords
+      capacity bid)
+
+def Query.key4FindOneBased
+    (account rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : Query :=
+  .key4Find rootWord
+    (.oneBased account linksBaseWord parentBaseWord keyBaseWord strideWords capacity)
 
 def Query.readWordZeroBased
     (account baseWord strideWords capacity : Nat) : Query :=
@@ -337,49 +388,15 @@ def RbMap.wellFormed (map : RbMap) (accountLimit : Nat := 64) : Bool :=
 
 def RbMap.key4OneBased
     (account rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : RbMap :=
-  let access := mutableAccess
   .key4 rootWord
-    { topology :=
-        { links :=
-            { region :=
-                { account, baseWord := linksBaseWord, strideWords, capacity
-                  indexBase := .one, access } }
-          parentColor :=
-            { region :=
-                { account, baseWord := parentBaseWord, strideWords, capacity
-                  indexBase := .one, access } } }
-      key :=
-        { region :=
-            { account, baseWord := keyBaseWord, strideWords, capacity
-              indexBase := .one, access } }
-      lastKey :=
-        { region :=
-            { account, baseWord := keyBaseWord + 3, strideWords, capacity
-              indexBase := .one, access } } }
+    (.oneBased account linksBaseWord parentBaseWord keyBaseWord strideWords capacity mutableAccess)
 
 def RbMap.fifoOneBased
     (account rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool) : RbMap :=
-  let access := mutableAccess
   .fifo rootWord
-    { topology :=
-        { links :=
-            { region :=
-                { account, baseWord := linksBaseWord, strideWords, capacity
-                  indexBase := .one, access } }
-          parentColor :=
-            { region :=
-                { account, baseWord := parentBaseWord, strideWords, capacity
-                  indexBase := .one, access } } }
-      price :=
-        { region :=
-            { account, baseWord := keyBaseWord, strideWords, capacity
-              indexBase := .one, access } }
-      sequence :=
-        { region :=
-            { account, baseWord := sequenceBaseWord, strideWords, capacity
-              indexBase := .one, access } }
-      bid }
+    (.oneBased account linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity
+      bid mutableAccess)
 
 /-- Existing-key behavior is an explicit map policy rather than a new SVM operation kind. -/
 inductive ExistingValuePolicy where

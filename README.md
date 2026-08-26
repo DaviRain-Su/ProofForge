@@ -56,7 +56,8 @@ Toolchain：`leanprover/lean4:v4.31.0`、`sbpf 0.2.2`、Surfpool `1.5.0`。
 `PhoenixV1Profile` 当前可在 128-seat trader tree 与双 512-node order books 中执行
 fixed-capacity Sokoban insertion/removal，并支持 trader get-or-register deposit。所有
 持久结构都直接驻留在账户 bytes 中，只保存 one-based slot index（`0` 为 sentinel），
-不使用 heap `Map`、detached node、copied tree 或账户外 pointer。
+不使用 heap `Map`、detached node、copied tree 或账户外 pointer。底层 account-storage
+backend 另提供共用的 bounded Key4/FIFO lookup，供后续业务指令组合 field read/write/remove。
 
 ## 入口
 
