@@ -60,6 +60,7 @@ import Tests.VaultSpec
 import Tests.OwnableSpec
 import Tests.TokenSpec
 import Tests.WideSpec
+import Tests.ConstSpec
 import Tests.IdlSpec
 import Tests.DumpIncrement
 import Tests.NormalizationSpec

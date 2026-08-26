@@ -13,6 +13,8 @@ inductive ValKind where
   | selfBalance
   | callerW0 | callerW1 | callerW2
   | selfW0 | selfW1 | selfW2
+  | immU64
+  | immW0 | immW1 | immW2
   | mapGetU64
   | mapGetAddr
   | mapGetPair
@@ -93,6 +95,10 @@ def callerW2 : Val := leaf .callerW2
 def selfW0 : Val := leaf .selfW0
 def selfW1 : Val := leaf .selfW1
 def selfW2 : Val := leaf .selfW2
+def immU64 : Val := leaf .immU64
+def immW0 : Val := leaf .immW0
+def immW1 : Val := leaf .immW1
+def immW2 : Val := leaf .immW2
 def mapGetU64 (base key : Val) : Val := .ext .mapGetU64 #[base, key]
 def mapGetAddr (base w0 w1 w2 : Val) : Val := .ext .mapGetAddr #[base, w0, w1, w2]
 def mapGetPair (base o0 o1 o2 s0 s1 s2 : Val) : Val :=

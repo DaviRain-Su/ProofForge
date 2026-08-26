@@ -75,6 +75,10 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2
+@[match_pattern] def Val.evmImmU64 : Val := evmLeaf .immU64
+@[match_pattern] def Val.evmImmW0 : Val := evmLeaf .immW0
+@[match_pattern] def Val.evmImmW1 : Val := evmLeaf .immW1
+@[match_pattern] def Val.evmImmW2 : Val := evmLeaf .immW2
 @[match_pattern] def Val.mapGetU64 (base key : Val) : Val :=
   .ext (.evm .mapGetU64) #[base, key]
 @[match_pattern] def Val.mapGetAddr (base w0 w1 w2 : Val) : Val :=

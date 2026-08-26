@@ -431,6 +431,30 @@ def hasEvmDeposit (ops : Array Op) : Bool :=
 def hasEvmReceive (ops : Array Op) : Bool :=
   walk 16 ops fun | .evmReceive => true | _ => false
 
+private partial def valMentionsImm : Ops.Val → Bool
+  | .ext .immU64 #[] | .ext .immW0 #[] | .ext .immW1 #[] | .ext .immW2 #[] => true
+  | .field base _ | .bitNot base => valMentionsImm base
+  | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
+      valMentionsImm l || valMentionsImm r
+  | .indexGet base _ index _ _ => valMentionsImm base || valMentionsImm index
+  | .select _ l r t f =>
+      valMentionsImm l || valMentionsImm r || valMentionsImm t || valMentionsImm f
+  | .ext _ operands => operands.any valMentionsImm
+  | _ => false
+
+def hasImmutable (ops : Array Op) : Bool :=
+  walk 16 ops fun op =>
+    match op with
+    | .letLocal _ v | .setLocal _ v | .storeField _ v | .okState v
+    | .returnU64 v | .returnState v | .forAccum _ v _ | .evmDeposit v | .evmLog _ v =>
+        valMentionsImm v
+    | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
+    | .checkedDivU64 l r | .checkedModU64 l r | .indexSet _ l r _ _ =>
+        valMentionsImm l || valMentionsImm r
+    | .ite _ l r _ _ => valMentionsImm l || valMentionsImm r
+    | _ => false
+
 structure Slot where
   place : Option Core.Place := none
   name : String
@@ -487,6 +511,9 @@ structure Program where
   constructor : Method
   entries : Array Method
   deriving BEq, Repr, Inhabited
+
+def programHasImmutable (p : Program) : Bool :=
+  hasImmutable p.constructor.ops || p.entries.any (fun m => hasImmutable m.ops)
 
 def slotIndex (p : Program) (name : String) : Option Nat :=
   (p.slots.find? (·.name == name)).map (·.index)
@@ -705,6 +732,10 @@ private partial def valCanon : Ops.Val → String
   | .ext .selfW0 #[] => "esw0"
   | .ext .selfW1 #[] => "esw1"
   | .ext .selfW2 #[] => "esw2"
+  | .ext .immU64 #[] => "eimm"
+  | .ext .immW0 #[] => "eiw0"
+  | .ext .immW1 #[] => "eiw1"
+  | .ext .immW2 #[] => "eiw2"
   | .bitAnd l r => s!"and({valCanon l},{valCanon r})"
   | .bitOr l r => s!"or({valCanon l},{valCanon r})"
   | .bitXor l r => s!"xor({valCanon l},{valCanon r})"

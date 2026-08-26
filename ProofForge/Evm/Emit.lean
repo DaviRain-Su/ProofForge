@@ -179,6 +179,10 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .ext .selfW0 #[] => .ok (packAddrWord "address()" 0)
   | .ext .selfW1 #[] => .ok (packAddrWord "address()" 1)
   | .ext .selfW2 #[] => .ok (packAddrWord "address()" 2)
+  | .ext .immU64 #[] => .ok "loadimmutable(\"imm0\")"
+  | .ext .immW0 #[] => .ok (packAddrWord "loadimmutable(\"immAddr\")" 0)
+  | .ext .immW1 #[] => .ok (packAddrWord "loadimmutable(\"immAddr\")" 1)
+  | .ext .immW2 #[] => .ok (packAddrWord "loadimmutable(\"immAddr\")" 2)
   | .bitAnd l r => do
       let lv ← loadVal p paramPrefix paramCount paramWidths l
       let rv ← loadVal p paramPrefix paramCount paramWidths r
@@ -1840,9 +1844,23 @@ private def renderCtorPrelude (objectName : String) (paramCount : Nat)
             revert0 ++ " }" ++ nl
     return out
 
-private def renderRuntimeCopy (runtimeName : String) : String :=
-  "    datacopy(0, dataoffset(" ++ q runtimeName ++ "), datasize(" ++ q runtimeName ++ "))" ++ nl ++
-  "    return(0, datasize(" ++ q runtimeName ++ "))" ++ nl
+/-- Bake constructor arguments that are not stored: one `uint64` (`imm0`) and one `address` (`immAddr`).
+`setimmutable(offset, name, value)` patches runtime already copied to memory at `offset`. -/
+private def renderImmutableSets (paramCount : Nat) (paramWidths : Array Nat) : String :=
+  Id.run do
+    let mut out := ""
+    let mut usedU64 := false
+    let mut usedAddr := false
+    for i in [0:paramCount] do
+      let w := (paramWidths[i]?).getD 8
+      let nm := "ctor_arg" ++ toString i
+      if w == 20 && !usedAddr then
+        out := out ++ "    setimmutable(0, \"immAddr\", " ++ nm ++ ")" ++ nl
+        usedAddr := true
+      else if (w == 8 || w == 1 || w == 2 || w == 4) && !usedU64 then
+        out := out ++ "    setimmutable(0, \"imm0\", " ++ nm ++ ")" ++ nl
+        usedU64 := true
+    return out
 
 private def hasPayableEntry (p : IR.Program) : Bool :=
   p.entries.any (·.payable)
@@ -1888,6 +1906,10 @@ def emitYul (p : IR.Program) : Except String String := do
   let runtimeName := p.name ++ "_runtime"
   let ctorHead := renderCtorPrelude p.name p.constructor.paramCount p.constructor.paramWidths
   let ctorStores ← emitConstructorStores p
+  let ctorImm :=
+    if IR.programHasImmutable p then
+      renderImmutableSets p.constructor.paramCount p.constructor.paramWidths
+    else ""
   let anyPay := hasPayableEntry p
   let mut receiveTxt := ""
   let mut entries := ""
@@ -1904,7 +1926,10 @@ def emitYul (p : IR.Program) : Except String String := do
     "// digest=" ++ IR.digestHex p ++ nl ++
     "object " ++ q p.name ++ " {" ++ nl ++
     "  code {" ++ nl ++
-    ctorHead ++ ctorStores ++ renderRuntimeCopy runtimeName ++
+    ctorHead ++ ctorStores ++
+    "    datacopy(0, dataoffset(" ++ q runtimeName ++ "), datasize(" ++ q runtimeName ++ "))" ++ nl ++
+    ctorImm ++
+    "    return(0, datasize(" ++ q runtimeName ++ "))" ++ nl ++
     "  }" ++ nl ++
     "  object " ++ q runtimeName ++ " {" ++ nl ++
     "    code {" ++ nl ++

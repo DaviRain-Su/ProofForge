@@ -1026,6 +1026,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 endsWith baseE ".evmSelf20" then
               some (match leaf with
                 | "w0" => .evmSelfW0 | "w1" => .evmSelfW1 | _ => .evmSelfW2)
+            else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmImm20 ||
+                endsWith baseE ".evmImm20" then
+              some (match leaf with
+                | "w0" => .evmImmW0 | "w1" => .evmImmW1 | _ => .evmImmW2)
             else
               match asVal env fuel' baseE with
               | some b => some (flattenField b leaf)
@@ -1036,6 +1040,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if endsWith e ".evmCaller20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 then
           none
         else if endsWith e ".evmSelf20" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 then
+          none
+        else if endsWith e ".evmImm20" || isConstNamed e ``ProofForge.Evm.Runtime.evmImm20 then
           none
         else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
           let args := e.getAppArgs
@@ -1243,6 +1249,14 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some .evmSelfW1
         else if endsWith e ".evmSelfW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW2 then
           some .evmSelfW2
+        else if endsWith e ".evmImmU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmU64 then
+          some .evmImmU64
+        else if endsWith e ".evmImmW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW0 then
+          some .evmImmW0
+        else if endsWith e ".evmImmW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW1 then
+          some .evmImmW1
+        else if endsWith e ".evmImmW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW2 then
+          some .evmImmW2
         else if endsWith e ".accLamports0" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports0 then
           some .accLamports0
         else if endsWith e ".accOwner0" || isConstNamed e ``ProofForge.Svm.Runtime.accOwner0 then
@@ -1439,6 +1453,8 @@ private def addr20Leaves (env : Environment) (e : Expr) : Ops.Val × Ops.Val × 
     (.evmCallerW0, .evmCallerW1, .evmCallerW2)
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" then
     (.evmSelfW0, .evmSelfW1, .evmSelfW2)
+  else if isConstNamed e ``ProofForge.Evm.Runtime.evmImm20 || endsWith e ".evmImm20" then
+    (.evmImmW0, .evmImmW1, .evmImmW2)
   else
     let w0 := val env (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) e)
     let w1 := val env (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) e)

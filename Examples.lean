@@ -49,6 +49,7 @@ import Examples.Vault
 import Examples.Ownable
 import Examples.Token
 import Examples.Wide
+import Examples.Const
 import Examples.Nested
 import Examples.Seat
 import Examples.Tree

@@ -430,11 +430,51 @@ def extractedTipJar : IR.Program :=
     ]
   }
 
+/-- Live extract of `Examples.Const`; Legacy IR has no immutable leaves. -/
+def extractedConst : IR.Program :=
+  {
+    name := "Const"
+    slots := dummySlot
+    constructor := {
+      kind := .init
+      name := "Examples.Const.init"
+      ixName := "initialize"
+      paramCount := 2
+      paramWidths := #[8, 20]
+      ops := #[.returnState (.lit 0)]
+    }
+    entries := #[
+      mutEntry "Const" "touch" 1 #[8] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.storeField "dummy" (.arg 0), .okState (.arg 0)]
+          #[.errorOverflow]
+      ],
+      {
+        kind := .get
+        name := "Examples.Const.get"
+        ixName := "get"
+        selector := Keccak.selectorOfWidths "get" #[]
+        ops := #[.returnU64 (.field (.arg 0) "dummy")]
+        view := true
+      },
+      {
+        kind := .get
+        name := "Examples.Const.seedOf"
+        ixName := "seedOf"
+        selector := Keccak.selectorOfWidths "seedOf" #[]
+        ops := #[.returnU64 (.ext .immU64 #[])]
+        view := true
+      },
+      viewAddr20 "Const" "whoOf" (.ext .immW0 #[]) (.ext .immW1 #[]) (.ext .immW2 #[])
+    ]
+  }
+
 def programs : Array IR.Program :=
   (sources.filterMap fun src =>
     match IR.fromProgram src with
     | .ok p => some p
-    | .error _ => none) ++ #[extractedTipJar, extractedVault, extractedToken, extractedWide]
+    | .error _ => none) ++ #[extractedTipJar, extractedVault, extractedToken, extractedWide,
+      extractedConst]
 
 def digestOf (name : String) : Option String :=
   (programs.find? (·.name == name)).map IR.digestHex
