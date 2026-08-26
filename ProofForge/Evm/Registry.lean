@@ -17,7 +17,7 @@ def entries : Array Entry := #[
   { name := "TipJar", digest := "754276e8063a7d08" },
   { name := "Lang", digest := "d2a43e6bf208bff0" },
   { name := "Vault", digest := "bc154a93981e974b" },
-  { name := "Ownable", digest := "25bf329e90f170d9" },
+  { name := "Ownable", digest := "4b92ab8cd828fac2" },
   { name := "Token", digest := "70888b259c17729b" },
   { name := "Wide", digest := "e3e24b62274618ce" },
   { name := "Const", digest := "58f58e14b0db25ec" }

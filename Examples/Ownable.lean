@@ -24,21 +24,15 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 def init (owner : Addr20) : State :=
   { owner := owner, value := 0 }
 
-/-- 只有 owner 能加。非 owner → `unauthorized`。身份比三叶，不把 Addr20 当单一 UInt64。 -/
+/-- 只有 owner 能加。非 owner → `unauthorized`。整值 `evmEq20`，不把 Addr20 当单一 UInt64。 -/
 @[pf_entry]
 def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
-  if evmCaller20.w0 = s.owner.w0 then
-    if evmCaller20.w1 = s.owner.w1 then
-      if evmCaller20.w2 = s.owner.w2 then
-        if s.value ≤ u64Max - delta then
-          let next := s.value + delta
-          .ok ({ owner := s.owner, value := next }, next)
-        else
-          .error .overflow
-      else
-        .error .unauthorized
+  if evmEq20 evmCaller20 s.owner then
+    if s.value ≤ u64Max - delta then
+      let next := s.value + delta
+      .ok ({ owner := s.owner, value := next }, next)
     else
-      .error .unauthorized
+      .error .overflow
   else
     .error .unauthorized
 

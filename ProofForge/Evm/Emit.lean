@@ -222,7 +222,7 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
     .ext .mapGetU64 _ | .ext .mapGetAddr _ | .ext .mapGetPair _ |
     .ext (.mapGetAddr256 _) _ | .ext (.mapGetPair256 _) _ |
     .ext (.tokenBalance256 _) _ | .ext (.tokenAllowance256 _) _ |
-    .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext .ge256 _ =>
+    .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext .ge256 _ | .ext .eq20 _ =>
       .error "extract/unsupported: evm map/arith val needs materialize"
   | .ext _ _ => .error "extract/ir: malformed EVM value operands"
 
@@ -672,6 +672,25 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ bv ++ " := " ++ packU256 y0 y1 y2 y3 ++ nl ++
           indent ++ "let " ++ nm ++ " := iszero(lt(" ++ av ++ ", " ++ bv ++ "))" ++ nl
         return (txt, nm, t6)
+    | .ext .eq20 #[a0, a1, a2, b0, b1, b2] =>
+        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
+        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0
+        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s1
+        let (q0, y0, t0) ← materializeVal p indent paramPrefix paramCount paramWidths b0 s2
+        let (q1, y1, t1) ← materializeVal p indent paramPrefix paramCount paramWidths b1 t0
+        let (q2, y2, t2) ← materializeVal p indent paramPrefix paramCount paramWidths b2 t1
+        let (av, t3) := fresh t2
+        let (bv, t4) := fresh t3
+        let (nm, t5) := fresh t4
+        let txt := p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent x0 x1 x2 ++
+          indent ++ "let " ++ av ++ " := mload(0)" ++ nl ++
+          indent ++ "mstore(0, 0)" ++ nl ++
+          packAddrMstore8 indent y0 y1 y2 ++
+          indent ++ "let " ++ bv ++ " := mload(0)" ++ nl ++
+          indent ++ "let " ++ nm ++ " := eq(" ++ av ++ ", " ++ bv ++ ")" ++ nl
+        return (txt, nm, t5)
     | .ext (.arith256 op limb) #[a0, a1, a2, a3, b0, b1, b2, b3] =>
         let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
         let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0

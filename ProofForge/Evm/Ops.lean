@@ -30,6 +30,8 @@ inductive ValKind where
   | selfBalance256 (limb : Nat)
   /-- `a ≥ b` on packed 256-bit words. Eight operands: a0..a3, b0..b3. -/
   | ge256
+  /-- Packed address equality. Six operands: a0..a2, b0..b2. -/
+  | eq20
   /-- Checked 256-bit `add`/`sub`/`mul`; `limb` is 0..3 (w0 lowest). Eight operands: a0..a3, b0..b3. -/
   | arith256 (op : Nat) (limb : Nat)
   deriving BEq, Repr, Inhabited
@@ -44,6 +46,7 @@ def ValKind.arity : ValKind → Nat
   | .tokenAllowance256 _ => 9
   | .callValue256 _ | .selfBalance256 _ => 0
   | .ge256 => 8
+  | .eq20 => 6
   | .arith256 _ _ => 8
   | _ => 0
 
@@ -115,6 +118,8 @@ def callValue256 (limb : Nat) : Val := .ext (.callValue256 limb) #[]
 def selfBalance256 (limb : Nat) : Val := .ext (.selfBalance256 limb) #[]
 def ge256 (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext .ge256 #[a0, a1, a2, a3, b0, b1, b2, b3]
+def eq20 (a0 a1 a2 b0 b1 b2 : Val) : Val :=
+  .ext .eq20 #[a0, a1, a2, b0, b1, b2]
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext (.arith256 op limb) #[a0, a1, a2, a3, b0, b1, b2, b3]
 

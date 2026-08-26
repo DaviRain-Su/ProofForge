@@ -176,6 +176,8 @@ partial def toLegacyVal : Val → Except String ProofForge.Ops.Val
       throw "extract/unsupported: legacy adapter cannot represent immutable u64"
   | .ext (.evm .immW0) #[] | .ext (.evm .immW1) #[] | .ext (.evm .immW2) #[] =>
       throw "extract/unsupported: legacy adapter cannot represent immutable Addr20"
+  | .ext (.evm .eq20) _ =>
+      throw "extract/unsupported: legacy adapter cannot represent Addr20 equality"
   | .ext (.evm .mapGetU64) #[base, key] =>
       return .mapGetU64 (← toLegacyVal base) (← toLegacyVal key)
   | .ext (.evm .mapGetAddr) #[base, w0, w1, w2] =>

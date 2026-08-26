@@ -26,28 +26,24 @@ def sample : Addr20 := ⟨1, 2, 3⟩
   ProofForge.Evm.Keccak.keccak256HexOfString "Tipped(uint64)"
 
 #guard
-  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedOwnable with
+  let p := ProofForge.Evm.Golden.extractedOwnable
+  match ProofForge.Evm.Emit.emitYul p with
   | .error _ => false
-  | .ok p =>
-      match ProofForge.Evm.Emit.emitYul p with
-      | .error _ => false
-      | .ok yul =>
-          yul.contains "keccak256(0, 224)" &&
-            yul.contains "log1(0, 32, 0x" &&
-            yul.contains "revert(0, 4)" &&
-            yul.contains "eq(" &&
-            yul.contains "sstore(0," &&
-            yul.contains "sstore(1," &&
-            yul.contains "sstore(2,"
+  | .ok yul =>
+      yul.contains "keccak256(0, 224)" &&
+        yul.contains "log1(0, 32, 0x" &&
+        yul.contains "revert(0, 4)" &&
+        yul.contains "eq(" &&
+        yul.contains "sstore(0," &&
+        yul.contains "sstore(1," &&
+        yul.contains "sstore(2,"
 
 #guard
-  match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedOwnable with
-  | .error _ => false
-  | .ok p =>
-      (p.entries.find? (·.ixName == "bump")).isSome &&
-        (p.entries.find? (·.ixName == "approve")).isSome &&
-        (p.entries.find? (·.ixName == "allowance")).map (·.view) == some true &&
-        (p.entries.find? (·.ixName == "logInc")).map (·.payable) == some false
+  let p := ProofForge.Evm.Golden.extractedOwnable
+  (p.entries.find? (·.ixName == "bump")).isSome &&
+    (p.entries.find? (·.ixName == "approve")).isSome &&
+    (p.entries.find? (·.ixName == "allowance")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "logInc")).map (·.payable) == some false
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedOwnable with

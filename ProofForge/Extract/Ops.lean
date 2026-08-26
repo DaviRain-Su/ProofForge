@@ -251,7 +251,7 @@ private partial def isEvmContext : Val → Bool
        | .mapGetU64 | .mapGetAddr | .mapGetPair
        | .mapGetAddr256 _ | .mapGetPair256 _ | .tokenBalance256 _
        | .tokenAllowance256 _ | .callValue256 _ | .selfBalance256 _
-       | .ge256 => false
+       | .ge256 | .eq20 => false
        | _ => true) || operands.any isEvmContext
   | .field base _ | .bitNot base => isEvmContext base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs

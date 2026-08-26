@@ -1089,6 +1089,25 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
               some (.ext (.evm .ge256) #[a0, a1, a2, a3, b0, b1, b2, b3])
             | _, _, _, _, _, _, _, _ => none
+        else if endsWith e ".evmEq20" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq20 then
+          let args := e.getAppArgs
+          if args.size < 2 then none
+          else
+            let aE := args[args.size - 2]!
+            let bE := args[args.size - 1]!
+            let limbA (name : Name) : Option Ops.Val :=
+              asVal env fuel' (mkApp (mkConst name) aE)
+            let limbB (name : Name) : Option Ops.Val :=
+              asVal env fuel' (mkApp (mkConst name) bE)
+            match limbA ``ProofForge.Evm.Runtime.Addr20.w0,
+                limbA ``ProofForge.Evm.Runtime.Addr20.w1,
+                limbA ``ProofForge.Evm.Runtime.Addr20.w2,
+                limbB ``ProofForge.Evm.Runtime.Addr20.w0,
+                limbB ``ProofForge.Evm.Runtime.Addr20.w1,
+                limbB ``ProofForge.Evm.Runtime.Addr20.w2 with
+            | some a0, some a1, some a2, some b0, some b1, some b2 =>
+              some (.ext (.evm .eq20) #[a0, a1, a2, b0, b1, b2])
+            | _, _, _, _, _, _ => none
         else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
           let args := e.getAppArgs
           let get (n : Nat) : Ops.Val :=
@@ -1662,6 +1681,10 @@ private def asCmpCoreWithFuel (env : Environment) (fuel : Nat) (e : Expr) :
       | _, _ => none
     | none => none
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 || endsWith e ".evmGe256" then
+    match asVal env fuel e with
+    | some v => some (.ne, v, .lit 0)
+    | none => none
+  else if isConstNamed e ``ProofForge.Evm.Runtime.evmEq20 || endsWith e ".evmEq20" then
     match asVal env fuel e with
     | some v => some (.ne, v, .lit 0)
     | none => none

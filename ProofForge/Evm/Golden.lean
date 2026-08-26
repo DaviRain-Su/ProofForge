@@ -17,8 +17,7 @@ def sources : Array Extract.Legacy.Program := #[
   ProofForge.Golden.extractedFlag,
   ProofForge.Golden.extractedMaybe,
   ProofForge.Golden.extractedEvmCtx,
-  ProofForge.Golden.extractedLang,
-  ProofForge.Golden.extractedOwnable
+  ProofForge.Golden.extractedLang
 ]
 
 private def u256Field (i : Nat) (limb : String) : Ops.Val :=
@@ -430,6 +429,113 @@ def extractedTipJar : IR.Program :=
     ]
   }
 
+/-- Live extract of `Examples.Ownable`; Legacy IR has no `eq20` leaf. -/
+def extractedOwnable : IR.Program :=
+  let ownerCtor (limb : String) : Ops.Val := .field (.arg 0) limb
+  {
+    name := "Ownable"
+    slots := #[
+      { name := "owner_w0", index := 0, width := 8 },
+      { name := "owner_w1", index := 1, width := 8 },
+      { name := "owner_w2", index := 2, width := 8 },
+      { name := "value", index := 3, width := 8 }
+    ]
+    constructor := {
+      kind := .init
+      name := "Examples.Ownable.init"
+      ixName := "initialize"
+      paramCount := 1
+      paramWidths := #[20]
+      ops := #[
+        .returnState (ownerCtor "w0"),
+        .returnState (ownerCtor "w1"),
+        .returnState (ownerCtor "w2"),
+        .returnState (.lit 0)
+      ]
+    }
+    entries := #[
+      mutEntry "Ownable" "approve" 3 #[20, 20, 8] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.mapSetPair (.lit 0)
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
+              (.arg 2),
+            .returnU64 (.arg 2)]
+          #[.errorOverflow]
+      ],
+      {
+        kind := .increment
+        name := "Examples.Ownable.bump"
+        ixName := "bump"
+        selector := Keccak.selectorOfWidths "bump" #[8]
+        paramCount := 1
+        paramWidths := #[8]
+        ops := #[
+          .ite .eq
+            (.ext .eq20 #[
+              .ext .callerW0 #[], .ext .callerW1 #[], .ext .callerW2 #[],
+              .field (.arg 1) "owner_w0", .field (.arg 1) "owner_w1", .field (.arg 1) "owner_w2"])
+            (.lit 1)
+            #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
+              .okState (.field (.arg 1) "value"),
+              .errorOverflow]
+            #[.errorNamed "unauthorized"]
+        ]
+      },
+      mutEntry "Ownable" "logInc" 1 #[8] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.evmLog "Incremented" (.arg 0), .returnU64 (.arg 0)]
+          #[.errorOverflow]
+      ],
+      mutEntry "Ownable" "spend" 3 #[20, 20, 8] #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.mapSetPair (.lit 0)
+              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+              (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
+              (.arg 2),
+            .returnU64 (.arg 2)]
+          #[.errorOverflow]
+      ],
+      {
+        kind := .get
+        name := "Examples.Ownable.allowance"
+        ixName := "allowance"
+        selector := Keccak.selectorOfWidths "allowance" #[20, 20]
+        paramCount := 2
+        paramWidths := #[20, 20]
+        ops := #[
+          .mapGetPair (.lit 0)
+            (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+            (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2"),
+          .returnU64 (addrField 0 "w0")
+        ]
+        view := true
+      },
+      {
+        kind := .get
+        name := "Examples.Ownable.get"
+        ixName := "get"
+        selector := Keccak.selectorOfWidths "get" #[]
+        ops := #[.returnU64 (.field (.arg 0) "value")]
+        view := true
+      },
+      {
+        kind := .get
+        name := "Examples.Ownable.ownerOf"
+        ixName := "ownerOf"
+        selector := Keccak.selectorOfWidths "ownerOf" #[]
+        retWidths := #[20]
+        retCount := 3
+        ops := #[
+          .returnU64 (.field (.arg 0) "owner_w0"),
+          .returnU64 (.field (.arg 0) "owner_w1"),
+          .returnU64 (.field (.arg 0) "owner_w2")
+        ]
+        view := true
+      }
+    ]
+  }
+
 /-- Live extract of `Examples.Const`; Legacy IR has no immutable leaves. -/
 def extractedConst : IR.Program :=
   {
@@ -474,7 +580,7 @@ def programs : Array IR.Program :=
     match IR.fromProgram src with
     | .ok p => some p
     | .error _ => none) ++ #[extractedTipJar, extractedVault, extractedToken, extractedWide,
-      extractedConst]
+      extractedConst, extractedOwnable]
 
 def digestOf (name : String) : Option String :=
   (programs.find? (·.name == name)).map IR.digestHex
