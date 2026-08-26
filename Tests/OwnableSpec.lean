@@ -7,9 +7,9 @@ open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩
 
-#guard (init sample).owner == sample
+#guard (init sample).value == 0
 #guard get (init sample) == 0
-#guard ownerOf (init sample) == sample
+#guard ownerOf (init sample) == ⟨0, 0, 0⟩
 #guard allowance (init sample) sample ⟨4, 5, 6⟩ == 0
 
 #guard
@@ -34,9 +34,10 @@ def sample : Addr20 := ⟨1, 2, 3⟩
         yul.contains "log1(0, 32, 0x" &&
         yul.contains "revert(0, 36)" &&
         yul.contains "eq(" &&
-        yul.contains "sstore(0," &&
-        yul.contains "sstore(1," &&
-        yul.contains "sstore(2,"
+        yul.contains "setimmutable" &&
+        yul.contains "loadimmutable" &&
+        yul.contains "immAddr" &&
+        yul.contains "sstore(0,"
 
 #guard
   let p := ProofForge.Evm.Golden.extractedOwnable

@@ -468,27 +468,16 @@ def extractedTipJar : IR.Program :=
 
 /-- Live extract of `Examples.Ownable`; Legacy IR has no `eq20` leaf. -/
 def extractedOwnable : IR.Program :=
-  let ownerCtor (limb : String) : Ops.Val := .field (.arg 0) limb
   {
     name := "Ownable"
-    slots := #[
-      { name := "owner_w0", index := 0, width := 8 },
-      { name := "owner_w1", index := 1, width := 8 },
-      { name := "owner_w2", index := 2, width := 8 },
-      { name := "value", index := 3, width := 8 }
-    ]
+    slots := #[{ name := "value", index := 0, width := 8 }]
     constructor := {
       kind := .init
       name := "Examples.Ownable.init"
       ixName := "initialize"
       paramCount := 1
       paramWidths := #[20]
-      ops := #[
-        .returnState (ownerCtor "w0"),
-        .returnState (ownerCtor "w1"),
-        .returnState (ownerCtor "w2"),
-        .returnState (.lit 0)
-      ]
+      ops := #[.returnState (.lit 0)]
     }
     entries := #[
       mutEntry "Ownable" "approve" 3 #[20, 20, 8] #[
@@ -511,7 +500,7 @@ def extractedOwnable : IR.Program :=
           .ite .eq
             (.ext .eq20 #[
               .ext .callerW0 #[], .ext .callerW1 #[], .ext .callerW2 #[],
-              .field (.arg 1) "owner_w0", .field (.arg 1) "owner_w1", .field (.arg 1) "owner_w2"])
+              .ext .immW0 #[], .ext .immW1 #[], .ext .immW2 #[]])
             (.lit 1)
             #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
               .okState (.field (.arg 1) "value"),
@@ -574,9 +563,9 @@ def extractedOwnable : IR.Program :=
         retWidths := #[20]
         retCount := 3
         ops := #[
-          .returnU64 (.field (.arg 0) "owner_w0"),
-          .returnU64 (.field (.arg 0) "owner_w1"),
-          .returnU64 (.field (.arg 0) "owner_w2")
+          .returnU64 (.ext .immW0 #[]),
+          .returnU64 (.ext .immW1 #[]),
+          .returnU64 (.ext .immW2 #[])
         ]
         view := true
       }

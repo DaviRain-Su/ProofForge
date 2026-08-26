@@ -76,4 +76,7 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowance(address,address)(uint64)' "$sender" "$spender")" \
   7 "spend writes remaining as amt (closed overwrite, not ERC-20 subtract)"
 
-echo "evm-anvil-ownable: ok (owner/log/allowance; engineering only)"
+got_owner2="$("$cast" call --rpc-url "$rpc" "$addr" 'ownerOf()(address)')"
+solana_lean_require_equal "${got_owner2,,}" "${sender,,}" "owner immutable holds after bump"
+
+echo "evm-anvil-ownable: ok (immutable owner/log/allowance; engineering only)"
