@@ -31,14 +31,14 @@ load/store、bounded scratch 与 CPI sink；新增组件只扩 component-owned v
 - `rentExemption n` — 链上 `sol_get_rent_sysvar` → `lamports_per_byte * (128 + n)`。`n` 抽出时必须是常量。宿主 stub。
 - `signerKey0 : UInt64` — 链上 `ACC0_KEY+0` 第一个小端 u64。用到该叶子的入口检查 `is_signer`。不是 `tx.origin`。
 - `systemTransfer lamports` — 封闭 `system.transfer`。三账户 payer/recipient/System，`sol_invoke_signed_c`，无 signer seeds。
-- EVM 叶（SVM 发射器一律拒）：`evmTimestamp` / `evmChainId` / `evmSelf` / `evmCallValue` / `evmSelfBalance` / `evmCaller`（低 8B）/ `evmBlockNumber` / Addr20 三叶 `evmCallerW0..W2`、`evmSelfW0..W2`（w2 仅低 4 字节）。
+- EVM 叶（SVM 发射器一律拒）：`evmTimestamp` / `evmChainId` / `evmSelf` / `evmCallValue` / `evmSelfBalance` / `evmCaller`（低 8B）/ `evmBlockNumber` / `structure Addr20`（w0/w1/w2，w2 仅低 4 字节）/ `evmCaller20` / `evmSelf20` / `structure UInt256`（w0 最低）/ `evmAdd256` / `evmSub256` / `evmMul256`。ABI 上 `Addr20` 是一个 `address`，`UInt256` 是一个 `uint256`。默认算术仍是 `UInt64`。
 - `evmDeposit amt` — `eq(callvalue(), amt)`，入口变 payable。
-- `evmSendEth w0 w1 w2 amt` — 组装 20B 后 value `CALL`，失败 revert。重入不进参考语义。
+- `evmSendEth dst amt` — `dst : Addr20`，组装 20B 后 value `CALL`，失败 revert。重入不进参考语义。
 - `evmLogTipped amt` — LOG1 topic = keccak(`Tipped(uint64)`)。
 - `evmMapGetU64` / `evmMapSetU64` — hashed `Map UInt64 UInt64`：`keccak256(key || base)` → occ + payload。
-- `evmMapGetAddr` / `evmMapSetAddr` — hashed `Map Addr20 UInt64`：`keccak256(w0||w1||w2||base)`。
-- `evmTokenTransfer` — 封闭 ERC-20 `transfer`；返回 0 或 32 非零。
-- `evmTokenBalanceOfSelf` — `STATICCALL balanceOf(address(this))`，超 UInt64 revert。
+- `evmMapGetAddr` / `evmMapSetAddr` — hashed `Map Addr20 UInt64`：`keccak256(w0||w1||w2||base)`。key 是 `Addr20`。
+- `evmTokenTransfer token dest amt` — 封闭 ERC-20 `transfer`；callee / dest 都是 `Addr20`；返回 0 或 32 非零。
+- `evmTokenBalanceOfSelf token` — `STATICCALL balanceOf(address(this))`，超 UInt64 revert。
 
 `unixTime` 已支持。32B key / owner 可通过四个 `UInt64` word 读取；把它们当作一个
 native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 SVM 名译成 EVM opcode。

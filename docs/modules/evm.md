@@ -9,7 +9,7 @@
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
-| `Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
+| `Evm.Runtime` | 环境 opcode、`Addr20` / `UInt256`、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
 | `Evm.Emit` | Core CFG → Yul + `abi.json`；环境、value、Addr20、位运算、for、下标、ABI、hashed Map、封闭 ERC-20、通用 LOG、pair-key allowance、event ABI、本合约 transfer/transferFrom | 任意 CALL / Token-2022 |
@@ -34,7 +34,7 @@ block id。`pf_last` 只显式承接原 ABI 的 checked/effect result；local �
 tuple return 由 CFG 的 `returnU64s` exit 一次编码为连续 ABI words。Constructor 也从
 `lowerInit` 的唯一 `initialize` exit 取值；尚未建模的 constructor effect fail closed。
 
-首选的 `init` / `initialize` → constructor；其它 `.init` 方法不会成为 runtime entry，避免部署后重置 storage。非 init 方法 → `uint64` ABI entry；`kind.get` 标 `view`；含 `evmDeposit` 的 mutate 标 `payable`。`evmLog name amt` 是 LOG1，topic = `keccak("name(uint64)")`。pair-key Map 是 `keccak256(owner||spender||base)`。
+首选的 `init` / `initialize` → constructor；其它 `.init` 方法不会成为 runtime entry，避免部署后重置 storage。非 init 方法 → ABI entry；`Addr20` 参数/返回编成一个 `address`（IR 摊三叶）；`UInt256` 编成一个 `uint256`（IR 摊四叶，w0 最低）。`kind.get` 标 `view`；含 `evmDeposit` 的 mutate 标 `payable`。`evmLog name amt` 是 LOG1，topic = `keccak("name(uint64)")`。pair-key Map 是 `keccak256(owner||spender||base)`。
 
 overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 
@@ -58,12 +58,13 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_flag.sh`：UInt8 mask + count 保持
 - `runtime-tests/evm/anvil_maybe.sh`：none 清零、some 写双叶
 - `runtime-tests/evm/anvil_ctx.sh`：`evmCaller` 对发送者低 8 字节；`height` 对 `block.number`
-- `runtime-tests/evm/anvil_tipjar.sh`：chainid、timestamp、Addr20 三叶、精确 deposit、错 value 保持、sendEth 改余额、Tipped log
+- `runtime-tests/evm/anvil_tipjar.sh`：chainid、timestamp、Addr20 三叶、`payout(address,uint256)`、精确 `deposit(uint256)`、错 value 保持、sendEth 改余额、Tipped log、空 calldata `receive()`
 - `runtime-tests/evm/anvil_lang.sh`：位运算、mod-64 移位、`uint8` ABI、tuple return、运行时下标、有界 for、`oob` revert
-- `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、ERC-20 transfer、超额保持、USDT 无返回成功
-- `runtime-tests/evm/anvil_ownable.sh`：owner 三槽、非 owner revert、Incremented log、approve / allowance / spend、超额额度保持
-- `runtime-tests/evm/anvil_token.sh`：mint / transfer 扣余额、不足 revert、approve / transferFrom 扣额度、Transfer/Approval log
+- `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、`shareOf(address)` / `pull(address,address,uint256)`、封闭 `approve`/`transferFrom`/`allowance`、超额保持、USDT 无返回成功
+- `runtime-tests/evm/anvil_ownable.sh`：`constructor(address)` / `ownerOf()(address)`、非 owner revert、Incremented log、`approve(address,address,uint64)` / allowance / spend
+- `runtime-tests/evm/anvil_token.sh`：`mint(address,uint256)` / `transfer(address,uint256)` 扣余额、不足 `Insufficient(have,want)`、`approve(address,uint256)` / `transferFrom(address,address,uint256)` 扣额度、LOG3 Transfer/Approval
 - `runtime-tests/evm/anvil_window.sh`：固定长 Vector 两槽；`setTail` 只写第二叶，第一叶保持
 - `runtime-tests/evm/anvil_phase.sh`：零 payload variant 的 idle/live tag 往返与 view
+- `runtime-tests/evm/anvil_wide.sh`：`uint256` ABI、跨 64-bit 边界 add/sub/mul、溢出 revert
 
 入口：`runtime-tests/evm/anvil.sh`（Darwin / Linux）。工具查找：`FOUNDRY_BIN`、`~/.foundry/bin`、`PATH`。缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。

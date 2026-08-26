@@ -25,7 +25,7 @@ elab "#pf_evm_build " n:ident : command => do
         match Registry.digestOf program.name with
         | some want =>
             if digest != want then
-              throwError s!"ir/mismatch: extracted evm {program.name} digest != fixture"
+              throwError s!"ir/mismatch: extracted evm {program.name} digest {digest} != fixture {want}"
         | none => pure ()
         logInfo m!"proofforge-evm: program {program.name} slots = {program.slots.map (·.name)}"
         logInfo m!"proofforge-evm: entries = {program.entries.map (fun m => m.ixName)}"

@@ -59,7 +59,7 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfW1()(uint
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfW2()(uint64)')" \
   "$sw2" "selfW2"
 
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'callValue()(uint64)')" \
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'callValue()(uint256)')" \
   0 "view callValue is 0"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 1 \
@@ -69,7 +69,7 @@ if "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 1 \
 fi
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 3 \
-    "$addr" 'deposit(uint64)' 7 >/dev/null 2>&1; then
+    "$addr" 'deposit(uint256)' 7 >/dev/null 2>&1; then
   echo "FAIL: wrong-value deposit unexpectedly succeeded" >&2
   exit 1
 fi
@@ -77,10 +77,10 @@ solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$r
   0 "wrong deposit must not keep ETH"
 
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 7 \
-  "$addr" 'deposit(uint64)' 7 >/dev/null
+  "$addr" 'deposit(uint256)' 7 >/dev/null
 solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$addr")")" \
   7 "exact deposit must credit contract"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfBal()(uint64)')" \
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfBal()(uint256)')" \
   7 "evmSelfBalance after deposit"
 
 recipient="$("$cast" wallet address --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d)"
@@ -94,7 +94,7 @@ print(word(0,8), word(8,8), word(16,4))
 ")"
 rw0="${rw%% *}"; rrest="${rw#* }"; rw1="${rrest%% *}"; rw2="${rrest#* }"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'payout(uint64,uint64,uint64,uint64)' "$rw0" "$rw1" "$rw2" 3 >/dev/null
+  "$addr" 'payout(address,uint256)' "$recipient" 3 >/dev/null
 after="$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$recipient")")"
 want="$("$python" -I -S -c "print(int('$before') + 3)")"
 solana_lean_require_equal "$after" "$want" "payout must credit recipient"
@@ -117,4 +117,26 @@ if int(data, 16) != 11:
     raise SystemExit(f'FAIL: log data {data} != 11')
 "
 
-echo "evm-anvil-tipjar: ok (env/deposit/payout/log; engineering only)"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'notAFunction()' >/dev/null 2>&1; then
+  echo "FAIL: unknown selector unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$addr")")" \
+  4 "unknown selector must not keep ETH"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 1 \
+    --data 0x1234 "$addr" >/dev/null 2>&1; then
+  echo "FAIL: short calldata unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$addr")")" \
+  4 "short calldata must not keep ETH"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" --value 2 --data 0x "$addr" >/dev/null
+solana_lean_require_equal "$(solana_lean_to_dec "$("$cast" balance --rpc-url "$rpc" "$addr")")" \
+  6 "empty-calldata receive must credit contract"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfBal()(uint256)')" \
+  6 "evmSelfBalance after receive"
+
+echo "evm-anvil-tipjar: ok (env/deposit/payout/log/receive; engineering only)"

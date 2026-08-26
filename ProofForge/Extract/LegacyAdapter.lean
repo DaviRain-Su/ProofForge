@@ -172,6 +172,13 @@ partial def toLegacyVal : Val → Except String ProofForge.Ops.Val
   | .ext (.evm .selfW0) #[] => pure .evmSelfW0
   | .ext (.evm .selfW1) #[] => pure .evmSelfW1
   | .ext (.evm .selfW2) #[] => pure .evmSelfW2
+  | .ext (.evm .immU64) #[] | .ext (.evm .immU64b) #[] =>
+      throw "extract/unsupported: legacy adapter cannot represent immutable u64"
+  | .ext (.evm .immW0) #[] | .ext (.evm .immW1) #[] | .ext (.evm .immW2) #[]
+  | .ext (.evm .immX0) #[] | .ext (.evm .immX1) #[] | .ext (.evm .immX2) #[] =>
+      throw "extract/unsupported: legacy adapter cannot represent immutable Addr20"
+  | .ext (.evm .eq20) _ =>
+      throw "extract/unsupported: legacy adapter cannot represent Addr20 equality"
   | .ext (.evm .mapGetU64) #[base, key] =>
       return .mapGetU64 (← toLegacyVal base) (← toLegacyVal key)
   | .ext (.evm .mapGetAddr) #[base, w0, w1, w2] =>
@@ -301,10 +308,26 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
   | .ext (.svm (.component ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent bounded SVM components"
   | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)
+  | .ext (.evm (.deposit256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit deposit"
   | .ext (.evm (.sendEth w0 w1 w2 amount)) =>
       return .evmSendEth (← toLegacyVal w0) (← toLegacyVal w1)
         (← toLegacyVal w2) (← toLegacyVal amount)
+  | .ext (.evm (.sendEth256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit sendEth"
   | .ext (.evm (.log name amount)) => return .evmLog name (← toLegacyVal amount)
+  | .ext (.evm (.logTransfer256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent LOG3 Transfer"
+  | .ext (.evm (.logApproval256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent LOG3 Approval"
+  | .ext (.evm (.revertInsufficient ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent parameterized Insufficient"
+  | .ext (.evm (.revertUnauthorized ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent parameterized Unauthorized"
+  | .ext (.evm .revertZeroAddress) =>
+      throw "extract/unsupported: legacy adapter cannot represent ZeroAddress"
+  | .ext (.evm .receive) =>
+      throw "extract/unsupported: legacy adapter cannot represent receive"
   | .ext (.evm (.mapGetU64 base key)) =>
       return .mapGetU64 (← toLegacyVal base) (← toLegacyVal key)
   | .ext (.evm (.mapSetU64 base key value)) =>
@@ -326,9 +349,31 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       return .evmTokenTransfer (← toLegacyVal tw0) (← toLegacyVal tw1) (← toLegacyVal tw2)
         (← toLegacyVal dw0) (← toLegacyVal dw1) (← toLegacyVal dw2)
         (← toLegacyVal amount)
+  | .ext (.evm (.mapSetAddr256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit map writes"
+  | .ext (.evm (.mapSetPair256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit pair-map writes"
+  | .ext (.evm (.tokenTransfer256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent 256-bit token transfer"
+  | .ext (.evm (.tokenApprove256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent ERC-20 approve"
+  | .ext (.evm (.tokenTransferFrom256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent ERC-20 transferFrom"
   | .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2)) =>
       return .evmTokenBalanceOfSelf (← toLegacyVal tw0) (← toLegacyVal tw1)
         (← toLegacyVal tw2)
+  | .ext (.evm (.wethDeposit256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent WETH deposit"
+  | .ext (.evm (.wethWithdraw256 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent WETH withdraw"
+  | .ext (.evm (.swapExact2 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent Uniswap V2 swap"
+  | .ext (.evm (.swapExact3 ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent Uniswap V2 path-3 swap"
+  | .ext (.evm (.permit ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent EIP-2612 permit"
+  | .ext (.evm (.tokenPermit ..)) =>
+      throw "extract/unsupported: legacy adapter cannot represent external permit"
 
 def toLegacyOps (ops : Array Op) : Except String (Array ProofForge.Ops.Op) :=
   ops.mapM toLegacyOp
@@ -353,6 +398,7 @@ private def methodOfLegacy (schema : Core.Schema) (method : Legacy.Method) :
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
+    retWidths := method.retWidths
     retCount := method.retCount
     sketch := method.sketch
     ops
@@ -382,6 +428,7 @@ private def methodToLegacy (schema : Core.Schema) (method : Method) :
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
+    retWidths := method.retWidths
     retCount := method.retCount
     sketch := method.sketch
     ops

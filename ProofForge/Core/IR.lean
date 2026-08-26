@@ -16,6 +16,8 @@ structure Method (ValExt : Type) (OpExt : Type → Type) where
   ixName : String := ""
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
+  /-- ABI return widths. Empty means `retCount` consecutive `uint64` words. `#[20]` is one `address`. -/
+  retWidths : Array Nat := #[]
   retCount : Nat := 1
   /-- Opaque compile-time annotations consumed only by the owning target. They are metadata, not
   executable Ops; foreign targets must either ignore or explicitly reject unknown entries. -/
