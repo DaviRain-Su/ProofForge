@@ -4,6 +4,7 @@ import ProofForge.Profile
 import ProofForge.Attr
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
+import ProofForge.Evm.Codec
 
 open Lean
 
@@ -6976,35 +6977,48 @@ def decodeMutating (env : Environment) (e : Expr) (stateType? : Option Name := n
   else
     throw "extract/unsupported: mutating method missing checked arith"
 
-private def widthOfType (e : Expr) : Option Nat :=
+private def codecScalarOfType (e : Expr) : Option Core.Codec.Scalar :=
   match e.consumeMData.getAppFn.constName? with
-  | some ``UInt8 => some 1
-  | some ``UInt16 => some 2
-  | some ``UInt32 => some 4
-  | some ``UInt64 => some 8
+  | some ``UInt8 => some .uint8
+  | some ``UInt16 => some .uint16
+  | some ``UInt32 => some .uint32
+  | some ``UInt64 => some .uint64
   | some n =>
-      if n == addr20Name then some 20
-      else if n == uint256Name then some 32
-      else if n == bytes32Name then some 33
+      if n == addr20Name then some .address20
+      else if n == uint256Name then some .uint256
+      else if n == bytes32Name then some .bytes32
       else none
   | none => none
 
-/-- 用户参数宽。init 全算；mutate/view 丢掉第一个 state。 -/
-private def inferParamWidths (_env : Environment) (e : Expr) (kind : Core.IR.MethodKind) :
-    Array Nat :=
-  let rec collect (fuel : Nat) (e : Expr) (acc : Array Nat) : Array Nat :=
+private def legacyWidthOfScalar : Core.Codec.Scalar → Nat
+  | type =>
+      match Evm.Codec.legacyWidthOfScalar type with
+      | .ok width => width
+      | .error _ => 8
+
+private def widthOfType (e : Expr) : Option Nat :=
+  (codecScalarOfType e).map legacyWidthOfScalar
+
+/-- Logical user parameter types. init includes every binder; mutate/view drop state. -/
+private def inferParamTypes (_env : Environment) (e : Expr) (kind : Core.IR.MethodKind) :
+    Array Core.Codec.Scalar :=
+  let rec collect (fuel : Nat) (e : Expr) (acc : Array Core.Codec.Scalar) :
+      Array Core.Codec.Scalar :=
     match fuel with
     | 0 => acc
     | fuel' + 1 =>
       match strip e with
-      | .lam _ ty body _ =>
-        collect fuel' body (acc.push ((widthOfType ty).getD 8))
+      | .lam _ ty body _ => collect fuel' body (acc.push ((codecScalarOfType ty).getD .uint64))
       | .letE _ _ _ body _ => collect fuel' body acc
       | _ => acc
-  let widths := collect 32 e #[]
+  let types := collect 32 e #[]
   match kind with
-  | .init => widths
-  | .increment | .get => if widths.isEmpty then #[] else widths.extract 1 widths.size
+  | .init => types
+  | .increment | .get => if types.isEmpty then #[] else types.extract 1 types.size
+
+/-- 用户参数宽。init 全算；mutate/view 丢掉第一个 state。 -/
+private def inferParamWidths (env : Environment) (e : Expr) (kind : Core.IR.MethodKind) : Array Nat :=
+  (inferParamTypes env e kind).map legacyWidthOfScalar
 
 private def markMethodArgs (kind : Core.IR.MethodKind) (count : Nat) (body : Expr) : Expr :=
   let marker (index : Nat) := mkApp (mkConst ``methodArgRef) (mkNatLit index)
@@ -7338,6 +7352,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | .init => if nLams = 0 then 1 else nLams
     | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
   let paramWidths := inferParamWidths env e kind
+  let paramTypes := inferParamTypes env e kind
   let retTy := peelForalls info.type
   let retWidths :=
     match kind with
@@ -7377,10 +7392,17 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       let nRet := maxReturnCount 32 ops
       if nRet = 0 then 1 else nRet
     | .init => 1
+  let retTypes :=
+    match kind with
+    | .init => #[]
+    | .increment | .get =>
+        match codecScalarOfType retTy with
+        | some type => #[type]
+        | none => Array.replicate retCount .uint64
   let annotations := (Attr.svmRawEntries env n).map (·.annotation)
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
-    paramCount, paramWidths, retWidths, retCount, annotations, sketch, ops
+    paramCount, paramWidths, paramTypes, retWidths, retTypes, retCount, annotations, sketch, ops
   }
 
 private def isUInt64Type (e : Expr) : Bool :=

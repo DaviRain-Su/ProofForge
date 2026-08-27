@@ -178,7 +178,9 @@ structure Method where
   ixName : String := ""
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
+  paramTypes : Array Core.Codec.Scalar := #[]
   retWidths : Array Nat := #[]
+  retTypes : Array Core.Codec.Scalar := #[]
   retCount : Nat := 1
   entry : EntryAdapter.MethodEntry := .generated
   ops : Array Op := #[]
@@ -412,7 +414,9 @@ private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
+    paramTypes := method.paramTypes
     retWidths := method.retWidths
+    retTypes := method.retTypes
     retCount := method.retCount
     entry
     ops

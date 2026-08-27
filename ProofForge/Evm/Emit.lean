@@ -94,13 +94,7 @@ private def renderAddr20Helper : String :=
     return out ++ "      }" ++ nl
 
 private def widthMask (width : Nat) : String :=
-  match width with
-  | 1 => "0xff"
-  | 2 => "0xffff"
-  | 4 => "0xffffffff"
-  | 20 => "0xffffffffffffffffffffffffffffffffffffffff"
-  | 32 => "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-  | _ => u64MaxYul
+  if width == 8 then u64MaxYul else Codec.byteMask width
 
 private def addrLeafOff : String → Option Nat
   | "w0" => some 0
@@ -135,7 +129,7 @@ private def cmpYul (c : Ops.Cmp) (l r : String) : String :=
   | .ge => s!"iszero(lt({l}, {r}))"
 
 private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
-    (paramWidths : Array Nat) (v : Ops.Val) : Except String String :=
+    (paramWidths : Array Core.Codec.Scalar) (v : Ops.Val) : Except String String :=
   match v with
   | .lit n => .ok (yulLit n)
   | .arg i =>
@@ -146,16 +140,21 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .local i => .ok s!"l{i}"
   | .field (.arg i) name =>
       if i < paramCount then
-        match uint256LeafOff name, (paramWidths[i]?).getD 8 with
-        | some off, 32 => .ok (packU256Word s!"{paramPrefix}{i}" off)
-        | some off, 33 => .ok (packU256Word s!"{paramPrefix}{i}" off)
-        | _, _ =>
-          match addrLeafOff name with
-          | some off => .ok (packAddrWord s!"{paramPrefix}{i}" off)
-          | none => do
+        match paramWidths[i]? with
+        | some type =>
+            if Codec.isFourLimbCarrier type then
+              match uint256LeafOff name with
+              | some off => .ok (packU256Word s!"{paramPrefix}{i}" off)
+              | none => .error s!"evm/codec: invalid four-limb projection {name}"
+            else if Codec.isAddressCarrier type then
+              match addrLeafOff name with
+              | some off => .ok (packAddrWord s!"{paramPrefix}{i}" off)
+              | none => .error s!"evm/codec: invalid address projection {name}"
+            else do
               let slot ← slotOf p name
               let w := (IR.slotWidth p name).getD 8
               return maskExpr w s!"sload({slot})"
+        | none => .error s!"evm/codec: missing parameter metadata at {i}"
       else do
         let slot ← slotOf p name
         let w := (IR.slotWidth p name).getD 8
@@ -332,7 +331,7 @@ private def bindChecked (indent name expr : String) : String :=
 
 /-- 环境 opcode / 移位 / 下标必须先检查再当值用。 -/
 private partial def materializeVal (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (paramWidths : Array Nat) (v : Ops.Val) (st : Render) :
+    (paramCount : Nat) (paramWidths : Array Core.Codec.Scalar) (v : Ops.Val) (st : Render) :
     Except String (String × String × Render) := do
   let checked? : Option String :=
     match v with
@@ -504,7 +503,7 @@ private def brace (inner : String) : String :=
   "{" ++ nl ++ inner ++ "}"
 
 private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (paramWidths : Array Nat) (ops : Array IR.Op) (st : Render) :
+    (paramCount : Nat) (paramWidths : Array Core.Codec.Scalar) (ops : Array IR.Op) (st : Render) :
     Except String (String × Render) := do
   let destSlot0 ← slotOf p (destHint p ops)
   let nStates := returnStateCount ops
@@ -827,7 +826,7 @@ private def cfgDefinedLocals (graph : Core.CFG.Graph Ops.ValKind Ops.OpExt) : Ar
   ids.toList.eraseDups.toArray
 
 private def emitCFGOkState (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (paramWidths : Array Nat) (value : Ops.Val) (last : Option String)
+    (paramCount : Nat) (paramWidths : Array Core.Codec.Scalar) (value : Ops.Val) (last : Option String)
     (hint : CFGResultHint) (st : Render) : Except String (String × Render) := do
   let mut body := ""
   let mut st := st
@@ -881,7 +880,7 @@ private def emitCFGOkState (p : IR.Program) (indent paramPrefix : String)
   return (body, st)
 
 private def emitCFGChecked (p : IR.Program) (indent paramPrefix : String)
-    (paramCount : Nat) (paramWidths : Array Nat) (operation : Core.CFG.Checked Ops.ValKind)
+    (paramCount : Nat) (paramWidths : Array Core.Codec.Scalar) (operation : Core.CFG.Checked Ops.ValKind)
     (success overflow : Nat) (st : Render) : Except String (String × Render) := do
   match operation with
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
@@ -940,6 +939,8 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
     Except String (String × Render) := do
   unless block.params.isEmpty do
     throw s!"evm/cfg: block parameters are not lowered in block {block.id}"
+  let paramTypes ← method.resolvedParamTypes
+  let retTypes ← method.resolvedRetTypes
   let indent := "            "
   let incoming := (hints.find? (·.1 == block.id)).map (·.2) |>.getD .plain
   let initialLast := if cfgHintHasLast incoming then some "pf_last" else none
@@ -953,7 +954,7 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
   for sourceInstruction in block.instructions do
     let instruction ← IR.ofSourceOps #[sourceInstruction]
     let (text, next) ←
-      emitOps p indent "arg" method.paramCount method.paramWidths instruction afterInstructions
+      emitOps p indent "arg" method.paramCount paramTypes instruction afterInstructions
     instructionText := instructionText ++ text
     if cfgInstructionProducesEffectResult sourceInstruction then
       let some expression := next.last
@@ -971,9 +972,9 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
       unless thenEdge.args.isEmpty && elseEdge.args.isEmpty do
         throw s!"evm/cfg: branch arguments remain at block {block.id}"
       let (preL, left, st1) ←
-        materializeVal p indent "arg" method.paramCount method.paramWidths lhs finalState
+        materializeVal p indent "arg" method.paramCount paramTypes lhs finalState
       let (preR, right, st2) ←
-        materializeVal p indent "arg" method.paramCount method.paramWidths rhs st1
+        materializeVal p indent "arg" method.paramCount paramTypes rhs st1
       let (condition, st3) := fresh st2
       finalState := st3
       body := body ++ preL ++ preR ++ indent ++ "let " ++ condition ++ " := " ++
@@ -984,7 +985,7 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
   | .checked operation success overflow =>
       unless success.args.isEmpty && overflow.args.isEmpty do
         throw s!"evm/cfg: checked arguments remain at block {block.id}"
-      let (checkedText, next) ← emitCFGChecked p indent "arg" method.paramCount method.paramWidths
+      let (checkedText, next) ← emitCFGChecked p indent "arg" method.paramCount paramTypes
         operation success.target overflow.target finalState
       body := body ++ checkedText
       finalState := { next with last := none }
@@ -992,7 +993,7 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
       match result with
       | .initialize _ => throw "evm/cfg: initializer reached runtime entry"
       | .okState value =>
-          let (exitText, next) ← emitCFGOkState p indent "arg" method.paramCount method.paramWidths
+          let (exitText, next) ← emitCFGOkState p indent "arg" method.paramCount paramTypes
             value none afterHint finalState
           body := body ++ exitText
           finalState := next
@@ -1001,31 +1002,31 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
       | .returnU64 value =>
           let (pre, expression, next) ←
             if cfgHintHasLast afterHint then pure ("", "pf_last", finalState)
-            else materializeVal p indent "arg" method.paramCount method.paramWidths value finalState
+            else materializeVal p indent "arg" method.paramCount paramTypes value finalState
           body := body ++ pre ++ returnWord indent expression
           finalState := next
       | .returnU64s values =>
           if values.isEmpty then throw "evm/cfg: empty return tuple"
-          if (method.retWidths == #[32] || method.retWidths == #[33]) && values.size == 4 then
+          if retTypes.size == 1 && Codec.isFourLimbCarrier retTypes[0]! && values.size == 4 then
             let (p0, a0, s0) ←
-              materializeVal p indent "arg" method.paramCount method.paramWidths values[0]! finalState
+              materializeVal p indent "arg" method.paramCount paramTypes values[0]! finalState
             let (p1, a1, s1) ←
-              materializeVal p indent "arg" method.paramCount method.paramWidths values[1]! s0
+              materializeVal p indent "arg" method.paramCount paramTypes values[1]! s0
             let (p2, a2, s2) ←
-              materializeVal p indent "arg" method.paramCount method.paramWidths values[2]! s1
+              materializeVal p indent "arg" method.paramCount paramTypes values[2]! s1
             let (p3, a3, s3) ←
-              materializeVal p indent "arg" method.paramCount method.paramWidths values[3]! s2
+              materializeVal p indent "arg" method.paramCount paramTypes values[3]! s2
             finalState := s3
             body := body ++ p0 ++ p1 ++ p2 ++ p3 ++
               indent ++ "mstore(0, " ++ packU256 a0 a1 a2 a3 ++ ")" ++ nl ++
               indent ++ "return(0, 32)" ++ nl
-          else if method.retWidths == #[20] && values.size == 3 then
+          else if retTypes.size == 1 && Codec.isAddressCarrier retTypes[0]! && values.size == 3 then
             let (p0, a0, s0) ←
-              materializeVal p indent "arg" method.paramCount method.paramWidths values[0]! finalState
+              materializeVal p indent "arg" method.paramCount paramTypes values[0]! finalState
             let (p1, a1, s1) ←
-              materializeVal p indent "arg" method.paramCount method.paramWidths values[1]! s0
+              materializeVal p indent "arg" method.paramCount paramTypes values[1]! s0
             let (p2, a2, s2) ←
-              materializeVal p indent "arg" method.paramCount method.paramWidths values[2]! s1
+              materializeVal p indent "arg" method.paramCount paramTypes values[2]! s1
             finalState := s2
             body := body ++ p0 ++ p1 ++ p2 ++
               indent ++ "mstore(0, 0)" ++ nl ++
@@ -1034,14 +1035,14 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
           else
             for i in [0:values.size] do
               let (pre, expression, next) ←
-                materializeVal p indent "arg" method.paramCount method.paramWidths values[i]! finalState
+                materializeVal p indent "arg" method.paramCount paramTypes values[i]! finalState
               finalState := next
               body := body ++ pre ++ indent ++ "mstore(" ++ toString (i * 32) ++ ", " ++
                 expression ++ ")" ++ nl
             body := body ++ indent ++ "return(0, " ++ toString (values.size * 32) ++ ")" ++ nl
       | .returnState value =>
           let (pre, expression, next) ←
-            materializeVal p indent "arg" method.paramCount method.paramWidths value finalState
+            materializeVal p indent "arg" method.paramCount paramTypes value finalState
           finalState := next
           let destination := (p.slots[0]?.map (·.name)).getD "slot0"
           let slot ← slotOf p destination
@@ -1094,17 +1095,33 @@ private def emitConstructorStores (p : IR.Program) : Except String String := do
       s!"schema requires {p.slots.size}")
   let mut body := ""
   let mut i : Nat := 0
+  let paramTypes ← p.constructor.resolvedParamTypes
   for s in p.slots do
     if h : i < vs.size then
-      let v ← loadVal p "ctor_arg" p.constructor.paramCount p.constructor.paramWidths vs[i]
+      let v ← loadVal p "ctor_arg" p.constructor.paramCount paramTypes vs[i]
       unless v == "0" do
         body := body ++ storeSlot "    " s.index (maskExpr s.width v)
     i := i + 1
   return body
 
+private def renderWordGuard (indent name : String) (type : Core.Codec.Scalar) :
+    Except String String := do
+  match ← Codec.wordGuard type with
+  | .fullWord => return ""
+  | .boolean =>
+      return indent ++ "if gt(" ++ name ++ ", 1) { " ++ revert0 ++ " }" ++ nl
+  | .unsignedMax bits =>
+      return indent ++ "if gt(" ++ name ++ ", " ++ Codec.byteMask (bits / 8) ++
+        ") { " ++ revert0 ++ " }" ++ nl
+  | .address160 =>
+      return indent ++ "if gt(" ++ name ++ ", " ++ Codec.byteMask 20 ++
+        ") { " ++ revert0 ++ " }" ++ nl
+  | .fixedBytesLeftPadded bytes =>
+      return indent ++ "if and(" ++ name ++ ", " ++ Codec.byteMask (32 - bytes) ++
+        ") { " ++ revert0 ++ " }" ++ nl
+
 private def renderCtorPrelude (objectName : String) (paramCount : Nat)
-    (paramWidths : Array Nat) : String :=
-  Id.run do
+    (paramWidths : Array Core.Codec.Scalar) : Except String String := do
     let argumentBytes := paramCount * 32
     let mut out :=
       "    if callvalue() { " ++ revert0 ++ " }" ++ nl ++
@@ -1114,32 +1131,29 @@ private def renderCtorPrelude (objectName : String) (paramCount : Nat)
     if argumentBytes > 0 then
       out := out ++ "    codecopy(0, programSize, " ++ toString argumentBytes ++ ")" ++ nl
     for i in [0:paramCount] do
-      let w := (paramWidths[i]?).getD 8
-      let max := widthMask w
       out := out ++
         "    let ctor_arg" ++ toString i ++ " := mload(" ++ toString (i * 32) ++ ")" ++ nl
-      unless w == 32 || w == 33 do
-        out := out ++
-          "    if gt(ctor_arg" ++ toString i ++ ", " ++ max ++ ") { " ++
-            revert0 ++ " }" ++ nl
+      let some type := paramWidths[i]?
+        | throw s!"evm/codec: missing constructor parameter metadata at {i}"
+      out := out ++ (← renderWordGuard "    " ("ctor_arg" ++ toString i) type)
     return out
 
 /-- Bake constructor arguments that are not stored: up to two `uint64`
 (`imm0`/`imm1`) and two `address` (`immAddr`/`immAddr2`) values.
 `setimmutable(offset, name, value)` patches runtime already copied to memory at `offset`. -/
-private def renderImmutableSets (paramCount : Nat) (paramWidths : Array Nat) : String :=
+private def renderImmutableSets (paramCount : Nat) (paramWidths : Array Core.Codec.Scalar) : String :=
   Id.run do
     let mut out := ""
     let mut usedU64 : Nat := 0
     let mut usedAddr : Nat := 0
     for i in [0:paramCount] do
-      let w := (paramWidths[i]?).getD 8
+      let type := (paramWidths[i]?).getD .uint64
       let nm := "ctor_arg" ++ toString i
-      if w == 20 && usedAddr < 2 then
+      if Codec.isAddressCarrier type && usedAddr < 2 then
         let name := if usedAddr == 0 then "immAddr" else "immAddr2"
         out := out ++ "    setimmutable(0, \"" ++ name ++ "\", " ++ nm ++ ")" ++ nl
         usedAddr := usedAddr + 1
-      else if (w == 8 || w == 1 || w == 2 || w == 4) && usedU64 < 2 then
+      else if Codec.isNarrowIntegerCarrier type && usedU64 < 2 then
         let name := if usedU64 == 0 then "imm0" else "imm1"
         out := out ++ "    setimmutable(0, \"" ++ name ++ "\", " ++ nm ++ ")" ++ nl
         usedU64 := usedU64 + 1
@@ -1159,6 +1173,7 @@ private def renderReceive (p : IR.Program) (m : IR.Method) : Except String Strin
 
 private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool) :
     Except String String := do
+  let paramTypes ← m.resolvedParamTypes
   let calldataBytes := 4 + m.paramCount * 32
   let mut head :=
     "      case 0x" ++ m.selector ++ " {" ++ nl ++
@@ -1168,14 +1183,11 @@ private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool
     head := head ++ "        if callvalue() { " ++ revert0 ++ " }" ++ nl
   for i in [0:m.paramCount] do
     let off := 4 + i * 32
-    let w := (m.paramWidths[i]?).getD 8
-    let max := widthMask w
     head := head ++
       "        let arg" ++ toString i ++ " := calldataload(" ++ toString off ++ ")" ++ nl
-    unless w == 32 || w == 33 do
-      head := head ++
-        "        if gt(arg" ++ toString i ++ ", " ++ max ++ ") { " ++
-          revert0 ++ " }" ++ nl
+    let some type := paramTypes[i]?
+      | throw s!"evm/codec: missing entry parameter metadata at {i}"
+    head := head ++ (← renderWordGuard "        " ("arg" ++ toString i) type)
   let body ← match emitCFGEntry p m with
     | .ok body => pure body
     | .error reason => throw s!"{reason} in {m.ixName}"
@@ -1187,11 +1199,12 @@ def emitYul (p : IR.Program) : Except String String := do
   if p.entries.isEmpty then
     throw "extract/unsupported: evm wants at least one entry"
   let runtimeName := p.name ++ "_runtime"
-  let ctorHead := renderCtorPrelude p.name p.constructor.paramCount p.constructor.paramWidths
+  let ctorParamTypes ← p.constructor.resolvedParamTypes
+  let ctorHead ← renderCtorPrelude p.name p.constructor.paramCount ctorParamTypes
   let ctorStores ← emitConstructorStores p
   let ctorImm :=
     if IR.programHasImmutable p then
-      renderImmutableSets p.constructor.paramCount p.constructor.paramWidths
+      renderImmutableSets p.constructor.paramCount ctorParamTypes
     else ""
   let anyPay := hasPayableEntry p
   let mut receiveTxt := ""
@@ -1231,44 +1244,33 @@ def emitYul (p : IR.Program) : Except String String := do
 private def escapeJson (s : String) : String :=
   s.replace "\\" "\\\\" |>.replace "\"" "\\\""
 
-private def paramJsonAt (i width : Nat) : String :=
-  "{\"name\":\"arg" ++ toString i ++ "\",\"type\":\"" ++
-    Keccak.abiTypeOfWidth width ++ "\"}"
+private def paramsJsonOf (types : Array Core.Codec.Scalar) : Except String String := do
+  let mut params := #[]
+  for i in [0:types.size] do
+    let abiType ← Codec.abiType types[i]!
+    params := params.push ("{\"name\":\"arg" ++ toString i ++ "\",\"type\":\"" ++
+      abiType ++ "\"}")
+  return String.intercalate "," params.toList
 
-private def paramsJsonOf (widths : Array Nat) (fallback : Nat) : String :=
-  let ws := if widths.size == fallback then widths else Array.replicate fallback 8
-  String.intercalate "," ((List.range fallback).map fun i =>
-    paramJsonAt i ((ws[i]?).getD 8))
+private def ctorAbi (p : IR.Program) : Except String String := do
+  let inputs ← paramsJsonOf (← p.constructor.resolvedParamTypes)
+  return "{\"type\":\"constructor\",\"stateMutability\":\"nonpayable\",\"inputs\":[" ++
+    inputs ++ "]}"
 
-private def ctorAbi (p : IR.Program) : String :=
-  "{\"type\":\"constructor\",\"stateMutability\":\"nonpayable\",\"inputs\":[" ++
-    paramsJsonOf p.constructor.paramWidths p.constructor.paramCount ++ "]}"
+private def outputsJson (m : IR.Method) : Except String String := do
+  let types ← m.resolvedRetTypes
+  let mut outputs := #[]
+  for type in types do
+    outputs := outputs.push ("{\"name\":\"\",\"type\":\"" ++ (← Codec.abiType type) ++ "\"}")
+  return "[" ++ String.intercalate "," outputs.toList ++ "]"
 
-private def outputsJson (m : IR.Method) : String :=
-  if m.retWidths == #[20] then
-    "[{\"name\":\"\",\"type\":\"address\"}]"
-  else if m.retWidths == #[32] then
-    "[{\"name\":\"\",\"type\":\"uint256\"}]"
-  else if m.retWidths == #[33] then
-    "[{\"name\":\"\",\"type\":\"bytes32\"}]"
-  else if m.retWidths == #[1] then
-    "[{\"name\":\"\",\"type\":\"uint8\"}]"
-  else if m.retWidths == #[2] then
-    "[{\"name\":\"\",\"type\":\"uint16\"}]"
-  else if m.retWidths == #[4] then
-    "[{\"name\":\"\",\"type\":\"uint32\"}]"
-  else if m.retCount ≤ 1 then
-    "[{\"name\":\"\",\"type\":\"uint64\"}]"
-  else
-    "[" ++ String.intercalate "," ((List.range m.retCount).map fun _ =>
-      "{\"name\":\"\",\"type\":\"uint64\"}") ++ "]"
-
-private def entryAbi (m : IR.Method) : String :=
+private def entryAbi (m : IR.Method) : Except String String := do
   let mutab := if m.view then "view" else if m.payable then "payable" else "nonpayable"
-  "{\"type\":\"function\",\"name\":\"" ++ escapeJson m.ixName ++
+  let inputs ← paramsJsonOf (← m.resolvedParamTypes)
+  let outputs ← outputsJson m
+  return "{\"type\":\"function\",\"name\":\"" ++ escapeJson m.ixName ++
     "\",\"stateMutability\":\"" ++ mutab ++ "\",\"inputs\":[" ++
-    paramsJsonOf m.paramWidths m.paramCount ++
-    "],\"outputs\":" ++ outputsJson m ++ "}"
+    inputs ++ "],\"outputs\":" ++ outputs ++ "}"
 
 private def eventAbi (name : String) : String :=
   if name == "Transfer256" then
@@ -1334,7 +1336,7 @@ private def hasErrorLeaf (fuel : Nat) (pred : IR.Op → Bool) (ops : Array IR.Op
 private def receiveAbi : String :=
   "{\"type\":\"receive\",\"stateMutability\":\"payable\"}"
 
-def emitAbi (p : IR.Program) : String :=
+def emitAbiChecked (p : IR.Program) : Except String String := do
   let evs :=
     p.entries.foldl (init := #[]) fun acc m =>
       (collectLogNames 8 m.ops).foldl (init := acc) fun acc n =>
@@ -1364,8 +1366,12 @@ def emitAbi (p : IR.Program) : String :=
       | .component call => call.emitsExpired
       | _ => false) m.ops)
   let needRecv := p.entries.any (fun m => m.ixName == "receive")
+  let mut entryItems := #[]
+  for method in p.entries do
+    unless method.ixName == "receive" do
+      entryItems := entryItems.push (← entryAbi method)
   let items :=
-    #[ctorAbi p] ++ evs.map eventAbi ++
+    #[← ctorAbi p] ++ evs.map eventAbi ++
       (if needIns then #[errorAbiInsufficient] else #[]) ++
       (if needUnauth then #[errorAbiUnauthorized] else #[]) ++
       (if needZero then #[errorAbiZeroAddress] else #[]) ++
@@ -1373,16 +1379,22 @@ def emitAbi (p : IR.Program) : String :=
       (if needCap then #[errorAbiCapExceeded] else #[]) ++
       (if needExpired then #[errorAbiExpired] else #[]) ++
       (if needRecv then #[receiveAbi] else #[]) ++
-      p.entries.filterMap fun m =>
-        if m.ixName == "receive" then none else some (entryAbi m)
-  "[
+      entryItems
+  return "[
   " ++ String.intercalate ",
   " items.toList ++ "
 ]
 "
 
+/-- Compatibility wrapper for callers that only need a valid artifact. Assembly
+uses `emitAbiChecked` and reports malformed codec metadata. -/
+def emitAbi (p : IR.Program) : String :=
+  match emitAbiChecked p with
+  | .ok abi => abi
+  | .error _ => ""
+
 def emit (p : IR.Program) : Except String (String × String) := do
   let yul ← emitYul p
-  return (yul, emitAbi p)
+  return (yul, ← emitAbiChecked p)
 
 end ProofForge.Evm.Emit

@@ -53,6 +53,7 @@ import Tests.LayoutSpec
 import Tests.Sha256Spec
 import Tests.EvmSpec
 import Tests.EvmSdkSpec
+import Tests.CoreCodecSpec
 import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
 import Tests.TipJarSpec

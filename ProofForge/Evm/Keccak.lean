@@ -1,4 +1,5 @@
 import ProofForge.Crypto.Keccak
+import ProofForge.Evm.Codec
 
 /-!
 本机 Keccak-256 在 `ProofForge.Crypto.Keccak`。
@@ -24,10 +25,12 @@ def selector (name : String) (paramTypes : Array String) : String :=
 def selectorU64 (name : String) (paramCount : Nat) : String :=
   ProofForge.Crypto.Keccak.selectorU64 name paramCount
 
-def abiTypeOfWidth : Nat → String :=
-  ProofForge.Crypto.Keccak.abiTypeOfWidth
+def abiTypeOfWidth (width : Nat) : String :=
+  match Codec.scalarOfLegacyWidth width with
+  | .ok type => (Codec.abiType type).toOption.getD "uint64"
+  | .error _ => "uint64"
 
 def selectorOfWidths (name : String) (widths : Array Nat) : String :=
-  ProofForge.Crypto.Keccak.selectorOfWidths name widths
+  if widths.isEmpty then selector name #[] else selector name (widths.map abiTypeOfWidth)
 
 end ProofForge.Evm.Keccak

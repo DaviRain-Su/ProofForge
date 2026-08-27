@@ -1,6 +1,7 @@
 import ProofForge.Extract.IR
 import ProofForge.Core.Target
 import ProofForge.Evm.Ops
+import ProofForge.Evm.Codec
 import ProofForge.Evm.Component
 import ProofForge.Crypto.Keccak
 
@@ -225,13 +226,39 @@ structure Method where
   selector : String := ""
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
+  paramTypes : Array Core.Codec.Scalar := #[]
   retWidths : Array Nat := #[]
+  retTypes : Array Core.Codec.Scalar := #[]
   retCount : Nat := 1
   ops : Array Op := #[]
   evaluation : Core.Evaluation Ops.ValKind := {}
   view : Bool := false
   payable : Bool := false
   deriving BEq, Repr, Inhabited
+
+private def resolveParamTypes (count : Nat) (types : Array Core.Codec.Scalar)
+    (legacyWidths : Array Nat) : Except String (Array Core.Codec.Scalar) := do
+  if types.size == count then
+    unless types.all Core.Codec.Scalar.isWellFormed do
+      throw "evm/codec: invalid parameter scalar metadata"
+    return types
+  if types.isEmpty && legacyWidths.size == count then
+    return ← legacyWidths.mapM Codec.scalarOfLegacyWidth
+  if types.isEmpty && legacyWidths.isEmpty then
+    return Array.replicate count .uint64
+  throw "evm/codec: incomplete parameter metadata"
+
+def Method.resolvedParamTypes (method : Method) : Except String (Array Core.Codec.Scalar) :=
+  resolveParamTypes method.paramCount method.paramTypes method.paramWidths
+
+def Method.resolvedRetTypes (method : Method) : Except String (Array Core.Codec.Scalar) := do
+  unless method.retTypes.isEmpty do
+    unless method.retTypes.all Core.Codec.Scalar.isWellFormed do
+      throw "evm/codec: invalid return scalar metadata"
+    return method.retTypes
+  unless method.retWidths.isEmpty do
+    return ← method.retWidths.mapM Codec.scalarOfLegacyWidth
+  return Array.replicate method.retCount .uint64
 
 def Method.toCFG (method : Method) : Except String CFG := do
   let source := toSourceOps method.ops
@@ -404,7 +431,9 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     selector := ""
     paramCount := ctorSrc.paramCount
     paramWidths := ctorSrc.paramWidths
+    paramTypes := ctorSrc.paramTypes
     retWidths := ctorSrc.retWidths
+    retTypes := ctorSrc.retTypes
     retCount := 1
     ops := ctorOps
     evaluation := ctorEvaluation
@@ -418,7 +447,9 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     let widths :=
       if m.paramWidths.size == m.paramCount then m.paramWidths
       else Array.replicate m.paramCount 8
-    let sel := Keccak.selectorOfWidths m.ixName widths
+    let paramTypes ← resolveParamTypes m.paramCount m.paramTypes widths
+    let abiTypes ← paramTypes.mapM Codec.abiType
+    let sel := Keccak.selector m.ixName abiTypes
     let view := m.kind == .get
     let (ops, evaluation) ← lowerMethodBody m
     entries := entries.push {
@@ -428,7 +459,9 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       selector := sel
       paramCount := m.paramCount
       paramWidths := widths
+      paramTypes
       retWidths := m.retWidths
+      retTypes := m.retTypes
       retCount := m.retCount
       ops
       evaluation

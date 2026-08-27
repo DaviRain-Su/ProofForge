@@ -1,0 +1,163 @@
+namespace ProofForge.Core.Codec
+
+/-- Target-neutral scalar values at a contract boundary.  This is logical
+metadata: targets still own their physical ABI/Borsh encoding. -/
+inductive Scalar where
+  | boolean
+  | uint (bits : Nat)
+  | address (bytes : Nat)
+  | fixedBytes (bytes : Nat)
+  deriving Repr, BEq, Inhabited
+
+namespace Scalar
+
+def isWellFormed : Scalar → Bool
+  | .boolean => true
+  | .uint bits => 8 ≤ bits && bits ≤ 256 && bits % 8 == 0
+  | .address bytes | .fixedBytes bytes => 1 ≤ bytes && bytes ≤ 32
+
+def byteWidth : Scalar → Nat
+  | .boolean => 1
+  | .uint bits => bits / 8
+  | .address bytes | .fixedBytes bytes => bytes
+
+def uint8 : Scalar := .uint 8
+def uint16 : Scalar := .uint 16
+def uint32 : Scalar := .uint 32
+def uint64 : Scalar := .uint 64
+def uint128 : Scalar := .uint 128
+def uint256 : Scalar := .uint 256
+def address20 : Scalar := .address 20
+def address32 : Scalar := .address 32
+def bytes32 : Scalar := .fixedBytes 32
+
+end Scalar
+
+/-- Logical codec shape shared by extractors and target adapters.  It does not
+describe SVM account offsets or EVM storage slots. -/
+inductive Schema where
+  | unit
+  | scalar (type : Scalar)
+  | tuple (items : Array Schema)
+  | record (name : String) (fields : Array (String × Schema))
+  | enumeration (name : String) (tagBits : Nat) (variants : Array (String × Schema))
+  | option (payload : Schema)
+  | fixedArray (length : Nat) (element : Schema)
+  | boundedArray (capacity : Nat) (element : Schema)
+  deriving Repr, BEq, Inhabited
+
+/-- Hard bounds keep user-supplied codec descriptors and generated layouts
+finite before a target lowers them. -/
+structure Limits where
+  maxDepth : Nat := 16
+  maxDescriptorNodes : Nat := 1024
+  maxLogicalLeaves : Nat := 16384
+  maxFields : Nat := 128
+  maxVariants : Nat := 128
+  maxArrayCapacity : Nat := 4096
+  deriving Repr, BEq, Inhabited
+
+structure Usage where
+  descriptorNodes : Nat
+  logicalLeaves : Nat
+  depth : Nat
+  deriving Repr, BEq, Inhabited
+
+private def addUsage (left right : Usage) : Usage :=
+  { descriptorNodes := left.descriptorNodes + right.descriptorNodes
+    logicalLeaves := left.logicalLeaves + right.logicalLeaves
+    depth := max left.depth right.depth }
+
+private def scaleUsage (count : Nat) (usage : Usage) : Usage :=
+  { descriptorNodes := usage.descriptorNodes
+    logicalLeaves := count * usage.logicalLeaves
+    depth := usage.depth }
+
+private def namesAreUnique (names : Array String) : Bool :=
+  names.all (fun name => !name.isEmpty) && names.toList.eraseDups.length == names.size
+
+private def ensureBudget (limits : Limits) (usage : Usage) : Except String Usage := do
+  if usage.descriptorNodes > limits.maxDescriptorNodes then
+    throw s!"codec/schema: descriptor nodes exceed {limits.maxDescriptorNodes}"
+  if usage.logicalLeaves > limits.maxLogicalLeaves then
+    throw s!"codec/schema: logical leaves exceed {limits.maxLogicalLeaves}"
+  if usage.depth > limits.maxDepth then
+    throw s!"codec/schema: depth exceeds {limits.maxDepth}"
+  return usage
+
+private partial def analyzeAt (limits : Limits) (depth : Nat) (schema : Schema) :
+    Except String Usage := do
+  if depth > limits.maxDepth then
+    throw s!"codec/schema: depth exceeds {limits.maxDepth}"
+  let usage ← match schema with
+    | .unit => pure { descriptorNodes := 1, logicalLeaves := 0, depth }
+    | .scalar type =>
+        unless type.isWellFormed do
+          throw "codec/schema: invalid scalar width"
+        pure { descriptorNodes := 1, logicalLeaves := 1, depth }
+    | .tuple items =>
+        if items.isEmpty then throw "codec/schema: empty tuple"
+        let mut usage := { descriptorNodes := 1, logicalLeaves := 0, depth }
+        for item in items do
+          usage := addUsage usage (← analyzeAt limits (depth + 1) item)
+        pure usage
+    | .record name fields =>
+        if name.isEmpty then throw "codec/schema: empty record name"
+        if fields.isEmpty then throw "codec/schema: empty record"
+        if fields.size > limits.maxFields then
+          throw s!"codec/schema: record fields exceed {limits.maxFields}"
+        unless namesAreUnique (fields.map (·.1)) do
+          throw "codec/schema: record field names must be non-empty and unique"
+        let mut usage := { descriptorNodes := 1, logicalLeaves := 0, depth }
+        for field in fields do
+          usage := addUsage usage (← analyzeAt limits (depth + 1) field.2)
+        pure usage
+    | .enumeration name tagBits variants =>
+        if name.isEmpty then throw "codec/schema: empty enum name"
+        unless tagBits == 8 || tagBits == 16 || tagBits == 32 do
+          throw "codec/schema: enum tag must be 8, 16, or 32 bits"
+        if variants.isEmpty then throw "codec/schema: empty enum"
+        if variants.size > limits.maxVariants then
+          throw s!"codec/schema: enum variants exceed {limits.maxVariants}"
+        unless namesAreUnique (variants.map (·.1)) do
+          throw "codec/schema: enum variant names must be non-empty and unique"
+        let mut nodes := 1
+        let mut leaves := 1
+        let mut maxDepth := depth
+        for variant in variants do
+          let variantUsage ← analyzeAt limits (depth + 1) variant.2
+          nodes := nodes + variantUsage.descriptorNodes
+          leaves := max leaves (1 + variantUsage.logicalLeaves)
+          maxDepth := max maxDepth variantUsage.depth
+        pure { descriptorNodes := nodes, logicalLeaves := leaves, depth := maxDepth }
+    | .option payload =>
+        let payloadUsage ← analyzeAt limits (depth + 1) payload
+        let nodes := 1 + payloadUsage.descriptorNodes
+        let leaves := 1 + payloadUsage.logicalLeaves
+        pure { descriptorNodes := nodes, logicalLeaves := leaves, depth := payloadUsage.depth }
+    | .fixedArray length element =>
+        if length == 0 then throw "codec/schema: zero-length fixed array"
+        if length > limits.maxArrayCapacity then
+          throw s!"codec/schema: array length exceeds {limits.maxArrayCapacity}"
+        let elementUsage ← analyzeAt limits (depth + 1) element
+        pure (addUsage { descriptorNodes := 1, logicalLeaves := 0, depth }
+          (scaleUsage length elementUsage))
+    | .boundedArray capacity element =>
+        if capacity == 0 then throw "codec/schema: zero-capacity bounded array"
+        if capacity > limits.maxArrayCapacity then
+          throw s!"codec/schema: array capacity exceeds {limits.maxArrayCapacity}"
+        let elementUsage ← analyzeAt limits (depth + 1) element
+        let elements := scaleUsage capacity elementUsage
+        let nodes := 1 + elements.descriptorNodes
+        let leaves := 1 + elements.logicalLeaves
+        pure { descriptorNodes := nodes, logicalLeaves := leaves, depth := elements.depth }
+  ensureBudget limits usage
+
+def analyze (schema : Schema) (limits : Limits := {}) : Except String Usage :=
+  analyzeAt limits 1 schema
+
+def validate (schema : Schema) (limits : Limits := {}) : Except String Unit := do
+  let _ ← analyze schema limits
+  return ()
+
+end ProofForge.Core.Codec

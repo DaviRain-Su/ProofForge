@@ -138,7 +138,9 @@ def projectMethod [BEq ValExt]
     ixName := method.ixName
     paramCount := method.paramCount
     paramWidths := method.paramWidths
+    paramTypes := method.paramTypes
     retWidths := method.retWidths
+    retTypes := method.retTypes
     retCount := method.retCount
     annotations := method.annotations
     sketch := method.sketch

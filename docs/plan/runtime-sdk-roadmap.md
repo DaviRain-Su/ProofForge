@@ -91,7 +91,10 @@ SVM 和 EVM target 工作交替推进，避免一个 target 长期挤掉另一�
 Phoenix `matchLimit=2` remainder posting 已作为 R0 前最后一个在途协议切片收口：它验证了
 现有 scalar frame、RBMap、allocator、recorder 和 optional-return 能直接组合，未给 Phoenix
 新增 Ops / IR / emitter case。R0 已冻结 capability ownership 并加入 CI anti-leak 门；当前
-进入 R1 shared protocol values，不再开 Phoenix-only 底层工作。
+进入 R1 shared protocol values，不再开 Phoenix-only 底层工作。R1-001 已落地 bounded
+`Core.Codec` descriptor 和 typed method metadata，并把 EVM selector/guard/ABI 从 width
+sentinel 迁到 `Evm.Codec`；shared source values 与 SVM Borsh/aggregate ABI lowering 继续按
+R1-002 往下做。
 
 ## 5. 阶段拆分
 
@@ -108,6 +111,10 @@ Phoenix `matchLimit=2` remainder posting 已作为 R0 前最后一个在途协�
 ownership 和物理状态边界。
 
 ### R1 — shared value / protocol schema
+
+R1-001 已完成 typed scalar/shape descriptor、资源预算、Core/SVM/EVM IR metadata transport，
+以及 EVM scalar ABI adapter；详见 [R1-001](tasks/r1-001.md)。它保留 legacy width 只用于
+Golden/Legacy compatibility，不把兼容 sentinel 当成新语言 API。
 
 1. 增加逻辑 `FixedBytes n`、`UInt128` 和现有 `UInt256` 的 source/profile 规则；物理 limbs 仍由
    target 决定。

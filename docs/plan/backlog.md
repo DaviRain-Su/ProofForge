@@ -7,13 +7,14 @@
 双目标路线固定为 `R0 ownership → R1 shared protocol values → R2 SVM Runtime →
 R3 SVM SDK → R4 EVM Runtime → R5 EVM SDK → R6 cross-target hardening`。共享普通 Lean、
 Profile、Extract 和 Core CFG；SVM account geometry 与 EVM storage layout 各归 target 所有，
-不做虚假的统一 storage。R0 ownership freeze 已完成，下一切片进入 R1 shared protocol
-values：先固定 bytes / u128 的逻辑值与 bounded codec contract，再分别绑定 SVM Borsh 和
-EVM ABI。
+不做虚假的统一 storage。R0 ownership freeze 已完成；R1-001 已固定 typed scalar metadata、
+bounded codec descriptor/resource budget，并把 EVM selector/calldata guard/ABI 从 width
+sentinel 迁到 `Evm.Codec`。下一切片继续 shared `FixedBytes n` / u128/u256 source values、
+SVM exact-cursor Borsh 与 EVM aggregate ABI；不把 codec geometry 混入 account/storage。
 
 ## 已做
 
-- **当前可验证基线（2026-08-27）**：Lean 汇总 233 jobs；SVM manifest 全 51 programs；
+- **当前可验证基线（2026-08-27）**：Lean 汇总 236 jobs；SVM manifest 全 51 programs；
   Mollusk 全量 285/285（Phoenix-v1 profile 76/76、RawEntry 11/11）；EVM manifest 全
   15 programs 且 Anvil 15/15。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
@@ -85,7 +86,20 @@ EVM ABI。
 
 ## 当前状态
 
-- `lake build Tests` 当前 233 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- R1-001 typed codec foundation 已完成：`Core.Codec` 提供 bool/uint/address/fixed-bytes 与
+  unit/tuple/record/enum/option/fixed/bounded array logical shape，并以 depth/nodes/leaves/
+  capacity 做 fail-closed 资源预算。Extract → Core.Target → SVM/EVM IR 透传
+  `paramTypes`/`retTypes`；EVM selector、word guard、wide carrier 和 ABI JSON 消费 typed
+  metadata。历史 `1/2/4/8/20/32/33` 只在 `Evm.Codec` compatibility boundary 恢复旧
+  Golden/Legacy fixture，`Crypto.Keccak` 和 production `Evm.Emit` 不再解释这些 sentinel。
+  这不是 aggregate codec 完成声明：SVM RawEntry 仍未从任意 descriptor 自动生成 Borsh，
+  shared `FixedBytes n` / u128/u256 source values 仍属下一切片。详见
+  `docs/plan/tasks/r1-001.md`。本切片最终门：Lean Tests 236 jobs、SVM 51 programs、locked
+  Mollusk 285/285、EVM 15 programs、Anvil 15/15；ownership、whitespace、Markdown link 与
+  production Emit width-sentinel static guards 全绿。SVM ELF 未改变，因此不重复 Surfpool
+  部署门。
+
+- `lake build Tests` 当前 236 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 285/285，其中 RawEntry 11/11、Phoenix-v1 profile
   76/76。

@@ -2,6 +2,7 @@ import ProofForge.Core.Ops
 import ProofForge.Core.CFG
 import ProofForge.Core.Schema
 import ProofForge.Core.Eval
+import ProofForge.Core.Codec
 import ProofForge.Core.IR
 import ProofForge.Core.Target
 import ProofForge.Extract.LegacyOps
@@ -30,6 +31,7 @@ import ProofForge.Evm.Sdk
 import ProofForge.Evm.Component
 import ProofForge.Evm.Component.Emit
 import ProofForge.Evm.Runtime
+import ProofForge.Evm.Codec
 import ProofForge.Evm.Registry
 import ProofForge.Extract.LegacyGolden
 import ProofForge.Attr

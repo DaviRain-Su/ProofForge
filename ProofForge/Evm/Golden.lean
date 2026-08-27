@@ -2,7 +2,7 @@ import ProofForge.Extract.LegacyGolden
 import ProofForge.Evm.IRCompat
 import ProofForge.Evm.Ops
 import ProofForge.Evm.NativeFx
-import ProofForge.Crypto.Keccak
+import ProofForge.Evm.Keccak
 
 namespace ProofForge.Evm.Golden
 
