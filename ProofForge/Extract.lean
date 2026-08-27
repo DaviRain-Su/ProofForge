@@ -544,6 +544,15 @@ private def unfoldUserHelper (env : Environment) (e : Expr) : Option (Name × Ex
       | _ => none
     else none
 
+/-- Bounded Source-facade unfold. Addr20 / UInt256 projections and `eq20` operands share this
+so a new `@[pf_inline]` helper does not grow a per-recipe decoder. -/
+private def unfoldUserHelpers (env : Environment) : Nat → Expr → Expr
+  | 0, e => e
+  | fuel + 1, e =>
+    match unfoldUserHelper env e with
+    | some (_, unfolded) => unfoldUserHelpers env fuel unfolded
+    | none => e
+
 private def resultType (fuel : Nat) (type : Expr) : Expr :=
   match fuel with
   | 0 => type
@@ -1272,14 +1281,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           if args.isEmpty then none
           else
             let rawBase := args[args.size - 1]!
-            let rec unfoldQuery (fuel : Nat) (e : Expr) : Expr :=
-              match fuel with
-              | 0 => e
-              | fuel' + 1 =>
-                match unfoldUserHelper env e with
-                | some (_, unfolded) => unfoldQuery fuel' unfolded
-                | none => e
-            let baseE := unfoldQuery 8 rawBase
+            let baseE := unfoldUserHelpers env 8 rawBase
             let limb := uint256LimbLit leaf
             let arith? :=
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
@@ -1396,7 +1398,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let args := e.getAppArgs
           if args.isEmpty then none
           else
-            let baseE := args[args.size - 1]!
+            let baseE := unfoldUserHelpers env 8 args[args.size - 1]!
             if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCaller20 ||
                 endsWith baseE ".evmCaller20" then
               some (match leaf with
@@ -1478,8 +1480,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let args := e.getAppArgs
           if args.size < 2 then none
           else
-            let aE := args[args.size - 2]!
-            let bE := args[args.size - 1]!
+            let aE := unfoldUserHelpers env 8 args[args.size - 2]!
+            let bE := unfoldUserHelpers env 8 args[args.size - 1]!
             let limbA (name : Name) : Option Ops.Val :=
               asVal env fuel' (mkApp (mkConst name) aE)
             let limbB (name : Name) : Option Ops.Val :=
@@ -1869,6 +1871,7 @@ private def val (env : Environment) (e : Expr) : Option Ops.Val :=
   asVal env 32 e
 
 private def addr20Leaves (env : Environment) (e : Expr) : Ops.Val × Ops.Val × Ops.Val :=
+  let e := unfoldUserHelpers env 8 e
   if isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" then
     (.evmCallerW0, .evmCallerW1, .evmCallerW2)
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" then
@@ -1914,14 +1917,7 @@ private def uint256CtorFields (env : Environment) (e : Expr) : Option (Array Exp
 
 private def uint256Leaves (env : Environment) (e : Expr) :
     Ops.Val × Ops.Val × Ops.Val × Ops.Val :=
-  let rec unfoldQuery (fuel : Nat) (e : Expr) : Expr :=
-    match fuel with
-    | 0 => e
-    | fuel' + 1 =>
-      match unfoldUserHelper env e with
-      | some (_, unfolded) => unfoldQuery fuel' unfolded
-      | none => e
-  let e := unfoldQuery 8 e
+  let e := unfoldUserHelpers env 8 e
   let projConst : String → Name
     | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
     | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1

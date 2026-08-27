@@ -52,4 +52,12 @@ projecting `UInt256.wN (add256 …)`, so Extract does not flatten the projection
 @[pf_inline] def eq20 (a b : Addr20) : Bool :=
   evmEq20 a b
 
+@[pf_inline] def zero20 : Addr20 := ⟨0, 0, 0⟩
+
+@[pf_inline] def isZero20 (a : Addr20) : Bool :=
+  eq20 a zero20
+
+@[pf_inline] def eqImm20 (a : Addr20) : Bool :=
+  eq20 a evmImm20
+
 end ProofForge.Evm.WideWord.Source
