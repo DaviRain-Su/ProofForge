@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.TipJar
 
 open ProofForge.Evm.Runtime
+open ProofForge.Evm
 
 /-- 无链上业务状态；init 只占入口形状。 -/
 structure State where
@@ -21,7 +22,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def deposit (_s : State) (amt : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmDeposit256 amt)
+    .ok ({ dummy := 0 }, NativeFx.Source.deposit256 amt)
   else
     .error .overflow
 
@@ -29,7 +30,7 @@ def deposit (_s : State) (amt : UInt256) : Except Error (State × UInt64) :=
 @[pf_entry]
 def payout (_s : State) (dst : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmSendEth256 dst amt)
+    .ok ({ dummy := 0 }, NativeFx.Source.sendEth256 dst amt)
   else
     .error .overflow
 
@@ -37,7 +38,7 @@ def payout (_s : State) (dst : Addr20) (amt : UInt256) : Except Error (State × 
 @[pf_entry]
 def logTip (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmLogTipped amt)
+    .ok ({ dummy := 0 }, NativeFx.Source.logTipped amt)
   else
     .error .overflow
 
@@ -45,7 +46,7 @@ def logTip (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def receive (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmReceive)
+    .ok ({ dummy := 0 }, NativeFx.Source.receive)
   else
     .error .overflow
 

@@ -18,10 +18,13 @@ import ProofForge.Evm.HashedMap
 import ProofForge.Evm.HashedMap.Source
 import ProofForge.Evm.HashedMap.Emit
 import ProofForge.Evm.WideWord
+import ProofForge.Evm.WideWord.Source
 import ProofForge.Evm.WideWord.Emit
 import ProofForge.Evm.ClosedCall
+import ProofForge.Evm.ClosedCall.Source
 import ProofForge.Evm.ClosedCall.Emit
 import ProofForge.Evm.NativeFx
+import ProofForge.Evm.NativeFx.Source
 import ProofForge.Evm.NativeFx.Emit
 import ProofForge.Evm.Component
 import ProofForge.Evm.Component.Emit

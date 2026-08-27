@@ -631,6 +631,9 @@ private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :
     let name := projection.toString
     if !name.startsWith "ProofForge.Svm.AccountStorage." &&
         !name.startsWith "ProofForge.Evm.HashedMap." &&
+        !name.startsWith "ProofForge.Evm.ClosedCall." &&
+        !name.startsWith "ProofForge.Evm.WideWord." &&
+        !name.startsWith "ProofForge.Evm.NativeFx." &&
         !Attr.isInline env projection then none else pure ()
     reduceCtorProjectionFuel? env 64 e
 

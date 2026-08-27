@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.Wide
 
 open ProofForge.Evm.Runtime
+open ProofForge.Evm
 
 structure State where
   dummy : UInt64
@@ -18,15 +19,15 @@ def init (_seed : UInt64) : State :=
 
 @[pf_entry]
 def add (_s : State) (a b : UInt256) : UInt256 :=
-  evmAdd256 a b
+  WideWord.Source.add256 a b
 
 @[pf_entry]
 def sub (_s : State) (a b : UInt256) : UInt256 :=
-  evmSub256 a b
+  WideWord.Source.sub256 a b
 
 @[pf_entry]
 def mul (_s : State) (a b : UInt256) : UInt256 :=
-  evmMul256 a b
+  WideWord.Source.mul256 a b
 
 @[pf_entry]
 def echo (_s : State) (a : UInt256) : UInt256 :=

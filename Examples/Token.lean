@@ -4,6 +4,7 @@ namespace Examples.Token
 
 open ProofForge.Evm.Runtime
 open ProofForge.Evm.HashedMap.Source
+open ProofForge.Evm
 
 /-- dummy 占槽；supply 是账户里的 UInt256；余额和额度走 hashed map。 -/
 structure State where
@@ -27,12 +28,12 @@ def init (_seed : UInt64) : State :=
     `to` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def mint (s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64) :=
-  if evmEq20 to ⟨0, 0, 0⟩ then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  if WideWord.Source.eq20 to ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy := setAddr256 balances to v,
-           supply := evmAdd256 s.supply v },
-      evmLogTransfer256 ⟨0, 0, 0⟩ to v)
+           supply := WideWord.Source.add256 s.supply v },
+      NativeFx.Source.logTransfer256 ⟨0, 0, 0⟩ to v)
   else
     .error .overflow
 
@@ -71,14 +72,15 @@ def nonceOf (_s : State) (who : Addr20) : UInt256 :=
 /-- 封闭 EIP-712 domain separator。name=`Token`，version=`1`。 -/
 @[pf_entry]
 def DOMAIN_SEPARATOR (_s : State) : Bytes32 :=
-  evmDomainSeparator
+  ClosedCall.Source.domainSeparator
 
 /-- 封闭 EIP-2612 `permit`。name=`Token`，version=`1`。 -/
 @[pf_entry]
 def permit (st : State) (owner spender : Addr20) (value deadline : UInt256)
     (v : UInt8) (r sig : Bytes32) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := st.dummy, supply := st.supply }, evmPermit owner spender value deadline v r sig)
+    .ok ({ dummy := st.dummy, supply := st.supply },
+      ClosedCall.Source.permit owner spender value deadline v r sig)
   else
     .error .overflow
 
@@ -86,12 +88,12 @@ def permit (st : State) (owner spender : Addr20) (value deadline : UInt256)
     `spender` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def approve (s : State) (spender : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
-  if evmEq20 spender ⟨0, 0, 0⟩ then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  if WideWord.Source.eq20 spender ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy :=
         setPair256 allowances evmCaller20 spender amt, supply := s.supply },
-      evmLogApproval256 evmCaller20 spender amt)
+      NativeFx.Source.logApproval256 evmCaller20 spender amt)
   else
     .error .overflow
 
@@ -100,13 +102,13 @@ def approve (s : State) (spender : Addr20) (amt : UInt256) : Except Error (State
 @[pf_entry]
 def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
     Except Error (State × UInt64) :=
-  if evmEq20 spender ⟨0, 0, 0⟩ then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  if WideWord.Source.eq20 spender ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
-    let next := evmAdd256 (getPair256 allowances evmCaller20 spender) added
+    let next := WideWord.Source.add256 (getPair256 allowances evmCaller20 spender) added
     .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
            supply := s.supply },
-      evmLogApproval256 evmCaller20 spender next)
+      NativeFx.Source.logApproval256 evmCaller20 spender next)
   else
     .error .overflow
 
@@ -115,101 +117,101 @@ def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
 @[pf_entry]
 def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
-  if evmEq20 spender ⟨0, 0, 0⟩ then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (getPair256 allowances evmCaller20 spender) subtracted then
-    let next := evmSub256 (getPair256 allowances evmCaller20 spender) subtracted
+  if WideWord.Source.eq20 spender ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
+  else if WideWord.Source.ge256 (getPair256 allowances evmCaller20 spender) subtracted then
+    let next := WideWord.Source.sub256 (getPair256 allowances evmCaller20 spender) subtracted
     .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
            supply := s.supply },
-      evmLogApproval256 evmCaller20 spender next)
+      NativeFx.Source.logApproval256 evmCaller20 spender next)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (getPair256 allowances evmCaller20 spender) subtracted)
+      NativeFx.Source.revertInsufficient (getPair256 allowances evmCaller20 spender) subtracted)
 
 /-- 从 caller 扣余额并减 totalSupply。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
 def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
-  if evmGe256 (getAddr256 balances evmCaller20) amt then
+  if WideWord.Source.ge256 (getAddr256 balances evmCaller20) amt then
     let debit :=
       setAddr256 balances evmCaller20
-        (evmSub256 (getAddr256 balances evmCaller20) amt)
-    .ok ({ dummy := debit, supply := evmSub256 s.supply amt },
-      evmLogTransfer256 evmCaller20 ⟨0, 0, 0⟩ amt)
+        (WideWord.Source.sub256 (getAddr256 balances evmCaller20) amt)
+    .ok ({ dummy := debit, supply := WideWord.Source.sub256 s.supply amt },
+      NativeFx.Source.logTransfer256 evmCaller20 ⟨0, 0, 0⟩ amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (getAddr256 balances evmCaller20) amt)
+      NativeFx.Source.revertInsufficient (getAddr256 balances evmCaller20) amt)
 
 /-- caller 用额度烧掉 owner 的币。额度或余额不够 → `Insufficient`。
     `owner` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
-  if evmEq20 owner ⟨0, 0, 0⟩ then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (getPair256 allowances owner evmCaller20) amt then
-    if evmGe256 (getAddr256 balances owner) amt then
+  if WideWord.Source.eq20 owner ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
+  else if WideWord.Source.ge256 (getPair256 allowances owner evmCaller20) amt then
+    if WideWord.Source.ge256 (getAddr256 balances owner) amt then
       let debit :=
         (setAddr256 balances owner
-          (evmSub256 (getAddr256 balances owner) amt)) |||
+          (WideWord.Source.sub256 (getAddr256 balances owner) amt)) |||
         (setPair256 allowances owner evmCaller20
-          (evmSub256 (getPair256 allowances owner evmCaller20) amt))
-      .ok ({ dummy := debit, supply := evmSub256 s.supply amt },
-        evmLogTransfer256 owner ⟨0, 0, 0⟩ amt)
+          (WideWord.Source.sub256 (getPair256 allowances owner evmCaller20) amt))
+      .ok ({ dummy := debit, supply := WideWord.Source.sub256 s.supply amt },
+        NativeFx.Source.logTransfer256 owner ⟨0, 0, 0⟩ amt)
     else
       .ok ({ dummy := s.dummy, supply := s.supply },
-        evmRevertInsufficient (getAddr256 balances owner) amt)
+        NativeFx.Source.revertInsufficient (getAddr256 balances owner) amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (getPair256 allowances owner evmCaller20) amt)
+      NativeFx.Source.revertInsufficient (getPair256 allowances owner evmCaller20) amt)
 
 /-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。
     `dest` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
-  if evmEq20 dest ⟨0, 0, 0⟩ then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (getAddr256 balances evmCaller20) amt then
+  if WideWord.Source.eq20 dest ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
+  else if WideWord.Source.ge256 (getAddr256 balances evmCaller20) amt then
     let debit :=
       (setAddr256 balances evmCaller20
-        (evmSub256 (getAddr256 balances evmCaller20) amt)) |||
+        (WideWord.Source.sub256 (getAddr256 balances evmCaller20) amt)) |||
       (setAddr256 balances dest
-        (evmAdd256 (getAddr256 balances dest) amt))
+        (WideWord.Source.add256 (getAddr256 balances dest) amt))
     .ok ({ dummy := debit, supply := s.supply },
-      evmLogTransfer256 evmCaller20 dest amt)
+      NativeFx.Source.logTransfer256 evmCaller20 dest amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (getAddr256 balances evmCaller20) amt)
+      NativeFx.Source.revertInsufficient (getAddr256 balances evmCaller20) amt)
 
 /-- 查 pair 额度；不足 → `Insufficient`。成功则改余额并写剩余额度。
     `dest` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def transferFrom (s : State) (owner dest : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
-  if evmEq20 dest ⟨0, 0, 0⟩ then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (getPair256 allowances owner evmCaller20) amt then
-    if evmGe256 (getAddr256 balances owner) amt then
+  if WideWord.Source.eq20 dest ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
+  else if WideWord.Source.ge256 (getPair256 allowances owner evmCaller20) amt then
+    if WideWord.Source.ge256 (getAddr256 balances owner) amt then
       let debit :=
         (setAddr256 balances owner
-          (evmSub256 (getAddr256 balances owner) amt)) |||
+          (WideWord.Source.sub256 (getAddr256 balances owner) amt)) |||
         (setAddr256 balances dest
-          (evmAdd256 (getAddr256 balances dest) amt)) |||
+          (WideWord.Source.add256 (getAddr256 balances dest) amt)) |||
         (setPair256 allowances owner evmCaller20
-          (evmSub256 (getPair256 allowances owner evmCaller20) amt))
+          (WideWord.Source.sub256 (getPair256 allowances owner evmCaller20) amt))
       .ok ({ dummy := debit, supply := s.supply },
-        evmLogTransfer256 owner dest amt)
+        NativeFx.Source.logTransfer256 owner dest amt)
     else
       .ok ({ dummy := s.dummy, supply := s.supply },
-        evmRevertInsufficient (getAddr256 balances owner) amt)
+        NativeFx.Source.revertInsufficient (getAddr256 balances owner) amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (getPair256 allowances owner evmCaller20) amt)
+      NativeFx.Source.revertInsufficient (getPair256 allowances owner evmCaller20) amt)
 
 /-- LOG1 `Transfer(uint64)`。 -/
 @[pf_entry]
 def logXfer (s : State) (amt : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmLogTransfer amt)
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.logTransfer amt)
   else
     .error .overflow
 
@@ -217,7 +219,7 @@ def logXfer (s : State) (amt : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def logApprove (s : State) (amt : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := s.dummy, supply := s.supply }, evmLogApproval amt)
+    .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.logApproval amt)
   else
     .error .overflow
 
