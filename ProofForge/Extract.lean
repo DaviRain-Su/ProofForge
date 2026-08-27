@@ -1272,10 +1272,14 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           if args.isEmpty then none
           else
             let rawBase := args[args.size - 1]!
-            let baseE :=
-              match unfoldUserHelper env rawBase with
-              | some (_, unfolded) => unfolded
-              | none => rawBase
+            let rec unfoldQuery (fuel : Nat) (e : Expr) : Expr :=
+              match fuel with
+              | 0 => e
+              | fuel' + 1 =>
+                match unfoldUserHelper env e with
+                | some (_, unfolded) => unfoldQuery fuel' unfolded
+                | none => e
+            let baseE := unfoldQuery 8 rawBase
             let limb := uint256LimbLit leaf
             let arith? :=
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
@@ -1910,6 +1914,14 @@ private def uint256CtorFields (env : Environment) (e : Expr) : Option (Array Exp
 
 private def uint256Leaves (env : Environment) (e : Expr) :
     Ops.Val × Ops.Val × Ops.Val × Ops.Val :=
+  let rec unfoldQuery (fuel : Nat) (e : Expr) : Expr :=
+    match fuel with
+    | 0 => e
+    | fuel' + 1 =>
+      match unfoldUserHelper env e with
+      | some (_, unfolded) => unfoldQuery fuel' unfolded
+      | none => e
+  let e := unfoldQuery 8 e
   let projConst : String → Name
     | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
     | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
@@ -5845,6 +5857,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" ||
+      (match unfoldUserHelper env e with
+        | some (_, unfolded) => (uint256CtorFields env unfolded).isSome
+        | none => false) ||
       (match e.getAppFn.constName? with
         | some n =>
           match env.find? n with

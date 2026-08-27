@@ -32,9 +32,11 @@ source semantic helper
 `mapGetU64` / `ge256` / `evmTokenTransfer256` / `evmDeposit` 等，canonical 拼写保持 `vg` / `mseta256` /
 `ttxfer` / `permit` / `edep` / `elog3.Transfer` / `err.ZeroAddress`，digest 不变。合同代码可经
 `Evm.HashedMap.Source` 命名编译期 map handle；封闭 CALL / 256-bit 算术 / ETH-LOG-revert
-走 `ClosedCall.Source` / `WideWord.Source` / `NativeFx.Source`。`@[pf_inline]` 消去这些
-helper，不改 component / digest。Extract 写/读路径展开 Source 后只认 `opOfRuntimeApp` /
-`queryOfRuntimeApp`，不再按 recipe 名枚举 walker。新增 LOG 配方仍在 `Evm.Component` 内注册，不再改动上述通用层。
+走 `ClosedCall.Source` / `WideWord.Source` / `NativeFx.Source`。`UInt256` 状态写回走
+`WideWord.Source.add` / `sub` / `mul` 的 ctor+limb 查询，不再投影
+`UInt256.wN (add256 …)`。`@[pf_inline]` 消去这些 helper，不改 component / digest。Extract
+写/读路径展开 Source 后只认 `opOfRuntimeApp` / `queryOfRuntimeApp`，不再按 recipe 名枚举
+walker。新增 LOG 配方仍在 `Evm.Component` 内注册，不再改动上述通用层。
 
 输入是已通过 Profile 的 frontend `Core.IR.Program`。`Evm.IR.extractRegistration` 向
 `Core.Target` 注册 extension 投影、arity / well-formed / CFG 合同；`Evm.IR.fromExtracted`

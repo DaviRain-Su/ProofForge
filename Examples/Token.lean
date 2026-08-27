@@ -32,7 +32,7 @@ def mint (s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64
     .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy := setAddr256 balances to v,
-           supply := WideWord.Source.add256 s.supply v },
+           supply := WideWord.Source.add s.supply v },
       NativeFx.Source.logTransfer256 ⟨0, 0, 0⟩ to v)
   else
     .error .overflow
@@ -135,7 +135,7 @@ def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
     let debit :=
       setAddr256 balances evmCaller20
         (WideWord.Source.sub256 (getAddr256 balances evmCaller20) amt)
-    .ok ({ dummy := debit, supply := WideWord.Source.sub256 s.supply amt },
+    .ok ({ dummy := debit, supply := WideWord.Source.sub s.supply amt },
       NativeFx.Source.logTransfer256 evmCaller20 ⟨0, 0, 0⟩ amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
@@ -155,7 +155,7 @@ def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
           (WideWord.Source.sub256 (getAddr256 balances owner) amt)) |||
         (setPair256 allowances owner evmCaller20
           (WideWord.Source.sub256 (getPair256 allowances owner evmCaller20) amt))
-      .ok ({ dummy := debit, supply := WideWord.Source.sub256 s.supply amt },
+      .ok ({ dummy := debit, supply := WideWord.Source.sub s.supply amt },
         NativeFx.Source.logTransfer256 owner ⟨0, 0, 0⟩ amt)
     else
       .ok ({ dummy := s.dummy, supply := s.supply },

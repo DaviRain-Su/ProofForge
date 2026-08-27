@@ -20,6 +20,32 @@ case is introduced.
 @[pf_inline] def mul256 (a b : UInt256) : UInt256 :=
   evmMul256 a b
 
+/-- Limb reads of packed arith. Contracts writing a `UInt256` state field name these instead of
+projecting `UInt256.wN (add256 …)`, so Extract does not flatten the projection into a schema leaf. -/
+@[pf_inline] def addW0 (a b : UInt256) : UInt64 := (evmAdd256 a b).w0
+@[pf_inline] def addW1 (a b : UInt256) : UInt64 := (evmAdd256 a b).w1
+@[pf_inline] def addW2 (a b : UInt256) : UInt64 := (evmAdd256 a b).w2
+@[pf_inline] def addW3 (a b : UInt256) : UInt64 := (evmAdd256 a b).w3
+
+@[pf_inline] def subW0 (a b : UInt256) : UInt64 := (evmSub256 a b).w0
+@[pf_inline] def subW1 (a b : UInt256) : UInt64 := (evmSub256 a b).w1
+@[pf_inline] def subW2 (a b : UInt256) : UInt64 := (evmSub256 a b).w2
+@[pf_inline] def subW3 (a b : UInt256) : UInt64 := (evmSub256 a b).w3
+
+@[pf_inline] def mulW0 (a b : UInt256) : UInt64 := (evmMul256 a b).w0
+@[pf_inline] def mulW1 (a b : UInt256) : UInt64 := (evmMul256 a b).w1
+@[pf_inline] def mulW2 (a b : UInt256) : UInt64 := (evmMul256 a b).w2
+@[pf_inline] def mulW3 (a b : UInt256) : UInt64 := (evmMul256 a b).w3
+
+@[pf_inline] def add (a b : UInt256) : UInt256 :=
+  ⟨addW0 a b, addW1 a b, addW2 a b, addW3 a b⟩
+
+@[pf_inline] def sub (a b : UInt256) : UInt256 :=
+  ⟨subW0 a b, subW1 a b, subW2 a b, subW3 a b⟩
+
+@[pf_inline] def mul (a b : UInt256) : UInt256 :=
+  ⟨mulW0 a b, mulW1 a b, mulW2 a b, mulW3 a b⟩
+
 @[pf_inline] def ge256 (a b : UInt256) : Bool :=
   evmGe256 a b
 
