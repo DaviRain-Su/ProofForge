@@ -1,5 +1,6 @@
 import ProofForge.Attr
 import ProofForge.Evm.Runtime
+import ProofForge.Evm.WideWord.Source
 
 namespace ProofForge.Evm.HashedMap.Source
 
@@ -65,5 +66,14 @@ attribute [pf_inline]
 @[pf_inline] def setPair256 (map : MapPair256) (owner spender : Addr20)
     (value : UInt256) : UInt64 :=
   evmMapSetPair256 map.base owner spender value
+
+/-- Packed comparison against a map slot. Contracts name these instead of
+`ge256 (getAddr256 …) amt`. `@[pf_inline]` erases them into the existing WideWord query. -/
+@[pf_inline] def geAddr256 (map : MapAddr256) (key : Addr20) (amt : UInt256) : Bool :=
+  WideWord.Source.ge256 (getAddr256 map key) amt
+
+@[pf_inline] def gePair256 (map : MapPair256) (owner spender : Addr20)
+    (amt : UInt256) : Bool :=
+  WideWord.Source.ge256 (getPair256 map owner spender) amt
 
 end ProofForge.Evm.HashedMap.Source

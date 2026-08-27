@@ -34,7 +34,9 @@ source semantic helper
 `Evm.HashedMap.Source` 命名编译期 map handle；封闭 CALL / 256-bit 算术 / ETH-LOG-revert
 走 `ClosedCall.Source` / `WideWord.Source` / `NativeFx.Source`。`UInt256` 状态写回走
 `WideWord.Source.add` / `sub` / `mul` 的 ctor+limb 查询，不再投影
-`UInt256.wN (add256 …)`。`@[pf_inline]` 消去这些 helper，不改 component / digest。Extract
+`UInt256.wN (add256 …)`。余额/额度比较走 `HashedMap.Source.geAddr256` /
+`gePair256`，不再手写 `ge256 (get …)`。`@[pf_inline]`
+消去这些 helper，不改 component / digest。Extract
 写/读路径展开 Source 后只认 `opOfRuntimeApp` / `queryOfRuntimeApp`，不再按 recipe 名枚举
 walker。新增 LOG 配方仍在 `Evm.Component` 内注册，不再改动上述通用层。
 

@@ -119,7 +119,7 @@ def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
   if WideWord.Source.eq20 spender ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if WideWord.Source.ge256 (getPair256 allowances evmCaller20 spender) subtracted then
+  else if gePair256 allowances evmCaller20 spender subtracted then
     let next := WideWord.Source.sub256 (getPair256 allowances evmCaller20 spender) subtracted
     .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
            supply := s.supply },
@@ -131,7 +131,7 @@ def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
 /-- 从 caller 扣余额并减 totalSupply。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
 def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
-  if WideWord.Source.ge256 (getAddr256 balances evmCaller20) amt then
+  if geAddr256 balances evmCaller20 amt then
     let debit :=
       setAddr256 balances evmCaller20
         (WideWord.Source.sub256 (getAddr256 balances evmCaller20) amt)
@@ -148,8 +148,8 @@ def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
   if WideWord.Source.eq20 owner ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if WideWord.Source.ge256 (getPair256 allowances owner evmCaller20) amt then
-    if WideWord.Source.ge256 (getAddr256 balances owner) amt then
+  else if gePair256 allowances owner evmCaller20 amt then
+    if geAddr256 balances owner amt then
       let debit :=
         (setAddr256 balances owner
           (WideWord.Source.sub256 (getAddr256 balances owner) amt)) |||
@@ -170,7 +170,7 @@ def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
 def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
   if WideWord.Source.eq20 dest ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if WideWord.Source.ge256 (getAddr256 balances evmCaller20) amt then
+  else if geAddr256 balances evmCaller20 amt then
     let debit :=
       (setAddr256 balances evmCaller20
         (WideWord.Source.sub256 (getAddr256 balances evmCaller20) amt)) |||
@@ -189,8 +189,8 @@ def transferFrom (s : State) (owner dest : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
   if WideWord.Source.eq20 dest ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if WideWord.Source.ge256 (getPair256 allowances owner evmCaller20) amt then
-    if WideWord.Source.ge256 (getAddr256 balances owner) amt then
+  else if gePair256 allowances owner evmCaller20 amt then
+    if geAddr256 balances owner amt then
       let debit :=
         (setAddr256 balances owner
           (WideWord.Source.sub256 (getAddr256 balances owner) amt)) |||
