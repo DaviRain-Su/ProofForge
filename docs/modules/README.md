@@ -10,7 +10,7 @@
 | [Profile](profile.md) | 传递闭包剖面 |
 | [Ops](ops.md) | Expr 操作序列 |
 | [Extract](extract.md) | Expr → IR + ops；任意用户项目 |
-| [Phoenix](phoenix.md) | 独立项目：双边 bounded N=4 price-time FIFO IOC |
+| [Phoenix](phoenix.md) | `Examples` 应用：双边 bounded N=4 与 Phoenix-v1 profile；只消费通用 SVM 组件 |
 | [Svm](svm.md) | Ops → sBPF / IDL / locked sbpf |
 | [Solanalib](solanalib.md) | Core/SVM target IR → bounded typed sBPF semantics |
 | [Emit](emit.md) | `Svm.Emit`：Counter → sBPF 文本 |

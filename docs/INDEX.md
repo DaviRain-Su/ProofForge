@@ -12,6 +12,7 @@
 | [04-task-breakdown.md](04-task-breakdown.md) | 阶段与任务 |
 | [05-test-spec.md](05-test-spec.md) | 怎样算对 |
 | [plan/README.md](plan/README.md) | 交付队列 |
+| [plan/runtime-sdk-roadmap.md](plan/runtime-sdk-roadmap.md) | SVM / EVM Runtime 与 SDK 的权威边界、排期和验收门 |
 | [plan/analysis/authority.md](plan/analysis/authority.md) | 补全对谁对齐（官方 runtime，不是 SDK crate） |
 | [plan/analysis/gap-vs-proofforge.md](plan/analysis/gap-vs-proofforge.md) | 相对 PF 的缺口与阶段 |
 | [plan/analysis/sdk-surface.md](plan/analysis/sdk-surface.md) | 剩余 SDK 表面（syscall / 封闭 CPI） |

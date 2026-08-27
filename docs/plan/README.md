@@ -2,6 +2,9 @@
 
 分析：[analysis/v0-slice.md](analysis/v0-slice.md) · [analysis/authority.md](analysis/authority.md) · [analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)
 
+后续权威排期：[Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md)。共享 Lean 语义层，
+SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
+
 任务：
 
 | ID | 状态 | 内容 |
@@ -138,6 +141,18 @@
 | [l5-045](tasks/l5-045.md) | done | Bounded Borsh Option entry plans |
 | [l5-046](tasks/l5-046.md) | done | Official Phoenix-v1 tags 8/9 CancelUpTo composition |
 | [l5-047](tasks/l5-047.md) | done | Correct Phoenix market/order sequence domains |
+| [l5-048](tasks/l5-048.md) | done | Official Phoenix-v1 tag 3 strict PostOnly placement |
+| [l5-049](tasks/l5-049.md) | done | Bounded effectful scalar tuple returns |
+| [l5-050](tasks/l5-050.md) | done | Phoenix source ownership migration to Examples |
+| [l5-051](tasks/l5-051.md) | done | Static account-storage component facade |
+| [l5-052](tasks/l5-052.md) | done | Static FIFO cancellation facade |
+| [l5-053](tasks/l5-053.md) | done | Static batch-recorder facade |
+| [l5-054](tasks/l5-054.md) | done | Reusable ordered storage + one-maker Limit matching |
+| [l5-055](tasks/l5-055.md) | done | Consume-in-place storage policy + partial maker fill |
+| [l5-056](tasks/l5-056.md) | done | One-maker noncrossing remainder posting |
+| [l5-057](tasks/l5-057.md) | done | Invocation-local bounded scalar frames |
+| [l5-058](tasks/l5-058.md) | done | Bounded two-maker Limit settlement |
+| [l5-059](tasks/l5-059.md) | done | Two-maker noncrossing remainder posting |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 
 
