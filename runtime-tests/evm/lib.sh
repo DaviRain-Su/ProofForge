@@ -262,6 +262,74 @@ if got != '$who':
 "
 }
 
+# eth_call must revert with ABI error CapExceeded().
+solana_lean_require_cap_exceeded() {
+  local addr="$1" from="$2" data="$3" message="$4"
+  local sel
+  sel="$("$cast" keccak 'CapExceeded()')"
+  sel="${sel#0x}"
+  sel="$(printf '%s' "$sel" | cut -c1-8 | tr 'A-Z' 'a-z')"
+  "$python" -I -S -c "
+import json, urllib.request, urllib.error
+rpc='$rpc'
+payload={
+  'jsonrpc':'2.0','id':1,'method':'eth_call',
+  'params':[{'to':'$addr','from':'$from','data':'$data'}, 'latest']
+}
+req=urllib.request.Request(rpc, data=json.dumps(payload).encode(),
+  headers={'Content-Type':'application/json'})
+try:
+    raw=urllib.request.urlopen(req).read().decode()
+except urllib.error.HTTPError as e:
+    raw=e.read().decode()
+resp=json.loads(raw)
+err=resp.get('error') or {}
+blob=(err.get('data') or '')
+if isinstance(blob, dict):
+    blob=blob.get('data') or blob.get('raw') or ''
+blob=str(blob).lower()
+if blob.startswith('0x'):
+    blob=blob[2:]
+sel='$sel'
+if len(blob) < 8 or not blob.startswith(sel):
+    raise SystemExit('FAIL: $message: missing CapExceeded() (got '+repr(err)+')')
+"
+}
+
+# eth_call must revert with ABI error Paused().
+solana_lean_require_paused() {
+  local addr="$1" from="$2" data="$3" message="$4"
+  local sel
+  sel="$("$cast" keccak 'Paused()')"
+  sel="${sel#0x}"
+  sel="$(printf '%s' "$sel" | cut -c1-8 | tr 'A-Z' 'a-z')"
+  "$python" -I -S -c "
+import json, urllib.request, urllib.error
+rpc='$rpc'
+payload={
+  'jsonrpc':'2.0','id':1,'method':'eth_call',
+  'params':[{'to':'$addr','from':'$from','data':'$data'}, 'latest']
+}
+req=urllib.request.Request(rpc, data=json.dumps(payload).encode(),
+  headers={'Content-Type':'application/json'})
+try:
+    raw=urllib.request.urlopen(req).read().decode()
+except urllib.error.HTTPError as e:
+    raw=e.read().decode()
+resp=json.loads(raw)
+err=resp.get('error') or {}
+blob=(err.get('data') or '')
+if isinstance(blob, dict):
+    blob=blob.get('data') or blob.get('raw') or ''
+blob=str(blob).lower()
+if blob.startswith('0x'):
+    blob=blob[2:]
+sel='$sel'
+if len(blob) < 8 or not blob.startswith(sel):
+    raise SystemExit('FAIL: $message: missing Paused() (got '+repr(err)+')')
+"
+}
+
 # eth_call must revert with ABI error ZeroAddress().
 solana_lean_require_zero_address() {
   local addr="$1" from="$2" data="$3" message="$4"

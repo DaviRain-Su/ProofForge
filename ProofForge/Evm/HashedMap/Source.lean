@@ -1,5 +1,7 @@
 import ProofForge.Attr
 import ProofForge.Evm.Runtime
+import ProofForge.Evm.WideWord.Source
+import ProofForge.Evm.NativeFx.Source
 
 namespace ProofForge.Evm.HashedMap.Source
 
@@ -65,5 +67,42 @@ attribute [pf_inline]
 @[pf_inline] def setPair256 (map : MapPair256) (owner spender : Addr20)
     (value : UInt256) : UInt64 :=
   evmMapSetPair256 map.base owner spender value
+
+/-- Packed comparison against a map slot. Contracts name these instead of
+`ge256 (getAddr256 …) amt`. `@[pf_inline]` erases them into the existing WideWord query. -/
+@[pf_inline] def geAddr256 (map : MapAddr256) (key : Addr20) (amt : UInt256) : Bool :=
+  WideWord.Source.ge256 (getAddr256 map key) amt
+
+@[pf_inline] def gePair256 (map : MapPair256) (owner spender : Addr20)
+    (amt : UInt256) : Bool :=
+  WideWord.Source.ge256 (getPair256 map owner spender) amt
+
+/-- Next packed value of a map slot. Contracts bind this once and feed the same `UInt256` to
+`set*` and LOG, instead of writing `add256 (get …) amt` at each use. `@[pf_inline]` erases
+these into the existing WideWord arith queries. They are not writes: packing get+arith+set
+into one helper duplicates the arith under LOG and changes extracted IR. -/
+@[pf_inline] def nextAddAddr256 (map : MapAddr256) (key : Addr20) (amt : UInt256) : UInt256 :=
+  WideWord.Source.add256 (getAddr256 map key) amt
+
+@[pf_inline] def nextSubAddr256 (map : MapAddr256) (key : Addr20) (amt : UInt256) : UInt256 :=
+  WideWord.Source.sub256 (getAddr256 map key) amt
+
+@[pf_inline] def nextAddPair256 (map : MapPair256) (owner spender : Addr20)
+    (amt : UInt256) : UInt256 :=
+  WideWord.Source.add256 (getPair256 map owner spender) amt
+
+@[pf_inline] def nextSubPair256 (map : MapPair256) (owner spender : Addr20)
+    (amt : UInt256) : UInt256 :=
+  WideWord.Source.sub256 (getPair256 map owner spender) amt
+
+/-- Map-slot Insufficient. Contracts name the handle instead of
+`revertInsufficient (getAddr256 …) want`. `@[pf_inline]` erases into NativeFx plus map get. -/
+@[pf_inline] def revertInsufficientAddr256 (map : MapAddr256) (key : Addr20)
+    (want : UInt256) : UInt64 :=
+  NativeFx.Source.revertInsufficient (getAddr256 map key) want
+
+@[pf_inline] def revertInsufficientPair256 (map : MapPair256) (owner spender : Addr20)
+    (want : UInt256) : UInt64 :=
+  NativeFx.Source.revertInsufficient (getPair256 map owner spender) want
 
 end ProofForge.Evm.HashedMap.Source

@@ -203,6 +203,10 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.evm (.component (.nativeFx (.revertUnauthorized w0 w1 w2))))
 @[match_pattern] def Op.evmRevertZeroAddress : Op :=
   .ext (.evm (.component (.nativeFx .revertZeroAddress)))
+@[match_pattern] def Op.evmRevertPaused : Op :=
+  .ext (.evm (.component (.nativeFx .revertPaused)))
+@[match_pattern] def Op.evmRevertCapExceeded : Op :=
+  .ext (.evm (.component (.nativeFx .revertCapExceeded)))
 @[match_pattern] def Op.evmReceive : Op :=
   .ext (.evm (.component (.nativeFx .receive)))
 @[match_pattern] def Op.mapGetU64 (base key : Val) : Op :=

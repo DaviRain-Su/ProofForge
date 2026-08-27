@@ -32,9 +32,18 @@ source semantic helper
 `mapGetU64` / `ge256` / `evmTokenTransfer256` / `evmDeposit` 等，canonical 拼写保持 `vg` / `mseta256` /
 `ttxfer` / `permit` / `edep` / `elog3.Transfer` / `err.ZeroAddress`，digest 不变。合同代码可经
 `Evm.HashedMap.Source` 命名编译期 map handle；封闭 CALL / 256-bit 算术 / ETH-LOG-revert
-走 `ClosedCall.Source` / `WideWord.Source` / `NativeFx.Source`。`@[pf_inline]` 消去这些
-helper，不改 component / digest。Extract 写/读路径展开 Source 后只认 `opOfRuntimeApp` /
-`queryOfRuntimeApp`，不再按 recipe 名枚举 walker。新增 LOG 配方仍在 `Evm.Component` 内注册，不再改动上述通用层。
+走 `ClosedCall.Source` / `WideWord.Source` / `NativeFx.Source`。`UInt256` 状态写回走
+`WideWord.Source.add` / `sub` / `mul` 的 ctor+limb 查询，不再投影
+`UInt256.wN (add256 …)`。余额/额度比较走 `HashedMap.Source.geAddr256` /
+`gePair256`，不再手写 `ge256 (get …)`。余额/额度下一值走
+`nextAddAddr256` / `nextSubAddr256` / `nextAddPair256` / `nextSubPair256`，
+合同绑定一次再交给 `set*` 和 LOG，不再手写 `add256 (get …)`。不足 revert 走
+`revertInsufficientAddr256` / `revertInsufficientPair256`，不再手写
+`revertInsufficient (get …)`。地址守卫走 `isZero20` / `eqImm20` / `zero20`。
+`@[pf_inline]`
+消去这些 helper，不改 component / digest。Extract
+写/读路径展开 Source 后只认 `opOfRuntimeApp` / `queryOfRuntimeApp`，不再按 recipe 名枚举
+walker。新增 LOG 配方仍在 `Evm.Component` 内注册，不再改动上述通用层。
 
 输入是已通过 Profile 的 frontend `Core.IR.Program`。`Evm.IR.extractRegistration` 向
 `Core.Target` 注册 extension 投影、arity / well-formed / CFG 合同；`Evm.IR.fromExtracted`
@@ -83,6 +92,7 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、`shareOf(address)` / `pull(address,address,uint256)`、封闭 `approve`/`transferFrom`/`allowance`、超额保持、USDT 无返回成功
 - `runtime-tests/evm/anvil_ownable.sh`：`constructor(address)` / `ownerOf()(address)`、非 owner revert、Incremented log、`approve(address,address,uint64)` / allowance / spend
 - `runtime-tests/evm/anvil_token.sh`：`mint(address,uint256)` / `transfer(address,uint256)` 扣余额、不足 `Insufficient(have,want)`、`approve(address,uint256)` / `transferFrom(address,address,uint256)` 扣额度、LOG3 Transfer/Approval
+- `runtime-tests/evm/anvil_capped.sh`：第二个合约复用 owner + pause + 固定 cap；非 owner / paused / 超 cap 分别解码 Unauthorized / Paused / CapExceeded
 - `runtime-tests/evm/anvil_window.sh`：固定长 Vector 两槽；`setTail` 只写第二叶，第一叶保持
 - `runtime-tests/evm/anvil_phase.sh`：零 payload variant 的 idle/live tag 往返与 view
 - `runtime-tests/evm/anvil_wide.sh`：`uint256` ABI、跨 64-bit 边界 add/sub/mul、溢出 revert

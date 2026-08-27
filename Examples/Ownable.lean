@@ -24,10 +24,10 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 def init (_owner : Addr20) : State :=
   { value := 0 }
 
-/-- 只有构造期 owner 能加。非 owner → `Unauthorized(caller)`。整值 `WideWord.Source.eq20`。 -/
+/-- 只有构造期 owner 能加。非 owner → `Unauthorized(caller)`。整值 `WideWord.Source.eqImm20`。 -/
 @[pf_entry]
 def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
-  if WideWord.Source.eq20 evmCaller20 evmImm20 then
+  if WideWord.Source.eqImm20 evmCaller20 then
     if s.value ≤ u64Max - delta then
       let next := s.value + delta
       .ok ({ value := next }, next)
@@ -39,7 +39,7 @@ def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
 /-- `who` 是零地址 → `ZeroAddress()`。成功只回 `who.w0`，不改 storage。 -/
 @[pf_entry]
 def guardZero (s : State) (who : Addr20) : Except Error (State × UInt64) :=
-  if WideWord.Source.eq20 who ⟨0, 0, 0⟩ then
+  if WideWord.Source.isZero20 who then
     .ok (s, NativeFx.Source.revertZeroAddress)
   else
     .ok (s, who.w0)

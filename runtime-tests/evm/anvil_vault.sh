@@ -186,7 +186,7 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)
 internal_bin="$root/build/evm/Token.bin"
 solana_lean_ensure_bin "$internal_bin"
 internal_hex="$(tr -d '\n\r ' < "$internal_bin")"
-internal="$(solana_lean_deploy_ctor_u64 "$internal_hex" 0)"
+internal="$(solana_lean_deploy_ctor_address "$internal_hex" "$sender")"
 
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$internal" 'mint(address,uint256)' "$sender" 80 >/dev/null

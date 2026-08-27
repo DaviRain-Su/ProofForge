@@ -547,6 +547,15 @@ private def unfoldUserHelper (env : Environment) (e : Expr) : Option (Name × Ex
       | _ => none
     else none
 
+/-- Bounded Source-facade unfold. Addr20 / UInt256 projections and `eq20` operands share this
+so a new `@[pf_inline]` helper does not grow a per-recipe decoder. -/
+private def unfoldUserHelpers (env : Environment) : Nat → Expr → Expr
+  | 0, e => e
+  | fuel + 1, e =>
+    match unfoldUserHelper env e with
+    | some (_, unfolded) => unfoldUserHelpers env fuel unfolded
+    | none => e
+
 private def resultType (fuel : Nat) (type : Expr) : Expr :=
   match fuel with
   | 0 => type
@@ -1276,10 +1285,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           if args.isEmpty then none
           else
             let rawBase := args[args.size - 1]!
-            let baseE :=
-              match unfoldUserHelper env rawBase with
-              | some (_, unfolded) => unfolded
-              | none => rawBase
+            let baseE := unfoldUserHelpers env 8 rawBase
             let limb := uint256LimbLit leaf
             let arith? :=
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
@@ -1396,7 +1402,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let args := e.getAppArgs
           if args.isEmpty then none
           else
-            let baseE := args[args.size - 1]!
+            let baseE := unfoldUserHelpers env 8 args[args.size - 1]!
             if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCaller20 ||
                 endsWith baseE ".evmCaller20" then
               some (match leaf with
@@ -1478,8 +1484,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let args := e.getAppArgs
           if args.size < 2 then none
           else
-            let aE := args[args.size - 2]!
-            let bE := args[args.size - 1]!
+            let aE := unfoldUserHelpers env 8 args[args.size - 2]!
+            let bE := unfoldUserHelpers env 8 args[args.size - 1]!
             let limbA (name : Name) : Option Ops.Val :=
               asVal env fuel' (mkApp (mkConst name) aE)
             let limbB (name : Name) : Option Ops.Val :=
@@ -1869,6 +1875,7 @@ private def val (env : Environment) (e : Expr) : Option Ops.Val :=
   asVal env 32 e
 
 private def addr20Leaves (env : Environment) (e : Expr) : Ops.Val × Ops.Val × Ops.Val :=
+  let e := unfoldUserHelpers env 8 e
   if isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" then
     (.evmCallerW0, .evmCallerW1, .evmCallerW2)
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" then
@@ -1914,6 +1921,7 @@ private def uint256CtorFields (env : Environment) (e : Expr) : Option (Array Exp
 
 private def uint256Leaves (env : Environment) (e : Expr) :
     Ops.Val × Ops.Val × Ops.Val × Ops.Val :=
+  let e := unfoldUserHelpers env 8 e
   let projConst : String → Name
     | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
     | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
@@ -4779,6 +4787,12 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmRevertZeroAddress ||
       endsWith app ".evmRevertZeroAddress" then
     some .evmRevertZeroAddress
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmRevertPaused ||
+      endsWith app ".evmRevertPaused" then
+    some .evmRevertPaused
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmRevertCapExceeded ||
+      endsWith app ".evmRevertCapExceeded" then
+    some .evmRevertCapExceeded
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmReceive || endsWith app ".evmReceive" then
     some .evmReceive
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
@@ -5114,6 +5128,8 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   | some (.evmRevertInsufficient h0 _ _ _ _ _ _ _) => h0
   | some (.evmRevertUnauthorized w0 _ _) => w0
   | some .evmRevertZeroAddress => .lit 0
+  | some .evmRevertPaused => .lit 0
+  | some .evmRevertCapExceeded => .lit 0
   | some .evmReceive => .lit 0
   | some (.mapSetU64 _ _ v) => v
   | some (.mapSetAddr _ _ _ _ v) => v
@@ -6033,6 +6049,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" ||
+      (match unfoldUserHelper env e with
+        | some (_, unfolded) => (uint256CtorFields env unfolded).isSome
+        | none => false) ||
       (match e.getAppFn.constName? with
         | some n =>
           match env.find? n with
@@ -7169,6 +7188,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .evmRevertUnauthorized a b c =>
           .evmRevertUnauthorized (flipVal fuel' a) (flipVal fuel' b) (flipVal fuel' c)
       | .evmRevertZeroAddress => .evmRevertZeroAddress
+      | .evmRevertPaused => .evmRevertPaused
+      | .evmRevertCapExceeded => .evmRevertCapExceeded
       | .evmReceive => .evmReceive
       | .forAccum n v resultLocal => .forAccum n (flipVal fuel' v) resultLocal
       | .forBody n body => .forBody n (body.map (flipOp fuel'))
@@ -7580,6 +7601,8 @@ private def opFields : Ops.Op → Array String
         valFields e ++ valFields f ++ valFields g ++ valFields h
   | .evmRevertUnauthorized a b c => valFields a ++ valFields b ++ valFields c
   | .evmRevertZeroAddress => #[]
+  | .evmRevertPaused => #[]
+  | .evmRevertCapExceeded => #[]
   | .evmReceive => #[]
   | .forAccum _ v _ => valFields v
   | .forBody _ body => body.flatMap opFields
@@ -7768,6 +7791,8 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
       | .evmRevertUnauthorized a b c =>
           return .evmRevertUnauthorized (← normalizeVal a) (← normalizeVal b) (← normalizeVal c)
       | .evmRevertZeroAddress => pure .evmRevertZeroAddress
+      | .evmRevertPaused => pure .evmRevertPaused
+      | .evmRevertCapExceeded => pure .evmRevertCapExceeded
       | .evmReceive => pure .evmReceive
       | .mapGetU64 b k => return .mapGetU64 (← normalizeVal b) (← normalizeVal k)
       | .mapSetU64 b k v =>
@@ -7922,6 +7947,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .evmRevertUnauthorized a b c =>
       #[a, b, c].findSome? (valEscapedArg limit)
   | .evmRevertZeroAddress => none
+  | .evmRevertPaused => none
+  | .evmRevertCapExceeded => none
   | .evmReceive => none
   | .forBody _ body => body.findSome? (opEscapedArg limit)
   | .indexSetLeaf _ i v _ _ | .indexSet _ i v _ _ | .mapGetU64 i v =>

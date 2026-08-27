@@ -46,6 +46,14 @@
 | [e-comp-006](tasks/e-comp-006.md) | done | 封闭 CALL / WideWord / NativeFx 源侧 facade |
 | [e-comp-007](tasks/e-comp-007.md) | done | Extract 写路径按 Runtime 命名空间收集 |
 | [e-comp-008](tasks/e-comp-008.md) | done | Extract 读路径按 Runtime 命名空间收集 |
+| [e-comp-009](tasks/e-comp-009.md) | done | WideWord 源侧 limb 查询 |
+| [e-comp-010](tasks/e-comp-010.md) | done | HashedMap 源侧 geAddr256 / gePair256 |
+| [e-comp-011](tasks/e-comp-011.md) | done | HashedMap 源侧 nextAdd / nextSub |
+| [e-comp-012](tasks/e-comp-012.md) | done | HashedMap 源侧 revertInsufficient |
+| [e-comp-013](tasks/e-comp-013.md) | done | 地址谓词 isZero20 / eqImm20 |
+| [e-pause-001](tasks/e-pause-001.md) | done | Token owner mint + Paused |
+| [e-cap-001](tasks/e-cap-001.md) | done | Token mint cap + CapExceeded |
+| [e-capped-001](tasks/e-capped-001.md) | done | Capped 复用 owner + pause + cap |
 | [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |
