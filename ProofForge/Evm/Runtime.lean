@@ -1,3 +1,5 @@
+import ProofForge.Core.Value
+
 namespace ProofForge.Evm.Runtime
 
 /--
@@ -10,28 +12,21 @@ structure Addr20 where
   w2 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
-/--
-256 位金额，四个 `UInt64` 叶：w0 最低 64 位，w3 最高。
-ABI / 单次 calldata word 是一个 `uint256`；storage 仍四槽。
-默认算术还是 `UInt64`。溢出在 Yul 里 `revert(0,0)`，宿主 stub 不模拟溢出。
--/
-structure UInt256 where
-  w0 : UInt64
-  w1 : UInt64
-  w2 : UInt64
-  w3 : UInt64
-  deriving Repr, DecidableEq, Inhabited, BEq
+/-! EVM compatibility names for target-neutral allocation-free source values. -/
 
 /--
-32 字节哈希 / 签名半段。四叶布局同 `UInt256`。
-ABI 是 `bytes32`（抽出 width 33），不是 `uint256`。
+256 位金额的兼容名。逻辑值由 shared Core 所有；EVM 只拥有 ABI / storage 物理布局。
 -/
-structure Bytes32 where
-  w0 : UInt64
-  w1 : UInt64
-  w2 : UInt64
-  w3 : UInt64
-  deriving Repr, DecidableEq, Inhabited, BEq
+abbrev UInt256 := ProofForge.Core.Value.UInt256
+
+/-- Compatibility constructor for code that named the old EVM-owned structure constructor. -/
+abbrev UInt256.mk := ProofForge.Core.Value.UInt256.mk
+
+/-- 32 字节哈希 / 签名半段的兼容名。EVM ABI 是 `bytes32`，不是 `uint256`。 -/
+abbrev Bytes32 := ProofForge.Core.Value.FixedBytes 32
+
+/-- Compatibility constructor for code that named the old EVM-owned structure constructor. -/
+abbrev Bytes32.mk (w0 w1 w2 w3 : UInt64) : Bytes32 := ⟨w0, w1, w2, w3⟩
 
 /--
 `CALLER` 的低 8 字节：`and(caller(), 0xffffffffffffffff)`。

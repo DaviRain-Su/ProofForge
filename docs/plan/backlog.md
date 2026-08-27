@@ -9,12 +9,13 @@ R3 SVM SDK → R4 EVM Runtime → R5 EVM SDK → R6 cross-target hardening`。�
 Profile、Extract 和 Core CFG；SVM account geometry 与 EVM storage layout 各归 target 所有，
 不做虚假的统一 storage。R0 ownership freeze 已完成；R1-001 已固定 typed scalar metadata、
 bounded codec descriptor/resource budget，并把 EVM selector/calldata guard/ABI 从 width
-sentinel 迁到 `Evm.Codec`。下一切片继续 shared `FixedBytes n` / u128/u256 source values、
-SVM exact-cursor Borsh 与 EVM aggregate ABI；不把 codec geometry 混入 account/storage。
+sentinel 迁到 `Evm.Codec`。R1-002 source slice 已加入 allocation-free shared
+`FixedBytes n` / u128/u256 并由 Extract 推导固定 limb metadata；下一切片绑定 SVM
+exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 account/storage。
 
 ## 已做
 
-- **当前可验证基线（2026-08-27）**：Lean 汇总 236 jobs；SVM manifest 全 51 programs；
+- **当前可验证基线（2026-08-27）**：Lean 汇总 237 jobs；SVM manifest 全 51 programs；
   Mollusk 全量 285/285（Phoenix-v1 profile 76/76、RawEntry 11/11）；EVM manifest 全
   15 programs 且 Anvil 15/15。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
@@ -92,14 +93,21 @@ SVM exact-cursor Borsh 与 EVM aggregate ABI；不把 codec geometry 混入 acco
   `paramTypes`/`retTypes`；EVM selector、word guard、wide carrier 和 ABI JSON 消费 typed
   metadata。历史 `1/2/4/8/20/32/33` 只在 `Evm.Codec` compatibility boundary 恢复旧
   Golden/Legacy fixture，`Crypto.Keccak` 和 production `Evm.Emit` 不再解释这些 sentinel。
-  这不是 aggregate codec 完成声明：SVM RawEntry 仍未从任意 descriptor 自动生成 Borsh，
-  shared `FixedBytes n` / u128/u256 source values 仍属下一切片。详见
+  这不是 aggregate codec 完成声明：SVM RawEntry 仍未从任意 descriptor 自动生成 Borsh。详见
   `docs/plan/tasks/r1-001.md`。本切片最终门：Lean Tests 236 jobs、SVM 51 programs、locked
   Mollusk 285/285、EVM 15 programs、Anvil 15/15；ownership、whitespace、Markdown link 与
   production Emit width-sentinel static guards 全绿。SVM ELF 未改变，因此不重复 Surfpool
   部署门。
 
-- `lake build Tests` 当前 236 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- R1-002 allocation-free source-values slice 已完成：`Core.Value` 以固定 UInt64 limbs 提供
+  shared `UInt128` / `UInt256` / literal `FixedBytes n`（`1 ≤ n ≤ 32`），不包含 Array、Map、
+  heap buffer 或 pointer。Extract 推导 typed metadata 与 2/4/`ceil(n/8)` return limbs；
+  非 literal、0-byte、33-byte 形状 fail closed。EVM 旧 UInt256/Bytes32 名保留为兼容 alias，
+  ABI 与 storage 物理布局仍由 target 所有。这仍不是 target codec 完成声明：下一片才做
+  SVM exact-cursor Borsh、EVM u128/left-aligned bytesN guards/returns 和 cross-target fixture。
+  详见 `docs/plan/tasks/r1-002.md`。
+
+- `lake build Tests` 当前 237 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 285/285，其中 RawEntry 11/11、Phoenix-v1 profile
   76/76。

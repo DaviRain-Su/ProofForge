@@ -2,6 +2,7 @@ import Lean
 import ProofForge.Extract.Ops
 import ProofForge.Profile
 import ProofForge.Attr
+import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.Codec
@@ -25,17 +26,46 @@ private def isConstNamed (e : Expr) (n : Name) : Bool :=
   e.consumeMData.getAppFn.constName? == some n
 
 private def addr20Name : Name := ``ProofForge.Evm.Runtime.Addr20
-private def uint256Name : Name := ``ProofForge.Evm.Runtime.UInt256
-private def bytes32Name : Name := ``ProofForge.Evm.Runtime.Bytes32
+private def uint128Name : Name := ``ProofForge.Core.Value.UInt128
+private def uint256Name : Name := ``ProofForge.Core.Value.UInt256
+private def fixedBytesName : Name := ``ProofForge.Core.Value.FixedBytes
+private def evmUInt256AliasName : Name := ``ProofForge.Evm.Runtime.UInt256
+private def evmBytes32AliasName : Name := ``ProofForge.Evm.Runtime.Bytes32
+
+private def natLiteral? (e : Expr) : Option Nat :=
+  let rec go (fuel : Nat) (e : Expr) : Option Nat :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      match e with
+      | .lit (.natVal n) => some n
+      | _ =>
+        if e.getAppFn.constName? == some ``OfNat.ofNat then
+          e.getAppArgs.findSome? (go fuel')
+        else none
+  go 8 e
+
+private def fixedBytesSize? (e : Expr) : Option Nat := do
+  let e := e.consumeMData
+  if e.getAppFn.constName? == some evmBytes32AliasName then return 32
+  if e.getAppFn.constName? != some fixedBytesName then none else pure ()
+  let size ← e.getAppArgs.back?
+  let n ← natLiteral? size
+  if Core.Value.FixedBytes.validSize n then some n else none
 
 private def isAddr20Type (e : Expr) : Bool :=
   e.consumeMData.getAppFn.constName? == some addr20Name
 
+private def isUInt128Type (e : Expr) : Bool :=
+  e.consumeMData.getAppFn.constName? == some uint128Name
+
 private def isUInt256Type (e : Expr) : Bool :=
-  e.consumeMData.getAppFn.constName? == some uint256Name
+  let name := e.consumeMData.getAppFn.constName?
+  name == some uint256Name || name == some evmUInt256AliasName
 
 private def isBytes32Type (e : Expr) : Bool :=
-  e.consumeMData.getAppFn.constName? == some bytes32Name
+  fixedBytesSize? e == some 32
 
 private def addr20ProjLeaf (n : Name) : Option String :=
   let last := Core.IR.lastName n.toString
@@ -50,15 +80,20 @@ private def addr20ProjLeaf (n : Name) : Option String :=
 
 private def uint256ProjLeaf (n : Name) : Option String :=
   let last := Core.IR.lastName n.toString
-  if n == ``ProofForge.Evm.Runtime.UInt256.w0 || n.toString.endsWith ".UInt256.w0" then some "w0"
-  else if n == ``ProofForge.Evm.Runtime.UInt256.w1 || n.toString.endsWith ".UInt256.w1" then some "w1"
-  else if n == ``ProofForge.Evm.Runtime.UInt256.w2 || n.toString.endsWith ".UInt256.w2" then some "w2"
-  else if n == ``ProofForge.Evm.Runtime.UInt256.w3 || n.toString.endsWith ".UInt256.w3" then some "w3"
+  if n == ``ProofForge.Core.Value.UInt128.w0 ||
+      n == ``ProofForge.Core.Value.UInt256.w0 ||
+      n == ``ProofForge.Core.Value.FixedBytes.w0 then some "w0"
+  else if n == ``ProofForge.Core.Value.UInt128.w1 ||
+      n == ``ProofForge.Core.Value.UInt256.w1 ||
+      n == ``ProofForge.Core.Value.FixedBytes.w1 then some "w1"
+  else if n == ``ProofForge.Core.Value.UInt256.w2 ||
+      n == ``ProofForge.Core.Value.FixedBytes.w2 then some "w2"
+  else if n == ``ProofForge.Core.Value.UInt256.w3 ||
+      n == ``ProofForge.Core.Value.FixedBytes.w3 then some "w3"
   else if last == "w0" || last == "w1" || last == "w2" || last == "w3" then
     match n with
     | .str p _ =>
-        if p == uint256Name || p.toString.endsWith ".UInt256" ||
-            p == bytes32Name || p.toString.endsWith ".Bytes32" then some last
+        if p == uint128Name || p == uint256Name || p == fixedBytesName then some last
         else none
     | _ => none
   else none
@@ -1324,10 +1359,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 let aE := bargs[bargs.size - 2]!
                 let bE := bargs[bargs.size - 1]!
                 let limbConst : String → Name
-                  | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
-                  | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
-                  | "w2" => ``ProofForge.Evm.Runtime.UInt256.w2
-                  | _ => ``ProofForge.Evm.Runtime.UInt256.w3
+                  | "w0" => ``ProofForge.Core.Value.UInt256.w0
+                  | "w1" => ``ProofForge.Core.Value.UInt256.w1
+                  | "w2" => ``ProofForge.Core.Value.UInt256.w2
+                  | _ => ``ProofForge.Core.Value.UInt256.w3
                 let limbVal (base : Expr) (name : String) : Option Ops.Val :=
                   asVal env fuel' (mkApp (mkConst (limbConst name)) base)
                 match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
@@ -1494,10 +1529,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let aE := args[args.size - 2]!
             let bE := args[args.size - 1]!
             let limbConst : String → Name
-              | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
-              | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
-              | "w2" => ``ProofForge.Evm.Runtime.UInt256.w2
-              | _ => ``ProofForge.Evm.Runtime.UInt256.w3
+              | "w0" => ``ProofForge.Core.Value.UInt256.w0
+              | "w1" => ``ProofForge.Core.Value.UInt256.w1
+              | "w2" => ``ProofForge.Core.Value.UInt256.w2
+              | _ => ``ProofForge.Core.Value.UInt256.w3
             let limbVal (base : Expr) (name : String) : Option Ops.Val :=
               asVal env fuel' (mkApp (mkConst (limbConst name)) base)
             match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
@@ -1943,7 +1978,7 @@ private def uint256CtorFields (env : Environment) (e : Expr) : Option (Array Exp
   | some n =>
     match env.find? n with
     | some (.ctorInfo c) =>
-      if (c.induct == uint256Name || c.induct == bytes32Name) && e.getAppArgs.size ≥ 4 then
+      if (c.induct == uint256Name || c.induct == fixedBytesName) && e.getAppArgs.size ≥ 4 then
         some (e.getAppArgs.extract (e.getAppArgs.size - 4) e.getAppArgs.size)
       else none
     | _ => none
@@ -1952,10 +1987,10 @@ private def uint256Leaves (env : Environment) (e : Expr) :
     Ops.Val × Ops.Val × Ops.Val × Ops.Val :=
   let e := unfoldUserHelpers env 8 e
   let projConst : String → Name
-    | "w0" => ``ProofForge.Evm.Runtime.UInt256.w0
-    | "w1" => ``ProofForge.Evm.Runtime.UInt256.w1
-    | "w2" => ``ProofForge.Evm.Runtime.UInt256.w2
-    | _ => ``ProofForge.Evm.Runtime.UInt256.w3
+    | "w0" => ``ProofForge.Core.Value.UInt256.w0
+    | "w1" => ``ProofForge.Core.Value.UInt256.w1
+    | "w2" => ``ProofForge.Core.Value.UInt256.w2
+    | _ => ``ProofForge.Core.Value.UInt256.w3
   let proj (name : String) : Ops.Val :=
     (val env (mkApp (mkConst (projConst name)) e)).getD (flattenField (.arg 0) name)
   match uint256CtorFields env e with
@@ -1976,10 +2011,10 @@ private def uint256Leaves (env : Environment) (e : Expr) :
 private def bytes32Leaves (env : Environment) (e : Expr) :
     Ops.Val × Ops.Val × Ops.Val × Ops.Val :=
   let projConst : String → Name
-    | "w0" => ``ProofForge.Evm.Runtime.Bytes32.w0
-    | "w1" => ``ProofForge.Evm.Runtime.Bytes32.w1
-    | "w2" => ``ProofForge.Evm.Runtime.Bytes32.w2
-    | _ => ``ProofForge.Evm.Runtime.Bytes32.w3
+    | "w0" => ``ProofForge.Core.Value.FixedBytes.w0
+    | "w1" => ``ProofForge.Core.Value.FixedBytes.w1
+    | "w2" => ``ProofForge.Core.Value.FixedBytes.w2
+    | _ => ``ProofForge.Core.Value.FixedBytes.w3
   let proj (name : String) : Ops.Val :=
     (val env (mkApp (mkConst (projConst name)) e)).getD (flattenField (.arg 0) name)
   match uint256CtorFields env e with
@@ -2708,7 +2743,7 @@ private partial def flattenInitValue (env : Environment) (fuel : Nat) (ty e : Ex
       else if tyName? == some addr20Name then
         let (w0, w1, w2) := addr20Leaves env e
         some #[w0, w1, w2]
-      else if tyName? == some uint256Name then
+      else if isUInt256Type ty then
         let (w0, w1, w2, w3) := uint256Leaves env e
         some #[w0, w1, w2, w3]
       else if tyName? == some ``Bool then
@@ -2770,7 +2805,8 @@ private def asStateFields (env : Environment) (e : Expr) : Option (Array Ops.Val
   let fields ← userCtorFields env (substLets 32 e)
   let ctor ← (substLets 32 e).getAppFn.constName?
   let .ctorInfo info ← env.find? ctor | none
-  if info.induct == addr20Name || info.induct == uint256Name then none else pure ()
+  if info.induct == addr20Name || info.induct == uint128Name ||
+      info.induct == uint256Name || info.induct == fixedBytesName then none else pure ()
   let names := getStructureFields env info.induct
   if fields.size != names.size then none else pure ()
   let mut values : Array Ops.Val := #[]
@@ -6072,7 +6108,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   else if (match e.getAppFn.constName? with
       | some name =>
         match env.find? name with
-        | some info => (resultType 16 info.type).consumeMData.getAppFn.constName? == some bytes32Name
+        | some info => isBytes32Type (resultType 16 info.type)
         | none => false
       | none => false) then
     let (w0, w1, w2, w3) := bytes32Leaves env (unfoldUserHelpers env 8 e)
@@ -6099,8 +6135,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       (match e.getAppFn.constName? with
         | some n =>
           match env.find? n with
-          | some info =>
-            (resultType 16 info.type).consumeMData.getAppFn.constName? == some uint256Name
+          | some info => isUInt256Type (resultType 16 info.type)
           | none => false
         | none => false) then
     let (w0, w1, w2, w3) := uint256Leaves env e
@@ -6985,8 +7020,10 @@ private def codecScalarOfType (e : Expr) : Option Core.Codec.Scalar :=
   | some ``UInt64 => some .uint64
   | some n =>
       if n == addr20Name then some .address20
-      else if n == uint256Name then some .uint256
-      else if n == bytes32Name then some .bytes32
+      else if n == uint128Name then some .uint128
+      else if n == uint256Name || n == evmUInt256AliasName then some .uint256
+      else if n == fixedBytesName || n == evmBytes32AliasName then
+        (fixedBytesSize? e).map (.fixedBytes ·)
       else none
   | none => none
 
@@ -6994,7 +7031,7 @@ private def legacyWidthOfScalar : Core.Codec.Scalar → Nat
   | type =>
       match Evm.Codec.legacyWidthOfScalar type with
       | .ok width => width
-      | .error _ => 8
+      | .error _ => type.byteWidth
 
 private def widthOfType (e : Expr) : Option Nat :=
   (codecScalarOfType e).map legacyWidthOfScalar
@@ -7336,17 +7373,19 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .errorOverflow => .errorOverflow
       | .errorNamed n => .errorNamed n
   let ops := ops0.map (flipOp 128)
-  let expandWide (ops : Array Ops.Op) (width : Nat) : Array Ops.Op :=
+  let expandWide (ops : Array Ops.Op) (limbCount : Nat) : Array Ops.Op :=
     match ops.toList with
     | [.returnU64 v] =>
-      let names := if width == 32 then #["w0", "w1", "w2", "w3"] else #["w0", "w1", "w2"]
+      let names := #["w0", "w1", "w2", "w3"].extract 0 limbCount
       names.map fun n => .returnU64 (flattenField v n)
     | _ => ops
   let ops :=
     let retTy := peelForalls info.type
-    if isUInt256Type retTy || isBytes32Type retTy then expandWide ops 32
-    else if isAddr20Type retTy then expandWide ops 20
-    else ops
+    match codecScalarOfType retTy with
+    | some (.uint bits) => if 64 < bits then expandWide ops ((bits + 63) / 64) else ops
+    | some (.fixedBytes bytes) => expandWide ops ((bytes + 7) / 8)
+    | some (.address 20) => expandWide ops 3
+    | _ => ops
   let paramCount :=
     match kind with
     | .init => if nLams = 0 then 1 else nLams
@@ -7358,8 +7397,10 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     match kind with
     | .get =>
       if isAddr20Type retTy then #[20]
+      else if isUInt128Type retTy then #[16]
       else if isUInt256Type retTy then #[32]
       else if isBytes32Type retTy then #[33]
+      else if let some bytes := fixedBytesSize? retTy then #[bytes]
       else if widthOfType retTy == some 1 then #[1]
       else if widthOfType retTy == some 2 then #[2]
       else if widthOfType retTy == some 4 then #[4]
@@ -7381,8 +7422,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     match kind with
     | .get =>
       if isAddr20Type retTy then 3
+      else if isUInt128Type retTy then 2
       else if isUInt256Type retTy then 4
-      else if isBytes32Type retTy then 4
+      else if let some bytes := fixedBytesSize? retTy then (bytes + 7) / 8
       else
         let nRet := ops.foldl (init := 0) fun acc op =>
           match op with | .returnU64 _ => acc + 1 | _ => acc
@@ -7459,7 +7501,7 @@ private def leafSchema (env : Environment) (fuel : Nat) (name : String)
           { place := place.push (.field "Addr20" 2 "w2"), name := s!"{name}_w2", ty := .uint 64 }
         ]
       }
-    else if ty.getAppFn.constName? == some uint256Name then
+    else if isUInt256Type ty then
       .ok {
         leaves := #[
           { place := place.push (.field "UInt256" 0 "w0"), name := s!"{name}_w0", ty := .uint 64 },
@@ -8119,15 +8161,15 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
   let ret := peelForalls info.type
   if isExceptType ret then
     return .increment
-  if isUInt64Type ret || (widthOfType ret).isSome || isAddr20Type ret ||
-      isUInt256Type ret || isBytes32Type ret then
+  if isUInt64Type ret || (codecScalarOfType ret).isSome then
     return .get
   if ret.getAppFn.constName? == some ``Prod then
     return .get
   if let some structName := ret.getAppFn.constName? then
     if isStructure env structName && structName != ``UInt64 &&
         structName != ``Prod && structName != addr20Name &&
-        structName != uint256Name && structName != bytes32Name then
+        structName != uint128Name && structName != uint256Name &&
+        structName != fixedBytesName then
       return .init
   throw s!"extract/unsupported: cannot classify {n}"
 
