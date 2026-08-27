@@ -245,13 +245,111 @@ private def emitBorshArgs (context : Context) (method : IR.Method)
 "
   return out ++ s!"  jne r7, r9, {err}\n"
 
+private def emitZeroBorshLocals (context : Context) (base : Nat)
+    (locals : Array Nat) : Except String String := do
+  let mut out := "  lddw r1, 0\n"
+  for localIndex in locals do
+    let some stackOff := context.scalarLocalStackOff (base + localIndex)
+      | throw "extract/unsupported: Borsh plan exceeds scalar local scratch"
+    out := out ++ s!"  stxdw [r10 - {stackOff}], r1\n"
+  return out
+
+private partial def emitBorshDecode (context : Context) (base : Nat) (err scope : String)
+    (fresh : Nat) : BorshDecode → Except String (String × Nat)
+  | .sequence items => do
+      let mut out := ""
+      let mut nonce := fresh
+      for item in items do
+        let (body, next) ← emitBorshDecode context base err scope nonce item
+        out := out ++ body
+        nonce := next
+      return (out, nonce)
+  | .scalar localIndex width canonicalBool => do
+      let some stackOff := context.scalarLocalStackOff (base + localIndex)
+        | throw "extract/unsupported: Borsh plan exceeds scalar local scratch"
+      let boolGuard := if canonicalBool then s!"  jgt r1, 1, {err}\n" else ""
+      return (s!"\
+  mov64 r2, r7
+  add64 r2, {width}
+  jgt r2, r9, {err}
+{← emitLoadLE "r7" 0 width}{boolGuard}\
+  stxdw [r10 - {stackOff}], r1
+  add64 r7, {width}
+", fresh)
+  | .option tagLocal payloadLocals payload => do
+      let some tagOff := context.scalarLocalStackOff (base + tagLocal)
+        | throw "extract/unsupported: Borsh plan exceeds scalar local scratch"
+      let noneLabel := s!"borsh_schema_none_{scope}_{fresh}"
+      let doneLabel := s!"borsh_schema_option_done_{scope}_{fresh}"
+      let (payloadBody, next) ← emitBorshDecode context base err scope (fresh + 1) payload
+      return (s!"\
+  jge r7, r9, {err}
+  ldxb r1, [r7 + 0]
+  add64 r7, 1
+  jgt r1, 1, {err}
+  stxdw [r10 - {tagOff}], r1
+  jeq r1, 0, {noneLabel}
+{payloadBody}\
+  ja {doneLabel}
+{noneLabel}:
+{← emitZeroBorshLocals context base payloadLocals}{doneLabel}:
+", next)
+  | .enumeration tagLocal payloadLocals variants => do
+      let some tagOff := context.scalarLocalStackOff (base + tagLocal)
+        | throw "extract/unsupported: Borsh plan exceeds scalar local scratch"
+      let doneLabel := s!"borsh_schema_enum_done_{scope}_{fresh}"
+      let mut out := s!"\
+  jge r7, r9, {err}
+  ldxb r1, [r7 + 0]
+  add64 r7, 1
+  stxdw [r10 - {tagOff}], r1
+{← emitZeroBorshLocals context base payloadLocals}\
+  ldxdw r1, [r10 - {tagOff}]
+"
+      let mut nonce := fresh + 1
+      for i in [0:variants.size] do
+        let nextLabel := s!"borsh_schema_enum_next_{scope}_{nonce}"
+        let (variantBody, next) ← emitBorshDecode context base err scope (nonce + 1) variants[i]!
+        out := out ++ s!"\
+  jne r1, {i}, {nextLabel}
+{variantBody}\
+  ja {doneLabel}
+{nextLabel}:
+"
+        nonce := next
+      return (out ++ s!"  ja {err}\n{doneLabel}:\n", nonce)
+
+/-- Interpret target-owned schema plans with one bounded cursor. All logical values land in fixed
+scalar locals; absent Option payloads and inactive enum lanes are canonical zero. -/
+private def emitSchemaBorshArgs (context : Context) (method : IR.Method)
+    (entry : RawEntry) (err : String) : Except String String := do
+  let base := method.rawArgLocalBase
+  let mut out := s!"\
+  ; decode recursive target-owned Borsh schema with exact cursor consumption
+  mov64 r7, r8
+  add64 r7, {9 + if entry.variant.isSome then 1 else 0}
+  mov64 r9, r8
+  ldxdw r1, [r8 + 0]
+  add64 r9, 8
+  add64 r9, r1
+"
+  let mut nonce := 0
+  for i in [0:entry.paramBorshPlans.size] do
+    let plan := entry.paramBorshPlans[i]!
+    let localBase := base + entry.paramLeafStart i
+    let (body, next) ← emitBorshDecode context localBase err method.ixName nonce plan.decode
+    out := out ++ body
+    nonce := next
+  return out ++ s!"  jne r7, r9, {err}\n"
+
 def emitHandler (context : Context) (method : IR.Method) (entry : RawEntry) :
     Except String String := do
   let label := if method.ixName.isEmpty then IR.ixNameOfLean (IR.lastName method.name)
     else method.ixName
   let err := s!"err_raw_{label}"
   let packed ←
-    if entry.isExact then emitPackedArgs context method entry err
+    if entry.usesSchemaBorsh then emitSchemaBorshArgs context method entry err
+    else if entry.isExact then emitPackedArgs context method entry err
     else emitBorshArgs context method entry err
   let lengthCheck :=
     if entry.isExact then s!"  jne r1, {entry.minDataLen}, {err}\n"

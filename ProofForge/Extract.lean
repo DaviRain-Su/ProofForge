@@ -6949,26 +6949,42 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           .field b s!"{base}_p0"
         | _ => .field (.arg 0) "slot_p0"
       let noneBody := peelMatcherLams 8 noneE
-      let someBody := peelMatcherLams 8 someE
       match decodeExpr env fuel' noneBody (stateful := stateful)
           (preserveLocals := preserveLocals) (localDepth := localDepth)
           (stateType? := stateType?) (deepScalars := deepScalars) with
       | .error r => return .error r
       | .ok noneOps =>
-        let someOps :=
-          match strip someBody with
-          | .bvar _ => #[.returnU64 payload]
+        match strip someE with
+        | .lam _ _ body _ =>
+          match strip body with
+          | .bvar 0 =>
+            return .ok #[.ite .eq tag (.lit 0) noneOps #[.returnU64 payload]]
           | _ =>
+            let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
+            let someBody := peelMatcherLams 8 (body.instantiate1 marker)
             match decodeExpr env fuel' someBody (stateful := stateful)
-                (preserveLocals := preserveLocals) (localDepth := localDepth)
+                (preserveLocals := preserveLocals) (localDepth := localDepth + 1)
                 (stateType? := stateType?) (deepScalars := deepScalars) with
-            | .ok ops =>
-              match ops with
-              | #[.returnU64 (.arg _)] => #[.returnU64 payload]
-              | #[.returnState (.arg _)] => #[.returnU64 payload]
-              | _ => ops
-            | .error _ => #[.returnU64 payload]
-        return .ok #[.ite .eq tag (.lit 0) noneOps someOps]
+            | .ok someOps =>
+              return .ok #[.ite .eq tag (.lit 0) noneOps
+                (#[.letLocal localDepth payload] ++ someOps)]
+            | .error r => return .error r
+        | _ =>
+          let someBody := peelMatcherLams 8 someE
+          let someOps :=
+            match strip someBody with
+            | .bvar _ => #[.returnU64 payload]
+            | _ =>
+              match decodeExpr env fuel' someBody (stateful := stateful)
+                  (preserveLocals := preserveLocals) (localDepth := localDepth)
+                  (stateType? := stateType?) (deepScalars := deepScalars) with
+              | .ok ops =>
+                match ops with
+                | #[.returnU64 (.arg _)] => #[.returnU64 payload]
+                | #[.returnState (.arg _)] => #[.returnU64 payload]
+                | _ => ops
+              | .error _ => #[.returnU64 payload]
+          return .ok #[.ite .eq tag (.lit 0) noneOps someOps]
     else
       return decodePlain env e stateful localDepth stateType? deepScalars
 

@@ -2,6 +2,51 @@ import ProofForge.Core.Codec
 
 namespace ProofForge.Svm.EntryAdapter
 
+/-- One target-owned Borsh decoder tree. Local indexes refer to fixed scalar scratch slots, never
+to account offsets or native pointers. Tagged nodes make branch-dependent wire geometry explicit
+without adding a source Op or a main-emitter case. -/
+inductive BorshDecode where
+  | sequence (items : Array BorshDecode)
+  | scalar (localIndex : Nat) (width : Nat) (canonicalBool : Bool)
+  | option (tagLocal : Nat) (payloadLocals : Array Nat) (payload : BorshDecode)
+  | enumeration (tagLocal : Nat) (payloadLocals : Array Nat)
+      (variants : Array BorshDecode)
+  deriving BEq, Repr, Inhabited
+
+/-- A source projection into one fixed scalar range of a Borsh parameter. Empty `sourceName`
+denotes the parameter itself; all other names match Extract's flattened compatibility spelling. -/
+structure BorshProjection where
+  sourceName : String
+  localStart : Nat
+  partCount : Nat
+  deriving BEq, Repr, Inhabited
+
+/-- Complete target-owned plan for one logical parameter. `localWidths` describes the fixed
+invocation-local representation; min/max describe only its conditional Borsh wire bytes. -/
+structure BorshPlan where
+  decode : BorshDecode
+  projections : Array BorshProjection
+  localWidths : Array Nat
+  localBooleans : Array Bool
+  minBytes : Nat
+  maxBytes : Nat
+  deriving BEq, Repr, Inhabited
+
+def BorshPlan.localCount (plan : BorshPlan) : Nat := plan.localWidths.size
+
+private partial def BorshDecode.canonical : BorshDecode → String
+  | .sequence items =>
+      s!"s[{String.intercalate "," (items.map BorshDecode.canonical).toList}]"
+  | .scalar localIndex width canonicalBool =>
+      s!"v{localIndex}.{width}.{if canonicalBool then 1 else 0}"
+  | .option tagLocal payloadLocals payload =>
+      let locals := String.intercalate "," (payloadLocals.map toString).toList
+      s!"o{tagLocal}.[{locals}]({payload.canonical})"
+  | .enumeration tagLocal payloadLocals variants =>
+      let locals := String.intercalate "," (payloadLocals.map toString).toList
+      let bodies := String.intercalate "," (variants.map BorshDecode.canonical).toList
+      s!"e{tagLocal}.[{locals}][{bodies}]"
+
 /-- A packed Solana instruction selected by one leading u8. Parameters are widened to the normal
 ProofForge scalar representation before the method CFG runs. Account indexes are physical outer
 instruction indexes, unlike CPI metas, which remain relative to the external-account region. -/
@@ -21,6 +66,9 @@ structure RawEntry where
   paramLeafCounts : Array Nat := #[]
   /-- Canonical Borsh Bool guards, one flag per physical scalar local. -/
   paramLeafBooleans : Array Bool := #[]
+  /-- Recursive target-owned plans for tagged logical parameters. Empty retains the exact static
+  leaf path and the legacy explicit Option adapter. -/
+  paramBorshPlans : Array BorshPlan := #[]
   /-- Width of each Borsh `Option<T>` payload at the end of the wire plan. The corresponding method
   parameters are `(u8 presence, T value)` pairs after the fixed prefix. -/
   optionWidths : Array Nat := #[]
@@ -65,18 +113,28 @@ def RawEntry.fixedLeafCount (entry : RawEntry) : Nat :=
   if entry.paramLeafCounts.isEmpty then entry.fixedParamCount
   else (entry.paramLeafCounts.extract 0 entry.fixedParamCount).foldl (init := 0) (· + ·)
 
+def RawEntry.usesSchemaBorsh (entry : RawEntry) : Bool := !entry.paramBorshPlans.isEmpty
+
 def RawEntry.minDataLen (entry : RawEntry) : Nat :=
-  let fixedWidths := entry.wireParamWidths.extract 0 entry.fixedLeafCount
-  1 + (if entry.variant.isSome then 1 else 0) +
-    fixedWidths.foldl (init := 0) (· + ·) + entry.optionWidths.size
+  let selectorBytes := 1 + if entry.variant.isSome then 1 else 0
+  if entry.usesSchemaBorsh then
+    selectorBytes + entry.paramBorshPlans.foldl (init := 0) fun size plan =>
+      size + plan.minBytes
+  else
+    let fixedWidths := entry.wireParamWidths.extract 0 entry.fixedLeafCount
+    selectorBytes + fixedWidths.foldl (init := 0) (· + ·) + entry.optionWidths.size
 
 def RawEntry.maxDataLen (entry : RawEntry) : Nat :=
-  entry.minDataLen + entry.optionWidths.foldl (init := 0) (· + ·)
+  if entry.usesSchemaBorsh then
+    1 + (if entry.variant.isSome then 1 else 0) +
+      entry.paramBorshPlans.foldl (init := 0) fun size plan => size + plan.maxBytes
+  else
+    entry.minDataLen + entry.optionWidths.foldl (init := 0) (· + ·)
 
 /-- Compatibility accessor for exact entries; variable entries report their maximum wire length. -/
 def RawEntry.dataLen (entry : RawEntry) : Nat := entry.maxDataLen
 
-def RawEntry.isExact (entry : RawEntry) : Bool := entry.optionWidths.isEmpty
+def RawEntry.isExact (entry : RawEntry) : Bool := entry.minDataLen == entry.maxDataLen
 
 def RawEntry.canonical (entry : RawEntry) : String :=
   let widths := String.intercalate "," (entry.paramWidths.map toString).toList
@@ -95,7 +153,11 @@ def RawEntry.canonical (entry : RawEntry) : String :=
         if guard then some (toString i) else none).filterMap id |>.toList
       s!"{base}.borsh-bool.[{guards}]"
   let base :=
-    if entry.optionWidths.isEmpty then base
+    if entry.usesSchemaBorsh then
+      let plans := String.intercalate "," <| entry.paramBorshPlans.map
+        (fun plan => s!"{plan.minBytes}-{plan.maxBytes}:{plan.decode.canonical}") |>.toList
+      s!"{base}.borsh-schema.[{plans}]"
+    else if entry.optionWidths.isEmpty then base
     else
       let options := String.intercalate "," (entry.optionWidths.map toString).toList
       s!"{base}.borsh-options.[{options}]"
@@ -152,6 +214,189 @@ def staticBorshLeaves (schema : Core.Codec.Schema) : Except String (Array BorshL
   let leaves ← Core.Codec.staticLeaves schema
   leaves.mapM fun logical => return { logical, widths := ← scalarLeafWidths logical.type }
 
+private partial def BorshDecode.shift (offset : Nat) : BorshDecode → BorshDecode
+  | .sequence items => .sequence (items.map (BorshDecode.shift offset))
+  | .scalar localIndex width canonicalBool =>
+      .scalar (offset + localIndex) width canonicalBool
+  | .option tagLocal payloadLocals payload =>
+      .option (offset + tagLocal) (payloadLocals.map (offset + ·)) (payload.shift offset)
+  | .enumeration tagLocal payloadLocals variants =>
+      .enumeration (offset + tagLocal) (payloadLocals.map (offset + ·))
+        (variants.map (BorshDecode.shift offset))
+
+private def BorshProjection.shift (projection : BorshProjection) (offset : Nat) :
+    BorshProjection :=
+  { projection with localStart := offset + projection.localStart }
+
+private def BorshPlan.shift (plan : BorshPlan) (offset : Nat) : BorshPlan :=
+  { plan with
+    decode := plan.decode.shift offset
+    projections := plan.projections.map (·.shift offset) }
+
+private def sequencePlans (plans : Array BorshPlan) : BorshPlan := Id.run do
+  let mut items := #[]
+  let mut projections := #[]
+  let mut widths := #[]
+  let mut booleans := #[]
+  let mut minBytes := 0
+  let mut maxBytes := 0
+  for plan in plans do
+    let shifted := plan.shift widths.size
+    items := items.push shifted.decode
+    projections := projections ++ shifted.projections
+    widths := widths ++ plan.localWidths
+    booleans := booleans ++ plan.localBooleans
+    minBytes := minBytes + plan.minBytes
+    maxBytes := maxBytes + plan.maxBytes
+  return {
+    decode := .sequence items
+    projections
+    localWidths := widths
+    localBooleans := booleans
+    minBytes
+    maxBytes
+  }
+
+private def sourceChild (sourcePrefix child : String) : String :=
+  if sourcePrefix.isEmpty then child else sourcePrefix ++ "_" ++ child
+
+private def scalarBorshPlan (sourcePrefix : String) (type : Core.Codec.Scalar) :
+    Except String BorshPlan := do
+  let widths ← scalarLeafWidths type
+  let nodes := widths.mapIdx fun localIndex width =>
+    BorshDecode.scalar localIndex width (type == .boolean)
+  return {
+    decode := .sequence nodes
+    projections := #[{ sourceName := sourcePrefix, localStart := 0, partCount := widths.size }]
+    localWidths := widths
+    localBooleans := Array.replicate widths.size (type == .boolean)
+    minBytes := widths.foldl (init := 0) (· + ·)
+    maxBytes := widths.foldl (init := 0) (· + ·)
+  }
+
+private def localRange (start count : Nat) : Array Nat := Id.run do
+  let mut result := #[]
+  for i in [0:count] do result := result.push (start + i)
+  return result
+
+/-- Extract currently represents payload enums as a tag plus the largest sequence of constructor
+`UInt64` fields. Preserve that fixed source representation while allowing each Borsh variant to
+have its own exact wire length. Richer enum payloads remain closed until the source representation
+can name their fields without ambiguity. -/
+private def enumPayloadPlan (base : String) : Core.Codec.Schema → Except String BorshPlan
+  | .unit => pure (sequencePlans #[])
+  | .scalar (.uint 64) => scalarBorshPlan (base ++ "_p0") .uint64
+  | .tuple items => do
+      let mut plans := #[]
+      for i in [0:items.size] do
+        unless items[i]! == .scalar .uint64 do
+          throw "extract/unsupported: SVM Borsh enum constructor fields must be UInt64"
+        plans := plans.push (← scalarBorshPlan (base ++ "_p" ++ toString i) .uint64)
+      return sequencePlans plans
+  | _ => throw "extract/unsupported: SVM Borsh enum constructor fields must be UInt64"
+
+private partial def borshPlanAt (sourcePrefix : String) :
+    Core.Codec.Schema → Except String BorshPlan
+  | .unit => pure (sequencePlans #[])
+  | .scalar type => scalarBorshPlan sourcePrefix type
+  | .tuple items => do
+      let mut plans := #[]
+      for i in [0:items.size] do
+        let child := match i with
+          | 0 => "fst"
+          | 1 => "snd"
+          | _ => toString i
+        plans := plans.push (← borshPlanAt (sourceChild sourcePrefix child) items[i]!)
+      return sequencePlans plans
+  | .record _ fields => do
+      let mut plans := #[]
+      for field in fields do
+        plans := plans.push (← borshPlanAt (sourceChild sourcePrefix field.1) field.2)
+      return sequencePlans plans
+  | .fixedArray length element => do
+      let mut plans := #[]
+      for i in [0:length] do
+        plans := plans.push (← borshPlanAt (sourcePrefix ++ "_" ++ toString i) element)
+      return sequencePlans plans
+  | .option payload => do
+      let base := if sourcePrefix.isEmpty then "slot" else sourcePrefix
+      let payloadPlan ← borshPlanAt (base ++ "_p0") payload
+      let shiftedPayload := payloadPlan.shift 1
+      return {
+        decode := .option 0 (localRange 1 payloadPlan.localCount) shiftedPayload.decode
+        projections := #[{
+          sourceName := base ++ "_tag"
+          localStart := 0
+          partCount := 1
+        }] ++ shiftedPayload.projections
+        localWidths := #[1] ++ payloadPlan.localWidths
+        localBooleans := #[false] ++ payloadPlan.localBooleans
+        minBytes := 1
+        maxBytes := 1 + payloadPlan.maxBytes
+      }
+  | .enumeration _ tagBits variants => do
+      unless tagBits == 8 do
+        throw "extract/unsupported: canonical Borsh enum tags must be u8"
+      unless !variants.isEmpty && variants.size ≤ 256 do
+        throw "extract/unsupported: canonical Borsh enum variants must fit u8"
+      let base := if sourcePrefix.isEmpty then "variant" else sourcePrefix
+      let plans ← variants.mapM fun variant => enumPayloadPlan base variant.2
+      let maxLocals := plans.foldl (init := 0) fun count plan => max count plan.localCount
+      let mut widths := Array.replicate maxLocals 0
+      let mut booleans := Array.replicate maxLocals false
+      for plan in plans do
+        for i in [0:plan.localCount] do
+          let width := plan.localWidths[i]!
+          if widths[i]! != 0 && widths[i]! != width then
+            throw "extract/unsupported: SVM Borsh enum payload slots have incompatible widths"
+          widths := widths.set! i width
+          booleans := booleans.set! i (booleans[i]! || plan.localBooleans[i]!)
+      let minPayload := plans.foldl (init := plans[0]!.minBytes) fun size plan =>
+        min size plan.minBytes
+      let maxPayload := plans.foldl (init := 0) fun size plan => max size plan.maxBytes
+      let mut projections : Array BorshProjection := #[{
+        sourceName := base ++ "_tag"
+        localStart := 0
+        partCount := 1
+      }]
+      if maxLocals == 0 then
+        projections := projections.push {
+          sourceName := sourcePrefix
+          localStart := 0
+          partCount := 1
+        }
+      else
+        for i in [0:maxLocals] do
+          projections := projections.push {
+            sourceName := base ++ "_p" ++ toString i
+            localStart := 1 + i
+            partCount := 1
+          }
+      return {
+        decode := .enumeration 0 (localRange 1 maxLocals)
+          (plans.map fun plan => (plan.shift 1).decode)
+        projections
+        localWidths := #[1] ++ widths
+        localBooleans := #[false] ++ booleans
+        minBytes := 1 + minPayload
+        maxBytes := 1 + maxPayload
+      }
+  | .boundedArray .. =>
+      throw "extract/unsupported: SVM bounded arrays require an explicit Borsh length policy"
+
+/-- Derive one recursive SVM-owned Borsh plan from a logical schema. The plan fixes scratch-local
+identity and canonical tag handling but carries no account geometry or application policy. -/
+def borshPlan (schema : Core.Codec.Schema) : Except String BorshPlan := do
+  let _ ← Core.Codec.validate schema
+  borshPlanAt "" schema
+
+private partial def hasTaggedSchema : Core.Codec.Schema → Bool
+  | .option _ | .enumeration .. | .boundedArray .. => true
+  | .tuple items => items.any hasTaggedSchema
+  | .record _ fields => fields.any (hasTaggedSchema ·.2)
+  | .fixedArray _ element => hasTaggedSchema element
+  | .unit | .scalar _ => false
+
 private def parseHeader (parts : List String) : Except String (Nat × Nat × Nat) := do
   let some tag := parts[1]!.toNat?
     | throw "extract/unsupported: malformed svm raw entry tag"
@@ -170,22 +415,31 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
     (paramSchemas : Array Core.Codec.Schema) (retSchema : Core.Codec.Schema) :
     Except String RawEntry := do
   let parts := annotation.splitOn ":"
-  let (paramLeafWidths, paramLeafCounts, paramLeafBooleans) ←
+  let (paramLeafWidths, paramLeafCounts, paramLeafBooleans, paramBorshPlans) ←
     if !paramSchemas.isEmpty then do
       unless paramSchemas.size == paramCount do
         throw "extract/unsupported: svm raw entry parameter schemas are incomplete"
-      let plans ← paramSchemas.mapM staticBorshLeaves
-      let widths := plans.map fun plan => plan.foldl (init := #[]) fun out leaf => out ++ leaf.widths
-      let booleans := plans.foldl (init := #[]) fun out plan =>
-        out ++ plan.foldl (init := #[]) fun flags leaf =>
-          flags ++ Array.replicate leaf.widths.size (leaf.logical.type == .boolean)
-      pure (widths.foldl (init := #[]) (· ++ ·), widths.map (·.size), booleans)
+      if paramSchemas.any hasTaggedSchema then do
+        let plans ← paramSchemas.mapM borshPlan
+        pure (
+          plans.foldl (init := #[]) fun out plan => out ++ plan.localWidths,
+          plans.map (·.localCount),
+          plans.foldl (init := #[]) fun out plan => out ++ plan.localBooleans,
+          plans)
+      else do
+        let plans ← paramSchemas.mapM staticBorshLeaves
+        let widths := plans.map fun plan =>
+          plan.foldl (init := #[]) fun out leaf => out ++ leaf.widths
+        let booleans := plans.foldl (init := #[]) fun out plan =>
+          out ++ plan.foldl (init := #[]) fun flags leaf =>
+            flags ++ Array.replicate leaf.widths.size (leaf.logical.type == .boolean)
+        pure (widths.foldl (init := #[]) (· ++ ·), widths.map (·.size), booleans, #[])
     else if paramTypes.isEmpty then do
       unless paramWidths.size == paramCount do
         throw "extract/unsupported: svm raw entry parameter widths are incomplete"
       unless paramWidths.all supportedWidth do
         throw "extract/unsupported: svm raw entry has unsupported legacy parameter widths"
-      pure (paramWidths, Array.replicate paramCount 1, Array.replicate paramCount false)
+      pure (paramWidths, Array.replicate paramCount 1, Array.replicate paramCount false, #[])
     else do
       unless paramWidths.size == paramCount do
         throw "extract/unsupported: svm raw entry parameter widths are incomplete"
@@ -194,7 +448,9 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
       let plans ← paramTypes.mapM scalarLeafWidths
       let booleans := (paramTypes.zip plans).foldl (init := #[]) fun out pair =>
         out ++ Array.replicate pair.2.size (pair.1 == .boolean)
-      pure (plans.foldl (init := #[]) (· ++ ·), plans.map (·.size), booleans)
+      pure (plans.foldl (init := #[]) (· ++ ·), plans.map (·.size), booleans, #[])
+  if hasTaggedSchema retSchema then
+    throw "extract/unsupported: SVM tagged Borsh return binding is not implemented"
   let inferredReturnWidths ←
     if retTypes.isEmpty then
       match staticBorshLeaves retSchema with
@@ -284,8 +540,8 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
       throw "extract/unsupported: malformed svm raw entry annotation"
   let entry := {
     tag, accountCount, programAccount, paramCount, variant, paramWidths, paramLeafWidths,
-    paramLeafCounts, paramLeafBooleans, optionWidths, returnWidths, inferredReturnWidths,
-    optionalReturnData
+    paramLeafCounts, paramLeafBooleans, paramBorshPlans, optionWidths, returnWidths,
+    inferredReturnWidths, optionalReturnData
   }
   unless entry.maxDataLen ≤ 1024 do
     throw "extract/unsupported: svm raw entry data exceeds 1024 bytes"

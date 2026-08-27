@@ -200,9 +200,29 @@ private def schemaIsScalar : Core.Codec.Schema → Bool
   | .scalar _ => true
   | _ => false
 
+private def resolveBorshProjection (plan : EntryAdapter.BorshPlan) (name : String) :
+    Except String (Nat × Nat) := do
+  let mut found : Array (Nat × Nat) := #[]
+  for projection in plan.projections do
+    if name == projection.sourceName && projection.partCount == 1 then
+      found := found.push (projection.localStart, 0)
+    else if !projection.sourceName.isEmpty &&
+        name.startsWith (projection.sourceName ++ "_") then
+      let suffix := name.drop (projection.sourceName.length + 1) |>.copy
+      if let some part := rawLimbIndex suffix then
+        if part < projection.partCount then
+          found := found.push (projection.localStart, part)
+  unless found.size == 1 do
+    let shown := if name.isEmpty then "<parameter>" else name
+    throw s!"extract/unsupported: Borsh projection {shown} is missing or ambiguous"
+  return found[0]!
+
 private def rawAggregateProjection (schemas : Array Core.Codec.Schema)
     (entry : EntryAdapter.RawEntry) (index : Nat) (name : String) :
     Except String (Nat × Nat) := do
+  if let some plan := entry.paramBorshPlans[index]? then
+    let (localStart, part) ← resolveBorshProjection plan name
+    return (entry.paramLeafStart index + localStart, part)
   let some schema := schemas[index]?
     | throw "extract/unsupported: raw aggregate parameter schema is missing"
   let leaves ← EntryAdapter.staticBorshLeaves schema
@@ -218,6 +238,9 @@ private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
   | .arg index => do
       unless index < entry.logicalParamCount do
         throw "extract/unsupported: raw entry cannot access managed State"
+      if entry.usesSchemaBorsh then
+        let (localStart, part) ← rawAggregateProjection schemas entry index ""
+        return .local (base + localStart + part)
       if schemas.size == entry.logicalParamCount && !schemaIsScalar schemas[index]! then
         throw s!"extract/unsupported: raw aggregate parameter {index} requires a scalar projection"
       unless entry.paramLeafCount index == 1 do
@@ -227,7 +250,8 @@ private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
   | .field (.arg index) name => do
       unless index < entry.logicalParamCount do
         throw "extract/unsupported: raw entry cannot access managed State"
-      if schemas.size == entry.logicalParamCount && !schemaIsScalar schemas[index]! then
+      if entry.usesSchemaBorsh ||
+          (schemas.size == entry.logicalParamCount && !schemaIsScalar schemas[index]!) then
         let (leafStart, limb) ← rawAggregateProjection schemas entry index name
         return .local (base + leafStart + limb)
       let some limb := rawLimbIndex name

@@ -21,6 +21,13 @@ structure AggregateRequest where
   amount : UInt64
   details : AggregateMeta
 
+/-- An ordinary Lean tagged union used to prove that Borsh variant geometry comes from the SVM
+codec plan rather than one annotation per variant. -/
+inductive TaggedRequest where
+  | idle
+  | one (value : UInt64)
+  | pair (left right : UInt64)
+
 @[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
@@ -106,5 +113,22 @@ def aggregate (_s : State) (request : AggregateRequest) (pair : UInt32 × UInt64
     (if request.details.enabled then (1 : UInt64) else 0) +
     pair.1.toUInt64 + pair.2 + levels[0].toUInt64 + levels[2].toUInt64 +
     (signerKey 1 &&& 0)
+
+/-- Ordinary `Option UInt64` binds directly to canonical Borsh `0 | 1 || payload`. The source
+method receives the logical Option; no presence/value pair appears in its public signature. -/
+@[pf_entry, pf_svm_raw 15 2 0]
+def optionValue (_s : State) (value : Option UInt64) : UInt64 :=
+  match value with
+  | none => 5
+  | some amount => amount + 1
+
+/-- Constructor ordinal and branch-dependent payload lengths are derived from `TaggedRequest`.
+Inactive fixed payload locals are zeroed before the ordinary Lean matcher runs. -/
+@[pf_entry, pf_svm_raw 16 2 0]
+def taggedValue (_s : State) (request : TaggedRequest) : UInt64 :=
+  match request with
+  | .idle => 3
+  | .one value => value + 10
+  | .pair left right => left + right
 
 end Examples.RawEntry

@@ -73,6 +73,21 @@ elab "#pf_guard_entry_adapter" : command => do
   unless sourceAggregate.paramCount == 3 && sourceAggregate.paramWidths.isEmpty &&
       sourceAggregate.paramTypes.isEmpty && sourceAggregate.paramSchemas.size == 3 do
     throwError "wrong aggregate source metadata"
+  let some sourceOption := source.methods.find? (·.ixName == "optionValue")
+    | throwError "missing logical Option raw method"
+  let some sourceTagged := source.methods.find? (·.ixName == "taggedValue")
+    | throwError "missing logical enum raw method"
+  unless sourceOption.annotations == #["svm.raw.v1:15:2:0"] &&
+      sourceOption.paramCount == 1 && sourceOption.paramWidths.isEmpty &&
+      sourceOption.paramSchemas == #[.option (.scalar .uint64)] &&
+      sourceTagged.annotations == #["svm.raw.v1:16:2:0"] &&
+      sourceTagged.paramCount == 1 && sourceTagged.paramWidths.isEmpty &&
+      (match sourceTagged.paramSchemas[0]? with
+        | some (ProofForge.Core.Codec.Schema.enumeration
+            "Examples.RawEntry.TaggedRequest" 8 variants) =>
+            variants.size == 3
+        | _ => false) do
+    throwError "ordinary tagged source schemas were not preserved"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -199,6 +214,30 @@ elab "#pf_guard_entry_adapter" : command => do
     match aggregate.toCFG with
     | .ok graph => pure graph
     | .error reason => throwError s!"aggregate Borsh locals did not reach CFG: {reason}"
+  let some optionValue := program.methods.find? (·.ixName == "optionValue")
+    | throwError "missing projected logical Option method"
+  let some taggedValue := program.methods.find? (·.ixName == "taggedValue")
+    | throwError "missing projected logical enum method"
+  match optionValue.entry, taggedValue.entry with
+  | .raw optionEntry, .raw taggedEntry =>
+      unless optionEntry.tag == 15 && optionEntry.paramBorshPlans.size == 1 &&
+          optionEntry.paramLeafWidths == #[1, 8] && optionEntry.paramLeafCounts == #[2] &&
+          optionEntry.minDataLen == 2 && optionEntry.maxDataLen == 10 &&
+          optionEntry.canonical.contains "borsh-schema.[1-9:o" &&
+          taggedEntry.tag == 16 && taggedEntry.paramBorshPlans.size == 1 &&
+          taggedEntry.paramLeafWidths == #[1, 8, 8] && taggedEntry.paramLeafCounts == #[3] &&
+          taggedEntry.minDataLen == 2 && taggedEntry.maxDataLen == 18 &&
+          taggedEntry.canonical.contains "borsh-schema.[1-17:e" do
+        throwError s!"wrong tagged Borsh plans: {repr optionEntry}, {repr taggedEntry}"
+  | _, _ => throwError "logical tagged method lost its raw adapter"
+  let _ ←
+    match optionValue.toCFG with
+    | .ok graph => pure graph
+    | .error reason => throwError s!"logical Option did not bind to fixed locals: {reason}"
+  let _ ←
+    match taggedValue.toCFG with
+    | .ok graph => pure graph
+    | .error reason => throwError s!"logical enum did not bind to fixed locals: {reason}"
   let bareWide := { echo128 with ops := #[.returnU64 (.arg 0)] }
   match bareWide.toCFG with
   | .error reason =>
@@ -219,6 +258,12 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call enumOptional" &&
       asm.contains "call echo128" && asm.contains "call echoBytes12" &&
       asm.contains "call aggregate" && asm.contains "jne r1, 29, err_raw_aggregate" &&
+      asm.contains "call optionValue" && asm.contains "call taggedValue" &&
+      asm.contains "decode recursive target-owned Borsh schema with exact cursor consumption" &&
+      asm.contains "borsh_schema_none_optionValue_" &&
+      asm.contains "borsh_schema_enum_done_taggedValue_" &&
+      asm.contains "jne r7, r9, err_raw_optionValue" &&
+      asm.contains "jne r7, r9, err_raw_taggedValue" &&
       asm.contains "jgt r1, 1, err_raw_aggregate" &&
       asm.contains "ldxdw r1, [r8 + 9]" && asm.contains "ldxw r1, [r8 + 19]" &&
       asm.contains "ldxh r1, [r8 + 35]" &&
@@ -257,6 +302,14 @@ elab "#pf_guard_entry_adapter" : command => do
 private def accepts (result : Except String α) : Bool :=
   result.isOk
 
+private def hasTaggedBounds (result : Except String EntryAdapter.MethodEntry)
+    (minDataLen maxDataLen localCount : Nat) : Bool :=
+  match result with
+  | .ok (.raw entry) =>
+      entry.minDataLen == minDataLen && entry.maxDataLen == maxDataLen &&
+        entry.paramLeafWidths.size == localCount && entry.paramBorshPlans.size == 1
+  | _ => false
+
 #guard accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 8])
 #guard accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,4,4"] 7 #[1, 1, 8, 1, 4, 1, 4])
 #guard accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,8,8"] 2 #[8, 8] 3)
@@ -269,6 +322,23 @@ private def accepts (result : Except String α) : Bool :=
   #[.fixedBytes 12] #[.fixedBytes 12])
 #guard accepts (EntryAdapter.decode #["svm.raw.v1:15:2:0"] 1 #[] 1
   (paramSchemas := #[.unit]))
+#guard hasTaggedBounds (EntryAdapter.decode #["svm.raw.v1:15:2:0"] 1 #[] 1
+  (paramSchemas := #[.option (.scalar .uint64)])) 2 10 2
+#guard hasTaggedBounds (EntryAdapter.decode #["svm.raw.v1:16:2:0"] 1 #[] 1
+  (paramSchemas := #[.enumeration "Request" 8 #[
+    ("idle", .unit),
+    ("one", .scalar .uint64),
+    ("pair", .tuple #[.scalar .uint64, .scalar .uint64])
+  ]])) 2 18 3
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 1 #[] 1
+  (paramSchemas := #[.record "Nested" #[
+    ("enabled", .scalar .boolean),
+    ("limit", .option (.scalar .uint32))
+  ]]))
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 1 #[] 1
+  (paramSchemas := #[.boundedArray 4 (.scalar .uint64)]))
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 0 #[] 2
+  (retSchema := .option (.scalar .uint64)))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:15:2:0"] 1 #[] 1
   (paramSchemas := #[.unit])
   (retSchema := .record "Pair" #[

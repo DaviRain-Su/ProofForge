@@ -17,6 +17,8 @@ const ENUM_TAG: u8 = 11;
 const U128_TAG: u8 = 12;
 const BYTES12_TAG: u8 = 13;
 const AGGREGATE_TAG: u8 = 14;
+const OPTION_SCHEMA_TAG: u8 = 15;
+const ENUM_SCHEMA_TAG: u8 = 16;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -239,6 +241,59 @@ fn static_aggregates_use_source_order_borsh_and_canonical_bool() {
             trailing.push(0);
             trailing
         },
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &malformed,
+        );
+    }
+}
+
+#[test]
+fn logical_option_and_enum_use_canonical_branch_dependent_borsh() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    let mut some = vec![OPTION_SCHEMA_TAG, 1];
+    some.extend_from_slice(&37u64.to_le_bytes());
+    let mut one = vec![ENUM_SCHEMA_TAG, 1];
+    one.extend_from_slice(&7u64.to_le_bytes());
+    let mut pair = vec![ENUM_SCHEMA_TAG, 2];
+    pair.extend_from_slice(&11u64.to_le_bytes());
+    pair.extend_from_slice(&29u64.to_le_bytes());
+    for (data, expected) in [
+        (vec![OPTION_SCHEMA_TAG, 0], 5u64),
+        (some, 38u64),
+        (vec![ENUM_SCHEMA_TAG, 0], 3u64),
+        (one, 17u64),
+        (pair, 40u64),
+    ] {
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
+
+    let mut short_some = vec![OPTION_SCHEMA_TAG, 1];
+    short_some.extend_from_slice(&37u32.to_le_bytes());
+    let mut short_pair = vec![ENUM_SCHEMA_TAG, 2];
+    short_pair.extend_from_slice(&11u64.to_le_bytes());
+    for malformed in [
+        vec![OPTION_SCHEMA_TAG, 2],
+        short_some,
+        vec![OPTION_SCHEMA_TAG, 0, 0],
+        vec![ENUM_SCHEMA_TAG, 3],
+        short_pair,
+        vec![ENUM_SCHEMA_TAG, 0, 0],
     ] {
         expect_raw_error(
             &mollusk,

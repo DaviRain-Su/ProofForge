@@ -66,8 +66,8 @@ instruction 增加 recipe opcode。
 
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
-| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar 与 static aggregate target binding | tagged/dynamic target policy 与 cross-target conformance fixture |
-| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return | bounded remaining-account view；运行时安全账户索引；tagged/dynamic Borsh policy；更完整 instruction buffer；Token-2022 TLV 语义 |
+| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar 与 static aggregate target binding | EVM tagged policy、bounded-dynamic target policy 与 cross-target conformance fixture |
+| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged Borsh input | bounded remaining-account view；运行时安全账户索引；tagged return/dynamic Borsh policy；更完整 instruction buffer；Token-2022 TLV 语义 |
 | SVM Component | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation | 容器 facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | bounded dynamic ABI 与 aggregate storage 组合；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade | scalar/struct/fixed-array layout facade；access-control/pausable/reentrancy 与 token/NFT reusable components |
@@ -98,8 +98,9 @@ sentinel 迁到 `Evm.Codec`；R1-002 source slice 已落地 shared allocation-fr
 scalar exact-cursor Borsh 和 EVM u128/bytesN canonical ABI binding；R1-004 已完成 bounded
 aggregate source-schema derivation 与 fail-closed target gate；R1-005 已完成 SVM static
 record/product/fixed-vector Borsh binding；R1-006 已完成 EVM canonical tuple/record/fixed-array
-ABI binding。下一切片显式分配 tagged/dynamic target policy，不统一两个 target 的物理
-layout，也不让 Emit 猜 tag/length 表示。
+ABI binding；R1-007 已完成 SVM canonical Option/payload-enum tagged Borsh input binding。
+下一切片给 EVM 定义显式命名的 tagged-value ABI policy，不统一两个 target 的物理 layout，
+也不让 Emit 猜 tag/length 表示。
 
 ## 5. 阶段拆分
 
@@ -143,11 +144,18 @@ fixed-array selector type 与 one-word-per-scalar-leaf plan，IR 区分 logical 
 word count，Emit 复用 canonical scalar guards/return packers，并输出标准 structured ABI JSON；
 详见 [R1-006](tasks/r1-006.md)。
 
+R1-007 已完成 SVM tagged input binding：`Svm.EntryAdapter` 独立选择 canonical Borsh u8 tag、
+branch payload cursor、fixed local projection 与 inactive payload zeroing；一个 recursive codec
+interpreter 覆盖普通 Lean Option 和 bounded UInt64-payload enum，不新增 Ops/Component/main
+Emit case。Tagged return、bounded array 和 richer payload 继续 fail closed；详见
+[R1-007](tasks/r1-007.md)。
+
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
 2. 定义 bounded codec schema：scalar、fixed bytes、tuple/record、enum、`Option`、固定/上限数组。
-3. SVM adapter 实现 Borsh little-endian 与 exact cursor consumption；EVM adapter 实现
-   32-byte ABI word、tuple head 和静态 bounded tail。
+3. SVM adapter 实现 Borsh little-endian、canonical tagged input 与 exact cursor
+   consumption；EVM adapter 实现 32-byte ABI word、tuple head，并将 tagged/bounded tail
+   policy 保持显式。
 4. codec 只描述 wire，不拥有 account/storage geometry，也不执行业务 validation。
 
 ### R2 — SVM Runtime

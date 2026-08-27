@@ -8,6 +8,7 @@ Upgradeable Loader-v3 transactions instead of the `surfnet_writeProgram` direct-
 ```bash
 runtime-tests/surfpool/smoke.sh
 runtime-tests/surfpool/smoke.sh PhoenixV1Profile
+runtime-tests/surfpool/smoke.sh RawEntry
 ```
 
 The script generates temporary payer/program keypairs under ignored `build/surfpool`, receives a
@@ -17,5 +18,5 @@ contacts devnet/mainnet and does not use `solana-test-validator`. Private key fi
 recovery log are removed when the script exits; non-secret RPC evidence remains under `build`.
 
 Successful local deployment proves that the selected ELF passed Surfpool's transaction and Loader
-path. Supported smoke targets are `Phoenix` and `PhoenixV1Profile`. This is not a public-network
-deployment claim.
+path. Supported smoke targets are `Phoenix`, `PhoenixV1Profile`, and `RawEntry`. This is not a
+public-network deployment claim.
