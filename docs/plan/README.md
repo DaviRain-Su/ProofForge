@@ -44,6 +44,7 @@
 | [e-comp-004](tasks/e-comp-004.md) | done | 迁 ETH / LOG / revert / receive 进 Component |
 | [e-comp-005](tasks/e-comp-005.md) | done | hashed-map 源侧静态 handle |
 | [e-comp-006](tasks/e-comp-006.md) | done | 封闭 CALL / WideWord / NativeFx 源侧 facade |
+| [e-comp-007](tasks/e-comp-007.md) | done | Extract 写路径按 Runtime 命名空间收集 |
 | [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |

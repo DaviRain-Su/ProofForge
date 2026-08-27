@@ -4516,19 +4516,6 @@ private def findRuntimeApp (fuel : Nat) (env : Environment) (e : Expr)
         | _ => none
   go fuel e
 
-private def findUnaryRuntime (env : Environment) (want : Name) (suffix : String)
-    (e : Expr) : Option Ops.Val :=
-  if mentionsRuntime env e suffix then
-    match findRuntimeApp 16 env e want suffix with
-    | some app =>
-      if app.getAppArgs.size ≥ 1 then
-        match val env app.getAppArgs[app.getAppArgs.size - 1]! with
-        | some v => some v
-        | none => some (.arg 0)
-      else some (.arg 0)
-    | none => some (.arg 0)
-  else none
-
 private def nthFromEnd (args : Array Expr) (n : Nat) : Option Expr :=
   if args.size ≥ n + 1 then some args[args.size - 1 - n]! else none
 
@@ -4536,37 +4523,6 @@ private def valAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val
   match nthFromEnd args n with
   | some e => (val env e).getD (.arg n)
   | none => .arg n
-
-private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmDeposit ".evmDeposit" e
-
-private def findEvmDeposit256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmDeposit256" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmDeposit256 ".evmDeposit256" with
-    | some app =>
-      match nthFromEnd app.getAppArgs 0 with
-      | some amt =>
-        let (a0, a1, a2, a3) := uint256Leaves env amt
-        some (a0, a1, a2, a3)
-      | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
-  else none
-
-private def findEvmSendEth256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmSendEth256" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSendEth256 ".evmSendEth256" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 1, nthFromEnd args 0 with
-      | some dst, some amt =>
-        let (w0, w1, w2) := addr20Leaves env dst
-        let (a0, a1, a2, a3) := uint256Leaves env amt
-        some (w0, w1, w2, a0, a1, a2, a3)
-      | _, _ => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-  else none
 
 private def findEvmCallValue256 (env : Environment) (e : Expr) : Bool :=
   mentionsRuntime env e "evmCallValue256"
@@ -4576,33 +4532,6 @@ private def findEvmSelfBalance256 (env : Environment) (e : Expr) : Bool :=
 
 private def findEvmDomainSeparator (env : Environment) (e : Expr) : Bool :=
   mentionsRuntime env e "evmDomainSeparator"
-
-private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogTipped ".evmLogTipped" e
-
-private def findEvmLogIncremented (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogIncremented ".evmLogIncremented" e
-
-private def findEvmLogTransfer (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogTransfer ".evmLogTransfer" e
-
-private def findEvmLogApproval (env : Environment) (e : Expr) : Option Ops.Val :=
-  findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogApproval ".evmLogApproval" e
-
-private def findEvmSendEth (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmSendEth" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSendEth ".evmSendEth" with
-    | some app =>
-      let args := app.getAppArgs
-      let amt := valAtEnd env args 0
-      match nthFromEnd args 1 with
-      | some dst =>
-        let (w0, w1, w2) := addr20Leaves env dst
-        some (w0, w1, w2, amt)
-      | none => some (.arg 0, .arg 1, .arg 2, amt)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
-  else none
 
 private def findBinaryRuntime (env : Environment) (want : Name) (suffix : String)
     (e : Expr) : Option (Ops.Val × Ops.Val) :=
@@ -4615,25 +4544,9 @@ private def findBinaryRuntime (env : Environment) (want : Name) (suffix : String
     | none => some (.arg 0, .arg 1)
   else none
 
-private def findTernaryRuntime (env : Environment) (want : Name) (suffix : String)
-    (e : Expr) : Option (Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e suffix then
-    match findRuntimeApp 16 env e want suffix with
-    | some app =>
-      let args := app.getAppArgs
-      if args.size ≥ 3 then
-        some (valAtEnd env args 2, valAtEnd env args 1, valAtEnd env args 0)
-      else some (.arg 0, .arg 1, .arg 2)
-    | none => some (.arg 0, .arg 1, .arg 2)
-  else none
-
 private def findEvmMapGetU64 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val) :=
   findBinaryRuntime env ``ProofForge.Evm.Runtime.evmMapGetU64 ".evmMapGetU64" e
-
-private def findEvmMapSetU64 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val) :=
-  findTernaryRuntime env ``ProofForge.Evm.Runtime.evmMapSetU64 ".evmMapSetU64" e
 
 private def findEvmMapGetAddr (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
@@ -4650,22 +4563,6 @@ private def findEvmMapGetAddr (env : Environment) (e : Expr) :
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3)
   else none
 
-private def findEvmMapSetAddr (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmMapSetAddr" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetAddr ".evmMapSetAddr" with
-    | some app =>
-      let args := app.getAppArgs
-      let val := valAtEnd env args 0
-      let base := valAtEnd env args 2
-      match nthFromEnd args 1 with
-      | some key =>
-        let (w0, w1, w2) := addr20Leaves env key
-        some (base, w0, w1, w2, val)
-      | none => some (base, .arg 1, .arg 2, .arg 3, val)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4)
-  else none
-
 private def findEvmMapGetPair (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
   if mentionsRuntime env e "evmMapGetPair" then
@@ -4679,39 +4576,6 @@ private def findEvmMapGetPair (env : Environment) (e : Expr) :
         let (s0, s1, s2) := addr20Leaves env spender
         some (base, o0, o1, o2, s0, s1, s2)
       | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-  else none
-
-private def findEvmMapSetPair (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmMapSetPair" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetPair ".evmMapSetPair" with
-    | some app =>
-      let args := app.getAppArgs
-      let val := valAtEnd env args 0
-      let base := valAtEnd env args 3
-      match nthFromEnd args 2, nthFromEnd args 1 with
-      | some owner, some spender =>
-        let (o0, o1, o2) := addr20Leaves env owner
-        let (s0, s1, s2) := addr20Leaves env spender
-        some (base, o0, o1, o2, s0, s1, s2, val)
-      | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, val)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7)
-  else none
-
-private def findEvmTokenTransfer (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmTokenTransfer" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenTransfer ".evmTokenTransfer" with
-    | some app =>
-      let args := app.getAppArgs
-      let amt := valAtEnd env args 0
-      match nthFromEnd args 2, nthFromEnd args 1 with
-      | some token, some dest =>
-        let (t0, t1, t2) := addr20Leaves env token
-        let (d0, d1, d2) := addr20Leaves env dest
-        some (t0, t1, t2, d0, d1, d2, amt)
-      | _, _ => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, amt)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
   else none
 
@@ -4761,247 +4625,6 @@ private def findEvmMapGetPair256 (env : Environment) (e : Expr) :
         some (base, o0, o1, o2, s0, s1, s2)
       | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-  else none
-
-private def findEvmMapSetAddr256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmMapSetAddr256" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetAddr256
-        ".evmMapSetAddr256" with
-    | some app =>
-      let args := app.getAppArgs
-      let base := valAtEnd env args 2
-      match nthFromEnd args 1, nthFromEnd args 0 with
-      | some key, some val =>
-        let (w0, w1, w2) := addr20Leaves env key
-        let (v0, v1, v2, v3) := uint256Leaves env val
-        some (base, w0, w1, w2, v0, v1, v2, v3)
-      | _, _ => some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7)
-    | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7)
-  else none
-
-private def findEvmMapSetPair256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmMapSetPair256" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetPair256
-        ".evmMapSetPair256" with
-    | some app =>
-      let args := app.getAppArgs
-      let base := valAtEnd env args 3
-      match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
-      | some owner, some spender, some val =>
-        let (o0, o1, o2) := addr20Leaves env owner
-        let (s0, s1, s2) := addr20Leaves env spender
-        let (v0, v1, v2, v3) := uint256Leaves env val
-        some (base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3)
-      | _, _, _ =>
-        some (base, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6,
-          .arg 7, .arg 8, .arg 9, .arg 10)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6,
-        .arg 7, .arg 8, .arg 9, .arg 10)
-  else none
-
-private def findEvmTokenTransfer256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmTokenTransfer" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenTransfer
-        ".evmTokenTransfer" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
-      | some token, some dest, some amt =>
-        let (t0, t1, t2) := addr20Leaves env token
-        let (d0, d1, d2) := addr20Leaves env dest
-        let (a0, a1, a2, a3) := uint256Leaves env amt
-        some (t0, t1, t2, d0, d1, d2, a0, a1, a2, a3)
-      | _, _, _ =>
-        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7, .arg 8, .arg 9)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7, .arg 8, .arg 9)
-  else none
-
-private def findEvmTokenApprove256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmTokenApprove" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenApprove
-        ".evmTokenApprove" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
-      | some token, some spender, some amt =>
-        let (t0, t1, t2) := addr20Leaves env token
-        let (s0, s1, s2) := addr20Leaves env spender
-        let (a0, a1, a2, a3) := uint256Leaves env amt
-        some (t0, t1, t2, s0, s1, s2, a0, a1, a2, a3)
-      | _, _, _ =>
-        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7, .arg 8, .arg 9)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7, .arg 8, .arg 9)
-  else none
-
-private def findEvmTokenTransferFrom256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmTokenTransferFrom" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenTransferFrom
-        ".evmTokenTransferFrom" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 3, nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
-      | some token, some owner, some dest, some amt =>
-        let (t0, t1, t2) := addr20Leaves env token
-        let (o0, o1, o2) := addr20Leaves env owner
-        let (d0, d1, d2) := addr20Leaves env dest
-        let (a0, a1, a2, a3) := uint256Leaves env amt
-        some (t0, t1, t2, o0, o1, o2, d0, d1, d2, a0, a1, a2, a3)
-      | _, _, _, _ =>
-        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7,
-          .arg 8, .arg 9, .arg 10, .arg 11, .arg 12)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7,
-        .arg 8, .arg 9, .arg 10, .arg 11, .arg 12)
-  else none
-
-private def findEvmWethDeposit256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmWethDeposit" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmWethDeposit
-        ".evmWethDeposit" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 1, nthFromEnd args 0 with
-      | some weth, some amt =>
-        let (t0, t1, t2) := addr20Leaves env weth
-        let (a0, a1, a2, a3) := uint256Leaves env amt
-        some (t0, t1, t2, a0, a1, a2, a3)
-      | _, _ =>
-        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-  else none
-
-private def findEvmWethWithdraw256 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmWethWithdraw" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmWethWithdraw
-        ".evmWethWithdraw" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 1, nthFromEnd args 0 with
-      | some weth, some amt =>
-        let (t0, t1, t2) := addr20Leaves env weth
-        let (a0, a1, a2, a3) := uint256Leaves env amt
-        some (t0, t1, t2, a0, a1, a2, a3)
-      | _, _ =>
-        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
-  else none
-
-private def findEvmSwapExact2 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmSwapExact2" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSwapExact2
-        ".evmSwapExact2" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 4, nthFromEnd args 3, nthFromEnd args 2,
-          nthFromEnd args 1, nthFromEnd args 0 with
-      | some router, some tokenA, some tokenB, some amtIn, some minOut =>
-        let (r0, r1, r2) := addr20Leaves env router
-        let (a0, a1, a2) := addr20Leaves env tokenA
-        let (b0, b1, b2) := addr20Leaves env tokenB
-        let (i0, i1, i2, i3) := uint256Leaves env amtIn
-        let (m0, m1, m2, m3) := uint256Leaves env minOut
-        some (r0, r1, r2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3)
-      | _, _, _, _, _ =>
-        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7,
-          .arg 8, .arg 9, .arg 10, .arg 11, .arg 12, .arg 13, .arg 14, .arg 15, .arg 16)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7,
-        .arg 8, .arg 9, .arg 10, .arg 11, .arg 12, .arg 13, .arg 14, .arg 15, .arg 16)
-  else none
-
-private def findEvmSwapExact3 (env : Environment) (e : Expr) :
-    Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
-      Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime env e "evmSwapExact3" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSwapExact3
-        ".evmSwapExact3" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 5, nthFromEnd args 4, nthFromEnd args 3,
-          nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
-      | some router, some tokenA, some tokenB, some tokenC, some amtIn, some minOut =>
-        let (r0, r1, r2) := addr20Leaves env router
-        let (a0, a1, a2) := addr20Leaves env tokenA
-        let (b0, b1, b2) := addr20Leaves env tokenB
-        let (c0, c1, c2) := addr20Leaves env tokenC
-        let (i0, i1, i2, i3) := uint256Leaves env amtIn
-        let (m0, m1, m2, m3) := uint256Leaves env minOut
-        some (r0, r1, r2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3)
-      | _, _, _, _, _, _ =>
-        some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7,
-          .arg 8, .arg 9, .arg 10, .arg 11, .arg 12, .arg 13, .arg 14, .arg 15,
-          .arg 16, .arg 17, .arg 18, .arg 19)
-    | none =>
-      some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6, .arg 7,
-        .arg 8, .arg 9, .arg 10, .arg 11, .arg 12, .arg 13, .arg 14, .arg 15,
-        .arg 16, .arg 17, .arg 18, .arg 19)
-  else none
-
-private def findEvmTokenPermit (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
-  if mentionsRuntime env e "evmTokenPermit" then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenPermit ".evmTokenPermit" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 7, nthFromEnd args 6, nthFromEnd args 5, nthFromEnd args 4,
-          nthFromEnd args 3, nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
-      | some token, some owner, some spender, some value, some deadline, some _v, some r, some s =>
-        let (t0, t1, t2) := addr20Leaves env token
-        let (o0, o1, o2) := addr20Leaves env owner
-        let (sp0, sp1, sp2) := addr20Leaves env spender
-        let (v0, v1, v2, v3) := uint256Leaves env value
-        let (d0, d1, d2, d3) := uint256Leaves env deadline
-        let vv := valAtEnd env args 2
-        let (r0, r1, r2, r3) := bytes32Leaves env r
-        let (z0, z1, z2, z3) := bytes32Leaves env s
-        some #[t0, t1, t2, o0, o1, o2, sp0, sp1, sp2, v0, v1, v2, v3, d0, d1, d2, d3,
-          vv, r0, r1, r2, r3, z0, z1, z2, z3]
-      | _, _, _, _, _, _, _, _ =>
-        some ((List.range 26).toArray.map fun i => .arg i)
-    | none =>
-      some ((List.range 26).toArray.map fun i => .arg i)
-  else none
-
-private def findEvmPermit (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
-  if mentionsRuntime env e "evmPermit" && !(mentionsRuntime env e "evmTokenPermit") then
-    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmPermit ".evmPermit" with
-    | some app =>
-      let args := app.getAppArgs
-      match nthFromEnd args 6, nthFromEnd args 5, nthFromEnd args 4,
-          nthFromEnd args 3, nthFromEnd args 2, nthFromEnd args 1, nthFromEnd args 0 with
-      | some owner, some spender, some value, some deadline, some _v, some r, some s =>
-        let (o0, o1, o2) := addr20Leaves env owner
-        let (sp0, sp1, sp2) := addr20Leaves env spender
-        let (v0, v1, v2, v3) := uint256Leaves env value
-        let (d0, d1, d2, d3) := uint256Leaves env deadline
-        let vv := valAtEnd env args 2
-        let (r0, r1, r2, r3) := bytes32Leaves env r
-        let (z0, z1, z2, z3) := bytes32Leaves env s
-        some #[o0, o1, o2, sp0, sp1, sp2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
-      | _, _, _, _, _, _, _ =>
-        some ((List.range 23).toArray.map fun i => .arg i)
-    | none =>
-      some ((List.range 23).toArray.map fun i => .arg i)
   else none
 
 private def findEvmTokenAllowance (env : Environment) (e : Expr) :
@@ -5266,56 +4889,27 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
         (.arg 20) (.arg 21) (.arg 22))
   else none
 
+/-- Collect EVM effect leaves by unfolding source facades into `ProofForge.Evm.Runtime`
+stubs. New closed recipes register in `opOfRuntimeApp`; this walker does not grow a name
+table. -/
 private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
-  let specs : Array (Name × String) := #[
-    (``ProofForge.Evm.Runtime.evmDeposit, ".evmDeposit"),
-    (``ProofForge.Evm.Runtime.evmDeposit256, ".evmDeposit256"),
-    (``ProofForge.Evm.Runtime.evmSendEth, ".evmSendEth"),
-    (``ProofForge.Evm.Runtime.evmSendEth256, ".evmSendEth256"),
-    (``ProofForge.Evm.Runtime.evmLogTipped, ".evmLogTipped"),
-    (``ProofForge.Evm.Runtime.evmLogIncremented, ".evmLogIncremented"),
-    (``ProofForge.Evm.Runtime.evmLogTransfer, ".evmLogTransfer"),
-    (``ProofForge.Evm.Runtime.evmLogApproval, ".evmLogApproval"),
-    (``ProofForge.Evm.Runtime.evmLogTransfer256, ".evmLogTransfer256"),
-    (``ProofForge.Evm.Runtime.evmLogApproval256, ".evmLogApproval256"),
-    (``ProofForge.Evm.Runtime.evmRevertInsufficient, ".evmRevertInsufficient"),
-    (``ProofForge.Evm.Runtime.evmRevertUnauthorized, ".evmRevertUnauthorized"),
-    (``ProofForge.Evm.Runtime.evmRevertZeroAddress, ".evmRevertZeroAddress"),
-    (``ProofForge.Evm.Runtime.evmReceive, ".evmReceive"),
-    (``ProofForge.Evm.Runtime.evmMapSetU64, ".evmMapSetU64"),
-    (``ProofForge.Evm.Runtime.evmMapSetAddr, ".evmMapSetAddr"),
-    (``ProofForge.Evm.Runtime.evmMapSetPair, ".evmMapSetPair"),
-    (``ProofForge.Evm.Runtime.evmMapSetAddr256, ".evmMapSetAddr256"),
-    (``ProofForge.Evm.Runtime.evmMapSetPair256, ".evmMapSetPair256"),
-    (``ProofForge.Evm.Runtime.evmTokenTransfer, ".evmTokenTransfer"),
-    (``ProofForge.Evm.Runtime.evmTokenApprove, ".evmTokenApprove"),
-    (``ProofForge.Evm.Runtime.evmTokenTransferFrom, ".evmTokenTransferFrom"),
-    (``ProofForge.Evm.Runtime.evmWethDeposit, ".evmWethDeposit"),
-    (``ProofForge.Evm.Runtime.evmWethWithdraw, ".evmWethWithdraw"),
-    (``ProofForge.Evm.Runtime.evmSwapExact2, ".evmSwapExact2"),
-    (``ProofForge.Evm.Runtime.evmSwapExact3, ".evmSwapExact3"),
-    (``ProofForge.Evm.Runtime.evmTokenPermit, ".evmTokenPermit"),
-    (``ProofForge.Evm.Runtime.evmPermit, ".evmPermit")
-    ]
   let rec walk (fuel : Nat) (e : Expr) (acc : Array Ops.Op) : Array Ops.Op :=
     match fuel with
     | 0 => acc
     | fuel' + 1 =>
       let e := e.consumeMData
-      if specs.any (fun (want, suf) =>
-          e.getAppFn.constName? == some want || endsWith e suf) then
-        match opOfRuntimeApp env e with
-        | some op => acc.push op
-        | none => acc
-      else if let some (_, unfolded) := unfoldUserHelper env e then
-        walk fuel' unfolded acc
-      else
-        match e with
-        | .letE _ _ value body _ =>
-          walk fuel' (body.instantiate1 value) (walk fuel' value acc)
-        | .lam _ _ body _ => walk fuel' body acc
-        | .app f a => walk fuel' a (walk fuel' f acc)
-        | _ => acc
+      match opOfRuntimeApp env e with
+      | some op => acc.push op
+      | none =>
+        if let some (_, unfolded) := unfoldUserHelper env e then
+          walk fuel' unfolded acc
+        else
+          match e with
+          | .letE _ _ value body _ =>
+            walk fuel' (body.instantiate1 value) (walk fuel' value acc)
+          | .lam _ _ body _ => walk fuel' body acc
+          | .app f a => walk fuel' a (walk fuel' f acc)
+          | _ => acc
   walk 24 e #[]
 
 private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
@@ -5352,66 +4946,6 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
   let writes := collectEvmEffectOps env e
   if writes.size ≥ 1 then
     some (writes.push (.returnU64 (retOfEvmOps writes)))
-  else if let some amount := findEvmDeposit env e then
-    some #[.evmDeposit amount, .returnU64 amount]
-  else if let some (a0, a1, a2, a3) := findEvmDeposit256 env e then
-    some #[.evmDeposit256 a0 a1 a2 a3, .returnU64 a0]
-  else if let some (w0, w1, w2, amt) := findEvmSendEth env e then
-    some #[.evmSendEth w0 w1 w2 amt, .returnU64 amt]
-  else if let some (w0, w1, w2, a0, a1, a2, a3) := findEvmSendEth256 env e then
-    some #[.evmSendEth256 w0 w1 w2 a0 a1 a2 a3, .returnU64 a0]
-  else if let some amount := findEvmLogTipped env e then
-    some #[.evmLog "Tipped" amount, .returnU64 amount]
-  else if let some amount := findEvmLogIncremented env e then
-    some #[.evmLog "Incremented" amount, .returnU64 amount]
-  else if let some amount := findEvmLogTransfer env e then
-    some #[.evmLog "Transfer" amount, .returnU64 amount]
-  else if let some amount := findEvmLogApproval env e then
-    some #[.evmLog "Approval" amount, .returnU64 amount]
-  else if let some (b, k, v) := findEvmMapSetU64 env e then
-    some #[.mapSetU64 b k v, .returnU64 v]
-  else if let some (b, a0, a1, a2, v) := findEvmMapSetAddr env e then
-    some #[.mapSetAddr b a0 a1 a2 v, .returnU64 v]
-  else if let some (b, o0, o1, o2, s0, s1, s2, v) := findEvmMapSetPair env e then
-    some #[.mapSetPair b o0 o1 o2 s0 s1 s2 v, .returnU64 v]
-  else if let some (b, a0, a1, a2, v0, v1, v2, v3) := findEvmMapSetAddr256 env e then
-    some #[.mapSetAddr256 b a0 a1 a2 v0 v1 v2 v3, .returnU64 v0]
-  else if let some (b, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3) :=
-      findEvmMapSetPair256 env e then
-    some #[.mapSetPair256 b o0 o1 o2 s0 s1 s2 v0 v1 v2 v3, .returnU64 v0]
-  else if let some (t0, t1, t2, d0, d1, d2, a0, a1, a2, a3) :=
-      findEvmTokenTransfer256 env e then
-    some #[.evmTokenTransfer256 t0 t1 t2 d0 d1 d2 a0 a1 a2 a3, .returnU64 a0]
-  else if let some (t0, t1, t2, s0, s1, s2, a0, a1, a2, a3) :=
-      findEvmTokenApprove256 env e then
-    some #[.evmTokenApprove256 t0 t1 t2 s0 s1 s2 a0 a1 a2 a3, .returnU64 a0]
-  else if let some (t0, t1, t2, o0, o1, o2, d0, d1, d2, a0, a1, a2, a3) :=
-      findEvmTokenTransferFrom256 env e then
-    some #[.evmTokenTransferFrom256 t0 t1 t2 o0 o1 o2 d0 d1 d2 a0 a1 a2 a3, .returnU64 a0]
-  else if let some (t0, t1, t2, a0, a1, a2, a3) := findEvmWethDeposit256 env e then
-    some #[.evmWethDeposit256 t0 t1 t2 a0 a1 a2 a3, .returnU64 a0]
-  else if let some (t0, t1, t2, a0, a1, a2, a3) := findEvmWethWithdraw256 env e then
-    some #[.evmWethWithdraw256 t0 t1 t2 a0 a1 a2 a3, .returnU64 a0]
-  else if let some (r0, r1, r2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3) :=
-      findEvmSwapExact2 env e then
-    some #[.evmSwapExact2 r0 r1 r2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3, .returnU64 i0]
-  else if let some (r0, r1, r2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3) :=
-      findEvmSwapExact3 env e then
-    some #[.evmSwapExact3 r0 r1 r2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3, .returnU64 i0]
-  else if let some xs := findEvmTokenPermit env e then
-    if xs.size == 26 then
-      some #[.evmTokenPermit xs[0]! xs[1]! xs[2]! xs[3]! xs[4]! xs[5]! xs[6]! xs[7]! xs[8]!
-        xs[9]! xs[10]! xs[11]! xs[12]! xs[13]! xs[14]! xs[15]! xs[16]! xs[17]! xs[18]!
-        xs[19]! xs[20]! xs[21]! xs[22]! xs[23]! xs[24]! xs[25]!, .returnU64 xs[9]!]
-    else none
-  else if let some xs := findEvmPermit env e then
-    if xs.size == 23 then
-      some #[.evmPermit xs[0]! xs[1]! xs[2]! xs[3]! xs[4]! xs[5]! xs[6]! xs[7]! xs[8]! xs[9]!
-        xs[10]! xs[11]! xs[12]! xs[13]! xs[14]! xs[15]! xs[16]! xs[17]! xs[18]! xs[19]!
-        xs[20]! xs[21]! xs[22]!, .returnU64 xs[6]!]
-    else none
-  else if let some (t0, t1, t2, d0, d1, d2, amt) := findEvmTokenTransfer env e then
-    some #[.evmTokenTransfer t0 t1 t2 d0 d1 d2 amt, .returnU64 amt]
   else if let some (b, k) := findEvmMapGetU64 env e then
     some #[.mapGetU64 b k, .returnU64 k]
   else if let some (b, a0, a1, a2) := findEvmMapGetAddr env e then
