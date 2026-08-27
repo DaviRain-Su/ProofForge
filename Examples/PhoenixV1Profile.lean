@@ -1254,62 +1254,49 @@ def removeAsk512 (s : State) (price sequence : UInt64) : Except Error (State × 
     .error .overflow
 
 /-!
-These two reducers are account-index-parametric only at extraction time. Generated verifier methods
-instantiate `(market, trader) = (1, 0)`; the official raw adapter instantiates `(2, 3)`. Every
-resulting `AccountStorage` descriptor still has literal account/base/stride/capacity geometry.
+These two reducers receive a compile-time Phoenix layout and a runtime trader identity. Generated
+verifier methods instantiate `small 1`; the official raw adapter instantiates `small 2`. Extraction
+erases the layout and leaves only the reusable `AccountStorage` component calls with literal
+account/base/stride/capacity geometry.
 -/
 
-def reduceAskFreeFunds512At (marketAccount traderAccount traderKey0 price sequence requested :
-    UInt64) : Except Error UInt64 :=
-  if profileAccountBytesAt marketAccount = 84944 &&
+def reduceAskFreeFunds512At (layout : Examples.PhoenixV1.Layout)
+    (marketAccount traderAccount traderKey0 price sequence requested : UInt64) :
+    Except Error UInt64 :=
+  if profileAccountBytesAt marketAccount = UInt64.ofNat layout.accountBytes &&
       allocatorHeadersValidAt marketAccount = 1 then
-    let traderCursor := accDataWord marketAccount 8313
-    let askCursor := accDataWord marketAccount 4213
-    let traderValid := accDataRbTreeKey4Valid marketAccount 8314 8315 8316 18 128
-      (lowUInt32 (accDataWord marketAccount 8310)) (accDataWord marketAccount 8312)
-      (lowUInt32 traderCursor) (highUInt32 traderCursor)
-    let askValid := accDataRbTreeValid marketAccount 4214 4215 4216 4217 8 512 0
-      (lowUInt32 (accDataWord marketAccount 4210)) (accDataWord marketAccount 4212)
-      (lowUInt32 askCursor) (highUInt32 askCursor)
-    if traderValid = 1 && askValid = 1 then
-      let traderIndex := accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
+    if layout.tradersValid = 1 && layout.asksValid = 1 then
+      let traderIndex := layout.findTrader
         traderKey0 (accKeyWord traderAccount 1) (accKeyWord traderAccount 2)
         (accKeyWord traderAccount 3)
       if traderIndex = 0 then
         .error .overflow
       else
-        let orderIndex := accDataRbTreeOrderFind marketAccount 4210 4214 4215 4216 4217
-          8 512 0 price sequence
+        let orderIndex := layout.findAsk price sequence
         if orderIndex = 0 then
           .ok 0
         else
-          let orderTrader := accDataWordAtOneBased marketAccount 4218 8 512 orderIndex
-          let resting := accDataWordAtOneBased marketAccount 4219 8 512 orderIndex
+          let orderTrader := layout.askOwner orderIndex
+          let resting := layout.askOrderSize orderIndex
           if orderTrader ≠ traderIndex then
             .error .overflow
           else
             let removed := if requested ≤ resting then requested else resting
-            let locked := accDataWordAtOneBased marketAccount 8322 18 128 traderIndex
-            let free := accDataWordAtOneBased marketAccount 8323 18 128 traderIndex
+            let locked := layout.baseLocked traderIndex
+            let free := layout.baseFree traderIndex
             if removed ≤ locked && free ≤ u64Max - removed then
               let remaining := resting - removed
               let nextLocked := locked - removed
               let nextFree := free + removed
               if remaining = 0 then
-                let _ := accDataRbTreeOrderRemove marketAccount 4210 4214 4215 4216 4217
-                  8 512 0 price sequence
-                let _ := accDataWordSetAtOneBased marketAccount 8322 18 128
-                  traderIndex nextLocked
-                let _ := accDataWordSetAtOneBased marketAccount 8323 18 128
-                  traderIndex nextFree
+                let _ := layout.removeAsk price sequence
+                let _ := layout.setBaseLocked traderIndex nextLocked
+                let _ := layout.setBaseFree traderIndex nextFree
                 .ok removed
               else
-                let _ := accDataWordSetAtOneBased marketAccount 4219 8 512
-                  orderIndex remaining
-                let _ := accDataWordSetAtOneBased marketAccount 8322 18 128
-                  traderIndex nextLocked
-                let _ := accDataWordSetAtOneBased marketAccount 8323 18 128
-                  traderIndex nextFree
+                let _ := layout.setAskOrderSize orderIndex remaining
+                let _ := layout.setBaseLocked traderIndex nextLocked
+                let _ := layout.setBaseFree traderIndex nextFree
                 .ok removed
             else
               .error .overflow
@@ -1318,65 +1305,51 @@ def reduceAskFreeFunds512At (marketAccount traderAccount traderKey0 price sequen
   else
     .error .overflow
 
-def reduceBidFreeFunds512At (marketAccount traderAccount traderKey0 price sequence requested :
-    UInt64) : Except Error UInt64 :=
-  if profileAccountBytesAt marketAccount = 84944 &&
+def reduceBidFreeFunds512At (layout : Examples.PhoenixV1.Layout)
+    (marketAccount traderAccount traderKey0 price sequence requested : UInt64) :
+    Except Error UInt64 :=
+  if profileAccountBytesAt marketAccount = UInt64.ofNat layout.accountBytes &&
       allocatorHeadersValidAt marketAccount = 1 then
-    let traderCursor := accDataWord marketAccount 8313
-    let bidCursor := accDataWord marketAccount 113
-    let traderValid := accDataRbTreeKey4Valid marketAccount 8314 8315 8316 18 128
-      (lowUInt32 (accDataWord marketAccount 8310)) (accDataWord marketAccount 8312)
-      (lowUInt32 traderCursor) (highUInt32 traderCursor)
-    let bidValid := accDataRbTreeValid marketAccount 114 115 116 117 8 512 1
-      (lowUInt32 (accDataWord marketAccount 110)) (accDataWord marketAccount 112)
-      (lowUInt32 bidCursor) (highUInt32 bidCursor)
-    if traderValid = 1 && bidValid = 1 then
-      let traderIndex := accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
+    if layout.tradersValid = 1 && layout.bidsValid = 1 then
+      let traderIndex := layout.findTrader
         traderKey0 (accKeyWord traderAccount 1) (accKeyWord traderAccount 2)
         (accKeyWord traderAccount 3)
       if traderIndex = 0 then
         .error .overflow
       else
-        let orderIndex := accDataRbTreeOrderFind marketAccount 110 114 115 116 117
-          8 512 1 price sequence
+        let orderIndex := layout.findBid price sequence
         if orderIndex = 0 then
           .ok 0
         else
-          let orderTrader := accDataWordAtOneBased marketAccount 118 8 512 orderIndex
-          let resting := accDataWordAtOneBased marketAccount 119 8 512 orderIndex
+          let orderTrader := layout.bidOwner orderIndex
+          let resting := layout.bidOrderSize orderIndex
           if orderTrader ≠ traderIndex then
             .error .overflow
           else
             let removed := if requested ≤ resting then requested else resting
-            let baseLotsPerBaseUnit := accDataWord marketAccount 104
-            let tickSize := accDataWord marketAccount 105
+            let baseLotsPerBaseUnit := layout.baseLotsPerBaseUnit
+            let tickSize := layout.tickSize
             if baseLotsPerBaseUnit = 0 then
               .error .overflow
             else if price = 0 || tickSize ≤ u64Max / price then
               let quotePerBase := price * tickSize
               if removed = 0 || quotePerBase ≤ u64Max / removed then
                 let unlocked := (quotePerBase * removed) / baseLotsPerBaseUnit
-                let locked := accDataWordAtOneBased marketAccount 8320 18 128 traderIndex
-                let free := accDataWordAtOneBased marketAccount 8321 18 128 traderIndex
+                let locked := layout.quoteLocked traderIndex
+                let free := layout.quoteFree traderIndex
                 if unlocked ≤ locked && free ≤ u64Max - unlocked then
                   let remaining := resting - removed
                   let nextLocked := locked - unlocked
                   let nextFree := free + unlocked
                   if remaining = 0 then
-                    let _ := accDataRbTreeOrderRemove marketAccount 110 114 115 116 117
-                      8 512 1 price sequence
-                    let _ := accDataWordSetAtOneBased marketAccount 8320 18 128
-                      traderIndex nextLocked
-                    let _ := accDataWordSetAtOneBased marketAccount 8321 18 128
-                      traderIndex nextFree
+                    let _ := layout.removeBid price sequence
+                    let _ := layout.setQuoteLocked traderIndex nextLocked
+                    let _ := layout.setQuoteFree traderIndex nextFree
                     .ok removed
                   else
-                    let _ := accDataWordSetAtOneBased marketAccount 119 8 512
-                      orderIndex remaining
-                    let _ := accDataWordSetAtOneBased marketAccount 8320 18 128
-                      traderIndex nextLocked
-                    let _ := accDataWordSetAtOneBased marketAccount 8321 18 128
-                      traderIndex nextFree
+                    let _ := layout.setBidOrderSize orderIndex remaining
+                    let _ := layout.setQuoteLocked traderIndex nextLocked
+                    let _ := layout.setQuoteFree traderIndex nextFree
                     .ok removed
                 else
                   .error .overflow
@@ -1392,17 +1365,19 @@ def reduceBidFreeFunds512At (marketAccount traderAccount traderKey0 price sequen
 /-- Select the fixed-capacity bid/ask reducer before protocol-adapter sequencing. Keeping side
 dispatch inside this reusable account-storage component gives generated and raw adapters the same
 bounded mutation contract. -/
-def reduceFreeFunds512At (marketAccount traderAccount traderKey0 side price sequence requested :
-    UInt64) : Except Error UInt64 :=
+def reduceFreeFunds512At (layout : Examples.PhoenixV1.Layout)
+    (marketAccount traderAccount traderKey0 side price sequence requested : UInt64) :
+    Except Error UInt64 :=
   if side = 0 then
-    reduceBidFreeFunds512At marketAccount traderAccount traderKey0 price sequence requested
+    reduceBidFreeFunds512At layout marketAccount traderAccount traderKey0 price sequence requested
   else
-    reduceAskFreeFunds512At marketAccount traderAccount traderKey0 price sequence requested
+    reduceAskFreeFunds512At layout marketAccount traderAccount traderKey0 price sequence requested
 
 /-- Compute the bid-side quote lots released by the same pinned market scalars as the reducer. -/
-def quoteLotsReleased512At (marketAccount price removed : UInt64) : Except Error UInt64 :=
-  let baseLotsPerBaseUnit := accDataWord marketAccount 104
-  let tickSize := accDataWord marketAccount 105
+def quoteLotsReleased512At (layout : Examples.PhoenixV1.Layout) (price removed : UInt64) :
+    Except Error UInt64 :=
+  let baseLotsPerBaseUnit := layout.baseLotsPerBaseUnit
+  let tickSize := layout.tickSize
   if baseLotsPerBaseUnit = 0 then
     .error .overflow
   else if price = 0 || tickSize ≤ u64Max / price then
@@ -1416,19 +1391,20 @@ def quoteLotsReleased512At (marketAccount price removed : UInt64) : Except Error
 
 /-- Claim exactly the lots just released by `reduceFreeFunds512At`. This composes literal
 one-based account-storage writes and leaves any pre-existing free balance untouched. -/
-def claimReleasedFunds512At (marketAccount traderIndex side released : UInt64) :
+def claimReleasedFunds512At (layout : Examples.PhoenixV1.Layout)
+    (traderIndex side released : UInt64) :
     Except Error UInt64 :=
   if side = 0 then
-    let free := accDataWordAtOneBased marketAccount 8321 18 128 traderIndex
+    let free := layout.quoteFree traderIndex
     if released ≤ free then
-      let _ := accDataWordSetAtOneBased marketAccount 8321 18 128 traderIndex (free - released)
+      let _ := layout.setQuoteFree traderIndex (free - released)
       .ok released
     else
       .error .overflow
   else
-    let free := accDataWordAtOneBased marketAccount 8323 18 128 traderIndex
+    let free := layout.baseFree traderIndex
     if released ≤ free then
-      let _ := accDataWordSetAtOneBased marketAccount 8323 18 128 traderIndex (free - released)
+      let _ := layout.setBaseFree traderIndex (free - released)
       .ok released
     else
       .error .overflow
@@ -1676,7 +1652,7 @@ def placePostOnlyFreeFunds512At (marketAccount traderAccount side price baseLots
         if duplicate ≠ 0 then
           .error .overflow
         else if bid then
-          let quoteLots ← quoteLotsReleased512At marketAccount price baseLots
+          let quoteLots ← quoteLotsReleased512At layout price baseLots
           if quoteLots = 0 then
             .error .overflow
           else
@@ -1714,13 +1690,15 @@ def placePostOnlyFreeFunds512At (marketAccount traderAccount side price baseLots
 @[pf_entry]
 def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
     Except Error (State × UInt64) := do
-  let removed ← reduceAskFreeFunds512At 1 0 (accKeyWord 0 0) price sequence requested
+  let removed ← reduceAskFreeFunds512At (Examples.PhoenixV1.small 1)
+    1 0 (accKeyWord 0 0) price sequence requested
   .ok (s, removed)
 
 @[pf_entry]
 def reduceBidFreeFunds512 (s : State) (price sequence requested : UInt64) :
     Except Error (State × UInt64) := do
-  let removed ← reduceBidFreeFunds512At 1 0 (accKeyWord 0 0) price sequence requested
+  let removed ← reduceBidFreeFunds512At (Examples.PhoenixV1.small 1)
+    1 0 (accKeyWord 0 0) price sequence requested
   .ok (s, removed)
 
 /--
@@ -1763,24 +1741,25 @@ def reduceOrderWithFreeFunds (_s : State) (side : UInt8)
       checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
     .error .overflow
   else
+    let layout := Examples.PhoenixV1.small 2
     let side := side.toUInt64
     if side ≠ 0 && side ≠ 1 then
       .error .overflow
     else
       let orderIndex :=
         if side = 0 then
-          accDataRbTreeOrderFind 2 110 114 115 116 117 8 512 1 price sequence
+          layout.findBid price sequence
         else
-          accDataRbTreeOrderFind 2 4210 4214 4215 4216 4217 8 512 0 price sequence
+          layout.findAsk price sequence
       let resting :=
         if orderIndex = 0 then 0
-        else if side = 0 then accDataWordAtOneBased 2 119 8 512 orderIndex
-        else accDataWordAtOneBased 2 4219 8 512 orderIndex
+        else if side = 0 then layout.bidOrderSize orderIndex
+        else layout.askOrderSize orderIndex
       let traderKey0 := signerKey 3
-      let removed ← reduceFreeFunds512At 2 3 traderKey0 side price sequence requested
-      let marketSequence := accDataWord 2 34
+      let removed ← reduceFreeFunds512At layout 2 3 traderKey0 side price sequence requested
+      let marketSequence := layout.marketSequence
       let remaining := resting - removed
-      let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
+      let _ := layout.setMarketSequence (marketSequence + 1)
       let _ := beginMarketBatchAt 5 2 2 marketSequence
       let _ := recordReduceAt orderIndex sequence price removed remaining
       let _ := finishMarketBatch
@@ -1798,40 +1777,41 @@ def reduceOrder (_s : State) (side : UInt8)
   if cancelWithdrawContextValid = 0 then
     .error .overflow
   else
+    let layout := Examples.PhoenixV1.small 2
     let side := side.toUInt64
     if side ≠ 0 && side ≠ 1 then
       .error .overflow
     else
       let traderKey0 := signerKey 3
-      let traderIndex := accDataRbTreeKey4Find 2 8310 8314 8315 8316 18 128
+      let traderIndex := layout.findTrader
         traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
       if traderIndex = 0 then
         .error .overflow
       else
         let orderIndex :=
           if side = 0 then
-            accDataRbTreeOrderFind 2 110 114 115 116 117 8 512 1 price sequence
+            layout.findBid price sequence
           else
-            accDataRbTreeOrderFind 2 4210 4214 4215 4216 4217 8 512 0 price sequence
+            layout.findAsk price sequence
         let resting :=
           if orderIndex = 0 then 0
-          else if side = 0 then accDataWordAtOneBased 2 119 8 512 orderIndex
-          else accDataWordAtOneBased 2 4219 8 512 orderIndex
+          else if side = 0 then layout.bidOrderSize orderIndex
+          else layout.askOrderSize orderIndex
         let removed := if requested ≤ resting then requested else resting
         let released ←
-          if side = 0 then quoteLotsReleased512At 2 price removed else .ok removed
-        let lotSize := if side = 0 then accDataWord 2 24 else accDataWord 2 14
+          if side = 0 then quoteLotsReleased512At layout price removed else .ok removed
+        let lotSize := if side = 0 then layout.quoteLotSize else layout.baseLotSize
         let releasedDivisor := if released = 0 then 1 else released
         if lotSize ≤ u64Max / releasedDivisor then
           let atoms := released * lotSize
-          let actual ← reduceFreeFunds512At 2 3 traderKey0 side price sequence requested
+          let actual ← reduceFreeFunds512At layout 2 3 traderKey0 side price sequence requested
           if actual ≠ removed then
             .error .overflow
           else
-            let _ ← claimReleasedFunds512At 2 traderIndex side released
+            let _ ← claimReleasedFunds512At layout traderIndex side released
             let _ := withdrawReleasedAt side atoms
-            let marketSequence := accDataWord 2 34
-            let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
+            let marketSequence := layout.marketSequence
+            let _ := layout.setMarketSequence (marketSequence + 1)
             let _ := beginMarketBatchAt 4 2 2 marketSequence
             let _ := recordReduceAt orderIndex sequence price actual (resting - actual)
             let _ := finishMarketBatch
@@ -1875,17 +1855,18 @@ def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
   if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
+    let layout := Examples.PhoenixV1.small 2
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 34
-    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
+    let marketSequence := layout.marketSequence
+    let _ := layout.setMarketSequence (marketSequence + 1)
     let _ := beginMarketBatchAt 6 2 2 marketSequence
     let _ := beginCancelAll
     let _ := cancelAllBids512At 2 traderIndex
     let _ := cancelAllAsks512At 2 traderIndex
     let quoteReleased := fifoCancelQuoteReleased
     let baseReleased := fifoCancelBaseReleased
-    let quoteLotSize := accDataWord 2 24
-    let baseLotSize := accDataWord 2 14
+    let quoteLotSize := layout.quoteLotSize
+    let baseLotSize := layout.baseLotSize
     let quoteDivisor := if quoteReleased = 0 then 1 else quoteReleased
     let baseDivisor := if baseReleased = 0 then 1 else baseReleased
     if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
@@ -1893,11 +1874,11 @@ def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
       let baseAtoms := baseReleased * baseLotSize
       let _ ←
         if traderIndex = 0 then .ok 0
-        else claimReleasedFunds512At 2 traderIndex 0 quoteReleased
+        else claimReleasedFunds512At layout traderIndex 0 quoteReleased
       let _ := withdrawReleasedAt 0 quoteAtoms
       let _ ←
         if traderIndex = 0 then .ok 0
-        else claimReleasedFunds512At 2 traderIndex 1 baseReleased
+        else claimReleasedFunds512At layout traderIndex 1 baseReleased
       let _ := withdrawReleasedAt 1 baseAtoms
       let _ := finishCancelAll
       let _ := finishMarketBatch

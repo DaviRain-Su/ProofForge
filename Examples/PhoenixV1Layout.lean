@@ -11,6 +11,8 @@ control flow. -/
 structure Header where
   status : Field
   marketSequence : Field
+  baseLotSize : Field
+  quoteLotSize : Field
   baseLotsPerBaseUnit : Field
   tickSize : Field
   orderSequence : Field
@@ -51,11 +53,11 @@ structure Layout where
 the extractor generic: it erases opted-in static layout records without knowing this example's
 namespace or protocol. -/
 attribute [pf_inline]
-  Header.status Header.marketSequence Header.baseLotsPerBaseUnit Header.tickSize
-  Header.orderSequence Book.map Book.nodeCount Book.owner Book.size Book.lastValidSlot
-  Book.lastValidTime Traders.map Traders.quoteLocked Traders.quoteFree Traders.baseLocked
-  Traders.baseFree Layout.account Layout.accountBytes Layout.header Layout.bids Layout.asks
-  Layout.traders
+  Header.status Header.marketSequence Header.baseLotSize Header.quoteLotSize
+  Header.baseLotsPerBaseUnit Header.tickSize Header.orderSequence Book.map Book.nodeCount
+  Book.owner Book.size Book.lastValidSlot Book.lastValidTime Traders.map Traders.quoteLocked
+  Traders.quoteFree Traders.baseLocked Traders.baseFree Layout.account Layout.accountBytes
+  Layout.header Layout.bids Layout.asks Layout.traders
 
 @[pf_inline] private def mutableAccess : Access :=
   { writable := true, currentProgramOwned := true }
@@ -79,6 +81,8 @@ source operations, so no descriptor or geometry is constructed at runtime. -/
     header :=
       { status := scalar account 1
         marketSequence := scalar account 34
+        baseLotSize := scalar account 14
+        quoteLotSize := scalar account 24
         baseLotsPerBaseUnit := scalar account 104
         tickSize := scalar account 105
         orderSequence := scalar account 106 }
@@ -108,6 +112,7 @@ def Layout.wellFormed (layout : Layout) : Bool :=
     layout.bids.map.wellFormed && layout.asks.map.wellFormed &&
     layout.traders.map.wellFormed &&
     layout.header.status.wellFormed && layout.header.marketSequence.wellFormed &&
+    layout.header.baseLotSize.wellFormed && layout.header.quoteLotSize.wellFormed &&
     layout.header.baseLotsPerBaseUnit.wellFormed && layout.header.tickSize.wellFormed &&
     layout.header.orderSequence.wellFormed &&
     layout.bids.nodeCount.wellFormed && layout.bids.owner.wellFormed &&
@@ -123,9 +128,24 @@ def Layout.wellFormed (layout : Layout) : Bool :=
   read layout.header.marketSequence 0
 @[pf_inline] def Layout.orderSequence (layout : Layout) : UInt64 :=
   read layout.header.orderSequence 0
+@[pf_inline] def Layout.baseLotSize (layout : Layout) : UInt64 :=
+  read layout.header.baseLotSize 0
+@[pf_inline] def Layout.quoteLotSize (layout : Layout) : UInt64 :=
+  read layout.header.quoteLotSize 0
+@[pf_inline] def Layout.baseLotsPerBaseUnit (layout : Layout) : UInt64 :=
+  read layout.header.baseLotsPerBaseUnit 0
+@[pf_inline] def Layout.tickSize (layout : Layout) : UInt64 :=
+  read layout.header.tickSize 0
 
 @[pf_inline] def Layout.bidSize (layout : Layout) : UInt64 := read layout.bids.nodeCount 0
 @[pf_inline] def Layout.askSize (layout : Layout) : UInt64 := read layout.asks.nodeCount 0
+
+@[pf_inline] def Layout.tradersValid (layout : Layout) : UInt64 :=
+  validate layout.traders.map
+@[pf_inline] def Layout.bidsValid (layout : Layout) : UInt64 :=
+  validate layout.bids.map
+@[pf_inline] def Layout.asksValid (layout : Layout) : UInt64 :=
+  validate layout.asks.map
 
 @[pf_inline] def Layout.findTrader (layout : Layout) (key0 key1 key2 key3 : UInt64) : UInt64 :=
   findKey4 layout.traders.map key0 key1 key2 key3
@@ -143,6 +163,25 @@ def Layout.wellFormed (layout : Layout) : Bool :=
 @[pf_inline] def Layout.insertAsk (layout : Layout)
     (price sequence owner size lastSlot lastTime : UInt64) : UInt64 :=
   insertFifo layout.asks.map price sequence owner size lastSlot lastTime
+
+@[pf_inline] def Layout.removeBid (layout : Layout) (price sequence : UInt64) : UInt64 :=
+  removeFifo layout.bids.map price sequence
+@[pf_inline] def Layout.removeAsk (layout : Layout) (price sequence : UInt64) : UInt64 :=
+  removeFifo layout.asks.map price sequence
+
+@[pf_inline] def Layout.bidOwner (layout : Layout) (order : UInt64) : UInt64 :=
+  read layout.bids.owner order
+@[pf_inline] def Layout.bidOrderSize (layout : Layout) (order : UInt64) : UInt64 :=
+  read layout.bids.size order
+@[pf_inline] def Layout.askOwner (layout : Layout) (order : UInt64) : UInt64 :=
+  read layout.asks.owner order
+@[pf_inline] def Layout.askOrderSize (layout : Layout) (order : UInt64) : UInt64 :=
+  read layout.asks.size order
+
+@[pf_inline] def Layout.setBidOrderSize (layout : Layout) (order value : UInt64) : UInt64 :=
+  write layout.bids.size order value
+@[pf_inline] def Layout.setAskOrderSize (layout : Layout) (order value : UInt64) : UInt64 :=
+  write layout.asks.size order value
 
 @[pf_inline] def Layout.quoteLocked (layout : Layout) (trader : UInt64) : UInt64 :=
   read layout.traders.quoteLocked trader

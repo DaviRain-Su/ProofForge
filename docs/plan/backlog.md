@@ -541,6 +541,23 @@
   Surfpool 1.5.0 部署的 bytes 相同。核心 `ProofForge/Svm` 仍无 Phoenix 名字、offset 或专用
   Emit case。详见 `docs/plan/tasks/l5-050.md`。下一步先迁移 reduce/cancel/recorder 的其余
   positional geometry 到命名静态句柄，再扩 OrderPacket/matching。
+- P5 第四十四段 static storage component facade 已完成：通用
+  `AccountStorage.Source.validate` 现在只接收编译期 `RbMap` handle，由 facade 内部拥有
+  allocator header 的 root/size/cursor、packed cursor 拆分、stride/capacity、key shape 与 bid
+  ordering；Phoenix source 不再拼 validator geometry。`Examples.PhoenixV1.Layout` 集中
+  已迁移 512/512/128 路径的 offsets/capacities，并提供命名 header、book、order、trader
+  balance 与 mutation API；bid/ask free-funds reducer 及 raw reduce/claim/withdraw adapter
+  已改为组合这些 API，尚未迁移的 cancel/recorder positional geometry 留给下一切片。
+  Extract 只把 validator geometry 从 direct literal 泛化成 static literal；没有新增
+  Phoenix 特判、顶层 Ops/IR/Component/主 Emit case，也没有 heap Map/Vec、runtime geometry、
+  persistent pointer 或无界遍历。旧 `Projects` 路径已完全不存在。当前 digest
+  `588c0d478800f7de`，assembly 12,645,217 B、ELF 3,963,800 B、IDL 9,537 B，ELF SHA-256
+  `7edc297917766ebe73dbd316e090fd321a1f4898832713db60362a5738f51cb2`。213-job Lean、
+  51 个 SVM build 与 Phoenix profile Mollusk 65/65 全绿；Surfpool 1.5.0 以 3,917 个正常
+  Loader-v3 writes 部署并核对 exact 3,963,845-byte ProgramData，未使用 Test Validator。
+  详见 `docs/plan/tasks/l5-051.md`。下一步把 cancel-all/trader lookup/FifoCancel positional
+  geometry 迁到同一 layout/component facade，再收口 recorder profile，最后扩
+  OrderPacket/matching。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

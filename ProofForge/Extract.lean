@@ -1140,14 +1140,14 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataRbTreeValid" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeValid) &&
             e.getAppArgs.size ≥ 12 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -1172,12 +1172,12 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataRbTreeKey4Valid" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Valid) &&
             e.getAppArgs.size ≥ 10 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,

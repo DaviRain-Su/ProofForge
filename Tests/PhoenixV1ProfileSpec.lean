@@ -81,6 +81,10 @@ set_option maxRecDepth 2048
 
 private partial def valHasDataWord (acc word : Nat) : ProofForge.Svm.Ops.Val → Bool
   | .ext (.accDataWord actualAcc actualWord) _ => actualAcc == acc && actualWord == word
+  | .ext (.component (.accountStorage (.readWord field))) operands =>
+      (field.region.account == acc && field.firstWord == word &&
+        field.region.strideWords == 1 && field.region.capacity == 1) ||
+        operands.any (valHasDataWord acc word)
   | .field base _ | .bitNot base => valHasDataWord acc word base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
   | .shiftL lhs rhs | .shiftR lhs rhs

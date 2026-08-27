@@ -65,6 +65,43 @@ SVM operation is introduced.
         (UInt64.ofNat region.strideWords) (UInt64.ofNat region.capacity)
         (if tree.bid then 1 else 0) hasCursor price sequence
 
+@[pf_inline] private def mapRoot (map : RbMap) : UInt64 :=
+  match map with
+  | .key4 rootWord tree | .fifo rootWord tree =>
+      accDataWord (UInt64.ofNat tree.links.region.account) (UInt64.ofNat rootWord)
+
+@[pf_inline] private def mapSize (map : RbMap) : UInt64 :=
+  match map with
+  | .key4 rootWord tree | .fifo rootWord tree =>
+      accDataWord (UInt64.ofNat tree.links.region.account) (UInt64.ofNat (rootWord + 2))
+
+@[pf_inline] private def mapCursor (map : RbMap) : UInt64 :=
+  match map with
+  | .key4 rootWord tree | .fifo rootWord tree =>
+      accDataWord (UInt64.ofNat tree.links.region.account) (UInt64.ofNat (rootWord + 3))
+
+/-- Validate the tree and its exact live/free allocator partition from the static map handle. The
+allocator-header encoding remains internal to this facade; contracts do not pass root, size, bump,
+free-list, stride, or capacity geometry. -/
+@[pf_inline] def validate (map : RbMap) : UInt64 :=
+  let root := mapRoot map
+  let size := mapSize map
+  let cursor := mapCursor map
+  match map with
+  | .key4 _ tree =>
+      let region := tree.links.region
+      accDataRbTreeKey4Valid (UInt64.ofNat region.account) (UInt64.ofNat tree.links.firstWord)
+        (UInt64.ofNat tree.parentColor.firstWord) (UInt64.ofNat tree.key.firstWord)
+        (UInt64.ofNat region.strideWords) (UInt64.ofNat region.capacity)
+        (root &&& 0xffffffff) size (cursor &&& 0xffffffff) (cursor >>> 32)
+  | .fifo _ tree =>
+      let region := tree.links.region
+      accDataRbTreeValid (UInt64.ofNat region.account) (UInt64.ofNat tree.links.firstWord)
+        (UInt64.ofNat tree.parentColor.firstWord) (UInt64.ofNat tree.price.firstWord)
+        (UInt64.ofNat tree.sequence.firstWord) (UInt64.ofNat region.strideWords)
+        (UInt64.ofNat region.capacity) (if tree.bid then 1 else 0)
+        (root &&& 0xffffffff) size (cursor &&& 0xffffffff) (cursor >>> 32)
+
 @[pf_inline] def insertKey4 (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
   match map with
   | .key4 rootWord tree =>
