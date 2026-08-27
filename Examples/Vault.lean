@@ -3,6 +3,8 @@ import ProofForge
 namespace Examples.Vault
 
 open ProofForge.Evm.Runtime
+open ProofForge.Evm.HashedMap.Source
+open ProofForge.Evm
 
 /-- `shares` 的 hashed Map 用 slot 0 当 base。 -/
 structure State where
@@ -13,7 +15,8 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-def shareBase : UInt64 := 0
+@[pf_inline] def keys : MapU64 := { base := 0 }
+@[pf_inline] def shares : MapAddr256 := { base := 0 }
 
 @[pf_entry]
 def init (_seed : UInt64) : State :=
@@ -22,26 +25,26 @@ def init (_seed : UInt64) : State :=
 /-- hashed `Map UInt64 UInt64` 读。 -/
 @[pf_entry]
 def getU64 (_s : State) (k : UInt64) : UInt64 :=
-  evmMapGetU64 shareBase k
+  HashedMap.Source.getU64 keys k
 
 /-- hashed `Map UInt64 UInt64` 写。 -/
 @[pf_entry]
 def setU64 (_s : State) (k v : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmMapSetU64 shareBase k v)
+    .ok ({ dummy := 0 }, HashedMap.Source.setU64 keys k v)
   else
     .error .overflow
 
 /-- hashed `Map Addr20 UInt256` 读份额。 -/
 @[pf_entry]
 def shareOf (_s : State) (who : Addr20) : UInt256 :=
-  evmMapGetAddr256 shareBase who
+  getAddr256 shares who
 
 /-- 把 256-bit 份额记到 Addr20。 -/
 @[pf_entry]
 def credit (_s : State) (who : Addr20) (v : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, evmMapSetAddr256 shareBase who v)
+    .ok ({ dummy := 0 }, setAddr256 shares who v)
   else
     .error .overflow
 

@@ -42,6 +42,7 @@
 | [e-comp-002](tasks/e-comp-002.md) | done | 迁 hashed-map / 256-bit 叶进 Component |
 | [e-comp-003](tasks/e-comp-003.md) | done | 迁封闭 CALL 叶进 Component |
 | [e-comp-004](tasks/e-comp-004.md) | done | 迁 ETH / LOG / revert / receive 进 Component |
+| [e-comp-005](tasks/e-comp-005.md) | done | hashed-map 源侧静态 handle |
 | [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |

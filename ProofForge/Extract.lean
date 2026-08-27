@@ -630,6 +630,7 @@ private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :
     let projection ← e.getAppFn.constName?
     let name := projection.toString
     if !name.startsWith "ProofForge.Svm.AccountStorage." &&
+        !name.startsWith "ProofForge.Evm.HashedMap." &&
         !Attr.isInline env projection then none else pure ()
     reduceCtorProjectionFuel? env 64 e
 
@@ -931,7 +932,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if let some (_, unfolded) := unfoldUserHelper env e then
           match env.find? n with
           | some (.defnInfo info) =>
-            if isScalarResult env info.type then asVal env fuel' unfolded else none
+            if isScalarResult env info.type || isUInt256Type (resultType 16 info.type) ||
+                isAddr20Type (resultType 16 info.type) ||
+                isBytes32Type (resultType 16 info.type) then
+              asVal env fuel' unfolded
+            else none
           | _ => none
         else if (endsWith e ".checkPdaSeeds" ||
             isConstNamed e ``ProofForge.Svm.Runtime.checkPdaSeeds) && e.getAppArgs.size ≥ 2 then
@@ -1262,7 +1267,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let args := e.getAppArgs
           if args.isEmpty then none
           else
-            let baseE := args[args.size - 1]!
+            let rawBase := args[args.size - 1]!
+            let baseE :=
+              match unfoldUserHelper env rawBase with
+              | some (_, unfolded) => unfolded
+              | none => rawBase
             let limb := uint256LimbLit leaf
             let arith? :=
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
@@ -3137,9 +3146,19 @@ private def isRuntimeName (n : Name) (suf : String) : Bool :=
     n == (`ProofForge.Evm.Runtime).append suf.toName ||
     n.toString.endsWith s!".{suf}"
 
-private def mentionsRuntime (e : Expr) (suf : String) : Bool :=
+private def mentionsRuntime (env : Environment) (e : Expr) (suf : String) : Bool :=
   let suf := if suf.front == '.' then String.ofList (suf.toList.drop 1) else suf
-  e.getUsedConstantsAsSet.toList.any (isRuntimeName · suf)
+  let rec mentions (fuel : Nat) (e : Expr) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      e.getUsedConstantsAsSet.toList.any fun name =>
+        isRuntimeName name suf ||
+          (Attr.isInline env name &&
+            match env.find? name with
+            | some (.defnInfo info) => mentions fuel' info.value
+            | _ => false)
+  mentions 8 e
 
 /-- Runtime CPI wrappers are unfolded by namespace, not by an ever-growing list of recipe names. -/
 private def mentionsSvmRuntime (e : Expr) : Bool :=
@@ -4054,7 +4073,7 @@ private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
         if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
           let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
           -- Constant evaluation of Runtime stubs must not turn a consumed CPI result into zero.
-          if mentionsRuntime ret "invoke" || mentionsRuntime ret "invokeSigned" then none
+          if mentionsRuntime env ret "invoke" || mentionsRuntime env ret "invokeSigned" then none
           else val env ret
         else none
       else
@@ -4475,8 +4494,8 @@ private def collectIndexSets (env : Environment) (e : Expr)
 private def findIndexSet (env : Environment) (e : Expr) : Option Ops.Op :=
   (collectIndexSets env e)[0]?
 
-private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : String) :
-    Option Expr :=
+private def findRuntimeApp (fuel : Nat) (env : Environment) (e : Expr)
+    (want : Name) (suffix : String) : Option Expr :=
   let rec go (fuel : Nat) (e : Expr) : Option Expr :=
     match fuel with
     | 0 => none
@@ -4484,6 +4503,8 @@ private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : Strin
       let e := e.consumeMData
       if e.getAppFn.constName? == some want || endsWith e suffix then
         some e
+      else if let some (_, unfolded) := unfoldUserHelper env e then
+        go fuel' unfolded
       else
         match e with
         | .letE _ _ value body _ => go fuel' value <|> go fuel' (body.instantiate1 value)
@@ -4494,8 +4515,8 @@ private def findRuntimeApp (fuel : Nat) (e : Expr) (want : Name) (suffix : Strin
 
 private def findUnaryRuntime (env : Environment) (want : Name) (suffix : String)
     (e : Expr) : Option Ops.Val :=
-  if mentionsRuntime e suffix then
-    match findRuntimeApp 16 e want suffix with
+  if mentionsRuntime env e suffix then
+    match findRuntimeApp 16 env e want suffix with
     | some app =>
       if app.getAppArgs.size ≥ 1 then
         match val env app.getAppArgs[app.getAppArgs.size - 1]! with
@@ -4518,8 +4539,8 @@ private def findEvmDeposit (env : Environment) (e : Expr) : Option Ops.Val :=
 
 private def findEvmDeposit256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmDeposit256" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmDeposit256 ".evmDeposit256" with
+  if mentionsRuntime env e "evmDeposit256" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmDeposit256 ".evmDeposit256" with
     | some app =>
       match nthFromEnd app.getAppArgs 0 with
       | some amt =>
@@ -4531,8 +4552,8 @@ private def findEvmDeposit256 (env : Environment) (e : Expr) :
 
 private def findEvmSendEth256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmSendEth256" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmSendEth256 ".evmSendEth256" with
+  if mentionsRuntime env e "evmSendEth256" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSendEth256 ".evmSendEth256" with
     | some app =>
       let args := app.getAppArgs
       match nthFromEnd args 1, nthFromEnd args 0 with
@@ -4544,14 +4565,14 @@ private def findEvmSendEth256 (env : Environment) (e : Expr) :
     | none => some (.arg 0, .arg 1, .arg 2, .arg 3, .arg 4, .arg 5, .arg 6)
   else none
 
-private def findEvmCallValue256 (_env : Environment) (e : Expr) : Bool :=
-  mentionsRuntime e "evmCallValue256"
+private def findEvmCallValue256 (env : Environment) (e : Expr) : Bool :=
+  mentionsRuntime env e "evmCallValue256"
 
-private def findEvmSelfBalance256 (_env : Environment) (e : Expr) : Bool :=
-  mentionsRuntime e "evmSelfBalance256"
+private def findEvmSelfBalance256 (env : Environment) (e : Expr) : Bool :=
+  mentionsRuntime env e "evmSelfBalance256"
 
-private def findEvmDomainSeparator (_env : Environment) (e : Expr) : Bool :=
-  mentionsRuntime e "evmDomainSeparator"
+private def findEvmDomainSeparator (env : Environment) (e : Expr) : Bool :=
+  mentionsRuntime env e "evmDomainSeparator"
 
 private def findEvmLogTipped (env : Environment) (e : Expr) : Option Ops.Val :=
   findUnaryRuntime env ``ProofForge.Evm.Runtime.evmLogTipped ".evmLogTipped" e
@@ -4567,8 +4588,8 @@ private def findEvmLogApproval (env : Environment) (e : Expr) : Option Ops.Val :
 
 private def findEvmSendEth (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmSendEth" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmSendEth ".evmSendEth" with
+  if mentionsRuntime env e "evmSendEth" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSendEth ".evmSendEth" with
     | some app =>
       let args := app.getAppArgs
       let amt := valAtEnd env args 0
@@ -4582,8 +4603,8 @@ private def findEvmSendEth (env : Environment) (e : Expr) :
 
 private def findBinaryRuntime (env : Environment) (want : Name) (suffix : String)
     (e : Expr) : Option (Ops.Val × Ops.Val) :=
-  if mentionsRuntime e suffix then
-    match findRuntimeApp 16 e want suffix with
+  if mentionsRuntime env e suffix then
+    match findRuntimeApp 16 env e want suffix with
     | some app =>
       let args := app.getAppArgs
       if args.size ≥ 2 then some (valAtEnd env args 1, valAtEnd env args 0)
@@ -4593,8 +4614,8 @@ private def findBinaryRuntime (env : Environment) (want : Name) (suffix : String
 
 private def findTernaryRuntime (env : Environment) (want : Name) (suffix : String)
     (e : Expr) : Option (Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e suffix then
-    match findRuntimeApp 16 e want suffix with
+  if mentionsRuntime env e suffix then
+    match findRuntimeApp 16 env e want suffix with
     | some app =>
       let args := app.getAppArgs
       if args.size ≥ 3 then
@@ -4613,8 +4634,8 @@ private def findEvmMapSetU64 (env : Environment) (e : Expr) :
 
 private def findEvmMapGetAddr (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapGetAddr" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetAddr ".evmMapGetAddr" with
+  if mentionsRuntime env e "evmMapGetAddr" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapGetAddr ".evmMapGetAddr" with
     | some app =>
       let args := app.getAppArgs
       let base := valAtEnd env args 1
@@ -4628,8 +4649,8 @@ private def findEvmMapGetAddr (env : Environment) (e : Expr) :
 
 private def findEvmMapSetAddr (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapSetAddr" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetAddr ".evmMapSetAddr" with
+  if mentionsRuntime env e "evmMapSetAddr" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetAddr ".evmMapSetAddr" with
     | some app =>
       let args := app.getAppArgs
       let val := valAtEnd env args 0
@@ -4644,8 +4665,8 @@ private def findEvmMapSetAddr (env : Environment) (e : Expr) :
 
 private def findEvmMapGetPair (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapGetPair" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetPair ".evmMapGetPair" with
+  if mentionsRuntime env e "evmMapGetPair" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapGetPair ".evmMapGetPair" with
     | some app =>
       let args := app.getAppArgs
       let base := valAtEnd env args 2
@@ -4660,8 +4681,8 @@ private def findEvmMapGetPair (env : Environment) (e : Expr) :
 
 private def findEvmMapSetPair (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapSetPair" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetPair ".evmMapSetPair" with
+  if mentionsRuntime env e "evmMapSetPair" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetPair ".evmMapSetPair" with
     | some app =>
       let args := app.getAppArgs
       let val := valAtEnd env args 0
@@ -4677,8 +4698,8 @@ private def findEvmMapSetPair (env : Environment) (e : Expr) :
 
 private def findEvmTokenTransfer (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmTokenTransfer" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenTransfer ".evmTokenTransfer" with
+  if mentionsRuntime env e "evmTokenTransfer" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenTransfer ".evmTokenTransfer" with
     | some app =>
       let args := app.getAppArgs
       let amt := valAtEnd env args 0
@@ -4693,8 +4714,8 @@ private def findEvmTokenTransfer (env : Environment) (e : Expr) :
 
 private def findEvmTokenBalance (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmTokenBalanceOfSelf" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf
+  if mentionsRuntime env e "evmTokenBalanceOfSelf" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf
         ".evmTokenBalanceOfSelf" with
     | some app =>
       let args := app.getAppArgs
@@ -4708,8 +4729,8 @@ private def findEvmTokenBalance (env : Environment) (e : Expr) :
 
 private def findEvmMapGetAddr256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapGetAddr256" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetAddr256
+  if mentionsRuntime env e "evmMapGetAddr256" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapGetAddr256
         ".evmMapGetAddr256" with
     | some app =>
       let args := app.getAppArgs
@@ -4724,8 +4745,8 @@ private def findEvmMapGetAddr256 (env : Environment) (e : Expr) :
 
 private def findEvmMapGetPair256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapGetPair256" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapGetPair256
+  if mentionsRuntime env e "evmMapGetPair256" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapGetPair256
         ".evmMapGetPair256" with
     | some app =>
       let args := app.getAppArgs
@@ -4742,8 +4763,8 @@ private def findEvmMapGetPair256 (env : Environment) (e : Expr) :
 private def findEvmMapSetAddr256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapSetAddr256" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetAddr256
+  if mentionsRuntime env e "evmMapSetAddr256" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetAddr256
         ".evmMapSetAddr256" with
     | some app =>
       let args := app.getAppArgs
@@ -4760,8 +4781,8 @@ private def findEvmMapSetAddr256 (env : Environment) (e : Expr) :
 private def findEvmMapSetPair256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmMapSetPair256" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmMapSetPair256
+  if mentionsRuntime env e "evmMapSetPair256" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmMapSetPair256
         ".evmMapSetPair256" with
     | some app =>
       let args := app.getAppArgs
@@ -4783,8 +4804,8 @@ private def findEvmMapSetPair256 (env : Environment) (e : Expr) :
 private def findEvmTokenTransfer256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmTokenTransfer" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenTransfer
+  if mentionsRuntime env e "evmTokenTransfer" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenTransfer
         ".evmTokenTransfer" with
     | some app =>
       let args := app.getAppArgs
@@ -4803,8 +4824,8 @@ private def findEvmTokenTransfer256 (env : Environment) (e : Expr) :
 private def findEvmTokenApprove256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmTokenApprove" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenApprove
+  if mentionsRuntime env e "evmTokenApprove" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenApprove
         ".evmTokenApprove" with
     | some app =>
       let args := app.getAppArgs
@@ -4823,8 +4844,8 @@ private def findEvmTokenApprove256 (env : Environment) (e : Expr) :
 private def findEvmTokenTransferFrom256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmTokenTransferFrom" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenTransferFrom
+  if mentionsRuntime env e "evmTokenTransferFrom" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenTransferFrom
         ".evmTokenTransferFrom" with
     | some app =>
       let args := app.getAppArgs
@@ -4845,8 +4866,8 @@ private def findEvmTokenTransferFrom256 (env : Environment) (e : Expr) :
 
 private def findEvmWethDeposit256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmWethDeposit" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmWethDeposit
+  if mentionsRuntime env e "evmWethDeposit" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmWethDeposit
         ".evmWethDeposit" with
     | some app =>
       let args := app.getAppArgs
@@ -4863,8 +4884,8 @@ private def findEvmWethDeposit256 (env : Environment) (e : Expr) :
 
 private def findEvmWethWithdraw256 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmWethWithdraw" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmWethWithdraw
+  if mentionsRuntime env e "evmWethWithdraw" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmWethWithdraw
         ".evmWethWithdraw" with
     | some app =>
       let args := app.getAppArgs
@@ -4883,8 +4904,8 @@ private def findEvmSwapExact2 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmSwapExact2" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmSwapExact2
+  if mentionsRuntime env e "evmSwapExact2" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSwapExact2
         ".evmSwapExact2" with
     | some app =>
       let args := app.getAppArgs
@@ -4909,8 +4930,8 @@ private def findEvmSwapExact3 (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmSwapExact3" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmSwapExact3
+  if mentionsRuntime env e "evmSwapExact3" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmSwapExact3
         ".evmSwapExact3" with
     | some app =>
       let args := app.getAppArgs
@@ -4935,8 +4956,8 @@ private def findEvmSwapExact3 (env : Environment) (e : Expr) :
   else none
 
 private def findEvmTokenPermit (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
-  if mentionsRuntime e "evmTokenPermit" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenPermit ".evmTokenPermit" with
+  if mentionsRuntime env e "evmTokenPermit" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenPermit ".evmTokenPermit" with
     | some app =>
       let args := app.getAppArgs
       match nthFromEnd args 7, nthFromEnd args 6, nthFromEnd args 5, nthFromEnd args 4,
@@ -4959,8 +4980,8 @@ private def findEvmTokenPermit (env : Environment) (e : Expr) : Option (Array Op
   else none
 
 private def findEvmPermit (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
-  if mentionsRuntime e "evmPermit" && !(mentionsRuntime e "evmTokenPermit") then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmPermit ".evmPermit" with
+  if mentionsRuntime env e "evmPermit" && !(mentionsRuntime env e "evmTokenPermit") then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmPermit ".evmPermit" with
     | some app =>
       let args := app.getAppArgs
       match nthFromEnd args 6, nthFromEnd args 5, nthFromEnd args 4,
@@ -4983,8 +5004,8 @@ private def findEvmPermit (env : Environment) (e : Expr) : Option (Array Ops.Val
 private def findEvmTokenAllowance (env : Environment) (e : Expr) :
     Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val × Ops.Val ×
       Ops.Val × Ops.Val × Ops.Val) :=
-  if mentionsRuntime e "evmTokenAllowanceOf" then
-    match findRuntimeApp 16 e ``ProofForge.Evm.Runtime.evmTokenAllowanceOf
+  if mentionsRuntime env e "evmTokenAllowanceOf" then
+    match findRuntimeApp 16 env e ``ProofForge.Evm.Runtime.evmTokenAllowanceOf
         ".evmTokenAllowanceOf" with
     | some app =>
       let args := app.getAppArgs
@@ -5283,6 +5304,8 @@ private def collectEvmEffectOps (env : Environment) (e : Expr) : Array Ops.Op :=
         match opOfRuntimeApp env e with
         | some op => acc.push op
         | none => acc
+      else if let some (_, unfolded) := unfoldUserHelper env e then
+        walk fuel' unfolded acc
       else
         match e with
         | .letE _ _ value body _ =>

@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.Token
 
 open ProofForge.Evm.Runtime
+open ProofForge.Evm.HashedMap.Source
 
 /-- dummy 占槽；supply 是账户里的 UInt256；余额和额度走 hashed map。 -/
 structure State where
@@ -14,9 +15,9 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-def balBase : UInt64 := 0
-def allowBase : UInt64 := 1
-def nonceBase : UInt64 := 2
+@[pf_inline] def balances : MapAddr256 := { base := 0 }
+@[pf_inline] def allowances : MapPair256 := { base := 1 }
+@[pf_inline] def nonces : MapAddr256 := { base := 2 }
 
 @[pf_entry]
 def init (_seed : UInt64) : State :=
@@ -29,7 +30,7 @@ def mint (s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64
   if evmEq20 to ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := evmMapSetAddr256 balBase to v,
+    .ok ({ dummy := setAddr256 balances to v,
            supply := evmAdd256 s.supply v },
       evmLogTransfer256 ⟨0, 0, 0⟩ to v)
   else
@@ -37,7 +38,7 @@ def mint (s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64
 
 @[pf_entry]
 def balanceOf (_s : State) (who : Addr20) : UInt256 :=
-  evmMapGetAddr256 balBase who
+  getAddr256 balances who
 
 /-- 账户里的总量。mint 累加；burn 相减；transfer 不动。 -/
 @[pf_entry]
@@ -61,11 +62,11 @@ def symbol (_s : State) : Bytes32 :=
 
 @[pf_entry]
 def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
-  evmMapGetPair256 allowBase owner spender
+  getPair256 allowances owner spender
 
 @[pf_entry]
 def nonceOf (_s : State) (who : Addr20) : UInt256 :=
-  evmMapGetAddr256 nonceBase who
+  getAddr256 nonces who
 
 /-- 封闭 EIP-712 domain separator。name=`Token`，version=`1`。 -/
 @[pf_entry]
@@ -89,7 +90,7 @@ def approve (s : State) (spender : Addr20) (amt : UInt256) : Except Error (State
     .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy :=
-        evmMapSetPair256 allowBase evmCaller20 spender amt, supply := s.supply },
+        setPair256 allowances evmCaller20 spender amt, supply := s.supply },
       evmLogApproval256 evmCaller20 spender amt)
   else
     .error .overflow
@@ -102,8 +103,8 @@ def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
   if evmEq20 spender ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
-    let next := evmAdd256 (evmMapGetPair256 allowBase evmCaller20 spender) added
-    .ok ({ dummy := evmMapSetPair256 allowBase evmCaller20 spender next,
+    let next := evmAdd256 (getPair256 allowances evmCaller20 spender) added
+    .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
            supply := s.supply },
       evmLogApproval256 evmCaller20 spender next)
   else
@@ -116,27 +117,27 @@ def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
   if evmEq20 spender ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (evmMapGetPair256 allowBase evmCaller20 spender) subtracted then
-    let next := evmSub256 (evmMapGetPair256 allowBase evmCaller20 spender) subtracted
-    .ok ({ dummy := evmMapSetPair256 allowBase evmCaller20 spender next,
+  else if evmGe256 (getPair256 allowances evmCaller20 spender) subtracted then
+    let next := evmSub256 (getPair256 allowances evmCaller20 spender) subtracted
+    .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
            supply := s.supply },
       evmLogApproval256 evmCaller20 spender next)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (evmMapGetPair256 allowBase evmCaller20 spender) subtracted)
+      evmRevertInsufficient (getPair256 allowances evmCaller20 spender) subtracted)
 
 /-- 从 caller 扣余额并减 totalSupply。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
 def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
-  if evmGe256 (evmMapGetAddr256 balBase evmCaller20) amt then
+  if evmGe256 (getAddr256 balances evmCaller20) amt then
     let debit :=
-      evmMapSetAddr256 balBase evmCaller20
-        (evmSub256 (evmMapGetAddr256 balBase evmCaller20) amt)
+      setAddr256 balances evmCaller20
+        (evmSub256 (getAddr256 balances evmCaller20) amt)
     .ok ({ dummy := debit, supply := evmSub256 s.supply amt },
       evmLogTransfer256 evmCaller20 ⟨0, 0, 0⟩ amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (evmMapGetAddr256 balBase evmCaller20) amt)
+      evmRevertInsufficient (getAddr256 balances evmCaller20) amt)
 
 /-- caller 用额度烧掉 owner 的币。额度或余额不够 → `Insufficient`。
     `owner` 为零地址 → `ZeroAddress()`。 -/
@@ -145,21 +146,21 @@ def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
   if evmEq20 owner ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (evmMapGetPair256 allowBase owner evmCaller20) amt then
-    if evmGe256 (evmMapGetAddr256 balBase owner) amt then
+  else if evmGe256 (getPair256 allowances owner evmCaller20) amt then
+    if evmGe256 (getAddr256 balances owner) amt then
       let debit :=
-        (evmMapSetAddr256 balBase owner
-          (evmSub256 (evmMapGetAddr256 balBase owner) amt)) |||
-        (evmMapSetPair256 allowBase owner evmCaller20
-          (evmSub256 (evmMapGetPair256 allowBase owner evmCaller20) amt))
+        (setAddr256 balances owner
+          (evmSub256 (getAddr256 balances owner) amt)) |||
+        (setPair256 allowances owner evmCaller20
+          (evmSub256 (getPair256 allowances owner evmCaller20) amt))
       .ok ({ dummy := debit, supply := evmSub256 s.supply amt },
         evmLogTransfer256 owner ⟨0, 0, 0⟩ amt)
     else
       .ok ({ dummy := s.dummy, supply := s.supply },
-        evmRevertInsufficient (evmMapGetAddr256 balBase owner) amt)
+        evmRevertInsufficient (getAddr256 balances owner) amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (evmMapGetPair256 allowBase owner evmCaller20) amt)
+      evmRevertInsufficient (getPair256 allowances owner evmCaller20) amt)
 
 /-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。
     `dest` 为零地址 → `ZeroAddress()`。 -/
@@ -167,17 +168,17 @@ def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
 def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
   if evmEq20 dest ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (evmMapGetAddr256 balBase evmCaller20) amt then
+  else if evmGe256 (getAddr256 balances evmCaller20) amt then
     let debit :=
-      (evmMapSetAddr256 balBase evmCaller20
-        (evmSub256 (evmMapGetAddr256 balBase evmCaller20) amt)) |||
-      (evmMapSetAddr256 balBase dest
-        (evmAdd256 (evmMapGetAddr256 balBase dest) amt))
+      (setAddr256 balances evmCaller20
+        (evmSub256 (getAddr256 balances evmCaller20) amt)) |||
+      (setAddr256 balances dest
+        (evmAdd256 (getAddr256 balances dest) amt))
     .ok ({ dummy := debit, supply := s.supply },
       evmLogTransfer256 evmCaller20 dest amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (evmMapGetAddr256 balBase evmCaller20) amt)
+      evmRevertInsufficient (getAddr256 balances evmCaller20) amt)
 
 /-- 查 pair 额度；不足 → `Insufficient`。成功则改余额并写剩余额度。
     `dest` 为零地址 → `ZeroAddress()`。 -/
@@ -186,23 +187,23 @@ def transferFrom (s : State) (owner dest : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
   if evmEq20 dest ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
-  else if evmGe256 (evmMapGetPair256 allowBase owner evmCaller20) amt then
-    if evmGe256 (evmMapGetAddr256 balBase owner) amt then
+  else if evmGe256 (getPair256 allowances owner evmCaller20) amt then
+    if evmGe256 (getAddr256 balances owner) amt then
       let debit :=
-        (evmMapSetAddr256 balBase owner
-          (evmSub256 (evmMapGetAddr256 balBase owner) amt)) |||
-        (evmMapSetAddr256 balBase dest
-          (evmAdd256 (evmMapGetAddr256 balBase dest) amt)) |||
-        (evmMapSetPair256 allowBase owner evmCaller20
-          (evmSub256 (evmMapGetPair256 allowBase owner evmCaller20) amt))
+        (setAddr256 balances owner
+          (evmSub256 (getAddr256 balances owner) amt)) |||
+        (setAddr256 balances dest
+          (evmAdd256 (getAddr256 balances dest) amt)) |||
+        (setPair256 allowances owner evmCaller20
+          (evmSub256 (getPair256 allowances owner evmCaller20) amt))
       .ok ({ dummy := debit, supply := s.supply },
         evmLogTransfer256 owner dest amt)
     else
       .ok ({ dummy := s.dummy, supply := s.supply },
-        evmRevertInsufficient (evmMapGetAddr256 balBase owner) amt)
+        evmRevertInsufficient (getAddr256 balances owner) amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      evmRevertInsufficient (evmMapGetPair256 allowBase owner evmCaller20) amt)
+      evmRevertInsufficient (getPair256 allowances owner evmCaller20) amt)
 
 /-- LOG1 `Transfer(uint64)`。 -/
 @[pf_entry]

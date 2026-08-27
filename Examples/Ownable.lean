@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.Ownable
 
 open ProofForge.Evm.Runtime
+open ProofForge.Evm.HashedMap.Source
 
 /-- owner 是构造期 immutable；storage 只留计数。allowance 走 hashed pair map。 -/
 structure State where
@@ -14,8 +15,7 @@ inductive Error where
   | unauthorized
   deriving Repr, DecidableEq, Inhabited, BEq
 
-/-- pair-key Map 的 hashed base。抽出认这个名字。 -/
-def allowBase : UInt64 := 0
+@[pf_inline] def allowances : MapPair := { base := 0 }
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
@@ -57,7 +57,7 @@ def approve (_s : State) (owner spender : Addr20) (amt : UInt64) :
     Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     .ok ({ value := 0 },
-      evmMapSetPair allowBase owner spender amt)
+      setPair allowances owner spender amt)
   else
     .error .overflow
 
@@ -67,13 +67,13 @@ def spend (_s : State) (owner spender : Addr20) (amt : UInt64) :
     Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     .ok ({ value := 0 },
-      evmMapSetPair allowBase owner spender amt)
+      setPair allowances owner spender amt)
   else
     .error .overflow
 
 @[pf_entry]
 def allowance (_s : State) (owner spender : Addr20) : UInt64 :=
-  evmMapGetPair allowBase owner spender
+  getPair allowances owner spender
 
 @[pf_entry]
 def ownerOf (_s : State) : Addr20 :=

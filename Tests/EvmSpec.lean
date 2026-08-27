@@ -72,6 +72,13 @@ open ProofForge.Evm
   (ProofForge.Evm.HashedMap.Call.canonical (fun _ => "x")
     (.setU64 (.lit 0) (.lit 1) (.lit 2) : ProofForge.Evm.HashedMap.Call ProofForge.Evm.Ops.Val))
     == "mset(x,x,x)"
+#guard
+  (ProofForge.Evm.HashedMap.Source.getU64
+    ({ base := 7 } : ProofForge.Evm.HashedMap.Source.MapU64) 3) == 0
+#guard
+  (ProofForge.Evm.HashedMap.Source.getAddr256
+    ({ base := 0 } : ProofForge.Evm.HashedMap.Source.MapAddr256)
+    ⟨1, 2, 3⟩).w0 == 0
 #guard ProofForge.Evm.NativeFx.Call.wellFormed (fun _ => true)
   (.receive : ProofForge.Evm.NativeFx.Call ProofForge.Evm.Ops.Val)
 #guard

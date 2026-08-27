@@ -1,0 +1,69 @@
+import ProofForge.Attr
+import ProofForge.Evm.Runtime
+
+namespace ProofForge.Evm.HashedMap.Source
+
+open ProofForge.Evm.Runtime
+
+/--
+Source-facing handles for hashed storage maps. A contract names a static map once and calls these
+operations with only dynamic keys and values. `@[pf_inline]` erases the handle at extraction,
+leaving the existing hashed-map component plan; no runtime geometry or new EVM operation is
+introduced.
+-/
+
+structure MapU64 where
+  base : UInt64
+  deriving BEq, Repr, Inhabited
+
+structure MapAddr where
+  base : UInt64
+  deriving BEq, Repr, Inhabited
+
+structure MapPair where
+  base : UInt64
+  deriving BEq, Repr, Inhabited
+
+structure MapAddr256 where
+  base : UInt64
+  deriving BEq, Repr, Inhabited
+
+structure MapPair256 where
+  base : UInt64
+  deriving BEq, Repr, Inhabited
+
+attribute [pf_inline]
+  MapU64.base MapAddr.base MapPair.base MapAddr256.base MapPair256.base
+
+@[pf_inline] def getU64 (map : MapU64) (key : UInt64) : UInt64 :=
+  evmMapGetU64 map.base key
+
+@[pf_inline] def setU64 (map : MapU64) (key value : UInt64) : UInt64 :=
+  evmMapSetU64 map.base key value
+
+@[pf_inline] def getAddr (map : MapAddr) (key : Addr20) : UInt64 :=
+  evmMapGetAddr map.base key
+
+@[pf_inline] def setAddr (map : MapAddr) (key : Addr20) (value : UInt64) : UInt64 :=
+  evmMapSetAddr map.base key value
+
+@[pf_inline] def getPair (map : MapPair) (owner spender : Addr20) : UInt64 :=
+  evmMapGetPair map.base owner spender
+
+@[pf_inline] def setPair (map : MapPair) (owner spender : Addr20) (value : UInt64) : UInt64 :=
+  evmMapSetPair map.base owner spender value
+
+@[pf_inline] def getAddr256 (map : MapAddr256) (key : Addr20) : UInt256 :=
+  evmMapGetAddr256 map.base key
+
+@[pf_inline] def setAddr256 (map : MapAddr256) (key : Addr20) (value : UInt256) : UInt64 :=
+  evmMapSetAddr256 map.base key value
+
+@[pf_inline] def getPair256 (map : MapPair256) (owner spender : Addr20) : UInt256 :=
+  evmMapGetPair256 map.base owner spender
+
+@[pf_inline] def setPair256 (map : MapPair256) (owner spender : Addr20)
+    (value : UInt256) : UInt64 :=
+  evmMapSetPair256 map.base owner spender value
+
+end ProofForge.Evm.HashedMap.Source
