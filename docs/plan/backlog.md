@@ -635,6 +635,23 @@
   Loader-v3 transaction 部署核对，未使用 Test Validator。详见
   `docs/plan/tasks/l5-055.md`。下一步保持 component/optional-return 边界固定，先补
   one-maker 后 noncrossing remainder posting，再做 bounded multi-maker aggregate traversal。
+- P5 第四十九段 bounded one-maker remainder posting 已完成：当较小 maker 被完整删除且 strict
+  cursor 证明下一 opposite order 不再 crossing 时，Limit 把 taker remainder 插入己方固定
+  512-slot book；bid 使用 complemented sequence，ask 使用 raw sequence，bid 按 taker limit
+  price 锁 quote、ask 锁 remaining base。余额、aggregate taker fee、order/market sequence 与
+  `Fill(0) → FillSummary(1) → Place(2)` audit 顺序均精确固定；成功 posting 通过既有 generic
+  optional packed return 返回单元素 Borsh `FIFOOrderId`，无 posting 仍完全不设置 return data。
+  full selected book/eviction、still-crossing remainder、TIF、sequence 异常与未支持 policy 继续
+  fail closed。generic Ops/IR/CFG/Component/主 Emit 均未新增 case，持久状态仍只有 account
+  bytes、one-based index 与 `0` sentinel，没有 heap Map/Vec、runtime geometry、persistent
+  pointer 或无界遍历。当前 digest `d16a4fd2a1a0f648`，assembly 13,696,391 B、ELF
+  4,285,024 B、IDL 9,537 B，SHA-256
+  `1339e5cd36607b42ad8f2a2f80915f9304ea60d9ea099ca184137f5ef59cdcf7`；229-job Lean、51 个
+  SVM build、14 个 EVM build、Phoenix profile 72/72 与 Anvil 14/14 全绿。Surfpool 1.5.0
+  以 4,235 个正常 Loader-v3 writes 部署并核对 exact ProgramData，未使用 Test Validator。
+  详见 `docs/plan/tasks/l5-056.md`。下一步先在既有 local/`forBody` IR 上补可复用的
+  invocation-local bounded scalar fold/frame，再用它组合 multi-maker cursor 与 aggregate fee，
+  避免把协议 scratch 写进持久账户或继续扩主 Emit。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。
@@ -652,7 +669,7 @@
 | P2 链上认证矩阵 | 已有 | 可组装 Phoenix ELF；classic SPL Token 与 signed self-CPI | Phoenix Mollusk lifecycle/CPI/authenticated audit 矩阵 8/8；跨四档逐样本 chain refinement 补齐前不得宣称 host↔chain 完整 refinement |
 | P3 横向回归 | 已有 | P0/P2 产物稳定 | `lake build Tests`、全 SVM `pf build`、SVM Mollusk 194/194、EVM Anvil 12/12 全绿；无 Phoenix 特判。跨四档 host↔chain refinement 仍未宣称；P4 部署资格见下一行 |
 | P4 产物资格/压缩 | 已有（本地 Surfpool Loader-v3 transaction；公网未声明） | P0 的稳定 CFG 和可测基线 | 通用 OOB fallthrough + 全图 keyed shared-block；Phoenix assembly 10,642,331 B / ELF 3,429,336 B，digest 不变。ELF 通过 10,485,715 B size gate，并经 Surfpool 1.5.0 的 3,389 write + deploy + authority transactions 落入 exact ProgramData；全 49 SVM + Mollusk 198/198 + Anvil 12/12 回归通过。更深 value-tree CSE 为后续优化 |
-| P5 动态 Phoenix-v1 | 部分：profile + complete tree/free-list validation + bounded trader/order insertion/removal + generic component/account-storage boundary + ordered cursor/audit recorder + tag 3 PostOnly/one-maker Limit slices + official tags 4–9 + 本地部署门已有 | 固定/固定-stride有界 account region、parent walk、fixed bitmap/stack、effect-safe guarded stores | canonical profile/allocator envelope/三树 invariants 已进 Lean/Mollusk；trader allocator 与 bid/ask books 均可按 Sokoban 0.3.0 填满并逐个删空；word-store、parent path、FIFO/Pubkey RB validators/mutation/key-based cursor 均已迁入 `Component → AccountStorage` bridge；bounded recorder 以 SDK 32 KiB cursor 提供 1,246-byte pre-flush 与 header-only finish；two-word ordered map/one-based allocator source API、zero-remove/nonzero-update policy、Borsh enum variant routing 与 optional packed return 已固定，strict PostOnly 与 one-maker full/partial-fill Limit、official tags 4–9 通过 `EntryAdapter + Component` 组合。下一步补 posting 与 multi-maker；remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
+| P5 动态 Phoenix-v1 | 部分：profile + complete tree/free-list validation + bounded trader/order insertion/removal + generic component/account-storage boundary + ordered cursor/audit recorder + tag 3 PostOnly/one-maker Limit slices + official tags 4–9 + 本地部署门已有 | 固定/固定-stride有界 account region、parent walk、fixed bitmap/stack、effect-safe guarded stores | canonical profile/allocator envelope/三树 invariants 已进 Lean/Mollusk；trader allocator 与 bid/ask books 均可按 Sokoban 0.3.0 填满并逐个删空；word-store、parent path、FIFO/Pubkey RB validators/mutation/key-based cursor 均已迁入 `Component → AccountStorage` bridge；bounded recorder 以 SDK 32 KiB cursor 提供 1,246-byte pre-flush 与 header-only finish；two-word ordered map/one-based allocator source API、zero-remove/nonzero-update policy、Borsh enum variant routing 与 optional packed return 已固定，strict PostOnly 与 one-maker full/partial/remainder-posting Limit、official tags 4–9 通过 `EntryAdapter + Component` 组合。下一步补 invocation-local bounded scalar fold/frame 后做 multi-maker；remaining accounts 和完整 Phoenix-v1 指令兼容仍 fail closed |
 | P6 SDK memory/protocol surface | 进行中：官方形状 transient heap 模型和 recorder lowering 已有 | P5 的 account-resident 边界；后续需要 effect-safe lowering | VM frame 可显式建模 32–256 KiB，但官方 SDK global allocator 固定使用 32 KiB；recorder 遵守同一 cursor/OOM/no-op free。后续只开放 bounded scratch/container API，禁止持久 heap pointer。再分片补 32-byte/u128/Borsh、remaining accounts 和 Token-2022 extension semantics |
 
 P0–P4 不把 Phoenix 名字或字段偏移加入 Extract/IR/emitter。P5 verifier 已能按账户原始
