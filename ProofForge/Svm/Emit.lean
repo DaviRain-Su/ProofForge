@@ -4669,7 +4669,9 @@ private def emitCFGBody (p : IR.Program) (marker handler : String) (method : IR.
     | .raw entry => entry.optionalReturnData
     | .generated => false
   let packedReturnWidths := match method.entry with
-    | .raw entry => if entry.returnWidths.isEmpty then none else some entry.returnWidths
+    | .raw entry =>
+        let widths := entry.wireReturnWidths
+        if widths.isEmpty then none else some widths
     | .generated => none
   let nextId := graph.blocks.foldl (init := 0) fun next block => max next (block.id + 1)
   let mut nodes := Array.replicate nextId (default : CFGAsmNode)

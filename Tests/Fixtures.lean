@@ -1,4 +1,5 @@
 import Examples.Counter
+import ProofForge.Core.Value
 import ProofForge.Svm.AccountStorage.Source
 import ProofForge.Svm.Runtime
 
@@ -6,6 +7,14 @@ namespace Tests.Fixtures
 
 /-- 负向：入口类型带 `Nat`。 -/
 def usesNat (n : Nat) : Nat := n + 1
+
+/-- Positive profile fixture: a bounded literal index is compile-time type metadata, not runtime Nat. -/
+def usesFixedBytes12 (value : ProofForge.Core.Value.FixedBytes 12) :
+    ProofForge.Core.Value.FixedBytes 12 := value
+
+/-- Negative profile fixture: a polymorphic fixed-byte size is still a runtime-shaped Nat boundary. -/
+def usesDynamicFixedBytes (n : Nat) (value : ProofForge.Core.Value.FixedBytes n) :
+    ProofForge.Core.Value.FixedBytes n := value
 
 /-- 负向：partial。 -/
 partial def loops (n : UInt64) : UInt64 :=

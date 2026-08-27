@@ -1,4 +1,5 @@
 import Lean
+import ProofForge.Core.Value
 
 open Lean
 
@@ -27,6 +28,38 @@ private def forbiddenTypeConst : Name → Option String
   | ``Task => some "Task"
   | ``BaseIO => some "BaseIO"
   | _ => none
+
+private def natLiteral? (e : Expr) : Option Nat :=
+  let rec go (fuel : Nat) (e : Expr) : Option Nat :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := e.consumeMData
+      match e with
+      | .lit (.natVal n) => some n
+      | _ =>
+        if e.getAppFn.constName? == some ``OfNat.ofNat then
+          e.getAppArgs.findSome? (go fuel')
+        else none
+  go 8 e
+
+/-- A literal bounded `FixedBytes n` index is source metadata, not runtime `Nat`. Every other Nat
+occurrence at an entry boundary remains rejected. -/
+private partial def hasRuntimeNat (e : Expr) : Bool :=
+  let e := e.consumeMData
+  if e.getAppFn.constName? == some ``ProofForge.Core.Value.FixedBytes then
+    match e.getAppArgs.back?.bind natLiteral? with
+    | some n => !ProofForge.Core.Value.FixedBytes.validSize n
+    | none => true
+  else
+    match e with
+    | .const name _ => name == ``Nat
+    | .app fn arg => hasRuntimeNat fn || hasRuntimeNat arg
+    | .lam _ type body _ | .forallE _ type body _ => hasRuntimeNat type || hasRuntimeNat body
+    | .letE _ type value body _ =>
+        hasRuntimeNat type || hasRuntimeNat value || hasRuntimeNat body
+    | .mdata _ body | .proj _ _ body => hasRuntimeNat body
+    | _ => false
 
 /-- 用户模块声明才施加 extern/opaque/implemented_by 门。
 Lean/Std/Init 以及 prelude 类型（`UInt64.ofNat`）不算用户代码。
@@ -105,7 +138,7 @@ def check (env : Environment) (root : Name) : Decision :=
       match env.find? root with
       | none => return .reject s!"profile/rejected: unknown {root}"
       | some rootInfo =>
-        if rootInfo.type.getUsedConstantsAsSet.contains ``Nat then
+        if hasRuntimeNat rootInfo.type then
           return .reject s!"profile/rejected: Nat in root type {root}"
       for n in names do
         let some info := env.find? n

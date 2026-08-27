@@ -4,6 +4,7 @@ namespace Examples.Wide
 
 open ProofForge.Evm.Runtime
 open ProofForge.Evm
+open ProofForge.Core.Value
 
 structure State where
   dummy : UInt64
@@ -31,6 +32,14 @@ def mul (_s : State) (a b : UInt256) : UInt256 :=
 
 @[pf_entry]
 def echo (_s : State) (a : UInt256) : UInt256 :=
+  a
+
+@[pf_entry]
+def echo128 (_s : State) (a : UInt128) : UInt128 :=
+  a
+
+@[pf_entry]
+def echoBytes12 (_s : State) (a : FixedBytes 12) : FixedBytes 12 :=
   a
 
 /-- mutate 入口，让模块有 Except 形状。 -/

@@ -58,6 +58,16 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceEnumOptional.annotations == #["svm.raw.v5:11:2:0:2:8"] &&
       sourceEnumOptional.paramWidths == #[1, 8] && sourceEnumOptional.retCount == 2 do
     throwError "wrong source Borsh enum-variant metadata"
+  let some sourceEcho128 := source.methods.find? (·.ixName == "echo128")
+    | throwError "missing shared UInt128 raw method"
+  let some sourceEchoBytes12 := source.methods.find? (·.ixName == "echoBytes12")
+    | throwError "missing shared FixedBytes raw method"
+  unless sourceEcho128.paramTypes == #[.uint128] && sourceEcho128.retTypes == #[.uint128] &&
+      sourceEcho128.paramWidths == #[16] && sourceEcho128.retCount == 2 &&
+      sourceEchoBytes12.paramTypes == #[.fixedBytes 12] &&
+      sourceEchoBytes12.retTypes == #[.fixedBytes 12] &&
+      sourceEchoBytes12.paramWidths == #[12] && sourceEchoBytes12.retCount == 2 do
+    throwError "wrong shared SVM codec metadata"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -153,6 +163,27 @@ elab "#pf_guard_entry_adapter" : command => do
           optional.optionalReturnData do
         throwError s!"wrong projected enum variants: {repr small}, {repr wide}, {repr optional}"
   | _, _, _ => throwError "Borsh enum variant lost its raw adapter"
+  let some echo128 := program.methods.find? (·.ixName == "echo128")
+    | throwError "missing projected shared UInt128 method"
+  let some echoBytes12 := program.methods.find? (·.ixName == "echoBytes12")
+    | throwError "missing projected shared FixedBytes method"
+  match echo128.entry, echoBytes12.entry with
+  | .raw wide, .raw bytes =>
+      unless wide.paramLeafWidths == #[8, 8] && wide.paramLeafCounts == #[2] &&
+          wide.inferredReturnWidths == #[8, 8] && wide.dataLen == 17 &&
+          wide.returnDataLen == 16 &&
+          bytes.paramLeafWidths == #[8, 4] && bytes.paramLeafCounts == #[2] &&
+          bytes.inferredReturnWidths == #[8, 4] && bytes.dataLen == 13 &&
+          bytes.returnDataLen == 12 && bytes.returnScratchBytes == 16 &&
+          bytes.canonical.contains "borsh-leaves.[8,4].borsh-returns.[8,4]" do
+        throwError s!"wrong shared SVM codec plans: {repr wide}, {repr bytes}"
+  | _, _ => throwError "shared codec method lost its raw adapter"
+  let bareWide := { echo128 with ops := #[.returnU64 (.arg 0)] }
+  match bareWide.toCFG with
+  | .error reason =>
+      unless reason.contains "requires a limb projection" do
+        throwError s!"wrong bare multi-limb rejection: {reason}"
+  | .ok _ => throwError "bare multi-limb raw parameter was accepted"
   unless IR.generatedAccountCount program == 1 do
     throwError "raw account geometry leaked into generated methods"
   let asm ←
@@ -165,6 +196,7 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call borshSingletonPair" && asm.contains "lddw r2, 20" &&
       asm.contains "call enumSmall" && asm.contains "call enumWide" &&
       asm.contains "call enumOptional" &&
+      asm.contains "call echo128" && asm.contains "call echoBytes12" &&
       asm.contains "optional_return_present_enumOptional_" &&
       asm.contains "optional_return_invalid_enumOptional_" &&
       asm.contains "jeq r1, 0, raw_route_match_" &&
@@ -206,6 +238,12 @@ private def accepts (result : Except String α) : Bool :=
 #guard accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:0:8"] 1 #[1])
 #guard accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:1:8"] 1 #[8])
 #guard accepts (EntryAdapter.decode #["svm.raw.v5:11:2:0:2:8"] 2 #[1, 8] 2)
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:12:2:0"] 1 #[16] 2
+  #[.uint128] #[.uint128])
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:13:2:0"] 1 #[12] 2
+  #[.fixedBytes 12] #[.fixedBytes 12])
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:13:2:0"] 1 #[20] 3
+  #[.address20] #[.address20])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:256:2:0"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:2"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 3])

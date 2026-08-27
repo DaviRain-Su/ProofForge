@@ -156,6 +156,9 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [l5-059](tasks/l5-059.md) | done | Two-maker noncrossing remainder posting |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
 | [r0-001](tasks/r0-001.md) | done | Runtime / SDK ownership matrix 与 anti-leak CI 门 |
+| [r1-001](tasks/r1-001.md) | done | Typed codec metadata 与 EVM scalar adapter |
+| [r1-002](tasks/r1-002.md) | done | Allocation-free shared boundary values |
+| [r1-003](tasks/r1-003.md) | done | Shared scalar SVM Borsh / EVM ABI binding |
 
 
 积压：[backlog.md](backlog.md)

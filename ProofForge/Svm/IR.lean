@@ -187,55 +187,105 @@ structure Method where
   evaluation : Core.Evaluation Ops.ValKind := {}
   deriving BEq, Repr, Inhabited
 
-private partial def rewriteRawArg (base : Nat) : Ops.Val → Ops.Val
-  | .arg index => .local (base + index)
-  | .local index => .local index
-  | .field value name => .field (rewriteRawArg base value) name
-  | .lit value => .lit value
-  | .bitAnd lhs rhs => .bitAnd (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .bitOr lhs rhs => .bitOr (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .bitXor lhs rhs => .bitXor (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .bitNot value => .bitNot (rewriteRawArg base value)
-  | .shiftL lhs rhs => .shiftL (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .shiftR lhs rhs => .shiftR (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .indexGet value name index len offset =>
-      .indexGet (rewriteRawArg base value) name (rewriteRawArg base index) len offset
-  | .loopIx => .loopIx
-  | .select cmp lhs rhs thn els =>
-      .select cmp (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-        (rewriteRawArg base thn) (rewriteRawArg base els)
-  | .addU64 lhs rhs => .addU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .subU64 lhs rhs => .subU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .mulU64 lhs rhs => .mulU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .divU64 lhs rhs => .divU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .modU64 lhs rhs => .modU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .ext kind operands => .ext kind (operands.map (rewriteRawArg base))
+private def rawLimbIndex : String → Option Nat
+  | "w0" => some 0
+  | "w1" => some 1
+  | "w2" => some 2
+  | "w3" => some 3
+  | _ => none
 
-private partial def rewriteRawArgsInOp (base : Nat) : Ops.Op → Ops.Op
-  | .letLocal index value => .letLocal index (rewriteRawArg base value)
-  | .joinLocal index => .joinLocal index
-  | .setLocal index value => .setLocal index (rewriteRawArg base value)
-  | .checkedAddU64 lhs rhs => .checkedAddU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .checkedSubU64 lhs rhs => .checkedSubU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .checkedMulU64 lhs rhs => .checkedMulU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .checkedDivU64 lhs rhs => .checkedDivU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-  | .checkedModU64 lhs rhs => .checkedModU64 (rewriteRawArg base lhs) (rewriteRawArg base rhs)
+private partial def rewriteRawArg (entry : EntryAdapter.RawEntry) (base : Nat) :
+    Ops.Val → Except String Ops.Val
+  | .arg index => do
+      unless index < entry.paramWidths.size do
+        throw "extract/unsupported: raw entry cannot access managed State"
+      unless entry.paramLeafCount index == 1 do
+        throw s!"extract/unsupported: raw multi-limb parameter {index} requires a limb projection"
+      return .local (base + entry.paramLeafStart index)
+  | .local index => pure (.local index)
+  | .field (.arg index) name => do
+      unless index < entry.paramWidths.size do
+        throw "extract/unsupported: raw entry cannot access managed State"
+      let some limb := rawLimbIndex name
+        | throw s!"extract/unsupported: raw boundary value has unsupported projection {name}"
+      unless limb < entry.paramLeafCount index do
+        throw s!"extract/unsupported: raw boundary projection {name} is out of range"
+      return .local (base + entry.paramLeafStart index + limb)
+  | .field value name => return .field (← rewriteRawArg entry base value) name
+  | .lit value => pure (.lit value)
+  | .bitAnd lhs rhs => return .bitAnd (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .bitOr lhs rhs => return .bitOr (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .bitXor lhs rhs => return .bitXor (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .bitNot value => return .bitNot (← rewriteRawArg entry base value)
+  | .shiftL lhs rhs => return .shiftL (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .shiftR lhs rhs => return .shiftR (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .indexGet value name index len offset =>
+      return .indexGet (← rewriteRawArg entry base value) name
+        (← rewriteRawArg entry base index) len offset
+  | .loopIx => pure .loopIx
+  | .select cmp lhs rhs thn els =>
+      return .select cmp (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+        (← rewriteRawArg entry base thn) (← rewriteRawArg entry base els)
+  | .addU64 lhs rhs => return .addU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .subU64 lhs rhs => return .subU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .mulU64 lhs rhs => return .mulU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .divU64 lhs rhs => return .divU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .modU64 lhs rhs => return .modU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .ext kind operands => return .ext kind (← operands.mapM (rewriteRawArg entry base))
+
+private def rewriteRawCpiWord (entry : EntryAdapter.RawEntry) (base : Nat) :
+    Ops.CpiWord Ops.Val → Except String (Ops.CpiWord Ops.Val)
+  | .u8le value => return .u8le (← rewriteRawArg entry base value)
+  | .u16le value => return .u16le (← rewriteRawArg entry base value)
+  | .u32le value => return .u32le (← rewriteRawArg entry base value)
+  | .u64le value => return .u64le (← rewriteRawArg entry base value)
+  | .selfEntry tag seed => pure (.selfEntry tag seed)
+  | .ascii value => pure (.ascii value)
+  | .programId => pure .programId
+  | .accKey index => pure (.accKey index)
+
+private def rewriteRawPayload (entry : EntryAdapter.RawEntry) (base : Nat) :
+    Ops.OpExt Ops.Val → Except String (Ops.OpExt Ops.Val)
+  | .invoke programIx metas data seeds bump =>
+      return .invoke programIx metas (← data.mapM (rewriteRawCpiWord entry base)) seeds
+        (← bump.mapM (rewriteRawArg entry base))
+  | .component call => return .component (← call.mapValuesM (rewriteRawArg entry base))
+
+private partial def rewriteRawArgsInOp (entry : EntryAdapter.RawEntry) (base : Nat) :
+    Ops.Op → Except String Ops.Op
+  | .letLocal index value => return .letLocal index (← rewriteRawArg entry base value)
+  | .joinLocal index => pure (.joinLocal index)
+  | .setLocal index value => return .setLocal index (← rewriteRawArg entry base value)
+  | .checkedAddU64 lhs rhs =>
+      return .checkedAddU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .checkedSubU64 lhs rhs =>
+      return .checkedSubU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .checkedMulU64 lhs rhs =>
+      return .checkedMulU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .checkedDivU64 lhs rhs =>
+      return .checkedDivU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .checkedModU64 lhs rhs =>
+      return .checkedModU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
   | .ite cmp lhs rhs thn els =>
-      .ite cmp (rewriteRawArg base lhs) (rewriteRawArg base rhs)
-        (thn.map (rewriteRawArgsInOp base)) (els.map (rewriteRawArgsInOp base))
-  | .forAccum count addend result => .forAccum count (rewriteRawArg base addend) result
-  | .forBody count body => .forBody count (body.map (rewriteRawArgsInOp base))
+      return .ite cmp (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+        (← thn.mapM (rewriteRawArgsInOp entry base))
+        (← els.mapM (rewriteRawArgsInOp entry base))
+  | .forAccum count addend result =>
+      return .forAccum count (← rewriteRawArg entry base addend) result
+  | .forBody count body => return .forBody count (← body.mapM (rewriteRawArgsInOp entry base))
   | .indexSetLeaf name index value len leaf =>
-      .indexSetLeaf name (rewriteRawArg base index) (rewriteRawArg base value) len leaf
+      return .indexSetLeaf name (← rewriteRawArg entry base index)
+        (← rewriteRawArg entry base value) len leaf
   | .indexSet name index value len offset =>
-      .indexSet name (rewriteRawArg base index) (rewriteRawArg base value) len offset
-  | .storeField name value => .storeField name (rewriteRawArg base value)
-  | .okState value => .okState (rewriteRawArg base value)
-  | .errorOverflow => .errorOverflow
-  | .errorNamed name => .errorNamed name
-  | .returnU64 value => .returnU64 (rewriteRawArg base value)
-  | .returnState value => .returnState (rewriteRawArg base value)
-  | .ext payload => .ext (mapCfgPayload (rewriteRawArg base) payload)
+      return .indexSet name (← rewriteRawArg entry base index)
+        (← rewriteRawArg entry base value) len offset
+  | .storeField name value => return .storeField name (← rewriteRawArg entry base value)
+  | .okState value => return .okState (← rewriteRawArg entry base value)
+  | .errorOverflow => pure .errorOverflow
+  | .errorNamed name => pure (.errorNamed name)
+  | .returnU64 value => return .returnU64 (← rewriteRawArg entry base value)
+  | .returnState value => return .returnState (← rewriteRawArg entry base value)
+  | .ext payload => return .ext (← rewriteRawPayload entry base payload)
 
 private partial def opLocalIds : Ops.Op → Array Nat
   | .letLocal index value | .setLocal index value => #[index] ++ Core.CFG.valueLocalIds value
@@ -264,10 +314,10 @@ code generation. This deliberately happens after target projection, so no combin
 extension can cross the backend boundary. -/
 def Method.toCFG (method : Method) : Except String CFG := do
   let source := toSourceOps method.ops
-  let source :=
+  let source ←
     match method.entry with
-    | .generated => source
-    | .raw _ => source.map (rewriteRawArgsInOp method.rawArgLocalBase)
+    | .generated => pure source
+    | .raw entry => source.mapM (rewriteRawArgsInOp entry method.rawArgLocalBase)
   let graph ←
     if method.kind == .init then Core.CFG.lowerInit cfgDialect source
     else Core.CFG.lower cfgDialect source
@@ -395,7 +445,7 @@ private partial def scalarizeRawOp : Op → Op
 private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String Method := do
   let entry ← EntryAdapter.decode method.annotations method.paramCount method.paramWidths
-    method.retCount
+    method.retCount method.paramTypes method.retTypes
   let ops ← ofSourceOps method.ops
   let (kind, ops) ←
     match entry with

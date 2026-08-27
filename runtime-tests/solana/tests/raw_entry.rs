@@ -14,6 +14,8 @@ const BORSH_TAG: u8 = 8;
 const PAIR_TAG: u8 = 9;
 const BORSH_PAIR_TAG: u8 = 10;
 const ENUM_TAG: u8 = 11;
+const U128_TAG: u8 = 12;
+const BYTES12_TAG: u8 = 13;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -44,6 +46,13 @@ fn enum_wide_data(value: u64) -> Vec<u8> {
 fn enum_optional_data(present: u8, value: u64) -> Vec<u8> {
     let mut data = vec![ENUM_TAG, 2, present];
     data.extend_from_slice(&value.to_le_bytes());
+    data
+}
+
+fn two_limb_data(tag: u8, w0: u64, w1: u64, final_width: usize) -> Vec<u8> {
+    let mut data = vec![tag];
+    data.extend_from_slice(&w0.to_le_bytes());
+    data.extend_from_slice(&w1.to_le_bytes()[..final_width]);
     data
 }
 
@@ -146,6 +155,44 @@ fn packed_u8_and_u64_are_widened_at_exact_offsets() {
         ),
         &[Check::success(), Check::return_data(&43u64.to_le_bytes())],
     );
+}
+
+#[test]
+fn shared_u128_and_fixed_bytes_use_exact_borsh_limbs() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    for data in [
+        two_limb_data(U128_TAG, 0x0706_0504_0302_0100, 0x1716_1514_1312_1110, 8),
+        two_limb_data(BYTES12_TAG, 0x8786_8584_8382_8180, 0x9796_9594_9392_9190, 4),
+    ] {
+        let expected = data[1..].to_vec();
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(&expected)],
+        );
+
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &data[..data.len() - 1],
+        );
+        let mut trailing = data;
+        trailing.push(0);
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &trailing,
+        );
+    }
 }
 
 #[test]

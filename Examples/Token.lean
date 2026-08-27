@@ -78,11 +78,11 @@ def decimals (_s : State) : UInt8 :=
 
 @[pf_entry]
 def name (_s : State) : Bytes32 :=
-  ⟨0x546f6b656e, 0, 0, 0⟩
+  ⟨0, 0, 0, 0x6e656b6f54000000⟩
 
 @[pf_entry]
 def symbol (_s : State) : Bytes32 :=
-  ⟨0x5046, 0, 0, 0⟩
+  ⟨0, 0, 0, 0x4650000000000000⟩
 
 @[pf_entry]
 def allowanceOf (_s : State) (owner spender : Address) : UInt256 :=

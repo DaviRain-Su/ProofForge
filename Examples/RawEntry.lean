@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.RawEntry
 
 open ProofForge.Svm.Runtime
+open ProofForge.Core.Value
 
 structure State where
   dummy : UInt64
@@ -78,5 +79,13 @@ is control data and never enters the payload; no invocation-local collection is 
 def enumOptional (_s : State) (present : UInt8) (value : UInt64) :
     Except Error (State × (UInt8 × UInt64)) :=
   if present ≤ 1 then .ok (_s, (present, value)) else .error .rejected
+
+/-- The shared logical `UInt128` binds to exact 16-byte little-endian Borsh without a heap value. -/
+@[pf_entry, pf_svm_raw 12 2 0]
+def echo128 (_s : State) (value : UInt128) : UInt128 := value
+
+/-- A partial final limb is decoded from and returned as exactly four bytes. -/
+@[pf_entry, pf_svm_raw 13 2 0]
+def echoBytes12 (_s : State) (value : FixedBytes 12) : FixedBytes 12 := value
 
 end Examples.RawEntry

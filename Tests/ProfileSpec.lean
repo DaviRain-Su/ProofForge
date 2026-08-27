@@ -12,6 +12,14 @@ error: profile/rejected: Nat in root type Tests.Fixtures.usesNat
 #guard_msgs (error) in
 #pf_check Tests.Fixtures.usesNat
 
+#pf_check Tests.Fixtures.usesFixedBytes12
+
+/--
+error: profile/rejected: Nat in root type Tests.Fixtures.usesDynamicFixedBytes
+-/
+#guard_msgs (error) in
+#pf_check Tests.Fixtures.usesDynamicFixedBytes
+
 /--
 error: profile/rejected: partial Tests.Fixtures.loops
 -/

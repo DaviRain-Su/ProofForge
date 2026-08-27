@@ -91,12 +91,24 @@ def emitRoute (routes : Array Route) (fallback err : String) : String := Id.run 
     matchedRoutes := matchedRoutes ++ s!"{matched}:\n  call {route.label}\n  exit\n"
   out ++ s!"  ja {fallback}\n" ++ matchedRoutes
 
-private def loadInsn : Nat → Except String String
-  | 1 => pure "ldxb"
-  | 2 => pure "ldxh"
-  | 4 => pure "ldxw"
-  | 8 => pure "ldxdw"
-  | width => throw s!"extract/unsupported: raw parameter width {width}"
+private def emitLoadLE (baseReg : String) (offset width : Nat) : Except String String := do
+  unless 1 ≤ width && width ≤ 8 do
+    throw s!"extract/unsupported: raw parameter width {width}"
+  let direct := match width with
+    | 1 => some "ldxb"
+    | 2 => some "ldxh"
+    | 4 => some "ldxw"
+    | 8 => some "ldxdw"
+    | _ => none
+  match direct with
+  | some load => return s!"  {load} r1, [{baseReg} + {offset}]\n"
+  | none =>
+      let mut out := "  lddw r1, 0\n"
+      for i in [0:width] do
+        out := out ++ s!"  ldxb r2, [{baseReg} + {offset + i}]\n"
+        if i > 0 then out := out ++ s!"  lsh64 r2, {8 * i}\n"
+        out := out ++ "  or64 r1, r2\n"
+      return out
 
 /-- Serialize a compile-time-shaped scalar product without a heap object or protocol operation.
 Each source value is already one widened scalar; this codec only chooses its exact little-endian
@@ -109,8 +121,8 @@ def emitReturnValues
   if values.isEmpty then throw "svm/cfg: empty return tuple"
   unless widths.size == values.size do
     throw "extract/unsupported: packed return plan does not match result leaves"
-  unless widths.all fun width => width == 1 || width == 2 || width == 4 || width == 8 do
-    throw "extract/unsupported: packed returns must be u8/u16/u32/u64"
+  unless widths.all fun width => 1 ≤ width && width ≤ 8 do
+    throw "extract/unsupported: packed return leaf widths must be in 1..8"
   let byteCount := widths.foldl (init := 0) (· + ·)
   let scratchBytes := byteCount + (8 - widths.back!)
   if scratchBytes > scratchLimit then
@@ -164,13 +176,12 @@ private def emitPackedArgs (context : Context) (method : IR.Method)
   let base := method.rawArgLocalBase
   let mut offset := if entry.variant.isSome then 2 else 1
   let mut out := ""
-  for i in [0:entry.paramWidths.size] do
-    let width := entry.paramWidths[i]!
-    let load ← loadInsn width
+  let widths := entry.wireParamWidths
+  for i in [0:widths.size] do
+    let width := widths[i]!
     let some localOff := context.scalarLocalStackOff (base + i)
       | throw "extract/unsupported: raw entry exceeds scalar local scratch"
-    out := out ++ s!"\
-  {load} r1, [r8 + {8 + offset}]
+    out := out ++ (← emitLoadLE "r8" (8 + offset) width) ++ s!"\
   stxdw [r10 - {localOff}], r1
 "
     offset := offset + width
@@ -184,11 +195,9 @@ private def emitBorshArgs (context : Context) (method : IR.Method)
   let mut out := ""
   for i in [0:prefixCount] do
     let width := entry.paramWidths[i]!
-    let load ← loadInsn width
     let some localOff := context.scalarLocalStackOff (base + i)
       | throw "extract/unsupported: raw entry exceeds scalar local scratch"
-    out := out ++ s!"\
-  {load} r1, [r8 + {9 + prefixBytes}]
+    out := out ++ (← emitLoadLE "r8" (9 + prefixBytes) width) ++ s!"\
   stxdw [r10 - {localOff}], r1
 "
     prefixBytes := prefixBytes + width
@@ -203,7 +212,6 @@ private def emitBorshArgs (context : Context) (method : IR.Method)
 "
   for i in [0:entry.optionWidths.size] do
     let width := entry.optionWidths[i]!
-    let load ← loadInsn width
     let presenceIndex := base + prefixCount + 2 * i
     let valueIndex := presenceIndex + 1
     let some presenceOff := context.scalarLocalStackOff presenceIndex
@@ -223,7 +231,7 @@ private def emitBorshArgs (context : Context) (method : IR.Method)
   jgt r2, r9, {err}
   lddw r1, 1
   stxdw [r10 - {presenceOff}], r1
-  {load} r1, [r7 + 0]
+{← emitLoadLE "r7" 0 width}\
   stxdw [r10 - {valueOff}], r1
   mov64 r7, r2
   ja {doneLabel}

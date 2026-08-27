@@ -66,10 +66,10 @@ instruction 增加 recipe opcode。
 
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
-| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values | SVM/EVM target codec binding；aggregate source-schema derivation 与 cross-target fixture |
-| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers | bounded remaining-account view；运行时安全账户索引；更完整 instruction buffer；Token-2022 TLV 语义 |
+| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values；SVM/EVM scalar target binding | aggregate source-schema derivation 与 cross-target aggregate fixture |
+| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar Borsh entry/return | bounded remaining-account view；运行时安全账户索引；aggregate Borsh；更完整 instruction buffer；Token-2022 TLV 语义 |
 | SVM Component | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation | 容器 facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
-| EVM Runtime | Address/UInt256/Bytes32、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | 完整 bounded ABI/storage 组合；call return/error 合同；缺少标准化资源/重入边界 |
+| EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar ABI、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | aggregate bounded ABI/storage 组合；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade | scalar/struct/fixed-array layout facade；access-control/pausable/reentrancy 与 token/NFT reusable components |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
@@ -94,8 +94,9 @@ Phoenix `matchLimit=2` remainder posting 已作为 R0 前最后一个在途协�
 进入 R1 shared protocol values，不再开 Phoenix-only 底层工作。R1-001 已落地 bounded
 `Core.Codec` descriptor 和 typed method metadata，并把 EVM selector/guard/ABI 从 width
 sentinel 迁到 `Evm.Codec`；R1-002 source slice 已落地 shared allocation-free
-`FixedBytes n` / u128/u256 values 与 fixed-limb extraction。SVM Borsh、EVM u128/bytesN ABI
-binding 和 cross-target fixture 继续作为下一 adapter slice 往下做。
+`FixedBytes n` / u128/u256 values 与 fixed-limb extraction。R1-003 已分别完成 SVM typed
+scalar exact-cursor Borsh 和 EVM u128/bytesN canonical ABI binding；下一切片继续做 bounded
+aggregate source-schema derivation，不统一两个 target 的物理 layout。
 
 ## 5. 阶段拆分
 
@@ -119,7 +120,11 @@ Golden/Legacy compatibility，不把兼容 sentinel 当成新语言 API。
 
 R1-002 source slice 已完成 allocation-free `UInt128`、shared `UInt256` 和 literal
 `FixedBytes n`（`1 ≤ n ≤ 32`）以及 Extract fixed-limb metadata；详见
-[R1-002](tasks/r1-002.md)。target codec binding 尚未完成。
+[R1-002](tasks/r1-002.md)。
+
+R1-003 已完成 scalar target binding：SVM 使用 exact little-endian Borsh leaf/cursor plan，
+EVM 使用 canonical numeric uint 与 source-order left-aligned bytesN ABI；详见
+[R1-003](tasks/r1-003.md)。aggregate derivation 尚未完成。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。

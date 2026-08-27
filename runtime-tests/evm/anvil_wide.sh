@@ -37,6 +37,29 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'mul(uint256,uint256)(uint256)' "$("$python" -I -S -c "print(1<<64)")" 2)" \
   "$("$python" -I -S -c "print(1<<65)")" "2^64 * 2"
 
+u128="$("$python" -I -S -c "print((1<<127)+(1<<64)+7)")"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'echo128(uint128)(uint128)' "$u128")" "$u128" "shared uint128 echo"
+
+bytes12="0x00112233445566778899aabb"
+got_bytes12="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'echoBytes12(bytes12)(bytes12)' "$bytes12")"
+solana_lean_require_equal "${got_bytes12,,}" "$bytes12" "shared bytes12 echo"
+
+u128_selector="$("$cast" sig 'echo128(uint128)')"
+bad_u128="${u128_selector}0000000000000000000000000000000100000000000000000000000000000007"
+if "$cast" call --rpc-url "$rpc" "$addr" --data "$bad_u128" >/dev/null 2>&1; then
+  echo "FAIL: uint128 high-bit padding unexpectedly succeeded" >&2
+  exit 1
+fi
+
+bytes12_selector="$("$cast" sig 'echoBytes12(bytes12)')"
+bad_bytes12="${bytes12_selector}${bytes12#0x}0000000000000000000000000000000000000001"
+if "$cast" call --rpc-url "$rpc" "$addr" --data "$bad_bytes12" >/dev/null 2>&1; then
+  echo "FAIL: bytes12 right padding unexpectedly succeeded" >&2
+  exit 1
+fi
+
 max="0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 if "$cast" call --rpc-url "$rpc" "$addr" \
     'add(uint256,uint256)(uint256)' "$max" 1 >/dev/null 2>&1; then
@@ -54,4 +77,4 @@ if "$cast" call --rpc-url "$rpc" "$addr" \
   exit 1
 fi
 
-echo "evm-anvil-wide: ok (uint256 add/sub/mul; engineering only)"
+echo "evm-anvil-wide: ok (uint256 arithmetic + uint128/bytes12 ABI; engineering only)"

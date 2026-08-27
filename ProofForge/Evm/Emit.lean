@@ -93,6 +93,21 @@ private def renderAddr20Helper : String :=
         toString (8 * i) ++ ", w2), 0xff))" ++ nl
     return out ++ "      }" ++ nl
 
+/-- Store logical fixed bytes from little-endian source limbs into ABI byte order. The loop is
+bounded by the validated compile-time size supplied at each call site. -/
+private def renderFixedBytesHelper : String :=
+  "      function pf_store_fixed_bytes(off, w0, w1, w2, w3, size) {" ++ nl ++
+  "        mstore(off, 0)" ++ nl ++
+  "        for { let i := 0 } lt(i, size) { i := add(i, 1) } {" ++ nl ++
+  "          let word := w0" ++ nl ++
+  "          switch div(i, 8)" ++ nl ++
+  "          case 1 { word := w1 }" ++ nl ++
+  "          case 2 { word := w2 }" ++ nl ++
+  "          case 3 { word := w3 }" ++ nl ++
+  "          mstore8(add(off, i), and(shr(mul(8, mod(i, 8)), word), 0xff))" ++ nl ++
+  "        }" ++ nl ++
+  "      }" ++ nl
+
 private def widthMask (width : Nat) : String :=
   if width == 8 then u64MaxYul else Codec.byteMask width
 
@@ -108,6 +123,19 @@ private def uint256LeafOff : String → Option Nat
   | "w2" => some 2
   | "w3" => some 3
   | _ => none
+
+private def packFixedBytesLimb (src : String) (bytes limb : Nat) : String :=
+  let start := 8 * limb
+  let count := min 8 (bytes - start)
+  let rec orBytes (i remaining : Nat) (acc : String) : String :=
+    match remaining with
+    | 0 => acc
+    | remaining' + 1 =>
+      let byte := "byte(" ++ toString (start + i) ++ ", " ++ src ++ ")"
+      let next := if i == 0 then byte
+        else "or(" ++ acc ++ ", shl(" ++ toString (8 * i) ++ ", " ++ byte ++ "))"
+      orBytes (i + 1) remaining' next
+  orBytes 0 count "0"
 
 /-- Little-endian 64-bit limb `word` of a 256-bit ABI/storage word. -/
 private def packU256Word (src : String) (word : Nat) : String :=
@@ -142,10 +170,19 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
       if i < paramCount then
         match paramWidths[i]? with
         | some type =>
-            if Codec.isFourLimbCarrier type then
+            if Codec.isWideIntegerCarrier type then
               match uint256LeafOff name with
-              | some off => .ok (packU256Word s!"{paramPrefix}{i}" off)
-              | none => .error s!"evm/codec: invalid four-limb projection {name}"
+              | some off =>
+                  if off < Codec.limbCount type then .ok (packU256Word s!"{paramPrefix}{i}" off)
+                  else .error s!"evm/codec: out-of-range integer projection {name}"
+              | none => .error s!"evm/codec: invalid wide-integer projection {name}"
+            else if Codec.isFixedBytesCarrier type then
+              match type, uint256LeafOff name with
+              | .fixedBytes bytes, some off =>
+                  if off < Codec.limbCount type then
+                    .ok (packFixedBytesLimb s!"{paramPrefix}{i}" bytes off)
+                  else .error s!"evm/codec: out-of-range fixed-bytes projection {name}"
+              | _, _ => .error s!"evm/codec: invalid fixed-bytes projection {name}"
             else if Codec.isAddressCarrier type then
               match addrLeafOff name with
               | some off => .ok (packAddrWord s!"{paramPrefix}{i}" off)
@@ -483,7 +520,8 @@ private partial def materializeVal (p : IR.Program) (indent paramPrefix : String
     | .ext (.domainSep256 limb) #[] =>
         let (pre, ret, st1) := emitDomainSeparator indent st
         let (nm, st2) := fresh st1
-        return (pre ++ indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl, nm, st2)
+        return (pre ++ indent ++ "let " ++ nm ++ " := " ++
+          packFixedBytesLimb ret 32 limb ++ nl, nm, st2)
     | .ext (.component query) operands =>
         let context : Component.Emit.Context Render := {
           materialize := fun value st =>
@@ -1003,23 +1041,48 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
           let (pre, expression, next) ←
             if cfgHintHasLast afterHint then pure ("", "pf_last", finalState)
             else materializeVal p indent "arg" method.paramCount paramTypes value finalState
-          body := body ++ pre ++ returnWord indent expression
+          body := body ++ pre
+          match retTypes.toList with
+          | [.fixedBytes bytes] =>
+              body := body ++ indent ++ "pf_store_fixed_bytes(0, " ++ expression ++
+                ", 0, 0, 0, " ++ toString bytes ++ ")" ++ nl ++
+                indent ++ "return(0, 32)" ++ nl
+          | _ => body := body ++ returnWord indent expression
           finalState := next
       | .returnU64s values =>
           if values.isEmpty then throw "evm/cfg: empty return tuple"
-          if retTypes.size == 1 && Codec.isFourLimbCarrier retTypes[0]! && values.size == 4 then
-            let (p0, a0, s0) ←
-              materializeVal p indent "arg" method.paramCount paramTypes values[0]! finalState
-            let (p1, a1, s1) ←
-              materializeVal p indent "arg" method.paramCount paramTypes values[1]! s0
-            let (p2, a2, s2) ←
-              materializeVal p indent "arg" method.paramCount paramTypes values[2]! s1
-            let (p3, a3, s3) ←
-              materializeVal p indent "arg" method.paramCount paramTypes values[3]! s2
-            finalState := s3
-            body := body ++ p0 ++ p1 ++ p2 ++ p3 ++
+          if retTypes.size == 1 && Codec.isWideIntegerCarrier retTypes[0]! &&
+              values.size == Codec.limbCount retTypes[0]! then
+            let mut pre := ""
+            let mut limbs := #[]
+            for value in values do
+              let (text, expression, next) ←
+                materializeVal p indent "arg" method.paramCount paramTypes value finalState
+              finalState := next
+              pre := pre ++ text
+              limbs := limbs.push expression
+            let a0 := limbs[0]!
+            let a1 := limbs[1]!
+            let a2 := (limbs[2]?).getD "0"
+            let a3 := (limbs[3]?).getD "0"
+            body := body ++ pre ++
               indent ++ "mstore(0, " ++ packU256 a0 a1 a2 a3 ++ ")" ++ nl ++
               indent ++ "return(0, 32)" ++ nl
+          else if retTypes.size == 1 && Codec.isFixedBytesCarrier retTypes[0]! &&
+              values.size == Codec.limbCount retTypes[0]! then
+            let mut pre := ""
+            let mut limbs := #[]
+            for value in values do
+              let (text, expression, next) ←
+                materializeVal p indent "arg" method.paramCount paramTypes value finalState
+              finalState := next
+              pre := pre ++ text
+              limbs := limbs.push expression
+            let bytes := retTypes[0]!.byteWidth
+            body := body ++ pre ++ indent ++ "pf_store_fixed_bytes(0, " ++
+              (limbs[0]?).getD "0" ++ ", " ++ (limbs[1]?).getD "0" ++ ", " ++
+              (limbs[2]?).getD "0" ++ ", " ++ (limbs[3]?).getD "0" ++ ", " ++
+              toString bytes ++ ")" ++ nl ++ indent ++ "return(0, 32)" ++ nl
           else if retTypes.size == 1 && Codec.isAddressCarrier retTypes[0]! && values.size == 3 then
             let (p0, a0, s0) ←
               materializeVal p indent "arg" method.paramCount paramTypes values[0]! finalState
@@ -1230,6 +1293,7 @@ def emitYul (p : IR.Program) : Except String String := do
     "  object " ++ q runtimeName ++ " {" ++ nl ++
     "    code {" ++ nl ++
     renderAddr20Helper ++
+    renderFixedBytesHelper ++
     globalGuard ++
     receiveTxt ++
     "      if lt(calldatasize(), 4) { " ++ revert0 ++ " }" ++ nl ++

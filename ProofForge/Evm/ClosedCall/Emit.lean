@@ -26,6 +26,11 @@ private def packAddrAt (indent : String) (off : Nat) (w0 w1 w2 : String) : Strin
   indent ++ "pf_store_addr20(" ++ toString (off - 12) ++ ", " ++ w0 ++ ", " ++ w1 ++
     ", " ++ w2 ++ ")" ++ nl
 
+/-- Pack source-order fixed bytes into one ABI bytes32 word. -/
+private def packBytes32At (indent : String) (off : Nat) (w0 w1 w2 w3 : String) : String :=
+  indent ++ "pf_store_fixed_bytes(" ++ toString off ++ ", " ++ w0 ++ ", " ++ w1 ++
+    ", " ++ w2 ++ ", " ++ w3 ++ ", 32)" ++ nl
+
 private def eip712DomainTypeHash : String :=
   Keccak.keccak256HexOfString
     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
@@ -534,8 +539,10 @@ private def emitPermit (context : Context σ)
     indent ++ "let " ++ spd ++ " := mload(0)" ++ nl ++
     indent ++ "let " ++ amt ++ " := " ++ packU256 n0 n1 n2 n3 ++ nl ++
     indent ++ "let " ++ dead ++ " := " ++ packU256 k0 k1 k2 k3 ++ nl ++
-    indent ++ "let " ++ rword ++ " := " ++ packU256 hr0 hr1 hr2 hr3 ++ nl ++
-    indent ++ "let " ++ sword ++ " := " ++ packU256 hs0 hs1 hs2 hs3 ++ nl ++
+    packBytes32At indent 0 hr0 hr1 hr2 hr3 ++
+    indent ++ "let " ++ rword ++ " := mload(0)" ++ nl ++
+    packBytes32At indent 0 hs0 hs1 hs2 hs3 ++
+    indent ++ "let " ++ sword ++ " := mload(0)" ++ nl ++
     indent ++ "if lt(" ++ dead ++ ", timestamp()) {" ++ nl ++
     indent ++ "  mstore(0, shl(224, 0x" ++ expiredSel ++ "))" ++ nl ++
     indent ++ "  revert(0, 4)" ++ nl ++
@@ -626,10 +633,8 @@ private def emitTokenPermit (context : Context σ)
   let (tok, s26) := context.fresh s25
   let (amt, s27) := context.fresh s26
   let (dead, s28) := context.fresh s27
-  let (rword, s29) := context.fresh s28
-  let (sword, s30) := context.fresh s29
-  let (ok, s31) := context.fresh s30
-  let (rds, s32) := context.fresh s31
+  let (ok, s29) := context.fresh s28
+  let (rds, s30) := context.fresh s29
   let acc :=
     p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ rA0 ++ rA1 ++ rA2 ++
     u0 ++ u1 ++ u2 ++ u3 ++ k0p ++ k1p ++ k2p ++ k3p ++ pv ++
@@ -648,17 +653,15 @@ private def emitTokenPermit (context : Context σ)
     indent ++ "let " ++ dead ++ " := " ++ packU256 k0 k1 k2 k3 ++ nl ++
     indent ++ "mstore(100, " ++ dead ++ ")" ++ nl ++
     indent ++ "mstore(132, " ++ vbyte ++ ")" ++ nl ++
-    indent ++ "let " ++ rword ++ " := " ++ packU256 hr0 hr1 hr2 hr3 ++ nl ++
-    indent ++ "mstore(164, " ++ rword ++ ")" ++ nl ++
-    indent ++ "let " ++ sword ++ " := " ++ packU256 hs0 hs1 hs2 hs3 ++ nl ++
-    indent ++ "mstore(196, " ++ sword ++ ")" ++ nl ++
+    packBytes32At indent 164 hr0 hr1 hr2 hr3 ++
+    packBytes32At indent 196 hs0 hs1 hs2 hs3 ++
     indent ++ "let " ++ ok ++ " := call(gas(), " ++ tok ++ ", 0, 0, 228, 0, 32)" ++ nl ++
     indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl ++
     indent ++ "let " ++ rds ++ " := returndatasize()" ++ nl ++
     indent ++ "if and(iszero(eq(" ++ rds ++ ", 0)), iszero(eq(" ++ rds ++
       ", 32))) { " ++ revert0 ++ " }" ++ nl ++
     indent ++ "if eq(" ++ rds ++ ", 32) { if iszero(mload(0)) { " ++ revert0 ++ " } }" ++ nl
-  return (acc, n0, s32)
+  return (acc, n0, s30)
 
 def emitCall (context : Context σ) (call : ClosedCall.Call Ops.Val) (st : σ) :
     Except String (String × String × σ) :=

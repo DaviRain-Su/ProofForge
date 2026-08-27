@@ -10,16 +10,17 @@ Profile、Extract 和 Core CFG；SVM account geometry 与 EVM storage layout 各
 不做虚假的统一 storage。R0 ownership freeze 已完成；R1-001 已固定 typed scalar metadata、
 bounded codec descriptor/resource budget，并把 EVM selector/calldata guard/ABI 从 width
 sentinel 迁到 `Evm.Codec`。R1-002 source slice 已加入 allocation-free shared
-`FixedBytes n` / u128/u256 并由 Extract 推导固定 limb metadata；下一切片绑定 SVM
+`FixedBytes n` / u128/u256 并由 Extract 推导固定 limb metadata；R1-003 已分别绑定 SVM
 exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 account/storage。
+下一切片推导 bounded aggregate source schema，并继续由两个 target 独立选择物理编码。
 
 ## 已做
 
 - **当前可验证基线（2026-08-27）**：Lean 汇总 237 jobs；SVM manifest 全 51 programs；
-  Mollusk 全量 285/285（Phoenix-v1 profile 76/76、RawEntry 11/11）；EVM manifest 全
+  Mollusk 全量 286/286（Phoenix-v1 profile 76/76、RawEntry 12/12）；EVM manifest 全
   15 programs 且 Anvil 15/15。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
-  Token deployment bytecode 为 18,453 B；Surfpool 1.5.0 部署门见 P5 最新记录。
+  当前 Token deployment bytecode 为 19,348 B；Surfpool 1.5.0 部署门见 P5 最新记录。
 - S0–S5：普通 Lean Counter 竖切到 Mollusk
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
@@ -107,9 +108,22 @@ exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 accoun
   SVM exact-cursor Borsh、EVM u128/left-aligned bytesN guards/returns 和 cross-target fixture。
   详见 `docs/plan/tasks/r1-002.md`。
 
+- R1-003 scalar target-adapter slice 已完成：SVM 从 typed metadata 推导 logical binder 到
+  fixed physical leaves 的映射，以 exact little-endian Borsh cursor 解码/返回 `UInt128` 与
+  partial-limb `FixedBytes 12`，short/trailing input 和 bare multi-limb scalar use 均 fail
+  closed；不分配 heap buffer，不把 pointer 写入 account。EVM 分别按 numeric right-aligned
+  uint128 与 source-order left-aligned bytesN ABI 解码，拒绝 noncanonical high bits/right
+  padding，并以 bounded runtime helper 返回 bytesN、重打包 permit bytes32。Profile 只放行
+  literal valid `FixedBytes n` metadata，继续拒绝 runtime/polymorphic `Nat`。RawEntry digest
+  `83dda49b07d85f48`、ELF 12,048 B，并由 Surfpool 1.5.0 以 12 个 Loader-v3 writes 部署；
+  Wide digest `692687089d4455f3`，Token digest `4f1db71eb59d4254`。237-job Lean、51 个 SVM
+  build、Mollusk 286/286（RawEntry 12/12）、15 个 EVM build 与 Anvil 15/15 全绿。详见
+  `docs/plan/tasks/r1-003.md`。下一切片仍在 R1，做 bounded record/tuple/enum source schema
+  derivation；它不统一 SVM account geometry 与 EVM storage layout。
+
 - `lake build Tests` 当前 237 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 285/285，其中 RawEntry 11/11、Phoenix-v1 profile
+  `pf build` 当前通过；全套 Mollusk 286/286，其中 RawEntry 12/12、Phoenix-v1 profile
   76/76。
 - EVM registry 15 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault /
   Ownable / Token / Capped / Window / Phase / Wide / Const 均进入 Anvil 总门。`Addr20` 是一等 ABI `address`；

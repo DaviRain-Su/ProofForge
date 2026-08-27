@@ -59,9 +59,18 @@ def wordGuard : Scalar → Except String WordGuard
       if 1 ≤ bytes && bytes < 32 then pure (.fixedBytesLeftPadded bytes)
       else throw s!"evm/codec: invalid fixed-bytes width {bytes}"
 
-def isFourLimbCarrier : Scalar → Bool
-  | .uint 256 | .fixedBytes 32 => true
+def isWideIntegerCarrier : Scalar → Bool
+  | .uint bits => 64 < bits && bits ≤ 256 && bits % 64 == 0
   | _ => false
+
+def isFixedBytesCarrier : Scalar → Bool
+  | .fixedBytes bytes => 1 ≤ bytes && bytes ≤ 32
+  | _ => false
+
+def limbCount : Scalar → Nat
+  | .uint bits => (bits + 63) / 64
+  | .address bytes | .fixedBytes bytes => (bytes + 7) / 8
+  | .boolean => 1
 
 def isAddressCarrier : Scalar → Bool
   | .address 20 => true

@@ -22,8 +22,8 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 #guard balanceOf (init sample) sample == zero256
 #guard totalSupply (init sample) == zero256
 #guard decimals (init sample) == 18
-#guard name (init sample) == ⟨0x546f6b656e, 0, 0, 0⟩
-#guard symbol (init sample) == ⟨0x5046, 0, 0, 0⟩
+#guard name (init sample) == ⟨0, 0, 0, 0x6e656b6f54000000⟩
+#guard symbol (init sample) == ⟨0, 0, 0, 0x4650000000000000⟩
 #guard allowanceOf (init sample) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
@@ -91,6 +91,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .error _, _ => false
   | .ok yul, abi =>
       yul.contains "function pf_store_addr20(off, w0, w1, w2)" &&
+        yul.contains "function pf_store_fixed_bytes(off, w0, w1, w2, w3, size)" &&
         yul.contains "pf_store_addr20(0," &&
         !yul.contains "mstore8(12," &&
         yul.contains "keccak256(0, 128)" &&
