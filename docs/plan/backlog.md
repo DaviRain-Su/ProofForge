@@ -6,8 +6,9 @@
 ## 已做
 
 - **当前可验证基线（2026-08-27）**：Lean 汇总 214 jobs；SVM manifest 全 51 programs；
-  Phoenix-v1 profile 65/65、RawEntry 10/10；当前远端 EVM Token 在 solc 0.8.34 有既存
-  Yul `StackTooDeepError`，不把该门误报为全绿；Surfpool 1.5.0 部署门见 P5 最新记录。
+  Phoenix-v1 profile 65/65、RawEntry 10/10；EVM manifest 全 14 programs 且 Anvil 14/14。
+  solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
+  Token deployment bytecode 为 15,202 B；Surfpool 1.5.0 部署门见 P5 最新记录。
 - S0–S5：普通 Lean Counter 竖切到 Mollusk
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
@@ -61,9 +62,9 @@
 - SVM 异构 PDA seeds（ASCII/state key/account key）、完整 canonical key 校验和可续接 ignored CPI；Phoenix classic SPL Token 双 vault 全链路
 - SVM packed u8/u16/u32/u64 CPI words 与 canonical PDA 签名 raw self-entry；SelfLog 覆盖 self-CPI、续段写回和认证失败矩阵
 - Phoenix 官方形状 `AuditLogHeader` / Borsh event 通过 `"log"` PDA signed self-CPI 发布真实 `Program data`
-- SVM 50 个 registry program 各有 runtime test 文件；EVM 12 个 registry program 全进 Anvil 总入口
+- SVM 51 个 registry program 各有 runtime test 文件；EVM 14 个 registry program 全进 Anvil 总入口
 - 审查修复：分支 fallthrough、state owner/marker、常量求值、Option identity、窄叶、Nat.sub、移位、EVM init、未知 CPI、solc 诊断
-- GitHub CI 串行执行 Lake guards、50 个 SVM 构建 + Mollusk，以及 12 个 EVM 构建 + Anvil
+- GitHub CI 串行执行 Lake guards、51 个 SVM 构建 + Mollusk，以及 14 个 EVM 构建 + Anvil
 - Core 显式 basic-block CFG 第一阶段：block arguments、显式 branch/checked/exit、完整 checker、local CSE、线性共享 block；Phoenix 全方法已通过 lowering/validation
 - SVM/EVM emitter 已消费 target-owned Core CFG：SVM 用全局 block layout + 迭代 long-jump relay，EVM 用 Yul `pf_pc` dispatcher；当时 Phoenix 汇编由 4,109,725 B 降至 2,748,784 B（加入 trader topology 后当前为 3,314,430 B），全部 49 个 Mollusk 文件与 12 个 Anvil 程序通过
 - Solanalib CFG correspondence：Counter add/sub/mul/div/mod 的 Core operands / physical slot / success-overflow edge 必须一致；typed guards、multiply zero-path jump、`r10-24` scratch handoff、static store 由上游 small-step semantics 执行。普通 eq/ne/lt/le/gt/ge branch 保留 cmp/operands/then/else identity，exact decoded pair theorem 证明 edge selection 与内存不变
@@ -79,9 +80,12 @@
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；本切片改动目标的 Mollusk 门为 RawEntry 10/10、Phoenix-v1 profile
   65/65。上一轮全套 Mollusk 基线为 271/271，本轮新增两个 RawEntry 用例后未伪报全套计数。
-- EVM registry 13 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault /
-  Ownable / Token / Window / Phase / Wide 均进入 Anvil 总门。`Addr20` 是一等 ABI `address`；
+- EVM registry 14 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault /
+  Ownable / Token / Window / Phase / Wide / Const 均进入 Anvil 总门。`Addr20` 是一等 ABI `address`；
   显式 `UInt256` 使用 checked add/sub/mul 和 ABI `uint256`，默认算术仍是 `UInt64`。
+  地址的 little-endian limbs → ABI word 转换由 runtime `pf_store_addr20` helper 统一实现，不再
+  在每个 CFG case 展开二十条 `mstore8`；solc 0.8.34 strict Yul optimizer 可编译完整 Token，
+  全 14 个 build 与 Anvil 14/14 通过。详见 `docs/plan/tasks/evm-009.md`。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
 - P4 通用压缩 / Loader-v3 部署资格：Core `shareBlocks` 从相邻比较升级为全图 fingerprint 分桶 + 精确结构相等，已知 redirect 先归一化；collision 不会错误共享。Phoenix CFG 6,128 → 5,151 blocks；实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 10,642,331 bytes，ELF 3,429,336 bytes，IDL 19,626 bytes，比上一 checkpoint 再减 244,637 / 75,440 bytes。Assembler 按 Agave 4.0 Loader-v3 `ProgramData` 10 MiB、metadata 45 B，强制 ELF ≤ 10,485,715 B；当前 headroom 7,056,379 B。Surfpool 1.5.0 offline smoke 禁用 instant direct-state 路径，以 3,389 个 Loader write transactions + deploy + authority transfer 完成本地部署；confirmed signature、Program/ProgramData layout 与完整 ELF bytes 全部核对。本轮 `lake build Tests`、全 49 个 SVM `pf build`、Mollusk 198/198（含 Phoenix 8/8 与 Tree 2/2）及 Anvil 12/12 全绿；不作公网部署声明。
