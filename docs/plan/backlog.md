@@ -13,8 +13,9 @@ sentinel 迁到 `Evm.Codec`。R1-002 source slice 已加入 allocation-free shar
 `FixedBytes n` / u128/u256 并由 Extract 推导固定 limb metadata；R1-003 已分别绑定 SVM
 exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 account/storage；
 R1-004 已从普通 Lean 推导 bounded tuple/record/enum/option/literal-Vector schema，并贯穿
-Core/SVM/EVM IR；R1-005 已由 SVM 独立绑定 static record/product/fixed-vector Borsh。
-下一切片由 EVM 独立绑定 canonical aggregate ABI，不共享两个 target 的物理编码。
+Core/SVM/EVM IR；R1-005 已由 SVM 独立绑定 static record/product/fixed-vector Borsh；
+R1-006 已由 EVM 独立绑定 canonical tuple/record/fixed-array ABI。下一切片显式分配 tagged /
+bounded-dynamic schema policy，不把 Borsh tag、ABI word 或两个 target 的物理编码放进 Core。
 
 ## 已做
 
@@ -142,6 +143,18 @@ Core/SVM/EVM IR；R1-005 已由 SVM 独立绑定 static record/product/fixed-vec
   `256081fbe6a93fcc`、ELF 13,624 B，经 Surfpool 1.5.0 的 14 个 Loader-v3 writes 部署核对；
   Lean 237、SVM 51 builds、Mollusk 287/287（RawEntry 13/13）、EVM 15 builds、Anvil 15/15、
   ownership/whitespace 全绿。详见 `docs/plan/tasks/r1-005.md`。
+
+- R1-006 EVM static aggregate ABI slice 已完成：共享层新增 target-neutral 的 typed static
+  projection resolver 和可复用 fallible value/operation rewrite traversal；`Evm.Codec` 独立
+  选择 canonical tuple/record/fixed-array selector spelling 与 one-word-per-scalar-leaf plan。
+  EVM IR 区分 logical parameter count 和 physical ABI word count，Emit 对每个摊平叶复用既有
+  Bool/narrow/address/fixed-bytes canonical guard、支持 wide/fixed-bytes/address aggregate
+  result packing，并在 ABI JSON 保留 tuple components/fixed-array shape。`EvmCtx.aggregate`
+  用普通 Lean nested record、`Prod`、literal `Vector` 验证 exact 260-byte calldata、8 个物理
+  words、`(uint64,bool)` return 与 malformed Bool rejection；Option/enum/bounded-dynamic policy
+  继续 fail closed。EvmCtx digest `856b382fd7f7552`，deployment bytecode 541 B；Lean 237、
+  SVM 51 builds、Mollusk 287/287、EVM 15 builds、Anvil 15/15、ownership/whitespace 全绿。
+  详见 `docs/plan/tasks/r1-006.md`。
 
 - `lake build Tests` 当前 237 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量

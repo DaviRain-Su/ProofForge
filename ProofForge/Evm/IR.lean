@@ -260,16 +260,114 @@ def Method.resolvedRetTypes (method : Method) : Except String (Array Core.Codec.
     return method.retTypes
   unless method.retWidths.isEmpty do
     return ← method.retWidths.mapM Codec.scalarOfLegacyWidth
+  unless method.retSchema == .unit do
+    return (← Codec.staticAbiLeaves method.retSchema).map (·.type)
   return Array.replicate method.retCount .uint64
 
 private def schemaIsScalar : Core.Codec.Schema → Bool
   | .scalar _ => true
   | _ => false
 
-private def rejectUnboundAggregateParams (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
-    Except String Unit := do
-  unless method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar do
-    throw s!"extract/unsupported: evm aggregate parameter binding is not implemented for {method.ixName}"
+def Method.logicalParamCount (method : Method) : Nat :=
+  if method.paramSchemas.isEmpty then method.paramCount else method.paramSchemas.size
+
+def Method.abiParamTypes (method : Method) : Except String (Array String) := do
+  if method.paramSchemas.isEmpty then
+    return ← (← method.resolvedParamTypes).mapM Codec.abiType
+  method.paramSchemas.mapM Codec.abiTypeOfSchema
+
+private def abiPartIndex : String → Option Nat
+  | "w0" => some 0
+  | "w1" => some 1
+  | "w2" => some 2
+  | "w3" => some 3
+  | _ => none
+
+private def paramWordStart (plans : Array (Array Core.Codec.StaticLeaf)) (index : Nat) : Nat :=
+  (plans.extract 0 index).foldl (init := 0) fun count leaves => count + leaves.size
+
+private def rewriteAbiPayload
+    (rewriteValue : Ops.Val → Except String Ops.Val) :
+    Ops.OpExt Ops.Val → Except String (Ops.OpExt Ops.Val)
+  | .component call => return .component (← call.mapValuesM rewriteValue)
+
+private def rewriteAbiRoot (method : Core.IR.Method Ops.ValKind Ops.OpExt)
+    (plans : Array (Array Core.Codec.StaticLeaf)) (physicalCount : Nat) :
+    Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg index) name => do
+      if index ≥ method.paramCount then return none
+      let some schema := method.paramSchemas[index]?
+        | throw "evm/codec: aggregate parameter schema is missing"
+      let some leaves := plans[index]?
+        | throw "evm/codec: aggregate ABI leaf plan is missing"
+      let start := paramWordStart plans index
+      match schema with
+      | .scalar type =>
+          let some part := abiPartIndex name
+            | throw s!"evm/codec: invalid scalar projection {name}"
+          unless part < Codec.limbCount type do
+            throw s!"evm/codec: out-of-range scalar projection {name}"
+          return some (.field (.arg start) name)
+      | _ =>
+          let projection ← Core.Codec.resolveSourceProjection leaves
+            (leaves.map fun leaf => Codec.limbCount leaf.type) abiPartIndex name
+          let physical := start + projection.leafIndex
+          if Codec.limbCount leaves[projection.leafIndex]!.type == 1 then
+            return some (.arg physical)
+          return some (.field (.arg physical) s!"w{projection.partIndex}")
+  | .arg index => do
+      if index < method.paramCount then
+        let some leaves := plans[index]?
+          | throw "evm/codec: aggregate ABI leaf plan is missing"
+        unless leaves.size == 1 do
+          throw s!"evm/codec: aggregate parameter {index} requires a scalar projection"
+        return some (.arg (paramWordStart plans index))
+      if method.kind != .init && index == method.paramCount then
+        return some (.arg physicalCount)
+      return none
+  | _ => pure none
+
+private structure BoundParams where
+  count : Nat
+  widths : Array Nat
+  types : Array Core.Codec.Scalar
+  ops : Array Ops.Op
+
+private def bindParams (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
+    Except String BoundParams := do
+  let hasAggregate := !method.paramSchemas.isEmpty && !method.paramSchemas.all schemaIsScalar
+  if !hasAggregate then
+    let widths :=
+      if method.paramWidths.size == method.paramCount then method.paramWidths
+      else Array.replicate method.paramCount 8
+    return {
+      count := method.paramCount
+      widths
+      types := ← resolveParamTypes method.paramCount method.paramTypes widths
+      ops := method.ops
+    }
+  unless method.paramSchemas.size == method.paramCount do
+    throw s!"evm/codec: aggregate parameter schemas are incomplete for {method.ixName}"
+  let plans ← method.paramSchemas.mapM Codec.staticAbiLeaves
+  let types := plans.foldl (init := #[]) fun out leaves => out ++ leaves.map (·.type)
+  let ops ← Core.Target.rewriteOpsValues (rewriteAbiRoot method plans types.size)
+    rewriteAbiPayload method.ops
+  return {
+    count := types.size
+    widths := types.map (·.byteWidth)
+    types
+    ops
+  }
+
+private def bindRetTypes (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
+    Except String (Array Core.Codec.Scalar) := do
+  if method.retSchema == .unit || schemaIsScalar method.retSchema then
+    return method.retTypes
+  let types := (← Codec.staticAbiLeaves method.retSchema).map (·.type)
+  let sourceParts := types.foldl (init := 0) fun count type => count + Codec.limbCount type
+  unless sourceParts == method.retCount do
+    throw s!"evm/codec: aggregate return metadata is incomplete for {method.ixName}"
+  return types
 
 def Method.toCFG (method : Method) : Except String CFG := do
   let source := toSourceOps method.ops
@@ -397,8 +495,9 @@ private def lowerVectors (src : Core.IR.Program Ops.ValKind Ops.OpExt)
     }
 
 private def lowerMethodBody (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
-    Except String (Array Op × Core.Evaluation Ops.ValKind) := do
-  return (← ofSourceOps method.ops, method.evaluation)
+    Except String (BoundParams × Array Op × Core.Evaluation Ops.ValKind) := do
+  let params ← bindParams method
+  return (params, ← ofSourceOps params.ops, method.evaluation)
 
 /-- Project the combined extractor dialect and lower it into an EVM-owned physical program. -/
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
@@ -425,7 +524,6 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
         m.ixName == "initialize" || Core.IR.lastName m.name == "init") with
     | some m => m
     | none => ctors[0]!
-  rejectUnboundAggregateParams ctorSrc
   -- EVM initialization is deployment-only. Alternative source initializers may remain useful to
   -- targets such as SVM, but exposing them as runtime selectors would allow storage reinitialization.
   let rest := extras
@@ -435,18 +533,18 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     throw "extract/unsupported: init missing returnState"
   unless ctorSrc.ops.any (fun | .returnState _ => true | _ => false) do
     throw "extract/unsupported: init missing returnState"
-  let (ctorOps, ctorEvaluation) ← lowerMethodBody ctorSrc
+  let (ctorParams, ctorOps, ctorEvaluation) ← lowerMethodBody ctorSrc
   let ctor : Method := {
     kind := ctorSrc.kind
     name := ctorSrc.name
     ixName := ctorSrc.ixName
     selector := ""
-    paramCount := ctorSrc.paramCount
-    paramWidths := ctorSrc.paramWidths
-    paramTypes := ctorSrc.paramTypes
+    paramCount := ctorParams.count
+    paramWidths := ctorParams.widths
+    paramTypes := ctorParams.types
     paramSchemas := ctorSrc.paramSchemas
     retWidths := ctorSrc.retWidths
-    retTypes := ctorSrc.retTypes
+    retTypes := ← bindRetTypes ctorSrc
     retSchema := ctorSrc.retSchema
     retCount := 1
     ops := ctorOps
@@ -456,28 +554,25 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
   }
   let mut entries : Array Method := #[]
   for m in rest do
-    rejectUnboundAggregateParams m
     if m.ops.isEmpty then
       throw s!"extract/unsupported: empty ops {m.ixName}"
-    let widths :=
-      if m.paramWidths.size == m.paramCount then m.paramWidths
-      else Array.replicate m.paramCount 8
-    let paramTypes ← resolveParamTypes m.paramCount m.paramTypes widths
-    let abiTypes ← paramTypes.mapM Codec.abiType
+    let (params, ops, evaluation) ← lowerMethodBody m
+    let abiTypes ←
+      if m.paramSchemas.isEmpty then params.types.mapM Codec.abiType
+      else m.paramSchemas.mapM Codec.abiTypeOfSchema
     let sel := Keccak.selector m.ixName abiTypes
     let view := m.kind == .get
-    let (ops, evaluation) ← lowerMethodBody m
     entries := entries.push {
       kind := m.kind
       name := m.name
       ixName := m.ixName
       selector := sel
-      paramCount := m.paramCount
-      paramWidths := widths
-      paramTypes
+      paramCount := params.count
+      paramWidths := params.widths
+      paramTypes := params.types
       paramSchemas := m.paramSchemas
       retWidths := m.retWidths
-      retTypes := m.retTypes
+      retTypes := ← bindRetTypes m
       retSchema := m.retSchema
       retCount := m.retCount
       ops

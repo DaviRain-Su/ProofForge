@@ -12,6 +12,14 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
+structure AggregateMeta where
+  side : UInt8
+  enabled : Bool
+
+structure AggregateRequest where
+  amount : UInt64
+  details : AggregateMeta
+
 @[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
@@ -37,5 +45,15 @@ def stamp (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def get (s : State) : UInt64 :=
   s.dummy
+
+/-- Static records, products, and literal vectors remain logical Lean values at the source. The
+EVM adapter independently binds their scalar leaves to canonical ABI words. -/
+@[pf_entry]
+def aggregate (_s : State) (request : AggregateRequest) (pair : UInt32 × UInt64)
+    (levels : Vector UInt16 3) : UInt64 × Bool :=
+  (request.amount + request.details.side.toUInt64 +
+    (if request.details.enabled then (1 : UInt64) else 0) +
+    pair.1.toUInt64 + pair.2 + levels[0].toUInt64 + levels[2].toUInt64,
+   request.details.enabled)
 
 end Examples.EvmCtx

@@ -206,22 +206,11 @@ private def rawAggregateProjection (schemas : Array Core.Codec.Schema)
   let some schema := schemas[index]?
     | throw "extract/unsupported: raw aggregate parameter schema is missing"
   let leaves ← EntryAdapter.staticBorshLeaves schema
-  let mut found : Array (Nat × Nat) := #[]
-  for i in [0:leaves.size] do
-    let leaf := leaves[i]!
-    let sourceName := leaf.logical.sourceName
-    if name == sourceName && leaf.widths.size == 1 then
-      found := found.push (i, 0)
-    else if !sourceName.isEmpty && name.startsWith (sourceName ++ "_") then
-      let suffix := name.drop (sourceName.length + 1) |>.copy
-      if let some limb := rawLimbIndex suffix then
-        if limb < leaf.widths.size then found := found.push (i, limb)
-  unless found.size == 1 do
-    throw s!"extract/unsupported: raw aggregate projection {name} is missing or ambiguous"
-  let (leafIndex, limbIndex) := found[0]!
-  let relative := (leaves.extract 0 leafIndex).foldl (init := 0)
+  let projection ← Core.Codec.resolveSourceProjection (leaves.map (·.logical))
+    (leaves.map (·.widths.size)) rawLimbIndex name
+  let relative := (leaves.extract 0 projection.leafIndex).foldl (init := 0)
     fun count leaf => count + leaf.widths.size
-  return (entry.paramLeafStart index + relative, limbIndex)
+  return (entry.paramLeafStart index + relative, projection.partIndex)
 
 private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
     (entry : EntryAdapter.RawEntry) (base : Nat) :

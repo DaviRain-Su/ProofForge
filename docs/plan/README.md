@@ -161,6 +161,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [r1-003](tasks/r1-003.md) | done | Shared scalar SVM Borsh / EVM ABI binding |
 | [r1-004](tasks/r1-004.md) | done | Bounded aggregate source schema derivation |
 | [r1-005](tasks/r1-005.md) | done | Static record/product/vector SVM Borsh binding |
+| [r1-006](tasks/r1-006.md) | done | Canonical tuple/record/fixed-array EVM ABI binding |
 
 
 积压：[backlog.md](backlog.md)

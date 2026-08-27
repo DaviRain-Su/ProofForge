@@ -971,6 +971,51 @@ private def emitCFGChecked (p : IR.Program) (indent paramPrefix : String)
         indent ++ "}" ++ nl
       return (text, { st3 with last := some "pf_last", loopIx := none })
 
+private def schemaIsStaticAggregate : Core.Codec.Schema → Bool
+  | .tuple _ | .record _ _ | .fixedArray _ _ => true
+  | _ => false
+
+/-- Pack the scalar source limbs of a static logical aggregate into its canonical ABI words.
+Every scalar leaf owns one word; wide integers, addresses, and fixed bytes consume several source
+limbs but never extra ABI words. -/
+private def emitStaticReturnWords (p : IR.Program) (method : IR.Method) (indent : String)
+    (paramTypes retTypes : Array Core.Codec.Scalar) (values : Array Ops.Val) (st : Render) :
+    Except String (String × Render) := do
+  let expected := retTypes.foldl (init := 0) fun count type => count + Codec.limbCount type
+  unless values.size == expected do
+    throw s!"evm/codec: aggregate result has {values.size} source parts, expected {expected}"
+  let mut out := ""
+  let mut st := st
+  let mut valueIndex : Nat := 0
+  for wordIndex in [0:retTypes.size] do
+    let type := retTypes[wordIndex]!
+    let partCount := Codec.limbCount type
+    let mut parts : Array String := #[]
+    for _ in [0:partCount] do
+      let (pre, expression, next) ←
+        materializeVal p indent "arg" method.paramCount paramTypes values[valueIndex]! st
+      out := out ++ pre
+      parts := parts.push expression
+      st := next
+      valueIndex := valueIndex + 1
+    let offset := wordIndex * 32
+    if Codec.isWideIntegerCarrier type then
+      out := out ++ indent ++ "mstore(" ++ toString offset ++ ", " ++
+        packU256 (parts[0]!) (parts[1]!) ((parts[2]?).getD "0") ((parts[3]?).getD "0") ++
+        ")" ++ nl
+    else if Codec.isFixedBytesCarrier type then
+      out := out ++ indent ++ "pf_store_fixed_bytes(" ++ toString offset ++ ", " ++
+        (parts[0]?).getD "0" ++ ", " ++ (parts[1]?).getD "0" ++ ", " ++
+        (parts[2]?).getD "0" ++ ", " ++ (parts[3]?).getD "0" ++ ", " ++
+        toString type.byteWidth ++ ")" ++ nl
+    else if Codec.isAddressCarrier type then
+      out := out ++ indent ++ "pf_store_addr20(" ++ toString offset ++ ", " ++
+        (parts[0]?).getD "0" ++ ", " ++ (parts[1]?).getD "0" ++ ", " ++
+        (parts[2]?).getD "0" ++ ")" ++ nl
+    else
+      out := out ++ indent ++ "mstore(" ++ toString offset ++ ", " ++ parts[0]! ++ ")" ++ nl
+  return (out ++ indent ++ "return(0, " ++ toString (retTypes.size * 32) ++ ")" ++ nl, st)
+
 private def emitCFGCase (p : IR.Program) (method : IR.Method)
     (hints : Array (Core.CFG.BlockId × CFGResultHint))
     (block : Core.CFG.Block Ops.ValKind Ops.OpExt) (st : Render) :
@@ -1051,7 +1096,12 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
           finalState := next
       | .returnU64s values =>
           if values.isEmpty then throw "evm/cfg: empty return tuple"
-          if retTypes.size == 1 && Codec.isWideIntegerCarrier retTypes[0]! &&
+          if schemaIsStaticAggregate method.retSchema then
+            let (text, next) ←
+              emitStaticReturnWords p method indent paramTypes retTypes values finalState
+            body := body ++ text
+            finalState := next
+          else if retTypes.size == 1 && Codec.isWideIntegerCarrier retTypes[0]! &&
               values.size == Codec.limbCount retTypes[0]! then
             let mut pre := ""
             let mut limbs := #[]
@@ -1316,12 +1366,55 @@ private def paramsJsonOf (types : Array Core.Codec.Scalar) : Except String Strin
       abiType ++ "\"}")
   return String.intercalate "," params.toList
 
+private structure AbiJsonShape where
+  type : String
+  components : Array (String × AbiJsonShape) := #[]
+  deriving Inhabited
+
+private partial def abiJsonShape : Core.Codec.Schema → Except String AbiJsonShape
+  | .unit => throw "evm/codec: unit has no ABI JSON parameter shape"
+  | .scalar type => return { type := ← Codec.abiType type }
+  | .tuple items => do
+      let mut components := #[]
+      for item in items do
+        components := components.push ("", ← abiJsonShape item)
+      return { type := "tuple", components }
+  | .record _ fields => do
+      let mut components := #[]
+      for field in fields do
+        components := components.push (field.1, ← abiJsonShape field.2)
+      return { type := "tuple", components }
+  | .fixedArray length element => do
+      let shape ← abiJsonShape element
+      return { shape with type := shape.type ++ "[" ++ toString length ++ "]" }
+  | .enumeration .. => throw "evm/codec: enum ABI JSON requires an explicit tag policy"
+  | .option _ => throw "evm/codec: option ABI JSON requires an explicit tag policy"
+  | .boundedArray .. => throw "evm/codec: bounded array ABI JSON requires a dynamic policy"
+
+private partial def renderAbiJsonParam (name : String) (shape : AbiJsonShape) : String :=
+  let base := "{\"name\":\"" ++ escapeJson name ++ "\",\"type\":\"" ++ shape.type ++ "\""
+  if shape.components.isEmpty then base ++ "}"
+  else
+    let components := shape.components.map fun component =>
+      renderAbiJsonParam component.1 component.2
+    base ++ ",\"components\":[" ++ String.intercalate "," components.toList ++ "]}"
+
+private def schemaParamsJsonOf (schemas : Array Core.Codec.Schema) : Except String String := do
+  let mut params := #[]
+  for i in [0:schemas.size] do
+    params := params.push (renderAbiJsonParam s!"arg{i}" (← abiJsonShape schemas[i]!))
+  return String.intercalate "," params.toList
+
 private def ctorAbi (p : IR.Program) : Except String String := do
-  let inputs ← paramsJsonOf (← p.constructor.resolvedParamTypes)
+  let inputs ←
+    if p.constructor.paramSchemas.isEmpty then paramsJsonOf (← p.constructor.resolvedParamTypes)
+    else schemaParamsJsonOf p.constructor.paramSchemas
   return "{\"type\":\"constructor\",\"stateMutability\":\"nonpayable\",\"inputs\":[" ++
     inputs ++ "]}"
 
 private def outputsJson (m : IR.Method) : Except String String := do
+  unless m.retSchema == .unit do
+    return "[" ++ renderAbiJsonParam "" (← abiJsonShape m.retSchema) ++ "]"
   let types ← m.resolvedRetTypes
   let mut outputs := #[]
   for type in types do
@@ -1330,7 +1423,9 @@ private def outputsJson (m : IR.Method) : Except String String := do
 
 private def entryAbi (m : IR.Method) : Except String String := do
   let mutab := if m.view then "view" else if m.payable then "payable" else "nonpayable"
-  let inputs ← paramsJsonOf (← m.resolvedParamTypes)
+  let inputs ←
+    if m.paramSchemas.isEmpty then paramsJsonOf (← m.resolvedParamTypes)
+    else schemaParamsJsonOf m.paramSchemas
   let outputs ← outputsJson m
   return "{\"type\":\"function\",\"name\":\"" ++ escapeJson m.ixName ++
     "\",\"stateMutability\":\"" ++ mutab ++ "\",\"inputs\":[" ++

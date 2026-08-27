@@ -59,6 +59,13 @@ structure StaticLeaf where
   type : Scalar
   deriving Repr, BEq, Inhabited
 
+/-- One resolved source projection. `partIndex` is interpreted by the target that supplied the
+part counts; Core does not assign wire widths, ABI words, or local offsets. -/
+structure StaticProjection where
+  leafIndex : Nat
+  partIndex : Nat
+  deriving Repr, BEq, Inhabited
+
 /-- Hard bounds keep user-supplied codec descriptors and generated layouts
 finite before a target lowers them. -/
 structure Limits where
@@ -215,5 +222,28 @@ def StaticLeaf.sourceName (leaf : StaticLeaf) : String :=
     | .tuple 1 => if out.isEmpty then "snd" else out ++ "_snd"
     | .tuple ordinal => if out.isEmpty then toString ordinal else out ++ "_" ++ toString ordinal
     | .index ordinal => out ++ "_" ++ toString ordinal
+
+/-- Resolve Extract's flattened source spelling against typed static leaves. Targets supply only
+the number and spelling of their fixed scalar parts. Exact leaf names are valid for one-part
+values; multi-part values require a target-recognized suffix. Ambiguous compatibility names fail
+closed rather than selecting the first matching path. -/
+def resolveSourceProjection (leaves : Array StaticLeaf) (partCounts : Array Nat)
+    (partIndex? : String → Option Nat) (name : String) : Except String StaticProjection := do
+  unless partCounts.size == leaves.size do
+    throw "codec/schema: static projection part metadata is incomplete"
+  let mut found : Array StaticProjection := #[]
+  for i in [0:leaves.size] do
+    let sourceName := leaves[i]!.sourceName
+    let partCount := partCounts[i]!
+    if name == sourceName && partCount == 1 then
+      found := found.push { leafIndex := i, partIndex := 0 }
+    else if !sourceName.isEmpty && name.startsWith (sourceName ++ "_") then
+      let suffix := name.drop (sourceName.length + 1) |>.copy
+      if let some partIndex := partIndex? suffix then
+        if partIndex < partCount then
+          found := found.push { leafIndex := i, partIndex }
+  unless found.size == 1 do
+    throw s!"codec/schema: static projection {name} is missing or ambiguous"
+  return found[0]!
 
 end ProofForge.Core.Codec

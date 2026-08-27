@@ -38,6 +38,37 @@ def abiType : Scalar → Except String String
       if 1 ≤ bytes && bytes ≤ 32 then pure s!"bytes{bytes}"
       else throw s!"evm/codec: invalid fixed-bytes width {bytes}"
 
+private partial def abiTypeOfSchemaAt : Schema → Except String String
+  | .unit => throw "evm/codec: unit has no canonical ABI parameter type"
+  | .scalar type => abiType type
+  | .tuple items => do
+      if items.isEmpty then throw "evm/codec: empty tuple is not supported"
+      let types ← items.mapM abiTypeOfSchemaAt
+      return "(" ++ String.intercalate "," types.toList ++ ")"
+  | .record _ fields => do
+      if fields.isEmpty then throw "evm/codec: empty record is not supported"
+      let types ← fields.mapM fun field => abiTypeOfSchemaAt field.2
+      return "(" ++ String.intercalate "," types.toList ++ ")"
+  | .fixedArray length element => do
+      if length == 0 then throw "evm/codec: zero-length fixed array is not supported"
+      return (← abiTypeOfSchemaAt element) ++ "[" ++ toString length ++ "]"
+  | .enumeration .. => throw "evm/codec: enum ABI tags require an explicit target policy"
+  | .option _ => throw "evm/codec: option ABI tags require an explicit target policy"
+  | .boundedArray .. => throw "evm/codec: bounded arrays require an explicit dynamic ABI policy"
+
+/-- Canonical Solidity ABI spelling for one logical parameter or result. Nested records and Lean
+products are tuples; literal vectors are fixed arrays. This target-owned function deliberately
+does not expose ABI words or padding to Core. -/
+def abiTypeOfSchema (schema : Schema) : Except String String := do
+  let _ ← validate schema
+  abiTypeOfSchemaAt schema
+
+/-- One ABI word per statically present scalar leaf. Wide source values still occupy one ABI word;
+their fixed source limbs are unpacked only when an operation projects `w0`..`w3`. -/
+def staticAbiLeaves (schema : Schema) : Except String (Array StaticLeaf) := do
+  let _ ← abiTypeOfSchema schema
+  staticLeaves schema
+
 inductive WordGuard where
   | boolean
   | unsignedMax (bits : Nat)

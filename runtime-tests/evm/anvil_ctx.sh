@@ -35,4 +35,18 @@ if [[ "$stored" != "$now" && "$stored" != "$((now - 1))" ]]; then
 fi
 solana_lean_require_storage "$addr" 0 "$stored" "stamp wrote dummy"
 
-echo "evm-anvil-ctx: ok (caller low-8 + number; engineering only)"
+aggregate="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'aggregate((uint64,(uint8,bool)),(uint32,uint64),uint16[3])((uint64,bool))' \
+  '(11,(3,true))' '(13,17)' '[19,23,29]')"
+aggregate_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$aggregate''')))" )"
+solana_lean_require_equal "$aggregate_values" "93 true" "static aggregate ABI"
+
+aggregate_selector="$("$cast" sig 'aggregate((uint64,(uint8,bool)),(uint32,uint64),uint16[3])')"
+bad_bool="${aggregate_selector}$("$python" -I -S -c \
+  "print(''.join(f'{v:064x}' for v in [11, 3, 2, 13, 17, 19, 23, 29]))")"
+if "$cast" call --rpc-url "$rpc" "$addr" --data "$bad_bool" >/dev/null 2>&1; then
+  echo "FAIL: aggregate noncanonical bool unexpectedly succeeded" >&2
+  exit 1
+fi
+
+echo "evm-anvil-ctx: ok (caller/number + static aggregate ABI; engineering only)"

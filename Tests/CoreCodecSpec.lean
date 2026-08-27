@@ -1,6 +1,7 @@
 import ProofForge.Core.Codec
 import ProofForge.Core.Value
 import ProofForge.Evm.Codec
+import ProofForge.Evm.Emit
 import ProofForge.Evm.IR
 import ProofForge.Extract
 import ProofForge.Svm.IR
@@ -181,10 +182,50 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
         throwError s!"wrong SVM aggregate gate: {reason}"
   | .ok _ => throwError "SVM accepted an unbound aggregate parameter"
   match ProofForge.Evm.IR.fromExtracted program with
+  | .error reason => throwError s!"EVM rejected a static aggregate parameter: {reason}"
+  | .ok lowered =>
+      let some read := lowered.entries.find? (·.ixName == "read")
+        | throwError "EVM static aggregate entry is missing"
+      unless read.logicalParamCount == 1 && read.paramCount == 2 &&
+          read.paramTypes == #[.uint64, .boolean] &&
+          read.selector == ProofForge.Crypto.Keccak.selector "read" #["(uint64,bool)"] do
+        throwError s!"wrong EVM static aggregate binding: {repr read}"
+  let tagged := { aggregate with
+    paramSchemas := #[.option (.scalar .uint64)]
+    ops := #[.returnU64 (.lit 0)]
+  }
+  match ProofForge.Evm.IR.fromExtracted { program with methods := #[init, tagged] } with
   | .error reason =>
-      unless reason.contains "aggregate parameter binding" do
-        throwError s!"wrong EVM aggregate gate: {reason}"
-  | .ok _ => throwError "EVM accepted an unbound aggregate parameter"
+      unless reason.contains "option ABI tags" do
+        throwError s!"wrong EVM tagged aggregate rejection: {reason}"
+  | .ok _ => throwError "EVM accepted an Option without an ABI tag policy"
+  let wideResult : Extract.IR.Method := {
+    kind := .get
+    name := "AggregateGate.wideResult"
+    ixName := "wideResult"
+    retSchema := .tuple #[
+      .scalar .uint128,
+      .scalar (.fixedBytes 12),
+      .scalar .address20
+    ]
+    retCount := 7
+    ops := #[
+      .returnU64 (.lit 1), .returnU64 (.lit 2),
+      .returnU64 (.lit 3), .returnU64 (.lit 4),
+      .returnU64 (.lit 5), .returnU64 (.lit 6), .returnU64 (.lit 7)
+    ]
+  }
+  let wideProgram ←
+    match ProofForge.Evm.IR.fromExtracted { program with methods := #[init, wideResult] } with
+    | .ok lowered => pure lowered
+    | .error reason => throwError s!"EVM rejected a wide aggregate result: {reason}"
+  let wideYul ←
+    match ProofForge.Evm.Emit.emitYul wideProgram with
+    | .ok yul => pure yul
+    | .error reason => throwError s!"EVM failed to emit a wide aggregate result: {reason}"
+  unless wideYul.contains "pf_store_fixed_bytes(32," &&
+      wideYul.contains "pf_store_addr20(64," && wideYul.contains "return(0, 96)" do
+    throwError "EVM wide aggregate result packing is incomplete"
 
 #pf_guard_aggregate_boundary_schemas
 
@@ -260,6 +301,18 @@ private def staticRequest : Schema :=
   | .error _ => false
 
 #guard
+  match staticLeaves (.record "Ambiguous" #[
+      ("pair_fst", .scalar .uint64),
+      ("pair", .tuple #[.scalar .uint64, .scalar .uint64])
+    ]) with
+  | .error _ => false
+  | .ok leaves =>
+      match resolveSourceProjection leaves #[1, 1, 1]
+          (fun | "w0" => some 0 | _ => none) "pair_fst" with
+      | .error reason => reason.contains "missing or ambiguous"
+      | .ok _ => false
+
+#guard
   match staticLeaves (.option (.scalar .uint64)) with
   | .error reason => reason.contains "target-owned option tag policy"
   | .ok _ => false
@@ -275,6 +328,9 @@ private def staticRequest : Schema :=
   | .error _ => false
 #guard match ProofForge.Evm.Codec.wordGuard (.fixedBytes 12) with
   | .ok guard => guard == .fixedBytesLeftPadded 12
+  | .error _ => false
+#guard match ProofForge.Evm.Codec.abiTypeOfSchema staticRequest with
+  | .ok type => type == "(uint64,(uint32,bool),uint16[2])"
   | .error _ => false
 
 private def typedMethod : ProofForge.Evm.IR.Method := {
