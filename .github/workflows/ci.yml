@@ -46,6 +46,9 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
+      - name: Check Runtime / SDK ownership boundaries
+        run: python3 scripts/check_ownership.py
+
       - name: Build Lean libraries and guards
         run: |
           lake build

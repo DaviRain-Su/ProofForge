@@ -139,7 +139,7 @@ def RbTree.wellFormed (tree : RbTree) (maxCapacity : Nat) (accountLimit : Nat :=
 def RbTree.hasAccess (tree : RbTree) (access : Access) : Bool :=
   tree.links.region.access == access
 
-/-- Static fields of a fixed-capacity Phoenix FIFO red-black tree. The validator traverses live
+/-- Static fields of a fixed-capacity two-word FIFO red-black tree. The validator traverses live
 nodes in place and then follows the allocator free list; neither phase allocates or copies nodes. -/
 structure FifoRbTree where
   topology : RbTree

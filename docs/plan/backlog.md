@@ -7,8 +7,9 @@
 双目标路线固定为 `R0 ownership → R1 shared protocol values → R2 SVM Runtime →
 R3 SVM SDK → R4 EVM Runtime → R5 EVM SDK → R6 cross-target hardening`。共享普通 Lean、
 Profile、Extract 和 Core CFG；SVM account geometry 与 EVM storage layout 各归 target 所有，
-不做虚假的统一 storage。Phoenix two-maker remainder 已收口，下一切片进入 R0 ownership
-freeze。
+不做虚假的统一 storage。R0 ownership freeze 已完成，下一切片进入 R1 shared protocol
+values：先固定 bytes / u128 的逻辑值与 bounded codec contract，再分别绑定 SVM Borsh 和
+EVM ABI。
 
 ## 已做
 
@@ -704,6 +705,19 @@ freeze。
   4,546,413-byte ProgramData，未使用 Test Validator。详见
   `docs/plan/tasks/l5-059.md`。下一切片进入 R0 ownership freeze，不再增加 Phoenix-only
   底层工作。
+- R0 ownership freeze 已完成：新增 source API → owner → component → target effect → physical
+  state capability matrix，明确共享层只拥有语义值、schema 与 checked control；SVM account
+  bytes/index/allocator 与 EVM slot/hashed namespace 分属 target，不建立虚假统一 storage。
+  anti-leak checker 与 CI 现在拒绝 `Examples` 直连 target Emit、target 反向 import
+  `Examples`/`Projects`，以及 production SVM/EVM 模块出现 Phoenix 协议词；registry 只保留
+  artifact enumeration 例外。generic SVM Runtime/storage/FIFO/emitter 文案已去协议化，没有
+  修改 Ops、IR、CFG、Component、Runtime 行为或 emitter recipe。IR digest 仍为
+  `af159cb894745102`；assembly 因 generic 注释变为 14,572,964 B，ELF 仍为 4,546,368 B、
+  IDL 9,537 B、SHA-256
+  `9cc463b06660fcedf709e8af097eb8302c9ac60a27573b3b7a4163c75427083c`，与 L5-059 已由
+  Surfpool 1.5.0 部署验证的 exact ELF 相同。233-job Lean、51 个 SVM build、Mollusk
+  285/285、15 个 EVM build 与 Anvil 15/15 全绿。详见 `docs/plan/tasks/r0-001.md`。下一步
+  进入 R1 fixed bytes/u128 logical schema 与 bounded codec plan，不增加协议 recipe opcode。
 - EVM contract SDK 第一段已完成：新增 `ProofForge.Evm.Sdk` 作为与 SVM SDK 平行、但不复制
   SVM account geometry 的合同侧 facade。`Address` / `UInt256` / `Bytes32`、`Context`、
   `Immutable`、Ether/Event/Revert、ERC-20/WETH/Uniswap/Permit 统一擦除到既有 target-owned

@@ -80,7 +80,7 @@ SVM 和 EVM target 工作交替推进，避免一个 target 长期挤掉另一�
 
 | 阶段 | 顺序 | 交付 | 验收门 |
 |---|---:|---|---|
-| R0 Ownership freeze | 1 | runtime/component/SDK/app capability matrix；增加边界测试，阻止 `Examples` 直接拼 component 魔数或 target emitter 出现协议名 | 文档与 import/canonical guards；全 Lean |
+| R0 Ownership freeze（已完成） | 1 | runtime/component/SDK/app capability matrix；增加边界测试，阻止 `Examples` 直连 target emitter 或协议 policy 反向进入 target | capability matrix、CI anti-leak/import guard、全双目标回归；见 [R0-001](tasks/r0-001.md) |
 | R1 Shared protocol values | 2 | fixed bytes、u128/u256 logical schema；bounded record/tuple/enum codec plan；SVM Borsh 与 EVM ABI 各自 lowering | 正反抽取测试；同一 logical fixture 两个 target 各自编码；未知/超长 fail closed |
 | R2 SVM Runtime completion | 3 | bounded remaining accounts、safe dynamic account view、generic bounded instruction data/CPI/PDA/sysvar；Token-2022 TLV slices | Lean + Mollusk；权限/OOB/malformed/atomic failure；不得出现 persistent pointer |
 | R3 SVM SDK completion | 4 | `Svm.Sdk` facade；Account/Signer/PDA/System/Token；fixed Vec/Queue/Map/RBMap/allocator；bounded transient scratch API | 至少两个非 Phoenix example 复用每类容器；Phoenix 只消费 SDK/Examples layout；Mollusk + Surfpool |
@@ -90,17 +90,22 @@ SVM 和 EVM target 工作交替推进，避免一个 target 长期挤掉另一�
 
 Phoenix `matchLimit=2` remainder posting 已作为 R0 前最后一个在途协议切片收口：它验证了
 现有 scalar frame、RBMap、allocator、recorder 和 optional-return 能直接组合，未给 Phoenix
-新增 Ops / IR / emitter case。下一切片进入 R0 ownership freeze，不再开新的 Phoenix-only
-底层工作。
+新增 Ops / IR / emitter case。R0 已冻结 capability ownership 并加入 CI anti-leak 门；当前
+进入 R1 shared protocol values，不再开 Phoenix-only 底层工作。
 
 ## 5. 阶段拆分
 
-### R0 — ownership 和 anti-leak 门
+### R0 — ownership 和 anti-leak 门（已完成）
 
-1. 生成一份 source API → component → target effect 的 capability matrix。
-2. 用测试钉死主 Ops / IR / Emit 只有 generic target/component bridge；拒绝协议名和 layout offset。
+1. 已生成 source API → component → target effect 的
+   [capability matrix](capability-matrix.md)。
+2. CI checker 钉死主 target Runtime / Emit 只有 generic target/component bridge，拒绝协议名和
+   application 反向依赖；canonical guards 继续固定既有 generic lowering。
 3. `Examples` 可以声明 concrete layout 和 policy，但不能直接依赖 `*/Emit`。
-4. 删除/修正文档里的旧 `Projects/Phoenix` ownership；`ProofForge/Svm` 只保留通用组件。
+4. `Projects/Phoenix` ownership 已删除；`ProofForge/Svm` 只保留通用组件。
+
+交付证据见 [R0-001](tasks/r0-001.md)。R0 不新增语言能力；它固定后续 R1–R6 必须遵守的
+ownership 和物理状态边界。
 
 ### R1 — shared value / protocol schema
 

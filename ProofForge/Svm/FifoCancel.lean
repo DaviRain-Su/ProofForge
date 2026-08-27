@@ -42,7 +42,7 @@ inductive Collateral where
   | base
   deriving BEq, Repr, Inhabited
 
-/-- Static account-resident geometry for one ordered Phoenix-like FIFO side. `map` owns the RB
+/-- Static account-resident geometry for one ordered FIFO side. `map` owns the RB
 topology and `(price, sequence)` key; the four fields select owner, resting size, and the trader's
 locked/free balance pair. -/
 structure Config where

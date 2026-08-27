@@ -873,7 +873,7 @@ private def emitFifoRbTreeValid (context : Context) (tree : FifoRbTree)
 {afterLeft}:
   ja {visit}
 {visit}:
-  ; Strict Phoenix FIFO in-order key: bids descend, asks ascend.
+  ; Strict two-word FIFO key: descending maps reverse both words; ascending maps preserve them.
   ldxdw r8, [r10 - {stackOff + 104}]
   jeq r8, 0, {firstKey}
   ldxdw r1, [r10 - {stackOff + 88}]

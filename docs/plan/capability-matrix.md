@@ -1,0 +1,110 @@
+# Runtime / SDK capability matrix
+
+> Ownership freeze: 2026-08-27. This matrix records the current source surface and the owner of
+> every lowering boundary. It is descriptive, not a promise that unsupported rows are available.
+
+## 1. Rules
+
+The reusable language is ordinary Lean 4 plus stable target SDK facades. Runtime, Component, and
+Emit are implementation boundaries, not three alternative application APIs.
+
+```diagram
+┌────────────────────┐
+│ Examples / contract│  protocol policy, concrete layout, business validation
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ target SDK / Source│  typed handles, bounded containers, closed effects
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ Component bridge   │  static shape, operands, effects, resource contract
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ target Runtime/Emit│  ABI, syscalls/opcodes, physical bytes/slots
+└────────────────────┘
+```
+
+- Shared Lean/Profile/Extract/Core owns values, schemas, checked control, bounded loops, and CFG.
+  It does not own account geometry, EVM slots, syscalls, opcodes, or protocol rules.
+- SVM persistent state is account bytes. A handle contains compile-time account/word/stride/
+  capacity/index-base/access metadata; a stored value is a scalar offset/index, never a VM pointer.
+- SVM scratch is invocation-local and bounded. The official-shaped bump heap defaults to 32 KiB,
+  may be configured up to 256 KiB by the VM, does not reclaim on `dealloc`, and cannot back a
+  persistent `Map` or `Vec`.
+- EVM persistent state is static slots or typed hashed namespaces. `Storage.Layout` allocates
+  handles at extraction time and is never materialized in contract storage.
+- Applications may own offsets, selectors, event variants, matching/fee rules, and wire choices,
+  but must bind them once into typed descriptors. They must not import a target `Emit` module or
+  duplicate emitter/runtime recipes.
+- A new Queue/Map/Allocator/codec is a source/SDK composition unless it requires a genuinely new
+  VM effect. Ops/IR/Emit expansion is the last option, not the default implementation technique.
+
+## 2. Shared language
+
+| Source capability | Owner | Lowering/effect | Physical state | Current status / fail-closed edge |
+|---|---|---|---|---|
+| `@[pf_entry]`, structures, fixed `Vector`, bounded enum/option | Profile + Extract + Core Schema | typed leaves and explicit CFG writes | target chooses account offsets or storage slots | Available for current fixed scalar shapes; recursive/unbounded data and general `Array` fail closed |
+| checked `UInt8/16/32/64`, Bool, comparisons, bounded `for` | Core Ops/CFG | target-neutral value/control nodes | target registers scalar representation | Available; general recursion, `IO`, FFI, and unbounded loops fail closed |
+| invocation-local scalar tuples/frames | Extract + Core CFG | locals and fixed-loop frame snapshots | SVM stack / EVM Yul locals | Available for bounded scalar state; not a heap/container or persistent state |
+| fixed bytes, u128 logical value, bounded record/enum codec plan | R1 shared protocol values | target adapter must select Borsh or ABI | no shared physical layout | Not yet a stable shared source API; unknown or unbounded codec shapes fail closed |
+
+## 3. SVM
+
+| Source/API surface | Owner | Component bridge | Target effect | Physical state/resource | Current status / fail-closed edge |
+|---|---|---|---|---|---|
+| account key/owner/length/flags, clock/rent, return data | `Svm.Runtime` | direct target query | Loader-v3 account/sysvar/return-data access | invocation account headers and checked account bytes | Static account indexes available; bounded remaining-account view and safe dynamic index belong to R2 |
+| PDA seeds, System/Token wrappers, generic CPI words | `Svm.Runtime` + `Svm.Ops.invoke` | target invoke effect | bounded instruction buffer + `sol_invoke_signed_c` | invocation-local stack/scratch only | Static metas/seeds and modeled classic Token paths available; unknown CPI/TLV semantics fail closed |
+| `Region`, `Field`, scalar/fixed-record read/write | `Svm.AccountStorage` + `.Source` | `Component.accountStorage` | checked load/store | fixed account bytes with explicit zero/one-based index | Available; runtime geometry, account heap objects, OOB and unauthorized writes fail closed |
+| key4 and ordered-pair RB maps, allocator, cursor, insert/remove/update | `Svm.AccountStorage` + `.Source` | `Component.accountStorage` | bounded in-place tree/allocator routines | fixed stride/capacity, one-based slots, `0` sentinel | Available for current key4/two-word schemas; arbitrary key/value shapes, hash maps, unbounded traversal and full-book policy fail closed |
+| whole-side FIFO cancellation and bounded cancel-up-to | `Svm.FifoCancel` + `.Source` | `Component.fifoCancel` | cursor + validated map mutation + collateral fold | account map plus invocation-local scalar cells | Available for statically described ordered sides; protocol selection and event schema remain application-owned |
+| bounded begin/append/finish event batching | `Svm.BatchRecorder` + `.Source` | `Component.batchRecorder` | heap-backed byte writer + signed self-CPI | max 1,246-byte payload, fixed record bound, invocation-local pointer | Available; over-capacity flushes before append and malformed config fails closed; no pointer enters account state |
+| packed/Borsh entry and optional return plans | `Svm.EntryAdapter` | entry adapter bridge | checked instruction-data decode and return encoding | bounded invocation bytes | Available only for registered static plans; general schema-driven codec is R1/R3 |
+| transient allocator model | `Svm.Heap` | none exposed as a container SDK yet | official-shaped downward bump allocation | invocation-local 32 KiB default, 256 KiB VM ceiling | Model and recorder use exist; general scratch `Vec`/writer facade and OOM-aware source lowering are R3 |
+| unified `Svm.Sdk` facade | R3 | will compose existing Runtime/Component owners | no new recipe opcode | preserves the resources above | Not yet present. Applications currently use `AccountStorage.Source`, `FifoCancel.Source`, recorder/entry adapters, and selected Runtime leaves directly |
+
+The old low-level `accData*` names remain compatibility decoding inputs while the unified facade is
+absent. They are not a license to add another protocol-shaped intrinsic. New application code
+should prefer typed `Region`/`Field`/`RbMap` handles and source facades; R3 removes remaining
+geometry arguments from application call sites rather than teaching Emit another recipe.
+
+## 4. EVM
+
+| Source/API surface | Owner | Component bridge | Target effect | Physical state/resource | Current status / fail-closed edge |
+|---|---|---|---|---|---|
+| `Address`, `UInt256`, `Bytes32`, Context, Immutable | `Evm.Sdk` + `Evm.Runtime` | `wideWord` where multi-limb logic is required | environment reads and checked packed operations | Yul stack/memory; no persistent SDK object | Available for current compare/add/sub/mul surface; complete bitwise/div/mod and bounded ABI shapes are R4 |
+| `Storage.Layout`, typed address/address-pair maps | `Evm.Sdk.Storage` + `Evm.HashedMap` | `Component.hashedMap` | `sload`/`sstore` under typed hash namespace | compile-time namespace handle, EVM storage slots | Available; scalar/struct/fixed-array declarations and broader typed values are R4/R5 |
+| Ether, Event, Revert, receive/payable | `Evm.Sdk` + `Evm.NativeFx` | `Component.nativeFx` | CALL value, LOG, revert, receive | EVM call frame/log/storage effects | Current closed set available; arbitrary event/error recipes and hidden state writes fail closed |
+| ERC-20/WETH/router/permit interaction | `Evm.Sdk` + `Evm.ClosedCall` | `Component.closedCall` | typed closed CALL/STATICCALL plans | bounded calldata/returndata in EVM memory | Current typed callees available; arbitrary callee+calldata, delegatecall, proxy and create fail closed |
+| reusable contract policy (access, pause, reentrancy, token/NFT ledgers) | R5 `Evm.Sdk` | composition of storage/native/closed-call components | explicit reads/writes/logs/reverts | static storage handles | Owner/pause fragments exist in examples; reusable two-consumer components and ERC-721/bounded ERC-1155 are not complete |
+
+EVM does not consume `Svm.AccountStorage`, account indexes, one-based allocators, or the SVM heap.
+SVM does not consume EVM slot cursors or hashed-map namespaces. Shared semantics can have two
+bindings, but the physical storage descriptor is always target-owned.
+
+## 5. Application boundary
+
+| Application | Owns | Must consume | Must not create |
+|---|---|---|---|
+| `Examples.Phoenix*` | market/account layout, order comparison, crossing, fees, TIF/self-trade/funds policy, official wire and audit choices | SVM typed account storage, allocator/map/cursor, recorder, entry adapter, CPI/PDA/Token capabilities | Phoenix-named Ops/IR/Emit cases, heap-backed persistent books, pointers in accounts |
+| `Examples.Token`, `Examples.Capped`, future EVM contracts | token/cap/access business policy and public ABI | `Evm.Sdk` typed storage/context/event/revert/closed calls | numeric map bases, hand-built topics/selectors, SVM account geometry |
+| future cross-target examples | shared behavioral fixture only | separate SVM and EVM state/ABI bindings | a fake unified storage abstraction |
+
+Registry and historical golden fixtures may name applications because they enumerate build/test
+artifacts. Production target Runtime/Component/Emit modules may not import applications or contain
+application protocol vocabulary.
+
+## 6. Enforced gates
+
+`python3 scripts/check_ownership.py` runs in CI and enforces the source-level freeze:
+
+1. `Examples/**/*.lean` cannot directly import any `ProofForge.Svm.*.Emit` or
+   `ProofForge.Evm.*.Emit` module.
+2. Production SVM/EVM target modules cannot import `Examples` or `Projects`.
+3. Production target modules (registries excluded) cannot contain Phoenix protocol vocabulary.
+
+The gate deliberately does not pretend that the current umbrella import is the final SDK surface.
+R3 narrows SVM applications to `Svm.Sdk`; R5 continues narrowing EVM contracts to `Evm.Sdk`.
+Canonical IR/layout tests remain responsible for proving that a facade erases to the same generic
+component operations and does not smuggle numeric layout policy into Emit.

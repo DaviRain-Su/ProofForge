@@ -4,6 +4,7 @@
 
 后续权威排期：[Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md)。共享 Lean 语义层，
 SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
+当前边界：[Runtime / SDK capability matrix](capability-matrix.md)。
 
 任务：
 
@@ -154,6 +155,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [l5-058](tasks/l5-058.md) | done | Bounded two-maker Limit settlement |
 | [l5-059](tasks/l5-059.md) | done | Two-maker noncrossing remainder posting |
 | [l6-001](tasks/l6-001.md) | done | Solana 官方形状的 bounded transient bump heap 模型 |
+| [r0-001](tasks/r0-001.md) | done | Runtime / SDK ownership matrix 与 anti-leak CI 门 |
 
 
 积压：[backlog.md](backlog.md)

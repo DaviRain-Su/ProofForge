@@ -860,11 +860,11 @@ pointer; callers that require complete topology/allocator assurance compose it a
   0
 
 /--
-Search a statically shaped Phoenix FIFO order tree by `(price, encoded_sequence)` and return its
-one-based slot index, or zero when absent. `bid=1` selects descending price/sequence ordering and
-`bid=0` ascending ordering. Geometry is compile-time fixed and traversal is bounded to 64 checked
-links; no heap map, node copy, raw pointer, or persistent allocation is created. Callers compose
-the complete FIFO tree validator when malformed topology must be rejected before business logic.
+Search a statically shaped two-word FIFO tree by `(key0, key1)` and return its one-based slot index,
+or zero when absent. `bid=1` selects descending ordering for both words and `bid=0` ascending
+ordering. Geometry is compile-time fixed and traversal is bounded to 64 checked links; no heap map,
+node copy, raw pointer, or persistent allocation is created. Callers compose the complete FIFO tree
+validator when malformed topology must be rejected before business logic.
 -/
 @[irreducible] def accDataRbTreeOrderFind
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
@@ -883,10 +883,10 @@ the complete FIFO tree validator when malformed topology must be rejected before
   0
 
 /--
-Return the first Phoenix FIFO order slot when `hasCursor=0`, or the strict logical successor of
-`(price, sequence)` when `hasCursor=1`. The result is a one-based slot index or zero at the end.
-Every call restarts from the fixed account-resident root, so callers retain only the scalar key
-across removals; no node pointer, heap collection, or runtime geometry is created.
+Return the first two-word FIFO slot when `hasCursor=0`, or the strict logical successor of
+`(key0, key1)` when `hasCursor=1`. The result is a one-based slot index or zero at the end. Every
+call restarts from the fixed account-resident root, so callers retain only the scalar key across
+removals; no node pointer, heap collection, or runtime geometry is created.
 -/
 @[irreducible] def accDataRbTreeOrderCursor
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
@@ -965,10 +965,9 @@ node copy, raw pointer, or detached allocation is exposed.
   0
 
 /--
-Deposit Phoenix quote/base lots into a trader keyed by four little-endian Pubkey limbs. The SVM
-target validates the fixed account-resident trader tree, then either checked-adds to an existing
-TraderState's quote/base free balances or inserts a canonical zeroed TraderState with those free
-balances. No heap map or persistent pointer is created.
+Checked-add two values in a record keyed by four little-endian 64-bit limbs. The SVM target validates
+the fixed account-resident key4 tree, then either updates an existing record or inserts a canonical
+zeroed record with those two values. No heap map or persistent pointer is created.
 -/
 @[irreducible] def accDataRbTreeTraderDeposit
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity
@@ -1012,13 +1011,11 @@ account-resident until a later bounded insertion reinitializes that slot.
   0
 
 /--
-Insert one Phoenix FIFO order into a statically shaped, account-resident Sokoban red-black tree.
-The two-word key is `(price_in_ticks, encoded_sequence)` and `bid` selects Phoenix's descending
-bid ordering or ascending ask ordering. The four value words are the exact `FIFORestingOrder`
-payload. The SVM target validates the complete tree/free partition and incoming side tag before
-the first store, supports Sokoban's in-place duplicate-value replacement, and otherwise performs
-bounded bump/free-list allocation plus insertion fixup. No persistent pointer or heap container is
-created.
+Insert one four-word value into a statically shaped, account-resident two-word FIFO red-black tree.
+The key is `(key0, key1)` and `bid` selects descending or ascending order for both words. The SVM
+target validates the complete tree/free partition and incoming direction tag before the first
+store, supports in-place duplicate-value replacement, and otherwise performs bounded
+bump/free-list allocation plus insertion fixup. No persistent pointer or heap container is created.
 -/
 @[irreducible] def accDataRbTreeOrderInsert
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
@@ -1042,11 +1039,11 @@ created.
   0
 
 /--
-Remove one Phoenix FIFO order from a statically shaped, account-resident Sokoban red-black tree.
-The SVM target validates the complete tree/free partition and encoded sequence side tag before the
-first store, then performs bounded predecessor transplant, delete fixup, and free-list push. The
-removed key/value payload remains in its fixed account slot until a later insertion reinitializes
-that slot; no persistent pointer or heap container is created.
+Remove one key from a statically shaped, account-resident two-word FIFO red-black tree. The SVM
+target validates the complete tree/free partition and encoded direction tag before the first store,
+then performs bounded predecessor transplant, delete fixup, and free-list push. The removed
+key/value payload remains in its fixed account slot until a later insertion reinitializes that slot;
+no persistent pointer or heap container is created.
 -/
 @[irreducible] def accDataRbTreeOrderRemove
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid
@@ -1067,7 +1064,7 @@ that slot; no persistent pointer or heap container is created.
 /--
 Update one word in an existing account-resident ordered-map record, removing the keyed record when
 the new value is zero. Static arguments describe the map and selected field; only key, one-based
-slot, and value are dynamic. This is a reusable bounded-storage policy, not a Phoenix operation.
+slot, and value are dynamic. This is a reusable bounded-storage policy, not a protocol operation.
 -/
 @[irreducible] def accDataRbTreeOrderSetWordOrRemove
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord valueBaseWord
@@ -1111,8 +1108,8 @@ Map，不复制节点；短账户在形成 data pointer 前 `Custom(1)`。
 
 /--
 直接在账户数据中验证完整的 fixed-capacity Sokoban red-black tree 及 allocator partition。
-静态参数选择 links、parent/color、price、sequence word 和槽布局；`bid=1` 使用 Phoenix bid
-降序，`bid=0` 使用 ask 升序。目标发射器使用固定的 4096-bit 栈 bitmap，不分配 Map、
+静态参数选择 links、parent/color、两个 key word 和槽布局；`bid=1` 使用双字降序，
+`bid=0` 使用双字升序。目标发射器使用固定的 4096-bit 栈 bitmap，不分配 Map、
 不复制节点；它验证树结构、颜色/black height、FIFO key 顺序、live count，以及 free-list
 与所有 pre-bump 槽的精确分区。
 -/

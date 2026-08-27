@@ -1565,24 +1565,24 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "root=8310 links=8314 parent=8315 key4=8316 stride=18 capacity=128" &&
       asm.contains "function_rb4i_" && asm.contains "_rotate_left" &&
       asm.contains "_rotate_right" &&
-      asm.contains "bounded account-resident Phoenix trader deposit RB insertion" &&
+      asm.contains "bounded account-resident four-word-key checked add RB insertion" &&
       asm.contains "function_rbtd_" &&
-      asm.contains "Existing trader: validate both additions before mutating either free balance" &&
+      asm.contains "Existing key4 record: validate both additions before mutating either value" &&
       asm.contains "ldxdw r1, [r8 + 40]" && asm.contains "ldxdw r1, [r8 + 56]" &&
       asm.contains "jlt r3, r1, rbtd_" && asm.contains "stxdw [r10 - 56], r3" &&
       asm.contains "stxdw [r10 - 64], r3" &&
       asm.contains "bounded account-resident four-word-key RB removal" &&
       asm.contains "function_rb4r_" && asm.contains "_transplant" &&
-      asm.contains "bounded account-resident Phoenix bid order RB insertion" &&
+      asm.contains "bounded account-resident descending two-word entry RB insertion" &&
       asm.contains "root=110 links=114 parent=115 key=116 stride=8 capacity=512" &&
-      asm.contains "bounded account-resident Phoenix ask order RB insertion" &&
+      asm.contains "bounded account-resident ascending two-word entry RB insertion" &&
       asm.contains "root=4210 links=4214 parent=4215 key=4216 stride=8 capacity=512" &&
       asm.contains "Sokoban map semantics replace only the existing resting-order value" &&
       asm.contains "stxdw [r8 + 16], r1" && asm.contains "stxdw [r8 + 40], r1" &&
       asm.contains "rsh64 r1, 63" && asm.contains "jne r1, 1" && asm.contains "jne r1, 0" &&
       asm.contains "function_rboi_" &&
-      asm.contains "bounded account-resident Phoenix bid order RB removal" &&
-      asm.contains "bounded account-resident Phoenix ask order RB removal" &&
+      asm.contains "bounded account-resident descending two-word entry RB removal" &&
+      asm.contains "bounded account-resident ascending two-word entry RB removal" &&
       asm.contains "function_rbor_" && asm.contains "_transplant" &&
       asm.contains "bounded one-based acc1 RB find root=8310 links=8314 stride=18 capacity=128" &&
       asm.contains "bounded one-based acc1 RB find root=110 links=114 stride=8 capacity=512" &&

@@ -1844,9 +1844,9 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
   let shapeComment :=
     match payload with
     | .key4 .. => "four-word-key"
-    | .traderDeposit .. => "Phoenix trader deposit"
-    | .order true .. => "Phoenix bid order"
-    | .order false .. => "Phoenix ask order"
+    | .traderDeposit .. => "four-word-key checked add"
+    | .order true .. => "descending two-word entry"
+    | .order false .. => "ascending two-word entry"
   let sideCheck :=
     match payload with
     | .key4 .. | .traderDeposit .. => ""
@@ -1895,9 +1895,9 @@ private def emitAccDataRbTreeInsert (p : IR.Program) (label : String)
 "
   let duplicate :=
     match payload with
-    | .key4 .. => s!"  ; Duplicate registrations fail instead of replacing TraderState.\n  ja {failure}\n"
+    | .key4 .. => s!"  ; Duplicate keys fail instead of replacing the existing record.\n  ja {failure}\n"
     | .traderDeposit .. => s!"\
-  ; Existing trader: validate both additions before mutating either free balance.
+  ; Existing key4 record: validate both additions before mutating either value.
   ldxdw r1, [r8 + 40]
   ldxdw r2, [r10 - 40]
   mov64 r3, r1
@@ -2856,8 +2856,8 @@ private def emitAccDataRbTreeRemove (p : IR.Program) (label : String)
   let shapeComment :=
     match key with
     | .key4 .. => "four-word-key"
-    | .order true .. => "Phoenix bid order"
-    | .order false .. => "Phoenix ask order"
+    | .order true .. => "descending two-word entry"
+    | .order false .. => "ascending two-word entry"
   let keyComment := match key with | .key4 .. => "key4" | .order .. => "key"
   let sideCheck :=
     match key with
@@ -3748,7 +3748,7 @@ private def emitAccDataRbTreeOrderRemove (p : IR.Program) (label : String)
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool) (price sequence : Ops.Val) : Except String String :=
   if keyBaseWord + 1 != sequenceBaseWord then
-    .error "extract/unsupported: Phoenix order key words must be contiguous"
+    .error "extract/unsupported: two-word ordered-map keys must be contiguous"
   else
     emitAccDataRbTreeRemove p label acc rootWord linksBaseWord parentBaseWord keyBaseWord
       strideWords capacity (.order bid price sequence)
