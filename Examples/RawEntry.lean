@@ -13,6 +13,14 @@ inductive Error where
   | rejected
   deriving Repr, DecidableEq, Inhabited, BEq
 
+structure AggregateMeta where
+  side : UInt8
+  enabled : Bool
+
+structure AggregateRequest where
+  amount : UInt64
+  details : AggregateMeta
+
 @[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
@@ -87,5 +95,16 @@ def echo128 (_s : State) (value : UInt128) : UInt128 := value
 /-- A partial final limb is decoded from and returned as exactly four bytes. -/
 @[pf_entry, pf_svm_raw 13 2 0]
 def echoBytes12 (_s : State) (value : FixedBytes 12) : FixedBytes 12 := value
+
+/-- Ordinary Lean records, products, and fixed vectors share one logical source schema. The SVM
+adapter derives the exact source-order Borsh leaves and fixed scratch locals without a heap value
+or a protocol-specific Op: `0e || request || pair || levels`. -/
+@[pf_entry, pf_svm_raw 14 2 0]
+def aggregate (_s : State) (request : AggregateRequest) (pair : UInt32 × UInt64)
+    (levels : Vector UInt16 3) : UInt64 :=
+  request.amount + request.details.side.toUInt64 +
+    (if request.details.enabled then (1 : UInt64) else 0) +
+    pair.1.toUInt64 + pair.2 + levels[0].toUInt64 + levels[2].toUInt64 +
+    (signerKey 1 &&& 0)
 
 end Examples.RawEntry

@@ -9,6 +9,9 @@ structure RawEntry where
   tag : Nat
   accountCount : Nat
   programAccount : Nat
+  /-- Number of source parameters before any aggregate is expanded into fixed scalar locals. Zero
+  retains compatibility for manually constructed test descriptors. -/
+  paramCount : Nat := 0
   /-- Optional Borsh enum discriminant immediately following `tag`. -/
   variant : Option Nat := none
   paramWidths : Array Nat
@@ -16,6 +19,8 @@ structure RawEntry where
   the legacy one-leaf-per-parameter plan for manually constructed fixtures. -/
   paramLeafWidths : Array Nat := #[]
   paramLeafCounts : Array Nat := #[]
+  /-- Canonical Borsh Bool guards, one flag per physical scalar local. -/
+  paramLeafBooleans : Array Bool := #[]
   /-- Width of each Borsh `Option<T>` payload at the end of the wire plan. The corresponding method
   parameters are `(u8 presence, T value)` pairs after the fixed prefix. -/
   optionWidths : Array Nat := #[]
@@ -37,8 +42,11 @@ def MethodEntry.isGenerated : MethodEntry → Bool
   | .generated => true
   | .raw _ => false
 
+def RawEntry.logicalParamCount (entry : RawEntry) : Nat :=
+  if entry.paramCount == 0 then entry.paramWidths.size else entry.paramCount
+
 def RawEntry.fixedParamCount (entry : RawEntry) : Nat :=
-  entry.paramWidths.size - 2 * entry.optionWidths.size
+  entry.logicalParamCount - 2 * entry.optionWidths.size
 
 def RawEntry.wireParamWidths (entry : RawEntry) : Array Nat :=
   if entry.paramLeafWidths.isEmpty then entry.paramWidths else entry.paramLeafWidths
@@ -81,6 +89,12 @@ def RawEntry.canonical (entry : RawEntry) : String :=
       let leaves := String.intercalate "," (entry.paramLeafWidths.map toString).toList
       s!"{base}.borsh-leaves.[{leaves}]"
   let base :=
+    if entry.paramLeafBooleans.all (· == false) then base
+    else
+      let guards := String.intercalate "," <| (entry.paramLeafBooleans.mapIdx fun i guard =>
+        if guard then some (toString i) else none).filterMap id |>.toList
+      s!"{base}.borsh-bool.[{guards}]"
+  let base :=
     if entry.optionWidths.isEmpty then base
     else
       let options := String.intercalate "," (entry.optionWidths.map toString).toList
@@ -110,7 +124,7 @@ def RawEntry.returnScratchBytes (entry : RawEntry) : Nat :=
 private def supportedWidth (width : Nat) : Bool :=
   width == 1 || width == 2 || width == 4 || width == 8
 
-private def leafWidths (type : Core.Codec.Scalar) : Except String (Array Nat) := do
+def scalarLeafWidths (type : Core.Codec.Scalar) : Except String (Array Nat) := do
   unless type.isWellFormed do throw "extract/unsupported: malformed svm boundary scalar"
   match type with
   | .boolean => return #[1]
@@ -127,6 +141,17 @@ private def leafWidths (type : Core.Codec.Scalar) : Except String (Array Nat) :=
   | .address _ =>
       throw "extract/unsupported: svm raw entry rejects target-specific address values"
 
+structure BorshLeaf where
+  logical : Core.Codec.StaticLeaf
+  widths : Array Nat
+  deriving BEq, Repr, Inhabited
+
+/-- Target-owned fixed Borsh plan. Logical paths come from Core; exact little-endian widths and
+Bool canonicality are SVM decisions. No pointer or account offset enters this descriptor. -/
+def staticBorshLeaves (schema : Core.Codec.Schema) : Except String (Array BorshLeaf) := do
+  let leaves ← Core.Codec.staticLeaves schema
+  leaves.mapM fun logical => return { logical, widths := ← scalarLeafWidths logical.type }
+
 private def parseHeader (parts : List String) : Except String (Nat × Nat × Nat) := do
   let some tag := parts[1]!.toNat?
     | throw "extract/unsupported: malformed svm raw entry tag"
@@ -141,25 +166,46 @@ private def parseHeader (parts : List String) : Except String (Nat × Nat × Nat
   return (tag, accountCount, programAccount)
 
 private def decodeRaw (annotation : String) (paramCount : Nat)
-    (paramWidths : Array Nat) (retCount : Nat) (paramTypes retTypes : Array Core.Codec.Scalar) :
+    (paramWidths : Array Nat) (retCount : Nat) (paramTypes retTypes : Array Core.Codec.Scalar)
+    (paramSchemas : Array Core.Codec.Schema) (retSchema : Core.Codec.Schema) :
     Except String RawEntry := do
   let parts := annotation.splitOn ":"
-  unless paramWidths.size == paramCount do
-    throw "extract/unsupported: svm raw entry parameter widths are incomplete"
-  let (paramLeafWidths, paramLeafCounts) ←
-    if paramTypes.isEmpty then do
+  let (paramLeafWidths, paramLeafCounts, paramLeafBooleans) ←
+    if !paramSchemas.isEmpty then do
+      unless paramSchemas.size == paramCount do
+        throw "extract/unsupported: svm raw entry parameter schemas are incomplete"
+      let plans ← paramSchemas.mapM staticBorshLeaves
+      let widths := plans.map fun plan => plan.foldl (init := #[]) fun out leaf => out ++ leaf.widths
+      let booleans := plans.foldl (init := #[]) fun out plan =>
+        out ++ plan.foldl (init := #[]) fun flags leaf =>
+          flags ++ Array.replicate leaf.widths.size (leaf.logical.type == .boolean)
+      pure (widths.foldl (init := #[]) (· ++ ·), widths.map (·.size), booleans)
+    else if paramTypes.isEmpty then do
+      unless paramWidths.size == paramCount do
+        throw "extract/unsupported: svm raw entry parameter widths are incomplete"
       unless paramWidths.all supportedWidth do
         throw "extract/unsupported: svm raw entry has unsupported legacy parameter widths"
-      pure (paramWidths, Array.replicate paramCount 1)
+      pure (paramWidths, Array.replicate paramCount 1, Array.replicate paramCount false)
     else do
+      unless paramWidths.size == paramCount do
+        throw "extract/unsupported: svm raw entry parameter widths are incomplete"
       unless paramTypes.size == paramCount do
         throw "extract/unsupported: svm raw entry typed parameter metadata is incomplete"
-      let plans ← paramTypes.mapM leafWidths
-      pure (plans.foldl (init := #[]) (· ++ ·), plans.map (·.size))
+      let plans ← paramTypes.mapM scalarLeafWidths
+      let booleans := (paramTypes.zip plans).foldl (init := #[]) fun out pair =>
+        out ++ Array.replicate pair.2.size (pair.1 == .boolean)
+      pure (plans.foldl (init := #[]) (· ++ ·), plans.map (·.size), booleans)
   let inferredReturnWidths ←
-    if retTypes.isEmpty then pure #[]
+    if retTypes.isEmpty then
+      match staticBorshLeaves retSchema with
+      | .ok leaves =>
+          let widths := leaves.foldl (init := #[]) fun out leaf => out ++ leaf.widths
+          unless retSchema == .unit || widths.size == retCount do
+            throw "extract/unsupported: svm raw aggregate return metadata is incomplete"
+          pure widths
+      | .error _ => pure #[]
     else do
-      let plans ← retTypes.mapM leafWidths
+      let plans ← retTypes.mapM scalarLeafWidths
       let widths := plans.foldl (init := #[]) (· ++ ·)
       unless widths.size == retCount do
         throw "extract/unsupported: svm raw entry typed return metadata is incomplete"
@@ -237,8 +283,9 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
     else
       throw "extract/unsupported: malformed svm raw entry annotation"
   let entry := {
-    tag, accountCount, programAccount, variant, paramWidths, paramLeafWidths, paramLeafCounts,
-    optionWidths, returnWidths, inferredReturnWidths, optionalReturnData
+    tag, accountCount, programAccount, paramCount, variant, paramWidths, paramLeafWidths,
+    paramLeafCounts, paramLeafBooleans, optionWidths, returnWidths, inferredReturnWidths,
+    optionalReturnData
   }
   unless entry.maxDataLen ≤ 1024 do
     throw "extract/unsupported: svm raw entry data exceeds 1024 bytes"
@@ -250,13 +297,16 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
 def decode (annotations : Array String) (paramCount : Nat)
     (paramWidths : Array Nat) (retCount : Nat := 1)
     (paramTypes : Array Core.Codec.Scalar := #[])
-    (retTypes : Array Core.Codec.Scalar := #[]) : Except String MethodEntry := do
+    (retTypes : Array Core.Codec.Scalar := #[])
+    (paramSchemas : Array Core.Codec.Schema := #[])
+    (retSchema : Core.Codec.Schema := .unit) : Except String MethodEntry := do
   let raw := annotations.filter (·.startsWith "svm.raw.")
   if raw.isEmpty then
     return .generated
   unless raw.size == 1 do
     throw "extract/unsupported: method has multiple svm raw entry annotations"
-  return .raw (← decodeRaw raw[0]! paramCount paramWidths retCount paramTypes retTypes)
+  return .raw (← decodeRaw raw[0]! paramCount paramWidths retCount paramTypes retTypes
+    paramSchemas retSchema)
 
 def validateUniqueTags (entries : Array MethodEntry) : Except String Unit := do
   let mut seen : Array (Nat × Option Nat) := #[]

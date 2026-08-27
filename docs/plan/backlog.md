@@ -13,12 +13,13 @@ sentinel 迁到 `Evm.Codec`。R1-002 source slice 已加入 allocation-free shar
 `FixedBytes n` / u128/u256 并由 Extract 推导固定 limb metadata；R1-003 已分别绑定 SVM
 exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 account/storage；
 R1-004 已从普通 Lean 推导 bounded tuple/record/enum/option/literal-Vector schema，并贯穿
-Core/SVM/EVM IR。下一切片由两个 target 分别绑定 aggregate Borsh 与 ABI 物理编码。
+Core/SVM/EVM IR；R1-005 已由 SVM 独立绑定 static record/product/fixed-vector Borsh。
+下一切片由 EVM 独立绑定 canonical aggregate ABI，不共享两个 target 的物理编码。
 
 ## 已做
 
 - **当前可验证基线（2026-08-27）**：Lean 汇总 237 jobs；SVM manifest 全 51 programs；
-  Mollusk 全量 286/286（Phoenix-v1 profile 76/76、RawEntry 12/12）；EVM manifest 全
+  Mollusk 全量 287/287（Phoenix-v1 profile 76/76、RawEntry 13/13）；EVM manifest 全
   15 programs 且 Anvil 15/15。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
   当前 Token deployment bytecode 为 19,348 B；Surfpool 1.5.0 部署门见 P5 最新记录。
@@ -131,9 +132,20 @@ Core/SVM/EVM IR。下一切片由两个 target 分别绑定 aggregate Borsh 与 
   shape 在 emission 前 fail closed；本切片未扩 Ops/Component/Emit。详见
   `docs/plan/tasks/r1-004.md`。
 
+- R1-005 SVM static aggregate Borsh slice 已完成：`Core.Codec.staticLeaves` 只提供 typed
+  source-order logical path；`Svm.EntryAdapter` 独立选择 little-endian widths、fixed scalar
+  local ranges 与 canonical Bool guard。普通 Lean nested record、`Prod`、literal `Vector`
+  projection 在 SVM IR 投影后绑定到已解码 local，不创建 aggregate heap object、不把 pointer
+  写入 account，也不新增 Ops/Component/main-Emit case。`RawEntry.aggregate` 的 exact 29-byte
+  Borsh wire 与 malformed Bool/short/trailing 负例进入 Mollusk；Option/enum/bounded-array tag/
+  length policy、generated aggregate SVM ABI 与 EVM aggregate ABI 仍 fail closed。RawEntry digest
+  `256081fbe6a93fcc`、ELF 13,624 B，经 Surfpool 1.5.0 的 14 个 Loader-v3 writes 部署核对；
+  Lean 237、SVM 51 builds、Mollusk 287/287（RawEntry 13/13）、EVM 15 builds、Anvil 15/15、
+  ownership/whitespace 全绿。详见 `docs/plan/tasks/r1-005.md`。
+
 - `lake build Tests` 当前 237 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 286/286，其中 RawEntry 12/12、Phoenix-v1 profile
+  `pf build` 当前通过；全套 Mollusk 287/287，其中 RawEntry 13/13、Phoenix-v1 profile
   76/76。
 - EVM registry 15 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault /
   Ownable / Token / Capped / Window / Phase / Wide / Const 均进入 Anvil 总门。`Addr20` 是一等 ABI `address`；

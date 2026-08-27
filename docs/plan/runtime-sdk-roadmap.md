@@ -96,8 +96,9 @@ Phoenix `matchLimit=2` remainder posting 已作为 R0 前最后一个在途协�
 sentinel 迁到 `Evm.Codec`；R1-002 source slice 已落地 shared allocation-free
 `FixedBytes n` / u128/u256 values 与 fixed-limb extraction。R1-003 已分别完成 SVM typed
 scalar exact-cursor Borsh 和 EVM u128/bytesN canonical ABI binding；R1-004 已完成 bounded
-aggregate source-schema derivation 与 fail-closed target gate。下一切片分别实现 SVM
-aggregate Borsh 与 EVM aggregate ABI，不统一两个 target 的物理 layout。
+aggregate source-schema derivation 与 fail-closed target gate；R1-005 已完成 SVM static
+record/product/fixed-vector Borsh binding。下一切片实现 EVM aggregate ABI，不统一两个
+target 的物理 layout。
 
 ## 5. 阶段拆分
 
@@ -130,6 +131,11 @@ EVM 使用 canonical numeric uint 与 source-order left-aligned bytesN ABI；详
 R1-004 已从普通 Lean 类型推导 bounded tuple/record/enum/option/fixed-array schema，贯穿
 Core/SVM/EVM IR，并在两个 target 的 aggregate adapter 完成前 fail closed；详见
 [R1-004](tasks/r1-004.md)。
+
+R1-005 已完成 SVM static aggregate binding：Core 只给 source-order typed path，SVM 独立
+选择 Borsh widths、fixed locals 与 canonical Bool guard；record/product/literal-Vector 可用于
+raw entry，generated aggregate ABI 与 tagged/dynamic policy 仍 fail closed；详见
+[R1-005](tasks/r1-005.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。

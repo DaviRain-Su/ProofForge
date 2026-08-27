@@ -46,6 +46,19 @@ inductive Schema where
   | boundedArray (capacity : Nat) (element : Schema)
   deriving Repr, BEq, Inhabited
 
+/-- A source-level route to one scalar in a statically shaped boundary value. This is logical
+identity only: it carries no Borsh offset, ABI word, account address, or storage slot. -/
+inductive PathStep where
+  | field (name : String)
+  | tuple (ordinal : Nat)
+  | index (ordinal : Nat)
+  deriving Repr, BEq, Inhabited
+
+structure StaticLeaf where
+  path : Array PathStep
+  type : Scalar
+  deriving Repr, BEq, Inhabited
+
 /-- Hard bounds keep user-supplied codec descriptors and generated layouts
 finite before a target lowers them. -/
 structure Limits where
@@ -159,5 +172,48 @@ def analyze (schema : Schema) (limits : Limits := {}) : Except String Usage :=
 def validate (schema : Schema) (limits : Limits := {}) : Except String Unit := do
   let _ ← analyze schema limits
   return ()
+
+private partial def staticLeavesAt (path : Array PathStep) : Schema → Except String (Array StaticLeaf)
+  | .unit => pure #[]
+  | .scalar type => pure #[{ path, type }]
+  | .tuple items => do
+      let mut leaves := #[]
+      for i in [0:items.size] do
+        leaves := leaves ++ (← staticLeavesAt (path.push (.tuple i)) items[i]!)
+      return leaves
+  | .record _ fields => do
+      let mut leaves := #[]
+      for field in fields do
+        leaves := leaves ++ (← staticLeavesAt (path.push (.field field.1)) field.2)
+      return leaves
+  | .fixedArray length element => do
+      let mut leaves := #[]
+      for i in [0:length] do
+        leaves := leaves ++ (← staticLeavesAt (path.push (.index i)) element)
+      return leaves
+  | .enumeration .. =>
+      throw "codec/schema: static leaf plan requires a target-owned enum tag policy"
+  | .option _ =>
+      throw "codec/schema: static leaf plan requires a target-owned option tag policy"
+  | .boundedArray .. =>
+      throw "codec/schema: bounded arrays require a target-owned length policy"
+
+/-- Flatten only source-order, statically present scalar leaves. Variable/tagged shapes stay
+closed until a target explicitly owns their tag/length representation. -/
+def staticLeaves (schema : Schema) : Except String (Array StaticLeaf) := do
+  let _ ← validate schema
+  staticLeavesAt #[] schema
+
+/-- Compatibility spelling used by scalar Ops projections. Extract currently flattens nested
+record fields with `_`, binary products as `fst`/`snd`, and fixed indexes as `_0`, `_1`, ... .
+The typed `path` remains authoritative; callers must reject ambiguous flattened spellings. -/
+def StaticLeaf.sourceName (leaf : StaticLeaf) : String :=
+  leaf.path.foldl (init := "") fun out step =>
+    match step with
+    | .field name => if out.isEmpty then name else out ++ "_" ++ name
+    | .tuple 0 => if out.isEmpty then "fst" else out ++ "_fst"
+    | .tuple 1 => if out.isEmpty then "snd" else out ++ "_snd"
+    | .tuple ordinal => if out.isEmpty then toString ordinal else out ++ "_" ++ toString ordinal
+    | .index ordinal => out ++ "_" ++ toString ordinal
 
 end ProofForge.Core.Codec

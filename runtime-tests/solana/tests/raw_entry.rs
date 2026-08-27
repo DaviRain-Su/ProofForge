@@ -16,6 +16,7 @@ const BORSH_PAIR_TAG: u8 = 10;
 const ENUM_TAG: u8 = 11;
 const U128_TAG: u8 = 12;
 const BYTES12_TAG: u8 = 13;
+const AGGREGATE_TAG: u8 = 14;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -53,6 +54,25 @@ fn two_limb_data(tag: u8, w0: u64, w1: u64, final_width: usize) -> Vec<u8> {
     let mut data = vec![tag];
     data.extend_from_slice(&w0.to_le_bytes());
     data.extend_from_slice(&w1.to_le_bytes()[..final_width]);
+    data
+}
+
+fn aggregate_data(
+    amount: u64,
+    side: u8,
+    enabled: u8,
+    pair: (u32, u64),
+    levels: [u16; 3],
+) -> Vec<u8> {
+    let mut data = vec![AGGREGATE_TAG];
+    data.extend_from_slice(&amount.to_le_bytes());
+    data.push(side);
+    data.push(enabled);
+    data.extend_from_slice(&pair.0.to_le_bytes());
+    data.extend_from_slice(&pair.1.to_le_bytes());
+    for level in levels {
+        data.extend_from_slice(&level.to_le_bytes());
+    }
     data
 }
 
@@ -191,6 +211,42 @@ fn shared_u128_and_fixed_bytes_use_exact_borsh_limbs() {
             program_account.clone(),
             true,
             &trailing,
+        );
+    }
+}
+
+#[test]
+fn static_aggregates_use_source_order_borsh_and_canonical_bool() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    let data = aggregate_data(11, 3, 1, (13, 17), [19, 23, 29]);
+    assert_eq!(data.len(), 29);
+    let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &raw_accounts(program_id, program_account.clone(), signer, None),
+        &[Check::success(), Check::return_data(&93u64.to_le_bytes())],
+    );
+
+    let mut bad_bool = data.clone();
+    bad_bool[10] = 2;
+    for malformed in [
+        bad_bool,
+        data[..data.len() - 1].to_vec(),
+        {
+            let mut trailing = data;
+            trailing.push(0);
+            trailing
+        },
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &malformed,
         );
     }
 }

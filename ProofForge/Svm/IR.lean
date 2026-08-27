@@ -196,98 +196,155 @@ private def rawLimbIndex : String → Option Nat
   | "w3" => some 3
   | _ => none
 
-private partial def rewriteRawArg (entry : EntryAdapter.RawEntry) (base : Nat) :
+private def schemaIsScalar : Core.Codec.Schema → Bool
+  | .scalar _ => true
+  | _ => false
+
+private def rawAggregateProjection (schemas : Array Core.Codec.Schema)
+    (entry : EntryAdapter.RawEntry) (index : Nat) (name : String) :
+    Except String (Nat × Nat) := do
+  let some schema := schemas[index]?
+    | throw "extract/unsupported: raw aggregate parameter schema is missing"
+  let leaves ← EntryAdapter.staticBorshLeaves schema
+  let mut found : Array (Nat × Nat) := #[]
+  for i in [0:leaves.size] do
+    let leaf := leaves[i]!
+    let sourceName := leaf.logical.sourceName
+    if name == sourceName && leaf.widths.size == 1 then
+      found := found.push (i, 0)
+    else if !sourceName.isEmpty && name.startsWith (sourceName ++ "_") then
+      let suffix := name.drop (sourceName.length + 1) |>.copy
+      if let some limb := rawLimbIndex suffix then
+        if limb < leaf.widths.size then found := found.push (i, limb)
+  unless found.size == 1 do
+    throw s!"extract/unsupported: raw aggregate projection {name} is missing or ambiguous"
+  let (leafIndex, limbIndex) := found[0]!
+  let relative := (leaves.extract 0 leafIndex).foldl (init := 0)
+    fun count leaf => count + leaf.widths.size
+  return (entry.paramLeafStart index + relative, limbIndex)
+
+private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
+    (entry : EntryAdapter.RawEntry) (base : Nat) :
     Ops.Val → Except String Ops.Val
   | .arg index => do
-      unless index < entry.paramWidths.size do
+      unless index < entry.logicalParamCount do
         throw "extract/unsupported: raw entry cannot access managed State"
+      if schemas.size == entry.logicalParamCount && !schemaIsScalar schemas[index]! then
+        throw s!"extract/unsupported: raw aggregate parameter {index} requires a scalar projection"
       unless entry.paramLeafCount index == 1 do
         throw s!"extract/unsupported: raw multi-limb parameter {index} requires a limb projection"
       return .local (base + entry.paramLeafStart index)
   | .local index => pure (.local index)
   | .field (.arg index) name => do
-      unless index < entry.paramWidths.size do
+      unless index < entry.logicalParamCount do
         throw "extract/unsupported: raw entry cannot access managed State"
+      if schemas.size == entry.logicalParamCount && !schemaIsScalar schemas[index]! then
+        let (leafStart, limb) ← rawAggregateProjection schemas entry index name
+        return .local (base + leafStart + limb)
       let some limb := rawLimbIndex name
         | throw s!"extract/unsupported: raw boundary value has unsupported projection {name}"
       unless limb < entry.paramLeafCount index do
         throw s!"extract/unsupported: raw boundary projection {name} is out of range"
       return .local (base + entry.paramLeafStart index + limb)
-  | .field value name => return .field (← rewriteRawArg entry base value) name
+  | .field value name => return .field (← rewriteRawArg schemas entry base value) name
   | .lit value => pure (.lit value)
-  | .bitAnd lhs rhs => return .bitAnd (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .bitOr lhs rhs => return .bitOr (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .bitXor lhs rhs => return .bitXor (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .bitNot value => return .bitNot (← rewriteRawArg entry base value)
-  | .shiftL lhs rhs => return .shiftL (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .shiftR lhs rhs => return .shiftR (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+  | .bitAnd lhs rhs =>
+      return .bitAnd (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .bitOr lhs rhs =>
+      return .bitOr (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .bitXor lhs rhs =>
+      return .bitXor (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .bitNot value => return .bitNot (← rewriteRawArg schemas entry base value)
+  | .shiftL lhs rhs =>
+      return .shiftL (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .shiftR lhs rhs =>
+      return .shiftR (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
   | .indexGet value name index len offset =>
-      return .indexGet (← rewriteRawArg entry base value) name
-        (← rewriteRawArg entry base index) len offset
+      return .indexGet (← rewriteRawArg schemas entry base value) name
+        (← rewriteRawArg schemas entry base index) len offset
   | .loopIx => pure .loopIx
   | .select cmp lhs rhs thn els =>
-      return .select cmp (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-        (← rewriteRawArg entry base thn) (← rewriteRawArg entry base els)
-  | .addU64 lhs rhs => return .addU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .subU64 lhs rhs => return .subU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .mulU64 lhs rhs => return .mulU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .divU64 lhs rhs => return .divU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .modU64 lhs rhs => return .modU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-  | .ext kind operands => return .ext kind (← operands.mapM (rewriteRawArg entry base))
+      return .select cmp (← rewriteRawArg schemas entry base lhs)
+        (← rewriteRawArg schemas entry base rhs) (← rewriteRawArg schemas entry base thn)
+        (← rewriteRawArg schemas entry base els)
+  | .addU64 lhs rhs =>
+      return .addU64 (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .subU64 lhs rhs =>
+      return .subU64 (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .mulU64 lhs rhs =>
+      return .mulU64 (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .divU64 lhs rhs =>
+      return .divU64 (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .modU64 lhs rhs =>
+      return .modU64 (← rewriteRawArg schemas entry base lhs) (← rewriteRawArg schemas entry base rhs)
+  | .ext kind operands =>
+      return .ext kind (← operands.mapM (rewriteRawArg schemas entry base))
 
-private def rewriteRawCpiWord (entry : EntryAdapter.RawEntry) (base : Nat) :
+private def rewriteRawCpiWord (schemas : Array Core.Codec.Schema)
+    (entry : EntryAdapter.RawEntry) (base : Nat) :
     Ops.CpiWord Ops.Val → Except String (Ops.CpiWord Ops.Val)
-  | .u8le value => return .u8le (← rewriteRawArg entry base value)
-  | .u16le value => return .u16le (← rewriteRawArg entry base value)
-  | .u32le value => return .u32le (← rewriteRawArg entry base value)
-  | .u64le value => return .u64le (← rewriteRawArg entry base value)
+  | .u8le value => return .u8le (← rewriteRawArg schemas entry base value)
+  | .u16le value => return .u16le (← rewriteRawArg schemas entry base value)
+  | .u32le value => return .u32le (← rewriteRawArg schemas entry base value)
+  | .u64le value => return .u64le (← rewriteRawArg schemas entry base value)
   | .selfEntry tag seed => pure (.selfEntry tag seed)
   | .ascii value => pure (.ascii value)
   | .programId => pure .programId
   | .accKey index => pure (.accKey index)
 
-private def rewriteRawPayload (entry : EntryAdapter.RawEntry) (base : Nat) :
+private def rewriteRawPayload (schemas : Array Core.Codec.Schema)
+    (entry : EntryAdapter.RawEntry) (base : Nat) :
     Ops.OpExt Ops.Val → Except String (Ops.OpExt Ops.Val)
   | .invoke programIx metas data seeds bump =>
-      return .invoke programIx metas (← data.mapM (rewriteRawCpiWord entry base)) seeds
-        (← bump.mapM (rewriteRawArg entry base))
-  | .component call => return .component (← call.mapValuesM (rewriteRawArg entry base))
+      return .invoke programIx metas (← data.mapM (rewriteRawCpiWord schemas entry base)) seeds
+        (← bump.mapM (rewriteRawArg schemas entry base))
+  | .component call =>
+      return .component (← call.mapValuesM (rewriteRawArg schemas entry base))
 
-private partial def rewriteRawArgsInOp (entry : EntryAdapter.RawEntry) (base : Nat) :
+private partial def rewriteRawArgsInOp (schemas : Array Core.Codec.Schema)
+    (entry : EntryAdapter.RawEntry) (base : Nat) :
     Ops.Op → Except String Ops.Op
-  | .letLocal index value => return .letLocal index (← rewriteRawArg entry base value)
+  | .letLocal index value => return .letLocal index (← rewriteRawArg schemas entry base value)
   | .joinLocal index => pure (.joinLocal index)
-  | .setLocal index value => return .setLocal index (← rewriteRawArg entry base value)
+  | .setLocal index value => return .setLocal index (← rewriteRawArg schemas entry base value)
   | .checkedAddU64 lhs rhs =>
-      return .checkedAddU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+      return .checkedAddU64 (← rewriteRawArg schemas entry base lhs)
+        (← rewriteRawArg schemas entry base rhs)
   | .checkedSubU64 lhs rhs =>
-      return .checkedSubU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+      return .checkedSubU64 (← rewriteRawArg schemas entry base lhs)
+        (← rewriteRawArg schemas entry base rhs)
   | .checkedMulU64 lhs rhs =>
-      return .checkedMulU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+      return .checkedMulU64 (← rewriteRawArg schemas entry base lhs)
+        (← rewriteRawArg schemas entry base rhs)
   | .checkedDivU64 lhs rhs =>
-      return .checkedDivU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+      return .checkedDivU64 (← rewriteRawArg schemas entry base lhs)
+        (← rewriteRawArg schemas entry base rhs)
   | .checkedModU64 lhs rhs =>
-      return .checkedModU64 (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
+      return .checkedModU64 (← rewriteRawArg schemas entry base lhs)
+        (← rewriteRawArg schemas entry base rhs)
   | .ite cmp lhs rhs thn els =>
-      return .ite cmp (← rewriteRawArg entry base lhs) (← rewriteRawArg entry base rhs)
-        (← thn.mapM (rewriteRawArgsInOp entry base))
-        (← els.mapM (rewriteRawArgsInOp entry base))
+      return .ite cmp (← rewriteRawArg schemas entry base lhs)
+        (← rewriteRawArg schemas entry base rhs)
+        (← thn.mapM (rewriteRawArgsInOp schemas entry base))
+        (← els.mapM (rewriteRawArgsInOp schemas entry base))
   | .forAccum count addend result =>
-      return .forAccum count (← rewriteRawArg entry base addend) result
-  | .forBody count body => return .forBody count (← body.mapM (rewriteRawArgsInOp entry base))
+      return .forAccum count (← rewriteRawArg schemas entry base addend) result
+  | .forBody count body =>
+      return .forBody count (← body.mapM (rewriteRawArgsInOp schemas entry base))
   | .indexSetLeaf name index value len leaf =>
-      return .indexSetLeaf name (← rewriteRawArg entry base index)
-        (← rewriteRawArg entry base value) len leaf
+      return .indexSetLeaf name (← rewriteRawArg schemas entry base index)
+        (← rewriteRawArg schemas entry base value) len leaf
   | .indexSet name index value len offset =>
-      return .indexSet name (← rewriteRawArg entry base index)
-        (← rewriteRawArg entry base value) len offset
-  | .storeField name value => return .storeField name (← rewriteRawArg entry base value)
-  | .okState value => return .okState (← rewriteRawArg entry base value)
+      return .indexSet name (← rewriteRawArg schemas entry base index)
+        (← rewriteRawArg schemas entry base value) len offset
+  | .storeField name value =>
+      return .storeField name (← rewriteRawArg schemas entry base value)
+  | .okState value => return .okState (← rewriteRawArg schemas entry base value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
-  | .returnU64 value => return .returnU64 (← rewriteRawArg entry base value)
-  | .returnState value => return .returnState (← rewriteRawArg entry base value)
-  | .ext payload => return .ext (← rewriteRawPayload entry base payload)
+  | .returnU64 value => return .returnU64 (← rewriteRawArg schemas entry base value)
+  | .returnState value => return .returnState (← rewriteRawArg schemas entry base value)
+  | .ext payload => return .ext (← rewriteRawPayload schemas entry base payload)
 
 private partial def opLocalIds : Ops.Op → Array Nat
   | .letLocal index value | .setLocal index value => #[index] ++ Core.CFG.valueLocalIds value
@@ -319,7 +376,8 @@ def Method.toCFG (method : Method) : Except String CFG := do
   let source ←
     match method.entry with
     | .generated => pure source
-    | .raw entry => source.mapM (rewriteRawArgsInOp entry method.rawArgLocalBase)
+    | .raw entry =>
+        source.mapM (rewriteRawArgsInOp method.paramSchemas entry method.rawArgLocalBase)
   let graph ←
     if method.kind == .init then Core.CFG.lowerInit cfgDialect source
     else Core.CFG.lower cfgDialect source
@@ -444,16 +502,13 @@ private partial def scalarizeRawOp : Op → Op
   | .okState value => .returnU64 value
   | op => op
 
-private def schemaIsScalar : Core.Codec.Schema → Bool
-  | .scalar _ => true
-  | _ => false
-
 private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String Method := do
-  unless method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar do
-    throw s!"extract/unsupported: svm aggregate parameter binding is not implemented for {method.ixName}"
   let entry ← EntryAdapter.decode method.annotations method.paramCount method.paramWidths
-    method.retCount method.paramTypes method.retTypes
+    method.retCount method.paramTypes method.retTypes method.paramSchemas method.retSchema
+  if entry.isGenerated then
+    unless method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar do
+      throw s!"extract/unsupported: svm generated aggregate parameter binding is not implemented for {method.ixName}"
   let ops ← ofSourceOps method.ops
   let (kind, ops) ←
     match entry with

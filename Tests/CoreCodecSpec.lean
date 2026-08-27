@@ -229,6 +229,41 @@ private def orderBatch : Schema :=
   | .ok usage => usage.logicalLeaves == 1
   | .error _ => false
 
+private def staticRequest : Schema :=
+  .record "Request" #[
+    ("amount", .scalar .uint64),
+    ("pair", .tuple #[.scalar .uint32, .scalar .boolean]),
+    ("levels", .fixedArray 2 (.scalar .uint16))
+  ]
+
+#guard
+  match staticLeaves staticRequest with
+  | .ok leaves =>
+      leaves.map StaticLeaf.sourceName ==
+        #["amount", "pair_fst", "pair_snd", "levels_0", "levels_1"] &&
+      leaves.map (·.type) == #[.uint64, .uint32, .boolean, .uint16, .uint16] &&
+      leaves[3]!.path == #[.field "levels", .index 0]
+  | .error _ => false
+
+#guard match staticLeaves .unit with
+  | .ok leaves => leaves.isEmpty
+  | .error _ => false
+
+#guard
+  match staticLeaves (.record "Ambiguous" #[
+      ("pair_fst", .scalar .uint64),
+      ("pair", .tuple #[.scalar .uint64, .scalar .uint64])
+    ]) with
+  | .ok leaves =>
+      leaves.map StaticLeaf.sourceName == #["pair_fst", "pair_fst", "pair_snd"] &&
+      leaves[0]!.path != leaves[1]!.path
+  | .error _ => false
+
+#guard
+  match staticLeaves (.option (.scalar .uint64)) with
+  | .error reason => reason.contains "target-owned option tag policy"
+  | .ok _ => false
+
 #guard match ProofForge.Evm.Codec.abiType .address20 with
   | .ok name => name == "address"
   | .error _ => false

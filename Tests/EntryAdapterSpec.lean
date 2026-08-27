@@ -68,6 +68,11 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceEchoBytes12.retTypes == #[.fixedBytes 12] &&
       sourceEchoBytes12.paramWidths == #[12] && sourceEchoBytes12.retCount == 2 do
     throwError "wrong shared SVM codec metadata"
+  let some sourceAggregate := source.methods.find? (·.ixName == "aggregate")
+    | throwError "missing aggregate raw method"
+  unless sourceAggregate.paramCount == 3 && sourceAggregate.paramWidths.isEmpty &&
+      sourceAggregate.paramTypes.isEmpty && sourceAggregate.paramSchemas.size == 3 do
+    throwError "wrong aggregate source metadata"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -178,6 +183,22 @@ elab "#pf_guard_entry_adapter" : command => do
           bytes.canonical.contains "borsh-leaves.[8,4].borsh-returns.[8,4]" do
         throwError s!"wrong shared SVM codec plans: {repr wide}, {repr bytes}"
   | _, _ => throwError "shared codec method lost its raw adapter"
+  let some aggregate := program.methods.find? (·.ixName == "aggregate")
+    | throwError "missing projected aggregate method"
+  match aggregate.entry with
+  | .raw entry =>
+      unless entry.tag == 14 && entry.paramCount == 3 && entry.paramWidths.isEmpty &&
+          entry.paramLeafWidths == #[8, 1, 1, 4, 8, 2, 2, 2] &&
+          entry.paramLeafCounts == #[3, 2, 3] &&
+          entry.paramLeafBooleans == #[false, false, true, false, false, false, false, false] &&
+          entry.dataLen == 29 &&
+          entry.canonical.contains "borsh-bool.[2]" do
+        throwError s!"wrong aggregate Borsh plan: {repr entry}"
+  | .generated => throwError "aggregate method lost its raw adapter"
+  let _ ←
+    match aggregate.toCFG with
+    | .ok graph => pure graph
+    | .error reason => throwError s!"aggregate Borsh locals did not reach CFG: {reason}"
   let bareWide := { echo128 with ops := #[.returnU64 (.arg 0)] }
   match bareWide.toCFG with
   | .error reason =>
@@ -197,6 +218,10 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call enumSmall" && asm.contains "call enumWide" &&
       asm.contains "call enumOptional" &&
       asm.contains "call echo128" && asm.contains "call echoBytes12" &&
+      asm.contains "call aggregate" && asm.contains "jne r1, 29, err_raw_aggregate" &&
+      asm.contains "jgt r1, 1, err_raw_aggregate" &&
+      asm.contains "ldxdw r1, [r8 + 9]" && asm.contains "ldxw r1, [r8 + 19]" &&
+      asm.contains "ldxh r1, [r8 + 35]" &&
       asm.contains "optional_return_present_enumOptional_" &&
       asm.contains "optional_return_invalid_enumOptional_" &&
       asm.contains "jeq r1, 0, raw_route_match_" &&
@@ -242,6 +267,14 @@ private def accepts (result : Except String α) : Bool :=
   #[.uint128] #[.uint128])
 #guard accepts (EntryAdapter.decode #["svm.raw.v1:13:2:0"] 1 #[12] 2
   #[.fixedBytes 12] #[.fixedBytes 12])
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:15:2:0"] 1 #[] 1
+  (paramSchemas := #[.unit]))
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:15:2:0"] 1 #[] 1
+  (paramSchemas := #[.unit])
+  (retSchema := .record "Pair" #[
+    ("left", .scalar .uint64),
+    ("right", .scalar .uint64)
+  ]))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:13:2:0"] 1 #[20] 3
   #[.address20] #[.address20])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:256:2:0"] 2 #[1, 8])

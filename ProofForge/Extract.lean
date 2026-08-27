@@ -997,6 +997,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if isConstNamed e ``Bool.not && e.getAppArgs.size ≥ 1 then
           (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map fun value =>
             .select .eq value (.lit 0) (.lit 1) (.lit 0)
+        else if (isConstNamed e ``Prod.fst || isConstNamed e ``Prod.snd) &&
+            e.getAppArgs.size ≥ 1 then
+          let leaf := if isConstNamed e ``Prod.fst then "fst" else "snd"
+          (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map (flattenField · leaf)
         else if isConstNamed e ``Decidable.decide && e.getAppArgs.size ≥ 2 then
           asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!
         else if (endsWith e ".svmByteSwap64" ||
@@ -1903,7 +1907,9 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | some base, none =>
               match vectorBaseName env 8 collection with
               | some fname => some (.field base s!"{fname}_{i}")
-              | none => none
+              | none =>
+                  if isConstNamed collection ``methodArgRef then some (.field base s!"_{i}")
+                  else none
             | _, _ => none
           | some (collection, idx) =>
             let lits := args.filterMap (asLit fuel')
@@ -7751,12 +7757,17 @@ def inferSlots (env : Environment) (initName : Name) : Except String (Array Core
 def inferFields (env : Environment) (initName : Name) : Except String (Array String) := do
   return (← inferSlots env initName).map (·.name)
 
-private partial def valFields : Ops.Val → Array String
-  | .field (.arg _) n =>
-      if n == "w0" || n == "w1" || n == "w2" || n == "w3" then #[] else #[n]
+private structure FieldUse where
+  name : String
+  rootArg? : Option Nat := none
+
+private partial def valFields : Ops.Val → Array FieldUse
+  | .field (.arg i) n =>
+      if n == "w0" || n == "w1" || n == "w2" || n == "w3" then #[]
+      else #[{ name := n, rootArg? := some i }]
   | .field (.local _) n =>
-      if n == "w0" || n == "w1" || n == "w2" || n == "w3" then #[] else #[n]
-  | .field _ n => #[n]
+      if n == "w0" || n == "w1" || n == "w2" || n == "w3" then #[] else #[{ name := n }]
+  | .field _ n => #[{ name := n }]
   | .arg _ => #[]
   | .local _ => #[]
   | .lit _ => #[]
@@ -7788,7 +7799,7 @@ private partial def valFields : Ops.Val → Array String
         valFields c0 ++ valFields c1 ++ valFields c2
   | v => if Ops.hasEvmLeaf #[.returnU64 v] then #[] else #[]
 
-private def opFields : Ops.Op → Array String
+private def opFields : Ops.Op → Array FieldUse
   | .letLocal _ v => valFields v
   | .joinLocal _ => #[]
   | .setLocal _ v => valFields v
@@ -7828,7 +7839,7 @@ private def opFields : Ops.Op → Array String
   | .forAccum _ v _ => valFields v
   | .forBody _ body => body.flatMap opFields
   | .indexSetLeaf _ i v _ _ | .indexSet _ i v _ _ => valFields i ++ valFields v
-  | .storeField n v => #[n] ++ valFields v
+  | .storeField n v => #[{ name := n }] ++ valFields v
   | .mapGetU64 b k => valFields b ++ valFields k
   | .mapSetU64 b k v => valFields b ++ valFields k ++ valFields v
   | .mapGetAddr b a0 a1 a2 => valFields b ++ valFields a0 ++ valFields a1 ++ valFields a2
@@ -8112,9 +8123,11 @@ private def evaluateProgram (p : IR.Program) : Except String IR.Program := do
 private def checkUsedFields (p : IR.Program) : Except String Unit := do
   for m in p.methods do
     for op in m.ops do
-      for name in opFields op do
-        if (Core.IR.fieldWidth p name).isNone then
-          throw s!"{m.ixName}: extract/unsupported: unknown field {name}"
+      for field in opFields op do
+        if let some rootArg := field.rootArg? then
+          if rootArg < m.paramCount then continue
+        if (Core.IR.fieldWidth p field.name).isNone then
+          throw s!"{m.ixName}: extract/unsupported: unknown field {field.name}"
 
 /-- Typed initializers must account for every leaf; backends must never invent missing zeros. -/
 private def checkInitCoverage (p : IR.Program) : Except String Unit := do

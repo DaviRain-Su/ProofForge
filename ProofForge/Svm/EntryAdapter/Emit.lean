@@ -172,7 +172,7 @@ private def emitProgramAccountCheck (context : Context) (entry : RawEntry)
 "
 
 private def emitPackedArgs (context : Context) (method : IR.Method)
-    (entry : RawEntry) : Except String String := do
+    (entry : RawEntry) (err : String) : Except String String := do
   let base := method.rawArgLocalBase
   let mut offset := if entry.variant.isSome then 2 else 1
   let mut out := ""
@@ -181,7 +181,9 @@ private def emitPackedArgs (context : Context) (method : IR.Method)
     let width := widths[i]!
     let some localOff := context.scalarLocalStackOff (base + i)
       | throw "extract/unsupported: raw entry exceeds scalar local scratch"
-    out := out ++ (← emitLoadLE "r8" (8 + offset) width) ++ s!"\
+    let boolGuard :=
+      if (entry.paramLeafBooleans[i]?).getD false then s!"  jgt r1, 1, {err}\n" else ""
+    out := out ++ (← emitLoadLE "r8" (8 + offset) width) ++ boolGuard ++ s!"\
   stxdw [r10 - {localOff}], r1
 "
     offset := offset + width
@@ -249,7 +251,7 @@ def emitHandler (context : Context) (method : IR.Method) (entry : RawEntry) :
     else method.ixName
   let err := s!"err_raw_{label}"
   let packed ←
-    if entry.isExact then emitPackedArgs context method entry
+    if entry.isExact then emitPackedArgs context method entry err
     else emitBorshArgs context method entry err
   let lengthCheck :=
     if entry.isExact then s!"  jne r1, {entry.minDataLen}, {err}\n"
