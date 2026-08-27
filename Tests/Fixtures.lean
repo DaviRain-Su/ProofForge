@@ -458,6 +458,9 @@ def runInvokeScalarFrame (s : FoldState) (value : UInt64) :
 @[pf_inline] def scalarFrameReadField : ProofForge.Svm.AccountStorage.Field :=
   ProofForge.Svm.AccountStorage.Field.scalar 1 0 {}
 
+@[pf_inline] def scalarFrameWriteField : ProofForge.Svm.AccountStorage.Field :=
+  ProofForge.Svm.AccountStorage.Field.scalar 1 1
+
 def runReadScalarFrame (s : FoldState) (seed : UInt64) :
     Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
   let mut cursor : UInt64 := 0
@@ -466,6 +469,23 @@ def runReadScalarFrame (s : FoldState) (seed : UInt64) :
     cursor := ProofForge.Svm.AccountStorage.Source.read scalarFrameReadField 0
     total := total + cursor + UInt64.ofNat i
   .ok (s, total + cursor)
+
+/-- Sequential scalar frames must preserve component effects in the later loop instead of
+zeta-reducing its ignored result away while normalizing the first loop's continuation. -/
+def runSequentialWriteScalarFrames (s : FoldState) (seed : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut cursor : UInt64 := 0
+  let mut total : UInt64 := seed
+  for _ in [:1] do
+    cursor := cursor + 1
+    total := total + cursor
+  let mut index := cursor
+  let mut remaining := total
+  for _ in [:1] do
+    let _ := ProofForge.Svm.AccountStorage.Source.write scalarFrameWriteField index remaining
+    index := index + 1
+    remaining := remaining + 1
+  .ok (s, index + remaining)
 
 /-- A state-field snapshot captured before a CPI must not be reloaded after the state write. -/
 def runInvokeSnapshot (s : FoldState) :

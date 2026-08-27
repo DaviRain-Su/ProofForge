@@ -410,6 +410,10 @@ private def orderedBidSetSizeOrRemoveAssembly :=
   | .ok assembly =>
       assembly.contains "bounded map field policy: zero removes, nonzero updates the existing slot" &&
         assembly.contains
+          "stxdw [r10 - 8], r1\n; bounded map field policy" &&
+        !assembly.contains
+          "stxdw [r10 - 408], r1\n; bounded map field policy" &&
+        assembly.contains
           "jeq r1, 0, rb_map_set_word_remove_zero_ordered_bid_size_policy_test" &&
         assembly.contains "fixed-stride external account word write acc=1 base=119 stride=8 capacity=512" &&
         assembly.contains "ja rb_map_set_word_remove_done_ordered_bid_size_policy_test" &&

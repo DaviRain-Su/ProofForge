@@ -308,6 +308,38 @@ elab "#pf_guard_scalar_frame_ir" : command => do
   unless (ProofForge.Svm.Emit.emitAsm readProgram).isOk do
     throwError "account-storage scalar frame did not reach the SVM emitter"
 
+  let sequentialSource ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runSequentialWriteScalarFrames ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let sequentialProgram ←
+    match ProofForge.Svm.IR.fromExtracted sequentialSource with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some sequential := sequentialProgram.methods.find?
+      (·.ixName == "runSequentialWriteScalarFrames")
+    | throwError "missing sequential scalar-frame method"
+  match sequential.ops with
+  | #[.letLocal 0 (.lit 0), .letLocal 1 (.arg 0),
+      .forBody 1 first,
+      .letLocal 4 (.local 0), .letLocal 5 (.local 1),
+      .forBody 1 #[.component (.accountStorage (.writeWord field (.local 4) (.local 5))),
+        .letLocal 6 (.addU64 (.local 4) (.lit 1)),
+        .letLocal 7 (.addU64 (.local 5) (.lit 1)),
+        .setLocal 4 (.local 6), .setLocal 5 (.local 7)],
+      .okState (.addU64 (.local 4) (.local 5))] =>
+      unless first == #[
+          .letLocal 2 (.addU64 (.local 0) (.lit 1)),
+          .letLocal 3 (.addU64 (.local 1) (.addU64 (.local 0) (.lit 1))),
+          .setLocal 0 (.local 2), .setLocal 1 (.local 3)] &&
+          field.region.account == 1 && field.firstWord == 1 &&
+          field.region.access.writable && field.region.access.currentProgramOwned do
+        throwError s!"sequential scalar-frame composition mismatch: {repr sequential.ops}"
+  | _ => throwError s!"sequential scalar-frame IR mismatch: {repr sequential.ops}"
+  unless (ProofForge.Svm.Emit.emitAsm sequentialProgram).isOk do
+    throwError "sequential component scalar frame did not reach the SVM emitter"
+
   let svm ←
     match ProofForge.Svm.Emit.emitCounterAsm frameProgram with
     | .ok asm => pure asm

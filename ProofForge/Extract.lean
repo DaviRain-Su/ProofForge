@@ -4053,8 +4053,8 @@ private def substLetsPreservingInvokes (env : Environment) (fuel : Nat) (e : Exp
         (ty.consumeMData.getAppFn.constName?.map (isUserType env)).getD false &&
           ((unfoldUserHelper env value).isSome || (userCtorFields env value).isSome ||
             isIteExpr value)
-      if (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
-          structuredState || scalarBinding then
+      if (findInvoke env 16 value).isSome || (findComponentCall env 16 value).isSome ||
+          mentionsSvmEffect env 16 value || structuredState || scalarBinding then
         .letE n ty value body nd
       else substLetsPreservingInvokes env fuel' (body.instantiate1 value)
     | .lam n ty body bi => .lam n ty (substLetsPreservingInvokes env fuel' body) bi
@@ -4550,7 +4550,8 @@ private def findForStateExpr (env : Environment) (e : Expr) :
                       containsInlineStateTransition env 2048 continuationBody then
                     some (strip continuationBody)
                   else
-                    some (peelControl 16 (substLets 128 continuationBody))
+                    some (peelControl 16
+                      (substLetsPreservingInvokes env 128 continuationBody))
                 | _ => none
               | none => none
             else args.findSome? (findContinuation fuel')
@@ -6118,8 +6119,13 @@ private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
           return some (lowered, hadSuccess, true)
     | .letLocal .. | .joinLocal .. | .setLocal ..
     | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
-    | .checkedDivU64 .. | .checkedModU64 .. =>
+    | .checkedDivU64 .. | .checkedModU64 .. | .forAccum .. =>
         lowered := lowered.push op
+    | .forBody bound body =>
+        let some (body', bodySuccess, bodyTerminates) := lowerBindProducer slot body
+          | return none
+        if bodySuccess || bodyTerminates then return none
+        lowered := lowered.push (.forBody bound body')
     | .ext _ =>
         -- Target effects can precede a scalar success just like checked arithmetic. Preserve
         -- them in order; their own backend contracts fail closed before the join continuation.
@@ -6153,8 +6159,14 @@ private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : 
         let producer := args[args.size - 2]
         let continuation := args[args.size - 1]
         -- `forIn ... >>= continuation` is the loop's own sequencing bind. A loop in the
-        -- producer is therefore not hidden by this bind; a loop in the continuation is.
-        loopUnderBind fuel' producer underBind || loopUnderBind fuel' continuation true
+        -- producer is therefore not hidden by this bind. Decode that producer first even when
+        -- its continuation contains another sequential loop; the recursive continuation decode
+        -- will then own the later loop. If the producer has no loop, a continuation loop remains
+        -- hidden under this bind and must wait for normal bind lowering.
+        let producerOwnsLoop := producer.getUsedConstantsAsSet.toList.any fun name =>
+          name == ``ForIn.forIn || name.toString.endsWith ".forIn"
+        if producerOwnsLoop then loopUnderBind fuel' producer underBind
+        else loopUnderBind fuel' producer underBind || loopUnderBind fuel' continuation true
       else
         args.any (loopUnderBind fuel' · true)
     else

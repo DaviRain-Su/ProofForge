@@ -165,13 +165,13 @@ private def emitWriteWord (context : Context) (label : String)
 "
 
 /-- Compose two existing bounded mutations behind a runtime scalar policy. Zero removes the keyed
-map record; nonzero updates one word in the caller-prevalidated one-based slot. The branch
-discriminator uses the component's highest reserved low-bank word before either child routine
-reuses scratch. -/
+map record; nonzero updates one word in the caller-prevalidated one-based slot. Evaluate and test
+the discriminator in ordinary short-lived expression scratch before either child routine starts;
+it must not occupy another component's invocation-local state across this call. -/
 private def emitRbMapSetWordOrRemove (context : Context) (mutations : MutationBackend)
     (label : String) (map : RbMap) (field : Field) (key : Array Ops.Val)
     (index value : Ops.Val) : Except String String := do
-  let valueStack := 408
+  let valueStack := 8
   let loadValue ← context.loadValue value valueStack 0 s!"{label}_policy_value"
   let write ← emitWriteWord context s!"{label}_write" field index value
   let remove ← mutations.emitRemove s!"{label}_remove" map key

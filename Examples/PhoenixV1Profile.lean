@@ -1435,19 +1435,20 @@ def recordPlaceAt (eventIndex orderSequence clientIdLow clientIdHigh price baseL
     #[.u8le 3, .u16le eventIndex, .u64le orderSequence, .u64le clientIdLow,
       .u64le clientIdHigh, .u64le price, .u64le baseLots]
 
-/-- Append Phoenix's one-maker 67-byte Fill event. The maker key is read from the generic
-four-word map key projection before its resting order is removed. -/
-def recordFillAt (makerKey0 makerKey1 makerKey2 makerKey3 orderSequence price filled
+/-- Append one 67-byte Fill event at the caller's bounded traversal index. The maker key is read
+from the generic four-word map key projection before its resting order is removed. -/
+def recordFillAt (eventIndex makerKey0 makerKey1 makerKey2 makerKey3 orderSequence price filled
     remaining : UInt64) : UInt64 :=
   ProofForge.Svm.BatchRecorder.Source.append marketRecorderConfig 1
-    #[.u8le 2, .u16le 0, .u64le makerKey0, .u64le makerKey1,
+    #[.u8le 2, .u16le eventIndex, .u64le makerKey0, .u64le makerKey1,
       .u64le makerKey2, .u64le makerKey3, .u64le orderSequence, .u64le price,
       .u64le filled, .u64le remaining]
 
-/-- Append the aggregate 43-byte taker FillSummary after one bounded matching pass. -/
-def recordFillSummaryAt (clientIdLow clientIdHigh baseFilled quoteFilled fee : UInt64) : UInt64 :=
+/-- Append the aggregate 43-byte taker FillSummary after a bounded matching pass. -/
+def recordFillSummaryAt (eventIndex clientIdLow clientIdHigh baseFilled quoteFilled fee : UInt64) :
+    UInt64 :=
   ProofForge.Svm.BatchRecorder.Source.append marketRecorderConfig 1
-    #[.u8le 6, .u16le 1, .u64le clientIdLow, .u64le clientIdHigh,
+    #[.u8le 6, .u16le eventIndex, .u64le clientIdLow, .u64le clientIdHigh,
       .u64le baseFilled, .u64le quoteFilled, .u64le fee]
 
 /-- Flush Phoenix's current batch, including an empty header-only batch, and close the recorder. -/
@@ -1863,9 +1864,9 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                             let _ := layout.setOrderSequence (orderSequence + 1)
                             let _ := layout.setMarketSequence (marketSequence + 1)
                             let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
-                            let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
+                            let _ := recordFillAt 0 makerKey0 makerKey1 makerKey2 makerKey3
                               makerSequence makerPrice matchedBaseLots makerRemaining
-                            let _ := recordFillSummaryAt clientIdLow clientIdHigh
+                            let _ := recordFillSummaryAt 1 clientIdLow clientIdHigh
                               matchedBaseLots takerCost fee
                             let _ := recordPlaceAt 2 encodedSequence clientIdLow clientIdHigh
                               price takerRemaining
@@ -1887,9 +1888,9 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                           let _ := layout.setUnclaimedQuoteFees (unclaimedFees + fee)
                           let _ := layout.setMarketSequence (marketSequence + 1)
                           let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
-                          let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
+                          let _ := recordFillAt 0 makerKey0 makerKey1 makerKey2 makerKey3
                             makerSequence makerPrice matchedBaseLots makerRemaining
-                          let _ := recordFillSummaryAt clientIdLow clientIdHigh
+                          let _ := recordFillSummaryAt 1 clientIdLow clientIdHigh
                             matchedBaseLots takerCost fee
                           let _ := finishMarketBatch
                           .ok 0
@@ -1925,9 +1926,9 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                           let _ := layout.setOrderSequence (orderSequence + 1)
                           let _ := layout.setMarketSequence (marketSequence + 1)
                           let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
-                          let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
+                          let _ := recordFillAt 0 makerKey0 makerKey1 makerKey2 makerKey3
                             makerSequence makerPrice matchedBaseLots makerRemaining
-                          let _ := recordFillSummaryAt clientIdLow clientIdHigh
+                          let _ := recordFillSummaryAt 1 clientIdLow clientIdHigh
                             matchedBaseLots takerProceeds fee
                           let _ := recordPlaceAt 2 encodedSequence clientIdLow clientIdHigh
                             price takerRemaining
@@ -1950,12 +1951,220 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                         let _ := layout.setUnclaimedQuoteFees (unclaimedFees + fee)
                         let _ := layout.setMarketSequence (marketSequence + 1)
                         let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
-                        let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
+                        let _ := recordFillAt 0 makerKey0 makerKey1 makerKey2 makerKey3
                           makerSequence makerPrice matchedBaseLots makerRemaining
-                        let _ := recordFillSummaryAt clientIdLow clientIdHigh
+                        let _ := recordFillSummaryAt 1 clientIdLow clientIdHigh
                           matchedBaseLots takerProceeds fee
                         let _ := finishMarketBatch
                         .ok 0
+
+/--
+Bounded two-maker Limit traversal built only from ordinary invocation-local scalar frames and the
+generic account-storage facade. A read-only pass validates both fills and accumulates adjusted
+quote lots before any account write or audit effect. A second fixed pass replays those exact keys,
+settles each maker in place, and emits indexed Fill records; taker funds and the aggregate fee are
+settled once afterward. This first multi-maker slice requires two distinct no-TIF makers and full
+taker exhaustion within two matches. Posting, same-trader aggregation across multiple resting
+orders, and a still-live remainder remain fail closed.
+-/
+def placeLimitTwoMatchesFreeFunds512At (marketAccount traderAccount side price baseLots
+    clientIdLow clientIdHigh : UInt64) : Except Error UInt64 := Id.run do
+  let layout := Examples.PhoenixV1.small 2
+  if marketAccount ≠ 2 || traderAccount ≠ 3 ||
+      cancelAllStorageValid512At marketAccount = 0 || price = 0 || baseLots = 0 then
+    .error .overflow
+  else
+    let status := layout.status
+    let marketSequence := layout.marketSequence
+    let bid := side = 0
+    let tickSize := layout.tickSize
+    let baseLotsPerBaseUnit := layout.baseLotsPerBaseUnit
+    let bps := layout.takerFeeBps
+    if (status ≠ 1 && status ≠ 2) || marketSequence = u64Max || tickSize = 0 ||
+        baseLotsPerBaseUnit = 0 || bps > 10000 then
+      .error .overflow
+    else
+      let taker := layout.findTrader
+        (signerKey traderAccount) (accKeyWord traderAccount 1)
+        (accKeyWord traderAccount 2) (accKeyWord traderAccount 3)
+      let firstOrder :=
+        if bid then layout.asks.cursor 0 0 0 else layout.bids.cursor 0 0 0
+      if taker = 0 || firstOrder = 0 then
+        .error .overflow
+      else
+        let mut makerOrder := firstOrder
+        let mut remainingBaseLots := baseLots
+        let mut totalAdjustedQuote : UInt64 := 0
+        let mut totalQuoteLots : UInt64 := 0
+        let mut fillCount : UInt64 := 0
+        let mut valid : UInt64 := 1
+        let mut previousMaker : UInt64 := 0
+        for _ in [:2] do
+          if valid = 1 && remainingBaseLots ≠ 0 then
+            if makerOrder = 0 then
+              valid := 0
+            else
+              let makerPrice :=
+                if bid then layout.asks.price makerOrder else layout.bids.price makerOrder
+              let makerSequence :=
+                if bid then layout.asks.sequence makerOrder else layout.bids.sequence makerOrder
+              let maker :=
+                if bid then layout.asks.ownerAt makerOrder else layout.bids.ownerAt makerOrder
+              let makerSize :=
+                if bid then layout.asks.sizeAt makerOrder else layout.bids.sizeAt makerOrder
+              let lastSlot :=
+                if bid then layout.asks.lastSlotAt makerOrder else layout.bids.lastSlotAt makerOrder
+              let lastTime :=
+                if bid then layout.asks.lastTimeAt makerOrder else layout.bids.lastTimeAt makerOrder
+              let crosses := if bid then makerPrice ≤ price else makerPrice ≥ price
+              if !crosses || makerPrice = 0 || maker = 0 || maker = taker || makerSize = 0 ||
+                  lastSlot ≠ 0 || lastTime ≠ 0 ||
+                  (fillCount ≠ 0 && maker = previousMaker) then
+                valid := 0
+              else if tickSize > u64Max / makerPrice then
+                valid := 0
+              else
+                let matchedBaseLots :=
+                  if makerSize < remainingBaseLots then makerSize else remainingBaseLots
+                let quotePerBase := makerPrice * tickSize
+                if quotePerBase > u64Max / matchedBaseLots then
+                  valid := 0
+                else
+                  let adjustedQuote := quotePerBase * matchedBaseLots
+                  if adjustedQuote % baseLotsPerBaseUnit ≠ 0 ||
+                      totalAdjustedQuote > u64Max - adjustedQuote then
+                    valid := 0
+                  else
+                    let quoteLots := adjustedQuote / baseLotsPerBaseUnit
+                    if totalQuoteLots > u64Max - quoteLots then
+                      valid := 0
+                    else if bid then
+                      let makerLocked := layout.baseLocked maker
+                      let makerFree := layout.quoteFree maker
+                      if makerLocked < matchedBaseLots || makerFree > u64Max - quoteLots then
+                        valid := 0
+                      else
+                        let nextOrder := layout.asks.cursor 1 makerPrice makerSequence
+                        makerOrder := nextOrder
+                        remainingBaseLots := remainingBaseLots - matchedBaseLots
+                        totalAdjustedQuote := totalAdjustedQuote + adjustedQuote
+                        totalQuoteLots := totalQuoteLots + quoteLots
+                        fillCount := fillCount + 1
+                        previousMaker := maker
+                    else
+                      let makerLocked := layout.quoteLocked maker
+                      let makerFree := layout.baseFree maker
+                      if makerLocked < quoteLots || makerFree > u64Max - matchedBaseLots then
+                        valid := 0
+                      else
+                        let nextOrder := layout.bids.cursor 1 makerPrice makerSequence
+                        makerOrder := nextOrder
+                        remainingBaseLots := remainingBaseLots - matchedBaseLots
+                        totalAdjustedQuote := totalAdjustedQuote + adjustedQuote
+                        totalQuoteLots := totalQuoteLots + quoteLots
+                        fillCount := fillCount + 1
+                        previousMaker := maker
+        if valid = 0 || remainingBaseLots ≠ 0 || fillCount ≠ 2 ||
+            (bps ≠ 0 && totalAdjustedQuote > (u64Max - 9999) / bps) then
+          .error .overflow
+        else
+          let fee := takerFeeQuoteLots512At layout totalAdjustedQuote
+          let unclaimedFees := layout.unclaimedQuoteFees
+          if unclaimedFees > u64Max - fee then
+            .error .overflow
+          else if bid then
+            if totalQuoteLots > u64Max - fee then
+              .error .overflow
+            else
+              let takerCost := totalQuoteLots + fee
+              let takerQuoteFree := layout.quoteFree taker
+              let takerBaseFree := layout.baseFree taker
+              if takerQuoteFree < takerCost || takerBaseFree > u64Max - baseLots then
+                .error .overflow
+              else
+                let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
+                let mut applyOrder := firstOrder
+                let mut applyRemaining := baseLots
+                for _ in [:2] do
+                  let eventIndex : UInt64 := if applyRemaining = baseLots then 0 else 1
+                  let makerPrice := layout.asks.price applyOrder
+                  let makerSequence := layout.asks.sequence applyOrder
+                  let maker := layout.asks.ownerAt applyOrder
+                  let makerSize := layout.asks.sizeAt applyOrder
+                  let matchedBaseLots :=
+                    if makerSize < applyRemaining then makerSize else applyRemaining
+                  let makerRemaining := makerSize - matchedBaseLots
+                  let quoteLots := adjustedQuoteLots512At layout makerPrice matchedBaseLots /
+                    baseLotsPerBaseUnit
+                  let nextOrder := layout.asks.cursor 1 makerPrice makerSequence
+                  let makerKey0 := layout.traderKey0 maker
+                  let makerKey1 := layout.traderKey1 maker
+                  let makerKey2 := layout.traderKey2 maker
+                  let makerKey3 := layout.traderKey3 maker
+                  let makerLocked := layout.baseLocked maker
+                  let makerFree := layout.quoteFree maker
+                  let _ := layout.setAskOrderSizeOrRemove applyOrder makerPrice makerSequence
+                    makerRemaining
+                  let _ := layout.setBaseLocked maker (makerLocked - matchedBaseLots)
+                  let _ := layout.setQuoteFree maker (makerFree + quoteLots)
+                  let _ := recordFillAt eventIndex makerKey0 makerKey1 makerKey2 makerKey3
+                    makerSequence makerPrice matchedBaseLots makerRemaining
+                  applyOrder := nextOrder
+                  applyRemaining := applyRemaining - matchedBaseLots
+                let _ := layout.setQuoteFree taker (takerQuoteFree - takerCost)
+                let _ := layout.setBaseFree taker (takerBaseFree + baseLots)
+                let _ := layout.setUnclaimedQuoteFees (unclaimedFees + fee)
+                let _ := layout.setMarketSequence (marketSequence + 1)
+                let _ := recordFillSummaryAt fillCount clientIdLow clientIdHigh
+                  baseLots takerCost fee
+                let _ := finishMarketBatch
+                .ok 0
+          else if fee > totalQuoteLots then
+            .error .overflow
+          else
+            let takerProceeds := totalQuoteLots - fee
+            let takerBaseFree := layout.baseFree taker
+            let takerQuoteFree := layout.quoteFree taker
+            if takerBaseFree < baseLots || takerQuoteFree > u64Max - takerProceeds then
+              .error .overflow
+            else
+              let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
+              let mut applyOrder := firstOrder
+              let mut applyRemaining := baseLots
+              for _ in [:2] do
+                let eventIndex : UInt64 := if applyRemaining = baseLots then 0 else 1
+                let makerPrice := layout.bids.price applyOrder
+                let makerSequence := layout.bids.sequence applyOrder
+                let maker := layout.bids.ownerAt applyOrder
+                let makerSize := layout.bids.sizeAt applyOrder
+                let matchedBaseLots :=
+                  if makerSize < applyRemaining then makerSize else applyRemaining
+                let makerRemaining := makerSize - matchedBaseLots
+                let quoteLots := adjustedQuoteLots512At layout makerPrice matchedBaseLots /
+                  baseLotsPerBaseUnit
+                let nextOrder := layout.bids.cursor 1 makerPrice makerSequence
+                let makerKey0 := layout.traderKey0 maker
+                let makerKey1 := layout.traderKey1 maker
+                let makerKey2 := layout.traderKey2 maker
+                let makerKey3 := layout.traderKey3 maker
+                let makerLocked := layout.quoteLocked maker
+                let makerFree := layout.baseFree maker
+                let _ := layout.setBidOrderSizeOrRemove applyOrder makerPrice makerSequence
+                  makerRemaining
+                let _ := layout.setQuoteLocked maker (makerLocked - quoteLots)
+                let _ := layout.setBaseFree maker (makerFree + matchedBaseLots)
+                let _ := recordFillAt eventIndex makerKey0 makerKey1 makerKey2 makerKey3
+                  makerSequence makerPrice matchedBaseLots makerRemaining
+                applyOrder := nextOrder
+                applyRemaining := applyRemaining - matchedBaseLots
+              let _ := layout.setBaseFree taker (takerBaseFree - baseLots)
+              let _ := layout.setQuoteFree taker (takerQuoteFree + takerProceeds)
+              let _ := layout.setUnclaimedQuoteFees (unclaimedFees + fee)
+              let _ := layout.setMarketSequence (marketSequence + 1)
+              let _ := recordFillSummaryAt fillCount clientIdLow clientIdHigh
+                baseLots takerProceeds fee
+              let _ := finishMarketBatch
+              .ok 0
 
 /-- Historical generated adapters retain their existing account geometry and IDL. -/
 @[pf_entry]
@@ -1998,13 +2207,12 @@ def placeLimitOrderWithFreeFunds (_s : State) (side : UInt8)
       clientIdLow clientIdHigh
     .ok (_s, ((1 : UInt32), (price, encodedSequence)))
 
-/-- Exact modern `OrderPacket::Limit` slice:
-`03 || 01 || side || price || base || Abort || Some(1) || client:u128 || 01 || None || None || 00`.
-It exhausts the taker's base budget against one non-self, no-TIF maker. A larger maker is reduced in
-place; an exact-size maker is removed. A remainder after a smaller maker is posted only when the
-next opposite order is absent or noncrossing and the selected book has spare capacity, returning
-one official FIFO order id. No posted remainder leaves return data unset. Other match limits,
-self-trade/TIF policy, crossed remainders, and full-book eviction remain fail closed.
+/-- Exact modern `OrderPacket::Limit` slices:
+`03 || 01 || side || price || base || Abort || Some(1|2) || client:u128 || 01 || None || None || 00`.
+The one-maker path retains partial fills and noncrossing remainder posting. The two-maker path uses
+a read-only bounded scalar-frame pass followed by an exact replay, aggregates the taker fee across
+both fills, and requires the taker's base budget to be exhausted. Unsupported match limits,
+self-trade/TIF policy, two-maker remainders, and full-book eviction remain fail closed.
 -/
 @[pf_entry, pf_svm_raw_variant_optional_return 3 1 5 0 [4, 8, 8]]
 def placeLimitOrderWithFreeFundsLimit (_s : State) (side : UInt8)
@@ -2014,12 +2222,19 @@ def placeLimitOrderWithFreeFundsLimit (_s : State) (side : UInt8)
       failSilentlyOnInsufficientFunds : UInt8) :
     Except Error (State × (UInt8 × (UInt32 × (UInt64 × UInt64)))) := do
   if (side ≠ 0 && side ≠ 1) || selfTradeBehavior ≠ 0 || matchLimitPresent ≠ 1 ||
-      matchLimit ≠ 1 || useOnlyDepositedFunds ≠ 1 || lastValidSlotPresent ≠ 0 ||
+      (matchLimit ≠ 1 && matchLimit ≠ 2) || useOnlyDepositedFunds ≠ 1 ||
+      lastValidSlotPresent ≠ 0 ||
       lastValidUnixTimestampPresent ≠ 0 || failSilentlyOnInsufficientFunds ≠ 0 ||
       placeFreeFundsContextValid = 0 then
     .error .overflow
-  else
+  else if matchLimit = 1 then
     let encodedSequence ← placeLimitOneMatchFreeFunds512At 2 3 side.toUInt64 price baseLots
+      clientIdLow clientIdHigh
+    let present : UInt8 := if encodedSequence = 0 then 0 else 1
+    let length : UInt32 := if encodedSequence = 0 then 0 else 1
+    .ok (_s, (present, (length, (price, encodedSequence))))
+  else
+    let encodedSequence ← placeLimitTwoMatchesFreeFunds512At 2 3 side.toUInt64 price baseLots
       clientIdLow clientIdHigh
     let present : UInt8 := if encodedSequence = 0 then 0 else 1
     let length : UInt32 := if encodedSequence = 0 then 0 else 1
@@ -2298,6 +2513,6 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   beginCancelAll cancelAllBids512At cancelAllAsks512At cancelUpToBids512At
   cancelUpToAsks512At finishCancelAll
   cancelWithdrawContextValid placeFreeFundsContextValid placePostOnlyFreeFunds512At
-  placeLimitOneMatchFreeFunds512At
+  placeLimitOneMatchFreeFunds512At placeLimitTwoMatchesFreeFunds512At
 
 end Examples.PhoenixV1Profile
