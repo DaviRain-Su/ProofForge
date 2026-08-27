@@ -414,6 +414,59 @@ def runInvokeFold (s : FoldState) (value : UInt64) :
       st := { st with product := value }
   .ok (st, st.product)
 
+/-- Multiple mutable scalars form an invocation-local bounded frame. They carry traversal state,
+not persistent contract fields. -/
+def runScalarFrame (s : FoldState) (seed : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut cursor : UInt64 := 0
+  let mut total : UInt64 := seed
+  let mut stopped : UInt64 := 0
+  for i in [:2] do
+    if stopped = 0 then
+      cursor := cursor + UInt64.ofNat i
+      total := total + cursor
+      if total > 10 then
+        stopped := 1
+  .ok (s, total + cursor + stopped)
+
+/-- Frame updates snapshot every yielded right-hand side before changing any destination slot. -/
+def runScalarFrameSwap (s : FoldState) (lhs rhs : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut left := lhs
+  let mut right := rhs
+  for _ in [:1] do
+    let oldLeft := left
+    left := right
+    right := oldLeft
+  .ok (s, left * 10 + right)
+
+/-- Effects inside a scalar frame remain ordered before that iteration publishes its next frame. -/
+def runInvokeScalarFrame (s : FoldState) (value : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut cursor : UInt64 := 0
+  let mut total : UInt64 := value
+  let mut active : UInt64 := 1
+  for i in [:2] do
+    if active = 1 then
+      let _ := ProofForge.Svm.Runtime.invoke 1 #[] #[.u64le total]
+      cursor := cursor + UInt64.ofNat i
+      total := total + cursor
+      active := 0
+  .ok (s, total + cursor + active)
+
+/-- A static account field remains a reusable value source inside the same local frame. -/
+@[pf_inline] def scalarFrameReadField : ProofForge.Svm.AccountStorage.Field :=
+  ProofForge.Svm.AccountStorage.Field.scalar 1 0 {}
+
+def runReadScalarFrame (s : FoldState) (seed : UInt64) :
+    Except Examples.Counter.Error (FoldState × UInt64) := Id.run do
+  let mut cursor : UInt64 := 0
+  let mut total : UInt64 := seed
+  for i in [:2] do
+    cursor := ProofForge.Svm.AccountStorage.Source.read scalarFrameReadField 0
+    total := total + cursor + UInt64.ofNat i
+  .ok (s, total + cursor)
+
 /-- A state-field snapshot captured before a CPI must not be reloaded after the state write. -/
 def runInvokeSnapshot (s : FoldState) :
     Except Examples.Counter.Error (FoldState × UInt64) :=

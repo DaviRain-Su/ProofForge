@@ -652,6 +652,18 @@
   详见 `docs/plan/tasks/l5-056.md`。下一步先在既有 local/`forBody` IR 上补可复用的
   invocation-local bounded scalar fold/frame，再用它组合 multi-maker cursor 与 aggregate fee，
   避免把协议 scratch 写进持久账户或继续扩主 Emit。
+- P5 第五十段 invocation-local bounded scalar frame 已完成：抽取器识别 Lean 对两个及以上
+  `let mut UInt64` 在静态有界循环中生成的 `MProd`，并直接降到既有
+  `letLocal`/`forBody`/`setLocal`；`MProd` 只属 source elaboration，不是 SDK API、runtime
+  container 或 target opcode。每次迭代先把所有 next-frame RHS snapshot 到互不重叠的临时
+  locals，再统一 publish，因而 swap/相互依赖赋值不会读到前一个写；CPI 等 effect 保持在
+  publish 之前。通用 `AccountStorage.Source.read` 可作为 frame scalar，固定 account/word/
+  stride/capacity/index-base/access geometry 经 component projection 到 SVM emitter，不复制账户
+  或保存 descriptor/pointer。generic Ops/IR/CFG/Component/SVM Emit/EVM Emit 未新增 case；
+  persistent state 仍只有 account bytes、fixed stride、one-based index 与 `0` sentinel，没有
+  heap Map/Vec、runtime geometry、persistent pointer 或无界遍历。详见
+  `docs/plan/tasks/l5-057.md`。下一步用同一 frame 承载 cursor/remaining/quote/fee/stop/error，
+  在 `Examples` 组合 bounded multi-maker Limit traversal 与 aggregate settlement。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

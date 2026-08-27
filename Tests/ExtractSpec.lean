@@ -198,6 +198,135 @@ elab "#pf_guard_invoke_state_fold_ir" : command => do
 
 #pf_guard_invoke_state_fold_ir
 
+#guard match Tests.Fixtures.runScalarFrame (Tests.Fixtures.initFold 0) 5 with
+  | .ok (_, result) => result == 7
+  | .error _ => false
+
+#guard match Tests.Fixtures.runScalarFrame (Tests.Fixtures.initFold 0) 11 with
+  | .ok (_, result) => result == 12
+  | .error _ => false
+
+#guard match Tests.Fixtures.runScalarFrameSwap (Tests.Fixtures.initFold 0) 2 7 with
+  | .ok (_, result) => result == 72
+  | .error _ => false
+
+elab "#pf_guard_scalar_frame_ir" : command => do
+  let env ← getEnv
+  let frameProgram ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runScalarFrame ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some frame := frameProgram.methods.find? (·.ixName == "runScalarFrame")
+    | throwError "missing scalar-frame method"
+  let publish3 (ops : Array ProofForge.Ops.Op)
+      (first second third : ProofForge.Ops.Val) : Bool :=
+    ops == #[
+      .letLocal 3 first, .letLocal 4 second, .letLocal 5 third,
+      .setLocal 0 (.local 3), .setLocal 1 (.local 4), .setLocal 2 (.local 5)
+    ]
+  let nextCursor : ProofForge.Ops.Val := .addU64 (.local 0) .loopIx
+  let nextTotal : ProofForge.Ops.Val := .addU64 (.local 2) nextCursor
+  match frame.ops with
+  | #[.letLocal 0 (.lit 0), .letLocal 1 (.lit 0), .letLocal 2 (.arg 0),
+      .forBody 2 #[.ite .eq (.local 1) (.lit 0)
+        #[.ite .gt condition (.lit 10) stopped continued] idle],
+      .okState result] =>
+      unless condition == nextTotal &&
+          publish3 stopped nextCursor (.lit 1) nextTotal &&
+          publish3 continued nextCursor (.local 1) nextTotal &&
+          publish3 idle (.local 0) (.local 1) (.local 2) &&
+          result == .addU64 (.addU64 (.local 2) (.local 0)) (.local 1) do
+        throwError s!"scalar-frame update mismatch: {repr frame.ops}"
+  | _ => throwError s!"scalar-frame IR mismatch: {repr frame.ops}"
+  unless !ProofForge.Ops.hasStoreField frame.ops && !ProofForge.Ops.hasIndexSet frame.ops do
+    throwError "invocation-local frame leaked into persistent state operations"
+
+  let swapProgram ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runScalarFrameSwap ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some swap := swapProgram.methods.find? (·.ixName == "runScalarFrameSwap")
+    | throwError "missing scalar-frame swap method"
+  let swapExpected : Array ProofForge.Ops.Op := #[
+    .letLocal 0 (.arg 0), .letLocal 1 (.arg 1),
+    .forBody 1 #[
+      .letLocal 2 (.local 1), .letLocal 3 (.local 0),
+      .setLocal 0 (.local 2), .setLocal 1 (.local 3)
+    ],
+    .okState (.addU64 (.mulU64 (.local 0) (.lit 10)) (.local 1))
+  ]
+  unless swap.ops == swapExpected do
+    throwError s!"scalar-frame simultaneous update mismatch: {repr swap.ops}"
+
+  let invokeProgram ←
+    match ProofForge.Extract.extractProgram env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runInvokeScalarFrame ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some invoke := invokeProgram.methods.find? (·.ixName == "runInvokeScalarFrame")
+    | throwError "missing effectful scalar-frame method"
+  match invoke.ops with
+  | #[.letLocal 0 (.lit 1), .letLocal 1 (.lit 0), .letLocal 2 (.arg 0),
+      .forBody 2 #[.ite .eq (.local 0) (.lit 1) thn els], .okState _] =>
+      match thn with
+      | #[.invoke 1 #[] #[.u64le (.local 2)],
+          .letLocal 3 (.lit 0), .letLocal 4 cursor, .letLocal 5 total,
+          .setLocal 0 (.local 3), .setLocal 1 (.local 4), .setLocal 2 (.local 5)] =>
+          unless cursor == .addU64 (.local 1) .loopIx &&
+              total == .addU64 (.local 2) cursor &&
+              publish3 els (.local 0) (.local 1) (.local 2) do
+            throwError s!"effectful scalar-frame update mismatch: {repr invoke.ops}"
+      | _ => throwError s!"scalar-frame effect was reordered: {repr invoke.ops}"
+  | _ => throwError s!"effectful scalar-frame IR mismatch: {repr invoke.ops}"
+
+  let readSource ←
+    match ProofForge.Extract.extractProgramIR env ``Tests.Fixtures.initFold
+        ``Tests.Fixtures.runReadScalarFrame ``Tests.Fixtures.foldProduct with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let readProgram ←
+    match ProofForge.Svm.IR.fromExtracted readSource with
+    | .ok p => pure p
+    | .error reason => throwError reason
+  let some read := readProgram.methods.find? (·.ixName == "runReadScalarFrame")
+    | throwError "missing account-reading scalar-frame method"
+  match read.ops with
+  | #[.letLocal 0 (.lit 0), .letLocal 1 (.arg 0),
+      .forBody 2 #[
+        .letLocal 4 (.ext (.component (.accountStorage (.readWord field))) #[.lit 0]),
+        .letLocal 2 (.local 4),
+        .letLocal 3 (.addU64 (.addU64 (.local 1) (.local 4)) .loopIx),
+        .setLocal 0 (.local 2), .setLocal 1 (.local 3)],
+      .okState (.addU64 (.local 1) (.local 0))] =>
+      unless field.region.account == 1 && field.firstWord == 0 &&
+          field.region.strideWords == 1 && field.region.capacity == 1 &&
+          field.region.indexBase == .zero && !field.region.access.writable do
+        throwError s!"scalar frame lost static account-storage geometry: {repr read.ops}"
+  | _ => throwError s!"account-storage scalar-frame IR mismatch: {repr read.ops}"
+  unless (ProofForge.Svm.Emit.emitAsm readProgram).isOk do
+    throwError "account-storage scalar frame did not reach the SVM emitter"
+
+  let svm ←
+    match ProofForge.Svm.Emit.emitCounterAsm frameProgram with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  let evmProgram ←
+    match ProofForge.Evm.IR.fromProgram frameProgram with
+    | .ok lowered => pure lowered
+    | .error reason => throwError reason
+  let evm ←
+    match ProofForge.Evm.Emit.emitYul evmProgram with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  unless !svm.isEmpty do
+    throwError "SVM scalar-frame lowering is missing"
+  unless !evm.isEmpty do
+    throwError "EVM scalar-frame lowering is missing"
+
+#pf_guard_scalar_frame_ir
+
 elab "#pf_guard_nested_state_loop_control" : command => do
   let env ← getEnv
   let program ←
