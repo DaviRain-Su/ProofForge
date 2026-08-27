@@ -50,6 +50,9 @@ main-emitter case is introduced.
 @[pf_inline] def revertZeroAddress : UInt64 :=
   evmRevertZeroAddress
 
+@[pf_inline] def revertPaused : UInt64 :=
+  evmRevertPaused
+
 @[pf_inline] def receive : UInt64 :=
   evmReceive
 

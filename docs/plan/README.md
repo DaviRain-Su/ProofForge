@@ -51,6 +51,7 @@
 | [e-comp-011](tasks/e-comp-011.md) | done | HashedMap 源侧 nextAdd / nextSub |
 | [e-comp-012](tasks/e-comp-012.md) | done | HashedMap 源侧 revertInsufficient |
 | [e-comp-013](tasks/e-comp-013.md) | done | 地址谓词 isZero20 / eqImm20 |
+| [e-pause-001](tasks/e-pause-001.md) | done | Token owner mint + Paused |
 | [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |

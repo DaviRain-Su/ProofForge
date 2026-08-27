@@ -200,6 +200,15 @@ private def emitRevertZeroAddress (context : Context σ) (st : σ) :
     indent ++ "revert(0, 4)" ++ nl
   pure (txt, "0", st)
 
+private def emitRevertPaused (context : Context σ) (st : σ) :
+    Except String (String × String × σ) :=
+  let indent := context.indent
+  let sel := Keccak.selector "Paused" #[]
+  let txt :=
+    indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
+    indent ++ "revert(0, 4)" ++ nl
+  pure (txt, "0", st)
+
 private def emitReceive (context : Context σ) (st : σ) :
     Except String (String × String × σ) :=
   let indent := context.indent
@@ -223,6 +232,7 @@ def emitCall (context : Context σ) (call : NativeFx.Call Ops.Val) (st : σ) :
       emitRevertInsufficient context h0 h1 h2 h3 w0 w1 w2 w3 st
   | .revertUnauthorized w0 w1 w2 => emitRevertUnauthorized context w0 w1 w2 st
   | .revertZeroAddress => emitRevertZeroAddress context st
+  | .revertPaused => emitRevertPaused context st
   | .receive => emitReceive context st
 
 end ProofForge.Evm.NativeFx.Emit

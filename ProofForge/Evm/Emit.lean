@@ -1297,6 +1297,9 @@ private def errorAbiUnauthorized : String :=
 private def errorAbiZeroAddress : String :=
   "{\"type\":\"error\",\"name\":\"ZeroAddress\",\"inputs\":[]}"
 
+private def errorAbiPaused : String :=
+  "{\"type\":\"error\",\"name\":\"Paused\",\"inputs\":[]}"
+
 private def errorAbiExpired : String :=
   "{\"type\":\"error\",\"name\":\"Expired\",\"inputs\":[]}"
 
@@ -1345,6 +1348,10 @@ def emitAbi (p : IR.Program) : String :=
     hasErrorLeaf 8 (fun
       | .component call => call.emitsZeroAddress
       | _ => false) m.ops)
+  let needPaused := p.entries.any (fun m =>
+    hasErrorLeaf 8 (fun
+      | .component call => call.emitsPaused
+      | _ => false) m.ops)
   let needExpired := p.entries.any (fun m =>
     hasErrorLeaf 8 (fun
       | .component call => call.emitsExpired
@@ -1355,6 +1362,7 @@ def emitAbi (p : IR.Program) : String :=
       (if needIns then #[errorAbiInsufficient] else #[]) ++
       (if needUnauth then #[errorAbiUnauthorized] else #[]) ++
       (if needZero then #[errorAbiZeroAddress] else #[]) ++
+      (if needPaused then #[errorAbiPaused] else #[]) ++
       (if needExpired then #[errorAbiExpired] else #[]) ++
       (if needRecv then #[receiveAbi] else #[]) ++
       p.entries.filterMap fun m =>

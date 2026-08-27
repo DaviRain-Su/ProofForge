@@ -96,6 +96,10 @@ open ProofForge.Evm
     (.revertZeroAddress : ProofForge.Evm.NativeFx.Call ProofForge.Evm.Ops.Val))
     == "err.ZeroAddress"
 #guard
+  (ProofForge.Evm.NativeFx.Call.canonical (fun _ => "x")
+    (.revertPaused : ProofForge.Evm.NativeFx.Call ProofForge.Evm.Ops.Val))
+    == "err.Paused"
+#guard
   (ProofForge.Evm.ClosedCall.Source.balanceOfSelf ⟨0, 0, 0⟩).w0 == 0
 #guard ProofForge.Evm.WideWord.Source.eq20 ⟨0, 0, 0⟩ ⟨0, 0, 0⟩
 #guard ProofForge.Evm.NativeFx.Source.receive == (0 : UInt64)

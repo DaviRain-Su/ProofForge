@@ -11,56 +11,69 @@ def nobody : Addr20 := ⟨0, 0, 0⟩
 def nine : UInt256 := ⟨9, 0, 0, 0⟩
 def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 
-#guard (init 0).dummy == 0
-#guard (init 0).supply == zero256
-#guard get (init 0) == 0
-#guard balanceOf (init 0) sample == zero256
-#guard totalSupply (init 0) == zero256
-#guard decimals (init 0) == 18
-#guard name (init 0) == ⟨0x546f6b656e, 0, 0, 0⟩
-#guard symbol (init 0) == ⟨0x5046, 0, 0, 0⟩
-#guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == zero256
+#guard (init sample).dummy == 0
+#guard (init sample).paused == 0
+#guard (init sample).supply == zero256
+#guard get (init sample) == 0
+#guard pausedOf (init sample) == 0
+#guard ownerOf (init sample) == ⟨0, 0, 0⟩
+#guard balanceOf (init sample) sample == zero256
+#guard totalSupply (init sample) == zero256
+#guard decimals (init sample) == 18
+#guard name (init sample) == ⟨0x546f6b656e, 0, 0, 0⟩
+#guard symbol (init sample) == ⟨0x5046, 0, 0, 0⟩
+#guard allowanceOf (init sample) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
-  match mint (init 0) sample nine with
+  match mint (init sample) sample nine with
   | .ok _ => true
   | .error _ => false
 
 #guard
-  match mint (init 0) nobody nine with
+  match mint (init sample) nobody nine with
   | .ok _ => true
   | .error _ => false
 
 #guard
-  match burn (init 0) nine with
+  match burn (init sample) nine with
   | .ok (_, ret) => ret == 9
   | .error _ => false
 
 #guard
-  match burnFrom (init 0) sample nine with
+  match burnFrom (init sample) sample nine with
   | .ok _ => true
   | .error _ => false
 
 #guard
-  match increaseAllowance (init 0) sample nine with
+  match increaseAllowance (init sample) sample nine with
   | .ok _ => true
   | .error _ => false
 
 #guard
-  match decreaseAllowance (init 0) sample nine with
+  match decreaseAllowance (init sample) sample nine with
   | .ok _ => true
   | .error _ => false
 
-#guard nonceOf (init 0) sample == zero256
-#guard DOMAIN_SEPARATOR (init 0) == ⟨0, 0, 0, 0⟩
+#guard nonceOf (init sample) sample == zero256
+#guard DOMAIN_SEPARATOR (init sample) == ⟨0, 0, 0, 0⟩
 
 #guard
-  match permit (init 0) sample sample nine nine 27 ⟨1, 0, 0, 0⟩ ⟨2, 0, 0, 0⟩ with
+  match permit (init sample) sample sample nine nine 27 ⟨1, 0, 0, 0⟩ ⟨2, 0, 0, 0⟩ with
   | .ok (_, ret) => ret == 9
   | .error _ => false
 
 #guard
-  match logXfer (init 0) 4 with
+  match pause (init sample) with
+  | .ok (st, ret) => ret == 1 && st.paused == 1 && pausedOf st == 1
+  | .error _ => false
+
+#guard
+  match unpause (init sample) with
+  | .ok (st, ret) => ret == 0 && st.paused == 0
+  | .error _ => false
+
+#guard
+  match logXfer (init sample) 4 with
   | .ok (_, ret) => ret == 4
   | .error _ => false
 
@@ -90,6 +103,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"Expired\"" &&
         abi.contains "\"name\":\"Unauthorized\"" &&
         abi.contains "\"name\":\"ZeroAddress\"" &&
+        abi.contains "\"name\":\"Paused\"" &&
         abi.contains "\"type\":\"error\"" &&
         yul.contains "revert(0, 36)" &&
         yul.contains "staticcall(gas(), 1," &&
@@ -112,6 +126,12 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "burnFrom")).isSome &&
     (p.entries.find? (·.ixName == "increaseAllowance")).isSome &&
     (p.entries.find? (·.ixName == "decreaseAllowance")).isSome &&
+    (p.entries.find? (·.ixName == "pause")).isSome &&
+    (p.entries.find? (·.ixName == "unpause")).isSome &&
+    (p.entries.find? (·.ixName == "pausedOf")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "pausedOf")).map (·.retWidths) == some #[1] &&
+    (p.entries.find? (·.ixName == "ownerOf")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "ownerOf")).map (·.retWidths) == some #[20] &&
     (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "allowanceOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.view) == some true &&

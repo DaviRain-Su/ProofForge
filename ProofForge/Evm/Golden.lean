@@ -192,6 +192,28 @@ private def guardZero (key : Nat) (ok : Array IR.Op) : Array IR.Op :=
       #[nativeFx .revertZeroAddress, .returnU64 (.lit 0)]
       ok]
 
+/-- `s.paused != 0` 抽出成嵌套 `select`。state 参数是 mutate 的最后一个 arg。 -/
+private def pausedNe0 (stateArg : Nat) : Ops.Val :=
+  .select .eq
+    (.select .eq (.field (.arg stateArg) "paused") (.lit 0) (.lit 1) (.lit 0))
+    (.lit 0) (.lit 1) (.lit 0)
+
+private def guardPaused (stateArg : Nat) (ok : Array IR.Op) : Array IR.Op :=
+  #[.ite .ne (pausedNe0 stateArg) (.lit 0)
+      #[nativeFx .revertPaused, .returnU64 (.lit 0)]
+      ok]
+
+private def eqImmCaller : Ops.Val :=
+  Ops.eq20
+    (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[])
+    (.ext .immW0 #[]) (.ext .immW1 #[]) (.ext .immW2 #[])
+
+private def ownerGate (ok : Array IR.Op) : Array IR.Op :=
+  #[.ite .eq eqImmCaller (.lit 1)
+      ok
+      #[nativeFx (.revertUnauthorized (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[])),
+        .returnU64 (.ext .callerW0 #[])]]
+
 /-- Live extract of `Examples.Wide`; Legacy IR has no `arith256` leaf. -/
 def extractedWide : IR.Program :=
   let ctor : IR.Method := {
@@ -375,18 +397,20 @@ def extractedToken : IR.Program :=
     name := "Token"
     slots := #[
       { name := "dummy", index := 0, width := 8 },
-      { name := "supply_w0", index := 1, width := 8 },
-      { name := "supply_w1", index := 2, width := 8 },
-      { name := "supply_w2", index := 3, width := 8 },
-      { name := "supply_w3", index := 4, width := 8 }
+      { name := "paused", index := 1, width := 1 },
+      { name := "supply_w0", index := 2, width := 8 },
+      { name := "supply_w1", index := 3, width := 8 },
+      { name := "supply_w2", index := 4, width := 8 },
+      { name := "supply_w3", index := 5, width := 8 }
     ]
     constructor := {
       kind := .init
       name := "Examples.Token.init"
       ixName := "initialize"
       paramCount := 1
-      paramWidths := #[8]
+      paramWidths := #[20]
       ops := #[
+        .returnState (.lit 0),
         .returnState (.lit 0),
         .returnState (.lit 0),
         .returnState (.lit 0),
@@ -395,7 +419,7 @@ def extractedToken : IR.Program :=
       ]
     }
     entries := #[
-      mutEntry "Token" "approve" 2 #[20, 32] (guardZero 0 #[
+      mutEntry "Token" "approve" 2 #[20, 32] (guardPaused 2 (guardZero 0 #[
         .ite .ne (.lit 0) (.lit 1)
           #[hashedCall (.setPair256 (.lit 1)
               (callerW 0) (callerW 1) (callerW 2)
@@ -403,12 +427,13 @@ def extractedToken : IR.Program :=
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             nativeFx (.logApproval256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
-          #[.errorOverflow]
-      ]),
-      mutEntry "Token" "burn" 1 #[32] #[
-        .ite .eq (ge256 callerBal 0) (.lit 1)
-          #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 0),
-            nativeFx (.logTransfer256 (callerW 0) (callerW 1) (callerW 2) (.lit 0) (.lit 0) (.lit 0) (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
+            #[.errorOverflow]
+            ])),
+            mutEntry "Token" "burn" 1 #[32] (guardPaused 1 #[
+              .ite .eq (ge256 callerBal 0) (.lit 1)
+                #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 0),
+                  setCaller256 0 (fun limb => arithGet 1 limb callerBal 0),
+                  nativeFx (.logTransfer256 (callerW 0) (callerW 1) (callerW 2) (.lit 0) (.lit 0) (.lit 0) (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
             .storeField "supply_w0" (Ops.arith256 1 0
               (.field (.arg 1) "supply_w0") (.field (.arg 1) "supply_w1")
               (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
@@ -428,11 +453,13 @@ def extractedToken : IR.Program :=
             .returnU64 (u256Field 0 "w0")]
           #[nativeFx (.revertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3) (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
             .returnU64 (callerBal 0)]
-          ],
-          mutEntry "Token" "burnFrom" 2 #[20, 32] (guardZero 0 #[
+          ]),
+          mutEntry "Token" "burnFrom" 2 #[20, 32] (guardPaused 2 (guardZero 0 #[
             .ite .eq (ge256 pairAllow 1) (.lit 1)
               #[.ite .eq (ge256 ownerBal 1) (.lit 1)
                   #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 1),
+                    setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 1),
+                    setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 1),
                     setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 1),
                     nativeFx (.logTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (.lit 0) (.lit 0) (.lit 0) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                     .storeField "supply_w0" (Ops.arith256 1 0
@@ -456,23 +483,23 @@ def extractedToken : IR.Program :=
                     .returnU64 (ownerBal 0)]]
               #[nativeFx (.revertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                 .returnU64 (pairAllow 0)]
-          ]),
-          mutEntry "Token" "decreaseAllowance" 2 #[20, 32] (guardZero 0 #[
+              ])),
+              mutEntry "Token" "decreaseAllowance" 2 #[20, 32] (guardPaused 2 (guardZero 0 #[
             .ite .eq (ge256 pairSelf 1) (.lit 1)
               #[setPairCallerSpender256 1 0 (fun limb => arithGet 1 limb pairSelf 1),
                 nativeFx (.logApproval256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (arithGet 1 0 pairSelf 1) (arithGet 1 1 pairSelf 1) (arithGet 1 2 pairSelf 1) (arithGet 1 3 pairSelf 1)),
                 .returnU64 (arithGet 1 0 pairSelf 1)]
               #[nativeFx (.revertInsufficient (pairSelf 0) (pairSelf 1) (pairSelf 2) (pairSelf 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                 .returnU64 (pairSelf 0)]
-          ]),
-          mutEntry "Token" "increaseAllowance" 2 #[20, 32] (guardZero 0 #[
+              ])),
+              mutEntry "Token" "increaseAllowance" 2 #[20, 32] (guardPaused 2 (guardZero 0 #[
             .ite .ne (.lit 0) (.lit 1)
               #[setPairCallerSpender256 1 0 (fun limb => arithGet 0 limb pairSelf 1),
                 nativeFx (.logApproval256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (arithGet 0 0 pairSelf 1) (arithGet 0 1 pairSelf 1) (arithGet 0 2 pairSelf 1) (arithGet 0 3 pairSelf 1)),
                 .returnU64 (arithGet 0 0 pairSelf 1)]
-              #[.errorOverflow]
-          ]),
-      mutEntry "Token" "logApprove" 1 #[8] #[
+                #[.errorOverflow]
+                ])),
+                mutEntry "Token" "logApprove" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
           #[nativeFx (.log "Approval" (.arg 0)), .returnU64 (.arg 0)]
           #[.errorOverflow]
@@ -482,7 +509,7 @@ def extractedToken : IR.Program :=
           #[nativeFx (.log "Transfer" (.arg 0)), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
-      mutEntry "Token" "mint" 2 #[20, 32] (guardZero 0 #[
+      mutEntry "Token" "mint" 2 #[20, 32] (ownerGate (guardPaused 2 (guardZero 0 #[
         .ite .ne (.lit 0) (.lit 1)
           #[setAddr256 0 0 (fun limb => u256Field 1 (limbName limb)),
             nativeFx (.logTransfer256 (.lit 0) (.lit 0) (.lit 0) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
@@ -504,8 +531,13 @@ def extractedToken : IR.Program :=
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
+      ]))),
+      mutEntry "Token" "pause" 0 #[] (ownerGate #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.storeField "paused" (.lit 1), .okState (.lit 1)]
+          #[.errorOverflow]
       ]),
-      mutEntry "Token" "permit" 7 #[20, 20, 32, 32, 1, 33, 33] #[
+      mutEntry "Token" "permit" 7 #[20, 20, 32, 32, 1, 33, 33] (guardPaused 7 #[
         .ite .ne (.lit 0) (.lit 1)
           #[closedCall (.permit
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
@@ -517,20 +549,25 @@ def extractedToken : IR.Program :=
               (u256Field 6 "w0") (u256Field 6 "w1") (u256Field 6 "w2") (u256Field 6 "w3")),
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
-      ],
-      mutEntry "Token" "transfer" 2 #[20, 32] (guardZero 0 #[
+      ]),
+      mutEntry "Token" "transfer" 2 #[20, 32] (guardPaused 2 (guardZero 0 #[
         .ite .eq (ge256 callerBal 1) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
+            setAddr256 0 0 (fun limb => arithGet 0 limb destBal 1),
+            setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
             setAddr256 0 0 (fun limb => arithGet 0 limb destBal 1),
             nativeFx (.logTransfer256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[nativeFx (.revertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (callerBal 0)]
-      ]),
-      mutEntry "Token" "transferFrom" 3 #[20, 20, 32] (guardZero 1 #[
+      ])),
+      mutEntry "Token" "transferFrom" 3 #[20, 20, 32] (guardPaused 3 (guardZero 1 #[
         .ite .eq (ge256 pairAllow 2) (.lit 1)
           #[.ite .eq (ge256 ownerBal 2) (.lit 1)
               #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 2),
+                setAddr256 0 1 (fun limb => arithGet 0 limb destFrom 2),
+                setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 2),
+                setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 2),
                 setAddr256 0 1 (fun limb => arithGet 0 limb destFrom 2),
                 setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 2),
                 nativeFx (.logTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2") (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
@@ -539,6 +576,11 @@ def extractedToken : IR.Program :=
                 .returnU64 (ownerBal 0)]]
           #[nativeFx (.revertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3) (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
             .returnU64 (pairAllow 0)]
+      ])),
+      mutEntry "Token" "unpause" 0 #[] (ownerGate #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.storeField "paused" (.lit 0), .okState (.lit 0)]
+          #[.errorOverflow]
       ]),
       {
         kind := .get
@@ -578,6 +620,29 @@ def extractedToken : IR.Program :=
         view := true
       },
       view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0),
+      {
+        kind := .get
+        name := "Examples.Token.ownerOf"
+        ixName := "ownerOf"
+        selector := Keccak.selectorOfWidths "ownerOf" #[]
+        retWidths := #[20]
+        retCount := 3
+        ops := #[
+          .returnU64 (.ext .immW0 #[]),
+          .returnU64 (.ext .immW1 #[]),
+          .returnU64 (.ext .immW2 #[])
+        ]
+        view := true
+      },
+      {
+        kind := .get
+        name := "Examples.Token.pausedOf"
+        ixName := "pausedOf"
+        selector := Keccak.selectorOfWidths "pausedOf" #[]
+        retWidths := #[1]
+        ops := #[.returnU64 (.field (.arg 0) "paused")]
+        view := true
+      },
       {
         kind := .get
         name := "Examples.Token.symbol"

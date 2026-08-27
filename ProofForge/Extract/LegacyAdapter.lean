@@ -337,6 +337,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       throw "extract/unsupported: legacy adapter cannot represent parameterized Unauthorized"
   | .ext (.evm (.component (.nativeFx .revertZeroAddress))) =>
       throw "extract/unsupported: legacy adapter cannot represent ZeroAddress"
+  | .ext (.evm (.component (.nativeFx .revertPaused))) =>
+      throw "extract/unsupported: legacy adapter cannot represent Paused"
   | .ext (.evm (.component (.nativeFx .receive))) =>
       throw "extract/unsupported: legacy adapter cannot represent receive"
   | .ext (.evm (.component (.hashedMap (.getU64 base key)))) =>
