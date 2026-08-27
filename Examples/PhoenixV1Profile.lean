@@ -1409,8 +1409,8 @@ def claimReleasedFunds512At (layout : Examples.PhoenixV1.Layout)
     else
       .error .overflow
 
-/-- Phoenix's static audit sink. Cancel components consume this descriptor as compile-time data;
-the recorder entry/record helpers are migrated to the same profile in the next slice. -/
+/-- Phoenix's static audit sink. Recorder and cancellation facades consume the same descriptor as
+compile-time data; no handler reconstructs its positional sink or byte geometry. -/
 @[pf_inline] def marketRecorderConfig : ProofForge.Svm.BatchRecorder.Config :=
   { logAccount := 0
     selfEntryTag := 15
@@ -1424,7 +1424,7 @@ the recorder entry/record helpers are migrated to the same profile in the next s
 embedded as a CPI data key; market reads remain physical indexes. The 92-byte payload below plus
 the component-owned raw-entry byte is Phoenix's 93-byte audit header. -/
 def beginMarketBatchAt (origin marketAccount traderCpiAccount marketSequence : UInt64) : UInt64 :=
-  batchRecorderBegin 0 15 "log" 1246 93 91 32
+  ProofForge.Svm.BatchRecorder.Source.begin marketRecorderConfig
     #[.u8le 1, .u8le origin,
       .u64le marketSequence, .u64le unixTime, .u64le clockSlot,
       .u64le (accKeyWord marketAccount 0), .u64le (accKeyWord marketAccount 1),
@@ -1435,20 +1435,20 @@ def beginMarketBatchAt (origin marketAccount traderCpiAccount marketSequence : U
 /-- Append one canonical 35-byte Phoenix Reduce record. `orderIndex = 0` disables the append while
 leaving `finishMarketBatch` responsible for the required header-only CPI. -/
 def recordReduceAt (orderIndex orderSequence price removed remaining : UInt64) : UInt64 :=
-  batchRecorderAppend 0 15 "log" 1246 93 91 32 orderIndex
+  ProofForge.Svm.BatchRecorder.Source.append marketRecorderConfig orderIndex
     #[.u8le 4, .u16le 0, .u64le orderSequence, .u64le price,
       .u64le removed, .u64le remaining]
 
 /-- Append one canonical 43-byte Phoenix Place record. The two client-id words preserve the
 original little-endian u128 wire order without introducing a dynamic byte buffer in source code. -/
 def recordPlaceAt (orderSequence clientIdLow clientIdHigh price baseLots : UInt64) : UInt64 :=
-  batchRecorderAppend 0 15 "log" 1246 93 91 32 1
+  ProofForge.Svm.BatchRecorder.Source.append marketRecorderConfig 1
     #[.u8le 3, .u16le 0, .u64le orderSequence, .u64le clientIdLow,
       .u64le clientIdHigh, .u64le price, .u64le baseLots]
 
 /-- Flush Phoenix's current batch, including an empty header-only batch, and close the recorder. -/
 def finishMarketBatch : UInt64 :=
-  batchRecorderFinish 0 15 "log" 1246 93 91 32
+  ProofForge.Svm.BatchRecorder.Source.finish marketRecorderConfig
 
 /-- Execute only the side-selected nonzero classic Token withdrawal. The mint seed points directly
 at the authenticated fixed MarketHeader field; no mint account, heap buffer, or copied seed exists. -/
