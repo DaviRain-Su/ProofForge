@@ -2,6 +2,7 @@ import ProofForge.Evm.Component
 import ProofForge.Evm.Ops
 import ProofForge.Evm.HashedMap.Emit
 import ProofForge.Evm.WideWord.Emit
+import ProofForge.Evm.ClosedCall.Emit
 
 namespace ProofForge.Evm.Component.Emit
 
@@ -31,6 +32,14 @@ private def Context.wideWord (context : Context σ) : WideWord.Emit.Context σ :
     valKey := context.valKey
     indent := context.indent }
 
+private def Context.closedCall (context : Context σ) : ClosedCall.Emit.Context σ :=
+  { materialize := context.materialize
+    fresh := context.fresh
+    rememberWide := context.rememberWide
+    lookupWide := context.lookupWide
+    valKey := context.valKey
+    indent := context.indent }
+
 def emitQuery (context : Context σ) (query : Component.Query) (operands : Array Ops.Val)
     (st : σ) : Except String (String × String × σ) :=
   match query with
@@ -43,6 +52,8 @@ def emitQuery (context : Context σ) (query : Component.Query) (operands : Array
       HashedMap.Emit.emitQuery context.hashedMap storageQuery operands st
   | .wideWord wideQuery =>
       WideWord.Emit.emitQuery context.wideWord wideQuery operands st
+  | .closedCall callQuery =>
+      ClosedCall.Emit.emitQuery context.closedCall callQuery operands st
 
 def emitCall (context : Context σ) (call : Component.Call Ops.Val) (st : σ) :
     Except String (String × String × σ) :=
@@ -50,5 +61,7 @@ def emitCall (context : Context σ) (call : Component.Call Ops.Val) (st : σ) :
   | .empty => .error "extract/unsupported: evm empty component call"
   | .hashedMap storageCall =>
       HashedMap.Emit.emitCall context.hashedMap storageCall st
+  | .closedCall callCall =>
+      ClosedCall.Emit.emitCall context.closedCall callCall st
 
 end ProofForge.Evm.Component.Emit

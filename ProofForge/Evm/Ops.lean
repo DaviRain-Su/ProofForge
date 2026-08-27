@@ -18,9 +18,6 @@ inductive ValKind where
   | immU64b
   | immW0 | immW1 | immW2
   | immX0 | immX1 | immX2
-  | tokenBalance256 (limb : Nat)
-  /-- 256-bit ERC-20 `allowance` limb; nine operands: token, owner, spender. -/
-  | tokenAllowance256 (limb : Nat)
   /-- packed `callvalue()` limb; `limb` is 0..3 (w0 lowest). -/
   | callValue256 (limb : Nat)
   /-- packed `selfbalance()` limb; `limb` is 0..3 (w0 lowest). -/
@@ -32,8 +29,6 @@ inductive ValKind where
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .tokenBalance256 _ => 3
-  | .tokenAllowance256 _ => 9
   | .callValue256 _ | .selfBalance256 _ | .domainSep256 _ => 0
   | .component query => query.arity
   | _ => 0
@@ -54,19 +49,6 @@ inductive OpExt (V : Type) where
   | revertUnauthorized (w0 w1 w2 : V)
   | revertZeroAddress
   | receive
-  | tokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : V)
-  | tokenTransfer256 (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : V)
-  | tokenApprove256 (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : V)
-  | tokenTransferFrom256 (tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 : V)
-  | tokenBalanceOfSelf (tw0 tw1 tw2 : V)
-  | wethDeposit256 (tw0 tw1 tw2 a0 a1 a2 a3 : V)
-  | wethWithdraw256 (tw0 tw1 tw2 a0 a1 a2 a3 : V)
-  | swapExact2 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : V)
-  | swapExact3 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : V)
-  /-- Closed EIP-2612 permit: owner, spender, value, deadline, v, r, s. -/
-  | permit (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : V)
-  /-- Closed external EIP-2612 permit CALL. -/
-  | tokenPermit (t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : V)
   /-- Bounded EVM component effect. New effect vocabularies extend `Component.Call`. -/
   | component (call : Component.Call V)
   deriving BEq, Repr, Inhabited
@@ -107,9 +89,9 @@ def mapGetAddr256 (limb : Nat) (base w0 w1 w2 : Val) : Val :=
 def mapGetPair256 (limb : Nat) (base o0 o1 o2 s0 s1 s2 : Val) : Val :=
   .ext (.component (.hashedMap (.getPair256 limb))) #[base, o0, o1, o2, s0, s1, s2]
 def tokenBalance256 (limb : Nat) (tw0 tw1 tw2 : Val) : Val :=
-  .ext (.tokenBalance256 limb) #[tw0, tw1, tw2]
+  .ext (.component (.closedCall (.balance256 limb))) #[tw0, tw1, tw2]
 def tokenAllowance256 (limb : Nat) (tw0 tw1 tw2 o0 o1 o2 s0 s1 s2 : Val) : Val :=
-  .ext (.tokenAllowance256 limb) #[tw0, tw1, tw2, o0, o1, o2, s0, s1, s2]
+  .ext (.component (.closedCall (.allowance256 limb))) #[tw0, tw1, tw2, o0, o1, o2, s0, s1, s2]
 def callValue256 (limb : Nat) : Val := .ext (.callValue256 limb) #[]
 def selfBalance256 (limb : Nat) : Val := .ext (.selfBalance256 limb) #[]
 def domainSep256 (limb : Nat) : Val := .ext (.domainSep256 limb) #[]
@@ -138,31 +120,6 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .revertUnauthorized w0 w1 w2 => allValuesWellFormed #[w0, w1, w2]
   | .revertZeroAddress => true
   | .receive => true
-  | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-      allValuesWellFormed #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
-  | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3]
-  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3]
-  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3]
-  | .tokenBalanceOfSelf tw0 tw1 tw2 => allValuesWellFormed #[tw0, tw1, tw2]
-  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[tw0, tw1, tw2, a0, a1, a2, a3]
-  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[tw0, tw1, tw2, a0, a1, a2, a3]
-  | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      allValuesWellFormed #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2,
-        i0, i1, i2, i3, m0, m1, m2, m3]
-  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      allValuesWellFormed #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2,
-        i0, i1, i2, i3, m0, m1, m2, m3]
-  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      allValuesWellFormed #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3,
-        vv, r0, r1, r2, r3, z0, z1, z2, z3]
-  | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      allValuesWellFormed #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3,
-        d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
   | .component call => call.wellFormed (·.wellFormed ValKind.arity)
 
 def Op.wellFormed (op : Op) : Bool :=

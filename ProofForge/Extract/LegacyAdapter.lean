@@ -264,10 +264,12 @@ partial def ofLegacyOp : ProofForge.Ops.Op → Op
         (ofLegacyVal o1) (ofLegacyVal o2) (ofLegacyVal s0) (ofLegacyVal s1)
         (ofLegacyVal s2) (ofLegacyVal value)))))
   | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-      .ext (.evm (.tokenTransfer (ofLegacyVal tw0) (ofLegacyVal tw1) (ofLegacyVal tw2)
-        (ofLegacyVal dw0) (ofLegacyVal dw1) (ofLegacyVal dw2) (ofLegacyVal amount)))
+      .ext (.evm (.component (.closedCall (.transfer (ofLegacyVal tw0) (ofLegacyVal tw1)
+        (ofLegacyVal tw2) (ofLegacyVal dw0) (ofLegacyVal dw1) (ofLegacyVal dw2)
+        (ofLegacyVal amount)))))
   | .evmTokenBalanceOfSelf tw0 tw1 tw2 =>
-      .ext (.evm (.tokenBalanceOfSelf (ofLegacyVal tw0) (ofLegacyVal tw1) (ofLegacyVal tw2)))
+      .ext (.evm (.component (.closedCall (.balanceOfSelf (ofLegacyVal tw0)
+        (ofLegacyVal tw1) (ofLegacyVal tw2)))))
   | .storeField name value => .storeField name (ofLegacyVal value)
   | .okState value => .okState (ofLegacyVal value)
   | .errorOverflow => .errorOverflow
@@ -350,7 +352,7 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       return .mapSetPair (← toLegacyVal base) (← toLegacyVal o0) (← toLegacyVal o1)
         (← toLegacyVal o2) (← toLegacyVal s0) (← toLegacyVal s1) (← toLegacyVal s2)
         (← toLegacyVal value)
-  | .ext (.evm (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)) =>
+  | .ext (.evm (.component (.closedCall (.transfer tw0 tw1 tw2 dw0 dw1 dw2 amount)))) =>
       return .evmTokenTransfer (← toLegacyVal tw0) (← toLegacyVal tw1) (← toLegacyVal tw2)
         (← toLegacyVal dw0) (← toLegacyVal dw1) (← toLegacyVal dw2)
         (← toLegacyVal amount)
@@ -358,26 +360,26 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       throw "extract/unsupported: legacy adapter cannot represent 256-bit map writes"
   | .ext (.evm (.component (.hashedMap (.setPair256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit pair-map writes"
-  | .ext (.evm (.tokenTransfer256 ..)) =>
+  | .ext (.evm (.component (.closedCall (.transfer256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit token transfer"
-  | .ext (.evm (.tokenApprove256 ..)) =>
+  | .ext (.evm (.component (.closedCall (.approve256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent ERC-20 approve"
-  | .ext (.evm (.tokenTransferFrom256 ..)) =>
+  | .ext (.evm (.component (.closedCall (.transferFrom256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent ERC-20 transferFrom"
-  | .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2)) =>
+  | .ext (.evm (.component (.closedCall (.balanceOfSelf tw0 tw1 tw2)))) =>
       return .evmTokenBalanceOfSelf (← toLegacyVal tw0) (← toLegacyVal tw1)
         (← toLegacyVal tw2)
-  | .ext (.evm (.wethDeposit256 ..)) =>
+  | .ext (.evm (.component (.closedCall (.wethDeposit256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent WETH deposit"
-  | .ext (.evm (.wethWithdraw256 ..)) =>
+  | .ext (.evm (.component (.closedCall (.wethWithdraw256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent WETH withdraw"
-  | .ext (.evm (.swapExact2 ..)) =>
+  | .ext (.evm (.component (.closedCall (.swapExact2 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent Uniswap V2 swap"
-  | .ext (.evm (.swapExact3 ..)) =>
+  | .ext (.evm (.component (.closedCall (.swapExact3 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent Uniswap V2 path-3 swap"
-  | .ext (.evm (.permit ..)) =>
+  | .ext (.evm (.component (.closedCall (.permit ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent EIP-2612 permit"
-  | .ext (.evm (.tokenPermit ..)) =>
+  | .ext (.evm (.component (.closedCall (.tokenPermit ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent external permit"
   | .ext (.evm (.component ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent evm component"

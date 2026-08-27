@@ -18,6 +18,8 @@ import ProofForge.Evm.HashedMap
 import ProofForge.Evm.HashedMap.Emit
 import ProofForge.Evm.WideWord
 import ProofForge.Evm.WideWord.Emit
+import ProofForge.Evm.ClosedCall
+import ProofForge.Evm.ClosedCall.Emit
 import ProofForge.Evm.Component
 import ProofForge.Evm.Component.Emit
 import ProofForge.Evm.Runtime

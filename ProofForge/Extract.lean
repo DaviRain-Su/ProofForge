@@ -1186,7 +1186,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   let t2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) token)
                   match t0, t1, t2 with
                   | some a0, some a1, some a2 =>
-                    some (.ext (.evm (.tokenBalance256 limb.toNat)) #[a0, a1, a2])
+                    some (.ext (.evm (.component (.closedCall (.balance256 limb.toNat)))) #[a0, a1, a2])
                   | _, _, _ => none
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmTokenAllowanceOf ||
                   endsWith baseE ".evmTokenAllowanceOf" then
@@ -1207,7 +1207,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   let s2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
                   match t0, t1, t2, o0, o1, o2, s0, s1, s2 with
                   | some a0, some a1, some a2, some b0, some b1, some b2, some c0, some c1, some c2 =>
-                    some (.ext (.evm (.tokenAllowance256 limb.toNat))
+                    some (.ext (.evm (.component (.closedCall (.allowance256 limb.toNat))))
                       #[a0, a1, a2, b0, b1, b2, c0, c1, c2])
                   | _, _, _, _, _, _, _, _, _ => none
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCallValue256 ||
@@ -5193,17 +5193,17 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     ]
   else if let some (t0, t1, t2) := findEvmTokenBalance env e then
     some #[
-      .returnU64 (.ext (.evm (.tokenBalance256 0)) #[t0, t1, t2]),
-      .returnU64 (.ext (.evm (.tokenBalance256 1)) #[t0, t1, t2]),
-      .returnU64 (.ext (.evm (.tokenBalance256 2)) #[t0, t1, t2]),
-      .returnU64 (.ext (.evm (.tokenBalance256 3)) #[t0, t1, t2])
+      .returnU64 (.ext (.evm (.component (.closedCall (.balance256 0)))) #[t0, t1, t2]),
+      .returnU64 (.ext (.evm (.component (.closedCall (.balance256 1)))) #[t0, t1, t2]),
+      .returnU64 (.ext (.evm (.component (.closedCall (.balance256 2)))) #[t0, t1, t2]),
+      .returnU64 (.ext (.evm (.component (.closedCall (.balance256 3)))) #[t0, t1, t2])
     ]
   else if let some (t0, t1, t2, o0, o1, o2, s0, s1, s2) := findEvmTokenAllowance env e then
     some #[
-      .returnU64 (.ext (.evm (.tokenAllowance256 0)) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
-      .returnU64 (.ext (.evm (.tokenAllowance256 1)) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
-      .returnU64 (.ext (.evm (.tokenAllowance256 2)) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
-      .returnU64 (.ext (.evm (.tokenAllowance256 3)) #[t0, t1, t2, o0, o1, o2, s0, s1, s2])
+      .returnU64 (.ext (.evm (.component (.closedCall (.allowance256 0)))) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.component (.closedCall (.allowance256 1)))) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.component (.closedCall (.allowance256 2)))) #[t0, t1, t2, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.component (.closedCall (.allowance256 3)))) #[t0, t1, t2, o0, o1, o2, s0, s1, s2])
     ]
   else if findEvmCallValue256 env e then
     some #[

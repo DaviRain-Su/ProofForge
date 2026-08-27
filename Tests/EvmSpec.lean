@@ -55,6 +55,12 @@ open ProofForge.Evm
 #guard !ProofForge.Evm.HashedMap.Query.wellFormed (.getAddr256 4)
 #guard ProofForge.Evm.WideWord.Query.wellFormed (.arith256 0 0)
 #guard !ProofForge.Evm.WideWord.Query.wellFormed (.arith256 3 0)
+#guard ProofForge.Evm.ClosedCall.Query.wellFormed (.balance256 0)
+#guard !ProofForge.Evm.ClosedCall.Query.wellFormed (.allowance256 4)
+#guard
+  (ProofForge.Evm.ClosedCall.Call.canonical (fun _ => "x")
+    (.balanceOfSelf (.lit 0) (.lit 1) (.lit 2) : ProofForge.Evm.ClosedCall.Call ProofForge.Evm.Ops.Val))
+    == "tbal(x,x,x)"
 #guard ProofForge.Evm.Ops.ValKind.arity (.component (.hashedMap .getU64)) == 2
 #guard ProofForge.Evm.Ops.mapGetU64 ProofForge.Evm.Ops.self (.lit 7)
   |>.wellFormed ProofForge.Evm.Ops.ValKind.arity

@@ -216,36 +216,36 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.mapSetPair256 (base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 : Val) : Op :=
   .ext (.evm (.component (.hashedMap (.setPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3))))
 @[match_pattern] def Op.evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Val) : Op :=
-  .ext (.evm (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount))
+  .ext (.evm (.component (.closedCall (.transfer tw0 tw1 tw2 dw0 dw1 dw2 amount))))
 @[match_pattern] def Op.evmTokenTransfer256
     (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3))
+  .ext (.evm (.component (.closedCall (.transfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmTokenApprove256
     (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3))
+  .ext (.evm (.component (.closedCall (.approve256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmTokenTransferFrom256
     (tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3))
+  .ext (.evm (.component (.closedCall (.transferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmTokenBalanceOfSelf (tw0 tw1 tw2 : Val) : Op :=
-  .ext (.evm (.tokenBalanceOfSelf tw0 tw1 tw2))
+  .ext (.evm (.component (.closedCall (.balanceOfSelf tw0 tw1 tw2))))
 @[match_pattern] def Op.evmWethDeposit256
     (tw0 tw1 tw2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3))
+  .ext (.evm (.component (.closedCall (.wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmWethWithdraw256
     (tw0 tw1 tw2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3))
+  .ext (.evm (.component (.closedCall (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmSwapExact2
     (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : Val) : Op :=
-  .ext (.evm (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3))
+  .ext (.evm (.component (.closedCall (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3))))
 @[match_pattern] def Op.evmSwapExact3
     (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : Val) : Op :=
-  .ext (.evm (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3))
+  .ext (.evm (.component (.closedCall (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3))))
 @[match_pattern] def Op.evmPermit
     (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Val) : Op :=
-  .ext (.evm (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3))
+  .ext (.evm (.component (.closedCall (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3))))
 @[match_pattern] def Op.evmTokenPermit
     (t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Val) : Op :=
-  .ext (.evm (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3))
+  .ext (.evm (.component (.closedCall (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3))))
 @[match_pattern] def Op.evmComponent (call : Evm.Component.Call Val) : Op :=
   .ext (.evm (.component call))
 
@@ -326,34 +326,12 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .evmRevertUnauthorized w0 w1 w2 => #[w0, w1, w2].any predicate
   | .evmRevertZeroAddress => false
   | .evmReceive => false
-  | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-      #[tw0, tw1, tw2, dw0, dw1, dw2, amount].any predicate
-  | .evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3].any predicate
-  | .evmTokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3].any predicate
-  | .evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3].any predicate
-  | .evmTokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2].any predicate
-  | .evmWethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, a0, a1, a2, a3].any predicate
-  | .evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, a0, a1, a2, a3].any predicate
-  | .evmSwapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3].any predicate
-  | .evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3].any predicate
-  | .evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].any predicate
-  | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3].any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
 
 private partial def isEvmContext : Val → Bool
   | .ext (.evm kind) operands =>
       (match kind with
-       | .tokenBalance256 _ | .tokenAllowance256 _ | .callValue256 _
-       | .selfBalance256 _ | .domainSep256 _ | .component _ => false
+       | .callValue256 _ | .selfBalance256 _ | .domainSep256 _ | .component _ => false
        | _ => true) || operands.any isEvmContext
   | .field base _ | .bitNot base => isEvmContext base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -380,11 +358,7 @@ def hasEvmEffect (ops : Array Op) : Bool :=
     | .evmDeposit .. | .evmDeposit256 .. | .evmSendEth .. | .evmSendEth256 .. | .evmLog ..
     | .evmLogTransfer256 .. | .evmLogApproval256 ..
     | .evmRevertInsufficient .. | .evmRevertUnauthorized .. | .evmRevertZeroAddress
-    | .evmReceive
-    | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenApprove256 ..
-    | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf ..
-    | .evmWethDeposit256 .. | .evmWethWithdraw256 .. | .evmSwapExact2 ..
-    | .evmSwapExact3 .. | .evmPermit .. | .evmTokenPermit .. | .evmComponent .. => true
+    | .evmReceive | .evmComponent .. => true
     | _ => false
 
 end ProofForge.Extract.Ops

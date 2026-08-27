@@ -154,6 +154,9 @@ private def ge256 (lhs : Nat → Ops.Val) (rhs : Nat) : Ops.Val :=
 private def hashedCall (call : HashedMap.Call Ops.Val) : IR.Op :=
   .component (.hashedMap call)
 
+private def closedCall (call : ClosedCall.Call Ops.Val) : IR.Op :=
+  .component (.closedCall call)
+
 private def setAddr256 (base key : Nat) (val : Nat → Ops.Val) : IR.Op :=
   hashedCall (.setAddr256 (.lit (UInt64.ofNat base))
     (addrField key "w0") (addrField key "w1") (addrField key "w2")
@@ -244,16 +247,16 @@ def extractedVault : IR.Program :=
       ],
       mutEntry "Vault" "grant" 3 #[20, 20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmTokenApprove256
+          #[closedCall (.approve256
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
-              (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
+              (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
       ],
       mutEntry "Vault" "permit" 8 #[20, 20, 20, 32, 32, 1, 33, 33] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmTokenPermit
+          #[closedCall (.tokenPermit
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
               (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")
@@ -261,16 +264,16 @@ def extractedVault : IR.Program :=
               (u256Field 4 "w0") (u256Field 4 "w1") (u256Field 4 "w2") (u256Field 4 "w3")
               (.arg 5)
               (u256Field 6 "w0") (u256Field 6 "w1") (u256Field 6 "w2") (u256Field 6 "w3")
-              (u256Field 7 "w0") (u256Field 7 "w1") (u256Field 7 "w2") (u256Field 7 "w3"),
+              (u256Field 7 "w0") (u256Field 7 "w1") (u256Field 7 "w2") (u256Field 7 "w3")),
             .returnU64 (u256Field 3 "w0")]
           #[.errorOverflow]
       ],
       mutEntry "Vault" "pull" 3 #[20, 20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmTokenTransfer256
+          #[closedCall (.transfer256
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
-              (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
+              (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
       ],
@@ -286,42 +289,42 @@ def extractedVault : IR.Program :=
       ],
       mutEntry "Vault" "swap2" 5 #[20, 20, 20, 32, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmSwapExact2
+          #[closedCall (.swapExact2
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
               (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")
               (u256Field 3 "w0") (u256Field 3 "w1") (u256Field 3 "w2") (u256Field 3 "w3")
-              (u256Field 4 "w0") (u256Field 4 "w1") (u256Field 4 "w2") (u256Field 4 "w3"),
+              (u256Field 4 "w0") (u256Field 4 "w1") (u256Field 4 "w2") (u256Field 4 "w3")),
             .returnU64 (u256Field 3 "w0")]
           #[.errorOverflow]
       ],
       mutEntry "Vault" "swap3" 6 #[20, 20, 20, 20, 32, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmSwapExact3
+          #[closedCall (.swapExact3
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
               (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")
               (addrField 3 "w0") (addrField 3 "w1") (addrField 3 "w2")
               (u256Field 4 "w0") (u256Field 4 "w1") (u256Field 4 "w2") (u256Field 4 "w3")
-              (u256Field 5 "w0") (u256Field 5 "w1") (u256Field 5 "w2") (u256Field 5 "w3"),
+              (u256Field 5 "w0") (u256Field 5 "w1") (u256Field 5 "w2") (u256Field 5 "w3")),
             .returnU64 (u256Field 4 "w0")]
           #[.errorOverflow]
       ],
       mutEntry "Vault" "take" 4 #[20, 20, 20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmTokenTransferFrom256
+          #[closedCall (.transferFrom256
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
               (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")
-              (u256Field 3 "w0") (u256Field 3 "w1") (u256Field 3 "w2") (u256Field 3 "w3"),
+              (u256Field 3 "w0") (u256Field 3 "w1") (u256Field 3 "w2") (u256Field 3 "w3")),
             .returnU64 (u256Field 3 "w0")]
           #[.errorOverflow]
       ],
       mutEntry "Vault" "unwrap" 2 #[20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmWethWithdraw256
+          #[closedCall (.wethWithdraw256
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
@@ -329,17 +332,17 @@ def extractedVault : IR.Program :=
         .ite .ne (.lit 0) (.lit 1)
           #[.evmDeposit256 (u256Field 1 "w0") (u256Field 1 "w1")
               (u256Field 1 "w2") (u256Field 1 "w3"),
-            .evmWethDeposit256
+            closedCall (.wethDeposit256
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
       view256 "Vault" "allowed" 3 #[20, 20, 20] (return256 fun limb =>
-        .ext (.tokenAllowance256 limb) #[
-          addrField 0 "w0", addrField 0 "w1", addrField 0 "w2",
-          addrField 1 "w0", addrField 1 "w1", addrField 1 "w2",
-          addrField 2 "w0", addrField 2 "w1", addrField 2 "w2"]),
+        Ops.tokenAllowance256 limb
+          (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+          (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
+          (addrField 2 "w0") (addrField 2 "w1") (addrField 2 "w2")),
       dummyGet "Vault",
       {
         kind := .get
@@ -352,7 +355,7 @@ def extractedVault : IR.Program :=
         view := true
       },
       view256 "Vault" "held" 1 #[20] (return256 fun limb =>
-        .ext (.tokenBalance256 limb) #[addrField 0 "w0", addrField 0 "w1", addrField 0 "w2"]),
+        Ops.tokenBalance256 limb (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")),
       view256 "Vault" "shareOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0)
     ]
   }
@@ -519,14 +522,14 @@ def extractedToken : IR.Program :=
       ]),
       mutEntry "Token" "permit" 7 #[20, 20, 32, 32, 1, 33, 33] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmPermit
+          #[closedCall (.permit
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
               (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")
               (u256Field 3 "w0") (u256Field 3 "w1") (u256Field 3 "w2") (u256Field 3 "w3")
               (.arg 4)
               (u256Field 5 "w0") (u256Field 5 "w1") (u256Field 5 "w2") (u256Field 5 "w3")
-              (u256Field 6 "w0") (u256Field 6 "w1") (u256Field 6 "w2") (u256Field 6 "w3"),
+              (u256Field 6 "w0") (u256Field 6 "w1") (u256Field 6 "w2") (u256Field 6 "w3")),
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
       ],

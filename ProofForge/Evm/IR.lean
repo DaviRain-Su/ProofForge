@@ -33,17 +33,6 @@ inductive Op where
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
-  | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Ops.Val)
-  | evmTokenTransfer256 (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : Ops.Val)
-  | evmTokenApprove256 (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : Ops.Val)
-  | evmTokenTransferFrom256 (tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 : Ops.Val)
-  | evmTokenBalanceOfSelf (tw0 tw1 tw2 : Ops.Val)
-  | evmWethDeposit256 (tw0 tw1 tw2 a0 a1 a2 a3 : Ops.Val)
-  | evmWethWithdraw256 (tw0 tw1 tw2 a0 a1 a2 a3 : Ops.Val)
-  | evmSwapExact2 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 : Ops.Val)
-  | evmSwapExact3 (rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 : Ops.Val)
-  | evmPermit (o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Ops.Val)
-  | evmTokenPermit (t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 : Ops.Val)
   | component (call : Component.Call Ops.Val)
   | storeField (name : String) (value : Ops.Val)
   | okState (value : Ops.Val)
@@ -91,28 +80,6 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmRevertUnauthorized w0 w1 w2)
   | .ext .revertZeroAddress => pure .evmRevertZeroAddress
   | .ext .receive => pure .evmReceive
-  | .ext (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount) =>
-      pure (.evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
-  | .ext (.tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3) =>
-      pure (.evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3)
-  | .ext (.tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3) =>
-      pure (.evmTokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3)
-  | .ext (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3) =>
-      pure (.evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3)
-  | .ext (.tokenBalanceOfSelf tw0 tw1 tw2) =>
-      pure (.evmTokenBalanceOfSelf tw0 tw1 tw2)
-  | .ext (.wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3) =>
-      pure (.evmWethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3)
-  | .ext (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3) =>
-      pure (.evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3)
-  | .ext (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3) =>
-      pure (.evmSwapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3)
-  | .ext (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3) =>
-      pure (.evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3)
-  | .ext (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3) =>
-      pure (.evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
-  | .ext (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3) =>
-      pure (.evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
   | .ext (.component call) => pure (.component call)
 
 where
@@ -151,27 +118,6 @@ private partial def Op.toSource : Op → Ops.Op
   | .forAccum bound addend resultLocal => .forAccum bound addend resultLocal
   | .forBody bound body => .forBody bound (toSourceOps body)
   | .indexSet name index value len elemOff => .indexSet name index value len elemOff
-  | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-      .ext (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
-  | .evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      .ext (.tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3)
-  | .evmTokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
-      .ext (.tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3)
-  | .evmTokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      .ext (.tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3)
-  | .evmTokenBalanceOfSelf tw0 tw1 tw2 => .ext (.tokenBalanceOfSelf tw0 tw1 tw2)
-  | .evmWethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      .ext (.wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3)
-  | .evmWethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      .ext (.wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3)
-  | .evmSwapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      .ext (.swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3)
-  | .evmSwapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      .ext (.swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3)
-  | .evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      .ext (.permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
-  | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      .ext (.tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3)
   | .component call => .ext (.component call)
   | .storeField name value => .storeField name value
   | .okState value => .okState value
@@ -213,60 +159,6 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
       .revertUnauthorized (mapValue w0) (mapValue w1) (mapValue w2)
   | .revertZeroAddress => .revertZeroAddress
   | .receive => .receive
-  | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-      .tokenTransfer (mapValue tw0) (mapValue tw1) (mapValue tw2)
-        (mapValue dw0) (mapValue dw1) (mapValue dw2) (mapValue amount)
-  | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      .tokenTransfer256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
-        (mapValue dw0) (mapValue dw1) (mapValue dw2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
-      .tokenApprove256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
-        (mapValue sw0) (mapValue sw1) (mapValue sw2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      .tokenTransferFrom256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
-        (mapValue ow0) (mapValue ow1) (mapValue ow2)
-        (mapValue dw0) (mapValue dw1) (mapValue dw2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .tokenBalanceOfSelf tw0 tw1 tw2 =>
-      .tokenBalanceOfSelf (mapValue tw0) (mapValue tw1) (mapValue tw2)
-  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      .wethDeposit256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      .wethWithdraw256 (mapValue tw0) (mapValue tw1) (mapValue tw2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      .swapExact2 (mapValue rw0) (mapValue rw1) (mapValue rw2)
-        (mapValue a0) (mapValue a1) (mapValue a2)
-        (mapValue b0) (mapValue b1) (mapValue b2)
-        (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
-        (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
-  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      .swapExact3 (mapValue rw0) (mapValue rw1) (mapValue rw2)
-        (mapValue a0) (mapValue a1) (mapValue a2)
-        (mapValue b0) (mapValue b1) (mapValue b2)
-        (mapValue c0) (mapValue c1) (mapValue c2)
-        (mapValue i0) (mapValue i1) (mapValue i2) (mapValue i3)
-        (mapValue m0) (mapValue m1) (mapValue m2) (mapValue m3)
-  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      .permit (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2)
-        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
-        (mapValue d0) (mapValue d1) (mapValue d2) (mapValue d3)
-        (mapValue vv)
-        (mapValue r0) (mapValue r1) (mapValue r2) (mapValue r3)
-        (mapValue z0) (mapValue z1) (mapValue z2) (mapValue z3)
-  | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      .tokenPermit (mapValue t0) (mapValue t1) (mapValue t2)
-        (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2)
-        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
-        (mapValue d0) (mapValue d1) (mapValue d2) (mapValue d3)
-        (mapValue vv)
-        (mapValue r0) (mapValue r1) (mapValue r2) (mapValue r3)
-        (mapValue z0) (mapValue z1) (mapValue z2) (mapValue z3)
   | .component call => .component (call.mapValues mapValue)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
@@ -283,27 +175,6 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .revertUnauthorized w0 w1 w2 => #[w0, w1, w2]
   | .revertZeroAddress => #[]
   | .receive => #[]
-  | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-      #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
-  | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3]
-  | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, sw0, sw1, sw2, a0, a1, a2, a3]
-  | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, ow0, ow1, ow2, dw0, dw1, dw2, a0, a1, a2, a3]
-  | .tokenBalanceOfSelf tw0 tw1 tw2 => #[tw0, tw1, tw2]
-  | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, a0, a1, a2, a3]
-  | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-      #[tw0, tw1, tw2, a0, a1, a2, a3]
-  | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, i0, i1, i2, i3, m0, m1, m2, m3]
-  | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-      #[rw0, rw1, rw2, a0, a1, a2, b0, b1, b2, c0, c1, c2, i0, i1, i2, i3, m0, m1, m2, m3]
-  | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      #[o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
-  | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-      #[t0, t1, t2, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3, d0, d1, d2, d3, vv, r0, r1, r2, r3, z0, z1, z2, z3]
   | .component call => call.values
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
@@ -348,64 +219,6 @@ private def projectOpExt
           return .revertUnauthorized (← projectVal w0) (← projectVal w1) (← projectVal w2)
       | .revertZeroAddress => return .revertZeroAddress
       | .receive => return .receive
-      | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
-          return .tokenTransfer (← projectVal tw0) (← projectVal tw1) (← projectVal tw2)
-            (← projectVal dw0) (← projectVal dw1) (← projectVal dw2)
-            (← projectVal amount)
-      | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-          return .tokenTransfer256 (← projectVal tw0) (← projectVal tw1) (← projectVal tw2)
-            (← projectVal dw0) (← projectVal dw1) (← projectVal dw2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
-      | .tokenApprove256 tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 =>
-          return .tokenApprove256 (← projectVal tw0) (← projectVal tw1) (← projectVal tw2)
-            (← projectVal sw0) (← projectVal sw1) (← projectVal sw2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
-      | .tokenTransferFrom256 tw0 tw1 tw2 ow0 ow1 ow2 dw0 dw1 dw2 a0 a1 a2 a3 =>
-          return .tokenTransferFrom256 (← projectVal tw0) (← projectVal tw1)
-            (← projectVal tw2) (← projectVal ow0) (← projectVal ow1) (← projectVal ow2)
-            (← projectVal dw0) (← projectVal dw1) (← projectVal dw2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
-      | .tokenBalanceOfSelf tw0 tw1 tw2 =>
-          return .tokenBalanceOfSelf (← projectVal tw0) (← projectVal tw1)
-            (← projectVal tw2)
-      | .wethDeposit256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-          return .wethDeposit256 (← projectVal tw0) (← projectVal tw1)
-            (← projectVal tw2) (← projectVal a0) (← projectVal a1)
-            (← projectVal a2) (← projectVal a3)
-      | .wethWithdraw256 tw0 tw1 tw2 a0 a1 a2 a3 =>
-          return .wethWithdraw256 (← projectVal tw0) (← projectVal tw1)
-            (← projectVal tw2) (← projectVal a0) (← projectVal a1)
-            (← projectVal a2) (← projectVal a3)
-      | .swapExact2 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-          return .swapExact2 (← projectVal rw0) (← projectVal rw1) (← projectVal rw2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2)
-            (← projectVal b0) (← projectVal b1) (← projectVal b2)
-            (← projectVal i0) (← projectVal i1) (← projectVal i2) (← projectVal i3)
-            (← projectVal m0) (← projectVal m1) (← projectVal m2) (← projectVal m3)
-      | .swapExact3 rw0 rw1 rw2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-          return .swapExact3 (← projectVal rw0) (← projectVal rw1) (← projectVal rw2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2)
-            (← projectVal b0) (← projectVal b1) (← projectVal b2)
-            (← projectVal c0) (← projectVal c1) (← projectVal c2)
-            (← projectVal i0) (← projectVal i1) (← projectVal i2) (← projectVal i3)
-            (← projectVal m0) (← projectVal m1) (← projectVal m2) (← projectVal m3)
-      | .permit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-          return .permit (← projectVal o0) (← projectVal o1) (← projectVal o2)
-            (← projectVal s0) (← projectVal s1) (← projectVal s2)
-            (← projectVal v0) (← projectVal v1) (← projectVal v2) (← projectVal v3)
-            (← projectVal d0) (← projectVal d1) (← projectVal d2) (← projectVal d3)
-            (← projectVal vv)
-            (← projectVal r0) (← projectVal r1) (← projectVal r2) (← projectVal r3)
-            (← projectVal z0) (← projectVal z1) (← projectVal z2) (← projectVal z3)
-      | .tokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-          return .tokenPermit (← projectVal t0) (← projectVal t1) (← projectVal t2)
-            (← projectVal o0) (← projectVal o1) (← projectVal o2)
-            (← projectVal s0) (← projectVal s1) (← projectVal s2)
-            (← projectVal v0) (← projectVal v1) (← projectVal v2) (← projectVal v3)
-            (← projectVal d0) (← projectVal d1) (← projectVal d2) (← projectVal d3)
-            (← projectVal vv)
-            (← projectVal r0) (← projectVal r1) (← projectVal r2) (← projectVal r3)
-            (← projectVal z0) (← projectVal z1) (← projectVal z2) (← projectVal z3)
       | .component call =>
           return .component (← call.mapValuesM projectVal)
 
@@ -827,28 +640,6 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .indexSet n i v k off =>
         if off == 0 then s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
         else s!"iset.{n}+{off}[{valCanon i}/{k}]({valCanon v})"
-    | .evmTokenTransfer a b c d e f g =>
-        s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
-    | .evmTokenTransfer256 a b c d e f g0 g1 g2 g3 =>
-        s!"ttxfer256({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g0},{valCanon g1},{valCanon g2},{valCanon g3})"
-    | .evmTokenApprove256 a b c d e f g0 g1 g2 g3 =>
-        s!"tapprove256({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g0},{valCanon g1},{valCanon g2},{valCanon g3})"
-    | .evmTokenTransferFrom256 a b c d e f g h i j k l m =>
-        s!"ttxferfrom256({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g},{valCanon h},{valCanon i},{valCanon j},{valCanon k},{valCanon l},{valCanon m})"
-    | .evmTokenBalanceOfSelf a b c =>
-        s!"tbal({valCanon a},{valCanon b},{valCanon c})"
-    | .evmWethDeposit256 a b c d0 d1 d2 d3 =>
-        s!"wethdep({valCanon a},{valCanon b},{valCanon c},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3})"
-    | .evmWethWithdraw256 a b c d0 d1 d2 d3 =>
-        s!"wethwd({valCanon a},{valCanon b},{valCanon c},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3})"
-    | .evmSwapExact2 r0 r1 r2 a0 a1 a2 b0 b1 b2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-        s!"swap2({valCanon r0},{valCanon r1},{valCanon r2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon b0},{valCanon b1},{valCanon b2},{valCanon i0},{valCanon i1},{valCanon i2},{valCanon i3},{valCanon m0},{valCanon m1},{valCanon m2},{valCanon m3})"
-    | .evmSwapExact3 r0 r1 r2 a0 a1 a2 b0 b1 b2 c0 c1 c2 i0 i1 i2 i3 m0 m1 m2 m3 =>
-        s!"swap3({valCanon r0},{valCanon r1},{valCanon r2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon b0},{valCanon b1},{valCanon b2},{valCanon c0},{valCanon c1},{valCanon c2},{valCanon i0},{valCanon i1},{valCanon i2},{valCanon i3},{valCanon m0},{valCanon m1},{valCanon m2},{valCanon m3})"
-    | .evmPermit o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-        s!"permit({valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon v0},{valCanon v1},{valCanon v2},{valCanon v3},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3},{valCanon vv},{valCanon r0},{valCanon r1},{valCanon r2},{valCanon r3},{valCanon z0},{valCanon z1},{valCanon z2},{valCanon z3})"
-    | .evmTokenPermit t0 t1 t2 o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 d0 d1 d2 d3 vv r0 r1 r2 r3 z0 z1 z2 z3 =>
-        s!"tpermit({valCanon t0},{valCanon t1},{valCanon t2},{valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon v0},{valCanon v1},{valCanon v2},{valCanon v3},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3},{valCanon vv},{valCanon r0},{valCanon r1},{valCanon r2},{valCanon r3},{valCanon z0},{valCanon z1},{valCanon z2},{valCanon z3})"
     | .component call => call.canonical valCanon
     | .storeField n v => s!"st.{n}({valCanon v})"
     | .okState v => s!"ok({valCanon v})"
