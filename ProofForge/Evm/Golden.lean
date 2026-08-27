@@ -899,12 +899,103 @@ def extractedConst : IR.Program :=
     ]
   }
 
+/-- Live extract of `Examples.Capped`; reuses owner + pause + cap, no hashed map. -/
+def extractedCapped : IR.Program :=
+  let nextSupply (limb : Nat) : Ops.Val :=
+    Ops.arith256 0 limb
+      (.field (.arg 1) "supply_w0") (.field (.arg 1) "supply_w1")
+      (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
+      (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")
+  {
+    name := "Capped"
+    slots := #[
+      { name := "paused", index := 0, width := 1 },
+      { name := "cap_w0", index := 1, width := 8 },
+      { name := "cap_w1", index := 2, width := 8 },
+      { name := "cap_w2", index := 3, width := 8 },
+      { name := "cap_w3", index := 4, width := 8 },
+      { name := "supply_w0", index := 5, width := 8 },
+      { name := "supply_w1", index := 6, width := 8 },
+      { name := "supply_w2", index := 7, width := 8 },
+      { name := "supply_w3", index := 8, width := 8 }
+    ]
+    constructor := {
+      kind := .init
+      name := "Examples.Capped.init"
+      ixName := "initialize"
+      paramCount := 1
+      paramWidths := #[20]
+      ops := #[
+        .returnState (.lit 0),
+        .returnState (.lit 100),
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 0)
+      ]
+    }
+    entries := #[
+      mutEntry "Capped" "mint" 1 #[32] (ownerGate (guardPaused 1 (guardCap 1 0 #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.letLocal 0 (nextSupply 1),
+            .letLocal 1 (nextSupply 2),
+            .letLocal 2 (nextSupply 3),
+            .storeField "supply_w0" (nextSupply 0),
+            .storeField "supply_w1" (.local 0),
+            .storeField "supply_w2" (.local 1),
+            .storeField "supply_w3" (.local 2),
+            .okState (u256Field 0 "w0")]
+          #[.errorOverflow]
+      ]))),
+      mutEntry "Capped" "pause" 0 #[] (ownerGate #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.storeField "paused" (.lit 1), .okState (.lit 1)]
+          #[.errorOverflow]
+      ]),
+      mutEntry "Capped" "unpause" 0 #[] (ownerGate #[
+        .ite .ne (.lit 0) (.lit 1)
+          #[.storeField "paused" (.lit 0), .okState (.lit 0)]
+          #[.errorOverflow]
+      ]),
+      view256 "Capped" "capOf" 0 #[] (return256 fun limb =>
+        .field (.arg 0) s!"cap_{limbName limb}"),
+      {
+        kind := .get
+        name := "Examples.Capped.ownerOf"
+        ixName := "ownerOf"
+        selector := Keccak.selectorOfWidths "ownerOf" #[]
+        retWidths := #[20]
+        retCount := 3
+        ops := #[
+          .returnU64 (.ext .immW0 #[]),
+          .returnU64 (.ext .immW1 #[]),
+          .returnU64 (.ext .immW2 #[])
+        ]
+        view := true
+      },
+      {
+        kind := .get
+        name := "Examples.Capped.pausedOf"
+        ixName := "pausedOf"
+        selector := Keccak.selectorOfWidths "pausedOf" #[]
+        retWidths := #[1]
+        ops := #[.returnU64 (.field (.arg 0) "paused")]
+        view := true
+      },
+      view256 "Capped" "totalSupply" 0 #[] (return256 fun limb =>
+        .field (.arg 0) s!"supply_{limbName limb}")
+    ]
+  }
+
 def programs : Array IR.Program :=
   (sources.filterMap fun src =>
     match IR.fromProgram src with
     | .ok p => some p
     | .error _ => none) ++ #[extractedTipJar, extractedVault, extractedToken, extractedWide,
-      extractedConst, extractedOwnable]
+      extractedConst, extractedOwnable, extractedCapped]
 
 def digestOf (name : String) : Option String :=
   (programs.find? (·.name == name)).map IR.digestHex

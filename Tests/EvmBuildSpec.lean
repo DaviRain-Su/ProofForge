@@ -14,6 +14,7 @@ import Examples.Lang
 import Examples.Vault
 import Examples.Ownable
 import Examples.Token
+import Examples.Capped
 import Examples.Wide
 import Examples.Const
 import Tests.Fixtures
@@ -41,6 +42,8 @@ import Tests.Fixtures
 #pf_evm_build Examples.Ownable
 
 #pf_evm_build Examples.Token
+
+#pf_evm_build Examples.Capped
 
 #pf_evm_build Examples.Wide
 

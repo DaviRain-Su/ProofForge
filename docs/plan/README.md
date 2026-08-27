@@ -53,6 +53,7 @@
 | [e-comp-013](tasks/e-comp-013.md) | done | 地址谓词 isZero20 / eqImm20 |
 | [e-pause-001](tasks/e-pause-001.md) | done | Token owner mint + Paused |
 | [e-cap-001](tasks/e-cap-001.md) | done | Token mint cap + CapExceeded |
+| [e-capped-001](tasks/e-capped-001.md) | done | Capped 复用 owner + pause + cap |
 | [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |
