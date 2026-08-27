@@ -547,6 +547,15 @@ fn raw_place_data(
     data
 }
 
+fn place_return_data(price: u64, encoded_sequence: u64) -> Vec<u8> {
+    // Official Phoenix sets Borsh `Vec<FIFOOrderId>` return data after event CPIs.
+    let mut data = 1u32.to_le_bytes().to_vec();
+    data.extend_from_slice(&price.to_le_bytes());
+    data.extend_from_slice(&encoded_sequence.to_le_bytes());
+    assert_eq!(data.len(), 20);
+    data
+}
+
 fn raw_reduce_data(side: u8, price: u64, sequence: u64, size: u64) -> Vec<u8> {
     raw_reduce_data_for_tag(5, side, price, sequence, size)
 }
@@ -1349,7 +1358,7 @@ fn official_raw_place_post_only_bid_locks_quote_and_emits_exact_record() {
         ),
         &[
             Check::success(),
-            Check::return_data(&(!12u64).to_le_bytes()),
+            Check::return_data(&place_return_data(5, !12u64)),
         ],
     );
     let market = resulting_account(&result, &market_key);
@@ -1414,7 +1423,10 @@ fn official_raw_place_post_only_ask_locks_base_and_keeps_sequence_domains_separa
             seat_key,
             seat_account(market_key, trader_key),
         ),
-        &[Check::success(), Check::return_data(&7u64.to_le_bytes())],
+        &[
+            Check::success(),
+            Check::return_data(&place_return_data(9, 7)),
+        ],
     );
     let market = resulting_account(&result, &market_key);
     assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);

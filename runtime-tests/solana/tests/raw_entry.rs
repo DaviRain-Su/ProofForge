@@ -11,10 +11,26 @@ use {
 
 const TAG: u8 = 7;
 const BORSH_TAG: u8 = 8;
+const PAIR_TAG: u8 = 9;
+const BORSH_PAIR_TAG: u8 = 10;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
     data.extend_from_slice(&wide.to_le_bytes());
+    data
+}
+
+fn bounded_pair_data(left: u64, right: u64) -> Vec<u8> {
+    let mut data = vec![PAIR_TAG];
+    data.extend_from_slice(&left.to_le_bytes());
+    data.extend_from_slice(&right.to_le_bytes());
+    data
+}
+
+fn borsh_singleton_pair_data(left: u64, right: u64) -> Vec<u8> {
+    let mut data = vec![BORSH_PAIR_TAG];
+    data.extend_from_slice(&left.to_le_bytes());
+    data.extend_from_slice(&right.to_le_bytes());
     data
 }
 
@@ -116,6 +132,67 @@ fn packed_u8_and_u64_are_widened_at_exact_offsets() {
             None,
         ),
         &[Check::success(), Check::return_data(&43u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn effectful_bounded_pair_returns_two_consecutive_scalars() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    let mut expected = 11u64.to_le_bytes().to_vec();
+    expected.extend_from_slice(&29u64.to_le_bytes());
+    let ix = raw_instruction(
+        program_id,
+        program_id,
+        signer,
+        true,
+        &bounded_pair_data(11, 29),
+        None,
+    );
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &raw_accounts(program_id, program_account.clone(), signer, None),
+        &[Check::success(), Check::return_data(&expected)],
+    );
+    expect_raw_error(
+        &mollusk,
+        program_id,
+        program_id,
+        program_account,
+        true,
+        &bounded_pair_data(30, 29),
+    );
+}
+
+#[test]
+fn packed_return_codec_emits_one_borsh_pair() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    let mut expected = 1u32.to_le_bytes().to_vec();
+    expected.extend_from_slice(&11u64.to_le_bytes());
+    expected.extend_from_slice(&29u64.to_le_bytes());
+    let ix = raw_instruction(
+        program_id,
+        program_id,
+        signer,
+        true,
+        &borsh_singleton_pair_data(11, 29),
+        None,
+    );
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &raw_accounts(program_id, program_account.clone(), signer, None),
+        &[Check::success(), Check::return_data(&expected)],
+    );
+    expect_raw_error(
+        &mollusk,
+        program_id,
+        program_id,
+        program_account,
+        true,
+        &borsh_singleton_pair_data(30, 29),
     );
 }
 

@@ -1,4 +1,5 @@
 import ProofForge
+import Examples.PhoenixV1Layout
 
 /-!
 Phoenix v1 market-account profile gate.
@@ -18,6 +19,7 @@ instruction set.
 namespace Projects.PhoenixV1Profile
 
 open ProofForge.Svm.Runtime
+open ProofForge.Svm
 
 def phoenixProgramOwner0 : UInt64 := 11497730047637682189
 def phoenixProgramOwner1 : UInt64 := 2178672117088209453
@@ -1642,22 +1644,24 @@ one-based indexes plus the zero sentinel.
 -/
 def placePostOnlyFreeFunds512At (marketAccount traderAccount side price baseLots clientIdLow
     clientIdHigh : UInt64) : Except Error UInt64 := do
-  if cancelAllStorageValid512At marketAccount = 0 || price = 0 || baseLots = 0 then
+  let layout := Examples.PhoenixV1.small 2
+  if marketAccount ≠ 2 || traderAccount ≠ 3 ||
+      cancelAllStorageValid512At marketAccount = 0 || price = 0 || baseLots = 0 then
     .error .overflow
   else
-    let status := accDataWord marketAccount 1
+    let status := layout.status
     let bid := side = 0
     let selectedSize :=
-      if bid then accDataWord marketAccount 112 else accDataWord marketAccount 4212
+      if bid then layout.bidSize else layout.askSize
     let oppositeSize :=
-      if bid then accDataWord marketAccount 4212 else accDataWord marketAccount 112
-    let orderSequence := accDataWord marketAccount 106
-    let marketSequence := accDataWord marketAccount 34
+      if bid then layout.askSize else layout.bidSize
+    let orderSequence := layout.orderSequence
+    let marketSequence := layout.marketSequence
     if (status ≠ 1 && status ≠ 2) || selectedSize ≥ 512 || oppositeSize ≠ 0 ||
         orderSequence = 0 || orderSequence ≥ maxOrderSequence || marketSequence = u64Max then
       .error .overflow
     else
-      let traderIndex := accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
+      let traderIndex := layout.findTrader
         (signerKey traderAccount) (accKeyWord traderAccount 1)
         (accKeyWord traderAccount 2) (accKeyWord traderAccount 3)
       if traderIndex = 0 then
@@ -1666,11 +1670,9 @@ def placePostOnlyFreeFunds512At (marketAccount traderAccount side price baseLots
         let encodedSequence := if bid then ~~~orderSequence else orderSequence
         let duplicate :=
           if bid then
-            accDataRbTreeOrderFind marketAccount 110 114 115 116 117 8 512 1
-              price encodedSequence
+            layout.findBid price encodedSequence
           else
-            accDataRbTreeOrderFind marketAccount 4210 4214 4215 4216 4217 8 512 0
-              price encodedSequence
+            layout.findAsk price encodedSequence
         if duplicate ≠ 0 then
           .error .overflow
         else if bid then
@@ -1678,37 +1680,31 @@ def placePostOnlyFreeFunds512At (marketAccount traderAccount side price baseLots
           if quoteLots = 0 then
             .error .overflow
           else
-            let locked := accDataWordAtOneBased marketAccount 8320 18 128 traderIndex
-            let free := accDataWordAtOneBased marketAccount 8321 18 128 traderIndex
+            let locked := layout.quoteLocked traderIndex
+            let free := layout.quoteFree traderIndex
             if quoteLots > free || locked > u64Max - quoteLots then
               .error .overflow
             else
-              let _ := accDataRbTreeOrderInsert marketAccount 110 114 115 116 117 8 512 1
-                price encodedSequence traderIndex baseLots 0 0
-              let _ := accDataWordSetAtOneBased marketAccount 8320 18 128
-                traderIndex (locked + quoteLots)
-              let _ := accDataWordSetAtOneBased marketAccount 8321 18 128
-                traderIndex (free - quoteLots)
-              let _ := accDataWordSetAt marketAccount 106 1 1 0 (orderSequence + 1)
-              let _ := accDataWordSetAt marketAccount 34 1 1 0 (marketSequence + 1)
+              let _ := layout.insertBid price encodedSequence traderIndex baseLots 0 0
+              let _ := layout.setQuoteLocked traderIndex (locked + quoteLots)
+              let _ := layout.setQuoteFree traderIndex (free - quoteLots)
+              let _ := layout.setOrderSequence (orderSequence + 1)
+              let _ := layout.setMarketSequence (marketSequence + 1)
               let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
               let _ := recordPlaceAt encodedSequence clientIdLow clientIdHigh price baseLots
               let _ := finishMarketBatch
               .ok encodedSequence
         else
-          let locked := accDataWordAtOneBased marketAccount 8322 18 128 traderIndex
-          let free := accDataWordAtOneBased marketAccount 8323 18 128 traderIndex
+          let locked := layout.baseLocked traderIndex
+          let free := layout.baseFree traderIndex
           if baseLots > free || locked > u64Max - baseLots then
             .error .overflow
           else
-            let _ := accDataRbTreeOrderInsert marketAccount 4210 4214 4215 4216 4217 8 512 0
-              price encodedSequence traderIndex baseLots 0 0
-            let _ := accDataWordSetAtOneBased marketAccount 8322 18 128
-              traderIndex (locked + baseLots)
-            let _ := accDataWordSetAtOneBased marketAccount 8323 18 128
-              traderIndex (free - baseLots)
-            let _ := accDataWordSetAt marketAccount 106 1 1 0 (orderSequence + 1)
-            let _ := accDataWordSetAt marketAccount 34 1 1 0 (marketSequence + 1)
+            let _ := layout.insertAsk price encodedSequence traderIndex baseLots 0 0
+            let _ := layout.setBaseLocked traderIndex (locked + baseLots)
+            let _ := layout.setBaseFree traderIndex (free - baseLots)
+            let _ := layout.setOrderSequence (orderSequence + 1)
+            let _ := layout.setMarketSequence (marketSequence + 1)
             let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
             let _ := recordPlaceAt encodedSequence clientIdLow clientIdHigh price baseLots
             let _ := finishMarketBatch
@@ -1732,14 +1728,17 @@ Official tag-3 wire, restricted to `OrderPacket::PostOnly`, two canonical `None`
 markers, deposited funds only, and hard insufficient-funds failure:
 `03 || 00 || side || price:u64 || base:u64 || client:u128 || reject || 01 || 00 || 00 || 00`.
 The bounded storage transition accepts either canonical reject flag because the opposite book must
-be empty. This slice returns the encoded sequence scalar; a subsequent generic raw-return plan will
-extend it to Phoenix's complete 16-byte `(price, sequence)` return without adding a protocol opcode.
+be empty. Official Phoenix serializes its collected IDs as a Borsh `Vec<FIFOOrderId>` after all
+event CPIs: this strict slice always rests one order, so success is exactly
+`01 00 00 00 || price:u64 || encoded_sequence:u64`. The three scalar leaves use a fixed-width
+EntryAdapter return plan; no protocol return opcode or runtime allocation is involved.
 -/
-@[pf_entry, pf_svm_raw 3 5 0]
+@[pf_entry, pf_svm_raw_return 3 5 0 [4, 8, 8]]
 def placeLimitOrderWithFreeFunds (_s : State) (variant side : UInt8)
     (price baseLots clientIdLow clientIdHigh : UInt64)
     (rejectPostOnly useOnlyDepositedFunds lastValidSlot lastValidUnixTimestamp
-      failSilentlyOnInsufficientFunds : UInt8) : Except Error (State × UInt64) := do
+      failSilentlyOnInsufficientFunds : UInt8) :
+    Except Error (State × (UInt32 × (UInt64 × UInt64))) := do
   if variant ≠ 0 || (side ≠ 0 && side ≠ 1) ||
       (rejectPostOnly ≠ 0 && rejectPostOnly ≠ 1) || useOnlyDepositedFunds ≠ 1 ||
       lastValidSlot ≠ 0 || lastValidUnixTimestamp ≠ 0 ||
@@ -1748,7 +1747,7 @@ def placeLimitOrderWithFreeFunds (_s : State) (variant side : UInt8)
   else
     let encodedSequence ← placePostOnlyFreeFunds512At 2 3 side.toUInt64 price baseLots
       clientIdLow clientIdHigh
-    .ok (_s, encodedSequence)
+    .ok (_s, ((1 : UInt32), (price, encodedSequence)))
 
 /--
 Official Phoenix `ReduceOrderWithFreeFunds` wire for the smallest static profile:

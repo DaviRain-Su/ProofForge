@@ -393,16 +393,18 @@ private partial def scalarizeRawOp : Op → Op
 private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String Method := do
   let entry ← EntryAdapter.decode method.annotations method.paramCount method.paramWidths
+    method.retCount
   let ops ← ofSourceOps method.ops
   let (kind, ops) ←
     match entry with
     | .generated => pure (method.kind, ops)
     | .raw _ =>
         unless method.kind == .get || method.kind == .increment do
-          throw s!"extract/unsupported: svm raw entry {method.ixName} must return a scalar result"
-        -- `Except Error (State × UInt64)` is the source-level spelling for an effectful scalar
-        -- protocol handler. Its success terminator already carries only the scalar return value;
-        -- external account effects stay in place and no managed-State writeback is introduced.
+          throw s!"extract/unsupported: svm raw entry {method.ixName} must return bounded scalars"
+        -- `Except Error (State × R)` is the source-level spelling for an effectful protocol
+        -- handler, where R is one scalar or a bounded scalar product. Scalar success shorthands
+        -- are normalized here; explicit tuple returns already use Core's generic return sequence.
+        -- External account effects stay in place and no managed-State writeback is introduced.
         pure (.get, ops.map scalarizeRawOp)
   return {
     kind
@@ -456,7 +458,7 @@ private def validateRawMethod (method : Method) : Except String Unit := do
   | .generated => pure ()
   | .raw _ =>
       unless method.kind == .get do
-        throw s!"extract/unsupported: svm raw entry {method.ixName} must return a scalar"
+        throw s!"extract/unsupported: svm raw entry {method.ixName} must return bounded scalars"
       if hasStoreField method.ops || hasIndexSet method.ops ||
           rawOpsUseManagedState method.paramCount method.ops then
         throw s!"extract/unsupported: svm raw entry {method.ixName} must use external account storage, not managed State"

@@ -4549,27 +4549,15 @@ private def emitCFGInitialize (p : IR.Program) (marker scope : String)
 "
 
 private def emitCFGReturnValues (p : IR.Program) (scope : String)
-    (values : Array Ops.Val) (fresh : Nat) : Except String String := do
-  if values.isEmpty then throw "svm/cfg: empty return tuple"
-  let byteCount := values.size * 8
-  if byteCount > loopCounterScratch then
-    throw "extract/unsupported: return tuple exceeds scalar scratch"
-  let mut body := ""
-  let mut n := fresh
-  for i in [0:values.size] do
-    let stackOff := byteCount - i * 8
-    body := body ++ (← loadVal p values[i]! stackOff n s!"{scope}_return_{i}")
-    n := n + 1
-  return body ++ s!"\
-  mov64 r1, r10
-  add64 r1, -{byteCount}
-  lddw r2, {byteCount}
-  call sol_set_return_data
-  lddw r0, 0
-  exit
-"
+    (packedWidths : Option (Array Nat)) (values : Array Ops.Val) (fresh : Nat) :
+    Except String String :=
+  let widths := packedWidths.getD (Array.replicate values.size 8)
+  EntryAdapter.Emit.emitReturnValues
+    (fun value stackOff nonce valueScope => loadVal p value stackOff nonce valueScope)
+    loopCounterScratch widths values fresh scope
 
 private def makeCFGNode (p : IR.Program) (marker handler : String)
+    (packedReturnWidths : Option (Array Nat))
     (hints : Array (Core.CFG.BlockId × CFGResultHint))
     (block : Core.CFG.Block Ops.ValKind Ops.OpExt) : Except String CFGAsmNode := do
   unless block.params.isEmpty do
@@ -4630,10 +4618,11 @@ private def makeCFGNode (p : IR.Program) (marker handler : String)
             | _ => "0x1"
           template := template ++ s!"  ; named error {name}\n  lddw r0, {code}\n  exit\n"
       | .returnU64 value =>
-          let (exitText, _) ← emitOps p scope handler #[.returnU64 value] fresh
-          template := template ++ exitText
+          template := template ++
+            (← emitCFGReturnValues p scope packedReturnWidths #[value] fresh)
       | .returnU64s values =>
-          template := template ++ (← emitCFGReturnValues p scope values fresh)
+          template := template ++
+            (← emitCFGReturnValues p scope packedReturnWidths values fresh)
       | .returnState value =>
           let (exitText, _) ← emitOps p scope handler #[.returnState value] fresh
           template := template ++ exitText
@@ -4650,10 +4639,14 @@ private def emitCFGBody (p : IR.Program) (marker handler : String) (method : IR.
     Except String String := do
   let graph ← method.toCFG
   let hints := cfgResultHints p graph
+  let packedReturnWidths := match method.entry with
+    | .raw entry => if entry.returnWidths.isEmpty then none else some entry.returnWidths
+    | .generated => none
   let nextId := graph.blocks.foldl (init := 0) fun next block => max next (block.id + 1)
   let mut nodes := Array.replicate nextId (default : CFGAsmNode)
   for block in graph.blocks do
-    nodes := nodes.set! block.id (← makeCFGNode p marker handler hints block)
+    nodes := nodes.set! block.id
+      (← makeCFGNode p marker handler packedReturnWidths hints block)
   let layout := graph.reachable
   let (splitNodes, layout, nextId) ← splitLargeCFGNodes handler nodes layout nextId
   let (finalNodes, layout) ← insertCFGRelays handler splitNodes layout nextId 100000
