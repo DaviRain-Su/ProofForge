@@ -53,8 +53,8 @@ import Examples.TokenOwner
 import Examples.TokenMs
 import Examples.SelfLog
 import Examples.RawEntry
-import Projects.Phoenix
-import Projects.PhoenixV1Profile
+import Examples.Phoenix
+import Examples.PhoenixV1Profile
 
 
 #pf_build Examples.Counter
@@ -153,9 +153,9 @@ import Projects.PhoenixV1Profile
 
 #pf_build Examples.RawEntry
 
-#pf_build Projects.Phoenix
+#pf_build Examples.Phoenix
 
-#pf_build Projects.PhoenixV1Profile
+#pf_build Examples.PhoenixV1Profile
 
 /--
 error: extract/unsupported: svm rejects evm leaf

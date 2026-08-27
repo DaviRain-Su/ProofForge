@@ -1,12 +1,21 @@
-import Projects.PhoenixV1Profile
+import Examples.PhoenixV1Profile
 import ProofForge
 
 namespace Tests.PhoenixV1ProfileSpec
 
-open Projects.PhoenixV1Profile
+open Examples.PhoenixV1Profile
 open Lean Elab Command
 
 set_option maxRecDepth 2048
+
+#guard (Examples.PhoenixV1.small 2).wellFormed
+#guard (Examples.PhoenixV1.small 2).accountBytes == 84944
+#guard (Examples.PhoenixV1.small 2).bids.map ==
+  ProofForge.Svm.AccountStorage.RbMap.fifoOneBased 2 110 114 115 116 117 8 512 true
+#guard (Examples.PhoenixV1.small 2).asks.map ==
+  ProofForge.Svm.AccountStorage.RbMap.fifoOneBased 2 4210 4214 4215 4216 4217 8 512 false
+#guard (Examples.PhoenixV1.small 2).traders.map ==
+  ProofForge.Svm.AccountStorage.RbMap.key4OneBased 2 8310 8314 8315 8316 18 128
 
 #guard accountBytesFor 512 512 128 == 84944
 #guard accountBytesFor 512 512 1025 == 214112
@@ -72,6 +81,10 @@ set_option maxRecDepth 2048
 
 private partial def valHasDataWord (acc word : Nat) : ProofForge.Svm.Ops.Val → Bool
   | .ext (.accDataWord actualAcc actualWord) _ => actualAcc == acc && actualWord == word
+  | .ext (.component (.accountStorage (.readWord field))) operands =>
+      (field.region.account == acc && field.firstWord == word &&
+        field.region.strideWords == 1 && field.region.capacity == 1) ||
+        operands.any (valHasDataWord acc word)
   | .field base _ | .bitNot base => valHasDataWord acc word base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
   | .shiftL lhs rhs | .shiftR lhs rhs
@@ -823,7 +836,7 @@ private def traceBefore (first second : Nat) : List Nat → Bool
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Projects.PhoenixV1Profile none with
+    match ProofForge.Extract.extractModuleIR env `Examples.PhoenixV1Profile none with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←
@@ -914,12 +927,23 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing raw CancelUpToWithFreeFunds"
   match placeRaw.entry with
   | .raw entry =>
-      unless placeRaw.kind == .get && entry.tag == 3 && entry.accountCount == 5 &&
+      unless placeRaw.kind == .get && placeRaw.retCount == 3 &&
+          entry.tag == 3 && entry.accountCount == 5 &&
           entry.programAccount == 0 &&
           entry.paramWidths == #[1, 1, 8, 8, 8, 8, 1, 1, 1, 1, 1] &&
-          entry.dataLen == 40 do
+          entry.dataLen == 40 && entry.returnWidths == #[4, 8, 8] &&
+          entry.returnDataLen == 20 do
         throwError s!"wrong raw PlaceLimitOrderWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "PlaceLimitOrderWithFreeFunds lost its raw adapter"
+  let placeCfg ←
+    match placeRaw.toCFG with
+    | .ok graph => pure graph
+    | .error reason => throwError reason
+  unless placeCfg.blocks.any fun block =>
+      match block.terminator with
+      | .exit (.returnU64s values) => values.size == 3
+      | _ => false do
+    throwError "PlaceLimitOrderWithFreeFunds did not use the generic three-scalar CFG return"
   match reduceRaw.entry with
   | .raw entry =>
       unless reduceRaw.kind == .get && entry.tag == 5 && entry.accountCount == 4 &&
@@ -972,7 +996,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveIntrinsic
         (· == .checkPdaSeeds 3 #[.ascii "seat", .accKey 1, .accKey 2]) placeRaw.ops &&
       opsHaveDataWord 4 0 placeRaw.ops && opsHaveDataWord 4 9 placeRaw.ops &&
-      opsHaveDataWord 2 34 placeRaw.ops && opsHaveDataWord 2 106 placeRaw.ops &&
+      opsHaveIndexedDataWord 2 1 1 1 placeRaw.ops &&
+      opsHaveIndexedDataWord 2 34 1 1 placeRaw.ops &&
+      opsHaveIndexedDataWord 2 106 1 1 placeRaw.ops &&
+      opsHaveIndexedDataWord 2 112 1 1 placeRaw.ops &&
+      opsHaveIndexedDataWord 2 4212 1 1 placeRaw.ops &&
       opsHaveAccountQuery (fun
         | .key4RbTreeValid tree => tree.links.region.account == 2
         | _ => false) placeRaw.ops &&

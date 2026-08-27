@@ -101,7 +101,7 @@ variant 使用一叶 tag + 最宽构造子的 payload，短构造子规范补零
 fail closed。`#pf_extract … with "a","b"` 仍可覆盖槽名，且必须与 schema 导出的表一致。
 ops 里出现的字段名必须在表内。
 
-用户合约不绑仓库目录名。`#pf_build Ns` 收任意名字空间下的 `@[pf_entry]`。字段投影认已注册 structure，排除 `ProofForge` / `Lean` / `Std` / `Init`。`Examples.` / `Projects.` 不是准入条件。
+用户合约不绑仓库目录名。`#pf_build Ns` 收任意名字空间下的 `@[pf_entry]`。字段投影认已注册 structure，排除 `ProofForge` / `Lean` / `Std` / `Init`；`Examples.` 本身不是准入条件。
 
 `@[pf_entry]` 只是标记。种类从返回类型推断：structure → init；`Except` → mutate；`UInt64` → view。Lean `init` 的链上名是 `initialize`。允许多个 init / mutate / view；槽表从名为 `init` 的那个收。重复链上名 fail closed。`init` 的 `paramCount` 按 λ 个数算。抽出按类型展开槽名（`name_tag` / `name_i`），不按合约字段名写死。
 

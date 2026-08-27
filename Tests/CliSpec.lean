@@ -17,8 +17,7 @@ namespace Tests.CliSpec
   | .ok o => o.target == .evm && o.outDir.toString == "out" && o.names == #["Counter", "Pair"]
   | .error _ => false
 
-#guard ProofForge.Cli.svmModuleName "Phoenix" == `Projects.Phoenix
+#guard ProofForge.Cli.svmModuleName "Phoenix" == `Examples.Phoenix
 #guard ProofForge.Cli.svmModuleName "Counter" == `Examples.Counter
-#guard ProofForge.Cli.projectPrograms.contains "Phoenix"
 
 end Tests.CliSpec

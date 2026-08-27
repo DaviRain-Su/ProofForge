@@ -579,8 +579,40 @@ private def inlineHelperPreservesUserType (env : Environment) (name : Name) : Bo
       | _, _ => false
   | _ => false
 
-/-- Reduce `({ s with field := value }).field` before scalar lowering. -/
-private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr := do
+/- Reduce projections through constructor literals and pure `pf_inline` descriptor builders. This
+is the compile-time erasure boundary used by static account-storage handles: nested layout records
+may improve source naming without constructing descriptors or carrying geometry at runtime. State
+helpers are deliberately excluded because their projections own mutable transition semantics. -/
+mutual
+  private partial def normalizePureInlineToCtor? (env : Environment) (fuel : Nat)
+      (ctorName : Name) (e : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if e.getAppFn.constName? == some ctorName then some e
+      else if let some reduced := reduceCtorProjectionFuel? env fuel' e then
+        normalizePureInlineToCtor? env fuel' ctorName reduced
+      else if let some (helper, unfolded) := unfoldUserHelper env e then
+        if inlineHelperPreservesUserType env helper then none
+        else normalizePureInlineToCtor? env fuel' ctorName unfolded
+      else none
+
+  private partial def reduceCtorProjectionFuel? (env : Environment) (fuel : Nat)
+      (e : Expr) : Option Expr := do
+    let fuel' ← match fuel with | 0 => none | fuel' + 1 => some fuel'
+    let projection ← e.getAppFn.constName?
+    let projectionInfo ← env.getProjectionFnInfo? projection
+    let args := e.getAppArgs
+    let base ← args[args.size - 1]?
+    let ctor ← normalizePureInlineToCtor? env fuel' projectionInfo.ctorName base
+    let .ctorInfo ctorInfo ← env.find? projectionInfo.ctorName | none
+    let fields := ctor.getAppArgs
+    if fields.size < ctorInfo.numFields || projectionInfo.i ≥ ctorInfo.numFields then none
+    else fields[fields.size - ctorInfo.numFields + projectionInfo.i]?
+end
+
+private def reduceDirectCtorProjection? (env : Environment) (e : Expr) : Option Expr := do
   let projection ← e.getAppFn.constName?
   let projectionInfo ← env.getProjectionFnInfo? projection
   let args := e.getAppArgs
@@ -592,6 +624,120 @@ private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :
   let fields := base.getAppArgs
   if fields.size < ctor.numFields || projectionInfo.i ≥ ctor.numFields then none
   else fields[fields.size - ctor.numFields + projectionInfo.i]?
+
+private def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :=
+  reduceDirectCtorProjection? env e <|> do
+    let projection ← e.getAppFn.constName?
+    let name := projection.toString
+    if !name.startsWith "ProofForge.Svm.AccountStorage." &&
+        !Attr.isInline env projection then none else pure ()
+    reduceCtorProjectionFuel? env 64 e
+
+private partial def normalizePureInlineCtorOf? (env : Environment) (fuel : Nat)
+    (inductName : Name) (e : Expr) : Option Expr :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    let isCtor :=
+      match e.getAppFn.constName?.bind env.find? with
+      | some (.ctorInfo ctor) => ctor.induct == inductName
+      | _ => false
+    if isCtor then some e
+    else if let some reduced := reduceCtorProjectionFuel? env fuel' e then
+      normalizePureInlineCtorOf? env fuel' inductName reduced
+    else if let some (helper, unfolded) := unfoldUserHelper env e then
+      if inlineHelperPreservesUserType env helper then none
+      else normalizePureInlineCtorOf? env fuel' inductName unfolded
+    else none
+
+/-- Iota-reduce a matcher only when its discriminant is a constructor literal obtained through
+pure marked descriptor builders. Dynamic contract variants keep their existing explicit lowering. -/
+private def reducePureInlineMatch? (env : Environment) (e : Expr) : Option Expr := do
+  let matcherName ← e.getAppFn.constName?
+  if !matcherName.toString.startsWith "ProofForge.Svm.AccountStorage.Source." then none else pure ()
+  let matcher ← Lean.Meta.getMatcherInfoCore? env matcherName
+  if matcher.numDiscrs != 1 then none else pure ()
+  let decl ← env.find? matcherName
+  let discrType ← forallDomainAt? 32 matcher.getFirstDiscrPos decl.type
+  let inductName ← discrType.consumeMData.getAppFn.constName?
+  let .inductInfo induct ← env.find? inductName | none
+  if induct.isRec then none else pure ()
+  let args := e.getAppArgs
+  let discrExpr ← args[matcher.getFirstDiscrPos]?
+  let discr ← normalizePureInlineCtorOf? env 64 inductName discrExpr
+  let ctorName ← discr.getAppFn.constName?
+  let some altIndex := induct.ctors.findIdx? (· == ctorName) | none
+  let alt ← args[matcher.getFirstAltPos + altIndex]?
+  let .ctorInfo ctor ← env.find? ctorName | none
+  let ctorArgs := discr.getAppArgs
+  if ctorArgs.size < ctor.numFields then none
+  else
+    let branch := alt.beta (ctorArgs.extract (ctorArgs.size - ctor.numFields) ctorArgs.size)
+    if ctor.numFields == 0 then
+      match strip branch with
+      | .lam _ type body _ =>
+          if type.consumeMData.getAppFn.constName? == some ``Unit then
+            some (body.instantiate1 (mkConst ``Unit.unit))
+          else some branch
+      | _ => some branch
+    else some branch
+
+private partial def staticBool? (env : Environment) (fuel : Nat) (e : Expr) : Option Bool :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    if let some ctor := normalizePureInlineCtorOf? env fuel' ``Bool e then
+      if ctor.getAppFn.constName? == some ``Bool.true then some true
+      else if ctor.getAppFn.constName? == some ``Bool.false then some false
+      else none
+    else if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq) && e.getAppArgs.size ≥ 2 then
+      let args := e.getAppArgs
+      match staticBool? env fuel' args[args.size - 2]!,
+          staticBool? env fuel' args[args.size - 1]! with
+      | some left, some right => some (left == right)
+      | _, _ => none
+    else none
+
+private partial def staticNat? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    match e with
+    | .lit (.natVal value) => some value
+    | _ =>
+      if let some reduced := reduceCtorProjectionFuel? env fuel' e then
+        staticNat? env fuel' reduced
+      else if isConstNamed e ``OfNat.ofNat then
+        e.getAppArgs.findSome? (staticNat? env fuel')
+      else if (isConstNamed e ``HAdd.hAdd || isConstNamed e ``Nat.add) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticNat? env fuel' args[args.size - 2]!,
+            staticNat? env fuel' args[args.size - 1]! with
+        | some left, some right => some (left + right)
+        | _, _ => none
+      else if isConstNamed e ``ite && e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        match staticBool? env fuel' args[args.size - 4]! with
+        | some true => staticNat? env fuel' args[args.size - 2]!
+        | some false => staticNat? env fuel' args[args.size - 1]!
+        | none => none
+      else if let some (helper, unfolded) := unfoldUserHelper env e then
+        if inlineHelperPreservesUserType env helper then none else staticNat? env fuel' unfolded
+      else none
+
+/-- Read a scalar literal through the static Nat geometry used by source storage descriptors. -/
+private def asStaticLit (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
+  asLit fuel e <|> do
+    let value ←
+      if isConstNamed e ``UInt64.ofNat && !e.getAppArgs.isEmpty then
+        staticNat? env fuel e.getAppArgs[e.getAppArgs.size - 1]!
+      else
+        staticNat? env fuel e
+    if value < UInt64.size then some (.lit (UInt64.ofNat value)) else none
 
 /-- Reduce a projection over a marked structure helper without guessing from its name. A helper
 whose first user-typed input and result have the same type is a State transition already emitted
@@ -667,6 +813,7 @@ private def asPdaSeeds (e : Expr) : Option (Array Ops.PdaSeed) := do
   let elems ← asStaticArrayElems e
   elems.mapM asPdaSeed
 
+set_option maxRecDepth 2048 in
 private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
@@ -677,6 +824,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
     | .bvar i => some (.arg i)
     | _ =>
       if let some reduced := reduceCtorProjection? env e then
+        asVal env fuel' reduced
+      else if let some reduced := reducePureInlineMatch? env e then
         asVal env fuel' reduced
       else if let some reduced := reduceInlineProjection? env e then
         asVal env fuel' reduced
@@ -839,8 +988,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           some (.fifoCancelResult .eventCount)
         else if (endsWith e ".accDataWord" || isConstNamed e ``ProofForge.Svm.Runtime.accDataWord) &&
             e.getAppArgs.size ≥ 2 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
@@ -850,10 +999,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | _, _ => none
         else if (endsWith e ".accDataWordAt" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAt) && e.getAppArgs.size ≥ 5 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
               some (.lit capacity), some index =>
@@ -868,10 +1017,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataWordAtOneBased" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAtOneBased) &&
             e.getAppArgs.size ≥ 5 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
               some (.lit capacity), some index =>
@@ -885,13 +1034,13 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataRbTreeKey4Find" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Find) &&
             e.getAppArgs.size ≥ 11 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -911,15 +1060,15 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataRbTreeOrderFind" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderFind) &&
             e.getAppArgs.size ≥ 11 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
@@ -938,15 +1087,15 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataRbTreeOrderCursor" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderCursor) &&
             e.getAppArgs.size ≥ 12 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -991,14 +1140,14 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataRbTreeValid" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeValid) &&
             e.getAppArgs.size ≥ 12 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -1023,12 +1172,12 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
         else if (endsWith e ".accDataRbTreeKey4Valid" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Valid) &&
             e.getAppArgs.size ≥ 10 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
               asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -2762,6 +2911,33 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
       if base.isEmpty || looksUnchangedField v base then #[] else #[(base, v)]
     | none => #[]
 
+/-- Flatten a statically shaped scalar result. Products are protocol tuples, not heap containers:
+each leaf must already lower to one target-neutral scalar value. -/
+private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
+    Option (Array Ops.Val) :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+    let e := strip e
+    if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then do
+      let args := e.getAppArgs
+      let left ← scalarResultValues env fuel' args[args.size - 2]!
+      let right ← scalarResultValues env fuel' args[args.size - 1]!
+      return left ++ right
+    else
+      (val env e).map (#[·])
+
+/-- Keep the historical scalar `okState` shorthand, but spell multi-leaf effectful results as the
+existing sequence of scalar returns. CFG lowering already joins that sequence into `returnU64s`. -/
+private def effectfulResultOps (env : Environment) (e : Expr) : Option (Array Ops.Op) := do
+  let values ← scalarResultValues env 16 e
+  if values.size == 1 then
+    return #[.okState values[0]!]
+  else if values.size > 1 then
+    return values.map fun value => .returnU64 value
+  else
+    none
+
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
 private def asStoreFields (env : Environment) (e : Expr)
     (includeSingle : Bool := false) : Option (Array Ops.Op) :=
@@ -2781,8 +2957,8 @@ private def asStoreFields (env : Environment) (e : Expr)
         if leaves.isEmpty || (!explicitSingle && leaves.size == 1) then none
         else
           let stores := leaves.map fun p => (.storeField p.1 p.2 : Ops.Op)
-          match val env ret with
-          | some rv => some (stores.push (.okState rv))
+          match effectfulResultOps env ret with
+          | some returns => some (stores ++ returns)
           | none => some stores
       else none
     else none
@@ -2894,8 +3070,9 @@ private def asOkScalar (env : Environment) (e : Expr) : Option Ops.Val :=
     else none
   else none
 
-/-- `.ok (s, value)` with the original state is a successful no-op, not an implicit write. -/
-private def asOkNoop (env : Environment) (e : Expr) : Option Ops.Val :=
+/-- `.ok (s, value)` with the original state is a successful no-op, not an implicit write. The
+result may be one scalar or a statically bounded product of scalar leaves. -/
+private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
   if isConstNamed e ``Except.ok then
     let args := e.getAppArgs
@@ -2905,9 +3082,10 @@ private def asOkNoop (env : Environment) (e : Expr) : Option Ops.Val :=
         let pairArgs := pair.getAppArgs
         if h : pairArgs.size ≥ 2 then
           match strip pairArgs[pairArgs.size - 2] with
-          | .bvar _ => val env pairArgs[pairArgs.size - 1]
+          | .bvar _ => scalarResultValues env 16 pairArgs[pairArgs.size - 1]
           | state =>
-            if isConstNamed state ``methodArgRef then val env pairArgs[pairArgs.size - 1]
+            if isConstNamed state ``methodArgRef then
+              scalarResultValues env 16 pairArgs[pairArgs.size - 1]
             else
               let reconstructedFromOneBinder :=
                 match userCtorFields env state with
@@ -2920,7 +3098,8 @@ private def asOkNoop (env : Environment) (e : Expr) : Option Ops.Val :=
                         | _ => false
                       else false
                 | none => false
-              if reconstructedFromOneBinder then val env pairArgs[pairArgs.size - 1]
+              if reconstructedFromOneBinder then
+                scalarResultValues env 16 pairArgs[pairArgs.size - 1]
               else none
         else none
       else none
@@ -3399,6 +3578,36 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
     go fuel e
   else none
 
+private def staticNatVal? (env : Environment) (e : Expr) : Option Nat :=
+  (val env e >>= natOfVal) <|> do
+    let .lit value ← asStaticLit env 64 e | none
+    some value.toNat
+
+private def mentionsAccountStorageSource (e : Expr) : Bool :=
+  e.getUsedConstantsAsSet.toList.any fun name =>
+    name.toString.startsWith "ProofForge.Svm.AccountStorage.Source."
+
+private def isStorageSourceHelper (env : Environment) (name : Name) : Bool :=
+  name.toString.startsWith "ProofForge.Svm.AccountStorage.Source." ||
+    Attr.isInline env name &&
+      match env.find? name with
+      | some (.defnInfo helper) => mentionsAccountStorageSource helper.value
+      | _ => false
+
+private def normalizeStorageEffect (env : Environment) (e : Expr) : Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Expr :=
+    match fuel with
+    | 0 => e
+    | fuel' + 1 =>
+      let e := substLets 64 e
+      if let some (helper, unfolded) := unfoldUserHelper env e then
+        if !isStorageSourceHelper env helper || inlineHelperPreservesUserType env helper then e
+        else go fuel' unfolded
+      else if let some reduced := reducePureInlineMatch? env e then
+        go fuel' reduced
+      else e
+  go 16 e
+
 private def decodeAccDataWordSetAt (env : Environment) (e : Expr) :
     Option DecodedAccDataWordSetAt :=
   let e := strip e
@@ -3408,10 +3617,10 @@ private def decodeAccDataWordSetAt (env : Environment) (e : Expr) :
     else none
   if indexBase.isSome && e.getAppArgs.size ≥ 6 then
     let args := e.getAppArgs
-    match val env args[args.size - 6]! >>= natOfVal,
-        val env args[args.size - 5]! >>= natOfVal,
-        val env args[args.size - 4]! >>= natOfVal,
-        val env args[args.size - 3]! >>= natOfVal,
+    match staticNatVal? env args[args.size - 6]!,
+        staticNatVal? env args[args.size - 5]!,
+        staticNatVal? env args[args.size - 4]!,
+        staticNatVal? env args[args.size - 3]!,
         val env args[args.size - 2]!, val env args[args.size - 1]! with
     | some acc, some baseWord, some strideWords, some capacity, some index, some value =>
         some (indexBase.get!, acc, baseWord, strideWords, capacity, index, value)
@@ -3424,6 +3633,7 @@ private def findAccDataWordSetAt (env : Environment) (fuel : Nat) (e : Expr) :
   match fuel with
   | 0 => none
   | fuel' + 1 =>
+      let e := normalizeStorageEffect env e
       match decodeAccDataWordSetAt env e with
       | some write => some write
       | none =>
@@ -3441,13 +3651,13 @@ private def decodeAccDataRbTreeKey4Insert (env : Environment) (e : Expr) :
   if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Insert &&
       e.getAppArgs.size ≥ 11 then
     let args := e.getAppArgs
-    match val env args[args.size - 11]! >>= natOfVal,
-        val env args[args.size - 10]! >>= natOfVal,
-        val env args[args.size - 9]! >>= natOfVal,
-        val env args[args.size - 8]! >>= natOfVal,
-        val env args[args.size - 7]! >>= natOfVal,
-        val env args[args.size - 6]! >>= natOfVal,
-        val env args[args.size - 5]! >>= natOfVal,
+    match staticNatVal? env args[args.size - 11]!,
+        staticNatVal? env args[args.size - 10]!,
+        staticNatVal? env args[args.size - 9]!,
+        staticNatVal? env args[args.size - 8]!,
+        staticNatVal? env args[args.size - 7]!,
+        staticNatVal? env args[args.size - 6]!,
+        staticNatVal? env args[args.size - 5]!,
         val env args[args.size - 4]!, val env args[args.size - 3]!,
         val env args[args.size - 2]!, val env args[args.size - 1]! with
     | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
@@ -3463,6 +3673,7 @@ private def findAccDataRbTreeKey4Insert (env : Environment) (fuel : Nat) (e : Ex
   match fuel with
   | 0 => none
   | fuel' + 1 =>
+      let e := normalizeStorageEffect env e
       match decodeAccDataRbTreeKey4Insert env e with
       | some insert => some insert
       | none =>
@@ -3482,13 +3693,13 @@ private def decodeAccDataRbTreeKey4Remove (env : Environment) (e : Expr) :
   if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Remove &&
       e.getAppArgs.size ≥ 11 then
     let args := e.getAppArgs
-    match val env args[args.size - 11]! >>= natOfVal,
-        val env args[args.size - 10]! >>= natOfVal,
-        val env args[args.size - 9]! >>= natOfVal,
-        val env args[args.size - 8]! >>= natOfVal,
-        val env args[args.size - 7]! >>= natOfVal,
-        val env args[args.size - 6]! >>= natOfVal,
-        val env args[args.size - 5]! >>= natOfVal,
+    match staticNatVal? env args[args.size - 11]!,
+        staticNatVal? env args[args.size - 10]!,
+        staticNatVal? env args[args.size - 9]!,
+        staticNatVal? env args[args.size - 8]!,
+        staticNatVal? env args[args.size - 7]!,
+        staticNatVal? env args[args.size - 6]!,
+        staticNatVal? env args[args.size - 5]!,
         val env args[args.size - 4]!, val env args[args.size - 3]!,
         val env args[args.size - 2]!, val env args[args.size - 1]! with
     | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
@@ -3504,6 +3715,7 @@ private def findAccDataRbTreeKey4Remove (env : Environment) (fuel : Nat) (e : Ex
   match fuel with
   | 0 => none
   | fuel' + 1 =>
+      let e := normalizeStorageEffect env e
       match decodeAccDataRbTreeKey4Remove env e with
       | some remove => some remove
       | none =>
@@ -3523,13 +3735,13 @@ private def decodeAccDataRbTreeTraderDeposit (env : Environment) (e : Expr) :
   if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeTraderDeposit &&
       e.getAppArgs.size ≥ 13 then
     let args := e.getAppArgs
-    match val env args[args.size - 13]! >>= natOfVal,
-        val env args[args.size - 12]! >>= natOfVal,
-        val env args[args.size - 11]! >>= natOfVal,
-        val env args[args.size - 10]! >>= natOfVal,
-        val env args[args.size - 9]! >>= natOfVal,
-        val env args[args.size - 8]! >>= natOfVal,
-        val env args[args.size - 7]! >>= natOfVal,
+    match staticNatVal? env args[args.size - 13]!,
+        staticNatVal? env args[args.size - 12]!,
+        staticNatVal? env args[args.size - 11]!,
+        staticNatVal? env args[args.size - 10]!,
+        staticNatVal? env args[args.size - 9]!,
+        staticNatVal? env args[args.size - 8]!,
+        staticNatVal? env args[args.size - 7]!,
         val env args[args.size - 6]!, val env args[args.size - 5]!,
         val env args[args.size - 4]!, val env args[args.size - 3]!,
         val env args[args.size - 2]!, val env args[args.size - 1]! with
@@ -3547,6 +3759,7 @@ private def findAccDataRbTreeTraderDeposit (env : Environment) (fuel : Nat) (e :
   match fuel with
   | 0 => none
   | fuel' + 1 =>
+      let e := normalizeStorageEffect env e
       match decodeAccDataRbTreeTraderDeposit env e with
       | some deposit => some deposit
       | none =>
@@ -3566,15 +3779,15 @@ private def decodeAccDataRbTreeOrderInsert (env : Environment) (e : Expr) :
   if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderInsert &&
       e.getAppArgs.size ≥ 15 then
     let args := e.getAppArgs
-    match val env args[args.size - 15]! >>= natOfVal,
-        val env args[args.size - 14]! >>= natOfVal,
-        val env args[args.size - 13]! >>= natOfVal,
-        val env args[args.size - 12]! >>= natOfVal,
-        val env args[args.size - 11]! >>= natOfVal,
-        val env args[args.size - 10]! >>= natOfVal,
-        val env args[args.size - 9]! >>= natOfVal,
-        val env args[args.size - 8]! >>= natOfVal,
-        val env args[args.size - 7]! >>= natOfVal,
+    match staticNatVal? env args[args.size - 15]!,
+        staticNatVal? env args[args.size - 14]!,
+        staticNatVal? env args[args.size - 13]!,
+        staticNatVal? env args[args.size - 12]!,
+        staticNatVal? env args[args.size - 11]!,
+        staticNatVal? env args[args.size - 10]!,
+        staticNatVal? env args[args.size - 9]!,
+        staticNatVal? env args[args.size - 8]!,
+        staticNatVal? env args[args.size - 7]!,
         val env args[args.size - 6]!, val env args[args.size - 5]!,
         val env args[args.size - 4]!, val env args[args.size - 3]!,
         val env args[args.size - 2]!, val env args[args.size - 1]! with
@@ -3596,6 +3809,7 @@ private def findAccDataRbTreeOrderInsert (env : Environment) (fuel : Nat) (e : E
   match fuel with
   | 0 => none
   | fuel' + 1 =>
+      let e := normalizeStorageEffect env e
       match decodeAccDataRbTreeOrderInsert env e with
       | some insert => some insert
       | none =>
@@ -3615,15 +3829,15 @@ private def decodeAccDataRbTreeOrderRemove (env : Environment) (e : Expr) :
   if isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderRemove &&
       e.getAppArgs.size ≥ 11 then
     let args := e.getAppArgs
-    match val env args[args.size - 11]! >>= natOfVal,
-        val env args[args.size - 10]! >>= natOfVal,
-        val env args[args.size - 9]! >>= natOfVal,
-        val env args[args.size - 8]! >>= natOfVal,
-        val env args[args.size - 7]! >>= natOfVal,
-        val env args[args.size - 6]! >>= natOfVal,
-        val env args[args.size - 5]! >>= natOfVal,
-        val env args[args.size - 4]! >>= natOfVal,
-        val env args[args.size - 3]! >>= natOfVal,
+    match staticNatVal? env args[args.size - 11]!,
+        staticNatVal? env args[args.size - 10]!,
+        staticNatVal? env args[args.size - 9]!,
+        staticNatVal? env args[args.size - 8]!,
+        staticNatVal? env args[args.size - 7]!,
+        staticNatVal? env args[args.size - 6]!,
+        staticNatVal? env args[args.size - 5]!,
+        staticNatVal? env args[args.size - 4]!,
+        staticNatVal? env args[args.size - 3]!,
         val env args[args.size - 2]!, val env args[args.size - 1]! with
     | some acc, some rootWord, some linksBaseWord, some parentBaseWord, some keyBaseWord,
         some sequenceBaseWord, some strideWords, some capacity, some bid, some price,
@@ -3641,6 +3855,7 @@ private def findAccDataRbTreeOrderRemove (env : Environment) (fuel : Nat) (e : E
   match fuel with
   | 0 => none
   | fuel' + 1 =>
+      let e := normalizeStorageEffect env e
       match decodeAccDataRbTreeOrderRemove env e with
       | some remove => some remove
       | none =>
@@ -5981,13 +6196,13 @@ private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Na
   let result := args[args.size - 1]!
   if (unfoldUserHelper env state).isNone then none else
   some do
-    let value ←
-      match val env result with
-      | some value => .ok value
+    let returns ←
+      match effectfulResultOps env result with
+      | some returns => .ok returns
       | none => .error "extract/unsupported: inline state success result"
     let stores ← decodeYieldState env 128 localDepth state (stateType? := stateType?)
       (deepScalars := deepScalars)
-    return stores.push (.okState value)
+    return stores ++ returns
 
 private def mergeEvmStores (evmOps stores : Array Ops.Op) : Array Ops.Op :=
   let evmHead :=
@@ -6053,8 +6268,11 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.errorOverflow]
   else if let some name := errorCtorName e then
     .ok #[.errorNamed name]
-  else if let some v := asOkNoop env e then
-    .ok #[if stateful then .okState v else .returnU64 v]
+  else if let some values := asOkNoop env e then
+    if stateful && values.size == 1 then
+      .ok #[.okState values[0]!]
+    else
+      .ok (values.map fun value => .returnU64 value)
   else if let some ops := asStoreFields env e stateful then
     .ok (snapshotStateUpdate localDepth ops)
   else if let some v := asOkState env e then
@@ -6226,6 +6444,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     -- result is replaced by a lexical marker. Normalize that language-level composition before
     -- looking for effects or control flow; this keeps helper composition out of target Ops/Emit.
     let e := e.headBeta
+    let e := (reducePureInlineMatch? env e).getD e
     let (effects, continuation, malformedWrite) := leadingSvmEffects env e
     if malformedWrite then
       return .error "extract/unsupported: external account write operands"
@@ -7279,6 +7498,18 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       else if widthOfType retTy == some 4 then #[4]
       else #[]
     | _ => #[]
+  let rec maxReturnCount (fuel : Nat) (ops : Array Ops.Op) : Nat :=
+    match fuel with
+    | 0 => 0
+    | fuel' + 1 =>
+      let direct := ops.foldl (init := 0) fun count op =>
+        match op with | .returnU64 _ => count + 1 | _ => count
+      let nested := ops.foldl (init := 0) fun count op =>
+        match op with
+        | .ite _ _ _ thn els => max count (max (maxReturnCount fuel' thn) (maxReturnCount fuel' els))
+        | .forBody _ body => max count (maxReturnCount fuel' body)
+        | _ => count
+      max direct nested
   let retCount :=
     match kind with
     | .get =>
@@ -7288,8 +7519,12 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       else
         let nRet := ops.foldl (init := 0) fun acc op =>
           match op with | .returnU64 _ => acc + 1 | _ => acc
+        let nRet := max nRet (maxReturnCount 32 ops)
         if nRet = 0 then 1 else nRet
-    | _ => 1
+    | .increment =>
+      let nRet := maxReturnCount 32 ops
+      if nRet = 0 then 1 else nRet
+    | .init => 1
   let annotations := (Attr.svmRawEntries env n).map (·.annotation)
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean

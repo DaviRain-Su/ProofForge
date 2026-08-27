@@ -90,6 +90,40 @@ private def loadInsn : Nat → Except String String
   | 8 => pure "ldxdw"
   | width => throw s!"extract/unsupported: raw parameter width {width}"
 
+/-- Serialize a compile-time-shaped scalar product without a heap object or protocol operation.
+Each source value is already one widened scalar; this codec only chooses its exact little-endian
+wire width and calls the standard return-data syscall. A trailing narrow scalar reserves enough
+padding for the emitter's full-width temporary store, but that padding is not returned. -/
+def emitReturnValues
+    (loadValue : Ops.Val → Nat → Nat → String → Except String String)
+    (scratchLimit : Nat) (widths : Array Nat) (values : Array Ops.Val)
+    (fresh : Nat) (scope : String) : Except String String := do
+  if values.isEmpty then throw "svm/cfg: empty return tuple"
+  unless widths.size == values.size do
+    throw "extract/unsupported: packed return plan does not match result leaves"
+  unless widths.all fun width => width == 1 || width == 2 || width == 4 || width == 8 do
+    throw "extract/unsupported: packed returns must be u8/u16/u32/u64"
+  let byteCount := widths.foldl (init := 0) (· + ·)
+  let scratchBytes := byteCount + (8 - widths.back!)
+  if scratchBytes > scratchLimit then
+    throw "extract/unsupported: return tuple exceeds scalar scratch"
+  let mut body := ""
+  let mut consumed := 0
+  let mut nonce := fresh
+  for i in [0:values.size] do
+    let stackOff := scratchBytes - consumed
+    body := body ++ (← loadValue values[i]! stackOff nonce s!"{scope}_return_{i}")
+    consumed := consumed + widths[i]!
+    nonce := nonce + 1
+  return body ++ s!"\
+  mov64 r1, r10
+  add64 r1, -{scratchBytes}
+  lddw r2, {byteCount}
+  call sol_set_return_data
+  lddw r0, 0
+  exit
+"
+
 private def emitProgramAccountCheck (context : Context) (entry : RawEntry)
     (err : String) : String :=
   let header := context.headerStack entry.programAccount

@@ -13,8 +13,6 @@ lean_lib ProofForge
 
 lean_lib Examples
 
-lean_lib Projects
-
 lean_lib Tests
 
 lean_exe pfAssemble where

@@ -30,7 +30,7 @@ private def forbiddenTypeConst : Name → Option String
 
 /-- 用户模块声明才施加 extern/opaque/implemented_by 门。
 Lean/Std/Init 以及 prelude 类型（`UInt64.ofNat`）不算用户代码。
-任意 Lake 包里的合约（`Examples`、`Projects`、外面的包）都算。 -/
+任意 Lake 包里的合约（仓库内 `Examples` 或外部包）都算。 -/
 private def isFrameworkRoot (n : Name) : Bool :=
   n == `Lean || n == `Std || n == `Init || n == `IO || n == `System ||
     n == `Lake || n == `UInt8 || n == `UInt16 || n == `UInt32 || n == `UInt64 ||

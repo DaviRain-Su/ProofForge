@@ -16,6 +16,9 @@ structure SvmRawEntry where
   original exact fixed-width adapter. -/
   prefixParamCount : Nat := 0
   optionWidths : Array Nat := #[]
+  /-- Exact little-endian widths for a statically shaped return product. Empty retains the normal
+  consecutive-u64 return ABI. This is wire metadata, not an executable operation. -/
+  returnWidths : Array Nat := #[]
   deriving BEq, Repr, Inhabited
 
 syntax (name := pf_svm_raw)
@@ -23,6 +26,9 @@ syntax (name := pf_svm_raw)
 
 syntax (name := pf_svm_raw_borsh_options)
   "pf_svm_raw_borsh_options" num num num num "[" num,* "]" : attr
+
+syntax (name := pf_svm_raw_return)
+  "pf_svm_raw_return" num num num "[" num,* "]" : attr
 
 private partial def syntaxNatLiterals (node : Syntax) : Array Nat :=
   match node.isNatLit? with
@@ -115,6 +121,40 @@ initialize pfSvmRawBorshOptionsAttr : ParametricAttribute SvmRawEntry ←
       | _ => throwError "extract/unsupported: pf_svm_raw_borsh_options is not a definition"
   }
 
+/--
+Attach an exact packed-input raw entry with an exact fixed-width scalar return product. The return
+codec is owned by the SVM EntryAdapter and therefore does not add a source Op, generic CFG exit, or
+protocol-specific emitter branch.
+-/
+initialize pfSvmRawReturnAttr : ParametricAttribute SvmRawEntry ←
+  registerParametricAttribute {
+    name := `pf_svm_raw_return
+    descr := "declare a packed-u8 Solana raw entry with a fixed-width return product"
+    getParam := fun decl stx => do
+      let values := syntaxNatLiterals stx
+      unless values.size ≥ 4 do
+        throwError "invalid pf_svm_raw_return syntax"
+      let entry : SvmRawEntry := {
+        tag := values[0]!
+        accountCount := values[1]!
+        programAccount := values[2]!
+        returnWidths := values.extract 3 values.size
+      }
+      unless entry.tag < 256 do
+        throwError "extract/unsupported: pf_svm_raw_return tag must fit u8"
+      unless 0 < entry.accountCount && entry.accountCount ≤ 64 do
+        throwError "extract/unsupported: pf_svm_raw_return accounts must be in 1..64"
+      unless entry.programAccount < entry.accountCount do
+        throwError "extract/unsupported: pf_svm_raw_return program account is out of range"
+      unless entry.returnWidths.all fun width =>
+          width == 1 || width == 2 || width == 4 || width == 8 do
+        throwError "extract/unsupported: packed returns must be u8/u16/u32/u64"
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure entry
+      | _ => throwError "extract/unsupported: pf_svm_raw_return is not a definition"
+  }
+
 def isEntry (env : Environment) (decl : Name) : Bool :=
   pfEntryAttr.hasTag env decl
 
@@ -122,7 +162,8 @@ def isInline (env : Environment) (decl : Name) : Bool :=
   pfInlineAttr.hasTag env decl
 
 def svmRawEntry? (env : Environment) (decl : Name) : Option SvmRawEntry :=
-  pfSvmRawAttr.getParam? env decl <|> pfSvmRawBorshOptionsAttr.getParam? env decl
+  pfSvmRawAttr.getParam? env decl <|> pfSvmRawBorshOptionsAttr.getParam? env decl <|>
+    pfSvmRawReturnAttr.getParam? env decl
 
 /-- Preserve all raw annotations so target projection can reject declarations that accidentally
 carry more than one wire contract. -/
@@ -132,10 +173,15 @@ def svmRawEntries (env : Environment) (decl : Name) : Array SvmRawEntry := Id.ru
     entries := entries.push entry
   if let some entry := pfSvmRawBorshOptionsAttr.getParam? env decl then
     entries := entries.push entry
+  if let some entry := pfSvmRawReturnAttr.getParam? env decl then
+    entries := entries.push entry
   return entries
 
 def SvmRawEntry.annotation (entry : SvmRawEntry) : String :=
-  if entry.optionWidths.isEmpty then
+  if !entry.returnWidths.isEmpty then
+    let widths := String.intercalate "," (entry.returnWidths.map toString).toList
+    s!"svm.raw.v3:{entry.tag}:{entry.accountCount}:{entry.programAccount}:{widths}"
+  else if entry.optionWidths.isEmpty then
     s!"svm.raw.v1:{entry.tag}:{entry.accountCount}:{entry.programAccount}"
   else
     let widths := String.intercalate "," (entry.optionWidths.map toString).toList

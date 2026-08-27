@@ -44,4 +44,24 @@ def borshOptions (_s : State) (side tickPresent : UInt8) (tick : UInt64)
   side.toUInt64 + tickPresent.toUInt64 + tick + 2 * searchPresent.toUInt64 +
     search.toUInt64 + 4 * cancelPresent.toUInt64 + cancel.toUInt64 + (signerKey 1 &&& 0)
 
+/-- An effectful raw handler returning two fixed scalar leaves. The pair lowers through generic
+CFG `returnU64s`; it is not a runtime allocation and adds no protocol-specific operation. -/
+@[pf_entry, pf_svm_raw 9 2 0]
+def boundedPair (_s : State) (left right : UInt64) :
+    Except Error (State × (UInt64 × UInt64)) :=
+  if left ≤ right then
+    .ok (_s, (left, right))
+  else
+    .error .rejected
+
+/-- A fixed-width return-codec probe. The result is the exact Borsh bytes of a one-element
+`Vec<(u64, u64)>`: `length:u32 || left:u64 || right:u64`. All values remain scalar leaves. -/
+@[pf_entry, pf_svm_raw_return 10 2 0 [4, 8, 8]]
+def borshSingletonPair (_s : State) (left right : UInt64) :
+    Except Error (State × (UInt32 × (UInt64 × UInt64))) :=
+  if left ≤ right then
+    .ok (_s, ((1 : UInt32), (left, right)))
+  else
+    .error .rejected
+
 end Examples.RawEntry

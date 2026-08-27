@@ -23,6 +23,28 @@ elab "#pf_guard_entry_adapter" : command => do
   unless sourceBorsh.annotations == #["svm.raw.v2:8:2:0:1:8,4,4"] &&
       sourceBorsh.paramWidths == #[1, 1, 8, 1, 4, 1, 4] do
     throwError "wrong source Borsh-option adapter metadata"
+  let some sourcePair := source.methods.find? (·.ixName == "boundedPair")
+    | throwError "missing bounded-pair source method"
+  let pairPlan :=
+    match sourcePair.ops with
+    | #[.ite .le (.arg 0) (.arg 1)
+        #[.returnU64 (.arg 0), .returnU64 (.arg 1)] #[.errorNamed "rejected"]] => true
+    | _ => false
+  unless sourcePair.annotations == #["svm.raw.v1:9:2:0"] &&
+      sourcePair.paramWidths == #[8, 8] && sourcePair.retCount == 2 && pairPlan do
+    throwError "wrong source bounded-pair plan"
+  let some sourcePackedReturn := source.methods.find? (·.ixName == "borshSingletonPair")
+    | throwError "missing packed-return source method"
+  let packedReturnPlan :=
+    match sourcePackedReturn.ops with
+    | #[.ite .le (.arg 0) (.arg 1)
+        #[.returnU64 (.lit 1), .returnU64 (.arg 0), .returnU64 (.arg 1)]
+        #[.errorNamed "rejected"]] => true
+    | _ => false
+  unless sourcePackedReturn.annotations == #["svm.raw.v3:10:2:0:4,8,8"] &&
+      sourcePackedReturn.paramWidths == #[8, 8] && sourcePackedReturn.retCount == 3 &&
+      packedReturnPlan do
+    throwError "wrong source packed-return plan"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -72,6 +94,34 @@ elab "#pf_guard_entry_adapter" : command => do
           entry.minDataLen == 5 && entry.maxDataLen == 21 do
         throwError s!"wrong projected Borsh-option adapter: {repr entry}"
   | .generated => throwError "Borsh-option method lost its raw adapter"
+  let some pair := program.methods.find? (·.ixName == "boundedPair")
+    | throwError "missing projected bounded-pair method"
+  match pair.entry with
+  | .raw entry =>
+      unless pair.kind == .get && pair.retCount == 2 && entry.tag == 9 &&
+          entry.accountCount == 2 && entry.programAccount == 0 &&
+          entry.paramWidths == #[8, 8] && entry.dataLen == 17 do
+        throwError s!"wrong projected bounded-pair adapter: {repr entry}"
+  | .generated => throwError "bounded-pair method lost its raw adapter"
+  let pairCfg ←
+    match pair.toCFG with
+    | .ok graph => pure graph
+    | .error reason => throwError reason
+  unless pairCfg.blocks.any fun block =>
+      match block.terminator with
+      | .exit (.returnU64s values) => values.size == 2
+      | _ => false do
+    throwError "bounded effectful pair did not reach generic CFG returnU64s"
+  let some packedReturn := program.methods.find? (·.ixName == "borshSingletonPair")
+    | throwError "missing projected packed-return method"
+  match packedReturn.entry with
+  | .raw entry =>
+      unless packedReturn.kind == .get && packedReturn.retCount == 3 && entry.tag == 10 &&
+          entry.accountCount == 2 && entry.programAccount == 0 &&
+          entry.paramWidths == #[8, 8] && entry.returnWidths == #[4, 8, 8] &&
+          entry.returnDataLen == 20 && entry.returnScratchBytes == 20 do
+        throwError s!"wrong projected packed-return adapter: {repr entry}"
+  | .generated => throwError "packed-return method lost its raw adapter"
   unless IR.generatedAccountCount program == 1 do
     throwError "raw account geometry leaked into generated methods"
   let asm ←
@@ -80,6 +130,9 @@ elab "#pf_guard_entry_adapter" : command => do
     | .error reason => throwError reason
   unless asm.contains "raw_walk_loop_route" &&
       asm.contains "call packed" && asm.contains "call borshOptions" &&
+      asm.contains "call boundedPair" && asm.contains "lddw r2, 16" &&
+      asm.contains "call borshSingletonPair" && asm.contains "lddw r2, 20" &&
+      asm.contains "call sol_set_return_data" &&
       asm.contains "authenticate the declared executable program account" &&
       asm.contains "ldxb r1, [r8 + 9]" &&
       asm.contains "ldxdw r1, [r8 + 10]" &&
@@ -112,11 +165,14 @@ private def accepts (result : Except String α) : Bool :=
 
 #guard accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 8])
 #guard accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,4,4"] 7 #[1, 1, 8, 1, 4, 1, 4])
+#guard accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,8,8"] 2 #[8, 8] 3)
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:256:2:0"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:2"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 3])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,4,4"] 7 #[1, 1, 8, 1, 8, 1, 4])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,3,4"] 7 #[1, 1, 8, 1, 4, 1, 4])
+#guard !accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,8"] 2 #[8, 8] 3)
+#guard !accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,3,8"] 2 #[8, 8] 3)
 #guard !accepts (EntryAdapter.validateUniqueTags #[
   .raw { tag := 7, accountCount := 2, programAccount := 0, paramWidths := #[1] },
   .raw { tag := 7, accountCount := 2, programAccount := 0, paramWidths := #[8] }

@@ -14,7 +14,7 @@ pf build --target evm [--out DIR] [Name ...]
 
 - `svm` / `solana` / `sbpf`：`.so` + `.s` + `.idl.json`
 - `evm`：`.bin` + `.yul` + `.abi.json`
-- SVM 每次运行时加载 `Examples.Name`（Phoenix 为 `Projects.Phoenix`）并重新抽 IR；
+- SVM 每次运行时加载 `Examples.Name` 并重新抽 IR；Phoenix 不再需要目录特判；
   digest 必须与 Golden 一致
 - 不写名字 = SVM 的全部登记源模块 / EVM 的全部 Golden 夹具
 - EVM 叶子的程序不会进 svm 组装

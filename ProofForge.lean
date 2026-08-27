@@ -38,6 +38,7 @@ import ProofForge.Svm.ABICompat
 import ProofForge.Svm.Heap
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
+import ProofForge.Svm.AccountStorage.Source
 import ProofForge.Svm.Component
 import ProofForge.Svm.Component.Emit
 import ProofForge.Svm.EntryAdapter

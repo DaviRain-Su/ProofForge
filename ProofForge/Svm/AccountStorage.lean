@@ -1,4 +1,5 @@
 import ProofForge.Core.Ops
+import ProofForge.Attr
 
 namespace ProofForge.Svm.AccountStorage
 
@@ -49,7 +50,7 @@ def Field.wellFormed (field : Field) (accountLimit : Nat := 64) : Bool :=
     field.region.baseWord + field.offsetWords +
       field.region.strideWords * (field.region.capacity - 1) + field.widthWords - 1 < maxDataWord
 
-def Field.firstWord (field : Field) : Nat :=
+@[pf_inline] def Field.firstWord (field : Field) : Nat :=
   field.region.baseWord + field.offsetWords
 
 /-- Transitive account effects are data, not an emitter-side list of operation constructors. -/
@@ -124,8 +125,8 @@ structure FifoRbTree where
   bid : Bool
   deriving BEq, Repr, Inhabited
 
-def FifoRbTree.links (tree : FifoRbTree) : Field := tree.topology.links
-def FifoRbTree.parentColor (tree : FifoRbTree) : Field := tree.topology.parentColor
+@[pf_inline] def FifoRbTree.links (tree : FifoRbTree) : Field := tree.topology.links
+@[pf_inline] def FifoRbTree.parentColor (tree : FifoRbTree) : Field := tree.topology.parentColor
 
 def FifoRbTree.wellFormed (tree : FifoRbTree) (accountLimit : Nat := 64) : Bool :=
   tree.topology.wellFormed 4096 accountLimit && tree.price.wellFormed accountLimit &&
@@ -134,7 +135,7 @@ def FifoRbTree.wellFormed (tree : FifoRbTree) (accountLimit : Nat := 64) : Bool 
     tree.links.region.sameShape tree.price.region &&
     tree.links.region.sameShape tree.sequence.region
 
-def FifoRbTree.oneBased
+@[pf_inline] def FifoRbTree.oneBased
     (account linksBaseWord parentBaseWord priceBaseWord sequenceBaseWord strideWords capacity : Nat)
     (bid : Bool) (access : Access := {}) : FifoRbTree :=
   { topology :=
@@ -163,8 +164,8 @@ structure Key4RbTree where
   lastKey : Field
   deriving BEq, Repr, Inhabited
 
-def Key4RbTree.links (tree : Key4RbTree) : Field := tree.topology.links
-def Key4RbTree.parentColor (tree : Key4RbTree) : Field := tree.topology.parentColor
+@[pf_inline] def Key4RbTree.links (tree : Key4RbTree) : Field := tree.topology.links
+@[pf_inline] def Key4RbTree.parentColor (tree : Key4RbTree) : Field := tree.topology.parentColor
 
 def Key4RbTree.wellFormed (tree : Key4RbTree) (accountLimit : Nat := 64) : Bool :=
   tree.topology.wellFormed 8321 accountLimit && tree.key.wellFormed accountLimit &&
@@ -174,7 +175,7 @@ def Key4RbTree.wellFormed (tree : Key4RbTree) (accountLimit : Nat := 64) : Bool 
     tree.links.firstWord ≤ tree.key.firstWord &&
     tree.lastKey.firstWord < tree.links.firstWord + tree.links.region.strideWords
 
-def Key4RbTree.oneBased
+@[pf_inline] def Key4RbTree.oneBased
     (account linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (access : Access := {}) : Key4RbTree :=
   { topology :=
@@ -407,12 +408,12 @@ def RbMap.wellFormed (map : RbMap) (accountLimit : Nat := 64) : Bool :=
           tree.parentColor.firstWord + 1 == tree.price.firstWord &&
           tree.price.firstWord + 1 == tree.sequence.firstWord
 
-def RbMap.key4OneBased
+@[pf_inline] def RbMap.key4OneBased
     (account rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat) : RbMap :=
   .key4 rootWord
     (.oneBased account linksBaseWord parentBaseWord keyBaseWord strideWords capacity mutableAccess)
 
-def RbMap.fifoOneBased
+@[pf_inline] def RbMap.fifoOneBased
     (account rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords
       capacity : Nat) (bid : Bool) : RbMap :=
   .fifo rootWord
