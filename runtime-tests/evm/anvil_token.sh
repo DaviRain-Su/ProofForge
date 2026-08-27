@@ -27,6 +27,9 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'pausedOf()(uint8)')" \
   0 "initial paused"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'capOf()(uint256)')" \
+  1000 "fixed mint cap"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
   0 "absent sender balance"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
@@ -74,6 +77,23 @@ solana_lean_require_unauthorized "$addr" "$dest" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
   100 "non-owner mint holds supply"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'mint(address,uint256)' "$sender" 901 >/dev/null 2>&1; then
+  echo "FAIL: mint over cap unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_cap_exceeded "$addr" "$sender" \
+  "$("$cast" calldata 'mint(address,uint256)' "$sender" 901)" \
+  "mint over cap"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  100 "mint over cap holds supply"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  100 "mint over cap holds sender"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'capOf()(uint256)')" \
+  1000 "cap holds after over-mint"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'decimals()(uint8)')" \
   18 "decimals holds after mint"
@@ -408,4 +428,4 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'pausedOf()(uint8)')" \
   0 "unpaused"
 
-echo "evm-anvil-token: ok (mint/owner/pause/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals/zero/name; engineering only)"
+echo "evm-anvil-token: ok (mint/owner/pause/cap/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals/zero/name; engineering only)"

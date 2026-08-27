@@ -151,6 +151,10 @@ def Call.emitsPaused : Call V → Bool
   | .nativeFx call => call.emitsPaused
   | _ => false
 
+def Call.emitsCapExceeded : Call V → Bool
+  | .nativeFx call => call.emitsCapExceeded
+  | _ => false
+
 def Call.isDeposit : Call V → Bool
   | .nativeFx call => call.isDeposit
   | _ => false

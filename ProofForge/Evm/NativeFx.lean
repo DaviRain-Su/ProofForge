@@ -21,6 +21,7 @@ inductive Call (V : Type) where
   | revertUnauthorized (w0 w1 w2 : V)
   | revertZeroAddress
   | revertPaused
+  | revertCapExceeded
   | receive
   deriving BEq, Repr, Inhabited
 
@@ -49,6 +50,7 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
       .revertUnauthorized (mapValue w0) (mapValue w1) (mapValue w2)
   | .revertZeroAddress => .revertZeroAddress
   | .revertPaused => .revertPaused
+  | .revertCapExceeded => .revertCapExceeded
   | .receive => .receive
 
 def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
@@ -76,6 +78,7 @@ def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
       return .revertUnauthorized (← mapValue w0) (← mapValue w1) (← mapValue w2)
   | .revertZeroAddress => pure .revertZeroAddress
   | .revertPaused => pure .revertPaused
+  | .revertCapExceeded => pure .revertCapExceeded
   | .receive => pure .receive
 
 def Call.values : Call V → Array V
@@ -90,7 +93,7 @@ def Call.values : Call V → Array V
   | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
       #[h0, h1, h2, h3, w0, w1, w2, w3]
   | .revertUnauthorized w0 w1 w2 => #[w0, w1, w2]
-  | .revertZeroAddress | .revertPaused | .receive => #[]
+  | .revertZeroAddress | .revertPaused | .revertCapExceeded | .receive => #[]
 
 def Call.anyValue (predicate : V → Bool) (call : Call V) : Bool :=
   call.values.any predicate
@@ -102,7 +105,8 @@ def Call.effects : Call V → EffectSummary
   | .deposit _ | .deposit256 .. => { payable := true }
   | .sendEth .. | .sendEth256 .. => { externalCall := true }
   | .log .. | .logTransfer256 .. | .logApproval256 .. => { logs := true }
-  | .revertInsufficient .. | .revertUnauthorized .. | .revertZeroAddress | .revertPaused => {}
+  | .revertInsufficient .. | .revertUnauthorized .. | .revertZeroAddress | .revertPaused
+  | .revertCapExceeded => {}
   | .receive => { payable := true, receive := true }
 
 def Call.wellFormed (valueWellFormed : V → Bool) (call : Call V) : Bool :=
@@ -132,6 +136,10 @@ def Call.emitsPaused : Call V → Bool
   | .revertPaused => true
   | _ => false
 
+def Call.emitsCapExceeded : Call V → Bool
+  | .revertCapExceeded => true
+  | _ => false
+
 def Call.logName : Call V → Option String
   | .log name _ => some name
   | .logTransfer256 .. => some "Transfer256"
@@ -158,6 +166,7 @@ def Call.canonical (renderValue : V → String) : Call V → String
       s!"err.Unauthorized({renderValue w0},{renderValue w1},{renderValue w2})"
   | .revertZeroAddress => "err.ZeroAddress"
   | .revertPaused => "err.Paused"
+  | .revertCapExceeded => "err.CapExceeded"
   | .receive => "erecv"
 
 end ProofForge.Evm.NativeFx

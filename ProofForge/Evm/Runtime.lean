@@ -147,6 +147,9 @@ def evmImm20b : Addr20 :=
 /-- 无参 `Paused()`。宿主返回 0。 -/
 @[irreducible] def evmRevertPaused : UInt64 := 0
 
+/-- 无参 `CapExceeded()`。宿主返回 0。 -/
+@[irreducible] def evmRevertCapExceeded : UInt64 := 0
+
 /-- 无 calldata 的 payable `receive()`。宿主返回 `callvalue`。 -/
 @[irreducible] def evmReceive : UInt64 := 0
 

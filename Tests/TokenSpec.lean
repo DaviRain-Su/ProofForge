@@ -13,9 +13,11 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 
 #guard (init sample).dummy == 0
 #guard (init sample).paused == 0
+#guard (init sample).cap == ⟨1000, 0, 0, 0⟩
 #guard (init sample).supply == zero256
 #guard get (init sample) == 0
 #guard pausedOf (init sample) == 0
+#guard capOf (init sample) == ⟨1000, 0, 0, 0⟩
 #guard ownerOf (init sample) == ⟨0, 0, 0⟩
 #guard balanceOf (init sample) sample == zero256
 #guard totalSupply (init sample) == zero256
@@ -104,6 +106,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"Unauthorized\"" &&
         abi.contains "\"name\":\"ZeroAddress\"" &&
         abi.contains "\"name\":\"Paused\"" &&
+        abi.contains "\"name\":\"CapExceeded\"" &&
         abi.contains "\"type\":\"error\"" &&
         yul.contains "revert(0, 36)" &&
         yul.contains "staticcall(gas(), 1," &&
@@ -130,6 +133,8 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "unpause")).isSome &&
     (p.entries.find? (·.ixName == "pausedOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "pausedOf")).map (·.retWidths) == some #[1] &&
+    (p.entries.find? (·.ixName == "capOf")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "capOf")).map (·.retWidths) == some #[32] &&
     (p.entries.find? (·.ixName == "ownerOf")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "ownerOf")).map (·.retWidths) == some #[20] &&
     (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&

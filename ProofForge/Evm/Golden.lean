@@ -214,6 +214,32 @@ private def ownerGate (ok : Array IR.Op) : Array IR.Op :=
       #[nativeFx (.revertUnauthorized (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[])),
         .returnU64 (.ext .callerW0 #[])]]
 
+private def capGeNext (stateArg amt : Nat) : Ops.Val :=
+  Ops.ge256
+    (.field (.arg stateArg) "cap_w0") (.field (.arg stateArg) "cap_w1")
+    (.field (.arg stateArg) "cap_w2") (.field (.arg stateArg) "cap_w3")
+    (Ops.arith256 0 0
+      (.field (.arg stateArg) "supply_w0") (.field (.arg stateArg) "supply_w1")
+      (.field (.arg stateArg) "supply_w2") (.field (.arg stateArg) "supply_w3")
+      (u256Field amt "w0") (u256Field amt "w1") (u256Field amt "w2") (u256Field amt "w3"))
+    (Ops.arith256 0 1
+      (.field (.arg stateArg) "supply_w0") (.field (.arg stateArg) "supply_w1")
+      (.field (.arg stateArg) "supply_w2") (.field (.arg stateArg) "supply_w3")
+      (u256Field amt "w0") (u256Field amt "w1") (u256Field amt "w2") (u256Field amt "w3"))
+    (Ops.arith256 0 2
+      (.field (.arg stateArg) "supply_w0") (.field (.arg stateArg) "supply_w1")
+      (.field (.arg stateArg) "supply_w2") (.field (.arg stateArg) "supply_w3")
+      (u256Field amt "w0") (u256Field amt "w1") (u256Field amt "w2") (u256Field amt "w3"))
+    (Ops.arith256 0 3
+      (.field (.arg stateArg) "supply_w0") (.field (.arg stateArg) "supply_w1")
+      (.field (.arg stateArg) "supply_w2") (.field (.arg stateArg) "supply_w3")
+      (u256Field amt "w0") (u256Field amt "w1") (u256Field amt "w2") (u256Field amt "w3"))
+
+private def guardCap (stateArg amt : Nat) (ok : Array IR.Op) : Array IR.Op :=
+  #[.ite .eq (capGeNext stateArg amt) (.lit 1)
+      ok
+      #[nativeFx .revertCapExceeded, .returnU64 (.lit 0)]]
+
 /-- Live extract of `Examples.Wide`; Legacy IR has no `arith256` leaf. -/
 def extractedWide : IR.Program :=
   let ctor : IR.Method := {
@@ -398,10 +424,14 @@ def extractedToken : IR.Program :=
     slots := #[
       { name := "dummy", index := 0, width := 8 },
       { name := "paused", index := 1, width := 1 },
-      { name := "supply_w0", index := 2, width := 8 },
-      { name := "supply_w1", index := 3, width := 8 },
-      { name := "supply_w2", index := 4, width := 8 },
-      { name := "supply_w3", index := 5, width := 8 }
+      { name := "cap_w0", index := 2, width := 8 },
+      { name := "cap_w1", index := 3, width := 8 },
+      { name := "cap_w2", index := 4, width := 8 },
+      { name := "cap_w3", index := 5, width := 8 },
+      { name := "supply_w0", index := 6, width := 8 },
+      { name := "supply_w1", index := 7, width := 8 },
+      { name := "supply_w2", index := 8, width := 8 },
+      { name := "supply_w3", index := 9, width := 8 }
     ]
     constructor := {
       kind := .init
@@ -410,6 +440,10 @@ def extractedToken : IR.Program :=
       paramCount := 1
       paramWidths := #[20]
       ops := #[
+        .returnState (.lit 0),
+        .returnState (.lit 0),
+        .returnState (.lit 1000),
+        .returnState (.lit 0),
         .returnState (.lit 0),
         .returnState (.lit 0),
         .returnState (.lit 0),
@@ -509,7 +543,7 @@ def extractedToken : IR.Program :=
           #[nativeFx (.log "Transfer" (.arg 0)), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
-      mutEntry "Token" "mint" 2 #[20, 32] (ownerGate (guardPaused 2 (guardZero 0 #[
+      mutEntry "Token" "mint" 2 #[20, 32] (ownerGate (guardPaused 2 (guardZero 0 (guardCap 2 1 #[
         .ite .ne (.lit 0) (.lit 1)
           #[setAddr256 0 0 (fun limb => u256Field 1 (limbName limb)),
             nativeFx (.logTransfer256 (.lit 0) (.lit 0) (.lit 0) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
@@ -531,7 +565,7 @@ def extractedToken : IR.Program :=
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
-      ]))),
+      ])))),
       mutEntry "Token" "pause" 0 #[] (ownerGate #[
         .ite .ne (.lit 0) (.lit 1)
           #[.storeField "paused" (.lit 1), .okState (.lit 1)]
@@ -594,6 +628,8 @@ def extractedToken : IR.Program :=
       },
       view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
       view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
+      view256 "Token" "capOf" 0 #[] (return256 fun limb =>
+        .field (.arg 0) s!"cap_{limbName limb}"),
       {
         kind := .get
         name := "Examples.Token.decimals"
