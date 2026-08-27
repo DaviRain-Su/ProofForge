@@ -67,35 +67,31 @@ private def packAddrWord (src : String) (word : Nat) : String :=
   let count := if word == 2 then 4 else 8
   orBytes 0 count "0"
 
-/-- 把三叶小端 Addr20 写到 memory[12..31]，高 12 字节已清零。 -/
+/-- 调用 runtime helper，把三叶小端 Addr20 写成 memory[0..31] 的 ABI address word。 -/
 private def packAddrMstore8 (indent w0 w1 w2 : String) : String :=
-  Id.run do
-    let mut out := ""
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (12 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (20 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
-    for i in [0:4] do
-      out := out ++ indent ++ "mstore8(" ++ toString (28 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
-    return out
+  indent ++ "pf_store_addr20(0, " ++ w0 ++ ", " ++ w1 ++ ", " ++ w2 ++ ")" ++ nl
 
 /-- 把三叶 Addr20 写到 calldata 的 `off..off+19`（transfer 的 dest 从 16 起）。 -/
 private def packAddrAt (indent : String) (off : Nat) (w0 w1 w2 : String) : String :=
+  indent ++ "pf_store_addr20(" ++ toString (off - 12) ++ ", " ++ w0 ++ ", " ++ w1 ++
+    ", " ++ w2 ++ ")" ++ nl
+
+/-- Runtime address encoder. Keeping the byte shuffle behind a Yul function prevents the
+optimizer from carrying twenty expanded `mstore8` expressions across CFG dispatcher cases. -/
+private def renderAddr20Helper : String :=
   Id.run do
-    let mut out := ""
+    let mut out := "      function pf_store_addr20(off, w0, w1, w2) {" ++ nl ++
+      "        mstore(off, 0)" ++ nl
     for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (off + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
+      out := out ++ "        mstore8(add(off, " ++ toString (12 + i) ++ "), and(shr(" ++
+        toString (8 * i) ++ ", w0), 0xff))" ++ nl
     for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (off + 8 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
+      out := out ++ "        mstore8(add(off, " ++ toString (20 + i) ++ "), and(shr(" ++
+        toString (8 * i) ++ ", w1), 0xff))" ++ nl
     for i in [0:4] do
-      out := out ++ indent ++ "mstore8(" ++ toString (off + 16 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
-    return out
+      out := out ++ "        mstore8(add(off, " ++ toString (28 + i) ++ "), and(shr(" ++
+        toString (8 * i) ++ ", w2), 0xff))" ++ nl
+    return out ++ "      }" ++ nl
 
 private def widthMask (width : Nat) : String :=
   match width with
@@ -1220,6 +1216,7 @@ def emitYul (p : IR.Program) : Except String String := do
     "  }" ++ nl ++
     "  object " ++ q runtimeName ++ " {" ++ nl ++
     "    code {" ++ nl ++
+    renderAddr20Helper ++
     globalGuard ++
     receiveTxt ++
     "      if lt(calldatasize(), 4) { " ++ revert0 ++ " }" ++ nl ++

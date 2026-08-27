@@ -1409,6 +1409,17 @@ def claimReleasedFunds512At (layout : Examples.PhoenixV1.Layout)
     else
       .error .overflow
 
+/-- Phoenix's static audit sink. Cancel components consume this descriptor as compile-time data;
+the recorder entry/record helpers are migrated to the same profile in the next slice. -/
+@[pf_inline] def marketRecorderConfig : ProofForge.Svm.BatchRecorder.Config :=
+  { logAccount := 0
+    selfEntryTag := 15
+    authoritySeed := "log"
+    maxBytes := 1246
+    headerBytes := 93
+    countOffset := 91
+    maxRecords := 32 }
+
 /-- Open Phoenix's bounded audit batch. `traderCpiAccount` is external-relative because it is
 embedded as a CPI data key; market reads remain physical indexes. The 92-byte payload below plus
 the component-owned raw-entry byte is Phoenix's 93-byte audit header. -/
@@ -1456,73 +1467,69 @@ three fixed allocators, trader key tree, and both FIFO trees are validated befor
 emit or any account byte can change. A missing trader remains distinct: this function succeeds and
 the subsequent bounded find returns the zero sentinel. -/
 def cancelAllStorageValid512At (marketAccount : UInt64) : UInt64 :=
-  if profileAccountBytesAt marketAccount = 84944 &&
-      accDataWord marketAccount 106 ≠ 0 &&
+  let layout := Examples.PhoenixV1.small 2
+  if marketAccount = UInt64.ofNat layout.account &&
+      profileAccountBytesAt marketAccount = UInt64.ofNat layout.accountBytes &&
+      layout.orderSequence ≠ 0 &&
       allocatorHeadersValidAt marketAccount = 1 then
-    let traderCursor := accDataWord marketAccount 8313
-    let bidCursor := accDataWord marketAccount 113
-    let askCursor := accDataWord marketAccount 4213
-    let traderValid := accDataRbTreeKey4Valid marketAccount 8314 8315 8316 18 128
-      (lowUInt32 (accDataWord marketAccount 8310)) (accDataWord marketAccount 8312)
-      (lowUInt32 traderCursor) (highUInt32 traderCursor)
-    let bidValid := accDataRbTreeValid marketAccount 114 115 116 117 8 512 1
-      (lowUInt32 (accDataWord marketAccount 110)) (accDataWord marketAccount 112)
-      (lowUInt32 bidCursor) (highUInt32 bidCursor)
-    let askValid := accDataRbTreeValid marketAccount 4214 4215 4216 4217 8 512 0
-      (lowUInt32 (accDataWord marketAccount 4210)) (accDataWord marketAccount 4212)
-      (lowUInt32 askCursor) (highUInt32 askCursor)
-    if traderValid = 1 && bidValid = 1 && askValid = 1 then 1 else 0
+    if layout.tradersValid = 1 && layout.bidsValid = 1 && layout.asksValid = 1 then 1 else 0
   else
     0
 
 /-- Find the official one-based trader slot after `cancelAllStorageValid512At` has dominated the
 operation. Zero is the account-resident null sentinel and implements missing-trader success. -/
 def cancelAllTraderIndex512At (marketAccount traderAccount : UInt64) : UInt64 :=
-  accDataRbTreeKey4Find marketAccount 8310 8314 8315 8316 18 128
-    (signerKey traderAccount) (accKeyWord traderAccount 1)
-    (accKeyWord traderAccount 2) (accKeyWord traderAccount 3)
+  let layout := Examples.PhoenixV1.small 2
+  if marketAccount = UInt64.ofNat layout.account && traderAccount = 3 then
+    layout.findTrader (signerKey traderAccount) (accKeyWord traderAccount 1)
+      (accKeyWord traderAccount 2) (accKeyWord traderAccount 3)
+  else
+    0
 
 /-- Open the invocation-local scalar accumulator shared by both FIFO passes. -/
-def beginCancelAll : UInt64 := fifoCancelBegin
+def beginCancelAll : UInt64 := ProofForge.Svm.FifoCancel.Source.begin
 
 /-- Cancel owned bids in Phoenix logical FIFO order. Static account geometry, collateral math, and
 audit recording are owned by the bounded component rather than the generic SVM operation set. -/
-def cancelAllBids512At (marketAccount traderIndex : UInt64) : UInt64 :=
-  fifoCancelSide marketAccount 110 114 115 116 117 118 119 8320 8321
-    8 512 18 128 1 104 105 0 15 "log" 1246 93 91 32 traderIndex
+def cancelAllBids512At (layout : Examples.PhoenixV1.Layout) (traderIndex : UInt64) : UInt64 :=
+  ProofForge.Svm.FifoCancel.Source.cancelSide
+    (layout.bidCancelConfig marketRecorderConfig) traderIndex
 
 /-- Cancel owned asks after the bid pass, preserving one invocation-global event index. -/
-def cancelAllAsks512At (marketAccount traderIndex : UInt64) : UInt64 :=
-  fifoCancelSide marketAccount 4210 4214 4215 4216 4217 4218 4219 8322 8323
-    8 512 18 128 0 104 105 0 15 "log" 1246 93 91 32 traderIndex
+def cancelAllAsks512At (layout : Examples.PhoenixV1.Layout) (traderIndex : UInt64) : UInt64 :=
+  ProofForge.Svm.FifoCancel.Source.cancelSide
+    (layout.askCancelConfig marketRecorderConfig) traderIndex
 
 /-- Cancel a bounded bid prefix. Search counts every traversed order before owner/price filters;
 cancel counts only selected orders. `claimImmediately` is a compile-time adapter choice. -/
-def cancelUpToBids512At (marketAccount traderIndex tickLimit searchLimit cancelLimit
-    claimImmediately : UInt64) : UInt64 :=
-  fifoCancelUpToSide marketAccount 110 114 115 116 117 118 119 8320 8321
-    8 512 18 128 1 104 105 0 15 "log" 1246 93 91 32
+def cancelUpToBids512At (layout : Examples.PhoenixV1.Layout)
+    (traderIndex tickLimit searchLimit cancelLimit : UInt64)
+    (claimImmediately : Bool) : UInt64 :=
+  ProofForge.Svm.FifoCancel.Source.cancelUpTo
+    (layout.bidCancelConfig marketRecorderConfig)
     traderIndex tickLimit searchLimit cancelLimit claimImmediately
 
 /-- Cancel a bounded ask prefix with the same account-resident cursor contract. -/
-def cancelUpToAsks512At (marketAccount traderIndex tickLimit searchLimit cancelLimit
-    claimImmediately : UInt64) : UInt64 :=
-  fifoCancelUpToSide marketAccount 4210 4214 4215 4216 4217 4218 4219 8322 8323
-    8 512 18 128 0 104 105 0 15 "log" 1246 93 91 32
+def cancelUpToAsks512At (layout : Examples.PhoenixV1.Layout)
+    (traderIndex tickLimit searchLimit cancelLimit : UInt64)
+    (claimImmediately : Bool) : UInt64 :=
+  ProofForge.Svm.FifoCancel.Source.cancelUpTo
+    (layout.askCancelConfig marketRecorderConfig)
     traderIndex tickLimit searchLimit cancelLimit claimImmediately
 
 /-- Close the FIFO accumulator after all aggregate results have been consumed. -/
-def finishCancelAll : UInt64 := fifoCancelFinish
+def finishCancelAll : UInt64 := ProofForge.Svm.FifoCancel.Source.finish
 
 /-- Shared official Token-context gate for tags 4 and 6. It authenticates the fixed raw account
 shape, market status, classic SPL Token program, trader destinations, vault keys, mints, and vault
 authorities before either storage mutation or CPI can occur. -/
 def cancelWithdrawContextValid : UInt64 :=
+  let layout := Examples.PhoenixV1.small 2
   if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
       isWritable 4 = 0 || isWritable 5 = 0 || isWritable 6 = 0 || isWritable 7 = 0 ||
       isWritable 8 ≠ 0 || checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
     0
-  else if profileAccountBytesAt 2 ≠ 84944 then
+  else if profileAccountBytesAt 2 ≠ UInt64.ofNat layout.accountBytes then
     0
   else if reduceStatusValidAt 2 = 0 then
     0
@@ -1833,13 +1840,14 @@ def cancelAllOrdersWithFreeFunds (_s : State) : Except Error (State × UInt64) :
   else if cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
+    let layout := Examples.PhoenixV1.small 2
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 34
-    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
+    let marketSequence := layout.marketSequence
+    let _ := layout.setMarketSequence (marketSequence + 1)
     let _ := beginMarketBatchAt 7 2 2 marketSequence
     let _ := beginCancelAll
-    let _ := cancelAllBids512At 2 traderIndex
-    let _ := cancelAllAsks512At 2 traderIndex
+    let _ := cancelAllBids512At layout traderIndex
+    let _ := cancelAllAsks512At layout traderIndex
     let _ := finishCancelAll
     let _ := finishMarketBatch
     .ok (_s, 0)
@@ -1861,10 +1869,10 @@ def cancelAllOrders (_s : State) : Except Error (State × UInt64) := do
     let _ := layout.setMarketSequence (marketSequence + 1)
     let _ := beginMarketBatchAt 6 2 2 marketSequence
     let _ := beginCancelAll
-    let _ := cancelAllBids512At 2 traderIndex
-    let _ := cancelAllAsks512At 2 traderIndex
-    let quoteReleased := fifoCancelQuoteReleased
-    let baseReleased := fifoCancelBaseReleased
+    let _ := cancelAllBids512At layout traderIndex
+    let _ := cancelAllAsks512At layout traderIndex
+    let quoteReleased := ProofForge.Svm.FifoCancel.Source.quoteReleased
+    let baseReleased := ProofForge.Svm.FifoCancel.Source.baseReleased
     let quoteLotSize := layout.quoteLotSize
     let baseLotSize := layout.baseLotSize
     let quoteDivisor := if quoteReleased = 0 then 1 else quoteReleased
@@ -1905,23 +1913,24 @@ def cancelUpToOrdersWithFreeFunds (_s : State) (side tickPresent : UInt8) (tick 
   else if cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
+    let layout := Examples.PhoenixV1.small 2
     let bid := side = 0
-    let bookSize := if bid then accDataWord 2 112 else accDataWord 2 4212
+    let bookSize := if bid then layout.bidSize else layout.askSize
     let tickLimit := if tickPresent = 0 then if bid then 0 else u64Max else tick
     let searchLimit := if searchPresent = 0 then bookSize else search.toUInt64
     let cancelLimit := if cancelPresent = 0 then bookSize else cancel.toUInt64
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 34
-    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
+    let marketSequence := layout.marketSequence
+    let _ := layout.setMarketSequence (marketSequence + 1)
     let _ := beginMarketBatchAt 9 2 2 marketSequence
     let _ := beginCancelAll
     if bid then
-      let _ := cancelUpToBids512At 2 traderIndex tickLimit searchLimit cancelLimit 0
+      let _ := cancelUpToBids512At layout traderIndex tickLimit searchLimit cancelLimit false
       let _ := finishCancelAll
       let _ := finishMarketBatch
       .ok (_s, 0)
     else
-      let _ := cancelUpToAsks512At 2 traderIndex tickLimit searchLimit cancelLimit 0
+      let _ := cancelUpToAsks512At layout traderIndex tickLimit searchLimit cancelLimit false
       let _ := finishCancelAll
       let _ := finishMarketBatch
       .ok (_s, 0)
@@ -1940,20 +1949,21 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
   else if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
+    let layout := Examples.PhoenixV1.small 2
     let bid := side = 0
-    let bookSize := if bid then accDataWord 2 112 else accDataWord 2 4212
+    let bookSize := if bid then layout.bidSize else layout.askSize
     let tickLimit := if tickPresent = 0 then if bid then 0 else u64Max else tick
     let searchLimit := if searchPresent = 0 then bookSize else search.toUInt64
     let cancelLimit := if cancelPresent = 0 then bookSize else cancel.toUInt64
     let traderIndex := cancelAllTraderIndex512At 2 3
-    let marketSequence := accDataWord 2 34
-    let _ := accDataWordSetAt 2 34 1 1 0 (marketSequence + 1)
+    let marketSequence := layout.marketSequence
+    let _ := layout.setMarketSequence (marketSequence + 1)
     let _ := beginMarketBatchAt 8 2 2 marketSequence
     let _ := beginCancelAll
     if bid then
-      let _ := cancelUpToBids512At 2 traderIndex tickLimit searchLimit cancelLimit 1
-      let released := fifoCancelQuoteReleased
-      let lotSize := accDataWord 2 24
+      let _ := cancelUpToBids512At layout traderIndex tickLimit searchLimit cancelLimit true
+      let released := ProofForge.Svm.FifoCancel.Source.quoteReleased
+      let lotSize := layout.quoteLotSize
       let divisor := if released = 0 then 1 else released
       if lotSize ≤ u64Max / divisor then
         let atoms := released * lotSize
@@ -1964,9 +1974,9 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
       else
         .error .overflow
     else
-      let _ := cancelUpToAsks512At 2 traderIndex tickLimit searchLimit cancelLimit 1
-      let released := fifoCancelBaseReleased
-      let lotSize := accDataWord 2 14
+      let _ := cancelUpToAsks512At layout traderIndex tickLimit searchLimit cancelLimit true
+      let released := ProofForge.Svm.FifoCancel.Source.baseReleased
+      let lotSize := layout.baseLotSize
       let divisor := if released = 0 then 1 else released
       if lotSize ≤ u64Max / divisor then
         let atoms := released * lotSize

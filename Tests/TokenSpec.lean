@@ -75,7 +75,10 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   match ProofForge.Evm.Emit.emitYul p, ProofForge.Evm.Emit.emitAbi p with
   | .error _, _ => false
   | .ok yul, abi =>
-      yul.contains "keccak256(0, 128)" &&
+      yul.contains "function pf_store_addr20(off, w0, w1, w2)" &&
+        yul.contains "pf_store_addr20(0," &&
+        !yul.contains "mstore8(12," &&
+        yul.contains "keccak256(0, 128)" &&
         yul.contains "keccak256(0, 224)" &&
         yul.contains "log1(0, 32, 0x" &&
         yul.contains "log3(0, 32, 0x" &&

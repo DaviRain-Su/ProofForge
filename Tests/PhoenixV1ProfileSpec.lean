@@ -689,6 +689,14 @@ private partial def opsHaveFifoCancelCall
       | .forBody _ body => opsHaveFifoCancelCall predicate body
       | _ => false
 
+private partial def fifoCancelCalls (ops : Array ProofForge.Svm.IR.Op) : List String :=
+  ops.toList.flatMap fun op =>
+    match op with
+    | .component (.fifoCancel call) => [call.canonical (fun value => toString (repr value))]
+    | .ite _ _ _ thenOps elseOps => fifoCancelCalls thenOps ++ fifoCancelCalls elseOps
+    | .forBody _ body => fifoCancelCalls body
+    | _ => []
+
 private partial def valHasFifoCancelQuery
     (predicate : ProofForge.Svm.FifoCancel.Query → Bool) : ProofForge.Svm.Ops.Val → Bool
   | .field base _ | .bitNot base => valHasFifoCancelQuery predicate base
@@ -1138,7 +1146,19 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRawReduceHeader 7 cancelAllFreeRaw.ops &&
       opsHaveRawReduceFinish cancelAllFreeRaw.ops &&
       !opsHaveInvoke cancelAllFreeRaw.ops && !opsHaveDataWord 2 1 cancelAllFreeRaw.ops do
-    throwError "raw CancelAllOrdersWithFreeFunds component composition is incomplete"
+    throwError s!"raw CancelAllOrdersWithFreeFunds component composition is incomplete: " ++
+      s!"validators={hasCancelValidators cancelAllFreeRaw.ops}, " ++
+      s!"components={hasCancelComponents cancelAllFreeRaw.ops}, " ++
+      s!"begin={opsHaveFifoCancelCall (fun | .begin => true | _ => false) cancelAllFreeRaw.ops}, " ++
+      s!"bid={opsHaveFifoCancelCall (fifoCancelSideMatches 110 114 115 116 117 118 119 8320 8321 true) cancelAllFreeRaw.ops}, " ++
+      s!"ask={opsHaveFifoCancelCall (fifoCancelSideMatches 4210 4214 4215 4216 4217 4218 4219 8322 8323 false) cancelAllFreeRaw.ops}, " ++
+      s!"finish={opsHaveFifoCancelCall (fun | .finish => true | _ => false) cancelAllFreeRaw.ops}, " ++
+      s!"trader={opsHaveAccountQuery (fun | .key4Find 8310 tree => tree.links.region.account == 2 | _ => false) cancelAllFreeRaw.ops}, " ++
+      s!"sequence={opsHaveDataWordSetAt 2 34 1 1 cancelAllFreeRaw.ops}, " ++
+      s!"header={opsHaveRawReduceHeader 7 cancelAllFreeRaw.ops}, " ++
+      s!"finishBatch={opsHaveRawReduceFinish cancelAllFreeRaw.ops}, " ++
+      s!"invoke={opsHaveInvoke cancelAllFreeRaw.ops}, status={opsHaveDataWord 2 1 cancelAllFreeRaw.ops}, " ++
+      s!"calls={String.intercalate ";" (fifoCancelCalls cancelAllFreeRaw.ops)}"
   unless hasCancelValidators cancelAllRaw.ops && hasCancelComponents cancelAllRaw.ops &&
       opsHaveFifoCancelQuery (· == .quoteReleased) cancelAllRaw.ops &&
       opsHaveFifoCancelQuery (· == .baseReleased) cancelAllRaw.ops &&
