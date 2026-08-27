@@ -12,6 +12,9 @@ def usesNat (n : Nat) : Nat := n + 1
 def usesFixedBytes12 (value : ProofForge.Core.Value.FixedBytes 12) :
     ProofForge.Core.Value.FixedBytes 12 := value
 
+/-- Positive profile fixture: a literal Vector length is compile-time schema metadata. -/
+def usesVector4 (value : Vector UInt64 4) : Vector UInt64 4 := value
+
 /-- Negative profile fixture: a polymorphic fixed-byte size is still a runtime-shaped Nat boundary. -/
 def usesDynamicFixedBytes (n : Nat) (value : ProofForge.Core.Value.FixedBytes n) :
     ProofForge.Core.Value.FixedBytes n := value

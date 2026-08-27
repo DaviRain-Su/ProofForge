@@ -159,6 +159,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [r1-001](tasks/r1-001.md) | done | Typed codec metadata 与 EVM scalar adapter |
 | [r1-002](tasks/r1-002.md) | done | Allocation-free shared boundary values |
 | [r1-003](tasks/r1-003.md) | done | Shared scalar SVM Borsh / EVM ABI binding |
+| [r1-004](tasks/r1-004.md) | done | Bounded aggregate source schema derivation |
 
 
 积压：[backlog.md](backlog.md)

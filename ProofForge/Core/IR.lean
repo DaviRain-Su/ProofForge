@@ -19,10 +19,14 @@ structure Method (ValExt : Type) (OpExt : Type → Type) where
   paramWidths : Array Nat := #[]
   /-- Logical boundary types. `paramWidths` remains only for legacy artifacts. -/
   paramTypes : Array Core.Codec.Scalar := #[]
+  /-- Target-neutral source shapes, one per public parameter. Targets own their physical layouts. -/
+  paramSchemas : Array Core.Codec.Schema := #[]
   /-- Legacy return carrier widths. New target code consumes `retTypes`. -/
   retWidths : Array Nat := #[]
   /-- Logical return types. `retWidths` remains only for legacy artifacts. -/
   retTypes : Array Core.Codec.Scalar := #[]
+  /-- Logical public result after removing persisted State and effect wrappers. -/
+  retSchema : Core.Codec.Schema := .unit
   retCount : Nat := 1
   /-- Opaque compile-time annotations consumed only by the owning target. They are metadata, not
   executable Ops; foreign targets must either ignore or explicitly reject unknown entries. -/

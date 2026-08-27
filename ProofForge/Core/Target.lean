@@ -116,10 +116,24 @@ private def validateCFG [BEq ValExt]
   let _ ← Core.CFG.optimize registration.cfgDialect graph
   pure ()
 
+private def validateBoundarySchemas (method : Core.IR.Method SrcValExt SrcOpExt) :
+    Except String Unit := do
+  unless method.paramSchemas.isEmpty do
+    unless method.paramSchemas.size == method.paramCount do
+      throw s!"extract/unsupported: {method.ixName} boundary parameter schema count mismatch"
+    for schema in method.paramSchemas do
+      match Core.Codec.validate schema with
+      | .ok _ => pure ()
+      | .error reason => throw s!"extract/unsupported: {method.ixName}: {reason}"
+  match Core.Codec.validate method.retSchema with
+  | .ok _ => pure ()
+  | .error reason => throw s!"extract/unsupported: {method.ixName}: {reason}"
+
 def projectMethod [BEq ValExt]
     (registration : Registration SrcValExt SrcOpExt ValExt OpExt)
     (schema : Core.Schema) (method : Core.IR.Method SrcValExt SrcOpExt) :
     Except String (Core.IR.Method ValExt OpExt) := do
+  validateBoundarySchemas method
   let ops ←
     match projectOps registration method.ops with
     | .ok ops => pure ops
@@ -139,8 +153,10 @@ def projectMethod [BEq ValExt]
     paramCount := method.paramCount
     paramWidths := method.paramWidths
     paramTypes := method.paramTypes
+    paramSchemas := method.paramSchemas
     retWidths := method.retWidths
     retTypes := method.retTypes
+    retSchema := method.retSchema
     retCount := method.retCount
     annotations := method.annotations
     sketch := method.sketch

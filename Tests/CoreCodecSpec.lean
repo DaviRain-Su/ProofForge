@@ -3,6 +3,7 @@ import ProofForge.Core.Value
 import ProofForge.Evm.Codec
 import ProofForge.Evm.IR
 import ProofForge.Extract
+import ProofForge.Svm.IR
 
 namespace Tests.CoreCodecSpec
 
@@ -47,6 +48,7 @@ elab "#pf_guard_shared_boundary_values" : command => do
           unless limb == limbs[i]! do opsMatch := false
       | _ => opsMatch := false
     unless method.paramTypes == #[type] && method.retTypes == #[type] &&
+        method.paramSchemas == #[.scalar type] && method.retSchema == .scalar type &&
         method.retCount == limbs.size && opsMatch do
       throwError s!"wrong shared boundary metadata for {name}"
   check ``echo128 .uint128 #["w0", "w1"]
@@ -73,6 +75,120 @@ elab "#pf_guard_shared_boundary_values" : command => do
 #guard ProofForge.Evm.Runtime.Bytes32.mk 1 2 3 4 == ⟨1, 2, 3, 4⟩
 
 end BoundaryValues
+
+namespace AggregateBoundary
+
+open ProofForge.Core.Value
+
+structure Request where
+  amount : UInt64
+  enabled : Bool
+
+inductive Action where
+  | cancel
+  | place (lots : UInt64) (clientId : FixedBytes 12)
+
+def inspect (_state : UInt64) (_request : Request) (_pair : UInt32 × Bool)
+    (_maybe : Option (UInt64 × Bool)) (_items : Vector UInt16 3) (_action : Action)
+    (_unit : Unit) : UInt64 := 0
+
+def pairResult (_state : UInt64) : UInt64 × Bool := (7, true)
+
+inductive Recursive where
+  | next (tail : Recursive)
+
+structure Parent where
+  parent : UInt64
+
+structure Inherited extends Parent where
+  child : UInt64
+
+structure Box (α : Type) where
+  value : α
+
+def dynamicArray (_state : UInt64) (_items : Array UInt64) : UInt64 := 0
+def recursive (_state : UInt64) (_value : Recursive) : UInt64 := 0
+def inherited (_state : UInt64) (_value : Inherited) : UInt64 := 0
+def polymorphic (_state : UInt64) (_value : Box UInt64) : UInt64 := 0
+def overBudget (_state : UInt64) (_value : Vector UInt64 4097) : UInt64 := 0
+
+elab "#pf_guard_aggregate_boundary_schemas" : command => do
+  let env ← getEnv
+  let method ←
+    match Extract.extractMethod env .get ``inspect with
+    | .ok method => pure method
+    | .error reason => throwError reason
+  let expected : Array Schema := #[
+    .record (``Request).toString #[
+      ("amount", .scalar .uint64),
+      ("enabled", .scalar .boolean)
+    ],
+    .tuple #[.scalar .uint32, .scalar .boolean],
+    .option (.tuple #[.scalar .uint64, .scalar .boolean]),
+    .fixedArray 3 (.scalar .uint16),
+    .enumeration (``Action).toString 8 #[
+      ("cancel", .unit),
+      ("place", .tuple #[.scalar .uint64, .scalar (.fixedBytes 12)])
+    ],
+    .unit
+  ]
+  unless method.paramSchemas == expected && method.paramTypes.isEmpty &&
+      method.paramWidths.isEmpty do
+    throwError s!"wrong aggregate parameter schemas: {repr method.paramSchemas}"
+  let result ←
+    match Extract.extractMethod env .get ``pairResult with
+    | .ok result => pure result
+    | .error reason => throwError reason
+  unless result.retSchema == .tuple #[.scalar .uint64, .scalar .boolean] &&
+      result.retTypes.isEmpty && result.retCount == 2 do
+    throwError s!"wrong aggregate result schema: {repr result.retSchema}"
+  let reject (name : Name) (fragment : String) :=
+    match Extract.extractMethod env .get name with
+    | .error reason =>
+        unless reason.contains fragment do
+          throwError s!"wrong boundary rejection for {name}: {reason}"
+    | .ok _ => throwError s!"unsupported boundary shape was accepted for {name}"
+  reject ``dynamicArray "dynamic"
+  reject ``recursive "recursive"
+  reject ``inherited "inheritance"
+  reject ``polymorphic "polymorphic"
+  reject ``overBudget "array length"
+  let init : Extract.IR.Method := {
+    kind := .init
+    name := "AggregateGate.init"
+    ixName := "initialize"
+    retSchema := .unit
+    ops := #[.returnState (.lit 0)]
+  }
+  let aggregate : Extract.IR.Method := {
+    kind := .get
+    name := "AggregateGate.read"
+    ixName := "read"
+    paramCount := 1
+    paramSchemas := #[.tuple #[.scalar .uint64, .scalar .boolean]]
+    retTypes := #[.uint64]
+    retSchema := .scalar .uint64
+    ops := #[.returnU64 (.lit 0)]
+  }
+  let program : Extract.IR.Program := {
+    name := "AggregateGate"
+    slots := #[{ name := "value" }]
+    methods := #[init, aggregate]
+  }
+  match ProofForge.Svm.IR.fromExtracted program with
+  | .error reason =>
+      unless reason.contains "aggregate parameter binding" do
+        throwError s!"wrong SVM aggregate gate: {reason}"
+  | .ok _ => throwError "SVM accepted an unbound aggregate parameter"
+  match ProofForge.Evm.IR.fromExtracted program with
+  | .error reason =>
+      unless reason.contains "aggregate parameter binding" do
+        throwError s!"wrong EVM aggregate gate: {reason}"
+  | .ok _ => throwError "EVM accepted an unbound aggregate parameter"
+
+#pf_guard_aggregate_boundary_schemas
+
+end AggregateBoundary
 
 private def orderBatch : Schema :=
   .record "OrderBatch" #[

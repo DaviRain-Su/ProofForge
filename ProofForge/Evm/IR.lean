@@ -227,8 +227,10 @@ structure Method where
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
   paramTypes : Array Core.Codec.Scalar := #[]
+  paramSchemas : Array Core.Codec.Schema := #[]
   retWidths : Array Nat := #[]
   retTypes : Array Core.Codec.Scalar := #[]
+  retSchema : Core.Codec.Schema := .unit
   retCount : Nat := 1
   ops : Array Op := #[]
   evaluation : Core.Evaluation Ops.ValKind := {}
@@ -259,6 +261,15 @@ def Method.resolvedRetTypes (method : Method) : Except String (Array Core.Codec.
   unless method.retWidths.isEmpty do
     return ← method.retWidths.mapM Codec.scalarOfLegacyWidth
   return Array.replicate method.retCount .uint64
+
+private def schemaIsScalar : Core.Codec.Schema → Bool
+  | .scalar _ => true
+  | _ => false
+
+private def rejectUnboundAggregateParams (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
+    Except String Unit := do
+  unless method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar do
+    throw s!"extract/unsupported: evm aggregate parameter binding is not implemented for {method.ixName}"
 
 def Method.toCFG (method : Method) : Except String CFG := do
   let source := toSourceOps method.ops
@@ -414,6 +425,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
         m.ixName == "initialize" || Core.IR.lastName m.name == "init") with
     | some m => m
     | none => ctors[0]!
+  rejectUnboundAggregateParams ctorSrc
   -- EVM initialization is deployment-only. Alternative source initializers may remain useful to
   -- targets such as SVM, but exposing them as runtime selectors would allow storage reinitialization.
   let rest := extras
@@ -432,8 +444,10 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     paramCount := ctorSrc.paramCount
     paramWidths := ctorSrc.paramWidths
     paramTypes := ctorSrc.paramTypes
+    paramSchemas := ctorSrc.paramSchemas
     retWidths := ctorSrc.retWidths
     retTypes := ctorSrc.retTypes
+    retSchema := ctorSrc.retSchema
     retCount := 1
     ops := ctorOps
     evaluation := ctorEvaluation
@@ -442,6 +456,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
   }
   let mut entries : Array Method := #[]
   for m in rest do
+    rejectUnboundAggregateParams m
     if m.ops.isEmpty then
       throw s!"extract/unsupported: empty ops {m.ixName}"
     let widths :=
@@ -460,8 +475,10 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       paramCount := m.paramCount
       paramWidths := widths
       paramTypes
+      paramSchemas := m.paramSchemas
       retWidths := m.retWidths
       retTypes := m.retTypes
+      retSchema := m.retSchema
       retCount := m.retCount
       ops
       evaluation

@@ -13,6 +13,7 @@ error: profile/rejected: Nat in root type Tests.Fixtures.usesNat
 #pf_check Tests.Fixtures.usesNat
 
 #pf_check Tests.Fixtures.usesFixedBytes12
+#pf_check Tests.Fixtures.usesVector4
 
 /--
 error: profile/rejected: Nat in root type Tests.Fixtures.usesDynamicFixedBytes

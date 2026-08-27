@@ -179,8 +179,10 @@ structure Method where
   paramCount : Nat := 0
   paramWidths : Array Nat := #[]
   paramTypes : Array Core.Codec.Scalar := #[]
+  paramSchemas : Array Core.Codec.Schema := #[]
   retWidths : Array Nat := #[]
   retTypes : Array Core.Codec.Scalar := #[]
+  retSchema : Core.Codec.Schema := .unit
   retCount : Nat := 1
   entry : EntryAdapter.MethodEntry := .generated
   ops : Array Op := #[]
@@ -442,8 +444,14 @@ private partial def scalarizeRawOp : Op → Op
   | .okState value => .returnU64 value
   | op => op
 
+private def schemaIsScalar : Core.Codec.Schema → Bool
+  | .scalar _ => true
+  | _ => false
+
 private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String Method := do
+  unless method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar do
+    throw s!"extract/unsupported: svm aggregate parameter binding is not implemented for {method.ixName}"
   let entry ← EntryAdapter.decode method.annotations method.paramCount method.paramWidths
     method.retCount method.paramTypes method.retTypes
   let ops ← ofSourceOps method.ops
@@ -465,8 +473,10 @@ private def lowerMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     paramCount := method.paramCount
     paramWidths := method.paramWidths
     paramTypes := method.paramTypes
+    paramSchemas := method.paramSchemas
     retWidths := method.retWidths
     retTypes := method.retTypes
+    retSchema := method.retSchema
     retCount := method.retCount
     entry
     ops

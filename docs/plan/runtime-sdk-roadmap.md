@@ -66,7 +66,7 @@ instruction 增加 recipe opcode。
 
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
-| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values；SVM/EVM scalar target binding | aggregate source-schema derivation 与 cross-target aggregate fixture |
+| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、aggregate source-schema derivation；SVM/EVM scalar target binding | SVM/EVM aggregate target binding 与 cross-target aggregate fixture |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar Borsh entry/return | bounded remaining-account view；运行时安全账户索引；aggregate Borsh；更完整 instruction buffer；Token-2022 TLV 语义 |
 | SVM Component | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation | 容器 facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar ABI、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | aggregate bounded ABI/storage 组合；call return/error 合同；缺少标准化资源/重入边界 |
@@ -95,8 +95,9 @@ Phoenix `matchLimit=2` remainder posting 已作为 R0 前最后一个在途协�
 `Core.Codec` descriptor 和 typed method metadata，并把 EVM selector/guard/ABI 从 width
 sentinel 迁到 `Evm.Codec`；R1-002 source slice 已落地 shared allocation-free
 `FixedBytes n` / u128/u256 values 与 fixed-limb extraction。R1-003 已分别完成 SVM typed
-scalar exact-cursor Borsh 和 EVM u128/bytesN canonical ABI binding；下一切片继续做 bounded
-aggregate source-schema derivation，不统一两个 target 的物理 layout。
+scalar exact-cursor Borsh 和 EVM u128/bytesN canonical ABI binding；R1-004 已完成 bounded
+aggregate source-schema derivation 与 fail-closed target gate。下一切片分别实现 SVM
+aggregate Borsh 与 EVM aggregate ABI，不统一两个 target 的物理 layout。
 
 ## 5. 阶段拆分
 
@@ -124,7 +125,11 @@ R1-002 source slice 已完成 allocation-free `UInt128`、shared `UInt256` 和 l
 
 R1-003 已完成 scalar target binding：SVM 使用 exact little-endian Borsh leaf/cursor plan，
 EVM 使用 canonical numeric uint 与 source-order left-aligned bytesN ABI；详见
-[R1-003](tasks/r1-003.md)。aggregate derivation 尚未完成。
+[R1-003](tasks/r1-003.md)。
+
+R1-004 已从普通 Lean 类型推导 bounded tuple/record/enum/option/fixed-array schema，贯穿
+Core/SVM/EVM IR，并在两个 target 的 aggregate adapter 完成前 fail closed；详见
+[R1-004](tasks/r1-004.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。

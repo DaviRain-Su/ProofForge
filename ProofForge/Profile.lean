@@ -43,14 +43,18 @@ private def natLiteral? (e : Expr) : Option Nat :=
         else none
   go 8 e
 
-/-- A literal bounded `FixedBytes n` index is source metadata, not runtime `Nat`. Every other Nat
-occurrence at an entry boundary remains rejected. -/
+/-- Literal `FixedBytes n` and `Vector α n` indices are compile-time schema metadata. Every other
+Nat occurrence at an entry boundary remains rejected. -/
 private partial def hasRuntimeNat (e : Expr) : Bool :=
   let e := e.consumeMData
   if e.getAppFn.constName? == some ``ProofForge.Core.Value.FixedBytes then
     match e.getAppArgs.back?.bind natLiteral? with
     | some n => !ProofForge.Core.Value.FixedBytes.validSize n
     | none => true
+  else if e.getAppFn.constName? == some ``Vector then
+    let args := e.getAppArgs
+    if args.size < 2 || (natLiteral? args[args.size - 1]!).isNone then true
+    else hasRuntimeNat args[args.size - 2]!
   else
     match e with
     | .const name _ => name == ``Nat

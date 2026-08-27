@@ -11,8 +11,9 @@ Profile、Extract 和 Core CFG；SVM account geometry 与 EVM storage layout 各
 bounded codec descriptor/resource budget，并把 EVM selector/calldata guard/ABI 从 width
 sentinel 迁到 `Evm.Codec`。R1-002 source slice 已加入 allocation-free shared
 `FixedBytes n` / u128/u256 并由 Extract 推导固定 limb metadata；R1-003 已分别绑定 SVM
-exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 account/storage。
-下一切片推导 bounded aggregate source schema，并继续由两个 target 独立选择物理编码。
+exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 account/storage；
+R1-004 已从普通 Lean 推导 bounded tuple/record/enum/option/literal-Vector schema，并贯穿
+Core/SVM/EVM IR。下一切片由两个 target 分别绑定 aggregate Borsh 与 ABI 物理编码。
 
 ## 已做
 
@@ -118,8 +119,17 @@ exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 accoun
   `83dda49b07d85f48`、ELF 12,048 B，并由 Surfpool 1.5.0 以 12 个 Loader-v3 writes 部署；
   Wide digest `692687089d4455f3`，Token digest `4f1db71eb59d4254`。237-job Lean、51 个 SVM
   build、Mollusk 286/286（RawEntry 12/12）、15 个 EVM build 与 Anvil 15/15 全绿。详见
-  `docs/plan/tasks/r1-003.md`。下一切片仍在 R1，做 bounded record/tuple/enum source schema
-  derivation；它不统一 SVM account geometry 与 EVM storage layout。
+  `docs/plan/tasks/r1-003.md`。后续 R1-004 已完成 bounded aggregate source metadata；
+  两者都不统一 SVM account geometry 与 EVM storage layout。
+
+- R1-004 aggregate source-metadata slice 已完成：Extract 从 Bool/scalar、Unit、`Prod`、
+  non-polymorphic record、bounded non-recursive enum、`Option` 与 literal-length `Vector`
+  推导并预算校验 `Core.Codec.Schema`；Method 以 `paramSchemas` / `retSchema` 贯穿
+  Core.Target 和 SVM/EVM IR，effectful return 只暴露 `Except Error (State × Result)` 的
+  `Result`。aggregate 不再回退成假的 `.uint64`；两个 target 在独立 codec adapter 落地前
+  显式拒绝 aggregate 参数。动态 Array、递归、inheritance、polymorphic 与 over-budget
+  shape 在 emission 前 fail closed；本切片未扩 Ops/Component/Emit。详见
+  `docs/plan/tasks/r1-004.md`。
 
 - `lake build Tests` 当前 237 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量

@@ -7014,6 +7014,7 @@ def decodeMutating (env : Environment) (e : Expr) (stateType? : Option Name := n
 
 private def codecScalarOfType (e : Expr) : Option Core.Codec.Scalar :=
   match e.consumeMData.getAppFn.constName? with
+  | some ``Bool => some .boolean
   | some ``UInt8 => some .uint8
   | some ``UInt16 => some .uint16
   | some ``UInt32 => some .uint32
@@ -7036,16 +7037,102 @@ private def legacyWidthOfScalar : Core.Codec.Scalar → Nat
 private def widthOfType (e : Expr) : Option Nat :=
   (codecScalarOfType e).map legacyWidthOfScalar
 
-/-- Logical user parameter types. init includes every binder; mutate/view drop state. -/
-private def inferParamTypes (_env : Environment) (e : Expr) (kind : Core.IR.MethodKind) :
-    Array Core.Codec.Scalar :=
-  let rec collect (fuel : Nat) (e : Expr) (acc : Array Core.Codec.Scalar) :
-      Array Core.Codec.Scalar :=
+/-- Derive a bounded logical codec shape without choosing Borsh, ABI, account, or storage layout. -/
+private partial def codecSchemaOfTypeAt (env : Environment) (fuel : Nat)
+    (ancestors : Array Name) (type : Expr) : Except String Core.Codec.Schema := do
+  if fuel == 0 then
+    throw "extract/unsupported: boundary schema nesting exceeds extractor limit"
+  let type := type.consumeMData
+  if let some scalar := codecScalarOfType type then
+    return .scalar scalar
+  let head := type.getAppFn.constName?
+  if head == some ``Unit || head == some ``PUnit then
+    return .unit
+  let args := type.getAppArgs
+  if head == some ``Prod then
+    unless args.size ≥ 2 do
+      throw "extract/unsupported: malformed Prod boundary type"
+    return .tuple #[
+      ← codecSchemaOfTypeAt env (fuel - 1) ancestors args[args.size - 2]!,
+      ← codecSchemaOfTypeAt env (fuel - 1) ancestors args[args.size - 1]!
+    ]
+  if head == some ``Option then
+    let some payload := args.back?
+      | throw "extract/unsupported: malformed Option boundary type"
+    return .option (← codecSchemaOfTypeAt env (fuel - 1) ancestors payload)
+  if head == some ``Vector then
+    unless args.size ≥ 2 do
+      throw "extract/unsupported: malformed Vector boundary type"
+    let some length := natLiteral? args[args.size - 1]!
+      | throw "extract/unsupported: Vector boundary length is not a literal"
+    let element ← codecSchemaOfTypeAt env (fuel - 1) ancestors args[args.size - 2]!
+    return .fixedArray length element
+  if head == some ``Array then
+    throw "extract/unsupported: Array boundary is dynamic; use literal-length Vector"
+  if head == some fixedBytesName then
+    throw "extract/unsupported: FixedBytes boundary size must be a literal in 1..32"
+  let some typeName := head
+    | throw "extract/unsupported: polymorphic boundary type"
+  unless isUserType env typeName do
+    throw s!"extract/unsupported: unsupported boundary type {typeName}"
+  if ancestors.contains typeName then
+    throw s!"extract/unsupported: recursive boundary type {typeName}"
+  let some (.inductInfo info) := env.find? typeName
+    | throw s!"extract/unsupported: malformed boundary type {typeName}"
+  if info.numParams != 0 || info.numIndices != 0 || !args.isEmpty then
+    throw s!"extract/unsupported: polymorphic boundary type {typeName}"
+  if info.isRec then
+    throw s!"extract/unsupported: recursive boundary type {typeName}"
+  if info.ctors.isEmpty then
+    throw s!"extract/unsupported: empty boundary type {typeName}"
+  let ancestors := ancestors.push typeName
+  if isStructure env typeName then
+    unless (getStructureParentInfo env typeName).isEmpty do
+      throw s!"extract/unsupported: boundary record {typeName} uses inheritance"
+    let fields := getStructureFields env typeName
+    if fields.isEmpty then
+      throw s!"extract/unsupported: boundary record {typeName} has no fields"
+    let mut schemas : Array (String × Core.Codec.Schema) := #[]
+    for field in fields do
+      if (isSubobjectField? env typeName field).isSome then
+        throw s!"extract/unsupported: boundary record {typeName} uses inheritance"
+      let some fieldType := fieldTypeExpr env typeName field
+        | throw s!"extract/unsupported: boundary field {typeName}.{field} has no type"
+      schemas := schemas.push (field.toString,
+        ← codecSchemaOfTypeAt env (fuel - 1) ancestors fieldType)
+    return .record typeName.toString schemas
+  let mut variants : Array (String × Core.Codec.Schema) := #[]
+  for ctorName in info.ctors do
+    let some (.ctorInfo ctor) := env.find? ctorName
+      | throw s!"extract/unsupported: malformed boundary constructor {ctorName}"
+    let mut payload : Array Core.Codec.Schema := #[]
+    for index in [:ctor.numFields] do
+      let some fieldType := forallDomainAt? 32 index ctor.type
+        | throw s!"extract/unsupported: boundary constructor {ctorName} has no field type"
+      payload := payload.push (← codecSchemaOfTypeAt env (fuel - 1) ancestors fieldType)
+    let payloadSchema :=
+      match payload.toList with
+      | [] => .unit
+      | [schema] => schema
+      | _ => .tuple payload
+    variants := variants.push (Core.IR.lastName ctorName.toString, payloadSchema)
+  return .enumeration typeName.toString 8 variants
+
+def codecSchemaOfType (env : Environment) (type : Expr) :
+    Except String Core.Codec.Schema := do
+  let schema ← codecSchemaOfTypeAt env 32 #[] type
+  match Core.Codec.validate schema with
+  | .ok _ => return schema
+  | .error reason => throw s!"extract/unsupported: {reason}"
+
+/-- User parameter domains. init includes every binder; mutate/view drop persisted State. -/
+private def inferParamTypeExprs (e : Expr) (kind : Core.IR.MethodKind) : Array Expr :=
+  let rec collect (fuel : Nat) (e : Expr) (acc : Array Expr) : Array Expr :=
     match fuel with
     | 0 => acc
     | fuel' + 1 =>
       match strip e with
-      | .lam _ ty body _ => collect fuel' body (acc.push ((codecScalarOfType ty).getD .uint64))
+      | .lam _ type body _ => collect fuel' body (acc.push type)
       | .letE _ _ _ body _ => collect fuel' body acc
       | _ => acc
   let types := collect 32 e #[]
@@ -7053,9 +7140,34 @@ private def inferParamTypes (_env : Environment) (e : Expr) (kind : Core.IR.Meth
   | .init => types
   | .increment | .get => if types.isEmpty then #[] else types.extract 1 types.size
 
-/-- 用户参数宽。init 全算；mutate/view 丢掉第一个 state。 -/
-private def inferParamWidths (env : Environment) (e : Expr) (kind : Core.IR.MethodKind) : Array Nat :=
-  (inferParamTypes env e kind).map legacyWidthOfScalar
+private def inferParamSchemas (env : Environment) (e : Expr) (kind : Core.IR.MethodKind) :
+    Except String (Array Core.Codec.Schema) :=
+  (inferParamTypeExprs e kind).mapM (codecSchemaOfType env)
+
+/-- Scalar compatibility metadata is complete or absent; aggregates never masquerade as u64. -/
+private def scalarTypesOfSchemas (schemas : Array Core.Codec.Schema) :
+    Array Core.Codec.Scalar := Id.run do
+  let mut types := #[]
+  for schema in schemas do
+    match schema with
+    | .scalar type => types := types.push type
+    | _ => return #[]
+  return types
+
+private def logicalReturnSchema (env : Environment) (kind : Core.IR.MethodKind) (type : Expr) :
+    Except String Core.Codec.Schema := do
+  match kind with
+  | .init => return .unit
+  | .get => return ← codecSchemaOfType env type
+  | .increment =>
+      let args := type.consumeMData.getAppArgs
+      unless type.consumeMData.getAppFn.constName? == some ``Except && args.size ≥ 2 do
+        throw "extract/unsupported: mutating boundary must return Except Error (State × Result)"
+      let success := args[args.size - 1]!.consumeMData
+      let successArgs := success.getAppArgs
+      unless success.getAppFn.constName? == some ``Prod && successArgs.size ≥ 2 do
+        throw "extract/unsupported: mutating boundary must return Except Error (State × Result)"
+      return ← codecSchemaOfType env successArgs[successArgs.size - 1]!
 
 private def markMethodArgs (kind : Core.IR.MethodKind) (count : Nat) (body : Expr) : Expr :=
   let marker (index : Nat) := mkApp (mkConst ``methodArgRef) (mkNatLit index)
@@ -7390,9 +7502,13 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     match kind with
     | .init => if nLams = 0 then 1 else nLams
     | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
-  let paramWidths := inferParamWidths env e kind
-  let paramTypes := inferParamTypes env e kind
   let retTy := peelForalls info.type
+  let paramSchemas ← inferParamSchemas env e kind
+  unless paramSchemas.size == paramCount do
+    throw "extract/unsupported: boundary parameter schema count mismatch"
+  let paramTypes := scalarTypesOfSchemas paramSchemas
+  let paramWidths := paramTypes.map legacyWidthOfScalar
+  let retSchema ← logicalReturnSchema env kind retTy
   let retWidths :=
     match kind with
     | .get =>
@@ -7435,16 +7551,14 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       if nRet = 0 then 1 else nRet
     | .init => 1
   let retTypes :=
-    match kind with
-    | .init => #[]
-    | .increment | .get =>
-        match codecScalarOfType retTy with
-        | some type => #[type]
-        | none => Array.replicate retCount .uint64
+    match retSchema with
+    | .scalar type => #[type]
+    | _ => #[]
   let annotations := (Attr.svmRawEntries env n).map (·.annotation)
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
-    paramCount, paramWidths, paramTypes, retWidths, retTypes, retCount, annotations, sketch, ops
+    paramCount, paramWidths, paramTypes, paramSchemas, retWidths, retTypes, retSchema, retCount,
+    annotations, sketch, ops
   }
 
 private def isUInt64Type (e : Expr) : Bool :=
