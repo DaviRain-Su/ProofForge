@@ -6,6 +6,7 @@ open Examples.Token
 open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩
+def nobody : Addr20 := ⟨0, 0, 0⟩
 
 def nine : UInt256 := ⟨9, 0, 0, 0⟩
 def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
@@ -15,16 +16,29 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 #guard get (init 0) == 0
 #guard balanceOf (init 0) sample == zero256
 #guard totalSupply (init 0) == zero256
+#guard decimals (init 0) == 18
+#guard name (init 0) == ⟨0x546f6b656e, 0, 0, 0⟩
+#guard symbol (init 0) == ⟨0x5046, 0, 0, 0⟩
 #guard allowanceOf (init 0) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
   match mint (init 0) sample nine with
-  | .ok (_, ret) => ret == 9
+  | .ok _ => true
+  | .error _ => false
+
+#guard
+  match mint (init 0) nobody nine with
+  | .ok _ => true
   | .error _ => false
 
 #guard
   match burn (init 0) nine with
   | .ok (_, ret) => ret == 9
+  | .error _ => false
+
+#guard
+  match burnFrom (init 0) sample nine with
+  | .ok _ => true
   | .error _ => false
 
 #guard
@@ -72,12 +86,18 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
         abi.contains "\"name\":\"Insufficient\"" &&
         abi.contains "\"name\":\"Expired\"" &&
         abi.contains "\"name\":\"Unauthorized\"" &&
+        abi.contains "\"name\":\"ZeroAddress\"" &&
         abi.contains "\"type\":\"error\"" &&
         yul.contains "revert(0, 36)" &&
         yul.contains "staticcall(gas(), 1," &&
         yul.contains "0x1901" &&
         yul.contains "keccak256(0, 160)" &&
         abi.contains "\"name\":\"DOMAIN_SEPARATOR\"" &&
+        abi.contains "\"type\":\"bytes32\"" &&
+        abi.contains "\"name\":\"decimals\"" &&
+        abi.contains "\"type\":\"uint8\"" &&
+        abi.contains "\"name\":\"name\"" &&
+        abi.contains "\"name\":\"symbol\"" &&
         abi.contains "\"type\":\"bytes32\""
 
 #guard
@@ -86,6 +106,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "transferFrom")).isSome &&
     (p.entries.find? (·.ixName == "approve")).isSome &&
     (p.entries.find? (·.ixName == "burn")).isSome &&
+    (p.entries.find? (·.ixName == "burnFrom")).isSome &&
     (p.entries.find? (·.ixName == "increaseAllowance")).isSome &&
     (p.entries.find? (·.ixName == "decreaseAllowance")).isSome &&
     (p.entries.find? (·.ixName == "balanceOf")).map (·.view) == some true &&
@@ -93,7 +114,13 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
     (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.view) == some true &&
     (p.entries.find? (·.ixName == "DOMAIN_SEPARATOR")).map (·.retWidths) == some #[33] &&
     (p.entries.find? (·.ixName == "totalSupply")).map (·.view) == some true &&
-    (p.entries.find? (·.ixName == "totalSupply")).map (·.retWidths) == some #[32]
+    (p.entries.find? (·.ixName == "totalSupply")).map (·.retWidths) == some #[32] &&
+    (p.entries.find? (·.ixName == "decimals")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "decimals")).map (·.retWidths) == some #[1] &&
+    (p.entries.find? (·.ixName == "name")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "name")).map (·.retWidths) == some #[33] &&
+    (p.entries.find? (·.ixName == "symbol")).map (·.view) == some true &&
+    (p.entries.find? (·.ixName == "symbol")).map (·.retWidths) == some #[33]
 
 #guard
   match ProofForge.Svm.Emit.emitCounterAsm ProofForge.Golden.extractedToken with

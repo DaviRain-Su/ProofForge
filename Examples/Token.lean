@@ -22,10 +22,13 @@ def nonceBase : UInt64 := 2
 def init (_seed : UInt64) : State :=
   { dummy := 0, supply := ⟨0, 0, 0, 0⟩ }
 
-/-- 给 Addr20 记 256-bit 余额，并累加 totalSupply。测试用铸币，不是权限模型。 -/
+/-- 给 Addr20 记 256-bit 余额，并累加 totalSupply。测试用铸币，不是权限模型。
+    `to` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def mint (s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64) :=
-  if (0 : UInt64) ≠ 1 then
+  if evmEq20 to ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy := evmMapSetAddr256 balBase to v,
            supply := evmAdd256 s.supply v },
       evmLogTransfer256 ⟨0, 0, 0⟩ to v)
@@ -40,6 +43,21 @@ def balanceOf (_s : State) (who : Addr20) : UInt256 :=
 @[pf_entry]
 def totalSupply (s : State) : UInt256 :=
   s.supply
+
+/-- 编译期 `decimals()`。不是 storage，也不是动态 string。 -/
+@[pf_entry]
+def decimals (_s : State) : UInt8 :=
+  18
+
+/-- 编译期 `name()`，右填充 ASCII `"Token"`。不是动态 string。 -/
+@[pf_entry]
+def name (_s : State) : Bytes32 :=
+  ⟨0x546f6b656e, 0, 0, 0⟩
+
+/-- 编译期 `symbol()`，右填充 ASCII `"PF"`。不是动态 string。 -/
+@[pf_entry]
+def symbol (_s : State) : Bytes32 :=
+  ⟨0x5046, 0, 0, 0⟩
 
 @[pf_entry]
 def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
@@ -63,21 +81,27 @@ def permit (st : State) (owner spender : Addr20) (value deadline : UInt256)
   else
     .error .overflow
 
-/-- caller → spender 写额度，并 LOG3 `Approval(address,address,uint256)`。 -/
+/-- caller → spender 写额度，并 LOG3 `Approval(address,address,uint256)`。
+    `spender` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def approve (s : State) (spender : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
-  if (0 : UInt64) ≠ 1 then
+  if evmEq20 spender ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy :=
         evmMapSetPair256 allowBase evmCaller20 spender amt, supply := s.supply },
       evmLogApproval256 evmCaller20 spender amt)
   else
     .error .overflow
 
-/-- caller → spender 现额度加上 `added`，并 LOG3 Approval。溢出 revert。 -/
+/-- caller → spender 现额度加上 `added`，并 LOG3 Approval。溢出 revert。
+    `spender` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
     Except Error (State × UInt64) :=
-  if (0 : UInt64) ≠ 1 then
+  if evmEq20 spender ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  else if (0 : UInt64) ≠ 1 then
     let next := evmAdd256 (evmMapGetPair256 allowBase evmCaller20 spender) added
     .ok ({ dummy := evmMapSetPair256 allowBase evmCaller20 spender next,
            supply := s.supply },
@@ -85,11 +109,14 @@ def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
   else
     .error .overflow
 
-/-- caller → spender 现额度减去 `subtracted`。不够 → `Insufficient(have,want)`。 -/
+/-- caller → spender 现额度减去 `subtracted`。不够 → `Insufficient(have,want)`。
+    `spender` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
-  if evmGe256 (evmMapGetPair256 allowBase evmCaller20 spender) subtracted then
+  if evmEq20 spender ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  else if evmGe256 (evmMapGetPair256 allowBase evmCaller20 spender) subtracted then
     let next := evmSub256 (evmMapGetPair256 allowBase evmCaller20 spender) subtracted
     .ok ({ dummy := evmMapSetPair256 allowBase evmCaller20 spender next,
            supply := s.supply },
@@ -111,10 +138,36 @@ def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
     .ok ({ dummy := s.dummy, supply := s.supply },
       evmRevertInsufficient (evmMapGetAddr256 balBase evmCaller20) amt)
 
-/-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。 -/
+/-- caller 用额度烧掉 owner 的币。额度或余额不够 → `Insufficient`。
+    `owner` 为零地址 → `ZeroAddress()`。 -/
+@[pf_entry]
+def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
+    Except Error (State × UInt64) :=
+  if evmEq20 owner ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  else if evmGe256 (evmMapGetPair256 allowBase owner evmCaller20) amt then
+    if evmGe256 (evmMapGetAddr256 balBase owner) amt then
+      let debit :=
+        (evmMapSetAddr256 balBase owner
+          (evmSub256 (evmMapGetAddr256 balBase owner) amt)) |||
+        (evmMapSetPair256 allowBase owner evmCaller20
+          (evmSub256 (evmMapGetPair256 allowBase owner evmCaller20) amt))
+      .ok ({ dummy := debit, supply := evmSub256 s.supply amt },
+        evmLogTransfer256 owner ⟨0, 0, 0⟩ amt)
+    else
+      .ok ({ dummy := s.dummy, supply := s.supply },
+        evmRevertInsufficient (evmMapGetAddr256 balBase owner) amt)
+  else
+    .ok ({ dummy := s.dummy, supply := s.supply },
+      evmRevertInsufficient (evmMapGetPair256 allowBase owner evmCaller20) amt)
+
+/-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。
+    `dest` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
-  if evmGe256 (evmMapGetAddr256 balBase evmCaller20) amt then
+  if evmEq20 dest ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  else if evmGe256 (evmMapGetAddr256 balBase evmCaller20) amt then
     let debit :=
       (evmMapSetAddr256 balBase evmCaller20
         (evmSub256 (evmMapGetAddr256 balBase evmCaller20) amt)) |||
@@ -126,11 +179,14 @@ def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State �
     .ok ({ dummy := s.dummy, supply := s.supply },
       evmRevertInsufficient (evmMapGetAddr256 balBase evmCaller20) amt)
 
-/-- 查 pair 额度；不足 → `Insufficient`。成功则改余额并写剩余额度。 -/
+/-- 查 pair 额度；不足 → `Insufficient`。成功则改余额并写剩余额度。
+    `dest` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
 def transferFrom (s : State) (owner dest : Addr20) (amt : UInt256) :
     Except Error (State × UInt64) :=
-  if evmGe256 (evmMapGetPair256 allowBase owner evmCaller20) amt then
+  if evmEq20 dest ⟨0, 0, 0⟩ then
+    .ok ({ dummy := s.dummy, supply := s.supply }, evmRevertZeroAddress)
+  else if evmGe256 (evmMapGetPair256 allowBase owner evmCaller20) amt then
     if evmGe256 (evmMapGetAddr256 balBase owner) amt then
       let debit :=
         (evmMapSetAddr256 balBase owner

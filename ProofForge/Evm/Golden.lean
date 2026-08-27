@@ -181,6 +181,16 @@ private def setPairCallerSpender256 (base spender : Nat) (val : Nat → Ops.Val)
     (addrField spender "w0") (addrField spender "w1") (addrField spender "w2")
     (val 0) (val 1) (val 2) (val 3)
 
+private def eq20Zero (key : Nat) : Ops.Val :=
+  .ext .eq20 #[
+    addrField key "w0", addrField key "w1", addrField key "w2",
+    .lit 0, .lit 0, .lit 0]
+
+private def guardZero (key : Nat) (ok : Array IR.Op) : Array IR.Op :=
+  #[.ite .eq (eq20Zero key) (.lit 1)
+      #[.evmRevertZeroAddress, .returnU64 (.lit 0)]
+      ok]
+
 /-- Live extract of `Examples.Wide`; Legacy IR has no `arith256` leaf. -/
 def extractedWide : IR.Program :=
   let ctor : IR.Method := {
@@ -385,7 +395,7 @@ def extractedToken : IR.Program :=
       ]
     }
     entries := #[
-      mutEntry "Token" "approve" 2 #[20, 32] #[
+      mutEntry "Token" "approve" 2 #[20, 32] (guardZero 0 #[
         .ite .ne (.lit 0) (.lit 1)
           #[.mapSetPair256 (.lit 1)
               (callerW 0) (callerW 1) (callerW 2)
@@ -396,7 +406,7 @@ def extractedToken : IR.Program :=
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
-      ],
+      ]),
       mutEntry "Token" "burn" 1 #[32] #[
         .ite .eq (ge256 callerBal 0) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 0),
@@ -423,29 +433,61 @@ def extractedToken : IR.Program :=
           #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
               (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
             .returnU64 (callerBal 0)]
-      ],
-      mutEntry "Token" "decreaseAllowance" 2 #[20, 32] #[
-        .ite .eq (ge256 pairSelf 1) (.lit 1)
-          #[setPairCallerSpender256 1 0 (fun limb => arithGet 1 limb pairSelf 1),
-            .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
-              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (arithGet 1 0 pairSelf 1) (arithGet 1 1 pairSelf 1)
-              (arithGet 1 2 pairSelf 1) (arithGet 1 3 pairSelf 1),
-            .returnU64 (arithGet 1 0 pairSelf 1)]
-          #[.evmRevertInsufficient (pairSelf 0) (pairSelf 1) (pairSelf 2) (pairSelf 3)
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
-            .returnU64 (pairSelf 0)]
-      ],
-      mutEntry "Token" "increaseAllowance" 2 #[20, 32] #[
-        .ite .ne (.lit 0) (.lit 1)
-          #[setPairCallerSpender256 1 0 (fun limb => arithGet 0 limb pairSelf 1),
-            .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
-              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (arithGet 0 0 pairSelf 1) (arithGet 0 1 pairSelf 1)
-              (arithGet 0 2 pairSelf 1) (arithGet 0 3 pairSelf 1),
-            .returnU64 (arithGet 0 0 pairSelf 1)]
-          #[.errorOverflow]
-      ],
+          ],
+          mutEntry "Token" "burnFrom" 2 #[20, 32] (guardZero 0 #[
+            .ite .eq (ge256 pairAllow 1) (.lit 1)
+              #[.ite .eq (ge256 ownerBal 1) (.lit 1)
+                  #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 1),
+                    setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 1),
+                    .evmLogTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+                      (.lit 0) (.lit 0) (.lit 0)
+                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                    .storeField "supply_w0" (.ext (.arith256 1 0) #[
+                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                    .storeField "supply_w1" (.ext (.arith256 1 1) #[
+                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                    .storeField "supply_w2" (.ext (.arith256 1 2) #[
+                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                    .storeField "supply_w3" (.ext (.arith256 1 3) #[
+                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
+                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
+                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                    .returnU64 (u256Field 1 "w0")]
+                  #[.evmRevertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3)
+                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                    .returnU64 (ownerBal 0)]]
+              #[.evmRevertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3)
+                  (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                .returnU64 (pairAllow 0)]
+          ]),
+          mutEntry "Token" "decreaseAllowance" 2 #[20, 32] (guardZero 0 #[
+            .ite .eq (ge256 pairSelf 1) (.lit 1)
+              #[setPairCallerSpender256 1 0 (fun limb => arithGet 1 limb pairSelf 1),
+                .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
+                  (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+                  (arithGet 1 0 pairSelf 1) (arithGet 1 1 pairSelf 1)
+                  (arithGet 1 2 pairSelf 1) (arithGet 1 3 pairSelf 1),
+                .returnU64 (arithGet 1 0 pairSelf 1)]
+              #[.evmRevertInsufficient (pairSelf 0) (pairSelf 1) (pairSelf 2) (pairSelf 3)
+                  (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                .returnU64 (pairSelf 0)]
+          ]),
+          mutEntry "Token" "increaseAllowance" 2 #[20, 32] (guardZero 0 #[
+            .ite .ne (.lit 0) (.lit 1)
+              #[setPairCallerSpender256 1 0 (fun limb => arithGet 0 limb pairSelf 1),
+                .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
+                  (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+                  (arithGet 0 0 pairSelf 1) (arithGet 0 1 pairSelf 1)
+                  (arithGet 0 2 pairSelf 1) (arithGet 0 3 pairSelf 1),
+                .returnU64 (arithGet 0 0 pairSelf 1)]
+              #[.errorOverflow]
+          ]),
       mutEntry "Token" "logApprove" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
           #[.evmLog "Approval" (.arg 0), .returnU64 (.arg 0)]
@@ -456,7 +498,7 @@ def extractedToken : IR.Program :=
           #[.evmLog "Transfer" (.arg 0), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
-      mutEntry "Token" "mint" 2 #[20, 32] #[
+      mutEntry "Token" "mint" 2 #[20, 32] (guardZero 0 #[
         .ite .ne (.lit 0) (.lit 1)
           #[setAddr256 0 0 (fun limb => u256Field 1 (limbName limb)),
             .evmLogTransfer256 (.lit 0) (.lit 0) (.lit 0)
@@ -480,7 +522,7 @@ def extractedToken : IR.Program :=
               u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
-      ],
+      ]),
       mutEntry "Token" "permit" 7 #[20, 20, 32, 32, 1, 33, 33] #[
         .ite .ne (.lit 0) (.lit 1)
           #[.evmPermit
@@ -494,7 +536,7 @@ def extractedToken : IR.Program :=
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
       ],
-      mutEntry "Token" "transfer" 2 #[20, 32] #[
+      mutEntry "Token" "transfer" 2 #[20, 32] (guardZero 0 #[
         .ite .eq (ge256 callerBal 1) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
             setAddr256 0 0 (fun limb => arithGet 0 limb destBal 1),
@@ -505,8 +547,8 @@ def extractedToken : IR.Program :=
           #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
             .returnU64 (callerBal 0)]
-      ],
-      mutEntry "Token" "transferFrom" 3 #[20, 20, 32] #[
+      ]),
+      mutEntry "Token" "transferFrom" 3 #[20, 20, 32] (guardZero 1 #[
         .ite .eq (ge256 pairAllow 2) (.lit 1)
           #[.ite .eq (ge256 ownerBal 2) (.lit 1)
               #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 2),
@@ -522,11 +564,7 @@ def extractedToken : IR.Program :=
           #[.evmRevertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3)
               (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
             .returnU64 (pairAllow 0)]
-      ],
-      view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
-      view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
-      dummyGet "Token",
-      view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0),
+      ]),
       {
         kind := .get
         name := "Examples.Token.DOMAIN_SEPARATOR"
@@ -535,6 +573,49 @@ def extractedToken : IR.Program :=
         retWidths := #[33]
         retCount := 4
         ops := return256 fun limb => .ext (.domainSep256 limb) #[]
+        view := true
+      },
+      view256 "Token" "allowanceOf" 2 #[20, 20] (return256 fun limb => getPair256 limb 1 0 1),
+      view256 "Token" "balanceOf" 1 #[20] (return256 fun limb => getAddr256 limb 0 0),
+      {
+        kind := .get
+        name := "Examples.Token.decimals"
+        ixName := "decimals"
+        selector := Keccak.selectorOfWidths "decimals" #[]
+        retWidths := #[1]
+        ops := #[.returnU64 (.lit 18)]
+        view := true
+      },
+      dummyGet "Token",
+      {
+        kind := .get
+        name := "Examples.Token.name"
+        ixName := "name"
+        selector := Keccak.selectorOfWidths "name" #[]
+        retWidths := #[33]
+        retCount := 4
+        ops := #[
+          .returnU64 (.lit 362646562158),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0)
+        ]
+        view := true
+      },
+      view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0),
+      {
+        kind := .get
+        name := "Examples.Token.symbol"
+        ixName := "symbol"
+        selector := Keccak.selectorOfWidths "symbol" #[]
+        retWidths := #[33]
+        retCount := 4
+        ops := #[
+          .returnU64 (.lit 20550),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0),
+          .returnU64 (.lit 0)
+        ]
         view := true
       },
       view256 "Token" "totalSupply" 0 #[] (return256 fun limb =>

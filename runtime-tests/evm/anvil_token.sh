@@ -27,6 +27,29 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
   0 "absent total supply"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'decimals()(uint8)')" \
+  18 "compile-time decimals"
+want_name="0x000000000000000000000000000000000000000000000000000000546f6b656e"
+want_symbol="0x0000000000000000000000000000000000000000000000000000000000005046"
+got_name="$("$cast" call --rpc-url "$rpc" "$addr" 'name()(bytes32)')"
+got_symbol="$("$cast" call --rpc-url "$rpc" "$addr" 'symbol()(bytes32)')"
+solana_lean_require_equal "${got_name,,}" "$want_name" "compile-time name"
+solana_lean_require_equal "${got_symbol,,}" "$want_symbol" "compile-time symbol"
+
+zero="0x0000000000000000000000000000000000000000"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'mint(address,uint256)' "$zero" 1 >/dev/null 2>&1; then
+  echo "FAIL: mint to zero unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_zero_address "$addr" "$sender" \
+  "$("$cast" calldata 'mint(address,uint256)' "$zero" 1)" \
+  "mint to zero"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  0 "mint to zero holds supply"
+
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'mint(address,uint256)' "$sender" 100 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
@@ -35,6 +58,13 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
   100 "total supply after mint"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'decimals()(uint8)')" \
+  18 "decimals holds after mint"
+got_name2="$("$cast" call --rpc-url "$rpc" "$addr" 'name()(bytes32)')"
+got_symbol2="$("$cast" call --rpc-url "$rpc" "$addr" 'symbol()(bytes32)')"
+solana_lean_require_equal "${got_name2,,}" "$want_name" "name holds after mint"
+solana_lean_require_equal "${got_symbol2,,}" "$want_symbol" "symbol holds after mint"
 
 topic_xfer="$("$cast" keccak 'Transfer(address,address,uint256)')"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" \
@@ -74,6 +104,27 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$dest")" \
   30 "dest after transfer"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'transfer(address,uint256)' "$zero" 1 >/dev/null 2>&1; then
+  echo "FAIL: transfer to zero unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_zero_address "$addr" "$sender" \
+  "$("$cast" calldata 'transfer(address,uint256)' "$zero" 1)" \
+  "transfer to zero"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  70 "transfer to zero holds sender"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'approve(address,uint256)' "$zero" 1 >/dev/null 2>&1; then
+  echo "FAIL: approve zero unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_zero_address "$addr" "$sender" \
+  "$("$cast" calldata 'approve(address,uint256)' "$zero" 1)" \
+  "approve zero"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
     "$addr" 'transfer(address,uint256)' "$dest" 1000 >/dev/null 2>&1; then
@@ -174,6 +225,36 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   10 "over-allowance holds remaining"
 
+"$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+  "$addr" 'burnFrom(address,uint256)' "$sender" 5 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  60 "owner after burnFrom"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  5 "allowance after burnFrom"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  95 "total supply after burnFrom"
+
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'burnFrom(address,uint256)' "$sender" 100 >/dev/null 2>&1; then
+  echo "FAIL: over-allowance burnFrom unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_insufficient "$addr" "$dest" \
+  "$("$cast" calldata 'burnFrom(address,uint256)' "$sender" 100)" \
+  5 100 "over-allowance burnFrom"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  60 "over-allowance burnFrom holds owner"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  5 "over-allowance burnFrom holds remaining"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  95 "over-allowance burnFrom holds supply"
+
 deadline=9999999999
 typed="$(printf '%s' "{
   \"types\": {
@@ -234,7 +315,7 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'transferFrom(address,address,uint256)' "$sender" "$dest" 10 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
-  55 "owner after permit transferFrom"
+  50 "owner after permit transferFrom"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   0 "allowance after permit transferFrom"
@@ -243,10 +324,10 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'burn(uint256)' 10 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
-  45 "owner after burn"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  40 "owner after burn"
+  solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
-  90 "total supply after burn"
+  85 "total supply after burn"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
     "$addr" 'burn(uint256)' 1000 >/dev/null 2>&1; then
@@ -255,13 +336,13 @@ if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
 fi
 solana_lean_require_insufficient "$addr" "$sender" \
   "$("$cast" calldata 'burn(uint256)' 1000)" \
-  45 1000 "overdraw burn"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  40 1000 "overdraw burn"
+  solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
-  45 "overdraw burn holds owner"
-solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  40 "overdraw burn holds owner"
+  solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'totalSupply()(uint256)')" \
-  90 "overdraw burn holds supply"
+  85 "overdraw burn holds supply"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
     "$addr" 'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)' \
@@ -278,4 +359,4 @@ fi
 got_dom2="$("$cast" call --rpc-url "$rpc" "$addr" 'DOMAIN_SEPARATOR()(bytes32)')"
 solana_lean_require_equal "${got_dom2,,}" "${got_dom,,}" "DOMAIN_SEPARATOR holds after permit"
 
-echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/incdec; engineering only)"
+echo "evm-anvil-token: ok (mint/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals/zero/name; engineering only)"
