@@ -126,7 +126,7 @@ def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
       NativeFx.Source.logApproval256 evmCaller20 spender next)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      NativeFx.Source.revertInsufficient (getPair256 allowances evmCaller20 spender) subtracted)
+      revertInsufficientPair256 allowances evmCaller20 spender subtracted)
 
 /-- 从 caller 扣余额并减 totalSupply。不足 → `Insufficient(have,want)`。 -/
 @[pf_entry]
@@ -139,7 +139,7 @@ def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
       NativeFx.Source.logTransfer256 evmCaller20 ⟨0, 0, 0⟩ amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      NativeFx.Source.revertInsufficient (getAddr256 balances evmCaller20) amt)
+      revertInsufficientAddr256 balances evmCaller20 amt)
 
 /-- caller 用额度烧掉 owner 的币。额度或余额不够 → `Insufficient`。
     `owner` 为零地址 → `ZeroAddress()`。 -/
@@ -159,10 +159,10 @@ def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
         NativeFx.Source.logTransfer256 owner ⟨0, 0, 0⟩ amt)
     else
       .ok ({ dummy := s.dummy, supply := s.supply },
-        NativeFx.Source.revertInsufficient (getAddr256 balances owner) amt)
+        revertInsufficientAddr256 balances owner amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      NativeFx.Source.revertInsufficient (getPair256 allowances owner evmCaller20) amt)
+      revertInsufficientPair256 allowances owner evmCaller20 amt)
 
 /-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。
     `dest` 为零地址 → `ZeroAddress()`。 -/
@@ -180,7 +180,7 @@ def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State �
       NativeFx.Source.logTransfer256 evmCaller20 dest amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      NativeFx.Source.revertInsufficient (getAddr256 balances evmCaller20) amt)
+      revertInsufficientAddr256 balances evmCaller20 amt)
 
 /-- 查 pair 额度；不足 → `Insufficient`。成功则改余额并写剩余额度。
     `dest` 为零地址 → `ZeroAddress()`。 -/
@@ -202,10 +202,10 @@ def transferFrom (s : State) (owner dest : Addr20) (amt : UInt256) :
         NativeFx.Source.logTransfer256 owner dest amt)
     else
       .ok ({ dummy := s.dummy, supply := s.supply },
-        NativeFx.Source.revertInsufficient (getAddr256 balances owner) amt)
+        revertInsufficientAddr256 balances owner amt)
   else
     .ok ({ dummy := s.dummy, supply := s.supply },
-      NativeFx.Source.revertInsufficient (getPair256 allowances owner evmCaller20) amt)
+      revertInsufficientPair256 allowances owner evmCaller20 amt)
 
 /-- LOG1 `Transfer(uint64)`。 -/
 @[pf_entry]

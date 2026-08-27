@@ -1,6 +1,7 @@
 import ProofForge.Attr
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.WideWord.Source
+import ProofForge.Evm.NativeFx.Source
 
 namespace ProofForge.Evm.HashedMap.Source
 
@@ -93,5 +94,15 @@ into one helper duplicates the arith under LOG and changes extracted IR. -/
 @[pf_inline] def nextSubPair256 (map : MapPair256) (owner spender : Addr20)
     (amt : UInt256) : UInt256 :=
   WideWord.Source.sub256 (getPair256 map owner spender) amt
+
+/-- Map-slot Insufficient. Contracts name the handle instead of
+`revertInsufficient (getAddr256 …) want`. `@[pf_inline]` erases into NativeFx plus map get. -/
+@[pf_inline] def revertInsufficientAddr256 (map : MapAddr256) (key : Addr20)
+    (want : UInt256) : UInt64 :=
+  NativeFx.Source.revertInsufficient (getAddr256 map key) want
+
+@[pf_inline] def revertInsufficientPair256 (map : MapPair256) (owner spender : Addr20)
+    (want : UInt256) : UInt64 :=
+  NativeFx.Source.revertInsufficient (getPair256 map owner spender) want
 
 end ProofForge.Evm.HashedMap.Source
