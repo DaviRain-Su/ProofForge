@@ -1,5 +1,6 @@
 import ProofForge.Attr
 import ProofForge.Svm.AccountStorage.Source
+import ProofForge.Svm.FifoCancel.Source
 
 namespace Examples.PhoenixV1
 
@@ -146,6 +147,30 @@ def Layout.wellFormed (layout : Layout) : Bool :=
   validate layout.bids.map
 @[pf_inline] def Layout.asksValid (layout : Layout) : UInt64 :=
   validate layout.asks.map
+
+/-- Build one reusable bounded cancellation plan from the named bid book, trader balance fields,
+and an independently supplied audit sink. All geometry remains compile-time data. -/
+@[pf_inline] def Layout.bidCancelConfig (layout : Layout)
+    (recorder : ProofForge.Svm.BatchRecorder.Config) : ProofForge.Svm.FifoCancel.Config :=
+  { map := layout.bids.map
+    owner := layout.bids.owner
+    size := layout.bids.size
+    locked := layout.traders.quoteLocked
+    free := layout.traders.quoteFree
+    collateral := .quote layout.header.baseLotsPerBaseUnit.firstWord
+      layout.header.tickSize.firstWord
+    recorder }
+
+/-- Build the corresponding ask-side plan. Base collateral needs no price-header geometry. -/
+@[pf_inline] def Layout.askCancelConfig (layout : Layout)
+    (recorder : ProofForge.Svm.BatchRecorder.Config) : ProofForge.Svm.FifoCancel.Config :=
+  { map := layout.asks.map
+    owner := layout.asks.owner
+    size := layout.asks.size
+    locked := layout.traders.baseLocked
+    free := layout.traders.baseFree
+    collateral := .base
+    recorder }
 
 @[pf_inline] def Layout.findTrader (layout : Layout) (key0 key1 key2 key3 : UInt64) : UInt64 :=
   findKey4 layout.traders.map key0 key1 key2 key3

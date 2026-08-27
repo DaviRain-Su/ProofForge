@@ -651,11 +651,16 @@ private partial def normalizePureInlineCtorOf? (env : Environment) (fuel : Nat)
       else normalizePureInlineCtorOf? env fuel' inductName unfolded
     else none
 
-/-- Iota-reduce a matcher only when its discriminant is a constructor literal obtained through
-pure marked descriptor builders. Dynamic contract variants keep their existing explicit lowering. -/
+private def isStaticSourceNamespace (name : Name) : Bool :=
+  name.toString.startsWith "ProofForge.Svm.AccountStorage.Source." ||
+    name.toString.startsWith "ProofForge.Svm.FifoCancel.Source."
+
+/-- Iota-reduce an SDK source-facade matcher only when its discriminant is a constructor literal
+obtained through pure marked descriptor builders. Dynamic contract variants keep their existing
+explicit lowering. -/
 private def reducePureInlineMatch? (env : Environment) (e : Expr) : Option Expr := do
   let matcherName ← e.getAppFn.constName?
-  if !matcherName.toString.startsWith "ProofForge.Svm.AccountStorage.Source." then none else pure ()
+  if !isStaticSourceNamespace matcherName then none else pure ()
   let matcher ← Lean.Meta.getMatcherInfoCore? env matcherName
   if matcher.numDiscrs != 1 then none else pure ()
   let decl ← env.find? matcherName
@@ -3150,6 +3155,26 @@ private def natOfVal : Ops.Val → Option Nat
   | .lit n => some n.toNat
   | _ => none
 
+private def staticNatVal? (env : Environment) (e : Expr) : Option Nat :=
+  (val env e >>= natOfVal) <|> do
+    let .lit value ← asStaticLit env 64 e | none
+    some value.toNat
+
+private partial def staticString? (env : Environment) (fuel : Nat) (e : Expr) : Option String :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      let e := strip e
+      match e with
+      | .lit (.strVal value) => some value
+      | _ =>
+          if let some reduced := reduceCtorProjectionFuel? env fuel' e then
+            staticString? env fuel' reduced
+          else if let some (helper, unfolded) := unfoldUserHelper env e then
+            if inlineHelperPreservesUserType env helper then none
+            else staticString? env fuel' unfolded
+          else none
+
 private def asBoolLit (e : Expr) : Option Bool :=
   if isConstNamed e ``Bool.true || endsWith e ".true" then some true
   else if isConstNamed e ``Bool.false || endsWith e ".false" then some false
@@ -3296,13 +3321,13 @@ private def decodeBatchRecorderWords (env : Environment) (e : Expr) :
 private def decodeBatchRecorderConfig (env : Environment)
     (logAccountE selfEntryTagE authoritySeedE maxBytesE headerBytesE countOffsetE
       maxRecordsE : Expr) : Option Svm.BatchRecorder.Config := do
-  let logAccount ← val env logAccountE >>= natOfVal
-  let selfEntryTag ← val env selfEntryTagE >>= natOfVal
-  let authoritySeed ← asAsciiLit authoritySeedE
-  let maxBytes ← val env maxBytesE >>= natOfVal
-  let headerBytes ← val env headerBytesE >>= natOfVal
-  let countOffset ← val env countOffsetE >>= natOfVal
-  let maxRecords ← val env maxRecordsE >>= natOfVal
+  let logAccount ← staticNatVal? env logAccountE
+  let selfEntryTag ← staticNatVal? env selfEntryTagE
+  let authoritySeed ← staticString? env 64 authoritySeedE
+  let maxBytes ← staticNatVal? env maxBytesE
+  let headerBytes ← staticNatVal? env headerBytesE
+  let countOffset ← staticNatVal? env countOffsetE
+  let maxRecords ← staticNatVal? env maxRecordsE
   return { logAccount, selfEntryTag, authoritySeed, maxBytes, headerBytes, countOffset, maxRecords }
 
 private def decodeBatchRecorderCall (env : Environment) (e : Expr) :
@@ -3349,23 +3374,23 @@ private def decodeFifoCancelCall (env : Environment) (e : Expr) :
   else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelSide ||
       endsWith e ".fifoCancelSide" then
     if args.size < 25 then none else do
-      let marketAccount ← val env args[args.size - 25]! >>= natOfVal
-      let rootWord ← val env args[args.size - 24]! >>= natOfVal
-      let linksWord ← val env args[args.size - 23]! >>= natOfVal
-      let parentWord ← val env args[args.size - 22]! >>= natOfVal
-      let priceWord ← val env args[args.size - 21]! >>= natOfVal
-      let sequenceWord ← val env args[args.size - 20]! >>= natOfVal
-      let ownerWord ← val env args[args.size - 19]! >>= natOfVal
-      let sizeWord ← val env args[args.size - 18]! >>= natOfVal
-      let lockedWord ← val env args[args.size - 17]! >>= natOfVal
-      let freeWord ← val env args[args.size - 16]! >>= natOfVal
-      let orderStride ← val env args[args.size - 15]! >>= natOfVal
-      let orderCapacity ← val env args[args.size - 14]! >>= natOfVal
-      let traderStride ← val env args[args.size - 13]! >>= natOfVal
-      let traderCapacity ← val env args[args.size - 12]! >>= natOfVal
-      let bid ← val env args[args.size - 11]! >>= natOfVal
-      let baseLotsPerBaseUnitWord ← val env args[args.size - 10]! >>= natOfVal
-      let tickSizeWord ← val env args[args.size - 9]! >>= natOfVal
+      let marketAccount ← staticNatVal? env args[args.size - 25]!
+      let rootWord ← staticNatVal? env args[args.size - 24]!
+      let linksWord ← staticNatVal? env args[args.size - 23]!
+      let parentWord ← staticNatVal? env args[args.size - 22]!
+      let priceWord ← staticNatVal? env args[args.size - 21]!
+      let sequenceWord ← staticNatVal? env args[args.size - 20]!
+      let ownerWord ← staticNatVal? env args[args.size - 19]!
+      let sizeWord ← staticNatVal? env args[args.size - 18]!
+      let lockedWord ← staticNatVal? env args[args.size - 17]!
+      let freeWord ← staticNatVal? env args[args.size - 16]!
+      let orderStride ← staticNatVal? env args[args.size - 15]!
+      let orderCapacity ← staticNatVal? env args[args.size - 14]!
+      let traderStride ← staticNatVal? env args[args.size - 13]!
+      let traderCapacity ← staticNatVal? env args[args.size - 12]!
+      let bid ← staticNatVal? env args[args.size - 11]!
+      let baseLotsPerBaseUnitWord ← staticNatVal? env args[args.size - 10]!
+      let tickSizeWord ← staticNatVal? env args[args.size - 9]!
       let recorder ← decodeBatchRecorderConfig env
         args[args.size - 8]! args[args.size - 7]! args[args.size - 6]!
         args[args.size - 5]! args[args.size - 4]! args[args.size - 3]! args[args.size - 2]!
@@ -3391,23 +3416,23 @@ private def decodeFifoCancelCall (env : Environment) (e : Expr) :
   else if isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelUpToSide ||
       endsWith e ".fifoCancelUpToSide" then
     if args.size < 29 then none else do
-      let marketAccount ← val env args[args.size - 29]! >>= natOfVal
-      let rootWord ← val env args[args.size - 28]! >>= natOfVal
-      let linksWord ← val env args[args.size - 27]! >>= natOfVal
-      let parentWord ← val env args[args.size - 26]! >>= natOfVal
-      let priceWord ← val env args[args.size - 25]! >>= natOfVal
-      let sequenceWord ← val env args[args.size - 24]! >>= natOfVal
-      let ownerWord ← val env args[args.size - 23]! >>= natOfVal
-      let sizeWord ← val env args[args.size - 22]! >>= natOfVal
-      let lockedWord ← val env args[args.size - 21]! >>= natOfVal
-      let freeWord ← val env args[args.size - 20]! >>= natOfVal
-      let orderStride ← val env args[args.size - 19]! >>= natOfVal
-      let orderCapacity ← val env args[args.size - 18]! >>= natOfVal
-      let traderStride ← val env args[args.size - 17]! >>= natOfVal
-      let traderCapacity ← val env args[args.size - 16]! >>= natOfVal
-      let bid ← val env args[args.size - 15]! >>= natOfVal
-      let baseLotsPerBaseUnitWord ← val env args[args.size - 14]! >>= natOfVal
-      let tickSizeWord ← val env args[args.size - 13]! >>= natOfVal
+      let marketAccount ← staticNatVal? env args[args.size - 29]!
+      let rootWord ← staticNatVal? env args[args.size - 28]!
+      let linksWord ← staticNatVal? env args[args.size - 27]!
+      let parentWord ← staticNatVal? env args[args.size - 26]!
+      let priceWord ← staticNatVal? env args[args.size - 25]!
+      let sequenceWord ← staticNatVal? env args[args.size - 24]!
+      let ownerWord ← staticNatVal? env args[args.size - 23]!
+      let sizeWord ← staticNatVal? env args[args.size - 22]!
+      let lockedWord ← staticNatVal? env args[args.size - 21]!
+      let freeWord ← staticNatVal? env args[args.size - 20]!
+      let orderStride ← staticNatVal? env args[args.size - 19]!
+      let orderCapacity ← staticNatVal? env args[args.size - 18]!
+      let traderStride ← staticNatVal? env args[args.size - 17]!
+      let traderCapacity ← staticNatVal? env args[args.size - 16]!
+      let bid ← staticNatVal? env args[args.size - 15]!
+      let baseLotsPerBaseUnitWord ← staticNatVal? env args[args.size - 14]!
+      let tickSizeWord ← staticNatVal? env args[args.size - 13]!
       let recorder ← decodeBatchRecorderConfig env
         args[args.size - 12]! args[args.size - 11]! args[args.size - 10]!
         args[args.size - 9]! args[args.size - 8]! args[args.size - 7]! args[args.size - 6]!
@@ -3415,7 +3440,7 @@ private def decodeFifoCancelCall (env : Environment) (e : Expr) :
       let tickLimit ← val env args[args.size - 4]!
       let searchLimit ← val env args[args.size - 3]!
       let cancelLimit ← val env args[args.size - 2]!
-      let claimImmediately ← val env args[args.size - 1]! >>= natOfVal
+      let claimImmediately ← staticNatVal? env args[args.size - 1]!
       if (bid != 0 && bid != 1) || (claimImmediately != 0 && claimImmediately != 1) then none else
       let bid := bid == 1
       let access : Svm.AccountStorage.Access :=
@@ -3443,6 +3468,31 @@ private def decodeComponentCall (env : Environment) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
   decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e
 
+private def mentionsFifoCancelSource (e : Expr) : Bool :=
+  e.getUsedConstantsAsSet.toList.any fun name =>
+    name.toString.startsWith "ProofForge.Svm.FifoCancel.Source."
+
+private def isFifoCancelSourceHelper (env : Environment) (name : Name) : Bool :=
+  name.toString.startsWith "ProofForge.Svm.FifoCancel.Source." ||
+    Attr.isInline env name &&
+      match env.find? name with
+      | some (.defnInfo helper) => mentionsFifoCancelSource helper.value
+      | _ => false
+
+private def normalizeFifoCancelEffect (env : Environment) (e : Expr) : Expr :=
+  let rec go (fuel : Nat) (e : Expr) : Expr :=
+    match fuel with
+    | 0 => e
+    | fuel' + 1 =>
+      let e := substLets 64 e
+      if let some (helper, unfolded) := unfoldUserHelper env e then
+        if !isFifoCancelSourceHelper env helper || inlineHelperPreservesUserType env helper then e
+        else go fuel' unfolded
+      else if let some reduced := reducePureInlineMatch? env e then
+        go fuel' reduced
+      else e
+  go 24 e
+
 /-- Find a bounded component call through ordinary source wrappers without exposing concrete
 component constructors to the generic extraction IR. -/
 private def findComponentCall (env : Environment) (fuel : Nat) (e : Expr) :
@@ -3451,7 +3501,7 @@ private def findComponentCall (env : Environment) (fuel : Nat) (e : Expr) :
     match fuel with
     | 0 => none
     | fuel' + 1 =>
-      let e := e.consumeMData
+      let e := normalizeFifoCancelEffect env e
       match decodeComponentCall env e with
       | some call => some call
       | none =>
@@ -3577,11 +3627,6 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
   if mentionsSvmRuntime e then
     go fuel e
   else none
-
-private def staticNatVal? (env : Environment) (e : Expr) : Option Nat :=
-  (val env e >>= natOfVal) <|> do
-    let .lit value ← asStaticLit env 64 e | none
-    some value.toNat
 
 private def mentionsAccountStorageSource (e : Expr) : Bool :=
   e.getUsedConstantsAsSet.toList.any fun name =>

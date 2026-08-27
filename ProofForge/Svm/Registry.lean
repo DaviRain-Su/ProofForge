@@ -54,7 +54,7 @@ def entries : Array Entry := #[
   { name := "SelfLog", digest := "7c000e2c7844d1af" },
   { name := "RawEntry", digest := "cefd717563a8ea95" },
   { name := "Phoenix", digest := "ec8383cf470795f4" },
-  { name := "PhoenixV1Profile", digest := "588c0d478800f7de" },
+  { name := "PhoenixV1Profile", digest := "880a0a19f26dcdb3" },
   { name := "Book", digest := "525c5967ae68d203" },
   { name := "Seat", digest := "831f313077f89947" },
   { name := "Lang", digest := "64264acebea0c34c" }
