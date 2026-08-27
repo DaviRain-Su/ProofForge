@@ -531,6 +531,16 @@
   `Examples/PhoenixV1Layout.lean` 实例化，`ProofForge/Svm` 与 Extract 均不认识 Phoenix
   namespace。其余 official `OrderPacket` 再逐 variant 收敛成 bounded EntryAdapter schema，
   并按切片增加 component-owned matching；未实现语义继续 fail closed。
+- P5 第四十三段 Phoenix source ownership 已收口：完整 bounded host model 与 official-account
+  profile/handlers 从 `Projects` 迁到 `Examples.Phoenix` / `Examples.PhoenixV1Profile`，不是删除
+  已实现的 allocator/tree/order/cancel/reduce/recorder 行为。`Projects` Lake library、root import
+  与 CLI program-name 特判均已删除，51 个 SVM program 统一按 `Examples.<Name>` 加载；测试、
+  legacy fixture 与文档同步改 namespace。Phoenix / profile canonical digest 仍分别为
+  `ec8383cf470795f4` / `9ecc2b7df3ecde85`，profile ELF SHA-256 仍为
+  `af27cf67566458007c5131aff69cad70101de56f8074c9e5b38973e7bbdce660`，与 L5-049 已经
+  Surfpool 1.5.0 部署的 bytes 相同。核心 `ProofForge/Svm` 仍无 Phoenix 名字、offset 或专用
+  Emit case。详见 `docs/plan/tasks/l5-050.md`。下一步先迁移 reduce/cancel/recorder 的其余
+  positional geometry 到命名静态句柄，再扩 OrderPacket/matching。
 - P6 第一段 bounded transient heap 模型已完成：按官方 entrypoint allocator 固定
   `0x300000000`、默认 32 KiB / 最大 256 KiB、首 word bump、向下对齐、OOM 与 no-op
   deallocation。它不开放 raw pointer，也不替代账户内 Phoenix/Sokoban allocator。

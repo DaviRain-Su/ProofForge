@@ -1382,7 +1382,7 @@ def extractedPhoenix : Program :=
       { name := "matchLimit" }
     ]
     methods := #[
-      { kind := .init, name := "Projects.Phoenix.init", ixName := "initialize", paramCount := 1
+      { kind := .init, name := "Examples.Phoenix.init", ixName := "initialize", paramCount := 1
         ops := #[
           .returnState (.lit 1), .returnState (.arg 0), .returnState (.lit 1),
           .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0),
@@ -1391,7 +1391,7 @@ def extractedPhoenix : Program :=
           .returnState (.lit 0), .returnState (.lit 0), .returnState (.lit 0),
           .returnState (.lit 0), .returnState (.lit 0)
         ] },
-      { kind := .increment, name := "Projects.Phoenix.postAsk", ixName := "postAsk", paramCount := 1
+      { kind := .increment, name := "Examples.Phoenix.postAsk", ixName := "postAsk", paramCount := 1
         ops := #[
           .ite .eq (.field (.arg 1) "sizes_0") (.lit 0)
             #[.okState (.field (.arg 0) "sizes_0")]
@@ -1409,32 +1409,32 @@ def extractedPhoenix : Program :=
                 ]
             ]
         ] },
-      { kind := .increment, name := "Projects.Phoenix.reduceAsk", ixName := "reduceAsk", paramCount := 1
+      { kind := .increment, name := "Examples.Phoenix.reduceAsk", ixName := "reduceAsk", paramCount := 1
         ops := #[
           .checkedSubU64 (.field (.arg 1) "sizes_0") (.arg 0),
           .okState (.field (.arg 1) "sizes_0"),
           .errorOverflow
         ] },
-      { kind := .increment, name := "Projects.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 2
+      { kind := .increment, name := "Examples.Phoenix.swapBuy", ixName := "swapBuy", paramCount := 2
         ops := phoenixSwapBuy },
-      { kind := .get, name := "Projects.Phoenix.askQty", ixName := "askQty", paramCount := 0
+      { kind := .get, name := "Examples.Phoenix.askQty", ixName := "askQty", paramCount := 0
         ops := #[.returnU64
           (.addU64
             (.addU64
               (.addU64 (.field (.arg 0) "sizes_0") (.field (.arg 0) "sizes_1"))
               (.field (.arg 0) "sizes_2"))
             (.field (.arg 0) "sizes_3"))] },
-      { kind := .get, name := "Projects.Phoenix.bestAsk", ixName := "bestAsk", paramCount := 0
+      { kind := .get, name := "Examples.Phoenix.bestAsk", ixName := "bestAsk", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "priceTicks_0")] },
-      { kind := .get, name := "Projects.Phoenix.feeBpsOf", ixName := "feeBpsOf", paramCount := 0
+      { kind := .get, name := "Examples.Phoenix.feeBpsOf", ixName := "feeBpsOf", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "takerFeeBps")] },
-      { kind := .get, name := "Projects.Phoenix.level0", ixName := "level0", paramCount := 0
+      { kind := .get, name := "Examples.Phoenix.level0", ixName := "level0", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "sizes_0")] },
-      { kind := .get, name := "Projects.Phoenix.makerBase", ixName := "makerBase", paramCount := 0
+      { kind := .get, name := "Examples.Phoenix.makerBase", ixName := "makerBase", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "baseLocked")] },
-      { kind := .get, name := "Projects.Phoenix.nextSeq", ixName := "nextSeq", paramCount := 0
+      { kind := .get, name := "Examples.Phoenix.nextSeq", ixName := "nextSeq", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "sequence")] },
-      { kind := .get, name := "Projects.Phoenix.takerBase", ixName := "takerBase", paramCount := 0
+      { kind := .get, name := "Examples.Phoenix.takerBase", ixName := "takerBase", paramCount := 0
         ops := #[.returnU64 (.field (.arg 0) "baseFree")] }
     ] }
 

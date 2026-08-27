@@ -1,4 +1,4 @@
-# Projects.Phoenix
+# Examples.Phoenix
 
 ## Purpose
 
@@ -28,7 +28,7 @@ trader registry 都固定 N=4，把 root、left/right、parent、color、allocat
 | `PhoenixMarketEvent` | 官方 ordinal tag + 九个规范 payload 槽；instruction 内固定容量 5 的 batch |
 | TIF 哨兵 0 | `expired`（严格 `<`；等于 deadline 仍有效） |
 
-236 个 8-byte 叶，账户含 discriminator 共 1,896 bytes。`#pf_build Projects.Phoenix`
+236 个 8-byte 叶，账户含 discriminator 共 1,896 bytes。`#pf_build Examples.Phoenix`
 的 SVM digest 及构建物大小见下方构建快照。物理账户表固定为 market state、trader signer、trader
 base/quote Token account、base/quote mint、base/quote vault 和 classic SPL Token program，
 再加 executable current program 与 canonical `"log"` PDA，共 11 个账户。

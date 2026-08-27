@@ -1,9 +1,9 @@
-import Projects.PhoenixV1Profile
+import Examples.PhoenixV1Profile
 import ProofForge
 
 namespace Tests.PhoenixV1ProfileSpec
 
-open Projects.PhoenixV1Profile
+open Examples.PhoenixV1Profile
 open Lean Elab Command
 
 set_option maxRecDepth 2048
@@ -832,7 +832,7 @@ private def traceBefore (first second : Nat) : List Nat → Bool
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Projects.PhoenixV1Profile none with
+    match ProofForge.Extract.extractModuleIR env `Examples.PhoenixV1Profile none with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

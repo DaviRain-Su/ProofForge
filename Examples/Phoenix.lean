@@ -21,7 +21,7 @@ left/right/parent、color、allocator 与 free-list。free-funds 挂单、驱逐
 Sokoban 的 1-based address、bump 分配与 LIFO free-list；withdraw 和 zero-state
 seat eviction 已接入，订单仍只存内部 address。
 -/
-namespace Projects.Phoenix
+namespace Examples.Phoenix
 
 open ProofForge.Svm.Runtime
 
@@ -3128,4 +3128,4 @@ def lastEventAmount (s : State) : UInt64 :=
   | .timeInForce _ _ lastValidSlot _ => lastValidSlot
   | .expiredOrder _ _ _ _ _ _ _ removed => removed
 
-end Projects.Phoenix
+end Examples.Phoenix

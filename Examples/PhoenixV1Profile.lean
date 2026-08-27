@@ -16,7 +16,7 @@ composed through bounded target-owned components; official instruction coverage 
 plus a strict PostOnly/no-TIF/deposited-funds-only slice of tag 3, not the complete Phoenix
 instruction set.
 -/
-namespace Projects.PhoenixV1Profile
+namespace Examples.PhoenixV1Profile
 
 open ProofForge.Svm.Runtime
 open ProofForge.Svm
@@ -2016,4 +2016,4 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   cancelUpToAsks512At finishCancelAll
   cancelWithdrawContextValid placeFreeFundsContextValid placePostOnlyFreeFunds512At
 
-end Projects.PhoenixV1Profile
+end Examples.PhoenixV1Profile

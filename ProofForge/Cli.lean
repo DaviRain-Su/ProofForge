@@ -66,12 +66,8 @@ private def selectSvmNames (names : Array String) : Except String (Array String)
       | some _ => .ok n
       | none => .error s!"unknown svm program {n}"
 
-/-- Programs whose source lives under `Projects.*` instead of `Examples.*`. -/
-def projectPrograms : Array String := #["Phoenix", "PhoenixV1Profile"]
-
 def svmModuleName (name : String) : Lean.Name :=
-  if projectPrograms.contains name then Lean.Name.str `Projects name
-  else Lean.Name.str `Examples name
+  Lean.Name.str `Examples name
 
 /--
 CLI 构建必须重新从用户模块抽 IR，不能组装 legacy Golden smoke fixture。target registry
