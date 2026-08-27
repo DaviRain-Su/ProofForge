@@ -64,4 +64,12 @@ def borshSingletonPair (_s : State) (left right : UInt64) :
   else
     .error .rejected
 
+/-- Two exact Borsh enum shapes share instruction tag 11. The adapter validates and consumes the
+variant byte; each source handler receives only its own payload shape. -/
+@[pf_entry, pf_svm_raw_variant_return 11 0 2 0 [8]]
+def enumSmall (_s : State) (value : UInt8) : UInt64 := value.toUInt64
+
+@[pf_entry, pf_svm_raw_variant_return 11 1 2 0 [8]]
+def enumWide (_s : State) (value : UInt64) : UInt64 := value
+
 end Examples.RawEntry

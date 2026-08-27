@@ -5,6 +5,7 @@ namespace ProofForge.Svm.EntryAdapter.Emit
 structure Route where
   label : String
   tag : Nat
+  variant : Option Nat := none
   minDataLen : Nat
   /-- `none` accepts every length at or above `minDataLen` (used only by the authenticated
   self-entry sink). Raw methods always supply a finite maximum; equal bounds are exact. -/
@@ -71,11 +72,18 @@ def emitRoute (routes : Array Route) (fallback err : String) : String := Id.run 
           else
             s!"  jlt r2, {route.minDataLen}, {next}\n  jgt r2, {maxDataLen}, {next}\n"
       | none => s!"  jlt r2, {route.minDataLen}, {next}\n"
+    let selectorCheck := match route.variant with
+      | none => s!"  jeq r1, {route.tag}, {matched}\n"
+      | some variant => s!"\
+  jne r1, {route.tag}, {next}
+  ldxb r1, [r8 + 9]
+  jeq r1, {variant}, {matched}
+"
     out := out ++ s!"\
   ldxdw r2, [r8 + 0]
 {lengthCheck}\
   ldxb r1, [r8 + 8]
-  jeq r1, {route.tag}, {matched}
+{selectorCheck}\
 {next}:
 "
     -- Conditional jumps only have a signed 16-bit offset. Keep them local and use a 32-bit
@@ -154,7 +162,7 @@ private def emitProgramAccountCheck (context : Context) (entry : RawEntry)
 private def emitPackedArgs (context : Context) (method : IR.Method)
     (entry : RawEntry) : Except String String := do
   let base := method.rawArgLocalBase
-  let mut offset := 1
+  let mut offset := if entry.variant.isSome then 2 else 1
   let mut out := ""
   for i in [0:entry.paramWidths.size] do
     let width := entry.paramWidths[i]!
@@ -250,6 +258,9 @@ def emitHandler (context : Context) (method : IR.Method) (entry : RawEntry) :
 {lengthCheck}\
   ldxb r1, [r8 + 8]
   jne r1, {entry.tag}, {err}
+{match entry.variant with
+  | none => ""
+  | some variant => s!"  ldxb r1, [r8 + 9]\n  jne r1, {variant}, {err}\n"}\
 {emitProgramAccountCheck context entry err}{packed}{context.signerChecks method.ops err}\
   ja body_{label}
 {err}:

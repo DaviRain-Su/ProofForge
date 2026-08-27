@@ -1,4 +1,5 @@
 import Examples.Counter
+import ProofForge.Svm.AccountStorage.Source
 import ProofForge.Svm.Runtime
 
 namespace Tests.Fixtures
@@ -663,6 +664,20 @@ def accountReadAfterWrite (s : ChoiceState) (value : UInt64) :
   let _ := ProofForge.Svm.Runtime.accDataWordSetAt 1 0 1 1 0 value
   let after := ProofForge.Svm.Runtime.accDataWord 1 0
   .ok ({ s with chosen := value }, after)
+
+@[pf_inline] def lexicalSourceField : ProofForge.Svm.AccountStorage.Field :=
+  .oneBased 1 8 2 4
+
+@[pf_inline] def lexicalDestinationField : ProofForge.Svm.AccountStorage.Field :=
+  .oneBased 1 9 2 4
+
+/-- A query-valued scalar from nested static SDK facades must be materialized before a later
+component consumes it. The target sees fixed geometry and one scalar local, not either facade. -/
+def accountFacadeReadBeforeWrite (s : ChoiceState) (index : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let before := ProofForge.Svm.AccountStorage.Source.read lexicalSourceField index
+  let _ := ProofForge.Svm.AccountStorage.Source.write lexicalDestinationField index before
+  .ok ({ s with chosen := before }, before)
 
 def getChosen (s : ChoiceState) : UInt64 :=
   s.chosen

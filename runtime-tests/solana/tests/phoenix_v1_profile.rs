@@ -547,6 +547,27 @@ fn raw_place_data(
     data
 }
 
+fn raw_limit_data(
+    side: u8,
+    price: u64,
+    base_lots: u64,
+    client_id_low: u64,
+    client_id_high: u64,
+) -> Vec<u8> {
+    let mut data = vec![3, 1, side];
+    data.extend_from_slice(&price.to_le_bytes());
+    data.extend_from_slice(&base_lots.to_le_bytes());
+    // SelfTradeBehavior::Abort and match_limit=Some(1).
+    data.extend_from_slice(&[0, 1]);
+    data.extend_from_slice(&1u64.to_le_bytes());
+    data.extend_from_slice(&client_id_low.to_le_bytes());
+    data.extend_from_slice(&client_id_high.to_le_bytes());
+    // Deposited funds only, no TIF, and hard insufficient-funds failure.
+    data.extend_from_slice(&[1, 0, 0, 0]);
+    assert_eq!(data.len(), 49);
+    data
+}
+
 fn place_return_data(price: u64, encoded_sequence: u64) -> Vec<u8> {
     // Official Phoenix sets Borsh `Vec<FIFOOrderId>` return data after event CPIs.
     let mut data = 1u32.to_le_bytes().to_vec();
@@ -934,6 +955,46 @@ fn assert_place_record(
     assert_eq!(&payload[112..120], &client_id_high.to_le_bytes());
     assert_eq!(&payload[120..128], &price.to_le_bytes());
     assert_eq!(&payload[128..136], &base_lots.to_le_bytes());
+}
+
+fn assert_one_match_batch(
+    payload: &[u8],
+    market_sequence: u64,
+    market_key: Pubkey,
+    taker_key: Pubkey,
+    maker_key: Pubkey,
+    maker_sequence: u64,
+    maker_price: u64,
+    base_lots: u64,
+    quote_lots: u64,
+    fee: u64,
+    client_id_low: u64,
+    client_id_high: u64,
+) {
+    assert_eq!(payload.len(), 203);
+    assert_eq!(&payload[..3], &[15, 1, 3]);
+    assert_eq!(&payload[3..11], &market_sequence.to_le_bytes());
+    assert_eq!(&payload[27..59], market_key.as_ref());
+    assert_eq!(&payload[59..91], taker_key.as_ref());
+    assert_eq!(&payload[91..93], &2u16.to_le_bytes());
+
+    let fill = &payload[93..160];
+    assert_eq!(fill[0], 2);
+    assert_eq!(&fill[1..3], &0u16.to_le_bytes());
+    assert_eq!(&fill[3..35], maker_key.as_ref());
+    assert_eq!(&fill[35..43], &maker_sequence.to_le_bytes());
+    assert_eq!(&fill[43..51], &maker_price.to_le_bytes());
+    assert_eq!(&fill[51..59], &base_lots.to_le_bytes());
+    assert_eq!(&fill[59..67], &0u64.to_le_bytes());
+
+    let summary = &payload[160..203];
+    assert_eq!(summary[0], 6);
+    assert_eq!(&summary[1..3], &1u16.to_le_bytes());
+    assert_eq!(&summary[3..11], &client_id_low.to_le_bytes());
+    assert_eq!(&summary[11..19], &client_id_high.to_le_bytes());
+    assert_eq!(&summary[19..27], &base_lots.to_le_bytes());
+    assert_eq!(&summary[27..35], &quote_lots.to_le_bytes());
+    assert_eq!(&summary[35..43], &fee.to_le_bytes());
 }
 
 fn assert_cancel_all_batch(
@@ -1442,6 +1503,292 @@ fn official_raw_place_post_only_ask_locks_base_and_keeps_sequence_domains_separa
     let payloads = phoenix_data_payloads(&mollusk);
     assert_eq!(payloads.len(), 1);
     assert_place_record(&payloads[0], 310, market_key, trader_key, 7, 44, 55, 9, 6);
+}
+
+#[test]
+fn official_raw_limit_bid_completely_fills_one_ask_and_charges_taker_fee() {
+    let taker_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let maker_key = Pubkey::new_unique();
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), taker_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let mut market = market_with_two_traders(pubkey_words(maker_key), pubkey_words(taker_key));
+    write_word(&mut market, 1, 1);
+    write_word(&mut market, 104, 2);
+    write_word(&mut market, 105, 2);
+    write_word(&mut market, 107, 100);
+    write_word(&mut market, 109, 7);
+    write_word(&mut market, ORDER_SEQUENCE_WORD, 12);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 400);
+    // Maker slot 1 sells four base lots; taker slot 2 pays 20 quote lots plus one fee lot.
+    write_word(&mut market, 8322, 4);
+    write_word(&mut market, 8321, 10);
+    write_word(&mut market, 8339, 100);
+    write_word(&mut market, 8341, 2);
+    market = run_market_write(
+        "insertAsk512",
+        market,
+        true,
+        &[5, 9, 1, 4, 0, 0],
+        &[Check::success()],
+    );
+    let client_id_low = 0x0706_0504_0302_0100;
+    let client_id_high = 0x1716_1514_1312_1110;
+    let result = mollusk.process_and_validate_instruction(
+        &raw_place_instruction(
+            &raw_limit_data(0, 6, 4, client_id_low, client_id_high),
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            true,
+            taker_key,
+            true,
+            seat_key,
+        ),
+        &raw_place_accounts(
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market,
+            taker_key,
+            seat_key,
+            seat_account(market_key, taker_key),
+        ),
+        &[Check::success(), Check::return_data(&0u32.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8322), 0);
+    assert_eq!(read_word(&market, 8321), 30);
+    assert_eq!(read_word(&market, 8339), 79);
+    assert_eq!(read_word(&market, 8341), 6);
+    assert_eq!(read_word(&market, 109), 8);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 401);
+    assert_eq!(read_word(&market, ORDER_SEQUENCE_WORD), 12);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_one_match_batch(
+        &payloads[0],
+        400,
+        market_key,
+        taker_key,
+        maker_key,
+        9,
+        5,
+        4,
+        21,
+        1,
+        client_id_low,
+        client_id_high,
+    );
+}
+
+#[test]
+fn official_raw_limit_ask_completely_fills_one_bid_and_charges_taker_fee() {
+    let taker_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let maker_key = Pubkey::new_unique();
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), taker_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let mut market = market_with_two_traders(pubkey_words(maker_key), pubkey_words(taker_key));
+    write_word(&mut market, 1, 1);
+    write_word(&mut market, 104, 2);
+    write_word(&mut market, 105, 2);
+    write_word(&mut market, 107, 100);
+    write_word(&mut market, 109, 7);
+    write_word(&mut market, ORDER_SEQUENCE_WORD, 12);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 410);
+    let maker_sequence = !9u64;
+    // Maker slot 1 buys four base lots; taker slot 2 receives 20 quote lots minus one fee lot.
+    write_word(&mut market, 8320, 20);
+    write_word(&mut market, 8323, 10);
+    write_word(&mut market, 8341, 20);
+    write_word(&mut market, 8339, 3);
+    market = run_market_write(
+        "insertBid512",
+        market,
+        true,
+        &[5, maker_sequence, 1, 4, 0, 0],
+        &[Check::success()],
+    );
+    let client_id_low = 44;
+    let client_id_high = 55;
+    let result = mollusk.process_and_validate_instruction(
+        &raw_place_instruction(
+            &raw_limit_data(1, 4, 4, client_id_low, client_id_high),
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            true,
+            taker_key,
+            true,
+            seat_key,
+        ),
+        &raw_place_accounts(
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market,
+            taker_key,
+            seat_key,
+            seat_account(market_key, taker_key),
+        ),
+        &[Check::success(), Check::return_data(&0u32.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8320), 0);
+    assert_eq!(read_word(&market, 8323), 14);
+    assert_eq!(read_word(&market, 8341), 16);
+    assert_eq!(read_word(&market, 8339), 22);
+    assert_eq!(read_word(&market, 109), 8);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 411);
+    assert_eq!(read_word(&market, ORDER_SEQUENCE_WORD), 12);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_one_match_batch(
+        &payloads[0],
+        410,
+        market_key,
+        taker_key,
+        maker_key,
+        maker_sequence,
+        5,
+        4,
+        19,
+        1,
+        client_id_low,
+        client_id_high,
+    );
+}
+
+#[test]
+fn official_raw_limit_unsupported_shapes_and_matches_fail_atomically() {
+    let taker_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let maker_key = Pubkey::new_unique();
+    let market_key = Pubkey::new_unique();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), taker_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let prepare = |owner: u64, size: u64, last_slot: u64, taker_quote_free: u64, tick: u64| {
+        let mut market = market_with_two_traders(pubkey_words(maker_key), pubkey_words(taker_key));
+        write_word(&mut market, 1, 1);
+        write_word(&mut market, 104, 2);
+        write_word(&mut market, 105, tick);
+        write_word(&mut market, 107, 100);
+        write_word(&mut market, 109, 7);
+        write_word(&mut market, ORDER_SEQUENCE_WORD, 12);
+        write_word(&mut market, MARKET_SEQUENCE_WORD, 420);
+        write_word(&mut market, 8322, 4);
+        write_word(&mut market, 8321, 10);
+        write_word(&mut market, 8339, taker_quote_free);
+        write_word(&mut market, 8341, 2);
+        run_market_write(
+            "insertAsk512",
+            market,
+            true,
+            &[5, 9, owner, size, last_slot, 0],
+            &[Check::success()],
+        )
+    };
+    let canonical = raw_limit_data(0, 6, 4, 1, 2);
+    let valid_market = prepare(1, 4, 0, 100, 3);
+    let mut cases: Vec<(&str, Vec<u8>, Account)> = vec![
+        ("short wire", canonical[..48].to_vec(), valid_market.clone()),
+        (
+            "long wire",
+            {
+                let mut data = canonical.clone();
+                data.push(0);
+                data
+            },
+            valid_market.clone(),
+        ),
+        (
+            "noncrossing",
+            raw_limit_data(0, 4, 4, 1, 2),
+            valid_market.clone(),
+        ),
+        (
+            "partial maker",
+            raw_limit_data(0, 6, 2, 1, 2),
+            valid_market.clone(),
+        ),
+        ("self match", canonical.clone(), prepare(2, 4, 0, 100, 3)),
+        ("maker TIF", canonical.clone(), prepare(1, 4, 1, 100, 3)),
+        (
+            "insufficient funds",
+            canonical.clone(),
+            prepare(1, 4, 0, 0, 3),
+        ),
+        (
+            "quote overflow",
+            canonical.clone(),
+            prepare(1, 4, 0, 100, u64::MAX),
+        ),
+    ];
+    for (label, offset, value) in [
+        ("wrong variant", 1, 2),
+        ("unsupported self-trade policy", 19, 1),
+        ("missing match limit", 20, 0),
+        ("non-deposited funds", 45, 0),
+        ("slot TIF", 46, 1),
+        ("time TIF", 47, 1),
+        ("silent funds failure", 48, 1),
+    ] {
+        let mut data = canonical.clone();
+        data[offset] = value;
+        cases.push((label, data, valid_market.clone()));
+    }
+    let mut wrong_match_limit = canonical.clone();
+    wrong_match_limit[21..29].copy_from_slice(&2u64.to_le_bytes());
+    cases.push(("unsupported match limit", wrong_match_limit, valid_market));
+
+    for (label, data, market) in cases {
+        let before = market.data.clone();
+        let (mollusk, log_key) = raw_reduce_harness();
+        let result = mollusk.process_instruction(
+            &raw_place_instruction(
+                &data,
+                PHOENIX_PROGRAM,
+                log_key,
+                market_key,
+                true,
+                taker_key,
+                true,
+                seat_key,
+            ),
+            &raw_place_accounts(
+                PHOENIX_PROGRAM,
+                log_key,
+                market_key,
+                market,
+                taker_key,
+                seat_key,
+                seat_account(market_key, taker_key),
+            ),
+        );
+        assert!(
+            result.raw_result.is_err(),
+            "unsupported Limit case succeeded: {label}"
+        );
+        assert_eq!(
+            resulting_account(&result, &market_key).data,
+            before,
+            "market mutated for rejected Limit case: {label}"
+        );
+        assert!(
+            phoenix_data_payloads(&mollusk).is_empty(),
+            "audit emitted for rejected Limit case: {label}"
+        );
+    }
 }
 
 #[test]

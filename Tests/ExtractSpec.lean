@@ -1056,10 +1056,13 @@ elab "#pf_guard_account_effect_lexical_reads" : command => do
     | .error reason => throwError reason
   let beforeProgram ← extract ``Tests.Fixtures.accountReadBeforeWrite
   let afterProgram ← extract ``Tests.Fixtures.accountReadAfterWrite
+  let facadeProgram ← extract ``Tests.Fixtures.accountFacadeReadBeforeWrite
   let some before := beforeProgram.methods.find? (·.ixName == "accountReadBeforeWrite")
     | throwError "missing accountReadBeforeWrite"
   let some after := afterProgram.methods.find? (·.ixName == "accountReadAfterWrite")
     | throwError "missing accountReadAfterWrite"
+  let some facade := facadeProgram.methods.find? (·.ixName == "accountFacadeReadBeforeWrite")
+    | throwError "missing accountFacadeReadBeforeWrite"
   match before.ops with
   | #[.letLocal snapshot (.ext (.accDataWord 1 0) #[]),
       .component (.accountStorage (.writeWord field (.lit 0) (.arg 0))),
@@ -1073,6 +1076,20 @@ elab "#pf_guard_account_effect_lexical_reads" : command => do
         unless field.region.account == 1 && field.firstWord == 0 do
           throwError s!"post-write account read mismatch: {repr after.ops}"
   | _ => throwError s!"post-write account read reordered: {repr after.ops}"
+  match facade.ops with
+  | #[.letLocal snapshot
+        (.ext (.component (.accountStorage (.readWord source))) #[.arg 0]),
+      .component (.accountStorage (.writeWord field (.arg 0) (.local value))),
+      .storeField "chosen" (.local stored), .okState (.local result)] =>
+        unless snapshot == value && value == stored && stored == result &&
+            source.region.account == 1 && source.firstWord == 8 &&
+            source.region.strideWords == 2 && source.region.capacity == 4 &&
+            source.region.indexBase == .one &&
+            field.region.account == 1 && field.firstWord == 9 &&
+            field.region.strideWords == 2 && field.region.capacity == 4 &&
+            field.region.indexBase == .one do
+          throwError s!"facade account snapshot mismatch: {repr facade.ops}"
+  | _ => throwError s!"facade account snapshot was not materialized: {repr facade.ops}"
 
 #pf_guard_account_effect_lexical_reads
 

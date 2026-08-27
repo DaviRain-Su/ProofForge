@@ -7,6 +7,8 @@ structure RawEntry where
   tag : Nat
   accountCount : Nat
   programAccount : Nat
+  /-- Optional Borsh enum discriminant immediately following `tag`. -/
+  variant : Option Nat := none
   paramWidths : Array Nat
   /-- Width of each Borsh `Option<T>` payload at the end of the wire plan. The corresponding method
   parameters are `(u8 presence, T value)` pairs after the fixed prefix. -/
@@ -29,7 +31,8 @@ def RawEntry.fixedParamCount (entry : RawEntry) : Nat :=
 
 def RawEntry.minDataLen (entry : RawEntry) : Nat :=
   let fixedWidths := entry.paramWidths.extract 0 entry.fixedParamCount
-  1 + fixedWidths.foldl (init := 0) (· + ·) + entry.optionWidths.size
+  1 + (if entry.variant.isSome then 1 else 0) +
+    fixedWidths.foldl (init := 0) (· + ·) + entry.optionWidths.size
 
 def RawEntry.maxDataLen (entry : RawEntry) : Nat :=
   entry.minDataLen + entry.optionWidths.foldl (init := 0) (· + ·)
@@ -41,7 +44,9 @@ def RawEntry.isExact (entry : RawEntry) : Bool := entry.optionWidths.isEmpty
 
 def RawEntry.canonical (entry : RawEntry) : String :=
   let widths := String.intercalate "," (entry.paramWidths.map toString).toList
-  let base := s!"raw.u8.{entry.tag}.a{entry.accountCount}.p{entry.programAccount}.[{widths}]"
+  let selector := entry.variant.map (s!".variant.{·}") |>.getD ""
+  let base :=
+    s!"raw.u8.{entry.tag}{selector}.a{entry.accountCount}.p{entry.programAccount}.[{widths}]"
   let base :=
     if entry.optionWidths.isEmpty then base
     else
@@ -88,9 +93,9 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
   let (tag, accountCount, programAccount) ←
     if parts.length ≥ 4 then parseHeader parts
     else throw "extract/unsupported: malformed svm raw entry annotation"
-  let (optionWidths, returnWidths) ←
+  let (variant, optionWidths, returnWidths) ←
     if parts.length == 4 && parts[0]! == "svm.raw.v1" then
-      pure (#[], #[])
+      pure (none, #[], #[])
     else if parts.length == 6 && parts[0]! == "svm.raw.v2" then do
       let some prefixParamCount := parts[4]!.toNat?
         | throw "extract/unsupported: malformed svm raw fixed-prefix count"
@@ -108,7 +113,7 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
         unless paramWidths[prefixParamCount + 2 * i]! == 1 &&
             paramWidths[prefixParamCount + 2 * i + 1]! == widths[i]! do
           throw "extract/unsupported: svm raw Borsh option parameters must be (u8 presence, payload) pairs"
-      pure (widths, #[])
+      pure (none, widths, #[])
     else if parts.length == 5 && parts[0]! == "svm.raw.v3" then do
       let widthParts := parts[4]!.splitOn ","
       let mut widths := #[]
@@ -120,10 +125,26 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
         widths := widths.push width
       unless !widths.isEmpty && widths.size == retCount do
         throw "extract/unsupported: svm raw packed-return plan must cover every result leaf"
-      pure (#[], widths)
+      pure (none, #[], widths)
+    else if parts.length == 6 && parts[0]! == "svm.raw.v4" then do
+      let some variant := parts[4]!.toNat?
+        | throw "extract/unsupported: malformed Borsh enum variant"
+      unless variant < 256 do
+        throw "extract/unsupported: Borsh enum variant must fit u8"
+      let widthParts := parts[5]!.splitOn ","
+      let mut widths := #[]
+      for part in widthParts do
+        let some width := part.toNat?
+          | throw "extract/unsupported: malformed svm raw packed-return width"
+        unless supportedWidth width do
+          throw "extract/unsupported: packed returns must be u8/u16/u32/u64"
+        widths := widths.push width
+      unless !widths.isEmpty && widths.size == retCount do
+        throw "extract/unsupported: svm raw packed-return plan must cover every result leaf"
+      pure (some variant, #[], widths)
     else
       throw "extract/unsupported: malformed svm raw entry annotation"
-  let entry := { tag, accountCount, programAccount, paramWidths, optionWidths, returnWidths }
+  let entry := { tag, accountCount, programAccount, variant, paramWidths, optionWidths, returnWidths }
   unless entry.maxDataLen ≤ 1024 do
     throw "extract/unsupported: svm raw entry data exceeds 1024 bytes"
   unless entry.returnScratchBytes ≤ 304 do
@@ -141,13 +162,14 @@ def decode (annotations : Array String) (paramCount : Nat)
   return .raw (← decodeRaw raw[0]! paramCount paramWidths retCount)
 
 def validateUniqueTags (entries : Array MethodEntry) : Except String Unit := do
-  let mut seen : Array Nat := #[]
+  let mut seen : Array (Nat × Option Nat) := #[]
   for entry in entries do
     match entry with
     | .generated => pure ()
     | .raw raw =>
-        if seen.contains raw.tag then
-          throw s!"extract/unsupported: duplicate svm raw entry tag {raw.tag}"
-        seen := seen.push raw.tag
+        if seen.any fun (tag, variant) =>
+            tag == raw.tag && (variant.isNone || raw.variant.isNone || variant == raw.variant) then
+          throw s!"extract/unsupported: duplicate svm raw entry selector {raw.tag}/{raw.variant}"
+        seen := seen.push (raw.tag, raw.variant)
 
 end ProofForge.Svm.EntryAdapter

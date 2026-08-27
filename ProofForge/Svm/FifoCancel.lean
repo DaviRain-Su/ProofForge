@@ -55,16 +55,6 @@ structure Config where
   recorder : BatchRecorder.Config
   deriving BEq, Repr, Inhabited
 
-private def sameRegionShape (left right : AccountStorage.Region) : Bool :=
-  left.account == right.account && left.strideWords == right.strideWords &&
-    left.capacity == right.capacity && left.indexBase == right.indexBase &&
-    left.access == right.access
-
-private def mutableOneBasedWord (field : AccountStorage.Field) (accountLimit : Nat) : Bool :=
-  field.wellFormed accountLimit && field.widthWords == 1 &&
-    field.region.indexBase == .one && field.region.access.writable &&
-    field.region.access.currentProgramOwned
-
 def Config.wellFormed (config : Config) (accountLimit : Nat := 64) : Bool :=
   config.map.wellFormed accountLimit && config.recorder.wellFormed accountLimit &&
     config.map.capacity ≤ 4096 &&
@@ -75,11 +65,11 @@ def Config.wellFormed (config : Config) (accountLimit : Nat := 64) : Bool :=
         let traderRegion := config.locked.region
         config.owner.wellFormed accountLimit && config.size.wellFormed accountLimit &&
           config.owner.widthWords == 1 && config.size.widthWords == 1 &&
-          sameRegionShape config.owner.region mapRegion &&
-          sameRegionShape config.size.region mapRegion &&
-          mutableOneBasedWord config.locked accountLimit &&
-          mutableOneBasedWord config.free accountLimit &&
-          sameRegionShape config.locked.region config.free.region &&
+          config.owner.region.sameShape mapRegion &&
+          config.size.region.sameShape mapRegion &&
+          config.locked.mutableOneBasedWord accountLimit &&
+          config.free.mutableOneBasedWord accountLimit &&
+          config.locked.region.sameShape config.free.region &&
           mapRegion.account == traderRegion.account &&
           (match config.collateral with
            | .base => !tree.bid

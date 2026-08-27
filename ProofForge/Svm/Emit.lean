@@ -4917,6 +4917,7 @@ def emitAsm (program : IR.Program) : Except String String := do
   let adapterRoutes := rawMethods.map fun (method, entry) => ({
     label := handlerLabel method
     tag := entry.tag
+    variant := entry.variant
     minDataLen := entry.minDataLen
     maxDataLen := some entry.maxDataLen
   } : EntryAdapter.Emit.Route)

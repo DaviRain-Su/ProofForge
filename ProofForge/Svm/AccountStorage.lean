@@ -36,6 +36,23 @@ structure Field where
   widthWords : Nat := 1
   deriving BEq, Repr, Inhabited
 
+/-- Standard write authorization for account data owned by the executing program. -/
+@[pf_inline] def Access.programOwnedMutable : Access :=
+  { writable := true, currentProgramOwned := true }
+
+/-- One scalar account word. Protocol layouts supply the account and word, while the SDK owns the
+fixed-region descriptor shape. -/
+@[pf_inline] def Field.scalar (account word : Nat)
+    (access : Access := Access.programOwnedMutable) : Field :=
+  { region := { account, baseWord := word, strideWords := 1, capacity := 1, access } }
+
+/-- One word in every slot of a fixed-capacity one-based account-resident record array. -/
+@[pf_inline] def Field.oneBased (account word stride capacity : Nat)
+    (access : Access := Access.programOwnedMutable) : Field :=
+  { region :=
+      { account, baseWord := word, strideWords := stride, capacity
+        indexBase := .one, access } }
+
 /-- The final byte of a selected u64 word must fit in a u64 account `data_len`. -/
 def maxDataWord : Nat := 2305843009213693951
 
@@ -80,10 +97,16 @@ structure ParentPath where
   maxDepth : Nat
   deriving BEq, Repr, Inhabited
 
-private def Region.sameShape (left right : Region) : Bool :=
+def Region.sameShape (left right : Region) : Bool :=
   left.account == right.account && left.strideWords == right.strideWords &&
     left.capacity == right.capacity && left.indexBase == right.indexBase &&
     left.access == right.access
+
+/-- A mutable scalar field in a one-based fixed record array. Higher-level SDK structures use this
+predicate to validate their own record schemas without reimplementing region checks. -/
+def Field.mutableOneBasedWord (field : Field) (accountLimit : Nat := 64) : Bool :=
+  field.wellFormed accountLimit && field.widthWords == 1 &&
+    field.region.indexBase == .one && field.region.access == Access.programOwnedMutable
 
 def ParentPath.wellFormed (path : ParentPath) (accountLimit : Nat := 64) : Bool :=
   path.links.wellFormed accountLimit && path.parentColor.wellFormed accountLimit &&
@@ -389,7 +412,7 @@ def RbMap.strideWords (map : RbMap) : Nat := map.links.region.strideWords
 def RbMap.capacity (map : RbMap) : Nat := map.links.region.capacity
 
 private def mutableAccess : Access :=
-  { writable := true, currentProgramOwned := true }
+  Access.programOwnedMutable
 
 def RbMap.wellFormed (map : RbMap) (accountLimit : Nat := 64) : Bool :=
   let region := map.links.region
@@ -419,6 +442,49 @@ def RbMap.wellFormed (map : RbMap) (accountLimit : Nat := 64) : Bool :=
   .fifo rootWord
     (.oneBased account linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity
       bid mutableAccess)
+
+/-- Protocol-neutral source constructor for a two-word lexicographic ordered map. `descending`
+selects descending order for both words; the legacy FIFO spelling remains as a compatibility alias
+for the same target-owned representation. -/
+@[pf_inline] def RbMap.orderedPairOneBased
+    (account rootWord linksBaseWord parentBaseWord key0BaseWord key1BaseWord strideWords
+      capacity : Nat) (descending : Bool) : RbMap :=
+  .fifoOneBased account rootWord linksBaseWord parentBaseWord key0BaseWord key1BaseWord
+    strideWords capacity descending
+
+/-- Header and slot regions of a one-based bounded allocator. The packed cursor stores
+`(bumpIndex, freeListHead)`; neither scalar is a VM pointer. -/
+structure OneBasedAllocator where
+  slots : Region
+  liveCount : Field
+  cursor : Field
+  deriving BEq, Repr, Inhabited
+
+attribute [pf_inline] OneBasedAllocator.slots OneBasedAllocator.liveCount OneBasedAllocator.cursor
+
+def OneBasedAllocator.wellFormed (allocator : OneBasedAllocator)
+    (accountLimit : Nat := 64) : Bool :=
+  allocator.slots.wellFormed accountLimit && allocator.slots.indexBase == .one &&
+    allocator.slots.access == Access.programOwnedMutable &&
+    allocator.liveCount.wellFormed accountLimit && allocator.cursor.wellFormed accountLimit &&
+    allocator.liveCount.widthWords == 1 && allocator.cursor.widthWords == 1 &&
+    allocator.liveCount.region.account == allocator.slots.account &&
+    allocator.cursor.region.account == allocator.slots.account &&
+    allocator.liveCount.region.strideWords == 1 && allocator.cursor.region.strideWords == 1 &&
+    allocator.liveCount.region.capacity == 1 && allocator.cursor.region.capacity == 1 &&
+    allocator.liveCount.region.indexBase == .zero && allocator.cursor.region.indexBase == .zero &&
+    allocator.liveCount.region.access == allocator.slots.access &&
+    allocator.cursor.region.access == allocator.slots.access &&
+    allocator.liveCount.firstWord + 1 == allocator.cursor.firstWord
+
+/-- Recover the allocator descriptor from either supported ordered-map key schema. Header geometry
+is owned by this SDK projection instead of being repeated by upper-level books or registries. -/
+@[pf_inline] def RbMap.allocator (map : RbMap) : OneBasedAllocator :=
+  let rootWord := map.rootWord
+  let slots := map.links.region
+  { slots
+    liveCount := Field.scalar slots.account (rootWord + 2) slots.access
+    cursor := Field.scalar slots.account (rootWord + 3) slots.access }
 
 /-- Existing-key behavior is an explicit map policy rather than a new SVM operation kind. -/
 inductive ExistingValuePolicy where

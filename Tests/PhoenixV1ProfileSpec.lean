@@ -16,6 +16,17 @@ set_option maxRecDepth 2048
   ProofForge.Svm.AccountStorage.RbMap.fifoOneBased 2 4210 4214 4215 4216 4217 8 512 false
 #guard (Examples.PhoenixV1.small 2).traders.map ==
   ProofForge.Svm.AccountStorage.RbMap.key4OneBased 2 8310 8314 8315 8316 18 128
+#guard (Examples.PhoenixV1.small 2).bids.wellFormed
+#guard (Examples.PhoenixV1.small 2).asks.wellFormed
+#guard (Examples.PhoenixV1.small 2).bids.map.allocator.wellFormed
+#guard (Examples.PhoenixV1.small 2).bids.map.allocator.liveCount.firstWord == 112
+#guard (Examples.PhoenixV1.small 2).bids.map.allocator.cursor.firstWord == 113
+
+private def malformedPhoenixBook : Examples.PhoenixV1.Book :=
+  let book := (Examples.PhoenixV1.small 2).bids
+  { book with owner := ProofForge.Svm.AccountStorage.Field.scalar 2 118 }
+
+#guard !malformedPhoenixBook.wellFormed
 
 #guard accountBytesFor 512 512 128 == 84944
 #guard accountBytesFor 512 512 1025 == 214112
@@ -919,6 +930,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing reduceBidFreeFunds512"
   let some placeRaw := program.methods.find? (·.ixName == "placeLimitOrderWithFreeFunds")
     | throwError s!"missing raw PlaceLimitOrderWithFreeFunds: {repr (program.methods.map (·.ixName))}"
+  let some placeLimitRaw :=
+      program.methods.find? (·.ixName == "placeLimitOrderWithFreeFundsLimit")
+    | throwError "missing raw Limit OrderPacket handler"
   let some reduceRaw := program.methods.find? (·.ixName == "reduceOrderWithFreeFunds")
     | throwError "missing raw ReduceOrderWithFreeFunds"
   let some reduceWithdrawRaw := program.methods.find? (·.ixName == "reduceOrder")
@@ -936,13 +950,22 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   match placeRaw.entry with
   | .raw entry =>
       unless placeRaw.kind == .get && placeRaw.retCount == 3 &&
-          entry.tag == 3 && entry.accountCount == 5 &&
+          entry.tag == 3 && entry.variant == some 0 && entry.accountCount == 5 &&
           entry.programAccount == 0 &&
-          entry.paramWidths == #[1, 1, 8, 8, 8, 8, 1, 1, 1, 1, 1] &&
+          entry.paramWidths == #[1, 8, 8, 8, 8, 1, 1, 1, 1, 1] &&
           entry.dataLen == 40 && entry.returnWidths == #[4, 8, 8] &&
           entry.returnDataLen == 20 do
         throwError s!"wrong raw PlaceLimitOrderWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "PlaceLimitOrderWithFreeFunds lost its raw adapter"
+  match placeLimitRaw.entry with
+  | .raw entry =>
+      unless placeLimitRaw.kind == .get && placeLimitRaw.retCount == 1 &&
+          entry.tag == 3 && entry.variant == some 1 && entry.accountCount == 5 &&
+          entry.programAccount == 0 &&
+          entry.paramWidths == #[1, 8, 8, 1, 1, 8, 8, 8, 1, 1, 1, 1] &&
+          entry.dataLen == 49 && entry.returnWidths == #[4] && entry.returnDataLen == 4 do
+        throwError s!"wrong raw Limit OrderPacket adapter: {repr entry}"
+  | .generated => throwError "Limit OrderPacket lost its raw adapter"
   let placeCfg ←
     match placeRaw.toCFG with
     | .ok graph => pure graph
@@ -1437,6 +1460,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     throwError "Phoenix-v1 bounded FIFO cursor composition is incomplete"
   let idl := ProofForge.Svm.Idl.emitProgramIdl program
   if idl.contains "\"name\": \"placeLimitOrderWithFreeFunds\"" ||
+      idl.contains "\"name\": \"placeLimitOrderWithFreeFundsLimit\"" ||
       idl.contains "\"name\": \"reduceOrderWithFreeFunds\"" ||
       idl.contains "\"name\": \"reduceOrder\"" then
     throwError "raw Phoenix protocol adapter leaked into the generated IDL"
@@ -1483,7 +1507,10 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | .ok asm => pure asm
     | .error reason => throwError reason
   unless asm.contains "jne r2, 40, raw_route_next_" &&
-      asm.contains "jeq r1, 3, raw_route_match_" &&
+      asm.contains "jne r2, 49, raw_route_next_" &&
+      asm.contains "jne r1, 3, raw_route_next_" &&
+      asm.contains "jeq r1, 0, raw_route_match_" &&
+      asm.contains "jeq r1, 1, raw_route_match_" &&
       asm.contains "jne r2, 26, raw_route_next_" &&
       asm.contains "jeq r1, 4, raw_route_match_" &&
       asm.contains "jeq r1, 5, raw_route_match_" &&

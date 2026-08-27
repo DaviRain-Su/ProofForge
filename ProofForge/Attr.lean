@@ -11,6 +11,10 @@ structure SvmRawEntry where
   tag : Nat
   accountCount : Nat
   programAccount : Nat
+  /-- Optional Borsh enum discriminant immediately after the instruction tag. Multiple handlers
+  may share a tag when each owns a distinct variant. The validated discriminant is not passed as
+  a method parameter. -/
+  variant : Option Nat := none
   /-- A fixed-width prefix followed by Borsh `Option<T>` fields. Each option lowers to two method
   parameters: a u8 presence flag and a scalar payload of the declared width. Empty means the
   original exact fixed-width adapter. -/
@@ -29,6 +33,9 @@ syntax (name := pf_svm_raw_borsh_options)
 
 syntax (name := pf_svm_raw_return)
   "pf_svm_raw_return" num num num "[" num,* "]" : attr
+
+syntax (name := pf_svm_raw_variant_return)
+  "pf_svm_raw_variant_return" num num num num "[" num,* "]" : attr
 
 private partial def syntaxNatLiterals (node : Syntax) : Array Nat :=
   match node.isNatLit? with
@@ -155,6 +162,41 @@ initialize pfSvmRawReturnAttr : ParametricAttribute SvmRawEntry ←
       | _ => throwError "extract/unsupported: pf_svm_raw_return is not a definition"
   }
 
+/--
+Attach one exact Borsh-enum variant beneath a packed instruction tag. Variant dispatch and the
+fixed-width scalar return codec are EntryAdapter schema data, allowing independent source handlers
+to implement different enum shapes without protocol branches in the main emitter.
+-/
+initialize pfSvmRawVariantReturnAttr : ParametricAttribute SvmRawEntry ←
+  registerParametricAttribute {
+    name := `pf_svm_raw_variant_return
+    descr := "declare an exact packed-u8 Borsh enum variant with a fixed-width return product"
+    getParam := fun decl stx => do
+      let values := syntaxNatLiterals stx
+      unless values.size ≥ 5 do
+        throwError "invalid pf_svm_raw_variant_return syntax"
+      let entry : SvmRawEntry := {
+        tag := values[0]!
+        variant := some values[1]!
+        accountCount := values[2]!
+        programAccount := values[3]!
+        returnWidths := values.extract 4 values.size
+      }
+      unless entry.tag < 256 && entry.variant.all (· < 256) do
+        throwError "extract/unsupported: raw tag and Borsh variant must fit u8"
+      unless 0 < entry.accountCount && entry.accountCount ≤ 64 do
+        throwError "extract/unsupported: pf_svm_raw_variant_return accounts must be in 1..64"
+      unless entry.programAccount < entry.accountCount do
+        throwError "extract/unsupported: pf_svm_raw_variant_return program account is out of range"
+      unless entry.returnWidths.all fun width =>
+          width == 1 || width == 2 || width == 4 || width == 8 do
+        throwError "extract/unsupported: packed returns must be u8/u16/u32/u64"
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure entry
+      | _ => throwError "extract/unsupported: pf_svm_raw_variant_return is not a definition"
+  }
+
 def isEntry (env : Environment) (decl : Name) : Bool :=
   pfEntryAttr.hasTag env decl
 
@@ -163,7 +205,7 @@ def isInline (env : Environment) (decl : Name) : Bool :=
 
 def svmRawEntry? (env : Environment) (decl : Name) : Option SvmRawEntry :=
   pfSvmRawAttr.getParam? env decl <|> pfSvmRawBorshOptionsAttr.getParam? env decl <|>
-    pfSvmRawReturnAttr.getParam? env decl
+    pfSvmRawReturnAttr.getParam? env decl <|> pfSvmRawVariantReturnAttr.getParam? env decl
 
 /-- Preserve all raw annotations so target projection can reject declarations that accidentally
 carry more than one wire contract. -/
@@ -175,10 +217,15 @@ def svmRawEntries (env : Environment) (decl : Name) : Array SvmRawEntry := Id.ru
     entries := entries.push entry
   if let some entry := pfSvmRawReturnAttr.getParam? env decl then
     entries := entries.push entry
+  if let some entry := pfSvmRawVariantReturnAttr.getParam? env decl then
+    entries := entries.push entry
   return entries
 
 def SvmRawEntry.annotation (entry : SvmRawEntry) : String :=
-  if !entry.returnWidths.isEmpty then
+  if let some variant := entry.variant then
+    let widths := String.intercalate "," (entry.returnWidths.map toString).toList
+    s!"svm.raw.v4:{entry.tag}:{entry.accountCount}:{entry.programAccount}:{variant}:{widths}"
+  else if !entry.returnWidths.isEmpty then
     let widths := String.intercalate "," (entry.returnWidths.map toString).toList
     s!"svm.raw.v3:{entry.tag}:{entry.accountCount}:{entry.programAccount}:{widths}"
   else if entry.optionWidths.isEmpty then

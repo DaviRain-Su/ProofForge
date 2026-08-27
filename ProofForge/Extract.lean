@@ -655,16 +655,12 @@ private partial def normalizePureInlineCtorOf? (env : Environment) (fuel : Nat)
       else normalizePureInlineCtorOf? env fuel' inductName unfolded
     else none
 
-private def isStaticSourceNamespace (name : Name) : Bool :=
-  name.toString.startsWith "ProofForge.Svm.AccountStorage.Source." ||
-    name.toString.startsWith "ProofForge.Svm.FifoCancel.Source."
-
-/-- Iota-reduce an SDK source-facade matcher only when its discriminant is a constructor literal
-obtained through pure marked descriptor builders. Dynamic contract variants keep their existing
-explicit lowering. -/
+/-- Iota-reduce a matcher only when its sole discriminant is a constructor literal obtained
+through pure marked descriptor builders. The structural gate lets new static Queue/Map/Allocator
+facades reuse descriptor erasure without adding their namespaces here; dynamic contract variants,
+recursive inductives, and state-preserving helpers keep their existing explicit lowering. -/
 private def reducePureInlineMatch? (env : Environment) (e : Expr) : Option Expr := do
   let matcherName ← e.getAppFn.constName?
-  if !isStaticSourceNamespace matcherName then none else pure ()
   let matcher ← Lean.Meta.getMatcherInfoCore? env matcherName
   if matcher.numDiscrs != 1 then none else pure ()
   let decl ← env.find? matcherName
@@ -1954,8 +1950,9 @@ private def bytes32Leaves (env : Environment) (e : Expr) :
     | some v => (flattenField v "w0", flattenField v "w1", flattenField v "w2", flattenField v "w3")
     | none => (proj "w0", proj "w1", proj "w2", proj "w3")
 
-/-- Decode a scalar binding through one explicitly-inline helper boundary before substituting it.
-This preserves a shared helper result without increasing the global value-decoder fuel. -/
+/-- Decode a scalar binding through pure explicitly-inline facade layers before substituting it.
+This preserves shared target reads without increasing the global value-decoder fuel or recognizing
+the facade's namespace. -/
 private partial def valNodeCount : Ops.Val → Nat
   | .arg _ | .local _ | .lit _ | .loopIx => 1
   | .field base _ | .bitNot base => 1 + valNodeCount base
@@ -1977,11 +1974,19 @@ private def shouldMaterializeLocal (_type : Expr) (value : Ops.Val) : Bool :=
   | value => valNodeCount value ≥ 1024
 
 private def localScalarValue? (env : Environment) (fuel : Nat) (value : Expr) : Option Ops.Val :=
-  val env value <|> do
-    if fuel ≤ 32 then none else pure ()
-    let (_, unfolded) ← unfoldUserHelper env value
-    let decoded ← asVal env fuel unfolded
-    if valNodeCount decoded < 1024 then none else some decoded
+  let rec go (fuel : Nat) (value : Expr) : Option Ops.Val :=
+    let value := substLets 64 value
+    asVal env 64 value <|>
+      match fuel with
+      | 0 => none
+      | fuel' + 1 =>
+        if let some reduced := reducePureInlineMatch? env value then
+          go fuel' reduced
+        else if let some (helper, unfolded) := unfoldUserHelper env value then
+          if inlineHelperPreservesUserType env helper then none else go fuel' unfolded
+        else
+          none
+  go fuel value
 
 private def asUInt64VariantCtor (env : Environment) (e : Expr) :
     Option (UInt64 × Array Ops.Val × Nat) := do
@@ -3650,17 +3655,10 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
     go fuel e
   else none
 
-private def mentionsAccountStorageSource (e : Expr) : Bool :=
-  e.getUsedConstantsAsSet.toList.any fun name =>
-    name.toString.startsWith "ProofForge.Svm.AccountStorage.Source."
-
-private def isStorageSourceHelper (env : Environment) (name : Name) : Bool :=
-  name.toString.startsWith "ProofForge.Svm.AccountStorage.Source." ||
-    Attr.isInline env name &&
-      match env.find? name with
-      | some (.defnInfo helper) => mentionsAccountStorageSource helper.value
-      | _ => false
-
+/-- Normalize an ignored storage effect through any pure marked facade. The decoder below still
+requires a known account-storage runtime intrinsic with fully static geometry, so Queue/Map
+wrappers can compose without a namespace whitelist while unrelated and stateful helpers remain
+fail closed. -/
 private def normalizeStorageEffect (env : Environment) (e : Expr) : Expr :=
   let rec go (fuel : Nat) (e : Expr) : Expr :=
     match fuel with
@@ -3668,12 +3666,11 @@ private def normalizeStorageEffect (env : Environment) (e : Expr) : Expr :=
     | fuel' + 1 =>
       let e := substLets 64 e
       if let some (helper, unfolded) := unfoldUserHelper env e then
-        if !isStorageSourceHelper env helper || inlineHelperPreservesUserType env helper then e
-        else go fuel' unfolded
+        if inlineHelperPreservesUserType env helper then e else go fuel' unfolded
       else if let some reduced := reducePureInlineMatch? env e then
         go fuel' reduced
       else e
-  go 16 e
+  go 64 e
 
 private def decodeAccDataWordSetAt (env : Environment) (e : Expr) :
     Option DecodedAccDataWordSetAt :=
@@ -6185,8 +6182,16 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             !isForInStep tRaw && !isForInStep fRaw)
       let t := peelProofLam 4 lower tRaw
       let f := peelProofLam 4 stateful fRaw
-      let t := if containsStructuredStateLet env 64 t then t else substIteLets 64 t
-      let f := if containsStructuredStateLet env 64 f then f else substIteLets 64 f
+      -- Preserve lexical scalar reads in an effectful arm so its recursive decoder can
+      -- materialize them before a later account write, component call, or CPI consumes them.
+      -- Substituting here would embed the read into the effect operand and could re-read mutated
+      -- storage; it also prevents reusable storage-query facades from composing with components.
+      let t :=
+        if containsStructuredStateLet env 64 t || mentionsSvmEffect env 64 t then t
+        else substIteLets 64 t
+      let f :=
+        if containsStructuredStateLet env 64 f || mentionsSvmEffect env 64 f then f
+        else substIteLets 64 f
       let checkedSubMatches (candidate : Expr) : Bool :=
         match asCheckedSubGuard env candidate with
         | none => false

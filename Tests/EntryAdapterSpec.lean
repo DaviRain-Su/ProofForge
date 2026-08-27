@@ -45,6 +45,15 @@ elab "#pf_guard_entry_adapter" : command => do
       sourcePackedReturn.paramWidths == #[8, 8] && sourcePackedReturn.retCount == 3 &&
       packedReturnPlan do
     throwError "wrong source packed-return plan"
+  let some sourceEnumSmall := source.methods.find? (·.ixName == "enumSmall")
+    | throwError "missing small enum-variant source method"
+  let some sourceEnumWide := source.methods.find? (·.ixName == "enumWide")
+    | throwError "missing wide enum-variant source method"
+  unless sourceEnumSmall.annotations == #["svm.raw.v4:11:2:0:0:8"] &&
+      sourceEnumSmall.paramWidths == #[1] &&
+      sourceEnumWide.annotations == #["svm.raw.v4:11:2:0:1:8"] &&
+      sourceEnumWide.paramWidths == #[8] do
+    throwError "wrong source Borsh enum-variant metadata"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -122,6 +131,18 @@ elab "#pf_guard_entry_adapter" : command => do
           entry.returnDataLen == 20 && entry.returnScratchBytes == 20 do
         throwError s!"wrong projected packed-return adapter: {repr entry}"
   | .generated => throwError "packed-return method lost its raw adapter"
+  let some enumSmall := program.methods.find? (·.ixName == "enumSmall")
+    | throwError "missing projected small enum variant"
+  let some enumWide := program.methods.find? (·.ixName == "enumWide")
+    | throwError "missing projected wide enum variant"
+  match enumSmall.entry, enumWide.entry with
+  | .raw small, .raw wide =>
+      unless small.tag == 11 && small.variant == some 0 && small.paramWidths == #[1] &&
+          small.dataLen == 3 && small.returnWidths == #[8] &&
+          wide.tag == 11 && wide.variant == some 1 && wide.paramWidths == #[8] &&
+          wide.dataLen == 10 && wide.returnWidths == #[8] do
+        throwError s!"wrong projected enum variants: {repr small}, {repr wide}"
+  | _, _ => throwError "Borsh enum variant lost its raw adapter"
   unless IR.generatedAccountCount program == 1 do
     throwError "raw account geometry leaked into generated methods"
   let asm ←
@@ -132,6 +153,9 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call packed" && asm.contains "call borshOptions" &&
       asm.contains "call boundedPair" && asm.contains "lddw r2, 16" &&
       asm.contains "call borshSingletonPair" && asm.contains "lddw r2, 20" &&
+      asm.contains "call enumSmall" && asm.contains "call enumWide" &&
+      asm.contains "jeq r1, 0, raw_route_match_" &&
+      asm.contains "jeq r1, 1, raw_route_match_" &&
       asm.contains "call sol_set_return_data" &&
       asm.contains "authenticate the declared executable program account" &&
       asm.contains "ldxb r1, [r8 + 9]" &&
@@ -166,6 +190,8 @@ private def accepts (result : Except String α) : Bool :=
 #guard accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 8])
 #guard accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,4,4"] 7 #[1, 1, 8, 1, 4, 1, 4])
 #guard accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,8,8"] 2 #[8, 8] 3)
+#guard accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:0:8"] 1 #[1])
+#guard accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:1:8"] 1 #[8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:256:2:0"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:2"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 3])
@@ -173,6 +199,11 @@ private def accepts (result : Except String α) : Bool :=
 #guard !accepts (EntryAdapter.decode #["svm.raw.v2:8:4:0:1:8,3,4"] 7 #[1, 1, 8, 1, 4, 1, 4])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,8"] 2 #[8, 8] 3)
 #guard !accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,3,8"] 2 #[8, 8] 3)
+#guard !accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:256:8"] 1 #[1])
+#guard accepts (EntryAdapter.validateUniqueTags #[
+  .raw { tag := 11, accountCount := 2, programAccount := 0, variant := some 0, paramWidths := #[1] },
+  .raw { tag := 11, accountCount := 2, programAccount := 0, variant := some 1, paramWidths := #[8] }
+])
 #guard !accepts (EntryAdapter.validateUniqueTags #[
   .raw { tag := 7, accountCount := 2, programAccount := 0, paramWidths := #[1] },
   .raw { tag := 7, accountCount := 2, programAccount := 0, paramWidths := #[8] }

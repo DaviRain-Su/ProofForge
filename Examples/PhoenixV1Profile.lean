@@ -657,12 +657,9 @@ or zero when absent/invalid. Complete tree/free-list validation runs before boun
 @[pf_entry]
 def findTrader128 (s : State) (key0 key1 key2 key3 : UInt64) : UInt64 :=
   if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
-    let cursor := accDataWord 1 8313
-    let valid := accDataRbTreeKey4Valid 1 8314 8315 8316 18 128
-      (lowUInt32 (accDataWord 1 8310)) (accDataWord 1 8312)
-      (lowUInt32 cursor) (highUInt32 cursor)
-    if valid = 1 then
-      accDataRbTreeKey4Find 1 8310 8314 8315 8316 18 128 key0 key1 key2 key3
+    let layout := Examples.PhoenixV1.small 1
+    if layout.tradersValid = 1 then
+      layout.findTrader key0 key1 key2 key3
     else
       0
   else
@@ -672,12 +669,9 @@ def findTrader128 (s : State) (key0 key1 key2 key3 : UInt64) : UInt64 :=
 @[pf_entry]
 def findBid512 (s : State) (price sequence : UInt64) : UInt64 :=
   if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
-    let cursor := accDataWord 1 113
-    let valid := accDataRbTreeValid 1 114 115 116 117 8 512 1
-      (lowUInt32 (accDataWord 1 110)) (accDataWord 1 112)
-      (lowUInt32 cursor) (highUInt32 cursor)
-    if valid = 1 then
-      accDataRbTreeOrderFind 1 110 114 115 116 117 8 512 1 price sequence
+    let layout := Examples.PhoenixV1.small 1
+    if layout.bidsValid = 1 then
+      layout.findBid price sequence
     else
       0
   else
@@ -687,12 +681,9 @@ def findBid512 (s : State) (price sequence : UInt64) : UInt64 :=
 @[pf_entry]
 def findAsk512 (s : State) (price sequence : UInt64) : UInt64 :=
   if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
-    let cursor := accDataWord 1 4213
-    let valid := accDataRbTreeValid 1 4214 4215 4216 4217 8 512 0
-      (lowUInt32 (accDataWord 1 4210)) (accDataWord 1 4212)
-      (lowUInt32 cursor) (highUInt32 cursor)
-    if valid = 1 then
-      accDataRbTreeOrderFind 1 4210 4214 4215 4216 4217 8 512 0 price sequence
+    let layout := Examples.PhoenixV1.small 1
+    if layout.asksValid = 1 then
+      layout.findAsk price sequence
     else
       0
   else
@@ -703,13 +694,9 @@ Only the key is retained between calls; the one-based slot result is for immedia
 @[pf_entry]
 def cursorBid512 (s : State) (hasCursor price sequence : UInt64) : UInt64 :=
   if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
-    let cursor := accDataWord 1 113
-    let valid := accDataRbTreeValid 1 114 115 116 117 8 512 1
-      (lowUInt32 (accDataWord 1 110)) (accDataWord 1 112)
-      (lowUInt32 cursor) (highUInt32 cursor)
-    if valid = 1 then
-      accDataRbTreeOrderCursor 1 110 114 115 116 117 8 512 1
-        hasCursor price sequence
+    let layout := Examples.PhoenixV1.small 1
+    if layout.bidsValid = 1 then
+      layout.bids.cursor hasCursor price sequence
     else
       0
   else
@@ -719,13 +706,9 @@ def cursorBid512 (s : State) (hasCursor price sequence : UInt64) : UInt64 :=
 @[pf_entry]
 def cursorAsk512 (s : State) (hasCursor price sequence : UInt64) : UInt64 :=
   if profileAccountBytes s = 84944 && allocatorHeadersValid s = 1 then
-    let cursor := accDataWord 1 4213
-    let valid := accDataRbTreeValid 1 4214 4215 4216 4217 8 512 0
-      (lowUInt32 (accDataWord 1 4210)) (accDataWord 1 4212)
-      (lowUInt32 cursor) (highUInt32 cursor)
-    if valid = 1 then
-      accDataRbTreeOrderCursor 1 4210 4214 4215 4216 4217 8 512 0
-        hasCursor price sequence
+    let layout := Examples.PhoenixV1.small 1
+    if layout.asksValid = 1 then
+      layout.asks.cursor hasCursor price sequence
     else
       0
   else
@@ -1204,9 +1187,10 @@ def insertBid512 (s : State) (price sequence traderIndex numBaseLots lastValidSl
   if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
       accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
       accDataWord 1 111 = 0 then
-    let _ := accDataRbTreeOrderInsert 1 110 114 115 116 117 8 512 1
+    let layout := Examples.PhoenixV1.small 1
+    let _ := layout.insertBid
       price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp
-    let size := accDataWord 1 112
+    let size := layout.bidSize
     .ok ({ s with dummy := 0 }, size)
   else
     .error .overflow
@@ -1218,9 +1202,10 @@ def insertAsk512 (s : State) (price sequence traderIndex numBaseLots lastValidSl
   if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
       accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
       accDataWord 1 4211 = 0 then
-    let _ := accDataRbTreeOrderInsert 1 4210 4214 4215 4216 4217 8 512 0
+    let layout := Examples.PhoenixV1.small 1
+    let _ := layout.insertAsk
       price sequence traderIndex numBaseLots lastValidSlot lastValidUnixTimestamp
-    let size := accDataWord 1 4212
+    let size := layout.askSize
     .ok ({ s with dummy := 0 }, size)
   else
     .error .overflow
@@ -1235,8 +1220,9 @@ def removeBid512 (s : State) (price sequence : UInt64) : Except Error (State × 
   if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
       accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
       accDataWord 1 111 = 0 then
-    let _ := accDataRbTreeOrderRemove 1 110 114 115 116 117 8 512 1 price sequence
-    let size := accDataWord 1 112
+    let layout := Examples.PhoenixV1.small 1
+    let _ := layout.removeBid price sequence
+    let size := layout.bidSize
     .ok ({ s with dummy := 0 }, size)
   else
     .error .overflow
@@ -1247,8 +1233,9 @@ def removeAsk512 (s : State) (price sequence : UInt64) : Except Error (State × 
   if accDataLen 1 = 84944 && accDataWord 1 0 = marketHeaderDiscriminant &&
       accDataWord 1 2 = 512 && accDataWord 1 3 = 512 && accDataWord 1 4 = 128 &&
       accDataWord 1 4211 = 0 then
-    let _ := accDataRbTreeOrderRemove 1 4210 4214 4215 4216 4217 8 512 0 price sequence
-    let size := accDataWord 1 4212
+    let layout := Examples.PhoenixV1.small 1
+    let _ := layout.removeAsk price sequence
+    let size := layout.askSize
     .ok ({ s with dummy := 0 }, size)
   else
     .error .overflow
@@ -1445,6 +1432,21 @@ def recordPlaceAt (orderSequence clientIdLow clientIdHigh price baseLots : UInt6
   ProofForge.Svm.BatchRecorder.Source.append marketRecorderConfig 1
     #[.u8le 3, .u16le 0, .u64le orderSequence, .u64le clientIdLow,
       .u64le clientIdHigh, .u64le price, .u64le baseLots]
+
+/-- Append Phoenix's one-maker 67-byte Fill event. The maker key is read from the generic
+four-word map key projection before its resting order is removed. -/
+def recordFillAt (makerKey0 makerKey1 makerKey2 makerKey3 orderSequence price filled
+    remaining : UInt64) : UInt64 :=
+  ProofForge.Svm.BatchRecorder.Source.append marketRecorderConfig 1
+    #[.u8le 2, .u16le 0, .u64le makerKey0, .u64le makerKey1,
+      .u64le makerKey2, .u64le makerKey3, .u64le orderSequence, .u64le price,
+      .u64le filled, .u64le remaining]
+
+/-- Append the aggregate 43-byte taker FillSummary after one bounded matching pass. -/
+def recordFillSummaryAt (clientIdLow clientIdHigh baseFilled quoteFilled fee : UInt64) : UInt64 :=
+  ProofForge.Svm.BatchRecorder.Source.append marketRecorderConfig 1
+    #[.u8le 6, .u16le 1, .u64le clientIdLow, .u64le clientIdHigh,
+      .u64le baseFilled, .u64le quoteFilled, .u64le fee]
 
 /-- Flush Phoenix's current batch, including an empty header-only batch, and close the recorder. -/
 def finishMarketBatch : UInt64 :=
@@ -1693,6 +1695,155 @@ def placePostOnlyFreeFunds512At (marketAccount traderAccount side price baseLots
             let _ := finishMarketBatch
             .ok encodedSequence
 
+/-- Compute adjusted quote lots after the caller has established the two multiplication bounds.
+This is invocation-local scalar arithmetic; it does not allocate or materialize a quote object. -/
+def adjustedQuoteLots512At (layout : Examples.PhoenixV1.Layout) (price baseLots : UInt64) :
+    UInt64 :=
+  price * layout.tickSize * baseLots
+
+/-- Phoenix's aggregate taker fee: ceil at basis-point precision, then ceil to one quote lot. -/
+def takerFeeQuoteLots512At (layout : Examples.PhoenixV1.Layout)
+    (adjustedQuote : UInt64) : UInt64 :=
+  let bps := layout.takerFeeBps
+  let baseLotsPerBaseUnit := layout.baseLotsPerBaseUnit
+  if adjustedQuote = 0 || bps = 0 then
+    0
+  else
+    let adjustedFee := (adjustedQuote * bps + 9999) / 10000
+    let whole := adjustedFee / baseLotsPerBaseUnit
+    if adjustedFee % baseLotsPerBaseUnit = 0 then whole else whole + 1
+
+/-!
+The first Limit slice deliberately performs one exact full-maker match. Generic SDK components
+provide validated best-order cursoring, record reads, key extraction, removal, and balance fields;
+Phoenix keeps crossing, fee, collateral, self-trade, audit, and packet policy here in `Examples`.
+Requiring `match_limit=Some(1)`, no resident TIF, `Abort` self-trade behavior, and no remainder gives
+a faithful bounded official execution without adding a matching opcode or emitter case.
+-/
+def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price baseLots clientIdLow
+    clientIdHigh : UInt64) : Except Error UInt64 := do
+  let layout := Examples.PhoenixV1.small 2
+  if marketAccount ≠ 2 || traderAccount ≠ 3 ||
+      cancelAllStorageValid512At marketAccount = 0 || price = 0 || baseLots = 0 then
+    .error .overflow
+  else
+    let status := layout.status
+    let marketSequence := layout.marketSequence
+    if (status ≠ 1 && status ≠ 2) || marketSequence = u64Max then
+      .error .overflow
+    else
+      let taker := layout.findTrader
+        (signerKey traderAccount) (accKeyWord traderAccount 1)
+        (accKeyWord traderAccount 2) (accKeyWord traderAccount 3)
+      if taker = 0 then
+        .error .overflow
+      else
+        let bid := side = 0
+        let makerOrder :=
+          if bid then layout.asks.cursor 0 0 0 else layout.bids.cursor 0 0 0
+        if makerOrder = 0 then
+          .error .overflow
+        else
+          let makerPrice :=
+            if bid then layout.asks.price makerOrder else layout.bids.price makerOrder
+          let makerSequence :=
+            if bid then layout.asks.sequence makerOrder else layout.bids.sequence makerOrder
+          let maker :=
+            if bid then layout.asks.ownerAt makerOrder else layout.bids.ownerAt makerOrder
+          let makerSize :=
+            if bid then layout.asks.sizeAt makerOrder else layout.bids.sizeAt makerOrder
+          let lastSlot :=
+            if bid then layout.asks.lastSlotAt makerOrder else layout.bids.lastSlotAt makerOrder
+          let lastTime :=
+            if bid then layout.asks.lastTimeAt makerOrder else layout.bids.lastTimeAt makerOrder
+          let crosses := if bid then makerPrice ≤ price else makerPrice ≥ price
+          if !crosses || maker = 0 || maker = taker || makerSize ≠ baseLots ||
+              lastSlot ≠ 0 || lastTime ≠ 0 then
+            .error .overflow
+          else
+            let tickSize := layout.tickSize
+            let baseLotsPerBaseUnit := layout.baseLotsPerBaseUnit
+            if tickSize = 0 || tickSize > u64Max / makerPrice then
+              .error .overflow
+            else
+              let quotePerBase := makerPrice * tickSize
+              if quotePerBase > u64Max / baseLots then
+                .error .overflow
+              else
+                let adjustedQuote := adjustedQuoteLots512At layout makerPrice baseLots
+                let bps := layout.takerFeeBps
+                if baseLotsPerBaseUnit = 0 || bps > 10000 ||
+                    (bps ≠ 0 && adjustedQuote > (u64Max - 9999) / bps) ||
+                    adjustedQuote % baseLotsPerBaseUnit ≠ 0 then
+                  .error .overflow
+                else
+                  let quoteLots := adjustedQuote / baseLotsPerBaseUnit
+                  let fee := takerFeeQuoteLots512At layout adjustedQuote
+                  let unclaimedFees := layout.unclaimedQuoteFees
+                  if unclaimedFees > u64Max - fee then
+                    .error .overflow
+                  else
+                    if bid then
+                      let makerLocked := layout.baseLocked maker
+                      let makerFree := layout.quoteFree maker
+                      let takerQuoteFree := layout.quoteFree taker
+                      let takerBaseFree := layout.baseFree taker
+                      if quoteLots > u64Max - fee then
+                        .error .overflow
+                      else
+                        let takerCost := quoteLots + fee
+                        if makerLocked < baseLots || makerFree > u64Max - quoteLots ||
+                            takerQuoteFree < takerCost || takerBaseFree > u64Max - baseLots then
+                          .error .overflow
+                        else
+                          let makerKey0 := layout.traderKey0 maker
+                          let makerKey1 := layout.traderKey1 maker
+                          let makerKey2 := layout.traderKey2 maker
+                          let makerKey3 := layout.traderKey3 maker
+                          let _ := layout.removeAsk makerPrice makerSequence
+                          let _ := layout.setBaseLocked maker (makerLocked - baseLots)
+                          let _ := layout.setQuoteFree maker (makerFree + quoteLots)
+                          let _ := layout.setQuoteFree taker (takerQuoteFree - takerCost)
+                          let _ := layout.setBaseFree taker (takerBaseFree + baseLots)
+                          let _ := layout.setUnclaimedQuoteFees (unclaimedFees + fee)
+                          let _ := layout.setMarketSequence (marketSequence + 1)
+                          let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
+                          let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
+                            makerSequence makerPrice baseLots 0
+                          let _ := recordFillSummaryAt clientIdLow clientIdHigh
+                            baseLots takerCost fee
+                          let _ := finishMarketBatch
+                          .ok 0
+                    else
+                      let makerLocked := layout.quoteLocked maker
+                      let makerFree := layout.baseFree maker
+                      let takerBaseFree := layout.baseFree taker
+                      let takerQuoteFree := layout.quoteFree taker
+                      if fee > quoteLots || makerLocked < quoteLots ||
+                          makerFree > u64Max - baseLots || takerBaseFree < baseLots ||
+                          takerQuoteFree > u64Max - (quoteLots - fee) then
+                        .error .overflow
+                      else
+                        let takerProceeds := quoteLots - fee
+                        let makerKey0 := layout.traderKey0 maker
+                        let makerKey1 := layout.traderKey1 maker
+                        let makerKey2 := layout.traderKey2 maker
+                        let makerKey3 := layout.traderKey3 maker
+                        let _ := layout.removeBid makerPrice makerSequence
+                        let _ := layout.setQuoteLocked maker (makerLocked - quoteLots)
+                        let _ := layout.setBaseFree maker (makerFree + baseLots)
+                        let _ := layout.setBaseFree taker (takerBaseFree - baseLots)
+                        let _ := layout.setQuoteFree taker (takerQuoteFree + takerProceeds)
+                        let _ := layout.setUnclaimedQuoteFees (unclaimedFees + fee)
+                        let _ := layout.setMarketSequence (marketSequence + 1)
+                        let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
+                        let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
+                          makerSequence makerPrice baseLots 0
+                        let _ := recordFillSummaryAt clientIdLow clientIdHigh
+                          baseLots takerProceeds fee
+                        let _ := finishMarketBatch
+                        .ok 0
+
 /-- Historical generated adapters retain their existing account geometry and IDL. -/
 @[pf_entry]
 def reduceAskFreeFunds512 (s : State) (price sequence requested : UInt64) :
@@ -1718,13 +1869,13 @@ event CPIs: this strict slice always rests one order, so success is exactly
 `01 00 00 00 || price:u64 || encoded_sequence:u64`. The three scalar leaves use a fixed-width
 EntryAdapter return plan; no protocol return opcode or runtime allocation is involved.
 -/
-@[pf_entry, pf_svm_raw_return 3 5 0 [4, 8, 8]]
-def placeLimitOrderWithFreeFunds (_s : State) (variant side : UInt8)
+@[pf_entry, pf_svm_raw_variant_return 3 0 5 0 [4, 8, 8]]
+def placeLimitOrderWithFreeFunds (_s : State) (side : UInt8)
     (price baseLots clientIdLow clientIdHigh : UInt64)
     (rejectPostOnly useOnlyDepositedFunds lastValidSlot lastValidUnixTimestamp
       failSilentlyOnInsufficientFunds : UInt8) :
     Except Error (State × (UInt32 × (UInt64 × UInt64))) := do
-  if variant ≠ 0 || (side ≠ 0 && side ≠ 1) ||
+  if (side ≠ 0 && side ≠ 1) ||
       (rejectPostOnly ≠ 0 && rejectPostOnly ≠ 1) || useOnlyDepositedFunds ≠ 1 ||
       lastValidSlot ≠ 0 || lastValidUnixTimestamp ≠ 0 ||
       failSilentlyOnInsufficientFunds ≠ 0 || placeFreeFundsContextValid = 0 then
@@ -1733,6 +1884,27 @@ def placeLimitOrderWithFreeFunds (_s : State) (variant side : UInt8)
     let encodedSequence ← placePostOnlyFreeFunds512At 2 3 side.toUInt64 price baseLots
       clientIdLow clientIdHigh
     .ok (_s, ((1 : UInt32), (price, encodedSequence)))
+
+/-- Exact modern `OrderPacket::Limit` slice:
+`03 || 01 || side || price || base || Abort || Some(1) || client:u128 || 01 || None || None || 00`.
+It fully fills one non-self, no-TIF maker and returns the official empty Borsh order-id vector.
+Other match limits, self-trade policies, partial fills, posting, and TIF remain fail closed.
+-/
+@[pf_entry, pf_svm_raw_variant_return 3 1 5 0 [4]]
+def placeLimitOrderWithFreeFundsLimit (_s : State) (side : UInt8)
+    (price baseLots : UInt64) (selfTradeBehavior matchLimitPresent : UInt8)
+    (matchLimit clientIdLow clientIdHigh : UInt64)
+    (useOnlyDepositedFunds lastValidSlotPresent lastValidUnixTimestampPresent
+      failSilentlyOnInsufficientFunds : UInt8) : Except Error (State × UInt32) := do
+  if (side ≠ 0 && side ≠ 1) || selfTradeBehavior ≠ 0 || matchLimitPresent ≠ 1 ||
+      matchLimit ≠ 1 || useOnlyDepositedFunds ≠ 1 || lastValidSlotPresent ≠ 0 ||
+      lastValidUnixTimestampPresent ≠ 0 || failSilentlyOnInsufficientFunds ≠ 0 ||
+      placeFreeFundsContextValid = 0 then
+    .error .overflow
+  else
+    let result ← placeLimitOneMatchFreeFunds512At 2 3 side.toUInt64 price baseLots
+      clientIdLow clientIdHigh
+    .ok (_s, result.toUInt32)
 
 /--
 Official Phoenix `ReduceOrderWithFreeFunds` wire for the smallest static profile:
@@ -2002,9 +2174,11 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   bidRootNeighborhood4096 profileAccountBytesAt profileAccountBytes allocatorHeadersValidAt
   allocatorHeadersValid reduceAskFreeFunds512At reduceBidFreeFunds512At reduceFreeFunds512At
   quoteLotsReleased512At claimReleasedFunds512At beginMarketBatchAt recordReduceAt recordPlaceAt
+  recordFillAt recordFillSummaryAt adjustedQuoteLots512At takerFeeQuoteLots512At
   finishMarketBatch withdrawReleasedAt cancelAllStorageValid512At cancelAllTraderIndex512At
   beginCancelAll cancelAllBids512At cancelAllAsks512At cancelUpToBids512At
   cancelUpToAsks512At finishCancelAll
   cancelWithdrawContextValid placeFreeFundsContextValid placePostOnlyFreeFunds512At
+  placeLimitOneMatchFreeFunds512At
 
 end Examples.PhoenixV1Profile

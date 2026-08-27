@@ -342,7 +342,37 @@ private def oneBasedTraderComponent :
     ProofForge.Svm.Component.Call ProofForge.Svm.Ops.Val :=
   .accountStorage oneBasedTraderWrite
 
+private def scalarHeaderField : ProofForge.Svm.AccountStorage.Field :=
+  ProofForge.Svm.AccountStorage.Field.scalar 1 34
+
+private def reusableTraderField : ProofForge.Svm.AccountStorage.Field :=
+  ProofForge.Svm.AccountStorage.Field.oneBased 1 8314 18 128
+
+private def orderedBidMap : ProofForge.Svm.AccountStorage.RbMap :=
+  ProofForge.Svm.AccountStorage.RbMap.orderedPairOneBased
+    1 110 114 115 116 117 8 512 true
+
+private def orderedBidAllocator : ProofForge.Svm.AccountStorage.OneBasedAllocator :=
+  orderedBidMap.allocator
+
 #guard oneBasedTraderLinks.wellFormed
+#guard scalarHeaderField.region.baseWord == 34
+#guard scalarHeaderField.region.strideWords == 1 && scalarHeaderField.region.capacity == 1
+#guard scalarHeaderField.region.indexBase == .zero
+#guard scalarHeaderField.region.access == ProofForge.Svm.AccountStorage.Access.programOwnedMutable
+#guard reusableTraderField == oneBasedTraderLinks
+#guard reusableTraderField.mutableOneBasedWord
+#guard orderedBidMap ==
+  ProofForge.Svm.AccountStorage.RbMap.fifoOneBased 1 110 114 115 116 117 8 512 true
+#guard orderedBidMap.wellFormed
+#guard orderedBidAllocator.wellFormed
+#guard orderedBidAllocator.slots == orderedBidMap.links.region
+#guard orderedBidAllocator.liveCount.firstWord == 112
+#guard orderedBidAllocator.cursor.firstWord == 113
+#guard !({ orderedBidAllocator with cursor :=
+  ProofForge.Svm.AccountStorage.Field.scalar 1 114 }).wellFormed
+#guard !({ orderedBidAllocator with slots :=
+  { orderedBidAllocator.slots with indexBase := .zero } }).wellFormed
 #guard oneBasedTraderWrite.wellFormed
   (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
 #guard oneBasedTraderWrite.effects.reads == #[1]

@@ -13,6 +13,7 @@ const TAG: u8 = 7;
 const BORSH_TAG: u8 = 8;
 const PAIR_TAG: u8 = 9;
 const BORSH_PAIR_TAG: u8 = 10;
+const ENUM_TAG: u8 = 11;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -31,6 +32,12 @@ fn borsh_singleton_pair_data(left: u64, right: u64) -> Vec<u8> {
     let mut data = vec![BORSH_PAIR_TAG];
     data.extend_from_slice(&left.to_le_bytes());
     data.extend_from_slice(&right.to_le_bytes());
+    data
+}
+
+fn enum_wide_data(value: u64) -> Vec<u8> {
+    let mut data = vec![ENUM_TAG, 1];
+    data.extend_from_slice(&value.to_le_bytes());
     data
 }
 
@@ -194,6 +201,55 @@ fn packed_return_codec_emits_one_borsh_pair() {
         true,
         &borsh_singleton_pair_data(30, 29),
     );
+}
+
+#[test]
+fn shared_tag_routes_exact_borsh_enum_variants_and_rejects_other_shapes() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    for (data, expected) in [
+        (vec![ENUM_TAG, 0, 37], 37u64),
+        (
+            enum_wide_data(0x1716_1514_1312_1110),
+            0x1716_1514_1312_1110u64,
+        ),
+    ] {
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
+    for malformed in [
+        vec![ENUM_TAG, 2, 37],
+        vec![ENUM_TAG, 0],
+        vec![ENUM_TAG, 0, 37, 0],
+        enum_wide_data(37)[..9].to_vec(),
+        {
+            let mut data = enum_wide_data(37);
+            data.push(0);
+            data
+        },
+        {
+            let mut data = enum_wide_data(37);
+            data[1] = 0;
+            data
+        },
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &malformed,
+        );
+    }
 }
 
 #[test]

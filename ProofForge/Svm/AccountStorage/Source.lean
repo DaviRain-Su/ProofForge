@@ -43,7 +43,20 @@ SVM operation is introduced.
         (UInt64.ofNat region.capacity) key0 key1 key2 key3
   | .fifo .. => 0
 
-@[pf_inline] def findFifo (map : RbMap) (price sequence : UInt64) : UInt64 :=
+@[pf_inline] private def key4Word (map : RbMap) (word : Nat) (index : UInt64) : UInt64 :=
+  match map with
+  | .key4 _ tree => read { tree.key with offsetWords := word, widthWords := 1 } index
+  | .fifo .. => 0
+
+/-- Read one word of a four-word map key at an already validated one-based slot. These accessors
+are fixed record projections; no key object, copied node, runtime offset, or persistent pointer is
+created. -/
+@[pf_inline] def key4Word0 (map : RbMap) (index : UInt64) : UInt64 := key4Word map 0 index
+@[pf_inline] def key4Word1 (map : RbMap) (index : UInt64) : UInt64 := key4Word map 1 index
+@[pf_inline] def key4Word2 (map : RbMap) (index : UInt64) : UInt64 := key4Word map 2 index
+@[pf_inline] def key4Word3 (map : RbMap) (index : UInt64) : UInt64 := key4Word map 3 index
+
+@[pf_inline] def findOrderedPair (map : RbMap) (key0 key1 : UInt64) : UInt64 :=
   match map with
   | .key4 .. => 0
   | .fifo rootWord tree =>
@@ -52,9 +65,9 @@ SVM operation is introduced.
         (UInt64.ofNat tree.links.firstWord) (UInt64.ofNat tree.parentColor.firstWord)
         (UInt64.ofNat tree.price.firstWord) (UInt64.ofNat tree.sequence.firstWord)
         (UInt64.ofNat region.strideWords) (UInt64.ofNat region.capacity)
-        (if tree.bid then 1 else 0) price sequence
+        (if tree.bid then 1 else 0) key0 key1
 
-@[pf_inline] def cursorFifo (map : RbMap) (hasCursor price sequence : UInt64) : UInt64 :=
+@[pf_inline] def cursorOrderedPair (map : RbMap) (hasCursor key0 key1 : UInt64) : UInt64 :=
   match map with
   | .key4 .. => 0
   | .fifo rootWord tree =>
@@ -63,7 +76,23 @@ SVM operation is introduced.
         (UInt64.ofNat tree.links.firstWord) (UInt64.ofNat tree.parentColor.firstWord)
         (UInt64.ofNat tree.price.firstWord) (UInt64.ofNat tree.sequence.firstWord)
         (UInt64.ofNat region.strideWords) (UInt64.ofNat region.capacity)
-        (if tree.bid then 1 else 0) hasCursor price sequence
+        (if tree.bid then 1 else 0) hasCursor key0 key1
+
+@[pf_inline] def findFifo (map : RbMap) (price sequence : UInt64) : UInt64 :=
+  findOrderedPair map price sequence
+
+@[pf_inline] def cursorFifo (map : RbMap) (hasCursor price sequence : UInt64) : UInt64 :=
+  cursorOrderedPair map hasCursor price sequence
+
+@[pf_inline] def orderedKey0 (map : RbMap) (index : UInt64) : UInt64 :=
+  match map with
+  | .key4 .. => 0
+  | .fifo _ tree => read tree.price index
+
+@[pf_inline] def orderedKey1 (map : RbMap) (index : UInt64) : UInt64 :=
+  match map with
+  | .key4 .. => 0
+  | .fifo _ tree => read tree.sequence index
 
 @[pf_inline] private def mapRoot (map : RbMap) : UInt64 :=
   match map with
@@ -79,6 +108,22 @@ SVM operation is introduced.
   match map with
   | .key4 rootWord tree | .fifo rootWord tree =>
       accDataWord (UInt64.ofNat tree.links.region.account) (UInt64.ofNat (rootWord + 3))
+
+@[pf_inline] def liveCount (map : RbMap) : UInt64 :=
+  match map with
+  | .key4 rootWord tree | .fifo rootWord tree =>
+      read (Field.scalar tree.links.region.account (rootWord + 2) tree.links.region.access) 0
+
+@[pf_inline] def bumpIndex (map : RbMap) : UInt64 :=
+  match map with
+  | .key4 rootWord tree | .fifo rootWord tree =>
+      read (Field.scalar tree.links.region.account (rootWord + 3) tree.links.region.access) 0 &&&
+        0xffffffff
+
+@[pf_inline] def freeListHead (map : RbMap) : UInt64 :=
+  match map with
+  | .key4 rootWord tree | .fifo rootWord tree =>
+      read (Field.scalar tree.links.region.account (rootWord + 3) tree.links.region.access) 0 >>> 32
 
 /-- Validate the tree and its exact live/free allocator partition from the static map handle. The
 allocator-header encoding remains internal to this facade; contracts do not pass root, size, bump,
@@ -123,7 +168,8 @@ free-list, stride, or capacity geometry. -/
         (UInt64.ofNat region.capacity) key0 key1 key2 key3 delta0 delta1
   | .fifo .. => 0
 
-@[pf_inline] def insertFifo (map : RbMap) (price sequence owner size lastSlot lastTime : UInt64) :
+@[pf_inline] def insertOrderedPair (map : RbMap)
+    (key0 key1 value0 value1 value2 value3 : UInt64) :
     UInt64 :=
   match map with
   | .key4 .. => 0
@@ -133,7 +179,11 @@ free-list, stride, or capacity geometry. -/
         (UInt64.ofNat tree.links.firstWord) (UInt64.ofNat tree.parentColor.firstWord)
         (UInt64.ofNat tree.price.firstWord) (UInt64.ofNat tree.sequence.firstWord)
         (UInt64.ofNat region.strideWords) (UInt64.ofNat region.capacity)
-        (if tree.bid then 1 else 0) price sequence owner size lastSlot lastTime
+        (if tree.bid then 1 else 0) key0 key1 value0 value1 value2 value3
+
+@[pf_inline] def insertFifo (map : RbMap) (price sequence owner size lastSlot lastTime : UInt64) :
+    UInt64 :=
+  insertOrderedPair map price sequence owner size lastSlot lastTime
 
 @[pf_inline] def removeKey4 (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
   match map with
@@ -145,7 +195,7 @@ free-list, stride, or capacity geometry. -/
         (UInt64.ofNat region.capacity) key0 key1 key2 key3
   | .fifo .. => 0
 
-@[pf_inline] def removeFifo (map : RbMap) (price sequence : UInt64) : UInt64 :=
+@[pf_inline] def removeOrderedPair (map : RbMap) (key0 key1 : UInt64) : UInt64 :=
   match map with
   | .key4 .. => 0
   | .fifo rootWord tree =>
@@ -154,6 +204,9 @@ free-list, stride, or capacity geometry. -/
         (UInt64.ofNat tree.links.firstWord) (UInt64.ofNat tree.parentColor.firstWord)
         (UInt64.ofNat tree.price.firstWord) (UInt64.ofNat tree.sequence.firstWord)
         (UInt64.ofNat region.strideWords) (UInt64.ofNat region.capacity)
-        (if tree.bid then 1 else 0) price sequence
+        (if tree.bid then 1 else 0) key0 key1
+
+@[pf_inline] def removeFifo (map : RbMap) (price sequence : UInt64) : UInt64 :=
+  removeOrderedPair map price sequence
 
 end ProofForge.Svm.AccountStorage.Source
