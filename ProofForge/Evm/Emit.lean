@@ -225,11 +225,9 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .loopIx => .ok "i"
   | .select .. => .error "extract/unsupported: evm select needs materialize"
   | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. |
-    .ext .mapGetU64 _ | .ext .mapGetAddr _ | .ext .mapGetPair _ |
-    .ext (.mapGetAddr256 _) _ | .ext (.mapGetPair256 _) _ |
     .ext (.tokenBalance256 _) _ | .ext (.tokenAllowance256 _) _ |
     .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext (.domainSep256 _) _ |
-    .ext .ge256 _ | .ext .eq20 _ | .ext (.component _) _ =>
+    .ext (.component _) _ =>
       .error "extract/unsupported: evm map/arith val needs materialize"
     | .ext _ _ => .error "extract/ir: malformed EVM value operands"
 
@@ -338,7 +336,7 @@ private def bindChecked (indent name expr : String) : String :=
     indent ++ "if gt(" ++ name ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl
 
 /-- 环境 opcode / 移位 / 下标必须先检查再当值用。 -/
-private def materializeVal (p : IR.Program) (indent paramPrefix : String)
+private partial def materializeVal (p : IR.Program) (indent paramPrefix : String)
     (paramCount : Nat) (paramWidths : Array Nat) (v : Ops.Val) (st : Render) :
     Except String (String × String × Render) := do
   let checked? : Option String :=
@@ -462,143 +460,6 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
           indent ++ "if iszero(" ++ rv ++ ") { " ++ revert0 ++ " }" ++ nl ++
           indent ++ "let " ++ nm ++ " := mod(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
-    | .ext .mapGetU64 #[base, key] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount paramWidths key st1
-        let (slot, st3) := fresh st2
-        let (tag, st4) := fresh st3
-        let (pay, st5) := fresh st4
-        let txt := pb ++ pk ++
-          indent ++ "mstore(0, " ++ k ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 64)" ++ nl ++
-          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-          indent ++ "if " ++ tag ++ " {" ++ nl ++
-          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "}" ++ nl
-        return (txt, pay, st5)
-    | .ext .mapGetAddr #[base, w0, w1, w2] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
-        let (slot, st5) := fresh st4
-        let (tag, st6) := fresh st5
-        let (pay, st7) := fresh st6
-        let txt := pb ++ p0 ++ p1 ++ p2 ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
-          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-          indent ++ "if " ++ tag ++ " {" ++ nl ++
-          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "}" ++ nl
-        return (txt, pay, st7)
-    | .ext .mapGetPair #[base, o0, o1, o2, s0, s1, s2] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
-        let (slot, st8) := fresh st7
-        let (tag, st9) := fresh st8
-        let (pay, st10) := fresh st9
-        let txt := pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
-          indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
-          indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
-          indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
-          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-          indent ++ "if " ++ tag ++ " {" ++ nl ++
-          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "}" ++ nl
-        return (txt, pay, st10)
-    | .ext (.mapGetAddr256 limb) #[base, w0, w1, w2] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
-        let cacheKey :=
-          "mga256|" ++ valKey base ++ "|" ++ valKey w0 ++ "|" ++ valKey w1 ++ "|" ++ valKey w2
-        match lookupWide st4 cacheKey with
-        | some pay =>
-          let (nm, st5) := fresh st4
-          return (pb ++ p0 ++ p1 ++ p2 ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word pay limb ++ nl, nm, st5)
-        | none =>
-          let (slot, st5) := fresh st4
-          let (tag, st6) := fresh st5
-          let (pay, st7) := fresh st6
-          let (nm, st8) := fresh (rememberWide st7 cacheKey pay)
-          let txt := pb ++ p0 ++ p1 ++ p2 ++
-            indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-            indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-            indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-            indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
-            indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
-            indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-            indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-            indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-            indent ++ "if " ++ tag ++ " {" ++ nl ++
-            indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-            indent ++ "}" ++ nl ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word pay limb ++ nl
-          return (txt, nm, st8)
-    | .ext (.mapGetPair256 limb) #[base, o0, o1, o2, s0, s1, s2] =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
-        let cacheKey :=
-          "mgp256|" ++ valKey base ++ "|" ++ valKey o0 ++ "|" ++ valKey o1 ++ "|" ++ valKey o2 ++
-            "|" ++ valKey s0 ++ "|" ++ valKey s1 ++ "|" ++ valKey s2
-        match lookupWide st7 cacheKey with
-        | some pay =>
-          let (nm, st8) := fresh st7
-          return (pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word pay limb ++ nl, nm, st8)
-        | none =>
-          let (slot, st8) := fresh st7
-          let (tag, st9) := fresh st8
-          let (pay, st10) := fresh st9
-          let (nm, st11) := fresh (rememberWide st10 cacheKey pay)
-          let txt := pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
-            indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-            indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-            indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-            indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
-            indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
-            indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
-            indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
-            indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
-            indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-            indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-            indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-            indent ++ "if " ++ tag ++ " {" ++ nl ++
-            indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-            indent ++ "}" ++ nl ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word pay limb ++ nl
-          return (txt, nm, st11)
     | .ext (.tokenBalance256 limb) #[tw0, tw1, tw2] =>
         let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
         let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 s0
@@ -697,91 +558,17 @@ private def materializeVal (p : IR.Program) (indent paramPrefix : String)
             indent ++ "let " ++ ret ++ " := mload(0)" ++ nl ++
             indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl
           return (txt, nm, st12)
-    | .ext .ge256 #[a0, a1, a2, a3, b0, b1, b2, b3] =>
-        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
-        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0
-        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s1
-        let (p3, x3, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s2
-        let (q0, y0, t0) ← materializeVal p indent paramPrefix paramCount paramWidths b0 s3
-        let (q1, y1, t1) ← materializeVal p indent paramPrefix paramCount paramWidths b1 t0
-        let (q2, y2, t2) ← materializeVal p indent paramPrefix paramCount paramWidths b2 t1
-        let (q3, y3, t3) ← materializeVal p indent paramPrefix paramCount paramWidths b3 t2
-        let (av, t4) := fresh t3
-        let (bv, t5) := fresh t4
-        let (nm, t6) := fresh t5
-        let txt := p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
-          indent ++ "let " ++ av ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
-          indent ++ "let " ++ bv ++ " := " ++ packU256 y0 y1 y2 y3 ++ nl ++
-          indent ++ "let " ++ nm ++ " := iszero(lt(" ++ av ++ ", " ++ bv ++ "))" ++ nl
-        return (txt, nm, t6)
-    | .ext .eq20 #[a0, a1, a2, b0, b1, b2] =>
-        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
-        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0
-        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s1
-        let (q0, y0, t0) ← materializeVal p indent paramPrefix paramCount paramWidths b0 s2
-        let (q1, y1, t1) ← materializeVal p indent paramPrefix paramCount paramWidths b1 t0
-        let (q2, y2, t2) ← materializeVal p indent paramPrefix paramCount paramWidths b2 t1
-        let (av, t3) := fresh t2
-        let (bv, t4) := fresh t3
-        let (nm, t5) := fresh t4
-        let txt := p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent x0 x1 x2 ++
-          indent ++ "let " ++ av ++ " := mload(0)" ++ nl ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent y0 y1 y2 ++
-          indent ++ "let " ++ bv ++ " := mload(0)" ++ nl ++
-          indent ++ "let " ++ nm ++ " := eq(" ++ av ++ ", " ++ bv ++ ")" ++ nl
-        return (txt, nm, t5)
-    | .ext (.arith256 op limb) #[a0, a1, a2, a3, b0, b1, b2, b3] =>
-        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
-        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0
-        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s1
-        let (p3, x3, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s2
-        let (q0, y0, t0) ← materializeVal p indent paramPrefix paramCount paramWidths b0 s3
-        let (q1, y1, t1) ← materializeVal p indent paramPrefix paramCount paramWidths b1 t0
-        let (q2, y2, t2) ← materializeVal p indent paramPrefix paramCount paramWidths b2 t1
-        let (q3, y3, t3) ← materializeVal p indent paramPrefix paramCount paramWidths b3 t2
-        let cacheKey :=
-          "arith256|" ++ toString op ++ "|" ++ valKey a0 ++ "|" ++ valKey a1 ++ "|" ++
-            valKey a2 ++ "|" ++ valKey a3 ++ "|" ++ valKey b0 ++ "|" ++ valKey b1 ++ "|" ++
-            valKey b2 ++ "|" ++ valKey b3
-        match lookupWide t3 cacheKey with
-        | some rv =>
-          let (nm, t4) := fresh t3
-          return (p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word rv limb ++ nl, nm, t4)
-        | none =>
-          let (av, t4) := fresh t3
-          let (bv, t5) := fresh t4
-          let (rv, t6) := fresh t5
-          let (nm, t7) := fresh (rememberWide t6 cacheKey rv)
-          let packedA := packU256 x0 x1 x2 x3
-          let packedB := packU256 y0 y1 y2 y3
-          let overflow :=
-            match op with
-            | 0 => "lt(" ++ rv ++ ", " ++ av ++ ")"
-            | 1 => "gt(" ++ bv ++ ", " ++ av ++ ")"
-            | _ => "and(iszero(iszero(" ++ bv ++ ")), iszero(eq(" ++ av ++ ", div(" ++ rv ++ ", " ++ bv ++ "))))"
-          let arith :=
-            match op with
-            | 0 => "add(" ++ av ++ ", " ++ bv ++ ")"
-            | 1 => "sub(" ++ av ++ ", " ++ bv ++ ")"
-            | _ => "mul(" ++ av ++ ", " ++ bv ++ ")"
-          let txt := p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
-            indent ++ "let " ++ av ++ " := " ++ packedA ++ nl ++
-            indent ++ "let " ++ bv ++ " := " ++ packedB ++ nl ++
-            indent ++ "let " ++ rv ++ " := " ++ arith ++ nl ++
-            indent ++ "if " ++ overflow ++ " { " ++ revert0 ++ " }" ++ nl ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word rv limb ++ nl
-          return (txt, nm, t7)
     | .ext (.component query) operands =>
-        let context : Component.Emit.Context := {
-          loadValue := fun value =>
-            loadVal p paramPrefix paramCount paramWidths value
+        let context : Component.Emit.Context Render := {
+          materialize := fun value st =>
+            materializeVal p indent paramPrefix paramCount paramWidths value st
+          fresh := fresh
+          rememberWide := rememberWide
+          lookupWide := lookupWide
+          valKey := valKey
+          indent
         }
-        let txt ← Component.Emit.emitQuery context query operands
-        return (txt, "0", st)
+        Component.Emit.emitQuery context query operands st
     | _ =>
         let e ← loadVal p paramPrefix paramCount paramWidths v
         return ("", e, st)
@@ -1260,180 +1047,6 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "sstore(add(" ++ toString (base + leaf) ++ ", mul(" ++ iv ++ ", " ++
             toString stride ++ ")), " ++ stored ++ ")" ++ nl
         st := { st with last := some stored }
-    | .mapGetU64 base key =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount paramWidths key st1
-        let (slot, st3) := fresh st2
-        let (tag, st4) := fresh st3
-        let (pay, st5) := fresh st4
-        st := st5
-        acc := acc ++ pb ++ pk ++
-          indent ++ "mstore(0, " ++ k ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 64)" ++ nl ++
-          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-          indent ++ "if " ++ tag ++ " {" ++ nl ++
-          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "}" ++ nl
-        st := { st with last := some pay }
-    | .mapSetU64 base key value =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (pk, k, st2) ← materializeVal p indent paramPrefix paramCount paramWidths key st1
-        let (pv, v, st3) ← materializeVal p indent paramPrefix paramCount paramWidths value st2
-        let (slot, st4) := fresh st3
-        st := st4
-        acc := acc ++ pb ++ pk ++ pv ++
-          indent ++ "mstore(0, " ++ k ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 64)" ++ nl ++
-          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
-          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
-        st := { st with last := some v }
-    | .mapGetAddr base w0 w1 w2 =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
-        let (slot, st5) := fresh st4
-        let (tag, st6) := fresh st5
-        let (pay, st7) := fresh st6
-        st := st7
-        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
-          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-          indent ++ "if " ++ tag ++ " {" ++ nl ++
-          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "}" ++ nl
-        st := { st with last := some pay }
-    | .mapSetAddr base w0 w1 w2 value =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
-        let (pv, v, st5) ← materializeVal p indent paramPrefix paramCount paramWidths value st4
-        let (slot, st6) := fresh st5
-        st := st6
-        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ pv ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
-          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
-          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
-        st := { st with last := some v }
-    | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
-        let (slot, st8) := fresh st7
-        let (tag, st9) := fresh st8
-        let (pay, st10) := fresh st9
-        st := st10
-        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
-          indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
-          indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
-          indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
-          indent ++ "let " ++ tag ++ " := sload(" ++ slot ++ ")" ++ nl ++
-          indent ++ "if gt(" ++ tag ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "let " ++ pay ++ " := 0" ++ nl ++
-          indent ++ "if " ++ tag ++ " {" ++ nl ++
-          indent ++ "  " ++ pay ++ " := sload(add(" ++ slot ++ ", 1))" ++ nl ++
-          indent ++ "  if gt(" ++ pay ++ ", " ++ u64MaxYul ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "}" ++ nl
-        st := { st with last := some pay }
-    | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
-        let (pv, v, st8) ← materializeVal p indent paramPrefix paramCount paramWidths value st7
-        let (slot, st9) := fresh st8
-        st := st9
-        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ pv ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
-          indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
-          indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
-          indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
-          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
-          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ v ++ ")" ++ nl
-        st := { st with last := some v }
-    | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st3
-        let (q0, x0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths v0 st4
-        let (q1, x1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths v1 st5
-        let (q2, x2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths v2 st6
-        let (q3, x3, st8) ← materializeVal p indent paramPrefix paramCount paramWidths v3 st7
-        let (slot, st9) := fresh st8
-        let (pay, st10) := fresh st9
-        st := st10
-        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ q3 ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 128)" ++ nl ++
-          indent ++ "let " ++ pay ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
-          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
-          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ pay ++ ")" ++ nl
-        st := { st with last := some x0 }
-    | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-        let (pb, b, st1) ← materializeVal p indent paramPrefix paramCount paramWidths base st
-        let (p0, a0, st2) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st1
-        let (p1, a1, st3) ← materializeVal p indent paramPrefix paramCount paramWidths o1 st2
-        let (p2, a2, st4) ← materializeVal p indent paramPrefix paramCount paramWidths o2 st3
-        let (q0, b0, st5) ← materializeVal p indent paramPrefix paramCount paramWidths s0 st4
-        let (q1, b1, st6) ← materializeVal p indent paramPrefix paramCount paramWidths s1 st5
-        let (q2, b2, st7) ← materializeVal p indent paramPrefix paramCount paramWidths s2 st6
-        let (r0, x0, st8) ← materializeVal p indent paramPrefix paramCount paramWidths v0 st7
-        let (r1, x1, st9) ← materializeVal p indent paramPrefix paramCount paramWidths v1 st8
-        let (r2, x2, st10) ← materializeVal p indent paramPrefix paramCount paramWidths v2 st9
-        let (r3, x3, st11) ← materializeVal p indent paramPrefix paramCount paramWidths v3 st10
-        let (slot, st12) := fresh st11
-        let (pay, st13) := fresh st12
-        st := st13
-        acc := acc ++ pb ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ r0 ++ r1 ++ r2 ++ r3 ++
-          indent ++ "mstore(0, " ++ a0 ++ ")" ++ nl ++
-          indent ++ "mstore(32, " ++ a1 ++ ")" ++ nl ++
-          indent ++ "mstore(64, " ++ a2 ++ ")" ++ nl ++
-          indent ++ "mstore(96, " ++ b0 ++ ")" ++ nl ++
-          indent ++ "mstore(128, " ++ b1 ++ ")" ++ nl ++
-          indent ++ "mstore(160, " ++ b2 ++ ")" ++ nl ++
-          indent ++ "mstore(192, " ++ b ++ ")" ++ nl ++
-          indent ++ "let " ++ slot ++ " := keccak256(0, 224)" ++ nl ++
-          indent ++ "let " ++ pay ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
-          indent ++ "sstore(" ++ slot ++ ", 1)" ++ nl ++
-          indent ++ "sstore(add(" ++ slot ++ ", 1), " ++ pay ++ ")" ++ nl
-        st := { st with last := some x0 }
     | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
         let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths tw0 st
         let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths tw1 s0
@@ -1749,11 +1362,18 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
         acc := acc ++ txt
         st := st'
     | .component call =>
-        let context : Component.Emit.Context := {
-          loadValue := fun value =>
-            loadVal p paramPrefix paramCount paramWidths value
+        let context : Component.Emit.Context Render := {
+          materialize := fun value st =>
+            materializeVal p indent paramPrefix paramCount paramWidths value st
+          fresh := fresh
+          rememberWide := rememberWide
+          lookupWide := lookupWide
+          valKey := valKey
+          indent
         }
-        acc := acc ++ (← Component.Emit.emitCall context call)
+        let (txt, last, st') ← Component.Emit.emitCall context call st
+        acc := acc ++ txt
+        st := { st' with last := some last }
     | .storeField name v =>
         let destS ← slotOf p name
         let (pre, value, st') ← materializeVal p indent paramPrefix paramCount paramWidths v st

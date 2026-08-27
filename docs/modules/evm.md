@@ -27,9 +27,10 @@ source semantic helper
 ```
 
 因此 generic `Evm.Ops.ValKind/OpExt`、`Evm.IR.Op`、CFG payload traversal 和主 `Evm.Emit`
-各自只保留一个 `.component` case。新增 hashed-map 形状、LOG 配方或封闭 CALL 仍需要在
-`Evm.Component` 内注册自己的 bounded vocabulary 和 backend，但不再改动上述通用层。
-现有 hashed-map / permit / swap 叶仍走旧构造子，digest 不变；新能力才进这个口。
+各自只保留一个 `.component` case。hashed-map 读写和 packed 256-bit 比较/算术已经迁进
+`Evm.HashedMap` / `Evm.WideWord`；源侧 helper 仍叫 `mapGetU64` / `ge256` 等，canonical
+拼写保持 `vg` / `mseta256` / `ext.ProofForge.Evm.Ops.ValKind.arith256 …`，digest 不变。
+新增 LOG 配方或封闭 CALL 仍在 `Evm.Component` 内注册，不再改动上述通用层。
 
 输入是已通过 Profile 的 frontend `Core.IR.Program`。`Evm.IR.extractRegistration` 向
 `Core.Target` 注册 extension 投影、arity / well-formed / CFG 合同；`Evm.IR.fromExtracted`

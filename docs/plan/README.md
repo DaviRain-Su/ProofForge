@@ -39,6 +39,7 @@
 | [evm-007](tasks/evm-007.md) | done | Darwin / Linux 共用 Anvil 入口 |
 | [evm-008](tasks/evm-008.md) | done | 独立 EVM runtime 叶子 |
 | [e-comp-001](tasks/e-comp-001.md) | done | EVM Component 桥：主链路只留一个口 |
+| [e-comp-002](tasks/e-comp-002.md) | done | 迁 hashed-map / 256-bit 叶进 Component |
 | [e-rt-001](tasks/e-rt-001.md) | done | 环境 + value + Addr20 + ETH + event |
 | [e-lang-001](tasks/e-lang-001.md) | done | 位运算 / for / 下标 / ABI / tuple / 命名 revert |
 | [e-asset-001](tasks/e-asset-001.md) | done | hashed Map + 封闭 ERC-20 |

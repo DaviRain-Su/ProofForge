@@ -18,12 +18,6 @@ inductive ValKind where
   | immU64b
   | immW0 | immW1 | immW2
   | immX0 | immX1 | immX2
-  | mapGetU64
-  | mapGetAddr
-  | mapGetPair
-  /-- 256-bit hashed map payload limb; `limb` is 0..3 (w0 lowest). -/
-  | mapGetAddr256 (limb : Nat)
-  | mapGetPair256 (limb : Nat)
   | tokenBalance256 (limb : Nat)
   /-- 256-bit ERC-20 `allowance` limb; nine operands: token, owner, spender. -/
   | tokenAllowance256 (limb : Nat)
@@ -33,28 +27,14 @@ inductive ValKind where
   | selfBalance256 (limb : Nat)
   /-- EIP-712 domain separator limb; `limb` is 0..3 (w0 lowest). -/
   | domainSep256 (limb : Nat)
-  /-- `a ≥ b` on packed 256-bit words. Eight operands: a0..a3, b0..b3. -/
-  | ge256
-  /-- Packed address equality. Six operands: a0..a2, b0..b2. -/
-  | eq20
-  /-- Checked 256-bit `add`/`sub`/`mul`; `limb` is 0..3 (w0 lowest). Eight operands: a0..a3, b0..b3. -/
-  | arith256 (op : Nat) (limb : Nat)
   /-- Bounded EVM component query. New value vocabularies extend `Component.Query`. -/
   | component (query : Component.Query)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .mapGetU64 => 2
-  | .mapGetAddr => 4
-  | .mapGetPair => 7
-  | .mapGetAddr256 _ => 4
-  | .mapGetPair256 _ => 7
   | .tokenBalance256 _ => 3
   | .tokenAllowance256 _ => 9
   | .callValue256 _ | .selfBalance256 _ | .domainSep256 _ => 0
-  | .ge256 => 8
-  | .eq20 => 6
-  | .arith256 _ _ => 8
   | .component query => query.arity
   | _ => 0
 
@@ -74,14 +54,6 @@ inductive OpExt (V : Type) where
   | revertUnauthorized (w0 w1 w2 : V)
   | revertZeroAddress
   | receive
-  | mapGetU64 (base key : V)
-  | mapSetU64 (base key value : V)
-  | mapGetAddr (base w0 w1 w2 : V)
-  | mapSetAddr (base w0 w1 w2 value : V)
-  | mapGetPair (base o0 o1 o2 s0 s1 s2 : V)
-  | mapSetPair (base o0 o1 o2 s0 s1 s2 value : V)
-  | mapSetAddr256 (base w0 w1 w2 v0 v1 v2 v3 : V)
-  | mapSetPair256 (base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 : V)
   | tokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : V)
   | tokenTransfer256 (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : V)
   | tokenApprove256 (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : V)
@@ -124,14 +96,16 @@ def immW2 : Val := leaf .immW2
 def immX0 : Val := leaf .immX0
 def immX1 : Val := leaf .immX1
 def immX2 : Val := leaf .immX2
-def mapGetU64 (base key : Val) : Val := .ext .mapGetU64 #[base, key]
-def mapGetAddr (base w0 w1 w2 : Val) : Val := .ext .mapGetAddr #[base, w0, w1, w2]
+def mapGetU64 (base key : Val) : Val :=
+  .ext (.component (.hashedMap .getU64)) #[base, key]
+def mapGetAddr (base w0 w1 w2 : Val) : Val :=
+  .ext (.component (.hashedMap .getAddr)) #[base, w0, w1, w2]
 def mapGetPair (base o0 o1 o2 s0 s1 s2 : Val) : Val :=
-  .ext .mapGetPair #[base, o0, o1, o2, s0, s1, s2]
+  .ext (.component (.hashedMap .getPair)) #[base, o0, o1, o2, s0, s1, s2]
 def mapGetAddr256 (limb : Nat) (base w0 w1 w2 : Val) : Val :=
-  .ext (.mapGetAddr256 limb) #[base, w0, w1, w2]
+  .ext (.component (.hashedMap (.getAddr256 limb))) #[base, w0, w1, w2]
 def mapGetPair256 (limb : Nat) (base o0 o1 o2 s0 s1 s2 : Val) : Val :=
-  .ext (.mapGetPair256 limb) #[base, o0, o1, o2, s0, s1, s2]
+  .ext (.component (.hashedMap (.getPair256 limb))) #[base, o0, o1, o2, s0, s1, s2]
 def tokenBalance256 (limb : Nat) (tw0 tw1 tw2 : Val) : Val :=
   .ext (.tokenBalance256 limb) #[tw0, tw1, tw2]
 def tokenAllowance256 (limb : Nat) (tw0 tw1 tw2 o0 o1 o2 s0 s1 s2 : Val) : Val :=
@@ -140,11 +114,11 @@ def callValue256 (limb : Nat) : Val := .ext (.callValue256 limb) #[]
 def selfBalance256 (limb : Nat) : Val := .ext (.selfBalance256 limb) #[]
 def domainSep256 (limb : Nat) : Val := .ext (.domainSep256 limb) #[]
 def ge256 (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
-  .ext .ge256 #[a0, a1, a2, a3, b0, b1, b2, b3]
+  .ext (.component (.wideWord .ge256)) #[a0, a1, a2, a3, b0, b1, b2, b3]
 def eq20 (a0 a1 a2 b0 b1 b2 : Val) : Val :=
-  .ext .eq20 #[a0, a1, a2, b0, b1, b2]
+  .ext (.component (.wideWord .eq20)) #[a0, a1, a2, b0, b1, b2]
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
-  .ext (.arith256 op limb) #[a0, a1, a2, a3, b0, b1, b2, b3]
+  .ext (.component (.wideWord (.arith256 op limb))) #[a0, a1, a2, a3, b0, b1, b2, b3]
 
 private def allValuesWellFormed (values : Array Val) : Bool :=
   values.all (·.wellFormed ValKind.arity)
@@ -164,18 +138,6 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .revertUnauthorized w0 w1 w2 => allValuesWellFormed #[w0, w1, w2]
   | .revertZeroAddress => true
   | .receive => true
-  | .mapGetU64 base key => allValuesWellFormed #[base, key]
-  | .mapSetU64 base key value => allValuesWellFormed #[base, key, value]
-  | .mapGetAddr base w0 w1 w2 => allValuesWellFormed #[base, w0, w1, w2]
-  | .mapSetAddr base w0 w1 w2 value => allValuesWellFormed #[base, w0, w1, w2, value]
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-      allValuesWellFormed #[base, o0, o1, o2, s0, s1, s2]
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      allValuesWellFormed #[base, o0, o1, o2, s0, s1, s2, value]
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-      allValuesWellFormed #[base, w0, w1, w2, v0, v1, v2, v3]
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      allValuesWellFormed #[base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3]
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       allValuesWellFormed #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>

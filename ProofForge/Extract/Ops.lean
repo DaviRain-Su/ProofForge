@@ -128,11 +128,11 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.evmImmX1 : Val := evmLeaf .immX1
 @[match_pattern] def Val.evmImmX2 : Val := evmLeaf .immX2
 @[match_pattern] def Val.mapGetU64 (base key : Val) : Val :=
-  .ext (.evm .mapGetU64) #[base, key]
+  .ext (.evm (.component (.hashedMap .getU64))) #[base, key]
 @[match_pattern] def Val.mapGetAddr (base w0 w1 w2 : Val) : Val :=
-  .ext (.evm .mapGetAddr) #[base, w0, w1, w2]
+  .ext (.evm (.component (.hashedMap .getAddr))) #[base, w0, w1, w2]
 @[match_pattern] def Val.mapGetPair (base o0 o1 o2 s0 s1 s2 : Val) : Val :=
-  .ext (.evm .mapGetPair) #[base, o0, o1, o2, s0, s1, s2]
+  .ext (.evm (.component (.hashedMap .getPair))) #[base, o0, o1, o2, s0, s1, s2]
 
 @[match_pattern] def Op.invoke (programIx : Nat) (metas : Array CpiMeta)
     (data : Array CpiWord) (seeds : Array PdaSeed := #[]) (bump : Option Val := none) : Op :=
@@ -200,21 +200,21 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Op.evmReceive : Op :=
   .ext (.evm .receive)
 @[match_pattern] def Op.mapGetU64 (base key : Val) : Op :=
-  .ext (.evm (.mapGetU64 base key))
+  .ext (.evm (.component (.hashedMap (.getU64 base key))))
 @[match_pattern] def Op.mapSetU64 (base key value : Val) : Op :=
-  .ext (.evm (.mapSetU64 base key value))
+  .ext (.evm (.component (.hashedMap (.setU64 base key value))))
 @[match_pattern] def Op.mapGetAddr (base w0 w1 w2 : Val) : Op :=
-  .ext (.evm (.mapGetAddr base w0 w1 w2))
+  .ext (.evm (.component (.hashedMap (.getAddr base w0 w1 w2))))
 @[match_pattern] def Op.mapSetAddr (base w0 w1 w2 value : Val) : Op :=
-  .ext (.evm (.mapSetAddr base w0 w1 w2 value))
+  .ext (.evm (.component (.hashedMap (.setAddr base w0 w1 w2 value))))
 @[match_pattern] def Op.mapGetPair (base o0 o1 o2 s0 s1 s2 : Val) : Op :=
-  .ext (.evm (.mapGetPair base o0 o1 o2 s0 s1 s2))
+  .ext (.evm (.component (.hashedMap (.getPair base o0 o1 o2 s0 s1 s2))))
 @[match_pattern] def Op.mapSetPair (base o0 o1 o2 s0 s1 s2 value : Val) : Op :=
-  .ext (.evm (.mapSetPair base o0 o1 o2 s0 s1 s2 value))
+  .ext (.evm (.component (.hashedMap (.setPair base o0 o1 o2 s0 s1 s2 value))))
 @[match_pattern] def Op.mapSetAddr256 (base w0 w1 w2 v0 v1 v2 v3 : Val) : Op :=
-  .ext (.evm (.mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3))
+  .ext (.evm (.component (.hashedMap (.setAddr256 base w0 w1 w2 v0 v1 v2 v3))))
 @[match_pattern] def Op.mapSetPair256 (base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 : Val) : Op :=
-  .ext (.evm (.mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3))
+  .ext (.evm (.component (.hashedMap (.setPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3))))
 @[match_pattern] def Op.evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Val) : Op :=
   .ext (.evm (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount))
 @[match_pattern] def Op.evmTokenTransfer256
@@ -326,17 +326,6 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .evmRevertUnauthorized w0 w1 w2 => #[w0, w1, w2].any predicate
   | .evmRevertZeroAddress => false
   | .evmReceive => false
-  | .mapGetU64 base key => #[base, key].any predicate
-  | .mapSetU64 base key value => #[base, key, value].any predicate
-  | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2].any predicate
-  | .mapSetAddr base w0 w1 w2 value => #[base, w0, w1, w2, value].any predicate
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 => #[base, o0, o1, o2, s0, s1, s2].any predicate
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      #[base, o0, o1, o2, s0, s1, s2, value].any predicate
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-      #[base, w0, w1, w2, v0, v1, v2, v3].any predicate
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      #[base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3].any predicate
   | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, amount].any predicate
   | .evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
@@ -363,10 +352,8 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
 private partial def isEvmContext : Val → Bool
   | .ext (.evm kind) operands =>
       (match kind with
-       | .mapGetU64 | .mapGetAddr | .mapGetPair
-       | .mapGetAddr256 _ | .mapGetPair256 _ | .tokenBalance256 _
-       | .tokenAllowance256 _ | .callValue256 _ | .selfBalance256 _
-       | .domainSep256 _ | .ge256 | .eq20 | .component _ => false
+       | .tokenBalance256 _ | .tokenAllowance256 _ | .callValue256 _
+       | .selfBalance256 _ | .domainSep256 _ | .component _ => false
        | _ => true) || operands.any isEvmContext
   | .field base _ | .bitNot base => isEvmContext base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -394,9 +381,6 @@ def hasEvmEffect (ops : Array Op) : Bool :=
     | .evmLogTransfer256 .. | .evmLogApproval256 ..
     | .evmRevertInsufficient .. | .evmRevertUnauthorized .. | .evmRevertZeroAddress
     | .evmReceive
-    | .mapGetU64 .. | .mapSetU64 .. | .mapGetAddr .. | .mapSetAddr ..
-    | .mapGetPair .. | .mapSetPair ..
-    | .mapSetAddr256 .. | .mapSetPair256 ..
     | .evmTokenTransfer .. | .evmTokenTransfer256 .. | .evmTokenApprove256 ..
     | .evmTokenTransferFrom256 .. | .evmTokenBalanceOfSelf ..
     | .evmWethDeposit256 .. | .evmWethWithdraw256 .. | .evmSwapExact2 ..

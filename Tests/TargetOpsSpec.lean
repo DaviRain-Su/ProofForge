@@ -705,7 +705,7 @@ private def validEvmValue : ProofForge.Evm.Ops.Val :=
   ProofForge.Evm.Ops.mapGetU64 ProofForge.Evm.Ops.self (.lit 7)
 
 private def invalidEvmValue : ProofForge.Evm.Ops.Val :=
-  .ext .mapGetU64 #[ProofForge.Evm.Ops.self]
+  .ext (.component (.hashedMap .getU64)) #[ProofForge.Evm.Ops.self]
 
 #guard validEvmValue.wellFormed ProofForge.Evm.Ops.ValKind.arity
 #guard !invalidEvmValue.wellFormed ProofForge.Evm.Ops.ValKind.arity

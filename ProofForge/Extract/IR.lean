@@ -67,25 +67,6 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
       .revertUnauthorized (mapValue w0) (mapValue w1) (mapValue w2)
   | .revertZeroAddress => .revertZeroAddress
   | .receive => .receive
-  | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
-  | .mapSetU64 base key value => .mapSetU64 (mapValue base) (mapValue key) (mapValue value)
-  | .mapGetAddr base w0 w1 w2 =>
-      .mapGetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2)
-  | .mapSetAddr base w0 w1 w2 value =>
-      .mapSetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2) (mapValue value)
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-      .mapGetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2)
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      .mapSetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2) (mapValue value)
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-      .mapSetAddr256 (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2)
-        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      .mapSetPair256 (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2)
-        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       .tokenTransfer (mapValue tw0) (mapValue tw1) (mapValue tw2)
         (mapValue dw0) (mapValue dw1) (mapValue dw2) (mapValue amount)
@@ -156,15 +137,6 @@ private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .revertUnauthorized w0 w1 w2 => #[w0, w1, w2]
   | .revertZeroAddress => #[]
   | .receive => #[]
-  | .mapGetU64 base key => #[base, key]
-  | .mapSetU64 base key value => #[base, key, value]
-  | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2]
-  | .mapSetAddr base w0 w1 w2 value => #[base, w0, w1, w2, value]
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 => #[base, o0, o1, o2, s0, s1, s2]
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value => #[base, o0, o1, o2, s0, s1, s2, value]
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 => #[base, w0, w1, w2, v0, v1, v2, v3]
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      #[base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3]
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount => #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, a0, a1, a2, a3]
@@ -238,19 +210,6 @@ private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
       #[w0, w1, w2].all (·.wellFormed ValKind.arity)
   | .revertZeroAddress => true
   | .receive => true
-  | .mapGetU64 base key => #[base, key].all (·.wellFormed ValKind.arity)
-  | .mapSetU64 base key value => #[base, key, value].all (·.wellFormed ValKind.arity)
-  | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2].all (·.wellFormed ValKind.arity)
-  | .mapSetAddr base w0 w1 w2 value =>
-      #[base, w0, w1, w2, value].all (·.wellFormed ValKind.arity)
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-      #[base, o0, o1, o2, s0, s1, s2].all (·.wellFormed ValKind.arity)
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      #[base, o0, o1, o2, s0, s1, s2, value].all (·.wellFormed ValKind.arity)
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-      #[base, w0, w1, w2, v0, v1, v2, v3].all (·.wellFormed ValKind.arity)
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      #[base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3].all (·.wellFormed ValKind.arity)
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, amount].all (·.wellFormed ValKind.arity)
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>

@@ -35,10 +35,9 @@ private def limbName : Nat → String
   | 0 => "w0" | 1 => "w1" | 2 => "w2" | _ => "w3"
 
 private def arith256Val (op limb a b : Nat) : Ops.Val :=
-  .ext (.arith256 op limb) #[
-    u256Field a "w0", u256Field a "w1", u256Field a "w2", u256Field a "w3",
-    u256Field b "w0", u256Field b "w1", u256Field b "w2", u256Field b "w3"
-  ]
+  Ops.arith256 op limb
+    (u256Field a "w0") (u256Field a "w1") (u256Field a "w2") (u256Field a "w3")
+    (u256Field b "w0") (u256Field b "w1") (u256Field b "w2") (u256Field b "w3")
 
 private def return256 (mk : Nat → Ops.Val) : Array IR.Op :=
   #[.returnU64 (mk 0), .returnU64 (mk 1), .returnU64 (mk 2), .returnU64 (mk 3)]
@@ -121,70 +120,65 @@ private def viewAddr20 (mod ix : String) (w0 w1 w2 : Ops.Val) : IR.Method :=
 private def dummySlot : Array IR.Slot := #[{ name := "dummy", index := 0, width := 8 }]
 
 private def getAddr256 (limb : Nat) (base key : Nat) : Ops.Val :=
-  .ext (.mapGetAddr256 limb)
-    #[.lit (UInt64.ofNat base), addrField key "w0", addrField key "w1", addrField key "w2"]
+  Ops.mapGetAddr256 limb (.lit (UInt64.ofNat base))
+    (addrField key "w0") (addrField key "w1") (addrField key "w2")
 
 private def getCaller256 (limb : Nat) (base : Nat) : Ops.Val :=
-  .ext (.mapGetAddr256 limb) #[.lit (UInt64.ofNat base), callerW 0, callerW 1, callerW 2]
+  Ops.mapGetAddr256 limb (.lit (UInt64.ofNat base)) (callerW 0) (callerW 1) (callerW 2)
 
 private def getPair256 (limb : Nat) (base owner spender : Nat) : Ops.Val :=
-  .ext (.mapGetPair256 limb) #[
-    .lit (UInt64.ofNat base),
-    addrField owner "w0", addrField owner "w1", addrField owner "w2",
-    addrField spender "w0", addrField spender "w1", addrField spender "w2"
-  ]
+  Ops.mapGetPair256 limb (.lit (UInt64.ofNat base))
+    (addrField owner "w0") (addrField owner "w1") (addrField owner "w2")
+    (addrField spender "w0") (addrField spender "w1") (addrField spender "w2")
 
 private def getPairCaller256 (limb : Nat) (base owner : Nat) : Ops.Val :=
-  .ext (.mapGetPair256 limb) #[
-    .lit (UInt64.ofNat base),
-    addrField owner "w0", addrField owner "w1", addrField owner "w2",
-    callerW 0, callerW 1, callerW 2
-  ]
-
-private def getPairCallerSpender256 (limb : Nat) (base spender : Nat) : Ops.Val :=
-  .ext (.mapGetPair256 limb) #[
-    .lit (UInt64.ofNat base),
-    callerW 0, callerW 1, callerW 2,
-    addrField spender "w0", addrField spender "w1", addrField spender "w2"
-  ]
-
-private def arithGet (op limb : Nat) (lhs : Nat → Ops.Val) (rhs : Nat) : Ops.Val :=
-  .ext (.arith256 op limb) #[
-    lhs 0, lhs 1, lhs 2, lhs 3,
-    u256Field rhs "w0", u256Field rhs "w1", u256Field rhs "w2", u256Field rhs "w3"
-  ]
-
-private def ge256 (lhs : Nat → Ops.Val) (rhs : Nat) : Ops.Val :=
-  .ext .ge256 #[
-    lhs 0, lhs 1, lhs 2, lhs 3,
-    u256Field rhs "w0", u256Field rhs "w1", u256Field rhs "w2", u256Field rhs "w3"
-  ]
-
-private def setAddr256 (base key : Nat) (val : Nat → Ops.Val) : IR.Op :=
-  .mapSetAddr256 (.lit (UInt64.ofNat base))
-    (addrField key "w0") (addrField key "w1") (addrField key "w2")
-    (val 0) (val 1) (val 2) (val 3)
-
-private def setCaller256 (base : Nat) (val : Nat → Ops.Val) : IR.Op :=
-  .mapSetAddr256 (.lit (UInt64.ofNat base)) (callerW 0) (callerW 1) (callerW 2)
-    (val 0) (val 1) (val 2) (val 3)
-
-private def setPairCaller256 (base owner : Nat) (val : Nat → Ops.Val) : IR.Op :=
-  .mapSetPair256 (.lit (UInt64.ofNat base))
+  Ops.mapGetPair256 limb (.lit (UInt64.ofNat base))
     (addrField owner "w0") (addrField owner "w1") (addrField owner "w2")
     (callerW 0) (callerW 1) (callerW 2)
-    (val 0) (val 1) (val 2) (val 3)
 
-private def setPairCallerSpender256 (base spender : Nat) (val : Nat → Ops.Val) : IR.Op :=
-  .mapSetPair256 (.lit (UInt64.ofNat base))
+private def getPairCallerSpender256 (limb : Nat) (base spender : Nat) : Ops.Val :=
+  Ops.mapGetPair256 limb (.lit (UInt64.ofNat base))
     (callerW 0) (callerW 1) (callerW 2)
     (addrField spender "w0") (addrField spender "w1") (addrField spender "w2")
-    (val 0) (val 1) (val 2) (val 3)
+
+private def arithGet (op limb : Nat) (lhs : Nat → Ops.Val) (rhs : Nat) : Ops.Val :=
+  Ops.arith256 op limb
+    (lhs 0) (lhs 1) (lhs 2) (lhs 3)
+    (u256Field rhs "w0") (u256Field rhs "w1") (u256Field rhs "w2") (u256Field rhs "w3")
+
+private def ge256 (lhs : Nat → Ops.Val) (rhs : Nat) : Ops.Val :=
+  Ops.ge256
+    (lhs 0) (lhs 1) (lhs 2) (lhs 3)
+    (u256Field rhs "w0") (u256Field rhs "w1") (u256Field rhs "w2") (u256Field rhs "w3")
+
+private def hashedCall (call : HashedMap.Call Ops.Val) : IR.Op :=
+  .component (.hashedMap call)
+
+private def setAddr256 (base key : Nat) (val : Nat → Ops.Val) : IR.Op :=
+  hashedCall (.setAddr256 (.lit (UInt64.ofNat base))
+    (addrField key "w0") (addrField key "w1") (addrField key "w2")
+    (val 0) (val 1) (val 2) (val 3))
+
+private def setCaller256 (base : Nat) (val : Nat → Ops.Val) : IR.Op :=
+  hashedCall (.setAddr256 (.lit (UInt64.ofNat base)) (callerW 0) (callerW 1) (callerW 2)
+    (val 0) (val 1) (val 2) (val 3))
+
+private def setPairCaller256 (base owner : Nat) (val : Nat → Ops.Val) : IR.Op :=
+  hashedCall (.setPair256 (.lit (UInt64.ofNat base))
+    (addrField owner "w0") (addrField owner "w1") (addrField owner "w2")
+    (callerW 0) (callerW 1) (callerW 2)
+    (val 0) (val 1) (val 2) (val 3))
+
+private def setPairCallerSpender256 (base spender : Nat) (val : Nat → Ops.Val) : IR.Op :=
+  hashedCall (.setPair256 (.lit (UInt64.ofNat base))
+    (callerW 0) (callerW 1) (callerW 2)
+    (addrField spender "w0") (addrField spender "w1") (addrField spender "w2")
+    (val 0) (val 1) (val 2) (val 3))
 
 private def eq20Zero (key : Nat) : Ops.Val :=
-  .ext .eq20 #[
-    addrField key "w0", addrField key "w1", addrField key "w2",
-    .lit 0, .lit 0, .lit 0]
+  Ops.eq20
+    (addrField key "w0") (addrField key "w1") (addrField key "w2")
+    (.lit 0) (.lit 0) (.lit 0)
 
 private def guardZero (key : Nat) (ok : Array IR.Op) : Array IR.Op :=
   #[.ite .eq (eq20Zero key) (.lit 1)
@@ -287,7 +281,7 @@ def extractedVault : IR.Program :=
       ],
       mutEntry "Vault" "setU64" 2 #[8, 8] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.mapSetU64 (.lit 0) (.arg 0) (.arg 1), .returnU64 (.arg 1)]
+          #[hashedCall (.setU64 (.lit 0) (.arg 0) (.arg 1)), .returnU64 (.arg 1)]
           #[.errorOverflow]
       ],
       mutEntry "Vault" "swap2" 5 #[20, 20, 20, 32, 32] #[
@@ -354,7 +348,7 @@ def extractedVault : IR.Program :=
         selector := Keccak.selectorOfWidths "getU64" #[8]
         paramCount := 1
         paramWidths := #[8]
-        ops := #[.mapGetU64 (.lit 0) (.arg 0), .returnU64 (.arg 0)]
+        ops := #[hashedCall (.getU64 (.lit 0) (.arg 0)), .returnU64 (.arg 0)]
         view := true
       },
       view256 "Vault" "held" 1 #[20] (return256 fun limb =>
@@ -397,10 +391,10 @@ def extractedToken : IR.Program :=
     entries := #[
       mutEntry "Token" "approve" 2 #[20, 32] (guardZero 0 #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.mapSetPair256 (.lit 1)
+          #[hashedCall (.setPair256 (.lit 1)
               (callerW 0) (callerW 1) (callerW 2)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
@@ -413,22 +407,22 @@ def extractedToken : IR.Program :=
             .evmLogTransfer256 (callerW 0) (callerW 1) (callerW 2)
               (.lit 0) (.lit 0) (.lit 0)
               (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
-            .storeField "supply_w0" (.ext (.arith256 1 0) #[
-              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
-              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
-              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
-            .storeField "supply_w1" (.ext (.arith256 1 1) #[
-              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
-              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
-              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
-            .storeField "supply_w2" (.ext (.arith256 1 2) #[
-              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
-              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
-              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
-            .storeField "supply_w3" (.ext (.arith256 1 3) #[
-              .field (.arg 1) "supply_w0", .field (.arg 1) "supply_w1",
-              .field (.arg 1) "supply_w2", .field (.arg 1) "supply_w3",
-              u256Field 0 "w0", u256Field 0 "w1", u256Field 0 "w2", u256Field 0 "w3"]),
+            .storeField "supply_w0" (Ops.arith256 1 0
+              (.field (.arg 1) "supply_w0") (.field (.arg 1) "supply_w1")
+              (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
+              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
+            .storeField "supply_w1" (Ops.arith256 1 1
+              (.field (.arg 1) "supply_w0") (.field (.arg 1) "supply_w1")
+              (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
+              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
+            .storeField "supply_w2" (Ops.arith256 1 2
+              (.field (.arg 1) "supply_w0") (.field (.arg 1) "supply_w1")
+              (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
+              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
+            .storeField "supply_w3" (Ops.arith256 1 3
+              (.field (.arg 1) "supply_w0") (.field (.arg 1) "supply_w1")
+              (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
+              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
             .returnU64 (u256Field 0 "w0")]
           #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
               (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
@@ -442,22 +436,22 @@ def extractedToken : IR.Program :=
                     .evmLogTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
                       (.lit 0) (.lit 0) (.lit 0)
                       (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
-                    .storeField "supply_w0" (.ext (.arith256 1 0) #[
-                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
-                    .storeField "supply_w1" (.ext (.arith256 1 1) #[
-                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
-                    .storeField "supply_w2" (.ext (.arith256 1 2) #[
-                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
-                    .storeField "supply_w3" (.ext (.arith256 1 3) #[
-                      .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-                      .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-                      u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+                    .storeField "supply_w0" (Ops.arith256 1 0
+                      (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+                      (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
+                    .storeField "supply_w1" (Ops.arith256 1 1
+                      (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+                      (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
+                    .storeField "supply_w2" (Ops.arith256 1 2
+                      (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+                      (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
+                    .storeField "supply_w3" (Ops.arith256 1 3
+                      (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+                      (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                     .returnU64 (u256Field 1 "w0")]
                   #[.evmRevertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3)
                       (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
@@ -504,22 +498,22 @@ def extractedToken : IR.Program :=
             .evmLogTransfer256 (.lit 0) (.lit 0) (.lit 0)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
-            .storeField "supply_w0" (.ext (.arith256 0 0) #[
-              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
-            .storeField "supply_w1" (.ext (.arith256 0 1) #[
-              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
-            .storeField "supply_w2" (.ext (.arith256 0 2) #[
-              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
-            .storeField "supply_w3" (.ext (.arith256 0 3) #[
-              .field (.arg 2) "supply_w0", .field (.arg 2) "supply_w1",
-              .field (.arg 2) "supply_w2", .field (.arg 2) "supply_w3",
-              u256Field 1 "w0", u256Field 1 "w1", u256Field 1 "w2", u256Field 1 "w3"]),
+            .storeField "supply_w0" (Ops.arith256 0 0
+              (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+              (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
+            .storeField "supply_w1" (Ops.arith256 0 1
+              (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+              (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
+            .storeField "supply_w2" (Ops.arith256 0 2
+              (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+              (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
+            .storeField "supply_w3" (Ops.arith256 0 3
+              (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
+              (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
+              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ]),
@@ -687,10 +681,10 @@ def extractedOwnable : IR.Program :=
     entries := #[
       mutEntry "Ownable" "approve" 3 #[20, 20, 8] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.mapSetPair (.lit 0)
+          #[hashedCall (.setPair (.lit 0)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
-              (.arg 2),
+              (.arg 2)),
             .returnU64 (.arg 2)]
           #[.errorOverflow]
       ],
@@ -703,9 +697,9 @@ def extractedOwnable : IR.Program :=
         paramWidths := #[8]
         ops := #[
           .ite .eq
-            (.ext .eq20 #[
-              .ext .callerW0 #[], .ext .callerW1 #[], .ext .callerW2 #[],
-              .ext .immW0 #[], .ext .immW1 #[], .ext .immW2 #[]])
+            (Ops.eq20
+              (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[])
+              (.ext .immW0 #[]) (.ext .immW1 #[]) (.ext .immW2 #[]))
             (.lit 1)
             #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
               .okState (.field (.arg 1) "value"),
@@ -716,9 +710,9 @@ def extractedOwnable : IR.Program :=
       },
       mutEntry "Ownable" "guardZero" 1 #[20] #[
         .ite .eq
-          (.ext .eq20 #[
-            addrField 0 "w0", addrField 0 "w1", addrField 0 "w2",
-            .lit 0, .lit 0, .lit 0])
+          (Ops.eq20
+            (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
+            (.lit 0) (.lit 0) (.lit 0))
           (.lit 1)
           #[.evmRevertZeroAddress, .returnU64 (.lit 0)]
           #[.returnU64 (addrField 0 "w0")]
@@ -730,10 +724,10 @@ def extractedOwnable : IR.Program :=
       ],
       mutEntry "Ownable" "spend" 3 #[20, 20, 8] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.mapSetPair (.lit 0)
+          #[hashedCall (.setPair (.lit 0)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
-              (.arg 2),
+              (.arg 2)),
             .returnU64 (.arg 2)]
           #[.errorOverflow]
       ],
@@ -745,9 +739,9 @@ def extractedOwnable : IR.Program :=
         paramCount := 2
         paramWidths := #[20, 20]
         ops := #[
-          .mapGetPair (.lit 0)
+          hashedCall (.getPair (.lit 0)
             (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-            (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2"),
+            (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")),
           .returnU64 (addrField 0 "w0")
         ]
         view := true

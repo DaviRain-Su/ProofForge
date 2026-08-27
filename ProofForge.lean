@@ -14,6 +14,10 @@ import ProofForge.Svm.Ops
 import ProofForge.Svm.Runtime
 import ProofForge.Svm.Registry
 import ProofForge.Evm.Ops
+import ProofForge.Evm.HashedMap
+import ProofForge.Evm.HashedMap.Emit
+import ProofForge.Evm.WideWord
+import ProofForge.Evm.WideWord.Emit
 import ProofForge.Evm.Component
 import ProofForge.Evm.Component.Emit
 import ProofForge.Evm.Runtime

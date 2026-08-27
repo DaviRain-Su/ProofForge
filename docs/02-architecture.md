@@ -56,7 +56,7 @@ sBPF/.so   Yul/.bin             ← Mollusk / Anvil 工程门
 | `ProofForge.Svm.Assemble` | 子进程调用 locked `sbpf` | FFI |
 | `ProofForge.Svm.Idl` | Solana IDL spec 0.1.0 | ABI JSON |
 | `ProofForge.Evm.Runtime` / `Evm.Ops` / `Evm.IR` | EVM runtime surface、opcode、EVM projection registration、storage slot、selector | Loader V3 / CPI |
-| `ProofForge.Evm.Component` | 稳定 Query/Call 桥、component-owned emitter | 任意 CALL、SVM 账户几何 |
+| `ProofForge.Evm.Component` | 稳定 Query/Call 桥；hashed-map / wide-word 已迁入 | 任意 CALL、SVM 账户几何 |
 | `ProofForge.Evm.Emit` / `Evm.Assemble` | Yul / ABI / locked solc | sBPF / IDL |
 
 ## SVM 组合边界

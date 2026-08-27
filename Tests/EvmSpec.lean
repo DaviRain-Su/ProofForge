@@ -39,10 +39,33 @@ open ProofForge.Evm
 
 #guard
   match ProofForge.Evm.Component.Emit.emitCall
-      { loadValue := fun _ => .ok "0" }
-      (.empty : ProofForge.Evm.Component.Call ProofForge.Evm.Ops.Val) with
+      { materialize := fun _ st => .ok ("", "0", st)
+        fresh := fun st => ("v0", st)
+        rememberWide := fun st _ _ => st
+        lookupWide := fun _ _ => none
+        valKey := fun _ => ""
+        indent := "  " }
+      (.empty : ProofForge.Evm.Component.Call ProofForge.Evm.Ops.Val)
+      () with
   | .error reason => reason.contains "empty component"
   | .ok _ => false
+
+#guard ProofForge.Evm.HashedMap.Query.wellFormed .getU64
+#guard ProofForge.Evm.HashedMap.Query.wellFormed (.getAddr256 3)
+#guard !ProofForge.Evm.HashedMap.Query.wellFormed (.getAddr256 4)
+#guard ProofForge.Evm.WideWord.Query.wellFormed (.arith256 0 0)
+#guard !ProofForge.Evm.WideWord.Query.wellFormed (.arith256 3 0)
+#guard ProofForge.Evm.Ops.ValKind.arity (.component (.hashedMap .getU64)) == 2
+#guard ProofForge.Evm.Ops.mapGetU64 ProofForge.Evm.Ops.self (.lit 7)
+  |>.wellFormed ProofForge.Evm.Ops.ValKind.arity
+#guard
+  (ProofForge.Evm.HashedMap.Query.canonical (fun _ => "x")
+    #[(ProofForge.Evm.Ops.self : ProofForge.Evm.Ops.Val), .lit 7]
+    .getU64) == "vg(x,x)"
+#guard
+  (ProofForge.Evm.HashedMap.Call.canonical (fun _ => "x")
+    (.setU64 (.lit 0) (.lit 1) (.lit 2) : ProofForge.Evm.HashedMap.Call ProofForge.Evm.Ops.Val))
+    == "mset(x,x,x)"
 
 #guard
   match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedCounter with

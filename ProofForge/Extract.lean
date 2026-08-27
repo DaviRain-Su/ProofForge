@@ -1140,7 +1140,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
                     limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
                 | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
-                  some (.ext (.evm (.arith256 op limb.toNat)) #[a0, a1, a2, a3, b0, b1, b2, b3])
+                  some (.ext (.evm (.component (.wideWord (.arith256 op limb.toNat)))) #[a0, a1, a2, a3, b0, b1, b2, b3])
                 | _, _, _, _, _, _, _, _ => none
             | none =>
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
@@ -1155,7 +1155,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   let k2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) key)
                   match base, k0, k1, k2 with
                   | some b, some a0, some a1, some a2 =>
-                    some (.ext (.evm (.mapGetAddr256 limb.toNat)) #[b, a0, a1, a2])
+                    some (.ext (.evm (.component (.hashedMap (.getAddr256 limb.toNat)))) #[b, a0, a1, a2])
                   | _, _, _, _ => none
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetPair256 ||
                   endsWith baseE ".evmMapGetPair256" then
@@ -1173,7 +1173,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   let sw2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
                   match base, ow0, ow1, ow2, sw0, sw1, sw2 with
                   | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
-                    some (.ext (.evm (.mapGetPair256 limb.toNat)) #[b, a0, a1, a2, b0, b1, b2])
+                    some (.ext (.evm (.component (.hashedMap (.getPair256 limb.toNat)))) #[b, a0, a1, a2, b0, b1, b2])
                   | _, _, _, _, _, _, _ => none
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf ||
                   endsWith baseE ".evmTokenBalanceOfSelf" then
@@ -1306,7 +1306,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
                 limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
             | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
-              some (.ext (.evm .ge256) #[a0, a1, a2, a3, b0, b1, b2, b3])
+              some (.ext (.evm (.component (.wideWord .ge256))) #[a0, a1, a2, a3, b0, b1, b2, b3])
             | _, _, _, _, _, _, _, _ => none
         else if endsWith e ".evmEq20" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq20 then
           let args := e.getAppArgs
@@ -1325,7 +1325,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 limbB ``ProofForge.Evm.Runtime.Addr20.w1,
                 limbB ``ProofForge.Evm.Runtime.Addr20.w2 with
             | some a0, some a1, some a2, some b0, some b1, some b2 =>
-              some (.ext (.evm .eq20) #[a0, a1, a2, b0, b1, b2])
+              some (.ext (.evm (.component (.wideWord .eq20))) #[a0, a1, a2, b0, b1, b2])
             | _, _, _, _, _, _ => none
         else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
           let args := e.getAppArgs
@@ -5179,17 +5179,17 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
     some #[.mapGetPair b o0 o1 o2 s0 s1 s2, .returnU64 o0]
   else if let some (b, a0, a1, a2) := findEvmMapGetAddr256 env e then
     some #[
-      .returnU64 (.ext (.evm (.mapGetAddr256 0)) #[b, a0, a1, a2]),
-      .returnU64 (.ext (.evm (.mapGetAddr256 1)) #[b, a0, a1, a2]),
-      .returnU64 (.ext (.evm (.mapGetAddr256 2)) #[b, a0, a1, a2]),
-      .returnU64 (.ext (.evm (.mapGetAddr256 3)) #[b, a0, a1, a2])
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getAddr256 0)))) #[b, a0, a1, a2]),
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getAddr256 1)))) #[b, a0, a1, a2]),
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getAddr256 2)))) #[b, a0, a1, a2]),
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getAddr256 3)))) #[b, a0, a1, a2])
     ]
   else if let some (b, o0, o1, o2, s0, s1, s2) := findEvmMapGetPair256 env e then
     some #[
-      .returnU64 (.ext (.evm (.mapGetPair256 0)) #[b, o0, o1, o2, s0, s1, s2]),
-      .returnU64 (.ext (.evm (.mapGetPair256 1)) #[b, o0, o1, o2, s0, s1, s2]),
-      .returnU64 (.ext (.evm (.mapGetPair256 2)) #[b, o0, o1, o2, s0, s1, s2]),
-      .returnU64 (.ext (.evm (.mapGetPair256 3)) #[b, o0, o1, o2, s0, s1, s2])
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getPair256 0)))) #[b, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getPair256 1)))) #[b, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getPair256 2)))) #[b, o0, o1, o2, s0, s1, s2]),
+      .returnU64 (.ext (.evm (.component (.hashedMap (.getPair256 3)))) #[b, o0, o1, o2, s0, s1, s2])
     ]
   else if let some (t0, t1, t2) := findEvmTokenBalance env e then
     some #[

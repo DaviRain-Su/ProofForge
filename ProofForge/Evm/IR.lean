@@ -33,14 +33,6 @@ inductive Op where
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
-  | mapGetU64 (base key : Ops.Val)
-  | mapSetU64 (base key value : Ops.Val)
-  | mapGetAddr (base w0 w1 w2 : Ops.Val)
-  | mapSetAddr (base w0 w1 w2 value : Ops.Val)
-  | mapGetPair (base o0 o1 o2 s0 s1 s2 : Ops.Val)
-  | mapSetPair (base o0 o1 o2 s0 s1 s2 value : Ops.Val)
-  | mapSetAddr256 (base w0 w1 w2 v0 v1 v2 v3 : Ops.Val)
-  | mapSetPair256 (base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 : Ops.Val)
   | evmTokenTransfer (tw0 tw1 tw2 dw0 dw1 dw2 amount : Ops.Val)
   | evmTokenTransfer256 (tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 : Ops.Val)
   | evmTokenApprove256 (tw0 tw1 tw2 sw0 sw1 sw2 a0 a1 a2 a3 : Ops.Val)
@@ -99,18 +91,6 @@ private partial def lowerOp : Ops.Op → Except String Op
       pure (.evmRevertUnauthorized w0 w1 w2)
   | .ext .revertZeroAddress => pure .evmRevertZeroAddress
   | .ext .receive => pure .evmReceive
-  | .ext (.mapGetU64 base key) => pure (.mapGetU64 base key)
-  | .ext (.mapSetU64 base key value) => pure (.mapSetU64 base key value)
-  | .ext (.mapGetAddr base w0 w1 w2) => pure (.mapGetAddr base w0 w1 w2)
-  | .ext (.mapSetAddr base w0 w1 w2 value) => pure (.mapSetAddr base w0 w1 w2 value)
-  | .ext (.mapGetPair base o0 o1 o2 s0 s1 s2) =>
-      pure (.mapGetPair base o0 o1 o2 s0 s1 s2)
-  | .ext (.mapSetPair base o0 o1 o2 s0 s1 s2 value) =>
-      pure (.mapSetPair base o0 o1 o2 s0 s1 s2 value)
-  | .ext (.mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3) =>
-      pure (.mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3)
-  | .ext (.mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3) =>
-      pure (.mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3)
   | .ext (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount) =>
       pure (.evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
   | .ext (.tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3) =>
@@ -171,17 +151,6 @@ private partial def Op.toSource : Op → Ops.Op
   | .forAccum bound addend resultLocal => .forAccum bound addend resultLocal
   | .forBody bound body => .forBody bound (toSourceOps body)
   | .indexSet name index value len elemOff => .indexSet name index value len elemOff
-  | .mapGetU64 base key => .ext (.mapGetU64 base key)
-  | .mapSetU64 base key value => .ext (.mapSetU64 base key value)
-  | .mapGetAddr base w0 w1 w2 => .ext (.mapGetAddr base w0 w1 w2)
-  | .mapSetAddr base w0 w1 w2 value => .ext (.mapSetAddr base w0 w1 w2 value)
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 => .ext (.mapGetPair base o0 o1 o2 s0 s1 s2)
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      .ext (.mapSetPair base o0 o1 o2 s0 s1 s2 value)
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-      .ext (.mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3)
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      .ext (.mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3)
   | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       .ext (.tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount)
   | .evmTokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
@@ -244,26 +213,6 @@ private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
       .revertUnauthorized (mapValue w0) (mapValue w1) (mapValue w2)
   | .revertZeroAddress => .revertZeroAddress
   | .receive => .receive
-  | .mapGetU64 base key => .mapGetU64 (mapValue base) (mapValue key)
-  | .mapSetU64 base key value =>
-      .mapSetU64 (mapValue base) (mapValue key) (mapValue value)
-  | .mapGetAddr base w0 w1 w2 =>
-      .mapGetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2)
-  | .mapSetAddr base w0 w1 w2 value =>
-      .mapSetAddr (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2) (mapValue value)
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-      .mapGetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2)
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      .mapSetPair (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2) (mapValue value)
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-      .mapSetAddr256 (mapValue base) (mapValue w0) (mapValue w1) (mapValue w2)
-        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      .mapSetPair256 (mapValue base) (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2)
-        (mapValue v0) (mapValue v1) (mapValue v2) (mapValue v3)
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       .tokenTransfer (mapValue tw0) (mapValue tw1) (mapValue tw2)
         (mapValue dw0) (mapValue dw1) (mapValue dw2) (mapValue amount)
@@ -334,17 +283,6 @@ private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
   | .revertUnauthorized w0 w1 w2 => #[w0, w1, w2]
   | .revertZeroAddress => #[]
   | .receive => #[]
-  | .mapGetU64 base key => #[base, key]
-  | .mapSetU64 base key value => #[base, key, value]
-  | .mapGetAddr base w0 w1 w2 => #[base, w0, w1, w2]
-  | .mapSetAddr base w0 w1 w2 value => #[base, w0, w1, w2, value]
-  | .mapGetPair base o0 o1 o2 s0 s1 s2 => #[base, o0, o1, o2, s0, s1, s2]
-  | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      #[base, o0, o1, o2, s0, s1, s2, value]
-  | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-      #[base, w0, w1, w2, v0, v1, v2, v3]
-  | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-      #[base, o0, o1, o2, s0, s1, s2, v0, v1, v2, v3]
   | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       #[tw0, tw1, tw2, dw0, dw1, dw2, amount]
   | .tokenTransfer256 tw0 tw1 tw2 dw0 dw1 dw2 a0 a1 a2 a3 =>
@@ -410,30 +348,6 @@ private def projectOpExt
           return .revertUnauthorized (← projectVal w0) (← projectVal w1) (← projectVal w2)
       | .revertZeroAddress => return .revertZeroAddress
       | .receive => return .receive
-      | .mapGetU64 base key => return .mapGetU64 (← projectVal base) (← projectVal key)
-      | .mapSetU64 base key value =>
-          return .mapSetU64 (← projectVal base) (← projectVal key) (← projectVal value)
-      | .mapGetAddr base w0 w1 w2 =>
-          return .mapGetAddr (← projectVal base) (← projectVal w0) (← projectVal w1)
-            (← projectVal w2)
-      | .mapSetAddr base w0 w1 w2 value =>
-          return .mapSetAddr (← projectVal base) (← projectVal w0) (← projectVal w1)
-            (← projectVal w2) (← projectVal value)
-      | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-          return .mapGetPair (← projectVal base) (← projectVal o0) (← projectVal o1)
-            (← projectVal o2) (← projectVal s0) (← projectVal s1) (← projectVal s2)
-      | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-          return .mapSetPair (← projectVal base) (← projectVal o0) (← projectVal o1)
-            (← projectVal o2) (← projectVal s0) (← projectVal s1) (← projectVal s2)
-            (← projectVal value)
-      | .mapSetAddr256 base w0 w1 w2 v0 v1 v2 v3 =>
-          return .mapSetAddr256 (← projectVal base) (← projectVal w0) (← projectVal w1)
-            (← projectVal w2) (← projectVal v0) (← projectVal v1) (← projectVal v2)
-            (← projectVal v3)
-      | .mapSetPair256 base o0 o1 o2 s0 s1 s2 v0 v1 v2 v3 =>
-          return .mapSetPair256 (← projectVal base) (← projectVal o0) (← projectVal o1)
-            (← projectVal o2) (← projectVal s0) (← projectVal s1) (← projectVal s2)
-            (← projectVal v0) (← projectVal v1) (← projectVal v2) (← projectVal v3)
       | .tokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
           return .tokenTransfer (← projectVal tw0) (← projectVal tw1) (← projectVal tw2)
             (← projectVal dw0) (← projectVal dw1) (← projectVal dw2)
@@ -874,11 +788,7 @@ private partial def valCanon : Ops.Val → String
   | .mulU64 l r => s!"umul({valCanon l},{valCanon r})"
   | .divU64 l r => s!"udiv({valCanon l},{valCanon r})"
   | .modU64 l r => s!"umod({valCanon l},{valCanon r})"
-  | .ext .mapGetU64 #[b, k] => s!"vg({valCanon b},{valCanon k})"
-  | .ext .mapGetAddr #[b, a0, a1, a2] =>
-      s!"vga({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"
-  | .ext .mapGetPair #[b, a0, a1, a2, c0, c1, c2] =>
-      s!"vgp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2})"
+  | .ext (.component query) operands => query.canonical valCanon operands
   | .ext kind operands =>
       s!"ext.{repr kind}({String.intercalate "," (operands.map valCanon).toList})"
 
@@ -917,20 +827,6 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .indexSet n i v k off =>
         if off == 0 then s!"iset.{n}[{valCanon i}/{k}]({valCanon v})"
         else s!"iset.{n}+{off}[{valCanon i}/{k}]({valCanon v})"
-    | .mapGetU64 b k => s!"mget({valCanon b},{valCanon k})"
-    | .mapSetU64 b k v => s!"mset({valCanon b},{valCanon k},{valCanon v})"
-    | .mapGetAddr b a0 a1 a2 =>
-        s!"mgeta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2})"
-    | .mapSetAddr b a0 a1 a2 v =>
-        s!"mseta({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon v})"
-    | .mapGetPair b a0 a1 a2 c0 c1 c2 =>
-        s!"mgetp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2})"
-    | .mapSetPair b a0 a1 a2 c0 c1 c2 v =>
-        s!"msetp({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2},{valCanon v})"
-    | .mapSetAddr256 b a0 a1 a2 v0 v1 v2 v3 =>
-        s!"mseta256({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon v0},{valCanon v1},{valCanon v2},{valCanon v3})"
-    | .mapSetPair256 b a0 a1 a2 c0 c1 c2 v0 v1 v2 v3 =>
-        s!"msetp256({valCanon b},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon c0},{valCanon c1},{valCanon c2},{valCanon v0},{valCanon v1},{valCanon v2},{valCanon v3})"
     | .evmTokenTransfer a b c d e f g =>
         s!"ttxfer({valCanon a},{valCanon b},{valCanon c},{valCanon d},{valCanon e},{valCanon f},{valCanon g})"
     | .evmTokenTransfer256 a b c d e f g0 g1 g2 g3 =>

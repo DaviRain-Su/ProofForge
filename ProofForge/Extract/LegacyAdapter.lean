@@ -88,12 +88,14 @@ partial def ofLegacyVal : ProofForge.Ops.Val → Val
   | .mulU64 lhs rhs => .mulU64 (ofLegacyVal lhs) (ofLegacyVal rhs)
   | .divU64 lhs rhs => .divU64 (ofLegacyVal lhs) (ofLegacyVal rhs)
   | .modU64 lhs rhs => .modU64 (ofLegacyVal lhs) (ofLegacyVal rhs)
-  | .mapGetU64 base key => .ext (.evm .mapGetU64) #[ofLegacyVal base, ofLegacyVal key]
+  | .mapGetU64 base key =>
+      .ext (.evm (.component (.hashedMap .getU64)))
+        #[ofLegacyVal base, ofLegacyVal key]
   | .mapGetAddr base w0 w1 w2 =>
-      .ext (.evm .mapGetAddr)
+      .ext (.evm (.component (.hashedMap .getAddr)))
         #[ofLegacyVal base, ofLegacyVal w0, ofLegacyVal w1, ofLegacyVal w2]
   | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-      .ext (.evm .mapGetPair)
+      .ext (.evm (.component (.hashedMap .getPair)))
         #[ofLegacyVal base, ofLegacyVal o0, ofLegacyVal o1, ofLegacyVal o2,
           ofLegacyVal s0, ofLegacyVal s1, ofLegacyVal s2]
 
@@ -177,14 +179,14 @@ partial def toLegacyVal : Val → Except String ProofForge.Ops.Val
   | .ext (.evm .immW0) #[] | .ext (.evm .immW1) #[] | .ext (.evm .immW2) #[]
   | .ext (.evm .immX0) #[] | .ext (.evm .immX1) #[] | .ext (.evm .immX2) #[] =>
       throw "extract/unsupported: legacy adapter cannot represent immutable Addr20"
-  | .ext (.evm .eq20) _ =>
+  | .ext (.evm (.component (.wideWord .eq20))) _ =>
       throw "extract/unsupported: legacy adapter cannot represent Addr20 equality"
-  | .ext (.evm .mapGetU64) #[base, key] =>
+  | .ext (.evm (.component (.hashedMap .getU64))) #[base, key] =>
       return .mapGetU64 (← toLegacyVal base) (← toLegacyVal key)
-  | .ext (.evm .mapGetAddr) #[base, w0, w1, w2] =>
+  | .ext (.evm (.component (.hashedMap .getAddr))) #[base, w0, w1, w2] =>
       return .mapGetAddr (← toLegacyVal base) (← toLegacyVal w0)
         (← toLegacyVal w1) (← toLegacyVal w2)
-  | .ext (.evm .mapGetPair) #[base, o0, o1, o2, s0, s1, s2] =>
+  | .ext (.evm (.component (.hashedMap .getPair))) #[base, o0, o1, o2, s0, s1, s2] =>
       return .mapGetPair (← toLegacyVal base) (← toLegacyVal o0) (← toLegacyVal o1)
         (← toLegacyVal o2) (← toLegacyVal s0) (← toLegacyVal s1) (← toLegacyVal s2)
   | .ext _ _ => malformedValue
@@ -242,22 +244,25 @@ partial def ofLegacyOp : ProofForge.Ops.Op → Op
   | .forBody n body => .forBody n (body.map ofLegacyOp)
   | .indexSet name idx value len elemOff =>
       .indexSet name (ofLegacyVal idx) (ofLegacyVal value) len elemOff
-  | .mapGetU64 base key => .ext (.evm (.mapGetU64 (ofLegacyVal base) (ofLegacyVal key)))
+  | .mapGetU64 base key =>
+      .ext (.evm (.component (.hashedMap (.getU64 (ofLegacyVal base) (ofLegacyVal key)))))
   | .mapSetU64 base key value =>
-      .ext (.evm (.mapSetU64 (ofLegacyVal base) (ofLegacyVal key) (ofLegacyVal value)))
+      .ext (.evm (.component (.hashedMap (.setU64 (ofLegacyVal base) (ofLegacyVal key)
+        (ofLegacyVal value)))))
   | .mapGetAddr base w0 w1 w2 =>
-      .ext (.evm (.mapGetAddr (ofLegacyVal base) (ofLegacyVal w0)
-        (ofLegacyVal w1) (ofLegacyVal w2)))
+      .ext (.evm (.component (.hashedMap (.getAddr (ofLegacyVal base) (ofLegacyVal w0)
+        (ofLegacyVal w1) (ofLegacyVal w2)))))
   | .mapSetAddr base w0 w1 w2 value =>
-      .ext (.evm (.mapSetAddr (ofLegacyVal base) (ofLegacyVal w0)
-        (ofLegacyVal w1) (ofLegacyVal w2) (ofLegacyVal value)))
+      .ext (.evm (.component (.hashedMap (.setAddr (ofLegacyVal base) (ofLegacyVal w0)
+        (ofLegacyVal w1) (ofLegacyVal w2) (ofLegacyVal value)))))
   | .mapGetPair base o0 o1 o2 s0 s1 s2 =>
-      .ext (.evm (.mapGetPair (ofLegacyVal base) (ofLegacyVal o0) (ofLegacyVal o1)
-        (ofLegacyVal o2) (ofLegacyVal s0) (ofLegacyVal s1) (ofLegacyVal s2)))
+      .ext (.evm (.component (.hashedMap (.getPair (ofLegacyVal base) (ofLegacyVal o0)
+        (ofLegacyVal o1) (ofLegacyVal o2) (ofLegacyVal s0) (ofLegacyVal s1)
+        (ofLegacyVal s2)))))
   | .mapSetPair base o0 o1 o2 s0 s1 s2 value =>
-      .ext (.evm (.mapSetPair (ofLegacyVal base) (ofLegacyVal o0) (ofLegacyVal o1)
-        (ofLegacyVal o2) (ofLegacyVal s0) (ofLegacyVal s1) (ofLegacyVal s2)
-        (ofLegacyVal value)))
+      .ext (.evm (.component (.hashedMap (.setPair (ofLegacyVal base) (ofLegacyVal o0)
+        (ofLegacyVal o1) (ofLegacyVal o2) (ofLegacyVal s0) (ofLegacyVal s1)
+        (ofLegacyVal s2) (ofLegacyVal value)))))
   | .evmTokenTransfer tw0 tw1 tw2 dw0 dw1 dw2 amount =>
       .ext (.evm (.tokenTransfer (ofLegacyVal tw0) (ofLegacyVal tw1) (ofLegacyVal tw2)
         (ofLegacyVal dw0) (ofLegacyVal dw1) (ofLegacyVal dw2) (ofLegacyVal amount)))
@@ -328,20 +333,20 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       throw "extract/unsupported: legacy adapter cannot represent ZeroAddress"
   | .ext (.evm .receive) =>
       throw "extract/unsupported: legacy adapter cannot represent receive"
-  | .ext (.evm (.mapGetU64 base key)) =>
+  | .ext (.evm (.component (.hashedMap (.getU64 base key)))) =>
       return .mapGetU64 (← toLegacyVal base) (← toLegacyVal key)
-  | .ext (.evm (.mapSetU64 base key value)) =>
+  | .ext (.evm (.component (.hashedMap (.setU64 base key value)))) =>
       return .mapSetU64 (← toLegacyVal base) (← toLegacyVal key) (← toLegacyVal value)
-  | .ext (.evm (.mapGetAddr base w0 w1 w2)) =>
+  | .ext (.evm (.component (.hashedMap (.getAddr base w0 w1 w2)))) =>
       return .mapGetAddr (← toLegacyVal base) (← toLegacyVal w0)
         (← toLegacyVal w1) (← toLegacyVal w2)
-  | .ext (.evm (.mapSetAddr base w0 w1 w2 value)) =>
+  | .ext (.evm (.component (.hashedMap (.setAddr base w0 w1 w2 value)))) =>
       return .mapSetAddr (← toLegacyVal base) (← toLegacyVal w0)
         (← toLegacyVal w1) (← toLegacyVal w2) (← toLegacyVal value)
-  | .ext (.evm (.mapGetPair base o0 o1 o2 s0 s1 s2)) =>
+  | .ext (.evm (.component (.hashedMap (.getPair base o0 o1 o2 s0 s1 s2)))) =>
       return .mapGetPair (← toLegacyVal base) (← toLegacyVal o0) (← toLegacyVal o1)
         (← toLegacyVal o2) (← toLegacyVal s0) (← toLegacyVal s1) (← toLegacyVal s2)
-  | .ext (.evm (.mapSetPair base o0 o1 o2 s0 s1 s2 value)) =>
+  | .ext (.evm (.component (.hashedMap (.setPair base o0 o1 o2 s0 s1 s2 value)))) =>
       return .mapSetPair (← toLegacyVal base) (← toLegacyVal o0) (← toLegacyVal o1)
         (← toLegacyVal o2) (← toLegacyVal s0) (← toLegacyVal s1) (← toLegacyVal s2)
         (← toLegacyVal value)
@@ -349,9 +354,9 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
       return .evmTokenTransfer (← toLegacyVal tw0) (← toLegacyVal tw1) (← toLegacyVal tw2)
         (← toLegacyVal dw0) (← toLegacyVal dw1) (← toLegacyVal dw2)
         (← toLegacyVal amount)
-  | .ext (.evm (.mapSetAddr256 ..)) =>
+  | .ext (.evm (.component (.hashedMap (.setAddr256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit map writes"
-  | .ext (.evm (.mapSetPair256 ..)) =>
+  | .ext (.evm (.component (.hashedMap (.setPair256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit pair-map writes"
   | .ext (.evm (.tokenTransfer256 ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit token transfer"
