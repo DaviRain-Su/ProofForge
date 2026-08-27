@@ -56,6 +56,7 @@ sBPF/.so   Yul/.bin             ← Mollusk / Anvil 工程门
 | `ProofForge.Svm.Assemble` | 子进程调用 locked `sbpf` | FFI |
 | `ProofForge.Svm.Idl` | Solana IDL spec 0.1.0 | ABI JSON |
 | `ProofForge.Evm.Runtime` / `Evm.Ops` / `Evm.IR` | EVM runtime surface、opcode、EVM projection registration、storage slot、selector | Loader V3 / CPI |
+| `ProofForge.Evm.Sdk` | EVM 合同侧类型、静态 storage cursor、typed map、context / immutable / event / revert / closed-call facade | SVM account bytes、业务协议、runtime layout object |
 | `ProofForge.Evm.Component` | 稳定 Query/Call 桥；hashed-map / wide-word / closed-call 已迁入 | 任意 CALL、SVM 账户几何 |
 | `ProofForge.Evm.Emit` / `Evm.Assemble` | Yul / ABI / locked solc | sBPF / IDL |
 
@@ -99,6 +100,33 @@ Phoenix、订单类型或某个账户偏移的特判。PDA/CPI 只在遇到一�
 一次 invocation 内存活，默认 32 KiB、可请求到 256 KiB，向下 bump 且 `dealloc` 不回收；
 任何 native pointer/capacity 都不能写进账户。持久 Map/Queue 使用账户 bytes 上的固定容量
 index/offset/POD 视图，零或 one-based sentinel 由 descriptor 明确声明。
+
+## EVM 组合边界
+
+EVM 与 SVM 共享普通 Lean、Profile、Extract 和 Core CFG，但不共享物理存储模型。
+`Evm.Sdk` 是合同源代码到既有 EVM component/runtime 的稳定 facade；静态 cursor 在抽取期
+把 typed map declaration 分配到 hashed-map namespace，descriptor 不进入链上 storage。
+
+```diagram
+┌──────────────────────┐
+│ 普通 Lean source 语义 │
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│ Evm.Sdk              │  Address/UInt256、Storage、Context、Event/Call
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│ Evm.Component        │  typed Query/Call、effects、canonical digest
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│ Evm IR / CFG / Yul   │  storage slot、ABI、selector、locked solc
+└──────────────────────┘
+```
+
+SDK 不包装 `.ok` / `.error` 或改变 Lean 控制流；这些形状仍由合同函数显式表达并由 Extract
+fail closed 处理。这样抽象 storage/effect vocabulary，而不让 facade 隐藏状态写入或改变 IR。
 
 ## 信任边界
 

@@ -9,6 +9,7 @@
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
+| `Evm.Sdk` | 合同侧 `Address` / `UInt256`、静态 storage layout、typed map、context / immutable / event / revert / closed-call facade | SVM 账户几何、业务协议、运行时 layout 对象 |
 | `Evm.Runtime` | 环境 opcode、`Addr20` / `UInt256`、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
@@ -28,20 +29,18 @@ source semantic helper
 
 因此 generic `Evm.Ops.ValKind/OpExt`、`Evm.IR.Op`、CFG payload traversal 和主 `Evm.Emit`
 各自只保留一个 `.component` case。hashed-map 读写、packed 256-bit 比较/算术、以及封闭 ERC-20 / WETH / Uniswap / permit
-已经迁进 `Evm.HashedMap` / `Evm.WideWord` / `Evm.ClosedCall` / `Evm.NativeFx`；源侧 helper 仍叫
-`mapGetU64` / `ge256` / `evmTokenTransfer256` / `evmDeposit` 等，canonical 拼写保持 `vg` / `mseta256` /
-`ttxfer` / `permit` / `edep` / `elog3.Transfer` / `err.ZeroAddress`，digest 不变。合同代码可经
-`Evm.HashedMap.Source` 命名编译期 map handle；封闭 CALL / 256-bit 算术 / ETH-LOG-revert
-走 `ClosedCall.Source` / `WideWord.Source` / `NativeFx.Source`。`UInt256` 状态写回走
-`WideWord.Source.add` / `sub` / `mul` 的 ctor+limb 查询，不再投影
-`UInt256.wN (add256 …)`。余额/额度比较走 `HashedMap.Source.geAddr256` /
-`gePair256`，不再手写 `ge256 (get …)`。余额/额度下一值走
-`nextAddAddr256` / `nextSubAddr256` / `nextAddPair256` / `nextSubPair256`，
-合同绑定一次再交给 `set*` 和 LOG，不再手写 `add256 (get …)`。不足 revert 走
-`revertInsufficientAddr256` / `revertInsufficientPair256`，不再手写
-`revertInsufficient (get …)`。地址守卫走 `isZero20` / `eqImm20` / `zero20`。
-`@[pf_inline]`
-消去这些 helper，不改 component / digest。Extract
+已经迁进 `Evm.HashedMap` / `Evm.WideWord` / `Evm.ClosedCall` / `Evm.NativeFx`。合同默认只打开
+`Evm.Sdk`：`Storage.Layout` 用编译期 cursor 分配互不重叠的 map namespace；
+`AddressMap256` / `AddressPairMap256` 提供 `get` / `put` / `containsAtLeast` /
+`nextAdd` / `nextSub` / `revertInsufficient`；`Context`、`Immutable`、`Event`、`Revert`、
+`ERC20`、`WETH`、`UniswapV2`、`Permit` 隔离 target runtime 名字。layout descriptor 只在
+抽取期存在，不进 EVM storage，也没有魔数泄漏进合同源代码。SVM 不复用这套 layout：它的
+持久容器仍由 account bytes / fixed stride / one-based index 描述。
+
+SDK facade 直接 `@[pf_inline]` 到既有 source/runtime 叶，不增加 Ops、IR 或 emitter case；
+canonical 拼写仍是 `vg` / `mseta256` / `ttxfer` / `permit` / `edep` /
+`elog3.Transfer` / `err.ZeroAddress`。迁移后的 `Token` 与 `Capped` target IR digest 逐字节不变。
+Extract
 写/读路径展开 Source 后只认 `opOfRuntimeApp` / `queryOfRuntimeApp`，不再按 recipe 名枚举
 walker。新增 LOG 配方仍在 `Evm.Component` 内注册，不再改动上述通用层。
 
@@ -78,7 +77,8 @@ overflow 是 `revert(0, 0)`，不是 `0x1001`。定理仍钉用户 `def`。
 
 ## Tests
 
-`Tests/EvmSpec.lean`、`Tests/EvmBuildSpec.lean`。solc 门在 `pfEvmAssemble`。
+`Tests/EvmSpec.lean`、`Tests/EvmSdkSpec.lean`、`Tests/EvmBuildSpec.lean`。solc 门在
+`pfEvmAssemble`。
 
 Anvil（工程门，不是 refinement）：
 

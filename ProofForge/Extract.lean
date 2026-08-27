@@ -757,6 +757,26 @@ private def asStaticLit (env : Environment) (fuel : Nat) (e : Expr) : Option Ops
         staticNat? env fuel e
     if value < UInt64.size then some (.lit (UInt64.ofNat value)) else none
 
+/-- EVM map namespaces are closed storage-layout descriptors, never runtime arithmetic. -/
+private partial def closedU64? : Ops.Val → Option UInt64
+  | .lit value => some value
+  | .addU64 left right => return (← closedU64? left) + (← closedU64? right)
+  | .subU64 left right => return (← closedU64? left) - (← closedU64? right)
+  | .mulU64 left right => return (← closedU64? left) * (← closedU64? right)
+  | _ => none
+
+private def foldClosedU64 (value : Ops.Val) : Ops.Val :=
+  (closedU64? value).map (.lit ·) |>.getD value
+
+private def asEvmMapBaseLit (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
+  ((asLit fuel e).bind fun value => closedU64? value |>.map (.lit ·)) <|> do
+    let value ←
+      if isConstNamed e ``UInt64.ofNat && !e.getAppArgs.isEmpty then
+        staticNat? env fuel e.getAppArgs[e.getAppArgs.size - 1]!
+      else
+        staticNat? env fuel e
+    if value < UInt64.size then some (.lit (UInt64.ofNat value)) else none
+
 /-- Reduce a projection over a marked structure helper without guessing from its name. A helper
 whose first user-typed input and result have the same type is a State transition already emitted
 by `decodeYieldState`, so its projection reads the current mutable source. Other helpers are pure
@@ -1320,7 +1340,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 let gargs := baseE.getAppArgs
                 if gargs.size < 2 then none
                 else
-                  let base := asVal env fuel' gargs[gargs.size - 2]!
+                  let base := (asEvmMapBaseLit env fuel' gargs[gargs.size - 2]! <|>
+                    asVal env fuel' gargs[gargs.size - 2]!).map foldClosedU64
                   let key := gargs[gargs.size - 1]!
                   let k0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) key)
                   let k1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) key)
@@ -1334,7 +1355,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 let gargs := baseE.getAppArgs
                 if gargs.size < 3 then none
                 else
-                  let base := asVal env fuel' gargs[gargs.size - 3]!
+                  let base := (asEvmMapBaseLit env fuel' gargs[gargs.size - 3]! <|>
+                    asVal env fuel' gargs[gargs.size - 3]!).map foldClosedU64
                   let owner := gargs[gargs.size - 2]!
                   let spender := gargs[gargs.size - 1]!
                   let ow0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
@@ -1438,7 +1460,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let args := e.getAppArgs
           if args.size < 2 then none
           else
-            let base := asVal env fuel' args[args.size - 2]!
+            let base := (asEvmMapBaseLit env fuel' args[args.size - 2]! <|>
+              asVal env fuel' args[args.size - 2]!).map foldClosedU64
             let k0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) args[args.size - 1]!)
             let k1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) args[args.size - 1]!)
             let k2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) args[args.size - 1]!)
@@ -1449,7 +1472,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let args := e.getAppArgs
           if args.size < 3 then none
           else
-            let base := asVal env fuel' args[args.size - 3]!
+            let base := (asEvmMapBaseLit env fuel' args[args.size - 3]! <|>
+              asVal env fuel' args[args.size - 3]!).map foldClosedU64
             let owner := args[args.size - 2]!
             let spender := args[args.size - 1]!
             let ow0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
@@ -1504,7 +1528,11 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           let get (n : Nat) : Ops.Val :=
             if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
             else .arg n
-          some (.mapGetU64 (get 1) (get 0))
+          let base :=
+            if args.size ≥ 2 then
+              foldClosedU64 <| (asEvmMapBaseLit env fuel' args[args.size - 2]!).getD (get 1)
+            else .arg 1
+          some (.mapGetU64 base (get 0))
         else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
           let proj :=
             match field.splitOn "." with
@@ -4710,6 +4738,13 @@ private def valAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val
   | some e => (val env e).getD (.arg n)
   | none => .arg n
 
+/-- EVM hashed-map namespaces are compile-time storage descriptors. Reduce their closed Nat
+geometry without changing ordinary source arithmetic or another target's canonical IR. -/
+private def mapBaseAtEnd (env : Environment) (args : Array Expr) (n : Nat) : Ops.Val :=
+  match nthFromEnd args n with
+  | some e => foldClosedU64 <| (asEvmMapBaseLit env 64 e <|> val env e).getD (.arg n)
+  | none => .arg n
+
 private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   let args := app.getAppArgs
   if isConstNamed app ``ProofForge.Evm.Runtime.evmDeposit || endsWith app ".evmDeposit" then
@@ -4796,10 +4831,10 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmReceive || endsWith app ".evmReceive" then
     some .evmReceive
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
-    some (.mapSetU64 (valAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
+    some (.mapSetU64 (mapBaseAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetAddr || endsWith app ".evmMapSetAddr" then
     let val := valAtEnd env args 0
-    let base := valAtEnd env args 2
+    let base := mapBaseAtEnd env args 2
     match nthFromEnd args 1 with
     | some key =>
       let (w0, w1, w2) := addr20Leaves env key
@@ -4807,7 +4842,7 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
     | none => some (.mapSetAddr base (.arg 1) (.arg 2) (.arg 3) val)
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetPair || endsWith app ".evmMapSetPair" then
     let val := valAtEnd env args 0
-    let base := valAtEnd env args 3
+    let base := mapBaseAtEnd env args 3
     match nthFromEnd args 2, nthFromEnd args 1 with
     | some owner, some spender =>
       let (o0, o1, o2) := addr20Leaves env owner
@@ -4820,9 +4855,9 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
     | some _base, some key, some val =>
       let (w0, w1, w2) := addr20Leaves env key
       let (v0, v1, v2, v3) := uint256Leaves env val
-      some (.mapSetAddr256 (valAtEnd env args 2) w0 w1 w2 v0 v1 v2 v3)
+      some (.mapSetAddr256 (mapBaseAtEnd env args 2) w0 w1 w2 v0 v1 v2 v3)
     | _, _, _ =>
-      some (.mapSetAddr256 (valAtEnd env args 2) (.arg 1) (.arg 2) (.arg 3)
+      some (.mapSetAddr256 (mapBaseAtEnd env args 2) (.arg 1) (.arg 2) (.arg 3)
         (.arg 4) (.arg 5) (.arg 6) (.arg 7))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetPair256 ||
       endsWith app ".evmMapSetPair256" then
@@ -4831,9 +4866,9 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
       let (o0, o1, o2) := addr20Leaves env owner
       let (s0, s1, s2) := addr20Leaves env spender
       let (v0, v1, v2, v3) := uint256Leaves env val
-      some (.mapSetPair256 (valAtEnd env args 3) o0 o1 o2 s0 s1 s2 v0 v1 v2 v3)
+      some (.mapSetPair256 (mapBaseAtEnd env args 3) o0 o1 o2 s0 s1 s2 v0 v1 v2 v3)
     | _, _, _, _ =>
-      some (.mapSetPair256 (valAtEnd env args 3) (.arg 1) (.arg 2) (.arg 3)
+      some (.mapSetPair256 (mapBaseAtEnd env args 3) (.arg 1) (.arg 2) (.arg 3)
         (.arg 4) (.arg 5) (.arg 6) (.arg 7) (.arg 8) (.arg 9) (.arg 10))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmTokenTransfer ||
       endsWith app ".evmTokenTransfer" then
@@ -4988,18 +5023,18 @@ top-level ValKind and are not collected. -/
 private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array Ops.Op) :=
   let args := app.getAppArgs
   if isConstNamed app ``ProofForge.Evm.Runtime.evmMapGetU64 || endsWith app ".evmMapGetU64" then
-    let b := valAtEnd env args 1
+    let b := mapBaseAtEnd env args 1
     let k := valAtEnd env args 0
     some #[.mapGetU64 b k, .returnU64 k]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapGetAddr || endsWith app ".evmMapGetAddr" then
-    let base := valAtEnd env args 1
+    let base := mapBaseAtEnd env args 1
     match nthFromEnd args 0 with
     | some key =>
       let (w0, w1, w2) := addr20Leaves env key
       some #[.mapGetAddr base w0 w1 w2, .returnU64 w0]
     | none => some #[.mapGetAddr base (.arg 1) (.arg 2) (.arg 3), .returnU64 (.arg 1)]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapGetPair || endsWith app ".evmMapGetPair" then
-    let base := valAtEnd env args 2
+    let base := mapBaseAtEnd env args 2
     match nthFromEnd args 1, nthFromEnd args 0 with
     | some owner, some spender =>
       let (o0, o1, o2) := addr20Leaves env owner
@@ -5010,7 +5045,7 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
         .returnU64 (.arg 1)]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
       endsWith app ".evmMapGetAddr256" then
-    let base := valAtEnd env args 1
+    let base := mapBaseAtEnd env args 1
     let (w0, w1, w2) :=
       match nthFromEnd args 0 with
       | some key => addr20Leaves env key
@@ -5023,7 +5058,7 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
     ]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapGetPair256 ||
       endsWith app ".evmMapGetPair256" then
-    let base := valAtEnd env args 2
+    let base := mapBaseAtEnd env args 2
     let (o0, o1, o2, s0, s1, s2) :=
       match nthFromEnd args 1, nthFromEnd args 0 with
       | some owner, some spender =>
@@ -6033,6 +6068,14 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
           val env e.getAppArgs[e.getAppArgs.size - 1]! with
     | some a, some b => .ok #[.returnU64 a, .returnU64 b]
     | _, _ => .error "extract/unsupported: pair return"
+  else if (match e.getAppFn.constName? with
+      | some name =>
+        match env.find? name with
+        | some info => (resultType 16 info.type).consumeMData.getAppFn.constName? == some bytes32Name
+        | none => false
+      | none => false) then
+    let (w0, w1, w2, w3) := bytes32Leaves env (unfoldUserHelpers env 8 e)
+    .ok #[.returnU64 w0, .returnU64 w1, .returnU64 w2, .returnU64 w3]
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" ||
       (addr20CtorFields env e).isSome ||

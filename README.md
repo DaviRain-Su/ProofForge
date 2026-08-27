@@ -80,6 +80,11 @@ PDA mint seed 直接引用
 不保存 node address，也不收集 heap `Vec`。下一步在同一 component boundary 上增加 tags 8/9
 CancelUpTo 的静态过滤条件，而不是重新扩张底层指令集。
 
+EVM 采用平行但不复制 SVM 账户几何的 SDK：合同打开 `ProofForge.Evm.Sdk`，通过
+`Storage.Layout` 的编译期 cursor 声明 typed hashed maps，并使用 `Address`、`UInt256`、
+`Context`、`Immutable`、`Event`、`Revert` 和封闭 call facade。descriptor 在抽取期消去，
+不进入 storage；`Examples.Token` / `Examples.Capped` 已迁移到该表面且 target IR digest 不变。
+
 ## 入口
 
 ```lean

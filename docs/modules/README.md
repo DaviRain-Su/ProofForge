@@ -18,4 +18,4 @@
 | [Idl](idl.md) | `Svm.Idl`：Solana IDL spec 0.1.0 |
 | [Cli](cli.md) | `pf build --target svm|evm` |
 | [Runtime](runtime.md) | `Svm.Runtime` / `Evm.Runtime` 宿主 stub；抽出按名认 |
-| [Evm](evm.md) | Ops → Yul / ABI / locked solc |
+| [Evm](evm.md) | `Evm.Sdk` 合同 facade + Ops → Yul / ABI / locked solc |

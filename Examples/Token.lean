@@ -2,12 +2,10 @@ import ProofForge
 
 namespace Examples.Token
 
-open ProofForge.Evm.Runtime
-open ProofForge.Evm.HashedMap.Source
-open ProofForge.Evm
+open ProofForge.Evm.Sdk
 
-/-- dummy 占槽；paused 是 UInt8（0 运行，1 暂停）；cap / supply 是账户里的 UInt256；
-    余额和额度走 hashed map。owner 是构造期 immutable。 -/
+/-- `paused` is 0 while running and 1 while paused. The owner is a constructor immutable;
+`cap` and `supply` use ordinary state slots, while balances, allowances, and nonces use maps. -/
 structure State where
   dummy : UInt64
   paused : UInt8
@@ -19,286 +17,276 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[pf_inline] def balances : MapAddr256 := { base := 0 }
-@[pf_inline] def allowances : MapPair256 := { base := 1 }
-@[pf_inline] def nonces : MapAddr256 := { base := 2 }
+structure ContractStorage where
+  balances : Storage.AddressMap256
+  allowances : Storage.AddressPairMap256
+  nonces : Storage.AddressMap256
+
+attribute [pf_inline]
+  ContractStorage.balances ContractStorage.allowances ContractStorage.nonces
+
+/-- The static cursor assigns disjoint map namespaces; no numeric slot escapes into contract code. -/
+@[pf_inline] def storage : ContractStorage :=
+  { balances := Storage.Layout.root.addressMap256 |>.handle
+    allowances := Storage.Layout.root.addressMap256 |>.next |>.addressPairMap256 |>.handle
+    nonces := Storage.Layout.root.addressMap256 |>.next |>.addressPairMap256 |>.next
+      |>.addressMap256 |>.handle }
 
 @[pf_entry]
-def init (_owner : Addr20) : State :=
-  { dummy := 0, paused := 0, cap := ⟨1000, 0, 0, 0⟩, supply := ⟨0, 0, 0, 0⟩ }
+def init (_owner : Address) : State :=
+  { dummy := 0, paused := 0, cap := ⟨1000, 0, 0, 0⟩, supply := UInt256.zero }
 
-/-- 给 Addr20 记 256-bit 余额，并累加 totalSupply。只有构造期 owner 能铸。
-    非 owner → `Unauthorized(caller)`；paused → `Paused()`；`to` 为零地址 → `ZeroAddress()`；
-    `supply + v` 超过 cap → `CapExceeded()`。 -/
+/-- Owner-only mint. Paused, zero-address, and cap failures revert without changing state. -/
 @[pf_entry]
-def mint (s : State) (to : Addr20) (v : UInt256) : Except Error (State × UInt64) :=
-  if WideWord.Source.eqImm20 evmCaller20 then
+def mint (s : State) (to : Address) (value : UInt256) : Except Error (State × UInt64) :=
+  if Address.eqImmutable Context.caller then
     if s.paused != 0 then
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        NativeFx.Source.revertPaused)
-    else if WideWord.Source.isZero20 to then
+        Revert.paused)
+    else if Address.isZero to then
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        NativeFx.Source.revertZeroAddress)
-    else if WideWord.Source.ge256 s.cap (WideWord.Source.add s.supply v) then
+        Revert.zeroAddress)
+    else if UInt256.atLeast s.cap (UInt256.add s.supply value) then
       if (0 : UInt64) ≠ 1 then
-        .ok ({ dummy := setAddr256 balances to v, paused := s.paused, cap := s.cap,
-               supply := WideWord.Source.add s.supply v },
-          NativeFx.Source.logTransfer256 WideWord.Source.zero20 to v)
+        .ok ({ dummy := storage.balances.put to value, paused := s.paused, cap := s.cap,
+               supply := UInt256.add s.supply value },
+          Event.transfer Address.zero to value)
       else
         .error .overflow
     else
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        NativeFx.Source.revertCapExceeded)
+        Revert.capExceeded)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertUnauthorized evmCaller20)
+      Revert.unauthorized Context.caller)
 
 @[pf_entry]
-def balanceOf (_s : State) (who : Addr20) : UInt256 :=
-  getAddr256 balances who
+def balanceOf (_s : State) (who : Address) : UInt256 :=
+  storage.balances.get who
 
-/-- 账户里的总量。mint 累加；burn 相减；transfer 不动。 -/
 @[pf_entry]
 def totalSupply (s : State) : UInt256 :=
   s.supply
 
-/-- 固定 mint 上限。init 写成 1000，不是 ctor 参数。 -/
 @[pf_entry]
 def capOf (s : State) : UInt256 :=
   s.cap
 
-/-- 编译期 `decimals()`。不是 storage，也不是动态 string。 -/
 @[pf_entry]
 def decimals (_s : State) : UInt8 :=
   18
 
-/-- 编译期 `name()`，右填充 ASCII `"Token"`。不是动态 string。 -/
 @[pf_entry]
 def name (_s : State) : Bytes32 :=
   ⟨0x546f6b656e, 0, 0, 0⟩
 
-/-- 编译期 `symbol()`，右填充 ASCII `"PF"`。不是动态 string。 -/
 @[pf_entry]
 def symbol (_s : State) : Bytes32 :=
   ⟨0x5046, 0, 0, 0⟩
 
 @[pf_entry]
-def allowanceOf (_s : State) (owner spender : Addr20) : UInt256 :=
-  getPair256 allowances owner spender
+def allowanceOf (_s : State) (owner spender : Address) : UInt256 :=
+  storage.allowances.get owner spender
 
 @[pf_entry]
-def nonceOf (_s : State) (who : Addr20) : UInt256 :=
-  getAddr256 nonces who
+def nonceOf (_s : State) (who : Address) : UInt256 :=
+  storage.nonces.get who
 
-/-- 封闭 EIP-712 domain separator。name=`Token`，version=`1`。 -/
 @[pf_entry]
 def DOMAIN_SEPARATOR (_s : State) : Bytes32 :=
-  ClosedCall.Source.domainSeparator
+  Permit.domainSeparator
 
-/-- 封闭 EIP-2612 `permit`。name=`Token`，version=`1`。
-    paused → `Paused()`。 -/
 @[pf_entry]
-def permit (st : State) (owner spender : Addr20) (value deadline : UInt256)
-    (v : UInt8) (r sig : Bytes32) : Except Error (State × UInt64) :=
-  if st.paused != 0 then
-    .ok ({ dummy := st.dummy, paused := st.paused, cap := st.cap, supply := st.supply },
-      NativeFx.Source.revertPaused)
-  else if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := st.dummy, paused := st.paused, cap := st.cap, supply := st.supply },
-      ClosedCall.Source.permit owner spender value deadline v r sig)
-  else
-    .error .overflow
-
-/-- caller → spender 写额度，并 LOG3 `Approval(address,address,uint256)`。
-    paused → `Paused()`；`spender` 为零地址 → `ZeroAddress()`。 -/
-@[pf_entry]
-def approve (s : State) (spender : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
+def permit (s : State) (owner spender : Address) (value deadline : UInt256)
+    (v : UInt8) (r signature : Bytes32) : Except Error (State × UInt64) :=
   if s.paused != 0 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertPaused)
-  else if WideWord.Source.isZero20 spender then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.revertZeroAddress)
+      Revert.paused)
   else if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy :=
-        setPair256 allowances evmCaller20 spender amt, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.logApproval256 evmCaller20 spender amt)
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Permit.authorize owner spender value deadline v r signature)
   else
     .error .overflow
 
-/-- caller → spender 现额度加上 `added`，并 LOG3 Approval。溢出 revert。
-    paused → `Paused()`；`spender` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
-def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
+def approve (s : State) (spender : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
   if s.paused != 0 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertPaused)
-  else if WideWord.Source.isZero20 spender then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.revertZeroAddress)
+      Revert.paused)
+  else if Address.isZero spender then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.zeroAddress)
   else if (0 : UInt64) ≠ 1 then
-    let next := nextAddPair256 allowances evmCaller20 spender added
-    .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
+    .ok ({ dummy := storage.allowances.put Context.caller spender amount,
            paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.logApproval256 evmCaller20 spender next)
+      Event.approval Context.caller spender amount)
   else
     .error .overflow
 
-/-- caller → spender 现额度减去 `subtracted`。不够 → `Insufficient(have,want)`。
-    paused → `Paused()`；`spender` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
-def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
+def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
     Except Error (State × UInt64) :=
   if s.paused != 0 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertPaused)
-  else if WideWord.Source.isZero20 spender then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if gePair256 allowances evmCaller20 spender subtracted then
-    let next := nextSubPair256 allowances evmCaller20 spender subtracted
-    .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
+      Revert.paused)
+  else if Address.isZero spender then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.zeroAddress)
+  else if (0 : UInt64) ≠ 1 then
+    let next := storage.allowances.nextAdd Context.caller spender added
+    .ok ({ dummy := storage.allowances.put Context.caller spender next,
            paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.logApproval256 evmCaller20 spender next)
+      Event.approval Context.caller spender next)
   else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      revertInsufficientPair256 allowances evmCaller20 spender subtracted)
+    .error .overflow
 
-/-- 从 caller 扣余额并减 totalSupply。不足 → `Insufficient(have,want)`。
-    paused → `Paused()`。 -/
 @[pf_entry]
-def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
-  if s.paused != 0 then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertPaused)
-  else if geAddr256 balances evmCaller20 amt then
-    let debit :=
-      setAddr256 balances evmCaller20
-        (nextSubAddr256 balances evmCaller20 amt)
-    .ok ({ dummy := debit, paused := s.paused, cap := s.cap, supply := WideWord.Source.sub s.supply amt },
-      NativeFx.Source.logTransfer256 evmCaller20 WideWord.Source.zero20 amt)
-  else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      revertInsufficientAddr256 balances evmCaller20 amt)
-
-/-- caller 用额度烧掉 owner 的币。额度或余额不够 → `Insufficient`。
-    paused → `Paused()`；`owner` 为零地址 → `ZeroAddress()`。 -/
-@[pf_entry]
-def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
+def decreaseAllowance (s : State) (spender : Address) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
   if s.paused != 0 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertPaused)
-  else if WideWord.Source.isZero20 owner then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if gePair256 allowances owner evmCaller20 amt then
-    if geAddr256 balances owner amt then
+      Revert.paused)
+  else if Address.isZero spender then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.zeroAddress)
+  else if storage.allowances.containsAtLeast Context.caller spender subtracted then
+    let next := storage.allowances.nextSub Context.caller spender subtracted
+    .ok ({ dummy := storage.allowances.put Context.caller spender next,
+           paused := s.paused, cap := s.cap, supply := s.supply },
+      Event.approval Context.caller spender next)
+  else
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      storage.allowances.revertInsufficient Context.caller spender subtracted)
+
+@[pf_entry]
+def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
+  if s.paused != 0 then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.paused)
+  else if storage.balances.containsAtLeast Context.caller amount then
+    let debit := storage.balances.put Context.caller
+      (storage.balances.nextSub Context.caller amount)
+    .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
+           supply := UInt256.sub s.supply amount },
+      Event.transfer Context.caller Address.zero amount)
+  else
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      storage.balances.revertInsufficient Context.caller amount)
+
+@[pf_entry]
+def burnFrom (s : State) (owner : Address) (amount : UInt256) :
+    Except Error (State × UInt64) :=
+  if s.paused != 0 then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.paused)
+  else if Address.isZero owner then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.zeroAddress)
+  else if storage.allowances.containsAtLeast owner Context.caller amount then
+    if storage.balances.containsAtLeast owner amount then
       let debit :=
-        (setAddr256 balances owner
-          (nextSubAddr256 balances owner amt)) |||
-        (setPair256 allowances owner evmCaller20
-          (nextSubPair256 allowances owner evmCaller20 amt))
-      .ok ({ dummy := debit, paused := s.paused, cap := s.cap, supply := WideWord.Source.sub s.supply amt },
-        NativeFx.Source.logTransfer256 owner WideWord.Source.zero20 amt)
+        (storage.balances.put owner (storage.balances.nextSub owner amount)) |||
+        (storage.allowances.put owner Context.caller
+          (storage.allowances.nextSub owner Context.caller amount))
+      .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
+             supply := UInt256.sub s.supply amount },
+        Event.transfer owner Address.zero amount)
     else
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        revertInsufficientAddr256 balances owner amt)
+        storage.balances.revertInsufficient owner amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      revertInsufficientPair256 allowances owner evmCaller20 amt)
+      storage.allowances.revertInsufficient owner Context.caller amount)
 
-/-- 从 caller 扣、给 dest 加。不足 → `Insufficient(have,want)`。
-    paused → `Paused()`；`dest` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
-def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
+def transfer (s : State) (destination : Address) (amount : UInt256) :
+    Except Error (State × UInt64) :=
   if s.paused != 0 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertPaused)
-  else if WideWord.Source.isZero20 dest then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if geAddr256 balances evmCaller20 amt then
+      Revert.paused)
+  else if Address.isZero destination then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.zeroAddress)
+  else if storage.balances.containsAtLeast Context.caller amount then
     let debit :=
-      (setAddr256 balances evmCaller20
-        (nextSubAddr256 balances evmCaller20 amt)) |||
-      (setAddr256 balances dest
-        (nextAddAddr256 balances dest amt))
+      (storage.balances.put Context.caller
+        (storage.balances.nextSub Context.caller amount)) |||
+      (storage.balances.put destination (storage.balances.nextAdd destination amount))
     .ok ({ dummy := debit, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.logTransfer256 evmCaller20 dest amt)
+      Event.transfer Context.caller destination amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      revertInsufficientAddr256 balances evmCaller20 amt)
+      storage.balances.revertInsufficient Context.caller amount)
 
-/-- 查 pair 额度；不足 → `Insufficient`。成功则改余额并写剩余额度。
-    paused → `Paused()`；`dest` 为零地址 → `ZeroAddress()`。 -/
 @[pf_entry]
-def transferFrom (s : State) (owner dest : Addr20) (amt : UInt256) :
+def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
   if s.paused != 0 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertPaused)
-  else if WideWord.Source.isZero20 dest then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.revertZeroAddress)
-  else if gePair256 allowances owner evmCaller20 amt then
-    if geAddr256 balances owner amt then
+      Revert.paused)
+  else if Address.isZero destination then
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Revert.zeroAddress)
+  else if storage.allowances.containsAtLeast owner Context.caller amount then
+    if storage.balances.containsAtLeast owner amount then
       let debit :=
-        (setAddr256 balances owner
-          (nextSubAddr256 balances owner amt)) |||
-        (setAddr256 balances dest
-          (nextAddAddr256 balances dest amt)) |||
-        (setPair256 allowances owner evmCaller20
-          (nextSubPair256 allowances owner evmCaller20 amt))
+        (storage.balances.put owner (storage.balances.nextSub owner amount)) |||
+        (storage.balances.put destination (storage.balances.nextAdd destination amount)) |||
+        (storage.allowances.put owner Context.caller
+          (storage.allowances.nextSub owner Context.caller amount))
       .ok ({ dummy := debit, paused := s.paused, cap := s.cap, supply := s.supply },
-        NativeFx.Source.logTransfer256 owner dest amt)
+        Event.transfer owner destination amount)
     else
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        revertInsufficientAddr256 balances owner amt)
+        storage.balances.revertInsufficient owner amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      revertInsufficientPair256 allowances owner evmCaller20 amt)
+      storage.allowances.revertInsufficient owner Context.caller amount)
 
-/-- 只有构造期 owner 能暂停。非 owner → `Unauthorized(caller)`。 -/
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=
-  if WideWord.Source.eqImm20 evmCaller20 then
+  if Address.eqImmutable Context.caller then
     if (0 : UInt64) ≠ 1 then
       .ok ({ dummy := s.dummy, paused := 1, cap := s.cap, supply := s.supply }, 1)
     else
       .error .overflow
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertUnauthorized evmCaller20)
+      Revert.unauthorized Context.caller)
 
-/-- 只有构造期 owner 能恢复。非 owner → `Unauthorized(caller)`。 -/
 @[pf_entry]
 def unpause (s : State) : Except Error (State × UInt64) :=
-  if WideWord.Source.eqImm20 evmCaller20 then
+  if Address.eqImmutable Context.caller then
     if (0 : UInt64) ≠ 1 then
       .ok ({ dummy := s.dummy, paused := 0, cap := s.cap, supply := s.supply }, 0)
     else
       .error .overflow
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      NativeFx.Source.revertUnauthorized evmCaller20)
+      Revert.unauthorized Context.caller)
 
 @[pf_entry]
 def pausedOf (s : State) : UInt8 :=
   s.paused
 
 @[pf_entry]
-def ownerOf (_s : State) : Addr20 :=
-  evmImm20
+def ownerOf (_s : State) : Address :=
+  Immutable.address
 
-/-- LOG1 `Transfer(uint64)`。工程入口，不受 pause。 -/
 @[pf_entry]
-def logXfer (s : State) (amt : UInt64) : Except Error (State × UInt64) :=
+def logXfer (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.logTransfer amt)
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Event.transferU64 amount)
   else
     .error .overflow
 
-/-- LOG1 `Approval(uint64)`。 -/
 @[pf_entry]
-def logApprove (s : State) (amt : UInt64) : Except Error (State × UInt64) :=
+def logApprove (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }, NativeFx.Source.logApproval amt)
+    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
+      Event.approvalU64 amount)
   else
     .error .overflow
 
