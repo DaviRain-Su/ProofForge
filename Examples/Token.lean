@@ -105,7 +105,7 @@ def increaseAllowance (s : State) (spender : Addr20) (added : UInt256) :
   if WideWord.Source.eq20 spender ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
   else if (0 : UInt64) ≠ 1 then
-    let next := WideWord.Source.add256 (getPair256 allowances evmCaller20 spender) added
+    let next := nextAddPair256 allowances evmCaller20 spender added
     .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
            supply := s.supply },
       NativeFx.Source.logApproval256 evmCaller20 spender next)
@@ -120,7 +120,7 @@ def decreaseAllowance (s : State) (spender : Addr20) (subtracted : UInt256) :
   if WideWord.Source.eq20 spender ⟨0, 0, 0⟩ then
     .ok ({ dummy := s.dummy, supply := s.supply }, NativeFx.Source.revertZeroAddress)
   else if gePair256 allowances evmCaller20 spender subtracted then
-    let next := WideWord.Source.sub256 (getPair256 allowances evmCaller20 spender) subtracted
+    let next := nextSubPair256 allowances evmCaller20 spender subtracted
     .ok ({ dummy := setPair256 allowances evmCaller20 spender next,
            supply := s.supply },
       NativeFx.Source.logApproval256 evmCaller20 spender next)
@@ -134,7 +134,7 @@ def burn (s : State) (amt : UInt256) : Except Error (State × UInt64) :=
   if geAddr256 balances evmCaller20 amt then
     let debit :=
       setAddr256 balances evmCaller20
-        (WideWord.Source.sub256 (getAddr256 balances evmCaller20) amt)
+        (nextSubAddr256 balances evmCaller20 amt)
     .ok ({ dummy := debit, supply := WideWord.Source.sub s.supply amt },
       NativeFx.Source.logTransfer256 evmCaller20 ⟨0, 0, 0⟩ amt)
   else
@@ -152,9 +152,9 @@ def burnFrom (s : State) (owner : Addr20) (amt : UInt256) :
     if geAddr256 balances owner amt then
       let debit :=
         (setAddr256 balances owner
-          (WideWord.Source.sub256 (getAddr256 balances owner) amt)) |||
+          (nextSubAddr256 balances owner amt)) |||
         (setPair256 allowances owner evmCaller20
-          (WideWord.Source.sub256 (getPair256 allowances owner evmCaller20) amt))
+          (nextSubPair256 allowances owner evmCaller20 amt))
       .ok ({ dummy := debit, supply := WideWord.Source.sub s.supply amt },
         NativeFx.Source.logTransfer256 owner ⟨0, 0, 0⟩ amt)
     else
@@ -173,9 +173,9 @@ def transfer (s : State) (dest : Addr20) (amt : UInt256) : Except Error (State �
   else if geAddr256 balances evmCaller20 amt then
     let debit :=
       (setAddr256 balances evmCaller20
-        (WideWord.Source.sub256 (getAddr256 balances evmCaller20) amt)) |||
+        (nextSubAddr256 balances evmCaller20 amt)) |||
       (setAddr256 balances dest
-        (WideWord.Source.add256 (getAddr256 balances dest) amt))
+        (nextAddAddr256 balances dest amt))
     .ok ({ dummy := debit, supply := s.supply },
       NativeFx.Source.logTransfer256 evmCaller20 dest amt)
   else
@@ -193,11 +193,11 @@ def transferFrom (s : State) (owner dest : Addr20) (amt : UInt256) :
     if geAddr256 balances owner amt then
       let debit :=
         (setAddr256 balances owner
-          (WideWord.Source.sub256 (getAddr256 balances owner) amt)) |||
+          (nextSubAddr256 balances owner amt)) |||
         (setAddr256 balances dest
-          (WideWord.Source.add256 (getAddr256 balances dest) amt)) |||
+          (nextAddAddr256 balances dest amt)) |||
         (setPair256 allowances owner evmCaller20
-          (WideWord.Source.sub256 (getPair256 allowances owner evmCaller20) amt))
+          (nextSubPair256 allowances owner evmCaller20 amt))
       .ok ({ dummy := debit, supply := s.supply },
         NativeFx.Source.logTransfer256 owner dest amt)
     else

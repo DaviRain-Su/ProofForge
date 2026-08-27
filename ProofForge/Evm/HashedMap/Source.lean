@@ -76,4 +76,22 @@ attribute [pf_inline]
     (amt : UInt256) : Bool :=
   WideWord.Source.ge256 (getPair256 map owner spender) amt
 
+/-- Next packed value of a map slot. Contracts bind this once and feed the same `UInt256` to
+`set*` and LOG, instead of writing `add256 (get …) amt` at each use. `@[pf_inline]` erases
+these into the existing WideWord arith queries. They are not writes: packing get+arith+set
+into one helper duplicates the arith under LOG and changes extracted IR. -/
+@[pf_inline] def nextAddAddr256 (map : MapAddr256) (key : Addr20) (amt : UInt256) : UInt256 :=
+  WideWord.Source.add256 (getAddr256 map key) amt
+
+@[pf_inline] def nextSubAddr256 (map : MapAddr256) (key : Addr20) (amt : UInt256) : UInt256 :=
+  WideWord.Source.sub256 (getAddr256 map key) amt
+
+@[pf_inline] def nextAddPair256 (map : MapPair256) (owner spender : Addr20)
+    (amt : UInt256) : UInt256 :=
+  WideWord.Source.add256 (getPair256 map owner spender) amt
+
+@[pf_inline] def nextSubPair256 (map : MapPair256) (owner spender : Addr20)
+    (amt : UInt256) : UInt256 :=
+  WideWord.Source.sub256 (getPair256 map owner spender) amt
+
 end ProofForge.Evm.HashedMap.Source
