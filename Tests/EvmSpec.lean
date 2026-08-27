@@ -72,6 +72,22 @@ open ProofForge.Evm
   (ProofForge.Evm.HashedMap.Call.canonical (fun _ => "x")
     (.setU64 (.lit 0) (.lit 1) (.lit 2) : ProofForge.Evm.HashedMap.Call ProofForge.Evm.Ops.Val))
     == "mset(x,x,x)"
+#guard ProofForge.Evm.NativeFx.Call.wellFormed (fun _ => true)
+  (.receive : ProofForge.Evm.NativeFx.Call ProofForge.Evm.Ops.Val)
+#guard
+  (ProofForge.Evm.NativeFx.Call.canonical (fun _ => "x")
+    (.deposit (.lit 1) : ProofForge.Evm.NativeFx.Call ProofForge.Evm.Ops.Val))
+    == "edep(x)"
+#guard
+  (ProofForge.Evm.NativeFx.Call.canonical (fun _ => "x")
+    (.logTransfer256 (.lit 0) (.lit 1) (.lit 2) (.lit 3) (.lit 4) (.lit 5)
+      (.lit 6) (.lit 7) (.lit 8) (.lit 9)
+      : ProofForge.Evm.NativeFx.Call ProofForge.Evm.Ops.Val))
+    == "elog3.Transfer(x,x,x,x,x,x,x,x,x,x)"
+#guard
+  (ProofForge.Evm.NativeFx.Call.canonical (fun _ => "x")
+    (.revertZeroAddress : ProofForge.Evm.NativeFx.Call ProofForge.Evm.Ops.Val))
+    == "err.ZeroAddress"
 
 #guard
   match ProofForge.Evm.IR.fromProgram ProofForge.Golden.extractedCounter with

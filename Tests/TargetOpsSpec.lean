@@ -711,7 +711,7 @@ private def invalidEvmValue : ProofForge.Evm.Ops.Val :=
 #guard !invalidEvmValue.wellFormed ProofForge.Evm.Ops.ValKind.arity
 
 private def validEvmOp : ProofForge.Evm.Ops.Op :=
-  .ext (.sendEth (.lit 1) (.lit 2) (.lit 3) validEvmValue)
+  .ext (.component (.nativeFx (.sendEth (.lit 1) (.lit 2) (.lit 3) validEvmValue)))
 
 #guard validEvmOp.wellFormed
 

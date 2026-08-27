@@ -36,20 +36,8 @@ def ValKind.arity : ValKind → Nat
 abbrev Val := ProofForge.Core.Ops.Val ValKind
 abbrev Cmp := ProofForge.Core.Ops.Cmp
 
-/-- EVM-only source effects. -/
+/-- EVM-only source effects. New effect vocabularies extend `Component.Call`. -/
 inductive OpExt (V : Type) where
-  | deposit (amount : V)
-  | deposit256 (a0 a1 a2 a3 : V)
-  | sendEth (w0 w1 w2 amount : V)
-  | sendEth256 (w0 w1 w2 a0 a1 a2 a3 : V)
-  | log (name : String) (amount : V)
-  | logTransfer256 (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : V)
-  | logApproval256 (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : V)
-  | revertInsufficient (h0 h1 h2 h3 w0 w1 w2 w3 : V)
-  | revertUnauthorized (w0 w1 w2 : V)
-  | revertZeroAddress
-  | receive
-  /-- Bounded EVM component effect. New effect vocabularies extend `Component.Call`. -/
   | component (call : Component.Call V)
   deriving BEq, Repr, Inhabited
 
@@ -102,24 +90,7 @@ def eq20 (a0 a1 a2 b0 b1 b2 : Val) : Val :=
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext (.component (.wideWord (.arith256 op limb))) #[a0, a1, a2, a3, b0, b1, b2, b3]
 
-private def allValuesWellFormed (values : Array Val) : Bool :=
-  values.all (·.wellFormed ValKind.arity)
-
 def OpExt.wellFormed : OpExt Val → Bool
-  | .deposit amount | .log _ amount => allValuesWellFormed #[amount]
-  | .deposit256 a0 a1 a2 a3 => allValuesWellFormed #[a0, a1, a2, a3]
-  | .sendEth w0 w1 w2 amount => allValuesWellFormed #[w0, w1, w2, amount]
-  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[w0, w1, w2, a0, a1, a2, a3]
-  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3]
-  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
-      allValuesWellFormed #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3]
-  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-      allValuesWellFormed #[h0, h1, h2, h3, w0, w1, w2, w3]
-  | .revertUnauthorized w0 w1 w2 => allValuesWellFormed #[w0, w1, w2]
-  | .revertZeroAddress => true
-  | .receive => true
   | .component call => call.wellFormed (·.wellFormed ValKind.arity)
 
 def Op.wellFormed (op : Op) : Bool :=

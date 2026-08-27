@@ -19,17 +19,6 @@ inductive Op where
   | checkedDivU64 (lhs rhs : Ops.Val)
   | checkedModU64 (lhs rhs : Ops.Val)
   | ite (cmp : Ops.Cmp) (lhs rhs : Ops.Val) (thn els : Array Op)
-  | evmDeposit (amount : Ops.Val)
-  | evmDeposit256 (a0 a1 a2 a3 : Ops.Val)
-  | evmSendEth (w0 w1 w2 amount : Ops.Val)
-  | evmSendEth256 (w0 w1 w2 a0 a1 a2 a3 : Ops.Val)
-  | evmLog (name : String) (amount : Ops.Val)
-  | evmLogTransfer256 (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : Ops.Val)
-  | evmLogApproval256 (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : Ops.Val)
-  | evmRevertInsufficient (h0 h1 h2 h3 w0 w1 w2 w3 : Ops.Val)
-  | evmRevertUnauthorized (w0 w1 w2 : Ops.Val)
-  | evmRevertZeroAddress
-  | evmReceive
   | forAccum (n : Nat) (addend : Ops.Val) (resultLocal : Nat)
   | forBody (n : Nat) (body : Array Op)
   | indexSet (name : String) (idx value : Ops.Val) (len : Nat) (elemOff : Nat := 0)
@@ -64,22 +53,6 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .errorNamed name => pure (.errorNamed name)
   | .returnU64 value => pure (.returnU64 value)
   | .returnState value => pure (.returnState value)
-  | .ext (.deposit amount) => pure (.evmDeposit amount)
-  | .ext (.deposit256 a0 a1 a2 a3) => pure (.evmDeposit256 a0 a1 a2 a3)
-  | .ext (.sendEth w0 w1 w2 amount) => pure (.evmSendEth w0 w1 w2 amount)
-  | .ext (.sendEth256 w0 w1 w2 a0 a1 a2 a3) =>
-      pure (.evmSendEth256 w0 w1 w2 a0 a1 a2 a3)
-  | .ext (.log name amount) => pure (.evmLog name amount)
-  | .ext (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3) =>
-      pure (.evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3)
-  | .ext (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3) =>
-      pure (.evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3)
-  | .ext (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3) =>
-      pure (.evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3)
-  | .ext (.revertUnauthorized w0 w1 w2) =>
-      pure (.evmRevertUnauthorized w0 w1 w2)
-  | .ext .revertZeroAddress => pure .evmRevertZeroAddress
-  | .ext .receive => pure .evmReceive
   | .ext (.component call) => pure (.component call)
 
 where
@@ -100,21 +73,6 @@ private partial def Op.toSource : Op → Ops.Op
   | .checkedModU64 lhs rhs => .checkedModU64 lhs rhs
   | .ite cmp lhs rhs thenOps elseOps =>
       .ite cmp lhs rhs (toSourceOps thenOps) (toSourceOps elseOps)
-  | .evmDeposit amount => .ext (.deposit amount)
-  | .evmDeposit256 a0 a1 a2 a3 => .ext (.deposit256 a0 a1 a2 a3)
-  | .evmSendEth w0 w1 w2 amount => .ext (.sendEth w0 w1 w2 amount)
-  | .evmSendEth256 w0 w1 w2 a0 a1 a2 a3 => .ext (.sendEth256 w0 w1 w2 a0 a1 a2 a3)
-  | .evmLog name amount => .ext (.log name amount)
-  | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-      .ext (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3)
-  | .evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
-      .ext (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3)
-  | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-      .ext (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3)
-  | .evmRevertUnauthorized w0 w1 w2 =>
-      .ext (.revertUnauthorized w0 w1 w2)
-  | .evmRevertZeroAddress => .ext .revertZeroAddress
-  | .evmReceive => .ext .receive
   | .forAccum bound addend resultLocal => .forAccum bound addend resultLocal
   | .forBody bound body => .forBody bound (toSourceOps body)
   | .indexSet name index value len elemOff => .indexSet name index value len elemOff
@@ -135,46 +93,9 @@ abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
 
 private def mapCfgPayload (mapValue : Ops.Val → Ops.Val) :
     Ops.OpExt Ops.Val → Ops.OpExt Ops.Val
-  | .deposit amount => .deposit (mapValue amount)
-  | .deposit256 a0 a1 a2 a3 =>
-      .deposit256 (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .sendEth w0 w1 w2 amount =>
-      .sendEth (mapValue w0) (mapValue w1) (mapValue w2) (mapValue amount)
-  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
-      .sendEth256 (mapValue w0) (mapValue w1) (mapValue w2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .log name amount => .log name (mapValue amount)
-  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-      .logTransfer256 (mapValue f0) (mapValue f1) (mapValue f2)
-        (mapValue t0) (mapValue t1) (mapValue t2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
-      .logApproval256 (mapValue o0) (mapValue o1) (mapValue o2)
-        (mapValue s0) (mapValue s1) (mapValue s2)
-        (mapValue a0) (mapValue a1) (mapValue a2) (mapValue a3)
-  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-      .revertInsufficient (mapValue h0) (mapValue h1) (mapValue h2) (mapValue h3)
-        (mapValue w0) (mapValue w1) (mapValue w2) (mapValue w3)
-  | .revertUnauthorized w0 w1 w2 =>
-      .revertUnauthorized (mapValue w0) (mapValue w1) (mapValue w2)
-  | .revertZeroAddress => .revertZeroAddress
-  | .receive => .receive
   | .component call => .component (call.mapValues mapValue)
 
 private def cfgPayloadValues : Ops.OpExt Ops.Val → Array Ops.Val
-  | .deposit amount | .log _ amount => #[amount]
-  | .deposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3]
-  | .sendEth w0 w1 w2 amount => #[w0, w1, w2, amount]
-  | .sendEth256 w0 w1 w2 a0 a1 a2 a3 => #[w0, w1, w2, a0, a1, a2, a3]
-  | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-      #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3]
-  | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
-      #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3]
-  | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-      #[h0, h1, h2, h3, w0, w1, w2, w3]
-  | .revertUnauthorized w0 w1 w2 => #[w0, w1, w2]
-  | .revertZeroAddress => #[]
-  | .receive => #[]
   | .component call => call.values
 
 def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
@@ -192,33 +113,6 @@ private def projectOpExt
   | .svm _ => throw "extract/unsupported: evm rejects svm effect"
   | .evm payload =>
       match payload with
-      | .deposit amount => return .deposit (← projectVal amount)
-      | .deposit256 a0 a1 a2 a3 =>
-          return .deposit256 (← projectVal a0) (← projectVal a1)
-            (← projectVal a2) (← projectVal a3)
-      | .sendEth w0 w1 w2 amount =>
-          return .sendEth (← projectVal w0) (← projectVal w1) (← projectVal w2)
-            (← projectVal amount)
-      | .sendEth256 w0 w1 w2 a0 a1 a2 a3 =>
-          return .sendEth256 (← projectVal w0) (← projectVal w1) (← projectVal w2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
-      | .log name amount => return .log name (← projectVal amount)
-      | .logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-          return .logTransfer256 (← projectVal f0) (← projectVal f1) (← projectVal f2)
-            (← projectVal t0) (← projectVal t1) (← projectVal t2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
-      | .logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
-          return .logApproval256 (← projectVal o0) (← projectVal o1) (← projectVal o2)
-            (← projectVal s0) (← projectVal s1) (← projectVal s2)
-            (← projectVal a0) (← projectVal a1) (← projectVal a2) (← projectVal a3)
-      | .revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-          return .revertInsufficient (← projectVal h0) (← projectVal h1)
-            (← projectVal h2) (← projectVal h3) (← projectVal w0) (← projectVal w1)
-            (← projectVal w2) (← projectVal w3)
-      | .revertUnauthorized w0 w1 w2 =>
-          return .revertUnauthorized (← projectVal w0) (← projectVal w1) (← projectVal w2)
-      | .revertZeroAddress => return .revertZeroAddress
-      | .receive => return .receive
       | .component call =>
           return .component (← call.mapValuesM projectVal)
 
@@ -264,11 +158,13 @@ def hasCheckedArith (ops : Array Op) : Bool :=
 
 def hasEvmDeposit (ops : Array Op) : Bool :=
   walk 16 ops fun
-    | .evmDeposit _ | .evmDeposit256 .. => true
+    | .component call => call.isDeposit
     | _ => false
 
 def hasEvmReceive (ops : Array Op) : Bool :=
-  walk 16 ops fun | .evmReceive => true | _ => false
+  walk 16 ops fun
+    | .component call => call.isReceive
+    | _ => false
 
 private partial def valMentionsImm : Ops.Val → Bool
   | .ext .immU64 #[] | .ext .immU64b #[]
@@ -288,8 +184,9 @@ def hasImmutable (ops : Array Op) : Bool :=
   walk 16 ops fun op =>
     match op with
     | .letLocal _ v | .setLocal _ v | .storeField _ v | .okState v
-    | .returnU64 v | .returnState v | .forAccum _ v _ | .evmDeposit v | .evmLog _ v =>
+    | .returnU64 v | .returnState v | .forAccum _ v _ =>
         valMentionsImm v
+    | .component call => call.anyValue valMentionsImm
     | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
     | .checkedDivU64 l r | .checkedModU64 l r | .indexSet _ l r _ _ =>
         valMentionsImm l || valMentionsImm r
@@ -617,24 +514,6 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .checkedDivU64 l r => s!"div({valCanon l},{valCanon r})"
     | .checkedModU64 l r => s!"mod({valCanon l},{valCanon r})"
     | .ite c l r t f => s!"ite.{cmpTag c}({valCanon l},{valCanon r},[{opsCanon t}],[{opsCanon f}])"
-    | .evmDeposit v => s!"edep({valCanon v})"
-    | .evmDeposit256 a0 a1 a2 a3 =>
-        s!"edep256({valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"
-    | .evmSendEth a b c d =>
-        s!"esend({valCanon a},{valCanon b},{valCanon c},{valCanon d})"
-    | .evmSendEth256 a b c d0 d1 d2 d3 =>
-        s!"esend256({valCanon a},{valCanon b},{valCanon c},{valCanon d0},{valCanon d1},{valCanon d2},{valCanon d3})"
-    | .evmLog n v => s!"elog.{n}({valCanon v})"
-    | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-        s!"elog3.Transfer({valCanon f0},{valCanon f1},{valCanon f2},{valCanon t0},{valCanon t1},{valCanon t2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"
-    | .evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
-        s!"elog3.Approval({valCanon o0},{valCanon o1},{valCanon o2},{valCanon s0},{valCanon s1},{valCanon s2},{valCanon a0},{valCanon a1},{valCanon a2},{valCanon a3})"
-    | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-        s!"err.Insufficient({valCanon h0},{valCanon h1},{valCanon h2},{valCanon h3},{valCanon w0},{valCanon w1},{valCanon w2},{valCanon w3})"
-    | .evmRevertUnauthorized w0 w1 w2 =>
-        s!"err.Unauthorized({valCanon w0},{valCanon w1},{valCanon w2})"
-    | .evmRevertZeroAddress => "err.ZeroAddress"
-    | .evmReceive => "erecv"
     | .forAccum n v resultLocal => s!"for.{resultLocal}({n},{valCanon v})"
     | .forBody n body => s!"forb({n},[{opsCanon body}])"
     | .indexSet n i v k off =>

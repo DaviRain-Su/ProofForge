@@ -1,6 +1,7 @@
 import ProofForge.Extract.LegacyGolden
 import ProofForge.Evm.IRCompat
 import ProofForge.Evm.Ops
+import ProofForge.Evm.NativeFx
 import ProofForge.Crypto.Keccak
 
 namespace ProofForge.Evm.Golden
@@ -157,6 +158,9 @@ private def hashedCall (call : HashedMap.Call Ops.Val) : IR.Op :=
 private def closedCall (call : ClosedCall.Call Ops.Val) : IR.Op :=
   .component (.closedCall call)
 
+private def nativeFx (call : NativeFx.Call Ops.Val) : IR.Op :=
+  .component (.nativeFx call)
+
 private def setAddr256 (base key : Nat) (val : Nat → Ops.Val) : IR.Op :=
   hashedCall (.setAddr256 (.lit (UInt64.ofNat base))
     (addrField key "w0") (addrField key "w1") (addrField key "w2")
@@ -185,7 +189,7 @@ private def eq20Zero (key : Nat) : Ops.Val :=
 
 private def guardZero (key : Nat) (ok : Array IR.Op) : Array IR.Op :=
   #[.ite .eq (eq20Zero key) (.lit 1)
-      #[.evmRevertZeroAddress, .returnU64 (.lit 0)]
+      #[nativeFx .revertZeroAddress, .returnU64 (.lit 0)]
       ok]
 
 /-- Live extract of `Examples.Wide`; Legacy IR has no `arith256` leaf. -/
@@ -279,7 +283,7 @@ def extractedVault : IR.Program :=
       ],
       payEntry "Vault" "receive" 0 #[] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmReceive, .returnU64 (.lit 0)]
+          #[nativeFx .receive, .returnU64 (.lit 0)]
           #[.errorOverflow]
       ],
       mutEntry "Vault" "setU64" 2 #[8, 8] #[
@@ -330,8 +334,7 @@ def extractedVault : IR.Program :=
       ],
       payEntry "Vault" "wrap" 2 #[20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmDeposit256 (u256Field 1 "w0") (u256Field 1 "w1")
-              (u256Field 1 "w2") (u256Field 1 "w3"),
+          #[nativeFx (.deposit256 (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             closedCall (.wethDeposit256
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
@@ -398,18 +401,14 @@ def extractedToken : IR.Program :=
               (callerW 0) (callerW 1) (callerW 2)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
-            .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
-              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            nativeFx (.logApproval256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ]),
       mutEntry "Token" "burn" 1 #[32] #[
         .ite .eq (ge256 callerBal 0) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 0),
-            .evmLogTransfer256 (callerW 0) (callerW 1) (callerW 2)
-              (.lit 0) (.lit 0) (.lit 0)
-              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
+            nativeFx (.logTransfer256 (callerW 0) (callerW 1) (callerW 2) (.lit 0) (.lit 0) (.lit 0) (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
             .storeField "supply_w0" (Ops.arith256 1 0
               (.field (.arg 1) "supply_w0") (.field (.arg 1) "supply_w1")
               (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
@@ -427,8 +426,7 @@ def extractedToken : IR.Program :=
               (.field (.arg 1) "supply_w2") (.field (.arg 1) "supply_w3")
               (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
             .returnU64 (u256Field 0 "w0")]
-          #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
-              (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3"),
+          #[nativeFx (.revertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3) (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
             .returnU64 (callerBal 0)]
           ],
           mutEntry "Token" "burnFrom" 2 #[20, 32] (guardZero 0 #[
@@ -436,9 +434,7 @@ def extractedToken : IR.Program :=
               #[.ite .eq (ge256 ownerBal 1) (.lit 1)
                   #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 1),
                     setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 1),
-                    .evmLogTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-                      (.lit 0) (.lit 0) (.lit 0)
-                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                    nativeFx (.logTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (.lit 0) (.lit 0) (.lit 0) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                     .storeField "supply_w0" (Ops.arith256 1 0
                       (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
                       (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
@@ -456,51 +452,40 @@ def extractedToken : IR.Program :=
                       (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
                       (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                     .returnU64 (u256Field 1 "w0")]
-                  #[.evmRevertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3)
-                      (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+                  #[nativeFx (.revertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                     .returnU64 (ownerBal 0)]]
-              #[.evmRevertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3)
-                  (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+              #[nativeFx (.revertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                 .returnU64 (pairAllow 0)]
           ]),
           mutEntry "Token" "decreaseAllowance" 2 #[20, 32] (guardZero 0 #[
             .ite .eq (ge256 pairSelf 1) (.lit 1)
               #[setPairCallerSpender256 1 0 (fun limb => arithGet 1 limb pairSelf 1),
-                .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
-                  (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-                  (arithGet 1 0 pairSelf 1) (arithGet 1 1 pairSelf 1)
-                  (arithGet 1 2 pairSelf 1) (arithGet 1 3 pairSelf 1),
+                nativeFx (.logApproval256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (arithGet 1 0 pairSelf 1) (arithGet 1 1 pairSelf 1) (arithGet 1 2 pairSelf 1) (arithGet 1 3 pairSelf 1)),
                 .returnU64 (arithGet 1 0 pairSelf 1)]
-              #[.evmRevertInsufficient (pairSelf 0) (pairSelf 1) (pairSelf 2) (pairSelf 3)
-                  (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+              #[nativeFx (.revertInsufficient (pairSelf 0) (pairSelf 1) (pairSelf 2) (pairSelf 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
                 .returnU64 (pairSelf 0)]
           ]),
           mutEntry "Token" "increaseAllowance" 2 #[20, 32] (guardZero 0 #[
             .ite .ne (.lit 0) (.lit 1)
               #[setPairCallerSpender256 1 0 (fun limb => arithGet 0 limb pairSelf 1),
-                .evmLogApproval256 (callerW 0) (callerW 1) (callerW 2)
-                  (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-                  (arithGet 0 0 pairSelf 1) (arithGet 0 1 pairSelf 1)
-                  (arithGet 0 2 pairSelf 1) (arithGet 0 3 pairSelf 1),
+                nativeFx (.logApproval256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (arithGet 0 0 pairSelf 1) (arithGet 0 1 pairSelf 1) (arithGet 0 2 pairSelf 1) (arithGet 0 3 pairSelf 1)),
                 .returnU64 (arithGet 0 0 pairSelf 1)]
               #[.errorOverflow]
           ]),
       mutEntry "Token" "logApprove" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmLog "Approval" (.arg 0), .returnU64 (.arg 0)]
+          #[nativeFx (.log "Approval" (.arg 0)), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
       mutEntry "Token" "logXfer" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmLog "Transfer" (.arg 0), .returnU64 (.arg 0)]
+          #[nativeFx (.log "Transfer" (.arg 0)), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
       mutEntry "Token" "mint" 2 #[20, 32] (guardZero 0 #[
         .ite .ne (.lit 0) (.lit 1)
           #[setAddr256 0 0 (fun limb => u256Field 1 (limbName limb)),
-            .evmLogTransfer256 (.lit 0) (.lit 0) (.lit 0)
-              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            nativeFx (.logTransfer256 (.lit 0) (.lit 0) (.lit 0) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .storeField "supply_w0" (Ops.arith256 0 0
               (.field (.arg 2) "supply_w0") (.field (.arg 2) "supply_w1")
               (.field (.arg 2) "supply_w2") (.field (.arg 2) "supply_w3")
@@ -537,12 +522,9 @@ def extractedToken : IR.Program :=
         .ite .eq (ge256 callerBal 1) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
             setAddr256 0 0 (fun limb => arithGet 0 limb destBal 1),
-            .evmLogTransfer256 (callerW 0) (callerW 1) (callerW 2)
-              (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+            nativeFx (.logTransfer256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
-          #[.evmRevertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3)
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+          #[nativeFx (.revertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (callerBal 0)]
       ]),
       mutEntry "Token" "transferFrom" 3 #[20, 20, 32] (guardZero 1 #[
@@ -551,15 +533,11 @@ def extractedToken : IR.Program :=
               #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 2),
                 setAddr256 0 1 (fun limb => arithGet 0 limb destFrom 2),
                 setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 2),
-                .evmLogTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-                  (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2")
-                  (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
+                nativeFx (.logTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2") (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
                 .returnU64 (u256Field 2 "w0")]
-              #[.evmRevertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3)
-                  (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
+              #[nativeFx (.revertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3) (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
                 .returnU64 (ownerBal 0)]]
-          #[.evmRevertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3)
-              (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3"),
+          #[nativeFx (.revertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3) (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
             .returnU64 (pairAllow 0)]
       ]),
       {
@@ -629,26 +607,24 @@ def extractedTipJar : IR.Program :=
     entries := #[
       payEntry "TipJar" "deposit" 1 #[32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmDeposit256 (u256Field 0 "w0") (u256Field 0 "w1")
-              (u256Field 0 "w2") (u256Field 0 "w3"),
+          #[nativeFx (.deposit256 (u256Field 0 "w0") (u256Field 0 "w1") (u256Field 0 "w2") (u256Field 0 "w3")),
             .returnU64 (u256Field 0 "w0")]
           #[.errorOverflow]
       ],
       mutEntry "TipJar" "logTip" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmLog "Tipped" (.arg 0), .returnU64 (.arg 0)]
+          #[nativeFx (.log "Tipped" (.arg 0)), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
       mutEntry "TipJar" "payout" 2 #[20, 32] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmSendEth256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
-              (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3"),
+          #[nativeFx (.sendEth256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             .returnU64 (u256Field 1 "w0")]
           #[.errorOverflow]
       ],
       payEntry "TipJar" "receive" 0 #[] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmReceive, .returnU64 (.lit 0)]
+          #[nativeFx .receive, .returnU64 (.lit 0)]
           #[.errorOverflow]
       ],
       view256 "TipJar" "callValue" 0 #[] (return256 fun limb => .ext (.callValue256 limb) #[]),
@@ -707,7 +683,7 @@ def extractedOwnable : IR.Program :=
             #[.checkedAddU64 (.field (.arg 1) "value") (.arg 0),
               .okState (.field (.arg 1) "value"),
               .errorOverflow]
-            #[.evmRevertUnauthorized (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[]),
+            #[nativeFx (.revertUnauthorized (.ext .callerW0 #[]) (.ext .callerW1 #[]) (.ext .callerW2 #[])),
               .returnU64 (.ext .callerW0 #[])]
         ]
       },
@@ -717,12 +693,12 @@ def extractedOwnable : IR.Program :=
             (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
             (.lit 0) (.lit 0) (.lit 0))
           (.lit 1)
-          #[.evmRevertZeroAddress, .returnU64 (.lit 0)]
+          #[nativeFx .revertZeroAddress, .returnU64 (.lit 0)]
           #[.returnU64 (addrField 0 "w0")]
       ],
       mutEntry "Ownable" "logInc" 1 #[8] #[
         .ite .ne (.lit 0) (.lit 1)
-          #[.evmLog "Incremented" (.arg 0), .returnU64 (.arg 0)]
+          #[nativeFx (.log "Incremented" (.arg 0)), .returnU64 (.arg 0)]
           #[.errorOverflow]
       ],
       mutEntry "Ownable" "spend" 3 #[20, 20, 8] #[

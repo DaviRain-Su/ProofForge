@@ -3,6 +3,7 @@ import ProofForge.Evm.Ops
 import ProofForge.Evm.HashedMap.Emit
 import ProofForge.Evm.WideWord.Emit
 import ProofForge.Evm.ClosedCall.Emit
+import ProofForge.Evm.NativeFx.Emit
 
 namespace ProofForge.Evm.Component.Emit
 
@@ -40,6 +41,11 @@ private def Context.closedCall (context : Context σ) : ClosedCall.Emit.Context 
     valKey := context.valKey
     indent := context.indent }
 
+private def Context.nativeFx (context : Context σ) : NativeFx.Emit.Context σ :=
+  { materialize := context.materialize
+    fresh := context.fresh
+    indent := context.indent }
+
 def emitQuery (context : Context σ) (query : Component.Query) (operands : Array Ops.Val)
     (st : σ) : Except String (String × String × σ) :=
   match query with
@@ -63,5 +69,7 @@ def emitCall (context : Context σ) (call : Component.Call Ops.Val) (st : σ) :
       HashedMap.Emit.emitCall context.hashedMap storageCall st
   | .closedCall callCall =>
       ClosedCall.Emit.emitCall context.closedCall callCall st
+  | .nativeFx fxCall =>
+      NativeFx.Emit.emitCall context.nativeFx fxCall st
 
 end ProofForge.Evm.Component.Emit

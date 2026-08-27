@@ -156,7 +156,7 @@ private def checkedProgram : Array ProofForge.Extract.IR.Op := #[
 private def evmEffectProgram : Array ProofForge.Extract.IR.Op := #[
   .letLocal 0 (.arg 0),
   .letLocal 1 (.arg 0),
-  .ext (.evm (.deposit (.local 1))),
+  .ext (.evm (.component (.nativeFx (.deposit (.local 1))))),
   .returnU64 (.local 1)
 ]
 
@@ -171,7 +171,8 @@ private def evmEffectProgram : Array ProofForge.Extract.IR.Op := #[
             | some (ProofForge.Core.Ops.Op.letLocal 0 _),
                 some (ProofForge.Core.Ops.Op.ext
                   (ProofForge.Extract.IR.OpExt.evm
-                    (ProofForge.Evm.Ops.OpExt.deposit (.local 0)))),
+                    (ProofForge.Evm.Ops.OpExt.component
+                      (.nativeFx (.deposit (.local 0)))))),
                 .exit (.returnU64 (.local 0)) => true
             | _, _, _ => false)
       | _ => false

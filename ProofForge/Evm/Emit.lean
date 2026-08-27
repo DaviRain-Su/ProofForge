@@ -591,163 +591,6 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           indent ++ "let " ++ nm ++ " := " ++ cmpYul c lv rv ++ nl ++
           indent ++ "if " ++ nm ++ " " ++ brace thenTxt ++ nl ++
           indent ++ "if iszero(" ++ nm ++ ") " ++ brace elseTxt ++ nl
-    | .evmDeposit amount =>
-        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount paramWidths amount st
-        st := st'
-        acc := acc ++ pre ++
-          indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
-        st := { st with last := some amt }
-    | .evmDeposit256 a0 a1 a2 a3 =>
-        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths a0 st
-        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s0
-        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s1
-        let (p3, x3, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s2
-        let (amt, s4) := fresh s3
-        st := s4
-        acc := acc ++ p0 ++ p1 ++ p2 ++ p3 ++
-          indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
-          indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
-        st := { st with last := some x0 }
-    | .evmSendEth w0 w1 w2 amount =>
-        let (p0, a0, st0) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st
-        let (p1, a1, st1) ← materializeVal p indent paramPrefix paramCount paramWidths w1 st0
-        let (p2, a2, st2) ← materializeVal p indent paramPrefix paramCount paramWidths w2 st1
-        let (p3, amt, st3) ← materializeVal p indent paramPrefix paramCount paramWidths amount st2
-        st := st3
-        let (ok, st') := fresh st
-        st := st'
-        acc := acc ++ p0 ++ p1 ++ p2 ++ p3 ++
-          indent ++ "if shr(32, " ++ a2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent a0 a1 a2 ++
-          indent ++ "let " ++ ok ++ " := call(gas(), mload(0), " ++ amt ++
-            ", 0, 0, 0, 0)" ++ nl ++
-          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
-        st := { st with last := some amt }
-    | .evmSendEth256 w0 w1 w2 a0 a1 a2 a3 =>
-        let (p0, d0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st
-        let (p1, d1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths w1 s0
-        let (p2, d2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths w2 s1
-        let (q0, x0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s2
-        let (q1, x1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s3
-        let (q2, x2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s4
-        let (q3, x3, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s5
-        let (amt, s7) := fresh s6
-        let (ok, s8) := fresh s7
-        st := s8
-        acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ q3 ++
-          indent ++ "if shr(32, " ++ d2 ++ ") { " ++ revert0 ++ " }" ++ nl ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent d0 d1 d2 ++
-          indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
-          indent ++ "let " ++ ok ++ " := call(gas(), mload(0), " ++ amt ++
-            ", 0, 0, 0, 0)" ++ nl ++
-          indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
-        st := { st with last := some x0 }
-    | .evmLog name amount =>
-        let (pre, amt, st') ← materializeVal p indent paramPrefix paramCount paramWidths amount st
-        st := st'
-        acc := acc ++ pre ++
-          indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-          indent ++ "log1(0, 32, 0x" ++
-            Keccak.keccak256HexOfString (name ++ "(uint64)") ++ ")" ++ nl
-        st := { st with last := some amt }
-    | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths f0 st
-        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths f1 s0
-        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths f2 s1
-        let (q0, y0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths t0 s2
-        let (q1, y1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths t1 s3
-        let (q2, y2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths t2 s4
-        let (r0, z0, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s5
-        let (r1, z1, s7) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s6
-        let (r2, z2, s8) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s7
-        let (r3, z3, s9) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s8
-        let (fromT, s10) := fresh s9
-        let (toT, s11) := fresh s10
-        let (amt, s12) := fresh s11
-        st := s12
-        acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ r0 ++ r1 ++ r2 ++ r3 ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent x0 x1 x2 ++
-          indent ++ "let " ++ fromT ++ " := mload(0)" ++ nl ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent y0 y1 y2 ++
-          indent ++ "let " ++ toT ++ " := mload(0)" ++ nl ++
-          indent ++ "let " ++ amt ++ " := " ++ packU256 z0 z1 z2 z3 ++ nl ++
-          indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-          indent ++ "log3(0, 32, 0x" ++
-            Keccak.keccak256HexOfString "Transfer(address,address,uint256)" ++
-            ", " ++ fromT ++ ", " ++ toT ++ ")" ++ nl
-        st := { st with last := some z0 }
-    | .evmLogApproval256 o0 o1 o2 sp0 sp1 sp2 a0 a1 a2 a3 =>
-        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths o0 st
-        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths o1 s0
-        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths o2 s1
-        let (q0, y0, s3) ← materializeVal p indent paramPrefix paramCount paramWidths sp0 s2
-        let (q1, y1, s4) ← materializeVal p indent paramPrefix paramCount paramWidths sp1 s3
-        let (q2, y2, s5) ← materializeVal p indent paramPrefix paramCount paramWidths sp2 s4
-        let (r0, z0, s6) ← materializeVal p indent paramPrefix paramCount paramWidths a0 s5
-        let (r1, z1, s7) ← materializeVal p indent paramPrefix paramCount paramWidths a1 s6
-        let (r2, z2, s8) ← materializeVal p indent paramPrefix paramCount paramWidths a2 s7
-        let (r3, z3, s9) ← materializeVal p indent paramPrefix paramCount paramWidths a3 s8
-        let (ownT, s10) := fresh s9
-        let (spdT, s11) := fresh s10
-        let (amt, s12) := fresh s11
-        st := s12
-        acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ r0 ++ r1 ++ r2 ++ r3 ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent x0 x1 x2 ++
-          indent ++ "let " ++ ownT ++ " := mload(0)" ++ nl ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent y0 y1 y2 ++
-          indent ++ "let " ++ spdT ++ " := mload(0)" ++ nl ++
-          indent ++ "let " ++ amt ++ " := " ++ packU256 z0 z1 z2 z3 ++ nl ++
-          indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-          indent ++ "log3(0, 32, 0x" ++
-            Keccak.keccak256HexOfString "Approval(address,address,uint256)" ++
-            ", " ++ ownT ++ ", " ++ spdT ++ ")" ++ nl
-        st := { st with last := some z0 }
-    | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-        let (p0, x0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths h0 st
-        let (p1, x1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths h1 s0
-        let (p2, x2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths h2 s1
-        let (p3, x3, s3) ← materializeVal p indent paramPrefix paramCount paramWidths h3 s2
-        let (q0, y0, s4) ← materializeVal p indent paramPrefix paramCount paramWidths w0 s3
-        let (q1, y1, s5) ← materializeVal p indent paramPrefix paramCount paramWidths w1 s4
-        let (q2, y2, s6) ← materializeVal p indent paramPrefix paramCount paramWidths w2 s5
-        let (q3, y3, s7) ← materializeVal p indent paramPrefix paramCount paramWidths w3 s6
-        st := s7
-        let sel := Keccak.selector "Insufficient" #["uint256", "uint256"]
-        acc := acc ++ p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
-          indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-          indent ++ "mstore(4, " ++ packU256 x0 x1 x2 x3 ++ ")" ++ nl ++
-          indent ++ "mstore(36, " ++ packU256 y0 y1 y2 y3 ++ ")" ++ nl ++
-          indent ++ "revert(0, 68)" ++ nl
-        st := { st with last := some x0 }
-    | .evmRevertUnauthorized w0 w1 w2 =>
-        let (p0, a0, s0) ← materializeVal p indent paramPrefix paramCount paramWidths w0 st
-        let (p1, a1, s1) ← materializeVal p indent paramPrefix paramCount paramWidths w1 s0
-        let (p2, a2, s2) ← materializeVal p indent paramPrefix paramCount paramWidths w2 s1
-        let sel := Keccak.selector "Unauthorized" #["address"]
-        st := s2
-        acc := acc ++ p0 ++ p1 ++ p2 ++
-          indent ++ "mstore(0, 0)" ++ nl ++
-          packAddrMstore8 indent a0 a1 a2 ++
-          indent ++ "let pf_who := mload(0)" ++ nl ++
-          indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-          indent ++ "mstore(4, pf_who)" ++ nl ++
-          indent ++ "revert(0, 36)" ++ nl
-        st := { st with last := some a0 }
-    | .evmRevertZeroAddress =>
-        let sel := Keccak.selector "ZeroAddress" #[]
-        acc := acc ++
-          indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-          indent ++ "revert(0, 4)" ++ nl
-        st := { st with last := some "0" }
-    | .evmReceive =>
-        acc := acc ++ indent ++ "let pf_recv := callvalue()" ++ nl
-        st := { st with last := some "pf_recv" }
     | .forAccum n addend resultLocal =>
         let accN := s!"l{resultLocal}"
         let (iN, st2) := fresh st
@@ -1466,9 +1309,10 @@ private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
   | fuel' + 1 =>
     ops.foldl (init := #[]) fun acc op =>
       match op with
-      | .evmLog n _ => if acc.contains n then acc else acc.push n
-      | .evmLogTransfer256 .. => if acc.contains "Transfer256" then acc else acc.push "Transfer256"
-      | .evmLogApproval256 .. => if acc.contains "Approval256" then acc else acc.push "Approval256"
+      | .component call =>
+        match call.logName with
+        | some n => if acc.contains n then acc else acc.push n
+        | none => acc
       | .ite _ _ _ t f =>
         (collectLogNames fuel' t ++ collectLogNames fuel' f).foldl (init := acc) fun acc n =>
           if acc.contains n then acc else acc.push n
@@ -1493,14 +1337,17 @@ def emitAbi (p : IR.Program) : String :=
       (collectLogNames 8 m.ops).foldl (init := acc) fun acc n =>
         if acc.contains n then acc else acc.push n
   let needIns := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun | .evmRevertInsufficient .. => true | _ => false) m.ops)
+    hasErrorLeaf 8 (fun
+      | .component call => call.emitsInsufficient
+      | _ => false) m.ops)
   let needUnauth := p.entries.any (fun m =>
     hasErrorLeaf 8 (fun
-      | .evmRevertUnauthorized .. => true
       | .component call => call.emitsUnauthorized
       | _ => false) m.ops)
   let needZero := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun | .evmRevertZeroAddress => true | _ => false) m.ops)
+    hasErrorLeaf 8 (fun
+      | .component call => call.emitsZeroAddress
+      | _ => false) m.ops)
   let needExpired := p.entries.any (fun m =>
     hasErrorLeaf 8 (fun
       | .component call => call.emitsExpired

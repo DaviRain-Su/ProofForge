@@ -235,11 +235,13 @@ partial def ofLegacyOp : ProofForge.Ops.Op → Op
       .ext (.svm (.invoke programIx (metas.map metaOfLegacy) (data.map wordOfLegacy)
         (match seed with | some value => #[.ascii value] | none => #[])
         (bump.map ofLegacyVal)))
-  | .evmDeposit amount => .ext (.evm (.deposit (ofLegacyVal amount)))
+  | .evmDeposit amount =>
+      .ext (.evm (.component (.nativeFx (.deposit (ofLegacyVal amount)))))
   | .evmSendEth w0 w1 w2 amount =>
-      .ext (.evm (.sendEth (ofLegacyVal w0) (ofLegacyVal w1)
-        (ofLegacyVal w2) (ofLegacyVal amount)))
-  | .evmLog name amount => .ext (.evm (.log name (ofLegacyVal amount)))
+      .ext (.evm (.component (.nativeFx (.sendEth (ofLegacyVal w0) (ofLegacyVal w1)
+        (ofLegacyVal w2) (ofLegacyVal amount)))))
+  | .evmLog name amount =>
+      .ext (.evm (.component (.nativeFx (.log name (ofLegacyVal amount)))))
   | .forAccum n addend resultLocal => .forAccum n (ofLegacyVal addend) resultLocal
   | .forBody n body => .forBody n (body.map ofLegacyOp)
   | .indexSet name idx value len elemOff =>
@@ -314,26 +316,28 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         seed (← bump.mapM toLegacyVal)
   | .ext (.svm (.component ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent bounded SVM components"
-  | .ext (.evm (.deposit amount)) => return .evmDeposit (← toLegacyVal amount)
-  | .ext (.evm (.deposit256 ..)) =>
+  | .ext (.evm (.component (.nativeFx (.deposit amount)))) =>
+      return .evmDeposit (← toLegacyVal amount)
+  | .ext (.evm (.component (.nativeFx (.deposit256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit deposit"
-  | .ext (.evm (.sendEth w0 w1 w2 amount)) =>
+  | .ext (.evm (.component (.nativeFx (.sendEth w0 w1 w2 amount)))) =>
       return .evmSendEth (← toLegacyVal w0) (← toLegacyVal w1)
         (← toLegacyVal w2) (← toLegacyVal amount)
-  | .ext (.evm (.sendEth256 ..)) =>
+  | .ext (.evm (.component (.nativeFx (.sendEth256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent 256-bit sendEth"
-  | .ext (.evm (.log name amount)) => return .evmLog name (← toLegacyVal amount)
-  | .ext (.evm (.logTransfer256 ..)) =>
+  | .ext (.evm (.component (.nativeFx (.log name amount)))) =>
+      return .evmLog name (← toLegacyVal amount)
+  | .ext (.evm (.component (.nativeFx (.logTransfer256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent LOG3 Transfer"
-  | .ext (.evm (.logApproval256 ..)) =>
+  | .ext (.evm (.component (.nativeFx (.logApproval256 ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent LOG3 Approval"
-  | .ext (.evm (.revertInsufficient ..)) =>
+  | .ext (.evm (.component (.nativeFx (.revertInsufficient ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent parameterized Insufficient"
-  | .ext (.evm (.revertUnauthorized ..)) =>
+  | .ext (.evm (.component (.nativeFx (.revertUnauthorized ..)))) =>
       throw "extract/unsupported: legacy adapter cannot represent parameterized Unauthorized"
-  | .ext (.evm .revertZeroAddress) =>
+  | .ext (.evm (.component (.nativeFx .revertZeroAddress))) =>
       throw "extract/unsupported: legacy adapter cannot represent ZeroAddress"
-  | .ext (.evm .receive) =>
+  | .ext (.evm (.component (.nativeFx .receive))) =>
       throw "extract/unsupported: legacy adapter cannot represent receive"
   | .ext (.evm (.component (.hashedMap (.getU64 base key)))) =>
       return .mapGetU64 (← toLegacyVal base) (← toLegacyVal key)

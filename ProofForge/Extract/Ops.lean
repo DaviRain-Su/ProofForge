@@ -175,30 +175,30 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.svm (.component (.accountStorage (.rbMapRemoveFifoOneBased acc rootWord linksBaseWord
     parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid price sequence))))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
-  .ext (.evm (.deposit amount))
+  .ext (.evm (.component (.nativeFx (.deposit amount))))
 @[match_pattern] def Op.evmDeposit256 (a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.deposit256 a0 a1 a2 a3))
+  .ext (.evm (.component (.nativeFx (.deposit256 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmSendEth (w0 w1 w2 amount : Val) : Op :=
-  .ext (.evm (.sendEth w0 w1 w2 amount))
+  .ext (.evm (.component (.nativeFx (.sendEth w0 w1 w2 amount))))
 @[match_pattern] def Op.evmSendEth256 (w0 w1 w2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.sendEth256 w0 w1 w2 a0 a1 a2 a3))
+  .ext (.evm (.component (.nativeFx (.sendEth256 w0 w1 w2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmLog (name : String) (amount : Val) : Op :=
-  .ext (.evm (.log name amount))
+  .ext (.evm (.component (.nativeFx (.log name amount))))
 @[match_pattern] def Op.evmLogTransfer256
     (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3))
+  .ext (.evm (.component (.nativeFx (.logTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmLogApproval256
     (o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 : Val) : Op :=
-  .ext (.evm (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3))
+  .ext (.evm (.component (.nativeFx (.logApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3))))
 @[match_pattern] def Op.evmRevertInsufficient
     (h0 h1 h2 h3 w0 w1 w2 w3 : Val) : Op :=
-  .ext (.evm (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3))
+  .ext (.evm (.component (.nativeFx (.revertInsufficient h0 h1 h2 h3 w0 w1 w2 w3))))
 @[match_pattern] def Op.evmRevertUnauthorized (w0 w1 w2 : Val) : Op :=
-  .ext (.evm (.revertUnauthorized w0 w1 w2))
+  .ext (.evm (.component (.nativeFx (.revertUnauthorized w0 w1 w2))))
 @[match_pattern] def Op.evmRevertZeroAddress : Op :=
-  .ext (.evm .revertZeroAddress)
+  .ext (.evm (.component (.nativeFx .revertZeroAddress)))
 @[match_pattern] def Op.evmReceive : Op :=
-  .ext (.evm .receive)
+  .ext (.evm (.component (.nativeFx .receive)))
 @[match_pattern] def Op.mapGetU64 (base key : Val) : Op :=
   .ext (.evm (.component (.hashedMap (.getU64 base key))))
 @[match_pattern] def Op.mapSetU64 (base key value : Val) : Op :=
@@ -312,20 +312,6 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .ext (.svm (.component call)) => call.anyValue predicate
   | .evmComponent call => call.anyValue predicate
-  | .evmDeposit value | .evmLog _ value => predicate value
-  | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].any predicate
-  | .evmSendEth256 w0 w1 w2 a0 a1 a2 a3 =>
-      #[w0, w1, w2, a0, a1, a2, a3].any predicate
-  | .evmSendEth w0 w1 w2 amount => #[w0, w1, w2, amount].any predicate
-  | .evmLogTransfer256 f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 =>
-      #[f0, f1, f2, t0, t1, t2, a0, a1, a2, a3].any predicate
-  | .evmLogApproval256 o0 o1 o2 s0 s1 s2 a0 a1 a2 a3 =>
-      #[o0, o1, o2, s0, s1, s2, a0, a1, a2, a3].any predicate
-  | .evmRevertInsufficient h0 h1 h2 h3 w0 w1 w2 w3 =>
-      #[h0, h1, h2, h3, w0, w1, w2, w3].any predicate
-  | .evmRevertUnauthorized w0 w1 w2 => #[w0, w1, w2].any predicate
-  | .evmRevertZeroAddress => false
-  | .evmReceive => false
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
 
 private partial def isEvmContext : Val → Bool
@@ -355,10 +341,7 @@ def hasLangOp (ops : Array Op) : Bool :=
 
 def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmLeaf ops || walk ops fun
-    | .evmDeposit .. | .evmDeposit256 .. | .evmSendEth .. | .evmSendEth256 .. | .evmLog ..
-    | .evmLogTransfer256 .. | .evmLogApproval256 ..
-    | .evmRevertInsufficient .. | .evmRevertUnauthorized .. | .evmRevertZeroAddress
-    | .evmReceive | .evmComponent .. => true
+    | .evmComponent .. => true
     | _ => false
 
 end ProofForge.Extract.Ops
