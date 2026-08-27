@@ -206,6 +206,21 @@ free-list, stride, or capacity geometry. -/
         (UInt64.ofNat region.strideWords) (UInt64.ofNat region.capacity)
         (if tree.bid then 1 else 0) key0 key1
 
+/-- Update one field in a caller-prevalidated ordered-map slot, or remove the keyed record when
+`value = 0`. The nonzero path requires `index` to be the slot already found for `(key0, key1)` in
+the same validated view. Map, field, and allocator geometry remain compile-time descriptors. -/
+@[pf_inline] def setWordOrRemoveOrderedPair (map : RbMap) (field : Field)
+    (key0 key1 index value : UInt64) : UInt64 :=
+  match map with
+  | .key4 .. => 0
+  | .fifo rootWord tree =>
+      let region := tree.links.region
+      accDataRbTreeOrderSetWordOrRemove (UInt64.ofNat region.account) (UInt64.ofNat rootWord)
+        (UInt64.ofNat tree.links.firstWord) (UInt64.ofNat tree.parentColor.firstWord)
+        (UInt64.ofNat tree.price.firstWord) (UInt64.ofNat tree.sequence.firstWord)
+        (UInt64.ofNat field.firstWord) (UInt64.ofNat region.strideWords)
+        (UInt64.ofNat region.capacity) (if tree.bid then 1 else 0) key0 key1 index value
+
 @[pf_inline] def removeFifo (map : RbMap) (price sequence : UInt64) : UInt64 :=
   removeOrderedPair map price sequence
 

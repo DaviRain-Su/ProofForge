@@ -174,6 +174,12 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
       capacity : Nat) (bid : Bool) (price sequence : Val) : Op :=
   .ext (.svm (.component (.accountStorage (.rbMapRemoveFifoOneBased acc rootWord linksBaseWord
     parentBaseWord keyBaseWord sequenceBaseWord strideWords capacity bid price sequence))))
+@[match_pattern] def Op.accDataRbTreeOrderSetWordOrRemove
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord valueBaseWord strideWords
+      capacity : Nat) (bid : Bool) (price sequence index value : Val) : Op :=
+  .ext (.svm (.component (.accountStorage (.rbMapSetWordOrRemoveFifoOneBased acc rootWord
+    linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord valueBaseWord strideWords capacity bid
+    price sequence index value))))
 @[match_pattern] def Op.evmDeposit (amount : Val) : Op :=
   .ext (.evm (.component (.nativeFx (.deposit amount))))
 @[match_pattern] def Op.evmDeposit256 (a0 a1 a2 a3 : Val) : Op :=

@@ -15,6 +15,9 @@ structure RawEntry where
   optionWidths : Array Nat := #[]
   /-- Exact packed widths for scalar return leaves. Empty means the normal consecutive-u64 ABI. -/
   returnWidths : Array Nat := #[]
+  /-- The first result leaf is a canonical 0/1 presence flag. Zero leaves return data unset; one
+  serializes all later leaves according to `returnWidths`. -/
+  optionalReturnData : Bool := false
   deriving BEq, Repr, Inhabited
 
 inductive MethodEntry where
@@ -52,7 +55,10 @@ def RawEntry.canonical (entry : RawEntry) : String :=
     else
       let options := String.intercalate "," (entry.optionWidths.map toString).toList
       s!"{base}.borsh-options.[{options}]"
-  if entry.returnWidths.isEmpty then base
+  if entry.optionalReturnData then
+    let returns := String.intercalate "," (entry.returnWidths.map toString).toList
+    s!"{base}.optional-returns.[{returns}]"
+  else if entry.returnWidths.isEmpty then base
   else
     let returns := String.intercalate "," (entry.returnWidths.map toString).toList
     s!"{base}.returns.[{returns}]"
@@ -93,9 +99,9 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
   let (tag, accountCount, programAccount) ←
     if parts.length ≥ 4 then parseHeader parts
     else throw "extract/unsupported: malformed svm raw entry annotation"
-  let (variant, optionWidths, returnWidths) ←
+  let (variant, optionWidths, returnWidths, optionalReturnData) ←
     if parts.length == 4 && parts[0]! == "svm.raw.v1" then
-      pure (none, #[], #[])
+      pure (none, #[], #[], false)
     else if parts.length == 6 && parts[0]! == "svm.raw.v2" then do
       let some prefixParamCount := parts[4]!.toNat?
         | throw "extract/unsupported: malformed svm raw fixed-prefix count"
@@ -113,7 +119,7 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
         unless paramWidths[prefixParamCount + 2 * i]! == 1 &&
             paramWidths[prefixParamCount + 2 * i + 1]! == widths[i]! do
           throw "extract/unsupported: svm raw Borsh option parameters must be (u8 presence, payload) pairs"
-      pure (none, widths, #[])
+      pure (none, widths, #[], false)
     else if parts.length == 5 && parts[0]! == "svm.raw.v3" then do
       let widthParts := parts[4]!.splitOn ","
       let mut widths := #[]
@@ -125,7 +131,7 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
         widths := widths.push width
       unless !widths.isEmpty && widths.size == retCount do
         throw "extract/unsupported: svm raw packed-return plan must cover every result leaf"
-      pure (none, #[], widths)
+      pure (none, #[], widths, false)
     else if parts.length == 6 && parts[0]! == "svm.raw.v4" then do
       let some variant := parts[4]!.toNat?
         | throw "extract/unsupported: malformed Borsh enum variant"
@@ -141,10 +147,29 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
         widths := widths.push width
       unless !widths.isEmpty && widths.size == retCount do
         throw "extract/unsupported: svm raw packed-return plan must cover every result leaf"
-      pure (some variant, #[], widths)
+      pure (some variant, #[], widths, false)
+    else if parts.length == 6 && parts[0]! == "svm.raw.v5" then do
+      let some variant := parts[4]!.toNat?
+        | throw "extract/unsupported: malformed Borsh enum variant"
+      unless variant < 256 do
+        throw "extract/unsupported: Borsh enum variant must fit u8"
+      let widthParts := parts[5]!.splitOn ","
+      let mut widths := #[]
+      for part in widthParts do
+        let some width := part.toNat?
+          | throw "extract/unsupported: malformed optional packed-return width"
+        unless supportedWidth width do
+          throw "extract/unsupported: optional packed-return width must be 1, 2, 4, or 8"
+        widths := widths.push width
+      unless !widths.isEmpty && widths.size + 1 == retCount do
+        throw "extract/unsupported: optional packed-return plan must cover every payload result leaf"
+      pure (some variant, #[], widths, true)
     else
       throw "extract/unsupported: malformed svm raw entry annotation"
-  let entry := { tag, accountCount, programAccount, variant, paramWidths, optionWidths, returnWidths }
+  let entry := {
+    tag, accountCount, programAccount, variant, paramWidths, optionWidths, returnWidths,
+    optionalReturnData
+  }
   unless entry.maxDataLen ≤ 1024 do
     throw "extract/unsupported: svm raw entry data exceeds 1024 bytes"
   unless entry.returnScratchBytes ≤ 304 do

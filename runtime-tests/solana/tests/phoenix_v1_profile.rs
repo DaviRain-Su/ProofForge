@@ -966,6 +966,7 @@ fn assert_one_match_batch(
     maker_sequence: u64,
     maker_price: u64,
     base_lots: u64,
+    remaining_base_lots: u64,
     quote_lots: u64,
     fee: u64,
     client_id_low: u64,
@@ -985,7 +986,7 @@ fn assert_one_match_batch(
     assert_eq!(&fill[35..43], &maker_sequence.to_le_bytes());
     assert_eq!(&fill[43..51], &maker_price.to_le_bytes());
     assert_eq!(&fill[51..59], &base_lots.to_le_bytes());
-    assert_eq!(&fill[59..67], &0u64.to_le_bytes());
+    assert_eq!(&fill[59..67], &remaining_base_lots.to_le_bytes());
 
     let summary = &payload[160..203];
     assert_eq!(summary[0], 6);
@@ -1557,9 +1558,12 @@ fn official_raw_limit_bid_completely_fills_one_ask_and_charges_taker_fee() {
             seat_key,
             seat_account(market_key, taker_key),
         ),
-        &[Check::success(), Check::return_data(&0u32.to_le_bytes())],
+        &[Check::success(), Check::return_data(&[])],
     );
     let market = resulting_account(&result, &market_key);
+    // Removing a fixed-stride node unlinks and frees its slot; its stale payload is overwritten
+    // only when the one-based allocator reuses that slot.
+    assert_eq!(read_word(&market, 4219), 4);
     assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 0);
     assert_eq!(read_word(&market, 8322), 0);
     assert_eq!(read_word(&market, 8321), 30);
@@ -1579,6 +1583,7 @@ fn official_raw_limit_bid_completely_fills_one_ask_and_charges_taker_fee() {
         9,
         5,
         4,
+        0,
         21,
         1,
         client_id_low,
@@ -1639,9 +1644,12 @@ fn official_raw_limit_ask_completely_fills_one_bid_and_charges_taker_fee() {
             seat_key,
             seat_account(market_key, taker_key),
         ),
-        &[Check::success(), Check::return_data(&0u32.to_le_bytes())],
+        &[Check::success(), Check::return_data(&[])],
     );
     let market = resulting_account(&result, &market_key);
+    // Removing a fixed-stride node unlinks and frees its slot; its stale payload is overwritten
+    // only when the one-based allocator reuses that slot.
+    assert_eq!(read_word(&market, 119), 4);
     assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);
     assert_eq!(read_word(&market, 8320), 0);
     assert_eq!(read_word(&market, 8323), 14);
@@ -1661,7 +1669,175 @@ fn official_raw_limit_ask_completely_fills_one_bid_and_charges_taker_fee() {
         maker_sequence,
         5,
         4,
+        0,
         19,
+        1,
+        client_id_low,
+        client_id_high,
+    );
+}
+
+#[test]
+fn official_raw_limit_bid_partially_fills_one_ask_in_place() {
+    let taker_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let maker_key = Pubkey::new_unique();
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), taker_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let mut market = market_with_two_traders(pubkey_words(maker_key), pubkey_words(taker_key));
+    write_word(&mut market, 1, 1);
+    write_word(&mut market, 104, 2);
+    write_word(&mut market, 105, 2);
+    write_word(&mut market, 107, 100);
+    write_word(&mut market, 109, 7);
+    write_word(&mut market, ORDER_SEQUENCE_WORD, 12);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 420);
+    // Maker slot 1 sells four base lots; the taker consumes two without moving the node.
+    write_word(&mut market, 8322, 4);
+    write_word(&mut market, 8321, 10);
+    write_word(&mut market, 8339, 100);
+    write_word(&mut market, 8341, 2);
+    market = run_market_write(
+        "insertAsk512",
+        market,
+        true,
+        &[5, 9, 1, 4, 0, 0],
+        &[Check::success()],
+    );
+    let client_id_low = 0x0706_0504_0302_0100;
+    let client_id_high = 0x1716_1514_1312_1110;
+    let result = mollusk.process_and_validate_instruction(
+        &raw_place_instruction(
+            &raw_limit_data(0, 6, 2, client_id_low, client_id_high),
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            true,
+            taker_key,
+            true,
+            seat_key,
+        ),
+        &raw_place_accounts(
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market,
+            taker_key,
+            seat_key,
+            seat_account(market_key, taker_key),
+        ),
+        &[Check::success(), Check::return_data(&[])],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, 4219), 2);
+    assert_eq!(read_word(&market, 8322), 2);
+    assert_eq!(read_word(&market, 8321), 20);
+    assert_eq!(read_word(&market, 8339), 89);
+    assert_eq!(read_word(&market, 8341), 4);
+    assert_eq!(read_word(&market, 109), 8);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 421);
+    assert_eq!(read_word(&market, ORDER_SEQUENCE_WORD), 12);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_one_match_batch(
+        &payloads[0],
+        420,
+        market_key,
+        taker_key,
+        maker_key,
+        9,
+        5,
+        2,
+        2,
+        11,
+        1,
+        client_id_low,
+        client_id_high,
+    );
+}
+
+#[test]
+fn official_raw_limit_ask_partially_fills_one_bid_in_place() {
+    let taker_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let maker_key = Pubkey::new_unique();
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), taker_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let mut market = market_with_two_traders(pubkey_words(maker_key), pubkey_words(taker_key));
+    write_word(&mut market, 1, 1);
+    write_word(&mut market, 104, 2);
+    write_word(&mut market, 105, 2);
+    write_word(&mut market, 107, 100);
+    write_word(&mut market, 109, 7);
+    write_word(&mut market, ORDER_SEQUENCE_WORD, 12);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 430);
+    let maker_sequence = !9u64;
+    // Maker slot 1 buys four base lots; the taker consumes two without moving the node.
+    write_word(&mut market, 8320, 20);
+    write_word(&mut market, 8323, 10);
+    write_word(&mut market, 8341, 3);
+    write_word(&mut market, 8339, 20);
+    market = run_market_write(
+        "insertBid512",
+        market,
+        true,
+        &[5, maker_sequence, 1, 4, 0, 0],
+        &[Check::success()],
+    );
+    let client_id_low = 44;
+    let client_id_high = 55;
+    let result = mollusk.process_and_validate_instruction(
+        &raw_place_instruction(
+            &raw_limit_data(1, 4, 2, client_id_low, client_id_high),
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            true,
+            taker_key,
+            true,
+            seat_key,
+        ),
+        &raw_place_accounts(
+            PHOENIX_PROGRAM,
+            log_key,
+            market_key,
+            market,
+            taker_key,
+            seat_key,
+            seat_account(market_key, taker_key),
+        ),
+        &[Check::success(), Check::return_data(&[])],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 1);
+    assert_eq!(read_word(&market, 119), 2);
+    assert_eq!(read_word(&market, 8320), 10);
+    assert_eq!(read_word(&market, 8323), 12);
+    assert_eq!(read_word(&market, 8341), 1);
+    assert_eq!(read_word(&market, 8339), 29);
+    assert_eq!(read_word(&market, 109), 8);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 431);
+    assert_eq!(read_word(&market, ORDER_SEQUENCE_WORD), 12);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_one_match_batch(
+        &payloads[0],
+        430,
+        market_key,
+        taker_key,
+        maker_key,
+        maker_sequence,
+        5,
+        2,
+        2,
+        9,
         1,
         client_id_low,
         client_id_high,
@@ -1717,8 +1893,8 @@ fn official_raw_limit_unsupported_shapes_and_matches_fail_atomically() {
             valid_market.clone(),
         ),
         (
-            "partial maker",
-            raw_limit_data(0, 6, 2, 1, 2),
+            "taker remainder",
+            raw_limit_data(0, 6, 5, 1, 2),
             valid_market.clone(),
         ),
         ("self match", canonical.clone(), prepare(2, 4, 0, 100, 3)),

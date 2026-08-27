@@ -134,6 +134,9 @@ def Book.wellFormed (book : Book) (accountLimit : Nat := 64) : Bool :=
   read book.lastValidTime order
 @[pf_inline] def Book.setSizeAt (book : Book) (order value : UInt64) : UInt64 :=
   write book.size order value
+@[pf_inline] def Book.setSizeOrRemove (book : Book)
+    (order price sequence value : UInt64) : UInt64 :=
+  setWordOrRemoveOrderedPair book.map book.size price sequence order value
 @[pf_inline] def Book.insert (book : Book)
     (price sequence owner size lastSlot lastTime : UInt64) : UInt64 :=
   insertOrderedPair book.map price sequence owner size lastSlot lastTime
@@ -247,6 +250,12 @@ and an independently supplied audit sink. All geometry remains compile-time data
   layout.bids.setSizeAt order value
 @[pf_inline] def Layout.setAskOrderSize (layout : Layout) (order value : UInt64) : UInt64 :=
   layout.asks.setSizeAt order value
+@[pf_inline] def Layout.setBidOrderSizeOrRemove (layout : Layout)
+    (order price sequence value : UInt64) : UInt64 :=
+  layout.bids.setSizeOrRemove order price sequence value
+@[pf_inline] def Layout.setAskOrderSizeOrRemove (layout : Layout)
+    (order price sequence value : UInt64) : UInt64 :=
+  layout.asks.setSizeOrRemove order price sequence value
 
 @[pf_inline] def Layout.quoteLocked (layout : Layout) (trader : UInt64) : UInt64 :=
   read layout.traders.quoteLocked trader

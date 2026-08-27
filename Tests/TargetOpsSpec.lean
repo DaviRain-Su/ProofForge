@@ -355,6 +355,28 @@ private def orderedBidMap : ProofForge.Svm.AccountStorage.RbMap :=
 private def orderedBidAllocator : ProofForge.Svm.AccountStorage.OneBasedAllocator :=
   orderedBidMap.allocator
 
+private def orderedBidSize : ProofForge.Svm.AccountStorage.Field :=
+  ProofForge.Svm.AccountStorage.Field.oneBased 1 119 8 512
+
+private def orderedBidSetSizeOrRemove :
+    ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
+  .rbMapSetWordOrRemove orderedBidMap orderedBidSize #[.arg 0, .arg 1] (.arg 2) (.arg 3)
+
+private def malformedOrderedBidSetSizeOrRemove :
+    ProofForge.Svm.AccountStorage.Call ProofForge.Svm.Ops.Val :=
+  .rbMapSetWordOrRemove orderedBidMap (ProofForge.Svm.AccountStorage.Field.oneBased 1 119 9 512)
+    #[.arg 0, .arg 1] (.arg 2) (.arg 3)
+
+private def storagePolicyBackend : ProofForge.Svm.AccountStorage.Emit.MutationBackend :=
+  { emitInsert := fun _ _ _ _ _ => .error "unused policy insert"
+    emitRemove := fun label _ _ => .ok s!"  ; remove-hook-{label}\n"
+    emitRemoveValidated := fun _ _ _ _ => .error "unused validated policy remove"
+    emitCheckedAdd := fun _ _ _ _ => .error "unused policy checked add" }
+
+private def orderedBidSetSizeOrRemoveAssembly :=
+  ProofForge.Svm.AccountStorage.Emit.emitCall findEmitContext storagePolicyBackend
+    "ordered_bid_size_policy_test" orderedBidSetSizeOrRemove
+
 #guard oneBasedTraderLinks.wellFormed
 #guard scalarHeaderField.region.baseWord == 34
 #guard scalarHeaderField.region.strideWords == 1 && scalarHeaderField.region.capacity == 1
@@ -373,6 +395,28 @@ private def orderedBidAllocator : ProofForge.Svm.AccountStorage.OneBasedAllocato
   ProofForge.Svm.AccountStorage.Field.scalar 1 114 }).wellFormed
 #guard !({ orderedBidAllocator with slots :=
   { orderedBidAllocator.slots with indexBase := .zero } }).wellFormed
+#guard orderedBidSetSizeOrRemove.wellFormed
+  (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard !malformedOrderedBidSetSizeOrRemove.wellFormed
+  (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
+#guard orderedBidSetSizeOrRemove.values == #[.arg 0, .arg 1, .arg 2, .arg 3]
+#guard orderedBidSetSizeOrRemove.effects.reads == #[1]
+#guard orderedBidSetSizeOrRemove.effects.writes == #[1]
+#guard orderedBidSetSizeOrRemove.canonical
+    (fun | .arg i => s!"a{i}" | _ => "v") ==
+  "rbowz.1.110.114.115.116.117.119.8.512.true(a0,a1,a2,a3)"
+#guard
+  match orderedBidSetSizeOrRemoveAssembly with
+  | .ok assembly =>
+      assembly.contains "bounded map field policy: zero removes, nonzero updates the existing slot" &&
+        assembly.contains
+          "jeq r1, 0, rb_map_set_word_remove_zero_ordered_bid_size_policy_test" &&
+        assembly.contains "fixed-stride external account word write acc=1 base=119 stride=8 capacity=512" &&
+        assembly.contains "ja rb_map_set_word_remove_done_ordered_bid_size_policy_test" &&
+        assembly.contains "rb_map_set_word_remove_zero_ordered_bid_size_policy_test:" &&
+        assembly.contains "remove-hook-ordered_bid_size_policy_test_remove" &&
+        assembly.contains "rb_map_set_word_remove_done_ordered_bid_size_policy_test:"
+  | .error _ => false
 #guard oneBasedTraderWrite.wellFormed
   (·.wellFormed ProofForge.Svm.Ops.ValKind.arity)
 #guard oneBasedTraderWrite.effects.reads == #[1]

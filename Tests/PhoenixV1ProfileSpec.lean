@@ -959,11 +959,12 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   | .generated => throwError "PlaceLimitOrderWithFreeFunds lost its raw adapter"
   match placeLimitRaw.entry with
   | .raw entry =>
-      unless placeLimitRaw.kind == .get && placeLimitRaw.retCount == 1 &&
+      unless placeLimitRaw.kind == .get && placeLimitRaw.retCount == 4 &&
           entry.tag == 3 && entry.variant == some 1 && entry.accountCount == 5 &&
           entry.programAccount == 0 &&
           entry.paramWidths == #[1, 8, 8, 1, 1, 8, 8, 8, 1, 1, 1, 1] &&
-          entry.dataLen == 49 && entry.returnWidths == #[4] && entry.returnDataLen == 4 do
+          entry.dataLen == 49 && entry.returnWidths == #[4, 8, 8] &&
+          entry.returnDataLen == 20 && entry.optionalReturnData do
         throwError s!"wrong raw Limit OrderPacket adapter: {repr entry}"
   | .generated => throwError "Limit OrderPacket lost its raw adapter"
   let placeCfg ←

@@ -72,4 +72,11 @@ def enumSmall (_s : State) (value : UInt8) : UInt64 := value.toUInt64
 @[pf_entry, pf_svm_raw_variant_return 11 1 2 0 [8]]
 def enumWide (_s : State) (value : UInt64) : UInt64 := value
 
+/-- A variant may decide at runtime whether to set a fixed-width return payload. The presence leaf
+is control data and never enters the payload; no invocation-local collection is constructed. -/
+@[pf_entry, pf_svm_raw_variant_optional_return 11 2 2 0 [8]]
+def enumOptional (_s : State) (present : UInt8) (value : UInt64) :
+    Except Error (State × (UInt8 × UInt64)) :=
+  if present ≤ 1 then .ok (_s, (present, value)) else .error .rejected
+
 end Examples.RawEntry

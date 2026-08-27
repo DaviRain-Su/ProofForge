@@ -41,6 +41,12 @@ fn enum_wide_data(value: u64) -> Vec<u8> {
     data
 }
 
+fn enum_optional_data(present: u8, value: u64) -> Vec<u8> {
+    let mut data = vec![ENUM_TAG, 2, present];
+    data.extend_from_slice(&value.to_le_bytes());
+    data
+}
+
 fn borsh_options_data(
     side: u8,
     tick: Option<u64>,
@@ -225,10 +231,37 @@ fn shared_tag_routes_exact_borsh_enum_variants_and_rejects_other_shapes() {
             ],
         );
     }
+    for (present, expected) in [(0, None), (1, Some(37u64.to_le_bytes()))] {
+        let ix = raw_instruction(
+            program_id,
+            program_id,
+            signer,
+            true,
+            &enum_optional_data(present, 37),
+            None,
+        );
+        let expected = expected
+            .as_ref()
+            .map(|bytes| bytes.as_slice())
+            .unwrap_or(&[]);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(expected)],
+        );
+    }
     for malformed in [
-        vec![ENUM_TAG, 2, 37],
+        vec![ENUM_TAG, 3, 37],
         vec![ENUM_TAG, 0],
         vec![ENUM_TAG, 0, 37, 0],
+        vec![ENUM_TAG, 2],
+        enum_optional_data(0, 37)[..10].to_vec(),
+        {
+            let mut data = enum_optional_data(0, 37);
+            data.push(0);
+            data
+        },
+        enum_optional_data(2, 37),
         enum_wide_data(37)[..9].to_vec(),
         {
             let mut data = enum_wide_data(37);

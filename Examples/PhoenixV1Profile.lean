@@ -1714,11 +1714,12 @@ def takerFeeQuoteLots512At (layout : Examples.PhoenixV1.Layout)
     if adjustedFee % baseLotsPerBaseUnit = 0 then whole else whole + 1
 
 /-!
-The first Limit slice deliberately performs one exact full-maker match. Generic SDK components
-provide validated best-order cursoring, record reads, key extraction, removal, and balance fields;
+This bounded Limit slice performs one maker match. Generic SDK components provide validated
+best-order cursoring, fixed-record reads/writes, key extraction, removal, and balance fields;
 Phoenix keeps crossing, fee, collateral, self-trade, audit, and packet policy here in `Examples`.
-Requiring `match_limit=Some(1)`, no resident TIF, `Abort` self-trade behavior, and no remainder gives
-a faithful bounded official execution without adding a matching opcode or emitter case.
+Requiring `match_limit=Some(1)`, no resident TIF, `Abort` self-trade behavior, and complete taker
+budget exhaustion gives a faithful bounded official execution without a matching opcode or emitter
+case. A larger maker remains at the same one-based slot with its size reduced in place.
 -/
 def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price baseLots clientIdLow
     clientIdHigh : UInt64) : Except Error UInt64 := do
@@ -1757,10 +1758,11 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
           let lastTime :=
             if bid then layout.asks.lastTimeAt makerOrder else layout.bids.lastTimeAt makerOrder
           let crosses := if bid then makerPrice ≤ price else makerPrice ≥ price
-          if !crosses || maker = 0 || maker = taker || makerSize ≠ baseLots ||
+          if !crosses || maker = 0 || maker = taker || makerSize < baseLots ||
               lastSlot ≠ 0 || lastTime ≠ 0 then
             .error .overflow
           else
+            let makerRemaining := makerSize - baseLots
             let tickSize := layout.tickSize
             let baseLotsPerBaseUnit := layout.baseLotsPerBaseUnit
             if tickSize = 0 || tickSize > u64Max / makerPrice then
@@ -1800,7 +1802,8 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                           let makerKey1 := layout.traderKey1 maker
                           let makerKey2 := layout.traderKey2 maker
                           let makerKey3 := layout.traderKey3 maker
-                          let _ := layout.removeAsk makerPrice makerSequence
+                          let _ := layout.setAskOrderSizeOrRemove makerOrder makerPrice makerSequence
+                            makerRemaining
                           let _ := layout.setBaseLocked maker (makerLocked - baseLots)
                           let _ := layout.setQuoteFree maker (makerFree + quoteLots)
                           let _ := layout.setQuoteFree taker (takerQuoteFree - takerCost)
@@ -1809,7 +1812,7 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                           let _ := layout.setMarketSequence (marketSequence + 1)
                           let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
                           let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
-                            makerSequence makerPrice baseLots 0
+                            makerSequence makerPrice baseLots makerRemaining
                           let _ := recordFillSummaryAt clientIdLow clientIdHigh
                             baseLots takerCost fee
                           let _ := finishMarketBatch
@@ -1829,7 +1832,8 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                         let makerKey1 := layout.traderKey1 maker
                         let makerKey2 := layout.traderKey2 maker
                         let makerKey3 := layout.traderKey3 maker
-                        let _ := layout.removeBid makerPrice makerSequence
+                        let _ := layout.setBidOrderSizeOrRemove makerOrder makerPrice makerSequence
+                          makerRemaining
                         let _ := layout.setQuoteLocked maker (makerLocked - quoteLots)
                         let _ := layout.setBaseFree maker (makerFree + baseLots)
                         let _ := layout.setBaseFree taker (takerBaseFree - baseLots)
@@ -1838,7 +1842,7 @@ def placeLimitOneMatchFreeFunds512At (marketAccount traderAccount side price bas
                         let _ := layout.setMarketSequence (marketSequence + 1)
                         let _ := beginMarketBatchAt 3 marketAccount marketAccount marketSequence
                         let _ := recordFillAt makerKey0 makerKey1 makerKey2 makerKey3
-                          makerSequence makerPrice baseLots 0
+                          makerSequence makerPrice baseLots makerRemaining
                         let _ := recordFillSummaryAt clientIdLow clientIdHigh
                           baseLots takerProceeds fee
                         let _ := finishMarketBatch
@@ -1887,24 +1891,29 @@ def placeLimitOrderWithFreeFunds (_s : State) (side : UInt8)
 
 /-- Exact modern `OrderPacket::Limit` slice:
 `03 || 01 || side || price || base || Abort || Some(1) || client:u128 || 01 || None || None || 00`.
-It fully fills one non-self, no-TIF maker and returns the official empty Borsh order-id vector.
-Other match limits, self-trade policies, partial fills, posting, and TIF remain fail closed.
+It exhausts the taker's base budget against one non-self, no-TIF maker. A larger maker is reduced in
+place; an exact-size maker is removed. Since no taker remainder is posted, official Phoenix leaves
+return data unset. Other match limits, self-trade policies, taker remainder/posting, and TIF remain
+fail closed.
 -/
-@[pf_entry, pf_svm_raw_variant_return 3 1 5 0 [4]]
+@[pf_entry, pf_svm_raw_variant_optional_return 3 1 5 0 [4, 8, 8]]
 def placeLimitOrderWithFreeFundsLimit (_s : State) (side : UInt8)
     (price baseLots : UInt64) (selfTradeBehavior matchLimitPresent : UInt8)
     (matchLimit clientIdLow clientIdHigh : UInt64)
     (useOnlyDepositedFunds lastValidSlotPresent lastValidUnixTimestampPresent
-      failSilentlyOnInsufficientFunds : UInt8) : Except Error (State × UInt32) := do
+      failSilentlyOnInsufficientFunds : UInt8) :
+    Except Error (State × (UInt8 × (UInt32 × (UInt64 × UInt64)))) := do
   if (side ≠ 0 && side ≠ 1) || selfTradeBehavior ≠ 0 || matchLimitPresent ≠ 1 ||
       matchLimit ≠ 1 || useOnlyDepositedFunds ≠ 1 || lastValidSlotPresent ≠ 0 ||
       lastValidUnixTimestampPresent ≠ 0 || failSilentlyOnInsufficientFunds ≠ 0 ||
       placeFreeFundsContextValid = 0 then
     .error .overflow
   else
-    let result ← placeLimitOneMatchFreeFunds512At 2 3 side.toUInt64 price baseLots
+    let encodedSequence ← placeLimitOneMatchFreeFunds512At 2 3 side.toUInt64 price baseLots
       clientIdLow clientIdHigh
-    .ok (_s, result.toUInt32)
+    let present : UInt8 := if encodedSequence = 0 then 0 else 1
+    let length : UInt32 := if encodedSequence = 0 then 0 else 1
+    .ok (_s, (present, (length, (price, encodedSequence))))
 
 /--
 Official Phoenix `ReduceOrderWithFreeFunds` wire for the smallest static profile:

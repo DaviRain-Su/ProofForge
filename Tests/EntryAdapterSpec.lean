@@ -49,10 +49,14 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing small enum-variant source method"
   let some sourceEnumWide := source.methods.find? (·.ixName == "enumWide")
     | throwError "missing wide enum-variant source method"
+  let some sourceEnumOptional := source.methods.find? (·.ixName == "enumOptional")
+    | throwError "missing optional-return enum-variant source method"
   unless sourceEnumSmall.annotations == #["svm.raw.v4:11:2:0:0:8"] &&
       sourceEnumSmall.paramWidths == #[1] &&
       sourceEnumWide.annotations == #["svm.raw.v4:11:2:0:1:8"] &&
-      sourceEnumWide.paramWidths == #[8] do
+      sourceEnumWide.paramWidths == #[8] &&
+      sourceEnumOptional.annotations == #["svm.raw.v5:11:2:0:2:8"] &&
+      sourceEnumOptional.paramWidths == #[1, 8] && sourceEnumOptional.retCount == 2 do
     throwError "wrong source Borsh enum-variant metadata"
   let program ←
     match IR.fromExtracted source with
@@ -135,14 +139,20 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing projected small enum variant"
   let some enumWide := program.methods.find? (·.ixName == "enumWide")
     | throwError "missing projected wide enum variant"
-  match enumSmall.entry, enumWide.entry with
-  | .raw small, .raw wide =>
+  let some enumOptional := program.methods.find? (·.ixName == "enumOptional")
+    | throwError "missing projected optional-return enum variant"
+  match enumSmall.entry, enumWide.entry, enumOptional.entry with
+  | .raw small, .raw wide, .raw optional =>
       unless small.tag == 11 && small.variant == some 0 && small.paramWidths == #[1] &&
           small.dataLen == 3 && small.returnWidths == #[8] &&
           wide.tag == 11 && wide.variant == some 1 && wide.paramWidths == #[8] &&
-          wide.dataLen == 10 && wide.returnWidths == #[8] do
-        throwError s!"wrong projected enum variants: {repr small}, {repr wide}"
-  | _, _ => throwError "Borsh enum variant lost its raw adapter"
+          wide.dataLen == 10 && wide.returnWidths == #[8] &&
+          enumOptional.retCount == 2 && optional.tag == 11 && optional.variant == some 2 &&
+          optional.paramWidths == #[1, 8] && optional.dataLen == 11 &&
+          optional.returnWidths == #[8] && optional.returnDataLen == 8 &&
+          optional.optionalReturnData do
+        throwError s!"wrong projected enum variants: {repr small}, {repr wide}, {repr optional}"
+  | _, _, _ => throwError "Borsh enum variant lost its raw adapter"
   unless IR.generatedAccountCount program == 1 do
     throwError "raw account geometry leaked into generated methods"
   let asm ←
@@ -154,6 +164,9 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call boundedPair" && asm.contains "lddw r2, 16" &&
       asm.contains "call borshSingletonPair" && asm.contains "lddw r2, 20" &&
       asm.contains "call enumSmall" && asm.contains "call enumWide" &&
+      asm.contains "call enumOptional" &&
+      asm.contains "optional_return_present_enumOptional_" &&
+      asm.contains "optional_return_invalid_enumOptional_" &&
       asm.contains "jeq r1, 0, raw_route_match_" &&
       asm.contains "jeq r1, 1, raw_route_match_" &&
       asm.contains "call sol_set_return_data" &&
@@ -192,6 +205,7 @@ private def accepts (result : Except String α) : Bool :=
 #guard accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,8,8"] 2 #[8, 8] 3)
 #guard accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:0:8"] 1 #[1])
 #guard accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:1:8"] 1 #[8])
+#guard accepts (EntryAdapter.decode #["svm.raw.v5:11:2:0:2:8"] 2 #[1, 8] 2)
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:256:2:0"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:2"] 2 #[1, 8])
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:7:2:0"] 2 #[1, 3])
@@ -200,9 +214,13 @@ private def accepts (result : Except String α) : Bool :=
 #guard !accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,8"] 2 #[8, 8] 3)
 #guard !accepts (EntryAdapter.decode #["svm.raw.v3:10:2:0:4,3,8"] 2 #[8, 8] 3)
 #guard !accepts (EntryAdapter.decode #["svm.raw.v4:11:2:0:256:8"] 1 #[1])
+#guard !accepts (EntryAdapter.decode #["svm.raw.v5:11:2:0:2:8"] 2 #[1, 8] 1)
+#guard !accepts (EntryAdapter.decode #["svm.raw.v5:11:2:0:2:3"] 2 #[1, 8] 2)
 #guard accepts (EntryAdapter.validateUniqueTags #[
   .raw { tag := 11, accountCount := 2, programAccount := 0, variant := some 0, paramWidths := #[1] },
-  .raw { tag := 11, accountCount := 2, programAccount := 0, variant := some 1, paramWidths := #[8] }
+  .raw { tag := 11, accountCount := 2, programAccount := 0, variant := some 1, paramWidths := #[8] },
+  .raw { tag := 11, accountCount := 2, programAccount := 0, variant := some 2,
+         paramWidths := #[1, 8], returnWidths := #[8], optionalReturnData := true }
 ])
 #guard !accepts (EntryAdapter.validateUniqueTags #[
   .raw { tag := 7, accountCount := 2, programAccount := 0, paramWidths := #[1] },

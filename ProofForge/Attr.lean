@@ -23,6 +23,9 @@ structure SvmRawEntry where
   /-- Exact little-endian widths for a statically shaped return product. Empty retains the normal
   consecutive-u64 return ABI. This is wire metadata, not an executable operation. -/
   returnWidths : Array Nat := #[]
+  /-- The first result leaf is a 0/1 presence flag and is not serialized. Zero completes without
+  setting return data; one serializes the remaining leaves with `returnWidths`. -/
+  optionalReturnData : Bool := false
   deriving BEq, Repr, Inhabited
 
 syntax (name := pf_svm_raw)
@@ -36,6 +39,9 @@ syntax (name := pf_svm_raw_return)
 
 syntax (name := pf_svm_raw_variant_return)
   "pf_svm_raw_variant_return" num num num num "[" num,* "]" : attr
+
+syntax (name := pf_svm_raw_variant_optional_return)
+  "pf_svm_raw_variant_optional_return" num num num num "[" num,* "]" : attr
 
 private partial def syntaxNatLiterals (node : Syntax) : Array Nat :=
   match node.isNatLit? with
@@ -197,6 +203,42 @@ initialize pfSvmRawVariantReturnAttr : ParametricAttribute SvmRawEntry ←
       | _ => throwError "extract/unsupported: pf_svm_raw_variant_return is not a definition"
   }
 
+/-- Attach one exact Borsh-enum variant with a runtime-optional fixed-width return payload. The
+first result leaf is a canonical 0/1 presence flag and the listed widths cover every later leaf. -/
+initialize pfSvmRawVariantOptionalReturnAttr : ParametricAttribute SvmRawEntry ←
+  registerParametricAttribute {
+    name := `pf_svm_raw_variant_optional_return
+    descr := "declare an exact packed-u8 Borsh enum variant with an optional packed return"
+    getParam := fun decl stx => do
+      let values := syntaxNatLiterals stx
+      unless values.size ≥ 5 do
+        throwError "invalid pf_svm_raw_variant_optional_return syntax"
+      let entry : SvmRawEntry := {
+        tag := values[0]!
+        variant := some values[1]!
+        accountCount := values[2]!
+        programAccount := values[3]!
+        returnWidths := values.extract 4 values.size
+        optionalReturnData := true
+      }
+      unless entry.tag < 256 && entry.variant.all (· < 256) do
+        throwError "extract/unsupported: raw tag and Borsh variant must fit u8"
+      unless 0 < entry.accountCount && entry.accountCount ≤ 64 do
+        throwError "extract/unsupported: pf_svm_raw_variant_optional_return accounts must be in 1..64"
+      unless entry.programAccount < entry.accountCount do
+        throwError "extract/unsupported: pf_svm_raw_variant_optional_return program account is out of range"
+      unless entry.returnWidths.all fun width =>
+          width == 1 || width == 2 || width == 4 || width == 8 do
+        throwError "extract/unsupported: packed return widths must be one of 1, 2, 4, or 8"
+      unless entry.returnWidths.foldl (init := 0) (· + ·) ≤ 304 do
+        throwError "extract/unsupported: packed return exceeds scalar scratch"
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure entry
+      | _ =>
+          throwError "extract/unsupported: pf_svm_raw_variant_optional_return is not a definition"
+  }
+
 def isEntry (env : Environment) (decl : Name) : Bool :=
   pfEntryAttr.hasTag env decl
 
@@ -205,7 +247,8 @@ def isInline (env : Environment) (decl : Name) : Bool :=
 
 def svmRawEntry? (env : Environment) (decl : Name) : Option SvmRawEntry :=
   pfSvmRawAttr.getParam? env decl <|> pfSvmRawBorshOptionsAttr.getParam? env decl <|>
-    pfSvmRawReturnAttr.getParam? env decl <|> pfSvmRawVariantReturnAttr.getParam? env decl
+    pfSvmRawReturnAttr.getParam? env decl <|> pfSvmRawVariantReturnAttr.getParam? env decl <|>
+    pfSvmRawVariantOptionalReturnAttr.getParam? env decl
 
 /-- Preserve all raw annotations so target projection can reject declarations that accidentally
 carry more than one wire contract. -/
@@ -219,10 +262,18 @@ def svmRawEntries (env : Environment) (decl : Name) : Array SvmRawEntry := Id.ru
     entries := entries.push entry
   if let some entry := pfSvmRawVariantReturnAttr.getParam? env decl then
     entries := entries.push entry
+  if let some entry := pfSvmRawVariantOptionalReturnAttr.getParam? env decl then
+    entries := entries.push entry
   return entries
 
 def SvmRawEntry.annotation (entry : SvmRawEntry) : String :=
-  if let some variant := entry.variant then
+  if entry.optionalReturnData then
+    match entry.variant with
+    | some variant =>
+        let widths := String.intercalate "," (entry.returnWidths.map toString).toList
+        s!"svm.raw.v5:{entry.tag}:{entry.accountCount}:{entry.programAccount}:{variant}:{widths}"
+    | none => ""
+  else if let some variant := entry.variant then
     let widths := String.intercalate "," (entry.returnWidths.map toString).toList
     s!"svm.raw.v4:{entry.tag}:{entry.accountCount}:{entry.programAccount}:{variant}:{widths}"
   else if !entry.returnWidths.isEmpty then

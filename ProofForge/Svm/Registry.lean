@@ -52,9 +52,9 @@ def entries : Array Entry := #[
   { name := "TokenOwner", digest := "d29884f00e7311b7" },
   { name := "TokenMs", digest := "672b83a54f057f79" },
   { name := "SelfLog", digest := "7c000e2c7844d1af" },
-  { name := "RawEntry", digest := "e9d98616071055f" },
+  { name := "RawEntry", digest := "50563530f2356efc" },
   { name := "Phoenix", digest := "420dcb611c69c130" },
-  { name := "PhoenixV1Profile", digest := "52bb3c6e8d6cb9a9" },
+  { name := "PhoenixV1Profile", digest := "4d6e0410bd14883f" },
   { name := "Book", digest := "525c5967ae68d203" },
   { name := "Seat", digest := "831f313077f89947" },
   { name := "Lang", digest := "64264acebea0c34c" }

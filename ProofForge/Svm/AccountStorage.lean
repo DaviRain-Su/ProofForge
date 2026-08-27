@@ -499,6 +499,11 @@ inductive Call (V : Type) where
   | writeWord (field : Field) (index value : V)
   | rbMapInsert (map : RbMap) (key value : Array V) (existing : ExistingValuePolicy)
   | rbMapRemove (map : RbMap) (key : Array V)
+  /-- Set one word at a caller-prevalidated one-based map slot, or remove the keyed record when the
+  value is zero. The nonzero path requires `index` to be the slot previously returned for `key` by
+  the same validated map view. This keeps the common consume-in-place policy inside bounded
+  storage composition without retaining a pointer across effects. -/
+  | rbMapSetWordOrRemove (map : RbMap) (field : Field) (key : Array V) (index value : V)
   | rbMapCheckedAdd (map : RbMap) (key delta : Array V)
   deriving BEq, Repr, Inhabited
 
@@ -507,6 +512,8 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .rbMapInsert map key value existing =>
       .rbMapInsert map (key.map mapValue) (value.map mapValue) existing
   | .rbMapRemove map key => .rbMapRemove map (key.map mapValue)
+  | .rbMapSetWordOrRemove map field key index value =>
+      .rbMapSetWordOrRemove map field (key.map mapValue) (mapValue index) (mapValue value)
   | .rbMapCheckedAdd map key delta =>
       .rbMapCheckedAdd map (key.map mapValue) (delta.map mapValue)
 
@@ -516,6 +523,9 @@ def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .rbMapInsert map key value existing =>
       return .rbMapInsert map (← key.mapM mapValue) (← value.mapM mapValue) existing
   | .rbMapRemove map key => return .rbMapRemove map (← key.mapM mapValue)
+  | .rbMapSetWordOrRemove map field key index value =>
+      return .rbMapSetWordOrRemove map field (← key.mapM mapValue)
+        (← mapValue index) (← mapValue value)
   | .rbMapCheckedAdd map key delta =>
       return .rbMapCheckedAdd map (← key.mapM mapValue) (← delta.mapM mapValue)
 
@@ -523,6 +533,7 @@ def Call.values : Call V → Array V
   | .writeWord _ index value => #[index, value]
   | .rbMapInsert _ key value _ => key ++ value
   | .rbMapRemove _ key => key
+  | .rbMapSetWordOrRemove _ _ key index value => key ++ #[index, value]
   | .rbMapCheckedAdd _ key delta => key ++ delta
 
 def Call.anyValue (predicate : V → Bool) (call : Call V) : Bool :=
@@ -536,7 +547,8 @@ def Call.foldValues (initial : Nat) (measure : V → Nat) (call : Call V) : Nat 
 
 def Call.effects : Call V → EffectSummary
   | .writeWord field _ _ => EffectSummary.forField field
-  | .rbMapInsert map _ _ _ | .rbMapRemove map _ | .rbMapCheckedAdd map _ _ =>
+  | .rbMapInsert map _ _ _ | .rbMapRemove map _ | .rbMapSetWordOrRemove map ..
+  | .rbMapCheckedAdd map _ _ =>
       EffectSummary.forField map.links
 
 def Call.minAccounts (measure : V → Nat) (call : Call V) : Nat :=
@@ -558,6 +570,13 @@ def Call.wellFormed (valueWellFormed : V → Bool) (accountLimit : Nat := 64) : 
         | _, _ => false
   | .rbMapRemove map key =>
       map.wellFormed accountLimit && key.all valueWellFormed &&
+        match map with
+        | .key4 .. => key.size == 4
+        | .fifo .. => key.size == 2
+  | .rbMapSetWordOrRemove map field key index value =>
+      map.wellFormed accountLimit && field.mutableOneBasedWord accountLimit &&
+        field.region.sameShape map.links.region && key.all valueWellFormed &&
+        valueWellFormed index && valueWellFormed value &&
         match map with
         | .key4 .. => key.size == 4
         | .fifo .. => key.size == 2
@@ -601,6 +620,21 @@ def Call.canonical (renderValue : V → String) : Call V → String
         s!"{tree.price.firstWord}.{tree.sequence.firstWord}.{region.strideWords}." ++
         s!"{region.capacity}.{tree.bid}" ++
         s!"({String.intercalate "," (key.map renderValue).toList})"
+  | .rbMapSetWordOrRemove map field key index value =>
+      let operands := key ++ #[index, value]
+      match map with
+      | .key4 rootWord tree =>
+          let region := tree.links.region
+          s!"rb4wz.{region.account}.{rootWord}.{tree.links.firstWord}." ++
+            s!"{tree.parentColor.firstWord}.{tree.key.firstWord}.{field.firstWord}." ++
+            s!"{region.strideWords}.{region.capacity}" ++
+            s!"({String.intercalate "," (operands.map renderValue).toList})"
+      | .fifo rootWord tree =>
+          let region := tree.links.region
+          s!"rbowz.{region.account}.{rootWord}.{tree.links.firstWord}." ++
+            s!"{tree.parentColor.firstWord}.{tree.price.firstWord}.{tree.sequence.firstWord}." ++
+            s!"{field.firstWord}.{region.strideWords}.{region.capacity}.{tree.bid}" ++
+            s!"({String.intercalate "," (operands.map renderValue).toList})"
   | .rbMapCheckedAdd (.key4 rootWord tree) key delta =>
       let region := tree.links.region
       let operands := key ++ delta
@@ -665,5 +699,13 @@ def Call.rbMapRemoveFifoOneBased
     (.fifoOneBased account rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
       strideWords capacity bid)
     #[price, sequence]
+
+def Call.rbMapSetWordOrRemoveFifoOneBased
+    (account rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord valueBaseWord
+      strideWords capacity : Nat) (bid : Bool) (price sequence index value : V) : Call V :=
+  let map := .fifoOneBased account rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord
+    strideWords capacity bid
+  let field := Field.oneBased account valueBaseWord strideWords capacity
+  .rbMapSetWordOrRemove map field #[price, sequence] index value
 
 end ProofForge.Svm.AccountStorage

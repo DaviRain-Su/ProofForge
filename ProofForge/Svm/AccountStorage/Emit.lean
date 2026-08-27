@@ -164,6 +164,25 @@ private def emitWriteWord (context : Context) (label : String)
 {done}:
 "
 
+/-- Compose two existing bounded mutations behind a runtime scalar policy. Zero removes the keyed
+map record; nonzero updates one word in the caller-prevalidated one-based slot. The branch
+discriminator uses the component's highest reserved low-bank word before either child routine
+reuses scratch. -/
+private def emitRbMapSetWordOrRemove (context : Context) (mutations : MutationBackend)
+    (label : String) (map : RbMap) (field : Field) (key : Array Ops.Val)
+    (index value : Ops.Val) : Except String String := do
+  let valueStack := 408
+  let loadValue ← context.loadValue value valueStack 0 s!"{label}_policy_value"
+  let write ← emitWriteWord context s!"{label}_write" field index value
+  let remove ← mutations.emitRemove s!"{label}_remove" map key
+  let removeLabel := s!"rb_map_set_word_remove_zero_{label}"
+  let done := s!"rb_map_set_word_remove_done_{label}"
+  return loadValue ++ s!"\
+  ; bounded map field policy: zero removes, nonzero updates the existing slot
+  ldxdw r1, [r10 - {valueStack}]
+  jeq r1, 0, {removeLabel}
+" ++ write ++ s!"  ja {done}\n{removeLabel}:\n" ++ remove ++ s!"{done}:\n"
+
 /-- Follow one account-resident parent path with constant memory. Every dereference is selected
 from static one-based regions, while index/root/bump and the final account length are checked
 before pointer formation. A cycle that excludes the root exhausts `maxDepth` and returns zero. -/
@@ -1431,6 +1450,8 @@ def emitCall (context : Context) (mutations : MutationBackend) (label : String) 
   | .rbMapInsert map key value existing =>
       mutations.emitInsert label map key value existing
   | .rbMapRemove map key => mutations.emitRemove label map key
+  | .rbMapSetWordOrRemove map field key index value =>
+      emitRbMapSetWordOrRemove context mutations label map field key index value
   | .rbMapCheckedAdd map key delta => mutations.emitCheckedAdd label map key delta
 
 end ProofForge.Svm.AccountStorage.Emit

@@ -4549,15 +4549,41 @@ private def emitCFGInitialize (p : IR.Program) (marker scope : String)
 "
 
 private def emitCFGReturnValues (p : IR.Program) (scope : String)
-    (packedWidths : Option (Array Nat)) (values : Array Ops.Val) (fresh : Nat) :
+    (optionalReturnData : Bool) (packedWidths : Option (Array Nat))
+    (values : Array Ops.Val) (fresh : Nat) :
     Except String String :=
-  let widths := packedWidths.getD (Array.replicate values.size 8)
-  EntryAdapter.Emit.emitReturnValues
-    (fun value stackOff nonce valueScope => loadVal p value stackOff nonce valueScope)
-    loopCounterScratch widths values fresh scope
+  if optionalReturnData then do
+    let some presence := values[0]?
+      | throw "extract/ir: optional return is missing its presence leaf"
+    let some widths := packedWidths
+      | throw "extract/ir: optional return is missing its packed payload"
+    unless widths.size + 1 == values.size do
+      throw "extract/ir: optional return payload shape does not match its width plan"
+    let loadPresence ← loadVal p presence loopCounterScratch fresh s!"{scope}_return_presence"
+    let present := s!"optional_return_present_{scope}_{fresh}"
+    let invalid := s!"optional_return_invalid_{scope}_{fresh}"
+    let payload ← EntryAdapter.Emit.emitReturnValues
+      (fun value stackOff nonce valueScope => loadVal p value stackOff nonce valueScope)
+      loopCounterScratch widths (values.extract 1 values.size) (fresh + 1) scope
+    pure (loadPresence ++ s!"\
+  ldxdw r1, [r10 - {loopCounterScratch}]
+  jeq r1, 1, {present}
+  jne r1, 0, {invalid}
+  lddw r0, 0
+  exit
+{invalid}:
+  lddw r0, 0x1
+  exit
+{present}:
+" ++ payload)
+  else
+    let widths := packedWidths.getD (Array.replicate values.size 8)
+    EntryAdapter.Emit.emitReturnValues
+      (fun value stackOff nonce valueScope => loadVal p value stackOff nonce valueScope)
+      loopCounterScratch widths values fresh scope
 
 private def makeCFGNode (p : IR.Program) (marker handler : String)
-    (packedReturnWidths : Option (Array Nat))
+    (optionalReturnData : Bool) (packedReturnWidths : Option (Array Nat))
     (hints : Array (Core.CFG.BlockId × CFGResultHint))
     (block : Core.CFG.Block Ops.ValKind Ops.OpExt) : Except String CFGAsmNode := do
   unless block.params.isEmpty do
@@ -4619,10 +4645,10 @@ private def makeCFGNode (p : IR.Program) (marker handler : String)
           template := template ++ s!"  ; named error {name}\n  lddw r0, {code}\n  exit\n"
       | .returnU64 value =>
           template := template ++
-            (← emitCFGReturnValues p scope packedReturnWidths #[value] fresh)
+            (← emitCFGReturnValues p scope optionalReturnData packedReturnWidths #[value] fresh)
       | .returnU64s values =>
           template := template ++
-            (← emitCFGReturnValues p scope packedReturnWidths values fresh)
+            (← emitCFGReturnValues p scope optionalReturnData packedReturnWidths values fresh)
       | .returnState value =>
           let (exitText, _) ← emitOps p scope handler #[.returnState value] fresh
           template := template ++ exitText
@@ -4639,6 +4665,9 @@ private def emitCFGBody (p : IR.Program) (marker handler : String) (method : IR.
     Except String String := do
   let graph ← method.toCFG
   let hints := cfgResultHints p graph
+  let optionalReturnData := match method.entry with
+    | .raw entry => entry.optionalReturnData
+    | .generated => false
   let packedReturnWidths := match method.entry with
     | .raw entry => if entry.returnWidths.isEmpty then none else some entry.returnWidths
     | .generated => none
@@ -4646,7 +4675,7 @@ private def emitCFGBody (p : IR.Program) (marker handler : String) (method : IR.
   let mut nodes := Array.replicate nextId (default : CFGAsmNode)
   for block in graph.blocks do
     nodes := nodes.set! block.id
-      (← makeCFGNode p marker handler packedReturnWidths hints block)
+      (← makeCFGNode p marker handler optionalReturnData packedReturnWidths hints block)
   let layout := graph.reachable
   let (splitNodes, layout, nextId) ← splitLargeCFGNodes handler nodes layout nextId
   let (finalNodes, layout) ← insertCFGRelays handler splitNodes layout nextId 100000

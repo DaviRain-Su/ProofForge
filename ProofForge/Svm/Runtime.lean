@@ -1065,6 +1065,30 @@ that slot; no persistent pointer or heap container is created.
   0
 
 /--
+Update one word in an existing account-resident ordered-map record, removing the keyed record when
+the new value is zero. Static arguments describe the map and selected field; only key, one-based
+slot, and value are dynamic. This is a reusable bounded-storage policy, not a Phoenix operation.
+-/
+@[irreducible] def accDataRbTreeOrderSetWordOrRemove
+    (acc rootWord linksBaseWord parentBaseWord keyBaseWord sequenceBaseWord valueBaseWord
+      strideWords capacity bid price sequence index value : UInt64) : UInt64 :=
+  let _ := acc
+  let _ := rootWord
+  let _ := linksBaseWord
+  let _ := parentBaseWord
+  let _ := keyBaseWord
+  let _ := sequenceBaseWord
+  let _ := valueBaseWord
+  let _ := strideWords
+  let _ := capacity
+  let _ := bid
+  let _ := price
+  let _ := sequence
+  let _ := index
+  let _ := value
+  0
+
+/--
 沿账户内 fixed-stride 节点的 parent 链验证一条有界路径。静态参数指定 links word、
 parent/color word、stride、capacity 和最多 64 步；运行时只提供起点、root 和 allocator
 `bumpIndex`。目标发射器逐步验证 index envelope、颜色、parent→child reciprocity，并要求
