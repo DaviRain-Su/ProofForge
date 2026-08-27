@@ -13,20 +13,10 @@ private def packU256 (w0 w1 w2 w3 : String) : String :=
 private def packU256Word (src : String) (word : Nat) : String :=
   "and(shr(" ++ toString (64 * word) ++ ", " ++ src ++ "), " ++ u64MaxYul ++ ")"
 
-/-- Pack three little-endian Addr20 limbs into memory[12..31]; high 12 bytes already zero. -/
+/-- Call the shared runtime helper that packs three little-endian Addr20 limbs into an
+ABI address word at `memory[0..31]`. -/
 private def packAddrMstore8 (indent w0 w1 w2 : String) : String :=
-  Id.run do
-    let mut out := ""
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (12 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (20 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
-    for i in [0:4] do
-      out := out ++ indent ++ "mstore8(" ++ toString (28 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
-    return out
+  indent ++ "pf_store_addr20(0, " ++ w0 ++ ", " ++ w1 ++ ", " ++ w2 ++ ")" ++ nl
 
 /-- Shared with hashed-map emission so the main emitter can pass one context record. -/
 structure Context (σ : Type) where

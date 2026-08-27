@@ -16,33 +16,15 @@ private def packU256 (w0 w1 w2 w3 : String) : String :=
 private def packU256Word (src : String) (word : Nat) : String :=
   "and(shr(" ++ toString (64 * word) ++ ", " ++ src ++ "), " ++ u64MaxYul ++ ")"
 
+/-- Call the shared runtime helper that packs three little-endian Addr20 limbs into an
+ABI address word at `memory[off..off+31]`. -/
 private def packAddrMstore8 (indent w0 w1 w2 : String) : String :=
-  Id.run do
-    let mut out := ""
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (12 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (20 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
-    for i in [0:4] do
-      out := out ++ indent ++ "mstore8(" ++ toString (28 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
-    return out
+  indent ++ "pf_store_addr20(0, " ++ w0 ++ ", " ++ w1 ++ ", " ++ w2 ++ ")" ++ nl
 
+/-- Pack three Addr20 limbs into calldata at `off..off+19` (transfer dest starts at 16). -/
 private def packAddrAt (indent : String) (off : Nat) (w0 w1 w2 : String) : String :=
-  Id.run do
-    let mut out := ""
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (off + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (off + 8 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
-    for i in [0:4] do
-      out := out ++ indent ++ "mstore8(" ++ toString (off + 16 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
-    return out
+  indent ++ "pf_store_addr20(" ++ toString (off - 12) ++ ", " ++ w0 ++ ", " ++ w1 ++
+    ", " ++ w2 ++ ")" ++ nl
 
 private def eip712DomainTypeHash : String :=
   Keccak.keccak256HexOfString

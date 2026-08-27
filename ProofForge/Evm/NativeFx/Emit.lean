@@ -12,19 +12,10 @@ private def revert0 : String := "revert(0, 0)"
 private def packU256 (w0 w1 w2 w3 : String) : String :=
   "or(or(" ++ w0 ++ ", shl(64, " ++ w1 ++ ")), or(shl(128, " ++ w2 ++ "), shl(192, " ++ w3 ++ ")))"
 
+/-- Call the shared runtime helper that packs three little-endian Addr20 limbs into an
+ABI address word at `memory[0..31]`. -/
 private def packAddrMstore8 (indent w0 w1 w2 : String) : String :=
-  Id.run do
-    let mut out := ""
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (12 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w0 ++ "), 0xff))" ++ nl
-    for i in [0:8] do
-      out := out ++ indent ++ "mstore8(" ++ toString (20 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w1 ++ "), 0xff))" ++ nl
-    for i in [0:4] do
-      out := out ++ indent ++ "mstore8(" ++ toString (28 + i) ++ ", and(shr(" ++
-        toString (8 * i) ++ ", " ++ w2 ++ "), 0xff))" ++ nl
-    return out
+  indent ++ "pf_store_addr20(0, " ++ w0 ++ ", " ++ w1 ++ ", " ++ w2 ++ ")" ++ nl
 
 structure Context (σ : Type) where
   materialize : Ops.Val → σ → Except String (String × String × σ)
