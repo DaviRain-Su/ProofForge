@@ -53,6 +53,11 @@ EVM = TargetSpec(
 SPECS = {"svm": SVM, "evm": EVM}
 ELF_MAGIC = b"\x7fELF"
 ELF64_CLASS = 2
+ELF64_DATA_LSB = 1
+ELF64_VERSION = 1
+ELF_ET_DYN = 3
+ELF_EM_SBPF = 247
+ELF64_EHDR_SIZE = 64
 
 
 def artifact_suffix(filename: str) -> str | None:
@@ -136,12 +141,28 @@ def check_json(path: Path, rel: str, diags: list[str]) -> None:
 
 def check_elf64(path: Path, rel: str, diags: list[str]) -> None:
     try:
-        header = path.read_bytes()[:5]
+        header = path.read_bytes()[:ELF64_EHDR_SIZE]
     except OSError:
         diags.append(f"malformed file: {rel}: unreadable")
         return
-    if len(header) < 5 or header[:4] != ELF_MAGIC or header[4] != ELF64_CLASS:
+    if len(header) < ELF64_EHDR_SIZE:
+        diags.append(f"not elf64: {rel}: truncated header")
+        return
+    if header[:4] != ELF_MAGIC or header[4] != ELF64_CLASS:
         diags.append(f"not elf64: {rel}")
+        return
+    if header[5] != ELF64_DATA_LSB or header[6] != ELF64_VERSION:
+        diags.append(f"not elf64: {rel}: bad ident")
+        return
+    e_type = int.from_bytes(header[16:18], "little")
+    e_machine = int.from_bytes(header[18:20], "little")
+    e_version = int.from_bytes(header[20:24], "little")
+    e_ehsize = int.from_bytes(header[52:54], "little")
+    if e_type != ELF_ET_DYN or e_machine != ELF_EM_SBPF:
+        diags.append(f"not sbpf elf: {rel}: type={e_type} machine={e_machine}")
+        return
+    if e_version != ELF64_VERSION or e_ehsize != ELF64_EHDR_SIZE:
+        diags.append(f"not elf64: {rel}: bad version/ehsize")
 
 
 def check_bin_hex(path: Path, rel: str, diags: list[str]) -> None:
@@ -153,6 +174,7 @@ def check_bin_hex(path: Path, rel: str, diags: list[str]) -> None:
     if text == "":
         diags.append(f"malformed file: {rel}: empty hex")
         return
+    # Assembler emits raw even-length hex only. Reject int()-accepted forms like 0x / +/-.
     if not re.fullmatch(r"[0-9a-fA-F]+", text):
         diags.append(f"malformed file: {rel}: not hex")
         return
@@ -261,7 +283,29 @@ def report(diags: list[str]) -> int:
     return 0
 
 
-ELF64_STUB = ELF_MAGIC + bytes([ELF64_CLASS]) + bytes(11)
+def make_sbpf_elf_header(
+    *,
+    ei_class: int = ELF64_CLASS,
+    ei_data: int = ELF64_DATA_LSB,
+    ei_version: int = ELF64_VERSION,
+    e_type: int = ELF_ET_DYN,
+    e_machine: int = ELF_EM_SBPF,
+    e_version: int = ELF64_VERSION,
+    e_ehsize: int = ELF64_EHDR_SIZE,
+) -> bytes:
+    header = bytearray(ELF64_EHDR_SIZE)
+    header[0:4] = ELF_MAGIC
+    header[4] = ei_class
+    header[5] = ei_data
+    header[6] = ei_version
+    header[16:18] = e_type.to_bytes(2, "little")
+    header[18:20] = e_machine.to_bytes(2, "little")
+    header[20:24] = e_version.to_bytes(4, "little")
+    header[52:54] = e_ehsize.to_bytes(2, "little")
+    return bytes(header)
+
+
+ELF64_STUB = make_sbpf_elf_header()
 
 
 def _write_registry(path: Path, entries: list[tuple[str, str]]) -> None:
@@ -372,6 +416,25 @@ def self_test() -> int:
                 raise AssertionError("expected failure")
             _require(diags, "not elf64:", "bad_elf")
 
+    def truncated_elf() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            # Old gate accepted magic+class alone. Truncated headers must fail.
+            _write_svm(out, "Prog", "abc123", so=ELF_MAGIC + bytes([ELF64_CLASS]) + bytes(11))
+            diags = diagnostics("svm", out, entries_by_target=injected, pin_count=False)
+            if not diags:
+                raise AssertionError("expected failure")
+            _require(diags, "truncated header", "truncated_elf")
+
+    def bad_machine() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            _write_svm(out, "Prog", "abc123", so=make_sbpf_elf_header(e_machine=62))
+            diags = diagnostics("svm", out, entries_by_target=injected, pin_count=False)
+            if not diags:
+                raise AssertionError("expected failure")
+            _require(diags, "not sbpf elf:", "bad_machine")
+
     def odd_hex() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
@@ -380,6 +443,24 @@ def self_test() -> int:
             if not diags:
                 raise AssertionError("expected failure")
             _require(diags, "odd-length hex", "odd_hex")
+
+    def prefixed_hex() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            _write_evm(out, "Tok", "def456", bin_hex="0x6080")
+            diags = diagnostics("evm", out, entries_by_target=injected, pin_count=False)
+            if not diags:
+                raise AssertionError("expected failure")
+            _require(diags, "not hex", "prefixed_hex")
+
+    def signed_hex() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            _write_evm(out, "Tok", "def456", bin_hex="+6080")
+            diags = diagnostics("evm", out, entries_by_target=injected, pin_count=False)
+            if not diags:
+                raise AssertionError("expected failure")
+            _require(diags, "not hex", "signed_hex")
 
     def unexpected_kind() -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -412,7 +493,11 @@ def self_test() -> int:
     case("orphan", orphan)
     case("empty_tree", empty_tree)
     case("bad_elf", bad_elf)
+    case("truncated_elf", truncated_elf)
+    case("bad_machine", bad_machine)
     case("odd_hex", odd_hex)
+    case("prefixed_hex", prefixed_hex)
+    case("signed_hex", signed_hex)
     case("unexpected_kind", unexpected_kind)
     case("synthetic_registry", synthetic_registry)
 
