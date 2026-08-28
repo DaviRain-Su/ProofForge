@@ -70,7 +70,7 @@ instruction 增加 recipe opcode。
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
-| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical initialization | PDA/System/Token facade 尚未统一；部分能力仍以具体 component 暴露；bounded transient container source contract 尚未完成 |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | PDA/System/Token facade 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade；`Access` owner/running gates 与 fixed single-pending two-step ownership | scalar/struct/fixed-array layout facade；bounded roles/reentrancy 与 token/NFT reusable components |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -258,8 +258,11 @@ Component 或 Emit recipe，也没有把 heap pointer、Lean `Array`/`Map` 放�
 [R3-001](tasks/r3-001.md)。R3-002 继续提供 compile-time fixed Account/Signer handles，并把
 bounded remaining-account view 移入同一 SDK owner；Trio 与 AccountView 独立消费，旧
 `AccountView.Source` 不再保留第二套 API。既有 account leaves 只接受 compiler-proven static
-index，runtime account geometry 仍 fail closed；详见 [R3-002](tasks/r3-002.md)。R3 尚未完成；
-bounded transient Scratch 与 PDA/System/Token facade 仍待完成。
+index，runtime account geometry 仍 fail closed；详见 [R3-002](tasks/r3-002.md)。R3-003 又直接
+复用 `Heap.State`、`Scratch.Plan` 与既有 invocation-only lifetime，提供 bounded heap buffer、
+fixed vector、byte writer 和 signed-CPI codec composition；BatchRecorder/CPI 两个真实 consumer
+保持产物逐字节不变，没有平行 allocator/plan 或持久 pointer；详见
+[R3-003](tasks/r3-003.md)。R3 尚未完成；PDA/System/Token facade 仍待完成。
 
 ### R4 — EVM Runtime
 

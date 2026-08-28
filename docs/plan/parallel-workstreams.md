@@ -1,6 +1,6 @@
 # Runtime / SDK 并行开发执行图
 
-> 基线：R1-010、SVM-SDK-1 和 EVM-SDK-1 已集成到本地 `main`；远端同步由 coordinator
+> 基线：R1-010、SVM-SDK-1/2 和 EVM-SDK-1/2 已集成到本地 `main`；远端同步由 coordinator
 > 单独执行。本文只拆 ownership、依赖和验收，不改变
 > [Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md) 的能力边界。
 
@@ -95,7 +95,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-RT-2a instruction layout（已集成）** | SVM-RT-1 | typed bounded scratch bank + instruction/metas/data/infos/signer-tail plan；1,024-byte OOM、alignment、duplicate region 在 emission 前 fail closed；见 R2-002 |
 | **SVM-RT-2b instruction effects（已集成）** | SVM-RT-2a | bounded return data、multi-seed PDA/CPI meta/signer seeds；复用同一 scratch plan，未知 shape fail closed；见 R2-003 |
 | **SVM-RT-3 Token-2022 TLV（envelope 已集成）** | SVM-RT-1/2 | allocation-free scalar cursor/bitmap 与 closed end/padding specialization 已落地；transfer-fee、hook/account requirements 继续按语义分片，未知 extension 不走 classic 82/165-byte path；见 R2-004 |
-| **SVM-SDK-2 scratch** | SVM-RT-2 | invocation-local bounded Vec/byte writer/codec buffer，显式 capacity/OOM/lifetime；不能持久化 pointer |
+| **SVM-SDK-2 transient（已集成）** | SVM-RT-2 | 直接复用 Heap/Scratch 的 invocation-local bounded buffer/fixed Vec/byte writer/signed-CPI codec composition；显式 capacity/alignment/frame/OOM，不复制 allocator/plan/lifetime，不能持久化 pointer；见 R3-003 |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
 | **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
 | **EVM-SDK-3 assets** | EVM-SDK-1/2、EVM-RT-2 | reusable fungible、ERC-721、bounded ERC-1155 core；每个组件至少两个 consumer |

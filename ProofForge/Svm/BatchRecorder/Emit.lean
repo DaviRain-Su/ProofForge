@@ -139,9 +139,10 @@ private def emitFlushBody (context : Context) (config : BatchRecorder.Config)
 
 private def emitBegin (context : Context) (label : String) (config : BatchRecorder.Config)
     (header : Array (BatchRecorder.Word Ops.Val)) (bump : Ops.Val) : Except String String := do
+  let writer := config.transientWriter
   let loadBump ← context.loadValue bump 8 0 s!"{label}_bump"
   let headerBytes ← emitWords context label false 1 1 header
-  return emitHeapAllocate label config.maxBytes ++ loadBump ++ s!"\
+  return emitHeapAllocate label writer.buffer.capacityBytes ++ loadBump ++ s!"\
   ldxdw r1, [r10 - 8]
   stxdw [r10 - {BatchRecorder.bumpStack}], r1
   ldxdw r9, [r10 - {BatchRecorder.pointerStack}]
@@ -160,6 +161,7 @@ private def emitBegin (context : Context) (label : String) (config : BatchRecord
 
 private def emitAppend (context : Context) (label : String) (config : BatchRecorder.Config)
     (enabled : Ops.Val) (record : Array (BatchRecorder.Word Ops.Val)) : Except String String := do
+  let writer := config.transientWriter
   let recordBytes := BatchRecorder.wordsByteSize record
   let loadEnabled ← context.loadValue enabled 8 0 s!"{label}_enabled"
   let flush ← emitFlushBody context config s!"{label}_auto"
@@ -171,7 +173,7 @@ private def emitAppend (context : Context) (label : String) (config : BatchRecor
   jge r1, {config.maxRecords}, recorder_append_flush_{label}
   ldxdw r1, [r10 - {BatchRecorder.lengthStack}]
   add64 r1, {recordBytes}
-  jgt r1, {config.maxBytes}, recorder_append_flush_{label}
+  jgt r1, {writer.buffer.capacityBytes}, recorder_append_flush_{label}
   ja recorder_append_ready_{label}
 recorder_append_flush_{label}:
 {flush}recorder_append_ready_{label}:
