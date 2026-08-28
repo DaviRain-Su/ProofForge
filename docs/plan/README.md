@@ -168,6 +168,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [r1-009](tasks/r1-009.md) | done | SVM fixed-capacity / canonical variable-length Borsh input binding |
 | [p-001](tasks/p-001.md) | done | Extract.lean 三段拆分（Lexical / Decode） |
 | [p-002](tasks/p-002.md) | done | 第一批 kernel 证明：合约性质定理 |
+| [p-003](tasks/p-003.md) | done | asVal 巨石拆分 + Tree 结构不变量证明 |
 
 
 积压：[backlog.md](backlog.md)

@@ -858,4 +858,115 @@ def removeNode (s : State) (k : UInt64) : Except Error (State × UInt64) :=
     let released := releaseRemoved rootBlack removedAddress
     .ok (released, removedAddress)
 
+section Proofs
+
+/-! ## 第二批 kernel 证明：N=4 分配器与旋转的结构不变量
+
+对上面 `@[pf_entry]` 函数的普通 kernel-checked 性质。旋转不分配/不释放节点，
+分配器成功路径恰好占用一个槽；这些都是 Sokoban 组合正确性的核心前提。 -/
+
+private theorem vec_set_self {α : Type} [Inhabited α] {n : Nat} (xs : Vector α n)
+    (i : Nat) (x : α) (hi : i < n) : (xs.set i x hi)[i]! = x := by
+  show (xs.set i x hi)[i]?.get! = x
+  have h2 : (xs.set i x hi)[i]? = some x := by simp
+  rw [h2]
+  rfl
+
+private theorem u64_succ_bound {a : UInt64} (h : a < 4) : (a + 1).toNat ≤ 4 := by
+  have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+  have hnat : a.toNat < 4 := h
+  have hone : UInt64.toNat 1 = 1 := rfl
+  rw [UInt64.toNat_add, h2, hone]
+  have hlt : a.toNat + 1 < 4294967296 * 4294967296 := by omega
+  rw [Nat.mod_eq_of_lt hlt]
+  omega
+
+theorem init_state (x : UInt64) :
+    getRoot (init x) = 0 ∧ getSize (init x) = 0 ∧ getBumpIndex (init x) = 1 := by
+  simp [getRoot, getSize, getBumpIndex, init]
+
+theorem setHead_roundtrip (s : State) (v : UInt64) {t : State} {r : UInt64}
+    (h : setHead s v = .ok (t, r)) : getHead t = v := by
+  unfold setHead at h
+  unfold getHead at *
+  split at h
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    simp
+  · simp at h
+
+theorem setAt_roundtrip (s : State) (i v : UInt64) {t : State} {r : UInt64}
+    (h : setAt s i v = .ok (t, r)) : getAt t i = v := by
+  unfold setAt at h
+  split at h
+  · rename_i hbound
+    simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    have hlt : i < 4 := hbound
+    unfold getAt
+    rw [if_pos hlt, vec_set_self]
+  · simp at h
+
+theorem allocNode_size (s : State) (k v : UInt64) {t : State} {a : UInt64}
+    (h : allocNode s k v = .ok (t, a)) : t.size = s.size + 1 ∧ t.size ≤ 4 := by
+  unfold allocNode at h
+  split at h
+  · rename_i hsz
+    repeat (first
+      | split at h
+      | simp only [] at h
+      | simp at h
+      | (obtain ⟨rfl, rfl⟩ := h
+         refine ⟨rfl, ?_⟩
+         show (s.size + 1).toNat ≤ 4
+         exact u64_succ_bound hsz)
+      | rfl)
+  · simp at h
+
+theorem rotateLeft_size (s : State) (x : UInt64) {t : State} {y : UInt64}
+    (h : rotateLeft s x = .ok (t, y)) : t.size = s.size := by
+  unfold rotateLeft at h
+  repeat (first
+    | split at h
+    | simp only [] at h
+    | simp at h
+    | (obtain ⟨rfl, rfl⟩ := h; rfl)
+    | rfl)
+
+theorem rotateRight_size (s : State) (x : UInt64) {t : State} {y : UInt64}
+    (h : rotateRight s x = .ok (t, y)) : t.size = s.size := by
+  unfold rotateRight at h
+  repeat (first
+    | split at h
+    | simp only [] at h
+    | simp at h
+    | (obtain ⟨rfl, rfl⟩ := h; rfl)
+    | rfl)
+
+theorem rotateLeft_root (s : State) (x : UInt64) {t : State} {y : UInt64}
+    (h : rotateLeft s x = .ok (t, y)) : t.root = s.root ∨ t.root = y := by
+  unfold rotateLeft at h
+  repeat (first
+    | split at h
+    | simp only [] at h
+    | simp at h
+    | (obtain ⟨rfl, rfl⟩ := h; first
+         | exact Or.inl rfl
+         | exact Or.inr rfl)
+    | rfl)
+
+theorem rotateRight_root (s : State) (x : UInt64) {t : State} {y : UInt64}
+    (h : rotateRight s x = .ok (t, y)) : t.root = s.root ∨ t.root = y := by
+  unfold rotateRight at h
+  repeat (first
+    | split at h
+    | simp only [] at h
+    | simp at h
+    | (obtain ⟨rfl, rfl⟩ := h; first
+         | exact Or.inl rfl
+         | exact Or.inr rfl)
+    | rfl)
+
+end Proofs
+
 end Examples.Tree

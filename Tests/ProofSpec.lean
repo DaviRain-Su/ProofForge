@@ -2,6 +2,7 @@ import ProofForge
 import Examples.Counter
 import Examples.Capped
 import Examples.Token
+import Examples.Tree
 
 /-!
 # 第一批 kernel 证明的连通性抽查
@@ -23,6 +24,9 @@ import Examples.Token
 - `Examples.Token.transfer_preserves_supply` / `mint_supply_effect`
   / `burn_supply_effect` / `transferFrom_preserves_supply`
   / `approve_preserves_supply`：`propext`（部分含 `Quot.sound`）
+- `Examples.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
+  / `allocNode_size` / `rotateLeft_size` / `rotateRight_size`
+  / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
 -/
 
 namespace Tests.ProofSpec
@@ -39,6 +43,12 @@ open Examples.Counter
   match decrement ({ value := 2 } : State) 5 with
   | .error .overflow => true
   | .ok _ => false
+
+-- Tree：旋转不改变节点数、分配器成功恰好占一槽
+#guard
+  match Examples.Tree.allocNode (Examples.Tree.init 0) 7 7 with
+  | .ok (t, a) => Examples.Tree.getSize t == 1 && a == 1
+  | .error _ => false
 
 -- 定理连通性：`increment_ok` 的返回值一致性分量可直接复用
 example (s : State) (d : UInt64) (t : State) (r : UInt64)
