@@ -33,13 +33,12 @@ UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
 R3-005 non-seeded System facade completion、
-R5-001 EVM Access foundation 和
-R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
-完成。
+R5-001 EVM Access foundation、R5-002 EVM static storage foundation 和
+R5-003 bounded static roles；这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 287 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 289 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 308/308（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -267,14 +266,21 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
   独立复用；replacement 会使旧 nominee 失效，accept/cancel 显式清零，不使用 hashed
   nomination map、隐藏 write、magic slot 或 policy Emit case。Extractor 同时修复 direct
-  one-field State store 与 wide-leaf path 误判；详见 `docs/plan/tasks/r5-001.md`。Roles、
-  reentrancy、asset/NFT components 仍未完成。
+  one-field State store 与 wide-leaf path 误判；详见 `docs/plan/tasks/r5-001.md`。
 
 - R5-002 EVM static storage declaration foundation 已完成：`Evm.Sdk.Storage.Static` 在抽取期
   分配 scalar、Address/wide、flat record、fixed array/record-array typed handles；声明表与
   两个独立 contract 的真实 State flattening 逐槽对照，Anvil 直接验证 constructor 和
   targeted mutation。它不改变 hashed-map base，不增加 runtime allocator、隐藏 storage
   write 或 Component/Emit recipe；详见 `docs/plan/tasks/r5-002.md`。
+
+- R5-003 EVM bounded static roles 已完成：`Evm.Sdk.Roles.Set2` 对两个显式 Address slot
+  提供 membership/grant/revoke 纯决策；EvmStaticCounter/EvmStaticRoster 分别以 operator/writer
+  角色独立复用。权限与错误策略留在 application，所有写入仍是 literal State field update；
+  不使用 Vector、hashed role map、runtime slot allocator、隐藏 write 或新 Ops/IR/Emit case。
+  Anvil 覆盖 zero/duplicate/full/nonmember/unauthorized/closed policy；indexed Address return
+  在 extraction 支持安全 OOB-zero 前不发布。详见 `docs/plan/tasks/r5-003.md`。Reentrancy 与
+  asset/NFT components 仍未完成。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
@@ -327,7 +333,7 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 287 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 289 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 308/308，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。

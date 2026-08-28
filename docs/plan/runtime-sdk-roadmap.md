@@ -72,7 +72,7 @@ instruction 增加 recipe opcode。
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、static ASCII PDA、non-seeded System transfer/create/assign/allocate/advanceNonce、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Seeded System 与 Token/Token-2022 facade 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
-| EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade；`Access` owner/running gates 与 fixed single-pending two-step ownership | scalar/struct/fixed-array layout facade；bounded roles/reentrancy 与 token/NFT reusable components |
+| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` scalar/record/fixed-array declarations、Context/Immutable/Event/Revert/closed-call facade；`Access` owner/running/two-step ownership；`Roles.Set2` fixed-capacity membership/grant/revoke decisions | reentrancy 与 token/NFT reusable components；dynamic indexed Address return |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -107,8 +107,8 @@ Array v1 canonical dynamic input binding，以独立 `Evm.Codec.Emit` plan inter
 offset/length/tail/padding，不统一两个 target 的物理 layout，也不增加 array Ops 或 main-CFG
 Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固定两套 target plan
 的 source projection conformance，但不统一 Borsh bytes 与 ABI words。SVM-RT-1 bounded
-account view、R5-001 Access foundation 与 R5-002 static storage declarations 均已集成；两个
-独立 contract 分别复用 Access 和 storage declaration contracts。SVM-RT-2a 已把 CPI
+account view、R5-001 Access foundation、R5-002 static storage declarations 与 R5-003 bounded
+roles 均已集成；独立 contract 分别复用这些 SDK contracts。SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
 return-data/multi-seed signer-tail geometry；SVM-RT-3 第一刀已建立 Token-2022 bounded TLV
 envelope，真实 extension 仍按语义分片开放。EVM-RT-2a 也已统一
@@ -120,7 +120,8 @@ signer；UInt256 div/mod 也已固定 checked 零除 revert。下一刀继续剩
 [R2-004](tasks/r2-004.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
 [R4-004](tasks/r4-004.md)、
-[E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。
+[E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md) 和
+[R5-003](tasks/r5-003.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -288,6 +289,12 @@ contract 的普通 typed State flattening 与 declaration leaf table 逐槽一�
 allocator，也不改变 hashed-map namespace 或增加 Ops/IR/Component/Emit recipe；详见
 [R5-002](tasks/r5-002.md)。
 
+R5-003 已在 static declaration 之上提供 `Roles.Set2`：capacity 2 的两个显式 Address slot
+只做 membership/vacancy/grant/revoke slot 决策，两个 consumer 自己拥有权限、terminal 与
+literal field write。没有 persistent SDK object、Vector、hashed role map、runtime allocator
+或 target recipe；indexed Address return 因 OOB-zero extraction 尚不可靠而继续 fail closed。
+详见 [R5-003](tasks/r5-003.md)。
+
 R4-001 已完成 EVM-RT-2a typed call-result contract：`Evm.CallResult` 统一 success-only、
 exact-one-word 与 ERC-20 empty-or-nonzero-word policy，最多复制 32 bytes returndata；
 `ClosedCall.Emit` 的 transfer/approve/permit/balance/allowance/WETH/router paths 统一消费该
@@ -338,13 +345,16 @@ event topic 或 error selector 魔数。
 R5-001 已完成 Access foundation：`Evm.Sdk.Access` 提供 owner/running gates 与固定
 single-pending Address 的 two-step ownership；TwoStepCounter 和 Credits 独立复用它，替换
 nominee 会立即使旧 nominee 失效，accept/cancel 显式清零。它没有 Access opcode、隐藏
-storage write、hashed nomination namespace 或 magic guard。Roles、reentrancy 和 assets 仍受
-上述 Runtime/storage 依赖约束；详见 [R5-001](tasks/r5-001.md)。
+storage write、hashed nomination namespace 或 magic guard。详见 [R5-001](tasks/r5-001.md)。
 
 R5-002 已完成 compile-time static storage declaration foundation。它给后续 roles、asset
 records 和 fixed collections 提供可验证 handles，但当前 runtime 访问仍由普通 typed State
 field extraction 拥有；不能把 descriptor 当成隐藏 `sload`/`sstore` API。EVM-RT-2 完成前，
 reentrancy 与 arbitrary-call-dependent policy 继续 fail closed。
+
+R5-003 已完成 bounded static roles：`Roles.Set2` 封装固定两个 Address slot 的纯策略判断，
+EvmStaticCounter/EvmStaticRoster 用不同权限和业务策略组合它，并保持每个 storage write 显式。
+动态角色集合、indexed Address return、reentrancy 与 assets 仍 fail closed。
 
 ### R6 — 双目标验收
 
