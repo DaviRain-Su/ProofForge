@@ -4,6 +4,8 @@
 > [backlog.md](backlog.md) 记录已经落地的证据和当前 Phoenix 切片。
 > 多 agent 并行时的 write set、shared-lock 和交付合同见
 > [并行开发执行图](parallel-workstreams.md)。
+> “达到主流环境能力”的完整定义和 F0–F3 优先级见
+> [mainstream parity baseline](mainstream-parity.md)。
 
 ## 1. 结论和边界
 

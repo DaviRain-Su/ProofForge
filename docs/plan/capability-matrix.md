@@ -2,6 +2,8 @@
 
 > Ownership freeze: 2026-08-27. This matrix records the current source surface and the owner of
 > every lowering boundary. It is descriptive, not a promise that unsupported rows are available.
+> 当前实现与 Solana SDK / Solidity + OpenZeppelin 的完整差距和优先级另见
+> [mainstream parity baseline](mainstream-parity.md)。
 
 ## 1. Rules
 

@@ -3,6 +3,7 @@
 补全依据：[analysis/authority.md](analysis/authority.md)。
 缺口阶段：[analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)。
 后续权威排期：[Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md)。
+主流能力目标：[Solana SDK / Solidity + OpenZeppelin parity baseline](mainstream-parity.md)。
 
 双目标路线固定为 `R0 ownership → R1 shared protocol values → R2 SVM Runtime →
 R3 SVM SDK → R4 EVM Runtime → R5 EVM SDK → R6 cross-target hardening`。共享普通 Lean、
@@ -35,6 +36,10 @@ R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundati
 R3-005 non-seeded System facade completion、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation 和
 R5-003 bounded static roles；这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
+R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
+SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
+`docs/plan/tasks/r0-002.md`。Vector/Map/allocator 必须分别声明 boundary、invocation-local、
+SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同名 host 类型代替能力证明。
 
 ## 已做
 
