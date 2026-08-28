@@ -20,16 +20,12 @@ namespace Examples.PhoenixV1Profile
 
 open ProofForge.Svm.Runtime
 open ProofForge.Svm
+open ProofForge.Svm.Sdk
 
 def phoenixProgramOwner0 : UInt64 := 11497730047637682189
 def phoenixProgramOwner1 : UInt64 := 2178672117088209453
 def phoenixProgramOwner2 : UInt64 := 16206118848139790065
 def phoenixProgramOwner3 : UInt64 := 1630085884070697098
-
-def splTokenProgram0 : UInt64 := 10637895772709248262
-def splTokenProgram1 : UInt64 := 12428223917890587609
-def splTokenProgram2 : UInt64 := 10463932726783620124
-def splTokenProgram3 : UInt64 := 12178014311288245306
 
 def marketHeaderDiscriminant : UInt64 := 8167313896524341111
 def seatDiscriminant : UInt64 := 2002603505298356104
@@ -87,13 +83,6 @@ def key4Before
 def key4Equal
     (lhs0 lhs1 lhs2 lhs3 rhs0 rhs1 rhs2 rhs3 : UInt64) : Bool :=
   lhs0 = rhs0 && lhs1 = rhs1 && lhs2 = rhs2 && lhs3 = rhs3
-
-def splTokenProgramValidAt (account : UInt64) : UInt64 :=
-  if isExecutable account = 1 &&
-    key4Equal
-      (accKeyWord account 0) (accKeyWord account 1)
-      (accKeyWord account 2) (accKeyWord account 3)
-      splTokenProgram0 splTokenProgram1 splTokenProgram2 splTokenProgram3 then 1 else 0
 
 def reduceStatusValidAt (marketAccount : UInt64) : UInt64 :=
   let status := accDataWord marketAccount 1
@@ -1550,7 +1539,7 @@ def cancelWithdrawContextValid : UInt64 :=
     0
   else if reduceStatusValidAt 2 = 0 then
     0
-  else if splTokenProgramValidAt 8 = 0 then
+  else if Program.classicToken.validWord (Account.Handle.at 8) = 0 then
     0
   else if accDataLen 4 ≠ 165 || !key4Equal
       (accOwnerWord 4 0) (accOwnerWord 4 1) (accOwnerWord 4 2) (accOwnerWord 4 3)
@@ -2609,7 +2598,7 @@ def headerSeats (_s : State) : UInt64 :=
   accDataWord 1 4
 
 attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32 packUInt32
-  key4Before key4Equal splTokenProgramValidAt reduceStatusValidAt
+  key4Before key4Equal reduceStatusValidAt
   thirdRoot thirdNode1Links thirdNode1ParentColor thirdNode2Links
   thirdNode2ParentColor thirdNode3Links thirdNode3ParentColor
   allocatorHeaderValid threeAllocatorHeadersValid nodeIndexOrNullValid boundedBidRootPrice

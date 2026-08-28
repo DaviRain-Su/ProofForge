@@ -1,4 +1,6 @@
 import ProofForge.Svm.Sdk.Account
+import ProofForge.Svm.Sdk.Pubkey
+import ProofForge.Svm.Sdk.Program
 import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.Queue
 import ProofForge.Svm.Sdk.Pda
@@ -23,8 +25,9 @@ for invocation-local fixed vectors, byte writers, and composed codecs rather tha
 parallel allocator or lifetime. No native pointer or invocation-heap collection crosses the
 contract boundary.
 
-`Sdk.Pda`, `Sdk.System`, `Sdk.Token`, `Sdk.AssociatedToken`, and `Sdk.Memo` provide
-compiler-erased names for current static program effects. Applications no longer repeat CPI tags,
-account metas, signer seeds, or instruction-word recipes; the existing Runtime/IR verifier still
-owns their target validation.
+`Sdk.Pubkey` / `Sdk.Program` and the packed views in `Sdk.Token` provide allocation-free full-key,
+canonical program-id, owner, and base-state validation. `Sdk.Pda`, `Sdk.System`, `Sdk.Token`,
+`Sdk.AssociatedToken`, and `Sdk.Memo` provide compiler-erased names for current static program
+effects. Applications no longer repeat key limbs, CPI tags, account metas, signer seeds, or
+instruction-word recipes; the existing Runtime/IR verifier still owns their target validation.
 -/

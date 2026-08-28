@@ -14,6 +14,7 @@
 | `Svm.Heap` | 32–256 KiB transient downward bump allocator 模型 | account data allocator、持久 pointer、无限 heap |
 | `Svm.AccountStorage` | 固定 Region/Field/index、bounded account-resident map/queue/tree routine | transient heap object、runtime geometry |
 | `Svm.AccountView` | compile-time `base`/`capacity` remaining-account window、runtime-safe index、read-only header/data 访问 | 写路径、persistent pointer、runtime geometry |
+| `Svm.Sdk.Pubkey/Program/Token` | compiler-erased 32-byte key、canonical program id、exact SPL base-state view | 链上 base58、account copy、Token-2022 extension 猜测 |
 | `Svm.BatchRecorder` | bounded begin/append/finish、SDK heap payload、dynamic signed self-CPI sink | persistent event container、source-visible pointer |
 | `Svm.Component` | 稳定 Query/Call bridge、effects/value traversal、component-owned emitter/scratch boundary | 业务协议语义、任意动态分配 |
 | `Svm.IR` | SVM-only `Op`、account-data byte offset、Vector byte stride | EVM storage slot / EVM effect |
@@ -49,7 +50,9 @@ source semantic helper
 切换到按 runtime `NUM_ACCOUNTS` 遍历、由 `maxTxAccountLocks` 硬上界约束的 walk 合同，并把
 instruction data / program id 定位到实际最后一个账户之后；不使用 view 的程序保持原字节。
 `Svm.Sdk.Account` 提供 fixed Account/Signer 和 bounded remaining-account `pf_inline` 句柄，
-抽取期整体擦除。bounded view 是只读的。
+抽取期整体擦除。bounded view 是只读的。`Svm.Sdk.Pubkey/Program` 以四个 little-endian word
+复用同一 key/owner leaves，`Token.AccountState/MintState` 再组合 exact 165/82-byte layout，
+不创建 byte Array、heap parser 或协议专用 emitter。
 
 `AccountStorage` 是第一个 component backend：它组合 compile-time `Region/Field`、显式
 zero/one-based index、checked load/store 与有界 tree walk，而不是把每种容器做成新的底层

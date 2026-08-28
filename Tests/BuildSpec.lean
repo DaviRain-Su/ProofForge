@@ -52,6 +52,7 @@ import Examples.Gate
 import Examples.Nonce
 import Examples.TokenOwner
 import Examples.TokenMs
+import Examples.TokenStateView
 import Examples.SelfLog
 import Examples.RawEntry
 import Examples.Phoenix
@@ -149,6 +150,8 @@ import Examples.PhoenixV1Profile
 #pf_build Examples.TokenOwner
 
 #pf_build Examples.TokenMs
+
+#pf_build Examples.TokenStateView
 
 #pf_build Examples.SelfLog
 

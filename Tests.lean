@@ -95,6 +95,7 @@ import Tests.SvmTransientSpec
 import Tests.SvmSdkPdaSystemSpec
 import Tests.SvmSdkSystemSpec
 import Tests.SvmSdkTokenSpec
+import Tests.SvmSdkTokenStateSpec
 import Tests.SvmSdkProgramSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec

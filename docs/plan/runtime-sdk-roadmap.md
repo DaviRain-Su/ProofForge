@@ -72,7 +72,7 @@ instruction 增加 recipe opcode。
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
-| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、CPI-relative account handles、static ASCII PDA、non-seeded/generic ASCII-seeded System、classic Token fixed/role-typed signed transfer、static role-typed ATA Create/CreateIdempotent/RecoverNested、bounded static ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo、Token state/program-id policy 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator，以及 invocation-local buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、`Storage.Static` scalar/record/fixed-array declarations、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/fixed-router facade；`Access` owner/two-step ownership；`Roles.Set2` fixed-capacity membership/grant/revoke；`Pausable` explicit fail-closed flag；`Fungible.Balances` O(1) checked movement；`Fungible.Allowances` explicit pair-handle checked allowance policy | typed pause events、reentrancy、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -129,8 +129,8 @@ signer，EVM-RT-2e 已提供 schema-resolved ordered static UInt64 store；UInt2
 [R4-004](tasks/r4-004.md)、[R4-005](tasks/r4-005.md)、
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
-[R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md) 和
-[R3-009](tasks/r3-009.md)。
+[R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md)、
+[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -291,9 +291,12 @@ ASCII facade；共享 policy 在 Extract 和 exact Memo geometry verifier fail c
 CPI words 不受影响，Memo 产物不变，详见 [R3-009](tasks/r3-009.md)。R3-010 已以
 `CreateAccounts` / `RecoverNestedAccounts` 收口官方 ATA Create/CreateIdempotent/RecoverNested，
 fixed 与 caller-selected geometry 都直接组合 generic invoke，并删除 ATA 专用 Runtime wrapper；
-Ata canonical IR 与产物不变，详见 [R3-010](tasks/r3-010.md)。R3 尚未完成；rent-aware resize、
-runtime-selected ATA/Memo geometry、UTF-8 Memo、Token state/program-id policy 与 Token-2022
-extension semantics 仍待完成。
+Ata canonical IR 与产物不变，详见 [R3-010](tasks/r3-010.md)。R3-011 又把 canonical
+System/Token/Token-2022/ATA/Memo identity 与 exact 82/165-byte SPL base-state parsing 收口到
+`Svm.Sdk.Pubkey` / `.Program` / `.Token`；完整 key/owner、state/COption/bool tags 和 unaligned
+supply 都直接组合既有 checked account leaves，Phoenix 删除本地 Token id limbs 后 digest
+不变，详见 [R3-011](tasks/r3-011.md)。R3 尚未完成；rent-aware resize、runtime-selected
+ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 
 ### R4 — EVM Runtime
 

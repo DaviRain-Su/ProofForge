@@ -1,4 +1,5 @@
 import ProofForge.Svm.Sdk.Account
+import ProofForge.Svm.Sdk.Program
 
 /-!
 # SVM SDK classic SPL Token facade
@@ -23,6 +24,171 @@ geometry, alternate program ids, and Token-2022 extension semantics remain fail 
 -/
 
 namespace ProofForge.Svm.Sdk.Token
+
+/-! ## Allocation-free packed state views -/
+
+/-- Which official SPL Token program owns an exact base-state account. -/
+inductive Flavor where
+  | classic
+  | token2022
+  deriving BEq, Repr, Inhabited
+
+@[pf_inline] def Flavor.programId : Flavor → Program.Id
+  | .classic => Program.classicToken
+  | .token2022 => Program.token2022
+
+@[pf_inline] def Flavor.owns
+    (flavor : Flavor) (program account : Account.Handle) : Bool :=
+  match flavor with
+  | .classic => Program.classicToken.owns program account
+  | .token2022 => Program.token2022.owns program account
+
+/--
+Zero-copy view of one exact 165-byte SPL Token Account plus its executable Token program account.
+The descriptor contains only compile-time account handles and a program flavor. Token-2022
+extension-bearing accounts deliberately do not pass this exact base view; they require the bounded
+TLV policy owned by `Svm.Cpi.TokenTlv`.
+-/
+structure AccountState where
+  account : Account.Handle
+  tokenProgram : Account.Handle
+  flavor : Flavor
+  deriving BEq, Repr, Inhabited
+
+attribute [pf_inline] AccountState.account AccountState.tokenProgram AccountState.flavor
+
+@[pf_inline] def AccountState.classic
+    (account tokenProgram : Account.Handle) : AccountState :=
+  { account, tokenProgram, flavor := .classic }
+
+@[pf_inline] def AccountState.token2022
+    (account tokenProgram : Account.Handle) : AccountState :=
+  { account, tokenProgram, flavor := .token2022 }
+
+def AccountState.wellFormed (view : AccountState) (accountLimit : Nat := 64) : Bool :=
+  view.account.wellFormed accountLimit && view.tokenProgram.wellFormed accountLimit
+
+/-- Packed `Account.state` byte at absolute offset 108. -/
+@[pf_inline] def AccountState.state (view : AccountState) : UInt64 :=
+  match view with
+  | ⟨account, _, _⟩ => (account.dataWord 13 >>> 32) &&& 0xff
+
+/-- Complete fixed-layout/owner/program/state-enum validation. -/
+@[pf_inline] def AccountState.packedValid (view : AccountState) : Bool :=
+  match view with
+  | ⟨account, tokenProgram, flavor⟩ =>
+      let state := (account.dataWord 13 >>> 32) &&& 0xff
+      account.dataLen = 165 && flavor.owns tokenProgram account && state ≤ 2
+
+/-- Official `IsInitialized`: both Initialized and Frozen are initialized states. -/
+@[pf_inline] def AccountState.isInitialized (view : AccountState) : Bool :=
+  match view with
+  | ⟨account, tokenProgram, flavor⟩ =>
+      let state := (account.dataWord 13 >>> 32) &&& 0xff
+      account.dataLen = 165 && flavor.owns tokenProgram account &&
+        (state = 1 || state = 2)
+
+/-- True only for the ordinary Initialized state, not Frozen. -/
+@[pf_inline] def AccountState.isUsable (view : AccountState) : Bool :=
+  match view with
+  | ⟨account, tokenProgram, flavor⟩ =>
+      let state := (account.dataWord 13 >>> 32) &&& 0xff
+      account.dataLen = 165 && flavor.owns tokenProgram account && state = 1
+
+@[pf_inline] def AccountState.isFrozen (view : AccountState) : Bool :=
+  match view with
+  | ⟨account, tokenProgram, flavor⟩ =>
+      let state := (account.dataWord 13 >>> 32) &&& 0xff
+      account.dataLen = 165 && flavor.owns tokenProgram account && state = 2
+
+/-- Packed `Account.amount` at absolute offset 64. -/
+@[pf_inline] def AccountState.amount (view : AccountState) : UInt64 :=
+  match view with
+  | ⟨account, _, _⟩ => account.dataWord 8
+
+/-- Compare the packed 32-byte mint field at offset 0 with a selected mint account key. -/
+@[pf_inline] def AccountState.mintIs
+    (view : AccountState) (mint : Account.Handle) : Bool :=
+  match view with
+  | ⟨account, _, _⟩ =>
+      account.dataWord 0 = mint.keyWord 0 && account.dataWord 1 = mint.keyWord 1 &&
+        account.dataWord 2 = mint.keyWord 2 && account.dataWord 3 = mint.keyWord 3
+
+/-- Compare the packed 32-byte authority/owner field at offset 32 with an account key. -/
+@[pf_inline] def AccountState.authorityIs
+    (view : AccountState) (authority : Account.Handle) : Bool :=
+  match view with
+  | ⟨account, _, _⟩ =>
+      account.dataWord 4 = authority.keyWord 0 &&
+        account.dataWord 5 = authority.keyWord 1 &&
+        account.dataWord 6 = authority.keyWord 2 &&
+        account.dataWord 7 = authority.keyWord 3
+
+/-- Zero-copy view of one exact 82-byte SPL Mint plus its executable Token program account. -/
+structure MintState where
+  account : Account.Handle
+  tokenProgram : Account.Handle
+  flavor : Flavor
+  deriving BEq, Repr, Inhabited
+
+attribute [pf_inline] MintState.account MintState.tokenProgram MintState.flavor
+
+@[pf_inline] def MintState.classic
+    (account tokenProgram : Account.Handle) : MintState :=
+  { account, tokenProgram, flavor := .classic }
+
+@[pf_inline] def MintState.token2022
+    (account tokenProgram : Account.Handle) : MintState :=
+  { account, tokenProgram, flavor := .token2022 }
+
+def MintState.wellFormed (view : MintState) (accountLimit : Nat := 64) : Bool :=
+  view.account.wellFormed accountLimit && view.tokenProgram.wellFormed accountLimit
+
+/-- Four-byte `COption<Pubkey>` tag at offset 0. -/
+@[pf_inline] def MintState.mintAuthorityTag (view : MintState) : UInt64 :=
+  match view with
+  | ⟨account, _, _⟩ => account.dataWord 0 &&& 0xffffffff
+
+/-- Reconstruct the unaligned little-endian supply at bytes 36..43. -/
+@[pf_inline] def MintState.supply (view : MintState) : UInt64 :=
+  match view with
+  | ⟨account, _, _⟩ =>
+      (account.dataWord 4 >>> 32) ||| ((account.dataWord 5 &&& 0xffffffff) <<< 32)
+
+@[pf_inline] def MintState.decimals (view : MintState) : UInt64 :=
+  match view with
+  | ⟨account, _, _⟩ => (account.dataWord 5 >>> 32) &&& 0xff
+
+@[pf_inline] def MintState.initializedByte (view : MintState) : UInt64 :=
+  match view with
+  | ⟨account, _, _⟩ => (account.dataWord 5 >>> 40) &&& 0xff
+
+/-- Four-byte `COption<Pubkey>` tag at bytes 46..49. -/
+@[pf_inline] def MintState.freezeAuthorityTag (view : MintState) : UInt64 :=
+  match view with
+  | ⟨account, _, _⟩ =>
+      (account.dataWord 5 >>> 48) ||| ((account.dataWord 6 &&& 0xffff) <<< 16)
+
+/-- Exact base length, authenticated owner/program, valid COption tags, and canonical bool byte. -/
+@[pf_inline] def MintState.packedValid (view : MintState) : Bool :=
+  match view with
+  | ⟨account, tokenProgram, flavor⟩ =>
+      let authorityTag := account.dataWord 0 &&& 0xffffffff
+      let initialized := (account.dataWord 5 >>> 40) &&& 0xff
+      let freezeTag :=
+        (account.dataWord 5 >>> 48) ||| ((account.dataWord 6 &&& 0xffff) <<< 16)
+      account.dataLen = 82 && flavor.owns tokenProgram account &&
+        authorityTag ≤ 1 && freezeTag ≤ 1 && initialized ≤ 1
+
+@[pf_inline] def MintState.isInitialized (view : MintState) : Bool :=
+  match view with
+  | ⟨account, tokenProgram, flavor⟩ =>
+      let authorityTag := account.dataWord 0 &&& 0xffffffff
+      let initialized := (account.dataWord 5 >>> 40) &&& 0xff
+      let freezeTag :=
+        (account.dataWord 5 >>> 48) ||| ((account.dataWord 6 &&& 0xffff) <<< 16)
+      account.dataLen = 82 && flavor.owns tokenProgram account &&
+        authorityTag ≤ 1 && freezeTag ≤ 1 && initialized = 1
 
 /-- Role-named classic Token `TransferChecked` account geometry. Every handle is relative to the
 external-account region after state, exactly like Runtime CPI metas and `PdaSeed.accKey`; the
