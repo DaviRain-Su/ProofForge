@@ -1233,8 +1233,32 @@ private def renderWordGuard (indent name : String) (type : Core.Codec.Scalar) :
       return indent ++ "if and(" ++ name ++ ", " ++ Codec.byteMask (32 - bytes) ++
         ") { " ++ revert0 ++ " }" ++ nl
 
+private def renderTaggedGuards (indent argPrefix : String)
+    (plans : Array Codec.AbiInputPlan) : Except String String := do
+  let mut out := ""
+  let mut base := 0
+  for plan in plans do
+    for guard in plan.taggedGuards do
+      unless guard.tagWord < plan.wordCount &&
+          guard.payloadStart + guard.payloadWords ≤ plan.wordCount &&
+          !guard.activePayloadWords.isEmpty &&
+          guard.activePayloadWords.all (· ≤ guard.payloadWords) do
+        throw "evm/codec: malformed tagged tuple v1 guard"
+      let tag := argPrefix ++ toString (base + guard.tagWord)
+      out := out ++ indent ++ "if iszero(lt(" ++ tag ++ ", " ++
+        toString guard.activePayloadWords.size ++ ")) { " ++ revert0 ++ " }" ++ nl
+      for variant in [0:guard.activePayloadWords.size] do
+        let active := guard.activePayloadWords[variant]!
+        for lane in [active:guard.payloadWords] do
+          let payload := argPrefix ++ toString (base + guard.payloadStart + lane)
+          out := out ++ indent ++ "if and(eq(" ++ tag ++ ", " ++ toString variant ++
+            "), " ++ payload ++ ") { " ++ revert0 ++ " }" ++ nl
+    base := base + plan.wordCount
+  return out
+
 private def renderCtorPrelude (objectName : String) (paramCount : Nat)
-    (paramWidths : Array Core.Codec.Scalar) : Except String String := do
+    (paramWidths : Array Core.Codec.Scalar) (plans : Array Codec.AbiInputPlan) :
+    Except String String := do
     let argumentBytes := paramCount * 32
     let mut out :=
       "    if callvalue() { " ++ revert0 ++ " }" ++ nl ++
@@ -1249,7 +1273,7 @@ private def renderCtorPrelude (objectName : String) (paramCount : Nat)
       let some type := paramWidths[i]?
         | throw s!"evm/codec: missing constructor parameter metadata at {i}"
       out := out ++ (← renderWordGuard "    " ("ctor_arg" ++ toString i) type)
-    return out
+    return out ++ (← renderTaggedGuards "    " "ctor_arg" plans)
 
 /-- Bake constructor arguments that are not stored: up to two `uint64`
 (`imm0`/`imm1`) and two `address` (`immAddr`/`immAddr2`) values.
@@ -1287,6 +1311,11 @@ private def renderReceive (p : IR.Program) (m : IR.Method) : Except String Strin
 private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool) :
     Except String String := do
   let paramTypes ← m.resolvedParamTypes
+  let plans ←
+    if m.paramSchemas.isEmpty then pure #[]
+    else m.paramSchemas.mapM Codec.inputPlan
+  unless m.inputPolicy == IR.inputPolicyOf plans do
+    throw s!"evm/codec: input policy identity mismatch in {m.ixName}"
   let calldataBytes := 4 + m.paramCount * 32
   let mut head :=
     "      case 0x" ++ m.selector ++ " {" ++ nl ++
@@ -1301,6 +1330,7 @@ private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool
     let some type := paramTypes[i]?
       | throw s!"evm/codec: missing entry parameter metadata at {i}"
     head := head ++ (← renderWordGuard "        " ("arg" ++ toString i) type)
+  head := head ++ (← renderTaggedGuards "        " "arg" plans)
   let body ← match emitCFGEntry p m with
     | .ok body => pure body
     | .error reason => throw s!"{reason} in {m.ixName}"
@@ -1313,7 +1343,13 @@ def emitYul (p : IR.Program) : Except String String := do
     throw "extract/unsupported: evm wants at least one entry"
   let runtimeName := p.name ++ "_runtime"
   let ctorParamTypes ← p.constructor.resolvedParamTypes
-  let ctorHead ← renderCtorPrelude p.name p.constructor.paramCount ctorParamTypes
+  let ctorPlans ←
+    if p.constructor.paramSchemas.isEmpty then pure #[]
+    else p.constructor.paramSchemas.mapM Codec.inputPlan
+  unless p.constructor.inputPolicy == IR.inputPolicyOf ctorPlans do
+    throw "evm/codec: constructor input policy identity mismatch"
+  let ctorHead ←
+    renderCtorPrelude p.name p.constructor.paramCount ctorParamTypes ctorPlans
   let ctorStores ← emitConstructorStores p
   let ctorImm :=
     if IR.programHasImmutable p then
@@ -1391,6 +1427,27 @@ private partial def abiJsonShape : Core.Codec.Schema → Except String AbiJsonSh
   | .option _ => throw "evm/codec: option ABI JSON requires an explicit tag policy"
   | .boundedArray .. => throw "evm/codec: bounded array ABI JSON requires a dynamic policy"
 
+private def abiJsonInputShape : Core.Codec.Schema → Except String AbiJsonShape
+  | .option payload => do
+      let _ ← Codec.taggedTupleV1InputPlan (.option payload)
+      return {
+        type := "tuple"
+        components := #[
+          ("present", { type := "bool" }),
+          ("value", ← abiJsonShape payload)
+        ]
+      }
+  | schema@(.enumeration ..) => do
+      let plan ← Codec.taggedTupleV1InputPlan schema
+      let mut components : Array (String × AbiJsonShape) := #[
+        ("tag", { type := "uint8" })
+      ]
+      for i in [1:plan.wordCount] do
+        components := components.push
+          ("p" ++ toString (i - 1), { type := ← Codec.abiType plan.words[i]! })
+      return { type := "tuple", components }
+  | schema => abiJsonShape schema
+
 private partial def renderAbiJsonParam (name : String) (shape : AbiJsonShape) : String :=
   let base := "{\"name\":\"" ++ escapeJson name ++ "\",\"type\":\"" ++ shape.type ++ "\""
   if shape.components.isEmpty then base ++ "}"
@@ -1402,7 +1459,7 @@ private partial def renderAbiJsonParam (name : String) (shape : AbiJsonShape) : 
 private def schemaParamsJsonOf (schemas : Array Core.Codec.Schema) : Except String String := do
   let mut params := #[]
   for i in [0:schemas.size] do
-    params := params.push (renderAbiJsonParam s!"arg{i}" (← abiJsonShape schemas[i]!))
+    params := params.push (renderAbiJsonParam s!"arg{i}" (← abiJsonInputShape schemas[i]!))
   return String.intercalate "," params.toList
 
 private def ctorAbi (p : IR.Program) : Except String String := do

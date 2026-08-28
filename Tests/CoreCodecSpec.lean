@@ -195,10 +195,46 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
     ops := #[.returnU64 (.lit 0)]
   }
   match ProofForge.Evm.IR.fromExtracted { program with methods := #[init, tagged] } with
+  | .error reason => throwError s!"EVM rejected Tagged Tuple v1 input: {reason}"
+  | .ok lowered =>
+      let some read := lowered.entries.find? (·.ixName == "read")
+        | throwError "EVM tagged entry is missing"
+      unless read.logicalParamCount == 1 && read.paramCount == 2 &&
+          read.paramTypes == #[.boolean, .uint64] &&
+          read.selector == ProofForge.Crypto.Keccak.selector "read" #["(bool,uint64)"] do
+        throwError s!"wrong EVM Tagged Tuple v1 binding: {repr read}"
+  let enumSchema : Schema := .enumeration "Request" 8 #[
+    ("idle", .unit),
+    ("one", .scalar .uint64),
+    ("pair", .tuple #[.scalar .uint64, .scalar .uint64])
+  ]
+  match ProofForge.Evm.Codec.inputPlan enumSchema with
+  | .error reason => throwError s!"EVM rejected bounded payload enum: {reason}"
+  | .ok plan =>
+      let some guard := plan.taggedGuards[0]?
+        | throwError "EVM enum input plan has no canonical tag guard"
+      unless plan.typeName == "(uint8,uint64,uint64)" &&
+          plan.words == #[.uint8, .uint64, .uint64] &&
+          guard.activePayloadWords == #[0, 1, 2] do
+        throwError s!"wrong EVM enum input plan: {repr plan}"
+  match ProofForge.Evm.Codec.inputPlan (.enumeration "Richer" 8 #[
+      ("bad", .scalar .uint32)]) with
+  | .error reason =>
+      unless reason.contains "must be UInt64" do
+        throwError s!"wrong EVM richer-enum rejection: {reason}"
+  | .ok _ => throwError "EVM Tagged Tuple v1 accepted an ambiguous richer enum payload"
+  let taggedReturn := { aggregate with
+    paramSchemas := #[.scalar .uint64]
+    retTypes := #[]
+    retSchema := .option (.scalar .uint64)
+    retCount := 2
+    ops := #[.returnU64 (.lit 0), .returnU64 (.lit 0)]
+  }
+  match ProofForge.Evm.IR.fromExtracted { program with methods := #[init, taggedReturn] } with
   | .error reason =>
       unless reason.contains "option ABI tags" do
-        throwError s!"wrong EVM tagged aggregate rejection: {reason}"
-  | .ok _ => throwError "EVM accepted an Option without an ABI tag policy"
+        throwError s!"wrong EVM tagged return rejection: {reason}"
+  | .ok _ => throwError "EVM accepted a tagged return under the input-only policy"
   let wideResult : Extract.IR.Method := {
     kind := .get
     name := "AggregateGate.wideResult"

@@ -232,6 +232,8 @@ structure Method where
   retTypes : Array Core.Codec.Scalar := #[]
   retSchema : Core.Codec.Schema := .unit
   retCount : Nat := 1
+  /-- Canonical identity for input guard semantics not encoded by the Solidity selector. -/
+  inputPolicy : String := ""
   ops : Array Op := #[]
   evaluation : Core.Evaluation Ops.ValKind := {}
   view : Bool := false
@@ -274,17 +276,10 @@ def Method.logicalParamCount (method : Method) : Nat :=
 def Method.abiParamTypes (method : Method) : Except String (Array String) := do
   if method.paramSchemas.isEmpty then
     return ← (← method.resolvedParamTypes).mapM Codec.abiType
-  method.paramSchemas.mapM Codec.abiTypeOfSchema
+  method.paramSchemas.mapM fun schema => return (← Codec.inputPlan schema).typeName
 
-private def abiPartIndex : String → Option Nat
-  | "w0" => some 0
-  | "w1" => some 1
-  | "w2" => some 2
-  | "w3" => some 3
-  | _ => none
-
-private def paramWordStart (plans : Array (Array Core.Codec.StaticLeaf)) (index : Nat) : Nat :=
-  (plans.extract 0 index).foldl (init := 0) fun count leaves => count + leaves.size
+private def paramWordStart (plans : Array Codec.AbiInputPlan) (index : Nat) : Nat :=
+  (plans.extract 0 index).foldl (init := 0) fun count plan => count + plan.wordCount
 
 private def rewriteAbiPayload
     (rewriteValue : Ops.Val → Except String Ops.Val) :
@@ -292,34 +287,25 @@ private def rewriteAbiPayload
   | .component call => return .component (← call.mapValuesM rewriteValue)
 
 private def rewriteAbiRoot (method : Core.IR.Method Ops.ValKind Ops.OpExt)
-    (plans : Array (Array Core.Codec.StaticLeaf)) (physicalCount : Nat) :
+    (plans : Array Codec.AbiInputPlan) (physicalCount : Nat) :
     Ops.Val → Except String (Option Ops.Val)
   | .field (.arg index) name => do
       if index ≥ method.paramCount then return none
-      let some schema := method.paramSchemas[index]?
-        | throw "evm/codec: aggregate parameter schema is missing"
-      let some leaves := plans[index]?
-        | throw "evm/codec: aggregate ABI leaf plan is missing"
+      let some plan := plans[index]?
+        | throw "evm/codec: input ABI plan is missing"
       let start := paramWordStart plans index
-      match schema with
-      | .scalar type =>
-          let some part := abiPartIndex name
-            | throw s!"evm/codec: invalid scalar projection {name}"
-          unless part < Codec.limbCount type do
-            throw s!"evm/codec: out-of-range scalar projection {name}"
-          return some (.field (.arg start) name)
-      | _ =>
-          let projection ← Core.Codec.resolveSourceProjection leaves
-            (leaves.map fun leaf => Codec.limbCount leaf.type) abiPartIndex name
-          let physical := start + projection.leafIndex
-          if Codec.limbCount leaves[projection.leafIndex]!.type == 1 then
-            return some (.arg physical)
-          return some (.field (.arg physical) s!"w{projection.partIndex}")
+      let projection ← plan.resolveProjection name
+      let some type := plan.words[projection.leafIndex]?
+        | throw "evm/codec: input projection word is out of range"
+      let physical := start + projection.leafIndex
+      if Codec.limbCount type == 1 then
+        return some (.arg physical)
+      return some (.field (.arg physical) s!"w{projection.partIndex}")
   | .arg index => do
       if index < method.paramCount then
-        let some leaves := plans[index]?
-          | throw "evm/codec: aggregate ABI leaf plan is missing"
-        unless leaves.size == 1 do
+        let some plan := plans[index]?
+          | throw "evm/codec: input ABI plan is missing"
+        unless plan.wordCount == 1 do
           throw s!"evm/codec: aggregate parameter {index} requires a scalar projection"
         return some (.arg (paramWordStart plans index))
       if method.kind != .init && index == method.paramCount then
@@ -331,7 +317,14 @@ private structure BoundParams where
   count : Nat
   widths : Array Nat
   types : Array Core.Codec.Scalar
+  inputPolicy : String
   ops : Array Ops.Op
+
+def inputPolicyOf (plans : Array Codec.AbiInputPlan) : String :=
+  let policies := (plans.mapIdx fun i plan =>
+    let canonical := plan.taggedCanonical
+    if canonical.isEmpty then none else some s!"{i}={canonical}").filterMap id
+  if policies.isEmpty then "" else String.intercalate "," policies.toList
 
 private def bindParams (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String BoundParams := do
@@ -344,18 +337,20 @@ private def bindParams (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       count := method.paramCount
       widths
       types := ← resolveParamTypes method.paramCount method.paramTypes widths
+      inputPolicy := ""
       ops := method.ops
     }
   unless method.paramSchemas.size == method.paramCount do
     throw s!"evm/codec: aggregate parameter schemas are incomplete for {method.ixName}"
-  let plans ← method.paramSchemas.mapM Codec.staticAbiLeaves
-  let types := plans.foldl (init := #[]) fun out leaves => out ++ leaves.map (·.type)
+  let plans ← method.paramSchemas.mapM Codec.inputPlan
+  let types := plans.foldl (init := #[]) fun out plan => out ++ plan.words
   let ops ← Core.Target.rewriteOpsValues (rewriteAbiRoot method plans types.size)
     rewriteAbiPayload method.ops
   return {
     count := types.size
     widths := types.map (·.byteWidth)
     types
+    inputPolicy := inputPolicyOf plans
     ops
   }
 
@@ -547,6 +542,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     retTypes := ← bindRetTypes ctorSrc
     retSchema := ctorSrc.retSchema
     retCount := 1
+    inputPolicy := ctorParams.inputPolicy
     ops := ctorOps
     evaluation := ctorEvaluation
     view := false
@@ -559,7 +555,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     let (params, ops, evaluation) ← lowerMethodBody m
     let abiTypes ←
       if m.paramSchemas.isEmpty then params.types.mapM Codec.abiType
-      else m.paramSchemas.mapM Codec.abiTypeOfSchema
+      else m.paramSchemas.mapM fun schema => return (← Codec.inputPlan schema).typeName
     let sel := Keccak.selector m.ixName abiTypes
     let view := m.kind == .get
     entries := entries.push {
@@ -575,6 +571,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       retTypes := ← bindRetTypes m
       retSchema := m.retSchema
       retCount := m.retCount
+      inputPolicy := params.inputPolicy
       ops
       evaluation
       view
@@ -676,21 +673,24 @@ private partial def opsCanon (ops : Array Op) : String :=
 def canonical (p : Program) : String :=
   let slots := String.intercalate ","
     (p.slots.map (fun s => s!"{s.name}:{s.width}")).toList
-  let ctor := s!"ctor:{p.constructor.paramCount}:[{opsCanon p.constructor.ops}]"
+  let ctorPolicy := if p.constructor.inputPolicy.isEmpty then ""
+    else s!":{p.constructor.inputPolicy}"
+  let ctor := s!"ctor:{p.constructor.paramCount}{ctorPolicy}:[{opsCanon p.constructor.ops}]"
   let entries :=
     (p.entries.qsort (fun a b => a.ixName < b.ixName)).toList.map fun m =>
       let tag := if m.view then "view" else if m.payable then "pay" else "mut"
-      let base := s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:[{opsCanon m.ops}]"
+      let policy := if m.inputPolicy.isEmpty then "" else s!":{m.inputPolicy}"
+      let base := s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}{policy}"
       if (m.paramWidths.isEmpty || m.paramWidths.all (· == 8)) &&
           m.retCount == 1 && m.retWidths.isEmpty then
-        base
+        s!"{base}:[{opsCanon m.ops}]"
       else
         let widths := String.intercalate "," (m.paramWidths.map toString).toList
         if m.retWidths.isEmpty then
-          s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:{widths}:r{m.retCount}:[{opsCanon m.ops}]"
+          s!"{base}:{widths}:r{m.retCount}:[{opsCanon m.ops}]"
         else
           let rws := String.intercalate "," (m.retWidths.map toString).toList
-          s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}:{widths}:r{m.retCount}:{rws}:[{opsCanon m.ops}]"
+          s!"{base}:{widths}:r{m.retCount}:{rws}:[{opsCanon m.ops}]"
   s!"evm|{p.name}|{slots}|{ctor}|{String.intercalate "/" entries}"
 
 def digestHex (p : Program) : String :=

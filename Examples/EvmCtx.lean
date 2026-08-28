@@ -20,6 +20,11 @@ structure AggregateRequest where
   amount : UInt64
   details : AggregateMeta
 
+inductive TaggedRequest where
+  | idle
+  | one (value : UInt64)
+  | pair (left right : UInt64)
+
 @[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
@@ -55,5 +60,22 @@ def aggregate (_s : State) (request : AggregateRequest) (pair : UInt32 × UInt64
     (if request.details.enabled then (1 : UInt64) else 0) +
     pair.1.toUInt64 + pair.2 + levels[0].toUInt64 + levels[2].toUInt64,
    request.details.enabled)
+
+/-- EVM Tagged Tuple v1 binds an ordinary Option to `(bool,uint64)`. `false` requires a zero
+payload word, so there is one canonical ABI encoding for `none`. -/
+@[pf_entry]
+def optionValue (_s : State) (value : Option UInt64) : UInt64 :=
+  match value with
+  | none => 5
+  | some amount => amount + 1
+
+/-- Payload enums use `(uint8,uint64,uint64)` with constructor ordinals and zero inactive lanes.
+This is an EVM ABI policy, not the branch-dependent Borsh representation used by SVM. -/
+@[pf_entry]
+def taggedValue (_s : State) (request : TaggedRequest) : UInt64 :=
+  match request with
+  | .idle => 3
+  | .one value => value + 10
+  | .pair left right => left + right
 
 end Examples.EvmCtx

@@ -13,6 +13,11 @@ open Lean Elab Command
 #guard height (init 0) == evmBlockNumber
 
 #guard aggregate (init 0) ⟨11, ⟨3, true⟩⟩ (13, 17) #v[19, 23, 29] == (93, true)
+#guard optionValue (init 0) none == 5
+#guard optionValue (init 0) (some 37) == 38
+#guard taggedValue (init 0) .idle == 3
+#guard taggedValue (init 0) (.one 7) == 17
+#guard taggedValue (init 0) (.pair 11 29) == 40
 
 elab "#pf_guard_evm_aggregate_abi" : command => do
   let env ← getEnv
@@ -33,6 +38,23 @@ elab "#pf_guard_evm_aggregate_abi" : command => do
       method.selector == ProofForge.Crypto.Keccak.selector "aggregate" signature &&
       method.retTypes == #[.uint64, .boolean] do
     throwError s!"wrong EVM aggregate method: {repr method}"
+  let some optionMethod := program.entries.find? (·.ixName == "optionValue")
+    | throwError "missing EVM Option entry"
+  let some taggedMethod := program.entries.find? (·.ixName == "taggedValue")
+    | throwError "missing EVM payload-enum entry"
+  unless optionMethod.logicalParamCount == 1 && optionMethod.paramCount == 2 &&
+      optionMethod.paramTypes == #[.boolean, .uint64] &&
+      optionMethod.selector == ProofForge.Crypto.Keccak.selector "optionValue"
+        #["(bool,uint64)"] &&
+      optionMethod.inputPolicy ==
+        "0=tagged-tuple-v1((bool,uint64);0:1:1:[0,1])" &&
+      taggedMethod.logicalParamCount == 1 && taggedMethod.paramCount == 3 &&
+      taggedMethod.paramTypes == #[.uint8, .uint64, .uint64] &&
+      taggedMethod.selector == ProofForge.Crypto.Keccak.selector "taggedValue"
+        #["(uint8,uint64,uint64)"] &&
+      taggedMethod.inputPolicy ==
+        "0=tagged-tuple-v1((uint8,uint64,uint64);0:1:2:[0,1,2])" do
+    throwError s!"wrong EVM Tagged Tuple v1 methods: {repr optionMethod}, {repr taggedMethod}"
   let yul ←
     match ProofForge.Evm.Emit.emitYul program with
     | .ok yul => pure yul
@@ -43,12 +65,20 @@ elab "#pf_guard_evm_aggregate_abi" : command => do
     | .error reason => throwError reason
   unless yul.contains "if iszero(eq(calldatasize(), 260))" &&
       yul.contains "if gt(arg2, 1)" && yul.contains "if gt(arg7, 0xffff)" &&
+      yul.contains "if iszero(eq(calldatasize(), 68))" &&
+      yul.contains "if and(eq(arg0, 0), arg1)" &&
+      yul.contains "if iszero(eq(calldatasize(), 100))" &&
+      yul.contains "if iszero(lt(arg0, 3))" &&
+      yul.contains "if and(eq(arg0, 1), arg2)" &&
       yul.contains "return(0, 64)" &&
       abi.contains "\"type\":\"tuple\",\"components\":[{\"name\":\"amount\"" &&
       abi.contains "\"name\":\"details\",\"type\":\"tuple\"" &&
       abi.contains "\"name\":\"arg2\",\"type\":\"uint16[3]\"" &&
+      abi.contains "\"name\":\"present\",\"type\":\"bool\"" &&
+      abi.contains "\"name\":\"tag\",\"type\":\"uint8\"" &&
+      abi.contains "\"name\":\"p1\",\"type\":\"uint64\"" &&
       abi.contains "\"outputs\":[{\"name\":\"\",\"type\":\"tuple\"" do
-    throwError "EVM aggregate calldata guards, return packing, or ABI JSON are incomplete"
+    throwError "EVM aggregate/tagged calldata guards, return packing, or ABI JSON are incomplete"
 
 #pf_guard_evm_aggregate_abi
 

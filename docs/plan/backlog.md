@@ -15,8 +15,9 @@ exact-cursor Borsh 与 EVM u128/bytesN ABI，不把 codec geometry 混入 accoun
 R1-004 已从普通 Lean 推导 bounded tuple/record/enum/option/literal-Vector schema，并贯穿
 Core/SVM/EVM IR；R1-005 已由 SVM 独立绑定 static record/product/fixed-vector Borsh；
 R1-006 已由 EVM 独立绑定 canonical tuple/record/fixed-array ABI；R1-007 已由 SVM 独立绑定
-普通 Lean Option/payload enum 的 canonical tagged Borsh input。下一切片给 EVM 定义显式命名
-的 tagged-value ABI policy；不把 Borsh tag、ABI word 或两个 target 的物理编码放进 Core。
+普通 Lean Option/payload enum 的 canonical tagged Borsh input；R1-008 已由 EVM 独立绑定
+Tagged Tuple v1 `(bool,T)` / `(uint8,p0,...)` input policy。下一切片给 SVM 定义 bounded-array
+Borsh input policy；不把 Borsh tag、ABI word 或两个 target 的物理编码放进 Core。
 
 ## 已做
 
@@ -169,6 +170,17 @@ R1-006 已由 EVM 独立绑定 canonical tuple/record/fixed-array ABI；R1-007 �
   `5fde6b9cfc767c10`、ELF 16,816 B；Lean 237、SVM 51 builds、Mollusk 288/288（RawEntry
   14/14）、EVM 15 builds、Anvil 15/15、Surfpool 1.5.0 Loader-v3 exact bytes、ownership/
   whitespace 全绿。详见 `docs/plan/tasks/r1-007.md`。
+
+- R1-008 EVM Tagged Tuple v1 input slice 已完成：`Evm.Codec.AbiInputPlan` 对普通 Lean
+  Option 选择 fixed `(bool,T)`，对 bounded UInt64-payload enum 选择 fixed
+  `(uint8,p0,...)`，并统一描述 physical words、source projections、tag range 与每个 variant
+  的 active payload prefix。EVM IR 在 Core CFG 前完成 logical→physical rewrite；Emit 只用
+  generic guard renderer 拒绝 noncanonical Bool/out-of-range tag/absent payload/inactive lane，
+  ABI JSON 输出命名 tuple components。它不复用 branch-dependent Borsh，不新增 Ops、Component
+  或 type-specific Emit case。`Examples.EvmCtx` 覆盖 Option 与 0/1/2-payload enum 的所有
+  合法分支和 malformed calldata；tagged return、bounded dynamic 和 richer enum payload 仍
+  fail closed。EvmCtx digest `da71408333a778a6`、deployment bytecode 1,062 B；详见
+  `docs/plan/tasks/r1-008.md`。
 
 - `lake build Tests` 当前 237 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量

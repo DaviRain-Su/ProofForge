@@ -38,6 +38,18 @@ def abiType : Scalar → Except String String
       if 1 ≤ bytes && bytes ≤ 32 then pure s!"bytes{bytes}"
       else throw s!"evm/codec: invalid fixed-bytes width {bytes}"
 
+def limbCount : Scalar → Nat
+  | .uint bits => (bits + 63) / 64
+  | .address bytes | .fixedBytes bytes => (bytes + 7) / 8
+  | .boolean => 1
+
+private def abiPartIndex : String → Option Nat
+  | "w0" => some 0
+  | "w1" => some 1
+  | "w2" => some 2
+  | "w3" => some 3
+  | _ => none
+
 private partial def abiTypeOfSchemaAt : Schema → Except String String
   | .unit => throw "evm/codec: unit has no canonical ABI parameter type"
   | .scalar type => abiType type
@@ -69,6 +81,171 @@ def staticAbiLeaves (schema : Schema) : Except String (Array StaticLeaf) := do
   let _ ← abiTypeOfSchema schema
   staticLeaves schema
 
+/-- One source projection into the physical words of an EVM input parameter. `wordIndex` is
+relative to that logical parameter; `partCount` describes the fixed source limbs carried by the
+single ABI word. -/
+structure AbiProjection where
+  sourceName : String
+  wordIndex : Nat
+  partCount : Nat
+  deriving Repr, BEq, Inhabited
+
+/-- Canonicality rule for one tag and its fixed payload lanes. Each variant activates a prefix of
+the payload words; every inactive word must be zero. -/
+structure TaggedGuard where
+  tagWord : Nat
+  payloadStart : Nat
+  payloadWords : Nat
+  activePayloadWords : Array Nat
+  deriving Repr, BEq, Inhabited
+
+/-- Complete EVM-owned input plan for one logical parameter. It contains ABI words and tag guards,
+but no storage slots, source Ops, or contract policy. -/
+structure AbiInputPlan where
+  typeName : String
+  words : Array Scalar
+  projections : Array AbiProjection
+  taggedGuards : Array TaggedGuard := #[]
+  deriving Repr, BEq, Inhabited
+
+def AbiInputPlan.wordCount (plan : AbiInputPlan) : Nat := plan.words.size
+
+/-- Canonical identity for guard semantics not visible in the Solidity selector. Two enums can
+share the same fixed tuple type while activating different payload lanes, so target IR digests
+must retain this policy identity. Static plans return the empty compatibility marker. -/
+def AbiInputPlan.taggedCanonical (plan : AbiInputPlan) : String :=
+  if plan.taggedGuards.isEmpty then ""
+  else
+    let guards := plan.taggedGuards.map fun guard =>
+      let active := String.intercalate "," (guard.activePayloadWords.map toString).toList
+      s!"{guard.tagWord}:{guard.payloadStart}:{guard.payloadWords}:[{active}]"
+    "tagged-tuple-v1(" ++ plan.typeName ++ ";" ++
+      String.intercalate "," guards.toList ++ ")"
+
+private def staticInputPlan (schema : Schema) : Except String AbiInputPlan := do
+  let leaves ← staticAbiLeaves schema
+  return {
+    typeName := ← abiTypeOfSchema schema
+    words := leaves.map (·.type)
+    projections := leaves.mapIdx fun wordIndex leaf => {
+      sourceName := leaf.sourceName
+      wordIndex
+      partCount := limbCount leaf.type
+    }
+  }
+
+private def enumPayloadWords : Schema → Except String Nat
+  | .unit => pure 0
+  | .scalar (.uint 64) => pure 1
+  | .tuple items => do
+      unless items.all (· == .scalar .uint64) do
+        throw "evm/codec: tagged tuple v1 enum fields must be UInt64"
+      return items.size
+  | _ => throw "evm/codec: tagged tuple v1 enum fields must be UInt64"
+
+/-- **ProofForge EVM Tagged Tuple v1** is the explicit standard-ABI input policy for logical sums.
+
+* `Option<T>` is `(bool present,T value)`. An absent value requires every payload word to be zero.
+* A payload enum is `(uint8 tag,uint64 p0,...)`, with enough lanes for its largest constructor.
+  The tag is the source constructor ordinal and every lane inactive for that constructor is zero.
+
+The fixed tuple avoids dynamic offsets and gives every source projection one bounded ABI word.
+Tagged returns and dynamic tails are deliberately outside this input-only policy. -/
+def taggedTupleV1InputPlan : Schema → Except String AbiInputPlan
+  | .option payload => do
+      let payloadPlan ← staticInputPlan payload
+      unless !payloadPlan.words.isEmpty do
+        throw "evm/codec: tagged tuple v1 Option payload must contain a scalar"
+      let payloadProjections := payloadPlan.projections.map fun projection => {
+        projection with
+        sourceName := if projection.sourceName.isEmpty then "slot_p0"
+          else "slot_p0_" ++ projection.sourceName
+        wordIndex := 1 + projection.wordIndex
+      }
+      return {
+        typeName := "(bool," ++ payloadPlan.typeName ++ ")"
+        words := #[.boolean] ++ payloadPlan.words
+        projections := #[{
+          sourceName := "slot_tag"
+          wordIndex := 0
+          partCount := 1
+        }] ++ payloadProjections
+        taggedGuards := #[{
+          tagWord := 0
+          payloadStart := 1
+          payloadWords := payloadPlan.wordCount
+          activePayloadWords := #[0, payloadPlan.wordCount]
+        }]
+      }
+  | .enumeration _ tagBits variants => do
+      unless tagBits == 8 do
+        throw "evm/codec: tagged tuple v1 enum tag must be uint8"
+      unless !variants.isEmpty && variants.size ≤ 256 do
+        throw "evm/codec: tagged tuple v1 enum variants must fit uint8"
+      let counts ← variants.mapM fun variant => enumPayloadWords variant.2
+      let payloadWords := counts.foldl (init := 0) max
+      let mut projections : Array AbiProjection := #[{
+        sourceName := "variant_tag"
+        wordIndex := 0
+        partCount := 1
+      }]
+      if payloadWords == 0 then
+        projections := projections.push {
+          sourceName := ""
+          wordIndex := 0
+          partCount := 1
+        }
+      else
+        for i in [0:payloadWords] do
+          projections := projections.push {
+            sourceName := "variant_p" ++ toString i
+            wordIndex := 1 + i
+            partCount := 1
+          }
+      let types := #["uint8"] ++ Array.replicate payloadWords "uint64"
+      return {
+        typeName := "(" ++ String.intercalate "," types.toList ++ ")"
+        words := #[.uint8] ++ Array.replicate payloadWords .uint64
+        projections
+        taggedGuards := #[{
+          tagWord := 0
+          payloadStart := 1
+          payloadWords
+          activePayloadWords := counts
+        }]
+      }
+  | _ => throw "evm/codec: tagged tuple v1 requires Option or enum input"
+
+/-- Select the EVM input policy once. Static schemas retain canonical Solidity ABI flattening;
+logical sums opt into the explicitly named Tagged Tuple v1 policy above. -/
+def inputPlan (schema : Schema) : Except String AbiInputPlan := do
+  let _ ← validate schema
+  match schema with
+  | .option _ | .enumeration .. => taggedTupleV1InputPlan schema
+  | .boundedArray .. => throw "evm/codec: bounded arrays require an explicit dynamic ABI policy"
+  | _ => staticInputPlan schema
+
+/-- Resolve Extract's compatibility projection spelling against one EVM input plan. -/
+def AbiInputPlan.resolveProjection (plan : AbiInputPlan) (name : String) :
+    Except String StaticProjection := do
+  let mut found : Array StaticProjection := #[]
+  for projection in plan.projections do
+    if name == projection.sourceName && projection.partCount == 1 then
+      found := found.push { leafIndex := projection.wordIndex, partIndex := 0 }
+    else if projection.sourceName.isEmpty then
+      if let some partIndex := abiPartIndex name then
+        if partIndex < projection.partCount then
+          found := found.push { leafIndex := projection.wordIndex, partIndex }
+    else if name.startsWith (projection.sourceName ++ "_") then
+      let suffix := name.drop (projection.sourceName.length + 1) |>.copy
+      if let some partIndex := abiPartIndex suffix then
+        if partIndex < projection.partCount then
+          found := found.push { leafIndex := projection.wordIndex, partIndex }
+  unless found.size == 1 do
+    let shown := if name.isEmpty then "<parameter>" else name
+    throw s!"evm/codec: input projection {shown} is missing or ambiguous"
+  return found[0]!
+
 inductive WordGuard where
   | boolean
   | unsignedMax (bits : Nat)
@@ -97,11 +274,6 @@ def isWideIntegerCarrier : Scalar → Bool
 def isFixedBytesCarrier : Scalar → Bool
   | .fixedBytes bytes => 1 ≤ bytes && bytes ≤ 32
   | _ => false
-
-def limbCount : Scalar → Nat
-  | .uint bits => (bits + 63) / 64
-  | .address bytes | .fixedBytes bytes => (bytes + 7) / 8
-  | .boolean => 1
 
 def isAddressCarrier : Scalar → Bool
   | .address 20 => true

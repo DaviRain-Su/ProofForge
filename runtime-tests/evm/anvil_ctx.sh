@@ -49,4 +49,42 @@ if "$cast" call --rpc-url "$rpc" "$addr" --data "$bad_bool" >/dev/null 2>&1; the
   exit 1
 fi
 
-echo "evm-anvil-ctx: ok (caller/number + static aggregate ABI; engineering only)"
+option_none="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'optionValue((bool,uint64))(uint64)' '(false,0)')"
+solana_lean_require_uint "$option_none" 5 "Tagged Tuple v1 Option.none"
+option_some="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'optionValue((bool,uint64))(uint64)' '(true,37)')"
+solana_lean_require_uint "$option_some" 38 "Tagged Tuple v1 Option.some"
+
+tagged_idle="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'taggedValue((uint8,uint64,uint64))(uint64)' '(0,0,0)')"
+solana_lean_require_uint "$tagged_idle" 3 "Tagged Tuple v1 idle"
+tagged_one="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'taggedValue((uint8,uint64,uint64))(uint64)' '(1,7,0)')"
+solana_lean_require_uint "$tagged_one" 17 "Tagged Tuple v1 one"
+tagged_pair="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'taggedValue((uint8,uint64,uint64))(uint64)' '(2,11,29)')"
+solana_lean_require_uint "$tagged_pair" 40 "Tagged Tuple v1 pair"
+
+option_selector="$("$cast" sig 'optionValue((bool,uint64))')"
+tagged_selector="$("$cast" sig 'taggedValue((uint8,uint64,uint64))')"
+word_data() {
+  local selector="$1"
+  shift
+  "$python" -I -S -c \
+    "import sys; print(sys.argv[1] + ''.join(f'{int(v):064x}' for v in sys.argv[2:]))" \
+    "$selector" "$@"
+}
+for malformed in \
+  "$(word_data "$option_selector" 0 1)" \
+  "$(word_data "$option_selector" 2 0)" \
+  "$(word_data "$tagged_selector" 3 0 0)" \
+  "$(word_data "$tagged_selector" 0 1 0)" \
+  "$(word_data "$tagged_selector" 1 7 1)"; do
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: noncanonical Tagged Tuple v1 calldata unexpectedly succeeded" >&2
+    exit 1
+  fi
+done
+
+echo "evm-anvil-ctx: ok (caller/number + static/tagged aggregate ABI; engineering only)"
