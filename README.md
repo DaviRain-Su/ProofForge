@@ -102,6 +102,14 @@ def increment (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
 
 `#pf_build Examples.Counter` 在 Lean 里抽出；`pf build --target svm` 走同一条 IR。
 
+## 证明
+
+第一批 kernel-checked 合约性质已落在合约文件内的 `Proofs` 节
+（`Examples/Counter.lean`、`Examples/Capped.lean`、`Examples/Token.lean`）：
+成功路径精确后置条件、单调性、Token supply 效应与 Capped cap 不变量，
+全部只依赖标准公理 `propext` / `Quot.sound`。CI 由
+`scripts/check_no_sorry.py` 保证证明批次不含占位符。
+
 ## 文档
 
 从 [docs/INDEX.md](docs/INDEX.md) 进。

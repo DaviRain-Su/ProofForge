@@ -361,4 +361,46 @@ Node bytes remain account-resident but unreachable behind the canonical empty he
           liveCount := Field.scalar tree.links.region.account (rootWord + 2) tree.links.region.access
           cursor := Field.scalar tree.links.region.account (rootWord + 3) tree.links.region.access }
 
+section Proofs
+
+/-- `scalarHeaderWellFormed` 钉死 header 与 body 同账户。 -/
+theorem scalarHeader_wf_account (header : Field) (bodyAccount : Nat) :
+    scalarHeaderWellFormed header bodyAccount = true → header.region.account = bodyAccount := by
+  intro h
+  simp only [scalarHeaderWellFormed, Bool.and_eq_true, beq_iff_eq] at h
+  exact h.1.1.1.1.1.2
+
+/-- header 恰好一个 word（widthWords = 1）。 -/
+theorem scalarHeader_wf_width (header : Field) (bodyAccount : Nat) :
+    scalarHeaderWellFormed header bodyAccount = true → header.widthWords = 1 := by
+  intro h
+  simp only [scalarHeaderWellFormed, Bool.and_eq_true, beq_iff_eq] at h
+  exact h.1.1.1.1.1.1.2
+
+/-- BoundedVec 的 count header 与 payload 槽在同一账户。 -/
+theorem boundedVec_wf_same_account (vec : BoundedVec) :
+    vec.wellFormed = true → vec.count.region.account = vec.slots.region.account := by
+  intro h
+  simp only [BoundedVec.wellFormed, Bool.and_eq_true] at h
+  exact scalarHeader_wf_account _ _ h.1.2
+
+/-- **header/slots 不重叠**：count header 的字位于首个 payload 槽字之前，
+且 header 只占一个 word。写 count header 永远不会覆盖 payload 槽字。 -/
+theorem boundedVec_wf_header_before_slots (vec : BoundedVec) (h : vec.wellFormed = true) :
+    vec.count.firstWord + 1 ≤ vec.slots.firstWord ∧ vec.count.widthWords = 1 := by
+  have hs := h
+  simp only [BoundedVec.wellFormed, Bool.and_eq_true] at hs
+  refine ⟨of_decide_eq_true hs.2, scalarHeader_wf_width _ _ hs.1.2⟩
+
+/-- 推论：任何 payload 槽字（`≥ slots.firstWord`）都不可能是 count header 字。 -/
+theorem boundedVec_wf_count_disjoint (vec : BoundedVec) (w : Nat)
+    (h : vec.wellFormed = true) (hw : vec.slots.firstWord ≤ w) :
+    vec.count.firstWord ≠ w := by
+  obtain ⟨hbefore, _⟩ := boundedVec_wf_header_before_slots vec h
+  have hfw : vec.count.firstWord + 1 ≤ vec.slots.firstWord := hbefore
+  intro heq
+  rw [heq] at hfw
+  omega
+
+end Proofs
 end ProofForge.Svm.Sdk.Storage

@@ -83,4 +83,65 @@ def totalSupply (s : State) : UInt256 :=
 def ownerOf (_s : State) : Address :=
   Immutable.address
 
+section Proofs
+
+/-! ## 第一批 kernel 证明：Capped mint 的 cap 不变量与 supply 效应
+
+对上面 `@[pf_entry]` 函数的普通 kernel-checked 性质；证明不依赖运行时值
+（`Context.caller` 是不透明运行时值，所以结论是全路径的）。 -/
+
+/-- **cap 不变量**：只要进入时 `supply ≤ cap`（用 `atLeast` 表示），mint 的
+任何返回结果（含各 revert 路径）都保持 `supply ≤ cap`。 -/
+theorem mint_supply_within_cap (s : State) (v : UInt256) {t : State} {r : UInt64}
+    (hcap : UInt256.atLeast s.cap s.supply = true)
+    (h : mint s v = .ok (t, r)) :
+    UInt256.atLeast t.cap t.supply = true := by
+  unfold mint at h
+  split at h
+  · split at h
+    · rename_i _hp
+      simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact hcap
+    · rename_i _hp
+      split at h
+      · rename_i hc
+        split at h
+        · simp at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact hc
+        · simp at h
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact hcap
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact hcap
+
+/-- **supply 效应**：mint 要么不动 supply，要么恰好加上 `v`（不会减）。 -/
+theorem mint_supply_effect (s : State) (v : UInt256) {t : State} {r : UInt64}
+    (h : mint s v = .ok (t, r)) :
+    t.supply = s.supply ∨ t.supply = UInt256.add s.supply v := by
+  unfold mint at h
+  split at h
+  · split at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact Or.inl rfl
+    · split at h
+      · rename_i _hc
+        split at h
+        · simp at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact Or.inr rfl
+        · simp at h
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact Or.inl rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact Or.inl rfl
+
+end Proofs
+
 end Examples.Capped
