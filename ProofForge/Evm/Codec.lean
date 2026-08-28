@@ -73,7 +73,10 @@ products are tuples; literal vectors are fixed arrays. This target-owned functio
 does not expose ABI words or padding to Core. -/
 def abiTypeOfSchema (schema : Schema) : Except String String := do
   let _ ← validate schema
-  abiTypeOfSchemaAt schema
+  match schema with
+  | .boundedArray _ element =>
+      return (← abiTypeOfSchemaAt element) ++ "[]"
+  | _ => abiTypeOfSchemaAt schema
 
 /-- One ABI word per statically present scalar leaf. Wide source values still occupy one ABI word;
 their fixed source limbs are unpacked only when an operation projects `w0`..`w3`. -/
@@ -99,16 +102,29 @@ structure TaggedGuard where
   activePayloadWords : Array Nat
   deriving Repr, BEq, Inhabited
 
+/-- Target-owned dynamic-tail geometry for a bounded top-level ABI array. `elementWords` describes
+one statically shaped element; all `capacity` source slots still live in a fixed local frame. -/
+structure BoundedArrayPlan where
+  capacity : Nat
+  elementWords : Array Scalar
+  deriving Repr, BEq, Inhabited
+
 /-- Complete EVM-owned input plan for one logical parameter. It contains ABI words and tag guards,
 but no storage slots, source Ops, or contract policy. -/
 structure AbiInputPlan where
   typeName : String
+  /-- Fixed source-local frame. A bounded dynamic array uses one length word followed by every
+  compile-time element slot; this is intentionally distinct from its one-word ABI head. -/
   words : Array Scalar
   projections : Array AbiProjection
   taggedGuards : Array TaggedGuard := #[]
+  boundedArray : Option BoundedArrayPlan := none
   deriving Repr, BEq, Inhabited
 
 def AbiInputPlan.wordCount (plan : AbiInputPlan) : Nat := plan.words.size
+
+def AbiInputPlan.headWordCount (plan : AbiInputPlan) : Nat :=
+  if plan.boundedArray.isSome then 1 else plan.wordCount
 
 /-- Canonical identity for guard semantics not visible in the Solidity selector. Two enums can
 share the same fixed tuple type while activating different payload lanes, so target IR digests
@@ -122,6 +138,14 @@ def AbiInputPlan.taggedCanonical (plan : AbiInputPlan) : String :=
     "tagged-tuple-v1(" ++ plan.typeName ++ ";" ++
       String.intercalate "," guards.toList ++ ")"
 
+/-- Canonical identity for every input rule not encoded by the Solidity selector. -/
+def AbiInputPlan.inputCanonical (plan : AbiInputPlan) : String :=
+  match plan.boundedArray with
+  | some array =>
+      s!"bounded-array-v1({plan.typeName};capacity={array.capacity};" ++
+        s!"element-words={array.elementWords.size})"
+  | none => plan.taggedCanonical
+
 private def staticInputPlan (schema : Schema) : Except String AbiInputPlan := do
   let leaves ← staticAbiLeaves schema
   return {
@@ -132,6 +156,43 @@ private def staticInputPlan (schema : Schema) : Except String AbiInputPlan := do
       wordIndex
       partCount := limbCount leaf.type
     }
+  }
+
+/-- EVM keeps the source carrier finite even though standard ABI uses a dynamic tail. This limit
+is a target resource bound on generated scalar locals, not an ABI or Core schema limit. -/
+def maxBoundedArrayLocalWords : Nat := 64
+
+/-- **ProofForge EVM Bounded Array v1** binds a top-level `BoundedVec α capacity` to canonical
+standard ABI `α[]` calldata. Elements must have a static ABI shape. The fixed source frame is
+`length:uint32 || capacity × flattened-element`; inactive element locals are zeroed by Emit. -/
+def boundedArrayV1InputPlan (capacity : Nat) (element : Schema) : Except String AbiInputPlan := do
+  let elementPlan ← staticInputPlan element
+  unless !elementPlan.words.isEmpty do
+    throw "evm/codec: bounded array element must contain a scalar"
+  let localWords := 1 + capacity * elementPlan.wordCount
+  unless localWords ≤ maxBoundedArrayLocalWords do
+    throw s!"evm/codec: bounded array local frame exceeds {maxBoundedArrayLocalWords} words"
+  let mut words : Array Scalar := #[.uint32]
+  let mut projections : Array AbiProjection := #[{
+    sourceName := "length"
+    wordIndex := 0
+    partCount := 1
+  }]
+  for i in [0:capacity] do
+    words := words ++ elementPlan.words
+    let sourcePrefix := "values_" ++ toString i
+    for projection in elementPlan.projections do
+      projections := projections.push {
+        sourceName := if projection.sourceName.isEmpty then sourcePrefix
+          else sourcePrefix ++ "_" ++ projection.sourceName
+        wordIndex := 1 + i * elementPlan.wordCount + projection.wordIndex
+        partCount := projection.partCount
+      }
+  return {
+    typeName := elementPlan.typeName ++ "[]"
+    words
+    projections
+    boundedArray := some { capacity, elementWords := elementPlan.words }
   }
 
 private def enumPayloadWords : Schema → Except String Nat
@@ -222,7 +283,7 @@ def inputPlan (schema : Schema) : Except String AbiInputPlan := do
   let _ ← validate schema
   match schema with
   | .option _ | .enumeration .. => taggedTupleV1InputPlan schema
-  | .boundedArray .. => throw "evm/codec: bounded arrays require an explicit dynamic ABI policy"
+  | .boundedArray capacity element => boundedArrayV1InputPlan capacity element
   | _ => staticInputPlan schema
 
 /-- Resolve Extract's compatibility projection spelling against one EVM input plan. -/

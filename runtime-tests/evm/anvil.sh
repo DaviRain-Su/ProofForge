@@ -13,8 +13,8 @@ echo "evm-anvil: host=$(uname -s)-$(uname -m) anvil=$anvil cast=$cast" >&2
 failed=0
 ran=0
 skipped=0
-for case in counter pair flag maybe ctx tipjar lang vault ownable token window phase wide const capped \
-    twostep_counter credits; do
+for case in counter pair flag maybe ctx bounded tipjar lang vault ownable token window phase wide \
+    const capped twostep_counter credits; do
   script="$here/anvil_$case.sh"
   echo "evm-anvil: $case" >&2
   if out="$("$script" 2>&1)"; then

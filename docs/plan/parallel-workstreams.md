@@ -1,6 +1,6 @@
 # Runtime / SDK 并行开发执行图
 
-> 基线：R1-009、SVM-SDK-1 和 EVM-SDK-1 已集成到本地 `main`；远端同步由 coordinator
+> 基线：R1-010、SVM-SDK-1 和 EVM-SDK-1 已集成到本地 `main`；远端同步由 coordinator
 > 单独执行。本文只拆 ownership、依赖和验收，不改变
 > [Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md) 的能力边界。
 
@@ -53,8 +53,8 @@ SVM 与 EVM 的物理 binding、SDK facade 和 fixture 才适合并行。
 
 Coordinator（当前线程）固定负责：
 
-- **PF-COORD-1 / R1-009**：shared `BoundedVec` source contract、SVM canonical bounded Borsh
-  input、RawEntry/Mollusk/Surfpool 证据；
+- **PF-COORD-1 / R1-009 + R1-010**：shared `BoundedVec` source contract，以及 SVM canonical
+  bounded Borsh / EVM canonical bounded ABI 两套独立 target binding 与证据；
 - **PF-COORD-2**：审查并集成各 worker 的 target-local commits，统一处理顶层 imports、
   registries、capability matrix、digest 和 CI；
 - **PF-COORD-3**：每一 wave 的全 Lean、全 SVM build/Mollusk、全 EVM build/Anvil 和
@@ -80,7 +80,7 @@ Wave A worker 的 example/test 暂不加入 `Examples.lean` / `Tests.lean` / reg
 
 | 包 | Owner | 允许写入 | 交付 | 禁止项 | 局部门 |
 |---|---|---|---|---|---|
-| **EVM-RT-1 bounded ABI** | worker | `ProofForge/Evm/Codec.lean`、`ProofForge/Evm/IR.lean`、`ProofForge/Evm/Emit.lean`；新建 dedicated example/test/Anvil fixture | 把 shared `.boundedArray` 绑定为 canonical ABI dynamic array/tail：offset、length、padding、capacity、exact tail 全部 fail closed；固定 scratch/word plan | 不复用 Borsh；不改 Core/Extract；不开放无界 bytes/array；不加 array opcode | dedicated Lean、solc、Anvil malformed offset/length/padding/OOB 矩阵 |
+| **EVM-RT-1 bounded ABI（已集成）** | coordinator | `Evm.Codec` plan + `Evm.Codec.Emit` interpreter；dedicated example/test/Anvil fixture | shared `.boundedArray` 已绑定 canonical ABI dynamic array/tail：offset、length、padding、capacity、exact tail 全部 fail closed；固定 local word frame | 未复用 Borsh、修改 Core/Extract、开放无界 bytes/array 或增加 array opcode | 253-job Lean、18-contract solc、Anvil 18/18 malformed matrix；见 R1-010 |
 | **SVM-RT-1 account view** | worker + `shared-lock` | `ProofForge/Svm/Runtime.lean`、`Ops.lean`、`Component*.lean`、`IR.lean`、`Emit.lean`、`ProofForge/Extract.lean`；新建 dedicated example/test/Mollusk fixture | bounded remaining-account view；经上界证明的 dynamic index；统一 account-count/OOB/signer/writable/owner gate | 不做 runtime-selected account geometry；不允许 pointer 进入 account；不夹带 Token/Phoenix policy | dedicated Lean + build + Mollusk 权限/OOB/duplicate/atomic failure |
 | **EVM-SDK-2 static storage declarations** | worker | 新建 `ProofForge/Evm/Sdk/Storage.lean` 和 target-local component/source/emit 文件；dedicated examples/tests | compile-time scalar/record/fixed-array cursor 与 typed handles；布局对象只在抽取期存在 | 不改 hashed-map namespace 语义；不做 runtime slot allocator；若需要 Extract hook，只报告给 coordinator | descriptor tests + two contracts + solc/Anvil storage layout |
 

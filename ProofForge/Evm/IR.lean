@@ -322,7 +322,7 @@ private structure BoundParams where
 
 def inputPolicyOf (plans : Array Codec.AbiInputPlan) : String :=
   let policies := (plans.mapIdx fun i plan =>
-    let canonical := plan.taggedCanonical
+    let canonical := plan.inputCanonical
     if canonical.isEmpty then none else some s!"{i}={canonical}").filterMap id
   if policies.isEmpty then "" else String.intercalate "," policies.toList
 

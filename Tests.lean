@@ -56,6 +56,7 @@ import Tests.EvmSdkSpec
 import Tests.CoreCodecSpec
 import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
+import Tests.EvmBoundedSpec
 import Tests.TipJarSpec
 import Tests.LangSpec
 import Tests.VaultSpec
