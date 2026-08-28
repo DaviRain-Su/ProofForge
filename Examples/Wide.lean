@@ -56,6 +56,14 @@ def shiftRight (_s : State) (a : UInt256) (bits : UInt64) : UInt256 :=
   UInt256.shiftRight a bits
 
 @[pf_entry]
+def div256 (_s : State) (a b : UInt256) : UInt256 :=
+  UInt256.div a b
+
+@[pf_entry]
+def mod256 (_s : State) (a b : UInt256) : UInt256 :=
+  UInt256.mod a b
+
+@[pf_entry]
 def eq256 (_s : State) (a b : UInt256) : Bool :=
   UInt256.eq a b
 

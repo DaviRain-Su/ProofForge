@@ -24,15 +24,16 @@ cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded accou
 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
 instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed signer tail 收口到
 同一个 bounded plan，下一刀进入 SVM-RT-3 Token-2022 TLV。EVM-RT-2a typed call-result 已完成，
-EVM-RT-2b 也已统一 typed LOG0..4/custom-error plan；下一刀完成 UInt256 div/mod 的明确除零
-策略，再继续 payable/receive policy。并行 EVM UInt256 线已补齐 typed bitwise/shift。
+EVM-RT-2b 也已统一 typed LOG0..4/custom-error plan；UInt256 div/mod 已固定 checked 除零
+revert 策略，下一刀继续 payable/receive policy。并行 EVM UInt256 线现已补齐 typed
+comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
 R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
 完成。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 269 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 272 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 293/293（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -266,6 +267,11 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   EVM Yul/bin/ABI 产物逐字节不变，没有开放 arbitrary opcode/signature/selector。详见
   `docs/plan/tasks/r4-002.md`。
 
+- E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
+  component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
+  divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
+  不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
+
 - `lake build Tests` 当前 272 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 293/293，其中 RawEntry 15/15、Phoenix-v1 profile
@@ -275,9 +281,10 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   TwoStepCounter / Credits / Window / Phase / Wide / Const 均进入
   Anvil 总门。`Addr20` 是一等 ABI `address`；
   显式 `UInt256` 使用 checked add/sub/mul、typed unsigned eq/lt/le/gt/ge 和 ABI `uint256`，
-  以及 typed bitwise AND/OR/XOR/complement/logical shift；默认算术仍是 `UInt64`。这些操作
-  全部复用 `WideWord` component，不增加 main Emit recipe；div/mod 仍未完成。详见
-  `docs/plan/tasks/e-u256-002.md`、`docs/plan/tasks/e-u256-003.md`。
+  以及 typed bitwise AND/OR/XOR/complement/logical shift 和 checked div/mod；默认算术仍是
+  `UInt64`。这些操作全部复用 `WideWord` component，不增加 main Emit recipe。详见
+  `docs/plan/tasks/e-u256-002.md`、`docs/plan/tasks/e-u256-003.md`、
+  `docs/plan/tasks/e-u256-004.md`。
   地址的 little-endian limbs → ABI word 转换由 runtime `pf_store_addr20` helper 统一实现，不再
   在每个 CFG case 展开二十条 `mstore8`；solc 0.8.34 strict Yul optimizer 可编译完整 Token，
   全 20 个 build 与 Anvil 20/20 通过。详见 `docs/plan/tasks/evm-009.md`、

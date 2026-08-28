@@ -77,6 +77,25 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'shiftLeft(uint256,uint64)(uint256)' "$shift_value" 256)" 0 "uint256 wide shift is zero"
 
+dividend="$("$python" -I -S -c "print((1<<200)+(17<<64)+12345)")"
+divisor="$("$python" -I -S -c "print((1<<96)+7)")"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'div256(uint256,uint256)(uint256)' "$dividend" "$divisor")" \
+  "$("$python" -I -S -c "print($dividend // $divisor)")" "uint256 cross-limb division"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'mod256(uint256,uint256)(uint256)' "$dividend" "$divisor")" \
+  "$("$python" -I -S -c "print($dividend % $divisor)")" "uint256 cross-limb modulo"
+if "$cast" call --rpc-url "$rpc" "$addr" \
+    'div256(uint256,uint256)(uint256)' "$dividend" 0 >/dev/null 2>&1; then
+  echo "FAIL: division by zero unexpectedly succeeded" >&2
+  exit 1
+fi
+if "$cast" call --rpc-url "$rpc" "$addr" \
+    'mod256(uint256,uint256)(uint256)' "$dividend" 0 >/dev/null 2>&1; then
+  echo "FAIL: modulo by zero unexpectedly succeeded" >&2
+  exit 1
+fi
+
 u128="$("$python" -I -S -c "print((1<<127)+(1<<64)+7)")"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'echo128(uint128)(uint128)' "$u128")" "$u128" "shared uint128 echo"
@@ -117,4 +136,4 @@ if "$cast" call --rpc-url "$rpc" "$addr" \
   exit 1
 fi
 
-echo "evm-anvil-wide: ok (uint256 arithmetic/ordering/bitwise + uint128/bytes12 ABI; engineering only)"
+echo "evm-anvil-wide: ok (uint256 arithmetic/ordering/bitwise/divmod + uint128/bytes12 ABI; engineering only)"

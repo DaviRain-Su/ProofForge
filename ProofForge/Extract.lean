@@ -1454,6 +1454,10 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                   endsWith baseE ".evmOr256" then some (.bitwise256 .or limb.toNat)
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmXor256 ||
                   endsWith baseE ".evmXor256" then some (.bitwise256 .xor limb.toNat)
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmDiv256 ||
+                  endsWith baseE ".evmDiv256" then some (.checkedDivMod256 .quotient limb.toNat)
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMod256 ||
+                  endsWith baseE ".evmMod256" then some (.checkedDivMod256 .remainder limb.toNat)
               else none
             let unaryQuery? : Option Evm.WideWord.Query :=
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmNot256 ||
@@ -2163,7 +2167,9 @@ private def uint256Leaves (env : Environment) (e : Expr) :
         isConstNamed e ``ProofForge.Evm.Runtime.evmXor256 || endsWith e ".evmXor256" ||
         isConstNamed e ``ProofForge.Evm.Runtime.evmNot256 || endsWith e ".evmNot256" ||
         isConstNamed e ``ProofForge.Evm.Runtime.evmShl256 || endsWith e ".evmShl256" ||
-        isConstNamed e ``ProofForge.Evm.Runtime.evmShr256 || endsWith e ".evmShr256" then
+        isConstNamed e ``ProofForge.Evm.Runtime.evmShr256 || endsWith e ".evmShr256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmDiv256 || endsWith e ".evmDiv256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmMod256 || endsWith e ".evmMod256" then
       (proj "w0", proj "w1", proj "w2", proj "w3")
     else
       match val env e with
@@ -6334,6 +6340,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       isConstNamed e ``ProofForge.Evm.Runtime.evmNot256 || endsWith e ".evmNot256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmShl256 || endsWith e ".evmShl256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmShr256 || endsWith e ".evmShr256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmDiv256 || endsWith e ".evmDiv256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMod256 || endsWith e ".evmMod256" ||
       (match unfoldUserHelper env e with
         | some (_, unfolded) => (uint256CtorFields env unfolded).isSome
         | none => false) ||

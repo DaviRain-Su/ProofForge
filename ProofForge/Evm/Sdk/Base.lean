@@ -67,6 +67,12 @@ namespace «UInt256»
 @[pf_inline] def shiftRight (value : UInt256) (bits : UInt64) : UInt256 :=
   WideWord.Source.shiftRight256 value bits
 
+@[pf_inline] def div (dividend divisor : UInt256) : UInt256 :=
+  WideWord.Source.div256 dividend divisor
+
+@[pf_inline] def mod (dividend divisor : UInt256) : UInt256 :=
+  WideWord.Source.mod256 dividend divisor
+
 @[pf_inline] def atLeast (left right : UInt256) : Bool :=
   Runtime.evmGe256 left right
 

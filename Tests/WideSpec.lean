@@ -24,6 +24,8 @@ def bytes12 : FixedBytes 12 := ⟨0x0706050403020100, 0x0b0a0908, 0, 0⟩
 #guard complement (init 0) one == one
 #guard shiftLeft (init 0) one 65 == one
 #guard shiftRight (init 0) one 65 == one
+#guard div256 (init 0) one ⟨2, 0, 0, 0⟩ == one
+#guard mod256 (init 0) one ⟨2, 0, 0, 0⟩ == one
 
 -- Host comparison stubs are deliberately opaque; these guards establish the stable SDK surface.
 #guard eq256 (init 0) one one
@@ -40,9 +42,12 @@ def bytes12 : FixedBytes 12 := ⟨0x0706050403020100, 0x0b0a0908, 0, 0⟩
 #guard ProofForge.Evm.WideWord.Query.wellFormed (.bitwise256 .and 3)
 #guard ProofForge.Evm.WideWord.Query.wellFormed (.not256 3)
 #guard ProofForge.Evm.WideWord.Query.wellFormed (.shift256 .left 3)
+#guard ProofForge.Evm.WideWord.Query.wellFormed (.checkedDivMod256 .quotient 3)
+#guard ProofForge.Evm.WideWord.Query.wellFormed (.checkedDivMod256 .remainder 3)
 #guard !ProofForge.Evm.WideWord.Query.wellFormed (.bitwise256 .xor 4)
 #guard !ProofForge.Evm.WideWord.Query.wellFormed (.not256 4)
 #guard !ProofForge.Evm.WideWord.Query.wellFormed (.shift256 .right 4)
+#guard !ProofForge.Evm.WideWord.Query.wellFormed (.checkedDivMod256 .quotient 4)
 
 private def mockContext : ProofForge.Evm.WideWord.Emit.Context Nat :=
   { materialize := fun _ st => .ok ("", s!"x{st}", st + 1)
@@ -79,6 +84,18 @@ private def emitsQuery (query : ProofForge.Evm.WideWord.Query)
 #guard emitsQuery (.not256 3) (Array.replicate 4 (.lit 0)) " := not(v4)" "v6" 7
 #guard emitsQuery (.shift256 .left 0) (Array.replicate 5 (.lit 0)) " := shl(x4, v5)" "v7" 8
 #guard emitsQuery (.shift256 .right 3) (Array.replicate 5 (.lit 0)) " := shr(x4, v5)" "v7" 8
+
+private def emitsCheckedDivMod (operation : ProofForge.Evm.WideWord.Division)
+    (needle : String) : Bool :=
+  match ProofForge.Evm.WideWord.Emit.emitQuery mockContext
+      (.checkedDivMod256 operation 0) operands 0 with
+  | .error _ => false
+  | .ok (text, result, st) =>
+      text.contains "if iszero(v9) { revert(0, 0) }" && text.contains needle &&
+        result == "v11" && st == 12
+
+#guard emitsCheckedDivMod .quotient " := div(v8, v9)"
+#guard emitsCheckedDivMod .remainder " := mod(v8, v9)"
 
 #guard
   match ProofForge.Evm.WideWord.Emit.emitQuery mockContext (.compare256 .eq)

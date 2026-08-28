@@ -85,7 +85,8 @@ private def bitwiseExpr (operation : WideWord.Bitwise) (left right : String) : S
   | .or => "or(" ++ left ++ ", " ++ right ++ ")"
   | .xor => "xor(" ++ left ++ ", " ++ right ++ ")"
 
-private def emitBitwise256 (context : Context σ) (operation : WideWord.Bitwise) (limb : Nat)
+private def emitPackedBinary256 (context : Context σ) (cacheIdentity : String)
+    (operation : String → String → String) (rejectZeroRight : Bool) (limb : Nat)
     (a0 a1 a2 a3 b0 b1 b2 b3 : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
   let indent := context.indent
@@ -98,7 +99,7 @@ private def emitBitwise256 (context : Context σ) (operation : WideWord.Bitwise)
   let (q2, y2, t2) ← context.materialize b2 t1
   let (q3, y3, t3) ← context.materialize b3 t2
   let cacheKey :=
-    "bitwise256|" ++ toString (repr operation) ++ "|" ++ context.valKey a0 ++ "|" ++
+    cacheIdentity ++ "|" ++ context.valKey a0 ++ "|" ++
       context.valKey a1 ++ "|" ++ context.valKey a2 ++ "|" ++ context.valKey a3 ++ "|" ++
       context.valKey b0 ++ "|" ++ context.valKey b1 ++ "|" ++ context.valKey b2 ++ "|" ++
       context.valKey b3
@@ -115,9 +116,27 @@ private def emitBitwise256 (context : Context σ) (operation : WideWord.Bitwise)
       let txt := pre ++
         indent ++ "let " ++ av ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
         indent ++ "let " ++ bv ++ " := " ++ packU256 y0 y1 y2 y3 ++ nl ++
-        indent ++ "let " ++ rv ++ " := " ++ bitwiseExpr operation av bv ++ nl ++
+        (if rejectZeroRight then indent ++ "if iszero(" ++ bv ++ ") { " ++ revert0 ++ " }" ++ nl
+          else "") ++
+        indent ++ "let " ++ rv ++ " := " ++ operation av bv ++ nl ++
         indent ++ "let " ++ nm ++ " := " ++ packU256Word rv limb ++ nl
       return (txt, nm, t7)
+
+private def emitBitwise256 (context : Context σ) (operation : WideWord.Bitwise) (limb : Nat)
+    (a0 a1 a2 a3 b0 b1 b2 b3 : Ops.Val) (st : σ) :
+    Except String (String × String × σ) :=
+  emitPackedBinary256 context ("bitwise256|" ++ toString (repr operation))
+    (bitwiseExpr operation) false limb a0 a1 a2 a3 b0 b1 b2 b3 st
+
+private def emitCheckedDivMod256 (context : Context σ) (operation : WideWord.Division) (limb : Nat)
+    (a0 a1 a2 a3 b0 b1 b2 b3 : Ops.Val) (st : σ) :
+    Except String (String × String × σ) :=
+  let expr :=
+    match operation with
+    | .quotient => fun left right => "div(" ++ left ++ ", " ++ right ++ ")"
+    | .remainder => fun left right => "mod(" ++ left ++ ", " ++ right ++ ")"
+  emitPackedBinary256 context ("checkedDivMod256|" ++ toString (repr operation)) expr true limb
+    a0 a1 a2 a3 b0 b1 b2 b3 st
 
 private def emitNot256 (context : Context σ) (limb : Nat)
     (a0 a1 a2 a3 : Ops.Val) (st : σ) : Except String (String × String × σ) := do
@@ -236,6 +255,8 @@ def emitQuery (context : Context σ) (query : WideWord.Query) (operands : Array 
       emitNot256 context limb a0 a1 a2 a3 st
   | .shift256 direction limb, [a0, a1, a2, a3, amount] =>
       emitShift256 context direction limb a0 a1 a2 a3 amount st
+  | .checkedDivMod256 operation limb, [a0, a1, a2, a3, b0, b1, b2, b3] =>
+      emitCheckedDivMod256 context operation limb a0 a1 a2 a3 b0 b1 b2 b3 st
   | .arith256 op limb, [a0, a1, a2, a3, b0, b1, b2, b3] =>
       emitArith256 context op limb a0 a1 a2 a3 b0 b1 b2 b3 st
   | _, _ =>

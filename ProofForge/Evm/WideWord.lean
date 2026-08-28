@@ -21,7 +21,12 @@ inductive Shift where
   | right
   deriving BEq, Repr, Inhabited
 
-/-- Packed 256-bit compare, checked arithmetic, bitwise operations, and logical shifts.
+inductive Division where
+  | quotient
+  | remainder
+  deriving BEq, Repr, Inhabited
+
+/-- Packed 256-bit compare, checked arithmetic/division, bitwise operations, and logical shifts.
 These are value queries: they do not touch storage, logs, or CALL. Dynamic operands stay in
 `Val.ext`. -/
 inductive Query where
@@ -37,20 +42,23 @@ inductive Query where
   | not256 (limb : Nat)
   /-- Packed logical shift by one UInt64 amount; `limb` is 0..3. Five operands. -/
   | shift256 (direction : Shift) (limb : Nat)
+  /-- Checked unsigned division or modulo; zero divisor reverts. Eight operands. -/
+  | checkedDivMod256 (operation : Division) (limb : Nat)
   /-- Checked 256-bit `add`/`sub`/`mul`; `limb` is 0..3 (w0 lowest).
   `op` is 0 add, 1 sub, 2 mul. Eight operands: a0..a3, b0..b3. -/
   | arith256 (op : Nat) (limb : Nat)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
-  | .ge256 | .compare256 _ | .bitwise256 _ _ | .arith256 _ _ => 8
+  | .ge256 | .compare256 _ | .bitwise256 _ _ | .checkedDivMod256 _ _ | .arith256 _ _ => 8
   | .not256 _ => 4
   | .shift256 _ _ => 5
   | .eq20 => 6
 
 def Query.wellFormed : Query → Bool
   | .ge256 | .compare256 _ | .eq20 => true
-  | .bitwise256 _ limb | .not256 limb | .shift256 _ limb => limb ≤ 3
+  | .bitwise256 _ limb | .not256 limb | .shift256 _ limb |
+      .checkedDivMod256 _ limb => limb ≤ 3
   | .arith256 op limb => op ≤ 2 && limb ≤ 3
 
 private def renderOperands (renderValue : V → String) (operands : Array V) : String :=
@@ -73,6 +81,9 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
         s!"({renderOperands renderValue operands})"
   | .shift256 direction limb =>
       s!"ext.ProofForge.Evm.Ops.ValKind.shift256.{repr direction} {limb}" ++
+        s!"({renderOperands renderValue operands})"
+  | .checkedDivMod256 operation limb =>
+      s!"ext.ProofForge.Evm.Ops.ValKind.checkedDivMod256.{repr operation} {limb}" ++
         s!"({renderOperands renderValue operands})"
   | .arith256 op limb =>
       s!"ext.ProofForge.Evm.Ops.ValKind.arith256 {op} {limb}" ++

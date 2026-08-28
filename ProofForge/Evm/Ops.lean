@@ -98,6 +98,10 @@ def not256 (limb : Nat) (a0 a1 a2 a3 : Val) : Val :=
 def shift256 (direction : WideWord.Shift) (limb : Nat)
     (a0 a1 a2 a3 amount : Val) : Val :=
   .ext (.component (.wideWord (.shift256 direction limb))) #[a0, a1, a2, a3, amount]
+def checkedDivMod256 (operation : WideWord.Division) (limb : Nat)
+    (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
+  .ext (.component (.wideWord (.checkedDivMod256 operation limb)))
+    #[a0, a1, a2, a3, b0, b1, b2, b3]
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext (.component (.wideWord (.arith256 op limb))) #[a0, a1, a2, a3, b0, b1, b2, b3]
 

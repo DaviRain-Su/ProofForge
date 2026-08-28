@@ -273,6 +273,14 @@ def evmImm20b : Addr20 :=
 @[irreducible] def evmShr256 (a : UInt256) (bits : UInt64) : UInt256 :=
   let _ := bits; a
 
+/-- Checked packed unsigned division. EVM emission reverts on a zero divisor. -/
+@[irreducible] def evmDiv256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
+
+/-- Checked packed unsigned remainder. EVM emission reverts on a zero divisor. -/
+@[irreducible] def evmMod256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
+
 /-- 两份 Addr20 整值相等。Yul pack 成 address 再 `eq`。宿主返回 `true`。 -/
 @[irreducible] def evmEq20 (_a _b : Addr20) : Bool := true
 
