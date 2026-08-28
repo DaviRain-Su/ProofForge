@@ -3,6 +3,7 @@ import Examples.Counter
 import Examples.Capped
 import Examples.Token
 import Examples.Tree
+import ProofForge.Evm.Sdk.Pausable
 
 /-!
 # 第一批 kernel 证明的连通性抽查
@@ -29,6 +30,10 @@ import Examples.Tree
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
 - `Examples.Tree.removeNode_size` / `init_wf` / `allocNode_wf`：
   `propext`（部分含 `Quot.sound`）
+- `Evm.Sdk.Pausable` fail-closed 包（unknown_neither / 互斥 / 转换常值 /
+  unpause 恢复 / roundtrip）：`propext`；`isRunning_unpause` 零公理
+- `Svm.Sdk.StorageModel`：字段代数 / wf 桥 / `mBvPush_twoWrites`：
+  `propext`（部分含 `Quot.sound`）
 -/
 
 namespace Tests.ProofSpec
@@ -54,6 +59,12 @@ open Examples.Counter
 
 -- Tree wf：init 良构（wf 谓词第一批切片；kernel 检查，不求值）
 example : Examples.Tree.wf (Examples.Tree.init 0) := Examples.Tree.init_wf 0
+
+-- Pausable fail-closed：unknown flag 门关且不误报 paused
+#guard
+  match (2 : UInt8) with
+  | f => !ProofForge.Evm.Sdk.Pausable.isRunning f
+      && !ProofForge.Evm.Sdk.Pausable.isPaused f
 
 -- 定理连通性：`increment_ok` 的返回值一致性分量可直接复用
 example (s : State) (d : UInt64) (t : State) (r : UInt64)
