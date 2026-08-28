@@ -18,7 +18,9 @@ open Lean Elab Command
 #guard Erc721.canEncode ⟨0, 1, 0, 0⟩
 #guard Erc721.canEncode ⟨0, 0, 1, 0⟩
 #guard !Erc721.canEncode ⟨0, 0, 0, 1⟩
+#guard !Erc721.canEncode ⟨1, 0, 0, 1⟩
 #guard Erc721.tokenKey ⟨7, 8, 9, 0⟩ == (⟨7, 8, 9⟩ : Address)
+#guard Erc721.tokenKey ⟨7, 8, 9, 1⟩ == (⟨7, 8, 9⟩ : Address)
 #guard Erc721.packAddress ⟨1, 2, 3⟩ == (⟨1, 2, 3, 0⟩ : UInt256)
 #guard Erc721.unpackAddress ⟨1, 2, 3, 9⟩ == (⟨1, 2, 3⟩ : Address)
 #guard Erc721.one == (⟨1, 0, 0, 0⟩ : UInt256)
@@ -46,8 +48,8 @@ private def expectDigest (moduleName : Name) (digest : String) : CommandElabM Un
     throwError s!"{moduleName} digest drifted: {IR.digestHex program}"
 
 private def expectErc721 : CommandElabM Unit := do
-  expectDigest `Examples.Collectible "266301132a881a02"
-  expectDigest `Examples.Badge "aa94d97fa25242a8"
+  expectDigest `Examples.Collectible "32af75f51e2dd67"
+  expectDigest `Examples.Badge "1bd25262b1bc32d2"
 
 elab "#pf_guard_evm_erc721" : command => expectErc721
 

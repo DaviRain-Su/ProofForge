@@ -99,4 +99,15 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'ownerOf(uint256)(uint256)' "$token_id2")" \
   "$sender_packed" "non-approved burn holds owner"
 
+# tokenKey drops w3; views/auth must not treat id+2^192 as the minted token.
+alias_id="$("$python" -I -S -c "print($token_id2 + (1 << 192))")"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'ownerOf(uint256)(uint256)' "$alias_id")" \
+  0 "ownerOf rejects unencodable alias"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'burn(uint256)' "$alias_id" >/dev/null 2>&1; then
+  echo "FAIL: burn on unencodable alias unexpectedly succeeded" >&2
+  exit 1
+fi
+
 echo "evm-anvil-badge: ok (operator transfer/burn)"

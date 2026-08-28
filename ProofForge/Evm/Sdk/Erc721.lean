@@ -48,6 +48,8 @@ abbrev Balances := Storage.AddressMap
 
 namespace Owners
 
+/-- Owner of `tokenId`. Precondition for a meaningful result: `canEncode tokenId`
+(otherwise `tokenKey` truncates and may alias another id). -/
 @[pf_inline] def ownerOf (owners : Owners) (tokenId : UInt256) : Address :=
   unpackAddress (owners.get (tokenKey tokenId))
 
@@ -64,6 +66,7 @@ end Owners
 
 namespace TokenApprovals
 
+/-- Approved spender for `tokenId`. Precondition for a meaningful result: `canEncode tokenId`. -/
 @[pf_inline] def getApproved (approvals : TokenApprovals) (tokenId : UInt256) : Address :=
   unpackAddress (approvals.get (tokenKey tokenId))
 
@@ -111,13 +114,15 @@ namespace Balances
 
 end Balances
 
-/-- True when `spender` is the owner, the per-token approved address, or an approved operator. -/
+/-- True when `spender` is the owner, the per-token approved address, or an approved operator.
+Unencodable token ids are never authorized (same gate as mutation predicates). -/
 @[pf_inline] def isApprovedOrOwner (owners : Owners) (approvals : TokenApprovals)
     (operators : Operators) (spender : Address) (tokenId : UInt256) : Bool :=
-  let owner := owners.ownerOf tokenId
-  Address.eq spender owner ||
-    Address.eq spender (approvals.getApproved tokenId) ||
-    operators.isApprovedForAll owner spender
+  canEncode tokenId &&
+    (let owner := owners.ownerOf tokenId
+     Address.eq spender owner ||
+       Address.eq spender (approvals.getApproved tokenId) ||
+       operators.isApprovedForAll owner spender)
 
 /-- Mint is valid when the id encodes, the token is absent, the recipient is nonzero, and the
 recipient balance can accept one more token. -/

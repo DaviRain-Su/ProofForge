@@ -86,15 +86,18 @@ def burn (s : State) (tokenId : UInt256) : Except Error (State × UInt64) :=
   else
     .ok (s, Revert.unauthorized Context.caller)
 
-/-- Packed owner; see Collectible.ownerOf for why this is `UInt256` rather than `Address`. -/
+/-- Packed owner; see Collectible.ownerOf for why this is `UInt256` rather than `Address`.
+Unencodable ids return zero (no `tokenKey` alias). -/
 @[pf_entry]
 def ownerOf (_s : State) (tokenId : UInt256) : UInt256 :=
-  owners.get (Erc721.tokenKey tokenId)
+  if !Erc721.canEncode tokenId then UInt256.zero
+  else owners.get (Erc721.tokenKey tokenId)
 
 /-- Packed per-token approval. -/
 @[pf_entry]
 def getApproved (_s : State) (tokenId : UInt256) : UInt256 :=
-  approvals.get (Erc721.tokenKey tokenId)
+  if !Erc721.canEncode tokenId then UInt256.zero
+  else approvals.get (Erc721.tokenKey tokenId)
 
 @[pf_entry]
 def isApprovedForAll (_s : State) (owner operator : Address) : Bool :=

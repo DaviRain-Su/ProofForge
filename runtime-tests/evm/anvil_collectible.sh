@@ -106,6 +106,21 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'getApproved(uint256)(uint256)' "$token_id")" \
   0 "approval cleared"
 
+# tokenKey drops w3; ownerOf/getApproved must not alias id with id+2^192.
+alias_id="$("$python" -I -S -c "print($token_id + (1 << 192))")"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'ownerOf(uint256)(uint256)' "$alias_id")" \
+  0 "ownerOf rejects unencodable alias"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'getApproved(uint256)(uint256)' "$alias_id")" \
+  0 "getApproved rejects unencodable alias"
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'transferFrom(address,address,uint256)' "$other" "$sender" "$alias_id" \
+    >/dev/null 2>&1; then
+  echo "FAIL: transferFrom on unencodable alias unexpectedly succeeded" >&2
+  exit 1
+fi
+
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
     "$addr" 'transferFrom(address,address,uint256)' "$other" "$sender" "$token_id" \
     >/dev/null 2>&1; then

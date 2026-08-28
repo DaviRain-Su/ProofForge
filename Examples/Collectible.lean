@@ -74,15 +74,17 @@ def transferFrom (s : State) (source to : Address) (tokenId : UInt256) :
 
 /-- Packed owner (`⟨w0,w1,w2,0⟩`). Address-typed returns from map reads still expand to four
 UInt256 limbs under Extract, so consumers expose the packed word until Emit grows a 3-limb
-Address path for hashed-map loads. -/
+Address path for hashed-map loads. Unencodable ids return zero (no `tokenKey` alias). -/
 @[pf_entry]
 def ownerOf (_s : State) (tokenId : UInt256) : UInt256 :=
-  owners.get (Erc721.tokenKey tokenId)
+  if !Erc721.canEncode tokenId then UInt256.zero
+  else owners.get (Erc721.tokenKey tokenId)
 
 /-- Packed per-token approval; same Extract limitation as `ownerOf`. -/
 @[pf_entry]
 def getApproved (_s : State) (tokenId : UInt256) : UInt256 :=
-  approvals.get (Erc721.tokenKey tokenId)
+  if !Erc721.canEncode tokenId then UInt256.zero
+  else approvals.get (Erc721.tokenKey tokenId)
 
 @[pf_entry]
 def balanceOf (_s : State) (owner : Address) : UInt256 :=
