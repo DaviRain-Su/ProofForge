@@ -862,6 +862,86 @@ section Proofs
 
 /-! ## 第二批 kernel 证明：N=4 分配器与旋转的结构不变量
 
+`u64_pred_add`：`(a-1)+1 = a` 对 UInt64 无条件成立（模 2^64），所以 removeNode
+的 size 结论不需要「树非空」前置。 -/
+
+private theorem u64_pred_add (a : UInt64) : (a - 1) + 1 = a := by
+  refine UInt64.toNat_inj.mp ?_
+  have hone : UInt64.toNat 1 = 1 := rfl
+  have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+  have hsz : a.toNat < 4294967296 * 4294967296 := UInt64.toNat_lt_size a
+  rw [UInt64.toNat_add, UInt64.toNat_sub a 1, hone, h2, Nat.mod_add_mod]
+  omega
+
+private theorem paintNode_size (s : State) (addr c : UInt64) :
+    (paintNode s addr c).size = s.size := by
+  unfold paintNode
+  split <;> rfl
+
+private theorem linkLeft_size (s : State) (p c : UInt64) :
+    (linkLeft s p c).size = s.size := by
+  unfold linkLeft
+  simp only []
+  split <;> simp
+
+private theorem linkRight_size (s : State) (p c : UInt64) :
+    (linkRight s p c).size = s.size := by
+  unfold linkRight
+  simp only []
+  split <;> simp
+
+private theorem transplantNode_size (s : State) (r r' : UInt64) :
+    (transplantNode s r r').size = s.size := by
+  unfold transplantNode
+  repeat (first | split | simp only [] | rfl)
+
+private theorem rotateLeftDelete_size (s : State) (x : UInt64) :
+    (rotateLeftDelete s x).size = s.size := by
+  unfold rotateLeftDelete
+  repeat (first | split | simp only [] | rfl)
+
+private theorem rotateRightDelete_size (s : State) (x : UInt64) :
+    (rotateRightDelete s x).size = s.size := by
+  unfold rotateRightDelete
+  repeat (first | split | simp only [] | rfl)
+
+private theorem moveSuccessor_size (s : State) (rm sc rp : UInt64) :
+    (moveSuccessor s rm sc rp).size = s.size := by
+  unfold moveSuccessor
+  repeat (first
+    | split
+    | simp only []
+    | simp only [transplantNode_size, linkLeft_size, linkRight_size, paintNode_size]
+    | rfl)
+
+/-- `- 1 + 1` 穿过 `ite`：让 `u64_pred_add` 只在叶子处应用。 -/
+private theorem sub_add_ite (c : Prop) [inst : Decidable c] (x y : UInt64) :
+    (if c then x else y) - 1 + 1 = if c then (x - 1 + 1) else (y - 1 + 1) := by
+  by_cases hc : c
+  · simp [hc]
+  · simp [hc]
+
+private theorem releaseRemoved_size (s : State) (addr : UInt64) :
+    (releaseRemoved s addr).size = s.size - 1 := rfl
+
+/-- `.size` 穿过 `ite` 的同态；removeNode 管线里的值分支靠它下推。 -/
+private theorem size_ite (c : Prop) [inst : Decidable c] (x y : State) :
+    (if c then x else y).size = if c then x.size else y.size := by
+  by_cases hc : c
+  · simp [hc]
+  · simp [hc]
+
+private theorem fixDeleted_size (s : State) (x p : UInt64) :
+    (fixDeleted s x p).size = s.size := by
+  unfold fixDeleted
+  repeat (first
+    | split
+    | simp only []
+    | simp only [paintNode_size, rotateLeftDelete_size, rotateRightDelete_size]
+    | rfl)
+
+/-! ## 第二批 kernel 证明：N=4 分配器与旋转的结构不变量
+
 对上面 `@[pf_entry]` 函数的普通 kernel-checked 性质。旋转不分配/不释放节点，
 分配器成功路径恰好占用一个槽；这些都是 Sokoban 组合正确性的核心前提。 -/
 
@@ -922,6 +1002,35 @@ theorem allocNode_size (s : State) (k v : UInt64) {t : State} {a : UInt64}
          exact u64_succ_bound hsz)
       | rfl)
   · simp at h
+
+/-- 控制分支反演：`(if c then error E else ok R) = ok (t, a)` 给出 `¬c ∧ R = (t, a)`。
+用一阶合一应用，绕开 `split` 在巨型项上的 motive elaboration。 -/
+private theorem ite_except_ok_inv {c : Prop} [inst : Decidable c]
+    {A B : Except Error (State × UInt64)} {t : State} {a : UInt64}
+    (h : (if c then A else B) = Except.ok (t, a)) :
+    B = Except.ok (t, a) ∨ A = Except.ok (t, a) := by
+  by_cases hc : c
+  · rw [if_pos hc] at h
+    exact Or.inr h
+  · rw [if_neg hc] at h
+    exact Or.inl h
+
+set_option pp.deepTerms false in
+/-- **removeNode 的 size 守恒**：成功删除后 `t.size + 1 = s.size`。
+管线里只有 `releaseRemoved` 碰 size（`s.size - 1`），其余全部只改 nodes/root；
+`(a-1)+1 = a` 对 UInt64 无条件成立，所以结论不需要非空前置。 -/
+theorem removeNode_size (s : State) (k : UInt64) {t : State} {a : UInt64}
+    (h : removeNode s k = .ok (t, a)) : t.size + 1 = s.size := by
+  unfold removeNode at h
+  simp (config := { maxSteps := 200000 }) only [] at h
+  rcases ite_except_ok_inv h with hR | hE
+  · simp only [Except.ok.injEq, Prod.mk.injEq] at hR
+    obtain ⟨rfl, rfl⟩ := hR
+    -- 先把 `.size` 一路推进 ite 分支到叶子，再让 `(a-1)+1 = a` 收尾
+    simp (config := { maxSteps := 200000 }) only [releaseRemoved_size, paintNode_size,
+      size_ite, fixDeleted_size, transplantNode_size, moveSuccessor_size]
+    simp only [u64_pred_add, ite_self]
+  · simp at hE
 
 theorem rotateLeft_size (s : State) (x : UInt64) {t : State} {y : UInt64}
     (h : rotateLeft s x = .ok (t, y)) : t.size = s.size := by
