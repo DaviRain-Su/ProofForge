@@ -232,7 +232,7 @@ private def mockClosedCtx : ClosedCall.Emit.Context Nat :=
         LogError.Emit.emitRevert { indent := "    " }
         { selector := Keccak.selector "Expired" #[] },
         LogError.Emit.emitRevert { indent := "    " }
-        { selector := Keccak.selector "Unauthorized" #["address"], args := #["v14"] },
+        { selector := Keccak.selector "Unauthorized" #["address"], args := #["v15"] },
         ClosedCall.Emit.emitCall mockClosedCtx
         (.permit lit lit lit lit lit lit lit lit lit lit lit lit lit lit lit lit lit lit lit
           lit lit lit lit) 0 with
@@ -240,7 +240,7 @@ private def mockClosedCtx : ClosedCall.Emit.Context Nat :=
       txt.endsWith approval && txt.contains expired &&
         txt.contains unauthorized &&
         txt.contains "  if lt(v3, timestamp()) {\n" &&
-        txt.contains "  if iszero(eq(v14, v0)) {\n"
+        txt.contains "  if iszero(eq(v15, v0)) {\n"
   | _, _, _, _ => false
 
 -- Component bridge still routes native effects into the shared interpreter.

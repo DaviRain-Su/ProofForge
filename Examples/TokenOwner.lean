@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.TokenOwner
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -19,7 +17,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def setOwner (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenSetAccountAuthority
+    let _ := ProofForge.Svm.Sdk.Token.setAccountAuthority
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
@@ -27,7 +25,7 @@ def setOwner (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def approve (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenApprove amount
+    let _ := ProofForge.Svm.Sdk.Token.approve amount
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

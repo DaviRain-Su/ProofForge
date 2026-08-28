@@ -1,4 +1,4 @@
-import ProofForge.Evm.Sdk.Base
+import ProofForge.Evm.Sdk.Pausable
 
 namespace ProofForge.Evm.Sdk.Access
 
@@ -9,8 +9,9 @@ This module owns contract *policy gates*, not storage geometry. Every combinator
 `@[pf_inline]` and erases at extraction into the existing target-owned components:
 
 - gates read `Context.caller` and compare through `Address.eq` (the `WideWord`
-  component query), or test an explicit `UInt8` paused flag; construction-time immutable
-  owners keep using the existing `Address.eqImmutable` directly (e.g. `Examples.Token`),
+  component query), or delegate an explicit `UInt8` paused flag to `Sdk.Pausable`;
+  construction-time immutable owners keep using the existing `Address.eqImmutable` directly
+  (e.g. `Examples.Token`),
 - failure terminals are the closed `Revert` set (`Unauthorized(caller)`, `Paused()`),
   never new error selectors;
 - two-step ownership is one fixed `Ownership` value containing the sole pending address; the
@@ -25,12 +26,12 @@ Resource contract: gates are O(1) component queries; `Ownership` is exactly one 
 EVM words in the current address representation). There is no loop, allocation, hashed namespace,
 or hidden storage.
 
-Fail-closed boundary (later dependencies, intentionally absent here):
+Component boundary (intentionally absent here):
 
-- no reentrancy guard: a sound guard needs the typed external-call contract of EVM-RT-2
-  (`EVM-SDK-3` consumes it), and the current closed-call set must not be pretended pure;
-- no roles API: bounded role storage needs scalar/static storage declarations
-  (EVM-SDK-2) or an owned role-namespace policy not yet specified;
+- no reentrancy guard: a sound guard needs a typed external-call/effect-sequencing contract, and
+  the current closed-call set must not be pretended pure;
+- no roles or pause-state owner: use `Sdk.Roles.Set2` for bounded role decisions and
+  `Sdk.Pausable` for explicit pause flags/transitions;
 - no new revert errors: only the existing closed `Revert` set is composed.
 
 The public `ProofForge.Evm.Sdk` umbrella exports this component. Nothing in this module requires
@@ -38,10 +39,10 @@ The public `ProofForge.Evm.Sdk` umbrella exports this component. Nothing in this
 -/
 
 /-- Value of an explicit paused flag while the contract is running. -/
-@[pf_inline] def runningFlag : UInt8 := 0
+@[pf_inline] def runningFlag : UInt8 := Pausable.running
 
 /-- Value of an explicit paused flag while the contract is paused. -/
-@[pf_inline] def pausedFlag : UInt8 := 1
+@[pf_inline] def pausedFlag : UInt8 := Pausable.paused
 
 /-- Owner gate: the caller holds the explicit stored-owner handle.
     Use as `if Access.requireOwner s.owner then … else .ok (s, Access.ownerViolation)`. -/
@@ -51,7 +52,7 @@ The public `ProofForge.Evm.Sdk` umbrella exports this component. Nothing in this
 /-- Running gate: the explicit paused flag is clear.
     Use as `if Access.requireRunning s.paused then … else .ok (s, Access.runningViolation)`. -/
 @[pf_inline] def requireRunning (paused : UInt8) : Bool :=
-  paused == 0
+  Pausable.isRunning paused
 
 /-- Failure terminal of the owner gate: `Unauthorized(caller)`. Returns the revert value;
     the caller's state is returned unchanged by the consumer. -/
@@ -60,7 +61,7 @@ The public `ProofForge.Evm.Sdk` umbrella exports this component. Nothing in this
 
 /-- Failure terminal of the running gate: `Paused()`. -/
 @[pf_inline] def runningViolation : UInt64 :=
-  Revert.paused
+  Pausable.violation
 
 /-- Explicit single-pending-owner state. The current owner remains a separate consumer field; this
 value is either one nonzero nominee or `Address.zero`. The alias deliberately reuses the existing

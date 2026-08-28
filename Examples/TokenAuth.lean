@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.TokenAuth
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -20,7 +18,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def setAuth (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenSetMintAuthority
+    let _ := ProofForge.Svm.Sdk.Token.setMintAuthority
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
@@ -29,7 +27,7 @@ def setAuth (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def revoke (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenRevoke
+    let _ := ProofForge.Svm.Sdk.Token.revoke
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

@@ -14,6 +14,7 @@
 | [plan/README.md](plan/README.md) | 交付队列 |
 | [plan/runtime-sdk-roadmap.md](plan/runtime-sdk-roadmap.md) | SVM / EVM Runtime 与 SDK 的权威边界、排期和验收门 |
 | [plan/capability-matrix.md](plan/capability-matrix.md) | source API → owner → component → target effect → 物理状态能力矩阵 |
+| [plan/mainstream-parity.md](plan/mainstream-parity.md) | 对照 Solana Rust SDK 与 Solidity/OpenZeppelin 的双目标能力基线和 F0–F3 优先级 |
 | [plan/analysis/authority.md](plan/analysis/authority.md) | 补全对谁对齐（官方 runtime，不是 SDK crate） |
 | [plan/analysis/gap-vs-proofforge.md](plan/analysis/gap-vs-proofforge.md) | 相对 PF 的缺口与阶段 |
 | [plan/analysis/sdk-surface.md](plan/analysis/sdk-surface.md) | 剩余 SDK 表面（syscall / 封闭 CPI） |

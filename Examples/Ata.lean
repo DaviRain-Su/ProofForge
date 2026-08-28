@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.Ata
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -16,11 +14,11 @@ inductive Error where
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
-/-- ATA CreateIdempotent；账户表由 `invoke` 钉死。 -/
+/-- ATA CreateIdempotent；Token program 由该交易的显式账户选择，不默认 classic Token。 -/
 @[pf_entry]
 def openAta (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := ataCreateIdempotent
+    let _ := ProofForge.Svm.Sdk.AssociatedToken.createIdempotent
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

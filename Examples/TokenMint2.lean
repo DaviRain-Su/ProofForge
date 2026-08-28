@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.TokenMint2
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -20,7 +18,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def openMint (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenInitMint
+    let _ := ProofForge.Svm.Sdk.Token.initializeMint6
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

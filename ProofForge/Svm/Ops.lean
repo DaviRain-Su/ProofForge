@@ -309,6 +309,8 @@ private partial def staticPayloadsWellFormed : Val → Bool
   | .select _ lhs rhs thn els =>
       staticPayloadsWellFormed lhs && staticPayloadsWellFormed rhs &&
         staticPayloadsWellFormed thn && staticPayloadsWellFormed els
+  | .ext (.findPda seed) operands | .ext (.checkPda seed) operands =>
+      asciiSeedWellFormed seed && operands.all staticPayloadsWellFormed
   | .ext (.findPdaSeeds seeds) operands =>
       PdaSeed.groupWellFormed seeds && operands.all staticPayloadsWellFormed
   | .ext (.checkPdaSeeds account seeds) operands =>

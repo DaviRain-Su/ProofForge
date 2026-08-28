@@ -26,6 +26,8 @@ import ProofForge.Evm.WideWord.Source
 import ProofForge.Evm.WideWord.Emit
 import ProofForge.Evm.CallResult
 import ProofForge.Evm.CallResult.Emit
+import ProofForge.Evm.Precompile
+import ProofForge.Evm.Precompile.Emit
 import ProofForge.Evm.LogError
 import ProofForge.Evm.LogError.Emit
 import ProofForge.Evm.Payable
@@ -57,7 +59,6 @@ import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.AccountStorage.Source
 import ProofForge.Svm.AccountView
-import ProofForge.Svm.AccountView.Source
 import ProofForge.Svm.Sdk
 import ProofForge.Svm.BatchRecorder.Source
 import ProofForge.Svm.FifoCancel.Source

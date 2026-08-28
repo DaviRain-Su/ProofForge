@@ -5,7 +5,7 @@ import ProofForge
 CPI 账户表不同，混在一个 Program 会抬高 `cpiAccountCount`。
 
 `openSeat` 的外层账户是 payer s+w、seat PDA w、System；`openBase` / `openQuote`
-分别把一组 owner、vault、mint、Token 绑定到同一条 `tokenInitAccount` recipe。
+分别把一组 owner、vault、mint、Token 绑定到同一条 `Sdk.Token.initializeAccount` recipe。
 双 vault 同一入口会需要两组不同的账户索引，留给 Phoenix adapter 切片。
 -/
 namespace Examples.Seat
@@ -37,7 +37,7 @@ def openSeat (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :
 @[pf_entry]
 def openBase (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenInitAccount
+    let _ := ProofForge.Svm.Sdk.Token.initializeAccount
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
@@ -46,7 +46,7 @@ def openBase (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def openQuote (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenInitAccount
+    let _ := ProofForge.Svm.Sdk.Token.initializeAccount
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

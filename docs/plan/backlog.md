@@ -3,6 +3,7 @@
 补全依据：[analysis/authority.md](analysis/authority.md)。
 缺口阶段：[analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)。
 后续权威排期：[Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md)。
+主流能力目标：[Solana SDK / Solidity + OpenZeppelin parity baseline](mainstream-parity.md)。
 
 双目标路线固定为 `R0 ownership → R1 shared protocol values → R2 SVM Runtime →
 R3 SVM SDK → R4 EVM Runtime → R5 EVM SDK → R6 cross-target hardening`。共享普通 Lean、
@@ -26,16 +27,25 @@ instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed sign
 同一个 bounded plan；SVM-RT-3 第一刀已用 allocation-free scalar cursor/bitmap 建立
 Token-2022 TLV envelope，并继续对所有未建模 extension fail closed。EVM-RT-2a typed call-result 已完成，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
-entry-value 与 calldata route policy；UInt256 div/mod 已固定 checked 除零 revert 策略。
-下一刀继续 precompile-specific closed return contract 与剩余 R4 hardening。并行 EVM
+entry-value 与 calldata route policy，EVM-RT-2d 已把 permit 的固定 ecrecover address/frame、
+STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed contract；UInt256
+div/mod 已固定 checked 除零 revert 策略。下一刀继续剩余 R4 hardening。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
-并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
-R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
-完成。
+并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
+R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
+R3-005 non-seeded System facade completion、R3-006 classic Token facade、
+R3-007 fixed ATA/Memo facades、
+R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
+R5-003 bounded static roles 与 R5-004 Pausable policy；这些都是阶段内可复用组件切片，
+不代表 R3/R5 整体完成。
+R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
+SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
+`docs/plan/tasks/r0-002.md`。Vector/Map/allocator 必须分别声明 boundary、invocation-local、
+SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同名 host 类型代替能力证明。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 277 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 289 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 308/308（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -228,21 +238,79 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。
-  详见 `docs/plan/tasks/r3-001.md`。R3 的 Account/Signer/PDA/System/Token facade 和 bounded
-  transient Scratch 仍未完成。
+  详见 `docs/plan/tasks/r3-001.md`。
+
+- R3-002 SVM Account/Signer facade 已完成：`Svm.Sdk.Account.Handle`、`Signer.Handle` 与直接
+  alias target plan 的 bounded `Account.View` 把 fixed metadata、required signer 和 runtime
+  bounded remaining-account access 收口到 compile-time handles；Trio/AccountView 独立复用。
+  extractor 只把既有 account leaves 的 literal gate 扩到 compiler-proven static handle
+  projection，不开放 runtime account geometry；全部 SVM 产物逐字节不变。详见
+  `docs/plan/tasks/r3-002.md`。
+
+- R3-003 SVM invocation-local transient SDK 已完成：`Svm.Sdk.Transient` 直接复用
+  `Heap.State`、`Scratch.Plan` 与既有 invocation-only lifetime，提供 bounded `HeapBuffer`、
+  fixed `FixedVec`、`ByteWriter` 和 composed `SignedCpiCodec`。BatchRecorder 与 dynamic signed
+  self-CPI 是两个真实 consumer；没有第二套 allocator/plan/lifetime，也没有 persistent
+  pointer、heap Map/Array 或新 Ops/IR/Component/main-Emit case。全部 SVM 产物逐字节不变；
+  详见 `docs/plan/tasks/r3-003.md`。
+
+- R3-004 SVM static PDA/System facade foundation 已完成：`Svm.Sdk.Pda.Ascii` 封装单个
+  compile-time ASCII seed 的 canonical bump/check/signed create，`Svm.Sdk.System` 封装 fixed
+  account geometry 的 transfer/createAccount；Pda、Transfer、Create、CreatePda 四个 example
+  不再重复 Runtime 名称或 CPI tag/meta/data recipe。Extractor 只新增通用 `pf_inline`→SVM
+  Runtime 边界展开，不新增 facade 名字特判；旧单 seed IR 同时补齐 1–32-byte ASCII
+  fail-closed gate。四个程序 IR digest 与 12 份 assembly/ELF/IDL 产物保持不变。详见
+  `docs/plan/tasks/r3-004.md`。
+
+- R3-005 non-seeded System facade 已完成：`Svm.Sdk.System.assign`、`allocate` 与
+  `advanceNonce` 直接组合既有 Runtime wrappers，SysAlloc/Nonce application 不再依赖 Runtime
+  名称。账户权限/程序下标仍由 fixed facade geometry 所有，space 是普通 scalar；没有新增
+  Ops/IR/Emit/Extract/Component。两个 canonical IR digest 与 6 份 assembly/ELF/IDL 产物保持
+  不变；详见 `docs/plan/tasks/r3-005.md`。
+
+- R3-006 classic Token facade 已完成：新增 CPI-relative `CpiAccount.Handle` 与 role-typed
+  checked/unchecked transfer descriptors；fixed transfer/mint/burn/account/approve/revoke/freeze/
+  authority/native/multisig/data-size wrappers 统一归 `Svm.Sdk.Token`。Phoenix/PhoenixV1Profile
+  在 `Examples` 中各自绑定具名 concrete account layouts，业务路径不再重复 positional
+  indexes；没有 Phoenix-owned target module，也没有新增 Ops/IR/Emit/Extract/Component。
+  42 份相关 assembly/ELF/IDL 产物逐字节不变；详见 `docs/plan/tasks/r3-006.md`。Seeded
+  System、general ATA/Memo、Token state/program-id policy 与 Token-2022 extension semantics
+  仍是 R3 工作。
+
+- R3-007 fixed ATA/Memo facade 已完成：`Svm.Sdk.AssociatedToken.createIdempotent` 复用现有
+  fixed account shape，并明确 external account 5 是 caller-selected Token program，不默认
+  classic Token；`Svm.Sdk.Memo.writeOk` 则诚实暴露当前固定 `"ok"` literal。Ata/Memo 应用不再
+  依赖 Runtime 名称；没有新增 Ops/IR/Emit/Extract/Component。两个 canonical digest 与六份
+  assembly/ELF/IDL 产物保持不变；详见 `docs/plan/tasks/r3-007.md`。普通 ATA Create、
+  RecoverNested、program-id policy 与 bounded memo bytes 仍待后续 Runtime/SDK contract。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
   独立复用；replacement 会使旧 nominee 失效，accept/cancel 显式清零，不使用 hashed
   nomination map、隐藏 write、magic slot 或 policy Emit case。Extractor 同时修复 direct
-  one-field State store 与 wide-leaf path 误判；详见 `docs/plan/tasks/r5-001.md`。Roles、
-  reentrancy、asset/NFT components 仍未完成。
+  one-field State store 与 wide-leaf path 误判；详见 `docs/plan/tasks/r5-001.md`。
 
 - R5-002 EVM static storage declaration foundation 已完成：`Evm.Sdk.Storage.Static` 在抽取期
   分配 scalar、Address/wide、flat record、fixed array/record-array typed handles；声明表与
   两个独立 contract 的真实 State flattening 逐槽对照，Anvil 直接验证 constructor 和
   targeted mutation。它不改变 hashed-map base，不增加 runtime allocator、隐藏 storage
   write 或 Component/Emit recipe；详见 `docs/plan/tasks/r5-002.md`。
+
+- R5-003 EVM bounded static roles 已完成：`Evm.Sdk.Roles.Set2` 对两个显式 Address slot
+  提供 membership/grant/revoke 纯决策；EvmStaticCounter/EvmStaticRoster 分别以 operator/writer
+  角色独立复用。权限与错误策略留在 application，所有写入仍是 literal State field update；
+  不使用 Vector、hashed role map、runtime slot allocator、隐藏 write 或新 Ops/IR/Emit case。
+  Anvil 覆盖 zero/duplicate/full/nonmember/unauthorized/closed policy；indexed Address return
+  在 extraction 支持安全 OOB-zero 前不发布。详见 `docs/plan/tasks/r5-003.md`。Reentrancy 与
+  asset/NFT components 仍未完成。
+
+- R5-004 EVM Pausable policy 已完成：`Evm.Sdk.Pausable` 统一 canonical `UInt8` flags、
+  fail-closed predicates、replacement transitions 与现有 `Paused()` terminal；
+  TwoStepCounter/Credits 直接复用，权限、事件和 literal State writes 仍归 application。
+  Extract 只把 `pf_inline` scalar helper 的通用合同补齐到 UInt8/16/32，没有 Pausable 名字、
+  新 Ops/IR/Component/Emit case 或隐藏 slot。两个 contract 的 Yul/ABI/bin 逐字节不变；详见
+  `docs/plan/tasks/r5-004.md`。Typed pause events 仍等待 generic event surface；ReentrancyGuard
+  在 lock write → external CALL → clear 的 effect ordering 可证明前继续 fail closed。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
@@ -283,12 +351,19 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   与全部 20 个 EVM 产物逐字节不变；native send CALL 继续归 closed NativeFx/CallResult
   policy。详见 `docs/plan/tasks/r4-003.md`。
 
+- R4-004 EVM closed ecrecover contract 已完成：`Evm.Precompile` 固定 address `0x01`、
+  128-byte `hash | v | r | s` frame、32-byte output，以及 STATICCALL success、exact
+  returndata、nonzero signer 三道门；`ClosedCall.Emit` permit 消费唯一 interpreter。exact-size
+  门拒绝 invalid ecrecover 成功但返回空数据时读取 stale output memory；其余 precompile、
+  arbitrary STATICCALL/delegatecall/create 仍不开放。只有 Token Yul/bin 因新增门发生预期变化，
+  全部 ABI 与 IR digests 不变。详见 `docs/plan/tasks/r4-004.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 277 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 289 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 308/308，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。

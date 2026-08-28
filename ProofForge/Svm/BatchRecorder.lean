@@ -1,6 +1,9 @@
 import ProofForge.Svm.AccountStorage
+import ProofForge.Svm.Sdk.Transient
 
 namespace ProofForge.Svm.BatchRecorder
+
+open Sdk.Transient
 
 /-- Solana rejects inner instructions whose serialized data and account-meta overhead exceed
 1,280 bytes. One account meta consumes 34 bytes, leaving 1,246 bytes for recorder data. -/
@@ -30,13 +33,18 @@ structure Config where
 private def byteString (value : String) : Bool :=
   value.toList.all (fun character => character.toNat ≤ 255)
 
+/-- Shared invocation-local writer geometry consumed by the recorder emitter. -/
+def Config.transientWriter (config : Config) : ByteWriter :=
+  { buffer := { name := "batchRecorder", capacityBytes := config.maxBytes }
+    headerBytes := config.headerBytes
+    countOffset := config.countOffset
+    maxRecords := config.maxRecords }
+
 def Config.wellFormed (config : Config) (accountLimit : Nat := 64) : Bool :=
   config.logAccount + 1 < accountLimit && config.selfEntryTag ≤ 255 &&
     !config.authoritySeed.isEmpty && config.authoritySeed.length ≤ 32 &&
-    byteString config.authoritySeed && config.headerBytes > 0 &&
-    config.countOffset + 2 ≤ config.headerBytes &&
-    config.headerBytes ≤ config.maxBytes && config.maxBytes ≤ maxInnerDataBytes &&
-    config.maxRecords > 0 && config.maxRecords ≤ 64
+    byteString config.authoritySeed && config.maxBytes ≤ maxInnerDataBytes &&
+    config.transientWriter.wellFormed && config.maxRecords ≤ 64
 
 /-- Compile-time-shaped little-endian byte fragments. Dynamic content remains scalar values;
 account keys are copied directly from the invocation's checked account headers. -/

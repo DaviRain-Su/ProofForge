@@ -1,4 +1,4 @@
-import ProofForge.Svm.Scratch
+import ProofForge.Svm.Sdk.Transient
 
 namespace ProofForge.Svm.Cpi.Emit
 
@@ -62,17 +62,17 @@ def emitDynamicSignedSelf (context : Context) (label : String)
   -- Instruction-buffer geometry and the signer-seed tail both come from the shared bounded-scratch
   -- contract: one typed plan establishes metas/descriptor/infos plus copied seed bytes, the bump
   -- byte, the seed-entry array (including the bump entry), and the signer group fail-closed.
-  let base ← Scratch.instructionPlan Scratch.cpiBank
+  let codec ← Sdk.Transient.SignedCpiCodec.plan Scratch.cpiBank
     { metaCount := 1, dataBytes := 0, accountCount := n }
-  let tail ← base.scratch.signerSeedTail authoritySeed.length 1
-  let metaOff := base.metas.offset
-  let instructionOff := base.instruction.offset
-  let infoOff := base.infos.offset
-  let seedOff := tail.bytes.offset
-  let bumpByte := tail.bump.offset
-  let seedEntries := tail.entries.offset
-  let bumpEntry := tail.bumpEntryOffset
-  let signerGroup := tail.group.offset
+    authoritySeed.length 1
+  let metaOff := codec.instruction.metas.offset
+  let instructionOff := codec.instruction.instruction.offset
+  let infoOff := codec.instruction.infos.offset
+  let seedOff := codec.signer.bytes.offset
+  let bumpByte := codec.signer.bump.offset
+  let seedEntries := codec.signer.entries.offset
+  let bumpEntry := codec.signer.bumpEntryOffset
+  let signerGroup := codec.signer.group.offset
   let physicalLogAccount := logAccount + 1
   let mut seedBytes := ""
   for i in [0:authoritySeed.length] do

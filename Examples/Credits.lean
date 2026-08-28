@@ -6,8 +6,8 @@ open ProofForge.Evm.Sdk
 
 /-!
 EVM-SDK-1 consumer B (independent of `Examples.TwoStepCounter`): an owner-granted credit
-ledger. Reuses the same `Access` gates and fixed single-pending `Access.Ownership` value,
-plus one typed hashed-map namespace for per-account credits.
+ledger. Reuses the same `Access` ownership gates, `Pausable` policy, and fixed single-pending
+`Access.Ownership` value, plus one typed hashed-map namespace for per-account credits.
 
 State: stored `owner` (rotated by two-step transfer), explicit `paused` flag, `UInt256` `total` of
 claimed credits, and one fixed pending owner. `credits` uses namespace 0 of `AddressMap256`, the map
@@ -31,7 +31,7 @@ inductive Error where
 
 @[pf_entry]
 def init (owner : Address) : State :=
-  { owner, paused := Access.runningFlag, total := UInt256.zero,
+  { owner, paused := Pausable.running, total := UInt256.zero,
     ownership := Access.Ownership.none }
 
 /-- Owner nominates `candidate` for the two-step transfer. -/
@@ -59,13 +59,13 @@ def acceptOwnership (s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def grant (s : State) (who : Address) (amount : UInt256) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    if Access.requireRunning s.paused then
+    if Pausable.isRunning s.paused then
       if Address.isZero who then
         .ok (s, Revert.zeroAddress)
       else
         .ok (s, credits.put who amount)
     else
-      .ok (s, Access.runningViolation)
+      .ok (s, Pausable.violation)
   else
     .ok (s, Access.ownerViolation)
 
@@ -76,20 +76,20 @@ def grant (s : State) (who : Address) (amount : UInt256) : Except Error (State �
     wraps at 2^256, the same arithmetic contract `Examples.Token` documents for `supply`. -/
 @[pf_entry]
 def claim (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
-  if Access.requireRunning s.paused then
+  if Pausable.isRunning s.paused then
     if credits.containsAtLeast Context.caller amount then
       .ok ({ s with total := UInt256.add s.total amount },
         credits.put Context.caller (credits.nextSub Context.caller amount))
     else
       .ok (s, credits.revertInsufficient Context.caller amount)
   else
-    .ok (s, Access.runningViolation)
+    .ok (s, Pausable.violation)
 
 /-- Owner-gated pause. -/
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    .ok ({ s with paused := Access.pausedFlag }, 1)
+    .ok ({ s with paused := Pausable.pause s.paused }, 1)
   else
     .ok (s, Access.ownerViolation)
 
@@ -97,7 +97,7 @@ def pause (s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def unpause (s : State) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    .ok ({ s with paused := Access.runningFlag }, 0)
+    .ok ({ s with paused := Pausable.unpause s.paused }, 0)
   else
     .ok (s, Access.ownerViolation)
 

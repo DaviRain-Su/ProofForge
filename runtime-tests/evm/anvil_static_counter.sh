@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# EvmStaticCounter: static scalar/wide/record layout and immutable-owner policy.
+# EvmStaticCounter: static scalar/wide/record layout, immutable-owner policy, and the
+# bounded static operator role set (EVM-SDK-3).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -75,4 +76,112 @@ solana_lean_require_storage "$addr" 0 0 "unpaused flag"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'windowOf()(uint16)')" \
   513 "record window getter"
 
-echo "evm-anvil-static-counter: ok (scalar/wide/record slots + access gates; engineering only)"
+# EVM-SDK-3 roles: bounded static operator set, two explicit address slots (7..12).
+zero_addr="0x0000000000000000000000000000000000000000"
+op2="0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+op3="0x90F79bf6EB2c4f870365E785982E1f101E93b906"
+
+operator_limbs() {
+  "$python" -I -S -c "
+b=bytes.fromhex('${1#0x}')
+print(int.from_bytes(b[0:8], 'little'), int.from_bytes(b[8:16], 'little'),
+      int.from_bytes(b[16:20], 'little'))
+"
+}
+
+for slot in 7 8 9 10 11 12; do
+  solana_lean_require_storage "$addr" "$slot" 0 "constructor operator slot vacant"
+done
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'isOperator(address)(bool)' "$other")" false "vacant membership view"
+
+# Non-owner grant reverts Unauthorized(other) and cannot mutate the role slots.
+solana_lean_require_unauthorized "$addr" "$other" \
+  "$("$cast" calldata 'grantOperator(address)' "$other")" "$other" "non-owner operator grant"
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'grantOperator(address)' "$other" >/dev/null 2>&1; then
+  echo "FAIL: non-owner operator grant unexpectedly succeeded" >&2
+  exit 1
+fi
+for slot in 7 8 9; do
+  solana_lean_require_storage "$addr" "$slot" 0 "unauthorized grant holds slot0"
+done
+
+# Zero candidate reverts ZeroAddress().
+solana_lean_require_zero_address "$addr" "$sender" \
+  "$("$cast" calldata 'grantOperator(address)' "$zero_addr")" "zero operator grant"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'grantOperator(address)' "$zero_addr" >/dev/null 2>&1; then
+  echo "FAIL: zero operator grant unexpectedly succeeded" >&2
+  exit 1
+fi
+
+# Owner grant fills slot 0 only (slots 7..9 = address limbs; 10..12 stay zero).
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'grantOperator(address)' "$other" >/dev/null
+read -r ow0 ow1 ow2 <<< "$(operator_limbs "$other")"
+solana_lean_require_storage "$addr" 7 "$ow0" "grant operator slot0 w0"
+solana_lean_require_storage "$addr" 8 "$ow1" "grant operator slot0 w1"
+solana_lean_require_storage "$addr" 9 "$ow2" "grant operator slot0 w2"
+for slot in 10 11 12; do
+  solana_lean_require_storage "$addr" "$slot" 0 "grant leaves slot1 vacant"
+done
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'isOperator(address)(bool)' "$other")" true "membership view after grant"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'isOperator(address)(bool)' "$sender")" false "nonmember view after grant"
+
+# Duplicate grant is a successful idempotent no-op: nothing moves.
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'grantOperator(address)' "$other" >/dev/null
+for slot in 10 11 12; do
+  solana_lean_require_storage "$addr" "$slot" 0 "duplicate grant holds slot1 vacant"
+done
+solana_lean_require_storage "$addr" 7 "$ow0" "duplicate grant holds slot0"
+
+# Second distinct grant fills slot 1 (slots 10..12).
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'grantOperator(address)' "$op2" >/dev/null
+read -r pw0 pw1 pw2 <<< "$(operator_limbs "$op2")"
+solana_lean_require_storage "$addr" 10 "$pw0" "grant operator slot1 w0"
+solana_lean_require_storage "$addr" 11 "$pw1" "grant operator slot1 w1"
+solana_lean_require_storage "$addr" 12 "$pw2" "grant operator slot1 w2"
+
+# Full set reverts CapExceeded().
+solana_lean_require_cap_exceeded "$addr" "$sender" \
+  "$("$cast" calldata 'grantOperator(address)' "$op3")" "full operator set grant"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'grantOperator(address)' "$op3" >/dev/null 2>&1; then
+  echo "FAIL: full-set operator grant unexpectedly succeeded" >&2
+  exit 1
+fi
+
+# Nonmember revoke is a successful idempotent no-op.
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'revokeOperator(address)' "$op3" >/dev/null
+solana_lean_require_storage "$addr" 7 "$ow0" "nonmember revoke holds slot0"
+solana_lean_require_storage "$addr" 10 "$pw0" "nonmember revoke holds slot1"
+
+# Member revoke clears exactly slot 0.
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'revokeOperator(address)' "$other" >/dev/null
+for slot in 7 8 9; do
+  solana_lean_require_storage "$addr" "$slot" 0 "revoke clears slot0"
+done
+solana_lean_require_storage "$addr" 10 "$pw0" "revoke holds slot1"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'isOperator(address)(bool)' "$other")" false "membership cleared after revoke"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'isOperator(address)(bool)' "$op2")" true "other member survives revoke"
+
+# Non-owner revoke reverts Unauthorized(other) and cannot clear slot1.
+solana_lean_require_unauthorized "$addr" "$other" \
+  "$("$cast" calldata 'revokeOperator(address)' "$op2")" "$other" "non-owner operator revoke"
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'revokeOperator(address)' "$op2" >/dev/null 2>&1; then
+  echo "FAIL: non-owner operator revoke unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 10 "$pw0" "unauthorized revoke holds slot1"
+
+echo "evm-anvil-static-counter: ok (scalar/wide/record slots + access gates + bounded operator roles; engineering only)"

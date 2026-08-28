@@ -1455,6 +1455,16 @@ def recordFillSummaryAt (eventIndex clientIdLow clientIdHigh baseFilled quoteFil
 def finishMarketBatch : UInt64 :=
   ProofForge.Svm.BatchRecorder.Source.finish marketRecorderConfig
 
+/-- Phoenix-v1 owns this raw instruction's concrete account order. The Token SDK descriptor gives
+those positions reusable source roles and erases back to the canonical unchecked transfer metas. -/
+@[pf_inline] def quoteWithdrawTokenAccounts :
+    ProofForge.Svm.Sdk.Token.UncheckedTransferAccounts :=
+  .at 7 6 4 6
+
+@[pf_inline] def baseWithdrawTokenAccounts :
+    ProofForge.Svm.Sdk.Token.UncheckedTransferAccounts :=
+  .at 7 5 3 5
+
 /-- Execute only the side-selected nonzero classic Token withdrawal. The mint seed points directly
 at the authenticated fixed MarketHeader field; no mint account, heap buffer, or copied seed exists. -/
 def withdrawReleasedAt (side atoms : UInt64) : UInt64 :=
@@ -1462,10 +1472,12 @@ def withdrawReleasedAt (side atoms : UInt64) : UInt64 :=
     0
   else if side = 0 then
     let seeds : Array PdaSeed := #[.ascii "vault", .accKey 1, .accData 1 128 32]
-    tokenTransferSignedIx 7 6 4 6 atoms seeds (highUInt32 (accDataWord 2 15))
+    ProofForge.Svm.Sdk.Token.transferSignedWith quoteWithdrawTokenAccounts atoms seeds
+      (highUInt32 (accDataWord 2 15))
   else
     let seeds : Array PdaSeed := #[.ascii "vault", .accKey 1, .accData 1 48 32]
-    tokenTransferSignedIx 7 5 3 5 atoms seeds (highUInt32 (accDataWord 2 5))
+    ProofForge.Svm.Sdk.Token.transferSignedWith baseWithdrawTokenAccounts atoms seeds
+      (highUInt32 (accDataWord 2 5))
 
 /-- Complete dominating validation required by the component-owned CancelAll mutation loop. The
 three fixed allocators, trader key tree, and both FIFO trees are validated before the recorder can

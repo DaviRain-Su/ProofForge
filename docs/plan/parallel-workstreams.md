@@ -1,6 +1,6 @@
 # Runtime / SDK 并行开发执行图
 
-> 基线：R1-010、SVM-SDK-1 和 EVM-SDK-1 已集成到本地 `main`；远端同步由 coordinator
+> 基线：R1-010、SVM-SDK-1/2 和 EVM-SDK-1/2 已集成到本地 `main`；远端同步由 coordinator
 > 单独执行。本文只拆 ownership、依赖和验收，不改变
 > [Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md) 的能力边界。
 
@@ -83,8 +83,10 @@ Wave A worker 的 example/test 暂不加入 `Examples.lean` / `Tests.lean` / reg
 | **EVM-RT-1 bounded ABI（已集成）** | coordinator | `Evm.Codec` plan + `Evm.Codec.Emit` interpreter；dedicated example/test/Anvil fixture | shared `.boundedArray` 已绑定 canonical ABI dynamic array/tail：offset、length、padding、capacity、exact tail 全部 fail closed；固定 local word frame | 未复用 Borsh、修改 Core/Extract、开放无界 bytes/array 或增加 array opcode | 253-job Lean、18-contract solc、Anvil 18/18 malformed matrix；见 R1-010 |
 | **SVM-RT-1 account view（已集成）** | worker + coordinator | `Svm.AccountView` component/source/emitter + bounded runtime account-count walk；dedicated example/test/Mollusk fixture | compile-time window、runtime-safe index、统一 account-count/OOB/duplicate/signer/writable/owner/data-length gate | 未做 runtime-selected geometry、写 view、persistent pointer 或 Token/Phoenix policy | 260-job Lean、AccountView sBPF、Mollusk 11/11；见 R2-001 |
 | **EVM-SDK-2 static storage declarations（已集成）** | worker + coordinator | `Evm.Sdk.Storage.Static` compile-time descriptors；两个独立 examples/tests/Anvil fixtures；coordinator 接 umbrella/registry | scalar/record/fixed-array cursor 与 typed handles；布局对象只在抽取期存在，ordinary typed State access 继续走现有 Extract→EVM IR | 未改 hashed-map namespace；未做 runtime slot allocator、handle `sload` recipe 或新 Component/Emit case | descriptor/extracted-layout conformance + two contracts + solc/Anvil raw-slot matrix；见 R5-002 |
+| **EVM-SDK-3 bounded roles（已集成）** | worker + coordinator | `Evm.Sdk.Roles.Set2` + 两个 existing static-layout consumers/tests/Anvil matrices | capacity-2 membership/grant/revoke slot 纯决策；权限/terminal/literal State write 保持 application-owned | 未做 Vector/hashed role map/runtime allocator/隐藏 write；indexed Address return 继续 fail closed | extraction slot/entry gate + two contracts zero/duplicate/full/revoke/authorization Anvil matrix；见 R5-003 |
+| **EVM-SDK-4 Pausable policy（已集成）** | coordinator | `Evm.Sdk.Pausable` + Access compatibility delegates + TwoStepCounter/Credits/tests | canonical u8 flags、fail-closed predicates、replacement transitions；权限/事件/literal State write 保持 application-owned | 未增加 pause Ops/IR/Emit recipe 或 hidden slot；typed events 后置；reentrancy 继续等待 effect sequencing | narrow-scalar generic inline gate + focused extraction + 两份 Yul/ABI/bin identity + existing Anvil pause matrices；见 R5-004 |
 
-Wave B 的两个并行包已经集成，`shared-lock` 保持释放。下一 wave 的 worker 必须保持
+Wave B 的上述组件包已经集成，`shared-lock` 保持释放。下一 wave 的 worker 必须保持
 target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写进交付说明，由 coordinator
 集成。
 
@@ -95,10 +97,15 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-RT-2a instruction layout（已集成）** | SVM-RT-1 | typed bounded scratch bank + instruction/metas/data/infos/signer-tail plan；1,024-byte OOM、alignment、duplicate region 在 emission 前 fail closed；见 R2-002 |
 | **SVM-RT-2b instruction effects（已集成）** | SVM-RT-2a | bounded return data、multi-seed PDA/CPI meta/signer seeds；复用同一 scratch plan，未知 shape fail closed；见 R2-003 |
 | **SVM-RT-3 Token-2022 TLV（envelope 已集成）** | SVM-RT-1/2 | allocation-free scalar cursor/bitmap 与 closed end/padding specialization 已落地；transfer-fee、hook/account requirements 继续按语义分片，未知 extension 不走 classic 82/165-byte path；见 R2-004 |
-| **SVM-SDK-2 scratch** | SVM-RT-2 | invocation-local bounded Vec/byte writer/codec buffer，显式 capacity/OOM/lifetime；不能持久化 pointer |
+| **SVM-SDK-2 transient（已集成）** | SVM-RT-2 | 直接复用 Heap/Scratch 的 invocation-local bounded buffer/fixed Vec/byte writer/signed-CPI codec composition；显式 capacity/alignment/frame/OOM，不复制 allocator/plan/lifetime，不能持久化 pointer；见 R3-003 |
+| **SVM-SDK-3 PDA/System foundation（已集成）** | SVM-RT-2 | static ASCII PDA bump/check/signed-create 与 fixed-account System transfer/create；example 只见 SDK 名称，`pf_inline` 通用展开，不增加名字特判或 CPI recipe；见 R3-004 |
+| **SVM-SDK-4 System core（已集成）** | SVM-SDK-3 | non-seeded assign/allocate/advanceNonce 直接组合既有 Runtime；SysAlloc/Nonce 只见 SDK 名称，canonical 产物不变；见 R3-005 |
+| **SVM-SDK-5 classic Token（已集成）** | SVM-SDK-4 | CPI-relative handle、role-typed checked/unchecked transfer layout 与 fixed classic facade；Phoenix concrete layouts 仍在 Examples，十二个非 Phoenix consumer 与 Phoenix/PhoenixV1Profile 产物保持不变；见 R3-006 |
+| **SVM-SDK-6 fixed ATA/Memo（已集成）** | SVM-SDK-5 | caller-selected Token program 的 fixed CreateIdempotent 与诚实名 fixed Memo facade；Ata/Memo canonical 产物不变；见 R3-007 |
+| **SVM-SDK-7 seeded/general remainder** | SVM-SDK-6、SVM-RT-3 | 分模块收口 seeded System、ordinary/RecoverNested ATA、bounded Memo、Token state/program-id policy 与 Token-2022 typed extension facade；逐条复用既有 Runtime/typed TLV contract，未知 extension/account geometry 继续 fail closed |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
-| **EVM-RT-2b effects** | EVM-RT-2a | typed LOG0..4/custom error/payable consolidation；不开放 delegatecall/create/arbitrary callee |
-| **EVM-SDK-3 assets** | EVM-SDK-1/2、EVM-RT-2 | reusable fungible、ERC-721、bounded ERC-1155 core；每个组件至少两个 consumer |
+| **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
+| **EVM-SDK-5 assets** | EVM-SDK-1/2/3/4、EVM-RT-2 | reusable fungible、ERC-721、bounded ERC-1155 core；每个组件至少两个 consumer |
 
 ## 4. Worker 统一交付合同
 

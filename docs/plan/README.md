@@ -5,6 +5,7 @@
 后续权威排期：[Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md)。共享 Lean 语义层，
 SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 当前边界：[Runtime / SDK capability matrix](capability-matrix.md)。
+主流能力基线：[Solana SDK / Solidity + OpenZeppelin parity](mainstream-parity.md)。
 多 agent 执行边界：[Runtime / SDK 并行开发执行图](parallel-workstreams.md)。
 
 任务：

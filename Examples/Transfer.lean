@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.Transfer
 
-open ProofForge.Svm.Runtime
-
 /-- 无链上状态；init 只占入口形状。 -/
 structure State where
   dummy : UInt64
@@ -21,7 +19,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def transfer (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := systemTransfer lamports
+    let _ := ProofForge.Svm.Sdk.System.transfer lamports
     .ok ({ dummy := 0 }, lamports)
   else
     .error .overflow

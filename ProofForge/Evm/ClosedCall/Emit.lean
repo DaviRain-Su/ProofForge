@@ -1,6 +1,7 @@
 import ProofForge.Evm.ClosedCall
 import ProofForge.Evm.CallResult.Emit
 import ProofForge.Evm.LogError.Emit
+import ProofForge.Evm.Precompile.Emit
 import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 
@@ -66,6 +67,13 @@ has exactly one spelling. Nested gates pass a deepened indent; the interpreter a
 fresh names, so emission order and output are unchanged. -/
 private def Context.logError (context : Context σ) : LogError.Emit.Context :=
   { indent := context.indent }
+
+/-- Project the typed ecrecover precompile emission context (EVM-RT-2d). Permit below spells
+its signer recovery through `Evm.Precompile.Emit`, the sole interpreter of the closed
+precompile contract, so the STATICCALL success, exact-32-byte returndata, and nonzero-signer
+gates have exactly one spelling instead of a hand-written inline assumption. -/
+private def Context.precompile (context : Context σ) : Precompile.Emit.Context σ :=
+  { fresh := context.fresh, indent := context.indent }
 
 private def emitDomainSeparator (context : Context σ) (st : σ) : String × String × σ :=
   let indent := context.indent
@@ -509,7 +517,8 @@ private def emitPermit (context : Context σ)
   let (structH, st32) := context.fresh st31
   let (domPre, domainH, st33) := emitDomainSeparator context st32
   let (digest, st34) := context.fresh st33
-  let (signer, st35) := context.fresh st34
+  let (precompileTxt, signer, st35) ← Precompile.Emit.emit context.precompile
+    .ecrecover st34
   let (aslot, st36) := context.fresh st35
   let expiredSel := Keccak.selector "Expired" #[]
   let expiredTxt ← LogError.Emit.emitRevert { indent := indent ++ "  " }
@@ -566,10 +575,8 @@ private def emitPermit (context : Context σ)
     indent ++ "mstore(32, " ++ vbyte ++ ")" ++ nl ++
     indent ++ "mstore(64, " ++ rword ++ ")" ++ nl ++
     indent ++ "mstore(96, " ++ sword ++ ")" ++ nl ++
-    indent ++ "if iszero(staticcall(gas(), 1, 0, 128, 0, 32)) { " ++ revert0 ++ " }" ++ nl ++
-    indent ++ "let " ++ signer ++ " := mload(0)" ++ nl
+    precompileTxt
   acc := acc ++
-    indent ++ "if iszero(" ++ signer ++ ") { " ++ revert0 ++ " }" ++ nl ++
     indent ++ "if iszero(eq(" ++ signer ++ ", " ++ own ++ ")) {" ++ nl ++
     unauthorizedTxt ++
     indent ++ "}" ++ nl ++

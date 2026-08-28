@@ -54,6 +54,7 @@ import Tests.Sha256Spec
 import Tests.EvmSpec
 import Tests.EvmSdkSpec
 import Tests.EvmCallResultSpec
+import Tests.EvmPrecompileSpec
 import Tests.EvmLogErrorSpec
 import Tests.EvmPayableSpec
 import Tests.CoreCodecSpec
@@ -62,6 +63,8 @@ import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmStaticStorageSpec
+import Tests.EvmRolesSpec
+import Tests.EvmPausableSpec
 import Tests.TipJarSpec
 import Tests.LangSpec
 import Tests.VaultSpec
@@ -86,6 +89,12 @@ import Tests.SeatSpec
 import Tests.TreeSpec
 import Tests.SvmSdkStorageSpec
 import Tests.SvmSdkQueueSpec
+import Tests.SvmSdkAccountSpec
+import Tests.SvmTransientSpec
+import Tests.SvmSdkPdaSystemSpec
+import Tests.SvmSdkSystemSpec
+import Tests.SvmSdkTokenSpec
+import Tests.SvmSdkProgramSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
 import Tests.ProofSpec

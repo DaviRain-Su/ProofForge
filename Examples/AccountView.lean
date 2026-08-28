@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.AccountView
 
-open ProofForge.Svm.AccountView.Source
+open ProofForge.Svm.Sdk
 
 /--
 Application fixture for the SVM-RT-1 bounded remaining-account view. State account 0 is
@@ -23,7 +23,7 @@ inductive Error where
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
 /-- One compile-time window: physical accounts 1..4, indexed by a runtime number. -/
-@[pf_inline] def window : View := View.bounded 1 4
+@[pf_inline] def window : Account.View := Account.View.bounded 1 4
 
 @[pf_entry]
 def init (initial : UInt64) : State :=
