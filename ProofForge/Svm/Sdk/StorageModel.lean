@@ -1,4 +1,5 @@
 import ProofForge.Svm.Sdk.Storage
+import ProofForge.Svm.Sdk.Queue
 
 /-!
 # 抽象账户字状态模型：SDK 存储组件的第二层形式化验证
@@ -514,5 +515,65 @@ theorem mBvPush_get (mem : AccountWords) (v : UInt64)
   exact htwo.2
 
 end BvWfAlgebra
+
+
+section QueueModel
+
+open ProofForge.Svm.Sdk.Queue
+
+variable (q : BoundedQueue)
+
+/-! ### BoundedQueue 模型代数
+
+三 header（slots/head/count）的词分离由 `BoundedQueue.wellFormed` 钉死：
+head 词 + 1 = count 词 ≤ slots 首词。三写（slots@tail、count@W_c、head@W_h）
+两两不干涉。 -/
+
+/-- wf 下 queue 三字段同账户且词两两分离。 -/
+theorem queue_wf_parts (hwf : q.wellFormed = true) :
+    q.slots.mutableOneBasedWord = true ∧
+    q.slots.region.account > 0 ∧
+    q.slots.region.capacity ≤ containerCapacityLimit ∧
+    scalarHeaderWellFormed q.head q.slots.region.account = true ∧
+    scalarHeaderWellFormed q.count q.slots.region.account = true ∧
+    q.head.firstWord + 1 = q.count.firstWord ∧
+    q.count.firstWord + 1 ≤ q.slots.firstWord := by
+  simp only [BoundedQueue.wellFormed, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hwf
+  exact ⟨hwf.1.1.1.1.1.1, hwf.1.1.1.1.1.2, hwf.1.1.1.1.2,
+    hwf.1.1.1.2, hwf.1.1.2, hwf.1.2, hwf.2⟩
+
+/-- count header 的访问词 = count.firstWord。 -/
+theorem mFieldWord_queue_count (hwf : q.wellFormed = true) :
+    mFieldWord q.count 0 = some q.count.firstWord := by
+  have parts := queue_wf_parts q hwf
+  have hacc : q.count.region.account = q.slots.region.account :=
+    scalarHeader_wf_account _ _ parts.2.2.2.2.1
+  have hsw : scalarHeaderWellFormed q.count q.count.region.account = true := by
+    rw [hacc]; exact parts.2.2.2.2.1
+  exact mFieldWord_scalar_header hsw
+
+/-- head header 的访问词 = head.firstWord。 -/
+theorem mFieldWord_queue_head (hwf : q.wellFormed = true) :
+    mFieldWord q.head 0 = some q.head.firstWord := by
+  have parts := queue_wf_parts q hwf
+  have hacc : q.head.region.account = q.slots.region.account :=
+    scalarHeader_wf_account _ _ parts.2.2.2.1
+  have hsw : scalarHeaderWellFormed q.head q.head.region.account = true := by
+    rw [hacc]; exact parts.2.2.2.1
+  exact mFieldWord_scalar_header hsw
+
+/-- wf 下 slots 的访问词公式（one-based，同 BoundedVec）。 -/
+theorem mFieldWord_queue_slots (hwf : q.wellFormed = true) (pos : UInt64)
+    (h1 : (1 : Nat) ≤ pos.toNat) (h2 : pos.toNat ≤ q.slots.region.capacity) :
+    mFieldWord q.slots pos =
+      some (q.slots.firstWord + (pos.toNat - 1) * q.slots.region.strideWords) := by
+  have hs := queue_wf_parts q hwf
+  have parts := mutableOneBased_wf_parts (h := hs.1)
+  have hidx := indexBase_beq_one_eq parts.2.2.1
+  unfold mFieldWord
+  rw [hidx]
+  simp only [h1, h2, and_true, if_true, Field.firstWord]
+
+end QueueModel
 
 end ProofForge.Svm.Sdk.StorageModel
