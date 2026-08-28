@@ -20,4 +20,22 @@ the owner is the current program id. Both instruction values may be dynamic scal
 @[pf_inline] def createAccount (lamports space : UInt64) : UInt64 :=
   ProofForge.Svm.Runtime.systemCreate lamports space
 
+/-- Closed `system.assign`: re-points account 0 (signer + writable) at the current program id.
+Fixed geometry: outer account 0 is the signer/writable target, outer account 1 is the System
+program. -/
+@[pf_inline] def assign : UInt64 :=
+  ProofForge.Svm.Runtime.systemAssign
+
+/-- Closed `system.allocate`: reserves `space` bytes on account 0 (signer + writable).
+Fixed geometry: outer account 0 is the signer/writable target, outer account 1 is the System
+program; `space` may be a dynamic scalar instruction value. -/
+@[pf_inline] def allocate (space : UInt64) : UInt64 :=
+  ProofForge.Svm.Runtime.systemAllocate space
+
+/-- Closed `system advance_nonce_account` (tag 4). Fixed geometry: outer account 0 is the nonce
+authority (signer), outer account 1 is the writable nonce account, outer account 2 is
+recent blockhashes, and outer account 3 is the System program. -/
+@[pf_inline] def advanceNonce : UInt64 :=
+  ProofForge.Svm.Runtime.systemAdvanceNonce
+
 end ProofForge.Svm.Sdk.System

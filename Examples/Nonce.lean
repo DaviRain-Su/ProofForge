@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.Nonce
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -19,7 +17,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def advance (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := systemAdvanceNonce
+    let _ := ProofForge.Svm.Sdk.System.advanceNonce
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

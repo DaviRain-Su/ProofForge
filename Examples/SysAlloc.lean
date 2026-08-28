@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.SysAlloc
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -20,7 +18,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def alloc (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := systemAllocate 16
+    let _ := ProofForge.Svm.Sdk.System.allocate 16
     .ok ({ dummy := 0 }, 16)
   else
     .error .overflow
@@ -29,7 +27,7 @@ def alloc (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def assign (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := systemAssign
+    let _ := ProofForge.Svm.Sdk.System.assign
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

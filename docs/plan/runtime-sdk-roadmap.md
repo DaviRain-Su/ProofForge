@@ -70,7 +70,7 @@ instruction 增加 recipe opcode。
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
-| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、static ASCII PDA、System transfer/create、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | 其余 System 与 Token/Token-2022 facade 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、static ASCII PDA、non-seeded System transfer/create/assign/allocate/advanceNonce、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Seeded System 与 Token/Token-2022 facade 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade；`Access` owner/running gates 与 fixed single-pending two-step ownership | scalar/struct/fixed-array layout facade；bounded roles/reentrancy 与 token/NFT reusable components |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -235,7 +235,7 @@ interface 固定 base/padding/type/TLV geometry，host reference cursor 用 UInt
 28-bit duplicate bitmap 验证 bounded advance；generated closed specialization 不分配 heap、
 不持久化 pointer，并由证明化的 straight-line interpreter 接受 classic base 和 official
 end/padding form。所有真实 extension 继续 fail closed，transfer-fee/hook 等必须在后续切片
-连同完整账户和 CPI 语义单独开放；详见 [R2-004](tasks/r2-004.md)。R3 的其余
+连同完整账户和 CPI 语义单独开放；详见 [R2-004](tasks/r2-004.md)。R3 的 seeded
 System/Token facade 仍未完成。
 
 ### R3 — SVM SDK
@@ -265,8 +265,10 @@ fixed vector、byte writer 和 signed-CPI codec composition；BatchRecorder/CPI 
 [R3-003](tasks/r3-003.md)。R3-004 再提供 `Svm.Sdk.Pda.Ascii` 与 `Svm.Sdk.System` 的
 static/fixed-account foundation；Pda、Transfer、Create、CreatePda 只消费 SDK 名称，通用
 `pf_inline` Runtime 展开保持四个程序的 canonical IR 和产物不变，单 seed ASCII policy
-在 IR verifier fail closed；详见 [R3-004](tasks/r3-004.md)。R3 尚未完成；其余 System
-指令与 classic Token/Token-2022 facade 仍待完成。
+在 IR verifier fail closed；详见 [R3-004](tasks/r3-004.md)。R3-005 已把 non-seeded System 的
+assign/allocate/advanceNonce 补入同一 facade，SysAlloc/Nonce 保持 canonical IR 和产物不变；
+详见 [R3-005](tasks/r3-005.md)。R3 尚未完成；seeded System 与 classic
+Token/Token-2022 facade 仍待完成。
 
 ### R4 — EVM Runtime
 

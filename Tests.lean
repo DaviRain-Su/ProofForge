@@ -90,5 +90,6 @@ import Tests.SvmSdkQueueSpec
 import Tests.SvmSdkAccountSpec
 import Tests.SvmTransientSpec
 import Tests.SvmSdkPdaSystemSpec
+import Tests.SvmSdkSystemSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
