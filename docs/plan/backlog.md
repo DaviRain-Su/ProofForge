@@ -24,8 +24,8 @@ cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded accou
 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
 instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed signer tail 收口到
 同一个 bounded plan，下一刀进入 SVM-RT-3 Token-2022 TLV。EVM-RT-2a typed call-result 已完成，
-下一刀是 typed LOG/custom-error plan。并行 EVM UInt256 线已补齐 typed bitwise/shift；div/mod
-留到独立切片明确除零策略。
+EVM-RT-2b 也已统一 typed LOG0..4/custom-error plan；下一刀完成 UInt256 div/mod 的明确除零
+策略，再继续 payable/receive policy。并行 EVM UInt256 线已补齐 typed bitwise/shift。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
 R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
 完成。
@@ -260,7 +260,13 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   Vault/Token artifacts byte-identical；没有开放 arbitrary call、delegatecall/create 或隐藏
   allocation。详见 `docs/plan/tasks/r4-001.md`。
 
-- `lake build Tests` 当前 269 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- R4-002 EVM typed LOG/custom-error plan 已完成：`Evm.LogError` 统一 LOG0..4 topic/data
+  geometry 与 ABI custom-error selector/argument/revert-length geometry；NativeFx 和 permit
+  继续拥有 closed event/error 语义，只把 materialized words 交给唯一 interpreter。全部 20 个
+  EVM Yul/bin/ABI 产物逐字节不变，没有开放 arbitrary opcode/signature/selector。详见
+  `docs/plan/tasks/r4-002.md`。
+
+- `lake build Tests` 当前 272 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 293/293，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。

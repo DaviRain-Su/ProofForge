@@ -1,5 +1,6 @@
 import ProofForge.Evm.ClosedCall
 import ProofForge.Evm.CallResult.Emit
+import ProofForge.Evm.LogError.Emit
 import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 
@@ -57,6 +58,14 @@ WETH / Uniswap / permit external call below is emitted through `CallResult.Emit.
 success, returndata-length, and bool-word gates have exactly one spelling. -/
 private def Context.callResult (context : Context σ) : CallResult.Emit.Context σ :=
   { fresh := context.fresh, indent := context.indent }
+
+/-- Project the shared typed log/error emission context (EVM-RT-2b). Permit below spells its
+Approval LOG3 and its nested Expired / Unauthorized custom-error reverts through
+`Evm.LogError.Emit`, the same interpreter the NativeFx effects consume, so the memory geometry
+has exactly one spelling. Nested gates pass a deepened indent; the interpreter allocates no
+fresh names, so emission order and output are unchanged. -/
+private def Context.logError (context : Context σ) : LogError.Emit.Context :=
+  { indent := context.indent }
 
 private def emitDomainSeparator (context : Context σ) (st : σ) : String × String × σ :=
   let indent := context.indent
@@ -503,6 +512,14 @@ private def emitPermit (context : Context σ)
   let (signer, st35) := context.fresh st34
   let (aslot, st36) := context.fresh st35
   let expiredSel := Keccak.selector "Expired" #[]
+  let expiredTxt ← LogError.Emit.emitRevert { indent := indent ++ "  " }
+    { selector := expiredSel }
+  let unauthorizedTxt ← LogError.Emit.emitRevert { indent := indent ++ "  " }
+    { selector := Keccak.selector "Unauthorized" #["address"], args := #[signer] }
+  let approvalTxt ← LogError.Emit.emitLog context.logError
+    { data := #[amt]
+      topics := #["0x" ++ Keccak.keccak256HexOfString "Approval(address,address,uint256)",
+        own, spd] }
   let mut acc := ""
   acc := acc ++ p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++
     u0 ++ u1 ++ u2 ++ u3 ++ t0 ++ t1 ++ t2 ++ t3 ++ pv ++
@@ -522,8 +539,7 @@ private def emitPermit (context : Context σ)
     packBytes32At indent 0 hs0 hs1 hs2 hs3 ++
     indent ++ "let " ++ sword ++ " := mload(0)" ++ nl ++
     indent ++ "if lt(" ++ dead ++ ", timestamp()) {" ++ nl ++
-    indent ++ "  mstore(0, shl(224, 0x" ++ expiredSel ++ "))" ++ nl ++
-    indent ++ "  revert(0, 4)" ++ nl ++
+    expiredTxt ++
     indent ++ "}" ++ nl ++
     indent ++ "mstore(0, " ++ ow0 ++ ")" ++ nl ++
     indent ++ "mstore(32, " ++ ow1 ++ ")" ++ nl ++
@@ -555,10 +571,7 @@ private def emitPermit (context : Context σ)
   acc := acc ++
     indent ++ "if iszero(" ++ signer ++ ") { " ++ revert0 ++ " }" ++ nl ++
     indent ++ "if iszero(eq(" ++ signer ++ ", " ++ own ++ ")) {" ++ nl ++
-    indent ++ "  mstore(0, shl(224, 0x" ++
-      Keccak.selector "Unauthorized" #["address"] ++ "))" ++ nl ++
-    indent ++ "  mstore(4, " ++ signer ++ ")" ++ nl ++
-    indent ++ "  revert(0, 36)" ++ nl ++
+    unauthorizedTxt ++
     indent ++ "}" ++ nl ++
     indent ++ "sstore(" ++ nslot ++ ", 1)" ++ nl ++
     indent ++ "sstore(add(" ++ nslot ++ ", 1), add(" ++ nonce ++ ", 1))" ++ nl ++
@@ -572,10 +585,7 @@ private def emitPermit (context : Context σ)
     indent ++ "let " ++ aslot ++ " := keccak256(0, 224)" ++ nl ++
     indent ++ "sstore(" ++ aslot ++ ", 1)" ++ nl ++
     indent ++ "sstore(add(" ++ aslot ++ ", 1), " ++ amt ++ ")" ++ nl ++
-    indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-    indent ++ "log3(0, 32, 0x" ++
-      Keccak.keccak256HexOfString "Approval(address,address,uint256)" ++
-      ", " ++ own ++ ", " ++ spd ++ ")" ++ nl
+    approvalTxt
   return (acc, n0, st36)
 
 private def emitTokenPermit (context : Context σ)

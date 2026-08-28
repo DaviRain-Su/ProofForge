@@ -111,10 +111,11 @@ account view、R5-001 Access foundation 与 R5-002 static storage declarations �
 独立 contract 分别复用 Access 和 storage declaration contracts。SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
 return-data/multi-seed signer-tail geometry，下一刀进入 Token-2022 TLV。EVM-RT-2a 也已统一
-closed CALL/STATICCALL result policy；下一刀推进 typed LOG/custom error。详见
+closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom error；下一刀
+完成 UInt256 div/mod 的明确除零策略。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
-[R4-001](tasks/r4-001.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。这不表示
-R2/R4/R5 已完成。
+[R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R5-001](tasks/r5-001.md) 和
+[R5-002](tasks/r5-002.md)。这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
 
@@ -267,13 +268,20 @@ exact-one-word 与 ERC-20 empty-or-nonzero-word policy，最多复制 32 bytes r
 `ClosedCall.Emit` 的 transfer/approve/permit/balance/allowance/WETH/router paths 统一消费该
 interpreter，产物保持 byte-identical。callee/calldata 仍由 closed vocabulary 拥有，没有开放
 arbitrary call、delegatecall/create 或隐藏 allocation。R4 的 typed LOG0..4/custom-error plan
-仍未完成；详见 [R4-001](tasks/r4-001.md)。
+在下一切片完成；详见 [R4-001](tasks/r4-001.md)。
+
+R4-002 已完成 EVM-RT-2b typed LOG/custom-error plan：`Evm.LogError` 以有界 plan 统一
+LOG0..4 topic count/data offsets/data length，以及 lowercase 4-byte selector/argument offsets/
+revert length；NativeFx 和 permit 的 closed semantic consumers 全部消费唯一 interpreter，20 个
+合约的 Yul/bin/ABI 保持逐字节一致。它没有开放 arbitrary event/error/opcode，也不引入 runtime
+allocator；详见 [R4-002](tasks/r4-002.md)。
 
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
 spelling 保留，因此 Token/Capped 等既有 IR/产物不漂移。Wide 的跨 64/192-bit Anvil matrix
-验证五种 relation；bitwise/shift/div/mod 留给后续独立切片。详见
-[E-U256-002](tasks/e-u256-002.md)。
+验证五种 relation；E-U256-003 已在同一 component 加入 typed bitwise/shift，div/mod 留给
+带明确除零策略的下一切片。详见 [E-U256-002](tasks/e-u256-002.md) 和
+[E-U256-003](tasks/e-u256-003.md)。
 
 ### R5 — EVM SDK
 

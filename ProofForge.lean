@@ -24,6 +24,8 @@ import ProofForge.Evm.WideWord.Source
 import ProofForge.Evm.WideWord.Emit
 import ProofForge.Evm.CallResult
 import ProofForge.Evm.CallResult.Emit
+import ProofForge.Evm.LogError
+import ProofForge.Evm.LogError.Emit
 import ProofForge.Evm.ClosedCall
 import ProofForge.Evm.ClosedCall.Source
 import ProofForge.Evm.ClosedCall.Emit

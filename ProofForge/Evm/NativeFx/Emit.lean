@@ -1,4 +1,5 @@
 import ProofForge.Evm.NativeFx
+import ProofForge.Evm.LogError.Emit
 import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 
@@ -21,6 +22,13 @@ structure Context (σ : Type) where
   materialize : Ops.Val → σ → Except String (String × String × σ)
   fresh : σ → String × σ
   indent : String
+
+/-- Project the shared typed log/error emission context (EVM-RT-2b). Every LOG0..4 event and
+custom-error revert below is emitted through `Evm.LogError.Emit`, so topic counts, data byte
+lengths/offsets, selector placement, ABI argument word offsets, and revert lengths have
+exactly one spelling; the closed semantic names stay here. -/
+private def Context.logError (context : Context σ) : LogError.Emit.Context :=
+  { indent := context.indent }
 
 private def emitDeposit (context : Context σ) (amount : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
@@ -85,13 +93,10 @@ private def emitSendEth256 (context : Context σ)
 
 private def emitLog (context : Context σ) (name : String) (amount : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
-  let indent := context.indent
   let (pre, amt, st') ← context.materialize amount st
-  let txt := pre ++
-    indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-    indent ++ "log1(0, 32, 0x" ++
-      Keccak.keccak256HexOfString (name ++ "(uint64)") ++ ")" ++ nl
-  return (txt, amt, st')
+  let sigTopic := "0x" ++ Keccak.keccak256HexOfString (name ++ "(uint64)")
+  let logTxt ← LogError.Emit.emitLog context.logError { data := #[amt], topics := #[sigTopic] }
+  return (pre ++ logTxt, amt, st')
 
 private def emitLogTransfer256 (context : Context σ)
     (f0 f1 f2 t0 t1 t2 a0 a1 a2 a3 : Ops.Val) (st : σ) :
@@ -110,6 +115,9 @@ private def emitLogTransfer256 (context : Context σ)
   let (fromT, s10) := context.fresh s9
   let (toT, s11) := context.fresh s10
   let (amt, s12) := context.fresh s11
+  let sigTopic := "0x" ++ Keccak.keccak256HexOfString "Transfer(address,address,uint256)"
+  let logTxt ← LogError.Emit.emitLog context.logError
+    { data := #[amt], topics := #[sigTopic, fromT, toT] }
   let txt := p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ r0 ++ r1 ++ r2 ++ r3 ++
     indent ++ "mstore(0, 0)" ++ nl ++
     packAddrMstore8 indent x0 x1 x2 ++
@@ -118,10 +126,7 @@ private def emitLogTransfer256 (context : Context σ)
     packAddrMstore8 indent y0 y1 y2 ++
     indent ++ "let " ++ toT ++ " := mload(0)" ++ nl ++
     indent ++ "let " ++ amt ++ " := " ++ packU256 z0 z1 z2 z3 ++ nl ++
-    indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-    indent ++ "log3(0, 32, 0x" ++
-      Keccak.keccak256HexOfString "Transfer(address,address,uint256)" ++
-      ", " ++ fromT ++ ", " ++ toT ++ ")" ++ nl
+    logTxt
   return (txt, z0, s12)
 
 private def emitLogApproval256 (context : Context σ)
@@ -141,6 +146,9 @@ private def emitLogApproval256 (context : Context σ)
   let (ownT, s10) := context.fresh s9
   let (spdT, s11) := context.fresh s10
   let (amt, s12) := context.fresh s11
+  let sigTopic := "0x" ++ Keccak.keccak256HexOfString "Approval(address,address,uint256)"
+  let logTxt ← LogError.Emit.emitLog context.logError
+    { data := #[amt], topics := #[sigTopic, ownT, spdT] }
   let txt := p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ r0 ++ r1 ++ r2 ++ r3 ++
     indent ++ "mstore(0, 0)" ++ nl ++
     packAddrMstore8 indent x0 x1 x2 ++
@@ -149,16 +157,12 @@ private def emitLogApproval256 (context : Context σ)
     packAddrMstore8 indent y0 y1 y2 ++
     indent ++ "let " ++ spdT ++ " := mload(0)" ++ nl ++
     indent ++ "let " ++ amt ++ " := " ++ packU256 z0 z1 z2 z3 ++ nl ++
-    indent ++ "mstore(0, " ++ amt ++ ")" ++ nl ++
-    indent ++ "log3(0, 32, 0x" ++
-      Keccak.keccak256HexOfString "Approval(address,address,uint256)" ++
-      ", " ++ ownT ++ ", " ++ spdT ++ ")" ++ nl
+    logTxt
   return (txt, z0, s12)
 
 private def emitRevertInsufficient (context : Context σ)
     (h0 h1 h2 h3 w0 w1 w2 w3 : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
-  let indent := context.indent
   let (p0, x0, s0) ← context.materialize h0 st
   let (p1, x1, s1) ← context.materialize h1 s0
   let (p2, x2, s2) ← context.materialize h2 s1
@@ -167,12 +171,10 @@ private def emitRevertInsufficient (context : Context σ)
   let (q1, y1, s5) ← context.materialize w1 s4
   let (q2, y2, s6) ← context.materialize w2 s5
   let (q3, y3, s7) ← context.materialize w3 s6
-  let sel := Keccak.selector "Insufficient" #["uint256", "uint256"]
-  let txt := p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
-    indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-    indent ++ "mstore(4, " ++ packU256 x0 x1 x2 x3 ++ ")" ++ nl ++
-    indent ++ "mstore(36, " ++ packU256 y0 y1 y2 y3 ++ ")" ++ nl ++
-    indent ++ "revert(0, 68)" ++ nl
+  let errTxt ← LogError.Emit.emitRevert context.logError
+    { selector := Keccak.selector "Insufficient" #["uint256", "uint256"]
+      args := #[packU256 x0 x1 x2 x3, packU256 y0 y1 y2 y3] }
+  let txt := p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++ errTxt
   return (txt, x0, s7)
 
 private def emitRevertUnauthorized (context : Context σ)
@@ -181,41 +183,31 @@ private def emitRevertUnauthorized (context : Context σ)
   let (p0, a0, s0) ← context.materialize w0 st
   let (p1, a1, s1) ← context.materialize w1 s0
   let (p2, a2, s2) ← context.materialize w2 s1
-  let sel := Keccak.selector "Unauthorized" #["address"]
+  let errTxt ← LogError.Emit.emitRevert context.logError
+    { selector := Keccak.selector "Unauthorized" #["address"], args := #["pf_who"] }
   let txt := p0 ++ p1 ++ p2 ++
     indent ++ "mstore(0, 0)" ++ nl ++
     packAddrMstore8 indent a0 a1 a2 ++
     indent ++ "let pf_who := mload(0)" ++ nl ++
-    indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-    indent ++ "mstore(4, pf_who)" ++ nl ++
-    indent ++ "revert(0, 36)" ++ nl
+    errTxt
   return (txt, a0, s2)
 
 private def emitRevertZeroAddress (context : Context σ) (st : σ) :
-    Except String (String × String × σ) :=
-  let indent := context.indent
-  let sel := Keccak.selector "ZeroAddress" #[]
-  let txt :=
-    indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-    indent ++ "revert(0, 4)" ++ nl
+    Except String (String × String × σ) := do
+  let txt ← LogError.Emit.emitRevert context.logError
+    { selector := Keccak.selector "ZeroAddress" #[] }
   pure (txt, "0", st)
 
 private def emitRevertPaused (context : Context σ) (st : σ) :
-    Except String (String × String × σ) :=
-  let indent := context.indent
-  let sel := Keccak.selector "Paused" #[]
-  let txt :=
-    indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-    indent ++ "revert(0, 4)" ++ nl
+    Except String (String × String × σ) := do
+  let txt ← LogError.Emit.emitRevert context.logError
+    { selector := Keccak.selector "Paused" #[] }
   pure (txt, "0", st)
 
 private def emitRevertCapExceeded (context : Context σ) (st : σ) :
-    Except String (String × String × σ) :=
-  let indent := context.indent
-  let sel := Keccak.selector "CapExceeded" #[]
-  let txt :=
-    indent ++ "mstore(0, shl(224, 0x" ++ sel ++ "))" ++ nl ++
-    indent ++ "revert(0, 4)" ++ nl
+    Except String (String × String × σ) := do
+  let txt ← LogError.Emit.emitRevert context.logError
+    { selector := Keccak.selector "CapExceeded" #[] }
   pure (txt, "0", st)
 
 private def emitReceive (context : Context σ) (st : σ) :
