@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.TokenXfer
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -20,7 +18,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def send (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenTransferChecked amount 6
+    let _ := ProofForge.Svm.Sdk.Token.transferChecked amount 6
     .ok ({ dummy := 0 }, amount)
   else
     .error .overflow

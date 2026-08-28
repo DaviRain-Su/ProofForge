@@ -3,6 +3,7 @@ import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.Queue
 import ProofForge.Svm.Sdk.Pda
 import ProofForge.Svm.Sdk.System
+import ProofForge.Svm.Sdk.Token
 import ProofForge.Svm.Sdk.Transient
 
 /-!
@@ -20,7 +21,8 @@ for invocation-local fixed vectors, byte writers, and composed codecs rather tha
 parallel allocator or lifetime. No native pointer or invocation-heap collection crosses the
 contract boundary.
 
-`Sdk.Pda` and `Sdk.System` provide compiler-erased names for the current static PDA and fixed
-System Program effects. Applications no longer repeat CPI tags, account metas, signer seeds, or
-instruction-word recipes; the existing Runtime/IR verifier still owns their target validation.
+`Sdk.Pda`, `Sdk.System`, and `Sdk.Token` provide compiler-erased names for the current static
+PDA, fixed System Program, and fixed-account classic SPL Token effects. Applications no longer
+repeat CPI tags, account metas, signer seeds, or instruction-word recipes; the existing
+Runtime/IR verifier still owns their target validation.
 -/

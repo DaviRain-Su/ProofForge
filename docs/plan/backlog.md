@@ -33,7 +33,7 @@ div/mod 已固定 checked 除零 revert 策略。下一刀继续剩余 R4 harden
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
-R3-005 non-seeded System facade completion、
+R3-005 non-seeded System facade completion、R3-006 classic Token facade、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles 与 R5-004 Pausable policy；这些都是阶段内可复用组件切片，
 不代表 R3/R5 整体完成。
@@ -265,8 +265,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `advanceNonce` 直接组合既有 Runtime wrappers，SysAlloc/Nonce application 不再依赖 Runtime
   名称。账户权限/程序下标仍由 fixed facade geometry 所有，space 是普通 scalar；没有新增
   Ops/IR/Emit/Extract/Component。两个 canonical IR digest 与 6 份 assembly/ELF/IDL 产物保持
-  不变；详见 `docs/plan/tasks/r3-005.md`。Seeded System 与 classic Token/Token-2022 facade
-  仍是 R3 工作。
+  不变；详见 `docs/plan/tasks/r3-005.md`。
+
+- R3-006 classic Token facade 已完成：新增 CPI-relative `CpiAccount.Handle` 与 role-typed
+  checked/unchecked transfer descriptors；fixed transfer/mint/burn/account/approve/revoke/freeze/
+  authority/native/multisig/data-size wrappers 统一归 `Svm.Sdk.Token`。Phoenix/PhoenixV1Profile
+  在 `Examples` 中各自绑定具名 concrete account layouts，业务路径不再重复 positional
+  indexes；没有 Phoenix-owned target module，也没有新增 Ops/IR/Emit/Extract/Component。
+  42 份相关 assembly/ELF/IDL 产物逐字节不变；详见 `docs/plan/tasks/r3-006.md`。Seeded
+  System、ATA/Memo、Token state/program-id policy 与 Token-2022 extension semantics 仍是 R3
+  工作。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

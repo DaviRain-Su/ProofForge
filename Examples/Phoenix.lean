@@ -186,6 +186,27 @@ private def throwMatch (code : UInt64) : Except Error (State × UInt64) :=
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
+/-!
+Phoenix owns its concrete transaction layout; the reusable Token SDK owns role checking and CPI
+composition. These descriptors are compile-time values, so protocol methods name intent instead
+of repeating positional account lists and extraction still emits the canonical Token metas.
+-/
+@[pf_inline] def baseDepositTokenAccounts :
+    ProofForge.Svm.Sdk.Token.CheckedTransferAccounts :=
+  .at 7 1 3 5 0
+
+@[pf_inline] def quoteDepositTokenAccounts :
+    ProofForge.Svm.Sdk.Token.CheckedTransferAccounts :=
+  .at 7 2 4 6 0
+
+@[pf_inline] def baseWithdrawTokenAccounts :
+    ProofForge.Svm.Sdk.Token.CheckedTransferAccounts :=
+  .at 7 5 3 1 5
+
+@[pf_inline] def quoteWithdrawTokenAccounts :
+    ProofForge.Svm.Sdk.Token.CheckedTransferAccounts :=
+  .at 7 6 4 2 6
+
 def empty4 : Vector UInt64 4 := #v[0, 0, 0, 0]
 
 def emptyEvents : Vector MarketEvent 5 :=
@@ -1134,8 +1155,8 @@ def depositFunds (s : State) (baseLots quoteLots : UInt64) :
   else if checkPdaSeeds 6 quoteSeeds ≠ 0 then
     .error .unauthorized
   else if (0 : UInt64) ≠ 1 then
-    let _ := tokenTransferCheckedIx 7 1 3 5 0 baseLots 6
-    let _ := tokenTransferCheckedIx 7 2 4 6 0 quoteLots 6
+    let _ := ProofForge.Svm.Sdk.Token.transferCheckedWith baseDepositTokenAccounts baseLots 6
+    let _ := ProofForge.Svm.Sdk.Token.transferCheckedWith quoteDepositTokenAccounts quoteLots 6
     depositFundsFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
       baseLots quoteLots
   else
@@ -1221,7 +1242,8 @@ def withdrawBase (s : State) (requested : UInt64) : Except Error (State × UInt6
     .error .overflow
   else
     let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 3]
-    let _ := tokenTransferCheckedSignedIx 7 5 3 1 5 amount 6 seeds (findPdaSeeds seeds)
+    let _ := ProofForge.Svm.Sdk.Token.transferCheckedSignedWith
+      baseWithdrawTokenAccounts amount 6 seeds (findPdaSeeds seeds)
     .ok ({ s with
             baseFree := s.baseFree - amount
             traderBaseFree := s.traderBaseFree.set (i % 4) (available - amount) }, amount)
@@ -1242,7 +1264,8 @@ def withdrawQuote (s : State) (requested : UInt64) : Except Error (State × UInt
     .error .overflow
   else
     let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 4]
-    let _ := tokenTransferCheckedSignedIx 7 6 4 2 6 amount 6 seeds (findPdaSeeds seeds)
+    let _ := ProofForge.Svm.Sdk.Token.transferCheckedSignedWith
+      quoteWithdrawTokenAccounts amount 6 seeds (findPdaSeeds seeds)
     .ok ({ s with
             quoteFree := s.quoteFree - amount
             traderQuoteFree := s.traderQuoteFree.set (i % 4) (available - amount) }, amount)
@@ -2062,9 +2085,11 @@ private def commitBuy
         else if s.baseFree > u64Max - expired then
           .error .overflow
         else
-          let _ := tokenTransferCheckedIx 7 2 4 6 0 quoteDebit 6
+          let _ := ProofForge.Svm.Sdk.Token.transferCheckedWith
+            quoteDepositTokenAccounts quoteDebit 6
           let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 3]
-          let _ := tokenTransferCheckedSignedIx 7 5 3 1 5 filled 6 seeds (findPdaSeeds seeds)
+          let _ := ProofForge.Svm.Sdk.Token.transferCheckedSignedWith
+            baseWithdrawTokenAccounts filled 6 seeds (findPdaSeeds seeds)
           .ok ({ s with
             quoteFree := s.quoteFree + quoteLots
             baseLocked := s.baseLocked - baseDebit
@@ -2319,10 +2344,11 @@ private def commitSell
         else if s.baseFree > u64Max - filled then
           .error .overflow
         else
-          let _ := tokenTransferCheckedIx 7 1 3 5 0 filled 6
+          let _ := ProofForge.Svm.Sdk.Token.transferCheckedWith
+            baseDepositTokenAccounts filled 6
           let seeds : Array PdaSeed := #[.ascii "vault", .stateKey, .accKey 4]
-          let _ := tokenTransferCheckedSignedIx
-            7 6 4 2 6 takerQuote 6 seeds (findPdaSeeds seeds)
+          let _ := ProofForge.Svm.Sdk.Token.transferCheckedSignedWith
+            quoteWithdrawTokenAccounts takerQuote 6 seeds (findPdaSeeds seeds)
           .ok ({ s with
             quoteLocked := s.quoteLocked - quoteDebit
             quoteFree := s.quoteFree + unlocked
@@ -3014,7 +3040,7 @@ def sweepAsk (s : State) : Except Error (State × UInt64) :=
     .error .overflow
   else if s.baseFree ≤ u64Max - s.sizes[i]! then
     if s.sizes[i]! ≤ s.baseLocked then
-      let _ := tokenTransferChecked s.sizes[i]! 6
+      let _ := ProofForge.Svm.Sdk.Token.transferChecked s.sizes[i]! 6
       .ok ({ s with
               sizes := s.sizes.set i 0
               askBook := removeBookAddress s.askBook address

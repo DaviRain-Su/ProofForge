@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.TokenMint
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -20,7 +18,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def mintTo (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenMintToChecked amount 6
+    let _ := ProofForge.Svm.Sdk.Token.mintToChecked amount 6
     .ok ({ dummy := 0 }, amount)
   else
     .error .overflow
@@ -29,7 +27,7 @@ def mintTo (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def burn (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenBurnChecked amount 6
+    let _ := ProofForge.Svm.Sdk.Token.burnChecked amount 6
     .ok ({ dummy := 0 }, amount)
   else
     .error .overflow

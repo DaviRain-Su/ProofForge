@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.TokenMs
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -19,7 +17,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def openMs (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenInitMultisig
+    let _ := ProofForge.Svm.Sdk.Token.initializeMultisig2
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

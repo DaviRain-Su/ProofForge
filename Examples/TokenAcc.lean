@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.TokenAcc
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -20,7 +18,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def openAcc (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenInitAccount
+    let _ := ProofForge.Svm.Sdk.Token.initializeAccount
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
@@ -29,7 +27,7 @@ def openAcc (_s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def closeAcc (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := tokenCloseAccount
+    let _ := ProofForge.Svm.Sdk.Token.closeAccount
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

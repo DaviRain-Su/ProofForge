@@ -102,6 +102,27 @@ abbrev View := ProofForge.Svm.AccountView.View
 
 end Account
 
+namespace CpiAccount
+
+/-- One compile-time account index relative to the external-account region after state. This is
+the index convention used by CPI metas, account-key PDA seeds, and signed-CPI authorities; it is
+deliberately distinct from `Account.Handle`, whose index is physical. -/
+structure Handle where
+  index : Nat
+  deriving BEq, Repr, Inhabited
+
+attribute [pf_inline] Handle.index
+
+/-- Name one statically selected CPI account. The descriptor is erased during extraction. -/
+@[pf_inline] def Handle.at (index : Nat) : Handle := { index }
+
+/-- Static transaction account-lock bound for CPI-relative indexes. Physical account zero is
+reserved for state, so the external index must leave room for that prefix account. -/
+def Handle.wellFormed (handle : Handle) (accountLimit : Nat := 64) : Bool :=
+  handle.index + 1 < accountLimit
+
+end CpiAccount
+
 namespace Signer
 
 /-- A fixed account whose first key-word access carries the existing target signer requirement. -/

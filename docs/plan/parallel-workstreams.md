@@ -100,7 +100,8 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-SDK-2 transient（已集成）** | SVM-RT-2 | 直接复用 Heap/Scratch 的 invocation-local bounded buffer/fixed Vec/byte writer/signed-CPI codec composition；显式 capacity/alignment/frame/OOM，不复制 allocator/plan/lifetime，不能持久化 pointer；见 R3-003 |
 | **SVM-SDK-3 PDA/System foundation（已集成）** | SVM-RT-2 | static ASCII PDA bump/check/signed-create 与 fixed-account System transfer/create；example 只见 SDK 名称，`pf_inline` 通用展开，不增加名字特判或 CPI recipe；见 R3-004 |
 | **SVM-SDK-4 System core（已集成）** | SVM-SDK-3 | non-seeded assign/allocate/advanceNonce 直接组合既有 Runtime；SysAlloc/Nonce 只见 SDK 名称，canonical 产物不变；见 R3-005 |
-| **SVM-SDK-5 seeded System/Token remainder** | SVM-SDK-4、SVM-RT-3 | 分模块收口 seeded System 与 classic Token/Token-2022 typed facade；逐条复用既有 Runtime/typed TLV contract，每类至少两个非 Phoenix consumer；未知 extension/account geometry 继续 fail closed |
+| **SVM-SDK-5 classic Token（已集成）** | SVM-SDK-4 | CPI-relative handle、role-typed checked/unchecked transfer layout 与 fixed classic facade；Phoenix concrete layouts 仍在 Examples，十二个非 Phoenix consumer 与 Phoenix/PhoenixV1Profile 产物保持不变；见 R3-006 |
+| **SVM-SDK-6 seeded System/Token remainder** | SVM-SDK-5、SVM-RT-3 | 分模块收口 seeded System、ATA/Memo、Token state/program-id policy 与 Token-2022 typed extension facade；逐条复用既有 Runtime/typed TLV contract，未知 extension/account geometry 继续 fail closed |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
 | **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
 | **EVM-SDK-5 assets** | EVM-SDK-1/2/3/4、EVM-RT-2 | reusable fungible、ERC-721、bounded ERC-1155 core；每个组件至少两个 consumer |
