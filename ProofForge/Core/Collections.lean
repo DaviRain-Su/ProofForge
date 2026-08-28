@@ -230,4 +230,121 @@ def remove? [BEq α] (set : BoundedSet α capacity) (value : α) :
 
 end BoundedSet
 
+/-! ## FIFO semantics -/
+
+/-- Fixed-frame FIFO ring. `head` and `length` are scalar indexes; inactive slots are unreachable
+and may retain stale values. -/
+structure BoundedQueue (α : Type) (capacity : Nat) where
+  head : UInt32
+  length : UInt32
+  values : Vector α capacity
+
+namespace BoundedQueue
+
+def wellFormed (queue : BoundedQueue α capacity) : Bool :=
+  0 < capacity && capacity < UInt32.size && queue.length.toNat ≤ capacity &&
+    (if queue.length = 0 then queue.head = 0 else queue.head.toNat < capacity)
+
+def size (queue : BoundedQueue α capacity) : UInt64 :=
+  queue.length.toUInt64
+
+def isEmpty (queue : BoundedQueue α capacity) : Bool :=
+  queue.length == 0
+
+def isFull (queue : BoundedQueue α capacity) : Bool :=
+  capacity ≤ queue.length.toNat
+
+private def physicalIndex? (queue : BoundedQueue α capacity) (offset : UInt64) : Option Nat :=
+  if !queue.wellFormed || queue.length.toUInt64 ≤ offset then none
+  else
+    let index := (queue.head.toNat + offset.toNat) % capacity
+    if index < capacity then some index else none
+
+/-- Read a zero-based logical offset from the front. -/
+def get? (queue : BoundedQueue α capacity) (offset : UInt64) : Option α := do
+  let index ← queue.physicalIndex? offset
+  if h : index < capacity then return queue.values[index]'h else none
+
+def peek? (queue : BoundedQueue α capacity) : Option α :=
+  queue.get? 0
+
+/-- Append at the ring tail. Full or malformed queues return `none`. -/
+def push? (queue : BoundedQueue α capacity) (value : α) : Option (BoundedQueue α capacity) :=
+  if !queue.wellFormed || queue.isFull then none
+  else
+    let tail := (queue.head.toNat + queue.length.toNat) % capacity
+    if h : tail < capacity then
+      some { queue with
+        length := queue.length + 1
+        values := queue.values.set tail value h }
+    else
+      none
+
+/-- Remove the front value and advance the ring head. An emptied queue returns to canonical
+`head = length = 0`; the old payload remains unreachable. -/
+def pop? (queue : BoundedQueue α capacity) : Option (BoundedQueue α capacity × α) := do
+  if !queue.wellFormed || queue.isEmpty then none else pure ()
+  let value ← queue.peek?
+  let remaining := queue.length - 1
+  let nextHead := if remaining = 0 then 0 else UInt32.ofNat ((queue.head.toNat + 1) % capacity)
+  return ({ queue with head := nextHead, length := remaining }, value)
+
+def clear (queue : BoundedQueue α capacity) : BoundedQueue α capacity :=
+  { queue with head := 0, length := 0 }
+
+end BoundedQueue
+
+/-! ## Fixed bit-set semantics -/
+
+def bitSetWordCount (capacity : Nat) : Nat :=
+  (capacity + 63) / 64
+
+/-- A compile-time-capacity bit set packed into fixed `UInt64` words. There is no runtime length,
+allocation, or collection header. -/
+structure BoundedBitSet (capacity : Nat) where
+  words : Vector UInt64 (bitSetWordCount capacity)
+
+namespace BoundedBitSet
+
+def empty (capacity : Nat) : BoundedBitSet capacity :=
+  { words := Vector.replicate (bitSetWordCount capacity) 0 }
+
+def contains (set : BoundedBitSet capacity) (index : UInt64) : Bool :=
+  if index.toNat < capacity then
+    let wordIndex := index.toNat / 64
+    if h : wordIndex < bitSetWordCount capacity then
+      let mask := (1 : UInt64) <<< (index % 64)
+      (set.words[wordIndex]'h &&& mask) != 0
+    else
+      false
+  else
+    false
+
+/-- Set or clear one in-range bit. Out-of-range indexes return `none` and cannot alias a lower
+word through modular arithmetic. -/
+def update? (set : BoundedBitSet capacity) (index : UInt64) (present : Bool) :
+    Option (BoundedBitSet capacity) :=
+  if index.toNat < capacity then
+    let wordIndex := index.toNat / 64
+    if h : wordIndex < bitSetWordCount capacity then
+      let mask := (1 : UInt64) <<< (index % 64)
+      let word := set.words[wordIndex]'h
+      let next := if present then word ||| mask else word &&& ~~~mask
+      some { words := set.words.set wordIndex next h }
+    else
+      none
+  else
+    none
+
+def insert? (set : BoundedBitSet capacity) (index : UInt64) : Option (BoundedBitSet capacity) :=
+  set.update? index true
+
+def remove? (set : BoundedBitSet capacity) (index : UInt64) : Option (BoundedBitSet capacity) :=
+  set.update? index false
+
+def clear (_set : BoundedBitSet capacity) : BoundedBitSet capacity :=
+  empty capacity
+
+end BoundedBitSet
+
 end ProofForge.Core.Collections

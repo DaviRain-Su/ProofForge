@@ -258,6 +258,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   固定 logical laws，SVM account RBMap/allocator 与 EVM hashed storage 的 target binding 继续
   独立排期。详见 `docs/plan/tasks/r1-013.md`。
 
+- R1-014 bounded Queue/BitSet semantics 已完成：`Core.Collections.BoundedQueue` 使用固定
+  `Vector` frame + `UInt32` head/length 实现 checked ring FIFO，`BoundedBitSet` 使用编译期
+  word count 的 fixed `UInt64` words 实现 packed membership/update。两者都显式拒绝
+  malformed/OOB/full case，不分配 heap、不存 pointer、不新增 Ops/IR/Emit，也不声称 shared
+  physical persistence；SVM account bytes 与 EVM slots 的 binding 继续独立排期。详见
+  `docs/plan/tasks/r1-014.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

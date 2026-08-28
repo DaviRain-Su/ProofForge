@@ -139,6 +139,78 @@ private def oneSet : BoundedSet UInt64 2 :=
 
 end MapSemantics
 
+namespace QueueAndBitSetSemantics
+
+open ProofForge.Core.Collections
+
+private def emptyQueue : BoundedQueue UInt64 3 :=
+  { head := 0, length := 0, values := #v[0, 0, 0] }
+
+private def q1 : BoundedQueue UInt64 3 :=
+  (emptyQueue.push? 11).getD emptyQueue
+
+private def q2 : BoundedQueue UInt64 3 :=
+  (q1.push? 13).getD q1
+
+private def q3 : BoundedQueue UInt64 3 :=
+  (q2.push? 17).getD q2
+
+#guard emptyQueue.wellFormed
+#guard emptyQueue.isEmpty
+#guard q2.size == 2
+#guard q2.peek? == some 11
+#guard q2.get? 1 == some 13
+#guard (q2.get? 2).isNone
+#guard q3.isFull
+#guard (q3.push? 19).isNone
+
+private def afterPop : BoundedQueue UInt64 3 :=
+  (q3.pop?).map (·.1) |>.getD q3
+
+private def wrapped : BoundedQueue UInt64 3 :=
+  (afterPop.push? 19).getD afterPop
+
+#guard afterPop.head == 1
+#guard afterPop.peek? == some 13
+#guard wrapped.values == #v[19, 13, 17]
+#guard wrapped.get? 0 == some 13
+#guard wrapped.get? 1 == some 17
+#guard wrapped.get? 2 == some 19
+
+private def drained : BoundedQueue UInt64 3 :=
+  let one := (q1.pop?).map (·.1) |>.getD q1
+  one
+
+#guard drained.wellFormed
+#guard drained.head == 0
+#guard drained.length == 0
+
+private def malformedQueue : BoundedQueue UInt64 3 :=
+  { head := 3, length := 1, values := #v[11, 13, 17] }
+
+#guard !malformedQueue.wellFormed
+#guard (malformedQueue.push? 19).isNone
+#guard (malformedQueue.pop?).isNone
+
+private def bits : BoundedBitSet 130 :=
+  (((BoundedBitSet.empty 130).insert? 0).bind (·.insert? 64)).bind (·.insert? 129)
+    |>.getD (BoundedBitSet.empty 130)
+
+#guard bitSetWordCount 0 == 0
+#guard bitSetWordCount 1 == 1
+#guard bitSetWordCount 64 == 1
+#guard bitSetWordCount 65 == 2
+#guard bits.contains 0
+#guard bits.contains 64
+#guard bits.contains 129
+#guard !bits.contains 1
+#guard !bits.contains 130
+#guard (bits.insert? 130).isNone
+#guard (bits.remove? 64).map (fun next => !next.contains 64 && next.contains 129) == some true
+#guard bits.clear.words == #v[0, 0, 0]
+
+end QueueAndBitSetSemantics
+
 /-! The same helper must remain an extractable source combinator. This probe deliberately carries
 the bounded vector through each target's existing input adapter; no collection operation is added
 to Core Ops or either target extension. -/
