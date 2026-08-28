@@ -394,4 +394,41 @@ theorem uncheckedTransfer_wf_parts (accounts : UncheckedTransferAccounts) (L : N
   simp only [UncheckedTransferAccounts.wellFormed, Bool.and_eq_true] at h
   exact ⟨h.1.1.1, h.1.1.2, h.1.2, h.2⟩
 
+
+/-- CheckedTransfer 的 5 角色索引逐一有界（Nat 级推论）。 -/
+theorem checkedTransfer_wf_bounds (accounts : CheckedTransferAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.tokenProgram.index < L ∧ accounts.source.index < L ∧
+    accounts.mint.index < L ∧ accounts.destination.index < L ∧
+    accounts.authority.index < L := by
+  have hs := checkedTransfer_wf_parts accounts L h
+  simp only [ProofForge.Svm.Sdk.CpiAccount.Handle.wellFormed, decide_eq_true_eq] at hs
+  constructor
+  · omega
+  · constructor
+    · omega
+    · constructor
+      · omega
+      · constructor
+        · omega
+        · omega
+
+/-- UncheckedTransfer 的 4 角色索引逐一有界。 -/
+theorem uncheckedTransfer_wf_bounds (accounts : UncheckedTransferAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.tokenProgram.index < L ∧ accounts.source.index < L ∧
+    accounts.destination.index < L ∧ accounts.authority.index < L := by
+  have hs := uncheckedTransfer_wf_parts accounts L h
+  simp only [ProofForge.Svm.Sdk.CpiAccount.Handle.wellFormed, decide_eq_true_eq] at hs
+  constructor
+  · omega
+  · constructor
+    · omega
+    · constructor
+      · omega
+      · omega
+
 end ProofForge.Svm.Sdk.Token
+
+
+
