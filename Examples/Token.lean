@@ -294,4 +294,124 @@ def logApprove (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
 def get (_s : State) : UInt64 :=
   0
 
+section Proofs
+
+/-! ## 第一批 kernel 证明：Token supply 效应
+
+对 `@[pf_entry]` 函数的全路径 supply 效应；`Context.caller` 不透明，所以结论
+覆盖所有分支（含 revert-as-code 路径）。 -/ 
+
+/-- **transfer 不增发不通缩**：转账后 `supply` 不变。 -/ 
+theorem transfer_preserves_supply (s : State) (d : Address) (a : UInt256)
+    {t : State} {r : UInt64}
+    (h : transfer s d a = .ok (t, r)) : t.supply = s.supply := by
+  unfold transfer at h
+  split at h
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+  · split at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+    · split at h
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        rfl
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        rfl
+
+/-- **mint 效应**：supply 要么不动，要么恰好加上 `v`。 -/ 
+theorem mint_supply_effect (s : State) (to_ : Address) (v : UInt256)
+    {t : State} {r : UInt64}
+    (h : mint s to_ v = .ok (t, r)) :
+    t.supply = s.supply ∨ t.supply = UInt256.add s.supply v := by
+  unfold mint at h
+  split at h
+  · split at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact Or.inl rfl
+    · split at h
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact Or.inl rfl
+      · split at h
+        · rename_i _hc
+          split at h
+          · simp at h
+            obtain ⟨rfl, rfl⟩ := h
+            exact Or.inr rfl
+          · simp at h
+        · simp at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact Or.inl rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact Or.inl rfl
+
+/-- **burn 效应**：supply 要么不动，要么恰好减去 `amount`。 -/ 
+theorem burn_supply_effect (s : State) (a : UInt256) {t : State} {r : UInt64}
+    (h : burn s a = .ok (t, r)) :
+    t.supply = s.supply ∨ t.supply = UInt256.sub s.supply a := by
+  unfold burn at h
+  split at h
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact Or.inl rfl
+  · split at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact Or.inr rfl
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact Or.inl rfl
+
+/-- **transferFrom 不动 supply**（余额走 hashed map，supply 只由 mint/burn 改变）。 -/ 
+theorem transferFrom_preserves_supply (s : State) (o d : Address) (a : UInt256)
+    {t : State} {r : UInt64}
+    (h : transferFrom s o d a = .ok (t, r)) : t.supply = s.supply := by
+  unfold transferFrom at h
+  split at h
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+  · split at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+    · split at h
+      · split at h
+        · simp at h
+          obtain ⟨rfl, rfl⟩ := h
+          rfl
+        · simp at h
+          obtain ⟨rfl, rfl⟩ := h
+          rfl
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        rfl
+
+/-- **approve 不动 supply**。 -/ 
+theorem approve_preserves_supply (s : State) (sp : Address) (a : UInt256)
+    {t : State} {r : UInt64}
+    (h : approve s sp a = .ok (t, r)) : t.supply = s.supply := by
+  unfold approve at h
+  split at h
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+  · split at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+    · split at h
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        rfl
+      · simp at h
+
+end Proofs
+
 end Examples.Token

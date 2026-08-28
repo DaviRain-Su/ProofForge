@@ -88,3 +88,4 @@ import Tests.SvmSdkStorageSpec
 import Tests.SvmSdkQueueSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
+import Tests.ProofSpec
