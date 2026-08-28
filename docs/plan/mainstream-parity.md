@@ -100,7 +100,7 @@ ProofForge 要保存的是相同的安全合同：写权限、owner、alias、�
 | System/PDA | static ASCII PDA；non-seeded transfer/create/assign/allocate/nonce | honest generic seeded System facade、rent-aware create/resize helpers | F1 |
 | SPL Token | `Svm.Sdk.Token` 已统一 fixed classic surface，并以 CPI-relative role descriptors 提供 checked/unchecked ordinary/PDA-signed transfer；concrete account layout 留在应用 | state parsers、program-id policy、更多 honest generic authority/multisig variants | F1 |
 | Token-2022 | base-layout transfer + bounded TLV envelope，未知 extension 原子拒绝 | typed extension lookup/account-size；transfer-fee/hook/memo/CPI-guard 等逐扩展完整语义 | F2 |
-| ATA/Memo | fixed Runtime wrappers | Token-program-aware ATA facade、Create/CreateIdempotent/RecoverNested；bounded memo bytes | F1/F2 |
+| ATA/Memo | SDK 已有 fixed ATA CreateIdempotent（Token program 由 caller account 显式提供）与诚实名 `writeOk` Memo facade | ordinary Create/RecoverNested、derived address/program-id policy；bounded memo bytes | F1/F2 |
 | loader/lifecycle | Loader-v3 assembly/deploy qualification exists | typed loader state/instructions、upgrade authority/immutability lifecycle facade | F3 |
 | persistent collections | POD Field、Vec、Queue、ordered Map/RBMap、allocator | generic bounded POD records、Set/BitSet、versioned initialization/close policy | F1/F2 |
 

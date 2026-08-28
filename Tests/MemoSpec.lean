@@ -3,11 +3,11 @@ import Examples.Memo
 namespace Tests.MemoSpec
 
 open Examples.Memo
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard memoWrite == 0
+#guard Memo.writeOk == 0
 
 #guard
   match write (init 0) with

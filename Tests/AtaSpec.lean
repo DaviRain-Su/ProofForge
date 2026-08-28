@@ -3,11 +3,11 @@ import Examples.Ata
 namespace Tests.AtaSpec
 
 open Examples.Ata
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard ataCreateIdempotent == 0
+#guard AssociatedToken.createIdempotent == 0
 
 #guard
   match openAta (init 0) with

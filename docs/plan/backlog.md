@@ -34,6 +34,7 @@ UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
 R3-005 non-seeded System facade completion、R3-006 classic Token facade、
+R3-007 fixed ATA/Memo facades、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles 与 R5-004 Pausable policy；这些都是阶段内可复用组件切片，
 不代表 R3/R5 整体完成。
@@ -273,8 +274,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   在 `Examples` 中各自绑定具名 concrete account layouts，业务路径不再重复 positional
   indexes；没有 Phoenix-owned target module，也没有新增 Ops/IR/Emit/Extract/Component。
   42 份相关 assembly/ELF/IDL 产物逐字节不变；详见 `docs/plan/tasks/r3-006.md`。Seeded
-  System、ATA/Memo、Token state/program-id policy 与 Token-2022 extension semantics 仍是 R3
-  工作。
+  System、general ATA/Memo、Token state/program-id policy 与 Token-2022 extension semantics
+  仍是 R3 工作。
+
+- R3-007 fixed ATA/Memo facade 已完成：`Svm.Sdk.AssociatedToken.createIdempotent` 复用现有
+  fixed account shape，并明确 external account 5 是 caller-selected Token program，不默认
+  classic Token；`Svm.Sdk.Memo.writeOk` 则诚实暴露当前固定 `"ok"` literal。Ata/Memo 应用不再
+  依赖 Runtime 名称；没有新增 Ops/IR/Emit/Extract/Component。两个 canonical digest 与六份
+  assembly/ELF/IDL 产物保持不变；详见 `docs/plan/tasks/r3-007.md`。普通 ATA Create、
+  RecoverNested、program-id policy 与 bounded memo bytes 仍待后续 Runtime/SDK contract。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
