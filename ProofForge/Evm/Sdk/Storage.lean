@@ -9,10 +9,12 @@ namespace ProofForge.Evm.Sdk.Storage
 Compile-time descriptors for the *static* storage region: the consecutive zero-based slots the
 extractor assigns when it flattens a contract `State` structure (`Extract` →
 `Evm.IR.fromExtracted` keeps Core schema leaves in declaration order and numbers them `0, 1, …`).
-This module owns no EVM operation, IR node, or emitter case. Declarations are descriptor data
-that exist only before extraction; contracts keep reading and writing state through ordinary
-typed `State` field and `Vector` accesses, and focused tests validate the declared layout
-against the extracted slot/vector tables of each consumer.
+The declarations are descriptor data that exist only before extraction. Contracts normally keep
+reading and writing state through ordinary typed `State` field and `Vector` accesses. The one
+effectful exception is `Handle.storeNow` for UInt64 fields: it composes the target-owned ordered
+static-storage component needed around external calls while resolving the handle name against the
+same extracted slot table. Focused tests validate declared layouts against the real slot/vector
+tables of each consumer.
 
 ## Flattening contract mirrored here
 
@@ -37,9 +39,9 @@ and hashed-map hash/tag/payload geometry is untouched.
 - consumers must declare fields in the exact declaration order of their `State` structure;
   `Tests/EvmStaticStorageSpec` proves the extracted slots of both consumers equal the declared
   leaves, so an order drift fails the focused suite;
-- there is deliberately no runtime slot allocator and no generic handle read/write: a direct
-  `sload`/`sstore` by handle index would need shared Core/Extract/Emit support and is reported
-  to the coordinator as a follow-up hook instead of being added here.
+- there is no runtime slot allocator, arbitrary slot-number API, generic handle read, or hidden
+  final-state write. `Handle.storeNow` is UInt64-only, requires a compiler-static handle name, and
+  fails if that name does not resolve to an actual 8-byte slot in the extracted program.
 -/
 
 namespace Static
@@ -244,6 +246,15 @@ fields in declaration order. -/
   layout.declare name (.arrayRecords fields length)
 
 namespace Handle
+
+/--
+Immediately write this UInt64 field in lexical EVM effect order. This is intentionally distinct
+from ordinary immutable Lean state return/writeback: it is the target effect used for locks and
+other values that must become visible before an external CALL. The compiler resolves `name`
+against the extracted static schema; no source-visible slot number survives.
+-/
+@[pf_inline] def storeNow (handle : Handle UInt64) (value : UInt64) : UInt64 :=
+  StaticStorage.Source.storeU64 handle.name value
 
 /-- Total static slots consumed by the handled element. -/
 @[pf_inline] def slots (handle : Handle α) : Nat :=

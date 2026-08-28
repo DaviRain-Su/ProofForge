@@ -38,6 +38,9 @@ import ProofForge.Evm.ClosedCall.Emit
 import ProofForge.Evm.NativeFx
 import ProofForge.Evm.NativeFx.Source
 import ProofForge.Evm.NativeFx.Emit
+import ProofForge.Evm.StaticStorage
+import ProofForge.Evm.StaticStorage.Source
+import ProofForge.Evm.StaticStorage.Emit
 import ProofForge.Evm.Sdk
 import ProofForge.Evm.Component
 import ProofForge.Evm.Component.Emit

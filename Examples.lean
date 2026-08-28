@@ -46,6 +46,7 @@ import Examples.EvmCtx
 import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
+import Examples.EvmOrderedStorage
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault

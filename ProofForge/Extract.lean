@@ -653,7 +653,7 @@ mutual
         normalizePureInlineToCtor? env fuel' ctorName reduced
       else if let some (helper, unfolded) := unfoldUserHelper env e then
         if inlineHelperPreservesUserType env helper then none
-        else normalizePureInlineToCtor? env fuel' ctorName unfolded
+        else normalizePureInlineToCtor? env fuel' ctorName (substLets fuel' unfolded)
       else none
 
   private partial def reduceCtorProjectionFuel? (env : Environment) (fuel : Nat)
@@ -711,7 +711,7 @@ private partial def normalizePureInlineCtorOf? (env : Environment) (fuel : Nat)
       normalizePureInlineCtorOf? env fuel' inductName reduced
     else if let some (helper, unfolded) := unfoldUserHelper env e then
       if inlineHelperPreservesUserType env helper then none
-      else normalizePureInlineCtorOf? env fuel' inductName unfolded
+      else normalizePureInlineCtorOf? env fuel' inductName (substLets fuel' unfolded)
     else none
 
 /-- Iota-reduce a matcher only when its sole discriminant is a constructor literal obtained
@@ -3463,7 +3463,7 @@ private partial def staticString? (env : Environment) (fuel : Nat) (e : Expr) : 
   match fuel with
   | 0 => none
   | fuel' + 1 =>
-      let e := strip e
+      let e := substLets fuel' (strip e)
       match e with
       | .lit (.strVal value) => some value
       | _ =>
@@ -3471,7 +3471,7 @@ private partial def staticString? (env : Environment) (fuel : Nat) (e : Expr) : 
             staticString? env fuel' reduced
           else if let some (helper, unfolded) := unfoldUserHelper env e then
             if inlineHelperPreservesUserType env helper then none
-            else staticString? env fuel' unfolded
+            else staticString? env fuel' (substLets fuel' unfolded)
           else none
 
 private def asBoolLit (e : Expr) : Option Bool :=
@@ -5120,6 +5120,12 @@ private def opOfRuntimeApp (env : Environment) (app : Expr) : Option Ops.Op :=
     some .evmRevertCapExceeded
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmReceive || endsWith app ".evmReceive" then
     some .evmReceive
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmStoreStaticU64 ||
+      endsWith app ".evmStoreStaticU64" then
+    match nthFromEnd args 1 with
+    | some field =>
+      some (.evmStoreStaticU64 ((staticString? env 64 field).getD "") (valAtEnd env args 0))
+    | none => some (.evmStoreStaticU64 "" (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetU64 || endsWith app ".evmMapSetU64" then
     some (.mapSetU64 (mapBaseAtEnd env args 2) (valAtEnd env args 1) (valAtEnd env args 0))
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmMapSetAddr || endsWith app ".evmMapSetAddr" then
@@ -5456,6 +5462,7 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
   | some .evmRevertPaused => .lit 0
   | some .evmRevertCapExceeded => .lit 0
   | some .evmReceive => .lit 0
+  | some (.evmStoreStaticU64 _ value) => value
   | some (.mapSetU64 _ _ v) => v
   | some (.mapSetAddr _ _ _ _ v) => v
   | some (.mapSetPair _ _ _ _ _ _ _ v) => v

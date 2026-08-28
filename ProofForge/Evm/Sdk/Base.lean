@@ -4,6 +4,7 @@ import ProofForge.Evm.HashedMap.Source
 import ProofForge.Evm.WideWord.Source
 import ProofForge.Evm.ClosedCall.Source
 import ProofForge.Evm.NativeFx.Source
+import ProofForge.Evm.StaticStorage.Source
 
 namespace ProofForge.Evm.Sdk
 

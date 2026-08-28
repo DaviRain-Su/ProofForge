@@ -2,6 +2,7 @@ import ProofForge.Evm.HashedMap
 import ProofForge.Evm.WideWord
 import ProofForge.Evm.ClosedCall
 import ProofForge.Evm.NativeFx
+import ProofForge.Evm.StaticStorage
 
 namespace ProofForge.Evm.Component
 
@@ -38,6 +39,9 @@ private def ofNativeFx (effects : NativeFx.EffectSummary) : EffectSummary :=
     externalCall := effects.externalCall
     payable := effects.payable
     receive := effects.receive }
+
+private def ofStaticStorage (effects : StaticStorage.EffectSummary) : EffectSummary :=
+  { writesStorage := effects.writesStorage }
 
 /-- Stable value-producing bridge. Generic EVM Ops, IR, CFG, and the main emitter traverse this
 wrapper once; component-specific query vocabularies remain in their owning modules.
@@ -86,6 +90,7 @@ inductive Call (V : Type) where
   | hashedMap (call : HashedMap.Call V)
   | closedCall (call : ClosedCall.Call V)
   | nativeFx (call : NativeFx.Call V)
+  | staticStorage (call : StaticStorage.Call V)
   deriving BEq, Repr, Inhabited
 
 def Call.mapValues (mapValue : α → β) : Call α → Call β
@@ -93,18 +98,21 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .hashedMap call => .hashedMap (call.mapValues mapValue)
   | .closedCall call => .closedCall (call.mapValues mapValue)
   | .nativeFx call => .nativeFx (call.mapValues mapValue)
+  | .staticStorage call => .staticStorage (call.mapValues mapValue)
 
 def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .empty => pure .empty
   | .hashedMap call => return .hashedMap (← call.mapValuesM mapValue)
   | .closedCall call => return .closedCall (← call.mapValuesM mapValue)
   | .nativeFx call => return .nativeFx (← call.mapValuesM mapValue)
+  | .staticStorage call => return .staticStorage (← call.mapValuesM mapValue)
 
 def Call.values : Call V → Array V
   | .empty => #[]
   | .hashedMap call => call.values
   | .closedCall call => call.values
   | .nativeFx call => call.values
+  | .staticStorage call => call.values
 
 def Call.anyValue (predicate : V → Bool) (call : Call V) : Bool :=
   call.values.any predicate
@@ -117,18 +125,21 @@ def Call.effects : Call V → EffectSummary
   | .hashedMap call => ofHashedMap call.effects
   | .closedCall call => ofClosedCall call.effects
   | .nativeFx call => ofNativeFx call.effects
+  | .staticStorage call => ofStaticStorage call.effects
 
 def Call.wellFormed (valueWellFormed : V → Bool) : Call V → Bool
   | .empty => false
   | .hashedMap call => call.wellFormed valueWellFormed
   | .closedCall call => call.wellFormed valueWellFormed
   | .nativeFx call => call.wellFormed valueWellFormed
+  | .staticStorage call => call.wellFormed valueWellFormed
 
 def Call.canonical (renderValue : V → String) : Call V → String
   | .empty => "evm.comp.empty"
   | .hashedMap call => call.canonical renderValue
   | .closedCall call => call.canonical renderValue
   | .nativeFx call => call.canonical renderValue
+  | .staticStorage call => call.canonical renderValue
 
 def Call.emitsExpired : Call V → Bool
   | .closedCall call => call.emitsExpired

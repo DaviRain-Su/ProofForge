@@ -4,6 +4,7 @@ import ProofForge.Evm.HashedMap.Emit
 import ProofForge.Evm.WideWord.Emit
 import ProofForge.Evm.ClosedCall.Emit
 import ProofForge.Evm.NativeFx.Emit
+import ProofForge.Evm.StaticStorage.Emit
 
 namespace ProofForge.Evm.Component.Emit
 
@@ -15,6 +16,8 @@ structure Context (σ : Type) where
   rememberWide : σ → String → String → σ
   lookupWide : σ → String → Option String
   valKey : Ops.Val → String
+  resolveStaticU64Slot : String → Except String Nat := fun field =>
+    .error s!"extract/unsupported: no static UInt64 resolver for {field}"
   indent : String
 
 private def Context.hashedMap (context : Context σ) : HashedMap.Emit.Context σ :=
@@ -46,6 +49,11 @@ private def Context.nativeFx (context : Context σ) : NativeFx.Emit.Context σ :
     fresh := context.fresh
     indent := context.indent }
 
+private def Context.staticStorage (context : Context σ) : StaticStorage.Emit.Context σ :=
+  { materialize := context.materialize
+    resolveU64Slot := context.resolveStaticU64Slot
+    indent := context.indent }
+
 def emitQuery (context : Context σ) (query : Component.Query) (operands : Array Ops.Val)
     (st : σ) : Except String (String × String × σ) :=
   match query with
@@ -71,5 +79,7 @@ def emitCall (context : Context σ) (call : Component.Call Ops.Val) (st : σ) :
       ClosedCall.Emit.emitCall context.closedCall callCall st
   | .nativeFx fxCall =>
       NativeFx.Emit.emitCall context.nativeFx fxCall st
+  | .staticStorage storageCall =>
+      StaticStorage.Emit.emitCall context.staticStorage storageCall st
 
 end ProofForge.Evm.Component.Emit

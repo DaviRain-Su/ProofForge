@@ -148,6 +148,13 @@ def evmImm20b : Addr20 :=
 /-- 无 calldata 的 payable `receive()`。宿主返回 `callvalue`。 -/
 @[irreducible] def evmReceive : UInt64 := 0
 
+/--
+Immediately write a statically named UInt64 state field. The host model returns `value`; target
+extraction preserves this effect in lexical order and resolves `field` against the contract's
+actual flattened storage schema. Empty, dynamic, unknown, or non-UInt64 fields fail closed.
+-/
+@[irreducible] def evmStoreStaticU64 (_field : String) (value : UInt64) : UInt64 := value
+
 /-- hashed `Map` 读 payload。缺席是 0。宿主返回 0。 -/
 @[irreducible] def evmMapGetU64 (_base _key : UInt64) : UInt64 := 0
 

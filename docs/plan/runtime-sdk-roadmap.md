@@ -121,11 +121,12 @@ envelope，真实 extension 仍按语义分片开放。EVM-RT-2a 也已统一
 closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom error，
 EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy，EVM-RT-2d 已统一
 permit ecrecover 的固定 address/frame、STATICCALL success、exact returndata 与 nonzero
-signer；UInt256 div/mod 也已固定 checked 零除 revert。下一刀继续剩余 R4 hardening。详见
+signer，EVM-RT-2e 已提供 schema-resolved ordered static UInt64 store；UInt256 div/mod 也已
+固定 checked 零除 revert。下一刀组合 reusable ReentrancyGuard policy。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
 [R2-004](tasks/r2-004.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
-[R4-004](tasks/r4-004.md)、
+[R4-004](tasks/r4-004.md)、[R4-005](tasks/r4-005.md)、
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
 [R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md) 和
@@ -378,6 +379,13 @@ ecrecover 以空 returndata 成功时把 output memory 的旧输入误认成 sig
 发生预期变化；其他产物、全部 ABI 与 IR digests 保持不变。它不开放其他 precompile、
 arbitrary STATICCALL、delegatecall 或 create。详见 [R4-004](tasks/r4-004.md)。
 
+R4-005 已完成 EVM-RT-2e ordered static UInt64 store：`Evm.StaticStorage` 在既有
+`Component.Call` bridge 内保留 lexical effects，`Storage.Static.Handle.storeNow` 把应用的
+typed declaration 化为 static field name，emitter 再对 concrete schema 解析 slot 并验证
+8-byte width。它与普通 final State writeback 分离，不开放 raw slot 或 runtime allocator；
+Anvil 验证 immediate persistence、store/CALL/restore 与 failed-CALL rollback。详见
+[R4-005](tasks/r4-005.md)。
+
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
 spelling 保留，因此 Token/Capped 等既有 IR/产物不漂移。Wide 的跨 64/192-bit Anvil matrix
@@ -404,9 +412,9 @@ nominee 会立即使旧 nominee 失效，accept/cancel 显式清零。它没有 
 storage write、hashed nomination namespace 或 magic guard。详见 [R5-001](tasks/r5-001.md)。
 
 R5-002 已完成 compile-time static storage declaration foundation。它给后续 roles、asset
-records 和 fixed collections 提供可验证 handles，但当前 runtime 访问仍由普通 typed State
-field extraction 拥有；不能把 descriptor 当成隐藏 `sload`/`sstore` API。EVM-RT-2 完成前，
-reentrancy 与 arbitrary-call-dependent policy 继续 fail closed。
+records 和 fixed collections 提供可验证 handles；普通访问仍由 typed State extraction
+拥有，R4-005 只为 UInt64 handle 增加 schema-checked ordered store effect。raw slot、generic
+handle load/store 与 runtime allocator 仍不开放；ReentrancyGuard policy 尚待后续组合。
 
 R5-003 已完成 bounded static roles：`Roles.Set2` 封装固定两个 Address slot 的纯策略判断，
 EvmStaticCounter/EvmStaticRoster 用不同权限和业务策略组合它，并保持每个 storage write 显式。

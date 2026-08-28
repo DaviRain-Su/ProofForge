@@ -29,7 +29,9 @@ Token-2022 TLV envelope，并继续对所有未建模 extension fail closed。EV
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
 entry-value 与 calldata route policy，EVM-RT-2d 已把 permit 的固定 ecrecover address/frame、
 STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed contract；UInt256
-div/mod 已固定 checked 除零 revert 策略。下一刀继续剩余 R4 hardening。并行 EVM
+div/mod 已固定 checked 除零 revert 策略；EVM-RT-2e 已加入 schema-resolved ordered static
+UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation。下一刀组合 reusable
+ReentrancyGuard policy。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
@@ -426,6 +428,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   门拒绝 invalid ecrecover 成功但返回空数据时读取 stale output memory；其余 precompile、
   arbitrary STATICCALL/delegatecall/create 仍不开放。只有 Token Yul/bin 因新增门发生预期变化，
   全部 ABI 与 IR digests 不变。详见 `docs/plan/tasks/r4-004.md`。
+
+- R4-005 EVM ordered static UInt64 store 已完成：`Evm.StaticStorage` 通过既有 Component
+  bridge 保留 `store → CALL → store` lexical order，`Storage.Static.Handle.storeNow` 只接受
+  compiler-static typed handle，emitter 再对真实 program schema 校验 field 与 8-byte width；
+  source 不接触 slot 魔数。该 effect 与普通 final State writeback 分离，失败 CALL 由 EVM
+  transaction rollback entered write。focused extraction、solc 和 Anvil 均通过；详见
+  `docs/plan/tasks/r4-005.md`。ReentrancyGuard policy 将在后续 SDK 切片组合此 effect。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零

@@ -50,6 +50,14 @@ private def slotOf (p : IR.Program) (name : String) : Except String Nat :=
   | some i => .ok i
   | none => .error s!"extract/unsupported: unknown field {name}"
 
+private def staticU64SlotOf (p : IR.Program) (name : String) : Except String Nat := do
+  let slot ← slotOf p name
+  match IR.slotWidth p name with
+  | some 8 => pure slot
+  | some width =>
+      throw s!"extract/unsupported: immediate static store requires UInt64 field {name}, got width {width}"
+  | none => throw s!"extract/unsupported: unknown field {name}"
+
 private def nl : String := "\n"
 
 private def yulLit (n : UInt64) : String :=
@@ -533,6 +541,7 @@ private partial def materializeVal (p : IR.Program) (indent paramPrefix : String
           rememberWide := rememberWide
           lookupWide := lookupWide
           valKey := valKey
+          resolveStaticU64Slot := staticU64SlotOf p
           indent
         }
         Component.Emit.emitQuery context query operands st
@@ -680,6 +689,7 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           rememberWide := rememberWide
           lookupWide := lookupWide
           valKey := valKey
+          resolveStaticU64Slot := staticU64SlotOf p
           indent
         }
         let (txt, last, st') ← Component.Emit.emitCall context call st

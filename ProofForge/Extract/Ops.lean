@@ -209,6 +209,8 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.evm (.component (.nativeFx .revertCapExceeded)))
 @[match_pattern] def Op.evmReceive : Op :=
   .ext (.evm (.component (.nativeFx .receive)))
+@[match_pattern] def Op.evmStoreStaticU64 (field : String) (value : Val) : Op :=
+  .ext (.evm (.component (.staticStorage (.storeU64 field value))))
 @[match_pattern] def Op.mapGetU64 (base key : Val) : Op :=
   .ext (.evm (.component (.hashedMap (.getU64 base key))))
 @[match_pattern] def Op.mapSetU64 (base key value : Val) : Op :=
