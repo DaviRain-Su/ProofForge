@@ -26,7 +26,7 @@ def init (_owner : Address) : State :=
 @[pf_entry]
 def mint (s : State) (value : UInt256) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
-    if !Access.requireRunning s.paused then
+    if s.paused != Pausable.running then
       .ok ({ paused := s.paused, cap := s.cap, supply := s.supply },
         Access.runningViolation)
     else if UInt256.atLeast s.cap (UInt256.add s.supply value) then

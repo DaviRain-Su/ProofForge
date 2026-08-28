@@ -40,7 +40,7 @@ def init (_owner : Address) : State :=
 @[pf_entry]
 def mint (s : State) (to : Address) (value : UInt256) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
-    if !Access.requireRunning s.paused then
+    if s.paused != Pausable.running then
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
         Access.runningViolation)
     else if Address.isZero to then
@@ -100,7 +100,7 @@ def DOMAIN_SEPARATOR (_s : State) : Bytes32 :=
 @[pf_entry]
 def permit (s : State) (owner spender : Address) (value deadline : UInt256)
     (v : UInt8) (r signature : Bytes32) : Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if (0 : UInt64) ≠ 1 then
@@ -112,7 +112,7 @@ def permit (s : State) (owner spender : Address) (value deadline : UInt256)
 @[pf_entry]
 def approve (s : State) (spender : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if Address.isZero spender then
@@ -128,7 +128,7 @@ def approve (s : State) (spender : Address) (amount : UInt256) :
 @[pf_entry]
 def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
     Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if Address.isZero spender then
@@ -145,7 +145,7 @@ def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
 @[pf_entry]
 def decreaseAllowance (s : State) (spender : Address) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if Address.isZero spender then
@@ -162,7 +162,7 @@ def decreaseAllowance (s : State) (spender : Address) (subtracted : UInt256) :
 
 @[pf_entry]
 def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if Fungible.Balances.canDebit storage.balances Context.caller amount then
@@ -177,7 +177,7 @@ def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
 @[pf_entry]
 def burnFrom (s : State) (owner : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if Address.isZero owner then
@@ -201,7 +201,7 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
 @[pf_entry]
 def transfer (s : State) (destination : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if Address.isZero destination then
@@ -223,7 +223,7 @@ def transfer (s : State) (destination : Address) (amount : UInt256) :
 @[pf_entry]
 def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if !Access.requireRunning s.paused then
+  if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Access.runningViolation)
   else if Address.isZero destination then
