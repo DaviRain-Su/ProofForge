@@ -224,4 +224,188 @@ theorem mBvPop_empty_noop (mem : AccountWords) (vec : BoundedVec)
   unfold mBvPop
   rw [if_pos h]
 
+section WfParts
+
+/-! ### wf 桥接：parts 引理
+
+`simp only [..., Bool.and_eq_true]` 展开的 Bool 链是左嵌套且叶位置随上下文漂移。
+parts 引理把链一次性重整成**语句侧控制结合方式的 Prop 合取**——下游全部用
+rcases 解构稳定结构，不再做位置敏感的投影。 -/
+
+/-- `scalarHeaderWellFormed` 的结构化合同（access 叶保持 Bool 形：Access 无 LawfulBEq）。 -/
+theorem scalarHeader_wf_parts {header : Field} {bodyAccount : Nat}
+    (h : scalarHeaderWellFormed header bodyAccount = true) :
+    header.wellFormed (accountLimit := 64) = true ∧
+    header.widthWords = 1 ∧
+    header.region.account = bodyAccount ∧
+    header.region.account > 0 ∧
+    header.region.strideWords = 1 ∧
+    header.region.capacity = 1 ∧
+    (header.region.indexBase == IndexBase.zero) = true ∧
+    (header.region.access == Access.programOwnedMutable) = true := by
+  simp only [scalarHeaderWellFormed, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  exact ⟨h.1.1.1.1.1.1.1, h.1.1.1.1.1.1.2, h.1.1.1.1.1.2, h.1.1.1.1.2,
+    h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+
+/-- `BoundedVec.wellFormed` 的结构化合同。 -/
+theorem boundedVec_wf_parts {vec : BoundedVec}
+    (h : vec.wellFormed = true) :
+    vec.slots.mutableOneBasedWord = true ∧
+    vec.slots.region.account > 0 ∧
+    vec.slots.region.capacity ≤ containerCapacityLimit ∧
+    scalarHeaderWellFormed vec.count vec.slots.region.account = true ∧
+    vec.count.firstWord + 1 ≤ vec.slots.firstWord := by
+  simp only [BoundedVec.wellFormed, Bool.and_eq_true, decide_eq_true_eq] at h
+  exact ⟨h.1.1.1.1, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+
+/-- `Field.mutableOneBasedWord` 的结构化合同。 -/
+theorem mutableOneBased_wf_parts {field : Field}
+    (h : field.mutableOneBasedWord = true) :
+    field.wellFormed (accountLimit := 64) = true ∧
+    field.widthWords = 1 ∧
+    (field.region.indexBase == IndexBase.one) = true ∧
+    (field.region.access == Access.programOwnedMutable) = true := by
+  simp only [Field.mutableOneBasedWord, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  exact ⟨h.1.1.1, h.1.1.2, h.1.2, h.2⟩
+
+end WfParts
+
+/-- IndexBase 无 LawfulBEq：`(b == zero) = true` 到等式的桥。 -/
+theorem indexBase_beq_zero_eq {b : IndexBase} (h : (b == IndexBase.zero) = true) :
+    b = IndexBase.zero := by
+  cases b with
+  | zero => rfl
+  | one => exact absurd h (by decide)
+
+/-- IndexBase 无 LawfulBEq：`(b == one) = true` 到等式的桥。 -/
+theorem indexBase_beq_one_eq {b : IndexBase} (h : (b == IndexBase.one) = true) :
+    b = IndexBase.one := by
+  cases b with
+  | zero => exact absurd h (by decide)
+  | one => rfl
+
+section WfBridge
+
+variable (vec : BoundedVec)
+
+/-- wf 下 slots 的 one-based 索引基。 -/
+theorem boundedVec_wf_indexBase (hwf : vec.wellFormed = true) :
+    vec.slots.region.indexBase = IndexBase.one := by
+  have parts := mutableOneBased_wf_parts (h := (boundedVec_wf_parts (vec := vec) hwf).1)
+  exact indexBase_beq_one_eq parts.2.2.1
+
+/-- wf 下 slots 容量 ≤ 容器上限。 -/
+theorem boundedVec_wf_capacity (hwf : vec.wellFormed = true) :
+    vec.slots.region.capacity ≤ containerCapacityLimit :=
+  (boundedVec_wf_parts (vec := vec) hwf).2.2.1
+
+/-- capacity 的 toNat 恒等（容量 ≤ 容器上限时无截断）。 -/
+theorem bv_capacity_toNat (hwf : vec.wellFormed = true) :
+    (BoundedVec.capacity vec).toNat = vec.slots.region.capacity := by
+  have hc := boundedVec_wf_capacity vec hwf
+  show (UInt64.ofNat vec.slots.region.capacity).toNat = vec.slots.region.capacity
+  have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+  have hmod : vec.slots.region.capacity % (4294967296 * 4294967296)
+      = vec.slots.region.capacity := by
+    have hc' : vec.slots.region.capacity ≤ 65536 := hc
+    omega
+  simp only [UInt64.ofNat, UInt64.toNat, BitVec.toNat_ofNat, h2, hmod]
+
+/-- wf 下 slots 的访问词公式（one-based）。 -/
+theorem mFieldWord_bv_slots (hwf : vec.wellFormed = true) (pos : UInt64)
+    (h1 : (1 : Nat) ≤ pos.toNat) (h2 : pos.toNat ≤ vec.slots.region.capacity) :
+    mFieldWord vec.slots pos =
+      some (vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords) := by
+  have hidx := boundedVec_wf_indexBase vec hwf
+  unfold mFieldWord
+  rw [hidx]
+  simp only [h1, h2, and_true, if_true, Field.firstWord]
+
+/-- wf 下 count header 的访问词 = firstWord。 -/
+theorem mFieldWord_bv_count (hwf : vec.wellFormed = true) :
+    mFieldWord vec.count 0 = some vec.count.firstWord := by
+  have hs4 := (boundedVec_wf_parts (vec := vec) hwf).2.2.2.1
+  have hacc : vec.count.region.account = vec.slots.region.account :=
+    scalarHeader_wf_account _ _ hs4
+  have parts := scalarHeader_wf_parts
+    (h := show scalarHeaderWellFormed vec.count vec.count.region.account = true from by
+      rw [hacc]; exact hs4)
+  have hidx := indexBase_beq_zero_eq parts.2.2.2.2.2.2.1
+  have hcap1 : vec.count.region.capacity = 1 := parts.2.2.2.2.2.1
+  unfold mFieldWord
+  rw [hidx]
+  have h0 : UInt64.toNat 0 = 0 := rfl
+  have hcap : (0 : Nat) < vec.count.region.capacity := by omega
+  simp only [h0, hcap, if_true, Nat.zero_mul, Nat.add_zero]
+  rfl
+
+/-- **wf 下 count header 字与任何 payload 槽字不同**（模型版不干涉的核心）。
+全部是 Nat 算术：slots 词 = firstWord + (pos-1)·stride ≥ slots.firstWord
+> count.firstWord，而 count 词恰为 count.firstWord。 -/
+theorem mFieldWord_bv_count_ne_slots (hwf : vec.wellFormed = true) (pos : UInt64)
+    (h1 : (1 : Nat) ≤ pos.toNat) (h2 : pos.toNat ≤ vec.slots.region.capacity)
+    {w : Nat} (hw : mFieldWord vec.slots pos = some w) :
+    mFieldWord vec.count 0 ≠ some w := by
+  intro hcount
+  rw [mFieldWord_bv_count vec hwf] at hcount
+  rw [mFieldWord_bv_slots vec hwf pos h1 h2] at hw
+  have heq : vec.count.firstWord = w := Option.some.inj hcount
+  have hw' : w = vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords :=
+    (Option.some.inj hw).symm
+  have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
+    (boundedVec_wf_header_before_slots vec hwf).1
+  omega
+
+end WfBridge
+
+section BvWfAlgebra
+
+variable (vec : BoundedVec)
+
+private theorem u64_toNat_add_one {a : UInt64} (h : a.toNat < 65535) :
+    (a + 1).toNat = a.toNat + 1 := by
+  have hone : UInt64.toNat 1 = 1 := rfl
+  have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+  rw [UInt64.toNat_add, hone, h2]
+  have hlt : a.toNat + 1 < 4294967296 * 4294967296 := by omega
+  rw [Nat.mod_eq_of_lt hlt]
+
+/-- wf 下 push 的双写组合：先写 payload 槽再写 count header 后，
+count 读回 = 旧 size + 1，payload 槽读回 = v。
+（count/slots 词不同由 `mFieldWord_bv_count_ne_slots` 给出。） -/
+theorem mBvPush_twoWrites (mem : AccountWords) (pos v : UInt64)
+    (hwf : vec.wellFormed = true)
+    (h1 : (1 : Nat) ≤ pos.toNat) (h2 : pos.toNat ≤ vec.slots.region.capacity) :
+    mReadField (mWriteField (mWriteField mem vec.slots pos v) vec.count 0
+        (mBvSize mem vec + 1)) vec.count 0
+      = mBvSize mem vec + 1 ∧
+    mReadField (mWriteField (mWriteField mem vec.slots pos v) vec.count 0
+        (mBvSize mem vec + 1)) vec.slots pos
+      = v := by
+  have hwc : mFieldWord vec.count 0 = some vec.count.firstWord := mFieldWord_bv_count vec hwf
+  have hws : mFieldWord vec.slots pos
+      = some (vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords) :=
+    mFieldWord_bv_slots vec hwf pos h1 h2
+  have hne : vec.count.firstWord
+      ≠ vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords := by
+    intro heq
+    have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
+      (boundedVec_wf_header_before_slots vec hwf).1
+    omega
+  -- 全部下推到词级
+  unfold mWriteField mReadField mBvSize
+  rw [hwc, hws]
+  constructor
+  · simp only [mWriteWord, if_pos rfl]
+    rfl
+  · have hne' : ¬(vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords
+        = vec.count.firstWord) := by
+      have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
+        (boundedVec_wf_header_before_slots vec hwf).1
+      omega
+    simp only [mWriteWord, if_neg hne', if_pos rfl]
+    rfl
+
+end BvWfAlgebra
+
 end ProofForge.Svm.Sdk.StorageModel
