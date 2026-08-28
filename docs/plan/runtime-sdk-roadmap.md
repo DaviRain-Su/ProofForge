@@ -69,8 +69,8 @@ instruction 增加 recipe opcode。
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
-| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input | bounded remaining-account view；运行时安全账户索引；tagged/bounded return policy；更完整 instruction buffer；Token-2022 TLV 语义 |
-| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical initialization | Account/Signer/PDA/System/Token facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
+| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical initialization | PDA/System/Token facade 尚未统一；部分能力仍以具体 component 暴露；bounded transient container source contract 尚未完成 |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade；`Access` owner/running gates 与 fixed single-pending two-step ownership | scalar/struct/fixed-array layout facade；bounded roles/reentrancy 与 token/NFT reusable components |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -211,7 +211,7 @@ closed；详见 [R1-010](tasks/r1-010.md)。
   transfer hook/account requirements 等语义。未知 extension 继续 fail closed，不能套 classic
   82/165-byte 路径。
 
-R2-001 已完成 SRT-1：`Svm.AccountView.Source.View` 把 remaining-account 的 `base/capacity`
+R2-001 已完成 SRT-1：现由 `Svm.Sdk.Account.View` 拥有的 remaining-account `base/capacity`
 绑定为编译期句柄，运行时 index 统一经过 capacity、实际 `NUM_ACCOUNTS`、duplicate marker 与
 header/data-length gate；按实际账户数定位 instruction data/program id，所有失败均在 state
 store 前原子退出。该 view 只读、零拷贝，不持久化 pointer 或 runtime geometry。详见
@@ -255,8 +255,11 @@ R3-001 已完成持久容器 foundation：`Svm.Sdk` 组合现有 checked account
 POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical header
 initialization。JobQueue/TicketLine 在独立 storage account 上复用这些组件；没有新增 Ops、IR、
 Component 或 Emit recipe，也没有把 heap pointer、Lean `Array`/`Map` 放进持久状态。详见
-[R3-001](tasks/r3-001.md)。R3 尚未完成；bounded transient Scratch 及 Runtime facade 仍依赖
-R2 的 account/effect contracts。
+[R3-001](tasks/r3-001.md)。R3-002 继续提供 compile-time fixed Account/Signer handles，并把
+bounded remaining-account view 移入同一 SDK owner；Trio 与 AccountView 独立消费，旧
+`AccountView.Source` 不再保留第二套 API。既有 account leaves 只接受 compiler-proven static
+index，runtime account geometry 仍 fail closed；详见 [R3-002](tasks/r3-002.md)。R3 尚未完成；
+bounded transient Scratch 与 PDA/System/Token facade 仍待完成。
 
 ### R4 — EVM Runtime
 

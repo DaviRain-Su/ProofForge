@@ -1051,8 +1051,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | _ => none
         else if (endsWith e ".accKeyWord" || isConstNamed e ``ProofForge.Svm.Runtime.accKeyWord) &&
             e.getAppArgs.size ≥ 2 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
@@ -1060,8 +1060,8 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | _, _ => none
         else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Svm.Runtime.accOwnerWord) &&
             e.getAppArgs.size ≥ 2 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc), some (.lit word) =>
             let a := acc.toNat
             let w := word.toNat
@@ -1387,49 +1387,49 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | _ => none
         else if (endsWith e ".accLamports" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports) &&
             e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.accLamportsN a) else none
           | _ => none
         else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen) &&
             e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.accDataLenN a) else none
           | _ => none
         else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner) &&
             e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.isSignerN a) else none
           | _ => none
         else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable) &&
             e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.isWritableN a) else none
           | _ => none
         else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable) &&
             e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.isExecutableN a) else none
           | _ => none
         else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey) &&
             e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.signerKeyN a) else none
           | _ => none
         else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Svm.Runtime.ownerIsSelf) &&
             e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
           | some (.lit acc) =>
             let a := acc.toNat
             if Svm.Ops.accInRange a then some (.ownerIsSelf a) else none

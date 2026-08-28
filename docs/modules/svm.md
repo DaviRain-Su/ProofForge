@@ -48,7 +48,8 @@ source semantic helper
 `data_len`-checked 数据字；任何越界在读取任何字节前以 `Custom(1)` 原子失败。使用 view 的程序
 切换到按 runtime `NUM_ACCOUNTS` 遍历、由 `maxTxAccountLocks` 硬上界约束的 walk 合同，并把
 instruction data / program id 定位到实际最后一个账户之后；不使用 view 的程序保持原字节。
-`Svm.AccountView.Source` 提供 `pf_inline` 窗口句柄，抽取期整体擦除。view 是只读的。
+`Svm.Sdk.Account` 提供 fixed Account/Signer 和 bounded remaining-account `pf_inline` 句柄，
+抽取期整体擦除。bounded view 是只读的。
 
 `AccountStorage` 是第一个 component backend：它组合 compile-time `Region/Field`、显式
 zero/one-based index、checked load/store 与有界 tree walk，而不是把每种容器做成新的底层

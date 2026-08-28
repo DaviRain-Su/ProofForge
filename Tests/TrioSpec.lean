@@ -3,6 +3,7 @@ import Examples.Trio
 namespace Tests.TrioSpec
 
 open Examples.Trio
+open ProofForge.Svm.Sdk
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
@@ -17,6 +18,12 @@ open ProofForge.Svm.Runtime
 #guard accLamports 2 == 0
 #guard signerKey 1 == 0
 #guard ownerIsSelf 0 == 0
+
+#guard account0.wellFormed && account2.wellFormed && signer1.wellFormed
+#guard !(Account.Handle.at 64).wellFormed
+#guard account2.wordWellFormed 0 && account2.wordWellFormed 3
+#guard !account2.wordWellFormed 4
+#guard account2.dataWordWellFormed 0
 
 #guard ProofForge.Svm.ABI.maxTxAccountLocks == 64
 #guard ProofForge.Svm.ABI.maxAccountsPerInstruction == 255

@@ -14,7 +14,7 @@ namespace Tests.AccountViewSpec
 
 open Lean Elab Command
 open Examples.AccountView
-open ProofForge.Svm.AccountView.Source
+open ProofForge.Svm.Sdk
 open ProofForge.Svm.Runtime
 
 #pf_build Examples.AccountView
@@ -28,11 +28,11 @@ open ProofForge.Svm.Runtime
 
 -- The facade erases to the target-owned component query; the descriptor stays compile-time.
 #guard window.wellFormed
-#guard (View.bounded 1 63).wellFormed
-#guard !({ base := 0, capacity := 4 } : View).wellFormed
-#guard !({ base := 1, capacity := 0 } : View).wellFormed
-#guard !({ base := 60, capacity := 8 } : View).wellFormed
-#guard !({ base := 64, capacity := 1 } : View).wellFormed
+#guard (Account.View.bounded 1 63).wellFormed
+#guard !({ base := 0, capacity := 4 } : Account.View).wellFormed
+#guard !({ base := 1, capacity := 0 } : Account.View).wellFormed
+#guard !({ base := 60, capacity := 8 } : Account.View).wellFormed
+#guard !({ base := 64, capacity := 1 } : Account.View).wellFormed
 
 -- Query-level fail-closed shape: key words are bounded to one 32-byte key.
 #guard
