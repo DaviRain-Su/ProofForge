@@ -50,6 +50,9 @@ jobs:
       - name: Check Runtime / SDK ownership boundaries
         run: python3 scripts/check_ownership.py
 
+      - name: Check artifact manifest
+        run: python3 scripts/check_artifact_manifest.py --self-test
+
       - name: Check kernel proofs have no placeholders
         run: python3 scripts/check_no_sorry.py
 
@@ -106,6 +109,9 @@ jobs:
 
       - name: Check Runtime / SDK ownership boundaries
         run: python3 scripts/check_ownership.py
+
+      - name: Check artifact manifest
+        run: python3 scripts/check_artifact_manifest.py --self-test
 
       - name: Check kernel proofs have no placeholders
         run: python3 scripts/check_no_sorry.py
