@@ -68,7 +68,7 @@ instruction 增加 recipe opcode。
 
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
-| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding | cross-target conformance fixture |
+| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input | bounded remaining-account view；运行时安全账户索引；tagged/bounded return policy；更完整 instruction buffer；Token-2022 TLV 语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical initialization | Account/Signer/PDA/System/Token facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
@@ -105,7 +105,9 @@ R1-008 已完成 EVM Tagged Tuple v1 Option/payload-enum input binding；R1-009 
 fixed-capacity / canonical variable-length Borsh input binding；R1-010 已完成 EVM Bounded
 Array v1 canonical dynamic input binding，以独立 `Evm.Codec.Emit` plan interpreter 处理
 offset/length/tail/padding，不统一两个 target 的物理 layout，也不增加 array Ops 或 main-CFG
-Emit recipe。下一切片进入 SVM-RT-1 bounded account view；并行的 R5-001 已先落地 Access
+Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固定两套 target plan
+的 source projection conformance，但不统一 Borsh bytes 与 ABI words。下一切片进入 SVM-RT-1
+bounded account view；并行的 R5-001 已先落地 Access
 foundation：两个独立 contract 复用同一
 owner/pause/two-step policy，pending owner 是一个 fixed Address 而不是 hashed map；详见
 [R5-001](tasks/r5-001.md)。这不表示 R5 已完成。

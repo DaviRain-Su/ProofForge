@@ -18,15 +18,16 @@ R1-006 已由 EVM 独立绑定 canonical tuple/record/fixed-array ABI；R1-007 �
 普通 Lean Option/payload enum 的 canonical tagged Borsh input；R1-008 已由 EVM 独立绑定
 Tagged Tuple v1 `(bool,T)` / `(uint8,p0,...)` input policy；R1-009 已由 SVM 独立绑定
 compile-time capacity + canonical Borsh `u32 length` input；R1-010 已由 EVM 独立绑定
-canonical standard-ABI dynamic head/tail 与 fixed local frame。两套 binding 不把 Borsh
-cursor、ABI offset 或 target 物理编码放进 Core。下一切片进入 SVM-RT-1 bounded account
+canonical standard-ABI dynamic head/tail 与 fixed local frame；R1-011 已用同一 logical
+static/tagged/bounded schema 对照两套 target plan 的 source projections，同时保持 Borsh
+cursor、ABI offset 与 target 物理编码互相独立。下一切片进入 SVM-RT-1 bounded account
 view；EVM-SDK-2 static storage declarations 可并行。
 并行 SDK 线已完成 R3-001 persistent SVM foundation 和 R5-001 EVM Access foundation；两者
 都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 253 jobs；SVM manifest 全 53 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 254 jobs；SVM manifest 全 53 programs；
   Mollusk 全量 293/293（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   18 programs 且 Anvil 18/18。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -210,6 +211,12 @@ view；EVM-SDK-2 static storage declarations 可并行。
   Dynamic constructor/return、nested dynamic 与 >64-word frame 继续 fail closed。详见
   `docs/plan/tasks/r1-010.md`。
 
+- R1-011 cross-target codec conformance 已完成：同一 static record、tagged Option 与 bounded
+  record-array schema 在 SVM/EVM plan 中保留相同 source projection 顺序；测试同时固定 SVM
+  exact/variable Borsh bytes 与 EVM static words/Tagged Tuple/dynamic tail 的差异，避免把它们
+  伪装成 shared wire layout。该切片只增加 plan contract，不改产物。详见
+  `docs/plan/tasks/r1-011.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。
@@ -223,7 +230,7 @@ view；EVM-SDK-2 static storage declarations 可并行。
   one-field State store 与 wide-leaf path 误判；详见 `docs/plan/tasks/r5-001.md`。Roles、
   reentrancy、asset/NFT components 仍未完成。
 
-- `lake build Tests` 当前 253 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 254 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 53 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 293/293，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。
