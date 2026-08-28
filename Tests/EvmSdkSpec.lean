@@ -27,6 +27,7 @@ def thirdMap : Storage.Allocated Storage.AddressMap256 :=
 
 def paymentAddress : Address := ⟨1, 2, 3⟩
 def paymentAmount : UInt256 := ⟨9, 0, 0, 0⟩
+def fungibleBalances : Fungible.Balances := firstMap.handle
 
 #guard Ether.accept paymentAmount == 9
 #guard Ether.send paymentAddress paymentAmount == 9
@@ -43,6 +44,16 @@ def paymentAmount : UInt256 := ⟨9, 0, 0, 0⟩
 #guard UniswapV2.swapExact2 paymentAddress paymentAddress paymentAddress paymentAmount UInt256.zero == 9
 #guard UniswapV2.swapExact3 paymentAddress paymentAddress paymentAddress paymentAddress
   paymentAmount UInt256.zero == 9
+#guard Fungible.Balances.balanceOf fungibleBalances paymentAddress == UInt256.zero
+#guard Fungible.Balances.debit fungibleBalances paymentAddress paymentAmount == 0
+
+/-- Compile-time surface check for the complete debit branch. Comparison and revert Runtime leaves
+are extraction contracts and therefore are not assigned host-evaluation semantics. -/
+def fungibleDebitSurface (owner : Address) (amount : UInt256) : UInt64 :=
+  if Fungible.Balances.canDebit fungibleBalances owner amount then
+    Fungible.Balances.debit fungibleBalances owner amount
+  else
+    Fungible.Balances.insufficient fungibleBalances owner amount
 
 /-- Compile-time surface check for the typed map API. Runtime stubs intentionally evaluate to zero
 on the Lean host; extraction assigns their EVM behavior. -/

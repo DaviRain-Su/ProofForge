@@ -36,7 +36,8 @@ R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundati
 R3-005 non-seeded System facade completion、R3-006 classic Token facade、
 R3-007 fixed ATA/Memo facades、R3-008 generic seeded System facade、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
-R5-003 bounded static roles、R5-004 Pausable policy 与 R5-005 bounded payment facade adoption；
+R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
+R5-006 fungible debit ledger foundation；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -45,7 +46,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 298 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 299 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 308/308（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -329,6 +330,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Yul/ABI/bin 产物逐字节不变；没有新增 selector、Ops/IR/Component/Emit case 或任意 calldata。
   详见 `docs/plan/tasks/r5-005.md`。Code-existence、revert bubbling、arbitrary call 与可证明的
   reentrancy ordering 仍 fail closed。
+
+- R5-006 EVM fungible debit ledger foundation 已完成：`Evm.Sdk.Fungible.Balances` 在显式
+  `AddressMap256` handle 上统一 balanceOf/canDebit/debit/insufficient；Token 的 burn/burnFrom
+  与 Credits 的 claim 两种独立 policy 复用同一 O(1) persistent ledger component。权限、pause、
+  zero-address、supply/cap、allowance 与 event sequencing 仍在 application；没有新
+  Runtime/Op/IR/Component/Emit case、slot allocator 或 selector/topic recipe。两个 source
+  digest 与六份 Yul/ABI/bin 产物逐字节不变；详见 `docs/plan/tasks/r5-006.md`。Credit/mint、
+  same-address-safe transfer、allowance core、ERC-721 与 bounded ERC-1155 仍是 R5 工作。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

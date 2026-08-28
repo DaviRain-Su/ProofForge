@@ -11,8 +11,9 @@ ledger. Reuses the same `Access` ownership gates, `Pausable` policy, and fixed s
 
 State: stored `owner` (rotated by two-step transfer), explicit `paused` flag, `UInt256` `total` of
 claimed credits, and one fixed pending owner. `credits` uses namespace 0 of `AddressMap256`, the map
-shape whose get/condition/put binding `Examples.Token` already proves end to end. All storage writes
-stay in this file.
+shape whose get/condition/put binding `Examples.Token` already proves end to end. Application
+policy and typed State writes stay in this file; reusable balance debit mechanics live in
+`Sdk.Fungible`.
 -/
 
 structure State where
@@ -26,7 +27,7 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[pf_inline] def credits : Storage.AddressMap256 :=
+@[pf_inline] def credits : Fungible.Balances :=
   Storage.Layout.root.addressMap256.handle
 
 @[pf_entry]
@@ -77,11 +78,11 @@ def grant (s : State) (who : Address) (amount : UInt256) : Except Error (State Ã
 @[pf_entry]
 def claim (s : State) (amount : UInt256) : Except Error (State Ã— UInt64) :=
   if Pausable.isRunning s.paused then
-    if credits.containsAtLeast Context.caller amount then
+    if Fungible.Balances.canDebit credits Context.caller amount then
       .ok ({ s with total := UInt256.add s.total amount },
-        credits.put Context.caller (credits.nextSub Context.caller amount))
+        Fungible.Balances.debit credits Context.caller amount)
     else
-      .ok (s, credits.revertInsufficient Context.caller amount)
+      .ok (s, Fungible.Balances.insufficient credits Context.caller amount)
   else
     .ok (s, Pausable.violation)
 
@@ -107,7 +108,7 @@ def ownerOf (s : State) : Address :=
 
 @[pf_entry]
 def creditOf (_s : State) (who : Address) : UInt256 :=
-  credits.get who
+  Fungible.Balances.balanceOf credits who
 
 @[pf_entry]
 def pendingOf (_s : State) (who : Address) : UInt64 :=

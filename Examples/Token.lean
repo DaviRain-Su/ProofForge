@@ -18,7 +18,7 @@ inductive Error where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 structure ContractStorage where
-  balances : Storage.AddressMap256
+  balances : Fungible.Balances
   allowances : Storage.AddressPairMap256
   nonces : Storage.AddressMap256
 
@@ -62,7 +62,7 @@ def mint (s : State) (to : Address) (value : UInt256) : Except Error (State × U
 
 @[pf_entry]
 def balanceOf (_s : State) (who : Address) : UInt256 :=
-  storage.balances.get who
+  Fungible.Balances.balanceOf storage.balances who
 
 @[pf_entry]
 def totalSupply (s : State) : UInt256 :=
@@ -164,15 +164,14 @@ def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
   if s.paused != 0 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.paused)
-  else if storage.balances.containsAtLeast Context.caller amount then
-    let debit := storage.balances.put Context.caller
-      (storage.balances.nextSub Context.caller amount)
+  else if Fungible.Balances.canDebit storage.balances Context.caller amount then
+    let debit := Fungible.Balances.debit storage.balances Context.caller amount
     .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
            supply := UInt256.sub s.supply amount },
       Event.transfer Context.caller Address.zero amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      storage.balances.revertInsufficient Context.caller amount)
+      Fungible.Balances.insufficient storage.balances Context.caller amount)
 
 @[pf_entry]
 def burnFrom (s : State) (owner : Address) (amount : UInt256) :
@@ -184,9 +183,9 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
   else if storage.allowances.containsAtLeast owner Context.caller amount then
-    if storage.balances.containsAtLeast owner amount then
+    if Fungible.Balances.canDebit storage.balances owner amount then
       let debit :=
-        (storage.balances.put owner (storage.balances.nextSub owner amount)) |||
+        (Fungible.Balances.debit storage.balances owner amount) |||
         (storage.allowances.put owner Context.caller
           (storage.allowances.nextSub owner Context.caller amount))
       .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
@@ -194,7 +193,7 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
         Event.transfer owner Address.zero amount)
     else
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        storage.balances.revertInsufficient owner amount)
+        Fungible.Balances.insufficient storage.balances owner amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       storage.allowances.revertInsufficient owner Context.caller amount)

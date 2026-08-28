@@ -9,7 +9,7 @@
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
-| `Evm.Sdk` | 合同侧 `Address` / `UInt256`、静态 storage layout、typed map、context / immutable / event / revert / closed-call facade | SVM 账户几何、业务协议、运行时 layout 对象 |
+| `Evm.Sdk` | 合同侧 `Address` / `UInt256`、静态 storage layout、typed map、fungible debit ledger、context / immutable / event / revert / closed-call facade | SVM 账户几何、业务协议、运行时 layout 对象 |
 | `Evm.Runtime` | 环境 opcode、`Addr20` / `UInt256`、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
@@ -36,6 +36,11 @@ source semantic helper
 `ERC20`、`WETH`、`UniswapV2`、`Permit` 隔离 target runtime 名字。layout descriptor 只在
 抽取期存在，不进 EVM storage，也没有魔数泄漏进合同源代码。SVM 不复用这套 layout：它的
 持久容器仍由 account bytes / fixed stride / one-based index 描述。
+
+`Sdk.Fungible.Balances` 再把显式 `AddressMap256` handle 组合成 O(1)
+balanceOf/canDebit/debit/insufficient ledger contract；Token burn 与 Credits claim 独立复用。
+权限、pause、supply/cap、allowance 和 event policy 仍在应用，credit/transfer alias contract
+未关闭前不伪装成完整 ERC-20。
 
 SDK facade 直接 `@[pf_inline]` 到既有 source/runtime 叶，不增加 Ops、IR 或 emitter case；
 canonical 拼写仍是 `vg` / `mseta256` / `ttxfer` / `permit` / `edep` /
