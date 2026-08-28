@@ -771,6 +771,18 @@ def accountFacadeReadBeforeWrite (s : ChoiceState) (index : UInt64) :
   let _ := ProofForge.Svm.AccountStorage.Source.write lexicalDestinationField index before
   .ok ({ s with chosen := before }, before)
 
+/-- The lexical snapshot must also survive when both the read and write are hidden behind one
+reusable inline SDK combinator. -/
+@[pf_inline] def accountFacadeInlineReadWrite (index value : UInt64) : UInt64 :=
+  let before := ProofForge.Svm.AccountStorage.Source.read lexicalSourceField index
+  let _ := ProofForge.Svm.AccountStorage.Source.write lexicalDestinationField index value
+  before
+
+def accountFacadeInlineReadBeforeWrite (s : ChoiceState) (index value : UInt64) :
+    Except Examples.Counter.Error (ChoiceState × UInt64) :=
+  let before := accountFacadeInlineReadWrite index value
+  .ok (s, before)
+
 def getChosen (s : ChoiceState) : UInt64 :=
   s.chosen
 

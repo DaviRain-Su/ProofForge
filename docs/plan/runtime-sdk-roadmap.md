@@ -70,7 +70,7 @@ instruction 增加 recipe opcode。
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate 与 tagged input target binding | EVM bounded-dynamic policy 与 cross-target conformance fixture |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input | bounded remaining-account view；运行时安全账户索引；tagged/bounded return policy；更完整 instruction buffer；Token-2022 TLV 语义 |
-| SVM Component | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation | 容器 facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical initialization | Account/Signer/PDA/System/Token facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged return/bounded dynamic ABI 与 aggregate storage 组合；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade | scalar/struct/fixed-array layout facade；access-control/pausable/reentrancy 与 token/NFT reusable components |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -200,6 +200,13 @@ SDK 按生命周期分两类，名字上也不能混：
 `Account`、`Signer`、`Pda`、`System`、`Token`、`Token2022` facade 应直接组合已有
 Runtime/Component，不增加“方便用”的 recipe opcode。Phoenix 用于证明复杂 orderbook 范式，
 另外增加小型 Queue/Map examples，证明组件不是 Phoenix 专用品。
+
+R3-001 已完成持久容器 foundation：`Svm.Sdk` 组合现有 checked account-storage effects，提供
+POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical header
+initialization。JobQueue/TicketLine 在独立 storage account 上复用这些组件；没有新增 Ops、IR、
+Component 或 Emit recipe，也没有把 heap pointer、Lean `Array`/`Map` 放进持久状态。详见
+[R3-001](tasks/r3-001.md)。R3 尚未完成；bounded transient Scratch 及 Runtime facade 仍依赖
+R2 的 account/effect contracts。
 
 ### R4 — EVM Runtime
 

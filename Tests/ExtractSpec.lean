@@ -1218,12 +1218,16 @@ elab "#pf_guard_account_effect_lexical_reads" : command => do
   let beforeProgram ← extract ``Tests.Fixtures.accountReadBeforeWrite
   let afterProgram ← extract ``Tests.Fixtures.accountReadAfterWrite
   let facadeProgram ← extract ``Tests.Fixtures.accountFacadeReadBeforeWrite
+  let inlineFacadeProgram ← extract ``Tests.Fixtures.accountFacadeInlineReadBeforeWrite
   let some before := beforeProgram.methods.find? (·.ixName == "accountReadBeforeWrite")
     | throwError "missing accountReadBeforeWrite"
   let some after := afterProgram.methods.find? (·.ixName == "accountReadAfterWrite")
     | throwError "missing accountReadAfterWrite"
   let some facade := facadeProgram.methods.find? (·.ixName == "accountFacadeReadBeforeWrite")
     | throwError "missing accountFacadeReadBeforeWrite"
+  let some inlineFacade := inlineFacadeProgram.methods.find?
+      (·.ixName == "accountFacadeInlineReadBeforeWrite")
+    | throwError "missing accountFacadeInlineReadBeforeWrite"
   match before.ops with
   | #[.letLocal snapshot (.ext (.accDataWord 1 0) #[]),
       .component (.accountStorage (.writeWord field (.lit 0) (.arg 0))),
@@ -1251,6 +1255,20 @@ elab "#pf_guard_account_effect_lexical_reads" : command => do
             field.region.indexBase == .one do
           throwError s!"facade account snapshot mismatch: {repr facade.ops}"
   | _ => throwError s!"facade account snapshot was not materialized: {repr facade.ops}"
+  match inlineFacade.ops with
+  | #[.joinLocal result,
+      .letLocal snapshotLocal
+        (.ext (.component (.accountStorage (.readWord source))) #[.arg 0]),
+      .component (.accountStorage (.writeWord field (.arg 0) (.arg 1))),
+      .setLocal producerResult (.local helperResult),
+      .returnU64 (.local returned)] =>
+        unless result == producerResult && snapshotLocal == helperResult &&
+            result == returned &&
+            source.region.account == 1 && source.firstWord == 8 &&
+            field.region.account == 1 && field.firstWord == 9 do
+          throwError s!"inline facade snapshot mismatch: {repr inlineFacade.ops}"
+  | _ =>
+      throwError s!"inline facade snapshot was not materialized: {repr inlineFacade.ops}"
 
 #pf_guard_account_effect_lexical_reads
 

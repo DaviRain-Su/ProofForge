@@ -62,12 +62,13 @@ Emit are implementation boundaries, not three alternative application APIs.
 | bounded begin/append/finish event batching | `Svm.BatchRecorder` + `.Source` | `Component.batchRecorder` | heap-backed byte writer + signed self-CPI | max 1,246-byte payload, fixed record bound, invocation-local pointer | Available; over-capacity flushes before append and malformed config fails closed; no pointer enters account state |
 | packed/Borsh entry and optional return plans | `Svm.EntryAdapter` | entry adapter bridge | checked instruction-data decode and return encoding | bounded invocation bytes and fixed scalar locals | Typed scalars plus static record/product/fixed-vector raw parameters derive exact little-endian cursor/local plans and canonical Bool guards; Option/payload enums use canonical u8 tags, while `BoundedVec` uses canonical u32 length with a fixed-capacity zeroed local frame. Tagged/bounded returns, richer payloads, and generated aggregate ABI remain fail closed |
 | transient allocator model | `Svm.Heap` | none exposed as a container SDK yet | official-shaped downward bump allocation | invocation-local 32 KiB default, 256 KiB VM ceiling | Model and recorder use exist; general scratch `Vec`/writer facade and OOM-aware source lowering are R3 |
-| unified `Svm.Sdk` facade | R3 | will compose existing Runtime/Component owners | no new recipe opcode | preserves the resources above | Not yet present. Applications currently use `AccountStorage.Source`, `FifoCancel.Source`, recorder/entry adapters, and selected Runtime leaves directly |
+| unified `Svm.Sdk` facade | `Svm.Sdk` + `.Storage` + `.Queue` | composes existing `AccountStorage.Source` and target components | checked load/store plus existing bounded tree/allocator routines; no new recipe opcode | compile-time descriptors over fixed account words, one-based indexes, and `0` sentinels | Persistent foundation available: POD Field, bounded Vec/Queue, ordered Map/RBMap, one-based allocator, and canonical header initialization. JobQueue and TicketLine consume it from a storage account separate from source state. Account/Signer/PDA/System/Token and transient Scratch facades remain R2/R3 work |
 
-The old low-level `accData*` names remain compatibility decoding inputs while the unified facade is
-absent. They are not a license to add another protocol-shaped intrinsic. New application code
-should prefer typed `Region`/`Field`/`RbMap` handles and source facades; R3 removes remaining
-geometry arguments from application call sites rather than teaching Emit another recipe.
+The old low-level `accData*` names remain compatibility decoding inputs. They are not a license to
+add another protocol-shaped intrinsic. New persistent-container code should prefer `Svm.Sdk` typed
+handles; its descriptors bind geometry once and erase to the existing generic component effects.
+R2/R3 continue narrowing direct Runtime leaves and add bounded transient Scratch rather than
+teaching Emit another recipe.
 
 ## 4. EVM
 

@@ -79,8 +79,7 @@ inside the target stub; callers guard expected-absent reads themselves. -/
 /-- Write the POD word at one-based `slot`. The target requires a writable, program-owned
 account and a final byte inside `data_len`. Successful writes return `value`. -/
 @[pf_inline] def PodField.writeAt (pod : PodField) (slot value : UInt64) : UInt64 :=
-  let _ := write pod.field slot value
-  value
+  write pod.field slot value
 
 /-! ## Fixed-capacity vector -/
 
@@ -113,6 +112,12 @@ def BoundedVec.wellFormed (vec : BoundedVec) (accountLimit : Nat := 64) : Bool :
 /-- Number of live positions. Stored as an account word; `0` is the empty vector. -/
 @[pf_inline] def BoundedVec.size (vec : BoundedVec) : UInt64 :=
   read vec.count 0
+
+/-- Initialize or intentionally reset the vector header. Payload words are left untouched and
+remain unreachable while `count = 0`; success returns `1`. -/
+@[pf_inline] def BoundedVec.initialize (vec : BoundedVec) : UInt64 :=
+  let _ := write vec.count 0 0
+  1
 
 /-- Read position `position` (one-based). Out-of-range and null positions return the `0`
 sentinel without touching the account. -/
@@ -283,6 +288,17 @@ abbrev Allocator := OneBasedAllocator
 alloc/free compose with the map's own allocator discipline. -/
 @[pf_inline] def Allocator.ofRbMap (map : RbMap) : Allocator := map.allocator
 
+/-- Canonical empty Sokoban cursor: bump frontier and free/end boundary both start at one. -/
+@[pf_inline] def Allocator.initialCursor : UInt64 :=
+  (1 : UInt64) ||| ((1 : UInt64) <<< 32)
+
+/-- Initialize or intentionally reset allocator headers. Slot payload is not cleared; with the
+canonical `(bumpIndex, freeListHead) = (1, 1)` boundary no stale slot is reachable. -/
+@[pf_inline] def Allocator.initialize (allocator : Allocator) : UInt64 :=
+  let _ := write (OneBasedAllocator.liveCount allocator) 0 0
+  let _ := write allocator.cursor 0 Allocator.initialCursor
+  1
+
 /-- Allocate one one-based slot. Reuses the free-list head when present, otherwise advances
 the bump frontier while it is below the static capacity. Returns `0` (and writes nothing)
 when the allocator is exhausted. -/
@@ -321,5 +337,28 @@ cannot establish liveness must pair the allocator with an occupancy field. -/
     let _ := write allocator.cursor 0 (bump ||| (slot <<< 32))
     let _ := write (OneBasedAllocator.liveCount allocator) 0 (count - 1)
     slot
+
+/-- Initialize or intentionally reset an ordered map's root, reserved header word, and allocator.
+Node bytes remain account-resident but unreachable behind the canonical empty headers. -/
+@[pf_inline] def OrderedMap.initialize (orderedMap : OrderedMap) : UInt64 :=
+  match orderedMap.map with
+  | .key4 rootWord tree =>
+      let _ := write
+        (Field.scalar tree.links.region.account rootWord tree.links.region.access) 0 0
+      let _ := write
+        (Field.scalar tree.links.region.account (rootWord + 1) tree.links.region.access) 0 0
+      Allocator.initialize
+        { slots := tree.links.region
+          liveCount := Field.scalar tree.links.region.account (rootWord + 2) tree.links.region.access
+          cursor := Field.scalar tree.links.region.account (rootWord + 3) tree.links.region.access }
+  | .fifo rootWord tree =>
+      let _ := write
+        (Field.scalar tree.links.region.account rootWord tree.links.region.access) 0 0
+      let _ := write
+        (Field.scalar tree.links.region.account (rootWord + 1) tree.links.region.access) 0 0
+      Allocator.initialize
+        { slots := tree.links.region
+          liveCount := Field.scalar tree.links.region.account (rootWord + 2) tree.links.region.access
+          cursor := Field.scalar tree.links.region.account (rootWord + 3) tree.links.region.access }
 
 end ProofForge.Svm.Sdk.Storage

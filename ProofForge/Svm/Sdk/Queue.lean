@@ -78,6 +78,13 @@ def BoundedQueue.wellFormed (queue : BoundedQueue) (accountLimit : Nat := 64) : 
 @[pf_inline] def BoundedQueue.headSlot (queue : BoundedQueue) : UInt64 :=
   read queue.head 0
 
+/-- Initialize or intentionally reset both ring headers. Payload words remain untouched and
+unreachable while `head = count = 0`; success returns `1`. -/
+@[pf_inline] def BoundedQueue.initialize (queue : BoundedQueue) : UInt64 :=
+  let _ := write queue.head 0 0
+  let _ := write queue.count 0 0
+  1
+
 /-- Ring successor of one-based slot `h` inside a capacity-`capacity` ring. -/
 @[pf_inline] private def nextSlot (slot capacity : UInt64) : UInt64 :=
   if slot = capacity then 1 else slot + 1

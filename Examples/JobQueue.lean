@@ -12,9 +12,11 @@ namespace Examples.JobQueue
 open ProofForge.Svm.AccountStorage
 open ProofForge.Svm.Sdk.Storage
 
-/-- Compile-time account layout for one job board.
+/-- Compile-time layout for the program-owned storage account at runtime account index `1`.
 
-word 1  — extracted `State.dummy`; SDK regions never overlap source-state fields
+The extracted `State.dummy` lives in runtime account `0`; no SDK region aliases that source-state
+account. Storage-account word 1 is reserved for future layout metadata.
+
 word 2  — live slot count header (allocator occupancy)
 word 3  — packed allocator cursor `(bumpIndex | freeListHead <<< 32)`
 word 4  — vector count header
@@ -27,8 +29,8 @@ structure Layout where
 
 attribute [pf_inline] Layout.allocator Layout.jobs
 
-/-- Build the fixed layout for one state account. The account index must become a literal
-through `pf_inline`; no runtime account selection or geometry is introduced. -/
+/-- Build the fixed layout for one program-owned storage account. The runtime account index must
+become a literal through `pf_inline`; no dynamic account selection or geometry is introduced. -/
 @[pf_inline] def small (account : Nat) : Layout :=
   { allocator :=
       { slots :=
@@ -53,6 +55,13 @@ inductive Error where
 @[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
+
+/-- Canonically initialize the separate program-owned storage account. This is explicit because
+the source `State` initializer owns account `0`, while SDK containers live in account `1`. -/
+@[pf_entry]
+def initializeStorage (_s : State) : UInt64 :=
+  let _ := Allocator.initialize (small 1).allocator
+  BoundedVec.initialize (small 1).jobs
 
 /-- Allocator views: packed cursor halves are the only allocation state. -/
 @[pf_entry]

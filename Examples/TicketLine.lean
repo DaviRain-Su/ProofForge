@@ -12,15 +12,18 @@ open ProofForge.Svm.AccountStorage
 open ProofForge.Svm.Sdk.Queue
 open ProofForge.Svm.Sdk.Storage
 
-/-- Compile-time account layout for one ticket line.
+/-- Compile-time layout for the program-owned storage account at runtime account index `1`.
 
-word 1  — extracted `State.dummy`; SDK regions never overlap source-state fields
+The extracted `State.dummy` lives in runtime account `0`; no SDK region aliases that source-state
+account. Storage-account word 1 is reserved for future layout metadata.
+
 word 2  — queue head header (one-based front slot, `0` = empty)
 word 3  — queue count header
 words 4..19   — queue payload slots, capacity 16
 words 20..35  — per-ticket status POD column, capacity 16
 word 40 — registry map root
-words 44..331 — registry nodes: links, parent/color, key words, owner payload, stride 18 -/
+words 44..331 — registry node-region extent, capacity 16, stride 18; the final owner payload
+is word 320 and words 321..331 are static tail padding retained by the full-stride region -/
 structure Layout where
   line : BoundedQueue
   status : PodField
@@ -30,8 +33,8 @@ structure Layout where
 
 attribute [pf_inline] Layout.line Layout.status Layout.registry Layout.owner
 
-/-- Build the fixed layout for one state account. The account index must become a literal
-through `pf_inline`; no runtime account selection or geometry is introduced. -/
+/-- Build the fixed layout for one program-owned storage account. The runtime account index must
+become a literal through `pf_inline`; no dynamic account selection or geometry is introduced. -/
 @[pf_inline] def small (account : Nat) : Layout :=
   { line := BoundedQueue.oneBased account 2 4 16
     status := { field := Field.oneBased account 20 1 16 }
@@ -57,6 +60,13 @@ inductive Error where
 @[pf_entry]
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
+
+/-- Canonically initialize queue and ordered-map headers in the separate program-owned storage
+account. POD payload words need no eager clearing because no header makes them reachable. -/
+@[pf_entry]
+def initializeStorage (_s : State) : UInt64 :=
+  let _ := BoundedQueue.initialize (small 1).line
+  OrderedMap.initialize (small 1).registry
 
 /-- Queue views. -/
 @[pf_entry]

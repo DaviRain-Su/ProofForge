@@ -4101,7 +4101,16 @@ private def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool
     | fuel' + 1 =>
         match unfoldUserHelper env e with
         | some (_, unfolded) => mentionsSvmEffect env fuel' unfolded
-        | none => false
+        | none =>
+            match e.consumeMData with
+            | .letE _ _ value body _ =>
+                mentionsSvmEffect env fuel' value || mentionsSvmEffect env fuel' body
+            -- A lambda is a deferred continuation, not an effect at its definition site. Applied
+            -- lambdas are beta-reduced by `decodeExpr` before effect discovery.
+            | .lam .. => false
+            | .app fn arg =>
+                mentionsSvmEffect env fuel' fn || mentionsSvmEffect env fuel' arg
+            | _ => false
 
 /-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
 ignored call needs explicit sequencing: recursive invoke search would otherwise retain the CPI
@@ -4217,11 +4226,16 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
     | 0 => (effects, e, false)
     | fuel' + 1 =>
       match strip e with
-      | .letE _ _ value body _ =>
+      | .letE _ ty value body _ =>
           if body.hasLooseBVar 0 then
             match asPdaSeeds value with
             | some _ => go fuel' (body.instantiate1 value) effects
-            | none => (effects, e, mentionsSvmEffect env 16 value)
+            | none =>
+                -- A dependent scalar effect is a producer, not a malformed ignored write.
+                -- `decodeExpr` lowers its terminal into a lexical local before decoding `body`.
+                -- Keep malformed detection for unsupported dependent non-scalar effects.
+                let scalarBinding := ty.consumeMData.getAppFn.constName? == some ``UInt64
+                (effects, e, !scalarBinding && mentionsSvmEffect env 16 value)
           else
             match findComponentCall env 16 value with
             | some call =>
@@ -4257,7 +4271,11 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
                   go fuel' (body.instantiate1 value)
                     (effects.push (accDataRbTreeOrderSetWordOrRemoveOp update))
               | none, none, none, none, none, none, none, none =>
-                  (effects, e, mentionsSvmEffect env 16 value)
+                  -- A marked inline SDK combinator may contain branch-local effects rather than
+                  -- one leading primitive. Defer it to `decodeExpr`, which unfolds and validates
+                  -- every branch; only an opaque malformed write fails here.
+                  let deferredInlineEffect := (unfoldUserHelper env value).isSome
+                  (effects, e, !deferredInlineEffect && mentionsSvmEffect env 16 value)
       | _ => (effects, e, false)
   go 32 e #[]
 
@@ -6343,7 +6361,28 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
           (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
-      if !effectful then
+      let scalarSvmEffect :=
+        ty.consumeMData.getAppFn.constName? == some ``UInt64 && mentionsSvmEffect env 16 value
+      if scalarSvmEffect then
+        match decodeExpr env fuel' value (preserveLocals := preserveLocals)
+            (localDepth := localDepth + 1) (stateType? := stateType?)
+            (deepScalars := deepScalars) with
+        | .error reason =>
+            return .error s!"extract/unsupported: scalar effect producer: {reason}"
+        | .ok producerOps =>
+          match lowerBindProducer localDepth producerOps with
+          | some (joinedProducer, true, true) =>
+            let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
+            match decodeExpr env fuel' (body.instantiate1 marker) (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth + 1)
+                (stateType? := stateType?) (deepScalars := deepScalars) with
+            | .ok continuationOps =>
+                return .ok (#[.joinLocal localDepth] ++ joinedProducer ++ continuationOps)
+            | .error reason =>
+                return .error s!"extract/unsupported: scalar effect continuation: {reason}"
+          | _ =>
+              return .error "extract/unsupported: scalar effect producer has no control value"
+      else if !effectful then
         if let some source := sequentialStateSource? env ty value stateType? then
           match decodeYieldState env 128 localDepth value (stateType? := stateType?)
               (statePrefix := "") (deepScalars := deepScalars),
@@ -6493,6 +6532,11 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
       -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
+    else if let some write := decodeAccDataWordSetAt env (normalizeStorageEffect env e) then
+      -- `accDataWordSetAt*` returns its stored value at the source boundary. Keep that return
+      -- contract available to reusable POD/container facades without adding another operation.
+      let (_, _, _, _, _, _, value) := write
+      return .ok #[accDataWordSetAtOp write, .returnU64 value]
     else if let some call := findComponentCall env 16 e then
       return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := findInvoke env 16 e then

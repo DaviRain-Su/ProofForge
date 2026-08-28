@@ -55,6 +55,8 @@ import Examples.Nested
 import Examples.Seat
 import Examples.Tree
 import Examples.RawEntry
+import Examples.JobQueue
+import Examples.TicketLine
 import Examples.PhoenixV1Layout
 import Examples.Phoenix
 import Examples.PhoenixV1Profile
