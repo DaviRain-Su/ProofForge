@@ -81,7 +81,7 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - lexical `let` 捕获的账户 read 在后续 account write/CPI 前 materialize；写前 snapshot
   不会因 substitution 在写后重读，源码明确放在写后的 read 则观察新值。
 - init 中的静态 CPI 在账户初始化写回前执行；非 CPI init effect fail closed，不再静默省略。
-- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `token2022TransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenTransferSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` / `ataCreateIdempotent` — 普通 Lean 包装，按 Runtime 命名空间统一展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语，不维护 recipe 名白名单。Token-2022 包装只接收 82B mint / 165B token account。
+- `systemTransfer` / `invokeAcc1` / `systemCreate` / `createPda` / `systemAssign` / `systemAllocate` / `systemAllocateWithSeed` / `systemCreateWithSeed` / `systemAssignWithSeed` / `systemTransferWithSeed` / `systemAdvanceNonce` / `tokenInitMint` / `tokenSyncNative` / `tokenTransferChecked` / `token2022TransferChecked` / `tokenTransferCheckedIx` / `tokenTransferCheckedSignedIx` / `tokenTransferSignedIx` / `tokenMintToChecked` / `tokenBurnChecked` / `tokenInitAccount` / `tokenCloseAccount` / `tokenApproveChecked` / `tokenApprove` / `tokenFreezeAccount` / `tokenThawAccount` / `tokenSetMintAuthority` / `tokenSetAccountAuthority` / `tokenRevoke` / `tokenInitMultisig` / `tokenAccountSize` / `memoWrite` — 普通 Lean 包装，按 Runtime 命名空间统一展开成同一组 `invoke` / `invokeSigned` / `invokeSignedSeeds` 原语，不维护 recipe 名白名单。Token-2022 包装只接收 82B mint / 165B token account。
 - 四个旧 `system*WithSeed` Runtime 名称保留 `"vault"` compatibility 输入；新应用使用
   `Svm.Sdk.System.AsciiSeed`，由 SDK 自动编码静态 ASCII seed 长度，并由 target verifier
   检查 1–32 bytes 与 bincode length 一致性。
@@ -89,6 +89,9 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
   `Svm.Sdk.Memo.Ascii.write payload`。payload 是 ≤512-byte compile-time seven-bit ASCII，
   只在 exact Memo CPI geometry 上由 target verifier 约束；不是 runtime String/Vec，也不进入
   account state。runtime-selected/UTF-8 payload 继续 fail closed。
+- ATA 不再有 Runtime policy wrapper。`Svm.Sdk.AssociatedToken` 的 role-typed
+  Create/CreateIdempotent/RecoverNested plan 直接组合 generic `invoke`；selected Token/ATA
+  program、账户次序和权限都是 compiler-erased static geometry，不增加 ATA Op/Emit recipe。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
 - `accLamports1` / `accOwner1` / `accDataLen1` / `isSigner1` / `isWritable1` / `isExecutable1` — 账户 1 只读 header。读到这些叶子就 walk，不强制 acc0 signer。

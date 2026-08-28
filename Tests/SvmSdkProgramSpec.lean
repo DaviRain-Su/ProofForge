@@ -10,6 +10,12 @@ namespace Tests.SvmSdkProgramSpec
 open ProofForge.Svm.Sdk
 
 #guard AssociatedToken.createIdempotent == 0
+#guard AssociatedToken.create == 0
+#guard AssociatedToken.recoverNested == 0
+#guard AssociatedToken.fixedCreateAccounts.wellFormed
+#guard AssociatedToken.fixedRecoverNestedAccounts.wellFormed
+#guard !(AssociatedToken.CreateAccounts.at 63 0 1 2 3 4 5).wellFormed
+#guard !(AssociatedToken.RecoverNestedAccounts.at 7 0 1 2 3 4 5 63).wellFormed
 #guard Memo.writeOk == 0
 #guard Memo.Ascii.maxBytes == 512
 #guard Memo.Ascii.wellFormed "proof-forge"
@@ -38,6 +44,65 @@ def writeNonAscii (_s : Examples.Memo.State) :
     .error .overflow
 
 end AlternateMemo
+
+namespace GeneralAta
+
+@[pf_inline] def roleCreateAccounts : AssociatedToken.CreateAccounts :=
+  { associatedTokenProgram := .at 8
+    payer := .at 1
+    associatedAccount := .at 2
+    wallet := .at 3
+    mint := .at 4
+    systemProgram := .at 5
+    tokenProgram := .at 6 }
+
+@[pf_inline] def roleRecoverAccounts : AssociatedToken.RecoverNestedAccounts :=
+  { associatedTokenProgram := .at 10
+    nestedAssociatedAccount := .at 1
+    nestedMint := .at 2
+    destinationAssociatedAccount := .at 3
+    ownerAssociatedAccount := .at 4
+    ownerMint := .at 5
+    wallet := .at 6
+    tokenProgram := .at 8 }
+
+@[pf_entry]
+def create (_s : Examples.Ata.State) :
+    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := AssociatedToken.create
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
+@[pf_entry]
+def recoverNested (_s : Examples.Ata.State) :
+    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := AssociatedToken.recoverNested
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
+@[pf_entry]
+def createWithRoles (_s : Examples.Ata.State) :
+    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := AssociatedToken.createIdempotentWith roleCreateAccounts
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
+@[pf_entry]
+def recoverWithRoles (_s : Examples.Ata.State) :
+    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := AssociatedToken.recoverNestedWith roleRecoverAccounts
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
+end GeneralAta
 
 private def memoInvokeWellFormed (payload : String) : Bool :=
   ProofForge.Svm.Ops.OpExt.wellFormed
@@ -97,5 +162,60 @@ elab "#pf_guard_svm_bounded_memo" : command => do
   | .ok _ => throwError "non-ASCII Memo payload was accepted"
 
 #pf_guard_svm_bounded_memo
+
+private def extractAtaMethod (env : Environment) (mutation : Name) :
+    Except String ProofForge.Svm.IR.Program := do
+  let source ← ProofForge.Extract.extractProgramIR env ``Examples.Ata.init mutation
+    ``Examples.Ata.get
+  ProofForge.Svm.IR.fromExtracted source
+
+elab "#pf_guard_svm_general_ata" : command => do
+  let env ← getEnv
+  let ordinary ←
+    match extractAtaMethod env ``GeneralAta.create with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  unless ordinary.methods.any fun method => method.ops.any fun
+      | .invoke 6 metas #[.u8le (.lit 0)] #[] none =>
+          metas == #[{ acc := 0, signer := true, writable := true },
+            { acc := 1, writable := true }, { acc := 2 }, { acc := 3 }, { acc := 4 },
+            { acc := 5 }]
+      | _ => false do
+    throwError "ordinary ATA Create did not preserve the official account geometry"
+  let recover ←
+    match extractAtaMethod env ``GeneralAta.recoverNested with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  unless recover.methods.any fun method => method.ops.any fun
+      | .invoke 7 metas #[.u8le (.lit 2)] #[] none =>
+          metas == #[{ acc := 0, writable := true }, { acc := 1 },
+            { acc := 2, writable := true }, { acc := 3 }, { acc := 4 },
+            { acc := 5, signer := true, writable := true }, { acc := 6 }]
+      | _ => false do
+    throwError "ATA RecoverNested did not preserve the official account geometry"
+  let roleSelected ←
+    match extractAtaMethod env ``GeneralAta.createWithRoles with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  unless roleSelected.methods.any fun method => method.ops.any fun
+      | .invoke 8 metas #[.u8le (.lit 1)] #[] none =>
+          metas == #[{ acc := 1, signer := true, writable := true },
+            { acc := 2, writable := true }, { acc := 3 }, { acc := 4 }, { acc := 5 },
+            { acc := 6 }]
+      | _ => false do
+    throwError "ATA role plan did not preserve caller-selected accounts"
+  let recoverRoleSelected ←
+    match extractAtaMethod env ``GeneralAta.recoverWithRoles with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  unless recoverRoleSelected.methods.any fun method => method.ops.any fun
+      | .invoke 10 metas #[.u8le (.lit 2)] #[] none =>
+          metas == #[{ acc := 1, writable := true }, { acc := 2 },
+            { acc := 3, writable := true }, { acc := 4 }, { acc := 5 },
+            { acc := 6, signer := true, writable := true }, { acc := 8 }]
+      | _ => false do
+    throwError "ATA RecoverNested role plan did not preserve caller-selected accounts"
+
+#pf_guard_svm_general_ata
 
 end Tests.SvmSdkProgramSpec

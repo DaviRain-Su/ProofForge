@@ -72,7 +72,7 @@ instruction 增加 recipe opcode。
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
-| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、CPI-relative account handles、static ASCII PDA、non-seeded/generic ASCII-seeded System、classic Token fixed/role-typed signed transfer、fixed ATA CreateIdempotent、bounded static ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、general ATA、runtime-selected/UTF-8 Memo、Token state/program-id policy 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、CPI-relative account handles、static ASCII PDA、non-seeded/generic ASCII-seeded System、classic Token fixed/role-typed signed transfer、static role-typed ATA Create/CreateIdempotent/RecoverNested、bounded static ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo、Token state/program-id policy 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、`Storage.Static` scalar/record/fixed-array declarations、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/fixed-router facade；`Access` owner/two-step ownership；`Roles.Set2` fixed-capacity membership/grant/revoke；`Pausable` explicit fail-closed flag；`Fungible.Balances` O(1) checked movement；`Fungible.Allowances` explicit pair-handle checked allowance policy | typed pause events、reentrancy、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -287,9 +287,12 @@ ASCII allocate/create/assign/transfer；seed length 由 SDK 自动编码，verif
 System geometry 校验 1–32 ASCII bytes 和相邻 bincode length，SysSeed/SysXfer 产物不变，详见
 [R3-008](tasks/r3-008.md)。R3-009 已把 Memo 从固定 `"ok"` 提升为 ≤512-byte compile-time
 ASCII facade；共享 policy 在 Extract 和 exact Memo geometry verifier fail closed，其他 generic
-CPI words 不受影响，Memo 产物不变，详见 [R3-009](tasks/r3-009.md)。R3 尚未完成；
-rent-aware resize、general ATA、runtime-selected/UTF-8 Memo、Token state/program-id policy 与
-Token-2022 extension semantics 仍待完成。
+CPI words 不受影响，Memo 产物不变，详见 [R3-009](tasks/r3-009.md)。R3-010 已以
+`CreateAccounts` / `RecoverNestedAccounts` 收口官方 ATA Create/CreateIdempotent/RecoverNested，
+fixed 与 caller-selected geometry 都直接组合 generic invoke，并删除 ATA 专用 Runtime wrapper；
+Ata canonical IR 与产物不变，详见 [R3-010](tasks/r3-010.md)。R3 尚未完成；rent-aware resize、
+runtime-selected ATA/Memo geometry、UTF-8 Memo、Token state/program-id policy 与 Token-2022
+extension semantics 仍待完成。
 
 ### R4 — EVM Runtime
 
