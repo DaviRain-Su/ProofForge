@@ -1,19 +1,36 @@
 import ProofForge.Attr
 import ProofForge.Svm.Runtime
+import ProofForge.Svm.Memo
 
 /-!
 # SVM SDK Memo facade
 
-An honest name for the existing closed Memo composition. This slice writes the fixed UTF-8 literal
-`"ok"`; it does not pretend to expose dynamic strings or a bounded byte buffer. General bounded
-memo data remains future Runtime/codec work.
+Compiler-erased names for one statically bounded Memo composition. Payloads are compile-time
+seven-bit strings of at most 512 bytes; they are copied into the existing invocation-local CPI
+scratch plan and never become persistent pointers or dynamic account state.
 -/
 
 namespace ProofForge.Svm.Sdk.Memo
 
-/-- Write the fixed UTF-8 literal `"ok"`. External account 0 signs and the Memo program is callee
-account 1. -/
+namespace Ascii
+
+def maxBytes : Nat := ProofForge.Svm.Memo.Ascii.maxBytes
+
+def wellFormed (value : String) : Bool :=
+  ProofForge.Svm.Memo.Ascii.wellFormed value
+
+/-- Write one compile-time seven-bit Memo payload. External account 0 signs and the Memo program
+is callee account 1. -/
+@[pf_inline] def write (value : String) : UInt64 :=
+  ProofForge.Svm.Runtime.invoke 1
+    #[{ acc := 0, signer := true, writable := false }]
+    #[.ascii value]
+
+end Ascii
+
+/-- Compatibility spelling for the original fixed payload. New applications should select their
+own static payload through `Ascii.write`. -/
 @[pf_inline] def writeOk : UInt64 :=
-  ProofForge.Svm.Runtime.memoWrite
+  Ascii.write "ok"
 
 end ProofForge.Svm.Sdk.Memo

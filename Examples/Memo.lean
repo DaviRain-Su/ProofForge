@@ -14,11 +14,11 @@ inductive Error where
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
-/-- CPI 进 Memo，写字面量 `"ok"`。 -/
+/-- CPI 进 Memo；`"ok"` 是本应用选择的静态 payload。 -/
 @[pf_entry]
 def write (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := ProofForge.Svm.Sdk.Memo.writeOk
+    let _ := ProofForge.Svm.Sdk.Memo.Ascii.write "ok"
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow

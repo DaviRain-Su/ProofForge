@@ -4556,7 +4556,9 @@ private def invokeRet
   | (3, _, #[.u8le (.lit 6), .u8le (.lit 0), .u8le (.lit 1), .accKey 2], #[], none) => .ok (.lit 0)
   | (3, _, #[.u8le (.lit 5)], #[], none) => .ok (.lit 0)
   | (2, _, #[.u8le (.lit 21)], #[], none) => .ok .cpiReturn
-  | (1, _, #[.ascii "ok"], #[], none) => .ok (.lit 0)
+  | (1, _, #[.ascii memo], #[], none) =>
+      if ProofForge.Svm.Memo.Ascii.wellFormed memo then .ok (.lit 0)
+      else .error "extract/unsupported: Memo payload must be at most 512 ASCII bytes"
   | (6, _, #[.u8le (.lit 1)], #[], none) => .ok (.lit 0)
   | (programIx, _, data, _, _) =>
       match data[0]? with

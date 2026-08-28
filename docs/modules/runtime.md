@@ -85,6 +85,10 @@ native 32-byte value、以及运行时动态拼装 CPI 仍 fail closed。不把 
 - 四个旧 `system*WithSeed` Runtime 名称保留 `"vault"` compatibility 输入；新应用使用
   `Svm.Sdk.System.AsciiSeed`，由 SDK 自动编码静态 ASCII seed 长度，并由 target verifier
   检查 1–32 bytes 与 bincode length 一致性。
+- 旧 `memoWrite` Runtime 名称保留固定 `"ok"` compatibility 输入；新应用使用
+  `Svm.Sdk.Memo.Ascii.write payload`。payload 是 ≤512-byte compile-time seven-bit ASCII，
+  只在 exact Memo CPI geometry 上由 target verifier 约束；不是 runtime String/Vec，也不进入
+  account state。runtime-selected/UTF-8 payload 继续 fail closed。
 - `accLamports0` / `accOwner0` / `accDataLen0` / `accN` — 账户 0 只读 header。
 - `isSigner0` / `isWritable0` / `isExecutable0` — 账户 0 旗，0 或 1；不强制入口签名。
 - `accLamports1` / `accOwner1` / `accDataLen1` / `isSigner1` / `isWritable1` / `isExecutable1` — 账户 1 只读 header。读到这些叶子就 walk，不强制 acc0 signer。
@@ -147,7 +151,7 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 `Examples/Signed.lean` + `runtime-tests/solana/tests/signed.rs`：canonical bump 签字成功；bump 0 失败。
 `Examples/SysAlloc.lean` + `runtime-tests/solana/tests/sys_alloc.rs`：allocate 把空 System 账户扩到 16 字节；assign 把 owner 改成当前 program；缺 signer → `Custom(1)`。
 `Examples/TokenAcc.lean` + `runtime-tests/solana/tests/token_acc.rs`：InitializeAccount3 写 owner/mint 且不要求 owner signer；CloseAccount 把 0 余额账户 lamports 退回 dest，并要求 owner signer。
-`Examples/Memo.lean` + `runtime-tests/solana/tests/memo.rs`：CPI 进官方 Memo v3，写字面量 `"ok"`；缺 signer → `Custom(1)`。
+`Examples/Memo.lean` + `runtime-tests/solana/tests/memo.rs`：经 bounded static Memo SDK CPI 进官方 Memo v3，应用选择字面量 `"ok"`；缺 signer → `Custom(1)`。
 `Examples/CreatePda.lean` + `runtime-tests/solana/tests/create_pda.rs`：给 `"vault"` PDA 开 16 字节；bump 0 失败。
 `Examples/TokenApprove.lean` + `runtime-tests/solana/tests/token_approve.rs`：ApproveChecked 写 delegate + delegated_amount；缺 signer → `Custom(1)`。
 `Examples/TokenFreeze.lean` + `runtime-tests/solana/tests/token_freeze.rs`：Freeze 把 state 写成 Frozen；Thaw 写回 Initialized；缺 signer → `Custom(1)`。

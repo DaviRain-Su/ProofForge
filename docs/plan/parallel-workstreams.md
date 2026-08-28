@@ -103,7 +103,8 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-SDK-5 classic Token（已集成）** | SVM-SDK-4 | CPI-relative handle、role-typed checked/unchecked transfer layout 与 fixed classic facade；Phoenix concrete layouts 仍在 Examples，十二个非 Phoenix consumer 与 Phoenix/PhoenixV1Profile 产物保持不变；见 R3-006 |
 | **SVM-SDK-6 fixed ATA/Memo（已集成）** | SVM-SDK-5 | caller-selected Token program 的 fixed CreateIdempotent 与诚实名 fixed Memo facade；Ata/Memo canonical 产物不变；见 R3-007 |
 | **SVM-SDK-7 seeded System（已集成）** | SVM-SDK-6 | generic compile-time ASCII seed 的 allocate/create/assign/transfer；自动 bincode length、closed geometry verifier gate、`ledger` 非特判证据；不新增 CPI recipe；见 R3-008 |
-| **SVM-SDK-8 general remainder** | SVM-SDK-7、SVM-RT-3 | 分模块收口 rent-aware resize、ordinary/RecoverNested ATA、bounded Memo、Token state/program-id policy 与 Token-2022 typed extension facade；逐条复用既有 Runtime/typed TLV contract，未知 extension/account geometry 继续 fail closed |
+| **SVM-SDK-8 bounded static Memo（已集成）** | SVM-SDK-7 | ≤512-byte compile-time ASCII payload；共享 policy 只约束 exact Memo geometry，非 ASCII/超长 fail closed；不增加动态 String/Vec、Memo opcode 或 emitter case；见 R3-009 |
+| **SVM-SDK-9 general remainder** | SVM-SDK-8、SVM-RT-3 | 分模块收口 rent-aware resize、ordinary/RecoverNested ATA、runtime-selected/UTF-8 Memo、Token state/program-id policy 与 Token-2022 typed extension facade；逐条复用既有 Runtime/typed TLV contract，未知 extension/account geometry 继续 fail closed |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
 | **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
 | **EVM-SDK-5 bounded payments（已集成）** | EVM-SDK-1/2/3/4、EVM-RT-2 | `Evm.Sdk.Payments` 收口 Ether/ERC20/WETH/fixed-router facade；Vault/TipJar/Ownable 不再直连 lower Source boundary，产物不变；见 R5-005 |

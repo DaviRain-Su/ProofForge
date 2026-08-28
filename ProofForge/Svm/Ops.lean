@@ -1,6 +1,7 @@
 import ProofForge.Core.Ops
 import ProofForge.Svm.Component
 import ProofForge.Svm.Cpi.TokenTlv
+import ProofForge.Svm.Memo
 import ProofForge.Svm.Seed
 
 namespace ProofForge.Svm.Ops
@@ -365,11 +366,25 @@ private def systemAsciiSeedWellFormed
       if tag == 11 && programIx == 3 && metas == transferMetas then validLength length seed else true
   | _ => true
 
+/-- Validate the statically bounded payload only for the fixed Memo SDK account geometry. Other
+`.ascii` CPI words remain generic instruction data. -/
+private def memoAsciiWellFormed
+    (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord Val)) : Bool :=
+  let memoMetas : Array CpiMeta :=
+    #[{ acc := 0, signer := true, writable := false }]
+  match data with
+  | #[.ascii value] =>
+      if programIx == 1 && metas == memoMetas then
+        ProofForge.Svm.Memo.Ascii.wellFormed value
+      else true
+  | _ => true
+
 def OpExt.wellFormed : OpExt Val → Bool
   | .invoke programIx metas data seeds bump =>
       cpiAccInRange programIx && metas.all CpiMeta.wellFormed &&
         data.all CpiWord.wellFormed &&
         systemAsciiSeedWellFormed programIx metas data &&
+        memoAsciiWellFormed programIx metas data &&
         rawSelfInvokeWellFormed metas data seeds bump &&
         ((seeds.isEmpty && bump.isNone) ||
           (PdaSeed.groupWellFormed seeds && bump.isSome)) &&

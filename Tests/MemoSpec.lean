@@ -8,6 +8,7 @@ open ProofForge.Svm.Sdk
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
 #guard Memo.writeOk == 0
+#guard Memo.Ascii.write "proof-forge" == 0
 
 #guard
   match write (init 0) with

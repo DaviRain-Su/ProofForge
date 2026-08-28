@@ -35,6 +35,7 @@ UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
 R3-005 non-seeded System facade completion、R3-006 classic Token facade、
 R3-007 fixed ATA/Memo facades、R3-008 generic seeded System facade、
+R3-009 bounded static Memo facade、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation；
@@ -46,7 +47,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 299 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 300 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 308/308（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -292,8 +293,18 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   上校验 1–32 ASCII bytes 与长度一致性；没有新 Op/IR/Component/Emit variant 或 recipe。
   `"ledger"` 四路径证明 API 非 `"vault"` 特判，空/超长/错长度均 fail closed；两个 canonical
   digest 与六份 assembly/ELF/IDL 产物逐字节不变。详见
-  `docs/plan/tasks/r3-008.md`。Rent-aware resize、general ATA/Memo、Token state/program-id policy
+  `docs/plan/tasks/r3-008.md`。Rent-aware resize、general ATA、Token state/program-id policy
   与 Token-2022 extension semantics 仍是 R3 工作。
+
+- R3-009 bounded static Memo facade 已完成：`Svm.Sdk.Memo.Ascii.write` 接收最多 512 bytes
+  的 compile-time seven-bit ASCII payload，`writeOk` 只保留为兼容 delegate；Memo 应用显式
+  选择 `"ok"`，独立 `"proof-forge"` fixture 证明 API 不是 literal recipe。共享
+  `Svm.Memo.Ascii.wellFormed` 同时供 SDK、Extract 与 exact Memo geometry 的 Ops verifier 使用；
+  其他 generic CPI `.ascii` words 不受 Memo policy 污染。非 ASCII 与 513-byte payload 在
+  emission 前 fail closed；没有动态 String/Vec、persistent pointer、新 Memo opcode 或
+  Component/Emit case。Memo assembly/ELF/IDL 逐字节不变；详见
+  `docs/plan/tasks/r3-009.md`。Runtime-selected Memo bytes、ordinary/RecoverNested ATA、
+  Token state/program-id policy 与 Token-2022 extension semantics 仍是 R3 工作。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
