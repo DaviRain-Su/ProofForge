@@ -1,9 +1,8 @@
-import ProofForge
+import ProofForge.Evm.Sdk
 
 namespace Examples.TipJar
 
-open ProofForge.Evm.Runtime
-open ProofForge.Evm
+open ProofForge.Evm.Sdk
 
 /-- 无链上业务状态；init 只占入口形状。 -/
 structure State where
@@ -22,15 +21,15 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def deposit (_s : State) (amt : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, NativeFx.Source.deposit256 amt)
+    .ok ({ dummy := 0 }, Ether.accept amt)
   else
     .error .overflow
 
-/-- value CALL 到 20B Addr20，金额是 packed wei。失败 revert。重入不进参考语义。 -/
+/-- value CALL 到 20B Address，金额是 packed wei。失败 revert。重入不进参考语义。 -/
 @[pf_entry]
-def payout (_s : State) (dst : Addr20) (amt : UInt256) : Except Error (State × UInt64) :=
+def payout (_s : State) (dst : Address) (amt : UInt256) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, NativeFx.Source.sendEth256 dst amt)
+    .ok ({ dummy := 0 }, Ether.send dst amt)
   else
     .error .overflow
 
@@ -38,7 +37,7 @@ def payout (_s : State) (dst : Addr20) (amt : UInt256) : Except Error (State × 
 @[pf_entry]
 def logTip (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, NativeFx.Source.logTipped amt)
+    .ok ({ dummy := 0 }, Event.tipped amt)
   else
     .error .overflow
 
@@ -46,63 +45,63 @@ def logTip (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def receive (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, NativeFx.Source.receive)
+    .ok ({ dummy := 0 }, Ether.receive)
   else
     .error .overflow
 
 @[pf_entry]
 def chainId (_s : State) : UInt64 :=
-  evmChainId
+  Context.chainId
 
 @[pf_entry]
 def timestamp (_s : State) : UInt64 :=
-  evmTimestamp
+  Context.timestamp
 
 /-- `ADDRESS` 低 8 字节。完整 20B 用 `self20`。 -/
 @[pf_entry]
 def selfLow (_s : State) : UInt64 :=
-  evmSelf
+  Context.selfLow
 
 @[pf_entry]
 def selfBal (_s : State) : UInt256 :=
-  evmSelfBalance256
+  Context.selfBalance
 
 /-- view：`STATICCALL` 下恒为 0。完整 wei。 -/
 @[pf_entry]
 def callValue (_s : State) : UInt256 :=
-  evmCallValue256
+  Context.callValue
 
 @[pf_entry]
-def caller20 (_s : State) : Addr20 :=
-  evmCaller20
+def caller20 (_s : State) : Address :=
+  Context.caller
 
 @[pf_entry]
-def self20 (_s : State) : Addr20 :=
-  evmSelf20
+def self20 (_s : State) : Address :=
+  Context.self
 
 @[pf_entry]
 def callerW0 (_s : State) : UInt64 :=
-  evmCallerW0
+  Context.caller.w0
 
 @[pf_entry]
 def callerW1 (_s : State) : UInt64 :=
-  evmCallerW1
+  Context.caller.w1
 
 @[pf_entry]
 def callerW2 (_s : State) : UInt64 :=
-  evmCallerW2
+  Context.caller.w2
 
 @[pf_entry]
 def selfW0 (_s : State) : UInt64 :=
-  evmSelfW0
+  Context.self.w0
 
 @[pf_entry]
 def selfW1 (_s : State) : UInt64 :=
-  evmSelfW1
+  Context.self.w1
 
 @[pf_entry]
 def selfW2 (_s : State) : UInt64 :=
-  evmSelfW2
+  Context.self.w2
 
 @[pf_entry]
 def get (_s : State) : UInt64 :=

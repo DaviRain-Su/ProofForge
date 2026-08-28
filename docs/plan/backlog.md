@@ -36,8 +36,8 @@ R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundati
 R3-005 non-seeded System facade completion、R3-006 classic Token facade、
 R3-007 fixed ATA/Memo facades、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
-R5-003 bounded static roles 与 R5-004 Pausable policy；这些都是阶段内可复用组件切片，
-不代表 R3/R5 整体完成。
+R5-003 bounded static roles、R5-004 Pausable policy 与 R5-005 bounded payment facade adoption；
+这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
 `docs/plan/tasks/r0-002.md`。Vector/Map/allocator 必须分别声明 boundary、invocation-local、
@@ -311,6 +311,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   新 Ops/IR/Component/Emit case 或隐藏 slot。两个 contract 的 Yul/ABI/bin 逐字节不变；详见
   `docs/plan/tasks/r5-004.md`。Typed pause events 仍等待 generic event surface；ReentrancyGuard
   在 lock write → external CALL → clear 的 effect ordering 可证明前继续 fail closed。
+
+- R5-005 EVM bounded payment facade adoption 已完成：`Evm.Sdk.Payments` 独立拥有 Ether、
+  ERC-20、WETH 与 fixed-path Uniswap V2 的 contract-facing 名称，仍复用既有 closed Runtime、
+  CallResult 和 payable contracts；Vault/TipJar/Ownable 改为只 import `Evm.Sdk`，不再直连
+  Runtime/ClosedCall/NativeFx/HashedMap source boundary。三个 canonical IR digest 与九份
+  Yul/ABI/bin 产物逐字节不变；没有新增 selector、Ops/IR/Component/Emit case 或任意 calldata。
+  详见 `docs/plan/tasks/r5-005.md`。Code-existence、revert bubbling、arbitrary call 与可证明的
+  reentrancy ordering 仍 fail closed。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

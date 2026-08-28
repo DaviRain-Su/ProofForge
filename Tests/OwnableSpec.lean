@@ -1,11 +1,12 @@
+import ProofForge
 import Examples.Ownable
 
 namespace Tests.OwnableSpec
 
 open Examples.Ownable
-open ProofForge.Evm.Runtime
+open ProofForge.Evm.Sdk
 
-def sample : Addr20 := ⟨1, 2, 3⟩
+def sample : Address := ⟨1, 2, 3⟩
 
 #guard (init sample).value == 0
 #guard get (init sample) == 0

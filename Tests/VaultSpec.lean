@@ -1,11 +1,12 @@
+import ProofForge
 import Examples.Vault
 
 namespace Tests.VaultSpec
 
 open Examples.Vault
-open ProofForge.Evm.Runtime
+open ProofForge.Evm.Sdk
 
-def sample : Addr20 := ⟨1, 2, 3⟩
+def sample : Address := ⟨1, 2, 3⟩
 
 def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 

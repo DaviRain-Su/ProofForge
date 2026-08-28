@@ -1,25 +1,26 @@
+import ProofForge
 import Examples.TipJar
 
 namespace Tests.TipJarSpec
 
 open Examples.TipJar
-open ProofForge.Evm.Runtime
+open ProofForge.Evm.Sdk
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard chainId (init 0) == evmChainId
-#guard timestamp (init 0) == evmTimestamp
-#guard selfLow (init 0) == evmSelf
-#guard selfBal (init 0) == evmSelfBalance256
-#guard callValue (init 0) == evmCallValue256
-#guard callerW0 (init 0) == evmCallerW0
-#guard callerW1 (init 0) == evmCallerW1
-#guard callerW2 (init 0) == evmCallerW2
-#guard selfW0 (init 0) == evmSelfW0
-#guard selfW1 (init 0) == evmSelfW1
-#guard selfW2 (init 0) == evmSelfW2
-#guard caller20 (init 0) == evmCaller20
-#guard self20 (init 0) == evmSelf20
+#guard chainId (init 0) == Context.chainId
+#guard timestamp (init 0) == Context.timestamp
+#guard selfLow (init 0) == Context.selfLow
+#guard selfBal (init 0) == Context.selfBalance
+#guard callValue (init 0) == Context.callValue
+#guard callerW0 (init 0) == Context.caller.w0
+#guard callerW1 (init 0) == Context.caller.w1
+#guard callerW2 (init 0) == Context.caller.w2
+#guard selfW0 (init 0) == Context.self.w0
+#guard selfW1 (init 0) == Context.self.w1
+#guard selfW2 (init 0) == Context.self.w2
+#guard caller20 (init 0) == Context.caller
+#guard self20 (init 0) == Context.self
 
 #guard
   match deposit (init 0) ⟨9, 0, 0, 0⟩ with

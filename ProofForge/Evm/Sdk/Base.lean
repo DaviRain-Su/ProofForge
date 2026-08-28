@@ -207,6 +207,8 @@ namespace Context
 
 @[pf_inline] def caller : Address := Runtime.evmCaller20
 @[pf_inline] def self : Address := Runtime.evmSelf20
+/-- Low 64 bits of the current contract address as exposed by the existing scalar Runtime leaf. -/
+@[pf_inline] def selfLow : UInt64 := Runtime.evmSelf
 @[pf_inline] def blockNumber : UInt64 := Runtime.evmBlockNumber
 @[pf_inline] def timestamp : UInt64 := Runtime.evmTimestamp
 @[pf_inline] def chainId : UInt64 := Runtime.evmChainId
@@ -223,18 +225,6 @@ namespace Immutable
 @[pf_inline] def u64b : UInt64 := Runtime.evmImmU64b
 
 end Immutable
-
-namespace Ether
-
-@[pf_inline] def accept (amount : UInt256) : UInt64 :=
-  Runtime.evmDeposit256 amount
-
-@[pf_inline] def send (destination : Address) (amount : UInt256) : UInt64 :=
-  Runtime.evmSendEth256 destination amount
-
-@[pf_inline] def receive : UInt64 := Runtime.evmReceive
-
-end Ether
 
 namespace Event
 
@@ -264,51 +254,6 @@ namespace Revert
 @[pf_inline] def capExceeded : UInt64 := Runtime.evmRevertCapExceeded
 
 end Revert
-
-namespace ERC20
-
-@[pf_inline] def transfer (token destination : Address) (amount : UInt256) : UInt64 :=
-  Runtime.evmTokenTransfer token destination amount
-
-@[pf_inline] def balanceOfSelf (token : Address) : UInt256 :=
-  Runtime.evmTokenBalanceOfSelf token
-
-@[pf_inline] def approve (token spender : Address) (amount : UInt256) : UInt64 :=
-  Runtime.evmTokenApprove token spender amount
-
-@[pf_inline] def transferFrom (token owner destination : Address) (amount : UInt256) : UInt64 :=
-  Runtime.evmTokenTransferFrom token owner destination amount
-
-@[pf_inline] def allowance (token owner spender : Address) : UInt256 :=
-  Runtime.evmTokenAllowanceOf token owner spender
-
-@[pf_inline] def permit (token owner spender : Address) (value deadline : UInt256)
-    (v : UInt8) (r s : Bytes32) : UInt64 :=
-  Runtime.evmTokenPermit token owner spender value deadline v r s
-
-end ERC20
-
-namespace WETH
-
-@[pf_inline] def deposit (weth : Address) (amount : UInt256) : UInt64 :=
-  Runtime.evmWethDeposit weth amount
-
-@[pf_inline] def withdraw (weth : Address) (amount : UInt256) : UInt64 :=
-  Runtime.evmWethWithdraw weth amount
-
-end WETH
-
-namespace UniswapV2
-
-@[pf_inline] def swapExact2 (router tokenA tokenB : Address)
-    (amountIn minimumOut : UInt256) : UInt64 :=
-  Runtime.evmSwapExact2 router tokenA tokenB amountIn minimumOut
-
-@[pf_inline] def swapExact3 (router tokenA tokenB tokenC : Address)
-    (amountIn minimumOut : UInt256) : UInt64 :=
-  Runtime.evmSwapExact3 router tokenA tokenB tokenC amountIn minimumOut
-
-end UniswapV2
 
 namespace Permit
 
