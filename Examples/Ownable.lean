@@ -4,7 +4,7 @@ namespace Examples.Ownable
 
 open ProofForge.Evm.Sdk
 
-/-- owner 是构造期 immutable；storage 只留计数。allowance 走 hashed pair map。 -/
+/-- owner 是构造期 immutable；storage 只留计数。allowance 走 checked UInt256 pair ledger。 -/
 structure State where
   value : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -14,7 +14,8 @@ inductive Error where
   | unauthorized
   deriving Repr, DecidableEq, Inhabited, BEq
 
-@[pf_inline] def allowances : Storage.AddressPairMap := { base := 0 }
+@[pf_inline] def allowances : Fungible.Allowances :=
+  Storage.Layout.root.addressPairMap256.handle
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
@@ -52,25 +53,25 @@ def logInc (_s : State) (amt : UInt64) : Except Error (State × UInt64) :=
 
 /-- pair-key `approve(owner, spender) = amt`。 -/
 @[pf_entry]
-def approve (_s : State) (owner spender : Address) (amt : UInt64) :
+def approve (_s : State) (owner spender : Address) (amt : UInt256) :
     Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ value := 0 }, allowances.put owner spender amt)
+    .ok ({ value := 0 }, Fungible.Allowances.approve allowances owner spender amt)
   else
     .error .overflow
 
-/-- 把 pair-key 额度写成 `amt`。不是 ERC-20 `transferFrom` 减法。 -/
+/-- Checked delegated allowance consumption. -/
 @[pf_entry]
-def spend (_s : State) (owner spender : Address) (amt : UInt64) :
+def spend (_s : State) (owner spender : Address) (amt : UInt256) :
     Except Error (State × UInt64) :=
-  if (0 : UInt64) ≠ 1 then
-    .ok ({ value := 0 }, allowances.put owner spender amt)
+  if Fungible.Allowances.canSpend allowances owner spender amt then
+    .ok ({ value := 0 }, Fungible.Allowances.spend allowances owner spender amt)
   else
-    .error .overflow
+    .ok ({ value := 0 }, Fungible.Allowances.insufficient allowances owner spender amt)
 
 @[pf_entry]
-def allowance (_s : State) (owner spender : Address) : UInt64 :=
-  allowances.get owner spender
+def allowance (_s : State) (owner spender : Address) : UInt256 :=
+  Fungible.Allowances.allowanceOf allowances owner spender
 
 @[pf_entry]
 def ownerOf (_s : State) : Address :=

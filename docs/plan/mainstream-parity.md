@@ -136,7 +136,7 @@ typed bounded call 和验证后的 result contract。
 | access/safety | owner/two-step ownership、bounded static roles、explicit fail-closed Pausable flag policy | typed Paused/Unpaused events, ReentrancyGuard, enumerable/admin roles, timelock/access manager | F1/F2 |
 | calls/payments | `Evm.Sdk.Payments` bounded Ether/ERC20/WETH/fixed-router facade；Vault/TipJar 只消费 SDK，typed closed result policy 保持不变 | code-existence policy、revert bubbling、pull payment/multicall；arbitrary call 继续留在 advanced boundary | F1/F2 |
 | signatures | permit-specific ecrecover/domain paths | ECDSA/SignatureChecker/EIP-712/nonce/deadline/Merkle reusable components | F2 |
-| assets | `Fungible.Balances` O(1) persistent read/debit/insufficient、checked additive credit 与 alias-safe transfer；Token/Credits/Vault independently consume slices；Token repeated mint 和 direct/delegated self-transfer 已验收 | reusable allowance core；ERC-721 owner/approval/receiver；bounded ERC-1155；standard events/errors | F2 |
+| assets | `Fungible.Balances` O(1) checked movement；`Fungible.Allowances` explicit pair-handle approve/checked increase/decrease/spend；Token/Credits/Vault/Ownable independently consume slices；wrap/alias/over-spend 已由 Anvil 验收 | ERC-721 owner/approval/receiver；bounded ERC-1155；standard events/errors | F2 |
 | lifecycle | constructor/receive/immutable basics | Initializable、ERC-1967/UUPS/proxy/clones、namespaced storage and layout compatibility | F3 |
 
 OpenZeppelin 的 [`utils/structs`](https://github.com/OpenZeppelin/openzeppelin-contracts/tree/master/contracts/utils/structs)、

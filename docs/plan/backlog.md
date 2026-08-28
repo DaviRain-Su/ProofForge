@@ -38,7 +38,8 @@ R3-007 fixed ATA/Memo facades、R3-008 generic seeded System facade、
 R3-009 bounded static Memo facade、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
-R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer；
+R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
+R5-008 checked allowance core；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -359,6 +360,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   application；没有新 Runtime/Op/IR/Component/Emit case。Token/Vault ABI 不变，Anvil 覆盖重复
   mint/credit、wraparound rejection、direct/delegated self-transfer 与失败原子性；详见
   `docs/plan/tasks/r5-007.md`。Reusable allowance core、ERC-721 与 bounded ERC-1155 仍是 R5 工作。
+
+- R5-008 EVM checked allowance core 已完成：`Fungible.Allowances` 在显式
+  `AddressPairMap256` handle 上统一 allowanceOf/approve、checked increase/decrease/spend 与
+  Insufficient terminal。increase 用 `next ≥ current` 拒绝 UInt256 wrap，decrease/spend 在写前
+  要求 current ≥ amount。Token 与 Ownable 独立复用；Token 仍显式拥有 pause/zero-address、
+  permit、授权和 Approval/Transfer ordering，Ownable 工程 fixture 从 UInt64 overwrite 改为
+  UInt256 checked subtraction。没有新 Runtime/Op/IR/Component/Emit case 或 allowance recipe。
+  Token ABI 不变，Ownable ABI 的 uint64→uint256 是有意的 ledger contract 修正；Anvil 覆盖
+  allowance wrap、over-spend 与失败原子性。详见 `docs/plan/tasks/r5-008.md`。ERC-721 与
+  bounded ERC-1155 仍是 R5 工作。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

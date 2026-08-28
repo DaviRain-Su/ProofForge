@@ -19,7 +19,7 @@ inductive Error where
 
 structure ContractStorage where
   balances : Fungible.Balances
-  allowances : Storage.AddressPairMap256
+  allowances : Fungible.Allowances
   nonces : Storage.AddressMap256
 
 attribute [pf_inline]
@@ -87,7 +87,7 @@ def symbol (_s : State) : Bytes32 :=
 
 @[pf_entry]
 def allowanceOf (_s : State) (owner spender : Address) : UInt256 :=
-  storage.allowances.get owner spender
+  Fungible.Allowances.allowanceOf storage.allowances owner spender
 
 @[pf_entry]
 def nonceOf (_s : State) (who : Address) : UInt256 :=
@@ -119,7 +119,7 @@ def approve (s : State) (spender : Address) (amount : UInt256) :
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
   else if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := storage.allowances.put Context.caller spender amount,
+    .ok ({ dummy := Fungible.Allowances.approve storage.allowances Context.caller spender amount,
            paused := s.paused, cap := s.cap, supply := s.supply },
       Event.approval Context.caller spender amount)
   else
@@ -134,9 +134,9 @@ def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
   else if Address.isZero spender then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
-  else if (0 : UInt64) ≠ 1 then
-    let next := storage.allowances.nextAdd Context.caller spender added
-    .ok ({ dummy := storage.allowances.put Context.caller spender next,
+  else if Fungible.Allowances.canIncrease storage.allowances Context.caller spender added then
+    let next := Fungible.Allowances.nextIncrease storage.allowances Context.caller spender added
+    .ok ({ dummy := Fungible.Allowances.increase storage.allowances Context.caller spender added,
            paused := s.paused, cap := s.cap, supply := s.supply },
       Event.approval Context.caller spender next)
   else
@@ -151,14 +151,14 @@ def decreaseAllowance (s : State) (spender : Address) (subtracted : UInt256) :
   else if Address.isZero spender then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
-  else if storage.allowances.containsAtLeast Context.caller spender subtracted then
-    let next := storage.allowances.nextSub Context.caller spender subtracted
-    .ok ({ dummy := storage.allowances.put Context.caller spender next,
+  else if Fungible.Allowances.canDecrease storage.allowances Context.caller spender subtracted then
+    let next := Fungible.Allowances.nextDecrease storage.allowances Context.caller spender subtracted
+    .ok ({ dummy := Fungible.Allowances.decrease storage.allowances Context.caller spender subtracted,
            paused := s.paused, cap := s.cap, supply := s.supply },
       Event.approval Context.caller spender next)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      storage.allowances.revertInsufficient Context.caller spender subtracted)
+      Fungible.Allowances.insufficient storage.allowances Context.caller spender subtracted)
 
 @[pf_entry]
 def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
@@ -183,12 +183,11 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
   else if Address.isZero owner then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
-  else if storage.allowances.containsAtLeast owner Context.caller amount then
+  else if Fungible.Allowances.canSpend storage.allowances owner Context.caller amount then
     if Fungible.Balances.canDebit storage.balances owner amount then
       let debit :=
         (Fungible.Balances.debit storage.balances owner amount) |||
-        (storage.allowances.put owner Context.caller
-          (storage.allowances.nextSub owner Context.caller amount))
+        (Fungible.Allowances.spend storage.allowances owner Context.caller amount)
       .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
              supply := UInt256.sub s.supply amount },
         Event.transfer owner Address.zero amount)
@@ -197,7 +196,7 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
         Fungible.Balances.insufficient storage.balances owner amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      storage.allowances.revertInsufficient owner Context.caller amount)
+      Fungible.Allowances.insufficient storage.allowances owner Context.caller amount)
 
 @[pf_entry]
 def transfer (s : State) (destination : Address) (amount : UInt256) :
@@ -230,14 +229,13 @@ def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
   else if Address.isZero destination then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
-  else if storage.allowances.containsAtLeast owner Context.caller amount then
+  else if Fungible.Allowances.canSpend storage.allowances owner Context.caller amount then
     if Fungible.Balances.canDebit storage.balances owner amount then
       if Address.eq owner destination ||
           Fungible.Balances.canCredit storage.balances destination amount then
         let movement :=
           (Fungible.Balances.transfer storage.balances owner destination amount) |||
-          (storage.allowances.put owner Context.caller
-            (storage.allowances.nextSub owner Context.caller amount))
+          (Fungible.Allowances.spend storage.allowances owner Context.caller amount)
         .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
           Event.transfer owner destination amount)
       else
@@ -247,7 +245,7 @@ def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
         Fungible.Balances.insufficient storage.balances owner amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      storage.allowances.revertInsufficient owner Context.caller amount)
+      Fungible.Allowances.insufficient storage.allowances owner Context.caller amount)
 
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=

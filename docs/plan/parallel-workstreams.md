@@ -110,7 +110,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-SDK-5 bounded payments（已集成）** | EVM-SDK-1/2/3/4、EVM-RT-2 | `Evm.Sdk.Payments` 收口 Ether/ERC20/WETH/fixed-router facade；Vault/TipJar/Ownable 不再直连 lower Source boundary，产物不变；见 R5-005 |
 | **EVM-SDK-6a fungible debit（已集成）** | EVM-SDK-5 | explicit `AddressMap256` handle 的 balanceOf/canDebit/debit/insufficient；Token/Credits 独立复用且产物不变；见 R5-006 |
 | **EVM-SDK-6b checked credit/transfer（已集成）** | EVM-SDK-6a | checked additive credit、cap-minus-supply mint gate、same-address-safe direct/delegated transfer；Token/Vault 两个 consumer，明确 overflow/alias/event/allowance ordering；见 R5-007 |
-| **EVM-SDK-6c allowance core** | EVM-SDK-6b | explicit pair-map handle 的 approve/increase/decrease/spend policy；保留 permit owner 与 application event ordering，至少两个 consumer |
+| **EVM-SDK-6c allowance core（已集成）** | EVM-SDK-6b | explicit pair-map handle 的 approve/checked increase/decrease/spend policy；Token/Ownable 两个 consumer，permit owner 与 event ordering 留在 application；见 R5-008 |
 | **EVM-SDK-7/8 NFT assets** | EVM-SDK-6c | reusable ERC-721 与 bounded ERC-1155 core；每个组件至少两个 consumer |
 
 ## 4. Worker 统一交付合同

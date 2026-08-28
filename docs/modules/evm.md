@@ -37,11 +37,12 @@ source semantic helper
 抽取期存在，不进 EVM storage，也没有魔数泄漏进合同源代码。SVM 不复用这套 layout：它的
 持久容器仍由 account bytes / fixed stride / one-based index 描述。
 
-`Sdk.Fungible.Balances` 再把显式 `AddressMap256` handle 组合成 O(1)
-balanceOf/canDebit/debit/insufficient、checked additive credit 和 alias-safe transfer contract；
-Token、Credits、Vault 分别复用。credit 以 `next ≥ current` 拒绝 UInt256 wrap；transfer 在
-source/destination 相同时通过 debit gate 后不重复写 hashed key。权限、pause、supply/cap、
-allowance 和 event policy 仍在应用；这不是隐藏完整 ERC-20 的 recipe。
+`Sdk.Fungible.Balances` 把显式 `AddressMap256` handle 组合成 O(1) checked balance movement；
+`Sdk.Fungible.Allowances` 把显式 `AddressPairMap256` handle 组合成 approve、checked
+increase/decrease/spend 与 Insufficient contract。Token、Credits、Vault、Ownable 分别复用。
+credit/increase 以 `next ≥ current` 拒绝 UInt256 wrap；transfer alias 不重复写 hashed key；
+decrease/spend 先验证 current ≥ amount。权限、pause、supply/cap、permit 和 event policy 仍在
+应用；这不是隐藏完整 ERC-20 的 recipe。
 
 SDK facade 直接 `@[pf_inline]` 到既有 source/runtime 叶，不增加 Ops、IR 或 emitter case；
 canonical 拼写仍是 `vg` / `mseta256` / `ttxfer` / `permit` / `edep` /
@@ -97,8 +98,8 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_tipjar.sh`：chainid、timestamp、Addr20 三叶、`payout(address,uint256)`、精确 `deposit(uint256)`、错 value 保持、sendEth 改余额、Tipped log、空 calldata `receive()`
 - `runtime-tests/evm/anvil_lang.sh`：位运算、mod-64 移位、`uint8` ABI、tuple return、运行时下标、有界 for、`oob` revert
 - `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、`shareOf(address)` / `pull(address,address,uint256)`、封闭 `approve`/`transferFrom`/`allowance`、超额保持、USDT 无返回成功
-- `runtime-tests/evm/anvil_ownable.sh`：`constructor(address)` / `ownerOf()(address)`、非 owner revert、Incremented log、`approve(address,address,uint64)` / allowance / spend
-- `runtime-tests/evm/anvil_token.sh`：`mint(address,uint256)` / `transfer(address,uint256)` 扣余额、不足 `Insufficient(have,want)`、`approve(address,uint256)` / `transferFrom(address,address,uint256)` 扣额度、LOG3 Transfer/Approval
+- `runtime-tests/evm/anvil_ownable.sh`：`constructor(address)` / `ownerOf()(address)`、非 owner revert、Incremented log、UInt256 approve / checked allowance spend / over-spend atomicity
+- `runtime-tests/evm/anvil_token.sh`：checked additive mint、direct/delegated self-transfer、checked allowance increase/decrease/spend、wrap/不足原子保持、LOG3 Transfer/Approval
 - `runtime-tests/evm/anvil_capped.sh`：第二个合约复用 owner + pause + 固定 cap；非 owner / paused / 超 cap 分别解码 Unauthorized / Paused / CapExceeded
 - `runtime-tests/evm/anvil_window.sh`：固定长 Vector 两槽；`setTail` 只写第二叶，第一叶保持
 - `runtime-tests/evm/anvil_phase.sh`：零 payload variant 的 idle/live tag 往返与 view

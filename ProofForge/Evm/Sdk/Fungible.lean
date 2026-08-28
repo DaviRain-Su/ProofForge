@@ -3,12 +3,13 @@ import ProofForge.Evm.Sdk.Base
 namespace ProofForge.Evm.Sdk.Fungible
 
 /-!
-# EVM SDK fungible balance ledger
+# EVM SDK fungible ledgers
 
-Reusable O(1) operations over one explicit `Storage.AddressMap256` balance namespace. The handle
-selects persistent EVM hashed storage at compile time; no runtime layout object or heap allocation
-is introduced. Authorization, pause policy, zero-address policy, supply/cap accounting, allowance
-spending, and events remain visible in the consuming contract.
+Reusable O(1) operations over explicit `Storage.AddressMap256` balance and
+`Storage.AddressPairMap256` allowance namespaces. Each handle selects persistent EVM hashed storage
+at compile time; no runtime layout object or heap allocation is introduced. Authorization, pause
+policy, zero-address policy, supply/cap accounting, permit ownership, and events remain visible in
+the consuming contract.
 
 Mutation methods have explicit checked preconditions so applications keep control of failure and
 event ordering: `debit` follows `canDebit`, `credit` follows `canCredit`, and `transfer` follows
@@ -60,5 +61,62 @@ writes through the same hashed key. Precondition: `canTransfer balances source d
   balances.revertInsufficient owner amount
 
 end Balances
+
+/-- Compile-time handle to one persistent owner/spender UInt256 allowance namespace. -/
+abbrev Allowances := Storage.AddressPairMap256
+
+namespace Allowances
+
+@[pf_inline] def allowanceOf (allowances : Allowances) (owner spender : Address) : UInt256 :=
+  allowances.get owner spender
+
+/-- Set and persist an allowance. Authorization and event policy remain application-owned. -/
+@[pf_inline] def approve (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : UInt64 :=
+  allowances.put owner spender amount
+
+@[pf_inline] def nextIncrease (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : UInt256 :=
+  allowances.nextAdd owner spender amount
+
+@[pf_inline] def canIncrease (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : Bool :=
+  UInt256.ge (allowances.nextIncrease owner spender amount)
+    (allowances.allowanceOf owner spender)
+
+/-- Add and persist `amount` without UInt256 wraparound. Precondition:
+`canIncrease allowances owner spender amount`. -/
+@[pf_inline] def increase (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : UInt64 :=
+  allowances.approve owner spender (allowances.nextIncrease owner spender amount)
+
+@[pf_inline] def canDecrease (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : Bool :=
+  allowances.containsAtLeast owner spender amount
+
+@[pf_inline] def nextDecrease (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : UInt256 :=
+  allowances.nextSub owner spender amount
+
+/-- Subtract and persist `amount`. Precondition:
+`canDecrease allowances owner spender amount`. -/
+@[pf_inline] def decrease (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : UInt64 :=
+  allowances.approve owner spender (allowances.nextDecrease owner spender amount)
+
+@[pf_inline] def canSpend (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : Bool :=
+  allowances.canDecrease owner spender amount
+
+/-- Consume a delegated allowance. Precondition: `canSpend allowances owner spender amount`. -/
+@[pf_inline] def spend (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : UInt64 :=
+  allowances.decrease owner spender amount
+
+@[pf_inline] def insufficient (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) : UInt64 :=
+  allowances.revertInsufficient owner spender amount
+
+end Allowances
 
 end ProofForge.Evm.Sdk.Fungible

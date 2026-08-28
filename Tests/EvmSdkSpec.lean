@@ -28,6 +28,7 @@ def thirdMap : Storage.Allocated Storage.AddressMap256 :=
 def paymentAddress : Address := ⟨1, 2, 3⟩
 def paymentAmount : UInt256 := ⟨9, 0, 0, 0⟩
 def fungibleBalances : Fungible.Balances := firstMap.handle
+def fungibleAllowances : Fungible.Allowances := secondMap.handle
 
 #guard Ether.accept paymentAmount == 9
 #guard Ether.send paymentAddress paymentAmount == 9
@@ -48,6 +49,10 @@ def fungibleBalances : Fungible.Balances := firstMap.handle
 #guard Fungible.Balances.debit fungibleBalances paymentAddress paymentAmount == 0
 #guard Fungible.Balances.credit fungibleBalances paymentAddress paymentAmount == 0
 #guard Fungible.Balances.transfer fungibleBalances paymentAddress paymentAddress paymentAmount == 0
+#guard Fungible.Allowances.allowanceOf fungibleAllowances paymentAddress paymentAddress ==
+  UInt256.zero
+#guard Fungible.Allowances.approve fungibleAllowances paymentAddress paymentAddress paymentAmount == 9
+#guard Fungible.Allowances.increase fungibleAllowances paymentAddress paymentAddress paymentAmount == 0
 
 /-- Compile-time surface check for the checked debit/credit/transfer branches. Comparison and
 revert Runtime leaves are extraction contracts and therefore are not assigned host-evaluation
@@ -69,6 +74,14 @@ def fungibleTransferSurface (source destination : Address) (amount : UInt256) : 
     Fungible.Balances.transfer fungibleBalances source destination amount
   else
     Fungible.Balances.insufficient fungibleBalances source amount
+
+def fungibleAllowanceSurface (owner spender : Address) (amount : UInt256) : UInt64 :=
+  if Fungible.Allowances.canIncrease fungibleAllowances owner spender amount then
+    Fungible.Allowances.increase fungibleAllowances owner spender amount
+  else if Fungible.Allowances.canSpend fungibleAllowances owner spender amount then
+    Fungible.Allowances.spend fungibleAllowances owner spender amount
+  else
+    Fungible.Allowances.insufficient fungibleAllowances owner spender amount
 
 /-- Compile-time surface check for the typed map API. Runtime stubs intentionally evaluate to zero
 on the Lean host; extraction assigns their EVM behavior. -/

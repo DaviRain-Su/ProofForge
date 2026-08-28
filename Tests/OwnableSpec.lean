@@ -7,11 +7,12 @@ open Examples.Ownable
 open ProofForge.Evm.Sdk
 
 def sample : Address := ⟨1, 2, 3⟩
+def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
 
 #guard (init sample).value == 0
 #guard get (init sample) == 0
 #guard ownerOf (init sample) == ⟨0, 0, 0⟩
-#guard allowance (init sample) sample ⟨4, 5, 6⟩ == 0
+#guard allowance (init sample) sample ⟨4, 5, 6⟩ == zero256
 
 #guard
   match logInc (init ⟨0, 0, 0⟩) 9 with
@@ -19,7 +20,7 @@ def sample : Address := ⟨1, 2, 3⟩
   | .error _ => false
 
 #guard
-  match approve (init ⟨0, 0, 0⟩) ⟨1, 2, 3⟩ ⟨4, 5, 6⟩ 7 with
+  match approve (init ⟨0, 0, 0⟩) ⟨1, 2, 3⟩ ⟨4, 5, 6⟩ ⟨7, 0, 0, 0⟩ with
   | .ok (_, ret) => ret == 7
   | .error _ => false
 

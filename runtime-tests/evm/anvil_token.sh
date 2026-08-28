@@ -476,4 +476,16 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
   0 "delegated same-address transfer spends allowance"
 
-echo "evm-anvil-token: ok (checked additive mint/self-transfer/owner/pause/cap/allowance/LOG3/Insufficient/permit/domain/burn/incdec/metadata; engineering only)"
+max_uint="0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'approve(address,uint256)' "$dest" "$max_uint" >/dev/null
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'increaseAllowance(address,uint256)' "$dest" 1 >/dev/null 2>&1; then
+  echo "FAIL: wrapping allowance increase unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  "$(solana_lean_to_dec "$max_uint")" "wrapping increase holds allowance"
+
+echo "evm-anvil-token: ok (checked mint/transfer/allowance/owner/pause/cap/LOG3/Insufficient/permit/domain/burn/metadata; engineering only)"

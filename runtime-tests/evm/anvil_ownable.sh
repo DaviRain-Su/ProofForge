@@ -63,20 +63,31 @@ if int(data,16)!=11:
 
 spender="$("$cast" wallet address --private-key "$other_key")"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'allowance(address,address)(uint64)' "$sender" "$spender")" \
+  'allowance(address,address)(uint256)' "$sender" "$spender")" \
   0 "absent allowance"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'approve(address,address,uint64)' "$sender" "$spender" 20 >/dev/null
+  "$addr" 'approve(address,address,uint256)' "$sender" "$spender" 20 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'allowance(address,address)(uint64)' "$sender" "$spender")" \
+  'allowance(address,address)(uint256)' "$sender" "$spender")" \
   20 "allowance after approve"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
-  "$addr" 'spend(address,address,uint64)' "$sender" "$spender" 7 >/dev/null
+  "$addr" 'spend(address,address,uint256)' "$sender" "$spender" 7 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
-  'allowance(address,address)(uint64)' "$sender" "$spender")" \
-  7 "spend writes remaining as amt (closed overwrite, not ERC-20 subtract)"
+  'allowance(address,address)(uint256)' "$sender" "$spender")" \
+  13 "spend subtracts allowance"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'spend(address,address,uint256)' "$sender" "$spender" 14 >/dev/null 2>&1; then
+  echo "FAIL: over-allowance spend unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_insufficient "$addr" "$sender" \
+  "$("$cast" calldata 'spend(address,address,uint256)' "$sender" "$spender" 14)" \
+  13 14 "over-allowance spend"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowance(address,address)(uint256)' "$sender" "$spender")" \
+  13 "over-allowance spend holds remaining"
 
 got_owner2="$("$cast" call --rpc-url "$rpc" "$addr" 'ownerOf()(address)')"
 solana_lean_require_equal "${got_owner2,,}" "${sender,,}" "owner immutable holds after bump"
 
-echo "evm-anvil-ownable: ok (immutable owner/log/allowance; engineering only)"
+echo "evm-anvil-ownable: ok (immutable owner/log/checked UInt256 allowance; engineering only)"

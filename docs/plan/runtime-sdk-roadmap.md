@@ -74,7 +74,7 @@ instruction 增加 recipe opcode。
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、CPI-relative account handles、static ASCII PDA、non-seeded/generic ASCII-seeded System、classic Token fixed/role-typed signed transfer、fixed ATA CreateIdempotent、bounded static ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、general ATA、runtime-selected/UTF-8 Memo、Token state/program-id policy 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
-| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` scalar/record/fixed-array declarations、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/fixed-router facade；`Access` owner/two-step ownership；`Roles.Set2` fixed-capacity membership/grant/revoke；`Pausable` explicit fail-closed flag；`Fungible.Balances` O(1) persistent read/debit/insufficient、checked additive credit 与 alias-safe transfer | reusable allowance core；typed pause events、reentrancy、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
+| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` scalar/record/fixed-array declarations、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/fixed-router facade；`Access` owner/two-step ownership；`Roles.Set2` fixed-capacity membership/grant/revoke；`Pausable` explicit fail-closed flag；`Fungible.Balances` O(1) checked movement；`Fungible.Allowances` explicit pair-handle checked allowance policy | typed pause events、reentrancy、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -111,7 +111,8 @@ Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固
 的 source projection conformance，但不统一 Borsh bytes 与 ABI words。SVM-RT-1 bounded
 account view、R5-001 Access foundation、R5-002 static storage declarations、R5-003 bounded
 roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption、R5-006 fungible debit
-ledger foundation 与 R5-007 checked credit/alias-safe transfer 均已集成；独立 contract
+ledger foundation、R5-007 checked credit/alias-safe transfer 与 R5-008 checked allowance core
+均已集成；独立 contract
 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
@@ -127,7 +128,8 @@ signer；UInt256 div/mod 也已固定 checked 零除 revert。下一刀继续剩
 [R4-004](tasks/r4-004.md)、
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
-[R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md) 和 [R3-009](tasks/r3-009.md)。
+[R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md) 和
+[R3-009](tasks/r3-009.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -339,6 +341,13 @@ delegated self-transfer 保持余额，delegated path 仍显式消费 allowance�
 行为变更由 Anvil 覆盖。Allowance core 与 NFT components 仍待后续；详见
 [R5-007](tasks/r5-007.md)。
 
+R5-008 已完成 explicit pair-handle allowance core：`Fungible.Allowances` 提供
+allowanceOf/approve、checked increase/decrease/spend 与 Insufficient terminal。Token/Ownable
+以不同应用 policy 复用；Token 的 pause/zero-address/permit/events 留在应用，Ownable fixture
+把旧 UInt64 overwrite 改为 UInt256 checked subtraction。没有新 Runtime/Op/IR/Component/Emit
+case；Token ABI 不变，Ownable ABI widening 是有意修正，Anvil 覆盖 wraparound 与 over-spend。
+NFT components 仍待后续；详见 [R5-008](tasks/r5-008.md)。
+
 R4-001 已完成 EVM-RT-2a typed call-result contract：`Evm.CallResult` 统一 success-only、
 exact-one-word 与 ERC-20 empty-or-nonzero-word policy，最多复制 32 bytes returndata；
 `ClosedCall.Emit` 的 transfer/approve/permit/balance/allowance/WETH/router paths 统一消费该
@@ -416,7 +425,11 @@ event policy。
 
 R5-007 已完成 checked credit/alias-safe movement：Token/Vault 复用 additive credit；Token
 mint 关闭 cap/supply wrap，direct/delegated self-transfer 不再双写同一个 balance key，delegated
-路径仍按应用顺序消费 allowance 并发事件。Reusable allowance core 和 NFT components 尚未完成。
+路径仍按应用顺序消费 allowance 并发事件。
+
+R5-008 已完成 checked allowance core：Token/Ownable 复用显式 pair-handle 上的 set、checked
+increase/decrease/spend 与 Insufficient，permit ownership 和 event ordering 仍在应用。NFT
+components 尚未完成。
 
 ### R6 — 双目标验收
 
