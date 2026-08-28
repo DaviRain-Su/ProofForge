@@ -516,20 +516,15 @@ theorem mBvPush_get (mem : AccountWords) (v : UInt64)
 
 end BvWfAlgebra
 
-
-section QueueModel
+section QueueProofs
 
 open ProofForge.Svm.Sdk.Queue
 
 variable (q : BoundedQueue)
 
-/-! ### BoundedQueue 模型代数
+/-! ### BoundedQueue fail-closed 几何与 push/pop 代数 -/
 
-三 header（slots/head/count）的词分离由 `BoundedQueue.wellFormed` 钉死：
-head 词 + 1 = count 词 ≤ slots 首词。三写（slots@tail、count@W_c、head@W_h）
-两两不干涉。 -/
-
-/-- wf 下 queue 三字段同账户且词两两分离。 -/
+/-- wf 的结构化合同（7 叶）。 -/
 theorem queue_wf_parts (hwf : q.wellFormed = true) :
     q.slots.mutableOneBasedWord = true ∧
     q.slots.region.account > 0 ∧
@@ -562,18 +557,43 @@ theorem mFieldWord_queue_head (hwf : q.wellFormed = true) :
     rw [hacc]; exact parts.2.2.2.1
   exact mFieldWord_scalar_header hsw
 
-/-- wf 下 slots 的访问词公式（one-based，同 BoundedVec）。 -/
+/-- wf 下 slots 的访问词公式。 -/
 theorem mFieldWord_queue_slots (hwf : q.wellFormed = true) (pos : UInt64)
     (h1 : (1 : Nat) ≤ pos.toNat) (h2 : pos.toNat ≤ q.slots.region.capacity) :
     mFieldWord q.slots pos =
       some (q.slots.firstWord + (pos.toNat - 1) * q.slots.region.strideWords) := by
-  have hs := queue_wf_parts q hwf
-  have parts := mutableOneBased_wf_parts (h := hs.1)
-  have hidx := indexBase_beq_one_eq parts.2.2.1
+  have parts := queue_wf_parts q hwf
+  have mparts := mutableOneBased_wf_parts (h := parts.1)
+  have hidx := indexBase_beq_one_eq mparts.2.2.1
   unfold mFieldWord
   rw [hidx]
   simp only [h1, h2, and_true, if_true, Field.firstWord]
 
-end QueueModel
+/-- **count ≠ head**（head+1 = count，两词相邻但不重叠）。 -/
+theorem queue_count_ne_head (hwf : q.wellFormed = true) :
+    q.count.firstWord ≠ q.head.firstWord := by
+  have parts := queue_wf_parts q hwf
+  omega
+
+/-- **count ≠ slots 词**。 -/
+theorem queue_count_ne_slots (hwf : q.wellFormed = true) (pos : UInt64)
+    (h1 : (1 : Nat) ≤ pos.toNat) (h2 : pos.toNat ≤ q.slots.region.capacity) :
+    q.count.firstWord ≠
+      q.slots.firstWord + (pos.toNat - 1) * q.slots.region.strideWords := by
+  have parts := queue_wf_parts q hwf
+  have h1' : q.count.firstWord + 1 ≤ q.slots.firstWord := parts.2.2.2.2.2.2
+  omega
+
+/-- **head ≠ slots 词**。 -/
+theorem queue_head_ne_slots (hwf : q.wellFormed = true) (pos : UInt64)
+    (h1 : (1 : Nat) ≤ pos.toNat) (h2 : pos.toNat ≤ q.slots.region.capacity) :
+    q.head.firstWord ≠
+      q.slots.firstWord + (pos.toNat - 1) * q.slots.region.strideWords := by
+  have parts := queue_wf_parts q hwf
+  have h1' : q.head.firstWord + 1 = q.count.firstWord := parts.2.2.2.2.2.1
+  have h2' : q.count.firstWord + 1 ≤ q.slots.firstWord := parts.2.2.2.2.2.2
+  omega
+
+end QueueProofs
 
 end ProofForge.Svm.Sdk.StorageModel
