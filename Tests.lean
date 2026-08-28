@@ -58,6 +58,7 @@ import Tests.EvmPrecompileSpec
 import Tests.EvmLogErrorSpec
 import Tests.EvmPayableSpec
 import Tests.CoreCodecSpec
+import Tests.CoreCollectionsSpec
 import Tests.CrossTargetCodecSpec
 import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec

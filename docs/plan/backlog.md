@@ -21,7 +21,9 @@ Tagged Tuple v1 `(bool,T)` / `(uint8,p0,...)` input policy；R1-009 已由 SVM �
 compile-time capacity + canonical Borsh `u32 length` input；R1-010 已由 EVM 独立绑定
 canonical standard-ABI dynamic head/tail 与 fixed local frame；R1-011 已用同一 logical
 static/tagged/bounded schema 对照两套 target plan 的 source projections，同时保持 Borsh
-cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded account view 与
+cursor、ABI offset 与 target 物理编码互相独立；R1-012 已为 shared `BoundedVec` 增加
+capacity-preserving 操作语义，并让 scalar runtime-index read 经两套 target codec adapter
+组合成既有 bounded select，不新增集合 opcode。SVM-RT-1 bounded account view 与
 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
 instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed signer tail 收口到
 同一个 bounded plan；SVM-RT-3 第一刀已用 allocation-free scalar cursor/bitmap 建立
@@ -240,6 +242,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   exact/variable Borsh bytes 与 EVM static words/Tagged Tuple/dynamic tail 的差异，避免把它们
   伪装成 shared wire layout。该切片只增加 plan contract，不改产物。详见
   `docs/plan/tasks/r1-011.md`。
+
+- R1-012 shared bounded-vector operations 已完成：`Core.Value.BoundedVec` 提供
+  well-formed/capacity/size/empty/full、active-prefix get、checked set/push/pop/clear；固定
+  `Vector` 只作 source/extraction frame，不成为 target heap 或持久 pointer。scalar dynamic
+  read 在 SVM Borsh locals 与 EVM ABI locals 中分别降为 bounded select；未新增 Core/target
+  Ops、Component、CFG 或 Emit case。wide/aggregate element dynamic read 与 mutation writeback
+  继续 fail closed。详见 `docs/plan/tasks/r1-012.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

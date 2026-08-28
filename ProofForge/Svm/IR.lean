@@ -235,6 +235,24 @@ private def rawAggregateProjection (schemas : Array Core.Codec.Schema)
 private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
     (entry : EntryAdapter.RawEntry) (base : Nat) :
     Ops.Val → Except String Ops.Val
+  | .indexGet (.arg param) name index length elementOffset => do
+      unless param < entry.logicalParamCount do
+        throw "extract/unsupported: raw entry cannot access managed State"
+      let some schema := schemas[param]?
+        | throw "extract/unsupported: raw aggregate parameter schema is missing"
+      let (.boundedArray capacity (.scalar _)) := schema
+        | throw "extract/unsupported: dynamic Borsh reads require scalar bounded arrays"
+      unless entry.usesSchemaBorsh && name == "values" &&
+          (length == 0 || length == capacity) && elementOffset == 0 do
+        throw "extract/unsupported: bounded-array index projection does not match its Borsh plan"
+      let index ← rewriteRawArg schemas entry base index
+      let mut selected : Ops.Val := .lit 0
+      for i in [0:capacity] do
+        let (localStart, part) ← rawAggregateProjection schemas entry param s!"values_{i}"
+        unless part == 0 do
+          throw "extract/unsupported: dynamic Borsh reads currently require one-limb elements"
+        selected := .select .eq index (.lit (UInt64.ofNat i)) (.local (base + localStart)) selected
+      return selected
   | .arg index => do
       unless index < entry.logicalParamCount do
         throw "extract/unsupported: raw entry cannot access managed State"

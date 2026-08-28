@@ -289,6 +289,27 @@ private def rewriteAbiPayload
 private def rewriteAbiRoot (method : Core.IR.Method Ops.ValKind Ops.OpExt)
     (plans : Array Codec.AbiInputPlan) (physicalCount : Nat) :
     Ops.Val → Except String (Option Ops.Val)
+  | .indexGet (.arg param) name index length elementOffset => do
+      if param ≥ method.paramCount then return none
+      let some plan := plans[param]?
+        | throw "evm/codec: input ABI plan is missing"
+      let some array := plan.boundedArray
+        | return none
+      -- Generic `pf_inline` helpers can erase the host Vector's implicit Nat argument before
+      -- Extract observes it, leaving the compatibility `indexGet.length` at zero. The typed ABI
+      -- plan remains authoritative for capacity and the fixed local frame.
+      unless name == "values" && (length == 0 || length == array.capacity) && elementOffset == 0 do
+        throw (s!"evm/codec: bounded-array index projection {name}/{length}/{elementOffset} " ++
+          s!"does not match values/{array.capacity}/0")
+      let some elementType := array.elementWords[0]?
+        | throw "evm/codec: bounded-array element plan is empty"
+      unless array.elementWords.size == 1 && Codec.limbCount elementType == 1 do
+        throw "evm/codec: dynamic bounded-array reads currently require one-limb scalar elements"
+      let start := paramWordStart plans param
+      let mut selected : Ops.Val := .lit 0
+      for i in [0:array.capacity] do
+        selected := .select .eq index (.lit (UInt64.ofNat i)) (.arg (start + 1 + i)) selected
+      return some selected
   | .field (.arg index) name => do
       if index ≥ method.paramCount then return none
       let some plan := plans[index]?
