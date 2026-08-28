@@ -367,11 +367,24 @@ variable (vec : BoundedVec)
 消除 UInt64↔Nat 强转舞步的桥引理。 -/
 private theorem toNat_lt_ofNat {x : UInt64} {c : Nat} (h : x < UInt64.ofNat c)
     (hc : c ≤ containerCapacityLimit) : x.toNat < c := by
+  have h1 : x.toNat < (BitVec.ofNat 64 c).toNat := h
   have h2 : (BitVec.ofNat 64 c).toNat = c % (4294967296 * 4294967296) := by
     simp only [BitVec.toNat_ofNat]
-  have h1 : x.toNat < (BitVec.ofNat 64 c).toNat := h
   rw [h2] at h1
   omega
+
+/-- **词级写读非干涉**：写 word w₁ 后读 word w₂ ≠ w₁ 得 mem w₂。 -/
+theorem mWriteWord_other (mem : AccountWords) (w₁ w₂ : Nat) (v : UInt64)
+    (hne : w₁ ≠ w₂) : mWriteWord mem w₁ v w₂ = mem w₂ := by
+  unfold mWriteWord
+  rw [if_neg (fun hc => hne hc.symm)]
+
+/-- **词级读后写**：写 word w 后读 word w 恰为 v。 -/
+theorem mWriteWord_self (mem : AccountWords) (w : Nat) (v : UInt64) :
+    mWriteWord mem w v w = v := by
+  unfold mWriteWord
+  simp [if_pos rfl]
+
 
 private theorem u64_toNat_add_one {a : UInt64} (h : a.toNat < 65536) :
     (a + 1).toNat = a.toNat + 1 := by
