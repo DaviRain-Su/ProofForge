@@ -85,6 +85,9 @@ def selfBalance256 (limb : Nat) : Val := .ext (.selfBalance256 limb) #[]
 def domainSep256 (limb : Nat) : Val := .ext (.domainSep256 limb) #[]
 def ge256 (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext (.component (.wideWord .ge256)) #[a0, a1, a2, a3, b0, b1, b2, b3]
+def compare256 (comparison : WideWord.Comparison)
+    (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
+  .ext (.component (.wideWord (.compare256 comparison))) #[a0, a1, a2, a3, b0, b1, b2, b3]
 def eq20 (a0 a1 a2 b0 b1 b2 : Val) : Val :=
   .ext (.component (.wideWord .eq20)) #[a0, a1, a2, b0, b1, b2]
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=

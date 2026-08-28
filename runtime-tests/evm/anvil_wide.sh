@@ -37,6 +37,21 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'mul(uint256,uint256)(uint256)' "$("$python" -I -S -c "print(1<<64)")" 2)" \
   "$("$python" -I -S -c "print(1<<65)")" "2^64 * 2"
 
+cmp_a="$("$python" -I -S -c "print((1<<192)+(7<<64)+3)")"
+cmp_b="$("$python" -I -S -c "print((1<<192)+(8<<64)+1)")"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'eq256(uint256,uint256)(bool)' "$cmp_a" "$cmp_a")" true "uint256 equality"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'eq256(uint256,uint256)(bool)' "$cmp_a" "$cmp_b")" false "uint256 inequality"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'lt256(uint256,uint256)(bool)' "$cmp_a" "$cmp_b")" true "uint256 less-than"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'le256(uint256,uint256)(bool)' "$cmp_b" "$cmp_b")" true "uint256 less-or-equal"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'gt256(uint256,uint256)(bool)' "$cmp_b" "$cmp_a")" true "uint256 greater-than"
+solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'ge256(uint256,uint256)(bool)' "$cmp_a" "$cmp_b")" false "uint256 greater-or-equal"
+
 u128="$("$python" -I -S -c "print((1<<127)+(1<<64)+7)")"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'echo128(uint128)(uint128)' "$u128")" "$u128" "shared uint128 echo"
@@ -77,4 +92,4 @@ if "$cast" call --rpc-url "$rpc" "$addr" \
   exit 1
 fi
 
-echo "evm-anvil-wide: ok (uint256 arithmetic + uint128/bytes12 ABI; engineering only)"
+echo "evm-anvil-wide: ok (uint256 arithmetic/ordering + uint128/bytes12 ABI; engineering only)"

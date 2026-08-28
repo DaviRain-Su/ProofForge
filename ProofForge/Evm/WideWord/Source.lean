@@ -49,6 +49,18 @@ projecting `UInt256.wN (add256 …)`, so Extract does not flatten the projection
 @[pf_inline] def ge256 (a b : UInt256) : Bool :=
   evmGe256 a b
 
+@[pf_inline] def eq256 (a b : UInt256) : Bool :=
+  evmEq256 a b
+
+@[pf_inline] def lt256 (a b : UInt256) : Bool :=
+  evmLt256 a b
+
+@[pf_inline] def le256 (a b : UInt256) : Bool :=
+  evmLe256 a b
+
+@[pf_inline] def gt256 (a b : UInt256) : Bool :=
+  evmGt256 a b
+
 @[pf_inline] def eq20 (a b : Addr20) : Bool :=
   evmEq20 a b
 

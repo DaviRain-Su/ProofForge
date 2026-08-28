@@ -1620,10 +1620,28 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
               some (.mapGetPair b a0 a1 a2 b0 b1 b2)
             | _, _, _, _, _, _, _ => none
-        else if endsWith e ".evmGe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 then
+        else if endsWith e ".evmGe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 ||
+            endsWith e ".evmEq256" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq256 ||
+            endsWith e ".evmLt256" || isConstNamed e ``ProofForge.Evm.Runtime.evmLt256 ||
+            endsWith e ".evmLe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmLe256 ||
+            endsWith e ".evmGt256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGt256 then
           let args := e.getAppArgs
           if args.size < 2 then none
           else
+            let query : Evm.WideWord.Query :=
+              if endsWith e ".evmEq256" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq256 then
+                .compare256 .eq
+              else if endsWith e ".evmLt256" ||
+                  isConstNamed e ``ProofForge.Evm.Runtime.evmLt256 then
+                .compare256 .lt
+              else if endsWith e ".evmLe256" ||
+                  isConstNamed e ``ProofForge.Evm.Runtime.evmLe256 then
+                .compare256 .le
+              else if endsWith e ".evmGt256" ||
+                  isConstNamed e ``ProofForge.Evm.Runtime.evmGt256 then
+                .compare256 .gt
+              else
+                .ge256
             let aE := args[args.size - 2]!
             let bE := args[args.size - 1]!
             let limbConst : String → Name
@@ -1636,7 +1654,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
                 limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
             | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
-              some (.ext (.evm (.component (.wideWord .ge256))) #[a0, a1, a2, a3, b0, b1, b2, b3])
+              some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, b0, b1, b2, b3])
             | _, _, _, _, _, _, _, _ => none
         else if endsWith e ".evmEq20" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq20 then
           let args := e.getAppArgs
@@ -2288,7 +2306,11 @@ private def asCmpCoreWithFuel (env : Environment) (fuel : Nat) (e : Expr) :
       | some lv, some rv => some (.ge, lv, rv)
       | _, _ => none
     | none => none
-  else if isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 || endsWith e ".evmGe256" then
+  else if isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 || endsWith e ".evmGe256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmEq256 || endsWith e ".evmEq256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLt256 || endsWith e ".evmLt256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLe256 || endsWith e ".evmLe256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmGt256 || endsWith e ".evmGt256" then
     match asVal env fuel e with
     | some v => some (.ne, v, .lit 0)
     | none => none

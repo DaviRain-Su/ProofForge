@@ -238,6 +238,18 @@ def evmImm20b : Addr20 :=
 /-- `a ≥ b`。Yul 比打包后的 256-bit word。宿主返回 `true`。 -/
 @[irreducible] def evmGe256 (_a _b : UInt256) : Bool := true
 
+/-- `a = b` on packed 256-bit words. The host stub returns `true`. -/
+@[irreducible] def evmEq256 (_a _b : UInt256) : Bool := true
+
+/-- Unsigned `a < b` on packed 256-bit words. The host stub returns `true`. -/
+@[irreducible] def evmLt256 (_a _b : UInt256) : Bool := true
+
+/-- Unsigned `a ≤ b` on packed 256-bit words. The host stub returns `true`. -/
+@[irreducible] def evmLe256 (_a _b : UInt256) : Bool := true
+
+/-- Unsigned `a > b` on packed 256-bit words. The host stub returns `true`. -/
+@[irreducible] def evmGt256 (_a _b : UInt256) : Bool := true
+
 /-- 两份 Addr20 整值相等。Yul pack 成 address 再 `eq`。宿主返回 `true`。 -/
 @[irreducible] def evmEq20 (_a _b : Addr20) : Bool := true
 

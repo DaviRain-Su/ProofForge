@@ -261,6 +261,12 @@ interpreter，产物保持 byte-identical。callee/calldata 仍由 closed vocabu
 arbitrary call、delegatecall/create 或隐藏 allocation。R4 的 typed LOG0..4/custom-error plan
 仍未完成；详见 [R4-001](tasks/r4-001.md)。
 
+E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
+覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
+spelling 保留，因此 Token/Capped 等既有 IR/产物不漂移。Wide 的跨 64/192-bit Anvil matrix
+验证五种 relation；bitwise/shift/div/mod 留给后续独立切片。详见
+[E-U256-002](tasks/e-u256-002.md)。
+
 ### R5 — EVM SDK
 
 可复用组件拥有**合同策略和显式 handles**，不隐藏状态写入：

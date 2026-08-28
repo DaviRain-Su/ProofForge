@@ -27,7 +27,15 @@ structure Context (σ : Type) where
   valKey : Ops.Val → String
   indent : String
 
-private def emitGe256 (context : Context σ)
+private def compareExpr (comparison : WideWord.Comparison) (left right : String) : String :=
+  match comparison with
+  | .eq => "eq(" ++ left ++ ", " ++ right ++ ")"
+  | .lt => "lt(" ++ left ++ ", " ++ right ++ ")"
+  | .le => "iszero(gt(" ++ left ++ ", " ++ right ++ "))"
+  | .gt => "gt(" ++ left ++ ", " ++ right ++ ")"
+  | .ge => "iszero(lt(" ++ left ++ ", " ++ right ++ "))"
+
+private def emitCompare256 (context : Context σ) (comparison : WideWord.Comparison)
     (a0 a1 a2 a3 b0 b1 b2 b3 : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
   let indent := context.indent
@@ -45,7 +53,7 @@ private def emitGe256 (context : Context σ)
   let txt := p0 ++ p1 ++ p2 ++ p3 ++ q0 ++ q1 ++ q2 ++ q3 ++
     indent ++ "let " ++ av ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
     indent ++ "let " ++ bv ++ " := " ++ packU256 y0 y1 y2 y3 ++ nl ++
-    indent ++ "let " ++ nm ++ " := iszero(lt(" ++ av ++ ", " ++ bv ++ "))" ++ nl
+    indent ++ "let " ++ nm ++ " := " ++ compareExpr comparison av bv ++ nl
   return (txt, nm, t6)
 
 private def emitEq20 (context : Context σ)
@@ -121,7 +129,9 @@ def emitQuery (context : Context σ) (query : WideWord.Query) (operands : Array 
     (st : σ) : Except String (String × String × σ) :=
   match query, operands.toList with
   | .ge256, [a0, a1, a2, a3, b0, b1, b2, b3] =>
-      emitGe256 context a0 a1 a2 a3 b0 b1 b2 b3 st
+      emitCompare256 context .ge a0 a1 a2 a3 b0 b1 b2 b3 st
+  | .compare256 comparison, [a0, a1, a2, a3, b0, b1, b2, b3] =>
+      emitCompare256 context comparison a0 a1 a2 a3 b0 b1 b2 b3 st
   | .eq20, [a0, a1, a2, b0, b1, b2] =>
       emitEq20 context a0 a1 a2 b0 b1 b2 st
   | .arith256 op limb, [a0, a1, a2, a3, b0, b1, b2, b3] =>

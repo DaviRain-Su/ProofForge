@@ -4,6 +4,7 @@ namespace Examples.Wide
 
 open ProofForge.Evm.Runtime
 open ProofForge.Evm
+open ProofForge.Evm.Sdk
 open ProofForge.Core.Value
 
 structure State where
@@ -29,6 +30,26 @@ def sub (_s : State) (a b : UInt256) : UInt256 :=
 @[pf_entry]
 def mul (_s : State) (a b : UInt256) : UInt256 :=
   WideWord.Source.mul256 a b
+
+@[pf_entry]
+def eq256 (_s : State) (a b : UInt256) : Bool :=
+  UInt256.eq a b
+
+@[pf_entry]
+def lt256 (_s : State) (a b : UInt256) : Bool :=
+  UInt256.lt a b
+
+@[pf_entry]
+def le256 (_s : State) (a b : UInt256) : Bool :=
+  UInt256.le a b
+
+@[pf_entry]
+def gt256 (_s : State) (a b : UInt256) : Bool :=
+  UInt256.gt a b
+
+@[pf_entry]
+def ge256 (_s : State) (a b : UInt256) : Bool :=
+  UInt256.ge a b
 
 @[pf_entry]
 def echo (_s : State) (a : UInt256) : UInt256 :=

@@ -261,7 +261,9 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   EvmStaticCounter / EvmStaticRoster / TipJar / Lang / Vault / Ownable / Token / Capped /
   TwoStepCounter / Credits / Window / Phase / Wide / Const 均进入
   Anvil 总门。`Addr20` 是一等 ABI `address`；
-  显式 `UInt256` 使用 checked add/sub/mul 和 ABI `uint256`，默认算术仍是 `UInt64`。
+  显式 `UInt256` 使用 checked add/sub/mul、typed unsigned eq/lt/le/gt/ge 和 ABI `uint256`，
+  默认算术仍是 `UInt64`。比较全部复用 `WideWord` component，不增加 main Emit recipe；
+  bitwise/shift/div/mod 仍未完成。详见 `docs/plan/tasks/e-u256-002.md`。
   地址的 little-endian limbs → ABI word 转换由 runtime `pf_store_addr20` helper 统一实现，不再
   在每个 CFG case 展开二十条 `mstore8`；solc 0.8.34 strict Yul optimizer 可编译完整 Token，
   全 20 个 build 与 Anvil 20/20 通过。详见 `docs/plan/tasks/evm-009.md`、

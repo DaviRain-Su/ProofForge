@@ -52,6 +52,21 @@ namespace «UInt256»
 @[pf_inline] def atLeast (left right : UInt256) : Bool :=
   Runtime.evmGe256 left right
 
+@[pf_inline] def ge (left right : UInt256) : Bool :=
+  WideWord.Source.ge256 left right
+
+@[pf_inline] def eq (left right : UInt256) : Bool :=
+  WideWord.Source.eq256 left right
+
+@[pf_inline] def lt (left right : UInt256) : Bool :=
+  WideWord.Source.lt256 left right
+
+@[pf_inline] def le (left right : UInt256) : Bool :=
+  WideWord.Source.le256 left right
+
+@[pf_inline] def gt (left right : UInt256) : Bool :=
+  WideWord.Source.gt256 left right
+
 end «UInt256»
 
 namespace Storage
