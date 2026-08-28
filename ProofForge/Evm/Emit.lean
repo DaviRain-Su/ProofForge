@@ -1331,8 +1331,8 @@ def emitYul (p : IR.Program) : Except String String := do
   let ctorPlans ←
     if p.constructor.paramSchemas.isEmpty then pure #[]
     else p.constructor.paramSchemas.mapM Codec.inputPlan
-  if ctorPlans.any (·.boundedArray.isSome) then
-    throw "evm/codec: bounded dynamic constructor inputs are not supported"
+  if ctorPlans.any (·.dynamic.isSome) then
+    throw "evm/codec: dynamic constructor inputs are not supported"
   unless p.constructor.inputPolicy == IR.inputPolicyOf ctorPlans do
     throw "evm/codec: constructor input policy identity mismatch"
   let ctorHead ←
@@ -1416,8 +1416,8 @@ private partial def abiJsonShape : Core.Codec.Schema → Except String AbiJsonSh
   | .boundedArray _ element => do
       let shape ← abiJsonShape element
       return { shape with type := shape.type ++ "[]" }
-  | .boundedBytes _ => throw "evm/codec: bounded bytes ABI JSON is not yet bound"
-  | .boundedString _ => throw "evm/codec: bounded string ABI JSON is not yet bound"
+  | .boundedBytes _ => return { type := "bytes" }
+  | .boundedString _ => return { type := "string" }
 
 private def abiJsonInputShape : Core.Codec.Schema → Except String AbiJsonShape
   | .option payload => do
@@ -1457,8 +1457,8 @@ private def schemaParamsJsonOf (schemas : Array Core.Codec.Schema) : Except Stri
 private def ctorAbi (p : IR.Program) : Except String String := do
   unless p.constructor.paramSchemas.isEmpty do
     let plans ← p.constructor.paramSchemas.mapM Codec.inputPlan
-    if plans.any (·.boundedArray.isSome) then
-      throw "evm/codec: bounded dynamic constructor inputs are not supported"
+    if plans.any (·.dynamic.isSome) then
+      throw "evm/codec: dynamic constructor inputs are not supported"
   let inputs ←
     if p.constructor.paramSchemas.isEmpty then paramsJsonOf (← p.constructor.resolvedParamTypes)
     else schemaParamsJsonOf p.constructor.paramSchemas

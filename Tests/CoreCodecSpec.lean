@@ -347,8 +347,10 @@ private def orderBatch : Schema :=
 
 #guard
   match ProofForge.Evm.Codec.inputPlan (.boundedString 16) with
-  | .error reason => reason.contains "not yet bound"
-  | .ok _ => false
+  | .ok plan => plan.typeName == "string" && plan.words.size == 17 &&
+      plan.words[0]? == some .uint32 && plan.headWordCount == 1 &&
+      plan.inputCanonical == "packed-bytes-v1(string;capacity=16;utf8=true)"
+  | .error _ => false
 
 #guard
   match analyze (.enumeration "Side" 8 #[

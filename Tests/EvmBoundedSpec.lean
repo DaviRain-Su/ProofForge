@@ -24,6 +24,15 @@ private def right : BoundedVec UInt16 3 :=
 
 #guard combine (init 0) 7 left true right == 49
 
+private def shortBytes : BoundedBytes 8 :=
+  { length := 2, values := #v[11, 13, 0, 0, 0, 0, 0, 0] }
+
+private def fullString : BoundedString 8 :=
+  { length := 8, values := #v[97, 98, 99, 100, 101, 102, 103, 104] }
+
+#guard boundedBytes (init 0) shortBytes == 13
+#guard boundedString (init 0) fullString == 209
+
 elab "#pf_guard_evm_bounded_abi" : command => do
   let env ← getEnv
   let source ←
@@ -38,6 +47,10 @@ elab "#pf_guard_evm_bounded_abi" : command => do
     | throwError "missing boundedValues entry"
   let some combined := program.entries.find? (·.ixName == "combine")
     | throwError "missing combine entry"
+  let some bytes := program.entries.find? (·.ixName == "boundedBytes")
+    | throwError "missing boundedBytes entry"
+  let some text := program.entries.find? (·.ixName == "boundedString")
+    | throwError "missing boundedString entry"
   unless bounded.logicalParamCount == 1 && bounded.paramCount == 5 &&
       bounded.paramTypes == #[.uint32, .uint64, .uint64, .uint64, .uint64] &&
       bounded.selector == ProofForge.Crypto.Keccak.selector "boundedValues" #["uint64[]"] &&
@@ -50,8 +63,18 @@ elab "#pf_guard_evm_bounded_abi" : command => do
         #["uint32", "uint64[]", "bool", "uint16[]"] &&
       combined.inputPolicy ==
         "1=bounded-array-v1(uint64[];capacity=2;element-words=1)," ++
-        "3=bounded-array-v1(uint16[];capacity=3;element-words=1)" do
-    throwError s!"wrong EVM bounded ABI methods: {repr bounded}, {repr combined}"
+        "3=bounded-array-v1(uint16[];capacity=3;element-words=1)" &&
+      bytes.logicalParamCount == 1 && bytes.paramCount == 9 &&
+      bytes.paramTypes == #[.uint32, .uint8, .uint8, .uint8, .uint8,
+        .uint8, .uint8, .uint8, .uint8] &&
+      bytes.selector == ProofForge.Crypto.Keccak.selector "boundedBytes" #["bytes"] &&
+      bytes.inputPolicy == "0=packed-bytes-v1(bytes;capacity=8;utf8=false)" &&
+      text.logicalParamCount == 1 && text.paramCount == 9 &&
+      text.paramTypes == bytes.paramTypes &&
+      text.selector == ProofForge.Crypto.Keccak.selector "boundedString" #["string"] &&
+      text.inputPolicy == "0=packed-bytes-v1(string;capacity=8;utf8=true)" do
+    throwError s!"wrong EVM bounded ABI methods: {repr bounded}, {repr combined}, " ++
+      s!"{repr bytes}, {repr text}"
   let yul ←
     match ProofForge.Evm.Emit.emitYul program with
     | .ok yul => pure yul
@@ -68,9 +91,16 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       yul.contains "if iszero(eq(calldataload(36), abi_tail))" &&
       yul.contains "if iszero(eq(calldataload(100), abi_tail))" &&
       yul.contains "if gt(arg8, 0xffff)" &&
+      yul.contains "let abi_padded0 := and(add(arg0, 31), not(31))" &&
+      yul.contains "for { let abi_padding_i0 := arg0 }" &&
+      yul.contains "arg8 := byte(0, calldataload" &&
+      yul.contains "let abi_utf8_need0 := 0" &&
+      yul.contains "if abi_utf8_need0 { revert(0, 0) }" &&
       abi.contains "\"name\":\"arg0\",\"type\":\"uint64[]\"" &&
       abi.contains "\"name\":\"arg1\",\"type\":\"uint64[]\"" &&
-      abi.contains "\"name\":\"arg3\",\"type\":\"uint16[]\"" do
+      abi.contains "\"name\":\"arg3\",\"type\":\"uint16[]\"" &&
+      abi.contains "\"name\":\"arg0\",\"type\":\"bytes\"" &&
+      abi.contains "\"name\":\"arg0\",\"type\":\"string\"" do
     throwError "bounded ABI offsets, bounds, zero frame, padding guards, or JSON are incomplete"
   let ctorSchema : ProofForge.Core.Codec.Schema := .boundedArray 2 (.scalar .uint64)
   let ctorPlan ←
@@ -109,6 +139,11 @@ elab "#pf_guard_evm_bounded_abi" : command => do
 #guard
   match ProofForge.Evm.Codec.inputPlan (.boundedArray 64 (.scalar .uint64)) with
   | .error reason => reason.contains "local frame exceeds 64 words"
+  | .ok _ => false
+
+#guard
+  match ProofForge.Evm.Codec.inputPlan (.boundedBytes 64) with
+  | .error reason => reason.contains "packed bytes local frame exceeds 64 words"
   | .ok _ => false
 
 end Tests.EvmBoundedSpec

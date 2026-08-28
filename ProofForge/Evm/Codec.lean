@@ -78,8 +78,8 @@ def abiTypeOfSchema (schema : Schema) : Except String String := do
   match schema with
   | .boundedArray _ element =>
       return (← abiTypeOfSchemaAt element) ++ "[]"
-  | .boundedBytes _ => throw "evm/codec: bounded bytes input policy is not yet bound"
-  | .boundedString _ => throw "evm/codec: bounded string input policy is not yet bound"
+  | .boundedBytes _ => pure "bytes"
+  | .boundedString _ => pure "string"
   | _ => abiTypeOfSchemaAt schema
 
 /-- One ABI word per statically present scalar leaf. Wide source values still occupy one ABI word;
@@ -113,6 +113,28 @@ structure BoundedArrayPlan where
   elementWords : Array Scalar
   deriving Repr, BEq, Inhabited
 
+/-- Target-owned dynamic-tail policy shared by standard ABI `bytes` and `string`. Both use packed
+bytes on the wire; String additionally requires strict Unicode-scalar UTF-8 before source code can
+observe the fixed local frame. -/
+structure PackedBytesPlan where
+  capacity : Nat
+  validateUtf8 : Bool
+  deriving Repr, BEq, Inhabited
+
+/-- One standard-ABI dynamic input policy. Keeping this as a sum prevents malformed plans from
+claiming multiple incompatible tail geometries and gives the codec interpreter one extension
+boundary for future dynamic shapes. -/
+inductive DynamicInputPlan where
+  | boundedArray (plan : BoundedArrayPlan)
+  | packedBytes (plan : PackedBytesPlan)
+  deriving Repr, BEq, Inhabited
+
+/-- Fixed source-frame geometry shared by dynamic inputs that support scalar indexed reads. Wire
+decoding remains variant-specific in the target codec interpreter. -/
+def DynamicInputPlan.indexedFrame : DynamicInputPlan → Nat × Array Scalar
+  | .boundedArray array => (array.capacity, array.elementWords)
+  | .packedBytes bytes => (bytes.capacity, #[.uint8])
+
 /-- Complete EVM-owned input plan for one logical parameter. It contains ABI words and tag guards,
 but no storage slots, source Ops, or contract policy. -/
 structure AbiInputPlan where
@@ -122,13 +144,24 @@ structure AbiInputPlan where
   words : Array Scalar
   projections : Array AbiProjection
   taggedGuards : Array TaggedGuard := #[]
-  boundedArray : Option BoundedArrayPlan := none
+  dynamic : Option DynamicInputPlan := none
   deriving Repr, BEq, Inhabited
 
 def AbiInputPlan.wordCount (plan : AbiInputPlan) : Nat := plan.words.size
 
 def AbiInputPlan.headWordCount (plan : AbiInputPlan) : Nat :=
-  if plan.boundedArray.isSome then 1 else plan.wordCount
+  if plan.dynamic.isSome then 1 else plan.wordCount
+
+/-- Compatibility/query view for consumers that specifically need bounded-array element shape. -/
+def AbiInputPlan.boundedArray (plan : AbiInputPlan) : Option BoundedArrayPlan :=
+  match plan.dynamic with
+  | some (.boundedArray array) => some array
+  | _ => none
+
+def AbiInputPlan.packedBytes (plan : AbiInputPlan) : Option PackedBytesPlan :=
+  match plan.dynamic with
+  | some (.packedBytes bytes) => some bytes
+  | _ => none
 
 /-- Canonical identity for guard semantics not visible in the Solidity selector. Two enums can
 share the same fixed tuple type while activating different payload lanes, so target IR digests
@@ -144,10 +177,13 @@ def AbiInputPlan.taggedCanonical (plan : AbiInputPlan) : String :=
 
 /-- Canonical identity for every input rule not encoded by the Solidity selector. -/
 def AbiInputPlan.inputCanonical (plan : AbiInputPlan) : String :=
-  match plan.boundedArray with
-  | some array =>
+  match plan.dynamic with
+  | some (.boundedArray array) =>
       s!"bounded-array-v1({plan.typeName};capacity={array.capacity};" ++
         s!"element-words={array.elementWords.size})"
+  | some (.packedBytes bytes) =>
+      s!"packed-bytes-v1({plan.typeName};capacity={bytes.capacity};" ++
+        s!"utf8={bytes.validateUtf8})"
   | none => plan.taggedCanonical
 
 private def staticInputPlan (schema : Schema) : Except String AbiInputPlan := do
@@ -196,7 +232,32 @@ def boundedArrayV1InputPlan (capacity : Nat) (element : Schema) : Except String 
     typeName := elementPlan.typeName ++ "[]"
     words
     projections
-    boundedArray := some { capacity, elementWords := elementPlan.words }
+    dynamic := some (.boundedArray { capacity, elementWords := elementPlan.words })
+  }
+
+/-- Bind a bounded source byte frame to canonical standard ABI `bytes` or `string`: one dynamic
+head offset, a 32-byte length, packed active bytes, and zero right-padding to a word boundary. -/
+def packedBytesV1InputPlan (capacity : Nat) (validateUtf8 : Bool) :
+    Except String AbiInputPlan := do
+  let localWords := 1 + capacity
+  unless localWords ≤ maxBoundedArrayLocalWords do
+    throw s!"evm/codec: packed bytes local frame exceeds {maxBoundedArrayLocalWords} words"
+  let mut projections : Array AbiProjection := #[{
+    sourceName := "length"
+    wordIndex := 0
+    partCount := 1
+  }]
+  for i in [0:capacity] do
+    projections := projections.push {
+      sourceName := "values_" ++ toString i
+      wordIndex := 1 + i
+      partCount := 1
+    }
+  return {
+    typeName := if validateUtf8 then "string" else "bytes"
+    words := #[.uint32] ++ Array.replicate capacity .uint8
+    projections
+    dynamic := some (.packedBytes { capacity, validateUtf8 })
   }
 
 private def enumPayloadWords : Schema → Except String Nat
@@ -288,8 +349,8 @@ def inputPlan (schema : Schema) : Except String AbiInputPlan := do
   match schema with
   | .option _ | .enumeration .. => taggedTupleV1InputPlan schema
   | .boundedArray capacity element => boundedArrayV1InputPlan capacity element
-  | .boundedBytes _ => throw "evm/codec: bounded bytes input policy is not yet bound"
-  | .boundedString _ => throw "evm/codec: bounded string input policy is not yet bound"
+  | .boundedBytes capacity => packedBytesV1InputPlan capacity false
+  | .boundedString capacity => packedBytesV1InputPlan capacity true
   | _ => staticInputPlan schema
 
 /-- Resolve Extract's compatibility projection spelling against one EVM input plan. -/

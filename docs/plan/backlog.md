@@ -279,6 +279,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Emit recipe。RawEntry digest `f1e0b094d591bd61`、ELF 21,768 B；Mollusk 17/17；Surfpool
   1.5.0 Loader-v3 22 writes 部署通过。详见 `docs/plan/tasks/r1-016.md`。
 
+- R1-017 EVM bounded ABI bytes/String binding 已完成：`Evm.Codec.DynamicInputPlan` 用 sum type
+  统一承载 dynamic tail policy，Packed Bytes v1 独立拥有 standard ABI head offset、32-byte
+  length、packed active bytes、zero right-padding、fixed UInt8 locals 与 exact calldata gate；
+  String 在 source 执行前验证 strict UTF-8。未新增 Core/EVM Ops、Runtime effect、Component
+  或 main CFG Emit recipe。EvmBounded digest `5d657469be1ed0fd`、deployment bytecode 1,421 B；
+  solc 0.8.34 与 Anvil 正反矩阵通过。详见 `docs/plan/tasks/r1-017.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

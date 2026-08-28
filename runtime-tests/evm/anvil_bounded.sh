@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bounded Array v1: canonical dynamic offsets/tails with a fixed source-local frame.
+# Bounded dynamic ABI: canonical array/packed-byte tails with fixed source-local frames.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,6 +30,53 @@ combined="$("$cast" call --rpc-url "$rpc" "$addr" \
   'combine(uint32,uint64[],bool,uint16[])(uint64)' 7 '[11,13]' true '[17,19,23]')"
 solana_lean_require_uint "$combined" 49 "multiple canonical dynamic tails"
 
+packed_data() {
+  local signature="$1"
+  local hex_bytes="$2"
+  local packed_selector
+  packed_selector="$("$cast" sig "$signature")"
+  "$python" -I -S -c \
+    "import sys
+payload = bytes.fromhex(sys.argv[2])
+padding = bytes((-len(payload)) % 32)
+print(sys.argv[1] + f'{32:064x}{len(payload):064x}' + (payload + padding).hex())" \
+    "$packed_selector" "$hex_bytes"
+}
+
+call_packed() {
+  local signature="$1"
+  local hex_bytes="$2"
+  "$cast" call --rpc-url "$rpc" "$addr" --data "$(packed_data "$signature" "$hex_bytes")"
+}
+
+for case in \
+  'boundedBytes(bytes)|' \
+  'boundedBytes(bytes)|0b0d' \
+  'boundedBytes(bytes)|0b0d1113171d1f25'; do
+  signature="${case%%|*}"
+  hex_bytes="${case#*|}"
+  result="$(call_packed "$signature" "$hex_bytes")"
+  case "$hex_bytes" in
+    '') expected=0 ;;
+    0b0d) expected=13 ;;
+    *) expected=56 ;;
+  esac
+  solana_lean_require_uint "$result" "$expected" "canonical packed bytes $hex_bytes"
+done
+
+for case in \
+  '|0' \
+  '616263|100' \
+  'c2a2|196' \
+  'e282ac|229' \
+  'f09f92a9|244' \
+  '6162636465666768|209'; do
+  hex_bytes="${case%%|*}"
+  expected="${case#*|}"
+  result="$(call_packed 'boundedString(string)' "$hex_bytes")"
+  solana_lean_require_uint "$result" "$expected" "strict UTF-8 string $hex_bytes"
+done
+
 selector="$("$cast" sig 'boundedValues(uint64[])')"
 array_data() {
   "$python" -I -S -c \
@@ -52,6 +99,45 @@ for malformed in \
   fi
 done
 
+bytes_selector="$("$cast" sig 'boundedBytes(bytes)')"
+malformed_packed_data() {
+  "$python" -I -S -c \
+    "import sys
+s = sys.argv[1]
+word = lambda n: f'{n:064x}'
+cases = [
+  word(0) + word(1) + '0b' + '00' * 31,
+  word(64) + word(1) + '0b' + '00' * 31,
+  word(32) + word(9) + '01' * 9 + '00' * 23,
+  word(32) + word(1),
+  word(32) + word(0) + '00' * 32,
+  word(32) + word(1) + '0b0d' + '00' * 30,
+]
+print('\\n'.join(s + case for case in cases))" "$bytes_selector"
+}
+
+while IFS= read -r malformed; do
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: malformed packed bytes ABI calldata unexpectedly succeeded" >&2
+    exit 1
+  fi
+done < <(malformed_packed_data)
+
+for invalid_utf8 in \
+  80 \
+  c080 \
+  e08080 \
+  eda080 \
+  e282 \
+  f4908080 \
+  f5808080; do
+  malformed="$(packed_data 'boundedString(string)' "$invalid_utf8")"
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: invalid UTF-8 ABI string unexpectedly succeeded ($invalid_utf8)" >&2
+    exit 1
+  fi
+done
+
 combine_selector="$("$cast" sig 'combine(uint32,uint64[],bool,uint16[])')"
 combine_data() {
   "$python" -I -S -c \
@@ -70,4 +156,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-bounded: ok (canonical offset/length/tail/padding matrix; engineering only)"
+echo "evm-anvil-bounded: ok (array/bytes/string offset/length/tail/padding/UTF-8 matrix; engineering only)"

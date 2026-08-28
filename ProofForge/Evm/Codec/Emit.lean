@@ -47,9 +47,53 @@ def renderTaggedGuards (indent argPrefix : String)
     base := base + plan.wordCount
   return out
 
+/-- Validate strict Unicode-scalar UTF-8 directly over one packed ABI String payload. The scan is
+bounded by the already capacity-checked runtime length and allocates no target memory. -/
+private def renderUtf8Guard (indent dataName lengthName : String) (index : Nat) : String :=
+  let i := "abi_utf8_i" ++ toString index
+  let need := "abi_utf8_need" ++ toString index
+  let min := "abi_utf8_min" ++ toString index
+  let max := "abi_utf8_max" ++ toString index
+  let byte := "abi_utf8_byte" ++ toString index
+  indent ++ "let " ++ i ++ " := 0" ++ nl ++
+  indent ++ "let " ++ need ++ " := 0" ++ nl ++
+  indent ++ "let " ++ min ++ " := 128" ++ nl ++
+  indent ++ "let " ++ max ++ " := 191" ++ nl ++
+  indent ++ "for { } lt(" ++ i ++ ", " ++ lengthName ++ ") { " ++ i ++
+    " := add(" ++ i ++ ", 1) } {" ++ nl ++
+  indent ++ "  let " ++ byte ++ " := byte(0, calldataload(add(add(add(4, " ++
+    dataName ++ "), 32), " ++ i ++ ")))" ++ nl ++
+  indent ++ "  switch " ++ need ++ nl ++
+  indent ++ "  case 0 {" ++ nl ++
+  indent ++ "    if gt(" ++ byte ++ ", 127) {" ++ nl ++
+  indent ++ "      if or(lt(" ++ byte ++ ", 194), gt(" ++ byte ++ ", 244)) { " ++
+    revert0 ++ " }" ++ nl ++
+  indent ++ "      if lt(" ++ byte ++ ", 224) { " ++ need ++ " := 1 }" ++ nl ++
+  indent ++ "      if and(gt(" ++ byte ++ ", 223), lt(" ++ byte ++ ", 240)) {" ++ nl ++
+  indent ++ "        " ++ need ++ " := 2" ++ nl ++
+  indent ++ "        if eq(" ++ byte ++ ", 224) { " ++ min ++ " := 160 }" ++ nl ++
+  indent ++ "        if eq(" ++ byte ++ ", 237) { " ++ max ++ " := 159 }" ++ nl ++
+  indent ++ "      }" ++ nl ++
+  indent ++ "      if gt(" ++ byte ++ ", 239) {" ++ nl ++
+  indent ++ "        " ++ need ++ " := 3" ++ nl ++
+  indent ++ "        if eq(" ++ byte ++ ", 240) { " ++ min ++ " := 144 }" ++ nl ++
+  indent ++ "        if eq(" ++ byte ++ ", 244) { " ++ max ++ " := 143 }" ++ nl ++
+  indent ++ "      }" ++ nl ++
+  indent ++ "    }" ++ nl ++
+  indent ++ "  }" ++ nl ++
+  indent ++ "  default {" ++ nl ++
+  indent ++ "    if or(lt(" ++ byte ++ ", " ++ min ++ "), gt(" ++ byte ++ ", " ++
+    max ++ ")) { " ++ revert0 ++ " }" ++ nl ++
+  indent ++ "    " ++ need ++ " := sub(" ++ need ++ ", 1)" ++ nl ++
+  indent ++ "    " ++ min ++ " := 128" ++ nl ++
+  indent ++ "    " ++ max ++ " := 191" ++ nl ++
+  indent ++ "  }" ++ nl ++
+  indent ++ "}" ++ nl ++
+  indent ++ "if " ++ need ++ " { " ++ revert0 ++ " }" ++ nl
+
 /-- Interpret EVM input plans into one fixed local frame. Static values load from the top-level
-head. Bounded arrays require canonical contiguous tails, cap their runtime length, zero inactive
-locals, and validate every active element word before contract CFG execution. -/
+head. Dynamic plans require canonical contiguous tails, cap their runtime length, zero inactive
+locals, and validate packed bytes or every active array word before contract CFG execution. -/
 def renderEntryArgs (plans : Array Codec.AbiInputPlan)
     (paramTypes : Array Core.Codec.Scalar) : Except String String := do
   let localWords := plans.foldl (init := 0) fun count plan => count + plan.wordCount
@@ -57,7 +101,7 @@ def renderEntryArgs (plans : Array Codec.AbiInputPlan)
     throw "evm/codec: input plan local frame does not match parameter metadata"
   let headWords := plans.foldl (init := 0) fun count plan => count + plan.headWordCount
   let headBytes := headWords * 32
-  let hasDynamic := plans.any (·.boundedArray.isSome)
+  let hasDynamic := plans.any (·.dynamic.isSome)
   let mut out := ""
   if hasDynamic then
     out := out ++
@@ -73,7 +117,7 @@ def renderEntryArgs (plans : Array Codec.AbiInputPlan)
   let mut localWord := 0
   let mut dynamicIndex := 0
   for plan in plans do
-    match plan.boundedArray with
+    match plan.dynamic with
     | none =>
         for i in [0:plan.wordCount] do
           let localIndex := localWord + i
@@ -85,7 +129,7 @@ def renderEntryArgs (plans : Array Codec.AbiInputPlan)
           out := out ++ (← renderWordGuard "        " ("arg" ++ toString localIndex) type)
         headWord := headWord + plan.wordCount
         localWord := localWord + plan.wordCount
-    | some array =>
+    | some (.boundedArray array) =>
         let elementWords := array.elementWords.size
         unless 0 < elementWords &&
             plan.wordCount == 1 + array.capacity * elementWords &&
@@ -122,6 +166,46 @@ def renderEntryArgs (plans : Array Codec.AbiInputPlan)
               | throw s!"evm/codec: missing bounded element metadata at {localIndex}"
             out := out ++ (← renderWordGuard "          " ("arg" ++ toString localIndex) type)
           out := out ++ "        }" ++ nl
+        headWord := headWord + 1
+        localWord := localWord + plan.wordCount
+        dynamicIndex := dynamicIndex + 1
+    | some (.packedBytes bytes) =>
+        unless plan.wordCount == 1 + bytes.capacity && plan.words[0]? == some .uint32 &&
+            plan.words.extract 1 plan.wordCount == Array.replicate bytes.capacity .uint8 do
+          throw "evm/codec: malformed packed bytes v1 input plan"
+        let dataName := "abi_data" ++ toString dynamicIndex
+        let lengthName := "arg" ++ toString localWord
+        let paddedName := "abi_padded" ++ toString dynamicIndex
+        let paddingIndex := "abi_padding_i" ++ toString dynamicIndex
+        out := out ++
+          "        if iszero(eq(calldataload(" ++ toString (4 + headWord * 32) ++
+            "), abi_tail)) { " ++ revert0 ++ " }" ++ nl ++
+          "        let " ++ dataName ++ " := abi_tail" ++ nl ++
+          "        if gt(add(" ++ dataName ++ ", 32), abi_size) { " ++ revert0 ++ " }" ++ nl ++
+          "        let " ++ lengthName ++ " := calldataload(add(4, " ++ dataName ++ "))" ++ nl ++
+          "        if gt(" ++ lengthName ++ ", " ++ toString bytes.capacity ++ ") { " ++
+            revert0 ++ " }" ++ nl
+        for i in [1:plan.wordCount] do
+          out := out ++ "        let arg" ++ toString (localWord + i) ++ " := 0" ++ nl
+        out := out ++
+          "        let " ++ paddedName ++ " := and(add(" ++ lengthName ++
+            ", 31), not(31))" ++ nl ++
+          "        abi_tail := add(abi_tail, add(32, " ++ paddedName ++ "))" ++ nl ++
+          "        if gt(abi_tail, abi_size) { " ++ revert0 ++ " }" ++ nl ++
+          "        for { let " ++ paddingIndex ++ " := " ++ lengthName ++ " } lt(" ++
+            paddingIndex ++ ", " ++ paddedName ++ ") { " ++ paddingIndex ++ " := add(" ++
+            paddingIndex ++ ", 1) } {" ++ nl ++
+          "          if byte(0, calldataload(add(add(add(4, " ++ dataName ++ "), 32), " ++
+            paddingIndex ++ "))) { " ++ revert0 ++ " }" ++ nl ++
+          "        }" ++ nl
+        if bytes.validateUtf8 then
+          out := out ++ renderUtf8Guard "        " dataName lengthName dynamicIndex
+        for i in [0:bytes.capacity] do
+          out := out ++ "        if gt(" ++ lengthName ++ ", " ++ toString i ++ ") {" ++ nl ++
+            "          arg" ++ toString (localWord + 1 + i) ++
+              " := byte(0, calldataload(add(add(add(4, " ++ dataName ++ "), 32), " ++
+              toString i ++ ")))" ++ nl ++
+            "        }" ++ nl
         headWord := headWord + 1
         localWord := localWord + plan.wordCount
         dynamicIndex := dynamicIndex + 1

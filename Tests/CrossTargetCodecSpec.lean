@@ -75,4 +75,27 @@ private def boundedItems : Schema :=
       | none => false
   | _, _ => false
 
+private def boundedText : Schema := .boundedString 8
+
+-- The source fixed-byte projection frame agrees, while each target independently owns Borsh
+-- byte geometry or standard-ABI packed-tail geometry and UTF-8 enforcement.
+#guard
+  match ProofForge.Svm.EntryAdapter.borshPlan boundedText,
+      ProofForge.Evm.Codec.inputPlan boundedText with
+  | .ok svm, .ok evm =>
+      match evm.packedBytes with
+      | some bytes =>
+          svm.projections.map (·.sourceName) == evm.projections.map (·.sourceName) &&
+          svm.projections.map (·.sourceName) ==
+            #["length", "values_0", "values_1", "values_2", "values_3",
+              "values_4", "values_5", "values_6", "values_7"] &&
+          svm.localWidths == #[4, 1, 1, 1, 1, 1, 1, 1, 1] &&
+          svm.minBytes == 4 && svm.maxBytes == 12 &&
+          evm.words == #[.uint32, .uint8, .uint8, .uint8, .uint8,
+            .uint8, .uint8, .uint8, .uint8] &&
+          evm.typeName == "string" && evm.headWordCount == 1 &&
+          bytes.capacity == 8 && bytes.validateUtf8
+      | none => false
+  | _, _ => false
+
 end Tests.CrossTargetCodecSpec

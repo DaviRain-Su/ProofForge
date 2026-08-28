@@ -44,7 +44,7 @@
 
 | 生命周期 | 正确表示 | 当前状态 | 必须补齐 |
 |---|---|---|---|
-| source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded input 已有 | bytes/string target binding、collection persistence binding、tagged/bounded return |
+| source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有 | collection persistence binding、tagged/bounded return、nested dynamic shapes |
 | invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient` 有 buffer/fixed-vector/writer **plan** | 可提取的 bounded byte/vector operations；EVM bounded memory binding |
 | SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、ordered Map/RBMap、allocator 已有 u64/固定 schema | richer POD element/key/value shapes、set/bitset、versioned codecs |
 | EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有 | reusable bounded vector/set/queue/bitmap operations 与 documented gas bounds |
@@ -63,8 +63,8 @@
 | 能力 | 当前 | Parity gap | 优先级 |
 |---|---|---|---|
 | integers/fixed bytes | Bool、u8/16/32/64、allocation-free u128/u256/`FixedBytes n`；u256 EVM arithmetic 已覆盖主要 unsigned op | signed widths、safe narrowing/casts、saturating/full-precision helpers、统一 overflow vocabulary | F0/F1 |
-| aggregate values | record/tuple/Option/bounded enum/fixed Vector；bounded input carrier；capacity-preserving bounded Vec semantics 与 cross-target scalar dynamic read；bounded Map/Set/Queue/BitSet、bytes、UTF-8 string logical contracts | collection/bytes/string target bindings、bounded mutation writeback、wide/aggregate dynamic elements；nested bounded shapes | F0 |
-| codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded input bindings | tagged/bounded returns、canonical bytes/string、version/discriminator、strict trailing policy 的统一 source contract | F0 |
+| aggregate values | record/tuple/Option/bounded enum/fixed Vector；bounded input carrier；capacity-preserving bounded Vec semantics 与 cross-target scalar dynamic read；bounded Map/Set/Queue/BitSet、bytes、UTF-8 string logical contracts；bytes/string 已分别绑定 SVM/EVM input | collection persistence bindings、bounded mutation writeback、wide/aggregate dynamic elements；nested bounded shapes | F0 |
+| codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded/bytes/string input bindings | tagged/bounded returns、version/discriminator、reusable account/storage codecs | F0 |
 | control/resources | checked arithmetic、bounded `for`、fixed scalar frame | per-method collection/codec/memory budget manifest；禁止隐式 allocation/clone/format | F1 |
 
 Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可以在 SVM 绑定为 Borsh
@@ -116,7 +116,7 @@ EVM Runtime 以 Solidity 的 [types](https://docs.soliditylang.org/en/latest/typ
 
 | 类别 | 当前 source surface | 主要缺口 | 优先级 |
 |---|---|---|---|
-| values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、one bounded dynamic-array input | signed ints、safe casts、bytes/string、nested dynamic、tagged/bounded return、dynamic constructor/fallback returndata | F0/F1 |
+| values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、bounded dynamic-array/bytes/string input、strict UTF-8 | signed ints、safe casts、nested dynamic、tagged/bounded return、dynamic constructor/fallback returndata | F0/F1 |
 | data/storage | ordinary typed State flattening、static declarations、address/address-pair hashed maps | reusable bounded storage vector/set/queue/bitmap；explicit bounded memory/transient contracts；namespaced storage | F0/F2 |
 | environment | caller/self/block number/timestamp/chain id/value/balance/immutables | gasleft、basefee/prevrandao/coinbase/gaslimit、blockhash、code/codehash and target-version gates | F1 |
 | call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send、explicit ordered reentrancy guard | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；code-existence policy | F1/F2 |

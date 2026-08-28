@@ -35,4 +35,16 @@ def combine (_s : State) (base : UInt32) (left : BoundedVec UInt64 2) (enabled :
     (if enabled then (1 : UInt64) else 0) + right.length.toUInt64 +
     right.values[2].toUInt64
 
+/-- Standard ABI `bytes` is decoded from a packed dynamic tail into an allocation-free fixed byte
+frame. Inactive slots are zero before source execution. -/
+@[pf_entry]
+def boundedBytes (_s : State) (bytes : BoundedBytes 8) : UInt64 :=
+  bytes.length.toUInt64 + bytes.values[0].toUInt64 + bytes.values[7].toUInt64
+
+/-- Standard ABI `string` has the same packed geometry as bytes but requires strict UTF-8 before
+source execution. -/
+@[pf_entry]
+def boundedString (_s : State) (text : BoundedString 8) : UInt64 :=
+  text.length.toUInt64 + text.values[0].toUInt64 + text.values[7].toUInt64
+
 end Examples.EvmBounded
