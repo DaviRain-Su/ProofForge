@@ -78,7 +78,7 @@ teaching Emit another recipe.
 | `Storage.Layout`, typed address/address-pair maps | `Evm.Sdk.Storage` + `Evm.HashedMap` | `Component.hashedMap` | `sload`/`sstore` under typed hash namespace | compile-time namespace handle, EVM storage slots | Available; scalar/struct/fixed-array declarations and broader typed values are R4/R5 |
 | Ether, Event, Revert, receive/payable | `Evm.Sdk` + `Evm.NativeFx` | `Component.nativeFx` | CALL value, LOG, revert, receive | EVM call frame/log/storage effects | Current closed set available; arbitrary event/error recipes and hidden state writes fail closed |
 | ERC-20/WETH/router/permit interaction | `Evm.Sdk` + `Evm.ClosedCall` | `Component.closedCall` | typed closed CALL/STATICCALL plans | bounded calldata/returndata in EVM memory | Current typed callees available; arbitrary callee+calldata, delegatecall, proxy and create fail closed |
-| reusable contract policy (access, pause, reentrancy, token/NFT ledgers) | R5 `Evm.Sdk` | composition of storage/native/closed-call components | explicit reads/writes/logs/reverts | static storage handles | Owner/pause fragments exist in examples; reusable two-consumer components and ERC-721/bounded ERC-1155 are not complete |
+| reusable contract policy (access, pause, reentrancy, token/NFT ledgers) | R5 `Evm.Sdk.Access` and later components | composition of static state/native/closed-call components | explicit reads/writes/logs/reverts | fixed Address/scalar fields and later typed storage handles | Access foundation available: owner/running gates and fixed single-pending two-step ownership are reused by TwoStepCounter and Credits. Replacement invalidates stale nominees and accept/cancel clears pending state. Roles, reentrancy, and ERC-721/bounded ERC-1155 are not complete |
 
 EVM does not consume `Svm.AccountStorage`, account indexes, one-based allocators, or the SVM heap.
 SVM does not consume EVM slot cursors or hashed-map namespaces. Shared semantics can have two
@@ -89,7 +89,7 @@ bindings, but the physical storage descriptor is always target-owned.
 | Application | Owns | Must consume | Must not create |
 |---|---|---|---|
 | `Examples.Phoenix*` | market/account layout, order comparison, crossing, fees, TIF/self-trade/funds policy, official wire and audit choices | SVM typed account storage, allocator/map/cursor, recorder, entry adapter, CPI/PDA/Token capabilities | Phoenix-named Ops/IR/Emit cases, heap-backed persistent books, pointers in accounts |
-| `Examples.Token`, `Examples.Capped`, future EVM contracts | token/cap/access business policy and public ABI | `Evm.Sdk` typed storage/context/event/revert/closed calls | numeric map bases, hand-built topics/selectors, SVM account geometry |
+| `Examples.Token`, `Examples.Capped`, `Examples.TwoStepCounter`, `Examples.Credits`, future EVM contracts | token/cap/access business policy and public ABI | `Evm.Sdk` typed storage/context/event/revert/closed calls and reusable Access policy | numeric map bases, hand-built topics/selectors, stale-nominee maps, SVM account geometry |
 | future cross-target examples | shared behavioral fixture only | separate SVM and EVM state/ABI bindings | a fake unified storage abstraction |
 
 Registry and historical golden fixtures may name applications because they enumerate build/test

@@ -8,7 +8,7 @@ reference semantics under the documented host stubs; the `#pf_guard_credits` ela
 live extraction → EVM IR → Yul/ABI pipeline. On-chain behavior is verified by
 `runtime-tests/evm/anvil_credits.sh`.
 
-Not wired into `Tests.lean` yet: the coordinator owns the aggregate import. Run focused:
+Run focused:
   lake env lean Tests/CreditsSpec.lean
 -/
 
@@ -90,6 +90,56 @@ elab "#pf_guard_credits" : command => do
       "pause", "unpause", "ownerOf", "creditOf", "pendingOf", "totalOf", "pausedOf"] do
     unless entryNames.contains name do
       throwError s!"missing Credits entry {name}"
+  let rec storesField (fuel : Nat) (name : String)
+      (ops : Array ProofForge.Evm.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun op =>
+        match op with
+        | .storeField actual _ => actual == name
+        | .ite _ _ _ thn els =>
+            storesField fuel' name thn || storesField fuel' name els
+        | .forBody _ body => storesField fuel' name body
+        | _ => false
+  let some pauseM := program.entries.find? (·.ixName == "pause")
+    | throwError "missing Credits pause"
+  unless storesField 16 "paused" pauseM.ops do
+    throwError "Credits direct pause transition did not store paused"
+  let some transferM := program.entries.find? (·.ixName == "transferOwnership")
+    | throwError "missing Credits transferOwnership"
+  for (field, limb) in #[
+      ("ownership_w0", "w0"), ("ownership_w1", "w1"), ("ownership_w2", "w2")] do
+    let rec storesInputLimb (fuel : Nat) (ops : Array ProofForge.Evm.IR.Op) : Bool :=
+      match fuel with
+      | 0 => false
+      | fuel' + 1 => ops.any fun op =>
+          match op with
+          | .storeField actual (.field (.arg 0) actualLimb) =>
+              actual == field && actualLimb == limb
+          | .ite _ _ _ thn els => storesInputLimb fuel' thn || storesInputLimb fuel' els
+          | .forBody _ body => storesInputLimb fuel' body
+          | _ => false
+    unless storesInputLimb 16 transferM.ops do
+      throwError s!"Credits transferOwnership did not store candidate {limb} in {field}"
+  let some acceptM := program.entries.find? (·.ixName == "acceptOwnership")
+    | throwError "missing Credits acceptOwnership"
+  for field in #["owner_w0", "owner_w1", "owner_w2", "ownership_w0", "ownership_w1",
+      "ownership_w2"] do
+    unless storesField 16 field acceptM.ops do
+      throwError s!"Credits acceptOwnership did not store {field}"
+  let rec storesZero (fuel : Nat) (name : String)
+      (ops : Array ProofForge.Evm.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun op =>
+        match op with
+        | .storeField actual (.lit value) => actual == name && value == 0
+        | .ite _ _ _ thn els => storesZero fuel' name thn || storesZero fuel' name els
+        | .forBody _ body => storesZero fuel' name body
+        | _ => false
+  for field in #["ownership_w0", "ownership_w1", "ownership_w2"] do
+    unless storesZero 16 field acceptM.ops do
+      throwError s!"Credits acceptOwnership did not clear {field}"
   let some ownerM := program.entries.find? (·.ixName == "ownerOf")
     | throwError "missing Credits ownerOf"
   unless ownerM.view && ownerM.retWidths == #[20] do

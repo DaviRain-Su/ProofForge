@@ -2836,6 +2836,14 @@ private def looksUnchangedField (v : Ops.Val) (leaf : String) : Bool :=
     n == leaf || n.endsWith ("_" ++ leaf) || leaf.endsWith ("_" ++ n)
   | _ => false
 
+/-- Wide aggregate leaves must preserve their complete parent path. A bare child name is not
+enough to prove identity: assigning `candidate.w0` to `ownership_w0` remains a write even though
+both paths end in `w0`. Scalar nested-state normalization retains its broader historical rule. -/
+private def looksUnchangedWideLeaf (v : Ops.Val) (leaf : String) : Bool :=
+  match v with
+  | .field _ n => n == leaf || n.endsWith ("_" ++ leaf)
+  | _ => false
+
 /-- 把一个值摊成账户叶。`Vector.set` / 嵌套 `with` 只展开被改的那些。 -/
 private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
     (appliedBases : Array Expr := #[]) : Array (String × Ops.Val) :=
@@ -2955,19 +2963,19 @@ private partial def flattenLeaves (env : Environment) (base : String) (e : Expr)
                 let l0 := s!"{child}_w0"
                 let l1 := s!"{child}_w1"
                 let l2 := s!"{child}_w2"
-                unless looksUnchangedField w0 l0 do acc := acc.push (l0, w0)
-                unless looksUnchangedField w1 l1 do acc := acc.push (l1, w1)
-                unless looksUnchangedField w2 l2 do acc := acc.push (l2, w2)
+                unless looksUnchangedWideLeaf w0 l0 do acc := acc.push (l0, w0)
+                unless looksUnchangedWideLeaf w1 l1 do acc := acc.push (l1, w1)
+                unless looksUnchangedWideLeaf w2 l2 do acc := acc.push (l2, w2)
               else if isUInt256Field then
                 let (w0, w1, w2, w3) := uint256Leaves env nestedArg
                 let l0 := s!"{child}_w0"
                 let l1 := s!"{child}_w1"
                 let l2 := s!"{child}_w2"
                 let l3 := s!"{child}_w3"
-                unless looksUnchangedField w0 l0 do acc := acc.push (l0, w0)
-                unless looksUnchangedField w1 l1 do acc := acc.push (l1, w1)
-                unless looksUnchangedField w2 l2 do acc := acc.push (l2, w2)
-                unless looksUnchangedField w3 l3 do acc := acc.push (l3, w3)
+                unless looksUnchangedWideLeaf w0 l0 do acc := acc.push (l0, w0)
+                unless looksUnchangedWideLeaf w1 l1 do acc := acc.push (l1, w1)
+                unless looksUnchangedWideLeaf w2 l2 do acc := acc.push (l2, w2)
+                unless looksUnchangedWideLeaf w3 l3 do acc := acc.push (l3, w3)
               else if !nested.isEmpty then
                 acc := acc ++ nested.filter fun p => !looksUnchangedField p.2 p.1
               else if isVectorField then
@@ -6073,6 +6081,12 @@ private def mergeEvmStores (evmOps stores : Array Ops.Op) : Array Ops.Op :=
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) (stateType? : Option Name := none) (deepScalars : Bool := false) :
     Except String (Array Ops.Op) :=
+  -- A direct update of one field in a multi-field State is still a complete state transition.
+  -- Historically only branch/loop callers requested single-leaf stores, forcing source programs
+  -- to wrap ordinary updates in an artificial always-true comparison. Keep the one-field-state
+  -- shorthand below, but decode one changed leaf explicitly when the declared State has siblings.
+  let includeSingleStore := stateful || stateType?.any fun stateType =>
+    (getStructureFields env stateType).size > 1
   -- 必须在 peelLets 之前找效应：剥掉 `have sent := …` 后调用就没了。
   if let some call := findComponentCall env 16 e then
     .ok #[.component call, .returnU64 (.lit 0)]
@@ -6122,7 +6136,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       .ok #[.okState values[0]!]
     else
       .ok (values.map fun value => .returnU64 value)
-  else if let some ops := asStoreFields env e stateful then
+  else if let some ops := asStoreFields env e includeSingleStore then
     .ok (snapshotStateUpdate localDepth ops)
   else if let some v := asOkState env e then
     .ok #[.okState v]

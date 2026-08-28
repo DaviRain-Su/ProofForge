@@ -1,5 +1,4 @@
 import ProofForge
-import ProofForge.Evm.Sdk.Access
 
 namespace Examples.TwoStepCounter
 
@@ -9,9 +8,9 @@ open ProofForge.Evm.Sdk
 EVM-SDK-1 consumer A: a counter guarded by `Access.requireOwner` /
 `Access.requireRunning` with two-step ownership transfer via `Access.Ownership`.
 
-The owner is an explicit `Address` state field (mutable so `acceptOwnership` can rotate
-it); the paused flag is an explicit `UInt8` state field; nominations live in the single
-`Ownership` hashed-map namespace. All storage writes stay in this file.
+The owner is an explicit `Address` state field (mutable so `acceptOwnership` can rotate it), the
+paused flag is an explicit `UInt8` state field, and `ownership` contains exactly one pending
+address. All storage writes stay in this file.
 -/
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
@@ -21,19 +20,16 @@ structure State where
   owner : Address
   paused : UInt8
   count : UInt64
+  ownership : Address
   deriving Repr, DecidableEq, Inhabited
 
 inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-/-- One nomination namespace from the root cursor; no numeric base escapes. -/
-@[pf_inline] def ownership : Access.Ownership :=
-  Access.Ownership.allocate Storage.Layout.root |>.handle
-
 @[pf_entry]
 def init (owner : Address) : State :=
-  { owner, paused := Access.runningFlag, count := 0 }
+  { owner, paused := Access.runningFlag, count := 0, ownership := Access.Ownership.none }
 
 /-- Step 1 of ownership transfer: current owner nominates `candidate`.
     Non-owner → `Unauthorized(caller)`; zero candidate → `ZeroAddress()`. -/
@@ -43,7 +39,7 @@ def transferOwnership (s : State) (candidate : Address) : Except Error (State ×
     if Address.isZero candidate then
       .ok (s, Revert.zeroAddress)
     else
-      .ok (s, ownership.nominate candidate)
+      .ok ({ s with ownership := Access.Ownership.nominate s.ownership candidate }, 1)
   else
     .ok (s, Access.ownerViolation)
 
@@ -51,7 +47,10 @@ def transferOwnership (s : State) (candidate : Address) : Except Error (State ×
 @[pf_entry]
 def cancelOwnership (s : State) (candidate : Address) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    .ok (s, ownership.cancel candidate)
+    if Access.Ownership.isPending s.ownership candidate then
+      .ok ({ s with ownership := Access.Ownership.cancel s.ownership }, 0)
+    else
+      .ok (s, 0)
   else
     .ok (s, Access.ownerViolation)
 
@@ -59,9 +58,9 @@ def cancelOwnership (s : State) (candidate : Address) : Except Error (State × U
     consumes the nomination flag. Non-nominee → `Unauthorized(caller)`. -/
 @[pf_entry]
 def acceptOwnership (s : State) : Except Error (State × UInt64) :=
-  if ownership.callerIsPending then
-    .ok ({ owner := Context.caller, paused := s.paused, count := s.count },
-      ownership.consume)
+  if Access.Ownership.callerIsPending s.ownership then
+    .ok ({ owner := Context.caller, paused := s.paused, count := s.count, ownership :=
+      Access.Ownership.consume s.ownership }, 1)
   else
     .ok (s, Access.ownerViolation)
 
@@ -73,7 +72,7 @@ def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
     if Access.requireRunning s.paused then
       if s.count ≤ u64Max - delta then
         let next := s.count + delta
-        .ok ({ owner := s.owner, paused := s.paused, count := next }, next)
+        .ok ({ s with count := next }, next)
       else
         .error .overflow
     else
@@ -81,15 +80,11 @@ def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   else
     .ok (s, Access.ownerViolation)
 
-/-- Owner-gated pause. The `0 ≠ 1` guard marks the checked state transition for extraction,
-    matching the existing EVM examples. -/
+/-- Owner-gated pause. -/
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    if (0 : UInt64) ≠ 1 then
-      .ok ({ owner := s.owner, paused := Access.pausedFlag, count := s.count }, 1)
-    else
-      .error .overflow
+    .ok ({ s with paused := Access.pausedFlag }, 1)
   else
     .ok (s, Access.ownerViolation)
 
@@ -97,10 +92,7 @@ def pause (s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def unpause (s : State) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    if (0 : UInt64) ≠ 1 then
-      .ok ({ owner := s.owner, paused := Access.runningFlag, count := s.count }, 0)
-    else
-      .error .overflow
+    .ok ({ s with paused := Access.runningFlag }, 0)
   else
     .ok (s, Access.ownerViolation)
 
@@ -110,7 +102,7 @@ def ownerOf (s : State) : Address :=
 
 @[pf_entry]
 def pendingOf (_s : State) (who : Address) : UInt64 :=
-  ownership.nominationOf who
+  Access.Ownership.nominationOf _s.ownership who
 
 @[pf_entry]
 def pausedOf (s : State) : UInt8 :=

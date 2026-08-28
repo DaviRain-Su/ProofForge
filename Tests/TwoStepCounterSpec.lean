@@ -4,11 +4,11 @@ import Examples.TwoStepCounter
 
 /-!
 EVM-SDK-1 consumer A spec. Host guards pin the reference semantics (stubs make the owner
-gate pass and map nominations read 0); the `#pf_guard_twostep_counter` elab runs the live
+gate pass and address comparisons report equality); the `#pf_guard_twostep_counter` elab runs the live
 extraction → EVM IR → Yul/ABI pipeline and checks the fail-closed surface. On-chain
 behavior is verified by `runtime-tests/evm/anvil_twostep_counter.sh`.
 
-Not wired into `Tests.lean` yet: the coordinator owns the aggregate import. Run focused:
+Run focused:
   lake env lean Tests/TwoStepCounterSpec.lean
 -/
 
@@ -64,15 +64,15 @@ def other : Addr20 := ⟨4, 5, 6⟩
   | .ok (st, ret) => ret == 0 && st.paused == 0
   | .error _ => false
 
-/- Host: nominations read 0, so acceptOwnership hits the unauthorized terminal and keeps
-    the owner; transferOwnership records via the (stubbed) map write returning 1. -/
+/- Host runtime intrinsics are stubs, so ownership-policy behavior is pinned by the live IR and
+    Anvil tests below rather than these executable reference guards. -/
 #guard
   match acceptOwnership (init sample) with
   | .ok (st, ret) => ret == 0 && st.owner == sample
   | .error _ => false
 
 /- Host: `Address.isZero` stub is always true, so transferOwnership takes the zero-address
-    revert terminal (0) and keeps state; the map write is exercised on-chain instead. -/
+    revert terminal (0) and keeps state; the explicit pending-address write is exercised on-chain. -/
 #guard
   match transferOwnership (init sample) other with
   | .ok (st, ret) => ret == 0 && st.owner == sample
@@ -103,6 +103,56 @@ elab "#pf_guard_twostep_counter" : command => do
       "pause", "unpause", "ownerOf", "pendingOf", "pausedOf", "get"] do
     unless entryNames.contains name do
       throwError s!"missing TwoStepCounter entry {name}"
+  let rec storesField (fuel : Nat) (name : String)
+      (ops : Array ProofForge.Evm.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun op =>
+        match op with
+        | .storeField actual _ => actual == name
+        | .ite _ _ _ thn els =>
+            storesField fuel' name thn || storesField fuel' name els
+        | .forBody _ body => storesField fuel' name body
+        | _ => false
+  let some pauseM := program.entries.find? (·.ixName == "pause")
+    | throwError "missing TwoStepCounter pause"
+  unless storesField 16 "paused" pauseM.ops do
+    throwError "TwoStepCounter direct pause transition did not store paused"
+  let some transferM := program.entries.find? (·.ixName == "transferOwnership")
+    | throwError "missing TwoStepCounter transferOwnership"
+  for (field, limb) in #[
+      ("ownership_w0", "w0"), ("ownership_w1", "w1"), ("ownership_w2", "w2")] do
+    let rec storesInputLimb (fuel : Nat) (ops : Array ProofForge.Evm.IR.Op) : Bool :=
+      match fuel with
+      | 0 => false
+      | fuel' + 1 => ops.any fun op =>
+          match op with
+          | .storeField actual (.field (.arg 0) actualLimb) =>
+              actual == field && actualLimb == limb
+          | .ite _ _ _ thn els => storesInputLimb fuel' thn || storesInputLimb fuel' els
+          | .forBody _ body => storesInputLimb fuel' body
+          | _ => false
+    unless storesInputLimb 16 transferM.ops do
+      throwError s!"TwoStepCounter transferOwnership did not store candidate {limb} in {field}"
+  let some acceptM := program.entries.find? (·.ixName == "acceptOwnership")
+    | throwError "missing TwoStepCounter acceptOwnership"
+  for field in #["owner_w0", "owner_w1", "owner_w2", "ownership_w0", "ownership_w1",
+      "ownership_w2"] do
+    unless storesField 16 field acceptM.ops do
+      throwError s!"TwoStepCounter acceptOwnership did not store {field}"
+  let rec storesZero (fuel : Nat) (name : String)
+      (ops : Array ProofForge.Evm.IR.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 => ops.any fun op =>
+        match op with
+        | .storeField actual (.lit value) => actual == name && value == 0
+        | .ite _ _ _ thn els => storesZero fuel' name thn || storesZero fuel' name els
+        | .forBody _ body => storesZero fuel' name body
+        | _ => false
+  for field in #["ownership_w0", "ownership_w1", "ownership_w2"] do
+    unless storesZero 16 field acceptM.ops do
+      throwError s!"TwoStepCounter acceptOwnership did not clear {field}"
   let expectView (name : String) (widths : Array Nat) : CommandElabM Unit := do
     let some m := program.entries.find? (·.ixName == name)
       | throwError s!"missing TwoStepCounter view {name}"

@@ -49,6 +49,8 @@ import Examples.Vault
 import Examples.Ownable
 import Examples.Token
 import Examples.Capped
+import Examples.TwoStepCounter
+import Examples.Credits
 import Examples.Wide
 import Examples.Const
 import Examples.Nested

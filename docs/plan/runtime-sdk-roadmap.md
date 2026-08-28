@@ -72,7 +72,7 @@ instruction 增加 recipe opcode。
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input | bounded remaining-account view；运行时安全账户索引；tagged/bounded return policy；更完整 instruction buffer；Token-2022 TLV 语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator 和 canonical initialization | Account/Signer/PDA/System/Token facade 尚未统一；部分能力仍以具体 component 暴露；heap 目前只是准确模型而非 source lowering |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged return/bounded dynamic ABI 与 aggregate storage 组合；call return/error 合同；缺少标准化资源/重入边界 |
-| EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade | scalar/struct/fixed-array layout facade；access-control/pausable/reentrancy 与 token/NFT reusable components |
+| EVM SDK | `Storage.Layout` typed maps、Context/Immutable/Event/Revert/closed-call facade；`Access` owner/running gates 与 fixed single-pending two-step ownership | scalar/struct/fixed-array layout facade；bounded roles/reentrancy 与 token/NFT reusable components |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -104,7 +104,9 @@ ABI binding；R1-007 已完成 SVM canonical Option/payload-enum tagged Borsh in
 R1-008 已完成 EVM Tagged Tuple v1 Option/payload-enum input binding；R1-009 已完成 SVM
 fixed-capacity / canonical variable-length Borsh input binding。下一切片给 EVM 定义独立的
 bounded dynamic ABI input policy，不统一两个 target 的物理 layout，也不增加 array Ops 或
-main-Emit recipe。
+main-Emit recipe。并行的 R5-001 已先落地 Access foundation：两个独立 contract 复用同一
+owner/pause/two-step policy，pending owner 是一个 fixed Address 而不是 hashed map；详见
+[R5-001](tasks/r5-001.md)。这不表示 R5 已完成。
 
 ## 5. 阶段拆分
 
@@ -230,6 +232,12 @@ R2 的 account/effect contracts。
 
 每个组件必须由两个不同 example 消费，且业务合约只 import `Evm.Sdk`，不能直接写 map base、
 event topic 或 error selector 魔数。
+
+R5-001 已完成 Access foundation：`Evm.Sdk.Access` 提供 owner/running gates 与固定
+single-pending Address 的 two-step ownership；TwoStepCounter 和 Credits 独立复用它，替换
+nominee 会立即使旧 nominee 失效，accept/cancel 显式清零。它没有 Access opcode、隐藏
+storage write、hashed nomination namespace 或 magic guard。Roles、reentrancy 和 assets 仍受
+上述 Runtime/storage 依赖约束；详见 [R5-001](tasks/r5-001.md)。
 
 ### R6 — 双目标验收
 

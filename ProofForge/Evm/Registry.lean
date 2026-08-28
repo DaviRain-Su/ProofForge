@@ -8,7 +8,7 @@ structure Entry where
 
 def entries : Array Entry := #[
   { name := "Counter", digest := "254202356ee921d6" },
-  { name := "Pair", digest := "13af3b0dba53f17" },
+  { name := "Pair", digest := "8a6b6ee40b8ade46" },
   { name := "Window", digest := "966cbad710c7eff1" },
   { name := "Phase", digest := "bed1d2111e652ac1" },
   { name := "Flag", digest := "6056d4920876b4f7" },
@@ -20,6 +20,8 @@ def entries : Array Entry := #[
   { name := "Ownable", digest := "ce6397521bd115fa" },
   { name := "Token", digest := "4f1db71eb59d4254" },
   { name := "Capped", digest := "cb058e662f968f65" },
+  { name := "TwoStepCounter", digest := "3b08dde14972e728" },
+  { name := "Credits", digest := "2cdeb3504c14ed59" },
   { name := "Wide", digest := "692687089d4455f3" },
   { name := "Const", digest := "81830f8855cd3dda" }
 ]

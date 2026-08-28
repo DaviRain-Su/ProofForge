@@ -9,12 +9,7 @@ source "$here/lib.sh"
 
 solana_lean_evm_init evm-anvil-credits
 bin="$root/build/evm/Credits.bin"
-if [[ ! -f "$bin" ]]; then
-  echo "assembling $bin" >&2
-  lake env lean --run "$here/emit_access_fixture.lean" "$root/build/evm" >/dev/null \
-    || { echo "FAIL: emit_access_fixture.lean failed" >&2; exit 1; }
-fi
-[[ -f "$bin" ]] || { echo "FAIL: missing $bin" >&2; exit 1; }
+solana_lean_ensure_bin "$bin"
 solana_lean_start_anvil "${PF_EVM_PORT:-18561}" "$root/build/evm/anvil-credits.log"
 
 bytecode="$(tr -d '\n\r ' < "$bin")"
@@ -100,16 +95,35 @@ solana_lean_require_insufficient "$addr" "$other" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'totalOf()(uint256)')" \
   7 "over-credit claim holds total"
 
-# Two-step rotation, then the new owner grants.
+# Two-step rotation replaces the sole pending address; a stale nominee cannot accept.
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'transferOwnership(address)' "$other" >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'pendingOf(address)(uint64)' "$other")" \
+  1 "first nomination recorded"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'transferOwnership(address)' "$third" >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'pendingOf(address)(uint64)' "$other")" \
+  0 "replacement invalidates stale nominee"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'pendingOf(address)(uint64)' "$third")" \
-  1 "nomination recorded"
+  1 "replacement nomination recorded"
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'acceptOwnership()' >/dev/null 2>&1; then
+  echo "FAIL: stale nominee acceptOwnership unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_unauthorized "$addr" "$other" \
+  "$("$cast" calldata 'acceptOwnership()')" "$other" \
+  "stale nominee acceptOwnership"
 "$cast" send --rpc-url "$rpc" --private-key "$third_key" \
   "$addr" 'acceptOwnership()' >/dev/null
 solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" 'ownerOf()(address)')" \
   "$third" "owner rotated to nominee"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'pendingOf(address)(uint64)' "$third")" \
+  0 "nomination consumed"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
     "$addr" 'grant(address,uint256)' "$other" 1 >/dev/null 2>&1; then

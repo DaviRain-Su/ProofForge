@@ -1,4 +1,4 @@
-import ProofForge.Evm.Sdk
+import ProofForge.Evm.Sdk.Base
 
 namespace ProofForge.Evm.Sdk.Access
 
@@ -13,17 +13,17 @@ This module owns contract *policy gates*, not storage geometry. Every combinator
   owners keep using the existing `Address.eqImmutable` directly (e.g. `Examples.Token`),
 - failure terminals are the closed `Revert` set (`Unauthorized(caller)`, `Paused()`),
   never new error selectors;
-- two-step nominations live in one typed hashed-map namespace
-  (`Storage.AddressMap`, candidate ↦ 1), allocated from the consumer's `Storage.Layout`
-  cursor so no numeric map base escapes into contract code.
+- two-step ownership is one fixed `Ownership` value containing the sole pending address; the
+  consumer stores that value as ordinary static state, so an accepted transfer cannot leave an
+  older nominee live in another map entry.
 
-Storage writes stay explicit: `Ownership.nominate` / `cancel` / `consume` are the typed
-map writes performed at the call site, and the owner/paused fields themselves are ordinary
-consumer-owned `State` fields updated by the consumer's own transition. This module never
-writes the owner field; `acceptOwnership` in a consumer does that explicitly.
+Storage writes stay explicit: `Ownership.nominate` / `cancel` / `consume` return replacement
+values, while the consumer's state transition writes both ownership policy and owner/paused
+fields. This module never performs a hidden storage write.
 
-Resource contract: gates are O(1) component queries; an `Ownership` handle reserves exactly
-one hashed-map namespace. There is no bounded loop, allocation, or hidden storage.
+Resource contract: gates are O(1) component queries; `Ownership` is exactly one `Address` (three
+EVM words in the current address representation). There is no loop, allocation, hashed namespace,
+or hidden storage.
 
 Fail-closed boundary (later dependencies, intentionally absent here):
 
@@ -33,10 +33,8 @@ Fail-closed boundary (later dependencies, intentionally absent here):
   (EVM-SDK-2) or an owned role-namespace policy not yet specified;
 - no new revert errors: only the existing closed `Revert` set is composed.
 
-Integration hook: this module is imported directly by consumers
-(`import ProofForge.Evm.Sdk.Access`). Registry/digest wiring of new example contracts and
-the umbrella imports (`Examples.lean`, `Tests.lean`) are left to the coordinator; nothing
-in this module requires `Evm.Golden`, `Evm.Registry`, Ops, IR, or Emit changes.
+The public `ProofForge.Evm.Sdk` umbrella exports this component. Nothing in this module requires
+`Evm.Golden`, `Evm.Registry`, Ops, IR, or Emit changes.
 -/
 
 /-- Value of an explicit paused flag while the contract is running. -/
@@ -64,57 +62,42 @@ in this module requires `Evm.Golden`, `Evm.Registry`, Ops, IR, or Emit changes.
 @[pf_inline] def runningViolation : UInt64 :=
   Revert.paused
 
-/--
-Explicit two-step ownership handle. The current owner stays wherever the consumer keeps it
-(typically an `Address` state field); this handle owns only the pending-nomination
-namespace: `candidate ↦ 1` while a transfer is proposed, absent/`0` otherwise.
-
-Allocation is a compile-time `Storage.Layout` cursor step, so the namespace is disjoint
-from every other map the consumer declares. The handle carries no runtime geometry.
--/
-structure Ownership where
-  pending : Storage.AddressMap
-  deriving Repr, Inhabited
-
-attribute [pf_inline] Ownership.pending
-
-/-- Reserve one hashed-map namespace for nominations and advance the layout cursor.
-    Keep the body projection-reducible (no `let`): extraction must see closed Nat
-    geometry, matching the `Storage.Layout` descriptor contract. -/
-@[pf_inline] def Ownership.allocate (layout : Storage.Layout) : Storage.Allocated Ownership :=
-  { handle := { pending := layout.addressMap.handle }, next := layout.addressMap.next }
+/-- Explicit single-pending-owner state. The current owner remains a separate consumer field; this
+value is either one nonzero nominee or `Address.zero`. The alias deliberately reuses the existing
+fixed address schema instead of requiring a policy-specific codec or target operation. -/
+abbrev Ownership := Address
 
 namespace Ownership
 
-/-- True while `who` holds a pending nomination. The gate is a `≠ 0` test on the flag,
-    the UInt64-map condition shape extraction supports; a `UInt256 ≥ 1` comparison against
-    a constant bound is *not* a supported condition shape and must not be used here. -/
+/-- Canonical state with no pending nominee. -/
+@[pf_inline] def none : Address :=
+  Address.zero
+
+/-- True exactly when one nonzero pending address equals `who`. -/
 @[pf_inline] def isPending (o : Ownership) (who : Address) : Bool :=
-  o.pending.get who != 0
+  !Address.isZero o && Address.eq o who
 
 /-- Accept gate: the caller is the current nominee.
     Use as `if ownership.callerIsPending then … else .ok (s, Access.ownerViolation)`. -/
 @[pf_inline] def callerIsPending (o : Ownership) : Bool :=
-  o.isPending Context.caller
+  Ownership.isPending o Context.caller
 
-/-- Nominate `candidate`. This is the explicit storage write behind `transferOwnership`;
-    callers must gate it with `Access.requireOwner` (and usually reject the zero address). -/
-@[pf_inline] def nominate (o : Ownership) (candidate : Address) : UInt64 :=
-  o.pending.put candidate 1
+/-- Replace the sole nominee. The consumer explicitly stores the returned value and must gate the
+operation with `Access.requireOwner` and reject the zero address. -/
+@[pf_inline] def nominate (_o : Ownership) (candidate : Address) : Address :=
+  candidate
 
-/-- Cancel a nomination before it is accepted (explicit storage write, owner-gated by the
-    caller). -/
-@[pf_inline] def cancel (o : Ownership) (candidate : Address) : UInt64 :=
-  o.pending.put candidate 0
+/-- Clear the sole nomination. The consumer explicitly stores the returned value. -/
+@[pf_inline] def cancel (_o : Ownership) : Address :=
+  Ownership.none
 
-/-- Consume the caller's nomination during `acceptOwnership` (explicit storage write).
-    The consumer writes its own owner field in the same transition; this module does not. -/
-@[pf_inline] def consume (o : Ownership) : UInt64 :=
-  o.pending.put Context.caller 0
+/-- Consume the sole nomination during `acceptOwnership`. -/
+@[pf_inline] def consume (o : Ownership) : Address :=
+  Ownership.cancel o
 
-/-- Read the raw nomination flag for `who` (view helper; 1 while nominated, else 0). -/
+/-- Read a compatibility flag for `who`: `1` only for the sole current nominee. -/
 @[pf_inline] def nominationOf (o : Ownership) (who : Address) : UInt64 :=
-  o.pending.get who
+  if Ownership.isPending o who then 1 else 0
 
 end Ownership
 

@@ -1,6 +1,7 @@
 # Runtime / SDK 并行开发执行图
 
-> 基线：R1-008 已进入 `origin/main`。本文只拆 ownership、依赖和验收，不改变
+> 基线：R1-009、SVM-SDK-1 和 EVM-SDK-1 已集成到本地 `main`；远端同步由 coordinator
+> 单独执行。本文只拆 ownership、依赖和验收，不改变
 > [Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md) 的能力边界。
 
 ## 1. 为什么按模块拆，而不是按文件数量拆
@@ -69,7 +70,7 @@ Coordinator（当前线程）固定负责：
 | 包 | Owner | 允许写入 | 交付 | 禁止项 | 局部门 |
 |---|---|---|---|---|---|
 | **SVM-SDK-1 persistent facade** | worker | 新建 `ProofForge/Svm/Sdk/Storage.lean`、`ProofForge/Svm/Sdk/Queue.lean`；新建两个非 Phoenix example/test 文件 | 用现有 `AccountStorage.Source` 组合 POD Field、fixed-capacity Vec/Queue、ordered Map/RBMap/one-based allocator handle；两个独立小例子消费 facade | 不改 Runtime/Ops/IR/Emit/Extract；不复制 account offset 到操作调用；不使用 heap pointer/Array/Map 作持久状态 | 新 test module 单独 `lake env lean`；两个 example 的 focused `pf build --target svm` 和 Mollusk fixture |
-| **EVM-SDK-1 access policy** | worker | 新建 `ProofForge/Evm/Sdk/Access.lean`；新建两个独立 example/test 文件 | 显式 owner/paused handles 和 `requireOwner`/`requireRunning`/two-step ownership 组合；复用 Context/Revert，不隐藏 storage write | 不改 `Evm/Sdk.lean`、Runtime/Ops/IR/Emit/Extract；暂不伪造 reentrancy error 或 roles map | 新 test module 单独 `lake env lean`；focused solc + Anvil |
+| **EVM-SDK-1 access policy（已集成）** | worker + coordinator | `ProofForge/Evm/Sdk/Access.lean`、两个独立 example/test/runtime fixture；coordinator 接 umbrella/registry/Extract generic fix | fixed single-pending Address、`requireOwner`/`requireRunning`/two-step ownership；显式 state writes，旧 nominee 不残留 | 未增加 Runtime/Ops/IR/Emit case；未伪造 reentrancy error 或 roles map | dedicated Lean、solc + Anvil stale-nominee matrix；见 R5-001 |
 | **QA-1 artifact manifest** | worker | 新建 `scripts/check_artifact_manifest.py`、`Tests/ArtifactManifestSpec.lean` 或独立 fixture 目录 | 从现有 build manifest 检查 digest、target、artifact size 与注册程序集合的一致性；输出 deterministic 诊断 | 不改 build 产物、registry、CI workflow 或计划文档；不执行部署 | script 自测、当前 SVM/EVM manifest 检查、`git diff --check` |
 
 Wave A worker 的 example/test 暂不加入 `Examples.lean` / `Tests.lean` / registry；coordinator
