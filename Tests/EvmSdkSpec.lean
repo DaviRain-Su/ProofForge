@@ -46,14 +46,29 @@ def fungibleBalances : Fungible.Balances := firstMap.handle
   paymentAmount UInt256.zero == 9
 #guard Fungible.Balances.balanceOf fungibleBalances paymentAddress == UInt256.zero
 #guard Fungible.Balances.debit fungibleBalances paymentAddress paymentAmount == 0
+#guard Fungible.Balances.credit fungibleBalances paymentAddress paymentAmount == 0
+#guard Fungible.Balances.transfer fungibleBalances paymentAddress paymentAddress paymentAmount == 0
 
-/-- Compile-time surface check for the complete debit branch. Comparison and revert Runtime leaves
-are extraction contracts and therefore are not assigned host-evaluation semantics. -/
+/-- Compile-time surface check for the checked debit/credit/transfer branches. Comparison and
+revert Runtime leaves are extraction contracts and therefore are not assigned host-evaluation
+semantics. -/
 def fungibleDebitSurface (owner : Address) (amount : UInt256) : UInt64 :=
   if Fungible.Balances.canDebit fungibleBalances owner amount then
     Fungible.Balances.debit fungibleBalances owner amount
   else
     Fungible.Balances.insufficient fungibleBalances owner amount
+
+def fungibleCreditSurface (owner : Address) (amount : UInt256) : UInt64 :=
+  if Fungible.Balances.canCredit fungibleBalances owner amount then
+    Fungible.Balances.credit fungibleBalances owner amount
+  else
+    0
+
+def fungibleTransferSurface (source destination : Address) (amount : UInt256) : UInt64 :=
+  if Fungible.Balances.canTransfer fungibleBalances source destination amount then
+    Fungible.Balances.transfer fungibleBalances source destination amount
+  else
+    Fungible.Balances.insufficient fungibleBalances source amount
 
 /-- Compile-time surface check for the typed map API. Runtime stubs intentionally evaluate to zero
 on the Lean host; extraction assigns their EVM behavior. -/

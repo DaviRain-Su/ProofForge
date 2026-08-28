@@ -23,6 +23,11 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .error _ => false
 
 #guard
+  match credit (init 0) sample ⟨11, 0, 0, 0⟩ with
+  | .ok (st, ret) => st.dummy == 0 && ret == 0
+  | .error _ => false
+
+#guard
   match grant (init 0) sample sample ⟨4, 0, 0, 0⟩ with
   | .ok (_, ret) => ret == 4
   | .error _ => false

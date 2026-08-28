@@ -47,6 +47,18 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(addre
   "$addr" 'credit(address,uint256)' "$sender" 11 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(address)(uint256)' "$sender")" \
   11 "share after credit"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'credit(address,uint256)' "$sender" 4 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(address)(uint256)' "$sender")" \
+  15 "share after additive credit"
+max_uint="0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'credit(address,uint256)' "$sender" "$max_uint" >/dev/null 2>&1; then
+  echo "FAIL: overflowing share credit unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'shareOf(address)(uint256)' "$sender")" \
+  15 "overflowing credit holds share"
 
 mock_hex="$(tr -d '\n\r ' < "$mock_out")"
 receipt="$("$cast" send --json --rpc-url "$rpc" --private-key "$private_key" --create "0x$mock_hex")"

@@ -14,7 +14,7 @@ inductive Error where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 @[pf_inline] def keys : Storage.U64Map := { base := 0 }
-@[pf_inline] def shares : Storage.AddressMap256 := { base := 0 }
+@[pf_inline] def shares : Fungible.Balances := { base := 0 }
 
 @[pf_entry]
 def init (_seed : UInt64) : State :=
@@ -38,11 +38,11 @@ def setU64 (_s : State) (k v : UInt64) : Except Error (State × UInt64) :=
 def shareOf (_s : State) (who : Address) : UInt256 :=
   shares.get who
 
-/-- 把 256-bit 份额记到 Address。 -/
+/-- Checked additive 256-bit share credit. -/
 @[pf_entry]
 def credit (_s : State) (who : Address) (v : UInt256) : Except Error (State × UInt64) :=
-  if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := 0 }, shares.put who v)
+  if Fungible.Balances.canCredit shares who v then
+    .ok ({ dummy := 0 }, Fungible.Balances.credit shares who v)
   else
     .error .overflow
 

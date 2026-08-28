@@ -38,7 +38,7 @@ R3-007 fixed ATA/Memo facades、R3-008 generic seeded System facade、
 R3-009 bounded static Memo facade、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
-R5-006 fungible debit ledger foundation；
+R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -349,6 +349,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Runtime/Op/IR/Component/Emit case、slot allocator 或 selector/topic recipe。两个 source
   digest 与六份 Yul/ABI/bin 产物逐字节不变；详见 `docs/plan/tasks/r5-006.md`。Credit/mint、
   same-address-safe transfer、allowance core、ERC-721 与 bounded ERC-1155 仍是 R5 工作。
+
+- R5-007 EVM checked credit/alias-safe transfer 已完成：`Fungible.Balances` 新增
+  canCredit/credit/canTransfer/transfer，credit 以 `next ≥ current` 拒绝 UInt256 wrap，transfer
+  在 source/destination 相同时通过 debit gate 后不写同一个 hashed key 两次。Token mint 改为
+  additive balance credit，并以 `value ≤ cap - supply` 阻断 supply wrap；direct/delegated
+  self-transfer 保持 balance，其中 delegated path 仍消费 allowance。Vault share ledger 是第二个
+  additive credit consumer。权限、pause、zero-address、allowance 与 event ordering 仍显式留在
+  application；没有新 Runtime/Op/IR/Component/Emit case。Token/Vault ABI 不变，Anvil 覆盖重复
+  mint/credit、wraparound rejection、direct/delegated self-transfer 与失败原子性；详见
+  `docs/plan/tasks/r5-007.md`。Reusable allowance core、ERC-721 与 bounded ERC-1155 仍是 R5 工作。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

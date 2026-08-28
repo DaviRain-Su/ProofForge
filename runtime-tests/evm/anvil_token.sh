@@ -91,6 +91,21 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'balanceOf(address)(uint256)' "$sender")" \
   100 "mint over cap holds sender"
+wrap_amount="0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'mint(address,uint256)' "$sender" "$wrap_amount" >/dev/null 2>&1; then
+  echo "FAIL: wrapping mint unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_cap_exceeded "$addr" "$sender" \
+  "$("$cast" calldata 'mint(address,uint256)' "$sender" "$wrap_amount")" \
+  "wrapping mint"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  100 "wrapping mint holds supply"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  100 "wrapping mint holds sender"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'capOf()(uint256)')" \
   1000 "cap holds after over-mint"
@@ -428,4 +443,37 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'pausedOf()(uint8)')" \
   0 "unpaused"
 
-echo "evm-anvil-token: ok (mint/owner/pause/cap/transfer/allowance/LOG3/Insufficient/permit/domain/burn/burnFrom/incdec/decimals/zero/name; engineering only)"
+third_key="0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
+third="$("$cast" wallet address --private-key "$third_key")"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'mint(address,uint256)' "$third" 6 >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'mint(address,uint256)' "$third" 9 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$third")" \
+  15 "repeated mint adds to recipient balance"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  100 "repeated mint adds to supply"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'transfer(address,uint256)' "$sender" 10 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  40 "same-address transfer preserves balance"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'totalSupply()(uint256)')" \
+  100 "same-address transfer preserves supply"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'approve(address,uint256)' "$dest" 5 >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+  "$addr" 'transferFrom(address,address,uint256)' "$sender" "$sender" 5 >/dev/null
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'balanceOf(address)(uint256)' "$sender")" \
+  40 "delegated same-address transfer preserves balance"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'allowanceOf(address,address)(uint256)' "$sender" "$dest")" \
+  0 "delegated same-address transfer spends allowance"
+
+echo "evm-anvil-token: ok (checked additive mint/self-transfer/owner/pause/cap/allowance/LOG3/Insufficient/permit/domain/burn/incdec/metadata; engineering only)"

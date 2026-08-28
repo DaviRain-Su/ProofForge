@@ -46,10 +46,11 @@ def mint (s : State) (to : Address) (value : UInt256) : Except Error (State × U
     else if Address.isZero to then
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
         Revert.zeroAddress)
-    else if UInt256.atLeast s.cap (UInt256.add s.supply value) then
-      if (0 : UInt64) ≠ 1 then
-        .ok ({ dummy := storage.balances.put to value, paused := s.paused, cap := s.cap,
-               supply := UInt256.add s.supply value },
+    else if UInt256.atLeast s.cap s.supply &&
+        UInt256.atLeast (UInt256.sub s.cap s.supply) value then
+      if Fungible.Balances.canCredit storage.balances to value then
+        .ok ({ dummy := Fungible.Balances.credit storage.balances to value,
+               paused := s.paused, cap := s.cap, supply := UInt256.add s.supply value },
           Event.transfer Address.zero to value)
       else
         .error .overflow
@@ -207,16 +208,18 @@ def transfer (s : State) (destination : Address) (amount : UInt256) :
   else if Address.isZero destination then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
-  else if storage.balances.containsAtLeast Context.caller amount then
-    let debit :=
-      (storage.balances.put Context.caller
-        (storage.balances.nextSub Context.caller amount)) |||
-      (storage.balances.put destination (storage.balances.nextAdd destination amount))
-    .ok ({ dummy := debit, paused := s.paused, cap := s.cap, supply := s.supply },
-      Event.transfer Context.caller destination amount)
+  else if Fungible.Balances.canDebit storage.balances Context.caller amount then
+    if Address.eq Context.caller destination ||
+        Fungible.Balances.canCredit storage.balances destination amount then
+      let movement :=
+        Fungible.Balances.transfer storage.balances Context.caller destination amount
+      .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
+        Event.transfer Context.caller destination amount)
+    else
+      .error .overflow
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      storage.balances.revertInsufficient Context.caller amount)
+      Fungible.Balances.insufficient storage.balances Context.caller amount)
 
 @[pf_entry]
 def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
@@ -228,17 +231,20 @@ def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
   else if storage.allowances.containsAtLeast owner Context.caller amount then
-    if storage.balances.containsAtLeast owner amount then
-      let debit :=
-        (storage.balances.put owner (storage.balances.nextSub owner amount)) |||
-        (storage.balances.put destination (storage.balances.nextAdd destination amount)) |||
-        (storage.allowances.put owner Context.caller
-          (storage.allowances.nextSub owner Context.caller amount))
-      .ok ({ dummy := debit, paused := s.paused, cap := s.cap, supply := s.supply },
-        Event.transfer owner destination amount)
+    if Fungible.Balances.canDebit storage.balances owner amount then
+      if Address.eq owner destination ||
+          Fungible.Balances.canCredit storage.balances destination amount then
+        let movement :=
+          (Fungible.Balances.transfer storage.balances owner destination amount) |||
+          (storage.allowances.put owner Context.caller
+            (storage.allowances.nextSub owner Context.caller amount))
+        .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
+          Event.transfer owner destination amount)
+      else
+        .error .overflow
     else
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        storage.balances.revertInsufficient owner amount)
+        Fungible.Balances.insufficient storage.balances owner amount)
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       storage.allowances.revertInsufficient owner Context.caller amount)
