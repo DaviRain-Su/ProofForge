@@ -34,15 +34,15 @@ attribute [pf_inline]
 
 @[pf_entry]
 def init (_owner : Address) : State :=
-  { dummy := 0, paused := 0, cap := ⟨1000, 0, 0, 0⟩, supply := UInt256.zero }
+  { dummy := 0, paused := Pausable.running, cap := ⟨1000, 0, 0, 0⟩, supply := UInt256.zero }
 
 /-- Owner-only mint. Paused, zero-address, and cap failures revert without changing state. -/
 @[pf_entry]
 def mint (s : State) (to : Address) (value : UInt256) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
-    if s.paused != 0 then
+    if !Access.requireRunning s.paused then
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        Revert.paused)
+        Access.runningViolation)
     else if Address.isZero to then
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
         Revert.zeroAddress)
@@ -100,9 +100,9 @@ def DOMAIN_SEPARATOR (_s : State) : Bytes32 :=
 @[pf_entry]
 def permit (s : State) (owner spender : Address) (value deadline : UInt256)
     (v : UInt8) (r signature : Bytes32) : Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Permit.authorize owner spender value deadline v r signature)
@@ -112,9 +112,9 @@ def permit (s : State) (owner spender : Address) (value deadline : UInt256)
 @[pf_entry]
 def approve (s : State) (spender : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if Address.isZero spender then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
@@ -128,9 +128,9 @@ def approve (s : State) (spender : Address) (amount : UInt256) :
 @[pf_entry]
 def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if Address.isZero spender then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
@@ -145,9 +145,9 @@ def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
 @[pf_entry]
 def decreaseAllowance (s : State) (spender : Address) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if Address.isZero spender then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
@@ -162,9 +162,9 @@ def decreaseAllowance (s : State) (spender : Address) (subtracted : UInt256) :
 
 @[pf_entry]
 def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if Fungible.Balances.canDebit storage.balances Context.caller amount then
     let debit := Fungible.Balances.debit storage.balances Context.caller amount
     .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
@@ -177,9 +177,9 @@ def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
 @[pf_entry]
 def burnFrom (s : State) (owner : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if Address.isZero owner then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
@@ -201,9 +201,9 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
 @[pf_entry]
 def transfer (s : State) (destination : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if Address.isZero destination then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
@@ -223,9 +223,9 @@ def transfer (s : State) (destination : Address) (amount : UInt256) :
 @[pf_entry]
 def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != 0 then
+  if !Access.requireRunning s.paused then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.paused)
+      Access.runningViolation)
   else if Address.isZero destination then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Revert.zeroAddress)
@@ -251,7 +251,7 @@ def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
 def pause (s : State) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
     if (0 : UInt64) ≠ 1 then
-      .ok ({ dummy := s.dummy, paused := 1, cap := s.cap, supply := s.supply }, 1)
+      .ok ({ dummy := s.dummy, paused := Pausable.pause s.paused, cap := s.cap, supply := s.supply }, 1)
     else
       .error .overflow
   else
@@ -262,7 +262,7 @@ def pause (s : State) : Except Error (State × UInt64) :=
 def unpause (s : State) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
     if (0 : UInt64) ≠ 1 then
-      .ok ({ dummy := s.dummy, paused := 0, cap := s.cap, supply := s.supply }, 0)
+      .ok ({ dummy := s.dummy, paused := Pausable.unpause s.paused, cap := s.cap, supply := s.supply }, 0)
     else
       .error .overflow
   else

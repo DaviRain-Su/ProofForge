@@ -18,7 +18,7 @@ inductive Error where
 
 @[pf_entry]
 def init (_owner : Address) : State :=
-  { paused := 0, cap := ⟨100, 0, 0, 0⟩, supply := UInt256.zero }
+  { paused := Pausable.running, cap := ⟨100, 0, 0, 0⟩, supply := UInt256.zero }
 
 /-- 只有构造期 owner 能加 supply。
     非 owner → `Unauthorized(caller)`；paused → `Paused()`；
@@ -26,9 +26,9 @@ def init (_owner : Address) : State :=
 @[pf_entry]
 def mint (s : State) (value : UInt256) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
-    if s.paused != 0 then
+    if !Access.requireRunning s.paused then
       .ok ({ paused := s.paused, cap := s.cap, supply := s.supply },
-        Revert.paused)
+        Access.runningViolation)
     else if UInt256.atLeast s.cap (UInt256.add s.supply value) then
       if (0 : UInt64) ≠ 1 then
         .ok ({ paused := s.paused, cap := s.cap,
@@ -48,7 +48,7 @@ def mint (s : State) (value : UInt256) : Except Error (State × UInt64) :=
 def pause (s : State) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
     if (0 : UInt64) ≠ 1 then
-      .ok ({ paused := 1, cap := s.cap, supply := s.supply }, 1)
+      .ok ({ paused := Pausable.pause s.paused, cap := s.cap, supply := s.supply }, 1)
     else
       .error .overflow
   else
@@ -60,7 +60,7 @@ def pause (s : State) : Except Error (State × UInt64) :=
 def unpause (s : State) : Except Error (State × UInt64) :=
   if Address.eqImmutable Context.caller then
     if (0 : UInt64) ≠ 1 then
-      .ok ({ paused := 0, cap := s.cap, supply := s.supply }, 0)
+      .ok ({ paused := Pausable.unpause s.paused, cap := s.cap, supply := s.supply }, 0)
     else
       .error .overflow
   else
