@@ -206,6 +206,28 @@ external account 2. The returned value is the last CPI return word. -/
 @[pf_inline] def baseAccountDataSize : UInt64 :=
   ProofForge.Svm.Runtime.tokenAccountSize
 
+
+/-- CheckedTransfer 的 5 个角色索引 wellFormed 分量提取。 -/
+theorem checkedTransfer_wf_parts (accounts : CheckedTransferAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.tokenProgram.wellFormed L ∧
+    accounts.source.wellFormed L ∧
+    accounts.mint.wellFormed L ∧
+    accounts.destination.wellFormed L ∧
+    accounts.authority.wellFormed L := by
+  simp only [CheckedTransferAccounts.wellFormed, Bool.and_eq_true] at h
+  exact ⟨h.1.1.1.1, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+
+/-- UncheckedTransfer 的 4 个角色索引 wellFormed 分量提取。 -/
+theorem uncheckedTransfer_wf_parts (accounts : UncheckedTransferAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.tokenProgram.wellFormed L ∧
+    accounts.source.wellFormed L ∧
+    accounts.destination.wellFormed L ∧
+    accounts.authority.wellFormed L := by
+  simp only [UncheckedTransferAccounts.wellFormed, Bool.and_eq_true] at h
+  exact ⟨h.1.1.1, h.1.1.2, h.1.2, h.2⟩
+
 end ProofForge.Svm.Sdk.Token
 
 
