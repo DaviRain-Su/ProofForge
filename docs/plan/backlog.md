@@ -23,7 +23,8 @@ static/tagged/bounded schema 对照两套 target plan 的 source projections，�
 cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded account view 与
 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
 instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed signer tail 收口到
-同一个 bounded plan，下一刀进入 SVM-RT-3 Token-2022 TLV。EVM-RT-2a typed call-result 已完成，
+同一个 bounded plan；SVM-RT-3 第一刀已用 allocation-free scalar cursor/bitmap 建立
+Token-2022 TLV envelope，并继续对所有未建模 extension fail closed。EVM-RT-2a typed call-result 已完成，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
 entry-value 与 calldata route policy；UInt256 div/mod 已固定 checked 除零 revert 策略。
 下一刀继续 precompile-specific closed return contract 与剩余 R4 hardening。并行 EVM
@@ -34,8 +35,8 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 275 jobs；SVM manifest 全 54 programs；
-  Mollusk 全量 293/293（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
+- **当前可验证基线（2026-08-28）**：Lean 汇总 277 jobs；SVM manifest 全 54 programs；
+  Mollusk 全量 308/308（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
@@ -256,6 +257,13 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   `ReturnDataStaging` 规划。全部 region 经 `Plan.alloc` 做 alignment/capacity gate，不携带或
   持久化 pointer；已有 assembly 逐字节不变。详见 `docs/plan/tasks/r2-003.md`。
 
+- R2-004 SVM Token-2022 TLV envelope 已完成：target-owned plan/reference cursor 按 pinned
+  SPL Token-2022 layout 验证 base、mint padding、AccountType、little-endian TLV header 与
+  `data_len`；cursor state 只有 UInt64 offset/count/duplicate bitmap，generated sBPF 不含
+  Array/List/Map 或 persistent pointer。当前 closed specialization 接受 classic base 与
+  official end/padding form，transfer-fee、hook、unknown/malformed 继续在 CPI 前原子拒绝；
+  53 个不相关 SVM 产物逐字节不变。详见 `docs/plan/tasks/r2-004.md`。
+
 - R4-001 EVM typed call-result contract 已完成：`Evm.CallResult` 用一个 interpreter 统一
   closed CALL/STATICCALL 的 success-only、exact-word 与 ERC-20 empty-or-nonzero-word policy，
   最多复制 32 bytes returndata。`ClosedCall.Emit` 的既有 consumers 全部迁移且
@@ -280,9 +288,9 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 275 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 277 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 293/293，其中 RawEntry 15/15、Phoenix-v1 profile
+  `pf build` 当前通过；全套 Mollusk 308/308，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。
 - EVM registry 20 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / TipJar / Lang / Vault / Ownable / Token / Capped /

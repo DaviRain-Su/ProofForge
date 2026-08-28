@@ -1,5 +1,6 @@
 import ProofForge.Core.Ops
 import ProofForge.Svm.Component
+import ProofForge.Svm.Cpi.TokenTlv
 
 namespace ProofForge.Svm.Ops
 
@@ -111,10 +112,18 @@ structure CpiMeta where
   signer : Bool := false
   writable : Bool := false
   expectedDataLen : Option Nat := none
+  /-- Typed account-data policy (e.g. the bounded Token-2022 TLV cursor); mutually exclusive
+  with `expectedDataLen`. -/
+  accountData : Option Cpi.TokenTlv.Policy := none
   deriving BEq, Repr, Inhabited
 
 def CpiMeta.wellFormed (entry : CpiMeta) : Bool :=
-  cpiAccInRange entry.acc && entry.expectedDataLen.all (· ≤ 18446744073709551615)
+  cpiAccInRange entry.acc && entry.expectedDataLen.all (· ≤ 18446744073709551615) &&
+    !(entry.expectedDataLen.isSome && entry.accountData.isSome) &&
+    entry.accountData.all (fun policy =>
+      match Cpi.TokenTlv.planFor policy with
+      | .ok plan => plan.wellFormed
+      | .error _ => false)
 
 inductive CpiWord (V : Type) where
   | u8le (value : V)

@@ -12,6 +12,8 @@ import ProofForge.Extract.LegacyIR
 import ProofForge.Crypto.Sha256
 import ProofForge.Crypto.Keccak
 import ProofForge.Crypto.Sha256Compat
+import ProofForge.Svm.Cpi.TokenTlv
+import ProofForge.Svm.Cpi.TokenTlv.Emit
 import ProofForge.Svm.Ops
 import ProofForge.Svm.Runtime
 import ProofForge.Svm.Registry

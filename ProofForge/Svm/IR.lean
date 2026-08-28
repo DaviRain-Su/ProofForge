@@ -877,7 +877,12 @@ private partial def opsCanon (ops : Array Op) : String :=
             match entry.expectedDataLen with
             | some n => s!"@{n}"
             | none => ""
-          s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}{dataLen}"
+          let policy :=
+            match entry.accountData with
+            | some (.token2022Base .mint) => "~t22mint"
+            | some (.token2022Base .account) => "~t22acct"
+            | none => ""
+          s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}{dataLen}{policy}"
         let wordCanon (word : Ops.CpiWord Ops.Val) : String :=
           match word with
           | .u8le (.lit n) => s!"u8.{n.toNat}"

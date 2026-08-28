@@ -197,6 +197,8 @@ private def metaOfLegacy (entry : ProofForge.Ops.CpiMeta) : Svm.Ops.CpiMeta :=
 private def metaToLegacy (entry : Svm.Ops.CpiMeta) : Except String ProofForge.Ops.CpiMeta := do
   if entry.expectedDataLen.isSome then
     throw "extract/unsupported: legacy adapter cannot represent CPI account data length"
+  if entry.accountData.isSome then
+    throw "extract/unsupported: legacy adapter cannot represent a typed CPI account-data policy"
   return { acc := entry.acc, signer := entry.signer, writable := entry.writable }
 
 private def wordOfLegacy : ProofForge.Ops.CpiWord → Svm.Ops.CpiWord Val

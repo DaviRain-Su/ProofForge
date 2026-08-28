@@ -3465,13 +3465,33 @@ private def asBoolLit (e : Expr) : Option Bool :=
   else if isConstNamed e ``Bool.false || endsWith e ".false" then some false
   else none
 
-/-- A statically shaped `CpiMeta`, including its optional exact account-data length. -/
+/-- Decode the closed `Cpi.TokenTlv.Policy` source vocabulary. -/
+private def asAccountDataPolicy (e : Expr) :
+    Option (Option ProofForge.Svm.Cpi.TokenTlv.Policy) :=
+  if isConstNamed e ``Option.none || endsWith e ".none" then
+    some none
+  else if (isConstNamed e ``Option.some || endsWith e ".some") && e.getAppArgs.size ≥ 1 then
+    let p := strip e.getAppArgs[e.getAppArgs.size - 1]!
+    if (isConstNamed p ``ProofForge.Svm.Cpi.TokenTlv.Policy.token2022Base ||
+        endsWith p ".token2022Base") && p.getAppArgs.size ≥ 1 then
+      let k := strip p.getAppArgs[p.getAppArgs.size - 1]!
+      if isConstNamed k ``ProofForge.Svm.Cpi.TokenTlv.BaseKind.mint || endsWith k ".mint" then
+        some (some (.token2022Base .mint))
+      else if isConstNamed k ``ProofForge.Svm.Cpi.TokenTlv.BaseKind.account ||
+          endsWith k ".account" then
+        some (some (.token2022Base .account))
+      else none
+    else none
+  else none
+
+/-- A statically shaped `CpiMeta`, including its optional exact account-data length or typed
+account-data policy. -/
 private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
   let e := strip e
   if isConstNamed e ``ProofForge.Svm.Runtime.CpiMeta.mk || endsWith e ".mk" then
     let args := e.getAppArgs
-    if args.size ≥ 4 then
-      let lenExpr := strip args[args.size - 1]!
+    if args.size ≥ 5 then
+      let lenExpr := strip args[args.size - 2]!
       let expectedDataLen : Option (Option Nat) :=
         if isConstNamed lenExpr ``Option.none || endsWith lenExpr ".none" then
           some none
@@ -3479,13 +3499,14 @@ private def asCpiMeta (env : Environment) (e : Expr) : Option Ops.CpiMeta :=
             lenExpr.getAppArgs.size ≥ 1 then
           (natOfVal <$> val env lenExpr.getAppArgs[lenExpr.getAppArgs.size - 1]!)
         else none
-      match val env args[args.size - 4]!, asBoolLit args[args.size - 3]!,
-          asBoolLit args[args.size - 2]!, expectedDataLen with
-      | some accV, some signer, some writable, some expectedDataLen =>
+      let accountData := asAccountDataPolicy (strip args[args.size - 1]!)
+      match val env args[args.size - 5]!, asBoolLit args[args.size - 4]!,
+          asBoolLit args[args.size - 3]!, expectedDataLen, accountData with
+      | some accV, some signer, some writable, some expectedDataLen, some accountData =>
         match natOfVal accV with
-        | some acc => some { acc, signer, writable, expectedDataLen }
+        | some acc => some { acc, signer, writable, expectedDataLen, accountData }
         | none => none
-      | _, _, _, _ => none
+      | _, _, _, _, _ => none
     else none
   else none
 

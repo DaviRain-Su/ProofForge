@@ -1,6 +1,7 @@
 import ProofForge.Svm.IR
 import ProofForge.Svm.Scratch
 import ProofForge.Svm.Component.Emit
+import ProofForge.Svm.Cpi.TokenTlv.Emit
 import ProofForge.Svm.EntryAdapter.Emit
 
 namespace ProofForge.Svm.Emit
@@ -1343,21 +1344,36 @@ private def emitOneMeta (i : Nat) (m : Ops.CpiMeta) : String :=
   stxb [r5 + {base + 15}], r1
 "
 
-/-- Optional target-owned account shape constraints run immediately before the CPI. -/
-private def emitCpiDataLenChecks (label : String) (metas : Array Ops.CpiMeta) : String :=
-  let constrained := metas.filter (·.expectedDataLen.isSome)
-  if constrained.isEmpty then ""
-  else Id.run do
+/--
+Typed target-owned account-data policies run immediately before the CPI. Exact-length constraints
+keep their existing lowering; `TokenTlv` policies lower through their own module's preflight, so
+the main emitter stays a dispatcher rather than owning Token-2022 layout knowledge.
+-/
+private def emitCpiAccountDataChecks (label : String) (metas : Array Ops.CpiMeta) :
+    Except String String := do
+  let constrained := metas.filter (fun m => m.expectedDataLen.isSome || m.accountData.isSome)
+  if constrained.isEmpty then
+    return ""
+  else
     let err := s!"cpi_data_len_err_{label}"
     let ok := s!"cpi_data_len_ok_{label}"
-    let mut out := "  ; validate statically constrained CPI account data lengths\n"
-    for entry in constrained do
-      let some expected := entry.expectedDataLen | unreachable!
+    let parts ← constrained.toList.mapM fun entry =>
       let physical := entry.acc + 1
-      out := out ++
-        s!"  ldxdw r8, [r10 - {headerStack physical}]\n" ++
-        s!"  ldxdw r1, [r8 + 80]\n  jne r1, {expected}, {err}\n"
-    return out ++ s!"\
+      match entry.expectedDataLen, entry.accountData with
+      | some expected, none =>
+        pure s!"
+  ldxdw r8, [r10 - {headerStack physical}]
+  ldxdw r1, [r8 + 80]
+  jne r1, {expected}, {err}
+"
+      | none, some policy =>
+        match ProofForge.Svm.Cpi.TokenTlv.planFor policy with
+        | .error reason => throw reason
+        | .ok plan =>
+          ProofForge.Svm.Cpi.TokenTlv.Emit.emitPreflight { headerStack } label physical plan
+      | _, _ =>
+        throw "extract/unsupported: CPI meta has conflicting account-data policies"
+    return "  ; validate typed CPI account-data policies\n" ++ String.join parts ++ s!"
   ja {ok}
 {err}:
   lddw r0, 0x1
@@ -1502,7 +1518,7 @@ private def emitInvoke (p : IR.Program) (label : String)
 "
     | _ =>
         s!"  ldxdw r1, [r10 - {headerStack physicalProgramIx}]\n  add64 r1, 8\n"
-  let dataLenChecks := emitCpiDataLenChecks label metas
+  let dataLenChecks ← emitCpiAccountDataChecks label metas
   return s!"\
   ; invoke programIx={physicalProgramIx} metas={metas.size} dataLen={dataLen}
 {dataLenChecks}\

@@ -1,3 +1,5 @@
+import ProofForge.Svm.Cpi.TokenTlv
+
 namespace ProofForge.Svm.Runtime
 
 
@@ -75,6 +77,10 @@ structure CpiMeta where
   writable : Bool := false
   /-- Reject the invocation before CPI unless this account has exactly this many data bytes. -/
   expectedDataLen : Option UInt64 := none
+  /-- Typed account-data policy (e.g. the bounded Token-2022 TLV cursor); mutually exclusive
+  with `expectedDataLen`. The policy's full meaning is owned by the target-side plan plus its
+  sole interpreter, not by source code. -/
+  accountData : Option Cpi.TokenTlv.Policy := none
   deriving Repr, DecidableEq, Inhabited
 
 /-- 内层 instruction data 的一段。长度和布局编译期钉死。 -/
@@ -420,15 +426,23 @@ def tokenTransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
     #[.u8le 12, .u64le amount, .u8le decimals]
 
 /--
-Token-2022 `TransferChecked` for the classic-compatible base-account slice. The transaction must
-place the Token-2022 program at external index 4. Exact base lengths reject every TLV extension
-before CPI, including transfer-fee and transfer-hook mints, until those semantics are modeled.
+Token-2022 `TransferChecked` for the classic-compatible base slice, guarded by the bounded
+TLV account-data policy. The transaction must place the Token-2022 program at external index 4.
+The official state-with-extensions layout is parsed by a target-local bounded cursor before any
+CPI: the classic base mint/account (82/165 bytes) proceeds; an extension-form account proceeds
+only when its TLV region holds nothing but official end/padding forms; every real extension
+entry — transfer-fee, transfer-hook, or anything else — is rejected atomically with a classified
+reason, before any persistent write or CPI, until its complete official semantics, accounts, and
+CPI behavior are modeled.
 -/
 def token2022TransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
   invoke 4
-    #[{ acc := 1, signer := false, writable := true, expectedDataLen := some 165 },
-      { acc := 2, signer := false, writable := false, expectedDataLen := some 82 },
-      { acc := 3, signer := false, writable := true, expectedDataLen := some 165 },
+    #[{ acc := 1, signer := false, writable := true,
+        accountData := some (.token2022Base .account) },
+      { acc := 2, signer := false, writable := false,
+        accountData := some (.token2022Base .mint) },
+      { acc := 3, signer := false, writable := true,
+        accountData := some (.token2022Base .account) },
       { acc := 0, signer := true, writable := false }]
     -- Token and Token-2022 share the packed tag-12 layout.
     #[.u8le 12, .u64le amount, .u8le decimals]

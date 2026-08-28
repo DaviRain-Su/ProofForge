@@ -93,8 +93,8 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | 包 | 依赖 | 交付边界 |
 |---|---|---|
 | **SVM-RT-2a instruction layout（已集成）** | SVM-RT-1 | typed bounded scratch bank + instruction/metas/data/infos/signer-tail plan；1,024-byte OOM、alignment、duplicate region 在 emission 前 fail closed；见 R2-002 |
-| **SVM-RT-2b instruction effects** | SVM-RT-2a | bounded return data、multi-seed PDA/CPI meta/signer seeds；复用同一 scratch plan，未知 shape fail closed |
-| **SVM-RT-3 Token-2022 TLV** | SVM-RT-1/2 | bounded TLV cursor；transfer-fee、hook/account requirements 分片；未知 extension 不走 classic 82/165-byte path |
+| **SVM-RT-2b instruction effects（已集成）** | SVM-RT-2a | bounded return data、multi-seed PDA/CPI meta/signer seeds；复用同一 scratch plan，未知 shape fail closed；见 R2-003 |
+| **SVM-RT-3 Token-2022 TLV（envelope 已集成）** | SVM-RT-1/2 | allocation-free scalar cursor/bitmap 与 closed end/padding specialization 已落地；transfer-fee、hook/account requirements 继续按语义分片，未知 extension 不走 classic 82/165-byte path；见 R2-004 |
 | **SVM-SDK-2 scratch** | SVM-RT-2 | invocation-local bounded Vec/byte writer/codec buffer，显式 capacity/OOM/lifetime；不能持久化 pointer |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
 | **EVM-RT-2b effects** | EVM-RT-2a | typed LOG0..4/custom error/payable consolidation；不开放 delegatecall/create/arbitrary callee |

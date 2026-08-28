@@ -110,12 +110,14 @@ Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固
 account view、R5-001 Access foundation 与 R5-002 static storage declarations 均已集成；两个
 独立 contract 分别复用 Access 和 storage declaration contracts。SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
-return-data/multi-seed signer-tail geometry，下一刀进入 Token-2022 TLV。EVM-RT-2a 也已统一
+return-data/multi-seed signer-tail geometry；SVM-RT-3 第一刀已建立 Token-2022 bounded TLV
+envelope，真实 extension 仍按语义分片开放。EVM-RT-2a 也已统一
 closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom error，
 EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy；UInt256 div/mod 也已
 固定 checked 零除 revert。下一刀继续 precompile-specific closed return contract 与剩余
 R4 hardening。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
+[R2-004](tasks/r2-004.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。
 这不表示 R2/R4/R5 已完成。
@@ -225,8 +227,15 @@ R2-003 已完成 SRT-2b：`SignerSeedTail` 统一 ordinary invoke / dynamic sign
 copied bytes、aligned bump、seed-entry array 与 signer group；`ReturnDataStaging` 统一固定
 32-byte program id + 8-byte payload。所有 geometry 经同一个 invocation-only `Plan.alloc`
 做 alignment/OOM gate，现有 assembly 不变；不开放 dynamic return data、runtime pointer 或
-persistent heap object。SRT-3 Token-2022 TLV 和 R3 transient containers 仍未完成；详见
-[R2-003](tasks/r2-003.md)。
+persistent heap object。详见 [R2-003](tasks/r2-003.md)。
+
+R2-004 已完成 SRT-3 的 bounded envelope foundation：`Svm.Cpi.TokenTlv` 从 pinned SPL
+interface 固定 base/padding/type/TLV geometry，host reference cursor 用 UInt64 offset/count 与
+28-bit duplicate bitmap 验证 bounded advance；generated closed specialization 不分配 heap、
+不持久化 pointer，并由证明化的 straight-line interpreter 接受 classic base 和 official
+end/padding form。所有真实 extension 继续 fail closed，transfer-fee/hook 等必须在后续切片
+连同完整账户和 CPI 语义单独开放；详见 [R2-004](tasks/r2-004.md)。R3 transient containers
+仍未完成。
 
 ### R3 — SVM SDK
 
