@@ -1,6 +1,8 @@
 import ProofForge.Svm.Sdk.Account
 import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.Queue
+import ProofForge.Svm.Sdk.Pda
+import ProofForge.Svm.Sdk.System
 import ProofForge.Svm.Sdk.Transient
 
 /-!
@@ -17,4 +19,8 @@ stores, and bounded control flow. `Sdk.Transient` reuses the official heap model
 for invocation-local fixed vectors, byte writers, and composed codecs rather than introducing a
 parallel allocator or lifetime. No native pointer or invocation-heap collection crosses the
 contract boundary.
+
+`Sdk.Pda` and `Sdk.System` provide compiler-erased names for the current static PDA and fixed
+System Program effects. Applications no longer repeat CPI tags, account metas, signer seeds, or
+instruction-word recipes; the existing Runtime/IR verifier still owns their target validation.
 -/

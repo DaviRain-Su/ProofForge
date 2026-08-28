@@ -2,8 +2,6 @@ import ProofForge
 
 namespace Examples.Create
 
-open ProofForge.Svm.Runtime
-
 structure State where
   dummy : UInt64
   deriving Repr, DecidableEq, Inhabited
@@ -20,7 +18,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def create (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := systemCreate lamports 16
+    let _ := ProofForge.Svm.Sdk.System.createAccount lamports 16
     .ok ({ dummy := 0 }, lamports)
   else
     .error .overflow

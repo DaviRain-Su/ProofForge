@@ -3431,10 +3431,18 @@ private def mentionsRuntime (env : Environment) (e : Expr) (suf : String) : Bool
             | _ => false)
   mentions 8 e
 
-/-- Runtime CPI wrappers are unfolded by namespace, not by an ever-growing list of recipe names. -/
-private def mentionsSvmRuntime (e : Expr) : Bool :=
-  e.getUsedConstantsAsSet.toList.any fun name =>
-    name.toString.startsWith "ProofForge.Svm.Runtime."
+/-- Runtime CPI wrappers are unfolded by namespace, not by an ever-growing list of recipe names.
+Marked source facades may add one or more compiler-erased naming layers; inspect only their
+definitions so an unmarked application helper cannot become an implicit extraction boundary. -/
+private def mentionsSvmRuntime (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      e.getUsedConstantsAsSet.toList.any fun name =>
+        name.toString.startsWith "ProofForge.Svm.Runtime." ||
+          (Attr.isInline env name &&
+            match env.find? name with
+            | some (.defnInfo info) => mentionsSvmRuntime env fuel info.value
+            | _ => false)
 
 private def natOfVal : Ops.Val → Option Nat
   | .lit n => some n.toNat
@@ -3934,7 +3942,7 @@ private def findInvoke (env : Environment) (fuel : Nat) (e : Expr) :
           | .lam _ _ body _ => go fuel' body
           | .app f a => go fuel' f <|> go fuel' a
           | _ => none
-  if mentionsSvmRuntime e then
+  if mentionsSvmRuntime env 8 e then
     go fuel e
   else none
 
@@ -6544,7 +6552,7 @@ private def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         else
           match unfoldUserHelper env value with
           | some (_, unfolded) =>
-              mentionsSvmRuntime unfolded || (findInvoke env 64 unfolded).isSome ||
+              mentionsSvmRuntime env 8 unfolded || (findInvoke env 64 unfolded).isSome ||
                 mentionsSvmEffect env 64 unfolded
           | none => false
       if ignoredInlineEffect then

@@ -16,11 +16,11 @@ inductive Error where
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
-/-- 给 `"vault"` PDA 开 16 字节。 -/
+/-- 给 `"vault"` PDA 开 16 字节；种子与 space 由 SDK facade 编译期绑定。 -/
 @[pf_entry]
 def openPda (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := createPda lamports
+    let _ := ProofForge.Svm.Sdk.Pda.Ascii.createAccount "vault" lamports 16
     .ok ({ dummy := 0 }, lamports)
   else
     .error .overflow

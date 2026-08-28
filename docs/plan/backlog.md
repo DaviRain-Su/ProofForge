@@ -31,14 +31,14 @@ STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed 
 div/mod 已固定 checked 除零 revert 策略。下一刀继续剩余 R4 hardening。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
-R3-003 invocation-local transient SDK、
+R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
 R5-001 EVM Access foundation 和
 R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
 完成。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 283 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 286 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 308/308（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -245,7 +245,15 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   fixed `FixedVec`、`ByteWriter` 和 composed `SignedCpiCodec`。BatchRecorder 与 dynamic signed
   self-CPI 是两个真实 consumer；没有第二套 allocator/plan/lifetime，也没有 persistent
   pointer、heap Map/Array 或新 Ops/IR/Component/main-Emit case。全部 SVM 产物逐字节不变；
-  详见 `docs/plan/tasks/r3-003.md`。R3 的 PDA/System/Token facade 仍未完成。
+  详见 `docs/plan/tasks/r3-003.md`。
+
+- R3-004 SVM static PDA/System facade foundation 已完成：`Svm.Sdk.Pda.Ascii` 封装单个
+  compile-time ASCII seed 的 canonical bump/check/signed create，`Svm.Sdk.System` 封装 fixed
+  account geometry 的 transfer/createAccount；Pda、Transfer、Create、CreatePda 四个 example
+  不再重复 Runtime 名称或 CPI tag/meta/data recipe。Extractor 只新增通用 `pf_inline`→SVM
+  Runtime 边界展开，不新增 facade 名字特判；旧单 seed IR 同时补齐 1–32-byte ASCII
+  fail-closed gate。四个程序 IR digest 与 12 份 assembly/ELF/IDL 产物保持不变。详见
+  `docs/plan/tasks/r3-004.md`。其余 System 指令与 classic Token/Token-2022 facade 仍是 R3 工作。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
@@ -311,7 +319,7 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 283 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 286 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 308/308，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。
