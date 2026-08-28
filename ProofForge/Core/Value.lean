@@ -55,4 +55,16 @@ structure BoundedVec (α : Type) (capacity : Nat) where
   length : UInt32
   values : Vector α capacity
 
+/-- A bounded byte sequence with a fixed source frame. Targets bind this logical type to their
+native dynamic-byte wire format; the host Vector is not a target pointer or heap object. -/
+structure BoundedBytes (capacity : Nat) where
+  length : UInt32
+  values : Vector UInt8 capacity
+
+/-- A bounded UTF-8 string. `Core.Value.BoundedString.wellFormed` owns UTF-8 validity;
+target decoders must enforce the same contract in addition to the capacity bound. -/
+structure BoundedString (capacity : Nat) where
+  length : UInt32
+  values : Vector UInt8 capacity
+
 end ProofForge.Core.Value

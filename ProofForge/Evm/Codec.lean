@@ -67,6 +67,8 @@ private partial def abiTypeOfSchemaAt : Schema → Except String String
   | .enumeration .. => throw "evm/codec: enum ABI tags require an explicit target policy"
   | .option _ => throw "evm/codec: option ABI tags require an explicit target policy"
   | .boundedArray .. => throw "evm/codec: bounded arrays require an explicit dynamic ABI policy"
+  | .boundedBytes .. => throw "evm/codec: bounded bytes require an explicit dynamic ABI policy"
+  | .boundedString .. => throw "evm/codec: bounded strings require an explicit dynamic ABI policy"
 
 /-- Canonical Solidity ABI spelling for one logical parameter or result. Nested records and Lean
 products are tuples; literal vectors are fixed arrays. This target-owned function deliberately
@@ -76,6 +78,8 @@ def abiTypeOfSchema (schema : Schema) : Except String String := do
   match schema with
   | .boundedArray _ element =>
       return (← abiTypeOfSchemaAt element) ++ "[]"
+  | .boundedBytes _ => throw "evm/codec: bounded bytes input policy is not yet bound"
+  | .boundedString _ => throw "evm/codec: bounded string input policy is not yet bound"
   | _ => abiTypeOfSchemaAt schema
 
 /-- One ABI word per statically present scalar leaf. Wide source values still occupy one ABI word;
@@ -284,6 +288,8 @@ def inputPlan (schema : Schema) : Except String AbiInputPlan := do
   match schema with
   | .option _ | .enumeration .. => taggedTupleV1InputPlan schema
   | .boundedArray capacity element => boundedArrayV1InputPlan capacity element
+  | .boundedBytes _ => throw "evm/codec: bounded bytes input policy is not yet bound"
+  | .boundedString _ => throw "evm/codec: bounded string input policy is not yet bound"
   | _ => staticInputPlan schema
 
 /-- Resolve Extract's compatibility projection spelling against one EVM input plan. -/

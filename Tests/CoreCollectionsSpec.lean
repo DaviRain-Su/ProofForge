@@ -211,6 +211,56 @@ private def bits : BoundedBitSet 130 :=
 
 end QueueAndBitSetSemantics
 
+namespace ByteAndStringSemantics
+
+open ProofForge.Core.Value
+
+private def ascii : BoundedBytes 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x63, 0] }
+
+private def cent : BoundedBytes 4 :=
+  { length := 2, values := #v[0xc2, 0xa2, 0, 0] }
+
+private def euro : BoundedBytes 4 :=
+  { length := 3, values := #v[0xe2, 0x82, 0xac, 0] }
+
+private def supplementary : BoundedBytes 4 :=
+  { length := 4, values := #v[0xf0, 0x9f, 0x92, 0xa9] }
+
+private def overlong : BoundedBytes 4 :=
+  { length := 2, values := #v[0xc0, 0x80, 0, 0] }
+
+private def surrogate : BoundedBytes 4 :=
+  { length := 3, values := #v[0xed, 0xa0, 0x80, 0] }
+
+private def truncated : BoundedBytes 4 :=
+  { length := 2, values := #v[0xe2, 0x82, 0, 0] }
+
+private def outOfRange : BoundedBytes 4 :=
+  { length := 4, values := #v[0xf4, 0x90, 0x80, 0x80] }
+
+private def malformedLength : BoundedBytes 4 :=
+  { length := 5, values := #v[0x61, 0x62, 0x63, 0x64] }
+
+#guard ascii.wellFormed
+#guard ascii.size == 3
+#guard ascii.get? 1 == some 0x62
+#guard (ascii.set? 1 0x7a).map (·.getD 1 0) == some 0x7a
+#guard (ascii.pop?).map (fun result => result.1.size == 2 && result.2 == 0x63) == some true
+#guard ascii.isValidUtf8
+#guard cent.isValidUtf8
+#guard euro.isValidUtf8
+#guard supplementary.isValidUtf8
+#guard !overlong.isValidUtf8
+#guard !surrogate.isValidUtf8
+#guard !truncated.isValidUtf8
+#guard !outOfRange.isValidUtf8
+#guard !malformedLength.isValidUtf8
+#guard (BoundedString.ofBytes? euro).map (·.wellFormed) == some true
+#guard (BoundedString.ofBytes? surrogate).isNone
+
+end ByteAndStringSemantics
+
 /-! The same helper must remain an extractable source combinator. This probe deliberately carries
 the bounded vector through each target's existing input adapter; no collection operation is added
 to Core Ops or either target extension. -/

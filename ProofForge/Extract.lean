@@ -121,6 +121,12 @@ private partial def codecSchemaOfTypeAt (env : Environment) (fuel : Nat)
       | throw "extract/unsupported: BoundedVec boundary capacity is not a literal"
     let element ← codecSchemaOfTypeAt env (fuel - 1) ancestors args[args.size - 2]!
     return .boundedArray capacity element
+  if head == some boundedBytesName || head == some boundedStringName then
+    let some capacityExpr := args.back?
+      | throw "extract/unsupported: malformed bounded byte boundary type"
+    let some capacity := natLiteral? capacityExpr
+      | throw "extract/unsupported: bounded byte capacity is not a literal"
+    return if head == some boundedBytesName then .boundedBytes capacity else .boundedString capacity
   if head == some ``Array then
     throw "extract/unsupported: Array boundary is dynamic; use Vector or BoundedVec"
   if head == some fixedBytesName then

@@ -265,6 +265,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   physical persistence；SVM account bytes 与 EVM slots 的 binding 继续独立排期。详见
   `docs/plan/tasks/r1-014.md`。
 
+- R1-015 bounded bytes/string source contract 已完成：`Core.Value.BoundedBytes` 与
+  `BoundedString` 使用 type-level capacity + `UInt32` active length + fixed UInt8 frame，byte
+  operations 复用 BoundedVec logical laws；strict UTF-8 validator 拒绝 overlong、surrogate、
+  truncated 与 >U+10FFFF。两者拥有独立 Codec schema，Profile/Extract 保留 logical identity，
+  但本片在 SVM/EVM 明确 fail closed，等待各自 Borsh `Vec<u8>`/`String` 与 ABI `bytes`/`string`
+  binding。未新增 Ops/IR/Emit recipe。详见 `docs/plan/tasks/r1-015.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

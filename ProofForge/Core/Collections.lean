@@ -106,6 +106,112 @@ logical length owns reachability, while a target may choose to zero storage as a
 end ProofForge.Core.Value.BoundedVec
 
 /-!
+## Bounded bytes and UTF-8 strings
+
+Both carriers reuse `BoundedVec UInt8` logical operations. They remain distinct source types so
+SVM can select Borsh `Vec<u8>`/`String` and EVM can select standard ABI `bytes`/`string` without
+pretending a generic vector determines either wire format.
+-/
+
+namespace ProofForge.Core.Value.BoundedBytes
+
+private def asVec (bytes : BoundedBytes capacity) : BoundedVec UInt8 capacity :=
+  { length := bytes.length, values := bytes.values }
+
+private def ofVec (bytes : BoundedVec UInt8 capacity) : BoundedBytes capacity :=
+  { length := bytes.length, values := bytes.values }
+
+def wellFormed (bytes : BoundedBytes capacity) : Bool := bytes.asVec.wellFormed
+def capacity {n : Nat} (bytes : BoundedBytes n) : UInt64 := bytes.asVec.capacity
+def size {n : Nat} (bytes : BoundedBytes n) : UInt64 := bytes.asVec.size
+def isEmpty {n : Nat} (bytes : BoundedBytes n) : Bool := bytes.asVec.isEmpty
+def isFull {n : Nat} (bytes : BoundedBytes n) : Bool := bytes.asVec.isFull
+def get? {n : Nat} (bytes : BoundedBytes n) (index : UInt64) : Option UInt8 := bytes.asVec.get? index
+def getD {n : Nat} (bytes : BoundedBytes n) (index : UInt64) (fallback : UInt8) : UInt8 :=
+  bytes.asVec.getD index fallback
+
+def set? {n : Nat} (bytes : BoundedBytes n) (index : UInt64) (value : UInt8) :
+    Option (BoundedBytes n) :=
+  (bytes.asVec.set? index value).map ofVec
+
+def push? {n : Nat} (bytes : BoundedBytes n) (value : UInt8) :
+    Option (BoundedBytes n × UInt64) :=
+  (bytes.asVec.push? value).map fun result => (ofVec result.1, result.2)
+
+def pop? {n : Nat} (bytes : BoundedBytes n) : Option (BoundedBytes n × UInt8) :=
+  (bytes.asVec.pop?).map fun result => (ofVec result.1, result.2)
+
+def clear {n : Nat} (bytes : BoundedBytes n) : BoundedBytes n :=
+  ofVec bytes.asVec.clear
+
+private def isContinuation (byte : Nat) : Bool := 0x80 ≤ byte && byte ≤ 0xbf
+
+/-- Strict Unicode scalar UTF-8 validation over the active prefix. It rejects truncated,
+overlong, surrogate, and greater-than-U+10FFFF encodings. -/
+def isValidUtf8 {n : Nat} (bytes : BoundedBytes n) : Bool := Id.run do
+  unless bytes.wellFormed do return false
+  let length := bytes.length.toNat
+  let mut index := 0
+  let mut valid := true
+  for _ in [0:n] do
+    if valid && index < length then
+      let b0 := (bytes.getD (UInt64.ofNat index) 0).toNat
+      if b0 ≤ 0x7f then
+        index := index + 1
+      else if 0xc2 ≤ b0 && b0 ≤ 0xdf then
+        if index + 2 ≤ length then
+          let b1 := (bytes.getD (UInt64.ofNat (index + 1)) 0).toNat
+          if isContinuation b1 then index := index + 2 else valid := false
+        else valid := false
+      else if 0xe0 ≤ b0 && b0 ≤ 0xef then
+        if index + 3 ≤ length then
+          let b1 := (bytes.getD (UInt64.ofNat (index + 1)) 0).toNat
+          let b2 := (bytes.getD (UInt64.ofNat (index + 2)) 0).toNat
+          let firstContinuation :=
+            if b0 == 0xe0 then 0xa0 ≤ b1 && b1 ≤ 0xbf
+            else if b0 == 0xed then 0x80 ≤ b1 && b1 ≤ 0x9f
+            else isContinuation b1
+          if firstContinuation && isContinuation b2 then index := index + 3
+          else valid := false
+        else valid := false
+      else if 0xf0 ≤ b0 && b0 ≤ 0xf4 then
+        if index + 4 ≤ length then
+          let b1 := (bytes.getD (UInt64.ofNat (index + 1)) 0).toNat
+          let b2 := (bytes.getD (UInt64.ofNat (index + 2)) 0).toNat
+          let b3 := (bytes.getD (UInt64.ofNat (index + 3)) 0).toNat
+          let firstContinuation :=
+            if b0 == 0xf0 then 0x90 ≤ b1 && b1 ≤ 0xbf
+            else if b0 == 0xf4 then 0x80 ≤ b1 && b1 ≤ 0x8f
+            else isContinuation b1
+          if firstContinuation && isContinuation b2 && isContinuation b3 then
+            index := index + 4
+          else valid := false
+        else valid := false
+      else
+        valid := false
+  return valid && index == length
+
+end ProofForge.Core.Value.BoundedBytes
+
+namespace ProofForge.Core.Value.BoundedString
+
+def asBytes (text : BoundedString capacity) : BoundedBytes capacity :=
+  { length := text.length, values := text.values }
+
+def wellFormed (text : BoundedString capacity) : Bool := text.asBytes.isValidUtf8
+def size (text : BoundedString capacity) : UInt64 := text.length.toUInt64
+def isEmpty (text : BoundedString capacity) : Bool := text.length == 0
+def getByte? (text : BoundedString capacity) (index : UInt64) : Option UInt8 :=
+  text.asBytes.get? index
+
+/-- Checked conversion keeps the byte and string carriers physically independent in source while
+reusing one strict UTF-8 contract. -/
+def ofBytes? (bytes : BoundedBytes capacity) : Option (BoundedString capacity) :=
+  if bytes.isValidUtf8 then some { length := bytes.length, values := bytes.values } else none
+
+end ProofForge.Core.Value.BoundedString
+
+/-!
 ## Bounded key/value semantics
 
 `BoundedMap` is the target-neutral *logical* contract for an enumerable finite map. It deliberately

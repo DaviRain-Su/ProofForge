@@ -44,6 +44,8 @@ inductive Schema where
   | option (payload : Schema)
   | fixedArray (length : Nat) (element : Schema)
   | boundedArray (capacity : Nat) (element : Schema)
+  | boundedBytes (capacity : Nat)
+  | boundedString (capacity : Nat)
   deriving Repr, BEq, Inhabited
 
 /-- A source-level route to one scalar in a statically shaped boundary value. This is logical
@@ -171,6 +173,11 @@ private partial def analyzeAt (limits : Limits) (depth : Nat) (schema : Schema) 
         let nodes := 1 + elements.descriptorNodes
         let leaves := 1 + elements.logicalLeaves
         pure { descriptorNodes := nodes, logicalLeaves := leaves, depth := elements.depth }
+    | .boundedBytes capacity | .boundedString capacity =>
+        if capacity == 0 then throw "codec/schema: zero-capacity bounded byte sequence"
+        if capacity > limits.maxArrayCapacity then
+          throw s!"codec/schema: byte capacity exceeds {limits.maxArrayCapacity}"
+        pure { descriptorNodes := 2, logicalLeaves := 1 + capacity, depth := depth + 1 }
   ensureBudget limits usage
 
 def analyze (schema : Schema) (limits : Limits := {}) : Except String Usage :=
@@ -204,6 +211,8 @@ private partial def staticLeavesAt (path : Array PathStep) : Schema → Except S
       throw "codec/schema: static leaf plan requires a target-owned option tag policy"
   | .boundedArray .. =>
       throw "codec/schema: bounded arrays require a target-owned length policy"
+  | .boundedBytes .. | .boundedString .. =>
+      throw "codec/schema: bounded bytes and strings require a target-owned length policy"
 
 /-- Flatten only source-order, statically present scalar leaves. Variable/tagged shapes stay
 closed until a target explicitly owns their tag/length representation. -/

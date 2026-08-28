@@ -95,8 +95,14 @@ def inspect (_state : UInt64) (_request : Request) (_pair : UInt32 × Bool)
 
 def inspectBounded (_state : UInt64) (_items : BoundedVec UInt64 4) : UInt64 := 0
 
+def inspectBytes (_state : UInt64) (_bytes : BoundedBytes 16) : UInt64 := 0
+
+def inspectString (_state : UInt64) (_text : BoundedString 32) : UInt64 := 0
+
 def inspectDynamicBounded (n : Nat) (_state : UInt64) (_items : BoundedVec UInt64 n) :
     UInt64 := 0
+
+def inspectDynamicBytes (n : Nat) (_state : UInt64) (_bytes : BoundedBytes n) : UInt64 := 0
 
 def pairResult (_state : UInt64) : UInt64 × Bool := (7, true)
 
@@ -148,6 +154,17 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
   unless bounded.paramSchemas == #[.boundedArray 4 (.scalar .uint64)] &&
       bounded.paramTypes.isEmpty && bounded.paramWidths.isEmpty do
     throwError s!"wrong bounded-array source schema: {repr bounded.paramSchemas}"
+  let bytes ←
+    match Extract.extractMethod env .get ``inspectBytes with
+    | .ok method => pure method
+    | .error reason => throwError reason
+  let text ←
+    match Extract.extractMethod env .get ``inspectString with
+    | .ok method => pure method
+    | .error reason => throwError reason
+  unless bytes.paramSchemas == #[.boundedBytes 16] &&
+      text.paramSchemas == #[.boundedString 32] do
+    throwError s!"wrong bounded byte/string schemas: {repr bytes.paramSchemas} / {repr text.paramSchemas}"
   let result ←
     match Extract.extractMethod env .get ``pairResult with
     | .ok result => pure result
@@ -167,6 +184,7 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
   reject ``polymorphic "polymorphic"
   reject ``overBudget "array length"
   reject ``inspectDynamicBounded "capacity is not a literal"
+  reject ``inspectDynamicBytes "capacity is not a literal"
   let init : Extract.IR.Method := {
     kind := .init
     name := "AggregateGate.init"
@@ -309,6 +327,26 @@ private def orderBatch : Schema :=
 #guard
   match validate (.boundedArray 4097 (.scalar .uint64)) with
   | .error reason => reason.contains "capacity"
+  | .ok _ => false
+
+#guard
+  match analyze (.boundedBytes 16) with
+  | .ok usage => usage.descriptorNodes == 2 && usage.logicalLeaves == 17 && usage.depth == 2
+  | .error _ => false
+
+#guard
+  match analyze (.boundedString 32) with
+  | .ok usage => usage.descriptorNodes == 2 && usage.logicalLeaves == 33 && usage.depth == 2
+  | .error _ => false
+
+#guard
+  match ProofForge.Svm.EntryAdapter.borshPlan (.boundedBytes 16) with
+  | .error reason => reason.contains "Borsh bytes policy"
+  | .ok _ => false
+
+#guard
+  match ProofForge.Evm.Codec.inputPlan (.boundedString 16) with
+  | .error reason => reason.contains "not yet bound"
   | .ok _ => false
 
 #guard

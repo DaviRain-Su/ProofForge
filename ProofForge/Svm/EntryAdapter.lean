@@ -418,6 +418,10 @@ private partial def borshPlanAt (sourcePrefix : String) :
         minBytes := 4
         maxBytes
       }
+  | .boundedBytes _ =>
+      throw "extract/unsupported: SVM bounded bytes require the Borsh bytes policy"
+  | .boundedString _ =>
+      throw "extract/unsupported: SVM bounded strings require the UTF-8 Borsh string policy"
 
 /-- Derive one recursive SVM-owned Borsh plan from a logical schema. The plan fixes scratch-local
 identity and canonical tag handling but carries no account geometry or application policy. -/
@@ -426,7 +430,7 @@ def borshPlan (schema : Core.Codec.Schema) : Except String BorshPlan := do
   borshPlanAt "" schema
 
 private partial def hasTaggedSchema : Core.Codec.Schema → Bool
-  | .option _ | .enumeration .. | .boundedArray .. => true
+  | .option _ | .enumeration .. | .boundedArray .. | .boundedBytes _ | .boundedString _ => true
   | .tuple items => items.any hasTaggedSchema
   | .record _ fields => fields.any (hasTaggedSchema ·.2)
   | .fixedArray _ element => hasTaggedSchema element

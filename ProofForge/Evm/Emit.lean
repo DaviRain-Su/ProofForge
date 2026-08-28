@@ -1416,6 +1416,8 @@ private partial def abiJsonShape : Core.Codec.Schema → Except String AbiJsonSh
   | .boundedArray _ element => do
       let shape ← abiJsonShape element
       return { shape with type := shape.type ++ "[]" }
+  | .boundedBytes _ => throw "evm/codec: bounded bytes ABI JSON is not yet bound"
+  | .boundedString _ => throw "evm/codec: bounded string ABI JSON is not yet bound"
 
 private def abiJsonInputShape : Core.Codec.Schema → Except String AbiJsonShape
   | .option payload => do

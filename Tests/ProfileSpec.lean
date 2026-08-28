@@ -15,6 +15,8 @@ error: profile/rejected: Nat in root type Tests.Fixtures.usesNat
 #pf_check Tests.Fixtures.usesFixedBytes12
 #pf_check Tests.Fixtures.usesVector4
 #pf_check Tests.Fixtures.usesBoundedVec4
+#pf_check Tests.Fixtures.usesBoundedBytes16
+#pf_check Tests.Fixtures.usesBoundedString32
 
 /--
 error: profile/rejected: Nat in root type Tests.Fixtures.usesDynamicFixedBytes
@@ -27,6 +29,12 @@ error: profile/rejected: Nat in root type Tests.Fixtures.usesDynamicBoundedVec
 -/
 #guard_msgs (error) in
 #pf_check Tests.Fixtures.usesDynamicBoundedVec
+
+/--
+error: profile/rejected: Nat in root type Tests.Fixtures.usesDynamicBoundedBytes
+-/
+#guard_msgs (error) in
+#pf_check Tests.Fixtures.usesDynamicBoundedBytes
 
 /--
 error: profile/rejected: partial Tests.Fixtures.loops

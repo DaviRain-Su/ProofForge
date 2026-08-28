@@ -32,6 +32,8 @@ def uint128Name : Name := ``ProofForge.Core.Value.UInt128
 def uint256Name : Name := ``ProofForge.Core.Value.UInt256
 def fixedBytesName : Name := ``ProofForge.Core.Value.FixedBytes
 def boundedVecName : Name := ``ProofForge.Core.Value.BoundedVec
+def boundedBytesName : Name := ``ProofForge.Core.Value.BoundedBytes
+def boundedStringName : Name := ``ProofForge.Core.Value.BoundedString
 def evmUInt256AliasName : Name := ``ProofForge.Evm.Runtime.UInt256
 def evmBytes32AliasName : Name := ``ProofForge.Evm.Runtime.Bytes32
 

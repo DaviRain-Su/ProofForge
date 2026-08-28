@@ -70,7 +70,7 @@ instruction 增加 recipe opcode。
 
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
-| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier 与 capacity-preserving operations、bounded Map/Set/Queue/BitSet logical semantics、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；bounded scalar dynamic read；同一 logical schema 的 cross-target plan conformance | collection target bindings、bytes/string specialization、bounded mutation writeback、wide/aggregate dynamic element、tagged/bounded return source contract 与更高 resource ceiling |
+| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier 与 capacity-preserving operations、bounded Map/Set/Queue/BitSet logical semantics、distinct bounded bytes/UTF-8 string source contracts、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 generic bounded input target binding；bounded scalar dynamic read；同一 logical schema 的 cross-target plan conformance | collection target bindings、bytes/string target bindings、bounded mutation writeback、wide/aggregate dynamic element、tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator，以及 invocation-local buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；bounded generic call return/error 合同；缺少标准化资源 manifest |
@@ -205,6 +205,10 @@ capacity-preserving operations 与 scalar dynamic read、fixed-frame Map/Set，�
 packed BitSet。它们不创建 shared physical layout 或新 Ops/Emit case；SVM account bytes 与
 EVM storage binding 仍分别验收。详见 [R1-012](tasks/r1-012.md)、
 [R1-013](tasks/r1-013.md) 和 [R1-014](tasks/r1-014.md)。
+
+R1-015 已增加 distinct `BoundedBytes` / `BoundedString` carriers、复用 BoundedVec 的 byte
+operations、strict UTF-8 logical validation 与独立 schema/resource gates；两个 target 在各自
+Borsh/ABI policy 完成前明确 fail closed。详见 [R1-015](tasks/r1-015.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
