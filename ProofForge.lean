@@ -44,6 +44,7 @@ import ProofForge.Extract.Compat
 import ProofForge.Svm.ABI
 import ProofForge.Svm.ABICompat
 import ProofForge.Svm.Heap
+import ProofForge.Svm.Scratch
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.AccountStorage.Source

@@ -108,9 +108,10 @@ offset/length/tail/padding，不统一两个 target 的物理 layout，也不增
 Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固定两套 target plan
 的 source projection conformance，但不统一 Borsh bytes 与 ABI words。SVM-RT-1 bounded
 account view、R5-001 Access foundation 与 R5-002 static storage declarations 均已集成；两个
-独立 contract 分别复用 Access 和 storage declaration contracts。下一 wave 是 SVM-RT-2
-instruction/scratch 与 EVM-RT-2 call-result/LOG contracts；详见
-[R2-001](tasks/r2-001.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。这不表示
+独立 contract 分别复用 Access 和 storage declaration contracts。SVM-RT-2a 已把 CPI
+instruction/scratch geometry 收口为 typed bounded plan；下一刀继续 return data/multi-seed，
+并与 EVM-RT-2 call-result/LOG contracts 交替推进。详见 [R2-001](tasks/r2-001.md)、
+[R2-002](tasks/r2-002.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。这不表示
 R2/R5 已完成。
 
 ## 5. 阶段拆分
@@ -205,8 +206,14 @@ R2-001 已完成 SRT-1：`Svm.AccountView.Source.View` 把 remaining-account 的
 绑定为编译期句柄，运行时 index 统一经过 capacity、实际 `NUM_ACCOUNTS`、duplicate marker 与
 header/data-length gate；按实际账户数定位 instruction data/program id，所有失败均在 state
 store 前原子退出。该 view 只读、零拷贝，不持久化 pointer 或 runtime geometry。详见
-[R2-001](tasks/r2-001.md)。R2 尚未完成；下一刀是 SRT-2 的 instruction/effects 与显式 scratch
-区域合同。
+[R2-001](tasks/r2-001.md)。R2 尚未完成；其后的 SRT-2a layout foundation 如下。
+
+R2-002 已完成 SRT-2a layout foundation：`Svm.Scratch` 用 invocation-only bank、aligned
+region allocator 和 typed `InstructionPlan` 统一 static invoke 与 dynamic signed self-CPI 的
+metas/descriptor/data/infos/signer-tail geometry；malformed bank、重复 region、非法 alignment 与
+1,024-byte CPI bank OOM 都在发射前失败。plan 只含编译期 byte counts，不含 pointer/account
+offset，也没有新增 Ops/IR/Component/Emit recipe。SRT-2 的 return-data policy、更广 multi-seed
+composition 与 SRT-3 Token-2022 TLV 仍未完成；详见 [R2-002](tasks/r2-002.md)。
 
 ### R3 — SVM SDK
 

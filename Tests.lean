@@ -76,6 +76,7 @@ import Tests.NormalizationSpec
 import Tests.SolanalibSpec
 import Tests.TargetOpsSpec
 import Tests.SvmHeapSpec
+import Tests.SvmScratchSpec
 import Tests.CFGSpec
 import Tests.NestedSpec
 import Tests.SeatSpec

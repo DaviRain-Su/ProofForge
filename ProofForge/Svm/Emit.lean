@@ -1,4 +1,5 @@
 import ProofForge.Svm.IR
+import ProofForge.Svm.Scratch
 import ProofForge.Svm.Component.Emit
 import ProofForge.Svm.EntryAdapter.Emit
 
@@ -16,9 +17,6 @@ private def pdaSeedsScratch : Nat := 4096
 /-- Loop control must not overlap expression temporaries, scalar locals, or walked-account
 headers. Bounded components publish one shared fixed-scratch boundary. -/
 private def loopCounterScratch : Nat := 304
-/-- CPI material grows upward from `r10-2048` and may use at most this many bytes. Keeping it in
-the 1024..2048 stack-offset bank makes it disjoint from account headers and scalar locals. -/
-private def cpiScratchBytes : Nat := 1024
 
 private def handlerLabel (m : IR.Method) : String :=
   if m.ixName != "" then m.ixName else IR.ixNameOfLean (IR.lastName m.name)
@@ -1249,6 +1247,9 @@ private def emitCpiInteger (p : IR.Program) (scope : String) (base off : Nat)
       return load ++
         s!"  ldxdw r1, [r10 - 8]\n  {store} [r9 + {base + off}], r1\n"
 
+/-- `emitCpiData` clears this complete window before writing a shorter payload. -/
+private def cpiDataWindowBytes : Nat := 64
+
 private def emitCpiData (p : IR.Program) (scope : String) (base : Nat)
     (data : Array (Ops.CpiWord Ops.Val)) : Except String (String × Nat) := do
   -- CreateAccount 是 52B：u32+u64 不对齐。先清 64B，避免残留污染 space。
@@ -1457,18 +1458,25 @@ private def emitInvoke (p : IR.Program) (label : String)
     Except String String := do
   let n := IR.cpiAccountCount p
   let physicalProgramIx := programIx + 1
-  let metaOff := 0
-  let ixOff := metaOff + 16 * metas.size
-  let dataOff := ixOff + 40
-  let (dataTxt, dataLen) ← emitCpiData p label dataOff data
-  let infoOff := dataOff + ((dataLen + 7) / 8) * 8
-  let seedOff := infoOff + 56 * n
+  -- Instruction-buffer geometry comes from the shared bounded-scratch contract: the data offset
+  -- does not depend on the payload size, so the data emitter runs first and the completed buffer
+  -- then fixes info/seed offsets through the same fail-closed bank plan.
+  let head : Scratch.InstructionBuffer :=
+    { metaCount := metas.size, dataBytes := 0, accountCount := n }
+  let (dataTxt, dataLen) ← emitCpiData p label head.dataOffset data
+  let plan ← Scratch.instructionPlan Scratch.cpiBank
+    { head with dataBytes := dataLen }
+  let metaOff := plan.metas.offset
+  let ixOff := plan.instruction.offset
+  let dataOff := plan.data.offset
+  let infoOff := plan.infos.offset
+  let seedOff := plan.infos.endOffset
   let (seedTxt, seedRegs, seedEnd) ← emitSignerSeeds p label seedOff seeds bump
   -- `emitCpiData` clears a full 64-byte data window even for shorter payloads. Account infos and
   -- signer descriptors may extend farther; all three must remain in the dedicated CPI bank.
-  let frameEnd := max (dataOff + 64) (max (infoOff + 56 * n) seedEnd)
-  if frameEnd > cpiScratchBytes then
-    throw s!"extract/unsupported: invoke scratch requires {frameEnd} bytes, maximum is {cpiScratchBytes}"
+  let frameEnd := max (dataOff + cpiDataWindowBytes) (max seedOff seedEnd)
+  if frameEnd > Scratch.cpiBank.capacityBytes then
+    throw s!"extract/unsupported: invoke scratch requires {frameEnd} bytes, maximum is {Scratch.cpiBank.capacityBytes}"
   let mut metasTxt := ""
   for i in [0:metas.size] do
     metasTxt := metasTxt ++ emitOneMeta i metas[i]!
@@ -1493,7 +1501,7 @@ private def emitInvoke (p : IR.Program) (label : String)
   ; invoke programIx={physicalProgramIx} metas={metas.size} dataLen={dataLen}
 {dataLenChecks}\
   mov64 r9, r10
-  add64 r9, -2048
+  add64 r9, -{Scratch.cpiBank.baseStackOffset}
 {dataTxt}  mov64 r5, r9
   add64 r5, {metaOff}
 {metasTxt}  mov64 r8, r9

@@ -1,8 +1,6 @@
-namespace ProofForge.Svm.Cpi.Emit
+import ProofForge.Svm.Scratch
 
-/-- Dynamic CPI descriptors share the established 1,024-byte stack bank rooted at `r10-2048`.
-The payload itself may live in bounded heap storage and is therefore not counted in this frame. -/
-def maxScratchBytes : Nat := 1024
+namespace ProofForge.Svm.Cpi.Emit
 
 structure Context where
   headerStack : Nat → Nat
@@ -61,17 +59,23 @@ def emitDynamicSignedSelf (context : Context) (label : String)
     (logAccount : Nat) (authoritySeed : String)
     (dataPointerStack dataLengthStack bumpStack : Nat) : Except String String := do
   let n := context.accountCount
-  let metaOff := 0
-  let instructionOff := 16
-  let infoOff := instructionOff + 40
-  let seedOff := infoOff + 56 * n
-  let bumpByte := ((seedOff + authoritySeed.length + 7) / 8) * 8
-  let seedEntries := bumpByte + 8
-  let bumpEntry := seedEntries + 16
-  let signerGroup := bumpEntry + 16
-  let frameEnd := signerGroup + 16
-  if frameEnd > maxScratchBytes then
-    throw s!"extract/unsupported: dynamic signed CPI scratch requires {frameEnd} bytes, maximum is {maxScratchBytes}"
+  -- Instruction-buffer geometry (metas, descriptor, infos) comes from the shared bounded-scratch
+  -- contract; the signer-seed tail is appended with the same fail-closed allocator.
+  let base ← Scratch.instructionPlan Scratch.cpiBank
+    { metaCount := 1, dataBytes := 0, accountCount := n }
+  let seed ← base.scratch.alloc "seed" authoritySeed.length 1
+  let bump ← seed.plan.alloc "bump" 1 8
+  let seedEntriesRegion ← bump.plan.alloc "seedEntries" 16 8
+  let bumpEntryRegion ← seedEntriesRegion.plan.alloc "bumpEntry" 16 8
+  let signerGroupRegion ← bumpEntryRegion.plan.alloc "signerGroup" 16 8
+  let metaOff := base.metas.offset
+  let instructionOff := base.instruction.offset
+  let infoOff := base.infos.offset
+  let seedOff := seed.region.offset
+  let bumpByte := bump.region.offset
+  let seedEntries := seedEntriesRegion.region.offset
+  let bumpEntry := bumpEntryRegion.region.offset
+  let signerGroup := signerGroupRegion.region.offset
   let physicalLogAccount := logAccount + 1
   let mut seedBytes := ""
   for i in [0:authoritySeed.length] do
@@ -86,7 +90,7 @@ def emitDynamicSignedSelf (context : Context) (label : String)
   return s!"\
   ; dynamic signed self CPI account={physicalLogAccount} data<=1246
   mov64 r9, r10
-  add64 r9, -2048
+  add64 r9, -{Scratch.cpiBank.baseStackOffset}
   mov64 r5, r9
   add64 r5, {metaOff}
   ldxdw r8, [r10 - {context.headerStack physicalLogAccount}]

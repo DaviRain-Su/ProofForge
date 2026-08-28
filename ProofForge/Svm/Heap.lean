@@ -30,6 +30,14 @@ def alignmentValid (alignment : Nat) : Bool :=
 def alignDown (address alignment : Nat) : Nat :=
   if alignmentValid alignment then address - address % alignment else address
 
+/-- Round an address up to the next multiple of `alignment`. Used when laying out fixed
+scratch regions, whose cursors only ever grow. -/
+def alignUp (address alignment : Nat) : Nat :=
+  if alignmentValid alignment then
+    (address + alignment - 1) - (address + alignment - 1) % alignment
+  else
+    address
+
 /--
 State stored by the bounded SVM allocator. A zero bump is the untouched heap word; the first
 allocation initializes it logically to the end of the selected frame before moving downward.

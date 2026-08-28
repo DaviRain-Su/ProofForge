@@ -21,15 +21,16 @@ compile-time capacity + canonical Borsh `u32 length` input；R1-010 已由 EVM �
 canonical standard-ABI dynamic head/tail 与 fixed local frame；R1-011 已用同一 logical
 static/tagged/bounded schema 对照两套 target plan 的 source projections，同时保持 Borsh
 cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded account view 与
-EVM-SDK-2 static storage declarations 已并行集成；下一 wave 是 SVM-RT-2 bounded
-instruction/effects/scratch contract 与 EVM-RT-2 typed call-result/LOG contract。
+EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
+instruction/scratch layout，下一刀是 SVM-RT-2b return-data/multi-seed effects，并与 EVM-RT-2
+typed call-result/LOG contract 交替推进。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
 R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
 完成。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 264 jobs；SVM manifest 全 53 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 266 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 293/293（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -238,8 +239,15 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   targeted mutation。它不改变 hashed-map base，不增加 runtime allocator、隐藏 storage
   write 或 Component/Emit recipe；详见 `docs/plan/tasks/r5-002.md`。
 
-- `lake build Tests` 当前 264 jobs，汇总门覆盖全部 imported test modules 与 target guards。
-- SVM registry 53 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+- R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
+  统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
+  geometry；malformed bank、重复 region、非法 alignment 与 1,024-byte OOM 均在 emission 前
+  fail closed。plan 只含编译期 byte counts，不持有或持久化 native pointer；没有新增
+  Ops/IR/Component/Emit recipe。全部 registered SVM program 的重构前后 assembly
+  逐字节一致；详见 `docs/plan/tasks/r2-002.md`。
+
+- `lake build Tests` 当前 266 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 293/293，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。
 - EVM registry 20 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
