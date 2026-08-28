@@ -54,6 +54,7 @@ import Tests.Sha256Spec
 import Tests.EvmSpec
 import Tests.EvmSdkSpec
 import Tests.EvmCallResultSpec
+import Tests.EvmPrecompileSpec
 import Tests.EvmLogErrorSpec
 import Tests.EvmPayableSpec
 import Tests.CoreCodecSpec

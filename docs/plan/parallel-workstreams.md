@@ -97,7 +97,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-RT-3 Token-2022 TLV（envelope 已集成）** | SVM-RT-1/2 | allocation-free scalar cursor/bitmap 与 closed end/padding specialization 已落地；transfer-fee、hook/account requirements 继续按语义分片，未知 extension 不走 classic 82/165-byte path；见 R2-004 |
 | **SVM-SDK-2 scratch** | SVM-RT-2 | invocation-local bounded Vec/byte writer/codec buffer，显式 capacity/OOM/lifetime；不能持久化 pointer |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
-| **EVM-RT-2b effects** | EVM-RT-2a | typed LOG0..4/custom error/payable consolidation；不开放 delegatecall/create/arbitrary callee |
+| **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
 | **EVM-SDK-3 assets** | EVM-SDK-1/2、EVM-RT-2 | reusable fungible、ERC-721、bounded ERC-1155 core；每个组件至少两个 consumer |
 
 ## 4. Worker 统一交付合同

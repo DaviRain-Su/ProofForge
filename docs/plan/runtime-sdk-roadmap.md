@@ -113,12 +113,13 @@ instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续�
 return-data/multi-seed signer-tail geometry；SVM-RT-3 第一刀已建立 Token-2022 bounded TLV
 envelope，真实 extension 仍按语义分片开放。EVM-RT-2a 也已统一
 closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom error，
-EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy；UInt256 div/mod 也已
-固定 checked 零除 revert。下一刀继续 precompile-specific closed return contract 与剩余
-R4 hardening。详见
+EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy，EVM-RT-2d 已统一
+permit ecrecover 的固定 address/frame、STATICCALL success、exact returndata 与 nonzero
+signer；UInt256 div/mod 也已固定 checked 零除 revert。下一刀继续剩余 R4 hardening。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
 [R2-004](tasks/r2-004.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
+[R4-004](tasks/r4-004.md)、
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。
 这不表示 R2/R4/R5 已完成。
 
@@ -294,6 +295,13 @@ exact CALLVALUE、receive accept-any binding、empty-calldata receive 与 select
 malformed gate/route/operand shape 在唯一 interpreter 内 fail closed。source API、IR/digest、
 ABI payable labels 与 20 个合约产物保持逐字节一致；native send CALL 继续归 closed
 NativeFx/CallResult policy。详见 [R4-003](tasks/r4-003.md)。
+
+R4-004 已完成 EVM-RT-2d typed closed ecrecover contract：`Evm.Precompile.Plan` 固定唯一
+precompile address `0x01`、128-byte input frame、32-byte output 与 success/exact-size/nonzero
+三道门，`ClosedCall.Emit` permit 只消费唯一 interpreter。exact returndata gate 防止 invalid
+ecrecover 以空 returndata 成功时把 output memory 的旧输入误认成 signer。只有 Token Yul/bin
+发生预期变化；其他产物、全部 ABI 与 IR digests 保持不变。它不开放其他 precompile、
+arbitrary STATICCALL、delegatecall 或 create。详见 [R4-004](tasks/r4-004.md)。
 
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
