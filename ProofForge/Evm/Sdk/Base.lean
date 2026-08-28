@@ -49,6 +49,24 @@ namespace «UInt256»
   ⟨WideWord.Source.mulW0 left right, WideWord.Source.mulW1 left right,
     WideWord.Source.mulW2 left right, WideWord.Source.mulW3 left right⟩
 
+@[pf_inline] def bitAnd (left right : UInt256) : UInt256 :=
+  WideWord.Source.bitAnd256 left right
+
+@[pf_inline] def bitOr (left right : UInt256) : UInt256 :=
+  WideWord.Source.bitOr256 left right
+
+@[pf_inline] def bitXor (left right : UInt256) : UInt256 :=
+  WideWord.Source.bitXor256 left right
+
+@[pf_inline] def complement (value : UInt256) : UInt256 :=
+  WideWord.Source.complement256 value
+
+@[pf_inline] def shiftLeft (value : UInt256) (bits : UInt64) : UInt256 :=
+  WideWord.Source.shiftLeft256 value bits
+
+@[pf_inline] def shiftRight (value : UInt256) (bits : UInt64) : UInt256 :=
+  WideWord.Source.shiftRight256 value bits
+
 @[pf_inline] def atLeast (left right : UInt256) : Bool :=
   Runtime.evmGe256 left right
 

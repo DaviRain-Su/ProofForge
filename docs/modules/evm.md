@@ -95,6 +95,6 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_capped.sh`：第二个合约复用 owner + pause + 固定 cap；非 owner / paused / 超 cap 分别解码 Unauthorized / Paused / CapExceeded
 - `runtime-tests/evm/anvil_window.sh`：固定长 Vector 两槽；`setTail` 只写第二叶，第一叶保持
 - `runtime-tests/evm/anvil_phase.sh`：零 payload variant 的 idle/live tag 往返与 view
-- `runtime-tests/evm/anvil_wide.sh`：`uint256` ABI、跨 64-bit 边界 add/sub/mul、溢出 revert
+- `runtime-tests/evm/anvil_wide.sh`：`uint256` ABI、跨 64-bit 边界 add/sub/mul、typed compare、bitwise/shift、溢出 revert
 
 入口：`runtime-tests/evm/anvil.sh`（Darwin / Linux）。工具查找：`FOUNDRY_BIN`、`~/.foundry/bin`、`PATH`。缺 `anvil`/`cast` 干净跳过。多个 `returnState` 按槽顺序 `sstore`，最后一次才 `return`。

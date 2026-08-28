@@ -25,7 +25,7 @@ def entries : Array Entry := #[
   { name := "Capped", digest := "cb058e662f968f65" },
   { name := "TwoStepCounter", digest := "3b08dde14972e728" },
   { name := "Credits", digest := "2cdeb3504c14ed59" },
-  { name := "Wide", digest := "6dc6f4b1aa89d707" },
+  { name := "Wide", digest := "faa49d815b13ff57" },
   { name := "Const", digest := "81830f8855cd3dda" }
 ]
 

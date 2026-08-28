@@ -1441,34 +1441,73 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
             let rawBase := args[args.size - 1]!
             let baseE := unfoldUserHelpers env 8 rawBase
             let limb := uint256LimbLit leaf
-            let arith? :=
+            let binaryQuery? : Option Evm.WideWord.Query :=
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
-                  endsWith baseE ".evmAdd256" then some 0
+                  endsWith baseE ".evmAdd256" then some (.arith256 0 limb.toNat)
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSub256 ||
-                  endsWith baseE ".evmSub256" then some 1
+                  endsWith baseE ".evmSub256" then some (.arith256 1 limb.toNat)
               else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMul256 ||
-                  endsWith baseE ".evmMul256" then some 2
+                  endsWith baseE ".evmMul256" then some (.arith256 2 limb.toNat)
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAnd256 ||
+                  endsWith baseE ".evmAnd256" then some (.bitwise256 .and limb.toNat)
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmOr256 ||
+                  endsWith baseE ".evmOr256" then some (.bitwise256 .or limb.toNat)
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmXor256 ||
+                  endsWith baseE ".evmXor256" then some (.bitwise256 .xor limb.toNat)
               else none
-            match arith? with
-            | some op =>
+            let unaryQuery? : Option Evm.WideWord.Query :=
+              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmNot256 ||
+                  endsWith baseE ".evmNot256" then some (.not256 limb.toNat)
+              else none
+            let shiftQuery? : Option Evm.WideWord.Query :=
+              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmShl256 ||
+                  endsWith baseE ".evmShl256" then some (.shift256 .left limb.toNat)
+              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmShr256 ||
+                  endsWith baseE ".evmShr256" then some (.shift256 .right limb.toNat)
+              else none
+            let limbConst : String → Name
+              | "w0" => ``ProofForge.Core.Value.UInt256.w0
+              | "w1" => ``ProofForge.Core.Value.UInt256.w1
+              | "w2" => ``ProofForge.Core.Value.UInt256.w2
+              | _ => ``ProofForge.Core.Value.UInt256.w3
+            let limbVal (base : Expr) (name : String) : Option Ops.Val :=
+              asVal env fuel' (mkApp (mkConst (limbConst name)) base)
+            let wordVals (base : Expr) : Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) := do
+              let w0 ← limbVal base "w0"
+              let w1 ← limbVal base "w1"
+              let w2 ← limbVal base "w2"
+              let w3 ← limbVal base "w3"
+              some (w0, w1, w2, w3)
+            match binaryQuery?, unaryQuery?, shiftQuery? with
+            | some query, _, _ =>
               let bargs := baseE.getAppArgs
               if bargs.size < 2 then none
               else
                 let aE := bargs[bargs.size - 2]!
                 let bE := bargs[bargs.size - 1]!
-                let limbConst : String → Name
-                  | "w0" => ``ProofForge.Core.Value.UInt256.w0
-                  | "w1" => ``ProofForge.Core.Value.UInt256.w1
-                  | "w2" => ``ProofForge.Core.Value.UInt256.w2
-                  | _ => ``ProofForge.Core.Value.UInt256.w3
-                let limbVal (base : Expr) (name : String) : Option Ops.Val :=
-                  asVal env fuel' (mkApp (mkConst (limbConst name)) base)
-                match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
-                    limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
-                | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
-                  some (.ext (.evm (.component (.wideWord (.arith256 op limb.toNat)))) #[a0, a1, a2, a3, b0, b1, b2, b3])
-                | _, _, _, _, _, _, _, _ => none
-            | none =>
+                match wordVals aE, wordVals bE with
+                | some (a0, a1, a2, a3), some (b0, b1, b2, b3) =>
+                  some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, b0, b1, b2, b3])
+                | _, _ => none
+            | none, some query, _ =>
+              let bargs := baseE.getAppArgs
+              if bargs.isEmpty then none
+              else
+                match wordVals bargs[bargs.size - 1]! with
+                | some (a0, a1, a2, a3) =>
+                  some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3])
+                | none => none
+            | none, none, some query =>
+              let bargs := baseE.getAppArgs
+              if bargs.size < 2 then none
+              else
+                let aE := bargs[bargs.size - 2]!
+                let amountE := bargs[bargs.size - 1]!
+                match wordVals aE, asVal env fuel' amountE with
+                | some (a0, a1, a2, a3), some amount =>
+                  some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, amount])
+                | _, _ => none
+            | none, none, none =>
               if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
                   endsWith baseE ".evmMapGetAddr256" then
                 let gargs := baseE.getAppArgs
@@ -2118,7 +2157,13 @@ private def uint256Leaves (env : Environment) (e : Expr) :
   | none =>
     if isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
         isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
-        isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" then
+        isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmAnd256 || endsWith e ".evmAnd256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmOr256 || endsWith e ".evmOr256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmXor256 || endsWith e ".evmXor256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmNot256 || endsWith e ".evmNot256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmShl256 || endsWith e ".evmShl256" ||
+        isConstNamed e ``ProofForge.Evm.Runtime.evmShr256 || endsWith e ".evmShr256" then
       (proj "w0", proj "w1", proj "w2", proj "w3")
     else
       match val env e with
@@ -6283,6 +6328,12 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       isConstNamed e ``ProofForge.Evm.Runtime.evmAdd256 || endsWith e ".evmAdd256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmSub256 || endsWith e ".evmSub256" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmMul256 || endsWith e ".evmMul256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmAnd256 || endsWith e ".evmAnd256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmOr256 || endsWith e ".evmOr256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmXor256 || endsWith e ".evmXor256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmNot256 || endsWith e ".evmNot256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmShl256 || endsWith e ".evmShl256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmShr256 || endsWith e ".evmShr256" ||
       (match unfoldUserHelper env e with
         | some (_, unfolded) => (uint256CtorFields env unfolded).isSome
         | none => false) ||

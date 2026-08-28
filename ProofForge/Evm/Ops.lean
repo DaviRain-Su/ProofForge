@@ -90,6 +90,14 @@ def compare256 (comparison : WideWord.Comparison)
   .ext (.component (.wideWord (.compare256 comparison))) #[a0, a1, a2, a3, b0, b1, b2, b3]
 def eq20 (a0 a1 a2 b0 b1 b2 : Val) : Val :=
   .ext (.component (.wideWord .eq20)) #[a0, a1, a2, b0, b1, b2]
+def bitwise256 (operation : WideWord.Bitwise) (limb : Nat)
+    (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
+  .ext (.component (.wideWord (.bitwise256 operation limb))) #[a0, a1, a2, a3, b0, b1, b2, b3]
+def not256 (limb : Nat) (a0 a1 a2 a3 : Val) : Val :=
+  .ext (.component (.wideWord (.not256 limb))) #[a0, a1, a2, a3]
+def shift256 (direction : WideWord.Shift) (limb : Nat)
+    (a0 a1 a2 a3 amount : Val) : Val :=
+  .ext (.component (.wideWord (.shift256 direction limb))) #[a0, a1, a2, a3, amount]
 def arith256 (op limb : Nat) (a0 a1 a2 a3 b0 b1 b2 b3 : Val) : Val :=
   .ext (.component (.wideWord (.arith256 op limb))) #[a0, a1, a2, a3, b0, b1, b2, b3]
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Wide: UInt256 ABI + checked add/sub/mul. Darwin + Linux.
+# Wide: UInt256 ABI + checked arithmetic, comparisons, bitwise operations, and shifts. Darwin + Linux.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,6 +52,31 @@ solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
 solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" \
   'ge256(uint256,uint256)(bool)' "$cmp_a" "$cmp_b")" false "uint256 greater-or-equal"
 
+bit_a="$("$python" -I -S -c "print((1<<255)+(0xf0<<64)+0x55)")"
+bit_b="$("$python" -I -S -c "print((1<<200)+(0x0f<<64)+0xaa)")"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'bitAnd(uint256,uint256)(uint256)' "$bit_a" "$bit_b")" \
+  "$("$python" -I -S -c "print($bit_a & $bit_b)")" "uint256 bitwise and"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'bitOr(uint256,uint256)(uint256)' "$bit_a" "$bit_b")" \
+  "$("$python" -I -S -c "print($bit_a | $bit_b)")" "uint256 bitwise or"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'bitXor(uint256,uint256)(uint256)' "$bit_a" "$bit_b")" \
+  "$("$python" -I -S -c "print($bit_a ^ $bit_b)")" "uint256 bitwise xor"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'complement(uint256)(uint256)' "$bit_a")" \
+  "$("$python" -I -S -c "print(((1<<256)-1) ^ $bit_a)")" "uint256 complement"
+
+shift_value="$("$python" -I -S -c "print((1<<192)+3)")"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'shiftLeft(uint256,uint64)(uint256)' "$shift_value" 65)" \
+  "$("$python" -I -S -c "print(($shift_value << 65) & ((1<<256)-1))")" "uint256 shift left"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'shiftRight(uint256,uint64)(uint256)' "$shift_value" 65)" \
+  "$("$python" -I -S -c "print($shift_value >> 65)")" "uint256 shift right"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'shiftLeft(uint256,uint64)(uint256)' "$shift_value" 256)" 0 "uint256 wide shift is zero"
+
 u128="$("$python" -I -S -c "print((1<<127)+(1<<64)+7)")"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'echo128(uint128)(uint128)' "$u128")" "$u128" "shared uint128 echo"
@@ -92,4 +117,4 @@ if "$cast" call --rpc-url "$rpc" "$addr" \
   exit 1
 fi
 
-echo "evm-anvil-wide: ok (uint256 arithmetic/ordering + uint128/bytes12 ABI; engineering only)"
+echo "evm-anvil-wide: ok (uint256 arithmetic/ordering/bitwise + uint128/bytes12 ABI; engineering only)"

@@ -24,7 +24,8 @@ cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded accou
 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
 instruction/scratch layout，下一刀是 SVM-RT-2b return-data/multi-seed effects，并与 EVM-RT-2
 typed call-result/LOG contract 交替推进。EVM-RT-2a typed call-result 已完成，下一刀是 typed
-LOG/custom-error plan。
+LOG/custom-error plan。并行 EVM UInt256 线已补齐 typed bitwise/shift；div/mod 留到独立切片
+明确除零策略。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
 R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
 完成。
@@ -262,8 +263,9 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   TwoStepCounter / Credits / Window / Phase / Wide / Const 均进入
   Anvil 总门。`Addr20` 是一等 ABI `address`；
   显式 `UInt256` 使用 checked add/sub/mul、typed unsigned eq/lt/le/gt/ge 和 ABI `uint256`，
-  默认算术仍是 `UInt64`。比较全部复用 `WideWord` component，不增加 main Emit recipe；
-  bitwise/shift/div/mod 仍未完成。详见 `docs/plan/tasks/e-u256-002.md`。
+  以及 typed bitwise AND/OR/XOR/complement/logical shift；默认算术仍是 `UInt64`。这些操作
+  全部复用 `WideWord` component，不增加 main Emit recipe；div/mod 仍未完成。详见
+  `docs/plan/tasks/e-u256-002.md`、`docs/plan/tasks/e-u256-003.md`。
   地址的 little-endian limbs → ABI word 转换由 runtime `pf_store_addr20` helper 统一实现，不再
   在每个 CFG case 展开二十条 `mstore8`；solc 0.8.34 strict Yul optimizer 可编译完整 Token，
   全 20 个 build 与 Anvil 20/20 通过。详见 `docs/plan/tasks/evm-009.md`、

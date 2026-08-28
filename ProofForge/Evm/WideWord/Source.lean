@@ -20,6 +20,24 @@ case is introduced.
 @[pf_inline] def mul256 (a b : UInt256) : UInt256 :=
   evmMul256 a b
 
+@[pf_inline] def bitAnd256 (a b : UInt256) : UInt256 :=
+  evmAnd256 a b
+
+@[pf_inline] def bitOr256 (a b : UInt256) : UInt256 :=
+  evmOr256 a b
+
+@[pf_inline] def bitXor256 (a b : UInt256) : UInt256 :=
+  evmXor256 a b
+
+@[pf_inline] def complement256 (a : UInt256) : UInt256 :=
+  evmNot256 a
+
+@[pf_inline] def shiftLeft256 (a : UInt256) (bits : UInt64) : UInt256 :=
+  evmShl256 a bits
+
+@[pf_inline] def shiftRight256 (a : UInt256) (bits : UInt64) : UInt256 :=
+  evmShr256 a bits
+
 /-- Limb reads of packed arith. Contracts writing a `UInt256` state field name these instead of
 projecting `UInt256.wN (add256 …)`, so Extract does not flatten the projection into a schema leaf. -/
 @[pf_inline] def addW0 (a b : UInt256) : UInt64 := (evmAdd256 a b).w0

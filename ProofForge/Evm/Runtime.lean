@@ -250,6 +250,29 @@ def evmImm20b : Addr20 :=
 /-- Unsigned `a > b` on packed 256-bit words. The host stub returns `true`. -/
 @[irreducible] def evmGt256 (_a _b : UInt256) : Bool := true
 
+/-- Packed `a & b`. The host stub returns `a`; EVM emission computes the full word. -/
+@[irreducible] def evmAnd256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
+
+/-- Packed `a | b`. The host stub returns `a`; EVM emission computes the full word. -/
+@[irreducible] def evmOr256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
+
+/-- Packed `a ^ b`. The host stub returns `a`; EVM emission computes the full word. -/
+@[irreducible] def evmXor256 (a b : UInt256) : UInt256 :=
+  let _ := b; a
+
+/-- Packed 256-bit complement. The host stub returns `a`. -/
+@[irreducible] def evmNot256 (a : UInt256) : UInt256 := a
+
+/-- Packed logical left shift. EVM yields zero for amounts ≥ 256. The host stub returns `a`. -/
+@[irreducible] def evmShl256 (a : UInt256) (bits : UInt64) : UInt256 :=
+  let _ := bits; a
+
+/-- Packed logical right shift. EVM yields zero for amounts ≥ 256. The host stub returns `a`. -/
+@[irreducible] def evmShr256 (a : UInt256) (bits : UInt64) : UInt256 :=
+  let _ := bits; a
+
 /-- 两份 Addr20 整值相等。Yul pack 成 address 再 `eq`。宿主返回 `true`。 -/
 @[irreducible] def evmEq20 (_a _b : Addr20) : Bool := true
 

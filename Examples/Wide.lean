@@ -32,6 +32,30 @@ def mul (_s : State) (a b : UInt256) : UInt256 :=
   WideWord.Source.mul256 a b
 
 @[pf_entry]
+def bitAnd (_s : State) (a b : UInt256) : UInt256 :=
+  UInt256.bitAnd a b
+
+@[pf_entry]
+def bitOr (_s : State) (a b : UInt256) : UInt256 :=
+  UInt256.bitOr a b
+
+@[pf_entry]
+def bitXor (_s : State) (a b : UInt256) : UInt256 :=
+  UInt256.bitXor a b
+
+@[pf_entry]
+def complement (_s : State) (a : UInt256) : UInt256 :=
+  UInt256.complement a
+
+@[pf_entry]
+def shiftLeft (_s : State) (a : UInt256) (bits : UInt64) : UInt256 :=
+  UInt256.shiftLeft a bits
+
+@[pf_entry]
+def shiftRight (_s : State) (a : UInt256) (bits : UInt64) : UInt256 :=
+  UInt256.shiftRight a bits
+
+@[pf_entry]
 def eq256 (_s : State) (a b : UInt256) : Bool :=
   UInt256.eq a b
 
