@@ -1,0 +1,126 @@
+# Runtime / SDK 并行开发执行图
+
+> 基线：R1-008 已进入 `origin/main`。本文只拆 ownership、依赖和验收，不改变
+> [Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md) 的能力边界。
+
+## 1. 为什么按模块拆，而不是按文件数量拆
+
+并行开发的目标是让每个 agent 拥有一个可以独立验证的纵向模块，而不是让多个 agent
+同时修改 `Extract.lean`、target IR 和主 emitter。共享 schema/control 只保留一个 owner；
+SVM 与 EVM 的物理 binding、SDK facade 和 fixture 才适合并行。
+
+```diagram
+                              ┌─────────────────────────────┐
+                              │ Coordinator / integration   │
+                              │ Shared schema · Extract · CI│
+                              └──────────────┬──────────────┘
+                                             │ stable contracts
+                ┌────────────────────────────┼────────────────────────────┐
+                ▼                            ▼                            ▼
+┌──────────────────────────┐  ┌──────────────────────────┐  ┌──────────────────────────┐
+│ SVM Runtime              │  │ SVM SDK                  │  │ EVM Runtime              │
+│ account/CPI/TLV binding  │  │ storage/scratch facades  │  │ ABI/storage/effects      │
+└─────────────┬────────────┘  └─────────────┬────────────┘  └─────────────┬────────────┘
+              │                             │                             │
+              └─────────────────────────────┼─────────────────────────────┘
+                                            ▼
+                              ┌──────────────────────────┐
+                              │ EVM SDK + conformance    │
+                              │ policies/assets/examples │
+                              └──────────────────────────┘
+```
+
+三条硬规则：
+
+1. agent 只拥有下表列出的 write set；发现必须越界时停止并报告 integration hook，不自行扩
+   shared Ops/Extract/Emit。
+2. worker 不修改 `docs/plan/**`、顶层 import、registry 或总 CI；它返回测试证据，由
+   coordinator 在集成 commit 一次更新。
+3. Queue/Map/Allocator/Phoenix instruction 都不能成为新 opcode。只有新的 VM effect 才能扩
+   target Ops/Component/Emit，并且必须先给出为什么现有 component 无法组合的证据。
+
+## 2. 写入锁和集成所有权
+
+下面文件是高冲突 source of truth。任意时刻只允许 coordinator，或被明确授予当前
+`shared-lock` 的一个 agent 修改：
+
+- `ProofForge/Core/**`、`ProofForge/Profile.lean`、`ProofForge/Extract.lean`、
+  `ProofForge/Extract/**`；
+- `ProofForge.lean`、`Examples.lean`、`Tests.lean`；
+- `ProofForge/Svm/Registry.lean`、`ProofForge/Evm/Registry.lean`；
+- `.github/**`、`scripts/check_ownership.py`、`docs/plan/**`。
+
+Coordinator（当前线程）固定负责：
+
+- **PF-COORD-1 / R1-009**：shared `BoundedVec` source contract、SVM canonical bounded Borsh
+  input、RawEntry/Mollusk/Surfpool 证据；
+- **PF-COORD-2**：审查并集成各 worker 的 target-local commits，统一处理顶层 imports、
+  registries、capability matrix、digest 和 CI；
+- **PF-COORD-3**：每一 wave 的全 Lean、全 SVM build/Mollusk、全 EVM build/Anvil 和
+  ownership/reproducibility 门。
+
+`shared-lock` 不允许被“顺手”复制：如果 SVM Runtime agent 正在修改 Extract，其他 agent
+只能做 target-local plan/component/test，不能同时提交另一份 Extract patch。
+
+## 3. 可直接交给其他 agent 的工作包
+
+### Wave A — 现在即可并行，不占 shared-lock
+
+| 包 | Owner | 允许写入 | 交付 | 禁止项 | 局部门 |
+|---|---|---|---|---|---|
+| **SVM-SDK-1 persistent facade** | worker | 新建 `ProofForge/Svm/Sdk/Storage.lean`、`ProofForge/Svm/Sdk/Queue.lean`；新建两个非 Phoenix example/test 文件 | 用现有 `AccountStorage.Source` 组合 POD Field、fixed-capacity Vec/Queue、ordered Map/RBMap/one-based allocator handle；两个独立小例子消费 facade | 不改 Runtime/Ops/IR/Emit/Extract；不复制 account offset 到操作调用；不使用 heap pointer/Array/Map 作持久状态 | 新 test module 单独 `lake env lean`；两个 example 的 focused `pf build --target svm` 和 Mollusk fixture |
+| **EVM-SDK-1 access policy** | worker | 新建 `ProofForge/Evm/Sdk/Access.lean`；新建两个独立 example/test 文件 | 显式 owner/paused handles 和 `requireOwner`/`requireRunning`/two-step ownership 组合；复用 Context/Revert，不隐藏 storage write | 不改 `Evm/Sdk.lean`、Runtime/Ops/IR/Emit/Extract；暂不伪造 reentrancy error 或 roles map | 新 test module 单独 `lake env lean`；focused solc + Anvil |
+| **QA-1 artifact manifest** | worker | 新建 `scripts/check_artifact_manifest.py`、`Tests/ArtifactManifestSpec.lean` 或独立 fixture 目录 | 从现有 build manifest 检查 digest、target、artifact size 与注册程序集合的一致性；输出 deterministic 诊断 | 不改 build 产物、registry、CI workflow 或计划文档；不执行部署 | script 自测、当前 SVM/EVM manifest 检查、`git diff --check` |
+
+Wave A worker 的 example/test 暂不加入 `Examples.lean` / `Tests.lean` / registry；coordinator
+集成时统一接线，以避免三个分支都修改聚合文件。
+
+### Wave B — PF-COORD-1 合入后并行
+
+| 包 | Owner | 允许写入 | 交付 | 禁止项 | 局部门 |
+|---|---|---|---|---|---|
+| **EVM-RT-1 bounded ABI** | worker | `ProofForge/Evm/Codec.lean`、`ProofForge/Evm/IR.lean`、`ProofForge/Evm/Emit.lean`；新建 dedicated example/test/Anvil fixture | 把 shared `.boundedArray` 绑定为 canonical ABI dynamic array/tail：offset、length、padding、capacity、exact tail 全部 fail closed；固定 scratch/word plan | 不复用 Borsh；不改 Core/Extract；不开放无界 bytes/array；不加 array opcode | dedicated Lean、solc、Anvil malformed offset/length/padding/OOB 矩阵 |
+| **SVM-RT-1 account view** | worker + `shared-lock` | `ProofForge/Svm/Runtime.lean`、`Ops.lean`、`Component*.lean`、`IR.lean`、`Emit.lean`、`ProofForge/Extract.lean`；新建 dedicated example/test/Mollusk fixture | bounded remaining-account view；经上界证明的 dynamic index；统一 account-count/OOB/signer/writable/owner gate | 不做 runtime-selected account geometry；不允许 pointer 进入 account；不夹带 Token/Phoenix policy | dedicated Lean + build + Mollusk 权限/OOB/duplicate/atomic failure |
+| **EVM-SDK-2 static storage declarations** | worker | 新建 `ProofForge/Evm/Sdk/Storage.lean` 和 target-local component/source/emit 文件；dedicated examples/tests | compile-time scalar/record/fixed-array cursor 与 typed handles；布局对象只在抽取期存在 | 不改 hashed-map namespace 语义；不做 runtime slot allocator；若需要 Extract hook，只报告给 coordinator | descriptor tests + two contracts + solc/Anvil storage layout |
+
+Wave B 中只有 **SVM-RT-1** 持有 `shared-lock`。EVM worker 必须保持 target-local；需要顶层
+schema 接线时，把最小 hook 和预期 IR 写进交付说明，由 coordinator 集成。
+
+### Wave C — Runtime contracts 稳定后并行
+
+| 包 | 依赖 | 交付边界 |
+|---|---|---|
+| **SVM-RT-2 instruction effects** | SVM-RT-1 | bounded instruction buffer、return data、multi-seed PDA/CPI meta/signer seeds、显式 scratch 合同；未知 shape fail closed |
+| **SVM-RT-3 Token-2022 TLV** | SVM-RT-1/2 | bounded TLV cursor；transfer-fee、hook/account requirements 分片；未知 extension 不走 classic 82/165-byte path |
+| **SVM-SDK-2 scratch** | SVM-RT-2 | invocation-local bounded Vec/byte writer/codec buffer，显式 capacity/OOM/lifetime；不能持久化 pointer |
+| **EVM-RT-2 effects/call result** | EVM-RT-1 | typed LOG/custom error/payable 与 closed CALL success/return-data contract；不开放 delegatecall/create/arbitrary callee |
+| **EVM-SDK-3 assets** | EVM-SDK-1/2、EVM-RT-2 | reusable fungible、ERC-721、bounded ERC-1155 core；每个组件至少两个 consumer |
+
+## 4. Worker 统一交付合同
+
+每个 code agent 从最新 `origin/main` 建自己的 reviewable 分支/commit，不直接合并或 force-push
+`main`。完成时只需要返回：
+
+1. commit SHA 和准确 write set；
+2. source API、lowering path、资源上界和 fail-closed 边界；
+3. 运行过的命令及通过数量；
+4. 需要 coordinator 完成的最小 integration hook；
+5. 已知未完成项，不得用 placeholder、magic selector/offset 或测试 special case 掩盖。
+
+Coordinator 集成顺序固定为：检查 write set → review target contract → 接 shared hook/顶层 import
+→ focused test → 双目标全回归 → 更新计划证据 → 一个稳定切片一个 commit。不同 worker 的
+commit 不直接互相 cherry-pick；都以 `origin/main` 的已集成状态为下一基线。
+
+## 5. Agent prompt 最小模板
+
+```text
+在 ProofForge 仓库实现工作包 <ID>。从最新 origin/main 开始，严格遵守
+docs/plan/parallel-workstreams.md 的 write set；不要修改 shared-lock、docs/plan、registry、
+顶层 imports 或 CI。目标是 <交付>，资源/fail-closed 边界是 <边界>。复用现有 Component/Source
+模式，不新增协议 opcode 或主 emitter recipe。添加 dedicated tests 并运行表中局部门。
+完成后给出 commit SHA、文件列表、验证结果和 coordinator 所需的最小 integration hook；
+不要 push/merge main。
+```
+
+这套拆法允许 target-local Runtime 和两个 SDK 方向真正并行，同时把最容易发生语义漂移的
+shared schema/Extract/registry 留在单一集成路径。

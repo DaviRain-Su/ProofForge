@@ -2,6 +2,8 @@
 
 > 更新：2026-08-27。本文是 SVM 与 EVM 后续 Runtime / SDK 工作的权威排期；
 > [backlog.md](backlog.md) 记录已经落地的证据和当前 Phoenix 切片。
+> 多 agent 并行时的 write set、shared-lock 和交付合同见
+> [并行开发执行图](parallel-workstreams.md)。
 
 ## 1. 结论和边界
 
