@@ -6,7 +6,7 @@ open ProofForge.Evm.Sdk
 
 /-!
 EVM-SDK-1 consumer A: a counter guarded by `Access.requireOwner` /
-`Access.requireRunning` with two-step ownership transfer via `Access.Ownership`.
+`Pausable.isRunning` with two-step ownership transfer via `Access.Ownership`.
 
 The owner is an explicit `Address` state field (mutable so `acceptOwnership` can rotate it), the
 paused flag is an explicit `UInt8` state field, and `ownership` contains exactly one pending
@@ -29,7 +29,7 @@ inductive Error where
 
 @[pf_entry]
 def init (owner : Address) : State :=
-  { owner, paused := Access.runningFlag, count := 0, ownership := Access.Ownership.none }
+  { owner, paused := Pausable.running, count := 0, ownership := Access.Ownership.none }
 
 /-- Step 1 of ownership transfer: current owner nominates `candidate`.
     Non-owner → `Unauthorized(caller)`; zero candidate → `ZeroAddress()`. -/
@@ -69,14 +69,14 @@ def acceptOwnership (s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    if Access.requireRunning s.paused then
+    if Pausable.isRunning s.paused then
       if s.count ≤ u64Max - delta then
         let next := s.count + delta
         .ok ({ s with count := next }, next)
       else
         .error .overflow
     else
-      .ok (s, Access.runningViolation)
+      .ok (s, Pausable.violation)
   else
     .ok (s, Access.ownerViolation)
 
@@ -84,7 +84,7 @@ def bump (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    .ok ({ s with paused := Access.pausedFlag }, 1)
+    .ok ({ s with paused := Pausable.pause s.paused }, 1)
   else
     .ok (s, Access.ownerViolation)
 
@@ -92,7 +92,7 @@ def pause (s : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def unpause (s : State) : Except Error (State × UInt64) :=
   if Access.requireOwner s.owner then
-    .ok ({ s with paused := Access.runningFlag }, 0)
+    .ok ({ s with paused := Pausable.unpause s.paused }, 0)
   else
     .ok (s, Access.ownerViolation)
 

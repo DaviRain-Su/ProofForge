@@ -34,8 +34,9 @@ UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
 R3-005 non-seeded System facade completion、
-R5-001 EVM Access foundation、R5-002 EVM static storage foundation 和
-R5-003 bounded static roles；这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
+R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
+R5-003 bounded static roles 与 R5-004 Pausable policy；这些都是阶段内可复用组件切片，
+不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
 `docs/plan/tasks/r0-002.md`。Vector/Map/allocator 必须分别声明 boundary、invocation-local、
@@ -286,6 +287,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Anvil 覆盖 zero/duplicate/full/nonmember/unauthorized/closed policy；indexed Address return
   在 extraction 支持安全 OOB-zero 前不发布。详见 `docs/plan/tasks/r5-003.md`。Reentrancy 与
   asset/NFT components 仍未完成。
+
+- R5-004 EVM Pausable policy 已完成：`Evm.Sdk.Pausable` 统一 canonical `UInt8` flags、
+  fail-closed predicates、replacement transitions 与现有 `Paused()` terminal；
+  TwoStepCounter/Credits 直接复用，权限、事件和 literal State writes 仍归 application。
+  Extract 只把 `pf_inline` scalar helper 的通用合同补齐到 UInt8/16/32，没有 Pausable 名字、
+  新 Ops/IR/Component/Emit case 或隐藏 slot。两个 contract 的 Yul/ABI/bin 逐字节不变；详见
+  `docs/plan/tasks/r5-004.md`。Typed pause events 仍等待 generic event surface；ReentrancyGuard
+  在 lock write → external CALL → clear 的 effect ordering 可证明前继续 fail closed。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

@@ -610,7 +610,9 @@ private def resultType (fuel : Nat) (type : Expr) : Expr :=
 
 private def isScalarResult (env : Environment) (type : Expr) : Bool :=
   match (resultType 16 type).consumeMData.getAppFn.constName? with
-  | some name => name == ``UInt64 || name == ``Bool || isUInt64Newtype env name
+  | some name =>
+      name == ``UInt8 || name == ``UInt16 || name == ``UInt32 || name == ``UInt64 ||
+        name == ``Bool || isUInt64Newtype env name
   | none => false
 
 private def firstUserInputType (env : Environment) : Nat → Expr → Option Name
