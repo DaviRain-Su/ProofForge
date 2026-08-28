@@ -65,53 +65,37 @@ private def oneRegion (name : String) (size alignment : Nat) : Except String All
 
 structure DynamicSelfLayout where
   instruction : InstructionPlan
-  scratch : Plan
-  seed : Region
-  bump : Region
-  seedEntries : Region
-  bumpEntry : Region
-  signerGroup : Region
+  tail : SignerSeedTail
 
-private def dynamicSelfPlan (accountCount seedBytes : Nat) : Except String DynamicSelfLayout := do
+private def dynamicSelfPlan (accountCount seedBytes : Nat) :
+    Except String DynamicSelfLayout := do
   let instruction ← instructionPlan cpiBank
     { metaCount := 1, dataBytes := 0, accountCount }
-  let seed ← instruction.scratch.alloc "seed" seedBytes 1
-  let bump ← seed.plan.alloc "bump" 1 8
-  let seedEntries ← bump.plan.alloc "seedEntries" 16 8
-  let bumpEntry ← seedEntries.plan.alloc "bumpEntry" 16 8
-  let signerGroup ← bumpEntry.plan.alloc "signerGroup" 16 8
-  return {
-    instruction
-    scratch := signerGroup.plan
-    seed := seed.region
-    bump := bump.region
-    seedEntries := seedEntries.region
-    bumpEntry := bumpEntry.region
-    signerGroup := signerGroup.region
-  }
+  let tail ← instruction.scratch.signerSeedTail seedBytes 1
+  return { instruction, tail }
 
 -- Existing BatchRecorder geometry is preserved without emitter-local offsets.
 #guard
   match dynamicSelfPlan 4 3 with
   | .ok layout =>
-      layout.scratch.frameBytes == 344 && layout.scratch.laidOut &&
+      layout.tail.scratch.frameBytes == 344 && layout.tail.scratch.laidOut &&
         layout.instruction.metas.offset == 0 &&
         layout.instruction.instruction.offset == 16 &&
         layout.instruction.infos.offset == 56 &&
-        layout.seed.offset == 280 && layout.bump.offset == 288 &&
-        layout.seedEntries.offset == 296 && layout.bumpEntry.offset == 312 &&
-        layout.signerGroup.offset == 328
+        layout.tail.bytes.offset == 280 && layout.tail.bump.offset == 288 &&
+        layout.tail.entries.offset == 296 && layout.tail.bumpEntryOffset == 312 &&
+        layout.tail.group.offset == 328
   | .error _ => false
 
 -- The exact account boundary fits; the next account fails before emission.
 #guard
   match dynamicSelfPlan 16 3 with
-  | .ok layout => layout.scratch.frameBytes == 1016
+  | .ok layout => layout.tail.scratch.frameBytes == 1016
   | .error _ => false
 
 #guard
   match dynamicSelfPlan 17 3 with
-  | .error message => message.contains "requires 1040 bytes" && message.contains "maximum is 1024"
+  | .error message => message.contains "requires 1056 bytes" && message.contains "maximum is 1024"
   | .ok _ => false
 
 #guard
@@ -132,5 +116,85 @@ private def dynamicSelfPlan (accountCount seedBytes : Nat) : Except String Dynam
   match instructionPlan cpiBank { metaCount := 4, dataBytes := 64, accountCount := 64 } with
   | .error message => message.contains "maximum is 1024"
   | .ok _ => false
+
+-- Ordinary invoke signer-tail guards: exact fit, OOM, mixed seed shapes, and alignment.
+
+-- Exact fit: a 14-account buffer leaves 184 bytes, enough for 5 seeds of 64 copied bytes, the
+-- bump byte, 6 entry slots, and the signer group, ending exactly at the 1024-byte boundary.
+private def invokeTailPlan (accountCount copiedBytes seedCount : Nat) :
+    Except String SignerSeedTail := do
+  let instruction ← instructionPlan cpiBank
+    { metaCount := 1, dataBytes := 0, accountCount }
+  instruction.scratch.signerSeedTail copiedBytes seedCount
+
+#guard
+  match invokeTailPlan 14 64 5 with
+  | .ok tail =>
+      tail.scratch.frameBytes == 1024 && tail.scratch.laidOut &&
+        tail.bytes.offset == 840 && tail.bump.offset == 904 &&
+        tail.entries.offset == 912 && tail.bumpEntryOffset == 992 &&
+        tail.group.offset == 1008
+  | .error _ => false
+
+-- One copied byte more leaves the bank and is rejected before emission.
+#guard
+  match invokeTailPlan 14 65 5 with
+  | .error message => message.contains "requires 1032 bytes" && message.contains "maximum is 1024"
+  | .ok _ => false
+
+-- An empty copied region with no seeds still reserves only the bump entry and group.
+#guard
+  match invokeTailPlan 4 0 0 with
+  | .ok tail =>
+      tail.bytes.offset == 280 && tail.bytes.size == 0 && tail.bump.offset == 280 &&
+        tail.entries.offset == 288 && tail.bumpEntryOffset == 288 &&
+        tail.group.offset == 304 && tail.scratch.frameBytes == 320 &&
+        tail.scratch.laidOut
+  | .error _ => false
+
+-- A non-copied multi-seed mix (state/account/data seeds) keeps size-zero copied bytes while
+-- every seed still gets one descriptor plus the shared bump entry.
+#guard
+  match invokeTailPlan 4 0 3 with
+  | .ok tail =>
+      tail.bytes.offset == 280 && tail.bytes.size == 0 && tail.bump.offset == 280 &&
+        tail.entries.offset == 288 && tail.entries.size == 64 &&
+        tail.bumpEntryOffset == 336 && tail.group.offset == 352 &&
+        tail.scratch.frameBytes == 368 && tail.scratch.laidOut
+  | .error _ => false
+
+-- An ascii/non-copied mix keeps the copied region packed and the bump byte 8-aligned even when
+-- the copied byte count is not.
+#guard
+  match invokeTailPlan 4 5 2 with
+  | .ok tail =>
+      tail.bytes.offset == 280 && tail.bytes.size == 5 && tail.bump.offset == 288 &&
+        tail.entries.offset == 296 && tail.bumpEntryOffset == 328 &&
+        tail.group.offset == 344 && tail.scratch.frameBytes == 360 &&
+        tail.scratch.laidOut
+  | .error _ => false
+
+-- A maximal 15-seed group with no copied bytes still overflows the 1024-byte bank.
+#guard
+  match invokeTailPlan 14 0 15 with
+  | .error message => message.contains "requires 1104 bytes" && message.contains "maximum is 1024"
+  | .ok _ => false
+
+-- Fixed return-data staging: 32-byte program id, fixed 8-byte payload, exact bank fit, and the
+-- established deep-sysvar physical distances.
+#guard returnDataBank.wellFormed
+#guard returnDataPayloadBytes == 8 && returnDataProgramIdBytes == 32
+
+#guard
+  match returnDataStaging with
+  | .ok staging =>
+      staging.scratch.frameBytes == 40 && staging.scratch.laidOut &&
+        staging.programId.offset == 0 && staging.programId.size == 32 &&
+        staging.payload.offset == 32 && staging.payload.size == 8 &&
+        staging.programId.stackDistance returnDataBank == 3104 &&
+        staging.payload.stackDistance returnDataBank == 3072
+  | .error _ => false
+
+#guard returnDataBank.lifetime == .invocationOnly
 
 end Tests.SvmScratchSpec

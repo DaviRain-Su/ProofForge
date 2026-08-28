@@ -59,23 +59,20 @@ def emitDynamicSignedSelf (context : Context) (label : String)
     (logAccount : Nat) (authoritySeed : String)
     (dataPointerStack dataLengthStack bumpStack : Nat) : Except String String := do
   let n := context.accountCount
-  -- Instruction-buffer geometry (metas, descriptor, infos) comes from the shared bounded-scratch
-  -- contract; the signer-seed tail is appended with the same fail-closed allocator.
+  -- Instruction-buffer geometry and the signer-seed tail both come from the shared bounded-scratch
+  -- contract: one typed plan establishes metas/descriptor/infos plus copied seed bytes, the bump
+  -- byte, the seed-entry array (including the bump entry), and the signer group fail-closed.
   let base ← Scratch.instructionPlan Scratch.cpiBank
     { metaCount := 1, dataBytes := 0, accountCount := n }
-  let seed ← base.scratch.alloc "seed" authoritySeed.length 1
-  let bump ← seed.plan.alloc "bump" 1 8
-  let seedEntriesRegion ← bump.plan.alloc "seedEntries" 16 8
-  let bumpEntryRegion ← seedEntriesRegion.plan.alloc "bumpEntry" 16 8
-  let signerGroupRegion ← bumpEntryRegion.plan.alloc "signerGroup" 16 8
+  let tail ← base.scratch.signerSeedTail authoritySeed.length 1
   let metaOff := base.metas.offset
   let instructionOff := base.instruction.offset
   let infoOff := base.infos.offset
-  let seedOff := seed.region.offset
-  let bumpByte := bump.region.offset
-  let seedEntries := seedEntriesRegion.region.offset
-  let bumpEntry := bumpEntryRegion.region.offset
-  let signerGroup := signerGroupRegion.region.offset
+  let seedOff := tail.bytes.offset
+  let bumpByte := tail.bump.offset
+  let seedEntries := tail.entries.offset
+  let bumpEntry := tail.bumpEntryOffset
+  let signerGroup := tail.group.offset
   let physicalLogAccount := logAccount + 1
   let mut seedBytes := ""
   for i in [0:authoritySeed.length] do

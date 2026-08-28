@@ -7,9 +7,9 @@ namespace ProofForge.Svm.Emit
 
 def overflowCode : String := "0x1001"
 
-/-- Deep scratch stays clear of expression temporaries, walk headers, scalar locals, and CPI data. -/
+/-- Deep scratch stays clear of expression temporaries, walk headers, scalar locals, and CPI data.
+The `sol_get_return_data` window is planned separately in `Svm.Scratch.returnDataBank`. -/
 private def sysvarScratch : Nat := 3072
-private def sysvarProgramIdScratch : Nat := 3104
 /-- Heterogeneous PDA discovery may need 480 seed bytes, 15 descriptors, and a 32-byte result.
 It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
 PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
@@ -411,20 +411,23 @@ epoch_ok_{scope}_{stackOff}:
 "
 
 /-- 最近一次 CPI 的 8 字节返回。长度不是 8 则 Custom(1)。 -/
-private def emitLoadCpiReturn (stackOff : Nat) (scope : String) : String :=
-  s!"\
+private def emitLoadCpiReturn (stackOff : Nat) (scope : String) : Except String String := do
+  let staging ← Scratch.returnDataStaging
+  let payloadDist := staging.payload.stackDistance Scratch.returnDataBank
+  let programIdDist := staging.programId.stackDistance Scratch.returnDataBank
+  return s!"\
   ; load cpiReturn via sol_get_return_data
   mov64 r1, r10
-  add64 r1, -{sysvarScratch}
+  add64 r1, -{payloadDist}
   lddw r2, 8
   mov64 r3, r10
-  add64 r3, -{sysvarProgramIdScratch}
+  add64 r3, -{programIdDist}
   call sol_get_return_data
   jeq r0, 8, cpi_ret_ok_{scope}_{stackOff}
   lddw r0, 0x1
   exit
 cpi_ret_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - {sysvarScratch}]
+  ldxdw r1, [r10 - {payloadDist}]
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -959,7 +962,7 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .ext .slotsPerEpoch #[] =>
     .ok (emitLoadSlotsPerEpoch stackOff scope)
   | .ext .cpiReturn #[] =>
-    .ok (emitLoadCpiReturn stackOff scope)
+    emitLoadCpiReturn stackOff scope
   | .ext .signerKey0 #[] =>
     .ok (emitLoadSignerKey0 stackOff)
   | .ext .accLamports0 #[] =>
@@ -1362,20 +1365,26 @@ private def emitCpiDataLenChecks (label : String) (metas : Array Ops.CpiMeta) : 
 {ok}:
 "
 
-private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
+private def emitSignerSeeds (p : IR.Program) (scope : String) (plan : Scratch.Plan)
     (seeds : Array Ops.PdaSeed) (bump : Option Ops.Val) :
-    Except String (String × String × Nat) :=
+    Except String (String × String) :=
   match bump with
   | some b => do
     if seeds.isEmpty then
       throw "extract/unsupported: invoke signer seeds cannot be empty"
-    let load ← loadVal p b 8 seedOff s!"{scope}_seed"
     let byteCount := seeds.foldl (init := 0) fun total seed =>
       match seed with
       | .ascii value => total + value.length
       | _ => total
-    let bumpByte := ((seedOff + byteCount + 7) / 8) * 8
-    let seedsArr := bumpByte + 8
+    -- The typed tail establishes copied-byte span, bump alignment, entry count, group offset,
+    -- and bank capacity fail-closed; the emitter only writes the planned regions.
+    let tail ← plan.signerSeedTail byteCount seeds.size
+    let seedOff := tail.bytes.offset
+    let bumpByte := tail.bump.offset
+    let seedsArr := tail.entries.offset
+    let bumpEntry := tail.bumpEntryOffset
+    let groupOff := tail.group.offset
+    let load ← loadVal p b 8 seedOff s!"{scope}_seed"
     let mut bytes := ""
     let mut entries := ""
     let mut byteOff := seedOff
@@ -1426,8 +1435,6 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
   lddw r1, {length}
   stxdw [r9 + {seedsArr + 16 * i + 8}], r1
 "
-    let bumpEntry := seedsArr + 16 * seeds.size
-    let groupOff := bumpEntry + 16
     let txt :=
       load ++ bytes ++ entries ++ s!"\
   ldxdw r1, [r10 - 8]
@@ -1445,10 +1452,10 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (seedOff : Nat)
 "
     let regs :=
       s!"  mov64 r4, r9\n  add64 r4, {groupOff}\n  lddw r5, 1\n"
-    return (txt, regs, groupOff + 16)
+    return (txt, regs)
   | none =>
     if seeds.isEmpty then
-      return ("", "  lddw r4, 0\n  lddw r5, 0\n", 0)
+      return ("", "  lddw r4, 0\n  lddw r5, 0\n")
     else
       throw "extract/unsupported: invoke signer seeds require a bump"
 
@@ -1470,13 +1477,12 @@ private def emitInvoke (p : IR.Program) (label : String)
   let ixOff := plan.instruction.offset
   let dataOff := plan.data.offset
   let infoOff := plan.infos.offset
-  let seedOff := plan.infos.endOffset
-  let (seedTxt, seedRegs, seedEnd) ← emitSignerSeeds p label seedOff seeds bump
-  -- `emitCpiData` clears a full 64-byte data window even for shorter payloads. Account infos and
-  -- signer descriptors may extend farther; all three must remain in the dedicated CPI bank.
-  let frameEnd := max (dataOff + cpiDataWindowBytes) (max seedOff seedEnd)
-  if frameEnd > Scratch.cpiBank.capacityBytes then
-    throw s!"extract/unsupported: invoke scratch requires {frameEnd} bytes, maximum is {Scratch.cpiBank.capacityBytes}"
+  let (seedTxt, seedRegs) ← emitSignerSeeds p label plan.scratch seeds bump
+  -- `emitCpiData` clears a full 64-byte data window even for shorter payloads. The instruction
+  -- plan bounds payload, metas, descriptor, and account infos, and the typed signer tail bounds
+  -- its own regions, so only this clear tail still needs an explicit bank check.
+  if dataOff + cpiDataWindowBytes > Scratch.cpiBank.capacityBytes then
+    throw s!"extract/unsupported: invoke scratch requires {dataOff + cpiDataWindowBytes} bytes, maximum is {Scratch.cpiBank.capacityBytes}"
   let mut metasTxt := ""
   for i in [0:metas.size] do
     metasTxt := metasTxt ++ emitOneMeta i metas[i]!

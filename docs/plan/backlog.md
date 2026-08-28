@@ -22,10 +22,10 @@ canonical standard-ABI dynamic head/tail 与 fixed local frame；R1-011 已用�
 static/tagged/bounded schema 对照两套 target plan 的 source projections，同时保持 Borsh
 cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded account view 与
 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
-instruction/scratch layout，下一刀是 SVM-RT-2b return-data/multi-seed effects，并与 EVM-RT-2
-typed call-result/LOG contract 交替推进。EVM-RT-2a typed call-result 已完成，下一刀是 typed
-LOG/custom-error plan。并行 EVM UInt256 线已补齐 typed bitwise/shift；div/mod 留到独立切片
-明确除零策略。
+instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed signer tail 收口到
+同一个 bounded plan，下一刀进入 SVM-RT-3 Token-2022 TLV。EVM-RT-2a typed call-result 已完成，
+下一刀是 typed LOG/custom-error plan。并行 EVM UInt256 线已补齐 typed bitwise/shift；div/mod
+留到独立切片明确除零策略。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
 R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
 完成。
@@ -247,6 +247,12 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   fail closed。plan 只含编译期 byte counts，不持有或持久化 native pointer；没有新增
   Ops/IR/Component/Emit recipe。全部 registered SVM program 的重构前后 assembly
   逐字节一致；详见 `docs/plan/tasks/r2-002.md`。
+
+- R2-003 SVM signer-tail/return-data staging 已完成：ordinary invoke 与 dynamic signed
+  self-CPI 的 copied seed bytes、aligned bump、seed descriptors 和 signer group 统一由
+  `SignerSeedTail` 规划；`sol_get_return_data` 的固定 32-byte program id + 8-byte payload 由
+  `ReturnDataStaging` 规划。全部 region 经 `Plan.alloc` 做 alignment/capacity gate，不携带或
+  持久化 pointer；已有 assembly 逐字节不变。详见 `docs/plan/tasks/r2-003.md`。
 
 - R4-001 EVM typed call-result contract 已完成：`Evm.CallResult` 用一个 interpreter 统一
   closed CALL/STATICCALL 的 success-only、exact-word 与 ERC-20 empty-or-nonzero-word policy，
