@@ -1,6 +1,6 @@
 # Runtime / SDK 双目标路线图
 
-> 更新：2026-08-27。本文是 SVM 与 EVM 后续 Runtime / SDK 工作的权威排期；
+> 更新：2026-08-28。本文是 SVM 与 EVM 后续 Runtime / SDK 工作的权威排期；
 > [backlog.md](backlog.md) 记录已经落地的证据和当前 Phoenix 切片。
 > 多 agent 并行时的 write set、shared-lock 和交付合同见
 > [并行开发执行图](parallel-workstreams.md)。
@@ -72,7 +72,7 @@ instruction 增加 recipe opcode。
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
-| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、CPI-relative account handles、static ASCII PDA、non-seeded System、classic Token fixed/role-typed signed transfer、fixed ATA CreateIdempotent/Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Seeded System、general ATA/Memo、Token state/program-id policy 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、CPI-relative account handles、static ASCII PDA、non-seeded/generic ASCII-seeded System、classic Token fixed/role-typed signed transfer、fixed ATA CreateIdempotent/Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、canonical initialization，以及 invocation-local heap buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、general ATA/Memo、Token state/program-id policy 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
 | EVM SDK | `Storage.Layout` typed maps、`Storage.Static` scalar/record/fixed-array declarations、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/fixed-router facade；`Access` owner/two-step ownership；`Roles.Set2` fixed-capacity membership/grant/revoke decisions；`Pausable` explicit fail-closed flag policy | typed pause events、reentrancy、code-existence/revert-bubbling policy 与 token/NFT reusable components；dynamic indexed Address return |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -278,7 +278,10 @@ positional account lists；应用仍在 `Examples` 拥有具体布局，全部�
 [R3-006](tasks/r3-006.md)。R3-007 又把 fixed ATA
 `CreateIdempotent` 与 fixed Memo 移到 `Svm.Sdk.AssociatedToken` / `.Memo`，显式保留
 caller-selected Token program 和 bounded-data/program-id 缺口；Ata/Memo 产物不变，详见
-[R3-007](tasks/r3-007.md)。R3 尚未完成；seeded System、general ATA/Memo、Token
+[R3-007](tasks/r3-007.md)。R3-008 又提供 `Svm.Sdk.System.AsciiSeed` 的 generic compile-time
+ASCII allocate/create/assign/transfer；seed length 由 SDK 自动编码，verifier 对四种 closed
+System geometry 校验 1–32 ASCII bytes 和相邻 bincode length，SysSeed/SysXfer 产物不变，详见
+[R3-008](tasks/r3-008.md)。R3 尚未完成；rent-aware resize、general ATA/Memo、Token
 state/program-id policy 与 Token-2022 extension semantics 仍待完成。
 
 ### R4 — EVM Runtime

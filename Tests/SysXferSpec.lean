@@ -3,11 +3,11 @@ import Examples.SysXfer
 namespace Tests.SysXferSpec
 
 open Examples.SysXfer
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard systemTransferWithSeed 7 == 0
+#guard System.AsciiSeed.transfer "vault" 7 == 0
 
 #guard
   match sendSeed (init 0) 9 with

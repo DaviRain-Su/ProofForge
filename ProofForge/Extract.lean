@@ -776,6 +776,10 @@ private partial def staticNat? (env : Environment) (fuel : Nat) (e : Expr) : Opt
         staticNat? env fuel' reduced
       else if isConstNamed e ``OfNat.ofNat then
         e.getAppArgs.findSome? (staticNat? env fuel')
+      else if isConstNamed e ``String.length && !e.getAppArgs.isEmpty then
+        match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+        | .lit (.strVal value) => some value.length
+        | _ => none
       else if (isConstNamed e ``HAdd.hAdd || isConstNamed e ``Nat.add) &&
           e.getAppArgs.size ≥ 2 then
         let args := e.getAppArgs
@@ -3542,9 +3546,13 @@ private def asCpiWord (env : Environment) (e : Expr) : Option Ops.CpiWord :=
     else none
   else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.u64le || endsWith e ".u64le" then
     if e.getAppArgs.size ≥ 1 then
-      match val env e.getAppArgs[e.getAppArgs.size - 1]! with
+      let value := e.getAppArgs[e.getAppArgs.size - 1]!
+      match val env value with
       | some v => some (.u64le v)
-      | none => none
+      | none =>
+          match staticNatVal? env value with
+          | some n => some (.u64le (.lit (UInt64.ofNat n)))
+          | none => none
     else none
   else if isConstNamed e ``ProofForge.Svm.Runtime.CpiWord.selfEntry then
     let args := e.getAppArgs
@@ -4504,6 +4512,15 @@ private def invokeRet
     (env : Environment) (e : Expr)
     (inv : DecodedInvoke) :
     Except String Ops.Val :=
+  let validAsciiSeedLength (length : Ops.Val) (seed : String) : Bool :=
+    match length with
+    | .lit encoded =>
+        encoded.toNat == seed.length &&
+          ProofForge.Svm.Seed.Ascii.wellFormed seed
+    | _ => false
+  let seededResult (length : Ops.Val) (seed : String) (result : Ops.Val) : Except String Ops.Val :=
+    if validAsciiSeedLength length seed then .ok result
+    else .error "extract/unsupported: System seed must be 1-32 ASCII bytes with matching length"
   if let some ret := findOkRet env e then
     .ok ret
   else match inv with
@@ -4513,10 +4530,14 @@ private def invokeRet
       .ok amount
   | (1, _, #[.u32le (.lit 1), .programId], #[], none) => .ok (.lit 0)
   | (1, _, #[.u32le (.lit 8), .u64le space], #[], none) => .ok space
-  | (2, _, #[.u32le (.lit 9), .accKey 0, .u64le _, .ascii "vault", .u64le space, .programId], #[], none) => .ok space
-  | (2, _, #[.u32le (.lit 3), .accKey 0, .u64le _, .ascii "vault", .u64le lamports, .u64le _, .programId], #[], none) => .ok lamports
-  | (2, _, #[.u32le (.lit 10), .accKey 0, .u64le _, .ascii "vault", .programId], #[], none) => .ok (.lit 0)
-  | (3, _, #[.u32le (.lit 11), .u64le lamports, .u64le _, .ascii "vault", .programId], #[], none) => .ok lamports
+  | (2, _, #[.u32le (.lit 9), .accKey 0, .u64le length, .ascii seed, .u64le space,
+      .programId], #[], none) => seededResult length seed space
+  | (2, _, #[.u32le (.lit 3), .accKey 0, .u64le length, .ascii seed, .u64le lamports,
+      .u64le _, .programId], #[], none) => seededResult length seed lamports
+  | (2, _, #[.u32le (.lit 10), .accKey 0, .u64le length, .ascii seed, .programId], #[], none) =>
+      seededResult length seed (.lit 0)
+  | (3, _, #[.u32le (.lit 11), .u64le lamports, .u64le length, .ascii seed,
+      .programId], #[], none) => seededResult length seed lamports
   | (2, _, #[.u8le (.lit 20), .u8le (.lit 6), .accKey 0, .u8le (.lit 0)], #[], none) => .ok (.lit 0)
   | (2, _, #[.u8le (.lit 17)], #[], none) => .ok (.lit 0)
   -- Statically indexed classic/Token-2022 TransferChecked wrappers return their modeled amount;

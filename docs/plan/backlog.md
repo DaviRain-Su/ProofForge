@@ -34,7 +34,7 @@ UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
 R3-005 non-seeded System facade completion、R3-006 classic Token facade、
-R3-007 fixed ATA/Memo facades、
+R3-007 fixed ATA/Memo facades、R3-008 generic seeded System facade、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy 与 R5-005 bounded payment facade adoption；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
@@ -45,7 +45,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 289 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 298 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 308/308（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -283,6 +283,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   依赖 Runtime 名称；没有新增 Ops/IR/Emit/Extract/Component。两个 canonical digest 与六份
   assembly/ELF/IDL 产物保持不变；详见 `docs/plan/tasks/r3-007.md`。普通 ATA Create、
   RecoverNested、program-id policy 与 bounded memo bytes 仍待后续 Runtime/SDK contract。
+
+- R3-008 generic seeded System facade 已完成：`Svm.Sdk.System.AsciiSeed` 提供 compile-time
+  ASCII seed 的 allocate/createAccount/assign/transfer，自动编码 bincode seed byte length；
+  SysSeed/SysXfer 不再依赖 hardcoded Runtime wrapper。Extractor 只补齐 static literal
+  `String.length` → CPI u64 的通用求值，Ops verifier 只在四种 closed System account geometry
+  上校验 1–32 ASCII bytes 与长度一致性；没有新 Op/IR/Component/Emit variant 或 recipe。
+  `"ledger"` 四路径证明 API 非 `"vault"` 特判，空/超长/错长度均 fail closed；两个 canonical
+  digest 与六份 assembly/ELF/IDL 产物逐字节不变。详见
+  `docs/plan/tasks/r3-008.md`。Rent-aware resize、general ATA/Memo、Token state/program-id policy
+  与 Token-2022 extension semantics 仍是 R3 工作。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

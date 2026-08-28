@@ -97,7 +97,7 @@ ProofForge 要保存的是相同的安全合同：写权限、owner、alias、�
 
 | 组件 | 当前 | 主要缺口 | 优先级 |
 |---|---|---|---|
-| System/PDA | static ASCII PDA；non-seeded transfer/create/assign/allocate/nonce | honest generic seeded System facade、rent-aware create/resize helpers | F1 |
+| System/PDA | static ASCII PDA；non-seeded transfer/create/assign/allocate/nonce；generic compile-time ASCII seeded allocate/create/assign/transfer with checked bincode length | rent-aware create/resize helpers、remaining System lifecycle policy | F1 |
 | SPL Token | `Svm.Sdk.Token` 已统一 fixed classic surface，并以 CPI-relative role descriptors 提供 checked/unchecked ordinary/PDA-signed transfer；concrete account layout 留在应用 | state parsers、program-id policy、更多 honest generic authority/multisig variants | F1 |
 | Token-2022 | base-layout transfer + bounded TLV envelope，未知 extension 原子拒绝 | typed extension lookup/account-size；transfer-fee/hook/memo/CPI-guard 等逐扩展完整语义 | F2 |
 | ATA/Memo | SDK 已有 fixed ATA CreateIdempotent（Token program 由 caller account 显式提供）与诚实名 `writeOk` Memo facade | ordinary Create/RecoverNested、derived address/program-id policy；bounded memo bytes | F1/F2 |

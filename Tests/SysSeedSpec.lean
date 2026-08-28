@@ -3,13 +3,13 @@ import Examples.SysSeed
 namespace Tests.SysSeedSpec
 
 open Examples.SysSeed
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard systemAllocateWithSeed 16 == 0
-#guard systemCreateWithSeed 7 16 == 0
-#guard systemAssignWithSeed == 0
+#guard System.AsciiSeed.allocate "vault" 16 == 0
+#guard System.AsciiSeed.createAccount "vault" 7 16 == 0
+#guard System.AsciiSeed.assign "vault" == 0
 
 #guard
   match openSeed (init 0) with

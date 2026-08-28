@@ -1,5 +1,6 @@
 import ProofForge.Attr
 import ProofForge.Svm.Runtime
+import ProofForge.Svm.Seed
 
 /-!
 # SVM SDK PDA facade
@@ -19,7 +20,7 @@ namespace ProofForge.Svm.Sdk.Pda.Ascii
 
 /-- Same bounded ASCII policy as target-owned `PdaSeed.ascii`: 1–32 seven-bit bytes. -/
 def wellFormed (seed : String) : Bool :=
-  !seed.isEmpty && seed.length ≤ 32 && seed.toList.all (·.toNat < 128)
+  ProofForge.Svm.Seed.Ascii.wellFormed seed
 
 /-- Canonical bump for one compile-time seed. The IR verifier enforces `wellFormed`. -/
 @[pf_inline] def bump (seed : String) : UInt64 :=

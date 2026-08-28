@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.SysXfer
 
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 structure State where
   dummy : UInt64
@@ -16,11 +16,11 @@ inductive Error where
 def init (_seed : UInt64) : State :=
   { dummy := 0 }
 
-/-- TransferWithSeed；种子钉死 `"vault"`。 -/
+/-- TransferWithSeed；此应用选择 `"vault"`。 -/
 @[pf_entry]
 def sendSeed (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := systemTransferWithSeed lamports
+    let _ := System.AsciiSeed.transfer "vault" lamports
     .ok ({ dummy := 0 }, lamports)
   else
     .error .overflow

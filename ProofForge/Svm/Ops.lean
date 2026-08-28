@@ -1,6 +1,7 @@
 import ProofForge.Core.Ops
 import ProofForge.Svm.Component
 import ProofForge.Svm.Cpi.TokenTlv
+import ProofForge.Svm.Seed
 
 namespace ProofForge.Svm.Ops
 
@@ -273,7 +274,7 @@ def checkPdaSeeds (account : Nat) (seeds : Array PdaSeed) : Val :=
   leaf (.checkPdaSeeds account seeds)
 
 private def asciiSeedWellFormed (value : String) : Bool :=
-  !value.isEmpty && value.length ≤ 32 && value.toList.all (·.toNat < 128)
+  ProofForge.Svm.Seed.Ascii.wellFormed value
 
 def CpiWord.wellFormed (word : CpiWord Val) : Bool :=
   match word with
@@ -335,10 +336,40 @@ private def rawSelfInvokeWellFormed (metas : Array CpiMeta) (data : Array (CpiWo
           signerSeed == authoritySeed && authorityMeta.signer && !authorityMeta.writable
     | _, _, _, _, _ => false
 
+/-- Seed-derived System instructions carry a bincode `u64` byte length immediately before their
+ASCII seed. Validate only the four closed account geometries owned by the SDK; `.ascii` remains a
+generic CPI data word for other programs. -/
+private def systemAsciiSeedWellFormed
+    (programIx : Nat) (metas : Array CpiMeta) (data : Array (CpiWord Val)) : Bool :=
+  let derivedMetas : Array CpiMeta :=
+    #[{ acc := 1, signer := false, writable := true },
+      { acc := 0, signer := true, writable := false }]
+  let createMetas : Array CpiMeta :=
+    #[{ acc := 0, signer := true, writable := true },
+      { acc := 1, signer := false, writable := true }]
+  let transferMetas : Array CpiMeta := derivedMetas.push
+    { acc := 2, signer := false, writable := true }
+  let validLength (length : Val) (seed : String) : Bool :=
+    match length with
+    | .lit encoded => encoded.toNat == seed.length && asciiSeedWellFormed seed
+    | _ => false
+  match data with
+  | #[.u32le (.lit tag), .accKey 0, .u64le length, .ascii seed, .u64le _, .programId] =>
+      if tag == 9 && programIx == 2 && metas == derivedMetas then validLength length seed else true
+  | #[.u32le (.lit tag), .accKey 0, .u64le length, .ascii seed, .u64le _, .u64le _,
+      .programId] =>
+      if tag == 3 && programIx == 2 && metas == createMetas then validLength length seed else true
+  | #[.u32le (.lit tag), .accKey 0, .u64le length, .ascii seed, .programId] =>
+      if tag == 10 && programIx == 2 && metas == derivedMetas then validLength length seed else true
+  | #[.u32le (.lit tag), .u64le _, .u64le length, .ascii seed, .programId] =>
+      if tag == 11 && programIx == 3 && metas == transferMetas then validLength length seed else true
+  | _ => true
+
 def OpExt.wellFormed : OpExt Val → Bool
   | .invoke programIx metas data seeds bump =>
       cpiAccInRange programIx && metas.all CpiMeta.wellFormed &&
         data.all CpiWord.wellFormed &&
+        systemAsciiSeedWellFormed programIx metas data &&
         rawSelfInvokeWellFormed metas data seeds bump &&
         ((seeds.isEmpty && bump.isNone) ||
           (PdaSeed.groupWellFormed seeds && bump.isSome)) &&
