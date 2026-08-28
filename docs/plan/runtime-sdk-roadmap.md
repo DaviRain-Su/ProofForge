@@ -110,9 +110,10 @@ Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固
 account view、R5-001 Access foundation 与 R5-002 static storage declarations 均已集成；两个
 独立 contract 分别复用 Access 和 storage declaration contracts。SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；下一刀继续 return data/multi-seed，
-并与 EVM-RT-2 call-result/LOG contracts 交替推进。详见 [R2-001](tasks/r2-001.md)、
-[R2-002](tasks/r2-002.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。这不表示
-R2/R5 已完成。
+EVM-RT-2a 也已统一 closed CALL/STATICCALL result policy；下一刀与 typed LOG/custom error
+交替推进。详见 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、
+[R4-001](tasks/r4-001.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。这不表示
+R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
 
@@ -251,7 +252,14 @@ scalar、Address/wide、flat record、fixed array 与 record-array cursor/typed 
 contract 的普通 typed State flattening 与 declaration leaf table 逐槽一致，并由 Anvil 直接
 核对 constructor、targeted mutation、邻槽保持、OOB 与权限原子失败。描述符不生成 runtime
 allocator，也不改变 hashed-map namespace 或增加 Ops/IR/Component/Emit recipe；详见
-[R5-002](tasks/r5-002.md)。R4 的 LOG0..4 与通用 CALL result contract 仍未完成。
+[R5-002](tasks/r5-002.md)。
+
+R4-001 已完成 EVM-RT-2a typed call-result contract：`Evm.CallResult` 统一 success-only、
+exact-one-word 与 ERC-20 empty-or-nonzero-word policy，最多复制 32 bytes returndata；
+`ClosedCall.Emit` 的 transfer/approve/permit/balance/allowance/WETH/router paths 统一消费该
+interpreter，产物保持 byte-identical。callee/calldata 仍由 closed vocabulary 拥有，没有开放
+arbitrary call、delegatecall/create 或隐藏 allocation。R4 的 typed LOG0..4/custom-error plan
+仍未完成；详见 [R4-001](tasks/r4-001.md)。
 
 ### R5 — EVM SDK
 

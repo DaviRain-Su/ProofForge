@@ -96,7 +96,8 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-RT-2b instruction effects** | SVM-RT-2a | bounded return data、multi-seed PDA/CPI meta/signer seeds；复用同一 scratch plan，未知 shape fail closed |
 | **SVM-RT-3 Token-2022 TLV** | SVM-RT-1/2 | bounded TLV cursor；transfer-fee、hook/account requirements 分片；未知 extension 不走 classic 82/165-byte path |
 | **SVM-SDK-2 scratch** | SVM-RT-2 | invocation-local bounded Vec/byte writer/codec buffer，显式 capacity/OOM/lifetime；不能持久化 pointer |
-| **EVM-RT-2 effects/call result** | EVM-RT-1 | typed LOG/custom error/payable 与 closed CALL success/return-data contract；不开放 delegatecall/create/arbitrary callee |
+| **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
+| **EVM-RT-2b effects** | EVM-RT-2a | typed LOG0..4/custom error/payable consolidation；不开放 delegatecall/create/arbitrary callee |
 | **EVM-SDK-3 assets** | EVM-SDK-1/2、EVM-RT-2 | reusable fungible、ERC-721、bounded ERC-1155 core；每个组件至少两个 consumer |
 
 ## 4. Worker 统一交付合同
