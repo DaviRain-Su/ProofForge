@@ -254,6 +254,77 @@ private def emitZeroBorshLocals (context : Context) (base : Nat)
     out := out ++ s!"  stxdw [r10 - {stackOff}], r1\n"
   return out
 
+/-- Validate one contiguous Borsh String payload before copying it into fixed scalar locals. The
+finite-state scan accepts Unicode scalar UTF-8 and rejects overlong, surrogate, truncated, and
+greater-than-U+10FFFF sequences. `r7` remains the payload cursor. -/
+private def emitUtf8Guard (lengthOff : Nat) (err scope : String) (fresh : Nat) : String :=
+  let loop := s!"borsh_schema_utf8_loop_{scope}_{fresh}"
+  let continuation := s!"borsh_schema_utf8_cont_{scope}_{fresh}"
+  let start2 := s!"borsh_schema_utf8_start2_{scope}_{fresh}"
+  let start3 := s!"borsh_schema_utf8_start3_{scope}_{fresh}"
+  let start4 := s!"borsh_schema_utf8_start4_{scope}_{fresh}"
+  let start3E0 := s!"borsh_schema_utf8_start3_e0_{scope}_{fresh}"
+  let start3Ed := s!"borsh_schema_utf8_start3_ed_{scope}_{fresh}"
+  let start4F0 := s!"borsh_schema_utf8_start4_f0_{scope}_{fresh}"
+  let start4F4 := s!"borsh_schema_utf8_start4_f4_{scope}_{fresh}"
+  let next := s!"borsh_schema_utf8_next_{scope}_{fresh}"
+  let done := s!"borsh_schema_utf8_done_{scope}_{fresh}"
+  s!"\
+  lddw r2, 0
+  lddw r3, 0
+  lddw r4, 128
+  lddw r5, 191
+{loop}:
+  ldxdw r1, [r10 - {lengthOff}]
+  jge r2, r1, {done}
+  mov64 r1, r7
+  add64 r1, r2
+  ldxb r0, [r1 + 0]
+  jne r3, 0, {continuation}
+  jle r0, 127, {next}
+  jlt r0, 194, {err}
+  jle r0, 223, {start2}
+  jle r0, 239, {start3}
+  jle r0, 244, {start4}
+  ja {err}
+{start2}:
+  lddw r3, 1
+  ja {next}
+{start3}:
+  lddw r3, 2
+  jeq r0, 224, {start3E0}
+  jeq r0, 237, {start3Ed}
+  ja {next}
+{start3E0}:
+  lddw r4, 160
+  ja {next}
+{start3Ed}:
+  lddw r5, 159
+  ja {next}
+{start4}:
+  lddw r3, 3
+  jeq r0, 240, {start4F0}
+  jeq r0, 244, {start4F4}
+  ja {next}
+{start4F0}:
+  lddw r4, 144
+  ja {next}
+{start4F4}:
+  lddw r5, 143
+  ja {next}
+{continuation}:
+  jlt r0, r4, {err}
+  jgt r0, r5, {err}
+  sub64 r3, 1
+  lddw r4, 128
+  lddw r5, 191
+{next}:
+  add64 r2, 1
+  ja {loop}
+{done}:
+  jne r3, 0, {err}
+"
+
 private partial def emitBorshDecode (context : Context) (base : Nat) (err scope : String)
     (fresh : Nat) : BorshDecode → Except String (String × Nat)
   | .sequence items => do
@@ -341,6 +412,37 @@ private partial def emitBorshDecode (context : Context) (base : Nat) (err scope 
 {elementBody}{skipLabel}:
 "
         nonce := next
+      return (out, nonce)
+  | .boundedBytes lengthLocal byteLocals validateUtf8 => do
+      let some lengthOff := context.scalarLocalStackOff (base + lengthLocal)
+        | throw "extract/unsupported: Borsh plan exceeds scalar local scratch"
+      let utf8 := if validateUtf8 then emitUtf8Guard lengthOff err scope fresh else ""
+      let mut out := s!"\
+  mov64 r2, r7
+  add64 r2, 4
+  jgt r2, r9, {err}
+  ldxw r1, [r7 + 0]
+  jgt r1, {byteLocals.size}, {err}
+  stxdw [r10 - {lengthOff}], r1
+  add64 r7, 4
+  mov64 r2, r7
+  add64 r2, r1
+  jgt r2, r9, {err}
+{← emitZeroBorshLocals context base byteLocals}{utf8}"
+      let mut nonce := fresh + if validateUtf8 then 1 else 0
+      for i in [0:byteLocals.size] do
+        let some byteOff := context.scalarLocalStackOff (base + byteLocals[i]!)
+          | throw "extract/unsupported: Borsh plan exceeds scalar local scratch"
+        let skipLabel := s!"borsh_schema_bytes_skip_{scope}_{nonce}"
+        out := out ++ s!"\
+  ldxdw r1, [r10 - {lengthOff}]
+  jle r1, {i}, {skipLabel}
+  ldxb r1, [r7 + 0]
+  stxdw [r10 - {byteOff}], r1
+  add64 r7, 1
+{skipLabel}:
+"
+        nonce := nonce + 1
       return (out, nonce)
 
 /-- Interpret target-owned schema plans with one bounded cursor. All logical values land in fixed

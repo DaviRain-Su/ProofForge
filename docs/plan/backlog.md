@@ -272,6 +272,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   但本片在 SVM/EVM 明确 fail closed，等待各自 Borsh `Vec<u8>`/`String` 与 ABI `bytes`/`string`
   binding。未新增 Ops/IR/Emit recipe。详见 `docs/plan/tasks/r1-015.md`。
 
+- R1-016 SVM bounded Borsh bytes/String binding 已完成：`Svm.EntryAdapter` 独立拥有
+  canonical `u32 length || active bytes`、fixed UInt8 locals、inactive zeroing、capacity/bounds/
+  exact-cursor gate；String 在 source 执行前经过 strict UTF-8 wire validator。该变化只扩展
+  adapter-owned codec plan interpreter，不新增 Core Ops、SVM Runtime/IR/Component 或 main
+  Emit recipe。RawEntry digest `f1e0b094d591bd61`、ELF 21,768 B；Mollusk 17/17；Surfpool
+  1.5.0 Loader-v3 22 writes 部署通过。详见 `docs/plan/tasks/r1-016.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

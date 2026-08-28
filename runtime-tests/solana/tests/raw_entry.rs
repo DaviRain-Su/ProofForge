@@ -20,6 +20,8 @@ const AGGREGATE_TAG: u8 = 14;
 const OPTION_SCHEMA_TAG: u8 = 15;
 const ENUM_SCHEMA_TAG: u8 = 16;
 const BOUNDED_SCHEMA_TAG: u8 = 17;
+const BOUNDED_BYTES_TAG: u8 = 18;
+const BOUNDED_STRING_TAG: u8 = 19;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -85,6 +87,13 @@ fn bounded_values_data(values: &[u64]) -> Vec<u8> {
     for value in values {
         data.extend_from_slice(&value.to_le_bytes());
     }
+    data
+}
+
+fn bounded_bytes_data(tag: u8, bytes: &[u8]) -> Vec<u8> {
+    let mut data = vec![tag];
+    data.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    data.extend_from_slice(bytes);
     data
 }
 
@@ -362,6 +371,93 @@ fn bounded_vec_uses_canonical_u32_length_and_fixed_zeroed_locals() {
             program_account.clone(),
             true,
             &malformed,
+        );
+    }
+}
+
+#[test]
+fn bounded_bytes_use_canonical_borsh_vec_u8_and_fixed_zeroed_locals() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    for (bytes, expected) in [
+        (vec![], 0u64),
+        (vec![11, 13], 13u64),
+        (vec![17, 19, 23, 29, 31, 37, 41, 43], 68u64),
+    ] {
+        let data = bounded_bytes_data(BOUNDED_BYTES_TAG, &bytes);
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
+
+    let mut over_capacity = bounded_bytes_data(BOUNDED_BYTES_TAG, &[1; 9]);
+    let mut truncated = bounded_bytes_data(BOUNDED_BYTES_TAG, &[11, 13]);
+    truncated.pop();
+    let mut trailing = bounded_bytes_data(BOUNDED_BYTES_TAG, &[11]);
+    trailing.push(13);
+    for malformed in [&mut over_capacity, &mut truncated, &mut trailing] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            malformed,
+        );
+    }
+}
+
+#[test]
+fn bounded_string_enforces_strict_utf8_before_source_observation() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    for text in [
+        vec![],
+        b"abc".to_vec(),
+        vec![0xc2, 0xa2],
+        vec![0xe2, 0x82, 0xac],
+        vec![0xf0, 0x9f, 0x92, 0xa9],
+        b"abcdefgh".to_vec(),
+    ] {
+        let expected = text.len() as u64
+            + u64::from(text.first().copied().unwrap_or_default())
+            + u64::from(text.get(7).copied().unwrap_or_default());
+        let data = bounded_bytes_data(BOUNDED_STRING_TAG, &text);
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
+
+    for malformed in [
+        vec![0x80],
+        vec![0xc0, 0x80],
+        vec![0xe0, 0x80, 0x80],
+        vec![0xed, 0xa0, 0x80],
+        vec![0xe2, 0x82],
+        vec![0xf4, 0x90, 0x80, 0x80],
+        vec![0xf5, 0x80, 0x80, 0x80],
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &bounded_bytes_data(BOUNDED_STRING_TAG, &malformed),
         );
     }
 }

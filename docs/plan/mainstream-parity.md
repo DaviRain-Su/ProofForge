@@ -87,7 +87,7 @@ Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可�
 | sysvar/runtime query | Clock slot/epoch/unix、Rent、EpochSchedule | remaining Clock/Epoch fields、generic sliced sysvar、remaining compute/stack height、instructions sysvar；advanced sysvars on demand | F1/F2 |
 | crypto | literal SHA-256/Keccak first word、PDA host calls | full 32-byte/multi-slice hashes；Blake3/SHA-512/secp recovery/Poseidon/curve/big-mod-exp；signature-program instruction validation | F1/F2 |
 | log/error | authenticated bounded `sol_log_data` recorder、custom failure terminal | generic bounded log-data/numeric/key API；stable typed event convention；complete ProgramError/custom-code mapping | F1 |
-| serialization | exact scalar/static/tagged/bounded Borsh input、raw entry、Token-2022 TLV envelope | bounded returns、Pack/POD/COption/versioned account codecs、strict reusable readers/writers | F0/F2 |
+| serialization | exact scalar/static/tagged/bounded Borsh input、canonical bounded bytes/String（strict UTF-8）、raw entry、Token-2022 TLV envelope | bounded returns、Pack/POD/COption/versioned account codecs、strict reusable readers/writers | F0/F2 |
 
 Rust 的 `Rc<RefCell<_>>` borrow API 是 Rust host representation，不应原样复制成 Lean SDK。
 ProofForge 要保存的是相同的安全合同：写权限、owner、alias、长度和 CPI 前状态必须被验证，且

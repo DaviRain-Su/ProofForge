@@ -138,4 +138,16 @@ the SVM artifact. -/
 def boundedValues (_s : State) (items : BoundedVec UInt64 4) : UInt64 :=
   items.length.toUInt64 + items.values[0] + items.values[3]
 
+/-- Canonical Borsh `Vec<u8>` uses the same u32-length wire prefix as a generic vector, but keeps
+distinct source/codec identity and an eight-byte fixed local frame. -/
+@[pf_entry, pf_svm_raw 18 2 0]
+def boundedBytes (_s : State) (bytes : BoundedBytes 8) : UInt64 :=
+  bytes.length.toUInt64 + bytes.values[0].toUInt64 + bytes.values[7].toUInt64
+
+/-- Canonical Borsh `String` additionally validates strict UTF-8 before the method can observe the
+fixed local frame. Invalid, overlong, surrogate, truncated, and out-of-range encodings fail. -/
+@[pf_entry, pf_svm_raw 19 2 0]
+def boundedString (_s : State) (text : BoundedString 8) : UInt64 :=
+  text.length.toUInt64 + text.values[0].toUInt64 + text.values[7].toUInt64
+
 end Examples.RawEntry

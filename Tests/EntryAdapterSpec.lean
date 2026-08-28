@@ -79,6 +79,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing logical enum raw method"
   let some sourceBounded := source.methods.find? (·.ixName == "boundedValues")
     | throwError "missing logical bounded-vector raw method"
+  let some sourceBytes := source.methods.find? (·.ixName == "boundedBytes")
+    | throwError "missing logical bounded-bytes raw method"
+  let some sourceString := source.methods.find? (·.ixName == "boundedString")
+    | throwError "missing logical bounded-string raw method"
   unless sourceOption.annotations == #["svm.raw.v1:15:2:0"] &&
       sourceOption.paramCount == 1 && sourceOption.paramWidths.isEmpty &&
       sourceOption.paramSchemas == #[.option (.scalar .uint64)] &&
@@ -91,7 +95,11 @@ elab "#pf_guard_entry_adapter" : command => do
         | _ => false) &&
       sourceBounded.annotations == #["svm.raw.v1:17:2:0"] &&
       sourceBounded.paramCount == 1 && sourceBounded.paramWidths.isEmpty &&
-      sourceBounded.paramSchemas == #[.boundedArray 4 (.scalar .uint64)] do
+      sourceBounded.paramSchemas == #[.boundedArray 4 (.scalar .uint64)] &&
+      sourceBytes.annotations == #["svm.raw.v1:18:2:0"] &&
+      sourceBytes.paramSchemas == #[.boundedBytes 8] &&
+      sourceString.annotations == #["svm.raw.v1:19:2:0"] &&
+      sourceString.paramSchemas == #[.boundedString 8] do
     throwError "ordinary tagged/bounded source schemas were not preserved"
   let program ←
     match IR.fromExtracted source with
@@ -225,6 +233,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing projected logical enum method"
   let some boundedValues := program.methods.find? (·.ixName == "boundedValues")
     | throwError "missing projected logical bounded-vector method"
+  let some boundedBytes := program.methods.find? (·.ixName == "boundedBytes")
+    | throwError "missing projected logical bounded-bytes method"
+  let some boundedString := program.methods.find? (·.ixName == "boundedString")
+    | throwError "missing projected logical bounded-string method"
   match optionValue.entry, taggedValue.entry with
   | .raw optionEntry, .raw taggedEntry =>
       unless optionEntry.tag == 15 && optionEntry.paramBorshPlans.size == 1 &&
@@ -258,6 +270,22 @@ elab "#pf_guard_entry_adapter" : command => do
     match boundedValues.toCFG with
     | .ok graph => pure graph
     | .error reason => throwError s!"logical bounded vector did not bind to fixed locals: {reason}"
+  for (method, tag, marker) in [
+      (boundedBytes, 18, "borsh-schema.[4-12:b"),
+      (boundedString, 19, "borsh-schema.[4-12:t")
+    ] do
+    match method.entry with
+    | .raw entry =>
+        unless entry.tag == tag && entry.paramBorshPlans.size == 1 &&
+            entry.paramLeafWidths == #[4, 1, 1, 1, 1, 1, 1, 1, 1] &&
+            entry.paramLeafCounts == #[9] && entry.minDataLen == 5 &&
+            entry.maxDataLen == 13 && entry.canonical.contains marker do
+          throwError s!"wrong bounded byte/string Borsh plan: {repr entry}"
+    | .generated => throwError "logical bounded byte/string lost its raw adapter"
+    let _ ←
+      match method.toCFG with
+      | .ok graph => pure graph
+      | .error reason => throwError s!"bounded byte/string did not bind to fixed locals: {reason}"
   let bareWide := { echo128 with ops := #[.returnU64 (.arg 0)] }
   match bareWide.toCFG with
   | .error reason =>
@@ -279,11 +307,15 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call echo128" && asm.contains "call echoBytes12" &&
       asm.contains "call aggregate" && asm.contains "jne r1, 29, err_raw_aggregate" &&
       asm.contains "call optionValue" && asm.contains "call taggedValue" &&
-      asm.contains "call boundedValues" &&
+      asm.contains "call boundedValues" && asm.contains "call boundedBytes" &&
+      asm.contains "call boundedString" &&
       asm.contains "decode recursive target-owned Borsh schema with exact cursor consumption" &&
       asm.contains "borsh_schema_none_optionValue_" &&
       asm.contains "borsh_schema_enum_done_taggedValue_" &&
       asm.contains "borsh_schema_array_skip_boundedValues_" &&
+      asm.contains "borsh_schema_bytes_skip_boundedBytes_" &&
+      asm.contains "borsh_schema_utf8_loop_boundedString_" &&
+      asm.contains "borsh_schema_utf8_cont_boundedString_" &&
       asm.contains "jne r7, r9, err_raw_optionValue" &&
       asm.contains "jne r7, r9, err_raw_taggedValue" &&
       asm.contains "jne r7, r9, err_raw_boundedValues" &&
@@ -361,6 +393,10 @@ private def hasTaggedBounds (result : Except String EntryAdapter.MethodEntry)
   ]]))
 #guard hasTaggedBounds (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 1 #[] 1
   (paramSchemas := #[.boundedArray 4 (.scalar .uint64)])) 5 37 5
+#guard hasTaggedBounds (EntryAdapter.decode #["svm.raw.v1:18:2:0"] 1 #[] 1
+  (paramSchemas := #[.boundedBytes 8])) 5 13 9
+#guard hasTaggedBounds (EntryAdapter.decode #["svm.raw.v1:19:2:0"] 1 #[] 1
+  (paramSchemas := #[.boundedString 8])) 5 13 9
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 1 #[] 1
   (paramSchemas := #[.boundedArray 128 (.scalar .uint64)]))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 0 #[] 2

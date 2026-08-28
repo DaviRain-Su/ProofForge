@@ -13,6 +13,7 @@ inductive BorshDecode where
       (variants : Array BorshDecode)
   | boundedArray (lengthLocal : Nat) (elementLocals : Array Nat)
       (elements : Array BorshDecode)
+  | boundedBytes (lengthLocal : Nat) (byteLocals : Array Nat) (validateUtf8 : Bool)
   deriving BEq, Repr, Inhabited
 
 /-- A source projection into one fixed scalar range of a Borsh parameter. Empty `sourceName`
@@ -52,6 +53,9 @@ private partial def BorshDecode.canonical : BorshDecode → String
       let locals := String.intercalate "," (elementLocals.map toString).toList
       let bodies := String.intercalate "," (elements.map BorshDecode.canonical).toList
       s!"a{lengthLocal}.[{locals}][{bodies}]"
+  | .boundedBytes lengthLocal byteLocals validateUtf8 =>
+      let locals := String.intercalate "," (byteLocals.map toString).toList
+      s!"{if validateUtf8 then "t" else "b"}{lengthLocal}.[{locals}]"
 
 /-- A packed Solana instruction selected by one leading u8. Parameters are widened to the normal
 ProofForge scalar representation before the method CFG runs. Account indexes are physical outer
@@ -232,6 +236,8 @@ private partial def BorshDecode.shift (offset : Nat) : BorshDecode → BorshDeco
   | .boundedArray lengthLocal elementLocals elements =>
       .boundedArray (offset + lengthLocal) (elementLocals.map (offset + ·))
         (elements.map (BorshDecode.shift offset))
+  | .boundedBytes lengthLocal byteLocals validateUtf8 =>
+      .boundedBytes (offset + lengthLocal) (byteLocals.map (offset + ·)) validateUtf8
 
 private def BorshProjection.shift (projection : BorshProjection) (offset : Nat) :
     BorshProjection :=
@@ -287,6 +293,30 @@ private def localRange (start count : Nat) : Array Nat := Id.run do
   let mut result := #[]
   for i in [0:count] do result := result.push (start + i)
   return result
+
+private def boundedBytePlan (sourcePrefix : String) (capacity : Nat) (validateUtf8 : Bool) :
+    BorshPlan := Id.run do
+  let lengthName := sourceChild sourcePrefix "length"
+  let valuesPrefix := sourceChild sourcePrefix "values"
+  let mut projections : Array BorshProjection := #[{
+    sourceName := lengthName
+    localStart := 0
+    partCount := 1
+  }]
+  for i in [0:capacity] do
+    projections := projections.push {
+      sourceName := valuesPrefix ++ "_" ++ toString i
+      localStart := 1 + i
+      partCount := 1
+    }
+  return {
+    decode := .boundedBytes 0 (localRange 1 capacity) validateUtf8
+    projections
+    localWidths := #[4] ++ Array.replicate capacity 1
+    localBooleans := Array.replicate (1 + capacity) false
+    minBytes := 4
+    maxBytes := 4 + capacity
+  }
 
 /-- Extract currently represents payload enums as a tag plus the largest sequence of constructor
 `UInt64` fields. Preserve that fixed source representation while allowing each Borsh variant to
@@ -418,10 +448,8 @@ private partial def borshPlanAt (sourcePrefix : String) :
         minBytes := 4
         maxBytes
       }
-  | .boundedBytes _ =>
-      throw "extract/unsupported: SVM bounded bytes require the Borsh bytes policy"
-  | .boundedString _ =>
-      throw "extract/unsupported: SVM bounded strings require the UTF-8 Borsh string policy"
+  | .boundedBytes capacity => pure (boundedBytePlan sourcePrefix capacity false)
+  | .boundedString capacity => pure (boundedBytePlan sourcePrefix capacity true)
 
 /-- Derive one recursive SVM-owned Borsh plan from a logical schema. The plan fixes scratch-local
 identity and canonical tag handling but carries no account geometry or application policy. -/

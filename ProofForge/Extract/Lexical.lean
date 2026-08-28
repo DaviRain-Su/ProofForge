@@ -535,7 +535,11 @@ def isUserName (env : Environment) (n : Name) : Bool :=
 the `ProofForge` namespace. Their target representation is still selected by the codec adapter. -/
 def isBoundaryProjectionName (n : Name) : Bool :=
   n == ``ProofForge.Core.Value.BoundedVec.length ||
-    n == ``ProofForge.Core.Value.BoundedVec.values
+    n == ``ProofForge.Core.Value.BoundedVec.values ||
+    n == ``ProofForge.Core.Value.BoundedBytes.length ||
+    n == ``ProofForge.Core.Value.BoundedBytes.values ||
+    n == ``ProofForge.Core.Value.BoundedString.length ||
+    n == ``ProofForge.Core.Value.BoundedString.values
 
 /-- Recover the schema path owned by nested user-structure projections.
 `s.book.right` is represented by two projection applications but owns the flattened leaf

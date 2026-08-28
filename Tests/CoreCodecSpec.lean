@@ -341,8 +341,9 @@ private def orderBatch : Schema :=
 
 #guard
   match ProofForge.Svm.EntryAdapter.borshPlan (.boundedBytes 16) with
-  | .error reason => reason.contains "Borsh bytes policy"
-  | .ok _ => false
+  | .ok plan => plan.localWidths == #[4] ++ Array.replicate 16 1 &&
+      plan.minBytes == 4 && plan.maxBytes == 20
+  | .error _ => false
 
 #guard
   match ProofForge.Evm.Codec.inputPlan (.boundedString 16) with
