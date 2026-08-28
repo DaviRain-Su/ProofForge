@@ -9,6 +9,8 @@ import Examples.Maybe
 import Examples.Clock
 import Examples.Transfer
 import Examples.EvmCtx
+import Examples.EvmStaticCounter
+import Examples.EvmStaticRoster
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
@@ -32,6 +34,10 @@ import Tests.Fixtures
 #pf_evm_build Examples.Maybe
 
 #pf_evm_build Examples.EvmCtx
+
+#pf_evm_build Examples.EvmStaticCounter
+
+#pf_evm_build Examples.EvmStaticRoster
 
 #pf_evm_build Examples.TipJar
 

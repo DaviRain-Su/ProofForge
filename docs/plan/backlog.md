@@ -20,16 +20,18 @@ Tagged Tuple v1 `(bool,T)` / `(uint8,p0,...)` input policy；R1-009 已由 SVM �
 compile-time capacity + canonical Borsh `u32 length` input；R1-010 已由 EVM 独立绑定
 canonical standard-ABI dynamic head/tail 与 fixed local frame；R1-011 已用同一 logical
 static/tagged/bounded schema 对照两套 target plan 的 source projections，同时保持 Borsh
-cursor、ABI offset 与 target 物理编码互相独立。下一切片进入 SVM-RT-1 bounded account
-view；EVM-SDK-2 static storage declarations 可并行。
-并行 SDK 线已完成 R3-001 persistent SVM foundation 和 R5-001 EVM Access foundation；两者
-都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
+cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded account view 与
+EVM-SDK-2 static storage declarations 已并行集成；下一 wave 是 SVM-RT-2 bounded
+instruction/effects/scratch contract 与 EVM-RT-2 typed call-result/LOG contract。
+并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
+R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
+完成。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 254 jobs；SVM manifest 全 53 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 264 jobs；SVM manifest 全 53 programs；
   Mollusk 全量 293/293（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
-  18 programs 且 Anvil 18/18。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
+  20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
   当前 Token deployment bytecode 为 19,348 B；Surfpool 1.5.0 部署门见 P5 最新记录。
@@ -230,18 +232,25 @@ view；EVM-SDK-2 static storage declarations 可并行。
   one-field State store 与 wide-leaf path 误判；详见 `docs/plan/tasks/r5-001.md`。Roles、
   reentrancy、asset/NFT components 仍未完成。
 
-- `lake build Tests` 当前 254 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- R5-002 EVM static storage declaration foundation 已完成：`Evm.Sdk.Storage.Static` 在抽取期
+  分配 scalar、Address/wide、flat record、fixed array/record-array typed handles；声明表与
+  两个独立 contract 的真实 State flattening 逐槽对照，Anvil 直接验证 constructor 和
+  targeted mutation。它不改变 hashed-map base，不增加 runtime allocator、隐藏 storage
+  write 或 Component/Emit recipe；详见 `docs/plan/tasks/r5-002.md`。
+
+- `lake build Tests` 当前 264 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 53 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 293/293，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。
-- EVM registry 18 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded / TipJar / Lang / Vault /
-  Ownable / Token / Capped / TwoStepCounter / Credits / Window / Phase / Wide / Const 均进入
+- EVM registry 20 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
+  EvmStaticCounter / EvmStaticRoster / TipJar / Lang / Vault / Ownable / Token / Capped /
+  TwoStepCounter / Credits / Window / Phase / Wide / Const 均进入
   Anvil 总门。`Addr20` 是一等 ABI `address`；
   显式 `UInt256` 使用 checked add/sub/mul 和 ABI `uint256`，默认算术仍是 `UInt64`。
   地址的 little-endian limbs → ABI word 转换由 runtime `pf_store_addr20` helper 统一实现，不再
   在每个 CFG case 展开二十条 `mstore8`；solc 0.8.34 strict Yul optimizer 可编译完整 Token，
-  全 18 个 build 与 Anvil 18/18 通过。详见 `docs/plan/tasks/evm-009.md`、
-  `docs/plan/tasks/r1-010.md` 和 `docs/plan/tasks/r5-001.md`。
+  全 20 个 build 与 Anvil 20/20 通过。详见 `docs/plan/tasks/evm-009.md`、
+  `docs/plan/tasks/r1-010.md`、`docs/plan/tasks/r5-001.md` 和 `docs/plan/tasks/r5-002.md`。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。
 - P4 通用压缩 / Loader-v3 部署资格：Core `shareBlocks` 从相邻比较升级为全图 fingerprint 分桶 + 精确结构相等，已知 redirect 先归一化；collision 不会错误共享。Phoenix CFG 6,128 → 5,151 blocks；实测 `pf build --target svm Phoenix`：digest `7a969da7b60ead4`，assembly 10,642,331 bytes，ELF 3,429,336 bytes，IDL 19,626 bytes，比上一 checkpoint 再减 244,637 / 75,440 bytes。Assembler 按 Agave 4.0 Loader-v3 `ProgramData` 10 MiB、metadata 45 B，强制 ELF ≤ 10,485,715 B；当前 headroom 7,056,379 B。Surfpool 1.5.0 offline smoke 禁用 instant direct-state 路径，以 3,389 个 Loader write transactions + deploy + authority transfer 完成本地部署；confirmed signature、Program/ProgramData layout 与完整 ELF bytes 全部核对。本轮 `lake build Tests`、全 49 个 SVM `pf build`、Mollusk 198/198（含 Phoenix 8/8 与 Tree 2/2）及 Anvil 12/12 全绿；不作公网部署声明。

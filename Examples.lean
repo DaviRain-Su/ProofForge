@@ -44,6 +44,8 @@ import Examples.TokenMs
 import Examples.SelfLog
 import Examples.EvmCtx
 import Examples.EvmBounded
+import Examples.EvmStaticCounter
+import Examples.EvmStaticRoster
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault

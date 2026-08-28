@@ -82,10 +82,11 @@ Wave A worker 的 example/test 暂不加入 `Examples.lean` / `Tests.lean` / reg
 |---|---|---|---|---|---|
 | **EVM-RT-1 bounded ABI（已集成）** | coordinator | `Evm.Codec` plan + `Evm.Codec.Emit` interpreter；dedicated example/test/Anvil fixture | shared `.boundedArray` 已绑定 canonical ABI dynamic array/tail：offset、length、padding、capacity、exact tail 全部 fail closed；固定 local word frame | 未复用 Borsh、修改 Core/Extract、开放无界 bytes/array 或增加 array opcode | 253-job Lean、18-contract solc、Anvil 18/18 malformed matrix；见 R1-010 |
 | **SVM-RT-1 account view（已集成）** | worker + coordinator | `Svm.AccountView` component/source/emitter + bounded runtime account-count walk；dedicated example/test/Mollusk fixture | compile-time window、runtime-safe index、统一 account-count/OOB/duplicate/signer/writable/owner/data-length gate | 未做 runtime-selected geometry、写 view、persistent pointer 或 Token/Phoenix policy | 260-job Lean、AccountView sBPF、Mollusk 11/11；见 R2-001 |
-| **EVM-SDK-2 static storage declarations** | worker | 新建 `ProofForge/Evm/Sdk/Storage.lean` 和 target-local component/source/emit 文件；dedicated examples/tests | compile-time scalar/record/fixed-array cursor 与 typed handles；布局对象只在抽取期存在 | 不改 hashed-map namespace 语义；不做 runtime slot allocator；若需要 Extract hook，只报告给 coordinator | descriptor tests + two contracts + solc/Anvil storage layout |
+| **EVM-SDK-2 static storage declarations（已集成）** | worker + coordinator | `Evm.Sdk.Storage.Static` compile-time descriptors；两个独立 examples/tests/Anvil fixtures；coordinator 接 umbrella/registry | scalar/record/fixed-array cursor 与 typed handles；布局对象只在抽取期存在，ordinary typed State access 继续走现有 Extract→EVM IR | 未改 hashed-map namespace；未做 runtime slot allocator、handle `sload` recipe 或新 Component/Emit case | descriptor/extracted-layout conformance + two contracts + solc/Anvil raw-slot matrix；见 R5-002 |
 
-Wave B 的 `shared-lock` 已随 **SVM-RT-1** 集成释放。EVM worker 必须保持 target-local；需要
-顶层 schema 接线时，把最小 hook 和预期 IR 写进交付说明，由 coordinator 集成。
+Wave B 的两个并行包已经集成，`shared-lock` 保持释放。下一 wave 的 worker 必须保持
+target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写进交付说明，由 coordinator
+集成。
 
 ### Wave C — Runtime contracts 稳定后并行
 

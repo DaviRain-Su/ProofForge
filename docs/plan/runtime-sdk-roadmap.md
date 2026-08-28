@@ -106,11 +106,12 @@ fixed-capacity / canonical variable-length Borsh input binding；R1-010 已完�
 Array v1 canonical dynamic input binding，以独立 `Evm.Codec.Emit` plan interpreter 处理
 offset/length/tail/padding，不统一两个 target 的物理 layout，也不增加 array Ops 或 main-CFG
 Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固定两套 target plan
-的 source projection conformance，但不统一 Borsh bytes 与 ABI words。下一切片进入 SVM-RT-1
-bounded account view；并行的 R5-001 已先落地 Access
-foundation：两个独立 contract 复用同一
-owner/pause/two-step policy，pending owner 是一个 fixed Address 而不是 hashed map；详见
-[R5-001](tasks/r5-001.md)。这不表示 R5 已完成。
+的 source projection conformance，但不统一 Borsh bytes 与 ABI words。SVM-RT-1 bounded
+account view、R5-001 Access foundation 与 R5-002 static storage declarations 均已集成；两个
+独立 contract 分别复用 Access 和 storage declaration contracts。下一 wave 是 SVM-RT-2
+instruction/scratch 与 EVM-RT-2 call-result/LOG contracts；详见
+[R2-001](tasks/r2-001.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。这不表示
+R2/R5 已完成。
 
 ## 5. 阶段拆分
 
@@ -238,6 +239,13 @@ R2 的 account/effect contracts。
 4. arithmetic：UInt256 compare/bitwise/div/mod 和明确 overflow policy；不把 UInt64 默认规则
    偷套到 EVM word。
 
+EVM-SDK-2 / R5-002 已完成 Storage 子切片：`Evm.Sdk.Storage.Static` 提供 extraction-time
+scalar、Address/wide、flat record、fixed array 与 record-array cursor/typed handles；两个独立
+contract 的普通 typed State flattening 与 declaration leaf table 逐槽一致，并由 Anvil 直接
+核对 constructor、targeted mutation、邻槽保持、OOB 与权限原子失败。描述符不生成 runtime
+allocator，也不改变 hashed-map namespace 或增加 Ops/IR/Component/Emit recipe；详见
+[R5-002](tasks/r5-002.md)。R4 的 LOG0..4 与通用 CALL result contract 仍未完成。
+
 ### R5 — EVM SDK
 
 可复用组件拥有**合同策略和显式 handles**，不隐藏状态写入：
@@ -255,6 +263,11 @@ single-pending Address 的 two-step ownership；TwoStepCounter 和 Credits 独�
 nominee 会立即使旧 nominee 失效，accept/cancel 显式清零。它没有 Access opcode、隐藏
 storage write、hashed nomination namespace 或 magic guard。Roles、reentrancy 和 assets 仍受
 上述 Runtime/storage 依赖约束；详见 [R5-001](tasks/r5-001.md)。
+
+R5-002 已完成 compile-time static storage declaration foundation。它给后续 roles、asset
+records 和 fixed collections 提供可验证 handles，但当前 runtime 访问仍由普通 typed State
+field extraction 拥有；不能把 descriptor 当成隐藏 `sload`/`sstore` API。EVM-RT-2 完成前，
+reentrancy 与 arbitrary-call-dependent policy 继续 fail closed。
 
 ### R6 — 双目标验收
 

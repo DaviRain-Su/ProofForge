@@ -58,6 +58,7 @@ import Tests.CrossTargetCodecSpec
 import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
+import Tests.EvmStaticStorageSpec
 import Tests.TipJarSpec
 import Tests.LangSpec
 import Tests.VaultSpec

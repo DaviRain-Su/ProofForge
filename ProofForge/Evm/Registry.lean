@@ -15,6 +15,8 @@ def entries : Array Entry := #[
   { name := "Maybe", digest := "6b602a44477483ee" },
   { name := "EvmCtx", digest := "da71408333a778a6" },
   { name := "EvmBounded", digest := "44bf1225ed7981aa" },
+  { name := "EvmStaticCounter", digest := "91b41fb32d550fd3" },
+  { name := "EvmStaticRoster", digest := "f1bf627143b860c3" },
   { name := "TipJar", digest := "754276e8063a7d08" },
   { name := "Lang", digest := "d2a43e6bf208bff0" },
   { name := "Vault", digest := "a3ea1b5b2a69c0e3" },
