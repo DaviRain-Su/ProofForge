@@ -47,6 +47,8 @@ import ProofForge.Svm.Heap
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.AccountStorage.Source
+import ProofForge.Svm.AccountView
+import ProofForge.Svm.AccountView.Source
 import ProofForge.Svm.Sdk
 import ProofForge.Svm.BatchRecorder.Source
 import ProofForge.Svm.FifoCancel.Source

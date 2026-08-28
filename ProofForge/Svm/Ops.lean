@@ -196,6 +196,25 @@ def accDataWordAt (acc baseWord strideWords capacity : Nat) (index : Val) : Val 
 def accDataWordAtOneBased (acc baseWord strideWords capacity : Nat) (index : Val) : Val :=
   .ext (.component (.accountStorage
     (.readWordOneBased acc baseWord strideWords capacity))) #[index]
+/-- Read one header field of the runtime-selected remaining account `base + index`. The compile-time
+window `[base, base + capacity)` bounds the index; availability and geometry are checked at
+runtime by the target. -/
+def viewHeader (base capacity : Nat) (field : AccountView.Header) (index : Val) : Val :=
+  .ext (.component (.accountView (.header { base, capacity } field))) #[index]
+def viewLamports (base capacity : Nat) (index : Val) : Val :=
+  viewHeader base capacity .lamports index
+def viewDataLen (base capacity : Nat) (index : Val) : Val :=
+  viewHeader base capacity .dataLen index
+def viewIsSigner (base capacity : Nat) (index : Val) : Val :=
+  viewHeader base capacity .isSigner index
+def viewIsWritable (base capacity : Nat) (index : Val) : Val :=
+  viewHeader base capacity .isWritable index
+def viewKeyWord (base capacity word : Nat) (index : Val) : Val :=
+  viewHeader base capacity (.key word) index
+def viewOwnerIsSelf (base capacity : Nat) (index : Val) : Val :=
+  .ext (.component (.accountView (.ownerIsSelf { base, capacity }))) #[index]
+def viewDataWord (base capacity word : Nat) (index : Val) : Val :=
+  .ext (.component (.accountView (.dataWord { base, capacity } word))) #[index]
 def accDataRbTreeKey4Find
     (acc rootWord linksBaseWord parentBaseWord keyBaseWord strideWords capacity : Nat)
     (key0 key1 key2 key3 : Val) : Val :=
@@ -420,6 +439,43 @@ partial def valHasSelect : Val → Bool
   | .divU64 lhs rhs | .modU64 lhs rhs => valHasSelect lhs || valHasSelect rhs
   | .indexGet base _ idx _ _ => valHasSelect base || valHasSelect idx
   | .ext _ operands => operands.any valHasSelect
+
+private partial def valHasAccountView : Val → Bool
+  | .arg _ | .local _ | .lit _ | .loopIx => false
+  | .field base _ => valHasAccountView base
+  | .ext (.component (.accountView _)) _ => true
+  | .ext _ operands => operands.any valHasAccountView
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valHasAccountView lhs || valHasAccountView rhs
+  | .bitNot v => valHasAccountView v
+  | .indexGet base _ idx _ _ => valHasAccountView base || valHasAccountView idx
+  | .select _ lhs rhs thn els =>
+      valHasAccountView lhs || valHasAccountView rhs ||
+        valHasAccountView thn || valHasAccountView els
+
+/-- True when any value or component call in `ops` selects an account through a bounded
+remaining-account view. Variable remaining accounts change where instruction data and the program
+id live, so the emitter must switch to the runtime account-count walk. -/
+partial def hasAccountView (ops : Array Op) : Bool :=
+  walkOps ops fun op =>
+    match op with
+    | .letLocal _ v | .setLocal _ v | .forAccum _ v _
+    | .storeField _ v | .okState v | .returnU64 v | .returnState v => valHasAccountView v
+    | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+    | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs | .ite _ lhs rhs _ _
+    | .indexSetLeaf _ lhs rhs _ _ | .indexSet _ lhs rhs _ _ =>
+        valHasAccountView lhs || valHasAccountView rhs
+    | .ext payload =>
+        match payload with
+        | .component call => call.values.any valHasAccountView
+        | .invoke _ _ data _ bump =>
+            data.any (fun word => word.value?.any valHasAccountView) ||
+              bump.any valHasAccountView
+    | .joinLocal _ | .errorOverflow | .errorNamed _ => false
+    | .forBody _ body => hasAccountView body
 
 partial def isLangVal : Val → Bool
   | .local _ | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot ..

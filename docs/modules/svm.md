@@ -13,6 +13,7 @@
 | `Svm.ABI` | account limits、discriminator、Loader V3/account byte layout、CPI account count | EVM storage |
 | `Svm.Heap` | 32–256 KiB transient downward bump allocator 模型 | account data allocator、持久 pointer、无限 heap |
 | `Svm.AccountStorage` | 固定 Region/Field/index、bounded account-resident map/queue/tree routine | transient heap object、runtime geometry |
+| `Svm.AccountView` | compile-time `base`/`capacity` remaining-account window、runtime-safe index、read-only header/data 访问 | 写路径、persistent pointer、runtime geometry |
 | `Svm.BatchRecorder` | bounded begin/append/finish、SDK heap payload、dynamic signed self-CPI sink | persistent event container、source-visible pointer |
 | `Svm.Component` | 稳定 Query/Call bridge、effects/value traversal、component-owned emitter/scratch boundary | 业务协议语义、任意动态分配 |
 | `Svm.IR` | SVM-only `Op`、account-data byte offset、Vector byte stride | EVM storage slot / EVM effect |
@@ -41,6 +42,14 @@ source semantic helper
 因此 generic `Svm.Ops.ValKind/OpExt`、`Svm.IR.Op`、CFG payload traversal 和主 `Svm.Emit`
 各自只保留一个 `.component` case。新增 queue、audit recorder、allocator 或 codec 仍需要在
 `Svm.Component` 内注册自己的 bounded vocabulary 和 backend，但不再改动上述通用层。
+`AccountView` 是 remaining-account 的 component backend：compile-time `View{base, capacity}`
+窗口加一个 runtime index，发射器先查 `index < capacity` 再查 `base + index < NUM_ACCOUNTS`，
+然后沿真实账户头 walk（逐个验证 `0xff`/`NON_DUP_MARKER` tag）读取 header 字段或
+`data_len`-checked 数据字；任何越界在读取任何字节前以 `Custom(1)` 原子失败。使用 view 的程序
+切换到按 runtime `NUM_ACCOUNTS` 遍历、由 `maxTxAccountLocks` 硬上界约束的 walk 合同，并把
+instruction data / program id 定位到实际最后一个账户之后；不使用 view 的程序保持原字节。
+`Svm.AccountView.Source` 提供 `pf_inline` 窗口句柄，抽取期整体擦除。view 是只读的。
+
 `AccountStorage` 是第一个 component backend：它组合 compile-time `Region/Field`、显式
 zero/one-based index、checked load/store 与有界 tree walk，而不是把每种容器做成新的底层
 opcode。`BatchRecorder` 是第二个 backend：固定 header/record recipe 经 begin/append/finish
@@ -71,4 +80,4 @@ SDK global allocator 本身仍固定使用 32 KiB；`BatchRecorder` 因此不假
 ## Tests
 
 `Tests/EmitSpec.lean`、`Tests/IdlSpec.lean`、`Tests/BuildSpec.lean`、
-`Tests/SvmHeapSpec.lean`。汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。
+`Tests/SvmHeapSpec.lean`、`Tests/AccountViewSpec.lean`。汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。

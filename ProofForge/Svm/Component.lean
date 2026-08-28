@@ -1,4 +1,5 @@
 import ProofForge.Svm.AccountStorage
+import ProofForge.Svm.AccountView
 import ProofForge.Svm.BatchRecorder
 import ProofForge.Svm.FifoCancel
 
@@ -16,32 +17,39 @@ and the main emitter traverse this wrapper once; component-specific query vocabu
 their owning modules. -/
 inductive Query where
   | accountStorage (query : AccountStorage.Query)
+  | accountView (query : AccountView.Query)
   | fifoCancel (query : FifoCancel.Query)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
   | .accountStorage query => query.arity
+  | .accountView query => query.arity
   | .fifoCancel _ => 0
 
 def Query.effects : Query → EffectSummary
   | .accountStorage query => query.effects
+  | .accountView query => query.effects
   | .fifoCancel _ => {}
 
 def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
   | .accountStorage query => query.wellFormed accountLimit
+  | .accountView query => query.wellFormed accountLimit
   | .fifoCancel _ => true
 
 def Query.needsWalk : Query → Bool
   | .accountStorage query => query.needsWalk
+  | .accountView _ => true
   | .fifoCancel _ => false
 
 def Query.minAccounts (measure : V → Nat) (operands : Array V) : Query → Nat
   | .accountStorage query => query.minAccounts measure operands
+  | .accountView query => query.minAccounts measure operands
   | .fifoCancel _ => operands.foldl (init := 0) fun current value =>
       Nat.max current (measure value)
 
 def Query.canonical (renderValue : V → String) (operands : Array V) : Query → String
   | .accountStorage query => query.canonical renderValue operands
+  | .accountView query => query.canonical renderValue operands
   | .fifoCancel query =>
       if operands.isEmpty then query.canonical
       else s!"invalid-{query.canonical}-{operands.size}"

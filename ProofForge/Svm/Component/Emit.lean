@@ -1,4 +1,5 @@
 import ProofForge.Svm.Component
+import ProofForge.Svm.AccountView.Emit
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.BatchRecorder.Emit
 import ProofForge.Svm.FifoCancel.Emit
@@ -18,6 +19,11 @@ private def Context.accountStorage (context : Context) : AccountStorage.Emit.Con
   { loadValue := context.loadValue
     loadOwnerIsSelf := context.loadOwnerIsSelf
     headerStack := context.headerStack }
+
+private def Context.accountView (context : Context) : AccountView.Emit.Context :=
+  { loadValue := context.loadValue
+    headerStack := context.headerStack
+    accountCount := context.accountCount }
 
 private def Context.batchRecorder (context : Context) : BatchRecorder.Emit.Context :=
   { loadValue := context.loadValue
@@ -40,6 +46,8 @@ def emitQuery (context : Context) (query : Component.Query) (operands : Array Op
   match query with
   | .accountStorage storageQuery =>
       AccountStorage.Emit.emitQuery context.accountStorage storageQuery operands stackOff nonce scope
+  | .accountView viewQuery =>
+      AccountView.Emit.emitQuery context.accountView viewQuery operands stackOff nonce scope
   | .fifoCancel cancelQuery =>
       FifoCancel.Emit.emitQuery scope cancelQuery operands stackOff
 

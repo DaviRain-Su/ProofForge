@@ -59,7 +59,8 @@ def entries : Array Entry := #[
   { name := "PhoenixV1Profile", digest := "af159cb894745102" },
   { name := "Book", digest := "525c5967ae68d203" },
   { name := "Seat", digest := "831f313077f89947" },
-  { name := "Lang", digest := "64264acebea0c34c" }
+  { name := "Lang", digest := "64264acebea0c34c" },
+  { name := "AccountView", digest := "8ec21e92de5d9588" }
 ]
 
 def names : Array String := entries.map (·.name)

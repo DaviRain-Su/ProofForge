@@ -121,6 +121,66 @@ private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
 {emitSkipAccount s!"{i}_{tag}"}"
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
+/--
+Account-view walk contract. Variable remaining accounts make the real instruction data and program
+id live after the *actual* final account, so the static unrolled prefix walk cannot locate them.
+This contract traverses the runtime `NUM_ACCOUNTS`, hard-bounded by `maxTxAccountLocks`, stores
+the static prefix headers `0..n-1` for CPI/flag checks, and stores the instruction-data pointer of
+the actual final account in the trailing `headerStack n` cell. Every walked account's tag byte is
+verified; any shortfall below the static prefix or any count above the lock limit exits `Custom(1)`.
+-/
+private def emitWalkAccountsVariable (n : Nat) (tag err : String) : String :=
+  let static :=
+    Id.run do
+      let mut out := "  mov64 r8, r6\n  add64 r8, 8\n"
+      for i in [0:n] do
+        out := out ++ s!"\
+  ldxb r1, [r8 + 0]
+  jne r1, 0xff, {err}
+  stxdw [r10 - {headerStack i}], r8
+  ldxdw r4, [r8 + 80]
+{emitSkipAccount s!"{i}_{tag}"}"
+      return out
+  let loop := s!"view_walk_{tag}"
+  let align := s!"view_al_{tag}"
+  let finished := s!"view_done_{tag}"
+  static ++ s!"\
+  ldxdw r9, [r6 + NUM_ACCOUNTS]
+  lddw r1, {Ops.maxTxAccountLocks}
+  jgt r9, r1, {err}
+  jlt r9, {n}, {err}
+  sub64 r9, {n}
+{loop}:
+  jeq r9, 0, {finished}
+  ldxb r1, [r8 + 0]
+  jne r1, 0xff, {err}
+  ldxdw r4, [r8 + 80]
+  mov64 r5, r8
+  add64 r5, 88
+  add64 r5, r4
+  add64 r5, MAX_PERMITTED_DATA_INCREASE
+  mov64 r1, r4
+  and64 r1, 7
+  jeq r1, 0, {align}
+  lddw r3, 8
+  sub64 r3, r1
+  add64 r5, r3
+{align}:
+  ldxdw r1, [r5 + 0]
+  add64 r5, 8
+  mov64 r8, r5
+  sub64 r9, 1
+  ja {loop}
+{finished}:
+  stxdw [r10 - {headerStack n}], r8
+"
+
+/-- Walk selection: only account-view programs traverse the runtime account count; every existing
+program keeps the byte-stable unrolled prefix walk. -/
+private def emitWalkAccountsFor (p : IR.Program) (n : Nat) (tag err : String) : String :=
+  if IR.usesAccountView p then emitWalkAccountsVariable n tag err
+  else emitWalkAccounts n tag err
+
 private partial def walkInvokeMetas (ops : Array IR.Op)
     (acc : Array (Ops.CpiMeta × Bool)) : Array (Ops.CpiMeta × Bool) :=
   ops.foldl (init := acc) fun a op =>
@@ -245,7 +305,7 @@ private def preludeWalk (p : IR.Program) (marker label : String) (ixLen : Nat)
   s!"\
   ldxdw r1, [r6 + NUM_ACCOUNTS]
   jlt r1, {n}, {err}
-{emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
+{emitWalkAccountsFor p n label err}  ldxdw r1, [r10 - {headerStack n}]
   ldxdw r1, [r1 + 0]
   jne r1, {ixLen}, {err}
 {emitWalkStateChecks p marker ixLen err needUninit}{emitWalkSignerChecks ops err}  ja body_{label}
@@ -262,7 +322,7 @@ private def preludeCpi (p : IR.Program) (marker label : String) (ixLen : Nat)
   s!"\
   ldxdw r1, [r6 + NUM_ACCOUNTS]
   jlt r1, {n}, {err}
-{emitWalkAccounts n label err}  ldxdw r1, [r10 - {headerStack n}]
+{emitWalkAccountsFor p n label err}  ldxdw r1, [r10 - {headerStack n}]
   ldxdw r1, [r1 + 0]
   jne r1, {ixLen}, {err}
 {emitWalkStateChecks p marker ixLen err needUninit}{emitCpiFlagChecks ops err needUninit}  ja body_{label}
@@ -3938,6 +3998,15 @@ private def wrapLoopRelays (tag loopTarget doneTarget body : String) : String ×
 "
   return (forward 0, out, backward (chunks.size - 1))
 
+/-- The classic checked-add okState shape: a pure arithmetic tree over method arguments,
+state fields, and literals. Trees referencing locals or component queries are not covered by
+the checked-accumulator shortcut. -/
+private partial def isPureStaticArith : Ops.Val → Bool
+  | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
+      isPureStaticArith l && isPureStaticArith r
+  | .arg _ | .lit _ | .field _ _ => true
+  | _ => false
+
 private def emitOkState (p : IR.Program) (label : String) (v : Ops.Val) (fresh : Nat)
     (destHint : String) (hasStore hasIndexSet hasChecked : Bool) :
     Except String (String × Nat) := do
@@ -4001,7 +4070,11 @@ private def emitOkState (p : IR.Program) (label : String) (v : Ops.Val) (fresh :
       acc := acc ++ load
       acc := acc ++ (← emitStoreAndReturn p destHint 24)
     | v =>
-      if hasChecked then
+      -- The checked-accumulator shortcut is only sound when the okState value is the same
+      -- statically-shaped arithmetic tree over arguments and fields that the checked add
+      -- computed into `[r10 - 24]`. Values that reference `letLocal`-defined locals or
+      -- component results are loaded explicitly.
+      if hasChecked && isPureStaticArith v then
         acc := acc ++ (← emitStoreAndReturn p destHint 24)
       else do
         let load ← loadVal p v 24 n s!"{label}_{n}_value"
@@ -4925,7 +4998,7 @@ def emitAsm (program : IR.Program) : Except String String := do
   let entryIx :=
     if IR.usesWalk generatedProgram then
       let n := IR.cpiAccountCount generatedProgram
-      emitWalkAccounts n "entry" "err_unknown_disc" ++
+      emitWalkAccountsFor generatedProgram n "entry" "err_unknown_disc" ++
         s!"  ldxdw r1, [r10 - {headerStack n}]\n  ldxdw r1, [r1 + 0]\n  jlt r1, 8, err_unknown_disc\n  ja dispatch_begin\n"
     else
       s!"\

@@ -716,6 +716,77 @@ def createPda (lamports : UInt64) : UInt64 :=
     #[.u32le 0, .u64le lamports, .u64le 16, .programId]
     "vault" (findPda "vault")
 
+/--
+Bounded remaining-account view: read header metadata of the runtime-selected remaining account
+`base + index`. The compile-time window `[base, base + capacity)` must bound the index; the target
+additionally validates `base + index` against the available account count, then reuses the account
+header walk in place. Any violation exits `Custom(1)` atomically. Host side is an irreducible stub.
+Persistent state is never addressed through a view; views are read-only.
+-/
+@[irreducible] def viewLamports (base capacity index : UInt64) : UInt64 :=
+  let _ := base
+  let _ := capacity
+  let _ := index
+  0
+
+/-- `data_len` of the runtime-selected remaining account `base + index`. Bounds as `viewLamports`. -/
+@[irreducible] def viewDataLen (base capacity index : UInt64) : UInt64 :=
+  let _ := base
+  let _ := capacity
+  let _ := index
+  0
+
+/-- `is_signer` (0 or 1) of the runtime-selected remaining account `base + index`. Bounds as
+`viewLamports`. This reads the flag; forcing entry-level signer policy stays with the entry. -/
+@[irreducible] def viewIsSigner (base capacity index : UInt64) : UInt64 :=
+  let _ := base
+  let _ := capacity
+  let _ := index
+  0
+
+/-- `is_writable` (0 or 1) of the runtime-selected remaining account `base + index`. Bounds as
+`viewLamports`. -/
+@[irreducible] def viewIsWritable (base capacity index : UInt64) : UInt64 :=
+  let _ := base
+  let _ := capacity
+  let _ := index
+  0
+
+/--
+First `word`-th little-endian u64 (word 0..=3) of the runtime-selected remaining account's public
+key. `base`, `capacity`, and `word` must be extraction-time constants; only `index` is dynamic.
+-/
+@[irreducible] def viewKeyWord (base capacity word index : UInt64) : UInt64 :=
+  let _ := base
+  let _ := capacity
+  let _ := word
+  let _ := index
+  0
+
+/--
+Whether the runtime-selected remaining account `base + index` is owned by the current program id.
+Equal returns 0, otherwise 1. Full 32-byte comparison is emitted by the SVM target.
+-/
+@[irreducible] def viewOwnerIsSelf (base capacity index : UInt64) : UInt64 :=
+  let _ := base
+  let _ := capacity
+  let _ := index
+  0
+
+/--
+Read one little-endian u64 at word `word` of the runtime-selected remaining account's data. The
+target validates the index against both the compile-time capacity and the available account count,
+then checks `data_len ≥ 8 * (word + 1)` before forming the data pointer. Any failure is an atomic
+`Custom(1)` exit. This is a zero-copy read of the serialized account input; it does not allocate
+or copy account data.
+-/
+@[irreducible] def viewDataWord (base capacity word index : UInt64) : UInt64 :=
+  let _ := base
+  let _ := capacity
+  let _ := word
+  let _ := index
+  0
+
 /-- 账户 0 的 lamports。只读；改余额走 `systemTransfer`。 -/
 @[irreducible] def accLamports0 : UInt64 := 0
 

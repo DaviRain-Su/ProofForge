@@ -719,6 +719,13 @@ def componentStackScratchEnd (p : Program) : Nat :=
 def usesWalk (p : Program) : Bool :=
   usesCpi p || p.methods.any fun method => Ops.hasAcc1 (toSourceOps method.ops)
 
+/-- True when any method selects an account through a bounded remaining-account view. Variable
+remaining accounts move the real instruction-data and program-id location after the actual final
+account, so the prelude must walk the runtime account count instead of the unrolled static prefix.
+-/
+def usesAccountView (p : Program) : Bool :=
+  p.methods.any fun method => Ops.hasAccountView (toSourceOps method.ops)
+
 private partial def highestInvokeIndex (ops : Array Op) : Nat :=
   ops.foldl (init := 0) fun result op =>
     match op with

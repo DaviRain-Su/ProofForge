@@ -200,6 +200,13 @@ closed；详见 [R1-010](tasks/r1-010.md)。
   transfer hook/account requirements 等语义。未知 extension 继续 fail closed，不能套 classic
   82/165-byte 路径。
 
+R2-001 已完成 SRT-1：`Svm.AccountView.Source.View` 把 remaining-account 的 `base/capacity`
+绑定为编译期句柄，运行时 index 统一经过 capacity、实际 `NUM_ACCOUNTS`、duplicate marker 与
+header/data-length gate；按实际账户数定位 instruction data/program id，所有失败均在 state
+store 前原子退出。该 view 只读、零拷贝，不持久化 pointer 或 runtime geometry。详见
+[R2-001](tasks/r2-001.md)。R2 尚未完成；下一刀是 SRT-2 的 instruction/effects 与显式 scratch
+区域合同。
+
 ### R3 — SVM SDK
 
 SDK 按生命周期分两类，名字上也不能混：

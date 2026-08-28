@@ -82,3 +82,4 @@ import Tests.TreeSpec
 import Tests.SvmSdkStorageSpec
 import Tests.SvmSdkQueueSpec
 import Tests.EntryAdapterSpec
+import Tests.AccountViewSpec

@@ -1121,6 +1121,92 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
                 capacity.toNat index)
             else none
           | _, _, _, _, _ => none
+        else if (endsWith e ".viewKeyWord" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.viewKeyWord) && e.getAppArgs.size ≥ 4 then
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit base), some (.lit capacity), some (.lit word), some index =>
+            let query := Svm.AccountView.Query.header
+              { base := base.toNat, capacity := capacity.toNat } (.key word.toNat)
+            if query.wellFormed then
+              some (.ext (.svm (.component (.accountView query))) #[index])
+            else none
+          | _, _, _, _ => none
+        else if (endsWith e ".viewDataWord" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.viewDataWord) && e.getAppArgs.size ≥ 4 then
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit base), some (.lit capacity), some (.lit word), some index =>
+            let query := Svm.AccountView.Query.dataWord
+              { base := base.toNat, capacity := capacity.toNat } word.toNat
+            if query.wellFormed then
+              some (.ext (.svm (.component (.accountView query))) #[index])
+            else none
+          | _, _, _, _ => none
+        else if (endsWith e ".viewOwnerIsSelf" ||
+            isConstNamed e ``ProofForge.Svm.Runtime.viewOwnerIsSelf) && e.getAppArgs.size ≥ 3 then
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit base), some (.lit capacity), some index =>
+            let query := Svm.AccountView.Query.ownerIsSelf
+              { base := base.toNat, capacity := capacity.toNat }
+            if query.wellFormed then
+              some (.ext (.svm (.component (.accountView query))) #[index])
+            else none
+          | _, _, _ => none
+        else if (endsWith e ".viewLamports" || isConstNamed e ``ProofForge.Svm.Runtime.viewLamports) &&
+            e.getAppArgs.size ≥ 3 then
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit base), some (.lit capacity), some index =>
+            let query := Svm.AccountView.Query.header
+              { base := base.toNat, capacity := capacity.toNat } .lamports
+            if query.wellFormed then
+              some (.ext (.svm (.component (.accountView query))) #[index])
+            else none
+          | _, _, _ => none
+        else if (endsWith e ".viewDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.viewDataLen) &&
+            e.getAppArgs.size ≥ 3 then
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit base), some (.lit capacity), some index =>
+            let query := Svm.AccountView.Query.header
+              { base := base.toNat, capacity := capacity.toNat } .dataLen
+            if query.wellFormed then
+              some (.ext (.svm (.component (.accountView query))) #[index])
+            else none
+          | _, _, _ => none
+        else if (endsWith e ".viewIsSigner" || isConstNamed e ``ProofForge.Svm.Runtime.viewIsSigner) &&
+            e.getAppArgs.size ≥ 3 then
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit base), some (.lit capacity), some index =>
+            let query := Svm.AccountView.Query.header
+              { base := base.toNat, capacity := capacity.toNat } .isSigner
+            if query.wellFormed then
+              some (.ext (.svm (.component (.accountView query))) #[index])
+            else none
+          | _, _, _ => none
+        else if (endsWith e ".viewIsWritable" || isConstNamed e ``ProofForge.Svm.Runtime.viewIsWritable) &&
+            e.getAppArgs.size ≥ 3 then
+          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
+              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
+              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
+          | some (.lit base), some (.lit capacity), some index =>
+            let query := Svm.AccountView.Query.header
+              { base := base.toNat, capacity := capacity.toNat } .isWritable
+            if query.wellFormed then
+              some (.ext (.svm (.component (.accountView query))) #[index])
+            else none
+          | _, _, _ => none
         else if (endsWith e ".accDataRbTreeKey4Find" ||
             isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Find) &&
             e.getAppArgs.size ≥ 11 then
