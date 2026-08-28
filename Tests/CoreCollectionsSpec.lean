@@ -54,6 +54,91 @@ private def malformed : BoundedVec UInt64 4 :=
 #guard short.clear.length == 0
 #guard short.clear.values == short.values
 
+namespace MapSemantics
+
+open ProofForge.Core.Collections
+
+private def emptyEntries : BoundedVec (Entry UInt64 UInt64) 3 :=
+  { length := 0
+    values := #v[
+      { key := 0, value := 0 },
+      { key := 0, value := 0 },
+      { key := 0, value := 0 }
+    ] }
+
+private def empty : BoundedMap UInt64 UInt64 3 :=
+  { entries := emptyEntries }
+
+private def withOne : BoundedMap UInt64 UInt64 3 :=
+  (empty.insert? 7 70).getD empty
+
+private def withTwo : BoundedMap UInt64 UInt64 3 :=
+  (withOne.insert? 9 90).getD withOne
+
+private def fullMap : BoundedMap UInt64 UInt64 3 :=
+  (withTwo.insert? 11 110).getD withTwo
+
+#guard empty.wellFormed
+#guard empty.isEmpty
+#guard withTwo.wellFormed
+#guard withTwo.size == 2
+#guard withTwo.contains 7
+#guard withTwo.contains 9
+#guard !withTwo.contains 8
+#guard withTwo.get? 7 == some 70
+#guard withTwo.get? 8 == none
+#guard (withTwo.insert? 7 71).isNone
+#guard (withTwo.insert? 7 71 .replace).bind (·.get? 7) == some 71
+#guard fullMap.isFull
+#guard (fullMap.insert? 13 130).isNone
+
+#guard
+  match withTwo.remove? 7 with
+  | some (next, removed) =>
+      removed == 70 && next.size == 1 && !next.contains 7 && next.get? 9 == some 90 &&
+        next.wellFormed
+  | none => false
+
+#guard (withTwo.remove? 8).isNone
+#guard withTwo.clear.isEmpty
+
+private def duplicate : BoundedMap UInt64 UInt64 3 :=
+  { entries := {
+      length := 2
+      values := #v[
+        { key := 7, value := 70 },
+        { key := 7, value := 71 },
+        { key := 0, value := 0 }
+      ]
+    } }
+
+#guard !duplicate.wellFormed
+
+private def malformedMap : BoundedMap UInt64 UInt64 3 :=
+  { entries := { emptyEntries with length := 4 } }
+
+#guard !malformedMap.wellFormed
+#guard (malformedMap.findIndex? 0).isNone
+#guard (malformedMap.insert? 1 10).isNone
+#guard (malformedMap.remove? 0).isNone
+
+private def emptySetEntries : BoundedVec (Entry UInt64 Unit) 2 :=
+  { length := 0
+    values := #v[{ key := 0, value := () }, { key := 0, value := () }] }
+
+private def emptySet : BoundedSet UInt64 2 :=
+  { entries := emptySetEntries }
+
+private def oneSet : BoundedSet UInt64 2 :=
+  (emptySet.insert? 5).getD emptySet
+
+#guard oneSet.contains 5
+#guard !oneSet.contains 6
+#guard (oneSet.insert? 5).isNone
+#guard (oneSet.remove? 5).bind (fun next => some next.isEmpty) == some true
+
+end MapSemantics
+
 /-! The same helper must remain an extractable source combinator. This probe deliberately carries
 the bounded vector through each target's existing input adapter; no collection operation is added
 to Core Ops or either target extension. -/

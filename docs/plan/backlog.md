@@ -23,8 +23,9 @@ canonical standard-ABI dynamic head/tail 与 fixed local frame；R1-011 已用�
 static/tagged/bounded schema 对照两套 target plan 的 source projections，同时保持 Borsh
 cursor、ABI offset 与 target 物理编码互相独立；R1-012 已为 shared `BoundedVec` 增加
 capacity-preserving 操作语义，并让 scalar runtime-index read 经两套 target codec adapter
-组合成既有 bounded select，不新增集合 opcode。SVM-RT-1 bounded account view 与
-EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
+组合成既有 bounded select，不新增集合 opcode；R1-013 已建立不含 host HashMap/pointer 的
+bounded Map/Set logical contract，物理 binding 继续由两个 target 各自所有。SVM-RT-1
+bounded account view 与 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
 instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed signer tail 收口到
 同一个 bounded plan；SVM-RT-3 第一刀已用 allocation-free scalar cursor/bitmap 建立
 Token-2022 TLV envelope，并继续对所有未建模 extension fail closed。EVM-RT-2a typed call-result 已完成，
@@ -249,6 +250,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   read 在 SVM Borsh locals 与 EVM ABI locals 中分别降为 bounded select；未新增 Core/target
   Ops、Component、CFG 或 Emit case。wide/aggregate element dynamic read 与 mutation writeback
   继续 fail closed。详见 `docs/plan/tasks/r1-012.md`。
+
+- R1-013 bounded Map/Set semantics 已完成：`Core.Collections.BoundedMap` 只用 shared
+  fixed-frame `BoundedVec` + `UInt32` active length，提供 bounded lookup、typed reject/replace
+  insert、unordered swap-remove、clear 与 no-duplicate validation；`BoundedSet` 复用 unit
+  payload。没有 Lean/Std HashMap、Array、allocator、pointer 或 shared physical layout；本片只
+  固定 logical laws，SVM account RBMap/allocator 与 EVM hashed storage 的 target binding 继续
+  独立排期。详见 `docs/plan/tasks/r1-013.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

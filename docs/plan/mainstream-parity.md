@@ -63,7 +63,7 @@
 | 能力 | 当前 | Parity gap | 优先级 |
 |---|---|---|---|
 | integers/fixed bytes | Bool、u8/16/32/64、allocation-free u128/u256/`FixedBytes n`；u256 EVM arithmetic 已覆盖主要 unsigned op | signed widths、safe narrowing/casts、saturating/full-precision helpers、统一 overflow vocabulary | F0/F1 |
-| aggregate values | record/tuple/Option/bounded enum/fixed Vector；bounded input carrier；capacity-preserving bounded Vec semantics 与 cross-target scalar dynamic read | bounded mutation writeback、wide/aggregate dynamic elements、bytes/string、set/map/queue/bitset logical contracts；nested bounded shapes | F0 |
+| aggregate values | record/tuple/Option/bounded enum/fixed Vector；bounded input carrier；capacity-preserving bounded Vec semantics 与 cross-target scalar dynamic read；bounded Map/Set logical contract | Map/Set target bindings、bounded mutation writeback、wide/aggregate dynamic elements、bytes/string、queue/bitset logical contracts；nested bounded shapes | F0 |
 | codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded input bindings | tagged/bounded returns、canonical bytes/string、version/discriminator、strict trailing policy 的统一 source contract | F0 |
 | control/resources | checked arithmetic、bounded `for`、fixed scalar frame | per-method collection/codec/memory budget manifest；禁止隐式 allocation/clone/format | F1 |
 

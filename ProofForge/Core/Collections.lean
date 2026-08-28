@@ -104,3 +104,130 @@ logical length owns reachability, while a target may choose to zero storage as a
   { items with length := 0 }
 
 end ProofForge.Core.Value.BoundedVec
+
+/-!
+## Bounded key/value semantics
+
+`BoundedMap` is the target-neutral *logical* contract for an enumerable finite map. It deliberately
+uses the shared fixed-frame vector rather than Lean/Std hash maps. SVM account storage and EVM
+hashed/static storage may implement these semantics with different physical layouts; this type is
+never permission to persist its host representation or a pointer.
+-/
+
+namespace ProofForge.Core.Collections
+
+open ProofForge.Core.Value
+
+structure Entry (κ υ : Type) where
+  key : κ
+  value : υ
+  deriving Repr, BEq
+
+/-- An unordered finite map with compile-time capacity and explicit active-prefix length. -/
+structure BoundedMap (κ υ : Type) (capacity : Nat) where
+  entries : BoundedVec (Entry κ υ) capacity
+
+inductive ExistingValuePolicy where
+  | reject
+  | replace
+  deriving Repr, BEq, Inhabited
+
+namespace BoundedMap
+
+def size (map : BoundedMap κ υ capacity) : UInt64 :=
+  map.entries.size
+
+def isEmpty (map : BoundedMap κ υ capacity) : Bool :=
+  map.entries.isEmpty
+
+def isFull (map : BoundedMap κ υ capacity) : Bool :=
+  map.entries.isFull
+
+/-- Zero-based active-prefix position of `key`. The scan bound is the compile-time capacity, not
+runtime input. -/
+def findIndex? [BEq κ] (map : BoundedMap κ υ capacity) (key : κ) : Option UInt64 :=
+  if !map.entries.wellFormed then none
+  else
+    Id.run do
+      for i in [0:capacity] do
+        if UInt64.ofNat i < map.entries.length.toUInt64 then
+          if let some entry := map.entries.get? (UInt64.ofNat i) then
+            if entry.key == key then return some (UInt64.ofNat i)
+      return none
+
+def contains [BEq κ] (map : BoundedMap κ υ capacity) (key : κ) : Bool :=
+  (map.findIndex? key).isSome
+
+def get? [BEq κ] (map : BoundedMap κ υ capacity) (key : κ) : Option υ := do
+  let index ← map.findIndex? key
+  let entry ← map.entries.get? index
+  return entry.value
+
+/-- Insert a missing key, or apply the typed policy to an existing key. `none` means
+duplicate-under-reject policy, full capacity, or a malformed input frame; no input value is mutated. -/
+def insert? [BEq κ] (map : BoundedMap κ υ capacity) (key : κ) (value : υ)
+    (existing : ExistingValuePolicy := .reject) : Option (BoundedMap κ υ capacity) :=
+  match map.findIndex? key with
+  | some index =>
+      match existing with
+      | .reject => none
+      | .replace =>
+          match map.entries.set? index { key, value } with
+          | some entries => some { entries }
+          | none => none
+  | none =>
+      match map.entries.push? { key, value } with
+      | some (entries, _) => some { entries }
+      | none => none
+
+/-- Remove one key by moving the final active entry into its slot, then shrinking length. Ordering
+is intentionally not part of the shared map contract. Returns the removed value with the new map. -/
+def remove? [BEq κ] (map : BoundedMap κ υ capacity) (key : κ) :
+    Option (BoundedMap κ υ capacity × υ) := do
+  let index ← map.findIndex? key
+  let removed ← map.entries.get? index
+  let lastIndex := map.entries.size - 1
+  let last ← map.entries.get? lastIndex
+  let moved ← map.entries.set? index last
+  let (entries, _) ← moved.pop?
+  return ({ entries }, removed.value)
+
+def clear (map : BoundedMap κ υ capacity) : BoundedMap κ υ capacity :=
+  { entries := map.entries.clear }
+
+/-- Canonical frames contain no duplicate active keys. This is a bounded semantic check, not a
+target hash-table validator. -/
+def wellFormed [BEq κ] (map : BoundedMap κ υ capacity) : Bool :=
+  if !map.entries.wellFormed then false
+  else Id.run do
+    for i in [0:capacity] do
+      if UInt64.ofNat i < map.entries.length.toUInt64 then
+        let some left := map.entries.get? (UInt64.ofNat i) | return false
+        for j in [i + 1:capacity] do
+          if UInt64.ofNat j < map.entries.length.toUInt64 then
+            let some right := map.entries.get? (UInt64.ofNat j) | return false
+            if left.key == right.key then return false
+    return true
+
+end BoundedMap
+
+/-- A finite set is the map contract with unit payload. It inherits the same explicit capacity,
+active-prefix scan bound, and unordered removal policy. -/
+abbrev BoundedSet (α : Type) (capacity : Nat) := BoundedMap α Unit capacity
+
+namespace BoundedSet
+
+def contains [BEq α] (set : BoundedSet α capacity) (value : α) : Bool :=
+  BoundedMap.contains set value
+
+def insert? [BEq α] (set : BoundedSet α capacity) (value : α) :
+    Option (BoundedSet α capacity) :=
+  BoundedMap.insert? set value ()
+
+def remove? [BEq α] (set : BoundedSet α capacity) (value : α) :
+    Option (BoundedSet α capacity) :=
+  (BoundedMap.remove? set value).map (·.1)
+
+end BoundedSet
+
+end ProofForge.Core.Collections
