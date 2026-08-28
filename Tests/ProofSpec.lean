@@ -27,6 +27,8 @@ import Examples.Tree
 - `Examples.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
   / `allocNode_size` / `rotateLeft_size` / `rotateRight_size`
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
+- `Examples.Tree.removeNode_size` / `init_wf` / `allocNode_wf`：
+  `propext`（部分含 `Quot.sound`）
 -/
 
 namespace Tests.ProofSpec
@@ -49,6 +51,9 @@ open Examples.Counter
   match Examples.Tree.allocNode (Examples.Tree.init 0) 7 7 with
   | .ok (t, a) => Examples.Tree.getSize t == 1 && a == 1
   | .error _ => false
+
+-- Tree wf：init 良构（wf 谓词第一批切片；kernel 检查，不求值）
+example : Examples.Tree.wf (Examples.Tree.init 0) := Examples.Tree.init_wf 0
 
 -- 定理连通性：`increment_ok` 的返回值一致性分量可直接复用
 example (s : State) (d : UInt64) (t : State) (r : UInt64)
