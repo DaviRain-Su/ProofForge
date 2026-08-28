@@ -93,6 +93,11 @@ def inspect (_state : UInt64) (_request : Request) (_pair : UInt32 × Bool)
     (_maybe : Option (UInt64 × Bool)) (_items : Vector UInt16 3) (_action : Action)
     (_unit : Unit) : UInt64 := 0
 
+def inspectBounded (_state : UInt64) (_items : BoundedVec UInt64 4) : UInt64 := 0
+
+def inspectDynamicBounded (n : Nat) (_state : UInt64) (_items : BoundedVec UInt64 n) :
+    UInt64 := 0
+
 def pairResult (_state : UInt64) : UInt64 × Bool := (7, true)
 
 inductive Recursive where
@@ -136,6 +141,13 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
   unless method.paramSchemas == expected && method.paramTypes.isEmpty &&
       method.paramWidths.isEmpty do
     throwError s!"wrong aggregate parameter schemas: {repr method.paramSchemas}"
+  let bounded ←
+    match Extract.extractMethod env .get ``inspectBounded with
+    | .ok method => pure method
+    | .error reason => throwError reason
+  unless bounded.paramSchemas == #[.boundedArray 4 (.scalar .uint64)] &&
+      bounded.paramTypes.isEmpty && bounded.paramWidths.isEmpty do
+    throwError s!"wrong bounded-array source schema: {repr bounded.paramSchemas}"
   let result ←
     match Extract.extractMethod env .get ``pairResult with
     | .ok result => pure result
@@ -154,6 +166,7 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
   reject ``inherited "inheritance"
   reject ``polymorphic "polymorphic"
   reject ``overBudget "array length"
+  reject ``inspectDynamicBounded "capacity is not a literal"
   let init : Extract.IR.Method := {
     kind := .init
     name := "AggregateGate.init"

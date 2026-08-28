@@ -11,6 +11,8 @@ inductive BorshDecode where
   | option (tagLocal : Nat) (payloadLocals : Array Nat) (payload : BorshDecode)
   | enumeration (tagLocal : Nat) (payloadLocals : Array Nat)
       (variants : Array BorshDecode)
+  | boundedArray (lengthLocal : Nat) (elementLocals : Array Nat)
+      (elements : Array BorshDecode)
   deriving BEq, Repr, Inhabited
 
 /-- A source projection into one fixed scalar range of a Borsh parameter. Empty `sourceName`
@@ -46,6 +48,10 @@ private partial def BorshDecode.canonical : BorshDecode → String
       let locals := String.intercalate "," (payloadLocals.map toString).toList
       let bodies := String.intercalate "," (variants.map BorshDecode.canonical).toList
       s!"e{tagLocal}.[{locals}][{bodies}]"
+  | .boundedArray lengthLocal elementLocals elements =>
+      let locals := String.intercalate "," (elementLocals.map toString).toList
+      let bodies := String.intercalate "," (elements.map BorshDecode.canonical).toList
+      s!"a{lengthLocal}.[{locals}][{bodies}]"
 
 /-- A packed Solana instruction selected by one leading u8. Parameters are widened to the normal
 ProofForge scalar representation before the method CFG runs. Account indexes are physical outer
@@ -223,6 +229,9 @@ private partial def BorshDecode.shift (offset : Nat) : BorshDecode → BorshDeco
   | .enumeration tagLocal payloadLocals variants =>
       .enumeration (offset + tagLocal) (payloadLocals.map (offset + ·))
         (variants.map (BorshDecode.shift offset))
+  | .boundedArray lengthLocal elementLocals elements =>
+      .boundedArray (offset + lengthLocal) (elementLocals.map (offset + ·))
+        (elements.map (BorshDecode.shift offset))
 
 private def BorshProjection.shift (projection : BorshProjection) (offset : Nat) :
     BorshProjection :=
@@ -381,8 +390,34 @@ private partial def borshPlanAt (sourcePrefix : String) :
         minBytes := 1 + minPayload
         maxBytes := 1 + maxPayload
       }
-  | .boundedArray .. =>
-      throw "extract/unsupported: SVM bounded arrays require an explicit Borsh length policy"
+  | .boundedArray capacity element => do
+      let lengthName := sourceChild sourcePrefix "length"
+      let valuesPrefix := sourceChild sourcePrefix "values"
+      let mut elements := #[]
+      let mut projections : Array BorshProjection := #[{
+        sourceName := lengthName
+        localStart := 0
+        partCount := 1
+      }]
+      let mut widths := #[]
+      let mut booleans := #[]
+      let mut maxBytes := 4
+      for i in [0:capacity] do
+        let plan ← borshPlanAt (valuesPrefix ++ "_" ++ toString i) element
+        let shifted := plan.shift (1 + widths.size)
+        elements := elements.push shifted.decode
+        projections := projections ++ shifted.projections
+        widths := widths ++ plan.localWidths
+        booleans := booleans ++ plan.localBooleans
+        maxBytes := maxBytes + plan.maxBytes
+      return {
+        decode := .boundedArray 0 (localRange 1 widths.size) elements
+        projections
+        localWidths := #[4] ++ widths
+        localBooleans := #[false] ++ booleans
+        minBytes := 4
+        maxBytes
+      }
 
 /-- Derive one recursive SVM-owned Borsh plan from a logical schema. The plan fixes scratch-local
 identity and canonical tag handling but carries no account geometry or application policy. -/

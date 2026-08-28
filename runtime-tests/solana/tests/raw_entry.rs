@@ -19,6 +19,7 @@ const BYTES12_TAG: u8 = 13;
 const AGGREGATE_TAG: u8 = 14;
 const OPTION_SCHEMA_TAG: u8 = 15;
 const ENUM_SCHEMA_TAG: u8 = 16;
+const BOUNDED_SCHEMA_TAG: u8 = 17;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -74,6 +75,15 @@ fn aggregate_data(
     data.extend_from_slice(&pair.1.to_le_bytes());
     for level in levels {
         data.extend_from_slice(&level.to_le_bytes());
+    }
+    data
+}
+
+fn bounded_values_data(values: &[u64]) -> Vec<u8> {
+    let mut data = vec![BOUNDED_SCHEMA_TAG];
+    data.extend_from_slice(&(values.len() as u32).to_le_bytes());
+    for value in values {
+        data.extend_from_slice(&value.to_le_bytes());
     }
     data
 }
@@ -294,6 +304,56 @@ fn logical_option_and_enum_use_canonical_branch_dependent_borsh() {
         vec![ENUM_SCHEMA_TAG, 3],
         short_pair,
         vec![ENUM_SCHEMA_TAG, 0, 0],
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &malformed,
+        );
+    }
+}
+
+#[test]
+fn bounded_vec_uses_canonical_u32_length_and_fixed_zeroed_locals() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    for (values, expected) in [
+        (vec![], 0u64),
+        (vec![11, 13], 13u64),
+        (vec![17, 19, 23, 29], 50u64),
+    ] {
+        let data = bounded_values_data(&values);
+        assert!((5..=37).contains(&data.len()));
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
+
+    let mut too_many = vec![BOUNDED_SCHEMA_TAG];
+    too_many.extend_from_slice(&5u32.to_le_bytes());
+    for value in [1u64, 2, 3, 4, 5] {
+        too_many.extend_from_slice(&value.to_le_bytes());
+    }
+    let mut short = vec![BOUNDED_SCHEMA_TAG];
+    short.extend_from_slice(&2u32.to_le_bytes());
+    short.extend_from_slice(&11u64.to_le_bytes());
+    let mut trailing = bounded_values_data(&[7]);
+    trailing.extend_from_slice(&9u64.to_le_bytes());
+    for malformed in [
+        vec![BOUNDED_SCHEMA_TAG, 0, 0, 0],
+        too_many,
+        short,
+        trailing,
     ] {
         expect_raw_error(
             &mollusk,

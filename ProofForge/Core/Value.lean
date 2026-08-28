@@ -1,11 +1,12 @@
 namespace ProofForge.Core.Value
 
 /-!
-Target-neutral, allocation-free source values used at contract boundaries.
+Target-neutral source values used at contract boundaries.
 
-These structures contain only fixed scalar limbs. They are logical values: SVM Borsh/account
-geometry and EVM ABI/storage layout remain target-owned. In particular, none of these limbs is a
-native pointer and no `Array`, `Map`, or heap-backed buffer may be persisted through them.
+The wide/fixed-byte structures contain only fixed scalar limbs. `BoundedVec` is a compiler-known
+capacity carrier: Extract erases its host `Vector` to a fixed scalar frame before target code runs.
+These are logical values; SVM Borsh/account geometry and EVM ABI/storage layout remain target-owned.
+No host collection or native pointer may be persisted in a target artifact.
 -/
 
 /-- A 128-bit unsigned value, least-significant limb first. -/
@@ -41,5 +42,17 @@ def FixedBytes.validSize (n : Nat) : Bool :=
 
 def FixedBytes.limbCount (n : Nat) : Nat :=
   (n + 7) / 8
+
+/--
+A source boundary value with a compile-time capacity and a runtime `UInt32` length.
+
+The `Vector` exists only while Lean elaborates and extracts the source program. Target adapters
+lower all `capacity` elements to fixed scalar locals and must reject `length > capacity`; no target
+heap object, collection header, backing pointer, or persistent allocation survives extraction.
+Ordinary `Array` remains an unsupported unbounded boundary type.
+-/
+structure BoundedVec (α : Type) (capacity : Nat) where
+  length : UInt32
+  values : Vector α capacity
 
 end ProofForge.Core.Value

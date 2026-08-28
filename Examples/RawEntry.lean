@@ -131,4 +131,11 @@ def taggedValue (_s : State) (request : TaggedRequest) : UInt64 :=
   | .one value => value + 10
   | .pair left right => left + right
 
+/-- A canonical Borsh `Vec<u64>` with a compiler-known capacity. The u32 length and four payload
+slots become fixed scalar locals; unused slots are zero and no Vector/Array backing pointer reaches
+the SVM artifact. -/
+@[pf_entry, pf_svm_raw 17 2 0]
+def boundedValues (_s : State) (items : BoundedVec UInt64 4) : UInt64 :=
+  items.length.toUInt64 + items.values[0] + items.values[3]
+
 end Examples.RawEntry

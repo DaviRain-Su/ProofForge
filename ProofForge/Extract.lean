@@ -29,6 +29,7 @@ private def addr20Name : Name := ``ProofForge.Evm.Runtime.Addr20
 private def uint128Name : Name := ``ProofForge.Core.Value.UInt128
 private def uint256Name : Name := ``ProofForge.Core.Value.UInt256
 private def fixedBytesName : Name := ``ProofForge.Core.Value.FixedBytes
+private def boundedVecName : Name := ``ProofForge.Core.Value.BoundedVec
 private def evmUInt256AliasName : Name := ``ProofForge.Evm.Runtime.UInt256
 private def evmBytes32AliasName : Name := ``ProofForge.Evm.Runtime.Bytes32
 
@@ -526,6 +527,12 @@ private def isUserName (env : Environment) (n : Name) : Bool :=
       | _ => false
     | none => false
 
+/-- Compiler-owned boundary carriers expose ordinary source projections even though they live in
+the `ProofForge` namespace. Their target representation is still selected by the codec adapter. -/
+private def isBoundaryProjectionName (n : Name) : Bool :=
+  n == ``ProofForge.Core.Value.BoundedVec.length ||
+    n == ``ProofForge.Core.Value.BoundedVec.values
+
 /-- Recover the schema path owned by nested user-structure projections.
 `s.book.right` is represented by two projection applications but owns the flattened leaf
 `book_right`; stopping at the terminal projection would collide with every other nested `right`. -/
@@ -536,7 +543,7 @@ private def projectionPath (env : Environment) (fuel : Nat) (e : Expr) : Option 
     let e := strip e
     let n ← e.getAppFn.constName?
     let _ ← env.getProjectionFnInfo? n
-    if !isUserName env n then none else
+    if !isUserName env n && !isBoundaryProjectionName n then none else
     let leaf := Core.IR.lastName n.toString
     let args := e.getAppArgs
     let parent :=
@@ -563,7 +570,8 @@ private def vectorBaseName (env : Environment) (fuel : Nat) (e : Expr) : Option 
         match env.find? n with
         | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
         | none => false
-      if !isUserName env n || isReservedProj last || skipTy || !returnsVector then
+      if (!isUserName env n && !isBoundaryProjectionName n) ||
+          isReservedProj last || skipTy || !returnsVector then
         e.getAppArgs.findSome? (vectorBaseName env fuel')
       else projectionPath env fuel' e
     | none => e.getAppArgs.findSome? (vectorBaseName env fuel')
@@ -957,7 +965,7 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
           | _, _, _ => none
       else if let some n := e.getAppFn.constName? then
         let field := n.toString
-        let user := isUserName env n
+        let user := isUserName env n || isBoundaryProjectionName n
         if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
             isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
             isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe") &&
@@ -7089,8 +7097,15 @@ private partial def codecSchemaOfTypeAt (env : Environment) (fuel : Nat)
       | throw "extract/unsupported: Vector boundary length is not a literal"
     let element ← codecSchemaOfTypeAt env (fuel - 1) ancestors args[args.size - 2]!
     return .fixedArray length element
+  if head == some boundedVecName then
+    unless args.size ≥ 2 do
+      throw "extract/unsupported: malformed BoundedVec boundary type"
+    let some capacity := natLiteral? args[args.size - 1]!
+      | throw "extract/unsupported: BoundedVec boundary capacity is not a literal"
+    let element ← codecSchemaOfTypeAt env (fuel - 1) ancestors args[args.size - 2]!
+    return .boundedArray capacity element
   if head == some ``Array then
-    throw "extract/unsupported: Array boundary is dynamic; use literal-length Vector"
+    throw "extract/unsupported: Array boundary is dynamic; use Vector or BoundedVec"
   if head == some fixedBytesName then
     throw "extract/unsupported: FixedBytes boundary size must be a literal in 1..32"
   let some typeName := head

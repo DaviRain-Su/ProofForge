@@ -15,9 +15,16 @@ def usesFixedBytes12 (value : ProofForge.Core.Value.FixedBytes 12) :
 /-- Positive profile fixture: a literal Vector length is compile-time schema metadata. -/
 def usesVector4 (value : Vector UInt64 4) : Vector UInt64 4 := value
 
+/-- Positive profile fixture: bounded capacity is compile-time metadata; length stays UInt32. -/
+def usesBoundedVec4 (value : ProofForge.Core.Value.BoundedVec UInt64 4) : UInt32 := value.length
+
 /-- Negative profile fixture: a polymorphic fixed-byte size is still a runtime-shaped Nat boundary. -/
 def usesDynamicFixedBytes (n : Nat) (value : ProofForge.Core.Value.FixedBytes n) :
     ProofForge.Core.Value.FixedBytes n := value
+
+/-- Negative profile fixture: bounded capacities must also be literals. -/
+def usesDynamicBoundedVec (n : Nat) (value : ProofForge.Core.Value.BoundedVec UInt64 n) :
+    UInt32 := value.length
 
 /-- 负向：partial。 -/
 partial def loops (n : UInt64) : UInt64 :=

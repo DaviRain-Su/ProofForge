@@ -318,9 +318,34 @@ private partial def emitBorshDecode (context : Context) (base : Nat) (err scope 
 "
         nonce := next
       return (out ++ s!"  ja {err}\n{doneLabel}:\n", nonce)
+  | .boundedArray lengthLocal elementLocals elements => do
+      let some lengthOff := context.scalarLocalStackOff (base + lengthLocal)
+        | throw "extract/unsupported: Borsh plan exceeds scalar local scratch"
+      let mut out := s!"\
+  mov64 r2, r7
+  add64 r2, 4
+  jgt r2, r9, {err}
+  ldxw r1, [r7 + 0]
+  jgt r1, {elements.size}, {err}
+  stxdw [r10 - {lengthOff}], r1
+  add64 r7, 4
+{← emitZeroBorshLocals context base elementLocals}"
+      let mut nonce := fresh
+      for i in [0:elements.size] do
+        let skipLabel := s!"borsh_schema_array_skip_{scope}_{nonce}"
+        let (elementBody, next) ←
+          emitBorshDecode context base err scope (nonce + 1) elements[i]!
+        out := out ++ s!"\
+  ldxdw r1, [r10 - {lengthOff}]
+  jle r1, {i}, {skipLabel}
+{elementBody}{skipLabel}:
+"
+        nonce := next
+      return (out, nonce)
 
 /-- Interpret target-owned schema plans with one bounded cursor. All logical values land in fixed
-scalar locals; absent Option payloads and inactive enum lanes are canonical zero. -/
+scalar locals; absent Option payloads, inactive enum lanes, and unused bounded-array elements are
+canonical zero. -/
 private def emitSchemaBorshArgs (context : Context) (method : IR.Method)
     (entry : RawEntry) (err : String) : Except String String := do
   let base := method.rawArgLocalBase

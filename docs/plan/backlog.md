@@ -16,13 +16,14 @@ R1-004 已从普通 Lean 推导 bounded tuple/record/enum/option/literal-Vector 
 Core/SVM/EVM IR；R1-005 已由 SVM 独立绑定 static record/product/fixed-vector Borsh；
 R1-006 已由 EVM 独立绑定 canonical tuple/record/fixed-array ABI；R1-007 已由 SVM 独立绑定
 普通 Lean Option/payload enum 的 canonical tagged Borsh input；R1-008 已由 EVM 独立绑定
-Tagged Tuple v1 `(bool,T)` / `(uint8,p0,...)` input policy。下一切片给 SVM 定义 bounded-array
-Borsh input policy；不把 Borsh tag、ABI word 或两个 target 的物理编码放进 Core。
+Tagged Tuple v1 `(bool,T)` / `(uint8,p0,...)` input policy；R1-009 已由 SVM 独立绑定
+compile-time capacity + canonical Borsh `u32 length` input。下一切片给 EVM 定义 bounded
+dynamic ABI input policy；不把 Borsh cursor、ABI offset 或两个 target 的物理编码放进 Core。
 
 ## 已做
 
-- **当前可验证基线（2026-08-27）**：Lean 汇总 237 jobs；SVM manifest 全 51 programs；
-  Mollusk 全量 288/288（Phoenix-v1 profile 76/76、RawEntry 14/14）；EVM manifest 全
+- **当前可验证基线（2026-08-28）**：Lean 汇总 237 jobs；SVM manifest 全 51 programs；
+  Mollusk 全量 289/289（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   15 programs 且 Anvil 15/15。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
   当前 Token deployment bytecode 为 19,348 B；Surfpool 1.5.0 部署门见 P5 最新记录。
@@ -182,9 +183,21 @@ Borsh input policy；不把 Borsh tag、ABI word 或两个 target 的物理编�
   fail closed。EvmCtx digest `da71408333a778a6`、deployment bytecode 1,062 B；详见
   `docs/plan/tasks/r1-008.md`。
 
+- R1-009 SVM bounded Borsh input slice 已完成：共享 `Core.Value.BoundedVec α capacity`
+  只携带 runtime `UInt32` length 与 compile-time/source-only `Vector`；Extract 要求 literal
+  capacity，并在 target emission 前把全部元素摊平成 fixed scalar projections。SVM 独立选择
+  canonical Borsh `u32 length || length elements`，recursive plan interpreter 检查
+  `length ≤ capacity`、预先清零未使用元素、只解码 active prefix，并用 exact final cursor
+  拒绝 short/trailing bytes。它不新增 array Ops、Component 或 main-Emit recipe，不产生 target
+  collection header、heap allocation、account pointer 或 persistent Map/Array。EVM bounded
+  dynamic ABI 继续 fail closed。RawEntry digest `101c1601217390a4`、ELF 18,240 B；Lean 237、
+  SVM 51 builds、Mollusk 289/289（RawEntry 15/15）、EVM 15 builds、Anvil 15/15、Surfpool
+  1.5.0 Loader-v3 exact bytes、ownership/whitespace 全绿。详见
+  `docs/plan/tasks/r1-009.md`。
+
 - `lake build Tests` 当前 237 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 51 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 288/288，其中 RawEntry 14/14、Phoenix-v1 profile
+  `pf build` 当前通过；全套 Mollusk 289/289，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。
 - EVM registry 15 个程序；Counter / Pair / Flag / Maybe / Context / TipJar / Lang / Vault /
   Ownable / Token / Capped / Window / Phase / Wide / Const 均进入 Anvil 总门。`Addr20` 是一等 ABI `address`；

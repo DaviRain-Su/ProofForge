@@ -165,6 +165,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [r1-006](tasks/r1-006.md) | done | Canonical tuple/record/fixed-array EVM ABI binding |
 | [r1-007](tasks/r1-007.md) | done | Canonical Option/payload-enum SVM Borsh input binding |
 | [r1-008](tasks/r1-008.md) | done | EVM Tagged Tuple v1 Option/payload-enum input binding |
+| [r1-009](tasks/r1-009.md) | done | SVM fixed-capacity / canonical variable-length Borsh input binding |
 
 
 积压：[backlog.md](backlog.md)
