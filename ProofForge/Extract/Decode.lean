@@ -13,7 +13,8 @@ open Lean
 namespace ProofForge.Extract
 
 set_option maxRecDepth 2048 in
-private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
+mutual
+private partial def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :=
   match fuel with
   | 0 => none
   | fuel' + 1 =>
@@ -80,1137 +81,1144 @@ private def asVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.Val :
               asVal env fuel' args[args.size - 2]!, asVal env fuel' args[args.size - 1]! with
           | some cond, some thn, some els => some (.select .ne cond (.lit 0) thn els)
           | _, _, _ => none
-      else if let some n := e.getAppFn.constName? then
-        let field := n.toString
-        let user := isUserName env n || isBoundaryProjectionName n
-        if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
-            isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
-            isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe") &&
-            e.getAppArgs.size ≥ 2 then
-          let args := e.getAppArgs
-          let cmp : Ops.Cmp :=
-            if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then .eq
-            else if isConstNamed e ``Ne then .ne
-            else if isConstNamed e ``LT.lt then .lt
-            else if isConstNamed e ``LE.le then .le
-            else if isConstNamed e ``GT.gt then .gt
-            else .ge
-          let lhsE := args[args.size - 2]!
-          let rhsE := args[args.size - 1]!
-          if isAddr20Type (lhsE) || isAddr20Type (rhsE) ||
-              isConstNamed lhsE ``ProofForge.Evm.Runtime.evmCaller20 ||
-              isConstNamed rhsE ``ProofForge.Evm.Runtime.evmCaller20 ||
-              isConstNamed lhsE ``ProofForge.Evm.Runtime.evmSelf20 ||
-              isConstNamed rhsE ``ProofForge.Evm.Runtime.evmSelf20 then
-            none
+      else
+        match e.getAppFn.constName? with
+        | some n => asValNamed env fuel' n e
+        | none => none
+
+/-- The `constName` dispatch arm of `asVal`, extracted so the recursive value decoder
+stays navigable. `fuel` here is the caller's already-decremented budget. -/
+private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : Expr) :
+    Option Ops.Val :=
+  let field := n.toString
+  let user := isUserName env n || isBoundaryProjectionName n
+  if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
+      isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
+      isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe") &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let cmp : Ops.Cmp :=
+      if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then .eq
+      else if isConstNamed e ``Ne then .ne
+      else if isConstNamed e ``LT.lt then .lt
+      else if isConstNamed e ``LE.le then .le
+      else if isConstNamed e ``GT.gt then .gt
+      else .ge
+    let lhsE := args[args.size - 2]!
+    let rhsE := args[args.size - 1]!
+    if isAddr20Type (lhsE) || isAddr20Type (rhsE) ||
+        isConstNamed lhsE ``ProofForge.Evm.Runtime.evmCaller20 ||
+        isConstNamed rhsE ``ProofForge.Evm.Runtime.evmCaller20 ||
+        isConstNamed lhsE ``ProofForge.Evm.Runtime.evmSelf20 ||
+        isConstNamed rhsE ``ProofForge.Evm.Runtime.evmSelf20 then
+      none
+    else
+      match asVal env fuel lhsE, asVal env fuel rhsE with
+      | some lhs, some rhs => some (.select cmp lhs rhs (.lit 1) (.lit 0))
+      | _, _ => none
+  else if isConstNamed e ``Bool.or && e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 2]!,
+        asVal env fuel args[args.size - 1]! with
+    | some lhs, some rhs => some (.bitOr lhs rhs)
+    | _, _ => none
+  else if isConstNamed e ``Bool.and && e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 2]!,
+        asVal env fuel args[args.size - 1]! with
+    | some lhs, some rhs => some (.bitAnd lhs rhs)
+    | _, _ => none
+  else if isConstNamed e ``Bool.not && e.getAppArgs.size ≥ 1 then
+    (asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!).map fun value =>
+      .select .eq value (.lit 0) (.lit 1) (.lit 0)
+  else if (isConstNamed e ``Prod.fst || isConstNamed e ``Prod.snd) &&
+      e.getAppArgs.size ≥ 1 then
+    let leaf := if isConstNamed e ``Prod.fst then "fst" else "snd"
+    (asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!).map (flattenField · leaf)
+  else if isConstNamed e ``Decidable.decide && e.getAppArgs.size ≥ 2 then
+    asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!
+  else if (endsWith e ".svmByteSwap64" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.svmByteSwap64) && e.getAppArgs.size ≥ 1 then
+    (asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.byteSwap64
+  else if let some (_, unfolded) := unfoldUserHelper env e then
+    match env.find? n with
+    | some (.defnInfo info) =>
+      if isScalarResult env info.type || isUInt256Type (resultType 16 info.type) ||
+          isAddr20Type (resultType 16 info.type) ||
+          isBytes32Type (resultType 16 info.type) then
+        asVal env fuel unfolded
+      else none
+    | _ => none
+  else if (endsWith e ".checkPdaSeeds" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.checkPdaSeeds) && e.getAppArgs.size ≥ 2 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asPdaSeeds e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit account), some seeds =>
+        let account := account.toNat
+        if Svm.Ops.cpiAccInRange account then some (.checkPdaSeeds account seeds) else none
+    | _, _ => none
+  else if (endsWith e ".findPdaSeeds" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.findPdaSeeds) && e.getAppArgs.size ≥ 1 then
+    (asPdaSeeds e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.findPdaSeeds
+  else if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Svm.Runtime.findPda) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => if s.isEmpty then none else some (.findPda s)
+    | _ => none
+  else if (endsWith e ".sha256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.sha256Lit) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.sha256Lit s)
+    | _ => none
+  else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.keccak256Lit s)
+    | _ => none
+  else if (endsWith e ".accKeyWord" || isConstNamed e ``ProofForge.Svm.Runtime.accKeyWord) &&
+      e.getAppArgs.size ≥ 2 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit word) =>
+      let a := acc.toNat
+      let w := word.toNat
+      if Svm.Ops.accInRange a && w ≤ 3 then some (.accKeyWord a w) else none
+    | _, _ => none
+  else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Svm.Runtime.accOwnerWord) &&
+      e.getAppArgs.size ≥ 2 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit word) =>
+      let a := acc.toNat
+      let w := word.toNat
+      if Svm.Ops.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
+    | _, _ => none
+  else if endsWith e ".fifoCancelQuoteReleased" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelQuoteReleased then
+    some (.fifoCancelResult .quoteReleased)
+  else if endsWith e ".fifoCancelBaseReleased" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelBaseReleased then
+    some (.fifoCancelResult .baseReleased)
+  else if endsWith e ".fifoCancelEventCount" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelEventCount then
+    some (.fifoCancelResult .eventCount)
+  else if (endsWith e ".accDataWord" || isConstNamed e ``ProofForge.Svm.Runtime.accDataWord) &&
+      e.getAppArgs.size ≥ 2 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit word) =>
+      let a := acc.toNat
+      let w := word.toNat
+      if Svm.Ops.accInRange a && Svm.Ops.dataWordInRange w then
+        some (.accDataWord a w)
+      else none
+    | _, _ => none
+  else if (endsWith e ".accDataWordAt" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAt) && e.getAppArgs.size ≥ 5 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
+        some (.lit capacity), some index =>
+      let a := acc.toNat
+      let b := baseWord.toNat
+      let s := strideWords.toNat
+      let c := capacity.toNat
+      if Svm.Ops.accInRange a && Svm.Ops.indexedDataWordsInRange b s c then
+        some (.accDataWordAt a b s c index)
+      else none
+    | _, _, _, _, _ => none
+  else if (endsWith e ".accDataWordAtOneBased" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAtOneBased) &&
+      e.getAppArgs.size ≥ 5 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
+        some (.lit capacity), some index =>
+      let query := Svm.AccountStorage.Query.readWordOneBased acc.toNat baseWord.toNat
+        strideWords.toNat capacity.toNat
+      if query.wellFormed then
+        some (.accDataWordAtOneBased acc.toNat baseWord.toNat strideWords.toNat
+          capacity.toNat index)
+      else none
+    | _, _, _, _, _ => none
+  else if (endsWith e ".viewKeyWord" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.viewKeyWord) && e.getAppArgs.size ≥ 4 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit base), some (.lit capacity), some (.lit word), some index =>
+      let query := Svm.AccountView.Query.header
+        { base := base.toNat, capacity := capacity.toNat } (.key word.toNat)
+      if query.wellFormed then
+        some (.ext (.svm (.component (.accountView query))) #[index])
+      else none
+    | _, _, _, _ => none
+  else if (endsWith e ".viewDataWord" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.viewDataWord) && e.getAppArgs.size ≥ 4 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit base), some (.lit capacity), some (.lit word), some index =>
+      let query := Svm.AccountView.Query.dataWord
+        { base := base.toNat, capacity := capacity.toNat } word.toNat
+      if query.wellFormed then
+        some (.ext (.svm (.component (.accountView query))) #[index])
+      else none
+    | _, _, _, _ => none
+  else if (endsWith e ".viewOwnerIsSelf" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.viewOwnerIsSelf) && e.getAppArgs.size ≥ 3 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit base), some (.lit capacity), some index =>
+      let query := Svm.AccountView.Query.ownerIsSelf
+        { base := base.toNat, capacity := capacity.toNat }
+      if query.wellFormed then
+        some (.ext (.svm (.component (.accountView query))) #[index])
+      else none
+    | _, _, _ => none
+  else if (endsWith e ".viewLamports" || isConstNamed e ``ProofForge.Svm.Runtime.viewLamports) &&
+      e.getAppArgs.size ≥ 3 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit base), some (.lit capacity), some index =>
+      let query := Svm.AccountView.Query.header
+        { base := base.toNat, capacity := capacity.toNat } .lamports
+      if query.wellFormed then
+        some (.ext (.svm (.component (.accountView query))) #[index])
+      else none
+    | _, _, _ => none
+  else if (endsWith e ".viewDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.viewDataLen) &&
+      e.getAppArgs.size ≥ 3 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit base), some (.lit capacity), some index =>
+      let query := Svm.AccountView.Query.header
+        { base := base.toNat, capacity := capacity.toNat } .dataLen
+      if query.wellFormed then
+        some (.ext (.svm (.component (.accountView query))) #[index])
+      else none
+    | _, _, _ => none
+  else if (endsWith e ".viewIsSigner" || isConstNamed e ``ProofForge.Svm.Runtime.viewIsSigner) &&
+      e.getAppArgs.size ≥ 3 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit base), some (.lit capacity), some index =>
+      let query := Svm.AccountView.Query.header
+        { base := base.toNat, capacity := capacity.toNat } .isSigner
+      if query.wellFormed then
+        some (.ext (.svm (.component (.accountView query))) #[index])
+      else none
+    | _, _, _ => none
+  else if (endsWith e ".viewIsWritable" || isConstNamed e ``ProofForge.Svm.Runtime.viewIsWritable) &&
+      e.getAppArgs.size ≥ 3 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit base), some (.lit capacity), some index =>
+      let query := Svm.AccountView.Query.header
+        { base := base.toNat, capacity := capacity.toNat } .isWritable
+      if query.wellFormed then
+        some (.ext (.svm (.component (.accountView query))) #[index])
+      else none
+    | _, _, _ => none
+  else if (endsWith e ".accDataRbTreeKey4Find" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Find) &&
+      e.getAppArgs.size ≥ 11 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 11]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 10]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 9]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 8]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 7]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 6]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
+        some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit strideWords),
+        some (.lit capacity), some key0, some key1, some key2, some key3 =>
+      let query := Svm.AccountStorage.Query.key4FindOneBased acc.toNat rootWord.toNat
+        linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat strideWords.toNat
+        capacity.toNat
+      if query.wellFormed then
+        some (.accDataRbTreeKey4Find acc.toNat rootWord.toNat linksBaseWord.toNat
+          parentBaseWord.toNat keyBaseWord.toNat strideWords.toNat capacity.toNat
+          key0 key1 key2 key3)
+      else none
+    | _, _, _, _, _, _, _, _, _, _, _ => none
+  else if (endsWith e ".accDataRbTreeOrderFind" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderFind) &&
+      e.getAppArgs.size ≥ 11 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 11]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 10]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 9]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 8]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 7]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 6]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
+        some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit sequenceBaseWord),
+        some (.lit strideWords), some (.lit capacity), some (.lit bid),
+        some price, some sequence =>
+      let query := Svm.AccountStorage.Query.fifoFindOneBased acc.toNat rootWord.toNat
+        linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat
+        strideWords.toNat capacity.toNat (bid == 1)
+      if (bid == 0 || bid == 1) && query.wellFormed then
+        some (.accDataRbTreeOrderFind acc.toNat rootWord.toNat linksBaseWord.toNat
+          parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat strideWords.toNat
+          capacity.toNat (bid == 1) price sequence)
+      else none
+    | _, _, _, _, _, _, _, _, _, _, _ => none
+  else if (endsWith e ".accDataRbTreeOrderCursor" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderCursor) &&
+      e.getAppArgs.size ≥ 12 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 12]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 11]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 10]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 9]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 8]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 7]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 6]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
+        some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit sequenceBaseWord),
+        some (.lit strideWords), some (.lit capacity), some (.lit bid),
+        some hasCursor, some price, some sequence =>
+      let query := Svm.AccountStorage.Query.fifoCursorOneBased acc.toNat rootWord.toNat
+        linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat
+        strideWords.toNat capacity.toNat (bid == 1)
+      if (bid == 0 || bid == 1) && query.wellFormed then
+        some (.accDataRbTreeOrderCursor acc.toNat rootWord.toNat linksBaseWord.toNat
+          parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat strideWords.toNat
+          capacity.toNat (bid == 1) hasCursor price sequence)
+      else none
+    | _, _, _, _, _, _, _, _, _, _, _, _ => none
+  else if (endsWith e ".accDataParentPathValid" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataParentPathValid) &&
+      e.getAppArgs.size ≥ 9 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 9]!,
+        asLit fuel e.getAppArgs[e.getAppArgs.size - 8]!,
+        asLit fuel e.getAppArgs[e.getAppArgs.size - 7]!,
+        asLit fuel e.getAppArgs[e.getAppArgs.size - 6]!,
+        asLit fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asLit fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+        some (.lit strideWords), some (.lit capacity), some (.lit maxDepth),
+        some index, some root, some bumpIndex =>
+      let a := acc.toNat
+      let l := linksBaseWord.toNat
+      let p := parentBaseWord.toNat
+      let s := strideWords.toNat
+      let c := capacity.toNat
+      let d := maxDepth.toNat
+      if Svm.Ops.accInRange a && Svm.Ops.parentPathWordsInRange l p s c d then
+        some (.accDataParentPathValid a l p s c d index root bumpIndex)
+      else none
+    | _, _, _, _, _, _, _, _, _ => none
+  else if (endsWith e ".accDataRbTreeValid" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeValid) &&
+      e.getAppArgs.size ≥ 12 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 12]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 11]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 10]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 9]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 8]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 7]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 6]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+        some (.lit keyBaseWord), some (.lit sequenceBaseWord), some (.lit strideWords),
+        some (.lit capacity), some (.lit bid), some root, some size, some bumpIndex,
+        some freeListHead =>
+      let a := acc.toNat
+      let l := linksBaseWord.toNat
+      let p := parentBaseWord.toNat
+      let k := keyBaseWord.toNat
+      let q := sequenceBaseWord.toNat
+      let s := strideWords.toNat
+      let c := capacity.toNat
+      if Svm.Ops.accInRange a &&
+          Svm.Ops.rbTreeWordsInRange l p k q s c && (bid == 0 || bid == 1) then
+        some (.accDataRbTreeValid a l p k q s c (bid == 1)
+          root size bumpIndex freeListHead)
+      else none
+    | _, _, _, _, _, _, _, _, _, _, _, _ => none
+  else if (endsWith e ".accDataRbTreeKey4Valid" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Valid) &&
+      e.getAppArgs.size ≥ 10 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 10]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 9]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 8]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 7]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 6]!,
+        asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 4]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 3]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
+        some (.lit keyBaseWord), some (.lit strideWords), some (.lit capacity),
+        some root, some size, some bumpIndex, some freeListHead =>
+      let a := acc.toNat
+      let l := linksBaseWord.toNat
+      let p := parentBaseWord.toNat
+      let k := keyBaseWord.toNat
+      let s := strideWords.toNat
+      let c := capacity.toNat
+      if Svm.Ops.accInRange a && Svm.Ops.rbTreeKey4WordsInRange l p k s c then
+        some (.accDataRbTreeKey4Valid a l p k s c
+          root size bumpIndex freeListHead)
+      else none
+    | _, _, _, _, _, _, _, _, _, _ => none
+  else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
+      e.getAppArgs.size ≥ 2 then
+    match strip e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s), some bump =>
+      if s.isEmpty then none else some (.checkPda s bump)
+    | _, _ => none
+  else if (endsWith e ".rentExemption" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.rentExemption) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit n) => some (.rentExemption n)
+    | _ => none
+  else if (endsWith e ".accLamports" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc) =>
+      let a := acc.toNat
+      if Svm.Ops.accInRange a then some (.accLamportsN a) else none
+    | _ => none
+  else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc) =>
+      let a := acc.toNat
+      if Svm.Ops.accInRange a then some (.accDataLenN a) else none
+    | _ => none
+  else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc) =>
+      let a := acc.toNat
+      if Svm.Ops.accInRange a then some (.isSignerN a) else none
+    | _ => none
+  else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc) =>
+      let a := acc.toNat
+      if Svm.Ops.accInRange a then some (.isWritableN a) else none
+    | _ => none
+  else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc) =>
+      let a := acc.toNat
+      if Svm.Ops.accInRange a then some (.isExecutableN a) else none
+    | _ => none
+  else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc) =>
+      let a := acc.toNat
+      if Svm.Ops.accInRange a then some (.signerKeyN a) else none
+    | _ => none
+  else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Svm.Runtime.ownerIsSelf) &&
+      e.getAppArgs.size ≥ 1 then
+    match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit acc) =>
+      let a := acc.toNat
+      if Svm.Ops.accInRange a then some (.ownerIsSelf a) else none
+    | _ => none
+  else if let some leaf := uint256ProjLeaf n then
+    let args := e.getAppArgs
+    if args.isEmpty then none
+    else
+      let rawBase := args[args.size - 1]!
+      let baseE := unfoldUserHelpers env 8 rawBase
+      let limb := uint256LimbLit leaf
+      let binaryQuery? : Option Evm.WideWord.Query :=
+        if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
+            endsWith baseE ".evmAdd256" then some (.arith256 0 limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSub256 ||
+            endsWith baseE ".evmSub256" then some (.arith256 1 limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMul256 ||
+            endsWith baseE ".evmMul256" then some (.arith256 2 limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAnd256 ||
+            endsWith baseE ".evmAnd256" then some (.bitwise256 .and limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmOr256 ||
+            endsWith baseE ".evmOr256" then some (.bitwise256 .or limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmXor256 ||
+            endsWith baseE ".evmXor256" then some (.bitwise256 .xor limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmDiv256 ||
+            endsWith baseE ".evmDiv256" then some (.checkedDivMod256 .quotient limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMod256 ||
+            endsWith baseE ".evmMod256" then some (.checkedDivMod256 .remainder limb.toNat)
+        else none
+      let unaryQuery? : Option Evm.WideWord.Query :=
+        if isConstNamed baseE ``ProofForge.Evm.Runtime.evmNot256 ||
+            endsWith baseE ".evmNot256" then some (.not256 limb.toNat)
+        else none
+      let shiftQuery? : Option Evm.WideWord.Query :=
+        if isConstNamed baseE ``ProofForge.Evm.Runtime.evmShl256 ||
+            endsWith baseE ".evmShl256" then some (.shift256 .left limb.toNat)
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmShr256 ||
+            endsWith baseE ".evmShr256" then some (.shift256 .right limb.toNat)
+        else none
+      let limbConst : String → Name
+        | "w0" => ``ProofForge.Core.Value.UInt256.w0
+        | "w1" => ``ProofForge.Core.Value.UInt256.w1
+        | "w2" => ``ProofForge.Core.Value.UInt256.w2
+        | _ => ``ProofForge.Core.Value.UInt256.w3
+      let limbVal (base : Expr) (name : String) : Option Ops.Val :=
+        asVal env fuel (mkApp (mkConst (limbConst name)) base)
+      let wordVals (base : Expr) : Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) := do
+        let w0 ← limbVal base "w0"
+        let w1 ← limbVal base "w1"
+        let w2 ← limbVal base "w2"
+        let w3 ← limbVal base "w3"
+        some (w0, w1, w2, w3)
+      match binaryQuery?, unaryQuery?, shiftQuery? with
+      | some query, _, _ =>
+        let bargs := baseE.getAppArgs
+        if bargs.size < 2 then none
+        else
+          let aE := bargs[bargs.size - 2]!
+          let bE := bargs[bargs.size - 1]!
+          match wordVals aE, wordVals bE with
+          | some (a0, a1, a2, a3), some (b0, b1, b2, b3) =>
+            some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, b0, b1, b2, b3])
+          | _, _ => none
+      | none, some query, _ =>
+        let bargs := baseE.getAppArgs
+        if bargs.isEmpty then none
+        else
+          match wordVals bargs[bargs.size - 1]! with
+          | some (a0, a1, a2, a3) =>
+            some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3])
+          | none => none
+      | none, none, some query =>
+        let bargs := baseE.getAppArgs
+        if bargs.size < 2 then none
+        else
+          let aE := bargs[bargs.size - 2]!
+          let amountE := bargs[bargs.size - 1]!
+          match wordVals aE, asVal env fuel amountE with
+          | some (a0, a1, a2, a3), some amount =>
+            some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, amount])
+          | _, _ => none
+      | none, none, none =>
+        if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
+            endsWith baseE ".evmMapGetAddr256" then
+          let gargs := baseE.getAppArgs
+          if gargs.size < 2 then none
           else
-            match asVal env fuel' lhsE, asVal env fuel' rhsE with
-            | some lhs, some rhs => some (.select cmp lhs rhs (.lit 1) (.lit 0))
-            | _, _ => none
-        else if isConstNamed e ``Bool.or && e.getAppArgs.size ≥ 2 then
-          let args := e.getAppArgs
-          match asVal env fuel' args[args.size - 2]!,
-              asVal env fuel' args[args.size - 1]! with
-          | some lhs, some rhs => some (.bitOr lhs rhs)
-          | _, _ => none
-        else if isConstNamed e ``Bool.and && e.getAppArgs.size ≥ 2 then
-          let args := e.getAppArgs
-          match asVal env fuel' args[args.size - 2]!,
-              asVal env fuel' args[args.size - 1]! with
-          | some lhs, some rhs => some (.bitAnd lhs rhs)
-          | _, _ => none
-        else if isConstNamed e ``Bool.not && e.getAppArgs.size ≥ 1 then
-          (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map fun value =>
-            .select .eq value (.lit 0) (.lit 1) (.lit 0)
-        else if (isConstNamed e ``Prod.fst || isConstNamed e ``Prod.snd) &&
-            e.getAppArgs.size ≥ 1 then
-          let leaf := if isConstNamed e ``Prod.fst then "fst" else "snd"
-          (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map (flattenField · leaf)
-        else if isConstNamed e ``Decidable.decide && e.getAppArgs.size ≥ 2 then
-          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!
-        else if (endsWith e ".svmByteSwap64" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.svmByteSwap64) && e.getAppArgs.size ≥ 1 then
-          (asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.byteSwap64
-        else if let some (_, unfolded) := unfoldUserHelper env e then
-          match env.find? n with
-          | some (.defnInfo info) =>
-            if isScalarResult env info.type || isUInt256Type (resultType 16 info.type) ||
-                isAddr20Type (resultType 16 info.type) ||
-                isBytes32Type (resultType 16 info.type) then
-              asVal env fuel' unfolded
-            else none
-          | _ => none
-        else if (endsWith e ".checkPdaSeeds" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.checkPdaSeeds) && e.getAppArgs.size ≥ 2 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asPdaSeeds e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit account), some seeds =>
-              let account := account.toNat
-              if Svm.Ops.cpiAccInRange account then some (.checkPdaSeeds account seeds) else none
-          | _, _ => none
-        else if (endsWith e ".findPdaSeeds" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.findPdaSeeds) && e.getAppArgs.size ≥ 1 then
-          (asPdaSeeds e.getAppArgs[e.getAppArgs.size - 1]!).map Ops.Val.findPdaSeeds
-        else if (endsWith e ".findPda" || isConstNamed e ``ProofForge.Svm.Runtime.findPda) &&
-            e.getAppArgs.size ≥ 1 then
-          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
-          | .lit (.strVal s) => if s.isEmpty then none else some (.findPda s)
-          | _ => none
-        else if (endsWith e ".sha256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.sha256Lit) &&
-            e.getAppArgs.size ≥ 1 then
-          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
-          | .lit (.strVal s) => some (.sha256Lit s)
-          | _ => none
-        else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
-            e.getAppArgs.size ≥ 1 then
-          match strip e.getAppArgs[e.getAppArgs.size - 1]! with
-          | .lit (.strVal s) => some (.keccak256Lit s)
-          | _ => none
-        else if (endsWith e ".accKeyWord" || isConstNamed e ``ProofForge.Svm.Runtime.accKeyWord) &&
-            e.getAppArgs.size ≥ 2 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit word) =>
-            let a := acc.toNat
-            let w := word.toNat
-            if Svm.Ops.accInRange a && w ≤ 3 then some (.accKeyWord a w) else none
-          | _, _ => none
-        else if (endsWith e ".accOwnerWord" || isConstNamed e ``ProofForge.Svm.Runtime.accOwnerWord) &&
-            e.getAppArgs.size ≥ 2 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit word) =>
-            let a := acc.toNat
-            let w := word.toNat
-            if Svm.Ops.accInRange a && w ≤ 3 then some (.accOwnerWord a w) else none
-          | _, _ => none
-        else if endsWith e ".fifoCancelQuoteReleased" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelQuoteReleased then
-          some (.fifoCancelResult .quoteReleased)
-        else if endsWith e ".fifoCancelBaseReleased" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelBaseReleased then
-          some (.fifoCancelResult .baseReleased)
-        else if endsWith e ".fifoCancelEventCount" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.fifoCancelEventCount then
-          some (.fifoCancelResult .eventCount)
-        else if (endsWith e ".accDataWord" || isConstNamed e ``ProofForge.Svm.Runtime.accDataWord) &&
-            e.getAppArgs.size ≥ 2 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit word) =>
-            let a := acc.toNat
-            let w := word.toNat
-            if Svm.Ops.accInRange a && Svm.Ops.dataWordInRange w then
-              some (.accDataWord a w)
-            else none
-          | _, _ => none
-        else if (endsWith e ".accDataWordAt" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAt) && e.getAppArgs.size ≥ 5 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
-              some (.lit capacity), some index =>
-            let a := acc.toNat
-            let b := baseWord.toNat
-            let s := strideWords.toNat
-            let c := capacity.toNat
-            if Svm.Ops.accInRange a && Svm.Ops.indexedDataWordsInRange b s c then
-              some (.accDataWordAt a b s c index)
-            else none
-          | _, _, _, _, _ => none
-        else if (endsWith e ".accDataWordAtOneBased" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAtOneBased) &&
-            e.getAppArgs.size ≥ 5 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit baseWord), some (.lit strideWords),
-              some (.lit capacity), some index =>
-            let query := Svm.AccountStorage.Query.readWordOneBased acc.toNat baseWord.toNat
-              strideWords.toNat capacity.toNat
-            if query.wellFormed then
-              some (.accDataWordAtOneBased acc.toNat baseWord.toNat strideWords.toNat
-                capacity.toNat index)
-            else none
-          | _, _, _, _, _ => none
-        else if (endsWith e ".viewKeyWord" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.viewKeyWord) && e.getAppArgs.size ≥ 4 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit base), some (.lit capacity), some (.lit word), some index =>
-            let query := Svm.AccountView.Query.header
-              { base := base.toNat, capacity := capacity.toNat } (.key word.toNat)
-            if query.wellFormed then
-              some (.ext (.svm (.component (.accountView query))) #[index])
-            else none
-          | _, _, _, _ => none
-        else if (endsWith e ".viewDataWord" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.viewDataWord) && e.getAppArgs.size ≥ 4 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit base), some (.lit capacity), some (.lit word), some index =>
-            let query := Svm.AccountView.Query.dataWord
-              { base := base.toNat, capacity := capacity.toNat } word.toNat
-            if query.wellFormed then
-              some (.ext (.svm (.component (.accountView query))) #[index])
-            else none
-          | _, _, _, _ => none
-        else if (endsWith e ".viewOwnerIsSelf" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.viewOwnerIsSelf) && e.getAppArgs.size ≥ 3 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit base), some (.lit capacity), some index =>
-            let query := Svm.AccountView.Query.ownerIsSelf
-              { base := base.toNat, capacity := capacity.toNat }
-            if query.wellFormed then
-              some (.ext (.svm (.component (.accountView query))) #[index])
-            else none
-          | _, _, _ => none
-        else if (endsWith e ".viewLamports" || isConstNamed e ``ProofForge.Svm.Runtime.viewLamports) &&
-            e.getAppArgs.size ≥ 3 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit base), some (.lit capacity), some index =>
-            let query := Svm.AccountView.Query.header
-              { base := base.toNat, capacity := capacity.toNat } .lamports
-            if query.wellFormed then
-              some (.ext (.svm (.component (.accountView query))) #[index])
-            else none
-          | _, _, _ => none
-        else if (endsWith e ".viewDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.viewDataLen) &&
-            e.getAppArgs.size ≥ 3 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit base), some (.lit capacity), some index =>
-            let query := Svm.AccountView.Query.header
-              { base := base.toNat, capacity := capacity.toNat } .dataLen
-            if query.wellFormed then
-              some (.ext (.svm (.component (.accountView query))) #[index])
-            else none
-          | _, _, _ => none
-        else if (endsWith e ".viewIsSigner" || isConstNamed e ``ProofForge.Svm.Runtime.viewIsSigner) &&
-            e.getAppArgs.size ≥ 3 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit base), some (.lit capacity), some index =>
-            let query := Svm.AccountView.Query.header
-              { base := base.toNat, capacity := capacity.toNat } .isSigner
-            if query.wellFormed then
-              some (.ext (.svm (.component (.accountView query))) #[index])
-            else none
-          | _, _, _ => none
-        else if (endsWith e ".viewIsWritable" || isConstNamed e ``ProofForge.Svm.Runtime.viewIsWritable) &&
-            e.getAppArgs.size ≥ 3 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit base), some (.lit capacity), some index =>
-            let query := Svm.AccountView.Query.header
-              { base := base.toNat, capacity := capacity.toNat } .isWritable
-            if query.wellFormed then
-              some (.ext (.svm (.component (.accountView query))) #[index])
-            else none
-          | _, _, _ => none
-        else if (endsWith e ".accDataRbTreeKey4Find" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Find) &&
-            e.getAppArgs.size ≥ 11 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
-              some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit strideWords),
-              some (.lit capacity), some key0, some key1, some key2, some key3 =>
-            let query := Svm.AccountStorage.Query.key4FindOneBased acc.toNat rootWord.toNat
-              linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat strideWords.toNat
-              capacity.toNat
-            if query.wellFormed then
-              some (.accDataRbTreeKey4Find acc.toNat rootWord.toNat linksBaseWord.toNat
-                parentBaseWord.toNat keyBaseWord.toNat strideWords.toNat capacity.toNat
-                key0 key1 key2 key3)
-            else none
-          | _, _, _, _, _, _, _, _, _, _, _ => none
-        else if (endsWith e ".accDataRbTreeOrderFind" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderFind) &&
-            e.getAppArgs.size ≥ 11 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
-              some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit sequenceBaseWord),
-              some (.lit strideWords), some (.lit capacity), some (.lit bid),
-              some price, some sequence =>
-            let query := Svm.AccountStorage.Query.fifoFindOneBased acc.toNat rootWord.toNat
-              linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat
-              strideWords.toNat capacity.toNat (bid == 1)
-            if (bid == 0 || bid == 1) && query.wellFormed then
-              some (.accDataRbTreeOrderFind acc.toNat rootWord.toNat linksBaseWord.toNat
-                parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat strideWords.toNat
-                capacity.toNat (bid == 1) price sequence)
-            else none
-          | _, _, _, _, _, _, _, _, _, _, _ => none
-        else if (endsWith e ".accDataRbTreeOrderCursor" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeOrderCursor) &&
-            e.getAppArgs.size ≥ 12 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit rootWord), some (.lit linksBaseWord),
-              some (.lit parentBaseWord), some (.lit keyBaseWord), some (.lit sequenceBaseWord),
-              some (.lit strideWords), some (.lit capacity), some (.lit bid),
-              some hasCursor, some price, some sequence =>
-            let query := Svm.AccountStorage.Query.fifoCursorOneBased acc.toNat rootWord.toNat
-              linksBaseWord.toNat parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat
-              strideWords.toNat capacity.toNat (bid == 1)
-            if (bid == 0 || bid == 1) && query.wellFormed then
-              some (.accDataRbTreeOrderCursor acc.toNat rootWord.toNat linksBaseWord.toNat
-                parentBaseWord.toNat keyBaseWord.toNat sequenceBaseWord.toNat strideWords.toNat
-                capacity.toNat (bid == 1) hasCursor price sequence)
-            else none
-          | _, _, _, _, _, _, _, _, _, _, _, _ => none
-        else if (endsWith e ".accDataParentPathValid" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataParentPathValid) &&
-            e.getAppArgs.size ≥ 9 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asLit fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
-              some (.lit strideWords), some (.lit capacity), some (.lit maxDepth),
-              some index, some root, some bumpIndex =>
-            let a := acc.toNat
-            let l := linksBaseWord.toNat
-            let p := parentBaseWord.toNat
-            let s := strideWords.toNat
-            let c := capacity.toNat
-            let d := maxDepth.toNat
-            if Svm.Ops.accInRange a && Svm.Ops.parentPathWordsInRange l p s c d then
-              some (.accDataParentPathValid a l p s c d index root bumpIndex)
-            else none
-          | _, _, _, _, _, _, _, _, _ => none
-        else if (endsWith e ".accDataRbTreeValid" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeValid) &&
-            e.getAppArgs.size ≥ 12 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 12]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 11]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
-              some (.lit keyBaseWord), some (.lit sequenceBaseWord), some (.lit strideWords),
-              some (.lit capacity), some (.lit bid), some root, some size, some bumpIndex,
-              some freeListHead =>
-            let a := acc.toNat
-            let l := linksBaseWord.toNat
-            let p := parentBaseWord.toNat
-            let k := keyBaseWord.toNat
-            let q := sequenceBaseWord.toNat
-            let s := strideWords.toNat
-            let c := capacity.toNat
-            if Svm.Ops.accInRange a &&
-                Svm.Ops.rbTreeWordsInRange l p k q s c && (bid == 0 || bid == 1) then
-              some (.accDataRbTreeValid a l p k q s c (bid == 1)
-                root size bumpIndex freeListHead)
-            else none
-          | _, _, _, _, _, _, _, _, _, _, _, _ => none
-        else if (endsWith e ".accDataRbTreeKey4Valid" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.accDataRbTreeKey4Valid) &&
-            e.getAppArgs.size ≥ 10 then
-          match asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 10]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 9]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 8]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 7]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 6]!,
-              asStaticLit env fuel' e.getAppArgs[e.getAppArgs.size - 5]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 4]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 3]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc), some (.lit linksBaseWord), some (.lit parentBaseWord),
-              some (.lit keyBaseWord), some (.lit strideWords), some (.lit capacity),
-              some root, some size, some bumpIndex, some freeListHead =>
-            let a := acc.toNat
-            let l := linksBaseWord.toNat
-            let p := parentBaseWord.toNat
-            let k := keyBaseWord.toNat
-            let s := strideWords.toNat
-            let c := capacity.toNat
-            if Svm.Ops.accInRange a && Svm.Ops.rbTreeKey4WordsInRange l p k s c then
-              some (.accDataRbTreeKey4Valid a l p k s c
-                root size bumpIndex freeListHead)
-            else none
-          | _, _, _, _, _, _, _, _, _, _ => none
-        else if (endsWith e ".checkPda" || isConstNamed e ``ProofForge.Svm.Runtime.checkPda) &&
-            e.getAppArgs.size ≥ 2 then
-          match strip e.getAppArgs[e.getAppArgs.size - 2]!,
-              asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | .lit (.strVal s), some bump =>
-            if s.isEmpty then none else some (.checkPda s bump)
-          | _, _ => none
-        else if (endsWith e ".rentExemption" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.rentExemption) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit n) => some (.rentExemption n)
-          | _ => none
-        else if (endsWith e ".accLamports" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc) =>
-            let a := acc.toNat
-            if Svm.Ops.accInRange a then some (.accLamportsN a) else none
-          | _ => none
-        else if (endsWith e ".accDataLen" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc) =>
-            let a := acc.toNat
-            if Svm.Ops.accInRange a then some (.accDataLenN a) else none
-          | _ => none
-        else if (endsWith e ".isSigner" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc) =>
-            let a := acc.toNat
-            if Svm.Ops.accInRange a then some (.isSignerN a) else none
-          | _ => none
-        else if (endsWith e ".isWritable" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc) =>
-            let a := acc.toNat
-            if Svm.Ops.accInRange a then some (.isWritableN a) else none
-          | _ => none
-        else if (endsWith e ".isExecutable" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc) =>
-            let a := acc.toNat
-            if Svm.Ops.accInRange a then some (.isExecutableN a) else none
-          | _ => none
-        else if (endsWith e ".signerKey" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc) =>
-            let a := acc.toNat
-            if Svm.Ops.accInRange a then some (.signerKeyN a) else none
-          | _ => none
-        else if (endsWith e ".ownerIsSelf" || isConstNamed e ``ProofForge.Svm.Runtime.ownerIsSelf) &&
-            e.getAppArgs.size ≥ 1 then
-          match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.lit acc) =>
-            let a := acc.toNat
-            if Svm.Ops.accInRange a then some (.ownerIsSelf a) else none
-          | _ => none
-        else if let some leaf := uint256ProjLeaf n then
-          let args := e.getAppArgs
-          if args.isEmpty then none
-          else
-            let rawBase := args[args.size - 1]!
-            let baseE := unfoldUserHelpers env 8 rawBase
-            let limb := uint256LimbLit leaf
-            let binaryQuery? : Option Evm.WideWord.Query :=
-              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAdd256 ||
-                  endsWith baseE ".evmAdd256" then some (.arith256 0 limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSub256 ||
-                  endsWith baseE ".evmSub256" then some (.arith256 1 limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMul256 ||
-                  endsWith baseE ".evmMul256" then some (.arith256 2 limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmAnd256 ||
-                  endsWith baseE ".evmAnd256" then some (.bitwise256 .and limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmOr256 ||
-                  endsWith baseE ".evmOr256" then some (.bitwise256 .or limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmXor256 ||
-                  endsWith baseE ".evmXor256" then some (.bitwise256 .xor limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmDiv256 ||
-                  endsWith baseE ".evmDiv256" then some (.checkedDivMod256 .quotient limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMod256 ||
-                  endsWith baseE ".evmMod256" then some (.checkedDivMod256 .remainder limb.toNat)
-              else none
-            let unaryQuery? : Option Evm.WideWord.Query :=
-              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmNot256 ||
-                  endsWith baseE ".evmNot256" then some (.not256 limb.toNat)
-              else none
-            let shiftQuery? : Option Evm.WideWord.Query :=
-              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmShl256 ||
-                  endsWith baseE ".evmShl256" then some (.shift256 .left limb.toNat)
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmShr256 ||
-                  endsWith baseE ".evmShr256" then some (.shift256 .right limb.toNat)
-              else none
-            let limbConst : String → Name
-              | "w0" => ``ProofForge.Core.Value.UInt256.w0
-              | "w1" => ``ProofForge.Core.Value.UInt256.w1
-              | "w2" => ``ProofForge.Core.Value.UInt256.w2
-              | _ => ``ProofForge.Core.Value.UInt256.w3
-            let limbVal (base : Expr) (name : String) : Option Ops.Val :=
-              asVal env fuel' (mkApp (mkConst (limbConst name)) base)
-            let wordVals (base : Expr) : Option (Ops.Val × Ops.Val × Ops.Val × Ops.Val) := do
-              let w0 ← limbVal base "w0"
-              let w1 ← limbVal base "w1"
-              let w2 ← limbVal base "w2"
-              let w3 ← limbVal base "w3"
-              some (w0, w1, w2, w3)
-            match binaryQuery?, unaryQuery?, shiftQuery? with
-            | some query, _, _ =>
-              let bargs := baseE.getAppArgs
-              if bargs.size < 2 then none
-              else
-                let aE := bargs[bargs.size - 2]!
-                let bE := bargs[bargs.size - 1]!
-                match wordVals aE, wordVals bE with
-                | some (a0, a1, a2, a3), some (b0, b1, b2, b3) =>
-                  some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, b0, b1, b2, b3])
-                | _, _ => none
-            | none, some query, _ =>
-              let bargs := baseE.getAppArgs
-              if bargs.isEmpty then none
-              else
-                match wordVals bargs[bargs.size - 1]! with
-                | some (a0, a1, a2, a3) =>
-                  some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3])
-                | none => none
-            | none, none, some query =>
-              let bargs := baseE.getAppArgs
-              if bargs.size < 2 then none
-              else
-                let aE := bargs[bargs.size - 2]!
-                let amountE := bargs[bargs.size - 1]!
-                match wordVals aE, asVal env fuel' amountE with
-                | some (a0, a1, a2, a3), some amount =>
-                  some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, amount])
-                | _, _ => none
-            | none, none, none =>
-              if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
-                  endsWith baseE ".evmMapGetAddr256" then
-                let gargs := baseE.getAppArgs
-                if gargs.size < 2 then none
-                else
-                  let base := (asEvmMapBaseLit env fuel' gargs[gargs.size - 2]! <|>
-                    asVal env fuel' gargs[gargs.size - 2]!).map foldClosedU64
-                  let key := gargs[gargs.size - 1]!
-                  let k0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) key)
-                  let k1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) key)
-                  let k2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) key)
-                  match base, k0, k1, k2 with
-                  | some b, some a0, some a1, some a2 =>
-                    some (.ext (.evm (.component (.hashedMap (.getAddr256 limb.toNat)))) #[b, a0, a1, a2])
-                  | _, _, _, _ => none
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetPair256 ||
-                  endsWith baseE ".evmMapGetPair256" then
-                let gargs := baseE.getAppArgs
-                if gargs.size < 3 then none
-                else
-                  let base := (asEvmMapBaseLit env fuel' gargs[gargs.size - 3]! <|>
-                    asVal env fuel' gargs[gargs.size - 3]!).map foldClosedU64
-                  let owner := gargs[gargs.size - 2]!
-                  let spender := gargs[gargs.size - 1]!
-                  let ow0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
-                  let ow1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
-                  let ow2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
-                  let sw0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
-                  let sw1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
-                  let sw2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
-                  match base, ow0, ow1, ow2, sw0, sw1, sw2 with
-                  | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
-                    some (.ext (.evm (.component (.hashedMap (.getPair256 limb.toNat)))) #[b, a0, a1, a2, b0, b1, b2])
-                  | _, _, _, _, _, _, _ => none
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf ||
-                  endsWith baseE ".evmTokenBalanceOfSelf" then
-                let gargs := baseE.getAppArgs
-                if gargs.isEmpty then none
-                else
-                  let token := gargs[gargs.size - 1]!
-                  let t0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) token)
-                  let t1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) token)
-                  let t2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) token)
-                  match t0, t1, t2 with
-                  | some a0, some a1, some a2 =>
-                    some (.ext (.evm (.component (.closedCall (.balance256 limb.toNat)))) #[a0, a1, a2])
-                  | _, _, _ => none
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmTokenAllowanceOf ||
-                  endsWith baseE ".evmTokenAllowanceOf" then
-                let gargs := baseE.getAppArgs
-                if gargs.size < 3 then none
-                else
-                  let token := gargs[gargs.size - 3]!
-                  let owner := gargs[gargs.size - 2]!
-                  let spender := gargs[gargs.size - 1]!
-                  let t0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) token)
-                  let t1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) token)
-                  let t2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) token)
-                  let o0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
-                  let o1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
-                  let o2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
-                  let s0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
-                  let s1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
-                  let s2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
-                  match t0, t1, t2, o0, o1, o2, s0, s1, s2 with
-                  | some a0, some a1, some a2, some b0, some b1, some b2, some c0, some c1, some c2 =>
-                    some (.ext (.evm (.component (.closedCall (.allowance256 limb.toNat))))
-                      #[a0, a1, a2, b0, b1, b2, c0, c1, c2])
-                  | _, _, _, _, _, _, _, _, _ => none
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCallValue256 ||
-                  endsWith baseE ".evmCallValue256" then
-                some (.ext (.evm (.callValue256 limb.toNat)) #[])
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelfBalance256 ||
-                  endsWith baseE ".evmSelfBalance256" then
-                some (.ext (.evm (.selfBalance256 limb.toNat)) #[])
-              else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmDomainSeparator ||
-                  endsWith baseE ".evmDomainSeparator" then
-                some (.ext (.evm (.domainSep256 limb.toNat)) #[])
-              else
-                match asVal env fuel' baseE with
-                | some b => some (flattenField b leaf)
-                | none =>
-                  match strip baseE with
-                  | .bvar i => some (flattenField (.arg i) leaf)
-                  | _ => none
-        else if let some leaf := addr20ProjLeaf n then
-          let args := e.getAppArgs
-          if args.isEmpty then none
-          else
-            let baseE := unfoldUserHelpers env 8 args[args.size - 1]!
-            if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCaller20 ||
-                endsWith baseE ".evmCaller20" then
-              some (match leaf with
-                | "w0" => .evmCallerW0 | "w1" => .evmCallerW1 | _ => .evmCallerW2)
-            else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelf20 ||
-                endsWith baseE ".evmSelf20" then
-              some (match leaf with
-                | "w0" => .evmSelfW0 | "w1" => .evmSelfW1 | _ => .evmSelfW2)
-            else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmImm20b ||
-                endsWith baseE ".evmImm20b" then
-              some (match leaf with
-                | "w0" => .evmImmX0 | "w1" => .evmImmX1 | _ => .evmImmX2)
-            else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmImm20 ||
-                endsWith baseE ".evmImm20" then
-              some (match leaf with
-                | "w0" => .evmImmW0 | "w1" => .evmImmW1 | _ => .evmImmW2)
-            else
-              match asVal env fuel' baseE with
-              | some b => some (flattenField b leaf)
-              | none =>
-                match strip baseE with
-                | .bvar i => some (flattenField (.arg i) leaf)
-                | _ => none
-        else if endsWith e ".evmCaller20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 then
-          none
-        else if endsWith e ".evmSelf20" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 then
-          none
-        else if endsWith e ".evmImm20b" || isConstNamed e ``ProofForge.Evm.Runtime.evmImm20b then
-          none
-        else if endsWith e ".evmImm20" || isConstNamed e ``ProofForge.Evm.Runtime.evmImm20 then
-          none
-        else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
-          let args := e.getAppArgs
-          if args.size < 2 then none
-          else
-            let base := (asEvmMapBaseLit env fuel' args[args.size - 2]! <|>
-              asVal env fuel' args[args.size - 2]!).map foldClosedU64
-            let k0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) args[args.size - 1]!)
-            let k1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) args[args.size - 1]!)
-            let k2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) args[args.size - 1]!)
+            let base := (asEvmMapBaseLit env fuel gargs[gargs.size - 2]! <|>
+              asVal env fuel gargs[gargs.size - 2]!).map foldClosedU64
+            let key := gargs[gargs.size - 1]!
+            let k0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) key)
+            let k1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) key)
+            let k2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) key)
             match base, k0, k1, k2 with
-            | some b, some a0, some a1, some a2 => some (.mapGetAddr b a0 a1 a2)
+            | some b, some a0, some a1, some a2 =>
+              some (.ext (.evm (.component (.hashedMap (.getAddr256 limb.toNat)))) #[b, a0, a1, a2])
             | _, _, _, _ => none
-        else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair then
-          let args := e.getAppArgs
-          if args.size < 3 then none
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetPair256 ||
+            endsWith baseE ".evmMapGetPair256" then
+          let gargs := baseE.getAppArgs
+          if gargs.size < 3 then none
           else
-            let base := (asEvmMapBaseLit env fuel' args[args.size - 3]! <|>
-              asVal env fuel' args[args.size - 3]!).map foldClosedU64
-            let owner := args[args.size - 2]!
-            let spender := args[args.size - 1]!
-            let ow0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
-            let ow1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
-            let ow2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
-            let sw0 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
-            let sw1 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
-            let sw2 := asVal env fuel' (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
+            let base := (asEvmMapBaseLit env fuel gargs[gargs.size - 3]! <|>
+              asVal env fuel gargs[gargs.size - 3]!).map foldClosedU64
+            let owner := gargs[gargs.size - 2]!
+            let spender := gargs[gargs.size - 1]!
+            let ow0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
+            let ow1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
+            let ow2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
+            let sw0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
+            let sw1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
+            let sw2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
             match base, ow0, ow1, ow2, sw0, sw1, sw2 with
             | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
-              some (.mapGetPair b a0 a1 a2 b0 b1 b2)
+              some (.ext (.evm (.component (.hashedMap (.getPair256 limb.toNat)))) #[b, a0, a1, a2, b0, b1, b2])
             | _, _, _, _, _, _, _ => none
-        else if endsWith e ".evmGe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 ||
-            endsWith e ".evmEq256" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq256 ||
-            endsWith e ".evmLt256" || isConstNamed e ``ProofForge.Evm.Runtime.evmLt256 ||
-            endsWith e ".evmLe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmLe256 ||
-            endsWith e ".evmGt256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGt256 then
-          let args := e.getAppArgs
-          if args.size < 2 then none
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf ||
+            endsWith baseE ".evmTokenBalanceOfSelf" then
+          let gargs := baseE.getAppArgs
+          if gargs.isEmpty then none
           else
-            let query : Evm.WideWord.Query :=
-              if endsWith e ".evmEq256" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq256 then
-                .compare256 .eq
-              else if endsWith e ".evmLt256" ||
-                  isConstNamed e ``ProofForge.Evm.Runtime.evmLt256 then
-                .compare256 .lt
-              else if endsWith e ".evmLe256" ||
-                  isConstNamed e ``ProofForge.Evm.Runtime.evmLe256 then
-                .compare256 .le
-              else if endsWith e ".evmGt256" ||
-                  isConstNamed e ``ProofForge.Evm.Runtime.evmGt256 then
-                .compare256 .gt
-              else
-                .ge256
-            let aE := args[args.size - 2]!
-            let bE := args[args.size - 1]!
-            let limbConst : String → Name
-              | "w0" => ``ProofForge.Core.Value.UInt256.w0
-              | "w1" => ``ProofForge.Core.Value.UInt256.w1
-              | "w2" => ``ProofForge.Core.Value.UInt256.w2
-              | _ => ``ProofForge.Core.Value.UInt256.w3
-            let limbVal (base : Expr) (name : String) : Option Ops.Val :=
-              asVal env fuel' (mkApp (mkConst (limbConst name)) base)
-            match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
-                limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
-            | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
-              some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, b0, b1, b2, b3])
-            | _, _, _, _, _, _, _, _ => none
-        else if endsWith e ".evmEq20" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq20 then
-          let args := e.getAppArgs
-          if args.size < 2 then none
+            let token := gargs[gargs.size - 1]!
+            let t0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) token)
+            let t1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) token)
+            let t2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) token)
+            match t0, t1, t2 with
+            | some a0, some a1, some a2 =>
+              some (.ext (.evm (.component (.closedCall (.balance256 limb.toNat)))) #[a0, a1, a2])
+            | _, _, _ => none
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmTokenAllowanceOf ||
+            endsWith baseE ".evmTokenAllowanceOf" then
+          let gargs := baseE.getAppArgs
+          if gargs.size < 3 then none
           else
-            let aE := unfoldUserHelpers env 8 args[args.size - 2]!
-            let bE := unfoldUserHelpers env 8 args[args.size - 1]!
-            let limbA (name : Name) : Option Ops.Val :=
-              asVal env fuel' (mkApp (mkConst name) aE)
-            let limbB (name : Name) : Option Ops.Val :=
-              asVal env fuel' (mkApp (mkConst name) bE)
-            match limbA ``ProofForge.Evm.Runtime.Addr20.w0,
-                limbA ``ProofForge.Evm.Runtime.Addr20.w1,
-                limbA ``ProofForge.Evm.Runtime.Addr20.w2,
-                limbB ``ProofForge.Evm.Runtime.Addr20.w0,
-                limbB ``ProofForge.Evm.Runtime.Addr20.w1,
-                limbB ``ProofForge.Evm.Runtime.Addr20.w2 with
-            | some a0, some a1, some a2, some b0, some b1, some b2 =>
-              some (.ext (.evm (.component (.wideWord .eq20))) #[a0, a1, a2, b0, b1, b2])
-            | _, _, _, _, _, _ => none
-        else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
-          let args := e.getAppArgs
-          let get (n : Nat) : Ops.Val :=
-            if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
-            else .arg n
-          let base :=
-            if args.size ≥ 2 then
-              foldClosedU64 <| (asEvmMapBaseLit env fuel' args[args.size - 2]!).getD (get 1)
-            else .arg 1
-          some (.mapGetU64 base (get 0))
-        else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
-          let proj :=
-            match field.splitOn "." with
-            | [] => field
-            | parts => parts.getLast!
-          if proj == "mk" || proj == "ok" || proj == "error" ||
-              proj.startsWith "_proof" || proj == "rfl" ||
-              (field.startsWith "ProofForge.Svm.Runtime." ||
-                field.startsWith "ProofForge.Evm.Runtime.") then none
-          else if match env.find? n with
-              | some (.ctorInfo _) => true
-              | some (.inductInfo _) => true
-              | _ => false then none
-          else
-            -- 整个 Vector 投影本身不是叶。下标 / 元素字段再展开。
-            let skipVector :=
-              match env.find? n with
-              | some info =>
-                info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
-              | none => false
-            if skipVector then none
-            else
-              match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-              | some b =>
-                let leaf := if looksLikeOptionProj env n then s!"{proj}_tag" else proj
-                -- `s.nodes[0]!.value`：基是 `nodes_0`，叶是 `value`。
-                some (flattenField b leaf)
-              | none =>
-                match e.getAppArgs[e.getAppArgs.size - 1]! with
-                | .bvar i =>
-                  let leaf := if looksLikeOptionProj env n then s!"{proj}_tag" else proj
-                  some (flattenField (.arg i) leaf)
-                | _ => none
-        else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8 ||
-            isConstNamed e ``UInt16.toUInt64 || isConstNamed e ``UInt64.toUInt16 ||
-            isConstNamed e ``UInt32.toUInt64 || isConstNamed e ``UInt64.toUInt32 ||
-            isConstNamed e ``UInt64.toNat || isConstNamed e ``UInt64.ofNat) &&
-            e.getAppArgs.size ≥ 1 then
-          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-          else if (isConstNamed e ``HAdd.hAdd || endsWith e ".hAdd") && e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.addU64 l r)
-          | _, _ => none
-          else if (isConstNamed e ``Nat.sub ||
-              (isConstNamed e ``HSub.hSub && e.getAppArgs.size ≥ 3 &&
-                isConstNamed e.getAppArgs[0]! ``Nat &&
-                isConstNamed e.getAppArgs[1]! ``Nat &&
-                isConstNamed e.getAppArgs[2]! ``Nat)) && e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.select .ge l r (.subU64 l r) (.lit 0))
-          | _, _ => none
-          else if (isConstNamed e ``HSub.hSub || endsWith e ".hSub") &&
-              e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.subU64 l r)
-          | _, _ => none
-          else if (isConstNamed e ``HMul.hMul || endsWith e ".hMul") &&
-              e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.mulU64 l r)
-          | _, _ => none
-          else if (isConstNamed e ``HDiv.hDiv || endsWith e ".hDiv" ||
-              isConstNamed e ``UInt64.div) && e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.divU64 l r)
-          | _, _ => none
-          else if (isConstNamed e ``HMod.hMod || endsWith e ".hMod" ||
-              isConstNamed e ``UInt64.mod) && e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.modU64 l r)
-          | _, _ => none
-          else if (isConstNamed e ``HAnd.hAnd || endsWith e ".hAnd") && e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.bitAnd l r)
-          | _, _ => none
-        else if (isConstNamed e ``HOr.hOr || endsWith e ".hOr") && e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.bitOr l r)
-          | _, _ => none
-        else if (isConstNamed e ``HXor.hXor || endsWith e ".hXor") && e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.bitXor l r)
-          | _, _ => none
-        else if (isConstNamed e ``Complement.complement || endsWith e ".complement") &&
-            e.getAppArgs.size ≥ 1 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some v => some (.bitNot v)
-          | none => none
-        else if (isConstNamed e ``HShiftLeft.hShiftLeft || endsWith e ".hShiftLeft") &&
-            e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.shiftL l r)
-          | _, _ => none
-        else if (isConstNamed e ``HShiftRight.hShiftRight || endsWith e ".hShiftRight") &&
-            e.getAppArgs.size ≥ 2 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 2]!,
-                asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some l, some r => some (.shiftR l r)
-          | _, _ => none
-        else if (isConstNamed e ``Option.isSome || endsWith e ".isSome") && e.getAppArgs.size ≥ 1 then
-          match asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-          | some (.field b n) =>
-            if n.endsWith "_tag" then some (.field b n)
-            else some (.field b s!"{n}_tag")
-          | some b => some (.field b s!"slot_tag")
-          | none => none
-        else if endsWith e ".clockSlot" || isConstNamed e ``ProofForge.Svm.Runtime.clockSlot then
-          some .clockSlot
-        else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
-          some .clockEpoch
-        else if endsWith e ".unixTime" || isConstNamed e ``ProofForge.Svm.Runtime.unixTime then
-          some .unixTime
-        else if endsWith e ".slotsPerEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.slotsPerEpoch then
-          some .slotsPerEpoch
-        else if endsWith e ".cpiReturn" || isConstNamed e ``ProofForge.Svm.Runtime.cpiReturn then
-          some .cpiReturn
-        else if endsWith e ".signerKey0" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey0 then
-          some .signerKey0
-        else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller then
-          some .evmCaller
-        else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Evm.Runtime.evmBlockNumber then
-          some .evmBlockNumber
-        else if endsWith e ".evmTimestamp" || isConstNamed e ``ProofForge.Evm.Runtime.evmTimestamp then
-          some .evmTimestamp
-        else if endsWith e ".evmChainId" || isConstNamed e ``ProofForge.Evm.Runtime.evmChainId then
-          some .evmChainId
-        else if endsWith e ".evmSelf" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf then
-          some .evmSelf
-        else if endsWith e ".evmCallValue" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallValue then
-          some .evmCallValue
-        else if endsWith e ".evmSelfBalance" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfBalance then
-          some .evmSelfBalance
-        else if endsWith e ".evmCallerW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW0 then
-          some .evmCallerW0
-        else if endsWith e ".evmCallerW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW1 then
-          some .evmCallerW1
-        else if endsWith e ".evmCallerW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW2 then
-          some .evmCallerW2
-        else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
-          some .evmSelfW0
-        else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then
-          some .evmSelfW1
-        else if endsWith e ".evmSelfW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW2 then
-          some .evmSelfW2
-        else if endsWith e ".evmImmU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmU64 then
-          some .evmImmU64
-        else if endsWith e ".evmImmU64b" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmU64b then
-          some .evmImmU64b
-        else if endsWith e ".evmImmW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW0 then
-          some .evmImmW0
-        else if endsWith e ".evmImmW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW1 then
-          some .evmImmW1
-        else if endsWith e ".evmImmW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW2 then
-          some .evmImmW2
-        else if endsWith e ".evmImmX0" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmX0 then
-          some .evmImmX0
-        else if endsWith e ".evmImmX1" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmX1 then
-          some .evmImmX1
-        else if endsWith e ".evmImmX2" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmX2 then
-          some .evmImmX2
-        else if endsWith e ".accLamports0" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports0 then
-          some .accLamports0
-        else if endsWith e ".accOwner0" || isConstNamed e ``ProofForge.Svm.Runtime.accOwner0 then
-          some .accOwner0
-        else if endsWith e ".accDataLen0" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen0 then
-          some .accDataLen0
-        else if endsWith e ".accN" || isConstNamed e ``ProofForge.Svm.Runtime.accN then
-          some .accN
-        else if endsWith e ".isSigner0" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner0 then
-          some .isSigner0
-        else if endsWith e ".isWritable0" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable0 then
-          some .isWritable0
-        else if endsWith e ".isExecutable0" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable0 then
-          some .isExecutable0
-        else if endsWith e ".accLamports1" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports1 then
-          some .accLamports1
-        else if endsWith e ".accOwner1" || isConstNamed e ``ProofForge.Svm.Runtime.accOwner1 then
-          some .accOwner1
-        else if endsWith e ".accDataLen1" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen1 then
-          some .accDataLen1
-        else if endsWith e ".isSigner1" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner1 then
-          some .isSigner1
-        else if endsWith e ".isWritable1" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable1 then
-          some .isWritable1
-        else if endsWith e ".isExecutable1" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable1 then
-          some .isExecutable1
-        else if (endsWith e ".systemTransfer" ||
-            isConstNamed e ``ProofForge.Svm.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
-          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-        else if endsWith e ".invokeAcc1" || isConstNamed e ``ProofForge.Svm.Runtime.invokeAcc1 ||
-            endsWith e ".invoke" || isConstNamed e ``ProofForge.Svm.Runtime.invoke ||
-            endsWith e ".invokeSigned" || isConstNamed e ``ProofForge.Svm.Runtime.invokeSigned then
-          some (.lit 0)
-        else if ((endsWith e ".evmDeposit" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmDeposit) ||
-            (endsWith e ".evmDeposit256" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmDeposit256) ||
-            (endsWith e ".evmLogTipped" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmLogTipped) ||
-            (endsWith e ".evmLogIncremented" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmLogIncremented) ||
-            (endsWith e ".evmLogTransfer" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmLogTransfer) ||
-            (endsWith e ".evmLogApproval" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmLogApproval) ||
-            (endsWith e ".evmSendEth" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth) ||
-            (endsWith e ".evmSendEth256" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth256) ||
-            (endsWith e ".evmMapGetU64" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64) ||
-            (endsWith e ".evmMapSetU64" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetU64) ||
-            (endsWith e ".evmMapGetAddr" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr) ||
-            (endsWith e ".evmMapSetAddr" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetAddr) ||
-            (endsWith e ".evmMapGetPair" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair) ||
-            (endsWith e ".evmMapSetPair" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetPair) ||
-            (endsWith e ".evmTokenTransfer" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenTransfer) ||
-            (endsWith e ".evmTokenApprove" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenApprove) ||
-            (endsWith e ".evmTokenTransferFrom" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenTransferFrom) ||
-            (endsWith e ".evmTokenBalanceOfSelf" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf) ||
-            (endsWith e ".evmTokenAllowanceOf" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenAllowanceOf) ||
-            (endsWith e ".evmWethDeposit" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmWethDeposit) ||
-            (endsWith e ".evmWethWithdraw" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmWethWithdraw) ||
-            (endsWith e ".evmSwapExact2" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmSwapExact2) ||
-            (endsWith e ".evmSwapExact3" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmSwapExact3) ||
-            (endsWith e ".evmTokenPermit" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmTokenPermit) ||
-            (endsWith e ".evmPermit" ||
-            isConstNamed e ``ProofForge.Evm.Runtime.evmPermit)) &&
-            e.getAppArgs.size ≥ 1 then
-            if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
-            let args := e.getAppArgs
-            let get (n : Nat) : Ops.Val :=
-              if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
-              else .arg n
-            some (.mapGetU64 (get 1) (get 0))
-            else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
-            let args := e.getAppArgs
-            let get (n : Nat) : Ops.Val :=
-              if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
-              else .arg n
-            some (.mapGetAddr (get 3) (get 2) (get 1) (get 0))
-            else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair then
-            let args := e.getAppArgs
-            let get (n : Nat) : Ops.Val :=
-              if args.size ≥ n + 1 then (asVal env fuel' args[args.size - 1 - n]!).getD (.arg n)
-              else .arg n
-            some (.mapGetPair (get 6) (get 5) (get 4) (get 3) (get 2) (get 1) (get 0))
-            else
-            asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-            else if isConstNamed e ``Bool.true || endsWith e ".true" then
-            some (.lit 1)
-        else if isConstNamed e ``Bool.false || endsWith e ".false" then
-          some (.lit 0)
-        else if user && e.getAppArgs.isEmpty then
-          match e.getAppFn.constName? with
-          | some ctor =>
-            match env.find? ctor with
-            | some (.ctorInfo c) =>
-              match enumCtorIndex env c.induct ctor with
-              | some i => some (.lit (UInt64.ofNat i))
-              | none => none
+            let token := gargs[gargs.size - 3]!
+            let owner := gargs[gargs.size - 2]!
+            let spender := gargs[gargs.size - 1]!
+            let t0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) token)
+            let t1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) token)
+            let t2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) token)
+            let o0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
+            let o1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
+            let o2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
+            let s0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
+            let s1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
+            let s2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
+            match t0, t1, t2, o0, o1, o2, s0, s1, s2 with
+            | some a0, some a1, some a2, some b0, some b1, some b2, some c0, some c1, some c2 =>
+              some (.ext (.evm (.component (.closedCall (.allowance256 limb.toNat))))
+                #[a0, a1, a2, b0, b1, b2, c0, c1, c2])
+            | _, _, _, _, _, _, _, _, _ => none
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCallValue256 ||
+            endsWith baseE ".evmCallValue256" then
+          some (.ext (.evm (.callValue256 limb.toNat)) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelfBalance256 ||
+            endsWith baseE ".evmSelfBalance256" then
+          some (.ext (.evm (.selfBalance256 limb.toNat)) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmDomainSeparator ||
+            endsWith baseE ".evmDomainSeparator" then
+          some (.ext (.evm (.domainSep256 limb.toNat)) #[])
+        else
+          match asVal env fuel baseE with
+          | some b => some (flattenField b leaf)
+          | none =>
+            match strip baseE with
+            | .bvar i => some (flattenField (.arg i) leaf)
             | _ => none
-          | none => none
-        else if isConstNamed e ``Option.none || endsWith e ".none" then
-          some (.lit 0)
-        else if (isConstNamed e ``Option.some || endsWith e ".some") && e.getAppArgs.size ≥ 1 then
-          asVal env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
-        else if (isConstNamed e ``GetElem.getElem || isConstNamed e ``GetElem?.getElem! ||
-            isConstNamed e ``Vector.get ||
-            endsWith e ".getElem" || endsWith e ".getElem!" || endsWith e ".get") &&
-            e.getAppArgs.size ≥ 2 then
-          let args := e.getAppArgs
-          -- Do not recursively search proof/type arguments for an index: their local binders
-          -- are not source values. The collection/index positions are fixed by GetElem.
-          let collIndex? : Option (Expr × Expr) :=
-            if isConstNamed e ``GetElem.getElem || endsWith e ".getElem" then
-              if h : args.size ≥ 3 then some (args[args.size - 3], args[args.size - 2])
-              else none
-            else if h : args.size ≥ 2 then
-              some (args[args.size - 2], args[args.size - 1])
-            else none
-          let rec findState (fuel : Nat) (e : Expr) : Option Ops.Val :=
-            match fuel with
-            | 0 => none
-            | fuel' + 1 =>
-              match strip e with
-              | .bvar j => some (.arg j)
-              | e =>
-                if isConstNamed e ``methodArgRef && e.getAppArgs.size ≥ 1 then
-                  match asLit fuel' e.getAppArgs[e.getAppArgs.size - 1]! with
-                  | some (.lit i) => some (.local (methodArgLocalBase + i.toNat))
-                  | _ => none
-                else e.getAppArgs.findSome? (findState fuel')
-          match collIndex?.bind fun pair => (asVal env fuel' pair.2).map (pair.1, ·) with
-          | some (collection, .lit n) =>
-            let i := n.toNat
-            let baseField :=
-              match asVal env fuel' collection with
-              | some (.field _ fname) => some fname
-              | _ => none
-            match findState fuel' collection, baseField with
-            | some base, some fname =>
-              let suf := s!"_{i}"
-              let baseName :=
-                if fname.endsWith suf then fname.dropEnd suf.length |>.copy else fname
-              some (.field base s!"{baseName}_{i}")
-            | some base, none =>
-              match vectorBaseName env 8 collection with
-              | some fname => some (.field base s!"{fname}_{i}")
-              | none =>
-                  if isConstNamed collection ``methodArgRef then some (.field base s!"_{i}")
-                  else none
-            | _, _ => none
-          | some (collection, idx) =>
-            let lits := args.filterMap (asLit fuel')
-            let len :=
-              if h : lits.size > 0 then
-                match lits[0] with
-                | .lit n => n.toNat
-                | _ => 0
-              else 0
-            match findState fuel' collection, vectorBaseName env 8 collection with
-            | some base, some fname => some (.indexGet base fname idx len)
-            | _, _ => none
-          | none => none
-
-        else if e.getAppArgs.isEmpty then
-          match env.find? n with
-          | some (.defnInfo info) =>
-            if info.type.consumeMData.getAppFn.constName? == some ``UInt64 then
-              match asVal env fuel' info.value with
-              | some value =>
-                  match staticUInt64? value with
-                  | some literal => some (.lit literal)
-                  | none => some value
-              | none => none
-            else none
+  else if let some leaf := addr20ProjLeaf n then
+    let args := e.getAppArgs
+    if args.isEmpty then none
+    else
+      let baseE := unfoldUserHelpers env 8 args[args.size - 1]!
+      if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCaller20 ||
+          endsWith baseE ".evmCaller20" then
+        some (match leaf with
+          | "w0" => .evmCallerW0 | "w1" => .evmCallerW1 | _ => .evmCallerW2)
+      else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelf20 ||
+          endsWith baseE ".evmSelf20" then
+        some (match leaf with
+          | "w0" => .evmSelfW0 | "w1" => .evmSelfW1 | _ => .evmSelfW2)
+      else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmImm20b ||
+          endsWith baseE ".evmImm20b" then
+        some (match leaf with
+          | "w0" => .evmImmX0 | "w1" => .evmImmX1 | _ => .evmImmX2)
+      else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmImm20 ||
+          endsWith baseE ".evmImm20" then
+        some (match leaf with
+          | "w0" => .evmImmW0 | "w1" => .evmImmW1 | _ => .evmImmW2)
+      else
+        match asVal env fuel baseE with
+        | some b => some (flattenField b leaf)
+        | none =>
+          match strip baseE with
+          | .bvar i => some (flattenField (.arg i) leaf)
           | _ => none
+  else if endsWith e ".evmCaller20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 then
+    none
+  else if endsWith e ".evmSelf20" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 then
+    none
+  else if endsWith e ".evmImm20b" || isConstNamed e ``ProofForge.Evm.Runtime.evmImm20b then
+    none
+  else if endsWith e ".evmImm20" || isConstNamed e ``ProofForge.Evm.Runtime.evmImm20 then
+    none
+  else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
+    let args := e.getAppArgs
+    if args.size < 2 then none
+    else
+      let base := (asEvmMapBaseLit env fuel args[args.size - 2]! <|>
+        asVal env fuel args[args.size - 2]!).map foldClosedU64
+      let k0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) args[args.size - 1]!)
+      let k1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) args[args.size - 1]!)
+      let k2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) args[args.size - 1]!)
+      match base, k0, k1, k2 with
+      | some b, some a0, some a1, some a2 => some (.mapGetAddr b a0 a1 a2)
+      | _, _, _, _ => none
+  else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair then
+    let args := e.getAppArgs
+    if args.size < 3 then none
+    else
+      let base := (asEvmMapBaseLit env fuel args[args.size - 3]! <|>
+        asVal env fuel args[args.size - 3]!).map foldClosedU64
+      let owner := args[args.size - 2]!
+      let spender := args[args.size - 1]!
+      let ow0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) owner)
+      let ow1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) owner)
+      let ow2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) owner)
+      let sw0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) spender)
+      let sw1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) spender)
+      let sw2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) spender)
+      match base, ow0, ow1, ow2, sw0, sw1, sw2 with
+      | some b, some a0, some a1, some a2, some b0, some b1, some b2 =>
+        some (.mapGetPair b a0 a1 a2 b0 b1 b2)
+      | _, _, _, _, _, _, _ => none
+  else if endsWith e ".evmGe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGe256 ||
+      endsWith e ".evmEq256" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq256 ||
+      endsWith e ".evmLt256" || isConstNamed e ``ProofForge.Evm.Runtime.evmLt256 ||
+      endsWith e ".evmLe256" || isConstNamed e ``ProofForge.Evm.Runtime.evmLe256 ||
+      endsWith e ".evmGt256" || isConstNamed e ``ProofForge.Evm.Runtime.evmGt256 then
+    let args := e.getAppArgs
+    if args.size < 2 then none
+    else
+      let query : Evm.WideWord.Query :=
+        if endsWith e ".evmEq256" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq256 then
+          .compare256 .eq
+        else if endsWith e ".evmLt256" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmLt256 then
+          .compare256 .lt
+        else if endsWith e ".evmLe256" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmLe256 then
+          .compare256 .le
+        else if endsWith e ".evmGt256" ||
+            isConstNamed e ``ProofForge.Evm.Runtime.evmGt256 then
+          .compare256 .gt
+        else
+          .ge256
+      let aE := args[args.size - 2]!
+      let bE := args[args.size - 1]!
+      let limbConst : String → Name
+        | "w0" => ``ProofForge.Core.Value.UInt256.w0
+        | "w1" => ``ProofForge.Core.Value.UInt256.w1
+        | "w2" => ``ProofForge.Core.Value.UInt256.w2
+        | _ => ``ProofForge.Core.Value.UInt256.w3
+      let limbVal (base : Expr) (name : String) : Option Ops.Val :=
+        asVal env fuel (mkApp (mkConst (limbConst name)) base)
+      match limbVal aE "w0", limbVal aE "w1", limbVal aE "w2", limbVal aE "w3",
+          limbVal bE "w0", limbVal bE "w1", limbVal bE "w2", limbVal bE "w3" with
+      | some a0, some a1, some a2, some a3, some b0, some b1, some b2, some b3 =>
+        some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, b0, b1, b2, b3])
+      | _, _, _, _, _, _, _, _ => none
+  else if endsWith e ".evmEq20" || isConstNamed e ``ProofForge.Evm.Runtime.evmEq20 then
+    let args := e.getAppArgs
+    if args.size < 2 then none
+    else
+      let aE := unfoldUserHelpers env 8 args[args.size - 2]!
+      let bE := unfoldUserHelpers env 8 args[args.size - 1]!
+      let limbA (name : Name) : Option Ops.Val :=
+        asVal env fuel (mkApp (mkConst name) aE)
+      let limbB (name : Name) : Option Ops.Val :=
+        asVal env fuel (mkApp (mkConst name) bE)
+      match limbA ``ProofForge.Evm.Runtime.Addr20.w0,
+          limbA ``ProofForge.Evm.Runtime.Addr20.w1,
+          limbA ``ProofForge.Evm.Runtime.Addr20.w2,
+          limbB ``ProofForge.Evm.Runtime.Addr20.w0,
+          limbB ``ProofForge.Evm.Runtime.Addr20.w1,
+          limbB ``ProofForge.Evm.Runtime.Addr20.w2 with
+      | some a0, some a1, some a2, some b0, some b1, some b2 =>
+        some (.ext (.evm (.component (.wideWord .eq20))) #[a0, a1, a2, b0, b1, b2])
+      | _, _, _, _, _, _ => none
+  else if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
+    let args := e.getAppArgs
+    let get (n : Nat) : Ops.Val :=
+      if args.size ≥ n + 1 then (asVal env fuel args[args.size - 1 - n]!).getD (.arg n)
+      else .arg n
+    let base :=
+      if args.size ≥ 2 then
+        foldClosedU64 <| (asEvmMapBaseLit env fuel args[args.size - 2]!).getD (get 1)
+      else .arg 1
+    some (.mapGetU64 base (get 0))
+  else if user && field.contains "." && e.getAppArgs.size ≥ 1 then
+    let proj :=
+      match field.splitOn "." with
+      | [] => field
+      | parts => parts.getLast!
+    if proj == "mk" || proj == "ok" || proj == "error" ||
+        proj.startsWith "_proof" || proj == "rfl" ||
+        (field.startsWith "ProofForge.Svm.Runtime." ||
+          field.startsWith "ProofForge.Evm.Runtime.") then none
+    else if match env.find? n with
+        | some (.ctorInfo _) => true
+        | some (.inductInfo _) => true
+        | _ => false then none
+    else
+      -- 整个 Vector 投影本身不是叶。下标 / 元素字段再展开。
+      let skipVector :=
+        match env.find? n with
+        | some info =>
+          info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
+        | none => false
+      if skipVector then none
+      else
+        match asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+        | some b =>
+          let leaf := if looksLikeOptionProj env n then s!"{proj}_tag" else proj
+          -- `s.nodes[0]!.value`：基是 `nodes_0`，叶是 `value`。
+          some (flattenField b leaf)
+        | none =>
+          match e.getAppArgs[e.getAppArgs.size - 1]! with
+          | .bvar i =>
+            let leaf := if looksLikeOptionProj env n then s!"{proj}_tag" else proj
+            some (flattenField (.arg i) leaf)
+          | _ => none
+  else if (isConstNamed e ``UInt8.toUInt64 || isConstNamed e ``UInt64.toUInt8 ||
+      isConstNamed e ``UInt16.toUInt64 || isConstNamed e ``UInt64.toUInt16 ||
+      isConstNamed e ``UInt32.toUInt64 || isConstNamed e ``UInt64.toUInt32 ||
+      isConstNamed e ``UInt64.toNat || isConstNamed e ``UInt64.ofNat) &&
+      e.getAppArgs.size ≥ 1 then
+    asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!
+    else if (isConstNamed e ``HAdd.hAdd || endsWith e ".hAdd") && e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.addU64 l r)
+    | _, _ => none
+    else if (isConstNamed e ``Nat.sub ||
+        (isConstNamed e ``HSub.hSub && e.getAppArgs.size ≥ 3 &&
+          isConstNamed e.getAppArgs[0]! ``Nat &&
+          isConstNamed e.getAppArgs[1]! ``Nat &&
+          isConstNamed e.getAppArgs[2]! ``Nat)) && e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.select .ge l r (.subU64 l r) (.lit 0))
+    | _, _ => none
+    else if (isConstNamed e ``HSub.hSub || endsWith e ".hSub") &&
+        e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.subU64 l r)
+    | _, _ => none
+    else if (isConstNamed e ``HMul.hMul || endsWith e ".hMul") &&
+        e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.mulU64 l r)
+    | _, _ => none
+    else if (isConstNamed e ``HDiv.hDiv || endsWith e ".hDiv" ||
+        isConstNamed e ``UInt64.div) && e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.divU64 l r)
+    | _, _ => none
+    else if (isConstNamed e ``HMod.hMod || endsWith e ".hMod" ||
+        isConstNamed e ``UInt64.mod) && e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.modU64 l r)
+    | _, _ => none
+    else if (isConstNamed e ``HAnd.hAnd || endsWith e ".hAnd") && e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.bitAnd l r)
+    | _, _ => none
+  else if (isConstNamed e ``HOr.hOr || endsWith e ".hOr") && e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.bitOr l r)
+    | _, _ => none
+  else if (isConstNamed e ``HXor.hXor || endsWith e ".hXor") && e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.bitXor l r)
+    | _, _ => none
+  else if (isConstNamed e ``Complement.complement || endsWith e ".complement") &&
+      e.getAppArgs.size ≥ 1 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some v => some (.bitNot v)
+    | none => none
+  else if (isConstNamed e ``HShiftLeft.hShiftLeft || endsWith e ".hShiftLeft") &&
+      e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.shiftL l r)
+    | _, _ => none
+  else if (isConstNamed e ``HShiftRight.hShiftRight || endsWith e ".hShiftRight") &&
+      e.getAppArgs.size ≥ 2 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+          asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some l, some r => some (.shiftR l r)
+    | _, _ => none
+  else if (isConstNamed e ``Option.isSome || endsWith e ".isSome") && e.getAppArgs.size ≥ 1 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.field b n) =>
+      if n.endsWith "_tag" then some (.field b n)
+      else some (.field b s!"{n}_tag")
+    | some b => some (.field b s!"slot_tag")
+    | none => none
+  else if endsWith e ".clockSlot" || isConstNamed e ``ProofForge.Svm.Runtime.clockSlot then
+    some .clockSlot
+  else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
+    some .clockEpoch
+  else if endsWith e ".unixTime" || isConstNamed e ``ProofForge.Svm.Runtime.unixTime then
+    some .unixTime
+  else if endsWith e ".slotsPerEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.slotsPerEpoch then
+    some .slotsPerEpoch
+  else if endsWith e ".cpiReturn" || isConstNamed e ``ProofForge.Svm.Runtime.cpiReturn then
+    some .cpiReturn
+  else if endsWith e ".signerKey0" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey0 then
+    some .signerKey0
+  else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller then
+    some .evmCaller
+  else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Evm.Runtime.evmBlockNumber then
+    some .evmBlockNumber
+  else if endsWith e ".evmTimestamp" || isConstNamed e ``ProofForge.Evm.Runtime.evmTimestamp then
+    some .evmTimestamp
+  else if endsWith e ".evmChainId" || isConstNamed e ``ProofForge.Evm.Runtime.evmChainId then
+    some .evmChainId
+  else if endsWith e ".evmSelf" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf then
+    some .evmSelf
+  else if endsWith e ".evmCallValue" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallValue then
+    some .evmCallValue
+  else if endsWith e ".evmSelfBalance" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfBalance then
+    some .evmSelfBalance
+  else if endsWith e ".evmCallerW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW0 then
+    some .evmCallerW0
+  else if endsWith e ".evmCallerW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW1 then
+    some .evmCallerW1
+  else if endsWith e ".evmCallerW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW2 then
+    some .evmCallerW2
+  else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
+    some .evmSelfW0
+  else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then
+    some .evmSelfW1
+  else if endsWith e ".evmSelfW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW2 then
+    some .evmSelfW2
+  else if endsWith e ".evmImmU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmU64 then
+    some .evmImmU64
+  else if endsWith e ".evmImmU64b" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmU64b then
+    some .evmImmU64b
+  else if endsWith e ".evmImmW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW0 then
+    some .evmImmW0
+  else if endsWith e ".evmImmW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW1 then
+    some .evmImmW1
+  else if endsWith e ".evmImmW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmW2 then
+    some .evmImmW2
+  else if endsWith e ".evmImmX0" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmX0 then
+    some .evmImmX0
+  else if endsWith e ".evmImmX1" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmX1 then
+    some .evmImmX1
+  else if endsWith e ".evmImmX2" || isConstNamed e ``ProofForge.Evm.Runtime.evmImmX2 then
+    some .evmImmX2
+  else if endsWith e ".accLamports0" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports0 then
+    some .accLamports0
+  else if endsWith e ".accOwner0" || isConstNamed e ``ProofForge.Svm.Runtime.accOwner0 then
+    some .accOwner0
+  else if endsWith e ".accDataLen0" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen0 then
+    some .accDataLen0
+  else if endsWith e ".accN" || isConstNamed e ``ProofForge.Svm.Runtime.accN then
+    some .accN
+  else if endsWith e ".isSigner0" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner0 then
+    some .isSigner0
+  else if endsWith e ".isWritable0" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable0 then
+    some .isWritable0
+  else if endsWith e ".isExecutable0" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable0 then
+    some .isExecutable0
+  else if endsWith e ".accLamports1" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports1 then
+    some .accLamports1
+  else if endsWith e ".accOwner1" || isConstNamed e ``ProofForge.Svm.Runtime.accOwner1 then
+    some .accOwner1
+  else if endsWith e ".accDataLen1" || isConstNamed e ``ProofForge.Svm.Runtime.accDataLen1 then
+    some .accDataLen1
+  else if endsWith e ".isSigner1" || isConstNamed e ``ProofForge.Svm.Runtime.isSigner1 then
+    some .isSigner1
+  else if endsWith e ".isWritable1" || isConstNamed e ``ProofForge.Svm.Runtime.isWritable1 then
+    some .isWritable1
+  else if endsWith e ".isExecutable1" || isConstNamed e ``ProofForge.Svm.Runtime.isExecutable1 then
+    some .isExecutable1
+  else if (endsWith e ".systemTransfer" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.systemTransfer) && e.getAppArgs.size ≥ 1 then
+    asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!
+  else if endsWith e ".invokeAcc1" || isConstNamed e ``ProofForge.Svm.Runtime.invokeAcc1 ||
+      endsWith e ".invoke" || isConstNamed e ``ProofForge.Svm.Runtime.invoke ||
+      endsWith e ".invokeSigned" || isConstNamed e ``ProofForge.Svm.Runtime.invokeSigned then
+    some (.lit 0)
+  else if ((endsWith e ".evmDeposit" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmDeposit) ||
+      (endsWith e ".evmDeposit256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmDeposit256) ||
+      (endsWith e ".evmLogTipped" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLogTipped) ||
+      (endsWith e ".evmLogIncremented" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLogIncremented) ||
+      (endsWith e ".evmLogTransfer" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLogTransfer) ||
+      (endsWith e ".evmLogApproval" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLogApproval) ||
+      (endsWith e ".evmSendEth" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth) ||
+      (endsWith e ".evmSendEth256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth256) ||
+      (endsWith e ".evmMapGetU64" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64) ||
+      (endsWith e ".evmMapSetU64" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetU64) ||
+      (endsWith e ".evmMapGetAddr" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr) ||
+      (endsWith e ".evmMapSetAddr" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetAddr) ||
+      (endsWith e ".evmMapGetPair" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair) ||
+      (endsWith e ".evmMapSetPair" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmMapSetPair) ||
+      (endsWith e ".evmTokenTransfer" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmTokenTransfer) ||
+      (endsWith e ".evmTokenApprove" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmTokenApprove) ||
+      (endsWith e ".evmTokenTransferFrom" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmTokenTransferFrom) ||
+      (endsWith e ".evmTokenBalanceOfSelf" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmTokenBalanceOfSelf) ||
+      (endsWith e ".evmTokenAllowanceOf" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmTokenAllowanceOf) ||
+      (endsWith e ".evmWethDeposit" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmWethDeposit) ||
+      (endsWith e ".evmWethWithdraw" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmWethWithdraw) ||
+      (endsWith e ".evmSwapExact2" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmSwapExact2) ||
+      (endsWith e ".evmSwapExact3" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmSwapExact3) ||
+      (endsWith e ".evmTokenPermit" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmTokenPermit) ||
+      (endsWith e ".evmPermit" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmPermit)) &&
+      e.getAppArgs.size ≥ 1 then
+      if endsWith e ".evmMapGetU64" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetU64 then
+      let args := e.getAppArgs
+      let get (n : Nat) : Ops.Val :=
+        if args.size ≥ n + 1 then (asVal env fuel args[args.size - 1 - n]!).getD (.arg n)
+        else .arg n
+      some (.mapGetU64 (get 1) (get 0))
+      else if endsWith e ".evmMapGetAddr" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetAddr then
+      let args := e.getAppArgs
+      let get (n : Nat) : Ops.Val :=
+        if args.size ≥ n + 1 then (asVal env fuel args[args.size - 1 - n]!).getD (.arg n)
+        else .arg n
+      some (.mapGetAddr (get 3) (get 2) (get 1) (get 0))
+      else if endsWith e ".evmMapGetPair" || isConstNamed e ``ProofForge.Evm.Runtime.evmMapGetPair then
+      let args := e.getAppArgs
+      let get (n : Nat) : Ops.Val :=
+        if args.size ≥ n + 1 then (asVal env fuel args[args.size - 1 - n]!).getD (.arg n)
+        else .arg n
+      some (.mapGetPair (get 6) (get 5) (get 4) (get 3) (get 2) (get 1) (get 0))
+      else
+      asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!
+      else if isConstNamed e ``Bool.true || endsWith e ".true" then
+      some (.lit 1)
+  else if isConstNamed e ``Bool.false || endsWith e ".false" then
+    some (.lit 0)
+  else if user && e.getAppArgs.isEmpty then
+    match e.getAppFn.constName? with
+    | some ctor =>
+      match env.find? ctor with
+      | some (.ctorInfo c) =>
+        match enumCtorIndex env c.induct ctor with
+        | some i => some (.lit (UInt64.ofNat i))
+        | none => none
+      | _ => none
+    | none => none
+  else if isConstNamed e ``Option.none || endsWith e ".none" then
+    some (.lit 0)
+  else if (isConstNamed e ``Option.some || endsWith e ".some") && e.getAppArgs.size ≥ 1 then
+    asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!
+  else if (isConstNamed e ``GetElem.getElem || isConstNamed e ``GetElem?.getElem! ||
+      isConstNamed e ``Vector.get ||
+      endsWith e ".getElem" || endsWith e ".getElem!" || endsWith e ".get") &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    -- Do not recursively search proof/type arguments for an index: their local binders
+    -- are not source values. The collection/index positions are fixed by GetElem.
+    let collIndex? : Option (Expr × Expr) :=
+      if isConstNamed e ``GetElem.getElem || endsWith e ".getElem" then
+        if h : args.size ≥ 3 then some (args[args.size - 3], args[args.size - 2])
         else none
+      else if h : args.size ≥ 2 then
+        some (args[args.size - 2], args[args.size - 1])
       else none
+    let rec findState (fuel : Nat) (e : Expr) : Option Ops.Val :=
+      match fuel with
+      | 0 => none
+      | fuel + 1 =>
+        match strip e with
+        | .bvar j => some (.arg j)
+        | e =>
+          if isConstNamed e ``methodArgRef && e.getAppArgs.size ≥ 1 then
+            match asLit fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+            | some (.lit i) => some (.local (methodArgLocalBase + i.toNat))
+            | _ => none
+          else e.getAppArgs.findSome? (findState fuel)
+    match collIndex?.bind fun pair => (asVal env fuel pair.2).map (pair.1, ·) with
+    | some (collection, .lit n) =>
+      let i := n.toNat
+      let baseField :=
+        match asVal env fuel collection with
+        | some (.field _ fname) => some fname
+        | _ => none
+      match findState fuel collection, baseField with
+      | some base, some fname =>
+        let suf := s!"_{i}"
+        let baseName :=
+          if fname.endsWith suf then fname.dropEnd suf.length |>.copy else fname
+        some (.field base s!"{baseName}_{i}")
+      | some base, none =>
+        match vectorBaseName env 8 collection with
+        | some fname => some (.field base s!"{fname}_{i}")
+        | none =>
+            if isConstNamed collection ``methodArgRef then some (.field base s!"_{i}")
+            else none
+      | _, _ => none
+    | some (collection, idx) =>
+      let lits := args.filterMap (asLit fuel)
+      let len :=
+        if h : lits.size > 0 then
+          match lits[0] with
+          | .lit n => n.toNat
+          | _ => 0
+        else 0
+      match findState fuel collection, vectorBaseName env 8 collection with
+      | some base, some fname => some (.indexGet base fname idx len)
+      | _, _ => none
+    | none => none
 
+  else if e.getAppArgs.isEmpty then
+    match env.find? n with
+    | some (.defnInfo info) =>
+      if info.type.consumeMData.getAppFn.constName? == some ``UInt64 then
+        match asVal env fuel info.value with
+        | some value =>
+            match staticUInt64? value with
+            | some literal => some (.lit literal)
+            | none => some value
+        | none => none
+      else none
+    | _ => none
+  else none
+end
 private def val (env : Environment) (e : Expr) : Option Ops.Val :=
   -- Bounded tree algorithms naturally compose several parent/child projections. Their elaborated
   -- `GetElem`/`toNat` wrappers are deeper than ordinary scalar expressions, but still finite.
@@ -6361,3 +6369,6 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
 
 
 end ProofForge.Extract
+
+
+
