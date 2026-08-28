@@ -362,7 +362,17 @@ section BvWfAlgebra
 
 variable (vec : BoundedVec)
 
-private theorem u64_toNat_add_one {a : UInt64} (h : a.toNat < 65535) :
+/-- `x < ofNat c`（UInt64）且 c ≤ 容器上限 时 `x.toNat < c`。
+消除 UInt64↔Nat 强转舞步的桥引理。 -/
+private theorem toNat_lt_ofNat {x : UInt64} {c : Nat} (h : x < UInt64.ofNat c)
+    (hc : c ≤ containerCapacityLimit) : x.toNat < c := by
+  have h2 : (BitVec.ofNat 64 c).toNat = c % (4294967296 * 4294967296) := by
+    simp only [BitVec.toNat_ofNat]
+  have h1 : x.toNat < (BitVec.ofNat 64 c).toNat := h
+  rw [h2] at h1
+  omega
+
+private theorem u64_toNat_add_one {a : UInt64} (h : a.toNat < 65536) :
     (a + 1).toNat = a.toNat + 1 := by
   have hone : UInt64.toNat 1 = 1 := rfl
   have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
@@ -405,6 +415,103 @@ theorem mBvPush_twoWrites (mem : AccountWords) (pos v : UInt64)
       omega
     simp only [mWriteWord, if_neg hne', if_pos rfl]
     rfl
+
+/-- **push 后 count 恰 +1**（twoWrites 的 count 分量）。 -/
+theorem mBvPush_size (mem : AccountWords) (v : UInt64)
+    (hwf : vec.wellFormed = true)
+    (hfull : mBvSize mem vec < BoundedVec.capacity vec) :
+    mBvSize (mBvPush mem vec v).1 vec = mBvSize mem vec + 1 := by
+  have hpos : (mBvSize mem vec + 1).toNat = (mBvSize mem vec).toNat + 1 :=
+    u64_toNat_add_one (show (mBvSize mem vec).toNat < 65536 by
+      have h1 : (mBvSize mem vec).toNat < vec.slots.region.capacity :=
+        toNat_lt_ofNat hfull (boundedVec_wf_capacity vec hwf)
+      have hcap'' : vec.slots.region.capacity ≤ 65536 :=
+        boundedVec_wf_capacity vec hwf
+      omega)
+  have h1 : (1 : Nat) ≤ (mBvSize mem vec + 1).toNat := by rw [hpos]; omega
+  have h2 : (mBvSize mem vec + 1).toNat ≤ vec.slots.region.capacity := by
+    rw [hpos]
+    have hcap' : vec.slots.region.capacity ≤ 65536 :=
+      boundedVec_wf_capacity vec hwf
+    have hlt : (mBvSize mem vec).toNat < vec.slots.region.capacity := by
+      have : (mBvSize mem vec).toNat < (BoundedVec.capacity vec).toNat := hfull
+      rw [bv_capacity_toNat vec hwf] at this
+      omega
+    omega
+  have hproj : (mBvPush mem vec v).1
+      = mWriteField (mWriteField mem vec.slots (mBvSize mem vec + 1) v) vec.count 0
+        (mBvSize mem vec + 1) := by
+    simp only [mBvPush]
+    rw [if_neg (by
+      show ¬(BoundedVec.capacity vec ≤ mBvSize mem vec)
+      exact fun hc => by
+        have h2 : (BoundedVec.capacity vec).toNat ≤ (mBvSize mem vec).toNat := hc
+        rw [bv_capacity_toNat vec hwf] at h2
+        omega)]
+  rw [hproj]
+  exact (mBvPush_twoWrites vec mem (mBvSize mem vec + 1) v hwf h1 h2).1
+
+/-- **push 后按返回位置读回恰为写入值**（twoWrites 的 slots 分量 + getAt 卫语句）。 -/
+theorem mBvPush_get (mem : AccountWords) (v : UInt64)
+    (hwf : vec.wellFormed = true)
+    (hfull : mBvSize mem vec < BoundedVec.capacity vec) :
+    mBvGetAt (mBvPush mem vec v).1 vec (mBvPush mem vec v).2 = v := by
+  have hsize : mBvSize (mBvPush mem vec v).1 vec = mBvSize mem vec + 1 :=
+    mBvPush_size vec mem v hwf hfull
+  have hpos : (mBvSize mem vec + 1).toNat = (mBvSize mem vec).toNat + 1 :=
+    u64_toNat_add_one (show (mBvSize mem vec).toNat < 65536 by
+      have h1 : (mBvSize mem vec).toNat < vec.slots.region.capacity :=
+        toNat_lt_ofNat hfull (boundedVec_wf_capacity vec hwf)
+      have hcap'' : vec.slots.region.capacity ≤ 65536 :=
+        boundedVec_wf_capacity vec hwf
+      omega)
+  have h1 : (1 : Nat) ≤ (mBvSize mem vec + 1).toNat := by rw [hpos]; omega
+  have h2 : (mBvSize mem vec + 1).toNat ≤ vec.slots.region.capacity := by
+    rw [hpos]
+    have hcap' : vec.slots.region.capacity ≤ 65536 :=
+      boundedVec_wf_capacity vec hwf
+    have hlt : (mBvSize mem vec).toNat < vec.slots.region.capacity := by
+      have : (mBvSize mem vec).toNat < (BoundedVec.capacity vec).toNat := hfull
+      rw [bv_capacity_toNat vec hwf] at this
+      omega
+    omega
+  have htwo := mBvPush_twoWrites vec mem (mBvSize mem vec + 1) v hwf h1 h2
+  have hproj : (mBvPush mem vec v).1
+      = mWriteField (mWriteField mem vec.slots (mBvSize mem vec + 1) v) vec.count 0
+        (mBvSize mem vec + 1) := by
+    simp only [mBvPush]
+    rw [if_neg (by
+      show ¬(BoundedVec.capacity vec ≤ mBvSize mem vec)
+      exact fun hc => by
+        have h2 : (BoundedVec.capacity vec).toNat ≤ (mBvSize mem vec).toNat := hc
+        rw [bv_capacity_toNat vec hwf] at h2
+        omega)]
+  have hret : (mBvPush mem vec v).2 = mBvSize mem vec + 1 := by
+    simp only [mBvPush]
+    rw [if_neg (by
+      show ¬(BoundedVec.capacity vec ≤ mBvSize mem vec)
+      exact fun hc => by
+        have h2 : (BoundedVec.capacity vec).toNat ≤ (mBvSize mem vec).toNat := hc
+        rw [bv_capacity_toNat vec hwf] at h2
+        omega)]
+  unfold mBvGetAt mBvSize
+  rw [hproj, hret, htwo.1]
+  have hposne : ¬((mBvSize mem vec + 1 : UInt64) = 0) := fun heq => by
+    have h1' : (mBvSize mem vec + 1).toNat = (0 : UInt64).toNat :=
+      congrArg UInt64.toNat heq
+    rw [hpos] at h1'
+    have h0 : UInt64.toNat 0 = 0 := rfl
+    rw [h0] at h1'
+    omega
+  have hlt2 : ¬((mBvSize mem vec + 1 : UInt64) < (mBvSize mem vec + 1 : UInt64)) := fun h => by
+    have h1' : (mBvSize mem vec + 1).toNat < (mBvSize mem vec + 1).toNat := h
+    exact absurd h1' (Nat.lt_irrefl _)
+  rw [if_neg (by
+    intro hdisj
+    rcases hdisj with h0 | hlt
+    · exact hposne h0
+    · exact hlt2 hlt)]
+  exact htwo.2
 
 end BvWfAlgebra
 
