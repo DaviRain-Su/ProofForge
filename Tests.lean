@@ -64,6 +64,7 @@ import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmStaticStorageSpec
 import Tests.EvmOrderedStorageSpec
+import Tests.EvmReentrancySpec
 import Tests.EvmRolesSpec
 import Tests.EvmPausableSpec
 import Tests.TipJarSpec

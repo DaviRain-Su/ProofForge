@@ -30,8 +30,8 @@ EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 pay
 entry-value 与 calldata route policy，EVM-RT-2d 已把 permit 的固定 ecrecover address/frame、
 STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed contract；UInt256
 div/mod 已固定 checked 除零 revert 策略；EVM-RT-2e 已加入 schema-resolved ordered static
-UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation。下一刀组合 reusable
-ReentrancyGuard policy。并行 EVM
+UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation；R5-009 已在其上组合
+reusable ReentrancyGuard policy。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
 R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundation、
@@ -42,7 +42,7 @@ R3-011 canonical program-id / SPL Token base-state views、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
-R5-008 checked allowance core；
+R5-008 checked allowance core、R5-009 reusable reentrancy policy；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -345,24 +345,24 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   角色独立复用。权限与错误策略留在 application，所有写入仍是 literal State field update；
   不使用 Vector、hashed role map、runtime slot allocator、隐藏 write 或新 Ops/IR/Emit case。
   Anvil 覆盖 zero/duplicate/full/nonmember/unauthorized/closed policy；indexed Address return
-  在 extraction 支持安全 OOB-zero 前不发布。详见 `docs/plan/tasks/r5-003.md`。Reentrancy 与
-  asset/NFT components 仍未完成。
+  在 extraction 支持安全 OOB-zero 前不发布。详见 `docs/plan/tasks/r5-003.md`。Reentrancy 已由
+  R5-009 完成；asset/NFT components 仍未完成。
 
 - R5-004 EVM Pausable policy 已完成：`Evm.Sdk.Pausable` 统一 canonical `UInt8` flags、
   fail-closed predicates、replacement transitions 与现有 `Paused()` terminal；
   TwoStepCounter/Credits 直接复用，权限、事件和 literal State writes 仍归 application。
   Extract 只把 `pf_inline` scalar helper 的通用合同补齐到 UInt8/16/32，没有 Pausable 名字、
   新 Ops/IR/Component/Emit case 或隐藏 slot。两个 contract 的 Yul/ABI/bin 逐字节不变；详见
-  `docs/plan/tasks/r5-004.md`。Typed pause events 仍等待 generic event surface；ReentrancyGuard
-  在 lock write → external CALL → clear 的 effect ordering 可证明前继续 fail closed。
+  `docs/plan/tasks/r5-004.md`。Typed pause events 仍等待 generic event surface；R5-009 已在
+  独立 ordered storage effect 上证明 ReentrancyGuard 的 lock → CALL → clear ordering。
 
 - R5-005 EVM bounded payment facade adoption 已完成：`Evm.Sdk.Payments` 独立拥有 Ether、
   ERC-20、WETH 与 fixed-path Uniswap V2 的 contract-facing 名称，仍复用既有 closed Runtime、
   CallResult 和 payable contracts；Vault/TipJar/Ownable 改为只 import `Evm.Sdk`，不再直连
   Runtime/ClosedCall/NativeFx/HashedMap source boundary。三个 canonical IR digest 与九份
   Yul/ABI/bin 产物逐字节不变；没有新增 selector、Ops/IR/Component/Emit case 或任意 calldata。
-  详见 `docs/plan/tasks/r5-005.md`。Code-existence、revert bubbling、arbitrary call 与可证明的
-  reentrancy ordering 仍 fail closed。
+  详见 `docs/plan/tasks/r5-005.md`。Code-existence、revert bubbling 与 arbitrary call 仍 fail
+  closed；reentrancy 保护只在 consumer 显式组合 R5-009 时成立。
 
 - R5-006 EVM fungible debit ledger foundation 已完成：`Evm.Sdk.Fungible.Balances` 在显式
   `AddressMap256` handle 上统一 balanceOf/canDebit/debit/insufficient；Token 的 burn/burnFrom
@@ -391,6 +391,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Token ABI 不变，Ownable ABI 的 uint64→uint256 是有意的 ledger contract 修正；Anvil 覆盖
   allowance wrap、over-spend 与失败原子性。详见 `docs/plan/tasks/r5-008.md`。ERC-721 与
   bounded ERC-1155 仍是 R5 工作。
+
+- R5-009 EVM reusable reentrancy policy 已完成：`Evm.Sdk.Reentrancy` 在显式
+  `Storage.Static.Handle UInt64` 上统一 OpenZeppelin-compatible `1/2` sentinels、fail-closed
+  entry gate 与 ordered enter/leave。GuardedPayout/EvmOrderedStorage 两个 consumer 都抽取为
+  `store 2 → CALL → store 1`，没有隐藏 final write 或新 Runtime/Ops/IR/Component/Emit case。
+  hostile Solidity callback 在 Anvil 观察到 entered=2，nested payout 原子拒绝；normal CALL、
+  outer restore 与 failed-CALL rollback 均通过。详见 `docs/plan/tasks/r5-009.md`。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
@@ -443,7 +450,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   compiler-static typed handle，emitter 再对真实 program schema 校验 field 与 8-byte width；
   source 不接触 slot 魔数。该 effect 与普通 final State writeback 分离，失败 CALL 由 EVM
   transaction rollback entered write。focused extraction、solc 和 Anvil 均通过；详见
-  `docs/plan/tasks/r4-005.md`。ReentrancyGuard policy 将在后续 SDK 切片组合此 effect。
+  `docs/plan/tasks/r4-005.md`。R5-009 已组合此 effect 为 reusable Reentrancy policy。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零

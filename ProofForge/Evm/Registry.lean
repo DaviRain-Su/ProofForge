@@ -18,6 +18,7 @@ def entries : Array Entry := #[
   { name := "EvmStaticCounter", digest := "ce10997e74a7972b" },
   { name := "EvmStaticRoster", digest := "5994b0ab59e7399b" },
   { name := "EvmOrderedStorage", digest := "c37f9c0a33352f4" },
+  { name := "GuardedPayout", digest := "359f6025f96aa432" },
   { name := "TipJar", digest := "754276e8063a7d08" },
   { name := "Lang", digest := "d2a43e6bf208bff0" },
   { name := "Vault", digest := "317cb48bad138c2e" },

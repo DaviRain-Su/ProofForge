@@ -9,7 +9,7 @@
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
-| `Evm.Sdk` | 合同侧 `Address` / `UInt256`、静态 storage layout、typed map、checked fungible ledger、context / immutable / event / revert / closed-call facade | SVM 账户几何、业务协议、运行时 layout 对象 |
+| `Evm.Sdk` | 合同侧 `Address` / `UInt256`、静态 storage layout、typed map、checked fungible ledger、explicit reentrancy policy、context / immutable / event / revert / closed-call facade | SVM 账户几何、业务协议、运行时 layout 对象 |
 | `Evm.Runtime` | 环境 opcode、`Addr20` / `UInt256`、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
@@ -43,6 +43,11 @@ increase/decrease/spend 与 Insufficient contract。Token、Credits、Vault、Ow
 credit/increase 以 `next ≥ current` 拒绝 UInt256 wrap；transfer alias 不重复写 hashed key；
 decrease/spend 先验证 current ≥ amount。权限、pause、supply/cap、permit 和 event policy 仍在
 应用；这不是隐藏完整 ERC-20 的 recipe。
+
+`Sdk.Reentrancy` 组合一个 explicit `Storage.Static.Handle UInt64`、OpenZeppelin-compatible
+nonzero sentinels 和既有 ordered `storeNow` effect。应用显式书写 enter → closed CALL → leave，
+hostile callback 可见 entered 状态，failed CALL 由交易回滚 lock；没有 raw slot、hidden State
+write 或 Reentrancy-specific Ops/IR/Emit recipe。
 
 SDK facade 直接 `@[pf_inline]` 到既有 source/runtime 叶，不增加 Ops、IR 或 emitter case；
 canonical 拼写仍是 `vg` / `mseta256` / `ttxfer` / `permit` / `edep` /
@@ -95,6 +100,7 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_flag.sh`：UInt8 mask + count 保持
 - `runtime-tests/evm/anvil_maybe.sh`：none 清零、some 写双叶
 - `runtime-tests/evm/anvil_ctx.sh`：`evmCaller` 对发送者低 8 字节；`height` 对 `block.number`
+- `runtime-tests/evm/anvil_reentrancy.sh`：normal CALL、hostile nested callback rejection、failed-CALL rollback
 - `runtime-tests/evm/anvil_tipjar.sh`：chainid、timestamp、Addr20 三叶、`payout(address,uint256)`、精确 `deposit(uint256)`、错 value 保持、sendEth 改余额、Tipped log、空 calldata `receive()`
 - `runtime-tests/evm/anvil_lang.sh`：位运算、mod-64 移位、`uint8` ABI、tuple return、运行时下标、有界 for、`oob` revert
 - `runtime-tests/evm/anvil_vault.sh`：hashed Map UInt64/Addr20、`shareOf(address)` / `pull(address,address,uint256)`、封闭 `approve`/`transferFrom`/`allowance`、超额保持、USDT 无返回成功

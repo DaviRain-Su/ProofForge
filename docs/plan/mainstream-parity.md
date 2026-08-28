@@ -119,7 +119,7 @@ EVM Runtime 以 Solidity 的 [types](https://docs.soliditylang.org/en/latest/typ
 | values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、one bounded dynamic-array input | signed ints、safe casts、bytes/string、nested dynamic、tagged/bounded return、dynamic constructor/fallback returndata | F0/F1 |
 | data/storage | ordinary typed State flattening、static declarations、address/address-pair hashed maps | reusable bounded storage vector/set/queue/bitmap；explicit bounded memory/transient contracts；namespaced storage | F0/F2 |
 | environment | caller/self/block number/timestamp/chain id/value/balance/immutables | gasleft、basefee/prevrandao/coinbase/gaslimit、blockhash、code/codehash and target-version gates | F1 |
-| call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；code-existence and reentrancy contracts | F1/F2 |
+| call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send、explicit ordered reentrancy guard | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；code-existence policy | F1/F2 |
 | crypto | host Keccak selector tooling、closed ecrecover precompile plan | source hash API、sha256/ripemd/precompiles、ECDSA anti-malleability、EIP-191/712、ERC-1271、Merkle | F1/F2 |
 | log/error | typed bounded LOG0..4/custom-error plans behind closed events/errors | source-declared generic typed events/errors、dynamic indexed/data encoding、Panic/revert-data propagation | F1 |
 | resources | checked u256 math and bounded ABI frame | gas/code/init-code/memory/stack manifest and compiler-version feature gates | F1/F3 |
@@ -133,7 +133,7 @@ typed bounded call 和验证后的 result contract。
 | 组件 | 当前 | 主要缺口 | 优先级 |
 |---|---|---|---|
 | collections/math | typed maps、static declarations、capacity-2 role set、checked u256 operations | bounded enumerable Set/Map/Queue/Bitmap/Checkpoints、SafeCast/Math/String/Bytes utilities | F0/F2 |
-| access/safety | owner/two-step ownership、bounded static roles、explicit fail-closed Pausable flag policy | typed Paused/Unpaused events, ReentrancyGuard, enumerable/admin roles, timelock/access manager | F1/F2 |
+| access/safety | owner/two-step ownership、bounded static roles、explicit Pausable、OpenZeppelin-shaped nonzero-sentinel Reentrancy guard | typed Paused/Unpaused events, enumerable/admin roles, timelock/access manager | F1/F2 |
 | calls/payments | `Evm.Sdk.Payments` bounded Ether/ERC20/WETH/fixed-router facade；Vault/TipJar 只消费 SDK，typed closed result policy 保持不变 | code-existence policy、revert bubbling、pull payment/multicall；arbitrary call 继续留在 advanced boundary | F1/F2 |
 | signatures | permit-specific ecrecover/domain paths | ECDSA/SignatureChecker/EIP-712/nonce/deadline/Merkle reusable components | F2 |
 | assets | `Fungible.Balances` O(1) checked movement；`Fungible.Allowances` explicit pair-handle approve/checked increase/decrease/spend；Token/Credits/Vault/Ownable independently consume slices；wrap/alias/over-spend 已由 Anvil 验收 | ERC-721 owner/approval/receiver；bounded ERC-1155；standard events/errors | F2 |
@@ -153,7 +153,7 @@ P0–P6 混用。
    32-byte values、safe casts/math 和 canonical codec readers/writers。
 2. **F1 — target Runtime**：SVM AccountInfo/memory/sysvar/full-hash/error gaps；EVM bounded
    call/result/revert、environment/events/resources；同时完成已有 Runtime recipe 的稳定 SDK facade。
-3. **F2 — reusable policy**：SVM Token-2022 extension slices；EVM reentrancy/safe-call/signature、
+3. **F2 — reusable policy**：SVM Token-2022 extension slices；EVM safe-call/signature、
    ERC-20/721/bounded-1155；两边的 Set/Queue/Bitmap richer shapes。
 4. **F3 — lifecycle/ecosystem**：SVM loader interface、EVM proxy/upgrade/clone、advanced crypto/sysvar
    和跨 target resource/reproducibility qualification。

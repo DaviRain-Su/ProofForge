@@ -48,6 +48,7 @@ import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage
+import Examples.GuardedPayout
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault

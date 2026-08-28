@@ -42,10 +42,10 @@ effects must remain in this lexical order; a failed CALL reverts the whole EVM t
 @[pf_entry]
 def writeAroundSend (s : State) (destination : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if s.status == 1 then
-    let _ := declared.handle.status.storeNow 2
+  if Reentrancy.canEnter s.status then
+    let _ := Reentrancy.enter declared.handle.status
     let _ := Ether.send destination amount
-    .ok (s, declared.handle.status.storeNow 1)
+    .ok (s, Reentrancy.leave declared.handle.status)
   else
     .error .locked
 

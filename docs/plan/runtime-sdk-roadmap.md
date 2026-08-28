@@ -73,8 +73,8 @@ instruction 增加 recipe opcode。
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged 与 bounded input target binding；同一 logical schema 的 cross-target plan conformance | tagged/bounded return source contract 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec input、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator，以及 invocation-local buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
-| EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；call return/error 合同；缺少标准化资源/重入边界 |
-| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` scalar/record/fixed-array declarations、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/fixed-router facade；`Access` owner/two-step ownership；`Roles.Set2` fixed-capacity membership/grant/revoke；`Pausable` explicit fail-closed flag；`Fungible.Balances` O(1) checked movement；`Fungible.Allowances` explicit pair-handle checked allowance policy | typed pause events、reentrancy、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
+| EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、Bounded Array v1 canonical dynamic input、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | tagged/bounded return 与 aggregate storage 组合；dynamic constructor；bounded generic call return/error 合同；缺少标准化资源 manifest |
+| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy | typed pause events、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -111,8 +111,8 @@ Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固
 的 source projection conformance，但不统一 Borsh bytes 与 ABI words。SVM-RT-1 bounded
 account view、R5-001 Access foundation、R5-002 static storage declarations、R5-003 bounded
 roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption、R5-006 fungible debit
-ledger foundation、R5-007 checked credit/alias-safe transfer 与 R5-008 checked allowance core
-均已集成；独立 contract
+ledger foundation、R5-007 checked credit/alias-safe transfer、R5-008 checked allowance core 与
+R5-009 reusable reentrancy policy 均已集成；独立 contract
 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
@@ -122,7 +122,7 @@ closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom 
 EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy，EVM-RT-2d 已统一
 permit ecrecover 的固定 address/frame、STATICCALL success、exact returndata 与 nonzero
 signer，EVM-RT-2e 已提供 schema-resolved ordered static UInt64 store；UInt256 div/mod 也已
-固定 checked 零除 revert。下一刀组合 reusable ReentrancyGuard policy。详见
+固定 checked 零除 revert。R5-009 已组合 reusable ReentrancyGuard policy。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
 [R2-004](tasks/r2-004.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
@@ -130,7 +130,7 @@ signer，EVM-RT-2e 已提供 schema-resolved ordered static UInt64 store；UInt2
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
 [R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md)、
-[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
+[R5-009](tasks/r5-009.md)、[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -417,16 +417,16 @@ storage write、hashed nomination namespace 或 magic guard。详见 [R5-001](ta
 R5-002 已完成 compile-time static storage declaration foundation。它给后续 roles、asset
 records 和 fixed collections 提供可验证 handles；普通访问仍由 typed State extraction
 拥有，R4-005 只为 UInt64 handle 增加 schema-checked ordered store effect。raw slot、generic
-handle load/store 与 runtime allocator 仍不开放；ReentrancyGuard policy 尚待后续组合。
+handle load/store 与 runtime allocator 仍不开放；R5-009 已在此基础上组合 ReentrancyGuard。
 
 R5-003 已完成 bounded static roles：`Roles.Set2` 封装固定两个 Address slot 的纯策略判断，
 EvmStaticCounter/EvmStaticRoster 用不同权限和业务策略组合它，并保持每个 storage write 显式。
-动态角色集合、indexed Address return、reentrancy 与 assets 仍 fail closed。
+动态角色集合、indexed Address return 与 assets 仍 fail closed。
 
 R5-004 已完成独立 Pausable policy：canonical u8 flags、fail-closed predicates 和 replacement
 transitions 由 SDK 所有，TwoStepCounter/Credits 保持权限与显式 field write。typed pause events
-仍等待 generic event surface；ReentrancyGuard 必须先证明 lock write → external CALL → clear 的
-effect ordering，不能用普通 returned State 冒充。
+仍等待 generic event surface；ReentrancyGuard 已在 R5-009 组合独立 ordered storage effect，
+没有用普通 returned State 冒充 CALL 前可见的 lock write。
 
 R5-005 已完成 bounded payment facade adoption：Ether/ERC20/WETH/fixed-router source names 归
 `Evm.Sdk.Payments`，Vault/TipJar/Ownable 不再 import target Runtime 或 lower Source modules，
@@ -444,6 +444,12 @@ mint 关闭 cap/supply wrap，direct/delegated self-transfer 不再双写同一�
 R5-008 已完成 checked allowance core：Token/Ownable 复用显式 pair-handle 上的 set、checked
 increase/decrease/spend 与 Insufficient，permit ownership 和 event ordering 仍在应用。NFT
 components 尚未完成。
+
+R5-009 已完成 reusable reentrancy policy：`Evm.Sdk.Reentrancy` 以 OpenZeppelin-compatible
+nonzero sentinels、fail-closed gate 和 explicit static handle 组合 R4-005 ordered effects。
+GuardedPayout/EvmOrderedStorage 两个 consumer 保持 `enter → CALL → leave` lexical order；真实
+hostile callback 观察 entered 状态并证明 nested call 拒绝，failed CALL 回滚 lock。应用仍拥有
+具体 call 与 typed error；没有 Reentrancy opcode/emitter recipe。详见 [R5-009](tasks/r5-009.md)。
 
 ### R6 — 双目标验收
 
