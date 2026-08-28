@@ -55,6 +55,7 @@ import Tests.EvmSpec
 import Tests.EvmSdkSpec
 import Tests.EvmCallResultSpec
 import Tests.EvmLogErrorSpec
+import Tests.EvmPayableSpec
 import Tests.CoreCodecSpec
 import Tests.CrossTargetCodecSpec
 import Tests.EvmBuildSpec

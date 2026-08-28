@@ -111,11 +111,14 @@ account view、R5-001 Access foundation 与 R5-002 static storage declarations �
 独立 contract 分别复用 Access 和 storage declaration contracts。SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
 return-data/multi-seed signer-tail geometry，下一刀进入 Token-2022 TLV。EVM-RT-2a 也已统一
-closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom error；下一刀
-完成 UInt256 div/mod 的明确除零策略。详见
+closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom error，
+EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy；UInt256 div/mod 也已
+固定 checked 零除 revert。下一刀继续 precompile-specific closed return contract 与剩余
+R4 hardening。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
-[R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R5-001](tasks/r5-001.md) 和
-[R5-002](tasks/r5-002.md)。这不表示 R2/R4/R5 已完成。
+[R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
+[E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md) 和 [R5-002](tasks/r5-002.md)。
+这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
 
@@ -276,12 +279,20 @@ revert length；NativeFx 和 permit 的 closed semantic consumers 全部消费�
 合约的 Yul/bin/ABI 保持逐字节一致。它没有开放 arbitrary event/error/opcode，也不引入 runtime
 allocator；详见 [R4-002](tasks/r4-002.md)。
 
+R4-003 已完成 EVM-RT-2c payable/receive policy：`Evm.Payable` 以 typed value gate、calldata
+route 和 validated entry plan 统一 constructor/runtime/selector nonpayable rejection、deposit
+exact CALLVALUE、receive accept-any binding、empty-calldata receive 与 selector dispatch；
+malformed gate/route/operand shape 在唯一 interpreter 内 fail closed。source API、IR/digest、
+ABI payable labels 与 20 个合约产物保持逐字节一致；native send CALL 继续归 closed
+NativeFx/CallResult policy。详见 [R4-003](tasks/r4-003.md)。
+
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
 spelling 保留，因此 Token/Capped 等既有 IR/产物不漂移。Wide 的跨 64/192-bit Anvil matrix
-验证五种 relation；E-U256-003 已在同一 component 加入 typed bitwise/shift，div/mod 留给
-带明确除零策略的下一切片。详见 [E-U256-002](tasks/e-u256-002.md) 和
-[E-U256-003](tasks/e-u256-003.md)。
+验证五种 relation；E-U256-003 已在同一 component 加入 typed bitwise/shift，E-U256-004
+继续加入 checked div/mod，并在 Yul operation 前统一拒绝零 divisor。详见
+[E-U256-002](tasks/e-u256-002.md)、[E-U256-003](tasks/e-u256-003.md) 和
+[E-U256-004](tasks/e-u256-004.md)。
 
 ### R5 — EVM SDK
 

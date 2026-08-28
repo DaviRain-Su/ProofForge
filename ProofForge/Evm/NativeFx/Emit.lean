@@ -1,5 +1,6 @@
 import ProofForge.Evm.NativeFx
 import ProofForge.Evm.LogError.Emit
+import ProofForge.Evm.Payable.Emit
 import ProofForge.Evm.Ops
 import ProofForge.Crypto.Keccak
 
@@ -30,13 +31,19 @@ exactly one spelling; the closed semantic names stay here. -/
 private def Context.logError (context : Context σ) : LogError.Emit.Context :=
   { indent := context.indent }
 
+/-- Project the shared typed entry-value emission context (EVM-RT-2c). The exact CALLVALUE
+deposit gate and the receive accept-any binding below are emitted through
+`Evm.Payable.Emit`, so the payable guard spellings have exactly one owner; the closed
+semantic names stay here. The native send CALL keeps its closed policy and does not
+participate in the entry-value abstraction. -/
+private def Context.payable (context : Context σ) : Payable.Emit.Context :=
+  { indent := context.indent }
+
 private def emitDeposit (context : Context σ) (amount : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
-  let indent := context.indent
   let (pre, amt, st') ← context.materialize amount st
-  let txt := pre ++
-    indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
-  return (txt, amt, st')
+  let gate ← Payable.Emit.emitValueGate context.payable .exact (some amt)
+  return (pre ++ gate, amt, st')
 
 private def emitDeposit256 (context : Context σ) (a0 a1 a2 a3 : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
@@ -46,9 +53,9 @@ private def emitDeposit256 (context : Context σ) (a0 a1 a2 a3 : Ops.Val) (st : 
   let (p2, x2, s2) ← context.materialize a2 s1
   let (p3, x3, s3) ← context.materialize a3 s2
   let (amt, s4) := context.fresh s3
+  let gate ← Payable.Emit.emitValueGate context.payable .exact (some amt)
   let txt := p0 ++ p1 ++ p2 ++ p3 ++
-    indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++
-    indent ++ "if iszero(eq(callvalue(), " ++ amt ++ ")) { " ++ revert0 ++ " }" ++ nl
+    indent ++ "let " ++ amt ++ " := " ++ packU256 x0 x1 x2 x3 ++ nl ++ gate
   return (txt, x0, s4)
 
 private def emitSendEth (context : Context σ) (w0 w1 w2 amount : Ops.Val) (st : σ) :
@@ -211,9 +218,8 @@ private def emitRevertCapExceeded (context : Context σ) (st : σ) :
   pure (txt, "0", st)
 
 private def emitReceive (context : Context σ) (st : σ) :
-    Except String (String × String × σ) :=
-  let indent := context.indent
-  let txt := indent ++ "let pf_recv := callvalue()" ++ nl
+    Except String (String × String × σ) := do
+  let txt ← Payable.Emit.emitValueGate context.payable .acceptAny
   pure (txt, "pf_recv", st)
 
 def emitCall (context : Context σ) (call : NativeFx.Call Ops.Val) (st : σ) :

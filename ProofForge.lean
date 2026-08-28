@@ -26,6 +26,8 @@ import ProofForge.Evm.CallResult
 import ProofForge.Evm.CallResult.Emit
 import ProofForge.Evm.LogError
 import ProofForge.Evm.LogError.Emit
+import ProofForge.Evm.Payable
+import ProofForge.Evm.Payable.Emit
 import ProofForge.Evm.ClosedCall
 import ProofForge.Evm.ClosedCall.Source
 import ProofForge.Evm.ClosedCall.Emit

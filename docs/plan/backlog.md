@@ -24,16 +24,17 @@ cursor、ABI offset 与 target 物理编码互相独立。SVM-RT-1 bounded accou
 EVM-SDK-2 static storage declarations 已并行集成；SVM-RT-2a 已完成 typed bounded
 instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed signer tail 收口到
 同一个 bounded plan，下一刀进入 SVM-RT-3 Token-2022 TLV。EVM-RT-2a typed call-result 已完成，
-EVM-RT-2b 也已统一 typed LOG0..4/custom-error plan；UInt256 div/mod 已固定 checked 除零
-revert 策略，下一刀继续 payable/receive policy。并行 EVM UInt256 线现已补齐 typed
-comparison/bitwise/shift/div/mod。
+EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
+entry-value 与 calldata route policy；UInt256 div/mod 已固定 checked 除零 revert 策略。
+下一刀继续 precompile-specific closed return contract 与剩余 R4 hardening。并行 EVM
+UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R5-001 EVM Access foundation 和
 R5-002 EVM static storage foundation；这些都是阶段内可复用组件切片，不代表 R3/R5 整体
 完成。
 
 ## 已做
 
-- **当前可验证基线（2026-08-28）**：Lean 汇总 272 jobs；SVM manifest 全 54 programs；
+- **当前可验证基线（2026-08-28）**：Lean 汇总 275 jobs；SVM manifest 全 54 programs；
   Mollusk 全量 293/293（Phoenix-v1 profile 76/76、RawEntry 15/15）；EVM manifest 全
   20 programs 且 Anvil 20/20。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
   一个 target 失败不再跳过或延迟另一个 target 的反馈。
@@ -267,12 +268,19 @@ R5-002 EVM static storage foundation；这些都是阶段内可复用组件切�
   EVM Yul/bin/ABI 产物逐字节不变，没有开放 arbitrary opcode/signature/selector。详见
   `docs/plan/tasks/r4-002.md`。
 
+- R4-003 EVM payable/receive policy 已完成：`Evm.Payable` 以 typed value gate 和 calldata
+  route 统一 constructor/runtime/selector nonpayable rejection、deposit exact CALLVALUE、
+  receive accept-any binding、empty-calldata receive 与 selector dispatch；唯一 interpreter
+  对 impossible gate/route/operand shape fail closed。source API、IR/digest、ABI payable labels
+  与全部 20 个 EVM 产物逐字节不变；native send CALL 继续归 closed NativeFx/CallResult
+  policy。详见 `docs/plan/tasks/r4-003.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 272 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 275 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 54 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 293/293，其中 RawEntry 15/15、Phoenix-v1 profile
   76/76。

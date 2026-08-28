@@ -1,5 +1,7 @@
 import ProofForge.Evm.Ops
 import ProofForge.Evm.IR
+import ProofForge.Evm.Payable
+import ProofForge.Evm.Payable.Emit
 import ProofForge.Evm.Codec.Emit
 import ProofForge.Evm.Component.Emit
 import ProofForge.Crypto.Keccak
@@ -1221,9 +1223,10 @@ private def emitConstructorStores (p : IR.Program) : Except String String := do
 private def renderCtorPrelude (objectName : String) (paramCount : Nat)
     (paramWidths : Array Core.Codec.Scalar) (plans : Array Codec.AbiInputPlan) :
     Except String String := do
+    let ctorGuard ← Payable.Emit.emitValueGate { indent := "    " } .reject
     let argumentBytes := paramCount * 32
     let mut out :=
-      "    if callvalue() { " ++ revert0 ++ " }" ++ nl ++
+      ctorGuard ++
       "    let programSize := datasize(" ++ q objectName ++ ")" ++ nl ++
       "    if iszero(eq(codesize(), add(programSize, " ++ toString argumentBytes ++
         "))) { " ++ revert0 ++ " }" ++ nl
@@ -1268,7 +1271,10 @@ private def renderReceive (p : IR.Program) (m : IR.Method) : Except String Strin
   | .error reason => throw s!"{reason} in {m.ixName}"
   | .ok "" => throw s!"extract/unsupported: empty ops {m.ixName}"
   | .ok body =>
-      pure ("      if iszero(calldatasize()) {" ++ nl ++ body ++ "      }" ++ nl)
+      match Payable.Emit.emitReceiveRoute { indent := "      " }
+          (Payable.EntryPlan.ofEntry (isReceive := true) m.payable) body with
+      | .error reason => throw s!"{reason} in {m.ixName}"
+      | .ok txt => pure txt
 
 private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool) :
     Except String String := do
@@ -1278,10 +1284,13 @@ private def renderEntry (p : IR.Program) (m : IR.Method) (localValueGuard : Bool
     else m.paramSchemas.mapM Codec.inputPlan
   unless m.inputPolicy == IR.inputPolicyOf plans do
     throw s!"evm/codec: input policy identity mismatch in {m.ixName}"
+  let entryPlan := Payable.EntryPlan.ofEntry (isReceive := false) m.payable
+  unless entryPlan.wellFormed do
+    throw s!"extract/unsupported: evm entry policy shape in {m.ixName}"
   let mut head :=
     "      case 0x" ++ m.selector ++ " {" ++ nl
   if localValueGuard && !m.payable then
-    head := head ++ "        if callvalue() { " ++ revert0 ++ " }" ++ nl
+    head := head ++ (← Payable.Emit.emitValueGate { indent := "        " } entryPlan.gate)
   if plans.isEmpty then
     let calldataBytes := 4 + m.paramCount * 32
     head := head ++
@@ -1331,9 +1340,11 @@ def emitYul (p : IR.Program) : Except String String := do
       receiveTxt := receiveTxt ++ (← renderReceive p m)
     else
       entries := entries ++ (← renderEntry p m anyPay)
-  let globalGuard :=
-    if anyPay then ""
-    else "      if callvalue() { " ++ revert0 ++ " }" ++ nl
+  let globalGuard ←
+    if anyPay then pure ""
+    else Payable.Emit.emitValueGate { indent := "      " } .reject
+  let selectorHead ←
+    Payable.Emit.emitSelectorHead { indent := "      " } .selectorDispatch
   let yul :=
     "// PROOF-FORGE-EVM-YUL v0" ++ nl ++
     "// digest=" ++ IR.digestHex p ++ nl ++
@@ -1350,8 +1361,7 @@ def emitYul (p : IR.Program) : Except String String := do
     renderFixedBytesHelper ++
     globalGuard ++
     receiveTxt ++
-    "      if lt(calldatasize(), 4) { " ++ revert0 ++ " }" ++ nl ++
-    "      switch shr(224, calldataload(0))" ++ nl ++
+    selectorHead ++
     entries ++
     "      default { " ++ revert0 ++ " }" ++ nl ++
     "    }" ++ nl ++
