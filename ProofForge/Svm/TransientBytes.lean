@@ -67,16 +67,18 @@ def Config.fitsLe64 (config : Config) : Bool :=
 inductive Query where
   | length (config : Config)
   | get (config : Config)
+  | pop (config : Config)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
   | .length _ => 0
   | .get _ => 1
+  | .pop _ => 0
 
 def Query.effects (_query : Query) : AccountStorage.EffectSummary := {}
 
 def Query.wellFormed : Query → Bool
-  | .length config | .get config => config.wellFormed
+  | .length config | .get config | .pop config => config.wellFormed
 
 def Query.needsWalk (_query : Query) : Bool := false
 
@@ -88,6 +90,7 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
   | .get config =>
       let suffix := String.intercalate "," (operands.map renderValue).toList
       s!"tbyte.get.{config.capacity}({suffix})"
+  | .pop config => s!"tbyte.pop.{config.capacity}"
 
 inductive Call (V : Type) where
   | begin (config : Config)

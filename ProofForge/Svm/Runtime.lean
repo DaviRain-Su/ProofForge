@@ -340,6 +340,10 @@ VM heap memory. -/
   let _ := index
   0
 
+@[irreducible] def transientBytesPop (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
 @[irreducible] def transientBytesAppendLe64 (capacity value : UInt64) : UInt64 :=
   let _ := capacity
   let _ := value

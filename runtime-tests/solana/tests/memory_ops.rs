@@ -343,6 +343,34 @@ fn transient_bytes_push_set_get_clear_and_length() {
 }
 
 #[test]
+fn transient_bytes_pop_is_lifo_and_rejects_empty() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        data.clone(),
+        "bytesPop",
+        &[0x11, 0xff],
+        false,
+        &[Check::success(), Check::return_data(&0xffu64.to_le_bytes())],
+    );
+    invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        data,
+        "bytesPopEmpty",
+        &[],
+        false,
+        &[Check::err(ProgramError::Custom(0x1212))],
+    );
+}
+
+#[test]
 fn transient_bytes_append_le64_keeps_little_endian_byte_order() {
     let (program_id, mollusk, data_key, state) = setup();
     let data = Account::new(1_000_000, 24, &program_id);

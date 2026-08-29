@@ -474,6 +474,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `e37f469f33e44884`、ELF 41,440 B。没有增加 top-level Ops/IR/main-Emit recipe。详见
   `docs/plan/tasks/r3-017.md`。
 
+- R3-018 transient Bytes pop 已完成：`Transient.Bytes.pop` 复用同一 active/capacity gate，
+  empty 以 byte bounds code `0x1212` 失败；成功时原位缩短 active byte prefix 并以 UInt64
+  返回旧尾 byte。它不清 stale payload、不分配、不 reclaim/realloc，也不暴露 pointer；只扩
+  `TransientBytes.Query` 与 target component interpreter。MemoryOps Mollusk 13/13 钉死 LIFO
+  与 empty failure，digest `9a5da5482923cd69`、ELF 44,496 B。详见
+  `docs/plan/tasks/r3-018.md`。
+
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
   独立复用；replacement 会使旧 nominee 失效，accept/cancel 显式清零，不使用 hashed

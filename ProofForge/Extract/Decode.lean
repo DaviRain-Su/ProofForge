@@ -285,6 +285,15 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         some (.ext (.svm (.component (.transientBytes query))) #[index])
       else none
     | _, _ => none
+  else if (endsWith e ".transientBytesPop" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.transientBytesPop) && e.getAppArgs.size ≥ 1 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit capacity) =>
+      let query : Svm.TransientBytes.Query := .pop { capacity := capacity.toNat }
+      if query.wellFormed then
+        some (.ext (.svm (.component (.transientBytes query))) #[])
+      else none
+    | _ => none
   else if (endsWith e ".accDataWordAt" ||
       isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAt) && e.getAppArgs.size ≥ 5 then
     match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,

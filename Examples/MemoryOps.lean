@@ -164,6 +164,22 @@ def bytesLengthAfterClear (_state : State) (byte : UInt64) : UInt64 :=
   let _ := bytes4.finish
   length
 
+/-- `pop` returns the former trailing byte and shortens the active byte prefix. -/
+@[pf_entry]
+def bytesPop (_state : State) (firstByte secondByte : UInt64) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push firstByte
+  let _ := bytes4.push secondByte
+  let popped := bytes4.pop
+  let _ := bytes4.finish
+  popped
+
+/-- Empty byte-buffer `pop` must terminate with the explicit byte bounds error. -/
+@[pf_entry]
+def bytesPopEmpty (_state : State) : UInt64 :=
+  let _ := bytes4.begin
+  bytes4.pop
+
 /-- One fixed-width little-endian append, then read byte `index` back. `index = 0` must be the
 lowest byte and `index = 7` the highest, pinning the canonical little-endian record. -/
 @[pf_entry]

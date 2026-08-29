@@ -111,6 +111,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-SDK-12 shared transient lifecycle（已集成）** | SVM-SDK-10/11 | Vector64/Bytes 共同的 allocation、metadata、active/capacity gate、clear/finish 由一个 target-owned interpreter 发射；concrete emitters 只拥有 element 语义，assembly byte-exact；见 R3-015 |
 | **SVM-SDK-13 bounded log-data（已集成）** | SVM-SDK-11/12 | active byte prefix 通过 syscall-adjacent `[addr,len]` descriptor 发布为一个 `sol_log_data` field；不复制 payload、不暴露 pointer，Mollusk 钉 exact payload + scalar return；见 R3-016 |
 | **SVM-SDK-14 transient Vector64 pop（已集成）** | SVM-SDK-10/12 | checked LIFO pop 原位缩短 active prefix 并返回旧尾元素；empty=`0x1202`，不分配、不清 payload、不伪造 reclaim/realloc，继续只扩 target component；见 R3-017 |
+| **SVM-SDK-15 transient Bytes pop（已集成）** | SVM-SDK-11/12 | checked LIFO byte pop 原位缩短 active prefix 并返回旧尾 byte；empty=`0x1212`，不分配、不清 payload、不伪造 reclaim/realloc，继续只扩 target component；见 R3-018 |
 | **EVM-RT-ENV address balance（已集成）** | R4-008 Environment Component | `Address.balance : UInt256` 使用完整三-limb address 与单次 BALANCE observation；numeric 四-limb cache，不新增 top-level Ops/IR/main Emit；见 R4-011 |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
 | **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |

@@ -140,6 +140,20 @@ def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
   ldxb r1, [r9 + 0]
   stxdw [r10 - {stackOff}], r1
 "
+  | .pop config, #[] =>
+      let label := s!"{scope}_{nonce}_{stackOff}_pop"
+      let nonEmpty := s!"transient_bytes_pop_nonempty_{label}"
+      return emitRequireActive config label ++ s!"\
+  ldxdw r2, [r10 - {lengthStack}]
+  jgt r2, 0, {nonEmpty}
+{failure boundsErrorCode}{nonEmpty}:
+  sub64 r2, 1
+  stxdw [r10 - {lengthStack}], r2
+  ldxdw r9, [r10 - {pointerStack}]
+  add64 r9, r2
+  ldxb r1, [r9 + 0]
+  stxdw [r10 - {stackOff}], r1
+"
   | _, _ => throw "extract/ir: malformed transient-byte query operands"
 
 def emitCall (context : Context) (label : String) :

@@ -40,9 +40,13 @@ private def bytesSmall : TransientBytes.Config := { capacity := 3 }
     "tbyte.logData.4"
 #guard (TransientBytes.Query.length bytes4).wellFormed
 #guard (TransientBytes.Query.get bytes4).arity == 1
+#guard (TransientBytes.Query.pop bytes4).arity == 0
 #guard
   (TransientBytes.Query.get bytes4).canonical (fun _ : UInt64 => "i") #[0] ==
     "tbyte.get.4(i)"
+#guard
+  (TransientBytes.Query.pop bytes4).canonical (fun _ : UInt64 => "unused") #[] ==
+    "tbyte.pop.4"
 
 #pf_build Examples.MemoryOps
 
@@ -56,8 +60,10 @@ private def bytesStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientBytes (.logData _)) => some "logData"
   | .letLocal _ (.ext (.component (.transientBytes (.length _))) #[]) => some "length"
   | .letLocal _ (.ext (.component (.transientBytes (.get _))) #[_]) => some "get"
+  | .letLocal _ (.ext (.component (.transientBytes (.pop _))) #[]) => some "pop"
   | .returnU64 (.ext (.component (.transientBytes (.length _))) #[]) => some "length"
   | .returnU64 (.ext (.component (.transientBytes (.get _))) #[_]) => some "get"
+  | .returnU64 (.ext (.component (.transientBytes (.pop _))) #[]) => some "pop"
   | _ => none
 
 private def taggedStep : ProofForge.Svm.IR.Op → Option String
@@ -113,7 +119,11 @@ elab "#pf_guard_transient_bytes" : command => do
     | .letLocal _ (.ext (.svm (.component (.transientBytes (.get _)))) #[_]) => true
     | .returnU64 (.ext (.svm (.component (.transientBytes (.get _)))) #[_]) => true
     | _ => false
-  unless hasLength && hasGet do
+  let hasPop := source.methods.any fun method => method.ops.any fun
+    | .letLocal _ (.ext (.svm (.component (.transientBytes (.pop _)))) #[]) => true
+    | .returnU64 (.ext (.svm (.component (.transientBytes (.pop _)))) #[]) => true
+    | _ => false
+  unless hasLength && hasGet && hasPop do
     throwError "transient byte queries did not stay behind the component bridge"
   let some setGet := program.methods.find? (·.ixName == "bytesSetGet")
     | throwError "missing bytesSetGet method"
@@ -123,6 +133,14 @@ elab "#pf_guard_transient_bytes" : command => do
     | throwError "missing bytesAppendLe64 method"
   unless filtered bytesStep appendGet == #["begin", "appendLe64", "get", "finish"] do
     throwError "bytesAppendLe64 effects were not preserved in source order"
+  let some pop := program.methods.find? (·.ixName == "bytesPop")
+    | throwError "missing bytesPop method"
+  unless filtered bytesStep pop == #["begin", "push", "push", "pop", "finish"] do
+    throwError "bytesPop effects were not preserved in source order"
+  let some popEmpty := program.methods.find? (·.ixName == "bytesPopEmpty")
+    | throwError "missing bytesPopEmpty method"
+  unless filtered bytesStep popEmpty == #["begin", "pop"] do
+    throwError "bytesPopEmpty did not preserve empty-pop validation order"
   let some logData := program.methods.find? (·.ixName == "bytesLogData")
     | throwError "missing bytesLogData method"
   unless filtered bytesStep logData ==
@@ -158,6 +176,7 @@ elab "#pf_guard_transient_bytes" : command => do
       asm.contains "transient_bytes_push_range_" &&
       asm.contains "transient_bytes_push_room_" &&
       asm.contains "transient_bytes_get_bounds_" &&
+      asm.contains "transient_bytes_pop_nonempty_" &&
       asm.contains "one sol_log_data field views the active 12-byte payload buffer" &&
       asm.contains "call sol_log_data" &&
       asm.contains "stxdw [r9 + 0], r1" && asm.contains "stxdw [r9 + 8], r1" &&

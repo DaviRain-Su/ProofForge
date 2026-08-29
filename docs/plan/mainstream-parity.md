@@ -45,7 +45,7 @@
 | 生命周期 | 正确表示 | 当前状态 | 必须补齐 |
 |---|---|---|---|
 | source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有；两边 top-level one-limb bounded/tagged return 已有独立 target plan | collection persistence binding、nested/constructed tagged shapes、wide/aggregate dynamic elements |
-| invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient.Vector64` 已有一个 active handle 的 begin/push/pop/set/clear/finish/length/get 与真实 OOM；buffer/writer 仍有 typed plan | 多 active handle、通用 element/byte writer、insert/remove/iteration；EVM bounded memory binding |
+| invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient.Vector64` 与 `Bytes` 已有一个各自 active handle 的 begin/push/pop/set/clear/finish/length/get、固定 byte append/log-data 与真实 OOM | 同类型多 active handle、通用 POD element/record writer、insert/remove-at/iteration；EVM bounded memory binding |
 | SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、ordered Map/RBMap、allocator 已有 u64/固定 schema | richer POD element/key/value shapes、set/bitset、versioned codecs |
 | EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有；bounded UInt64 storage vector（`Evm.Sdk.StorageVec`：compile-time capacity + explicit length + checked active-prefix push/pop/set/clear，O(1) gas shape 已文档化）已有 | reusable bounded set/queue/bitmap operations 与 richer storage-vector element shapes |
 
