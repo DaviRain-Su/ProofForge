@@ -177,4 +177,18 @@ owner ATA / owner mint / wallet s+w / selected Token, with the ATA program as ca
       { acc := 6 }]
     #[.u8le 2]
 
+section Proofs
+
+theorem createAccounts_wf_parts (accounts : CreateAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.associatedTokenProgram.index + 1 < L ∧ accounts.payer.index + 1 < L ∧
+    accounts.associatedAccount.index + 1 < L ∧ accounts.wallet.index + 1 < L ∧
+    accounts.mint.index + 1 < L ∧ accounts.systemProgram.index + 1 < L ∧
+    accounts.tokenProgram.index + 1 < L := by
+  simp only [CreateAccounts.wellFormed, Bool.and_eq_true,
+    ProofForge.Svm.Sdk.CpiAccount.Handle.wellFormed, decide_eq_true_eq] at h
+  exact ⟨h.1.1.1.1.1.1, h.1.1.1.1.1.2, h.1.1.1.1.2, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+
+end Proofs
+
 end ProofForge.Svm.Sdk.AssociatedToken
