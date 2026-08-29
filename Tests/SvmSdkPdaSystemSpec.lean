@@ -55,7 +55,7 @@ private def hasRentAwareCreate (program : ProofForge.Svm.IR.Program)
   | some method => method.ops.any fun
       | .invoke _ _ data _ _ =>
           data.any fun
-            | .u64le (.ext (.rentExemption 16) #[]) => true
+            | .u64le (.ext (.component (.sysvar (.rentExemption 16))) #[]) => true
             | _ => false
       | _ => false
 

@@ -165,7 +165,8 @@ elab "#pf_guard_svm_alternate_system_seed" : command => do
           .u64le (.lit 16), .programId] &&
       hasInstructionData createRentExempt
         #[.u32le (.lit 3), .accKey 0, .u64le (.lit 6), .ascii "ledger",
-          .u64le (.ext (.rentExemption 16) #[]), .u64le (.lit 16), .programId] &&
+          .u64le (.ext (.component (.sysvar (.rentExemption 16))) #[]),
+          .u64le (.lit 16), .programId] &&
       hasInstructionData assign
         #[.u32le (.lit 10), .accKey 0, .u64le (.lit 6), .ascii "ledger", .programId] &&
       hasInstructionData transfer

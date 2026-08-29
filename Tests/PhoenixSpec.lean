@@ -311,8 +311,10 @@ elab "#pf_guard_phoenix_artifact" : command => do
                 (match data[3]? with
                  | some (ProofForge.Svm.Ops.CpiWord.u64le _) => true
                  | _ => false) &&
-                data[4]? == some (ProofForge.Svm.Ops.CpiWord.u64le ProofForge.Svm.Ops.unixTime) &&
-                data[5]? == some (ProofForge.Svm.Ops.CpiWord.u64le ProofForge.Svm.Ops.clockSlot) &&
+                data[4]? == some (ProofForge.Svm.Ops.CpiWord.u64le
+                  (.ext (.component (.sysvar (.clock .unixTimestamp))) #[])) &&
+                data[5]? == some (ProofForge.Svm.Ops.CpiWord.u64le
+                  (.ext (.component (.sysvar (.clock .slot))) #[])) &&
                 data[6]? == some (ProofForge.Svm.Ops.CpiWord.u64le
                   (ProofForge.Svm.Ops.accKeyWord 0 0)) &&
                 data[7]? == some (ProofForge.Svm.Ops.CpiWord.u64le

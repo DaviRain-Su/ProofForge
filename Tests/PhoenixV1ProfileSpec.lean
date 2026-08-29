@@ -639,8 +639,10 @@ private partial def opsHaveRawReduceHeader (origin : UInt64)
          isPhoenixRecorderConfig config && bump == .ext (.findPda "log") #[] &&
            header.size == 11 && header[0]? == some (.u8le (.lit 1)) &&
            header[1]? == some (.u8le (.lit origin)) &&
-           header[3]? == some (.u64le (.ext .unixTime #[])) &&
-           header[4]? == some (.u64le (.ext .clockSlot #[])) &&
+           header[3]? == some (.u64le
+             (.ext (.component (.sysvar (.clock .unixTimestamp))) #[])) &&
+           header[4]? == some (.u64le
+             (.ext (.component (.sysvar (.clock .slot))) #[])) &&
            header[5]? == some (.u64le (.ext (.accKeyWord 2 0) #[])) &&
            header[6]? == some (.u64le (.ext (.accKeyWord 2 1) #[])) &&
            header[7]? == some (.u64le (.ext (.accKeyWord 2 2) #[])) &&
