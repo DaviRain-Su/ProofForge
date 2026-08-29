@@ -37,7 +37,9 @@ SVM 写出 `Name.so` / `Name.s` / `Name.idl.json`（Solana IDL spec 0.1.0）。
 EVM 写出 `Name.bin` / `Name.yul` / `Name.abi.json`。
 XRPL（`--target xrpl`；`wasm` 会被拒绝并提示选具体链）写出 `Name.wat` /
 `Name.wasm`（XLS-0102 `host_lib` import；锁定 `wat2wasm 1.0.41`；
-主网 `deployable=false`；工程门 `runtime-tests/xrpl/check.sh` 断言 import 表）。
+主网 `deployable=false`；工程门 `runtime-tests/xrpl/check.sh` 断言 import 表，
+`runtime-tests/xrpl/counter.sh` 起 Bedrock 本地节点部署 Counter（缺 Docker /
+bedrock 则 skip）。
 
 Mollusk（环境变量已改成 `PF_*_SO`）：
 

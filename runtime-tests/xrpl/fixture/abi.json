@@ -1,0 +1,57 @@
+{
+  "contract_name": "Counter",
+  "functions": [
+    {
+      "name": "initialize",
+      "parameters": [
+        { "name": "initial_value", "type": "UINT64", "flag": 0 }
+      ],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "increment",
+      "parameters": [
+        { "name": "amount", "type": "UINT64", "flag": 0 }
+      ],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "decrement",
+      "parameters": [
+        { "name": "amount", "type": "UINT64", "flag": 0 }
+      ],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "scale",
+      "parameters": [
+        { "name": "factor", "type": "UINT64", "flag": 0 }
+      ],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "divide",
+      "parameters": [
+        { "name": "den", "type": "UINT64", "flag": 0 }
+      ],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "modulo",
+      "parameters": [
+        { "name": "den", "type": "UINT64", "flag": 0 }
+      ],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "get",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "nonzero",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
+    }
+  ]
+}

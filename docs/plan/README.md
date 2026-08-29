@@ -174,7 +174,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [p-005](tasks/p-005.md) | done | SDK 组件验证：三层策略 + 几何安全定理第一批 |
 | [wsm-001](tasks/wsm-001.md) | done | WASM 家族 + XRPL Bedrock 方言 Rust 源 v0 竖切（过渡；产物不是 `.wasm`） |
 | [wsm-002](tasks/wsm-002.md) | done | Lean → WAT → `.wasm`；XRPL 拥有 `host_lib` import 与存储布局 |
-| [wsm-003](tasks/wsm-003.md) | todo | XRPL 本地链工程门：起节点、部署 Counter、四场景 |
+| [wsm-003](tasks/wsm-003.md) | in-progress | XRPL 本地链工程门：起节点、部署 Counter、四场景 |
 
 
 积压：[backlog.md](backlog.md)
