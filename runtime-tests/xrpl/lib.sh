@@ -21,7 +21,7 @@ xrpl_find_tool() {
     command -v "$name"
     return 0
   fi
-  for dir in /usr/local/bin "$HOME/.local/bin" /opt/homebrew/bin /usr/bin; do
+  for dir in /usr/local/bin "$HOME/.local/bin" "$HOME/go/bin" "$HOME/bin" /opt/homebrew/bin /usr/bin; do
     candidate="$dir/$name"
     if [[ -x "$candidate" ]]; then
       echo "$candidate"
@@ -46,16 +46,15 @@ xrpl_init() {
     echo "$label: skip: docker not found" >&2
     exit 0
   }
+  if [[ -z "${DOCKER_HOST:-}" && -S "/run/user/$(id -u)/docker.sock" ]]; then
+    export DOCKER_HOST="unix:///run/user/$(id -u)/docker.sock"
+  fi
   if ! "$docker_bin" info >/dev/null 2>&1; then
     echo "$label: skip: docker daemon not running" >&2
     exit 0
   fi
   bedrock="$(xrpl_find_tool bedrock)" || {
     echo "$label: skip: bedrock not found (install XRPL-Commons/bedrock, or set BEDROCK_BIN)" >&2
-    exit 0
-  }
-  jq_bin="$(xrpl_find_tool jq)" || {
-    echo "$label: skip: jq not found" >&2
     exit 0
   }
   python="$(command -v python3 || true)"
@@ -73,46 +72,51 @@ xrpl_require_equal() {
   }
 }
 
-xrpl_extract_json() {
+xrpl_field() {
+  local text="$1" label="$2"
   "$python" -I -S -c '
-import json, sys
-text = sys.stdin.read()
-decoder = json.JSONDecoder()
-found = None
-i = 0
-while i < len(text):
-    if text[i] == "{":
-        try:
-            obj, end = decoder.raw_decode(text, i)
-            found = obj
-            i = end
-            continue
-        except json.JSONDecodeError:
-            pass
-    i += 1
-if found is None:
-    raise SystemExit("no JSON object in command output")
-json.dump(found, sys.stdout)
-' <<<"$1"
+import re, sys
+text, label = sys.argv[1], sys.argv[2]
+m = re.search(r"(?m)^[ \t]*" + re.escape(label) + r":[ \t]*(.+?)\s*$", text)
+if not m:
+    raise SystemExit("missing field: " + label)
+print(m.group(1).strip())
+' "$text" "$label"
 }
 
-xrpl_json_field() {
-  local json="$1" path="$2"
-  xrpl_extract_json "$json" | "$jq_bin" -er "$path"
+xrpl_return_code() {
+  local text="$1"
+  "$python" -I -S -c '
+import re, sys
+text = sys.argv[1]
+m = re.search(r"(?m)^[ \t]*Return Code:[ \t]*(-?\d+)", text)
+if not m:
+    raise SystemExit("missing Return Code")
+print(m.group(1))
+' "$text"
 }
 
-xrpl_hex_u64() {
-  local hex="$1"
+xrpl_return_decimal() {
+  local text="$1"
   "$python" -I -S -c '
-import sys
-h = sys.argv[1].strip().lower()
-if h.startswith("0x"):
-    h = h[2:]
-if h == "" or h == "null":
-    print(0)
+import re, sys
+text = sys.argv[1]
+m = re.search(r"(?m)^[ \t]*Return Value \(decimal\):[ \t]*(-?\d+)", text)
+if not m:
+    m = re.search(r"(?m)^[ \t]*Return Value:[ \t]*(\S+)", text)
+    if not m:
+        print(0)
+        raise SystemExit
+    h = m.group(1).lower()
+    if h.startswith("0x"):
+        h = h[2:]
+    print(int(h, 16) if h else 0)
     raise SystemExit
-if len(h) % 2:
-    h = "0" + h
-print(int(h, 16))
-' "$hex"
+print(m.group(1))
+' "$text"
+}
+
+# Standalone genesis account. Bedrock's local funder uses the same seed.
+xrpl_genesis_seed() {
+  echo "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
 }

@@ -21,8 +21,8 @@ if len(wats) != len(wasms):
     sys.exit(f"xrpl check: wat/wasm count mismatch {len(wats)}/{len(wasms)}")
 
 need_imports = (
-    '(import "host_lib" "home_le_field"',
-    '(import "host_lib" "set_data"',
+    '(import "host_lib" "get_current_ledger_obj_field"',
+    '(import "host_lib" "update_data"',
 )
 need_exports = (
     '(func (export "initialize")',
