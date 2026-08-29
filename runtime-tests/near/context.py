@@ -81,6 +81,15 @@ def main() -> None:
     if seconds == 0:
         raise AssertionError("seconds() returned 0; sandbox block_timestamp should be live")
     print(f"nearctx: seconds() == {seconds} ok")
+
+    self_id = client.view_u64("selfId")
+    expected = int.from_bytes(b"test.nea", "little")
+    if self_id != expected:
+        raise AssertionError(
+            f"selfId() expected first 8 UTF-8 bytes of test.near "
+            f"({expected:#x}), got {self_id:#x}"
+        )
+    print(f"nearctx: selfId() == {self_id:#x} (test.nea) ok")
     print("suite NearCtx: PASS")
 
 

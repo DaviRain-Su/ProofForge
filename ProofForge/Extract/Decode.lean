@@ -30,6 +30,9 @@ private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalance ||
       endsWith e ".accountBalance" then
     some Ops.Val.nearAccountBalance
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountId ||
+      endsWith e ".currentAccountId" then
+    some Ops.Val.nearCurrentAccountId
   else none
 
 set_option maxRecDepth 2048 in
@@ -2794,6 +2797,7 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.nearPredecessor) => some .nearPredecessor
             | some (.nearAttachedDeposit) => some .nearAttachedDeposit
             | some (.nearAccountBalance) => some .nearAccountBalance
+            | some (.nearCurrentAccountId) => some .nearCurrentAccountId
             | some (.clockEpoch) => some .clockEpoch
             | some (.unixTime) => some .unixTime
             | some (.slotsPerEpoch) => some .slotsPerEpoch
@@ -6426,7 +6430,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .ext (.svm (.component _)) _
     | .nearBlockIndex | .nearBlockTimestamp | .nearPredecessor
-    | .nearAttachedDeposit | .nearAccountBalance
+    | .nearAttachedDeposit | .nearAccountBalance | .nearCurrentAccountId
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]

@@ -203,6 +203,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-029](tasks/wsm-029.md) | done | 探针读 AccountRoot.Balance（accountroot_id+cache_le+le_field） |
 | [wsm-033](tasks/wsm-033.md) | done | Runtime 叶 `callerBalanceDrops`（XrplBalRt，对账 account_info） |
 | [wsm-near-rt-001](tasks/wsm-near-rt-001.md) | done | NEAR Runtime 叶子 + 薄 SDK（block/time/caller/deposit/balance） |
+| [wsm-019](tasks/wsm-019.md) | done | NEAR `current_account_id`（view-safe self，UInt64 前 8 字节） |
 
 ## SVM 全面工作计划（当前主线）
 

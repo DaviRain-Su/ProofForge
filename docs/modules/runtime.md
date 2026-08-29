@@ -11,7 +11,7 @@
 | `ProofForge.Svm.Runtime` | sysvar、AccountInfo、CPI、PDA、hash syscall |
 | `ProofForge.Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 |
 | `ProofForge.Wasm.Xrpl.Runtime` | XRPL `host_lib` 环境叶：`xrplCaller20` / `xrplSelf20` / `xrplLedgerSqn` / `xrplParentTime` |
-| `ProofForge.Wasm.Near.Runtime` | `block_index` / `block_timestamp` / predecessor / attached_deposit / account_balance |
+| `ProofForge.Wasm.Near.Runtime` | `block_index` / `block_timestamp` / predecessor / attached_deposit / account_balance / `current_account_id` |
 
 根层不再提供混合 façade。合约必须按 target 明确 `open ProofForge.Svm.Runtime`、
 `open ProofForge.Evm.Runtime`、`open ProofForge.Wasm.Xrpl.Runtime` 或

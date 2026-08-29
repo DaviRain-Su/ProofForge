@@ -31,6 +31,11 @@ def seconds (_s : State) : UInt64 :=
 def selfBal (_s : State) : UInt64 :=
   Context.balanceOfSelf
 
+/-- view：本账户 id 前 8 字节 LE。不是 predecessor，也不是 Principal 9 叶。 -/
+@[pf_entry]
+def selfId (_s : State) : UInt64 :=
+  Context.self
+
 /-- 把当前 height 写入状态。`0 ≠ 1` 给无参 mutate 一条比较守卫。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=

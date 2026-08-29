@@ -62,6 +62,7 @@ def extValCanon : Ops.ValKind → String
   | .predecessor => "npred"
   | .attachedDeposit => "ndep"
   | .accountBalance => "nbal"
+  | .currentAccountId => "nself"
   | .reserved => "wext"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String := fun _ => "wext"

@@ -39,11 +39,13 @@ ctx_imports = (
     '(import "env" "predecessor_account_id"',
     '(import "env" "attached_deposit"',
     '(import "env" "account_balance"',
+    '(import "env" "current_account_id"',
 )
 ctx_exports = (
     '(func (export "height")',
     '(func (export "seconds")',
     '(func (export "selfBal")',
+    '(func (export "selfId")',
 )
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 

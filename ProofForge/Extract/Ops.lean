@@ -117,6 +117,7 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Val.nearPredecessor : Val := nearLeaf .predecessor
 @[match_pattern] def Val.nearAttachedDeposit : Val := nearLeaf .attachedDeposit
 @[match_pattern] def Val.nearAccountBalance : Val := nearLeaf .accountBalance
+@[match_pattern] def Val.nearCurrentAccountId : Val := nearLeaf .currentAccountId
 
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber

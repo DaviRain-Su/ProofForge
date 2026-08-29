@@ -106,6 +106,7 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext .predecessor #[] => .ok "(local.get $pf_pred)"
   | .ext .attachedDeposit #[] => .ok "(local.get $pf_dep)"
   | .ext .accountBalance #[] => .ok "(local.get $pf_bal)"
+  | .ext .currentAccountId #[] => .ok "(local.get $pf_self)"
   | _ => .error "extract/unsupported: near v0 value"
 
 private def isExitOp : Op ValKind OpExt → Bool
@@ -363,6 +364,12 @@ private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level
       indent (level + 2) "))",
       indent level "(local.set $pf_bal (i64.load (i32.const 40)))"
     ]
+  if methodUses .currentAccountId method then
+    lines := lines ++ #[
+      indent level "(call $pf_current_account_id (i64.const 3))",
+      indent level "(call $pf_read_register (i64.const 3) (i64.const 56))",
+      indent level "(local.set $pf_self (i64.load (i32.const 56)))"
+    ]
   return lines
 
 private def loadArg (count : Nat) (level : Nat) : Array String :=
@@ -430,6 +437,8 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push "    (local $pf_dep i64)"
   if methodUses .accountBalance method then
     lines := lines.push "    (local $pf_bal i64)"
+  if methodUses .currentAccountId method then
+    lines := lines.push "    (local $pf_self i64)"
   for slot in p.slots do
     lines := lines.push ("    (local " ++ localOfSlot slot.name ++ " i64)")
   for i in List.range (Nat.max (countTemps method.ops) region.st.fresh) do
@@ -488,6 +497,9 @@ def emit (p : IR.Program) : Except String String := do
   if programUses .accountBalance p then
     lines := lines.push
       "  (import \"env\" \"account_balance\" (func $pf_account_balance (param i64)))"
+  if programUses .currentAccountId p then
+    lines := lines.push
+      "  (import \"env\" \"current_account_id\" (func $pf_current_account_id (param i64)))"
   lines := lines.push "  (memory (export \"memory\") 1)"
   lines := lines ++ dataSection p
   lines := lines.push ""

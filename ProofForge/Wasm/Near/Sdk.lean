@@ -28,6 +28,10 @@ namespace Context
 @[pf_inline] def balanceOfSelf : UInt64 :=
   Runtime.accountBalance
 
+/-- View-safe. First 8 UTF-8 bytes of `current_account_id`, little-endian. -/
+@[pf_inline] def self : UInt64 :=
+  Runtime.currentAccountId
+
 end Context
 
 end ProofForge.Wasm.Near.Sdk

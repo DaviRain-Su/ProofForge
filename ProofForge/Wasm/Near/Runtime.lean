@@ -37,4 +37,11 @@ context cannot call `attached_deposit`.
 -/
 @[irreducible] def accountBalance : UInt64 := 0
 
+/--
+`current_account_id` as the first 8 bytes of the UTF-8 account id,
+little-endian. View-safe — unlike `predecessor`. Not a 20-byte address,
+not a 9-leaf Principal.
+-/
+@[irreducible] def currentAccountId : UInt64 := 0
+
 end ProofForge.Wasm.Near.Runtime

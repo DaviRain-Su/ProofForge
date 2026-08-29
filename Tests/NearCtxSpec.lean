@@ -50,11 +50,14 @@ elab "#pf_near_ctx_emit_check " n:ident : command => do
           "(import \"env\" \"predecessor_account_id\"",
           "(import \"env\" \"attached_deposit\"",
           "(import \"env\" \"account_balance\"",
+          "(import \"env\" \"current_account_id\"",
           "(func (export \"height\")",
           "(func (export \"seconds\")",
           "(func (export \"selfBal\")",
+          "(func (export \"selfId\")",
           "(call $pf_block_index)",
-          "i64.div_u (call $pf_block_timestamp)"
+          "i64.div_u (call $pf_block_timestamp)",
+          "(call $pf_current_account_id"
         ]
         for anchor in anchors do
           unless source.contains anchor do

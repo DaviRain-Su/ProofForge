@@ -516,7 +516,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
       | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _
       | .nearBlockIndex | .nearBlockTimestamp | .nearPredecessor
-      | .nearAttachedDeposit | .nearAccountBalance => v
+      | .nearAttachedDeposit | .nearAccountBalance | .nearCurrentAccountId => v
       | .byteSwap64 word => .byteSwap64 (flipVal fuel' word)
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
       | .ext (.svm (.component query)) operands =>
