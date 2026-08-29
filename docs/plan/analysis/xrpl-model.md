@@ -12,6 +12,7 @@ XRPL（XLS-0101）是「账本上本来就有 AccountRoot / Trust line / AMM；W
 树状结构不是「关联」就能搬：SVM 树长在程序拥有的账户字节里（见 §1.1d）。
 Map / PDA / Uniswap：用户口袋有，程序金库没有（见 §1.1e）。
 主账本 AMM 是 2024 起的协议对象（XLS-30），不是 WASM 写的（见 §1.1f）。
+其它同类 XLS（NFT/MPT/Oracle…）清单见 [xrpl-xls.md](xrpl-xls.md)：不要用 WASM 重写。
 
 它支持 WASM，**不等于**它是一条 WASM 智能合约链。WASM 在这里是账本对象的扩展，不是世界计算机。
 

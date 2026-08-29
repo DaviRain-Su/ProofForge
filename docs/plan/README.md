@@ -198,3 +198,4 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 积压：[backlog.md](backlog.md)
 历史 SDK 表面盘点：[analysis/sdk-surface.md](analysis/sdk-surface.md)
 XRPL 账本模型 vs EVM/SVM/NEAR：[analysis/xrpl-model.md](analysis/xrpl-model.md)
+XLS 协议对象 vs 本仓 WASM：[analysis/xrpl-xls.md](analysis/xrpl-xls.md)
