@@ -52,6 +52,8 @@ import Examples.EvmVecLog
 import Examples.EvmVecStack
 import Examples.EvmFeatureFlags
 import Examples.EvmClaimBitmap
+import Examples.EvmRingMailbox
+import Examples.EvmRingHistory
 import Examples.GuardedPayout
 import Examples.Collectible
 import Examples.Badge

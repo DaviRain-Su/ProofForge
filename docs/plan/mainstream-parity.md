@@ -47,7 +47,7 @@
 | source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有；两边 top-level one-limb bounded/tagged return 已有独立 target plan | collection persistence binding、nested/constructed tagged shapes、wide/aggregate dynamic elements |
 | invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient.Vector64` 与 `Bytes` 各有两个可同时 active 的编译期 slot；`Record64` 在同一 Vector64 slot 上提供派生 geometry、aligned count/access 和 fixed-arity `append1..4` whole-record preflight；共同提供 begin/pop/truncate/clear/finish、独立 metadata/payload 与真实 OOM | wider/typed POD element shapes、更多 resource-manifest slots、insert/remove-at/iteration；EVM bounded memory binding |
 | SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、ordered Map/RBMap、allocator 已有 u64/固定 schema | richer POD element/key/value shapes、set/bitset、versioned codecs |
-| EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有；bounded UInt64 storage vector（`Evm.Sdk.StorageVec`）与 packed static bitmap（`Evm.Sdk.StorageBitmap`）已有，均为 compile-time capacity、显式 checked policy 与 O(1) 单元素 slot shape | reusable bounded set/queue/checkpoints 与 richer storage-vector/bitmap element or iteration shapes |
+| EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有；bounded UInt64 storage vector、packed static bitmap 与 static ring queue 均为 compile-time capacity、显式 checked policy 和 O(1) 单元素/queue operation shape | reusable bounded enumerable set/checkpoints 与 richer storage-vector/bitmap/ring element or iteration shapes |
 
 因此：
 
@@ -117,7 +117,7 @@ EVM Runtime 以 Solidity 的 [types](https://docs.soliditylang.org/en/latest/typ
 | 类别 | 当前 source surface | 主要缺口 | 优先级 |
 |---|---|---|---|
 | values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、bounded dynamic-array/bytes/string input、top-level one-limb bounded/tagged output、strict UTF-8 | signed ints、safe casts、nested/constructed/wide dynamic return、dynamic constructor/fallback returndata | F0/F1 |
-| data/storage | ordinary typed State flattening、static declarations、address/address-pair hashed maps、bounded UInt64 storage vector、packed static bitmap | reusable bounded set/queue/checkpoints；explicit bounded memory/transient contracts；namespaced storage | F0/F2 |
+| data/storage | ordinary typed State flattening、static declarations、address/address-pair hashed maps、bounded UInt64 storage vector、packed static bitmap、bounded persistent UInt64 ring queue | reusable bounded enumerable set/checkpoints；explicit bounded memory/transient contracts；namespaced storage | F0/F2 |
 | environment | caller/origin/self/coinbase、`msg.sig`、exact `msg.data.length`、block number/hash、timestamp/chain id/value/selfBalance/immutables；full-width gasleft/gasprice/basefee/prevrandao/gaslimit/blobbasefee/blobhash/blockhash；Address balance/codeSize/codeHash；solc 0.8.34 + Cancun target pin | blob payload、bounded raw `msg.data` byte view、broader target-version matrix；raw code bytes 不进入 safe SDK，blockhash/blobhash input 暂为 checked UInt64 index/height | F1 |
 | call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send、explicit ordered reentrancy guard；ERC-20 exact canonical `1` / code-backed empty 与 success-only empty-code policy；`Address.hasCode` 提供诚实的观察点 predicate | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；arbitrary-call policy | F1/F2 |
 | crypto | host Keccak selector tooling、closed ecrecover precompile plan | source hash API、sha256/ripemd/precompiles、ECDSA anti-malleability、EIP-191/712、ERC-1271、Merkle | F1/F2 |
@@ -132,7 +132,7 @@ typed bounded call 和验证后的 result contract。
 
 | 组件 | 当前 | 主要缺口 | 优先级 |
 |---|---|---|---|
-| collections/math | typed maps、static declarations、capacity-2 role set、checked u256 operations、persistent bounded UInt64 storage vector、packed static StorageBitmap | bounded enumerable Set/Map/Queue/Checkpoints、SafeCast/Math/String/Bytes utilities、richer storage-vector/bitmap shapes | F0/F2 |
+| collections/math | typed maps、static declarations、capacity-2 role set、checked u256 operations、persistent bounded UInt64 storage vector、packed static StorageBitmap、bounded StorageRing queue | bounded enumerable Set/Map/Checkpoints、SafeCast/Math/String/Bytes utilities、richer persistent element/iteration shapes | F0/F2 |
 | access/safety | owner/two-step ownership、bounded static roles、explicit Pausable、OpenZeppelin-shaped nonzero-sentinel Reentrancy guard | typed Paused/Unpaused events, enumerable/admin roles, timelock/access manager | F1/F2 |
 | calls/payments | `Evm.Sdk.Payments` bounded Ether/ERC20/WETH/fixed-router facade；共享 CallResult 拒绝 false/noncanonical/no-code empty，并兼容 code-backed no-return；`Effect.thenTrue` 提供 canonical Bool composition；exact-32 比 OpenZeppelin ≥32 更严格 | bounded revert bubbling、pull payment/multicall；generic/arbitrary call 继续留在 advanced boundary | F1/F2 |
 | signatures | permit-specific ecrecover/domain paths | ECDSA/SignatureChecker/EIP-712/nonce/deadline/Merkle reusable components | F2 |

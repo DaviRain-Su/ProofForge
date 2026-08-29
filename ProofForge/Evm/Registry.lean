@@ -36,7 +36,9 @@ def entries : Array Entry := #[
   { name := "Wide", digest := "a190f187d58d188e" },
   { name := "Const", digest := "81830f8855cd3dda" },
   { name := "EvmFeatureFlags", digest := "5cc9bb266f23487f" },
-  { name := "EvmClaimBitmap", digest := "d91809979ad94cdc" }
+  { name := "EvmClaimBitmap", digest := "d91809979ad94cdc" },
+  { name := "EvmRingMailbox", digest := "5f2a66d9732449cd" },
+  { name := "EvmRingHistory", digest := "51b492f52021f6ec" }
 ]
 
 def names : Array String := entries.map (·.name)

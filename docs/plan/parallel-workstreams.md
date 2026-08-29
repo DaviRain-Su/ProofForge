@@ -136,6 +136,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-SDK-7 bounded ERC-721（已集成）** | EVM-SDK-6c/6d | 四个 compile-time hashed-map handles 上的 192-bit-key owner/approval/operator/balance core；Collectible/Badge 两 consumer；不可编码 id 在截断前拒绝；standard Address views/events/receiver callback 继续 fail closed；见 R5-013 |
 | **EVM-SDK-8 bounded ERC-1155（已集成）** | EVM-SDK-6c/6d、EVM-SDK-7 | 192-bit-key single-id UInt256 balance/operator/checked movement core；MultiToken/CraftToken 两 consumer；view/auth/write 先 gate 再截断，不开放 batch/receiver/metadata/standard event；见 R5-014 |
 | **EVM-SDK-9 persistent StorageBitmap（已集成）** | Core bounded BitSet、EVM-SDK-2 | compile-time bit capacity 绑定 ordinary fixed `Vector UInt64 wordCount` state；O(1) checked read/set/clear/toggle，不新增 Runtime/Ops/IR/Emit；EvmFeatureFlags/EvmClaimBitmap 两 consumer；bulk iteration/enumeration 继续 fail closed；见 R5-015 |
+| **EVM-SDK-10 persistent StorageRing（已集成）** | Core bounded Queue、EVM-SDK-2/5 | compile-time UInt64 payload/head/live static geometry；O(1) checked push/pop/peek/get/clear、modulo wraparound、malformed metadata fail closed；EvmRingMailbox/EvmRingHistory 两 consumer；不新增 Runtime/Ops/IR/Emit；见 R5-016 |
 
 ## 4. Worker 统一交付合同
 
