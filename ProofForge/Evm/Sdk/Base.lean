@@ -207,6 +207,9 @@ end Storage
 namespace Context
 
 @[pf_inline] def caller : Address := Runtime.evmCaller20
+/-! Scalar compatibility views remain explicit: they are truncating projections, not Address. -/
+/-- Low 64 bits of `msg.sender`, matching Solidity's numeric address value. -/
+@[pf_inline] def callerLow : UInt64 := Runtime.evmCaller
 @[pf_inline] def self : Address := Runtime.evmSelf20
 /-- Low 64 bits of the current contract address as exposed by the existing scalar Runtime leaf. -/
 @[pf_inline] def selfLow : UInt64 := Runtime.evmSelf

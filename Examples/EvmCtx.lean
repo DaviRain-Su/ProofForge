@@ -1,8 +1,8 @@
-import ProofForge
+import ProofForge.Evm.Sdk
 
 namespace Examples.EvmCtx
 
-open ProofForge.Evm.Runtime
+open ProofForge.Evm.Sdk
 
 structure State where
   dummy : UInt64
@@ -32,23 +32,23 @@ def init (_seed : UInt64) : State :=
 /-- view：`CALLER` 低 8 字节。不是 `signerKey0`，也不是完整 address。 -/
 @[pf_entry]
 def caller (_s : State) : UInt64 :=
-  evmCaller
+  Context.callerLow
 
 /-- view：`NUMBER`。不是 `clockSlot`。 -/
 @[pf_entry]
 def height (_s : State) : UInt64 :=
-  evmBlockNumber
+  Context.blockNumber
 
 /-- Full-width `GAS` observation. All four limbs come from one cached opcode result. -/
 @[pf_entry]
 def gasLeft (_s : State) : UInt256 :=
-  evmGasLeft256
+  Context.gasLeft
 
 /-- 把当前 block number 写入 dummy。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := evmBlockNumber }, evmBlockNumber)
+    .ok ({ dummy := Context.blockNumber }, Context.blockNumber)
   else
     .error .overflow
 

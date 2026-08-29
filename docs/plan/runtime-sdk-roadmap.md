@@ -458,7 +458,8 @@ Anvil 验证 immediate persistence、store/CALL/restore 与 failed-CALL rollback
 R4-006 已完成 full-width EVM environment words：`Runtime` / `Sdk.Context` 暴露 gasleft、
 basefee、prevrandao 与 gaslimit 的 allocation-free `UInt256`，通用 wide environment renderer
 对每个结果只观察一次 opcode 再投影四 limb。assembly 同时钉死 solc 0.8.34 和 Cancun，避免
-`0x44` 被解释成 pre-Paris DIFFICULTY；EvmCtx/TipJar 的 Anvil 门与 block JSON 精确对照。详见
+`0x44` 被解释成 pre-Paris DIFFICULTY；显式截断的 `callerLow`/`selfLow` 也归 SDK facade，
+EvmCtx/TipJar 不再直接 import Runtime，Anvil 门与 block JSON 精确对照。详见
 [R4-006](tasks/r4-006.md)。
 
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter

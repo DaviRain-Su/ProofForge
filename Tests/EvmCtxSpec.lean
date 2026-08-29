@@ -4,14 +4,14 @@ import ProofForge
 namespace Tests.EvmCtxSpec
 
 open Examples.EvmCtx
-open ProofForge.Evm.Runtime
+open ProofForge.Evm.Sdk
 open Lean Elab Command
 
 #guard (init 0).dummy == 0
 #guard get (init 0) == 0
-#guard caller (init 0) == evmCaller
-#guard height (init 0) == evmBlockNumber
-#guard gasLeft (init 0) == evmGasLeft256
+#guard caller (init 0) == Context.callerLow
+#guard height (init 0) == Context.blockNumber
+#guard gasLeft (init 0) == Context.gasLeft
 
 #guard aggregate (init 0) ⟨11, ⟨3, true⟩⟩ (13, 17) #v[19, 23, 29] == (93, true)
 #guard optionValue (init 0) none == 5

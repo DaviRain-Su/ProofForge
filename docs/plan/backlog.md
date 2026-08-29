@@ -568,7 +568,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 - R4-006 EVM full-width environment 已完成：`Runtime` / `Sdk.Context` 提供 allocation-free
   `UInt256` gasleft/basefee/prevrandao/gaslimit；wide environment renderer 每个结果只读一次
   opcode 并复用四 limb 投影。solc 0.8.34 assembly 显式固定 Cancun，避免 `0x44` 的旧
-  DIFFICULTY 语义；EvmCtx 和 TipJar 独立消费，Anvil 与当前 block 字段精确对照。详见
+  DIFFICULTY 语义；`callerLow`/`selfLow` 截断投影也由 `Sdk.Context` 显式拥有，EvmCtx 和
+  TipJar 均不再直接 import Runtime，Anvil 与当前 block 字段精确对照。详见
   `docs/plan/tasks/r4-006.md`。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
