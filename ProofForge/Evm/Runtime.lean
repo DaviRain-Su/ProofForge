@@ -129,6 +129,13 @@ the pre-Paris `DIFFICULTY` interpretation of opcode `0x44`; assembly pins the Ca
 current, and future block numbers return zero exactly as the VM specifies. -/
 @[irreducible] def evmBlockHash256 (_number : UInt64) : UInt256 := ⟨0, 0, 0, 0⟩
 
+/-- Runtime code size for a full address (`EXTCODESIZE`). -/
+@[irreducible] def evmCodeSize20 (_address : Addr20) : UInt64 := 0
+
+/-- Runtime code hash for a full address (`EXTCODEHASH`). The result is source-order `Bytes32`,
+not a numeric UInt256. -/
+@[irreducible] def evmCodeHash32 (_address : Addr20) : Bytes32 := ⟨0, 0, 0, 0⟩
+
 /-- `eq(callvalue(), packed uint256)`。入口因此 payable。宿主返回 `amt.w0`。 -/
 @[irreducible] def evmDeposit256 (amt : UInt256) : UInt64 := amt.w0
 

@@ -32,6 +32,12 @@ namespace «Address»
 @[pf_inline] def eqImmutable (address : Address) : Bool :=
   WideWord.Source.eq20 address Runtime.evmImm20
 
+@[pf_inline] def codeSize (address : Address) : UInt64 :=
+  Runtime.evmCodeSize20 address
+
+@[pf_inline] def codeHash (address : Address) : Bytes32 :=
+  Runtime.evmCodeHash32 address
+
 end «Address»
 
 namespace «UInt256»

@@ -788,6 +788,23 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasLimit256 ||
             endsWith baseE ".evmGasLimit256" then
           some (.ext (.evm (.component (.environment (.gasLimit256 limb.toNat)))) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCodeHash32 ||
+            endsWith baseE ".evmCodeHash32" then
+          let args := baseE.getAppArgs
+          if args.isEmpty then none
+          else
+            let address := args[args.size - 1]!
+            let a0 := asVal env fuel
+              (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) address)
+            let a1 := asVal env fuel
+              (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) address)
+            let a2 := asVal env fuel
+              (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) address)
+            match a0, a1, a2 with
+            | some w0, some w1, some w2 =>
+                some (.ext (.evm (.component (.environment (.codeHash32 limb.toNat))))
+                  #[w0, w1, w2])
+            | _, _, _ => none
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmBlockHash256 ||
             endsWith baseE ".evmBlockHash256" then
           let args := baseE.getAppArgs
@@ -1073,6 +1090,19 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some .cpiReturn
   else if endsWith e ".signerKey0" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey0 then
     some .signerKey0
+  else if endsWith e ".evmCodeSize20" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmCodeSize20 then
+    let args := e.getAppArgs
+    if args.isEmpty then none
+    else
+      let address := args[args.size - 1]!
+      let a0 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) address)
+      let a1 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) address)
+      let a2 := asVal env fuel (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) address)
+      match a0, a1, a2 with
+      | some w0, some w1, some w2 =>
+          some (.ext (.evm (.component (.environment .codeSize20))) #[w0, w1, w2])
+      | _, _, _ => none
   else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller then
     some .evmCaller
   else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Evm.Runtime.evmBlockNumber then
@@ -4861,6 +4891,18 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
       .returnU64 (.ext (.evm (.component (.environment (.blockHash256 1)))) #[number]),
       .returnU64 (.ext (.evm (.component (.environment (.blockHash256 2)))) #[number]),
       .returnU64 (.ext (.evm (.component (.environment (.blockHash256 3)))) #[number])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmCodeHash32 ||
+      endsWith app ".evmCodeHash32" then
+    let (w0, w1, w2) :=
+      match nthFromEnd args 0 with
+      | some address => addr20Leaves env address
+      | none => (.arg 0, .arg 1, .arg 2)
+    some #[
+      .returnU64 (.ext (.evm (.component (.environment (.codeHash32 0)))) #[w0, w1, w2]),
+      .returnU64 (.ext (.evm (.component (.environment (.codeHash32 1)))) #[w0, w1, w2]),
+      .returnU64 (.ext (.evm (.component (.environment (.codeHash32 2)))) #[w0, w1, w2]),
+      .returnU64 (.ext (.evm (.component (.environment (.codeHash32 3)))) #[w0, w1, w2])
     ]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmDomainSeparator ||
       endsWith app ".evmDomainSeparator" then

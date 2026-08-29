@@ -643,6 +643,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   digest `3387209f8b9b4b1f`、bytecode 2,480 B；focused Anvil 与真实 block beneficiary/hash
   精确一致。详见 `docs/plan/tasks/r4-009.md`。
 
+- R4-010 EVM address code observations 已完成：`Sdk.Address` 新增 `codeSize : UInt64` 与
+  `codeHash : Bytes32`，完整三-limb Address 通过已有 fixed 32-byte packing helper 绑定
+  EXTCODESIZE/EXTCODEHASH；hash 只执行一次 opcode，并按 source-order FixedBytes 投影四
+  limb。production extraction 仍只生成 Environment Component query，没有 top-level
+  Ops/IR/main Emit recipe、allocation、storage 或 call。EvmCtx digest
+  `937893f551c87688`、bytecode 2,415 B；Anvil 核对 deployed self code size/hash 以及
+  nonexistent account 的 size=0/hash=0。详见 `docs/plan/tasks/r4-010.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、

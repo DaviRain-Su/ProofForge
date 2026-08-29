@@ -36,6 +36,21 @@ solana_lean_require_uint \
   "$("$cast" call --rpc-url "$rpc" "$addr" 'blockHash(uint64)(uint256)' "$previous")" \
   "$previous_hash" "BLOCKHASH previous block"
 
+solana_lean_require_uint \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'codeSize(address)(uint64)' "$addr")" \
+  "$("$cast" codesize --rpc-url "$rpc" "$addr")" "EXTCODESIZE self"
+solana_lean_require_equal \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'codeHash(address)(bytes32)' "$addr")" \
+  "$("$cast" codehash --rpc-url "$rpc" "$addr")" "EXTCODEHASH self"
+empty_address="0x000000000000000000000000000000000000dead"
+solana_lean_require_uint \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'codeSize(address)(uint64)' "$empty_address")" \
+  0 "EXTCODESIZE nonexistent"
+solana_lean_require_equal \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'codeHash(address)(bytes32)' "$empty_address")" \
+  "0x0000000000000000000000000000000000000000000000000000000000000000" \
+  "EXTCODEHASH nonexistent"
+
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" "$addr" 'stamp()' >/dev/null
 got_get="$("$cast" call --rpc-url "$rpc" "$addr" 'get()(uint64)')"
 bn2="$("$cast" block-number --rpc-url "$rpc")"
@@ -125,4 +140,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-ctx: ok (caller/number/gas/blockhash + static/tagged aggregate ABI; engineering only)"
+echo "evm-anvil-ctx: ok (caller/number/gas/blockhash/code + static/tagged aggregate ABI; engineering only)"

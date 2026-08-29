@@ -499,6 +499,12 @@ Component bridge。每个三/四-limb 结果只执行一次 COINBASE/BLOCKHASH�
 投影；没有增加 top-level Ops/IR/main-Emit case、allocation、storage 或 call。EvmCtx/TipJar 的
 Anvil gate 与 block JSON 精确对照。详见 [R4-009](tasks/r4-009.md)。
 
+R4-010 继续沿同一边界增加 `Address.codeSize : UInt64` 与 `Address.codeHash : Bytes32`。
+完整 Address 由已有固定 32-byte packing helper 进入 EXTCODESIZE/EXTCODEHASH；hash 只观察
+一次并按 FixedBytes source order 投影四 limb，不把 bytes32 偷换成 UInt256。存在合约与
+nonexistent account 的 Anvil 语义均已核对；raw code bytes 继续不进入 safe SDK。详见
+[R4-010](tasks/r4-010.md)。
+
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
 spelling 保留，因此 Token/Capped 等既有 IR/产物不漂移。Wide 的跨 64/192-bit Anvil matrix

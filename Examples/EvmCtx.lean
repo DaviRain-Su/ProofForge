@@ -49,6 +49,16 @@ def gasLeft (_s : State) : UInt256 :=
 def blockHash (_s : State) (number : UInt64) : UInt256 :=
   Context.blockHash number
 
+/-- Runtime code size for a complete address. -/
+@[pf_entry]
+def codeSize (_s : State) (address : Address) : UInt64 :=
+  Address.codeSize address
+
+/-- Runtime code hash as Solidity-shaped `bytes32`. -/
+@[pf_entry]
+def codeHash (_s : State) (address : Address) : Bytes32 :=
+  Address.codeHash address
+
 /-- 把当前 block number 写入 dummy。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=

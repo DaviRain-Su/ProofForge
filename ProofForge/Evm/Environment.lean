@@ -19,10 +19,13 @@ inductive Query where
   | gasLimit256 (limb : Nat)
   | coinbase20 (limb : Nat)
   | blockHash256 (limb : Nat)
+  | codeSize20
+  | codeHash32 (limb : Nat)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
   | .blockHash256 _ => 1
+  | .codeSize20 | .codeHash32 _ => 3
   | _ => 0
 
 def Query.wellFormed : Query → Bool
@@ -30,6 +33,8 @@ def Query.wellFormed : Query → Bool
       limb ≤ 3
   | .coinbase20 limb => limb ≤ 2
   | .blockHash256 limb => limb ≤ 3
+  | .codeSize20 => true
+  | .codeHash32 limb => limb ≤ 3
 
 /-- Preserve the pre-component canonical spelling so this ownership refactor does not change
 program digests. -/
@@ -52,5 +57,14 @@ def Query.canonical (_renderValue : V → String) (operands : Array V) : Query �
       match operands with
       | #[number] => s!"env.blockHash256.{limb}({_renderValue number})"
       | _ => s!"invalid-env.blockHash256.{limb}-{operands.size}"
+  | .codeSize20 =>
+      match operands with
+      | #[w0, w1, w2] => s!"env.codeSize20({_renderValue w0},{_renderValue w1},{_renderValue w2})"
+      | _ => s!"invalid-env.codeSize20-{operands.size}"
+  | .codeHash32 limb =>
+      match operands with
+      | #[w0, w1, w2] =>
+          s!"env.codeHash32.{limb}({_renderValue w0},{_renderValue w1},{_renderValue w2})"
+      | _ => s!"invalid-env.codeHash32.{limb}-{operands.size}"
 
 end ProofForge.Evm.Environment
