@@ -126,7 +126,8 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-SDK-6d Reentrancy（已集成）** | EVM-RT-2e、EVM-SDK-2/5 | explicit UInt64 handle、nonzero sentinel、ordered enter/leave；GuardedPayout/EvmOrderedStorage 两 consumer + hostile callback；不新增 Runtime/IR/Emit recipe；见 R5-009 |
 | **EVM-SDK runtime-code observation（已集成）** | R4-010 Address codeSize | `Address.hasCode` 纯组合 existing EXTCODESIZE query + UInt64 compare；不冒充 EOA/authentication/call-success，不自动改 closed CALL，不新增 Runtime/IR/Emit；见 R5-011 |
 | **EVM-SDK safe closed-call result（已集成）** | EVM-RT-2a、R5-011 | `Evm.CallResult` 唯一 interpreter + `Sdk.Effect.thenTrue` canonical Bool composition；false/2/EOA-empty fail closed，code-backed no-return compatible；exact-32 比 OZ ≥32 更严格，revert bubbling 仍未开放；见 R5-012 |
-| **EVM-SDK-7/8 NFT assets** | EVM-SDK-6c/6d | reusable ERC-721 与 bounded ERC-1155 core；每个组件至少两个 consumer |
+| **EVM-SDK-7 bounded ERC-721（已集成）** | EVM-SDK-6c/6d | 四个 compile-time hashed-map handles 上的 192-bit-key owner/approval/operator/balance core；Collectible/Badge 两 consumer；不可编码 id 在截断前拒绝；standard Address views/events/receiver callback 继续 fail closed；见 R5-013 |
+| **EVM-SDK-8 bounded ERC-1155** | EVM-SDK-6c/6d、EVM-SDK-7 | bounded id/account balance 与 operator core；至少两个 consumer；先固定 key envelope 和 batch capacity，不开放 unbounded batch/receiver callback |
 
 ## 4. Worker 统一交付合同
 
