@@ -2099,8 +2099,12 @@ private def unfoldNullaryValue? (env : Environment) (e : Expr) : Option Expr :=
   if !e.getAppArgs.isEmpty then none
   else do
     let name ← e.getAppFn.constName?
-    let .defnInfo info ← env.find? name | none
-    return info.value
+    -- Keep `@[irreducible]` runtime leaves (caller/self/ledger) as named constants.
+    -- Unfolding them here would turn `xrplCallerW0` into the host stub `0`.
+    if Lean.getReducibilityStatusCore env name == .irreducible then none
+    else
+      let .defnInfo info ← env.find? name | none
+      return info.value
 
 /-- Explicit source fields of one user-defined structure constructor. -/
 private def userCtorFields (env : Environment) (e : Expr) : Option (Array Expr) :=

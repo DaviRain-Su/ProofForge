@@ -6,6 +6,7 @@ import Examples.Counter
 import Examples.Clock
 import Examples.EvmCtx
 import Examples.XrplCtx
+import Examples.XrplOwn
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -23,7 +24,8 @@ open ProofForge
 
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "Counter" == some "e029f72296e320be"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCtx" == some "f483be9d20810b57"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplOwn" == some "47645ee35068637f"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -41,6 +43,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.Counter
 
 #pf_xrpl_build Examples.XrplCtx
+
+#pf_xrpl_build Examples.XrplOwn
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -90,3 +94,35 @@ elab "#pf_xrpl_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-test: {source.length} bytes of WAT passed anchor check"
 
 #pf_xrpl_emit_check Examples.Counter
+
+open Lean Elab Command in
+elab "#pf_xrpl_own_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"host_lib\" \"get_tx_field\"",
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"bump\") (result i32)",
+          "(func (export \"get\")",
+          "(func (export \"ownerLo\")",
+          "i64.eq",
+          "(i32.const 3)",
+          "(data (i32.const 64) \"owner0owner1owner2value\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing own anchor: {anchor}\n{source}"
+        -- `splitOn` yields n+1 parts for n occurrences.
+        let eqCount := (source.splitOn "i64.eq").length - 1
+        unless eqCount ≥ 3 do
+          throwError s!"wasm emit wants ≥3 i64.eq for three-limb compare, got {eqCount}\n{source}"
+        unless !source.contains "eq_account" do
+          throwError "wasm emit must not add eq_account host"
+        logInfo m!"proofforge-xrpl-own: {source.length} bytes of WAT passed own anchor check"
+
+#pf_xrpl_own_emit_check Examples.XrplOwn

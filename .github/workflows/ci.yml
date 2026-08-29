@@ -136,6 +136,9 @@ jobs:
       - name: Run XRPL local-node XrplCtx gate
         run: runtime-tests/xrpl/ctx.sh
 
+      - name: Run XRPL local-node XrplOwn gate
+        run: runtime-tests/xrpl/own.sh
+
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
 

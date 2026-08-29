@@ -89,6 +89,16 @@ private def collectReturnU64s (first : Val ValExt) (rest : List (Op ValExt OpExt
     | _ => (acc, rest)
   go #[first] rest
 
+/-- Consecutive `returnState` leaves, one per slot, as emitted by a multi-field init. -/
+private def collectReturnStates (first : Val ValExt) (rest : List (Op ValExt OpExt)) :
+    Array (Val ValExt) × List (Op ValExt OpExt) :=
+  let rec go (acc : Array (Val ValExt)) (rest : List (Op ValExt OpExt)) :
+      Array (Val ValExt) × List (Op ValExt OpExt) :=
+    match rest with
+    | .returnState next :: more => go (acc.push next) more
+    | _ => (acc, rest)
+  go #[first] rest
+
 private def slotOffset (p : Program ValExt OpExt) (name : String) : Nat :=
   match p.slots.findIdx? (·.name == name) with
   | some i => i * 8
@@ -310,7 +320,7 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
         let region ← emitRegion host p extTag view level defaultSlot tail
           { st with last := some (localOfSlot name), pendingDest := some name }
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
-    | .okState value | .returnState value =>
+    | .okState value =>
         if view then throw "extract/unsupported: wasm v0 view cannot write state"
         let dest := st.pendingDest <|> fieldOf value |>.getD defaultSlot
         let v ← match st.last with
@@ -323,11 +333,39 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
           persistSlots host p level ++
           #[indent level "(i32.const 0)"]
         return { lines, st, terminal := true }
+    | .returnState value =>
+        if view then throw "extract/unsupported: wasm v0 view cannot write state"
+        let (values, skipped) := collectReturnStates value tail
+        unless skipped.all isExitOp do
+          throw "extract/unsupported: wasm v0 instructions follow terminal operation"
+        if values.size == p.slots.size then
+          let mut lines : Array String := #[]
+          for i in [:p.slots.size] do
+            let v ← renderVal extTag st values[i]!
+            lines := lines.push
+              (indent level ("(local.set " ++ localOfSlot p.slots[i]!.name ++ " " ++ v ++ ")"))
+          lines := lines ++ persistSlots host p level ++ #[indent level "(i32.const 0)"]
+          return { lines, st, terminal := true }
+        else
+          let dest := st.pendingDest <|> fieldOf value |>.getD defaultSlot
+          let v ← match st.last with
+            | some e => .ok ("(local.get " ++ e ++ ")")
+            | none => renderVal extTag st value
+          let lines :=
+            #[indent level ("(local.set " ++ localOfSlot dest ++ " " ++ v ++ ")")] ++
+            persistSlots host p level ++
+            #[indent level "(i32.const 0)"]
+          return { lines, st, terminal := true }
     | .errorOverflow =>
         if view then throw "extract/unsupported: wasm v0 view cannot fail"
         unless tail.all isExitOp do
           throw "extract/unsupported: wasm v0 instructions follow terminal operation"
         return { lines := #[indent level "(i32.const 1)"], st, terminal := true }
+    | .errorNamed "unauthorized" =>
+        if view then throw "extract/unsupported: wasm v0 view cannot fail"
+        unless tail.all isExitOp do
+          throw "extract/unsupported: wasm v0 instructions follow terminal operation"
+        return { lines := #[indent level "(i32.const 3)"], st, terminal := true }
     | .returnU64 value =>
         unless view do
           throw "extract/unsupported: wasm v0 mutating region cannot return a value"
