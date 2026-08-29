@@ -123,13 +123,14 @@ EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy，EVM-
 permit ecrecover 的固定 address/frame、STATICCALL success、exact returndata 与 nonzero
 signer，EVM-RT-2e 已提供 schema-resolved ordered static UInt64 store；R4-006 又补齐
 full-width gas/basefee/prevrandao/gaslimit 并固定 Cancun opcode 语义；R4-007 又让 source
-zero-argument named errors 自动进入 ABI metadata；UInt256 div/mod 也已
+zero-argument named errors 自动进入 ABI metadata；R4-008 再把 production full-width
+environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 固定 checked 零除 revert。R5-009 已组合 reusable ReentrancyGuard policy。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
 [R2-004](tasks/r2-004.md)、[R2-005](tasks/r2-005.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
 [R4-004](tasks/r4-004.md)、[R4-005](tasks/r4-005.md)、[R4-006](tasks/r4-006.md)、
-[R4-007](tasks/r4-007.md)、
+[R4-007](tasks/r4-007.md)、[R4-008](tasks/r4-008.md)、
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
 [R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md)、
@@ -485,6 +486,12 @@ op tree 收集 `.errorNamed`，与 Yul emitter 一样递归 `ite`/bounded `forBo
 去重并生成 `error Name()` JSON。应用新增 enum error 不再改 Emit 的 hard-coded error list；
 EvmVecLog/Stack artifact 已包含 malformed/oob/empty。Yul、bytecode、IR/digest 全部不变；
 parameterized source errors 仍需未来 typed IR contract。详见 [R4-007](tasks/r4-007.md)。
+
+R4-008 已把 R4-006 的 production full-width environment lowering 从 top-level value recipe
+迁到 `Evm.Environment.Query` + generic Component bridge。唯一 component interpreter 继续对每个
+EVM word 只观察一次并投影四 limb；legacy Golden constructors 暂留兼容，但 source extraction
+不再生成它们。canonical strings、cache keys、EvmCtx/TipJar digest、Yul/ABI/bin 均逐字节不变；
+后续 coinbase/blockhash/code query 只扩 target component。详见 [R4-008](tasks/r4-008.md)。
 
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical

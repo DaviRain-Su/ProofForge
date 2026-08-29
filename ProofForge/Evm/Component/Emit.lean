@@ -5,6 +5,7 @@ import ProofForge.Evm.WideWord.Emit
 import ProofForge.Evm.ClosedCall.Emit
 import ProofForge.Evm.NativeFx.Emit
 import ProofForge.Evm.StaticStorage.Emit
+import ProofForge.Evm.Environment.Emit
 
 namespace ProofForge.Evm.Component.Emit
 
@@ -54,6 +55,12 @@ private def Context.staticStorage (context : Context σ) : StaticStorage.Emit.Co
     resolveU64Slot := context.resolveStaticU64Slot
     indent := context.indent }
 
+private def Context.environment (context : Context σ) : Environment.Emit.Context σ :=
+  { fresh := context.fresh
+    rememberWide := context.rememberWide
+    lookupWide := context.lookupWide
+    indent := context.indent }
+
 def emitQuery (context : Context σ) (query : Component.Query) (operands : Array Ops.Val)
     (st : σ) : Except String (String × String × σ) :=
   match query with
@@ -68,6 +75,8 @@ def emitQuery (context : Context σ) (query : Component.Query) (operands : Array
       WideWord.Emit.emitQuery context.wideWord wideQuery operands st
   | .closedCall callQuery =>
       ClosedCall.Emit.emitQuery context.closedCall callQuery operands st
+  | .environment environmentQuery =>
+      Environment.Emit.emitQuery context.environment environmentQuery operands st
 
 def emitCall (context : Context σ) (call : Component.Call Ops.Val) (st : σ) :
     Except String (String × String × σ) :=

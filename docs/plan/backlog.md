@@ -39,7 +39,8 @@ STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed 
 div/mod 已固定 checked 除零 revert 策略；EVM-RT-2e 已加入 schema-resolved ordered static
 UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation；R4-006 已补齐 full-width
 gas/basefee/prevrandao/gaslimit 并钉死 Cancun opcode 语义；R4-007 已让所有 source
-`.errorNamed` 叶自动进入 zero-argument custom-error ABI metadata；R5-009 已在其上组合
+`.errorNamed` 叶自动进入 zero-argument custom-error ABI metadata；R4-008 已把 production
+full-width environment lowering 收口到 generic Component bridge；R5-009 已在其上组合
 reusable ReentrancyGuard policy。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
@@ -627,6 +628,12 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   修改硬编码 ABI 列表；EvmVecLog/Stack 的 malformed/oob/empty 已进入真实 artifact。该切片
   不新增 Ops/IR/Runtime recipe，不改变 Yul、bytecode 或 digest。详见
   `docs/plan/tasks/r4-007.md`。
+
+- R4-008 EVM environment component boundary 已完成：production gasleft/basefee/prevrandao/
+  gaslimit source extraction 现在只生成 generic Component query，由一个 target-owned
+  interpreter 做单次 full-width observation 和四 limb 投影；legacy Golden constructor 暂留
+  compatibility，但后续 environment 能力不再扩 top-level Ops/IR/main Emit。EvmCtx/TipJar 的
+  digest、Yul、ABI、bytecode 均逐字节不变。详见 `docs/plan/tasks/r4-008.md`。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零

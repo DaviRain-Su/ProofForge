@@ -3,6 +3,7 @@ import ProofForge.Evm.WideWord
 import ProofForge.Evm.ClosedCall
 import ProofForge.Evm.NativeFx
 import ProofForge.Evm.StaticStorage
+import ProofForge.Evm.Environment
 
 namespace ProofForge.Evm.Component
 
@@ -53,6 +54,7 @@ inductive Query where
   | hashedMap (query : HashedMap.Query)
   | wideWord (query : WideWord.Query)
   | closedCall (query : ClosedCall.Query)
+  | environment (query : Environment.Query)
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
@@ -60,18 +62,21 @@ def Query.arity : Query → Nat
   | .hashedMap query => query.arity
   | .wideWord query => query.arity
   | .closedCall query => query.arity
+  | .environment query => query.arity
 
 def Query.effects : Query → EffectSummary
   | .empty => {}
   | .hashedMap query => ofHashedMap query.effects
   | .wideWord _ => {}
   | .closedCall query => ofClosedCall query.effects
+  | .environment _ => {}
 
 def Query.wellFormed : Query → Bool
   | .empty => false
   | .hashedMap query => query.wellFormed
   | .wideWord query => query.wellFormed
   | .closedCall query => query.wellFormed
+  | .environment query => query.wellFormed
 
 def Query.canonical (renderValue : V → String) (operands : Array V) : Query → String
   | .empty =>
@@ -80,6 +85,7 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
   | .hashedMap query => query.canonical renderValue operands
   | .wideWord query => query.canonical renderValue operands
   | .closedCall query => query.canonical renderValue operands
+  | .environment query => query.canonical renderValue operands
 
 /-- Stable effect bridge. New hashed-map, closed-CALL, or native ETH/LOG backends extend this
 layer instead of adding top-level EVM Ops/IR/main-emitter cases.

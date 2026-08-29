@@ -330,7 +330,9 @@ private partial def isEvmContext : Val → Bool
   | .ext (.evm kind) operands =>
       (match kind with
        | .callValue256 _ | .selfBalance256 _ | .gasLeft256 _ | .baseFee256 _
-       | .prevRandao256 _ | .gasLimit256 _ | .domainSep256 _ | .component _ => false
+       | .prevRandao256 _ | .gasLimit256 _ | .domainSep256 _ => false
+       | .component (.environment _) => true
+       | .component _ => false
        | _ => true) || operands.any isEvmContext
   | .field base _ | .bitNot base => isEvmContext base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
