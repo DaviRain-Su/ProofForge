@@ -60,7 +60,29 @@
 复杂逻辑的第一道墙是 **IR v0 拒绝 loop / local / vector / map**，
 不是 SDK 文件太少。
 
-## 3. 切片（按依赖，一刀一事）
+## 1.1 不要做 wasm 分配器当 SDK 底座
+
+XLS-0102 §4 / §6.3：每次执行 **新建 VM**；线性内存一次调用内有效，**不跨 `ContractCall`**。
+本仓 WAT 已经是 `(memory (export "memory") 1)`（64KiB），偏移钉死：
+
+| 偏移 | 用途 |
+|---|---|
+| 0..19 | 存储 Owner AccountID |
+| 20..27 | `function_param` scratch |
+| 28..36 | UINT64 编解码 |
+| 64+ | 槽名 ASCII |
+
+SVM `BumpAllocator` 活在 **账户字节里的持久 heap**。XRPL 持久状态是
+`ContractData.ContractJson`，经 host 进出，不经 wasm 堆。
+
+所以：
+
+- **能做**：调用内固定 scratch（host 缓冲、编解码）。发射器已经在做，不必再造 malloc。
+- **不要做**：把 bump allocator 当 `Sdk.Map` / Vec 的底座。跨交易的余额必须换
+  **存储 Owner**（用户 ContractData）或 nested JSON，不是 `memory.grow`。
+- 有了分配器 **不能** 就「上层造 SDK」。缺的是账本形状，不是堆。
+
+## 2. 切片（按依赖，一刀一事）
 
 ### A. 仍是组合，但要第二把钥匙 / 更大表（不新 host）
 
@@ -90,7 +112,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 | id | 物理模型 | 能写的合约 | 不做 |
 |---|---|---|---|
-| **wsm-026** 用户 ContractData | `Owner` = 用户账户，一块 JSON | 每用户一个 UInt64 余额 | keccak map |
+| **wsm-026** 用户 ContractData | **blocked**：caller 可写；合约账户 -22。单用户 `"bal"` 现在就能做 | 多用户要第二把钥匙或 host 改 | keccak / wasm heap |
 | **wsm-027** Amount 三叶 | XRP drops 一个 UInt64；IOU 以后 | 记「欠多少 drops」 | ERC-20 |
 | **wsm-028** counted for | IR 允许编译期上界的 `for` | VEC-8 不再手写 8 个 `if` | 无界循环 / 递归 |
 
@@ -113,14 +135,13 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 |---|---|
 | **wsm-032** | 跑 `alphanet` 分支 rippled，host 表对齐 XLS-0102。**不是** Bedrock Docker |
 
-## 4. 建议立刻做的顺序
+## 3. 建议立刻做的顺序
 
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
 2. **wsm-023 `cache_le` 探针** — **import 已绿**（零 id -10）。下一刀才是 keylet + `le_field(Balance)`。
-3. **wsm-026 用户 ContractData** — 设计 + 一刀 Example：`credit` / `debit` 按 caller 分槽。
-   零参数活网：`credit` 给 caller 加 1，`get` 读 caller 槽（仍是 JSON key，但 key 可以是
-   固定 `"bal"` 挂在 **用户** Owner 下，不是合约 Owner）。
-4. 探针绿之前 **不要** 开 `Sdk.Map` / `Sdk.Payments` / `Sdk.AccountRoot`。
+3. **wsm-026 用户 ContractData** — **caller 可写、合约账户 -22**。下一刀 Example
+   只能是 **单用户** `"bal"`（caller 自己的积分）。多用户 mapping 还没有物理层。
+4. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 
@@ -131,7 +152,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 | 动 XRP 的 swap | 不能 | wsm-023 + wsm-030 |
 | EVM Uniswap 字节码 | 永远不要 | — |
 
-## 5. 验收句
+## 4. 验收句
 
 - 新 SDK 名必须能指出 **哪条已接线的 Runtime 叶或哪条已绿的探针**
 - 存储提案必须写清：key 怎么进 ContractJson、Owner 是合约还是用户、缺字段返回什么

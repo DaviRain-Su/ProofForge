@@ -196,6 +196,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-018](tasks/wsm-018.md) | planned | 复杂合约缺口排期（[xrpl-next.md](analysis/xrpl-next.md)） |
 | [wsm-021](tasks/wsm-021.md) | done | 探针 `trace_num`（AlphaNet 绿；不开 Sdk.Log） |
 | [wsm-023](tasks/wsm-023.md) | done | 探针 `cache_le`（import 在；零 id → -10；不开 AccountRoot） |
+| [wsm-026](tasks/wsm-026.md) | blocked | 用户 ContractData：caller 可写；合约账户 **-22**；不做 wasm allocator |
 
 ## SVM 全面工作计划（当前主线）
 
