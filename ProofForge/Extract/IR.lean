@@ -73,6 +73,15 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
       | .transientBuffer64Set capacity index value =>
           .near (.transientBuffer64Set capacity (mapValue index) (mapValue value))
       | .transientBuffer64Finish capacity => .near (.transientBuffer64Finish capacity)
+      | .storageRead resultCapacity keyCapacity key =>
+          .near (.storageRead resultCapacity keyCapacity (key.map mapValue))
+      | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+          .near (.storageWrite resultCapacity keyCapacity valueCapacity
+            (key.map mapValue) (value.map mapValue))
+      | .storageRemove resultCapacity keyCapacity key =>
+          .near (.storageRemove resultCapacity keyCapacity (key.map mapValue))
+      | .storageHasKey resultCapacity keyCapacity key =>
+          .near (.storageHasKey resultCapacity keyCapacity (key.map mapValue))
       | .reserved => .near .reserved
 
 def OpExt.values : OpExt Val → Array Val
@@ -84,6 +93,8 @@ def OpExt.values : OpExt Val → Array Val
       | .logUtf8 _ => #[]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
       | .transientBuffer64Set _ index value => #[index, value]
+      | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key
+      | .storageWrite _ _ _ key value => key ++ value
       | .reserved => #[]
 
 def cfgDialect : Core.CFG.Dialect ValKind OpExt where
@@ -129,6 +140,18 @@ def OpExt.wellFormed : OpExt Val → Bool
       | .transientBuffer64Set capacity index value =>
           Wasm.Near.Memory.buffer64CapacityValid capacity &&
             index.wellFormed ValKind.arity && value.wellFormed ValKind.arity
+      | .storageRead resultCapacity keyCapacity key
+      | .storageRemove resultCapacity keyCapacity key
+      | .storageHasKey resultCapacity keyCapacity key =>
+          Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+            Wasm.Near.Codec.storageCapacityValid keyCapacity &&
+            key.size == keyCapacity + 1 && key.all (·.wellFormed ValKind.arity)
+      | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+          Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+            Wasm.Near.Codec.storageCapacityValid keyCapacity &&
+            Wasm.Near.Codec.storageCapacityValid valueCapacity &&
+            key.size == keyCapacity + 1 && value.size == valueCapacity + 1 &&
+            key.all (·.wellFormed ValKind.arity) && value.all (·.wellFormed ValKind.arity)
       | .reserved => false
 
 def Op.wellFormed (op : Op) : Bool :=

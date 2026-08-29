@@ -5,7 +5,8 @@
 WASM 家族的第二条链：**NEAR Protocol**。经 `Core.Target.Registration` 注册。
 产物是 **`.wasm`**：Lean 直接 lowering 到 WAT，import 表钉 NEAR runtime 的
 `env`（`input` / `register_len` / `read_register` / `storage_read` /
-`storage_write` / `value_return` / `panic_utf8`），组装器是锁定的
+`storage_write` / `storage_remove` / `storage_has_key` / `value_return` /
+`panic_utf8`），组装器是锁定的
 `wat2wasm 1.0.41`。外来叶子经 [`Wasm.Family`](wasm.md) fail closed。
 
 基础标量绑定历史仓 proof_forge 的 profile `near-wasm-raw-u64-v1`：这**不是** JSON
@@ -14,7 +15,9 @@ ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。标量 method 的 `en
 `BoundedString` 参数绑定 canonical Borsh `u32_le(length) || active bytes`（capacity 1..64；
 String strict UTF-8）。wsm-near-output-001 使用 guest arena 为 bounded bytes/String 及单
 limb unsigned array view 输出同样的 canonical active prefix；scalar view 仍恰好返回
-8-byte little-endian。
+8-byte little-endian。wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
+storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
+no-copy 语义。
 
 ## Boundary
 
@@ -25,8 +28,9 @@ limb unsigned array view 输出同样的 canonical active prefix；scalar view �
 | `Near.Codec` | bounded bytes/String 输入与 bounded view 输出的 canonical Borsh 计划/资源上限 | collection layout、JSON、mutating bounded output |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
+| `Near.Sdk.Storage` | bounded raw key/value、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
-| `Near.Emit` | `env` import、KV 8-byte LE 存储、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
+| `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
 | `Near.Registry` | 可构建模块 + canonical digest | 部署声明 |
 | `Near.Commands` | `#pf_near_build` / `#pf_near_dump` | 新 DSL |
@@ -46,7 +50,8 @@ limb unsigned array view 输出同样的 canonical active prefix；scalar view �
   分配/复用/清零以及 bounds、stale handle、wrong capacity、double begin traps（nearcore
   可把 initial memory 规范化得更大，实际 grow 路径由 model + WAT gate 钉住）。不是
   「artifact 已被证明」；`output.sh` 验证 exact bytes/String/UInt16-array Borsh、input/output
-  round-trip、capacity 和 output UTF-8 failures。
+  round-trip、capacity 和 output UTF-8 failures；`storage.sh` 验证 binary/empty keys、
+  insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
-`NearOutput`。
+`NearOutput`、`NearStorage`。

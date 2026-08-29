@@ -70,6 +70,7 @@ import Examples.NearCtx
 import Examples.NearBytes
 import Examples.NearMemory
 import Examples.NearOutput
+import Examples.NearStorage
 import Examples.EvmBounded
 import Examples.EvmSearch
 import Examples.EvmFindIndex

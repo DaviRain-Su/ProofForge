@@ -1,13 +1,14 @@
 import ProofForge.Core.Ops
 import ProofForge.Core.CFG
 import ProofForge.Wasm.Near.Memory
+import ProofForge.Wasm.Near.Codec
 
 /-!
 # NEAR target dialect
 
 Value/effect extensions owned by the NEAR Protocol chain. v0 admits scalar
-context reads, lossless u128 token values, and lossless 64-byte account-id
-leaves. Promise and hashing stay absent.
+context reads, lossless u128 token values, lossless 64-byte account-id leaves,
+invocation-memory operations, and bounded raw storage. Promise and hashing stay absent.
 `reserved` is rejected by `wellFormed`.
 -/
 
@@ -34,12 +35,17 @@ inductive ValKind where
   | currentAccountIdW5 | currentAccountIdW6 | currentAccountIdW7
   /-- Read from the one active invocation-local UInt64 buffer. -/
   | transientBuffer64Get (capacity : Nat)
+  /-- Metadata and byte access for the latest raw-storage operation. -/
+  | storageResultStatus (capacity : Nat)
+  | storageResultLength (capacity : Nat)
+  | storageResultFits (capacity : Nat)
+  | storageResultByte (capacity : Nat)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .transientBuffer64Get _ => 1
+  | .transientBuffer64Get _ | .storageResultByte _ => 1
   | .reserved => 0
   | _ => 0
 
@@ -53,11 +59,20 @@ inductive OpExt (V : Type) where
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
   | transientBuffer64Finish (capacity : Nat)
+  | storageRead (resultCapacity keyCapacity : Nat) (key : Array V)
+  | storageWrite (resultCapacity keyCapacity valueCapacity : Nat)
+      (key value : Array V)
+  | storageRemove (resultCapacity keyCapacity : Nat) (key : Array V)
+  | storageHasKey (resultCapacity keyCapacity : Nat) (key : Array V)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
 
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
+
+private def storageFrameWellFormed (capacity : Nat) (values : Array Val) : Bool :=
+  Codec.storageCapacityValid capacity && values.size == capacity + 1 &&
+    values.all (·.wellFormed ValKind.arity)
 
 def OpExt.wellFormed : OpExt Val → Bool
   | .logUtf8 message => message.toUTF8.size ≤ 1024
@@ -66,6 +81,13 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .transientBuffer64Set capacity index value =>
       Memory.buffer64CapacityValid capacity &&
         index.wellFormed ValKind.arity && value.wellFormed ValKind.arity
+  | .storageRead resultCapacity keyCapacity key
+  | .storageRemove resultCapacity keyCapacity key
+  | .storageHasKey resultCapacity keyCapacity key =>
+      Codec.storageCapacityValid resultCapacity && storageFrameWellFormed keyCapacity key
+  | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+      Codec.storageCapacityValid resultCapacity && storageFrameWellFormed keyCapacity key &&
+        storageFrameWellFormed valueCapacity value
   | .reserved => false
 
 def Op.wellFormed (op : Op) : Bool :=
@@ -77,12 +99,22 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .transientBuffer64Set capacity index value =>
       .transientBuffer64Set capacity (mapValue index) (mapValue value)
   | .transientBuffer64Finish capacity => .transientBuffer64Finish capacity
+  | .storageRead resultCapacity keyCapacity key =>
+      .storageRead resultCapacity keyCapacity (key.map mapValue)
+  | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+      .storageWrite resultCapacity keyCapacity valueCapacity (key.map mapValue) (value.map mapValue)
+  | .storageRemove resultCapacity keyCapacity key =>
+      .storageRemove resultCapacity keyCapacity (key.map mapValue)
+  | .storageHasKey resultCapacity keyCapacity key =>
+      .storageHasKey resultCapacity keyCapacity (key.map mapValue)
   | .reserved => .reserved
 
 private def cfgPayloadValues : OpExt Val → Array Val
   | .logUtf8 _ => #[]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
   | .transientBuffer64Set _ index value => #[index, value]
+  | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key
+  | .storageWrite _ _ _ key value => key ++ value
   | .reserved => #[]
 
 def cfgDialect : Core.CFG.Dialect ValKind OpExt where

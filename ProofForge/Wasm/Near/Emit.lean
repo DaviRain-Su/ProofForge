@@ -10,8 +10,8 @@ import ProofForge.Wasm.Near.Memory
 Core IR → WAT with the NEAR `env` host table (near-wasm-raw-u64-v1).
 
 Family `Wasm.Emit` injects XRPL's Data-blob `host_lib` contract; NEAR storage
-and ABI do not fit that shape, so this file owns the env import table, KV
-layout, and raw-u64 entry ABI. Control-flow lowering (checked i64, `if`)
+and ABI do not fit that shape, so this file owns the env import table, scalar/raw
+KV layout, guest arena, and raw-u64 entry ABI. Control-flow lowering (checked i64, `if`)
 mirrors the family emitter. Do not reuse XRPL's `host_lib` /
 `home_le_field` / `set_data`.
 -/
@@ -53,6 +53,8 @@ private def keyBase : Nat := 1024
 private def inputReg : Nat := 0
 private def storageReg : Nat := 1
 private def evictedReg : Nat := 2
+/-- Dedicated bounded raw-storage register; status 0 is always branched before consulting it. -/
+private def rawStorageReg : Nat := 3
 
 private def panicOverflowOff : Nat := 2048
 private def panicDivOff : Nat := 2057
@@ -99,7 +101,11 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.logUtf8 message) => #[message]
       | .ext (.transientBuffer64Begin _)
       | .ext (.transientBuffer64Set _ _ _)
-      | .ext (.transientBuffer64Finish _) => #[]
+      | .ext (.transientBuffer64Finish _)
+      | .ext (.storageRead _ _ _)
+      | .ext (.storageWrite _ _ _ _ _)
+      | .ext (.storageRemove _ _ _)
+      | .ext (.storageHasKey _ _ _) => #[]
       | .ite _ _ _ thn els => logsOfOps thn ++ logsOfOps els
       | .forBody _ body => logsOfOps body
       | _ => #[]
@@ -201,6 +207,15 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext (.transientBuffer64Get capacity) #[index] => do
       let i ← renderVal st index
       return "(call $pf_buffer64_get (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
+  | .ext (.storageResultStatus capacity) #[] =>
+      .ok ("(call $pf_storage_result_status (i64.const " ++ toString capacity ++ "))")
+  | .ext (.storageResultLength capacity) #[] =>
+      .ok ("(call $pf_storage_result_length (i64.const " ++ toString capacity ++ "))")
+  | .ext (.storageResultFits capacity) #[] =>
+      .ok ("(call $pf_storage_result_fits (i64.const " ++ toString capacity ++ "))")
+  | .ext (.storageResultByte capacity) #[index] => do
+      let i ← renderVal st index
+      return "(call $pf_storage_result_byte (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
   | .local index => .error s!"extract/unsupported: near v0 value local {index}"
   | .ext kind operands =>
       .error s!"extract/unsupported: near v0 value extension {repr kind}/{operands.size}"
@@ -377,6 +392,89 @@ private def checkedKind : Op ValKind OpExt → Option String
   | .checkedModU64 .. => some "rem"
   | _ => none
 
+private structure StagedStorageFrame where
+  lines : Array String
+  pointer : String
+  length : String
+  st : EState
+
+/-- Materialize one bounded source frame before invalidating the previous raw-storage result.
+Only active bytes are narrowed/stored; capacity bytes are allocated so length zero still passes a
+valid guest pointer to nearcore. -/
+private def stageStorageFrame (st : EState) (capacity : Nat)
+    (values : Array (Val ValKind)) (level : Nat) : Except String StagedStorageFrame := do
+  unless Codec.storageCapacityValid capacity && values.size == capacity + 1 do
+    throw "extract/unsupported: near raw storage frame geometry"
+  let length ← renderVal st values[0]!
+  let lengthLocal := localOfTemp st.fresh
+  let pointerLocal := localOfTemp (st.fresh + 1)
+  let st' := { st with fresh := st.fresh + 2 }
+  let mut lines := #[
+    indent level ("(local.set " ++ lengthLocal ++ " " ++ length ++ ")"),
+    indent level ("(if (i64.gt_u (local.get " ++ lengthLocal ++ ") (i64.const " ++
+      toString capacity ++ ")) (then unreachable))"),
+    indent level ("(local.set " ++ pointerLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const " ++ toString capacity ++
+      ") (i64.const 1))))")
+  ]
+  for index in [0:capacity] do
+    let value ← renderVal st values[index + 1]!
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        lengthLocal ++ "))"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(if (i64.gt_u " ++ value ++ " (i64.const 255)) (then unreachable))"),
+      indent (level + 4) ("(i64.store8 (i32.add (i32.wrap_i64 (local.get " ++ pointerLocal ++
+        ")) (i32.const " ++ toString index ++ ")) " ++ value ++ ")"),
+      indent (level + 2) "))"
+    ]
+  let pointer := "(local.get " ++ pointerLocal ++ ")"
+  let length := "(local.get " ++ lengthLocal ++ ")"
+  return { lines := lines, pointer := pointer, length := length, st := st' }
+
+private def resetStorageResult (capacity level : Nat) : Array String := #[
+  indent level "(global.set $pf_storage_result_active (i32.const 1))",
+  indent level ("(global.set $pf_storage_result_capacity (i64.const " ++
+    toString capacity ++ "))"),
+  indent level "(global.set $pf_storage_result_status (i64.const 0))",
+  indent level "(global.set $pf_storage_result_length (i64.const 0))",
+  indent level "(global.set $pf_storage_result_fits (i64.const 1))",
+  indent level "(global.set $pf_storage_result_ptr (i32.const 0))"
+]
+
+/-- Preserve the exact host 0/1 status. A status-1 register is length-checked before allocation and
+copied in full only when bounded. Status 0 never consults the possibly stale register. -/
+private def finishStorageResult (capacity : Nat) (status : String)
+    (register : Option Nat) (level : Nat) : Array String :=
+  let head := #[
+    indent level ("(global.set $pf_storage_result_status " ++ status ++ ")"),
+    indent level "(if (i64.gt_u (global.get $pf_storage_result_status) (i64.const 1))",
+    indent (level + 2) "(then unreachable))"
+  ]
+  match register with
+  | none => head
+  | some register => head ++ #[
+      indent level "(if (i64.eq (global.get $pf_storage_result_status) (i64.const 1))",
+      indent (level + 2) "(then",
+      indent (level + 4) ("(global.set $pf_storage_result_length (call $pf_register_len (i64.const " ++
+        toString register ++ ")) )"),
+      indent (level + 4) "(if (i64.eq (global.get $pf_storage_result_length) (i64.const -1))",
+      indent (level + 6) "(then unreachable))",
+      indent (level + 4) ("(if (i64.gt_u (global.get $pf_storage_result_length) (i64.const " ++
+        toString capacity ++ "))"),
+      indent (level + 6) "(then (global.set $pf_storage_result_fits (i64.const 0)))",
+      indent (level + 6) "(else",
+      indent (level + 8) "(if (i64.ne (global.get $pf_storage_result_length) (i64.const 0))",
+      indent (level + 10) "(then",
+      indent (level + 12) "(global.set $pf_storage_result_ptr",
+      indent (level + 14) "(call $pf_arena_alloc (global.get $pf_storage_result_length) (i64.const 1)))",
+      indent (level + 12) ("(call $pf_read_register (i64.const " ++ toString register ++
+        ") (i64.extend_i32_u (global.get $pf_storage_result_ptr)))"),
+      indent (level + 10) "))",
+      indent (level + 6) "))",
+      indent (level + 2) "))"
+    ]
+
 private structure Region where
   lines : Array String := #[]
   st : EState
@@ -487,6 +585,42 @@ private partial def emitRegion (p : Program ValKind OpExt)
             toString capacity ++ "))")] ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.storageRead resultCapacity keyCapacity key) =>
+        let staged ← stageStorageFrame st keyCapacity key level
+        let status := "(call $pf_storage_read " ++ staged.length ++ " " ++ staged.pointer ++
+          " (i64.const " ++ toString rawStorageReg ++ "))"
+        let lines := staged.lines ++ resetStorageResult resultCapacity level ++
+          finishStorageResult resultCapacity status (some rawStorageReg) level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
+    | .ext (.storageWrite resultCapacity keyCapacity valueCapacity key value) =>
+        if view then throw "extract/unsupported: near view cannot write raw storage"
+        let stagedKey ← stageStorageFrame st keyCapacity key level
+        let stagedValue ← stageStorageFrame stagedKey.st valueCapacity value level
+        let status := "(call $pf_storage_write " ++ stagedKey.length ++ " " ++
+          stagedKey.pointer ++ " " ++ stagedValue.length ++ " " ++ stagedValue.pointer ++
+          " (i64.const " ++ toString rawStorageReg ++ "))"
+        let lines := stagedKey.lines ++ stagedValue.lines ++
+          resetStorageResult resultCapacity level ++
+          finishStorageResult resultCapacity status (some rawStorageReg) level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail stagedValue.st
+        return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
+    | .ext (.storageRemove resultCapacity keyCapacity key) =>
+        if view then throw "extract/unsupported: near view cannot remove raw storage"
+        let staged ← stageStorageFrame st keyCapacity key level
+        let status := "(call $pf_storage_remove " ++ staged.length ++ " " ++ staged.pointer ++
+          " (i64.const " ++ toString rawStorageReg ++ "))"
+        let lines := staged.lines ++ resetStorageResult resultCapacity level ++
+          finishStorageResult resultCapacity status (some rawStorageReg) level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
+    | .ext (.storageHasKey resultCapacity keyCapacity key) =>
+        let staged ← stageStorageFrame st keyCapacity key level
+        let status := "(call $pf_storage_has_key " ++ staged.length ++ " " ++ staged.pointer ++ ")"
+        let lines := staged.lines ++ resetStorageResult resultCapacity level ++
+          finishStorageResult resultCapacity status none level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .returnU64 value =>
         unless view do
           throw "extract/unsupported: near v0 mutating region cannot return a value"
@@ -523,10 +657,16 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
       valHas lhs || valHas rhs || thn.any (usesKind kind) || els.any (usesKind kind)
   | .storeField _ value | .okState value | .returnState value | .returnU64 value =>
       valHas value
+  | .ext payload =>
+      match payload with
+      | .logUtf8 _ | .transientBuffer64Begin _ | .transientBuffer64Finish _ | .reserved => false
+      | .transientBuffer64Set _ index value => valHas index || valHas value
+      | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key.any valHas
+      | .storageWrite _ _ _ key value => key.any valHas || value.any valHas
   | _ => false
 where
   valHas : Val ValKind → Bool
-    | .ext k _ => k == kind
+    | .ext k operands => k == kind || operands.any valHas
     | .select _ l r t f => valHas l || valHas r || valHas t || valHas f
     | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
         valHas l || valHas r
@@ -561,7 +701,11 @@ private def methodUsesAny (kinds : Array ValKind) (method : Method ValKind OpExt
   kinds.any (methodUses · method)
 
 private partial def valUsesArena : Val ValKind → Bool
-  | .ext (.transientBuffer64Get _) _ => true
+  | .ext (.transientBuffer64Get _) _
+  | .ext (.storageResultStatus _) _
+  | .ext (.storageResultLength _) _
+  | .ext (.storageResultFits _) _
+  | .ext (.storageResultByte _) _ => true
   | .ext _ operands => operands.any valUsesArena
   | .field base _ | .bitNot base => valUsesArena base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -576,7 +720,11 @@ private partial def valUsesArena : Val ValKind → Bool
 private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.transientBuffer64Begin _)
   | .ext (.transientBuffer64Set _ _ _)
-  | .ext (.transientBuffer64Finish _) => true
+  | .ext (.transientBuffer64Finish _)
+  | .ext (.storageRead _ _ _)
+  | .ext (.storageWrite _ _ _ _ _)
+  | .ext (.storageRemove _ _ _)
+  | .ext (.storageHasKey _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
@@ -752,6 +900,8 @@ private def loadSlots (p : Program ValKind OpExt) (level : Nat) : Array String :
         ") (i64.const " ++ toString off ++ ") (i64.const " ++ toString storageReg ++
         ")) (i64.const 1))"),
       indent (level + 2) "(then",
+      indent (level + 4) ("(if (i64.ne (call $pf_register_len (i64.const " ++
+        toString storageReg ++ ")) (i64.const 8)) (then unreachable))"),
       indent (level + 4) ("(call $pf_read_register (i64.const " ++ toString storageReg ++
         ") (i64.const 8))"),
       indent (level + 4) ("(local.set " ++ localOfSlot slot.name ++
@@ -845,8 +995,8 @@ private def staticDataEnd (p : Program ValKind OpExt) : Nat :=
 private def arenaBase (p : Program ValKind OpExt) : Nat :=
   Memory.alignUp (staticDataEnd p) 8
 
-/-- Generic upward bump arena plus one fixed UInt64-buffer consumer. All addresses remain in
-target-owned globals. Arithmetic is widened to i64 before memory32 page/range checks. -/
+/-- Generic upward bump arena plus bounded UInt64-buffer and raw-storage consumers. All addresses
+remain in target-owned globals. Arithmetic is widened to i64 before memory32 page/range checks. -/
 private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
   let base := arenaBase p
   #[
@@ -854,11 +1004,23 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     "  (global $pf_buffer64_ptr (mut i32) (i32.const 0))",
     "  (global $pf_buffer64_capacity (mut i64) (i64.const 0))",
     "  (global $pf_buffer64_active (mut i32) (i32.const 0))",
+    "  (global $pf_storage_result_ptr (mut i32) (i32.const 0))",
+    "  (global $pf_storage_result_capacity (mut i64) (i64.const 0))",
+    "  (global $pf_storage_result_status (mut i64) (i64.const 0))",
+    "  (global $pf_storage_result_length (mut i64) (i64.const 0))",
+    "  (global $pf_storage_result_fits (mut i64) (i64.const 1))",
+    "  (global $pf_storage_result_active (mut i32) (i32.const 0))",
     "  (func $pf_arena_reset",
     "    (global.set $pf_arena_cursor (i64.const " ++ toString base ++ "))",
     "    (global.set $pf_buffer64_ptr (i32.const 0))",
     "    (global.set $pf_buffer64_capacity (i64.const 0))",
-    "    (global.set $pf_buffer64_active (i32.const 0)))",
+    "    (global.set $pf_buffer64_active (i32.const 0))",
+    "    (global.set $pf_storage_result_ptr (i32.const 0))",
+    "    (global.set $pf_storage_result_capacity (i64.const 0))",
+    "    (global.set $pf_storage_result_status (i64.const 0))",
+    "    (global.set $pf_storage_result_length (i64.const 0))",
+    "    (global.set $pf_storage_result_fits (i64.const 1))",
+    "    (global.set $pf_storage_result_active (i32.const 0)))",
     "  (func $pf_arena_alloc (param $bytes i64) (param $alignment i64) (result i32)",
     "    (local $mask i64) (local $pointer i64) (local $finish i64)",
     "    (local $current_pages i64) (local $current_bytes i64)",
@@ -930,6 +1092,27 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     "    (global.set $pf_buffer64_ptr (i32.const 0))",
     "    (global.set $pf_buffer64_capacity (i64.const 0))",
     "    (global.set $pf_buffer64_active (i32.const 0)))",
+    "  (func $pf_storage_result_check (param $capacity i64)",
+    "    (if (i32.eqz (global.get $pf_storage_result_active)) (then unreachable))",
+    "    (if (i64.ne (local.get $capacity) (global.get $pf_storage_result_capacity))",
+    "      (then unreachable)))",
+    "  (func $pf_storage_result_status (param $capacity i64) (result i64)",
+    "    (call $pf_storage_result_check (local.get $capacity))",
+    "    (global.get $pf_storage_result_status))",
+    "  (func $pf_storage_result_length (param $capacity i64) (result i64)",
+    "    (call $pf_storage_result_check (local.get $capacity))",
+    "    (global.get $pf_storage_result_length))",
+    "  (func $pf_storage_result_fits (param $capacity i64) (result i64)",
+    "    (call $pf_storage_result_check (local.get $capacity))",
+    "    (global.get $pf_storage_result_fits))",
+    "  (func $pf_storage_result_byte (param $capacity i64) (param $index i64) (result i64)",
+    "    (call $pf_storage_result_check (local.get $capacity))",
+    "    (if (result i64)",
+    "      (i32.and (i64.ne (global.get $pf_storage_result_fits) (i64.const 0))",
+    "        (i64.lt_u (local.get $index) (global.get $pf_storage_result_length)))",
+    "      (then (i64.load8_u (i32.add (global.get $pf_storage_result_ptr)",
+    "        (i32.wrap_i64 (local.get $index)))))",
+    "      (else (i64.const 0))))",
     ""
   ]
 
@@ -1026,6 +1209,10 @@ def emit (p : IR.Program) : Except String String := do
     "  (import \"env\" \"storage_read\" (func $pf_storage_read (param i64 i64 i64) (result i64)))"
   lines := lines.push
     "  (import \"env\" \"storage_write\" (func $pf_storage_write (param i64 i64 i64 i64 i64) (result i64)))"
+  lines := lines.push
+    "  (import \"env\" \"storage_remove\" (func $pf_storage_remove (param i64 i64 i64) (result i64)))"
+  lines := lines.push
+    "  (import \"env\" \"storage_has_key\" (func $pf_storage_has_key (param i64 i64) (result i64)))"
   lines := lines.push
     "  (import \"env\" \"value_return\" (func $pf_value_return (param i64 i64)))"
   lines := lines.push

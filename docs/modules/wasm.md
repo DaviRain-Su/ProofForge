@@ -20,7 +20,7 @@ ProofForge/Wasm/
   IR.lean         -- 家族共享：程序形状、v0 子集、canonical 拼写（域由链注入）
   Emit.lean       -- 家族共享：Core → WAT
   Xrpl/           -- 每条具体链一个子目录
-  Near/           -- 第二条链：NEAR raw-u64 + bounded Borsh input + checked guest arena
+  Near/           -- 第二条链：NEAR raw-u64/Borsh + guest arena + bounded raw storage
 ```
 
 - 家族层共享：svm / evm 叶子的 fail-closed 拒绝，以及 Core 标量 / 控制流到
@@ -47,4 +47,4 @@ ProofForge/Wasm/
 | 链 | 模块 | 状态 |
 |---|---|---|
 | XRPL Bedrock（XLS-0101） | [`Wasm/Xrpl`](xrpl.md) | Lean → WAT → `.wasm`（wsm-002）；本地四场景（wsm-003）；Runtime 叶子（wsm-005） |
-| NEAR Protocol | [`Wasm/Near`](near.md) | Lean → WAT → `.wasm`（bounded Borsh input/output + invocation-local guest arena；[wsm-near-output-001](../plan/tasks/wsm-near-output-001.md)） |
+| NEAR Protocol | [`Wasm/Near`](near.md) | Lean → WAT → `.wasm`（bounded Borsh/arena + exact-key raw storage；[wsm-near-storage-001](../plan/tasks/wsm-near-storage-001.md)） |

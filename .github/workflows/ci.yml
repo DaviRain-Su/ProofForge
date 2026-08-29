@@ -233,6 +233,9 @@ jobs:
       - name: Run NEAR sandbox Borsh output gate
         run: runtime-tests/near/output.sh
 
+      - name: Run NEAR sandbox raw storage gate
+        run: runtime-tests/near/storage.sh
+
   # Preserve the original required-check identity while making proof/guard and target failures
   # independently observable. This job fails unless every lane completes, including after an error.
   test:

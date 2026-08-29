@@ -142,6 +142,15 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Val.nearTransientBuffer64Get (capacity : Nat) (index : Val) : Val :=
   .ext (.near (.transientBuffer64Get capacity)) #[index]
 
+@[match_pattern] def Val.nearStorageResultStatus (capacity : Nat) : Val :=
+  nearLeaf (.storageResultStatus capacity)
+@[match_pattern] def Val.nearStorageResultLength (capacity : Nat) : Val :=
+  nearLeaf (.storageResultLength capacity)
+@[match_pattern] def Val.nearStorageResultFits (capacity : Nat) : Val :=
+  nearLeaf (.storageResultFits capacity)
+@[match_pattern] def Val.nearStorageResultByte (capacity : Nat) (index : Val) : Val :=
+  .ext (.near (.storageResultByte capacity)) #[index]
+
 @[match_pattern] def Op.nearLogUtf8 (message : String) : Op :=
   .ext (.near (.logUtf8 message))
 
@@ -154,6 +163,22 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 
 @[match_pattern] def Op.nearTransientBuffer64Finish (capacity : Nat) : Op :=
   .ext (.near (.transientBuffer64Finish capacity))
+
+@[match_pattern] def Op.nearStorageRead
+    (resultCapacity keyCapacity : Nat) (key : Array Val) : Op :=
+  .ext (.near (.storageRead resultCapacity keyCapacity key))
+
+@[match_pattern] def Op.nearStorageWrite
+    (resultCapacity keyCapacity valueCapacity : Nat) (key value : Array Val) : Op :=
+  .ext (.near (.storageWrite resultCapacity keyCapacity valueCapacity key value))
+
+@[match_pattern] def Op.nearStorageRemove
+    (resultCapacity keyCapacity : Nat) (key : Array Val) : Op :=
+  .ext (.near (.storageRemove resultCapacity keyCapacity key))
+
+@[match_pattern] def Op.nearStorageHasKey
+    (resultCapacity keyCapacity : Nat) (key : Array Val) : Op :=
+  .ext (.near (.storageHasKey resultCapacity keyCapacity key))
 
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber
@@ -450,6 +475,18 @@ def hasLangOp (ops : Array Op) : Bool :=
 def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmLeaf ops || walk ops fun
     | .evmComponent .. => true
+    | _ => false
+
+def hasNearEffect (ops : Array Op) : Bool :=
+  walk ops fun
+    | .ext (.near (.logUtf8 _))
+    | .ext (.near (.transientBuffer64Begin _))
+    | .ext (.near (.transientBuffer64Set _ _ _))
+    | .ext (.near (.transientBuffer64Finish _))
+    | .ext (.near (.storageRead _ _ _))
+    | .ext (.near (.storageWrite _ _ _ _ _))
+    | .ext (.near (.storageRemove _ _ _))
+    | .ext (.near (.storageHasKey _ _ _)) => true
     | _ => false
 
 end ProofForge.Extract.Ops

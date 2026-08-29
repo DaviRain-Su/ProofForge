@@ -1,6 +1,7 @@
 import ProofForge.Attr
 import ProofForge.Wasm.Near.Runtime
 import ProofForge.Wasm.Near.Sdk.Transient
+import ProofForge.Wasm.Near.Sdk.Storage
 
 namespace ProofForge.Wasm.Near.Sdk
 

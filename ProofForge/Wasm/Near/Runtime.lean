@@ -132,6 +132,60 @@ enter source state or persistent storage.
   let _ := capacity
   0
 
+/-!
+Raw NEAR key-value storage leaves. Keys and values remain fixed `BoundedBytes` source frames;
+the target stages only their active binary prefixes in guest memory. Every operation replaces one
+invocation-local result descriptor. Read/write/remove copy a present/evicted/removed host register
+only when it fits the declared result capacity. No guest pointer enters source code.
+-/
+
+@[irreducible] def storageRead (resultCapacity keyCapacity : Nat)
+    (key : ProofForge.Core.Value.BoundedBytes keyCapacity) : UInt64 :=
+  let _ := resultCapacity
+  let _ := key
+  0
+
+@[irreducible] def storageWrite (resultCapacity keyCapacity valueCapacity : Nat)
+    (key : ProofForge.Core.Value.BoundedBytes keyCapacity)
+    (value : ProofForge.Core.Value.BoundedBytes valueCapacity) : UInt64 :=
+  let _ := resultCapacity
+  let _ := key
+  let _ := value
+  0
+
+@[irreducible] def storageRemove (resultCapacity keyCapacity : Nat)
+    (key : ProofForge.Core.Value.BoundedBytes keyCapacity) : UInt64 :=
+  let _ := resultCapacity
+  let _ := key
+  0
+
+@[irreducible] def storageHasKey (resultCapacity keyCapacity : Nat)
+    (key : ProofForge.Core.Value.BoundedBytes keyCapacity) : UInt64 :=
+  let _ := resultCapacity
+  let _ := key
+  0
+
+/-- Raw nearcore 0/1 status for the latest operation. -/
+@[irreducible] def storageResultStatus (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+/-- Actual copied-register length for status 1, including an oversized length; otherwise zero. -/
+@[irreducible] def storageResultLength (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+/-- One unless a status-1 register exceeded the declared result capacity. -/
+@[irreducible] def storageResultFits (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+/-- Byte from the latest bounded copy. Inactive or uncopied lanes read as zero. -/
+@[irreducible] def storageResultByte (capacity : Nat) (index : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  0
+
 /--
 `current_account_id` as the first 8 bytes of the UTF-8 account id,
 little-endian. View-safe — unlike `predecessor`. Not a 20-byte address,

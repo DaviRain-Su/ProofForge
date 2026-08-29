@@ -7,6 +7,7 @@ import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Wasm.Near.Runtime
 import ProofForge.Wasm.Near.Sdk.Transient
+import ProofForge.Wasm.Near.Sdk.Storage
 import ProofForge.Evm.Codec
 import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Lexical
@@ -160,6 +161,35 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     | some (.lit capacity), some index =>
         if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity.toNat then
           some (.nearTransientBuffer64Get capacity.toNat index)
+        else none
+    | _, _ => none
+  else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultStatus ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultLength ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultFits) &&
+      e.getAppArgs.size ≥ 1 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 1]!
+    match asStaticLit env fuel capacityExpr with
+    | some (.lit capacity) =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultStatus then
+            some (.nearStorageResultStatus capacity)
+          else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultLength then
+            some (.nearStorageResultLength capacity)
+          else
+            some (.nearStorageResultFits capacity)
+        else none
+    | _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultByte &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some index =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          some (.nearStorageResultByte capacity index)
         else none
     | _, _ => none
   else if let some leaf := nearRuntimeLeaf? e then
@@ -5521,6 +5551,20 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
   else
     collectEvmQueryOps env e
 
+/-- Flatten one logical bounded byte value into `length, byte₀ … byteₙ₋₁`. Constructors already
+carry literal leaves; a parameter or local root is projected so the target input binder can later
+rewrite it to canonical scalar locals. -/
+private def boundedStorageFrame? (env : Environment) (capacity : Nat) (e : Expr) :
+    Option (Array Ops.Val) := do
+  let e := substLets 32 (strip (unfoldUserHelpers env 8 e))
+  if let some values := asBoundedCtorFields env e then
+    if values.size == capacity + 1 then return values else none
+  let root ← val env e
+  let mut values : Array Ops.Val := #[.field root "length"]
+  for index in [0:capacity] do
+    values := values.push (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 0)
+  return values
+
 /-- Preserve source lets that sequence NEAR effects before generic zeta reduction. Otherwise an
 ignored UInt64 sequencing result would erase the host/log or guest-memory mutation before
 `decodeExpr` can turn it into a typed effect. -/
@@ -5532,9 +5576,17 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageRead ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageWrite ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageRemove ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageHasKey ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.read ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.write ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.remove ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.hasKey ||
         (Attr.isInline env name &&
           match env.find? name with
           | some (.defnInfo info) => mentionsNearEffect env fuel info.value
@@ -5581,6 +5633,51 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
               some (.nearTransientBuffer64Finish capacity)
             else none
         | none => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRead &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 3]!,
+            staticNatVal? env args[args.size - 2]! with
+        | some resultCapacity, some keyCapacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid keyCapacity then
+              (boundedStorageFrame? env keyCapacity args[args.size - 1]!).map fun key =>
+                .nearStorageRead resultCapacity keyCapacity key
+            else none
+        | _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageWrite &&
+          e.getAppArgs.size ≥ 5 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 5]!,
+            staticNatVal? env args[args.size - 4]!,
+            staticNatVal? env args[args.size - 3]! with
+        | some resultCapacity, some keyCapacity, some valueCapacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid keyCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid valueCapacity then
+              match boundedStorageFrame? env keyCapacity args[args.size - 2]!,
+                  boundedStorageFrame? env valueCapacity args[args.size - 1]! with
+              | some key, some value =>
+                  some (.nearStorageWrite resultCapacity keyCapacity valueCapacity key value)
+              | _, _ => none
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRemove ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageHasKey) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 3]!,
+            staticNatVal? env args[args.size - 2]! with
+        | some resultCapacity, some keyCapacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid keyCapacity then
+              (boundedStorageFrame? env keyCapacity args[args.size - 1]!).map fun key =>
+                if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRemove then
+                  .nearStorageRemove resultCapacity keyCapacity key
+                else
+                  .nearStorageHasKey resultCapacity keyCapacity key
+            else none
+        | _, _ => none
       else
         match unfoldUserHelper env e with
         | some (_, unfolded) => find fuel' unfolded
@@ -6625,6 +6722,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .nearCurrentAccountIdW4 | .nearCurrentAccountIdW5 | .nearCurrentAccountIdW6
     | .nearCurrentAccountIdW7
     | .nearTransientBuffer64Get _ _
+    | .nearStorageResultStatus _ | .nearStorageResultLength _ | .nearStorageResultFits _
+    | .nearStorageResultByte _ _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]

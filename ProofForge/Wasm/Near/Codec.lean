@@ -14,6 +14,12 @@ namespace ProofForge.Wasm.Near.Codec
 payloads. This is a ProofForge compilation limit, not a Borsh or nearcore protocol limit. -/
 def maxBoundedBytesCapacity : Nat := 64
 
+/-- Raw storage keys, values, and copied register results reuse the bounded-byte compiler budget.
+This is not nearcore's protocol limit. A capacity of at least one still represents an empty byte
+sequence through runtime `length = 0`. -/
+def storageCapacityValid (capacity : Nat) : Bool :=
+  1 ≤ capacity && capacity ≤ maxBoundedBytesCapacity
+
 structure BorshInputPlan where
   capacity : Nat
   validateUtf8 : Bool
@@ -26,11 +32,11 @@ def BorshInputPlan.canonical (plan : BorshInputPlan) : String :=
 
 def inputPlan : Core.Codec.Schema → Except String BorshInputPlan
   | .boundedBytes capacity => do
-      unless 1 ≤ capacity && capacity ≤ maxBoundedBytesCapacity do
+      unless storageCapacityValid capacity do
         throw s!"near/codec: bounded bytes capacity must be in 1..{maxBoundedBytesCapacity}"
       pure { capacity, validateUtf8 := false }
   | .boundedString capacity => do
-      unless 1 ≤ capacity && capacity ≤ maxBoundedBytesCapacity do
+      unless storageCapacityValid capacity do
         throw s!"near/codec: bounded string capacity must be in 1..{maxBoundedBytesCapacity}"
       pure { capacity, validateUtf8 := true }
   | _ => throw "near/codec: input plan requires bounded bytes or string"

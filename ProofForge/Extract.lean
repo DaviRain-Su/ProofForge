@@ -55,7 +55,7 @@ def decodeMutating (env : Environment) (e : Expr) (stateType? : Option Name := n
     Except String (Array Ops.Op) := do
   let ops ← decodeBody env e true stateType?
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
-      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops ||
+      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasNearEffect ops || Ops.hasLangOp ops ||
         Ops.hasForAccum ops || Ops.hasIndexSet ops || Ops.hasStoreField ops then
     return ops
   else
@@ -579,6 +579,15 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
             | .transientBuffer64Set capacity index value =>
                 .transientBuffer64Set capacity (flipVal fuel' index) (flipVal fuel' value)
             | .transientBuffer64Finish capacity => .transientBuffer64Finish capacity
+            | .storageRead resultCapacity keyCapacity key =>
+                .storageRead resultCapacity keyCapacity (key.map (flipVal fuel'))
+            | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+                .storageWrite resultCapacity keyCapacity valueCapacity
+                  (key.map (flipVal fuel')) (value.map (flipVal fuel'))
+            | .storageRemove resultCapacity keyCapacity key =>
+                .storageRemove resultCapacity keyCapacity (key.map (flipVal fuel'))
+            | .storageHasKey resultCapacity keyCapacity key =>
+                .storageHasKey resultCapacity keyCapacity (key.map (flipVal fuel'))
             | .reserved => .reserved))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmDeposit256 a0 a1 a2 a3 =>

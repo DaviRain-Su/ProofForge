@@ -28,6 +28,7 @@ nested aggregates, tagged values, and JSON remain fail closed.
 
 ## Next
 
-Implement arbitrary binary storage read/write/remove/exists with explicit host status semantics and
-allocator-backed bounded register copies. Durable Vector/Map/Queue bindings remain blocked on that
-storage contract; the arena is scratch, never persistence.
+Bounded raw binary storage with explicit host status semantics and allocator-backed register copies
+landed in [wsm-near-storage-001](wsm-near-storage-001.md). Durable current-layout Vector is next,
+followed by LookupMap/Set and an explicitly specified bounded Queue; the arena remains scratch,
+never persistence.

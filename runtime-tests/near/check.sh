@@ -24,6 +24,8 @@ need_imports = (
     '(import "env" "input"',
     '(import "env" "storage_read"',
     '(import "env" "storage_write"',
+    '(import "env" "storage_remove"',
+    '(import "env" "storage_has_key"',
     '(import "env" "value_return"',
 )
 need_exports = (
@@ -82,6 +84,20 @@ output_anchors = (
     '(func (export "echoBytes")',
     '(call $pf_value_return (i64.add (i64.const 4)',
 )
+storage_anchors = (
+    '(global $pf_storage_result_status (mut i64)',
+    '(func $pf_storage_result_byte',
+    '(call $pf_storage_read',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+    '(call $pf_storage_has_key',
+    '(func (export "put")',
+    '(func (export "readByte")',
+    '(func (export "staleByteAfterMiss")',
+    '(func (export "readSmallFits")',
+    '(func (export "remove")',
+    '(func (export "has")',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -97,6 +113,8 @@ for wat in wats:
         extra = memory_anchors
     elif wat.stem == "NearOutput":
         extra = output_anchors
+    elif wat.stem == "NearStorage":
+        extra = storage_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

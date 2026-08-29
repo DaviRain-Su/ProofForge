@@ -39,6 +39,15 @@ private def projectOpExt
       | .transientBuffer64Set capacity index value =>
           return .transientBuffer64Set capacity (← _projectVal index) (← _projectVal value)
       | .transientBuffer64Finish capacity => pure (.transientBuffer64Finish capacity)
+      | .storageRead resultCapacity keyCapacity key =>
+          return .storageRead resultCapacity keyCapacity (← key.mapM _projectVal)
+      | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+          return .storageWrite resultCapacity keyCapacity valueCapacity
+            (← key.mapM _projectVal) (← value.mapM _projectVal)
+      | .storageRemove resultCapacity keyCapacity key =>
+          return .storageRemove resultCapacity keyCapacity (← key.mapM _projectVal)
+      | .storageHasKey resultCapacity keyCapacity key =>
+          return .storageHasKey resultCapacity keyCapacity (← key.mapM _projectVal)
       | .reserved => throw "extract/unsupported: near rejects reserved effect"
   | .svm _ => throw "extract/unsupported: near rejects svm effect"
   | .evm _ => throw "extract/unsupported: near rejects evm effect"
@@ -81,7 +90,14 @@ def extValCanon : Ops.ValKind → String
   | .currentAccountIdW5 => "ns5" | .currentAccountIdW6 => "ns6"
   | .currentAccountIdW7 => "ns7"
   | .transientBuffer64Get capacity => s!"ntb64.get.{capacity}"
+  | .storageResultStatus capacity => s!"nstore.status.{capacity}"
+  | .storageResultLength capacity => s!"nstore.length.{capacity}"
+  | .storageResultFits capacity => s!"nstore.fits.{capacity}"
+  | .storageResultByte capacity => s!"nstore.byte.{capacity}"
   | .reserved => "wext"
+
+private def canonValues (values : Array (Wasm.IR.Val Ops.ValKind)) : String :=
+  String.intercalate "," (values.toList.map (Wasm.IR.valCanon extValCanon))
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .logUtf8 message => s!"nlog:{message.toUTF8.size}:{message}"
@@ -89,6 +105,15 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .transientBuffer64Set capacity index value =>
       s!"ntb64.set.{capacity}({Wasm.IR.valCanon extValCanon index},{Wasm.IR.valCanon extValCanon value})"
   | .transientBuffer64Finish capacity => s!"ntb64.finish.{capacity}"
+  | .storageRead resultCapacity keyCapacity key =>
+      s!"nstore.read.{resultCapacity}.{keyCapacity}({canonValues key})"
+  | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+      s!"nstore.write.{resultCapacity}.{keyCapacity}.{valueCapacity}" ++
+        s!"({canonValues key};{canonValues value})"
+  | .storageRemove resultCapacity keyCapacity key =>
+      s!"nstore.remove.{resultCapacity}.{keyCapacity}({canonValues key})"
+  | .storageHasKey resultCapacity keyCapacity key =>
+      s!"nstore.has.{resultCapacity}.{keyCapacity}({canonValues key})"
   | .reserved => "wext"
 
 def slotNames (p : Program) : Array String :=
@@ -106,6 +131,15 @@ private def rewritePayload
   | .transientBuffer64Set capacity index value =>
       return .transientBuffer64Set capacity (← rewriteValue index) (← rewriteValue value)
   | .transientBuffer64Finish capacity => pure (.transientBuffer64Finish capacity)
+  | .storageRead resultCapacity keyCapacity key =>
+      return .storageRead resultCapacity keyCapacity (← key.mapM rewriteValue)
+  | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+      return .storageWrite resultCapacity keyCapacity valueCapacity
+        (← key.mapM rewriteValue) (← value.mapM rewriteValue)
+  | .storageRemove resultCapacity keyCapacity key =>
+      return .storageRemove resultCapacity keyCapacity (← key.mapM rewriteValue)
+  | .storageHasKey resultCapacity keyCapacity key =>
+      return .storageHasKey resultCapacity keyCapacity (← key.mapM rewriteValue)
   | .reserved => pure .reserved
 
 private partial def rewriteInputRoot (method : Core.IR.Method Ops.ValKind Ops.OpExt)

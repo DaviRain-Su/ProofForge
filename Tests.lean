@@ -68,6 +68,7 @@ import Tests.NearCtxSpec
 import Tests.NearBytesSpec
 import Tests.NearMemorySpec
 import Tests.NearOutputSpec
+import Tests.NearStorageSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmSearchSpec
