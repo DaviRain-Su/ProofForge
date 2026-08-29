@@ -82,7 +82,7 @@ Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可�
 | 类别 | 当前 source surface | 主要缺口 | 优先级 |
 |---|---|---|---|
 | AccountInfo | fixed Account/Signer handle；key/owner/data words、lamports/length/flags；read-only bounded remaining-account view；program-owned checked data word writes | 一等 32-byte address；checked lamport mutation；account resize/zero-fill；duplicate-account alias policy；完整 initialization/close helpers | F0/F1 |
-| memory | official-shaped 32 KiB downward bump model、bounded scratch plans；checked account spans 已绑定 `memcpy/memmove/memcmp/memset`；source-visible bounded `Vector64` 已绑定真实 heap，保留显式 OOM/full/OOB/handle errors | 多 handle、bounded bytes/writer 与 generic POD vectors；allocator/resource manifest | F0/F1 |
+| memory | official-shaped 32 KiB downward bump model、bounded scratch plans；checked account spans 已绑定 `memcpy/memmove/memcmp/memset`；source-visible bounded `Vector64` 与 checked byte writer 已绑定真实 heap，可异类并存并保留显式 OOM/full/OOB/state/range errors | 同类型多 handle、generic POD vectors/record writer；allocator/resource manifest | F0/F1 |
 | instruction/CPI/PDA | static bounded metas/data、multi-seed signed CPI、return-data staging、PDA find/check | bounded full return data + returned program-id check；more generic bounded instruction bytes；stack/sibling/instruction introspection only when required | F1 |
 | sysvar/runtime query | `Svm.Sdk.Sysvar` 已收口 Clock slot/epoch/unix、Rent、EpochSchedule target leaves | remaining Clock/Epoch fields、generic sliced sysvar、remaining compute/stack height、instructions sysvar；advanced sysvars on demand | F1/F2 |
 | crypto | literal SHA-256/Keccak first word、PDA host calls | full 32-byte/multi-slice hashes；Blake3/SHA-512/secp recovery/Poseidon/curve/big-mod-exp；signature-program instruction validation | F1/F2 |

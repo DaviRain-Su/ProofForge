@@ -30,6 +30,7 @@ compile-time byte geometry for official program-memory host functions. -/
 @[pf_inline] private def firstPrefix : Memory.Span := Memory.Span.accountData 1 0 8
 @[pf_inline] private def secondPrefix : Memory.Span := Memory.Span.accountData 1 8 8
 @[pf_inline] private def stagingVector : Transient.Vector64 := Transient.Vector64.bounded 1
+@[pf_inline] private def stagingBytes : Transient.Bytes := Transient.Bytes.bounded 8
 
 @[pf_entry]
 def init (initial : UInt64) : State :=
@@ -93,6 +94,18 @@ def stageSelected (_s : State) (index : UInt64) : UInt64 :=
   let _ := stagingVector.push selected
   let staged := stagingVector.get 0
   let _ := stagingVector.finish
+  staged
+
+/-- Independently stage the same runtime-selected account word through the invocation-local byte
+buffer: one fixed-width little-endian append, then byte `0` read-back. The returned byte must be
+exactly the low byte of the selected word, proving the canonical little-endian record. -/
+@[pf_entry]
+def stageSelectedBytes (_s : State) (index : UInt64) : UInt64 :=
+  let selected := window.peekData 0 index
+  let _ := stagingBytes.begin
+  let _ := stagingBytes.appendLe64 selected
+  let staged := stagingBytes.get 0
+  let _ := stagingBytes.finish
   staged
 
 /--

@@ -277,6 +277,48 @@ binds these stubs to one target-owned component. The host model cannot observe V
   let _ := index
   0
 
+/-! Invocation-local bounded byte buffer leaves. Extraction requires compile-time byte capacity
+and binds these stubs to one target-owned component; pushes and stores carry canonical `≤ 255`
+byte values and `appendLe64` uses one 8-byte little-endian record. The host model cannot observe
+VM heap memory. -/
+
+@[irreducible] def transientBytesBegin (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientBytesPush (capacity byte : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := byte
+  0
+
+@[irreducible] def transientBytesSet (capacity index byte : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  let _ := byte
+  0
+
+@[irreducible] def transientBytesClear (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientBytesFinish (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientBytesLength (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientBytesGet (capacity index : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  0
+
+@[irreducible] def transientBytesAppendLe64 (capacity value : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := value
+  0
+
 /-- Open the invocation-local accumulators used by bounded FIFO cancellation. Persistent order and
 trader state remains in account bytes; this handle contains only scalar cursor keys, event index,
 and released-lot totals. -/

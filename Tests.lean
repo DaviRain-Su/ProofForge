@@ -105,4 +105,5 @@ import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
 import Tests.SvmMemorySpec
 import Tests.SvmTransientVectorSpec
+import Tests.SvmTransientBytesSpec
 import Tests.ProofSpec

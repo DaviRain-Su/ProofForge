@@ -235,6 +235,23 @@ fn selected_word_round_trips_through_transient_vector() {
 }
 
 #[test]
+fn selected_word_low_byte_round_trips_through_transient_bytes() {
+    let (program_id, mollusk) = harness();
+    let (state, accounts, metas) = full_window(&program_id);
+    let selected = 300u64;
+    expect_return(
+        &program_id,
+        &mollusk,
+        "stageSelectedBytes",
+        &[2],
+        &state,
+        metas,
+        accounts,
+        selected & 0xff,
+    );
+}
+
+#[test]
 fn peek_key_follows_runtime_index() {
     let (program_id, mollusk) = harness();
     let (state, accounts, metas) = full_window(&program_id);

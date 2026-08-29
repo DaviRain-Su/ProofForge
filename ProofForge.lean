@@ -64,12 +64,15 @@ import ProofForge.Svm.Memory
 import ProofForge.Svm.Memory.Emit
 import ProofForge.Svm.TransientVec
 import ProofForge.Svm.TransientVec.Emit
+import ProofForge.Svm.TransientBytes
+import ProofForge.Svm.TransientBytes.Emit
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.AccountStorage.Source
 import ProofForge.Svm.AccountView
 import ProofForge.Svm.Sdk
 import ProofForge.Svm.Sdk.Sysvar
+import ProofForge.Svm.Sdk.TransientBytes
 import ProofForge.Svm.BatchRecorder.Source
 import ProofForge.Svm.FifoCancel.Source
 import ProofForge.Svm.Component

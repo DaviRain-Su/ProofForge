@@ -241,6 +241,15 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         some (.ext (.svm (.component (.transientVec query))) #[])
       else none
     | _ => none
+  else if (endsWith e ".transientBytesLength" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.transientBytesLength) && e.getAppArgs.size ≥ 1 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit capacity) =>
+      let query : Svm.TransientBytes.Query := .length { capacity := capacity.toNat }
+      if query.wellFormed then
+        some (.ext (.svm (.component (.transientBytes query))) #[])
+      else none
+    | _ => none
   else if (endsWith e ".transientVecGet" ||
       isConstNamed e ``ProofForge.Svm.Runtime.transientVecGet) && e.getAppArgs.size ≥ 2 then
     match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -249,6 +258,16 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
       let query : Svm.TransientVec.Query := .get { capacity := capacity.toNat }
       if query.wellFormed then
         some (.ext (.svm (.component (.transientVec query))) #[index])
+      else none
+    | _, _ => none
+  else if (endsWith e ".transientBytesGet" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.transientBytesGet) && e.getAppArgs.size ≥ 2 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit capacity), some index =>
+      let query : Svm.TransientBytes.Query := .get { capacity := capacity.toNat }
+      if query.wellFormed then
+        some (.ext (.svm (.component (.transientBytes query))) #[index])
       else none
     | _, _ => none
   else if (endsWith e ".accDataWordAt" ||
@@ -3058,10 +3077,59 @@ private def decodeTransientVecCall (env : Environment) (e : Expr) :
       return .transientVec (.finish config)
   else none
 
+private def decodeTransientBytesConfig (env : Environment) (capacity : Expr) :
+    Option Svm.TransientBytes.Config := do
+  let capacity ← staticNatVal? env capacity
+  let config : Svm.TransientBytes.Config := { capacity }
+  if config.wellFormed then some config else none
+
+private def decodeTransientBytesCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesBegin ||
+      endsWith e ".transientBytesBegin" then
+    if args.size < 1 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 1]!
+      return .transientBytes (.begin config)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesPush ||
+      endsWith e ".transientBytesPush" then
+    if args.size < 2 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 2]!
+      let byte ← val env args[args.size - 1]!
+      let call : Svm.TransientBytes.Call Ops.Val := .push config byte
+      if call.wellFormed (fun _ => true) then some (.transientBytes call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesAppendLe64 ||
+      endsWith e ".transientBytesAppendLe64" then
+    if args.size < 2 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 2]!
+      let value ← val env args[args.size - 1]!
+      let call : Svm.TransientBytes.Call Ops.Val := .appendLe64 config value
+      if call.wellFormed (fun _ => true) then some (.transientBytes call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesSet ||
+      endsWith e ".transientBytesSet" then
+    if args.size < 3 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 3]!
+      let index ← val env args[args.size - 2]!
+      let byte ← val env args[args.size - 1]!
+      let call : Svm.TransientBytes.Call Ops.Val := .set config index byte
+      if call.wellFormed (fun _ => true) then some (.transientBytes call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesClear ||
+      endsWith e ".transientBytesClear" then
+    if args.size < 1 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 1]!
+      return .transientBytes (.clear config)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesFinish ||
+      endsWith e ".transientBytesFinish" then
+    if args.size < 1 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 1]!
+      return .transientBytes (.finish config)
+  else none
+
 private def decodeComponentCall (env : Environment) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
   decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e <|> decodeMemoryCall env e <|>
-    decodeTransientVecCall env e
+    decodeTransientVecCall env e <|> decodeTransientBytesCall env e
 
 private def mentionsFifoCancelSource (e : Expr) : Bool :=
   e.getUsedConstantsAsSet.toList.any fun name =>
@@ -3579,7 +3647,13 @@ def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
       constants.contains ``ProofForge.Svm.Runtime.transientVecPush ||
       constants.contains ``ProofForge.Svm.Runtime.transientVecSet ||
       constants.contains ``ProofForge.Svm.Runtime.transientVecClear ||
-      constants.contains ``ProofForge.Svm.Runtime.transientVecFinish then true
+      constants.contains ``ProofForge.Svm.Runtime.transientVecFinish ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesBegin ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesPush ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesAppendLe64 ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesSet ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesClear ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesFinish then true
   else
     match fuel with
     | 0 => false

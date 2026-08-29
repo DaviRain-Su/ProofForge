@@ -45,6 +45,7 @@ R3-005 non-seeded System facade completion、R3-006 classic Token facade、
 R3-007 fixed ATA/Memo facades、R3-008 generic seeded System facade、
 R3-009 bounded static Memo facade、R3-010 general ATA facade、
 R3-011 canonical program-id / SPL Token base-state views、R3-012 source-visible transient Vector64、
+R3-013 source-visible transient bounded bytes/writer、
 R3-014 stable Clock/EpochSchedule/Rent SDK facade、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
@@ -425,7 +426,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   代码，不进入 source、IR value 或 account state。MemoryOps 与 AccountView 独立消费，且
   effect-preserving Extract 边界逐方法钉死 begin→mutation→query→finish 顺序；没有新增
   top-level Ops/IR/main-Emit recipe。详见 `docs/plan/tasks/r3-012.md`。多个同时 active vector、
-  通用元素、pop/insert/remove/iteration 与 source-visible byte writer 仍是后续 R3 工作。
+  通用元素、pop/insert/remove/iteration 仍是后续 R3 工作。
+
+- R3-013 source-visible transient bounded bytes 已完成：`Svm.Sdk.Transient.Bytes` 以编译期
+  byte capacity 绑定同一 32 KiB downward bump allocator，提供 begin/push/set/get/length/
+  clear/finish 与固定 `appendLe64`；每个 runtime byte 都验证 `≤255`，完整记录先验容量不足、
+  full/OOB、stale/capacity mismatch 与 OOM 均在写入前以独立 terminal code 失败。一个 Bytes
+  与一个 Vector64 可同时 active，pointer/metadata 只在 invocation target memory。MemoryOps
+  与 AccountView 独立消费；没有 persistent pointer、realloc/free 语义或 top-level Ops/IR/
+  main-Emit recipe。下一切片抽取两种 transient emitter 的共同 lifecycle。详见
+  `docs/plan/tasks/r3-013.md`。
 
 - R3-014 stable sysvar SDK facade 已完成：`Svm.Sdk.Sysvar.Clock`、`.EpochSchedule` 和 `.Rent`
   把已有 Clock slot/epoch/unix、slots-per-epoch 与 compile-time rent-exemption Runtime contract

@@ -273,3 +273,120 @@ fn transient_vector_reports_bounds_stale_handle_and_oom() {
         );
     }
 }
+
+#[test]
+fn transient_bytes_push_set_get_clear_and_length() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        data.clone(),
+        "bytesSetGet",
+        &[0x11, 0x22, 0xff, 0],
+        false,
+        &[Check::success(), Check::return_data(&0x11u64.to_le_bytes())],
+    );
+    invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        data.clone(),
+        "bytesSetGet",
+        &[0x11, 0x22, 0xff, 1],
+        false,
+        &[Check::success(), Check::return_data(&0xffu64.to_le_bytes())],
+    );
+    invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        data,
+        "bytesLengthAfterClear",
+        &[0x33],
+        false,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn transient_bytes_append_le64_keeps_little_endian_byte_order() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    let value = 0x1122334455667788u64;
+    let expected_low = (value & 0xff).to_le_bytes();
+    let expected_high = (value >> 56).to_le_bytes();
+    invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        data.clone(),
+        "bytesAppendLe64",
+        &[value, 0],
+        false,
+        &[Check::success(), Check::return_data(&expected_low)],
+    );
+    invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        data,
+        "bytesAppendLe64",
+        &[value, 7],
+        false,
+        &[Check::success(), Check::return_data(&expected_high)],
+    );
+}
+
+#[test]
+fn transient_bytes_coexist_with_transient_vector() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    for (word, byte) in [(0x0102030405060708u64, 0xaau64), (0xff11ee22dd33cc44, 0x42)] {
+        let expected = (byte + word).to_le_bytes();
+        invoke(
+            &mollusk,
+            program_id,
+            state.clone(),
+            data_key,
+            data.clone(),
+            "vectorWithBytes",
+            &[word, byte],
+            false,
+            &[Check::success(), Check::return_data(&expected)],
+        );
+    }
+}
+
+#[test]
+fn transient_bytes_reports_bounds_range_stale_handle_and_oom() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    for (name, error) in [
+        ("bytesOverflow", 0x1212),
+        ("bytesOutOfBounds", 0x1212),
+        ("bytesWrongCapacity", 0x1213),
+        ("bytesAfterFinish", 0x1213),
+        ("bytesPushOverRange", 0x1214),
+        ("bytesSetOverRange", 0x1214),
+        ("bytesOom", 0x1211),
+    ] {
+        invoke(
+            &mollusk,
+            program_id,
+            state.clone(),
+            data_key,
+            data.clone(),
+            name,
+            &[],
+            false,
+            &[Check::err(ProgramError::Custom(error))],
+        );
+    }
+}
