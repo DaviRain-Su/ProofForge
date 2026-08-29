@@ -89,6 +89,11 @@ inductive Action where
   | cancel
   | place (lots : UInt64) (clientId : FixedBytes 12)
 
+inductive ResultAction where
+  | idle
+  | one (value : UInt64)
+  | pair (left right : UInt64)
+
 def inspect (_state : UInt64) (_request : Request) (_pair : UInt32 × Bool)
     (_maybe : Option (UInt64 × Bool)) (_items : Vector UInt16 3) (_action : Action)
     (_unit : Unit) : UInt64 := 0
@@ -105,6 +110,10 @@ def inspectDynamicBounded (n : Nat) (_state : UInt64) (_items : BoundedVec UInt6
 def inspectDynamicBytes (n : Nat) (_state : UInt64) (_bytes : BoundedBytes n) : UInt64 := 0
 
 def pairResult (_state : UInt64) : UInt64 × Bool := (7, true)
+
+def echoOptionResult (_state : UInt64) (value : Option UInt64) : Option UInt64 := value
+
+def echoEnumResult (_state : UInt64) (value : ResultAction) : ResultAction := value
 
 inductive Recursive where
   | next (tail : Recursive)
@@ -172,6 +181,38 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
   unless result.retSchema == .tuple #[.scalar .uint64, .scalar .boolean] &&
       result.retTypes.isEmpty && result.retCount == 2 do
     throwError s!"wrong aggregate result schema: {repr result.retSchema}"
+  let optionResult ←
+    match Extract.extractMethod env .get ``echoOptionResult with
+    | .ok result => pure result
+    | .error reason => throwError reason
+  let optionOps := match optionResult.ops.toList with
+    | [
+        .returnU64 (.field (.arg 0) "slot_tag"),
+        .returnU64 (.field (.arg 0) "slot_p0")
+      ] => true
+    | _ => false
+  unless optionResult.retSchema == .option (.scalar .uint64) &&
+      optionResult.retCount == 2 && optionOps do
+    throwError "wrong tagged Option result frame"
+  let enumResult ←
+    match Extract.extractMethod env .get ``echoEnumResult with
+    | .ok result => pure result
+    | .error reason => throwError reason
+  unless enumResult.retSchema == .enumeration (``ResultAction).toString 8 #[
+        ("idle", .unit),
+        ("one", .scalar .uint64),
+        ("pair", .tuple #[.scalar .uint64, .scalar .uint64])
+      ] && enumResult.retCount == 3 do
+    throwError "wrong tagged enum result schema"
+  let enumOps := match enumResult.ops.toList with
+    | [
+        .returnU64 (.field (.arg 0) "variant_tag"),
+        .returnU64 (.field (.arg 0) "variant_p0"),
+        .returnU64 (.field (.arg 0) "variant_p1")
+      ] => true
+    | _ => false
+  unless enumOps do
+    throwError "wrong tagged enum result frame"
   let reject (name : Name) (fragment : String) :=
     match Extract.extractMethod env .get name with
     | .error reason =>

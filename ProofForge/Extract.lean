@@ -267,6 +267,50 @@ private def expandBoundedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops
       throw "extract/unsupported: bounded result requires scalar elements"
   | _, _ => pure ops
 
+/-- Count the fixed UInt64 payload lanes in the source representation of one enum constructor.
+The shared frame deliberately follows the representation Extract already uses for tagged inputs;
+Borsh and ABI tag widths, active-lane rules, and wire encoding remain target-owned. -/
+private def enumReturnPayloadWords : Core.Codec.Schema → Except String Nat
+  | .unit => pure 0
+  | .scalar (.uint 64) => pure 1
+  | .tuple items => do
+      for item in items do
+        unless item == .scalar .uint64 do
+          throw "extract/unsupported: tagged enum result fields must be UInt64"
+      pure items.size
+  | _ => throw "extract/unsupported: tagged enum result fields must be UInt64"
+
+/-- Project a top-level tagged result into a fixed source frame before either target selects its
+wire policy. Option uses `slot_tag, slot_p0`; enums use `variant_tag, variant_p0, ...`, matching the
+existing input-side source names without importing Borsh or ABI geometry into shared extraction. -/
+private def expandTaggedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.Op) :
+    Except String (Array Ops.Op) := do
+  let root? := match ops.toList with
+    | [.returnU64 root] | [.returnState root] => some root
+    | _ => none
+  match schema, root? with
+  | .option (.scalar type), some root =>
+      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
+        throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
+      pure #[
+        .returnU64 (.field root "slot_tag"),
+        .returnU64 (.field root "slot_p0")
+      ]
+  | .option _, some _ =>
+      throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
+  | .enumeration _ tagBits variants, some root => do
+      unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
+        throw "extract/unsupported: tagged enum result requires a nonempty u8 tag space"
+      let counts ← variants.mapM fun variant => enumReturnPayloadWords variant.2
+      let payloadWords := counts.foldl (init := 0) max
+      let mut result : Array Ops.Op := #[.returnU64 (.field root "variant_tag")]
+      for i in [0:payloadWords] do
+        result := result.push (.returnU64 (.field root ("variant_p" ++ toString i)))
+      pure result
+  | .option _, none | .enumeration .., none =>
+      throw "extract/unsupported: constructed tagged results are not yet represented as a fixed source frame"
+  | _, _ => pure ops
+
 private def markMethodArgs (kind : Core.IR.MethodKind) (count : Nat) (body : Expr) : Expr :=
   let marker (index : Nat) := mkApp (mkConst ``methodArgRef) (mkNatLit index)
   let abiIndex (dbIndex : Nat) : Nat :=
@@ -608,6 +652,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
   let paramWidths := paramTypes.map legacyWidthOfScalar
   let retSchema ← logicalReturnSchema env kind retTy
   let ops ← expandBoundedReturnOps retSchema ops
+  let ops ← expandTaggedReturnOps retSchema ops
   let retWidths :=
     match kind with
     | .get =>
@@ -1389,6 +1434,10 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
       ret.getAppFn.constName? == some boundedBytesName ||
       ret.getAppFn.constName? == some boundedStringName then
     return .get
+  if let some typeName := ret.getAppFn.constName? then
+    if !isStructure env typeName &&
+        (match env.find? typeName with | some (.inductInfo _) => true | _ => false) then
+      return .get
   if let some structName := ret.getAppFn.constName? then
     if isStructure env structName && structName != ``UInt64 &&
         structName != ``Prod && structName != addr20Name &&

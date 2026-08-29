@@ -304,6 +304,12 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `dace199d3c7ca718`、deployment bytecode 3,668 B；solc 0.8.34 与 Anvil output 正反矩阵通过。
   详见 `docs/plan/tasks/r1-019.md`。
 
+- R1-020 shared tagged return frame 已完成：Extract 将 direct `Option` 与 payload enum 结果
+  投影为固定 `tag + payload lanes` source frame，名称与既有 input-side logical projection
+  对齐，但不在 shared 层选择 Borsh/ABI tag width、active-payload 或 wire bytes。首片只开放
+  one-limb Option 与 unit/UInt64 enum payload；constructed/richer tagged result 继续 fail closed。
+  未新增 Core/target Ops、Runtime effect 或 Emit recipe。详见 `docs/plan/tasks/r1-020.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

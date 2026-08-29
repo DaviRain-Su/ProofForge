@@ -231,6 +231,11 @@ frame 发布 canonical standard-ABI offset/length 与 active word/packed-byte pr
 digest，不复用 calldata tail，也不增加 collection opcode 或 Runtime effect。详见
 [R1-019](tasks/r1-019.md)。
 
+R1-020 已完成 shared tagged return frame：Extract 把 direct `Option` 与 payload enum 结果投影
+为固定 `tag + payload lanes`，复用 input-side logical source name，但不选择 Borsh/ABI tag
+宽度或 active-payload wire rule。首片支持 one-limb Option 与 unit/UInt64 enum payload；构造式
+tagged result 和 richer payload 继续 fail closed。详见 [R1-020](tasks/r1-020.md)。
+
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
 2. 定义 bounded codec schema：scalar、fixed bytes、tuple/record、enum、`Option`、固定/上限数组。
