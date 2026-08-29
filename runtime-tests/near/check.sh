@@ -143,6 +143,23 @@ queue_anchors = (
     'i64.lt_u',
     'i64.sub',
 )
+iterable_anchors = (
+    '(func (export "mapPut")',
+    '(func (export "mapRemove")',
+    '(func (export "mapIndex")',
+    '(func (export "mapKeyAt")',
+    '(func (export "setInsert")',
+    '(func (export "setRemove")',
+    '(func (export "setIndex")',
+    '(func (export "setKeyAt")',
+    '(call $pf_storage_has_key',
+    '(call $pf_storage_read',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+    'i64.lt_u',
+    'i64.shl',
+    'i64.or',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -166,6 +183,8 @@ for wat in wats:
         extra = lookup_anchors
     elif wat.stem == "NearQueue":
         extra = queue_anchors
+    elif wat.stem == "NearIterable":
+        extra = iterable_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

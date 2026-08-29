@@ -245,6 +245,9 @@ jobs:
       - name: Run NEAR sandbox bounded Queue gate
         run: runtime-tests/near/queue.sh
 
+      - name: Run NEAR sandbox Identity IterableMap/IterableSet gate
+        run: runtime-tests/near/iterable.sh
+
   # Preserve the original required-check identity while making proof/guard and target failures
   # independently observable. This job fails unless every lane completes, including after an error.
   test:

@@ -42,6 +42,6 @@ persistent collection metadata are outside this slice.
 
 ## Next
 
-Specify bounded direct IterableMap/IterableSet composition. It must pin key-vector and lookup
-namespaces, swap-remove/index-record behavior, immediate persistence, and partial-failure rollback
-without claiming near-sdk-rs cache/Drop timing.
+Bounded direct IterableMap/IterableSet composition landed in
+[wsm-near-iterable-001](wsm-near-iterable-001.md). Next begin N7 with a closed static
+cross-contract function call carrying explicit gas and attached deposit.

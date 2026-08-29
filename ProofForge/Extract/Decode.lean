@@ -1803,12 +1803,30 @@ private partial def valNodeCount : Ops.Val → Nat
   | .ext _ operands =>
       1 + operands.foldl (init := 0) fun total operand => total + valNodeCount operand
 
+private partial def readsMutableNearStorageResult : Ops.Val → Bool
+  | .arg _ | .local _ | .lit _ | .loopIx => false
+  | .field base _ | .bitNot base => readsMutableNearStorageResult base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+  | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+      readsMutableNearStorageResult lhs || readsMutableNearStorageResult rhs
+  | .indexGet base _ index _ _ =>
+      readsMutableNearStorageResult base || readsMutableNearStorageResult index
+  | .select _ lhs rhs thn els =>
+      readsMutableNearStorageResult lhs || readsMutableNearStorageResult rhs ||
+        readsMutableNearStorageResult thn || readsMutableNearStorageResult els
+  | .ext (.near (.storageResultStatus _)) _
+  | .ext (.near (.storageResultLength _)) _
+  | .ext (.near (.storageResultFits _)) _
+  | .ext (.near (.storageResultByte _)) _ => true
+  | .ext _ operands => operands.any readsMutableNearStorageResult
+
 /-- Materialize scalar source values whose substitution would duplicate bounded control flow or
 re-evaluate a target read after a later effect. -/
 private def shouldMaterializeLocal (_type : Expr) (value : Ops.Val) : Bool :=
   match value with
   | .field .. | .indexGet .. | .select .. | .ext .. => true
-  | value => valNodeCount value ≥ 1024
+  | value => readsMutableNearStorageResult value || valNodeCount value ≥ 1024
 
 private def localScalarValue? (env : Environment) (fuel : Nat) (value : Expr) : Option Ops.Val :=
   let rec go (fuel : Nat) (value : Expr) : Option Ops.Val :=

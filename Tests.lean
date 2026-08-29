@@ -72,6 +72,7 @@ import Tests.NearStorageSpec
 import Tests.NearVectorSpec
 import Tests.NearLookupSpec
 import Tests.NearQueueSpec
+import Tests.NearIterableSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmSearchSpec

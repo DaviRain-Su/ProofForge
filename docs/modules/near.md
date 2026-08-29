@@ -63,7 +63,9 @@ wsm-near-lookup-001 再加入 default-Identity `DirectLookupMap64` / `DirectLook
   与大 index 在 narrowing 前被拒绝；`lookup.sh` 验证 Identity map/set exact keys、map Borsh
   values、set empty values、insert/replace/remove status、namespace split 与 key reclamation；
   `queue.sh` 验证 ProofForge bounded FIFO 的 exact slots、wraparound、full/empty rollback、逐槽
-  reclamation、drained head reset 与 malformed metadata fail-closed。
+  reclamation、drained head reset 与 malformed metadata fail-closed；`iterable.sh` 验证当前
+  near-sdk-rs Identity IterableMap/IterableSet 的 `P||v`/`P||m` exact bytes、index records、
+  replacement/duplicate no-op、swap-remove、moved-index repair、reclamation 与 malformed rollback。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
-`NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`。
+`NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`。
