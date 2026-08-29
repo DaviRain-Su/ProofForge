@@ -84,6 +84,8 @@ def alphanet : Contract where
   missingFields := #[-1, -2, -10, -17]
   getDataObject := "get_data_object_field"
   setDataObject := "set_data_object_field"
+  getDataNested := "get_data_nested_object_field"
+  setDataNested := "set_data_nested_object_field"
   sfieldAccount := 524290
   getTxField := "tx_field"
   sfieldTxAccount := 524289

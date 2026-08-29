@@ -51,6 +51,11 @@ structure Contract where
   getDataObject : String := ""
   /-- Host function `set_data_object_field(acc, acc_len, key, key_len, data, data_len)`. -/
   setDataObject : String := ""
+  /-- Host `get_data_nested_object_field(acc, acc_len, key, klen, nested, nlen, out, olen)`.
+  Empty skips nested JSON. Slot `user_bal` (letter suffix) maps to `{user:{bal}}`. -/
+  getDataNested : String := ""
+  /-- Host `set_data_nested_object_field` (same 8 i32s, last two are data). -/
+  setDataNested : String := ""
   /-- sfield of the data-owner AccountID (XRPL `sfOwner` = 524290). -/
   sfieldAccount : Nat := 0
   /-- Host `get_tx_field(field, ptr, len) -> i32`. Empty means no tx-field env leaves. -/

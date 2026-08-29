@@ -180,14 +180,42 @@ private def paramOffObj : Nat := 20
 private def storeOff : Nat := 28
 private def keyBase : Nat := 64
 
+/-- Slot `user_bal` → nested `{user:{bal}}`. `xs_0` stays a flat key (digit suffix). -/
+private def nestedParts (name : String) : Option (String × String) :=
+  match name.toList.span (· != '_') with
+  | (outer, '_' :: rest) =>
+    let o := String.ofList outer
+    let inner := String.ofList rest
+    if o.isEmpty || inner.isEmpty then none
+    else if inner.front.isDigit then none
+    else some (o, inner)
+  | _ => none
+
 private def keyBlob (p : Program ValExt OpExt) : String :=
-  String.join (p.slots.map (·.name)).toList
+  let parts : Array String :=
+    p.slots.foldl (fun acc slot =>
+      match nestedParts slot.name with
+      | some (o, i) => acc.push o |>.push i
+      | none => acc.push slot.name) #[]
+  String.join parts.toList
 
 private def keyOffsetOf (p : Program ValExt OpExt) (name : String) : Nat :=
   (p.slots.foldl (fun (acc : Nat × Bool) slot =>
     if acc.2 then acc
     else if slot.name == name then (acc.1, true)
-    else (acc.1 + slot.name.length, false)) (keyBase, false)).1
+    else
+      let n :=
+        match nestedParts slot.name with
+        | some (o, i) => o.length + i.length
+        | none => slot.name.length
+      (acc.1 + n, false)) (keyBase, false)).1
+
+private def nestedOffsets (p : Program ValExt OpExt) (name : String) : Option (Nat × Nat × Nat × Nat) :=
+  match nestedParts name with
+  | none => none
+  | some (outer, inner) =>
+    let off := keyOffsetOf p name
+    some (off, outer.length, off + outer.length, inner.length)
 
 /-- Big-endian store of an i64 local into 8 bytes at `ptr`. -/
 private def storeBe64 (level ptr : Nat) (localName : String) : Array String :=
@@ -230,24 +258,52 @@ private def persistSlots (host : Contract) (p : Program ValExt OpExt) (level : N
     dumpSlots p level ++ hostWrite host p level
   else
     p.slots.flatMap fun slot =>
-      let keyOff := keyOffsetOf p slot.name
       let hdr := #[
         indent level ("(i32.store8 (i32.const " ++ toString storeOff ++
           ") (i32.const " ++ toString host.stiUint64 ++ "))")
       ]
       let be := storeBe64 level (storeOff + 1) (localOfSlot slot.name)
-      let call := #[
-        indent level ("(local.set $st (call $" ++ host.setDataObject ++
-          " (i32.const " ++ toString accountOff ++
-          ") (i32.const " ++ toString accountLen ++
-          ") (i32.const " ++ toString keyOff ++
-          ") (i32.const " ++ toString slot.name.length ++
-          ") (i32.const " ++ toString storeOff ++
-          ") (i32.const 9)))"),
+      let call :=
+        match nestedOffsets p slot.name with
+        | some (oOff, oLen, iOff, iLen) =>
+          if host.setDataNested.isEmpty then
+            let keyOff := keyOffsetOf p slot.name
+            #[
+              indent level ("(local.set $st (call $" ++ host.setDataObject ++
+                " (i32.const " ++ toString accountOff ++
+                ") (i32.const " ++ toString accountLen ++
+                ") (i32.const " ++ toString keyOff ++
+                ") (i32.const " ++ toString slot.name.length ++
+                ") (i32.const " ++ toString storeOff ++
+                ") (i32.const 9)))")
+            ]
+          else
+            #[
+              indent level ("(local.set $st (call $" ++ host.setDataNested ++
+                " (i32.const " ++ toString accountOff ++
+                ") (i32.const " ++ toString accountLen ++
+                ") (i32.const " ++ toString oOff ++
+                ") (i32.const " ++ toString oLen ++
+                ") (i32.const " ++ toString iOff ++
+                ") (i32.const " ++ toString iLen ++
+                ") (i32.const " ++ toString storeOff ++
+                ") (i32.const 9)))")
+            ]
+        | none =>
+          let keyOff := keyOffsetOf p slot.name
+          #[
+            indent level ("(local.set $st (call $" ++ host.setDataObject ++
+              " (i32.const " ++ toString accountOff ++
+              ") (i32.const " ++ toString accountLen ++
+              ") (i32.const " ++ toString keyOff ++
+              ") (i32.const " ++ toString slot.name.length ++
+              ") (i32.const " ++ toString storeOff ++
+              ") (i32.const 9)))")
+          ]
+      hdr ++ be ++ call ++ #[
         indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
         indent (level + 2) "(then (return (local.get $st))))"
       ]
-      hdr ++ be ++ call
 
 private structure Region where
   lines : Array String := #[]
@@ -504,15 +560,37 @@ private def loadSlots (host : Contract) (p : Program ValExt OpExt) (level : Nat)
     (view : Bool) : Array String :=
   if host.objectStore then
     p.slots.flatMap fun slot =>
-      let keyOff := keyOffsetOf p slot.name
       let call :=
-        indent level ("(local.set $st (call $" ++ host.getDataObject ++
-          " (i32.const " ++ toString accountOff ++
-          ") (i32.const " ++ toString accountLen ++
-          ") (i32.const " ++ toString keyOff ++
-          ") (i32.const " ++ toString slot.name.length ++
-          ") (i32.const " ++ toString storeOff ++
-          ") (i32.const 8)))")
+        match nestedOffsets p slot.name with
+        | some (oOff, oLen, iOff, iLen) =>
+          if host.getDataNested.isEmpty then
+            let keyOff := keyOffsetOf p slot.name
+            indent level ("(local.set $st (call $" ++ host.getDataObject ++
+              " (i32.const " ++ toString accountOff ++
+              ") (i32.const " ++ toString accountLen ++
+              ") (i32.const " ++ toString keyOff ++
+              ") (i32.const " ++ toString slot.name.length ++
+              ") (i32.const " ++ toString storeOff ++
+              ") (i32.const 8)))")
+          else
+            indent level ("(local.set $st (call $" ++ host.getDataNested ++
+              " (i32.const " ++ toString accountOff ++
+              ") (i32.const " ++ toString accountLen ++
+              ") (i32.const " ++ toString oOff ++
+              ") (i32.const " ++ toString oLen ++
+              ") (i32.const " ++ toString iOff ++
+              ") (i32.const " ++ toString iLen ++
+              ") (i32.const " ++ toString storeOff ++
+              ") (i32.const 8)))")
+        | none =>
+          let keyOff := keyOffsetOf p slot.name
+          indent level ("(local.set $st (call $" ++ host.getDataObject ++
+            " (i32.const " ++ toString accountOff ++
+            ") (i32.const " ++ toString accountLen ++
+            ") (i32.const " ++ toString keyOff ++
+            ") (i32.const " ++ toString slot.name.length ++
+            ") (i32.const " ++ toString storeOff ++
+            ") (i32.const 8)))")
       let err :=
         if view then #[] else returnUnlessMissing host level
       let load := #[
@@ -619,6 +697,15 @@ def emit (host : Contract)
       ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.setDataObject ++
         "\" (func $" ++ host.setDataObject ++
         " (param i32 i32 i32 i32 i32 i32) (result i32)))")
+    if !host.getDataNested.isEmpty && p.slots.any (fun s => (nestedParts s.name).isSome) then
+      lines := lines.push
+        ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.getDataNested ++
+          "\" (func $" ++ host.getDataNested ++
+          " (param i32 i32 i32 i32 i32 i32 i32 i32) (result i32)))")
+      lines := lines.push
+        ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.setDataNested ++
+          "\" (func $" ++ host.setDataNested ++
+          " (param i32 i32 i32 i32 i32 i32 i32 i32) (result i32)))")
   else
     lines := lines.push
       ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.setData ++
