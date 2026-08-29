@@ -132,9 +132,10 @@ structure AccountId where
 `xrplSha512HalfLit "vault"` 对标 `sha256Lit`：ASCII 字面量 → SHA-512Half 首个小端
 UInt64。完整 32B / 动态输入 / keccak 仍 FC。`Examples.XrplHash` 把结果写入槽。
 
-### XRPL-SDK（更后）
+### XRPL-SDK（[wsm-008](../tasks/wsm-008.md)）
 
-`Xrpl.Sdk.caller / self / ledgerSqn`，全部 `@[pf_inline]` 转到 Runtime。Ownable 是源码 `if`，不是新 Op。
+`Xrpl.Sdk.Context.caller / self / ledgerSqn`，全部 `@[pf_inline]` 转到 Runtime。
+Ownable 是源码嵌套 `if` 三叶，不是新 Op。8 字节 `callerLo` 只是截断视图。
 
 ## 7. 明确 fail closed
 

@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.XrplHash
 
-open ProofForge.Wasm.Xrpl.Runtime
+open ProofForge.Wasm.Xrpl.Sdk
 
 structure State where
   hashed : UInt64
@@ -20,7 +20,7 @@ def init (_seed : UInt64) : State :=
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ hashed := xrplSha512HalfLit "vault" }, (0 : UInt64))
+    .ok ({ hashed := Hash.sha512HalfLit "vault" }, (0 : UInt64))
   else
     .error .overflow
 
