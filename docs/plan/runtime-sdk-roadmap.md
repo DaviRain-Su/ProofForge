@@ -112,8 +112,8 @@ Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固
 account view、R5-001 Access foundation、R5-002 static storage declarations、R5-003 bounded
 roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption、R5-006 fungible debit
 ledger foundation、R5-007 checked credit/alias-safe transfer、R5-008 checked allowance core 与
-R5-009 reusable reentrancy policy 与 R5-010 persistent bounded storage vector 均已集成；独立 contract
-分别复用这些 SDK contracts。
+R5-009 reusable reentrancy policy、R5-010 persistent bounded storage vector 与 R5-011 honest
+runtime-code observation policy 均已集成；独立 contract 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
 return-data/multi-seed signer-tail geometry；SVM-RT-3 第一刀已建立 Token-2022 bounded TLV
@@ -134,7 +134,8 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
 [R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md)、
-[R5-009](tasks/r5-009.md)、[R5-010](tasks/r5-010.md)、[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
+[R5-009](tasks/r5-009.md)、[R5-010](tasks/r5-010.md)、[R5-011](tasks/r5-011.md)、
+[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -602,6 +603,13 @@ extraction 前消去的 `Storage.Static` bundle，没有 runtime slot allocator�
 Ops/IR/Emit recipe 或无界循环。EvmVecLog（owner-gated append log，capacity 4）与
 EvmVecStack（permissionless LIFO，capacity 3）独立复用；文档化的 worst-case slot/gas shape
 是 O(1) 且与 capacity 无关。详见 [R5-010](tasks/r5-010.md)。
+
+R5-011 已完成 runtime-code observation policy：`Evm.Sdk.Address.hasCode` 只组合已有
+`Address.codeSize` 与 UInt64 比较，语义精确等于观察点上的 `EXTCODESIZE != 0`。它不把
+runtime code presence 冒充 EOA/authentication、constructor/precompile 判定或 call-success
+保证，也不自动改变任何 closed CALL。该 facade 没有新增 Runtime、Ops/IR/Component/Emit、
+memory 或 storage；EvmCtx 的 deployed/nonexistent Anvil 对照通过。详见
+[R5-011](tasks/r5-011.md)。
 
 ### R6 — 双目标验收
 

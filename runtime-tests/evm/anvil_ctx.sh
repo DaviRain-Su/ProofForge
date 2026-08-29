@@ -52,12 +52,18 @@ solana_lean_require_uint \
   "$("$cast" call --rpc-url "$rpc" "$addr" 'codeSize(address)(uint64)' "$addr")" \
   "$("$cast" codesize --rpc-url "$rpc" "$addr")" "EXTCODESIZE self"
 solana_lean_require_equal \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'hasCode(address)(bool)' "$addr")" \
+  true "hasCode deployed self"
+solana_lean_require_equal \
   "$("$cast" call --rpc-url "$rpc" "$addr" 'codeHash(address)(bytes32)' "$addr")" \
   "$("$cast" codehash --rpc-url "$rpc" "$addr")" "EXTCODEHASH self"
 empty_address="0x000000000000000000000000000000000000dead"
 solana_lean_require_uint \
   "$("$cast" call --rpc-url "$rpc" "$addr" 'codeSize(address)(uint64)' "$empty_address")" \
   0 "EXTCODESIZE nonexistent"
+solana_lean_require_equal \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'hasCode(address)(bool)' "$empty_address")" \
+  false "hasCode nonexistent"
 solana_lean_require_equal \
   "$("$cast" call --rpc-url "$rpc" "$addr" 'codeHash(address)(bytes32)' "$empty_address")" \
   "0x0000000000000000000000000000000000000000000000000000000000000000" \

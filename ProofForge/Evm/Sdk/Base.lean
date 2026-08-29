@@ -36,6 +36,12 @@ namespace «Address»
 @[pf_inline] def codeSize (address : Address) : UInt64 :=
   Runtime.evmCodeSize20 address
 
+/-- True exactly when `EXTCODESIZE(address) != 0` at the observation point. This is a runtime-code
+observation, not an EOA/authentication test: contracts under construction and precompiles may have
+zero code size, and a positive size does not imply that any particular call will succeed. -/
+@[pf_inline] def hasCode (address : Address) : Bool :=
+  !(codeSize address == 0)
+
 @[pf_inline] def codeHash (address : Address) : Bytes32 :=
   Runtime.evmCodeHash32 address
 

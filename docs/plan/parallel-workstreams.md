@@ -123,6 +123,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-SDK-6b checked credit/transfer（已集成）** | EVM-SDK-6a | checked additive credit、cap-minus-supply mint gate、same-address-safe direct/delegated transfer；Token/Vault 两个 consumer，明确 overflow/alias/event/allowance ordering；见 R5-007 |
 | **EVM-SDK-6c allowance core（已集成）** | EVM-SDK-6b | explicit pair-map handle 的 approve/checked increase/decrease/spend policy；Token/Ownable 两个 consumer，permit owner 与 event ordering 留在 application；见 R5-008 |
 | **EVM-SDK-6d Reentrancy（已集成）** | EVM-RT-2e、EVM-SDK-2/5 | explicit UInt64 handle、nonzero sentinel、ordered enter/leave；GuardedPayout/EvmOrderedStorage 两 consumer + hostile callback；不新增 Runtime/IR/Emit recipe；见 R5-009 |
+| **EVM-SDK runtime-code observation（已集成）** | R4-010 Address codeSize | `Address.hasCode` 纯组合 existing EXTCODESIZE query + UInt64 compare；不冒充 EOA/authentication/call-success，不自动改 closed CALL，不新增 Runtime/IR/Emit；见 R5-011 |
 | **EVM-SDK-7/8 NFT assets** | EVM-SDK-6c/6d | reusable ERC-721 与 bounded ERC-1155 core；每个组件至少两个 consumer |
 
 ## 4. Worker 统一交付合同

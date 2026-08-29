@@ -58,7 +58,7 @@ R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
 R5-008 checked allowance core、R5-009 reusable reentrancy policy、
-R5-010 persistent bounded EVM storage vector；
+R5-010 persistent bounded EVM storage vector、R5-011 honest runtime-code observation policy；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -569,6 +569,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   EvmVecLog（owner-gated log，capacity 4）与 EvmVecStack（permissionless LIFO，capacity 3）
   独立复用；worst-case slot/gas shape 为 O(1) 且与 capacity 无关，stale-slot 与注入的
   malformed-length 原子失败由 Anvil 直接核对。详见 `docs/plan/tasks/r5-010.md`。
+
+- R5-011 EVM runtime-code observation policy 已完成：`Evm.Sdk.Address.hasCode` 组合已有
+  `Address.codeSize` 与普通 UInt64 比较，精确定义为观察点上的 `EXTCODESIZE(address) != 0`。
+  它明确不是 EOA/authentication test：constructor、precompile 与调用成功语义均不由该谓词
+  推断，也不会自动插入 closed CALL。实现没有新增 Runtime、Ops/IR/Component/Emit case、
+  selector、memory 或 storage；EvmCtx Anvil 核对 deployed/nonexistent 两侧。digest
+  `4eb0c4cd2c0b1239`、deployment bytecode 3,383 B。详见
+  `docs/plan/tasks/r5-011.md`。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

@@ -42,6 +42,29 @@ private def hasEnvironmentReturn (method : IR.Method) (wanted : Environment.Quer
         found == wanted && operands.size == wanted.arity
     | _ => false
 
+private partial def valueMentionsEnvironment (wanted : Environment.Query) : Ops.Val → Bool
+  | .field base _ | .bitNot base => valueMentionsEnvironment wanted base
+  | .bitAnd left right | .bitOr left right | .bitXor left right
+  | .shiftL left right | .shiftR left right
+  | .addU64 left right | .subU64 left right | .mulU64 left right
+  | .divU64 left right | .modU64 left right =>
+      valueMentionsEnvironment wanted left || valueMentionsEnvironment wanted right
+  | .indexGet base _ index _ _ =>
+      valueMentionsEnvironment wanted base || valueMentionsEnvironment wanted index
+  | .select _ left right thenValue elseValue =>
+      valueMentionsEnvironment wanted left || valueMentionsEnvironment wanted right ||
+        valueMentionsEnvironment wanted thenValue || valueMentionsEnvironment wanted elseValue
+  | .ext (.component (.environment found)) operands =>
+      (found == wanted && operands.size == wanted.arity) ||
+        operands.any (valueMentionsEnvironment wanted)
+  | .ext _ operands => operands.any (valueMentionsEnvironment wanted)
+  | _ => false
+
+private def returnMentionsEnvironment (method : IR.Method) (wanted : Environment.Query) : Bool :=
+  method.ops.any fun
+    | .returnU64 value => valueMentionsEnvironment wanted value
+    | _ => false
+
 private def requireQuery (program : IR.Program) (methodName : String)
     (makeQuery : Nat → Environment.Query) : CommandElabM Unit := do
   let some method := program.entries.find? (·.ixName == methodName)
@@ -79,6 +102,10 @@ elab "#pf_guard_evm_environment_component" : command => do
     | throwError "missing EvmCtx.codeSize"
   unless hasEnvironmentReturn codeSize .codeSize20 do
     throwError "EvmCtx.codeSize escaped the Component bridge"
+  let some hasCode := ctx.entries.find? (·.ixName == "hasCode")
+    | throwError "missing EvmCtx.hasCode"
+  unless returnMentionsEnvironment hasCode .codeSize20 do
+    throwError "EvmCtx.hasCode escaped the Component bridge"
   for limb in [0, 1, 2] do
     unless hasEnvironmentReturn
         (tipJar.entries.find? (·.ixName == "coinbase")).get! (.coinbase20 limb) do
@@ -108,7 +135,7 @@ elab "#pf_guard_evm_environment_component" : command => do
       (ctxYul.splitOn " := calldataload(0)").length == 2 &&
       (ctxYul.splitOn "blockhash(").length == 2 &&
       (tipJarYul.splitOn "coinbase()").length == 2 &&
-      (ctxYul.splitOn "extcodesize(").length == 2 &&
+      (ctxYul.splitOn "extcodesize(").length == 3 &&
       (ctxYul.splitOn "extcodehash(").length == 2 &&
       (ctxYul.splitOn " := balance(").length == 2 do
     throwError "environment component omitted one or more pinned Cancun opcode bindings"

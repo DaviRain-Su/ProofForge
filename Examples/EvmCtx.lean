@@ -69,6 +69,12 @@ def blockHash (_s : State) (number : UInt64) : UInt256 :=
 def codeSize (_s : State) (address : Address) : UInt64 :=
   Address.codeSize address
 
+/-- Whether the address has nonempty runtime code at this observation point. This is not an
+authorization or EOA test; it deliberately preserves `EXTCODESIZE` constructor/precompile edges. -/
+@[pf_entry]
+def hasCode (_s : State) (address : Address) : Bool :=
+  Address.hasCode address
+
 /-- Runtime code hash as Solidity-shaped `bytes32`. -/
 @[pf_entry]
 def codeHash (_s : State) (address : Address) : Bytes32 :=
