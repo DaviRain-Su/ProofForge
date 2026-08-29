@@ -20,7 +20,7 @@ WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
 | `Xrpl.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / bedrock / AlphaNet |
 | `Xrpl.Registry` | 可构建模块 + canonical digest | 部署声明 |
 | `Xrpl.Commands` | `#pf_xrpl_build` / `#pf_xrpl_dump` | 新 DSL |
-| `Xrpl.Sdk` | `@[pf_inline]` 名：`Context.caller/self/ledgerSqn`、`Hash.sha512HalfLit` | 新 host / Op / Ownable 类型 |
+| `Xrpl.Sdk` | `@[pf_inline]`：`Context`、`AccountId.eq`、`Access.requireOwner`、`Hash.sha512HalfLit` | 新 host / Vec / Map / EVM hashed storage |
 
 ## v0 子集（全部 fail closed）
 

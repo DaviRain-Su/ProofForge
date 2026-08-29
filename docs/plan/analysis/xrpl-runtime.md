@@ -14,9 +14,9 @@
 | 产物 | Lean → WAT → `.wasm`，锁定 `wat2wasm` | Yul/`solc`，`.s`/`sbpf` |
 | Host 表 | `host_lib`：`function_param`、`get_current_ledger_obj_field`、`get/set_data_object_field` | opcode / syscall |
 | 存储 | 发射器把 `State` 槽写成 `ContractData.ContractJson` | EVM slot / SVM account bytes |
-| Runtime 叶子 | **没有**。`Xrpl.Ops` 只有被拒的 `reserved` | `Evm.Runtime.evmCaller`、`Svm.Runtime.clockSlot` |
-| SDK | 没有 | `Evm.Sdk.caller`、`Svm.Sdk.Account` |
-| 工程门 | `counter.sh` 四场景 | Anvil / Mollusk |
+| Runtime 叶子 | caller/self/ledger/hash 字面量已绿 | `Evm.Runtime.evmCaller`、`Svm.Runtime.clockSlot` |
+| SDK | `Context` / `AccountId.eq` / `Hash`；缺口见 [xrpl-sdk-gap.md](xrpl-sdk-gap.md) | `Evm.Sdk.caller`、`Svm.Sdk.Account` |
+| 工程门 | `counter.sh` / `ctx.sh` / `own.sh` / `hash.sh` | Anvil / Mollusk |
 
 合约还不能写「读 caller / 账本序号」。存储是发射器偷偷调 host，源码看不见宿主。
 
@@ -137,6 +137,9 @@ UInt64。完整 32B / 动态输入 / keccak 仍 FC。`Examples.XrplHash` 把结�
 `Xrpl.Sdk.Context.caller / self / ledgerSqn`，全部 `@[pf_inline]` 转到 Runtime。
 `AccountId.eq` 也是 `@[pf_inline]`，展开成三叶嵌套 `if`（[wsm-009](../tasks/wsm-009.md)）。
 Ownable 走这个 helper，不是新 Op。8 字节 `callerLo` 只是截断视图。
+
+后续 SDK / Runtime 缺口（Vec、Map、日志、第二批 host）见
+[xrpl-sdk-gap.md](xrpl-sdk-gap.md)。不要把 SVM RBMap 或 EVM hashed Map 接到 XRPL。
 
 ## 7. 明确 fail closed
 
