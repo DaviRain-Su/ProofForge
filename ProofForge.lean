@@ -117,6 +117,7 @@ import ProofForge.Wasm.Near.Ops
 import ProofForge.Wasm.Near.Memory
 import ProofForge.Wasm.Near.Runtime
 import ProofForge.Wasm.Near.Sdk
+import ProofForge.Wasm.Near.Sdk.Promise
 import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Wasm.Near.Sdk.Storage
 import ProofForge.Wasm.Near.Sdk.Store.Codec

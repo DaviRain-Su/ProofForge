@@ -49,23 +49,24 @@ Authoritative source anchors:
 | guest linear-memory allocation | near-sdk-rs guest allocator over Wasm `memory.grow`; no nearcore malloc host import | **checked invocation-local arena + `Buffer64` complete** in wsm-near-memory-001 | Near Memory/Emit substrate; SDK exposes bounded consumers, never raw pointers |
 | register ABI | nearcore host | bounded reads for input/context/raw storage; exact status and stale-register rules | Runtime memory/register contract |
 | full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
-| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance complete** in wsm-near-u128-001; gas/promise values absent | shared wide value + Near ABI binding |
+| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance complete** in wsm-near-u128-001; explicit gas and lossless Promise deposit complete in wsm-near-promise-001 | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
 | Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | independent field keys | Near SDK policy; migration/version explicit |
 | `store::Vector` | SDK over KV, prefix + `u32_le` index | **bounded direct UInt64 element layout foundation complete** in wsm-near-vector-001; full metadata/cache/generic API absent | Near storage binding after bytes/Borsh |
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
-| IterableMap/TreeMap | SDK composition | absent | after Vector + LookupMap; TreeMap last/optional |
-| persistent Queue | no official exported Queue | absent | explicit bounded Vector/LookupMap + head/length policy |
+| IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
+| persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
 | logs/events | `log_utf8`; NEP-297 SDK JSON | static UTF-8 literal effect in wsm-near-log-001; dynamic spans/events absent | Runtime log effect, then SDK event envelope |
-| cross-contract call | promise receipt/action host ABI | absent | Runtime promise effects, then typed SDK builder |
+| cross-contract call | promise receipt/action host ABI | **detached static batch function call complete** in wsm-near-promise-001; return/chaining/results absent | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | absent | Runtime batch/action; never synchronous balance mutation |
 | callback results | promise count/status/register + SDK decode | absent | bounded Runtime result read + SDK Result codec |
 | private/payable/init | generated entry guards | absent | entry-adapter policy over context/storage |
 
 Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
 bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw binary storage,
-and direct fixed-width Vector/Identity LookupMap/LookupSet foundations. It is not yet a general
+fixed-width Vector/Identity LookupMap/LookupSet/IterableMap/IterableSet and ProofForge Queue
+foundations, plus one detached static cross-contract function call. It is not yet a general
 near-sdk-rs contract model.
 
 ## 3. Storage and collection contracts
@@ -145,7 +146,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
 | N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
-| N7 promises | create/then/and, batch function-call/transfer actions, explicit return | receipt DAG/gas/deposit/failure sandbox scenes |
+| N7 promises | **detached static batch function call done in wsm-near-promise-001**; explicit return, then/and, transfer actions remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | bounded result count/status/read, typed Result decode, private self callback | success/failure/oversized result and rollback scenes |
 | N9 lifecycle | non-payable default, payable/private/init guards, `STATE` version/migration | repeated init, deposit rejection, migration fixtures |
 | N10 standards | NEP-141/145 building blocks only after storage, events, transfer/call semantics | standard-specific integration suites |
@@ -173,8 +174,9 @@ It depends on full AccountId and u128 and is asynchronous.
 9. **NEAR-STORE-ITERABLE (wsm-near-iterable-001 done):** bounded Identity UInt64 map/set layouts derive exact
    `P || 'v'` and `P || 'm'` namespaces, preserve replacement order, and repair moved index records
    during fail-closed swap-remove. Immediate persistence does not claim Rust cache/`Drop` timing.
-10. **NEAR-PROMISE-1:** closed static receiver/method function call with explicit gas/deposit;
-   callback/results follow in a separate slice.
+10. **NEAR-PROMISE-1 (wsm-near-promise-001 done):** closed static receiver/method detached function call with
+    bounded arguments, explicit gas, and lossless u128 deposit. It emits batch create/action without
+    `promise_return`; explicit forwarding, chaining, callbacks, and results remain separate slices.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

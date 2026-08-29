@@ -575,6 +575,11 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .ext (.near payload) =>
           .ext (.near (match payload with
             | .logUtf8 message => .logUtf8 message
+            | .promiseFunctionCallDetached receiver method argsCapacity arguments
+                depositLo depositHi gas =>
+                .promiseFunctionCallDetached receiver method argsCapacity
+                  (arguments.map (flipVal fuel')) (flipVal fuel' depositLo)
+                  (flipVal fuel' depositHi) (flipVal fuel' gas)
             | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
             | .transientBuffer64Set capacity index value =>
                 .transientBuffer64Set capacity (flipVal fuel' index) (flipVal fuel' value)

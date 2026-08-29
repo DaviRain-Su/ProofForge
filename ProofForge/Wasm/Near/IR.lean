@@ -35,6 +35,10 @@ private def projectOpExt
   | .near payload =>
       match payload with
       | .logUtf8 message => pure (.logUtf8 message)
+      | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+          return .promiseFunctionCallDetached receiver method argsCapacity
+            (← arguments.mapM _projectVal) (← _projectVal depositLo)
+            (← _projectVal depositHi) (← _projectVal gas)
       | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
       | .transientBuffer64Set capacity index value =>
           return .transientBuffer64Set capacity (← _projectVal index) (← _projectVal value)
@@ -101,6 +105,11 @@ private def canonValues (values : Array (Wasm.IR.Val Ops.ValKind)) : String :=
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .logUtf8 message => s!"nlog:{message.toUTF8.size}:{message}"
+  | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+      s!"npromise.detached:{receiver.toUTF8.size}:{receiver}:{method.toUTF8.size}:{method}." ++
+        s!"{argsCapacity}({canonValues arguments};" ++
+        s!"{Wasm.IR.valCanon extValCanon depositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon depositHi},{Wasm.IR.valCanon extValCanon gas})"
   | .transientBuffer64Begin capacity => s!"ntb64.begin.{capacity}"
   | .transientBuffer64Set capacity index value =>
       s!"ntb64.set.{capacity}({Wasm.IR.valCanon extValCanon index},{Wasm.IR.valCanon extValCanon value})"
@@ -127,6 +136,10 @@ private def rewritePayload
     (rewriteValue : Ops.Val → Except String Ops.Val) :
     Ops.OpExt Ops.Val → Except String (Ops.OpExt Ops.Val)
   | .logUtf8 message => pure (.logUtf8 message)
+  | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+      return .promiseFunctionCallDetached receiver method argsCapacity
+        (← arguments.mapM rewriteValue) (← rewriteValue depositLo)
+        (← rewriteValue depositHi) (← rewriteValue gas)
   | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
   | .transientBuffer64Set capacity index value =>
       return .transientBuffer64Set capacity (← rewriteValue index) (← rewriteValue value)

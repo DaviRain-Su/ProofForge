@@ -69,6 +69,9 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .near payload =>
       match payload with
       | .logUtf8 message => .near (.logUtf8 message)
+      | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+          .near (.promiseFunctionCallDetached receiver method argsCapacity
+            (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
       | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
       | .transientBuffer64Set capacity index value =>
           .near (.transientBuffer64Set capacity (mapValue index) (mapValue value))
@@ -91,6 +94,8 @@ def OpExt.values : OpExt Val → Array Val
   | .near payload =>
       match payload with
       | .logUtf8 _ => #[]
+      | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
+          arguments ++ #[depositLo, depositHi, gas]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
       | .transientBuffer64Set _ index value => #[index, value]
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key
@@ -135,6 +140,14 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .near payload =>
       match payload with
       | .logUtf8 message => message.toUTF8.size ≤ 1024
+      | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+          Wasm.Near.Codec.accountIdLiteralValid receiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid method &&
+            Wasm.Near.Codec.storageCapacityValid argsCapacity &&
+            arguments.size == argsCapacity + 1 &&
+            arguments.all (·.wellFormed ValKind.arity) &&
+            depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
+            gas.wellFormed ValKind.arity
       | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
           Wasm.Near.Memory.buffer64CapacityValid capacity
       | .transientBuffer64Set capacity index value =>

@@ -6,6 +6,7 @@ import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Wasm.Near.Runtime
+import ProofForge.Wasm.Near.Sdk.Promise
 import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Wasm.Near.Sdk.Storage
 import ProofForge.Evm.Codec
@@ -5591,6 +5592,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
   | fuel + 1, e =>
       e.getUsedConstantsAsSet.toList.any fun name =>
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
@@ -5598,6 +5600,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.storageWrite ||
         name == ``ProofForge.Wasm.Near.Runtime.storageRemove ||
         name == ``ProofForge.Wasm.Near.Runtime.storageHasKey ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish ||
@@ -5620,6 +5623,42 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
       let e := strip e
       if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
         (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callDetached &&
+          e.getAppArgs.size ≥ 6 then
+        let args := e.getAppArgs
+        let deposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 6]!,
+            staticString? env 64 args[args.size - 5]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) deposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) deposit),
+            val env args[args.size - 1]! with
+        | some argsCapacity, some receiver, some method, some depositLo, some depositHi, some gas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
+              (boundedStorageFrame? env argsCapacity args[args.size - 3]!).map fun arguments =>
+                .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                  depositLo depositHi gas
+            else none
+        | _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached &&
+          e.getAppArgs.size ≥ 7 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 7]!,
+            staticString? env 64 args[args.size - 6]!,
+            staticString? env 64 args[args.size - 5]!,
+            val env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some argsCapacity, some receiver, some method, some depositLo, some depositHi, some gas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
+              (boundedStorageFrame? env argsCapacity args[args.size - 4]!).map fun arguments =>
+                .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                  depositLo depositHi gas
+            else none
+        | _, _, _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin) &&
           e.getAppArgs.size ≥ 1 then

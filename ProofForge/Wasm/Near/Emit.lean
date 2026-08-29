@@ -96,11 +96,14 @@ private def keyOf (p : Program ValKind OpExt) (name : String) : Nat × Nat :=
 
 private def logDataBase : Nat := 4096
 private def maxLogDataBytes : Nat := 4096
+private def promiseDataBase : Nat := 8192
+private def maxPromiseDataBytes : Nat := 4096
 
 private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
   ops.foldl (init := #[]) fun messages op =>
     messages ++ match op with
       | .ext (.logUtf8 message) => #[message]
+      | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.transientBuffer64Begin _)
       | .ext (.transientBuffer64Set _ _ _)
       | .ext (.transientBuffer64Finish _)
@@ -129,6 +132,34 @@ private def logOf (p : Program ValKind OpExt) (message : String) : Except String
   | some (_, off, len) => pure (off, len)
   | none => throw "extract/unsupported: near log literal is missing from static layout"
 
+private partial def promiseLiteralsOfOps
+    (ops : Array (Op ValKind OpExt)) : Array String :=
+  ops.foldl (init := #[]) fun literals op =>
+    literals ++ match op with
+      | .ext (.promiseFunctionCallDetached receiver method _ _ _ _ _) => #[receiver, method]
+      | .ite _ _ _ thn els => promiseLiteralsOfOps thn ++ promiseLiteralsOfOps els
+      | .forBody _ body => promiseLiteralsOfOps body
+      | _ => #[]
+
+private def promiseLiterals (p : Program ValKind OpExt) : Array String :=
+  let all := promiseLiteralsOfOps p.initializer.ops ++
+    p.entries.flatMap (promiseLiteralsOfOps ·.ops)
+  all.foldl (init := #[]) fun unique literal =>
+    if unique.contains literal then unique else unique.push literal
+
+private def promiseLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
+  (promiseLiterals p).foldl (init := #[]) fun layout literal =>
+    let next := match layout.back? with
+      | some (_, off, len) => off + len
+      | none => promiseDataBase
+    layout.push (literal, next, literal.toUTF8.size)
+
+private def promiseLiteralOf
+    (p : Program ValKind OpExt) (literal : String) : Except String (Nat × Nat) :=
+  match (promiseLayout p).find? (fun item => item.1 == literal) with
+  | some (_, off, len) => pure (off, len)
+  | none => throw "extract/unsupported: near promise literal is missing from static layout"
+
 private def hexDigit (value : Nat) : Char :=
   if value < 10 then Char.ofNat ('0'.toNat + value)
   else Char.ofNat ('a'.toNat + value - 10)
@@ -149,6 +180,16 @@ private def logDataSection (p : Program ValKind OpExt) : Except String (Array St
     throw s!"extract/unsupported: near static log data {total} exceeds {maxLogDataBytes} bytes"
   return layout.map fun (message, off, _) =>
     "  (data (i32.const " ++ toString off ++ ") \"" ++ watBytes message ++ "\")"
+
+private def promiseDataSection (p : Program ValKind OpExt) : Except String (Array String) := do
+  let layout := promiseLayout p
+  let total := match layout.back? with
+    | some (_, off, len) => off + len - promiseDataBase
+    | none => 0
+  if maxPromiseDataBytes < total then
+    throw s!"extract/unsupported: near static promise data {total} exceeds {maxPromiseDataBytes} bytes"
+  return layout.map fun (literal, off, _) =>
+    "  (data (i32.const " ++ toString off ++ ") \"" ++ watBytes literal ++ "\")"
 
 private partial def renderVal (st : EState) (v : Val ValKind) : Except String String :=
   match v with
@@ -604,6 +645,35 @@ private partial def emitRegion (p : Program ValKind OpExt)
             ") (i64.const " ++ toString off ++ "))")] ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseFunctionCallDetached receiver method argsCapacity arguments
+        depositLo depositHi gas) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        let (receiverOff, receiverLen) ← promiseLiteralOf p receiver
+        let (methodOff, methodLen) ← promiseLiteralOf p method
+        let staged ← stageStorageFrame st argsCapacity arguments level
+        let depositLo ← renderVal staged.st depositLo
+        let depositHi ← renderVal staged.st depositHi
+        let gas ← renderVal staged.st gas
+        let depositPtrLocal := localOfTemp staged.st.fresh
+        let promiseLocal := localOfTemp (staged.st.fresh + 1)
+        let st' := { staged.st with fresh := staged.st.fresh + 2 }
+        let lines := staged.lines ++ #[
+          indent level ("(local.set " ++ depositPtrLocal ++
+            " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
+          indent level ("(i64.store (i32.wrap_i64 (local.get " ++ depositPtrLocal ++ ")) " ++
+            depositLo ++ ")"),
+          indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
+            ")) (i32.const 8)) " ++ depositHi ++ ")"),
+          indent level ("(local.set " ++ promiseLocal ++
+            " (call $pf_promise_batch_create (i64.const " ++ toString receiverLen ++
+            ") (i64.const " ++ toString receiverOff ++ ")))"),
+          indent level ("(call $pf_promise_batch_action_function_call (local.get " ++
+            promiseLocal ++ ") (i64.const " ++ toString methodLen ++ ") (i64.const " ++
+            toString methodOff ++ ") " ++ staged.length ++ " " ++ staged.pointer ++
+            " (local.get " ++ depositPtrLocal ++ ") " ++ gas ++ ")")
+        ]
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail st'
+        return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .ext (.transientBuffer64Begin capacity) =>
         let region ← emitRegion p outputPlan view echo level defaultSlot tail st
         return {
@@ -703,6 +773,8 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
   | .ext payload =>
       match payload with
       | .logUtf8 _ | .transientBuffer64Begin _ | .transientBuffer64Finish _ | .reserved => false
+      | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
+          arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .transientBuffer64Set _ index value => valHas index || valHas value
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key.any valHas
       | .storageWrite _ _ _ key value => key.any valHas || value.any valHas
@@ -778,6 +850,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.storageWrite _ _ _ _ _)
   | .ext (.storageRemove _ _ _)
   | .ext (.storageHasKey _ _ _) => true
+  | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
@@ -1040,12 +1113,15 @@ private def staticDataEnd (p : Program ValKind OpExt) : Nat :=
   let logEnd := match (logLayout p).back? with
     | some (_, off, len) => off + len
     | none => 0
+  let promiseEnd := match (promiseLayout p).back? with
+    | some (_, off, len) => off + len
+    | none => 0
   let panicEnd :=
     if predecessorKinds.any (programUses · p) || currentAccountKinds.any (programUses · p) then
       panicAccountIdOff + 10
     else
       panicInputOff + 5
-  Nat.max panicEnd (Nat.max keyEnd logEnd)
+  Nat.max promiseEnd (Nat.max panicEnd (Nat.max keyEnd logEnd))
 
 private def arenaBase (p : Program ValKind OpExt) : Nat :=
   Memory.alignUp (staticDataEnd p) 8
@@ -1247,6 +1323,7 @@ private def utf8Validator : Array String := #[
 
 def emit (p : IR.Program) : Except String String := do
   let logData ← logDataSection p
+  let promiseData ← promiseDataSection p
   if programUsesArena p && Memory.pageBytes < arenaBase p then
     throw "extract/unsupported: near static data leaves no room in the initial Wasm page"
   let mut lines : Array String := #[]
@@ -1275,6 +1352,11 @@ def emit (p : IR.Program) : Except String String := do
   if !(logMessages p).isEmpty then
     lines := lines.push
       "  (import \"env\" \"log_utf8\" (func $pf_log_utf8 (param i64 i64)))"
+  if !(promiseLiterals p).isEmpty then
+    lines := lines.push
+      "  (import \"env\" \"promise_batch_create\" (func $pf_promise_batch_create (param i64 i64) (result i64)))"
+    lines := lines.push
+      "  (import \"env\" \"promise_batch_action_function_call\" (func $pf_promise_batch_action_function_call (param i64 i64 i64 i64 i64 i64 i64)))"
   if programUses .blockIndex p then
     lines := lines.push
       "  (import \"env\" \"block_index\" (func $pf_block_index (result i64)))"
@@ -1296,6 +1378,7 @@ def emit (p : IR.Program) : Except String String := do
   lines := lines.push "  (memory (export \"memory\") 1)"
   lines := lines ++ dataSection p
   lines := lines ++ logData
+  lines := lines ++ promiseData
   if programUsesArena p then
     lines := lines ++ arenaHelpers p
   if programUsesUtf8Codec p then

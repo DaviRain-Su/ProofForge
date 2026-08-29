@@ -19,8 +19,10 @@ The current profile uses all four storage calls plus `input` / `register_len` /
 `read_register` / `value_return` / `panic_utf8`, context reads, and bounded static
 `log_utf8`. Bounded bytes/string input is allocation-free; bounded view output and raw-storage
 register copies use the checked guest arena. Raw storage preserves nearcore's exact 0/1 status,
-stale-register, empty-value, and oversized-result behavior. Mutating bounded output and promises
-stay fail closed.
+stale-register, empty-value, and oversized-result behavior. The first detached Promise slice uses
+static receiver/method literals, bounded arguments, lossless u128 deposit, and explicit gas through
+the batch function-call ABI. Promise return/chaining/results and mutating bounded output stay fail
+closed.
 
 The family `Wasm.Host.Contract` still describes XRPL's Data-blob import shape.
 NEAR does not instantiate it; `Near.Emit` owns the env import table.

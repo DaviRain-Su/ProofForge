@@ -8,7 +8,8 @@ import ProofForge.Wasm.Near.Codec
 
 Value/effect extensions owned by the NEAR Protocol chain. v0 admits scalar
 context reads, lossless u128 token values, lossless 64-byte account-id leaves,
-invocation-memory operations, and bounded raw storage. Promise and hashing stay absent.
+invocation-memory operations, bounded raw storage, and one detached static Promise call.
+Promise graphs/results and hashing stay absent.
 `reserved` is rejected by `wellFormed`.
 -/
 
@@ -56,6 +57,8 @@ abbrev Cmp := ProofForge.Core.Ops.Cmp
 UTF-8 literal that the emitter places in deterministic linear-memory data. -/
 inductive OpExt (V : Type) where
   | logUtf8 (message : String)
+  | promiseFunctionCallDetached (receiver method : String) (argsCapacity : Nat)
+      (arguments : Array V) (depositLo depositHi gas : V)
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
   | transientBuffer64Finish (capacity : Nat)
@@ -76,6 +79,11 @@ private def storageFrameWellFormed (capacity : Nat) (values : Array Val) : Bool 
 
 def OpExt.wellFormed : OpExt Val → Bool
   | .logUtf8 message => message.toUTF8.size ≤ 1024
+  | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+      Codec.accountIdLiteralValid receiver && Codec.promiseMethodLiteralValid method &&
+        storageFrameWellFormed argsCapacity arguments &&
+        depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
+        gas.wellFormed ValKind.arity
   | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
       Memory.buffer64CapacityValid capacity
   | .transientBuffer64Set capacity index value =>
@@ -95,6 +103,9 @@ def Op.wellFormed (op : Op) : Bool :=
 
 private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .logUtf8 message => .logUtf8 message
+  | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+      .promiseFunctionCallDetached receiver method argsCapacity (arguments.map mapValue)
+        (mapValue depositLo) (mapValue depositHi) (mapValue gas)
   | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
   | .transientBuffer64Set capacity index value =>
       .transientBuffer64Set capacity (mapValue index) (mapValue value)
@@ -111,6 +122,8 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
 
 private def cfgPayloadValues : OpExt Val → Array Val
   | .logUtf8 _ => #[]
+  | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
+      arguments ++ #[depositLo, depositHi, gas]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
   | .transientBuffer64Set _ index value => #[index, value]
   | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key

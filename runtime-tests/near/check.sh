@@ -160,6 +160,16 @@ iterable_anchors = (
     'i64.shl',
     'i64.or',
 )
+promise_anchors = (
+    '(func (export "send")',
+    '(func (export "sendMissing")',
+    '(import "env" "promise_batch_create"',
+    '(import "env" "promise_batch_action_function_call"',
+    '(call $pf_promise_batch_create',
+    '(call $pf_promise_batch_action_function_call',
+    '(call $pf_arena_alloc (i64.const 16) (i64.const 8))',
+    '(i64.const 20000000000000)',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -185,6 +195,8 @@ for wat in wats:
         extra = queue_anchors
     elif wat.stem == "NearIterable":
         extra = iterable_anchors
+    elif wat.stem == "NearPromise":
+        extra = promise_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

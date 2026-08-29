@@ -215,6 +215,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-lookup-001](tasks/wsm-near-lookup-001.md) | done | NEAR direct Identity LookupMap64 / LookupSet64 layout foundation |
 | [wsm-near-queue-001](tasks/wsm-near-queue-001.md) | done | ProofForge bounded persistent NEAR Queue64 |
 | [wsm-near-iterable-001](tasks/wsm-near-iterable-001.md) | done | NEAR bounded Identity IterableMap64 / IterableSet64 |
+| [wsm-near-promise-001](tasks/wsm-near-promise-001.md) | done | NEAR detached static Promise function call |
 
 ## SVM 全面工作计划（当前主线）
 

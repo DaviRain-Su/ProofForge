@@ -107,6 +107,27 @@ rejects dynamic strings and messages above the target-owned bound.
   0
 
 /-!
+Detached cross-contract call foundation. Receiver and method are compile-time literals; arguments
+remain a bounded source frame, deposit is passed losslessly as two u64 limbs, and gas is an inline
+u64. The emitter uses the same batch-create plus function-call action sequence as near-sdk-rs.
+This schedules work but does not call `promise_return`; callbacks and result observation are
+separate target effects.
+-/
+
+@[irreducible] def promiseFunctionCallDetached (argsCapacity : Nat)
+    (receiver method : String)
+    (arguments : ProofForge.Core.Value.BoundedBytes argsCapacity)
+    (depositLo depositHi gas : UInt64) : UInt64 :=
+  let _ := argsCapacity
+  let _ := receiver
+  let _ := method
+  let _ := arguments
+  let _ := depositLo
+  let _ := depositHi
+  let _ := gas
+  0
+
+/-!
 Invocation-local guest-Wasm arena leaves. Capacity is compile-time fixed by the SDK descriptor;
 the extractor rejects malformed geometry. The physical pointer remains target-owned and cannot
 enter source state or persistent storage.

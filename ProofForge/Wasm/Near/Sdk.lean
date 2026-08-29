@@ -2,6 +2,7 @@ import ProofForge.Attr
 import ProofForge.Wasm.Near.Runtime
 import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Wasm.Near.Sdk.Storage
+import ProofForge.Wasm.Near.Sdk.Promise
 import ProofForge.Wasm.Near.Sdk.Store.Codec
 import ProofForge.Wasm.Near.Sdk.Store.Iterable
 import ProofForge.Wasm.Near.Sdk.Store.Lookup
@@ -12,7 +13,7 @@ namespace ProofForge.Wasm.Near.Sdk
 
 /-!
 Source-facing NEAR SDK. Names erase through `@[pf_inline]` to Runtime stubs;
-they do not add Ops, IR nodes, or emitter cases. Promise / NEP-141 stay absent.
+they do not add Ops, IR nodes, or emitter cases. Promise chaining/results and NEP-141 stay absent.
 -/
 
 notation "AccountId" => Runtime.AccountId

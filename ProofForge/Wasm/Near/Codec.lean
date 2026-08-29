@@ -20,6 +20,31 @@ sequence through runtime `length = 0`. -/
 def storageCapacityValid (capacity : Nat) : Bool :=
   1 ≤ capacity && capacity ≤ maxBoundedBytesCapacity
 
+private def accountIdSeparator (byte : UInt8) : Bool :=
+  byte == 0x2d || byte == 0x2e || byte == 0x5f
+
+private def accountIdByte (byte : UInt8) : Bool :=
+  (0x61 ≤ byte && byte ≤ 0x7a) || (0x30 ≤ byte && byte ≤ 0x39) ||
+    accountIdSeparator byte
+
+/-- Exact static NEAR AccountId syntax used for compile-time promise receivers: 2..64 ASCII
+bytes, lowercase letters/digits plus `-`, `.`, `_`, with no leading, trailing, or adjacent
+separators. This mirrors nearcore's account-id parser and adds no `.near`/`.test` policy. -/
+def accountIdLiteralValid (accountId : String) : Bool :=
+  let bytes := accountId.toUTF8.data
+  if bytes.size < 2 || 64 < bytes.size then false
+  else
+    let state := bytes.foldl (init := (true, true)) fun (valid, previousSeparator) byte =>
+      let separator := accountIdSeparator byte
+      (valid && accountIdByte byte && !(separator && previousSeparator), separator)
+    state.1 && !state.2
+
+/-- Static near-sdk `String` method-name bound. The host consumes raw bytes; ProofForge keeps the
+SDK-facing UTF-8 literal nonempty and within nearcore's 256-byte action limit. -/
+def promiseMethodLiteralValid (method : String) : Bool :=
+  let size := method.toUTF8.size
+  1 ≤ size && size ≤ 256
+
 structure BorshInputPlan where
   capacity : Nat
   validateUtf8 : Bool
