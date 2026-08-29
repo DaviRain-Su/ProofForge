@@ -35,6 +35,13 @@ def boundsErrorCode : Nat := 0x1212
 def stateErrorCode : Nat := 0x1213
 def rangeErrorCode : Nat := 0x1214
 
+/-- Deepest stack offset of the 16-byte `SolBytes` descriptor used by `sol_log_data`. Its base is
+`r10 - descriptorStack`; the target emitter stores the active payload pointer at `[base + 0]` and
+its current length at `[base + 8]`. The descriptor exists only adjacent to syscall emission; the
+pointer never enters a source value, generic IR, or account state. The occupied `2377..2392` bytes
+are disjoint from FIFO's `2056..2304` and `AccountStorage`'s `2489..4096` deep scratch. -/
+def descriptorStack : Nat := 2392
+
 /-- Compiler-erased byte-buffer geometry. Capacity is measured in bytes. -/
 structure Config where
   capacity : Nat
@@ -89,6 +96,7 @@ inductive Call (V : Type) where
   | set (config : Config) (index byte : V)
   | clear (config : Config)
   | finish (config : Config)
+  | logData (config : Config)
   deriving BEq, Repr, Inhabited
 
 def Call.mapValues (mapValue : α → β) : Call α → Call β
@@ -98,6 +106,7 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .set config index byte => .set config (mapValue index) (mapValue byte)
   | .clear config => .clear config
   | .finish config => .finish config
+  | .logData config => .logData config
 
 def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .begin config => return .begin config
@@ -106,9 +115,10 @@ def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .set config index byte => return .set config (← mapValue index) (← mapValue byte)
   | .clear config => return .clear config
   | .finish config => return .finish config
+  | .logData config => return .logData config
 
 def Call.values : Call V → Array V
-  | .begin _ | .clear _ | .finish _ => #[]
+  | .begin _ | .clear _ | .finish _ | .logData _ => #[]
   | .push _ byte | .appendLe64 _ byte => #[byte]
   | .set _ index byte => #[index, byte]
 
@@ -118,7 +128,7 @@ def Call.minAccounts (measure : V → Nat) (call : Call V) : Nat :=
   call.values.foldl (init := 0) fun current value => Nat.max current (measure value)
 
 def Call.wellFormed (valueWellFormed : V → Bool) : Call V → Bool
-  | .begin config | .clear config | .finish config => config.wellFormed
+  | .begin config | .clear config | .finish config | .logData config => config.wellFormed
   | .push config byte => config.wellFormed && valueWellFormed byte
   | .appendLe64 config value => config.wellFormed && config.fitsLe64 && valueWellFormed value
   | .set config index byte =>
@@ -132,5 +142,6 @@ def Call.canonical (renderValue : V → String) : Call V → String
       s!"tbyte.set.{config.capacity}({renderValue index},{renderValue byte})"
   | .clear config => s!"tbyte.clear.{config.capacity}"
   | .finish config => s!"tbyte.finish.{config.capacity}"
+  | .logData config => s!"tbyte.logData.{config.capacity}"
 
 end ProofForge.Svm.TransientBytes

@@ -368,7 +368,11 @@ EpochSchedule 和 compile-time Rent Runtime leaves；Clock/Epoch/Rent 的 IR dig
 syscall 路径不变，没有形成第二套 syscall backend，详见 [R3-014](tasks/r3-014.md)。
 R3-015 又把两种 transient emitter 重复的 allocation、metadata、
 active/capacity validation、clear/finish 收口到一个 target-owned lifecycle interpreter，且
-保持 assembly byte-exact；详见 [R3-015](tasks/r3-015.md)。
+保持 assembly byte-exact；详见 [R3-015](tasks/r3-015.md)。R3-016 再把 active byte prefix
+通过 syscall-adjacent `SolBytes` descriptor 绑定为一个 bounded `sol_log_data` field，exact
+payload 与普通 return data 由 Mollusk 同时验证，详见 [R3-016](tasks/r3-016.md)。R3 尚未完成；
+同类型多 handle、generic POD vector/record writer、rent-aware resize、runtime-selected
+ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 
 ### R4 — EVM Runtime
 

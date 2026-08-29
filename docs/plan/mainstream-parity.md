@@ -86,7 +86,7 @@ Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可�
 | instruction/CPI/PDA | static bounded metas/data、multi-seed signed CPI、return-data staging、PDA find/check | bounded full return data + returned program-id check；more generic bounded instruction bytes；stack/sibling/instruction introspection only when required | F1 |
 | sysvar/runtime query | `Svm.Sdk.Sysvar` 已收口 Clock slot/epoch/unix、Rent、EpochSchedule target leaves | remaining Clock/Epoch fields、generic sliced sysvar、remaining compute/stack height、instructions sysvar；advanced sysvars on demand | F1/F2 |
 | crypto | literal SHA-256/Keccak first word、PDA host calls | full 32-byte/multi-slice hashes；Blake3/SHA-512/secp recovery/Poseidon/curve/big-mod-exp；signature-program instruction validation | F1/F2 |
-| log/error | authenticated bounded `sol_log_data` recorder、custom failure terminal | generic bounded log-data/numeric/key API；stable typed event convention；complete ProgramError/custom-code mapping | F1 |
+| log/error | authenticated bounded `sol_log_data` recorder；active transient bytes 可作为一个 bounded field 直接发布；custom failure terminal | multi-field/字符串/numeric/key log API；stable typed event convention；complete ProgramError/custom-code mapping | F1 |
 | serialization | exact scalar/static/tagged/bounded Borsh input、canonical bounded bytes/String（strict UTF-8）、top-level one-limb bounded/tagged Borsh return、raw entry、Token-2022 TLV envelope | nested/constructed/wide dynamic returns、Pack/POD/COption/versioned account codecs、strict reusable readers/writers | F0/F2 |
 
 Rust 的 `Rc<RefCell<_>>` borrow API 是 Rust host representation，不应原样复制成 Lean SDK。

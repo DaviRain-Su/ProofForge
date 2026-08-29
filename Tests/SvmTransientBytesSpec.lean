@@ -30,6 +30,14 @@ private def bytesSmall : TransientBytes.Config := { capacity := 3 }
   (TransientBytes.Call.push bytes4 255 : TransientBytes.Call UInt64).wellFormed (fun _ => true)
 #guard
   (TransientBytes.Call.set bytes4 0 9 : TransientBytes.Call UInt64).wellFormed (fun _ => true)
+#guard
+  (TransientBytes.Call.logData bytes4 : TransientBytes.Call UInt64).wellFormed (fun _ => true)
+#guard
+  !((TransientBytes.Call.logData { capacity := 0 } :
+      TransientBytes.Call UInt64).wellFormed (fun _ => true))
+#guard
+  (TransientBytes.Call.logData bytes4 : TransientBytes.Call UInt64).canonical (fun _ => "v") ==
+    "tbyte.logData.4"
 #guard (TransientBytes.Query.length bytes4).wellFormed
 #guard (TransientBytes.Query.get bytes4).arity == 1
 #guard
@@ -45,6 +53,7 @@ private def bytesStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientBytes (.set _ _ _)) => some "set"
   | .component (.transientBytes (.clear _)) => some "clear"
   | .component (.transientBytes (.finish _)) => some "finish"
+  | .component (.transientBytes (.logData _)) => some "logData"
   | .letLocal _ (.ext (.component (.transientBytes (.length _))) #[]) => some "length"
   | .letLocal _ (.ext (.component (.transientBytes (.get _))) #[_]) => some "get"
   | .returnU64 (.ext (.component (.transientBytes (.length _))) #[]) => some "length"
@@ -63,6 +72,7 @@ private def taggedStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientBytes (.set _ _ _)) => some "b.set"
   | .component (.transientBytes (.clear _)) => some "b.clear"
   | .component (.transientBytes (.finish _)) => some "b.finish"
+  | .component (.transientBytes (.logData _)) => some "b.logData"
   | .letLocal _ (.ext (.component (.transientVec _)) _) => some "v.query"
   | .letLocal _ (.ext (.component (.transientBytes _)) _) => some "b.query"
   | .returnU64 (.ext (.component (.transientVec _)) _) => some "v.query"
@@ -92,6 +102,7 @@ elab "#pf_guard_transient_bytes" : command => do
       hasCall (fun | .appendLe64 _ _ => true | _ => false) &&
       hasCall (fun | .set _ _ _ => true | _ => false) &&
       hasCall (fun | .clear _ => true | _ => false) &&
+      hasCall (fun | .logData _ => true | _ => false) &&
       hasCall (fun | .finish _ => true | _ => false) do
     throwError "transient byte calls did not stay behind the component bridge"
   let hasLength := source.methods.any fun method => method.ops.any fun
@@ -112,6 +123,11 @@ elab "#pf_guard_transient_bytes" : command => do
     | throwError "missing bytesAppendLe64 method"
   unless filtered bytesStep appendGet == #["begin", "appendLe64", "get", "finish"] do
     throwError "bytesAppendLe64 effects were not preserved in source order"
+  let some logData := program.methods.find? (·.ixName == "bytesLogData")
+    | throwError "missing bytesLogData method"
+  unless filtered bytesStep logData ==
+      #["begin", "appendLe64", "push", "length", "logData", "finish"] do
+    throwError "bytesLogData did not preserve its bounded writer and syscall effects in source order"
   let some afterFinish := program.methods.find? (·.ixName == "bytesAfterFinish")
     | throwError "missing bytesAfterFinish method"
   unless filtered bytesStep afterFinish == #["begin", "finish", "length"] do
@@ -142,6 +158,9 @@ elab "#pf_guard_transient_bytes" : command => do
       asm.contains "transient_bytes_push_range_" &&
       asm.contains "transient_bytes_push_room_" &&
       asm.contains "transient_bytes_get_bounds_" &&
+      asm.contains "one sol_log_data field views the active 12-byte payload buffer" &&
+      asm.contains "call sol_log_data" &&
+      asm.contains "stxdw [r9 + 0], r1" && asm.contains "stxdw [r9 + 8], r1" &&
       asm.contains "stxb [r9 + 0], r1" &&
       asm.contains "lddw r0, 0x1211" && asm.contains "lddw r0, 0x1212" &&
       asm.contains "lddw r0, 0x1213" && asm.contains "lddw r0, 0x1214" do

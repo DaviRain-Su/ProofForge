@@ -7,6 +7,7 @@ use {
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
+    solana_svm_log_collector::LogCollector,
 };
 
 fn account_after(result: &mollusk_svm::result::InstructionResult, key: &Pubkey) -> Account {
@@ -341,6 +342,32 @@ fn transient_bytes_append_le64_keeps_little_endian_byte_order() {
         &[value, 7],
         false,
         &[Check::success(), Check::return_data(&expected_high)],
+    );
+}
+
+#[test]
+fn transient_bytes_log_data_publishes_live_payload_and_preserves_return_data() {
+    let (program_id, mut mollusk, data_key, state) = setup();
+    mollusk.logger = Some(LogCollector::new_ref_with_limit(None));
+    let data = Account::new(1_000_000, 24, &program_id);
+    invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        data,
+        "bytesLogData",
+        &[0x1122334455667788, 0xaa],
+        false,
+        &[Check::success(), Check::return_data(&9u64.to_le_bytes())],
+    );
+    let logger = mollusk.logger.as_ref().expect("memory ops logger").borrow();
+    let messages = logger.get_recorded_content();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message == "Program data: iHdmVUQzIhGq"),
+        "missing exact bounded log-data payload: {messages:?}"
     );
 }
 

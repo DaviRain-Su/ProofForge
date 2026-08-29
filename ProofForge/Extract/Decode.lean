@@ -3119,6 +3119,11 @@ private def decodeTransientBytesCall (env : Environment) (e : Expr) :
     if args.size < 1 then none else do
       let config ← decodeTransientBytesConfig env args[args.size - 1]!
       return .transientBytes (.clear config)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesLogData ||
+      endsWith e ".transientBytesLogData" then
+    if args.size < 1 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 1]!
+      return .transientBytes (.logData config)
   else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesFinish ||
       endsWith e ".transientBytesFinish" then
     if args.size < 1 then none else do
@@ -3653,6 +3658,7 @@ def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
       constants.contains ``ProofForge.Svm.Runtime.transientBytesAppendLe64 ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesSet ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesClear ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesLogData ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesFinish then true
   else
     match fuel with

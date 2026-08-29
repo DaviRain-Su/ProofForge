@@ -48,6 +48,7 @@ R3-011 canonical program-id / SPL Token base-state views、R3-012 source-visible
 R3-013 source-visible transient bounded bytes/writer、
 R3-014 stable Clock/EpochSchedule/Rent SDK facade、
 R3-015 shared transient lifecycle emitter、
+R3-016 bounded transient log-data binding、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -452,6 +453,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   没有新增 top-level Ops/IR/CFG/main-Emit recipe 或 pointer-valued source/state。详见
   `docs/plan/tasks/r3-015.md`。下一切片可在该 lifecycle 上增加同类型多 handle 或 generic
   POD/record writer，而不再复制 allocator/metadata assembly。
+
+- R3-016 bounded transient log-data binding 已完成：`Transient.Bytes.logData` 把 active prefix
+  作为一个官方 `sol_log_data` field 发布；`SolBytes` descriptor 只在 syscall 邻接的 16-byte
+  target scratch 中按 `[addr,len]` 构造，payload 不复制，source/IR/account state 不出现 pointer。
+  active/capacity gate 继续复用 shared lifecycle；MemoryOps 的真实 Mollusk 路径同时钉死 exact
+  base64 payload 与普通 u64 return data。没有新增 top-level Ops/IR/main-Emit recipe，也不声称
+  已覆盖多 field、字符串、pubkey、numeric log 或 return-data API。详见
+  `docs/plan/tasks/r3-016.md`。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

@@ -62,7 +62,7 @@ def entries : Array Entry := #[
   { name := "Seat", digest := "831f313077f89947" },
   { name := "Lang", digest := "64264acebea0c34c" },
   { name := "AccountView", digest := "d5f1d730f3364a31" },
-  { name := "MemoryOps", digest := "28770989515f61b0" }
+  { name := "MemoryOps", digest := "328ed73565005d33" }
 ]
 
 def names : Array String := entries.map (·.name)

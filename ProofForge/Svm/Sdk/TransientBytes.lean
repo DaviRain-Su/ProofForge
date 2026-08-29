@@ -46,4 +46,10 @@ abbrev Bytes := ProofForge.Svm.TransientBytes.Config
 @[pf_inline] def Bytes.get (bytes : Bytes) (index : UInt64) : UInt64 :=
   transientBytesGet (UInt64.ofNat bytes.capacity) index
 
+/-- Publish exactly one official `sol_log_data` field whose bytes are the active payload and whose
+length is the current runtime length. The syscall descriptor is constructed by the target emitter;
+no pointer, descriptor, or syscall enters this source handle. -/
+@[pf_inline] def Bytes.logData (bytes : Bytes) : UInt64 :=
+  transientBytesLogData (UInt64.ofNat bytes.capacity)
+
 end ProofForge.Svm.Sdk.Transient

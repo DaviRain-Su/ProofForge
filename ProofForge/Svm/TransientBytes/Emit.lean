@@ -103,6 +103,21 @@ private def emitClear (label : String) (config : Config) : String :=
 private def emitFinish (label : String) (config : Config) : String :=
   Transient.Emit.emitFinish lifecycle config.capacity label
 
+/-- Publish one official `sol_log_data` field: the descriptor (active payload pointer and current
+runtime length) is constructed in this component's adjacent deep-scratch cells and no copy of the
+payload is made. Shared `emitRequireActive` keeps stale and capacity-mismatched handles on the
+existing state error before any pointer can be formed. -/
+private def emitLogData (label : String) (config : Config) : Except String String :=
+  return emitRequireActive config label ++ s!"\
+  ; one sol_log_data field views the active {config.capacity}-byte payload buffer\n\
+  mov64 r9, r10\n  add64 r9, -{descriptorStack}\n\
+  ldxdw r1, [r10 - {pointerStack}]\n\
+  stxdw [r9 + 0], r1\n\
+  ldxdw r1, [r10 - {lengthStack}]\n\
+  stxdw [r9 + 8], r1\n\
+  mov64 r1, r9\n\
+  lddw r2, 1\n  call sol_log_data\n"
+
 def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
     (stackOff nonce : Nat) (scope : String) : Except String String :=
   match query, operands with
@@ -135,5 +150,6 @@ def emitCall (context : Context) (label : String) :
   | .set config index byte => emitSet context label config index byte
   | .clear config => return emitClear label config
   | .finish config => return emitFinish label config
+  | .logData config => emitLogData label config
 
 end ProofForge.Svm.TransientBytes.Emit

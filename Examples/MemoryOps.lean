@@ -158,6 +158,18 @@ def bytesAppendLe64 (_state : State) (value index : UInt64) : UInt64 :=
   let _ := bytes12.finish
   selected
 
+/-- Build one bounded binary event field in invocation memory, publish exactly its live bytes with
+the official `sol_log_data` syscall, and keep the ordinary scalar return path independent. -/
+@[pf_entry]
+def bytesLogData (_state : State) (value trailingByte : UInt64) : UInt64 :=
+  let _ := bytes12.begin
+  let _ := bytes12.appendLe64 value
+  let _ := bytes12.push trailingByte
+  let length := bytes12.length
+  let _ := bytes12.logData
+  let _ := bytes12.finish
+  length
+
 /-- One `Vector64` handle and one byte-buffer handle may be active at the same time. The vector
 and the bytes buffer compose through the same bump allocator with disjoint invocation metadata. -/
 @[pf_entry]

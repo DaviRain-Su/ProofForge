@@ -319,6 +319,13 @@ VM heap memory. -/
   let _ := value
   0
 
+/-- Publish the current active byte-buffer payload as one official `sol_log_data` field. The host
+model cannot observe VM heap memory; the target emitter binds the active pointer and length to the
+syscall, and stale or mismatched handles keep the buffer's state error. -/
+@[irreducible] def transientBytesLogData (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
 /-- Open the invocation-local accumulators used by bounded FIFO cancellation. Persistent order and
 trader state remains in account bytes; this handle contains only scalar cursor keys, event index,
 and released-lot totals. -/
