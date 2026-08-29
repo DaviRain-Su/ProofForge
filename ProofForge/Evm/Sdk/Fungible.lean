@@ -60,6 +60,27 @@ writes through the same hashed key. Precondition: `canTransfer balances source d
     (amount : UInt256) : UInt64 :=
   balances.revertInsufficient owner amount
 
+
+/-- **transfer 前置蕴含 debit 前置**。 -/
+theorem canTransfer_canDebit (balances : Balances) (source destination : Address)
+    (amount : UInt256) (h : canTransfer balances source destination amount = true) :
+    canDebit balances source amount = true := by
+  unfold canTransfer at h
+  simp only [Bool.and_eq_true] at h
+  exact h.1
+
+/-- **transfer 前置蕴含 credit 前置**（source ≠ destination 时）。 -/
+theorem canTransfer_canCredit (balances : Balances) (source destination : Address)
+    (amount : UInt256) (h : canTransfer balances source destination amount = true)
+    (hne : Address.eq source destination = false) :
+    canCredit balances destination amount = true := by
+  unfold canTransfer at h
+  simp only [Bool.and_eq_true, Bool.or_eq_true] at h
+  rw [hne] at h
+  cases h.2 with
+  | inl hf => exact absurd hf (by simp)
+  | inr hc => exact hc
+
 end Balances
 
 /-- Compile-time handle to one persistent owner/spender UInt256 allowance namespace. -/
@@ -116,6 +137,22 @@ namespace Allowances
 @[pf_inline] def insufficient (allowances : Allowances) (owner spender : Address)
     (amount : UInt256) : UInt64 :=
   allowances.revertInsufficient owner spender amount
+
+
+/-- **spend 前置蕴含 decrease 前置**。 -/
+theorem canSpend_canDecrease (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) (h : canSpend allowances owner spender amount = true) :
+    canDecrease allowances owner spender amount = true := by
+  unfold canSpend at h
+  exact h
+
+/-- **increase 前置蕴含 nextIncrease ≥ 旧值**（UInt256 不回绕蕴含）。 -/
+theorem canIncrease_ge (allowances : Allowances) (owner spender : Address)
+    (amount : UInt256) (h : canIncrease allowances owner spender amount = true) :
+    UInt256.ge (nextIncrease allowances owner spender amount)
+      (allowanceOf allowances owner spender) = true := by
+  unfold canIncrease at h
+  exact h
 
 end Allowances
 
