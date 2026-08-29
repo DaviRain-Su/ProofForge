@@ -93,6 +93,9 @@ def alphanet : Contract where
   computeSha512Half := "sha512_half"
   getParentHash := ""
   getBaseFee := ""
+  accountRootId := "accountroot_id"
+  cacheLe := "cache_le"
+  leField := "le_field"
   viewResultI32 := true
   ledgerSqnBuffer := true
   ownerFromTx := true

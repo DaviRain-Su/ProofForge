@@ -1091,6 +1091,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some .xrplParentHashW0
   else if endsWith e ".xrplBaseFee" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplBaseFee then
     some .xrplBaseFee
+  else if endsWith e ".xrplCallerBalanceDrops" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerBalanceDrops then
+    some .xrplCallerBalanceDrops
   else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
     some .evmSelfW0
   else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then

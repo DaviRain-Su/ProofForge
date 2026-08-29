@@ -69,6 +69,12 @@ structure Contract where
   getParentHash : String := ""
   /-- Host `get_base_fee() -> i32`. Empty skips the base-fee leaf. Same shape as ledger sqn. -/
   getBaseFee : String := ""
+  /-- Host `accountroot_id(acc, acc_len, out, out_len) -> i32`. Empty skips Balance. -/
+  accountRootId : String := ""
+  /-- Host `cache_le(id, id_len, cache_num) -> i32`. Empty skips Balance. -/
+  cacheLe : String := ""
+  /-- Host `le_field(slot, sfield, out, out_len) -> i32`. Empty skips Balance. -/
+  leField : String := ""
   /-- AlphaNet rejects view exports that return `i64`; Bedrock local still uses `i64`. -/
   viewResultI32 : Bool := false
   /-- AlphaNet `ldgr_index(ptr, len) -> i32` writes a little-endian u32. Bedrock is `() -> i32`. -/

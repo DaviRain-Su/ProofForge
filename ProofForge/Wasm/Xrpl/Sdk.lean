@@ -64,6 +64,9 @@ namespace Context
 /-- `host_lib.get_base_fee`. Not EVM `baseFee` UInt256. -/
 @[pf_inline] def baseFee : UInt64 := Runtime.xrplBaseFee
 
+/-- Caller's XRP AccountRoot.Balance in drops. Not EVM `selfBalance`. -/
+@[pf_inline] def callerBalanceDrops : UInt64 := Runtime.xrplCallerBalanceDrops
+
 end Context
 
 namespace Pausable

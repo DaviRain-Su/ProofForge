@@ -24,6 +24,8 @@ inductive ValKind where
   | baseFee
   /-- Compile-time ASCII seed; first little-endian UInt64 of SHA-512Half. -/
   | sha512HalfLit (seed : String)
+  /-- Caller's AccountRoot.Balance as XRP drops (STAmount 57-bit mantissa). -/
+  | callerBalanceDrops
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat

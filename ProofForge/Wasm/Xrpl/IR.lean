@@ -52,6 +52,7 @@ def extValCanon : Ops.ValKind → String
   | .parentHashW0 => "xhash0"
   | .baseFee => "xfee"
   | .sha512HalfLit seed => s!"xsha.{seed}"
+  | .callerBalanceDrops => "xbal"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .reserved => "wext"
