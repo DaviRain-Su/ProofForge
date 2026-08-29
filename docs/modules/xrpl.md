@@ -92,3 +92,6 @@ CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本�
 `research/06-wasm-feasibility.md` 的链上腿最初设想「通用 wasmtime + `pf` import」。
 那条通用宿主不存在：链差在 host function 和存储布局。本切片是 Lean → WAT →
 locked `wat2wasm` → `.wasm`，import 表由链拥有。XRPL 钉 `host_lib`，不是 `pf.*`。
+
+账本模型（为什么不是 EVM 合约存储、不是 SVM 账户字节、为什么不像 NEAR）见
+[xrpl-model.md](../plan/analysis/xrpl-model.md)。

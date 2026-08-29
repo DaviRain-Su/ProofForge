@@ -30,5 +30,6 @@
 | [modules/wasm.md](modules/wasm.md) | WASM 链家族：Lean → `.wasm`；链拥有 host import 表与存储布局 |
 | [modules/xrpl.md](modules/xrpl.md) | WASM 家族成员：XRPL Bedrock Lean → WAT → `.wasm` |
 | [plan/analysis/xrpl-runtime.md](plan/analysis/xrpl-runtime.md) | XRPL Runtime 排期：向 EVM/SVM 学分层，不学物理模型 |
+| [plan/analysis/xrpl-model.md](plan/analysis/xrpl-model.md) | XRPL WASM 账本模型 vs EVM / SVM / NEAR；为什么生态不像 NEAR |
 
 当前阶段：**L4 + EVM + WASM 家族 XRPL（`.wasm` v0 已绿，下一刀 Runtime 叶子）**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。E-ADDR / E-U256 已并入：`Addr20` 是 `address`，`UInt256` 是显式 `uint256`。SVM 名不翻译。XRPL 不翻译成 `clockSlot` / `CALLER`。
