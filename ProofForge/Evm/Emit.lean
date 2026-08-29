@@ -319,6 +319,23 @@ private def rememberWide (st : Render) (key packed : String) : Render :=
 private def lookupWide (st : Render) (key : String) : Option String :=
   (st.wide.find? (·.key == key)).map (·.packed)
 
+/-- Materialize one 256-bit EVM environment word once, then project its allocation-free UInt64
+limbs from the render cache. Environment leaves share this policy instead of duplicating cache and
+packing logic for every opcode. -/
+private def materializePackedEnvWord (indent cacheKey expression : String) (limb : Nat)
+    (st : Render) : String × String × Render :=
+  match lookupWide st cacheKey with
+  | some packed =>
+      let (name, st') := fresh st
+      (indent ++ "let " ++ name ++ " := " ++ packU256Word packed limb ++ nl, name, st')
+  | none =>
+      let (packed, st1) := fresh st
+      let (name, st2) := fresh (rememberWide st1 cacheKey packed)
+      let text :=
+        indent ++ "let " ++ packed ++ " := " ++ expression ++ nl ++
+        indent ++ "let " ++ name ++ " := " ++ packU256Word packed limb ++ nl
+      (text, name, st2)
+
 private partial def valKey : Ops.Val → String
   | .arg i => s!"a{i}"
   | .local i => s!"v{i}"
@@ -503,31 +520,9 @@ private partial def materializeVal (p : IR.Program) (indent paramPrefix : String
           indent ++ "let " ++ nm ++ " := mod(" ++ lv ++ ", " ++ rv ++ ")" ++ nl
         return (txt, nm, st3)
     | .ext (.callValue256 limb) #[] =>
-        let cacheKey := "cval256"
-        match lookupWide st cacheKey with
-        | some ret =>
-          let (nm, st') := fresh st
-          return (indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl, nm, st')
-        | none =>
-          let (ret, st1) := fresh st
-          let (nm, st2) := fresh (rememberWide st1 cacheKey ret)
-          let txt :=
-            indent ++ "let " ++ ret ++ " := callvalue()" ++ nl ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl
-          return (txt, nm, st2)
+        return materializePackedEnvWord indent "cval256" "callvalue()" limb st
     | .ext (.selfBalance256 limb) #[] =>
-        let cacheKey := "sbal256"
-        match lookupWide st cacheKey with
-        | some ret =>
-          let (nm, st') := fresh st
-          return (indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl, nm, st')
-        | none =>
-          let (ret, st1) := fresh st
-          let (nm, st2) := fresh (rememberWide st1 cacheKey ret)
-          let txt :=
-            indent ++ "let " ++ ret ++ " := selfbalance()" ++ nl ++
-            indent ++ "let " ++ nm ++ " := " ++ packU256Word ret limb ++ nl
-          return (txt, nm, st2)
+        return materializePackedEnvWord indent "sbal256" "selfbalance()" limb st
     | .ext (.domainSep256 limb) #[] =>
         let (pre, ret, st1) := emitDomainSeparator indent st
         let (nm, st2) := fresh st1
