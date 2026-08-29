@@ -11,6 +11,7 @@ import ProofForge.Svm.Sdk.Memo
 import ProofForge.Svm.Sdk.Sysvar
 import ProofForge.Svm.Sdk.Transient
 import ProofForge.Svm.Sdk.TransientVec
+import ProofForge.Svm.Sdk.TransientRecord64
 import ProofForge.Svm.Sdk.TransientBytes
 import ProofForge.Svm.Sdk.Memory
 import ProofForge.Svm.Sdk.Telemetry
@@ -26,9 +27,9 @@ or emitter cases.
 All persistent state remains inside statically bounded Solana account-data regions. Component
 handles contain only compile-time descriptors; extraction erases them to checked account loads,
 stores, and bounded control flow. `Sdk.Transient` reuses the official heap model and scratch plan
-for invocation-local fixed vectors, byte writers, and composed codecs rather than introducing a
-parallel allocator or lifetime. No native pointer or invocation-heap collection crosses the
-contract boundary.
+for invocation-local fixed vectors, fixed-width UInt64 records, byte writers, and composed codecs
+rather than introducing a parallel allocator or lifetime. No native pointer or invocation-heap
+collection crosses the contract boundary.
 
 `Sdk.Memory` binds compile-time account-data spans to the official program-memory host functions.
 It preserves `memcpy` non-overlap, `memmove` overlap, exact `memcmp` result bits, and `memset` byte

@@ -3962,6 +3962,30 @@ private def accDataRbTreeOrderSetWordOrRemoveOp
   .accDataRbTreeOrderSetWordOrRemove acc rootWord linksBaseWord parentBaseWord keyBaseWord
     sequenceBaseWord valueBaseWord strideWords capacity bid price sequence index value
 
+/-- Whether the first marked helper layer owns effectful runtime control/sequencing that recursive
+primitive discovery must not erase. Static descriptor wrappers and matcher projections can keep
+the historical direct discovery path; an `if` around effects or two effectful sides of a `let`
+must be unfolded by `decodeExpr` as a whole. Nested helper layers are deliberately not unfolded
+here, so one-use facade delegates do not become a new extraction boundary. -/
+private def inlineOwnsSvmEffectStructure (env : Environment) (e : Expr) : Bool :=
+  let rec go (fuel : Nat) (e : Expr) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      let e := strip e
+      match e with
+      | .letE _ _ value body _ =>
+          (mentionsSvmEffect env 16 value && mentionsSvmEffect env 16 body) ||
+            go fuel' value || go fuel' body
+      | .lam .. => false
+      | .app fn arg =>
+          let isBranch := isConstNamed e ``ite || isConstNamed e ``dite
+          (isBranch && mentionsSvmEffect env 16 e) || go fuel' fn || go fuel' arg
+      | _ => false
+  match unfoldUserHelper env e with
+  | some (_, unfolded) => go 32 unfolded
+  | none => false
+
 /-- Preserve consecutive ignored SVM effects before decoding their state/return continuation.
 The final flag reports an external-account write that was present but could not be decoded. -/
 private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × Expr × Bool :=
@@ -3981,45 +4005,47 @@ private def leadingSvmEffects (env : Environment) (e : Expr) : Array Ops.Op × E
                 let scalarBinding := ty.consumeMData.getAppFn.constName? == some ``UInt64
                 (effects, e, !scalarBinding && mentionsSvmEffect env 16 value)
           else
-            match findComponentCall env 16 value with
-            | some call =>
-                go fuel' (body.instantiate1 value) (effects.push (.component call))
-            | none =>
-              match findInvoke env 16 value, findAccDataWordSetAt env 16 value,
+            -- A marked SDK combinator may sequence multiple component effects or own runtime
+            -- branch-local effects. Do not let recursive component discovery select only one
+            -- nested call and erase siblings/control flow; simple facade delegates keep the
+            -- established direct primitive path.
+            if inlineOwnsSvmEffectStructure env value then
+              (effects, e, false)
+            else
+              match findComponentCall env 16 value, findInvoke env 16 value,
+                  findAccDataWordSetAt env 16 value,
                   findAccDataRbTreeKey4Insert env 16 value,
                   findAccDataRbTreeKey4Remove env 16 value,
                   findAccDataRbTreeTraderDeposit env 16 value,
                   findAccDataRbTreeOrderInsert env 16 value,
                   findAccDataRbTreeOrderRemove env 16 value,
                   findAccDataRbTreeOrderSetWordOrRemove env 16 value with
-              | some invoke, _, _, _, _, _, _, _ =>
+              | some call, _, _, _, _, _, _, _, _ =>
+                  go fuel' (body.instantiate1 value) (effects.push (.component call))
+              | none, some invoke, _, _, _, _, _, _, _ =>
                   go fuel' (body.instantiate1 value) (effects.push (invokeOp invoke))
-              | none, some write, _, _, _, _, _, _ =>
+              | none, none, some write, _, _, _, _, _, _ =>
                   go fuel' (body.instantiate1 value) (effects.push (accDataWordSetAtOp write))
-              | none, none, some insert, _, _, _, _, _ =>
+              | none, none, none, some insert, _, _, _, _, _ =>
                   go fuel' (body.instantiate1 value)
                     (effects.push (accDataRbTreeKey4InsertOp insert))
-              | none, none, none, some remove, _, _, _, _ =>
+              | none, none, none, none, some remove, _, _, _, _ =>
                   go fuel' (body.instantiate1 value)
                     (effects.push (accDataRbTreeKey4RemoveOp remove))
-              | none, none, none, none, some deposit, _, _, _ =>
+              | none, none, none, none, none, some deposit, _, _, _ =>
                   go fuel' (body.instantiate1 value)
                     (effects.push (accDataRbTreeTraderDepositOp deposit))
-              | none, none, none, none, none, some insert, _, _ =>
+              | none, none, none, none, none, none, some insert, _, _ =>
                   go fuel' (body.instantiate1 value)
                     (effects.push (accDataRbTreeOrderInsertOp insert))
-              | none, none, none, none, none, none, some remove, _ =>
+              | none, none, none, none, none, none, none, some remove, _ =>
                   go fuel' (body.instantiate1 value)
                     (effects.push (accDataRbTreeOrderRemoveOp remove))
-              | none, none, none, none, none, none, none, some update =>
+              | none, none, none, none, none, none, none, none, some update =>
                   go fuel' (body.instantiate1 value)
                     (effects.push (accDataRbTreeOrderSetWordOrRemoveOp update))
-              | none, none, none, none, none, none, none, none =>
-                  -- A marked inline SDK combinator may contain branch-local effects rather than
-                  -- one leading primitive. Defer it to `decodeExpr`, which unfolds and validates
-                  -- every branch; only an opaque malformed write fails here.
-                  let deferredInlineEffect := (unfoldUserHelper env value).isSome
-                  (effects, e, !deferredInlineEffect && mentionsSvmEffect env 16 value)
+              | none, none, none, none, none, none, none, none, none =>
+                  (effects, e, mentionsSvmEffect env 16 value)
       | _ => (effects, e, false)
   go 32 e #[]
 

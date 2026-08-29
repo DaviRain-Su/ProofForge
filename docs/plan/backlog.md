@@ -61,13 +61,15 @@ R3-016 bounded transient log-data binding、
 R3-017/018 checked transient Vector64/Bytes pop、R3-019 shared transient truncate、
 R3-020 rent-exempt System/PDA create policy、
 R3-021 two-slot same-kind transient handle isolation、
+R3-022 invocation-local fixed-width UInt64 POD records、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
 R5-008 checked allowance core、R5-009 reusable reentrancy policy、
 R5-010 persistent bounded EVM storage vector、R5-011 honest runtime-code observation policy、
 R5-012 safe closed-call result policy、R5-013 bounded ERC-721 core、
-R5-014 bounded single-id ERC-1155 core 与 explicit effect-result sequencing；
+R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap 与 explicit
+effect-result sequencing；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -76,10 +78,10 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-29）**：Lean 汇总 360 jobs；SVM manifest 全 57 programs；
-  Mollusk 全量 349/349（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
+- **当前可验证基线（2026-08-29）**：Lean 汇总 364 jobs；SVM manifest 全 59 programs；
+  Mollusk 全量 363/363（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
   30 programs 且 Anvil 30/30。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 360-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  并保留汇总 `test` gate；完整 364-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
   `docs/plan/tasks/ci-001.md`。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
@@ -524,6 +526,18 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `899815d9f910e597`、assembly 98,699 B、ELF 31,520 B，Mollusk 7/7；详见
   `docs/plan/tasks/r3-021.md`。
 
+- R3-022 invocation-local fixed-width UInt64 POD records 已完成：
+  `Svm.Sdk.Transient.Record64` 只接收 compile-time `(limbs, records)`，由 SDK 派生 payload
+  product 和 slot handle；`append1..4` 在任何 word write 前预检完整 record，raw single-word
+  push 不暴露，`count` 拒绝非 stride-aligned prefix，get/set/truncate/drop/clear 均保持 record
+  边界。它完全组合已有 two-slot `Vector64` Component 和 official-shaped downward bump heap，
+  没有新增 Runtime leaf、顶层 Ops/IR/Component/main Emit recipe、pointer、realloc 或 reclaim。
+  `TransientLedger`（2 limbs）与 `TransientOrderTape`（3 limbs）两个非 Phoenix consumer 的
+  digests 为 `a91e5e115c1f83b` / `e203afd44ef6eea9`，assembly 573,988 / 587,880 B，ELF
+  164,824 / 169,400 B；focused Mollusk 14/14。更宽 record、typed wide field、更多 slot、
+  insert/remove-at/iteration 与任何持久化 pointer 继续 fail closed。详见
+  `docs/plan/tasks/r3-022.md`。
+
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
   独立复用；replacement 会使旧 nominee 失效，accept/cancel 显式清零，不使用 hashed
@@ -806,9 +820,9 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 360 jobs，汇总门覆盖全部 imported test modules 与 target guards。
-- SVM registry 57 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 349/349，其中 RawEntry 20/20、Phoenix-v1 profile
+- `lake build Tests` 当前 364 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 59 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+  `pf build` 当前通过；全套 Mollusk 363/363，其中 RawEntry 20/20、Phoenix-v1 profile
   76/76。
 - EVM registry 30 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /

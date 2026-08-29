@@ -79,3 +79,5 @@ import Examples.PhoenixV1Profile
 import Examples.AccountView
 import Examples.MemoryOps
 import Examples.TransientPair
+import Examples.TransientLedger
+import Examples.TransientOrderTape

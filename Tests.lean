@@ -110,5 +110,6 @@ import Tests.AccountViewSpec
 import Tests.SvmMemorySpec
 import Tests.SvmTransientVectorSpec
 import Tests.SvmTransientBytesSpec
+import Tests.SvmTransientRecordSpec
 import Tests.SvmTelemetrySpec
 import Tests.ProofSpec
