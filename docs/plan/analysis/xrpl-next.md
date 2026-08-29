@@ -158,7 +158,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 6. **wsm-035** — 给别人写卡片 **已绿**（硬编码对方 AccountID）。`tx Sequence/Fee` 已绿。
    `amm_id` host 在（零 issue -15）。不开 Sdk.Map / Sdk.Amm。
 7. **wsm-036** — Lean `Context.accountLit hex` 覆盖存储 Owner。`XrplSend` 把 1 写到第二把钥匙的卡片。
-8. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+8. **wsm-037** — nested JSON `user_bal` → `{user:{bal}}`（AlphaNet）。不是 Map。
+9. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 

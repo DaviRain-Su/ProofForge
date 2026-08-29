@@ -20,6 +20,7 @@ import Examples.XrplBalRt
 import Examples.XrplRoot
 import Examples.XrplTx
 import Examples.XrplSend
+import Examples.XrplNest
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -50,7 +51,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRoot" == some "a8e6569035ec2d13"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTx" == some "2a9d4e10cd7ecec9"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplSend" == some "64eb128e0be5a2c6"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplNest" == some "5deed02b57389d2"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -96,6 +98,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplTx
 
 #pf_xrpl_build Examples.XrplSend
+
+#pf_xrpl_build Examples.XrplNest
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -398,6 +402,30 @@ elab "#pf_xrpl_send_alphanet_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-send: {source.length} bytes of WAT passed send anchor check"
 
 #pf_xrpl_send_alphanet_emit_check Examples.XrplSend
+
+open Lean Elab Command in
+elab "#pf_xrpl_nest_alphanet_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emitAlphaNet program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"host_lib\" \"set_data_nested_object_field\"",
+          "(import \"host_lib\" \"get_data_nested_object_field\"",
+          "(func (export \"credit\") (result i32)",
+          "(data (i32.const 64) \"userbal\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"alphanet emit is missing nest anchor: {anchor}\\n{source}"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-nest: {source.length} bytes of WAT passed nest anchor check"
+
+#pf_xrpl_nest_alphanet_emit_check Examples.XrplNest
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

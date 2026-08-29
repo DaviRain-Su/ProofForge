@@ -343,19 +343,25 @@ async function main() {
       ledger_index: "validated",
     });
     const key = cfg.key || "value";
-    const keyHex = Buffer.from(key).toString("hex");
     for (const obj of objs.account_objects || []) {
       if (obj.LedgerEntryType !== "ContractData") continue;
       if (obj.ContractAccount !== cfg.contract_account) continue;
       const json = obj.ContractJson || {};
-      const raw =
-        json[key] !== undefined
-          ? json[key]
-          : json[keyHex] !== undefined
-            ? json[keyHex]
-            : json[keyHex.toLowerCase()] !== undefined
-              ? json[keyHex.toLowerCase()]
-              : json[keyHex.toUpperCase()];
+      function lookup(obj, k) {
+        if (obj == null || typeof obj !== "object") return undefined;
+        if (obj[k] !== undefined) return obj[k];
+        const hx = Buffer.from(k).toString("hex");
+        if (obj[hx] !== undefined) return obj[hx];
+        if (obj[hx.toLowerCase()] !== undefined) return obj[hx.toLowerCase()];
+        if (obj[hx.toUpperCase()] !== undefined) return obj[hx.toUpperCase()];
+        return undefined;
+      }
+      let raw = lookup(json, key);
+      if (raw === undefined && key.includes("_") && !/^[0-9]/.test(key.split("_")[1] || "")) {
+        const parts = key.split("_");
+        raw = lookup(json, parts[0]);
+        if (raw && typeof raw === "object") raw = lookup(raw, parts.slice(1).join("_"));
+      }
       if (raw === undefined) {
         process.stdout.write("0\n");
         return;
