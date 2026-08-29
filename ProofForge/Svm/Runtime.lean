@@ -203,6 +203,45 @@ append that would exceed either the configured byte bound or record-count bound.
   let _ := maxRecords
   0
 
+/-! Official Solana program-memory host contracts. Static SDK spans lower to these leaves; the
+host stubs cannot model account bytes and therefore return zero. Generated sBPF validates the
+complete ranges and destination authorization before issuing the matching syscall. -/
+
+@[irreducible] def memoryCopy
+    (destinationAccount destinationOffset sourceAccount sourceOffset length : UInt64) : UInt64 :=
+  let _ := destinationAccount
+  let _ := destinationOffset
+  let _ := sourceAccount
+  let _ := sourceOffset
+  let _ := length
+  0
+
+@[irreducible] def memoryMove
+    (destinationAccount destinationOffset sourceAccount sourceOffset length : UInt64) : UInt64 :=
+  let _ := destinationAccount
+  let _ := destinationOffset
+  let _ := sourceAccount
+  let _ := sourceOffset
+  let _ := length
+  0
+
+@[irreducible] def memoryCompare
+    (leftAccount leftOffset rightAccount rightOffset length : UInt64) : UInt64 :=
+  let _ := leftAccount
+  let _ := leftOffset
+  let _ := rightAccount
+  let _ := rightOffset
+  let _ := length
+  0
+
+@[irreducible] def memorySet
+    (destinationAccount destinationOffset length byte : UInt64) : UInt64 :=
+  let _ := destinationAccount
+  let _ := destinationOffset
+  let _ := length
+  let _ := byte
+  0
+
 /-- Open the invocation-local accumulators used by bounded FIFO cancellation. Persistent order and
 trader state remains in account bytes; this handle contains only scalar cursor keys, event index,
 and released-lot totals. -/

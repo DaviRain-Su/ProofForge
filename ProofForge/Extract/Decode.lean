@@ -213,6 +213,25 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         some (.accDataWord a w)
       else none
     | _, _ => none
+  else if (endsWith e ".memoryCompare" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.memoryCompare) && e.getAppArgs.size ≥ 5 then
+    let args := e.getAppArgs
+    match asStaticLit env fuel args[args.size - 5]!,
+        asStaticLit env fuel args[args.size - 4]!,
+        asStaticLit env fuel args[args.size - 3]!,
+        asStaticLit env fuel args[args.size - 2]!,
+        asStaticLit env fuel args[args.size - 1]! with
+    | some (.lit leftAccount), some (.lit leftOffset), some (.lit rightAccount),
+        some (.lit rightOffset), some (.lit length) =>
+      let query : Svm.Memory.Query := .compare
+        { account := leftAccount.toNat, offsetBytes := leftOffset.toNat,
+          lengthBytes := length.toNat }
+        { account := rightAccount.toNat, offsetBytes := rightOffset.toNat,
+          lengthBytes := length.toNat }
+      if query.wellFormed then
+        some (.ext (.svm (.component (.memory query))) #[])
+      else none
+    | _, _, _, _, _ => none
   else if (endsWith e ".accDataWordAt" ||
       isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAt) && e.getAppArgs.size ≥ 5 then
     match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
@@ -2935,9 +2954,52 @@ private def decodeFifoCancelCall (env : Environment) (e : Expr) :
       else none
   else none
 
+private def decodeMemorySpan (account offset length : Nat) : Option Svm.Memory.Span := do
+  let span : Svm.Memory.Span := { account, offsetBytes := offset, lengthBytes := length }
+  if span.wellFormed then some span else none
+
+private def decodeMemoryCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.memoryCopy || endsWith e ".memoryCopy" then
+    if args.size < 5 then none else do
+      let destinationAccount ← staticNatVal? env args[args.size - 5]!
+      let destinationOffset ← staticNatVal? env args[args.size - 4]!
+      let sourceAccount ← staticNatVal? env args[args.size - 3]!
+      let sourceOffset ← staticNatVal? env args[args.size - 2]!
+      let length ← staticNatVal? env args[args.size - 1]!
+      let destination ← decodeMemorySpan destinationAccount destinationOffset length
+      let source ← decodeMemorySpan sourceAccount sourceOffset length
+      let call : Svm.Memory.Call Ops.Val := .copyNonoverlapping destination source
+      if call.wellFormed (fun _ => true) then some (.memory call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.memoryMove || endsWith e ".memoryMove" then
+    if args.size < 5 then none else do
+      let destinationAccount ← staticNatVal? env args[args.size - 5]!
+      let destinationOffset ← staticNatVal? env args[args.size - 4]!
+      let sourceAccount ← staticNatVal? env args[args.size - 3]!
+      let sourceOffset ← staticNatVal? env args[args.size - 2]!
+      let length ← staticNatVal? env args[args.size - 1]!
+      let destination ← decodeMemorySpan destinationAccount destinationOffset length
+      let source ← decodeMemorySpan sourceAccount sourceOffset length
+      let call : Svm.Memory.Call Ops.Val := .move destination source
+      if call.wellFormed (fun _ => true) then some (.memory call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.memorySet || endsWith e ".memorySet" then
+    if args.size < 4 then none else do
+      let destinationAccount ← staticNatVal? env args[args.size - 4]!
+      let destinationOffset ← staticNatVal? env args[args.size - 3]!
+      let length ← staticNatVal? env args[args.size - 2]!
+      let byte ← val env args[args.size - 1]!
+      let destination ← decodeMemorySpan destinationAccount destinationOffset length
+      let call : Svm.Memory.Call Ops.Val := .set destination byte
+      if call.wellFormed (fun _ => true) then
+        some (.memory call)
+      else none
+  else none
+
 private def decodeComponentCall (env : Environment) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
-  decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e
+  decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e <|> decodeMemoryCall env e
 
 private def mentionsFifoCancelSource (e : Expr) : Bool :=
   e.getUsedConstantsAsSet.toList.any fun name =>

@@ -9,6 +9,7 @@ import ProofForge.Svm.Sdk.Token
 import ProofForge.Svm.Sdk.AssociatedToken
 import ProofForge.Svm.Sdk.Memo
 import ProofForge.Svm.Sdk.Transient
+import ProofForge.Svm.Sdk.Memory
 
 /-!
 # ProofForge SVM SDK
@@ -24,6 +25,10 @@ stores, and bounded control flow. `Sdk.Transient` reuses the official heap model
 for invocation-local fixed vectors, byte writers, and composed codecs rather than introducing a
 parallel allocator or lifetime. No native pointer or invocation-heap collection crosses the
 contract boundary.
+
+`Sdk.Memory` binds compile-time account-data spans to the official program-memory host functions.
+It preserves `memcpy` non-overlap, `memmove` overlap, exact `memcmp` result bits, and `memset` byte
+semantics while keeping every transient VM pointer behind the target-owned component boundary.
 
 `Sdk.Pubkey` / `Sdk.Program` and the packed views in `Sdk.Token` provide allocation-free full-key,
 canonical program-id, owner, and base-state validation. `Sdk.Pda`, `Sdk.System`, `Sdk.Token`,

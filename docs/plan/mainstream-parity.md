@@ -82,7 +82,7 @@ Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可�
 | 类别 | 当前 source surface | 主要缺口 | 优先级 |
 |---|---|---|---|
 | AccountInfo | fixed Account/Signer handle；key/owner/data words、lamports/length/flags；read-only bounded remaining-account view；program-owned checked data word writes | 一等 32-byte address；checked lamport mutation；account resize/zero-fill；duplicate-account alias policy；完整 initialization/close helpers | F0/F1 |
-| memory | official-shaped 32 KiB downward bump model、bounded scratch plans | `memcpy/memmove/memcmp/memset` host contracts；source-visible bounded bytes/vector operations；显式 OOM propagation | F0/F1 |
+| memory | official-shaped 32 KiB downward bump model、bounded scratch plans；checked account spans 已绑定 `memcpy/memmove/memcmp/memset`，保留 non-overlap/overlap/exact-i32 语义并隐藏 transient pointer | source-visible bounded bytes/vector operations；显式 OOM propagation | F0/F1 |
 | instruction/CPI/PDA | static bounded metas/data、multi-seed signed CPI、return-data staging、PDA find/check | bounded full return data + returned program-id check；more generic bounded instruction bytes；stack/sibling/instruction introspection only when required | F1 |
 | sysvar/runtime query | Clock slot/epoch/unix、Rent、EpochSchedule | remaining Clock/Epoch fields、generic sliced sysvar、remaining compute/stack height、instructions sysvar；advanced sysvars on demand | F1/F2 |
 | crypto | literal SHA-256/Keccak first word、PDA host calls | full 32-byte/multi-slice hashes；Blake3/SHA-512/secp recovery/Poseidon/curve/big-mod-exp；signature-program instruction validation | F1/F2 |

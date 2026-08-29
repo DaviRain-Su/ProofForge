@@ -25,6 +25,11 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 /-- One compile-time window: physical accounts 1..4, indexed by a runtime number. -/
 @[pf_inline] def window : Account.View := Account.View.bounded 1 4
 
+/-- Two fixed spans in the first remaining account. Unlike `window`, these descriptors are
+compile-time byte geometry for official program-memory host functions. -/
+@[pf_inline] private def firstPrefix : Memory.Span := Memory.Span.accountData 1 0 8
+@[pf_inline] private def secondPrefix : Memory.Span := Memory.Span.accountData 1 8 8
+
 @[pf_entry]
 def init (initial : UInt64) : State :=
   { value := initial }
@@ -72,6 +77,11 @@ def peekLamports (_s : State) (index : UInt64) : UInt64 :=
 @[pf_entry]
 def peekOwned (_s : State) (index : UInt64) : UInt64 :=
   window.ownedBySelf index
+
+/-- Compare two fixed prefixes without copying account bytes into a source-visible buffer. -/
+@[pf_entry]
+def comparePrefixes (_s : State) : UInt64 :=
+  Memory.compareI32Bits firstPrefix secondPrefix
 
 /--
 Absorb the selected account's first data word plus `delta` into the state cell. The view read is

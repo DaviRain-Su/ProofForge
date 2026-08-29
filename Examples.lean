@@ -71,3 +71,4 @@ import Examples.PhoenixV1Layout
 import Examples.Phoenix
 import Examples.PhoenixV1Profile
 import Examples.AccountView
+import Examples.MemoryOps

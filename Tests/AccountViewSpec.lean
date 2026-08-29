@@ -80,6 +80,11 @@ elab "#pf_guard_account_view" : command => do
     | none => false
   unless queryIsView do
     throwError "peek did not lower to the account-view component query"
+  let compareIsMemory := source.methods.any fun method => method.ops.any fun
+    | .returnU64 (.ext (.svm (.component (.memory (.compare _ _)))) #[]) => true
+    | _ => false
+  unless compareIsMemory do
+    throwError "comparePrefixes did not lower through the reusable memory component"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm
@@ -100,7 +105,7 @@ elab "#pf_guard_account_view" : command => do
   -- Header/data access through the walked header pointer.
   unless asm.contains "load view header k0" &&
       asm.contains "load view data word 0" &&
-      asm.contains "view ownerIsSelf" do
+      asm.contains "view ownerIsSelf" && asm.contains "call sol_memcmp_" do
     throwError "missing account-view field access"
 
 end Tests.AccountViewSpec

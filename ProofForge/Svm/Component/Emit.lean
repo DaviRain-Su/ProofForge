@@ -3,6 +3,7 @@ import ProofForge.Svm.AccountView.Emit
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.BatchRecorder.Emit
 import ProofForge.Svm.FifoCancel.Emit
+import ProofForge.Svm.Memory.Emit
 
 namespace ProofForge.Svm.Component.Emit
 
@@ -36,6 +37,11 @@ private def Context.fifoCancel (context : Context) : FifoCancel.Emit.Context :=
     headerStack := context.headerStack
     accountCount := context.accountCount }
 
+private def Context.memory (context : Context) : Memory.Emit.Context :=
+  { loadValue := context.loadValue
+    loadOwnerIsSelf := context.loadOwnerIsSelf
+    headerStack := context.headerStack }
+
 /-- Backend implementations needed by component-owned dispatch. The main emitter supplies this
 record once and remains independent of individual component call constructors. -/
 structure Backend where
@@ -50,6 +56,8 @@ def emitQuery (context : Context) (query : Component.Query) (operands : Array Op
       AccountView.Emit.emitQuery context.accountView viewQuery operands stackOff nonce scope
   | .fifoCancel cancelQuery =>
       FifoCancel.Emit.emitQuery scope cancelQuery operands stackOff
+  | .memory memoryQuery =>
+      Memory.Emit.emitQuery context.memory memoryQuery operands stackOff nonce scope
 
 def emitCall (context : Context) (backend : Backend) (label : String) :
     Component.Call Ops.Val → Except String String
@@ -59,5 +67,6 @@ def emitCall (context : Context) (backend : Backend) (label : String) :
       BatchRecorder.Emit.emitCall context.batchRecorder label call
   | .fifoCancel call =>
       FifoCancel.Emit.emitCall context.fifoCancel backend.accountStorage label call
+  | .memory call => Memory.Emit.emitCall context.memory label call
 
 end ProofForge.Svm.Component.Emit

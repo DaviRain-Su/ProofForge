@@ -102,4 +102,5 @@ import Tests.SvmSdkTokenStateSpec
 import Tests.SvmSdkProgramSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
+import Tests.SvmMemorySpec
 import Tests.ProofSpec

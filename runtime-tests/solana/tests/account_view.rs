@@ -202,6 +202,23 @@ fn peek_data_words_follow_runtime_index() {
 }
 
 #[test]
+fn fixed_prefix_compare_uses_exact_memcmp_bits() {
+    let (program_id, mollusk) = harness();
+    let (state, accounts, metas) = full_window(&program_id);
+    let expected = u64::from((-1i32) as u32);
+    expect_return(
+        &program_id,
+        &mollusk,
+        "comparePrefixes",
+        &[],
+        &state,
+        metas,
+        accounts,
+        expected,
+    );
+}
+
+#[test]
 fn peek_key_follows_runtime_index() {
     let (program_id, mollusk) = harness();
     let (state, accounts, metas) = full_window(&program_id);
