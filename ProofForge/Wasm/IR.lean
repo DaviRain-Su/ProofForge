@@ -6,9 +6,10 @@ import ProofForge.Wasm.Family
 # WASM 家族 IR 核心（链共享）
 
 WASM 家族共享的程序形状、v0 子集检查与 canonical digest 拼写，对链方言类型
-（`ValExt` / `OpExt`）泛型。链间差异——存储、host function、SDK / 入口 ABI——
+（`ValExt` / `OpExt`）泛型。链间差异——host import 表、存储布局、入口 ABI——
 由 `ProofForge.Wasm.Host.Contract` 注入发射器，不进这一层；每条链自己的
-registration 实例化见 `Wasm/<Chain>/IR.lean`。
+registration 实例化见 `Wasm/<Chain>/IR.lean`。产物是 `.wasm`（wsm-002）；
+wsm-001 仍经同一 IR 发 Rust 源，那是过渡。
 
 v0 子集（对家族所有链 fail closed；链方言可以更严，不能更松）：
 
@@ -72,9 +73,9 @@ def slotNames (p : Program ValExt OpExt) : Array String :=
 
 /-! ## v0 subset checks -/
 
-/-- Values the v0 Rust renderer can express. Guard computations rely on wrapping
-two's-complement `+ - *`; unchecked `/ %` is rejected because Rust panics (traps) on
-divide-by-zero outside the checked path. -/
+/-- Values the v0 WAT renderer can express. Guard computations use wrapping
+two's-complement `i64.add/sub/mul`; unchecked `/ %` is rejected because divide-by-zero
+traps outside the checked path. -/
 partial def valAllowed {ValExt : Type} : Val ValExt → Bool
   | .arg _ | .lit _ => true
   | .field (.arg _) _ => true
@@ -84,7 +85,7 @@ partial def valAllowed {ValExt : Type} : Val ValExt → Bool
       valAllowed lhs && valAllowed rhs
   | _ => false
 
-/-- Ops the v0 Rust renderer can express. -/
+/-- Ops the v0 WAT renderer can express. -/
 partial def opAllowed {ValExt : Type} {OpExt : Type → Type} : Op ValExt OpExt → Bool
   | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
   | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>

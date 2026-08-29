@@ -142,6 +142,26 @@ else
 fi
 surfpool --version
 
+wabt_version="1.0.41"
+wabt_archive="wabt-${wabt_version}-linux-x64.tar.gz"
+wabt_url="https://github.com/WebAssembly/wabt/releases/download/${wabt_version}/${wabt_archive}"
+wabt_sha256="83f8122e924745fcd70636e3594bc01c4c47f2d4c8f3c63b5d70d3f83a482677"
+if [[ "$(wat2wasm --version 2>/dev/null || true)" != "${wabt_version}" ]]; then
+  wabt_download="$(mktemp)"
+  wabt_unpack="$(mktemp -d)"
+  trap 'rm -f "$wabt_download"; rm -rf "$wabt_unpack"' EXIT
+  curl --proto '=https' --tlsv1.2 -fsSL "$wabt_url" -o "$wabt_download"
+  echo "$wabt_sha256  $wabt_download" | sha256sum --check --status
+  tar -xzf "$wabt_download" -C "$wabt_unpack"
+  install -m 0755 "$wabt_unpack/wabt-${wabt_version}/bin/wat2wasm" "$HOME/.local/bin/wat2wasm"
+  rm -f "$wabt_download"
+  rm -rf "$wabt_unpack"
+  trap - EXIT
+else
+  echo "wat2wasm ${wabt_version} is already installed."
+fi
+wat2wasm --version
+
 solc_url="https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"
 solc_sha256="d40adc6f9fdbb22a97d32a02fa05688bf2ee7886affc48c9851b0afd4a726b39"
 if ! solc --version 2>/dev/null | grep -Fq "Version: 0.8.34+commit.80d5c536"; then

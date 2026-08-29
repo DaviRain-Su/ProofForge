@@ -9,10 +9,8 @@ import Examples.EvmCtx
 /-!
 # XRPL Bedrock target tests (WASM family)
 
-v0 vertical slice: registration rejects foreign target leaves, the canonical digest is
-pinned against the registry, and the emitted Rust source carries the Bedrock-dialect
-anchors (`xrpl_wasm_std` storage helpers, `#[unsafe(no_mangle)]` exports, checked
-arithmetic with pinned error codes).
+v0: registration rejects foreign leaves; digest is pinned; emitted WAT carries
+`host_lib` imports and exported entries.
 -/
 
 open ProofForge
@@ -34,14 +32,9 @@ elab "#pf_xrpl_reject " n:ident : command => do
       unless reason.contains "xrpl rejects" do
         throwError "unexpected xrpl rejection reason: {reason}"
 
-/-! Runtime leaves are not cross-target: the XRPL profile fails closed on svm and evm
-values through the WASM family rejection, same discipline as the EVM slice. -/
-
 #pf_xrpl_reject Examples.Clock
 
 #pf_xrpl_reject Examples.EvmCtx
-
-/-! Digest pin: extraction → registration → lowering must reproduce the registry digest. -/
 
 #pf_xrpl_build Examples.Counter
 
@@ -55,28 +48,31 @@ elab "#pf_xrpl_emit_check " n:ident : command => do
     | .error reason => throwError reason
     | .ok source => do
         let anchors : Array String := #[
-          "pub extern \"C\" fn initialize(pf_p0: u64) -> i32",
-          "pub extern \"C\" fn increment(pf_p0: u64) -> i32",
-          "pub extern \"C\" fn get() -> u64",
-          "pub extern \"C\" fn nonzero() -> u64",
-          "/// @xrpl-function increment",
-          "#[unsafe(no_mangle)]",
-          "use xrpl_wasm_std::core::data::codec::{get_data, set_data};",
-          "const value_KEY: &str = \"value\";",
-          "read_u64(value_KEY)",
-          "write_u64(value_KEY, pf_r0)?;",
-          "checked_add(pf_p0).ok_or(1i32)?",
-          "checked_sub(pf_p0).ok_or(1i32)?",
-          "checked_mul(pf_p0).ok_or(1i32)?",
-          "checked_div(pf_p0).ok_or(2i32)?",
-          "checked_rem(pf_p0).ok_or(2i32)?",
-          "Ok(0)",
-          "Err(code) => if code < 0 { code } else { -code },",
-          "// digest=e029f72296e320be"
+          "(import \"host_lib\" \"home_le_field\"",
+          "(import \"host_lib\" \"set_data\"",
+          "(func (export \"initialize\")",
+          "(func (export \"increment\")",
+          "(func (export \"get\")",
+          "(func (export \"nonzero\")",
+          "(i32.const 458779)",
+          "(return (i32.const 1))",
+          "(return (i32.const 2))",
+          "i64.add",
+          "i64.sub",
+          "i64.mul",
+          "i64.div_u",
+          "i64.rem_u",
+          ";; digest=e029f72296e320be"
         ]
         for anchor in anchors do
           unless source.contains anchor do
-            throwError s!"wasm emit is missing anchor: {anchor}"
-        logInfo m!"proofforge-xrpl-test: {source.length} bytes of Rust passed anchor check"
+            throwError s!"wasm emit is missing anchor: {anchor}\n{source}"
+        unless !source.contains "xrpl_wasm_std" do
+          throwError "wasm emit still mentions xrpl_wasm_std"
+        unless !source.contains "get_current_contract_call" do
+          throwError "wasm emit still mentions get_current_contract_call"
+        unless !source.contains "\"get_data\"" do
+          throwError "wasm emit still mentions get_data"
+        logInfo m!"proofforge-xrpl-test: {source.length} bytes of WAT passed anchor check"
 
 #pf_xrpl_emit_check Examples.Counter

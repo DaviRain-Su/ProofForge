@@ -40,7 +40,7 @@ private def usage : String :=
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
-    "xrpl writes Name.rs (XRPL Bedrock dialect Rust source; zero-tool)\n" ++
+    "xrpl writes Name.wat / Name.wasm (XRPL Bedrock; locked wat2wasm)\n" ++
     "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
     "No program names means every registered source module for the selected target.\n"
 
@@ -227,7 +227,7 @@ unsafe def run (args : List String) : IO UInt32 := do
           IO.FS.createDirAll opts.outDir
           for program in programs do
             let r ← ProofForge.Wasm.Xrpl.Assemble.assembleProgram opts.outDir program
-            IO.println s!"wrote {r.rsPath} ({r.rsSource.length} bytes; XRPL Bedrock source; deployable=false)"
+            IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; deployable=false)"
           return 0
 
 end ProofForge.Cli
