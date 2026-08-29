@@ -76,4 +76,22 @@ Not EVM `selfBalance`. IOU/MPT fail closed (mantissa only). -/
 /-- Current `ContractCall` Fee in drops. Host: `tx_field(sfFee=393224)`. -/
 @[irreducible] def xrplTxFeeDrops : UInt64 := 0
 
+/-- Compile-time 20-byte AccountID as three little-endian limbs.
+`hex` is 40 lowercase hex chars. Host stub 0; extractor keeps the literal. -/
+@[irreducible] def xrplAccountLitW0 (hex : String) : UInt64 :=
+  let _ := hex
+  0
+
+@[irreducible] def xrplAccountLitW1 (hex : String) : UInt64 :=
+  let _ := hex
+  0
+
+@[irreducible] def xrplAccountLitW2 (hex : String) : UInt64 :=
+  let _ := hex
+  0
+
+/-- Three-limb compile-time AccountID. Extractor unfolds ofLimbs after these leaves. -/
+def xrplAccountLit (hex : String) : AccountId :=
+  { w0 := xrplAccountLitW0 hex, w1 := xrplAccountLitW1 hex, w2 := xrplAccountLitW2 hex }
+
 end ProofForge.Wasm.Xrpl.Runtime

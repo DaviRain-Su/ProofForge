@@ -36,6 +36,10 @@ inductive ValKind where
   | txSequence
   /-- Current ContractCall `sfFee` as XRP drops (STAmount 57-bit mantissa). -/
   | txFeeDrops
+  /-- Compile-time AccountID limb. Bytes 0..7 / 8..15 / 16..19 little-endian. -/
+  | accountLitW0 (hex : String)
+  | accountLitW1 (hex : String)
+  | accountLitW2 (hex : String)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat

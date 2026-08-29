@@ -82,6 +82,10 @@ namespace Context
 /-- Current `ContractCall` Fee in drops. Not EVM `gasprice`. -/
 @[pf_inline] def txFeeDrops : UInt64 := Runtime.xrplTxFeeDrops
 
+/-- Compile-time 20-byte AccountID from 40 hex chars. Not a host, not EVM `address(uint)`. -/
+@[pf_inline] def accountLit (hex : String) : AccountId :=
+  Runtime.xrplAccountLit hex
+
 end Context
 
 namespace Pausable

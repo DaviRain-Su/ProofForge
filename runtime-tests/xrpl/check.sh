@@ -121,6 +121,13 @@ need_exports_tx = (
     '(func (export "getSeq")',
     '(data (i32.const 64) "tseqtfee")',
 )
+need_exports_send = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "get")',
+    '(data (i32.const 64) "bal")',
+    '(i32.store8 (i32.const 0) (i32.const 208))',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -154,6 +161,8 @@ for wat in wats:
         exports = need_exports_root
     elif wat.stem == "XrplTx":
         exports = need_exports_tx
+    elif wat.stem == "XrplSend":
+        exports = need_exports_send
     else:
         exports = need_exports_counter
     for needle in exports:
