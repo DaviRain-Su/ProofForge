@@ -1143,10 +1143,25 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some (.ext (.svm (.component (.sysvar (.clock .slot)))) #[])
   else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
     some (.ext (.svm (.component (.sysvar (.clock .epoch)))) #[])
+  else if endsWith e ".clockLeaderScheduleEpoch" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.clockLeaderScheduleEpoch then
+    some (.ext (.svm (.component (.sysvar (.clock .leaderScheduleEpoch)))) #[])
   else if endsWith e ".unixTime" || isConstNamed e ``ProofForge.Svm.Runtime.unixTime then
     some (.ext (.svm (.component (.sysvar (.clock .unixTimestamp)))) #[])
   else if endsWith e ".slotsPerEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.slotsPerEpoch then
     some (.ext (.svm (.component (.sysvar (.epochSchedule .slotsPerEpoch)))) #[])
+  else if endsWith e ".epochScheduleLeaderScheduleSlotOffset" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.epochScheduleLeaderScheduleSlotOffset then
+    some (.ext (.svm (.component (.sysvar (.epochSchedule .leaderScheduleSlotOffset)))) #[])
+  else if endsWith e ".epochScheduleWarmup" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.epochScheduleWarmup then
+    some (.ext (.svm (.component (.sysvar (.epochSchedule .warmup)))) #[])
+  else if endsWith e ".epochScheduleFirstNormalEpoch" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.epochScheduleFirstNormalEpoch then
+    some (.ext (.svm (.component (.sysvar (.epochSchedule .firstNormalEpoch)))) #[])
+  else if endsWith e ".epochScheduleFirstNormalSlot" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.epochScheduleFirstNormalSlot then
+    some (.ext (.svm (.component (.sysvar (.epochSchedule .firstNormalSlot)))) #[])
   else if endsWith e ".cpiReturn" || isConstNamed e ``ProofForge.Svm.Runtime.cpiReturn then
     some .cpiReturn
   else if endsWith e ".signerKey0" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey0 then

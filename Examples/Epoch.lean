@@ -21,6 +21,26 @@ def init (_seed : UInt64) : State :=
 def span (_s : State) : UInt64 :=
   Sysvar.EpochSchedule.slotsPerEpoch
 
+/-- Number of slots before an epoch at which its leader schedule is calculated. -/
+@[pf_entry]
+def leaderOffset (_s : State) : UInt64 :=
+  Sysvar.EpochSchedule.leaderScheduleSlotOffset
+
+/-- Whether epoch warmup is active. -/
+@[pf_entry]
+def isWarmup (_s : State) : Bool :=
+  Sysvar.EpochSchedule.warmup
+
+/-- First epoch after warmup. -/
+@[pf_entry]
+def normalEpoch (_s : State) : UInt64 :=
+  Sysvar.EpochSchedule.firstNormalEpoch
+
+/-- First slot after warmup. -/
+@[pf_entry]
+def normalSlot (_s : State) : UInt64 :=
+  Sysvar.EpochSchedule.firstNormalSlot
+
 /-- 把 slots_per_epoch 写进状态。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=

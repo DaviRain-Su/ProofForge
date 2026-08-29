@@ -16,8 +16,18 @@ open ProofForge.Svm.Sdk
 
 #guard Sysvar.Clock.slot == ProofForge.Svm.Runtime.clockSlot
 #guard Sysvar.Clock.epoch == ProofForge.Svm.Runtime.clockEpoch
+#guard Sysvar.Clock.leaderScheduleEpoch == ProofForge.Svm.Runtime.clockLeaderScheduleEpoch
 #guard Sysvar.Clock.unixTimestamp == ProofForge.Svm.Runtime.unixTime
 #guard Sysvar.EpochSchedule.slotsPerEpoch == ProofForge.Svm.Runtime.slotsPerEpoch
+#guard
+  Sysvar.EpochSchedule.leaderScheduleSlotOffset ==
+    ProofForge.Svm.Runtime.epochScheduleLeaderScheduleSlotOffset
+#guard Sysvar.EpochSchedule.warmup == (ProofForge.Svm.Runtime.epochScheduleWarmup != 0)
+#guard
+  Sysvar.EpochSchedule.firstNormalEpoch ==
+    ProofForge.Svm.Runtime.epochScheduleFirstNormalEpoch
+#guard
+  Sysvar.EpochSchedule.firstNormalSlot == ProofForge.Svm.Runtime.epochScheduleFirstNormalSlot
 #guard Sysvar.Rent.minimumBalance 16 == ProofForge.Svm.Runtime.rentExemption 16
 #guard (ProofForge.Svm.Sysvar.Query.clock .slot).wellFormed
 #guard
@@ -51,8 +61,12 @@ private def expectSysvarCall (module : Name) (needles : Array String) : CommandE
       throwError s!"{module}: SDK sysvar facade lost target host call {needle}"
 
 elab "#pf_guard_sdk_sysvars" : command => do
-  expectSysvarCall `Examples.Clock #["call sol_get_clock_sysvar"]
-  expectSysvarCall `Examples.Epoch #["call sol_get_epoch_schedule_sysvar"]
+  expectSysvarCall `Examples.Clock #["call sol_get_clock_sysvar",
+    "load clock.leaderScheduleEpoch", "ldxdw r1, [r10 - 3048]"]
+  expectSysvarCall `Examples.Epoch #["call sol_get_epoch_schedule_sysvar",
+    "load leaderScheduleSlotOffset", "ldxdw r1, [r10 - 3064]", "load warmup",
+    "ldxb r1, [r10 - 3056]", "load firstNormalEpoch", "ldxdw r1, [r10 - 3048]",
+    "load firstNormalSlot", "ldxdw r1, [r10 - 3040]"]
   expectSysvarCall `Examples.Rent #["call sol_get_rent_sysvar"]
 
 #pf_guard_sdk_sysvars

@@ -223,6 +223,27 @@ fn era_tracks_second_distinct_epoch() {
 }
 
 #[test]
+fn leader_era_tracks_clock_leader_schedule_epoch() {
+    let expected = 77u64;
+    let (program_id, mut mollusk) = harness();
+    mollusk.sysvars.clock.leader_schedule_epoch = expected;
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("leaderEra", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = clock_state(true, 7);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&expected.to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
 fn stamp_stores_current_slot_then_get_reads_it() {
     let slot = 123_456u64;
     let (program_id, mollusk) = warped(slot);

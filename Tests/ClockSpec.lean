@@ -9,6 +9,7 @@ open ProofForge.Svm.Sdk
 #guard get (init 0) == 0
 #guard height (init 0) == Sysvar.Clock.slot
 #guard era (init 0) == Sysvar.Clock.epoch
+#guard leaderEra (init 0) == Sysvar.Clock.leaderScheduleEpoch
 #guard key0 (init 0) == ProofForge.Svm.Runtime.signerKey0
 
 #guard

@@ -23,6 +23,10 @@ namespace Clock
 /-- Current epoch (`Clock.epoch`). -/
 @[pf_inline] def epoch : UInt64 := ProofForge.Svm.Runtime.clockEpoch
 
+/-- Future epoch whose leader schedule was most recently calculated. -/
+@[pf_inline] def leaderScheduleEpoch : UInt64 :=
+  ProofForge.Svm.Runtime.clockLeaderScheduleEpoch
+
 /-- Current `Clock.unix_timestamp`, exposed as the existing unsigned 64-bit bit pattern. -/
 @[pf_inline] def unixTimestamp : UInt64 := ProofForge.Svm.Runtime.unixTime
 
@@ -32,6 +36,21 @@ namespace EpochSchedule
 
 /-- Current `EpochSchedule.slots_per_epoch`. -/
 @[pf_inline] def slotsPerEpoch : UInt64 := ProofForge.Svm.Runtime.slotsPerEpoch
+
+/-- Number of slots before an epoch used to calculate its leader schedule. -/
+@[pf_inline] def leaderScheduleSlotOffset : UInt64 :=
+  ProofForge.Svm.Runtime.epochScheduleLeaderScheduleSlotOffset
+
+/-- Whether epochs begin short and grow during warmup. -/
+@[pf_inline] def warmup : Bool := ProofForge.Svm.Runtime.epochScheduleWarmup != 0
+
+/-- First epoch after the warmup period. -/
+@[pf_inline] def firstNormalEpoch : UInt64 :=
+  ProofForge.Svm.Runtime.epochScheduleFirstNormalEpoch
+
+/-- First slot after the warmup period. -/
+@[pf_inline] def firstNormalSlot : UInt64 :=
+  ProofForge.Svm.Runtime.epochScheduleFirstNormalSlot
 
 end EpochSchedule
 

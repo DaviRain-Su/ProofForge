@@ -22,7 +22,7 @@ clock_{field}_ok_{scope}_{stackOff}:
 "
 
 private def emitEpochScheduleField
-    (field : String) (offset stackOff : Nat) (scope : String) : String :=
+    (field load : String) (offset stackOff : Nat) (scope : String) : String :=
   s!"\
   ; load {field} via sol_get_epoch_schedule_sysvar
   mov64 r1, r10
@@ -32,7 +32,7 @@ private def emitEpochScheduleField
   lddw r0, 0x1
   exit
 epoch_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - {scratch - offset}]
+  {load} r1, [r10 - {scratch - offset}]
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -57,9 +57,19 @@ def emitQuery (query : Query) (operands : Array Ops.Val) (stackOff : Nat)
   match query, operands with
   | .clock .slot, #[] => .ok (emitClockField "slot" 0 stackOff scope)
   | .clock .epoch, #[] => .ok (emitClockField "epoch" 16 stackOff scope)
+  | .clock .leaderScheduleEpoch, #[] =>
+      .ok (emitClockField "leaderScheduleEpoch" 24 stackOff scope)
   | .clock .unixTimestamp, #[] => .ok (emitClockField "unix" 32 stackOff scope)
   | .epochSchedule .slotsPerEpoch, #[] =>
-      .ok (emitEpochScheduleField "slotsPerEpoch" 0 stackOff scope)
+      .ok (emitEpochScheduleField "slotsPerEpoch" "ldxdw" 0 stackOff scope)
+  | .epochSchedule .leaderScheduleSlotOffset, #[] =>
+      .ok (emitEpochScheduleField "leaderScheduleSlotOffset" "ldxdw" 8 stackOff scope)
+  | .epochSchedule .warmup, #[] =>
+      .ok (emitEpochScheduleField "warmup" "ldxb" 16 stackOff scope)
+  | .epochSchedule .firstNormalEpoch, #[] =>
+      .ok (emitEpochScheduleField "firstNormalEpoch" "ldxdw" 24 stackOff scope)
+  | .epochSchedule .firstNormalSlot, #[] =>
+      .ok (emitEpochScheduleField "firstNormalSlot" "ldxdw" 32 stackOff scope)
   | .rentExemption dataLen, #[] => .ok (emitRentExemption dataLen.toNat stackOff scope)
   | _, _ => .error "extract/ir: malformed SVM sysvar query operands"
 

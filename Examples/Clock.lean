@@ -26,6 +26,11 @@ def height (_s : State) : UInt64 :=
 def era (_s : State) : UInt64 :=
   Sysvar.Clock.epoch
 
+/-- view：最近完成 leader schedule 计算的 future epoch。 -/
+@[pf_entry]
+def leaderEra (_s : State) : UInt64 :=
+  Sysvar.Clock.leaderScheduleEpoch
+
 /-- view：账户 0 公钥的第一个小端 u64。入口会要求 signer。 -/
 @[pf_entry]
 def key0 (_s : State) : UInt64 :=

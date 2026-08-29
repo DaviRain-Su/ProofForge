@@ -100,6 +100,23 @@ fn state_account(program_id: &Pubkey, data: Vec<u8>) -> Account {
     account
 }
 
+fn assert_view(program_id: Pubkey, mollusk: &Mollusk, method: &str, expected: u64) {
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator(method, 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false);
+    let pre = epoch_state(true, 7);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&expected.to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
 #[test]
 fn span_returns_default_slots_per_epoch() {
     let (program_id, mollusk) = harness();
@@ -138,6 +155,20 @@ fn span_tracks_custom_slots_per_epoch() {
             Check::account(&state_key).data(&pre).build(),
         ],
     );
+}
+
+#[test]
+fn views_track_complete_native_epoch_schedule() {
+    let (program_id, mut mollusk) = harness();
+    mollusk.sysvars.epoch_schedule.leader_schedule_slot_offset = 12_345;
+    mollusk.sysvars.epoch_schedule.warmup = false;
+    mollusk.sysvars.epoch_schedule.first_normal_epoch = 77;
+    mollusk.sysvars.epoch_schedule.first_normal_slot = 88_888;
+
+    assert_view(program_id, &mollusk, "leaderOffset", 12_345);
+    assert_view(program_id, &mollusk, "isWarmup", 0);
+    assert_view(program_id, &mollusk, "normalEpoch", 77);
+    assert_view(program_id, &mollusk, "normalSlot", 88_888);
 }
 
 #[test]

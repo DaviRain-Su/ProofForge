@@ -13,11 +13,16 @@ namespace ProofForge.Svm.Sysvar
 inductive ClockField where
   | slot
   | epoch
+  | leaderScheduleEpoch
   | unixTimestamp
   deriving BEq, Repr, Inhabited
 
 inductive EpochScheduleField where
   | slotsPerEpoch
+  | leaderScheduleSlotOffset
+  | warmup
+  | firstNormalEpoch
+  | firstNormalSlot
   deriving BEq, Repr, Inhabited
 
 inductive Query where
@@ -40,8 +45,13 @@ def Query.minAccounts (measure : V → Nat) (operands : Array V) (_query : Query
 private def Query.name : Query → String
   | .clock .slot => "clk"
   | .clock .epoch => "epo"
+  | .clock .leaderScheduleEpoch => "clock.leaderScheduleEpoch"
   | .clock .unixTimestamp => "unix"
   | .epochSchedule .slotsPerEpoch => "spe"
+  | .epochSchedule .leaderScheduleSlotOffset => "epochSchedule.leaderScheduleSlotOffset"
+  | .epochSchedule .warmup => "epochSchedule.warmup"
+  | .epochSchedule .firstNormalEpoch => "epochSchedule.firstNormalEpoch"
+  | .epochSchedule .firstNormalSlot => "epochSchedule.firstNormalSlot"
   | .rentExemption dataLen => s!"rent.{dataLen.toNat}"
 
 def Query.canonical (renderValue : V → String) (operands : Array V) (query : Query) : String :=

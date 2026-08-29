@@ -34,6 +34,8 @@ R2-006 已把 remaining compute、invocation stack height 与两个 allocation-f
 收口到 target-owned Telemetry Query/Call，并继续只经过 generic Component bridge。
 R2-007 又把已有 Clock/EpochSchedule/compile-time Rent lowering 收口到 target-owned Sysvar
 Query 和同一个 generic Component bridge，production source 不再生成对应 top-level value recipe。
+R2-008 已在该稳定边界补齐 Clock leader-schedule epoch，以及 EpochSchedule 的 leader offset、
+warmup Bool、first-normal epoch/slot，并明确区分 40-byte native host layout 与 33-byte packed layout。
 EVM-RT-2a typed call-result 已完成，并由 R5-012 收紧为 canonical ERC-20 Bool / code-backed
 empty-result policy，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
@@ -459,8 +461,9 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   recipe；legacy Golden 构造也委托同一 interpreter。Clock/Epoch/Rent 三个独立 consumer 的
   digest、assembly、IDL 和 ELF 仍逐字节一致，Mollusk 14/14。
   详见 `docs/plan/tasks/r3-014.md`。generic sliced sysvar、Instructions sysvar 与其余
-  Clock/Epoch 字段仍属 R2/R3 Runtime backlog；R2-007 证据见
-  `docs/plan/tasks/r2-007.md`。
+  signed Clock timestamp 语义仍属 R2/R3 Runtime backlog。R2-008 已补齐其余 unsigned/Bool
+  Clock/EpochSchedule views；R2-007/008 证据见 `docs/plan/tasks/r2-007.md` 和
+  `docs/plan/tasks/r2-008.md`。
 
 - R3-015 shared transient lifecycle emitter 已完成：`Svm.Transient.Emit.Lifecycle` 统一
   Vector64/Bytes 的 official-shaped bump allocation、pointer/length/capacity/active metadata、

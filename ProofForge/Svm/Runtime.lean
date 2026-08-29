@@ -20,6 +20,12 @@ namespace ProofForge.Svm.Runtime
 @[irreducible] def clockEpoch : UInt64 := 0
 
 /--
+Future epoch for which the leader schedule was most recently calculated. Extracted programs read
+`Clock.leader_schedule_epoch` at native `repr(C)` offset 24. The host stub is irreducible.
+-/
+@[irreducible] def clockLeaderScheduleEpoch : UInt64 := 0
+
+/--
 当前 unix 时间戳。抽出后发射 `sol_get_clock_sysvar`，读
 `Clock.unix_timestamp`（偏移 32）为无符号 `u64`。
 宿主侧是不可约 stub。有符号语义本剖面不建模。
@@ -38,10 +44,21 @@ namespace ProofForge.Svm.Runtime
 
 /--
 当前 `EpochSchedule.slots_per_epoch`。抽出后发射
-`sol_get_epoch_schedule_sysvar`，读偏移 0。宿主侧是不可约 stub。
-`warmup` / `first_normal_*` 本剖面 fail closed。
+`sol_get_epoch_schedule_sysvar`，读 native `repr(C)` 偏移 0。宿主侧是不可约 stub。
 -/
 @[irreducible] def slotsPerEpoch : UInt64 := 0
+
+/-- Native `EpochSchedule.leader_schedule_slot_offset` at offset 8. -/
+@[irreducible] def epochScheduleLeaderScheduleSlotOffset : UInt64 := 0
+
+/-- Native `EpochSchedule.warmup` byte at offset 16, canonicalized by the SDK to `Bool`. -/
+@[irreducible] def epochScheduleWarmup : UInt64 := 0
+
+/-- Native `EpochSchedule.first_normal_epoch` at offset 24 after seven C-layout padding bytes. -/
+@[irreducible] def epochScheduleFirstNormalEpoch : UInt64 := 0
+
+/-- Native `EpochSchedule.first_normal_slot` at offset 32. -/
+@[irreducible] def epochScheduleFirstNormalSlot : UInt64 := 0
 
 /-! Allocation-free invocation telemetry. Host stubs intentionally return zero; extracted SVM
 programs bind these leaves to the exact official syscall symbols through `Svm.Telemetry`. -/
