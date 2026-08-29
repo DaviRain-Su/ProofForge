@@ -32,7 +32,9 @@ ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。每个 method 的 `en
 - 家族共享 `Wasm.Emit` 目前按 XRPL Data-blob 形状注入 host；NEAR 的 env/KV
   ABI 不拟合，所以 `Near.Emit` 拥有自己的 import 表。加第三条链时不要把
   NEAR 的 `env` 塞进 `Wasm.Host.Contract`；
-- 工程门 `runtime-tests/near/check.sh` 断言 import 表 + wasm magic。不是
-  「artifact 已被证明」。
+- 工程门分两层：`runtime-tests/near/check.sh` 断言 import 表 + wasm magic；
+  `runtime-tests/near/counter.sh` 起锁定 `near-sandbox 2.13.0`、部署本仓
+  `Counter.wasm`、跑 initialize / increment / overflow / get。缺 sandbox /
+  python 依赖则 skip。不是「artifact 已被证明」。
 
 CLI：`pf build --target near`。当前注册 `Counter`。
