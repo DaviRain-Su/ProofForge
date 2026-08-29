@@ -424,5 +424,53 @@ theorem rbTree_wf_parentColor_contained {tree : RbTree} {maxCapacity : Nat}
   simp only [RbTree.wellFormed, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
   exact ⟨h.1.2, h.2⟩
 
+
+/-- OrderedMap 的委托透明性——facade ≡ Source。 -/
+theorem orderedMap_findKey4_eq (m : OrderedMap) (k0 k1 k2 k3 : UInt64) :
+    m.findKey4 k0 k1 k2 k3 = Source.findKey4 m.map k0 k1 k2 k3 := rfl
+
+theorem orderedMap_findOrderedPair_eq (m : OrderedMap) (k0 k1 : UInt64) :
+    m.findOrderedPair k0 k1 = Source.findOrderedPair m.map k0 k1 := rfl
+
+theorem orderedMap_insertOrderedPair_eq (m : OrderedMap) (k0 k1 v0 v1 v2 v3 : UInt64) :
+    m.insertOrderedPair k0 k1 v0 v1 v2 v3 = Source.insertOrderedPair m.map k0 k1 v0 v1 v2 v3 := rfl
+
+theorem orderedMap_removeOrderedPair_eq (m : OrderedMap) (k0 k1 : UInt64) :
+    m.removeOrderedPair k0 k1 = Source.removeOrderedPair m.map k0 k1 := rfl
+
+/-- **slotValue 的 fail-closed 卫语句**：slot = 0 返回哨兵 0。 -/
+theorem slotValue_zero (payload : Field) :
+    OrderedMap.slotValue payload 0 = 0 := rfl
+
+/-- **slotValue 非 0 委托**。 -/
+theorem slotValue_pos (payload : Field) (slot : UInt64) (hne : slot ≠ 0) :
+    OrderedMap.slotValue payload slot = read payload slot := by
+  unfold OrderedMap.slotValue
+  rw [if_neg hne]
+
+/-- **findValueKey4 的组合性**。 -/
+theorem findValueKey4_eq (m : OrderedMap) (payload : Field) (k0 k1 k2 k3 : UInt64) :
+    m.findValueKey4 payload k0 k1 k2 k3
+      = OrderedMap.slotValue payload (Source.findKey4 m.map k0 k1 k2 k3) := rfl
+
+/-- **findValueOrderedPair 的组合性**。 -/
+theorem findValueOrderedPair_eq (m : OrderedMap) (payload : Field) (k0 k1 : UInt64) :
+    m.findValueOrderedPair payload k0 k1
+      = OrderedMap.slotValue payload (Source.findOrderedPair m.map k0 k1) := rfl
+
+/-- **initialCursor 的位域分离**：低 32 位 bump = 1，高 32 位 free head = 1。 -/
+theorem initialCursor_decompose :
+    Allocator.initialCursor &&& 0xffffffff = 1 ∧
+    Allocator.initialCursor >>> 32 = 1 := by
+  constructor <;> (unfold Allocator.initialCursor; decide)
+
+/-- **Allocator.alloc 满返回 0**。 -/
+theorem allocator_alloc_full (allocator : Allocator)
+    (hfull : (UInt64.ofNat allocator.slots.capacity) ≤ Source.read
+      (OneBasedAllocator.liveCount allocator) 0) :
+    Allocator.alloc allocator = 0 := by
+  unfold Allocator.alloc
+  rw [if_pos hfull]
+
 end Proofs
 end ProofForge.Svm.Sdk.Storage
