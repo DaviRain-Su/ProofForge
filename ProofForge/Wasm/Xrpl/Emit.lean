@@ -38,7 +38,7 @@ private def hexBytes (hex : String) : Option (Array Nat) :=
   go hex.toList #[]
 
 private def accountLitHexFromKind : Ops.ValKind → Option String
-  | .accountLitW0 h | .accountLitW1 h | .accountLitW2 h => some h
+  | .accountLitW0 h | .accountLitW1 h | .accountLitW2 h | .litBalanceDrops h => some h
   | _ => none
 
 private def accountLitHex (ops : Array Ops.Op) : Option String :=
@@ -116,9 +116,37 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
     let needOwnc := usesKind method.ops .callerOwnerCount
     let needTxSeq := usesKind method.ops .txSequence
     let needTxFee := usesKind method.ops .txFeeDrops
-    let needRoot := needBal || needSeq || needFlags || needOwnc
+    let needTxFlags := usesKind method.ops .txFlags
+    let needLitBal :=
+      let rec has (fuel : Nat) (v : Ops.Val) : Bool :=
+        match fuel with
+        | 0 => false
+        | fuel' + 1 =>
+          match v with
+          | .ext (.litBalanceDrops _) _ => true
+          | .field base _ => has fuel' base
+          | .select _ a b c d => has fuel' a || has fuel' b || has fuel' c || has fuel' d
+          | .addU64 a b | .subU64 a b | .mulU64 a b | .divU64 a b | .modU64 a b
+          | .bitAnd a b | .bitOr a b | .bitXor a b | .shiftL a b | .shiftR a b =>
+              has fuel' a || has fuel' b
+          | .bitNot a => has fuel' a
+          | .indexGet base _ idx _ _ => has fuel' base || has fuel' idx
+          | _ => false
+      let rec op (fuel : Nat) (x : Ops.Op) : Bool :=
+        match fuel with
+        | 0 => false
+        | fuel' + 1 =>
+          match x with
+          | .checkedAddU64 a b | .checkedSubU64 a b | .checkedMulU64 a b
+          | .checkedDivU64 a b | .checkedModU64 a b => has 32 a || has 32 b
+          | .ite _ a b thn els =>
+              has 32 a || has 32 b || thn.any (op fuel') || els.any (op fuel')
+          | .storeField _ v | .okState v | .returnState v | .returnU64 v => has 32 v
+          | _ => false
+      method.ops.any (op 32)
+    let needRoot := needBal || needSeq || needFlags || needOwnc || needLitBal
     let otherHex := accountLitHex method.ops
-    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot || needTxSeq || needTxFee) && otherHex.isNone then #[]
+    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot || needTxSeq || needTxFee || needTxFlags) && otherHex.isNone then #[]
     else
     let err :=
       if view then #[]
@@ -274,16 +302,57 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
           indent level ("(local.set $pf_x_xtfee (i64.and " ++ be ++
             " (i64.const 144115188075855871)))")
         ]
+    let txFlags :=
+      if !needTxFlags || host.getTxField.isEmpty then #[]
+      else
+        -- Default ContractCall omits Flags; host -2 FIELD_NOT_FOUND is 0, not a trap.
+        #[
+          indent level ("(local.set $st (call $" ++ host.getTxField ++
+            " (i32.const 131074) (i32.const 208) (i32.const 8)))"),
+          indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+          indent (level + 2) "(then (local.set $pf_x_xtflags (i64.const 0)))",
+          indent (level + 2) "(else (local.set $pf_x_xtflags (i64.extend_i32_u (i32.load (i32.const 208))))))"
+        ]
+    let litBal :=
+      if !needLitBal || !rootReady then #[]
+      else
+        match otherHex.bind hexBytes with
+        | some bs =>
+          if bs.size != 20 then #[]
+          else
+            let stores :=
+              (Array.range 20).map fun i =>
+                indent level ("(i32.store8 (i32.const " ++ toString (240 + i) ++
+                  ") (i32.const " ++ toString bs[i]! ++ "))")
+            let be :=
+              (Array.range 8).foldl (fun acc i =>
+                let byte := "(i64.extend_i32_u (i32.load8_u (i32.const " ++
+                  toString (208 + i) ++ ")))"
+                if acc.isEmpty then byte
+                else "(i64.or (i64.shl " ++ acc ++ " (i64.const 8)) " ++ byte ++ ")") ""
+            stores ++ #[
+              indent level ("(local.set $st (call $" ++ host.accountRootId ++
+                " (i32.const 240) (i32.const 20) (i32.const 176) (i32.const 32)))")
+            ] ++ err ++ #[
+              indent level ("(local.set $st (call $" ++ host.cacheLe ++
+                " (i32.const 176) (i32.const 32) (i32.const 1)))")
+            ] ++ err ++ #[
+              indent level ("(drop (call $" ++ host.leField ++
+                " (local.get $st) (i32.const 393218) (i32.const 208) (i32.const 48)))"),
+              indent level ("(local.set $pf_x_xlitbal (i64.and " ++ be ++
+                " (i64.const 144115188075855871)))")
+            ]
+        | none => #[]
     let other :=
       match otherHex.bind hexBytes with
       | some bs =>
-        if bs.size != 20 then #[]
+        if bs.size != 20 || needLitBal then #[]
         else
           (Array.range 20).map fun i =>
             indent level ("(i32.store8 (i32.const " ++ toString i ++
               ") (i32.const " ++ toString bs[i]! ++ "))")
       | none => #[]
-    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee ++ other
+    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee ++ txFlags ++ litBal ++ other
 
 def extraImports (host : Contract) : Array String :=
   let tx :=

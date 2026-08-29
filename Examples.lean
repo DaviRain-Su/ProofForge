@@ -59,6 +59,10 @@ import Examples.XrplRoot
 import Examples.XrplTx
 import Examples.XrplSend
 import Examples.XrplNest
+import Examples.XrplStep
+import Examples.XrplRole
+import Examples.XrplPeer
+import Examples.XrplFlag
 import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster

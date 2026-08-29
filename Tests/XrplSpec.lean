@@ -21,6 +21,10 @@ import Examples.XrplRoot
 import Examples.XrplTx
 import Examples.XrplSend
 import Examples.XrplNest
+import Examples.XrplStep
+import Examples.XrplRole
+import Examples.XrplPeer
+import Examples.XrplFlag
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -52,7 +56,11 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTx" == some "2a9d4e10cd7ecec9"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplSend" == some "64eb128e0be5a2c6"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplNest" == some "5deed02b57389d2"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplStep" == some "8273bd4064e4745a"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRole" == some "bae46704480482ee"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPeer" == some "b808c0cc3278fb10"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplFlag" == some "d71a13301ce82878"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -100,6 +108,14 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplSend
 
 #pf_xrpl_build Examples.XrplNest
+
+#pf_xrpl_build Examples.XrplStep
+
+#pf_xrpl_build Examples.XrplRole
+
+#pf_xrpl_build Examples.XrplPeer
+
+#pf_xrpl_build Examples.XrplFlag
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -426,6 +442,112 @@ elab "#pf_xrpl_nest_alphanet_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-nest: {source.length} bytes of WAT passed nest anchor check"
 
 #pf_xrpl_nest_alphanet_emit_check Examples.XrplNest
+
+open Lean Elab Command in
+elab "#pf_xrpl_step_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"bump\") (result i32)",
+          "(func (export \"propose\") (result i32)",
+          "(func (export \"accept\") (result i32)",
+          "(func (export \"get\")",
+          "i64.eq",
+          "(i32.const 3)",
+          "(data (i32.const 64) \"owner0owner1owner2pend0pend1pend2value\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing step anchor: {anchor}\n{source}"
+        unless !source.contains "(param $pf_p0 i64)" do
+          throwError "XrplStep must not take wasm i64 params"
+        logInfo m!"proofforge-xrpl-step: {source.length} bytes of WAT passed step anchor check"
+
+#pf_xrpl_step_emit_check Examples.XrplStep
+
+open Lean Elab Command in
+elab "#pf_xrpl_role_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"bump\") (result i32)",
+          "(func (export \"setOp\") (result i32)",
+          "(func (export \"get\")",
+          "i64.eq",
+          "(i32.const 3)",
+          "(data (i32.const 64) \"owner0owner1owner2op0op1op2value\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing role anchor: {anchor}\n{source}"
+        unless !source.contains "(param $pf_p0 i64)" do
+          throwError "XrplRole must not take wasm i64 params"
+        logInfo m!"proofforge-xrpl-role: {source.length} bytes of WAT passed role anchor check"
+
+#pf_xrpl_role_emit_check Examples.XrplRole
+
+open Lean Elab Command in
+elab "#pf_xrpl_peer_alphanet_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emitAlphaNet program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"host_lib\" \"accountroot_id\"",
+          "(import \"host_lib\" \"cache_le\"",
+          "(import \"host_lib\" \"le_field\"",
+          "(func (export \"stamp\") (result i32)",
+          "(i32.const 240)",
+          "(i32.const 1)",
+          "(i32.const 393218)",
+          "(i64.const 144115188075855871)",
+          "(data (i32.const 64) \"drops\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"alphanet emit is missing peer anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-peer: {source.length} bytes of WAT passed peer anchor check"
+
+#pf_xrpl_peer_alphanet_emit_check Examples.XrplPeer
+
+open Lean Elab Command in
+elab "#pf_xrpl_flag_alphanet_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emitAlphaNet program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"host_lib\" \"tx_field\"",
+          "(func (export \"stamp\") (result i32)",
+          "(i32.const 131074)",
+          "(data (i32.const 64) \"flags\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"alphanet emit is missing flag anchor: {anchor}\n{source}"
+        logInfo m!"proofforge-xrpl-flag: {source.length} bytes of WAT passed flag anchor check"
+
+#pf_xrpl_flag_alphanet_emit_check Examples.XrplFlag
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

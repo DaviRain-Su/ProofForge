@@ -195,6 +195,12 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
     | .lit (.strVal s) => some (.xrplAccountLitW2 s)
     | _ => none
+  else if (endsWith e ".xrplLitBalanceDrops" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplLitBalanceDrops) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplLitBalanceDrops s)
+    | _ => none
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -1136,6 +1142,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   else if endsWith e ".xrplTxFeeDrops" ||
       isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplTxFeeDrops then
     some .xrplTxFeeDrops
+  else if endsWith e ".xrplTxFlags" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplTxFlags then
+    some .xrplTxFlags
   else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
     some .evmSelfW0
   else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then

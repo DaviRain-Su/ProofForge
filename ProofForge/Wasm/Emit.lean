@@ -122,7 +122,12 @@ private partial def renderVal (host : Contract) (extTag : ValExt → String) (st
       | none =>
         match accountLitLimb? (extTag kind) with
         | some n => .ok ("(i64.const " ++ toString n.toNat ++ ")")
-        | none => .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
+        | none =>
+          let tag := extTag kind
+          if tag.startsWith "xlitbal." then
+            .ok "(local.get $pf_x_xlitbal)"
+          else
+            .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
   | _ => .error "extract/unsupported: wasm v0 value"
 
 private def isExitOp : Op ValExt OpExt → Bool
@@ -659,7 +664,7 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
                   "pf_x_xs0", "pf_x_xs1", "pf_x_xs2",
                   "pf_x_xsqn", "pf_x_xtime", "pf_x_xhash0", "pf_x_xfee", "pf_x_xbal",
                   "pf_x_xseq", "pf_x_xflags", "pf_x_xownc",
-                  "pf_x_xtseq", "pf_x_xtfee"] do
+                  "pf_x_xtseq", "pf_x_xtfee", "pf_x_xtflags", "pf_x_xlitbal"] do
       lines := lines.push s!"    (local ${name} i64)"
   for loc in slotLocals p do
     lines := lines.push s!"    {loc}"

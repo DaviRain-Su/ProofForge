@@ -86,6 +86,13 @@ namespace Context
 @[pf_inline] def accountLit (hex : String) : AccountId :=
   Runtime.xrplAccountLit hex
 
+/-- Current `ContractCall` Flags. -/
+@[pf_inline] def txFlags : UInt64 := Runtime.xrplTxFlags
+
+/-- Compile-time AccountID's XRP Balance in drops. Persist owner stays the caller. -/
+@[pf_inline] def litBalanceDrops (hex : String) : UInt64 :=
+  Runtime.xrplLitBalanceDrops hex
+
 end Context
 
 namespace Pausable
@@ -108,6 +115,13 @@ namespace Access
 Not EVM `Revert.unauthorized(address)`. -/
 @[pf_inline] def requireOwner (owner : AccountId) : Bool :=
   AccountId.eq Context.caller owner
+
+/-- Owner or operator. Nested `if`, not `||` (wasm v0). -/
+@[pf_inline] def requireOwnerOr (owner operator : AccountId) : Bool :=
+  if AccountId.eq Context.caller owner then
+    true
+  else
+    AccountId.eq Context.caller operator
 
 end Access
 
