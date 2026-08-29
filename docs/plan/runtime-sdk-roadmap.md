@@ -122,12 +122,14 @@ closed CALL/STATICCALL result policy，EVM-RT-2b 已统一 typed LOG0..4/custom 
 EVM-RT-2c 已统一 payable/receive entry-value 与 calldata route policy，EVM-RT-2d 已统一
 permit ecrecover 的固定 address/frame、STATICCALL success、exact returndata 与 nonzero
 signer，EVM-RT-2e 已提供 schema-resolved ordered static UInt64 store；R4-006 又补齐
-full-width gas/basefee/prevrandao/gaslimit 并固定 Cancun opcode 语义；UInt256 div/mod 也已
+full-width gas/basefee/prevrandao/gaslimit 并固定 Cancun opcode 语义；R4-007 又让 source
+zero-argument named errors 自动进入 ABI metadata；UInt256 div/mod 也已
 固定 checked 零除 revert。R5-009 已组合 reusable ReentrancyGuard policy。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
 [R2-004](tasks/r2-004.md)、[R2-005](tasks/r2-005.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
 [R4-004](tasks/r4-004.md)、[R4-005](tasks/r4-005.md)、[R4-006](tasks/r4-006.md)、
+[R4-007](tasks/r4-007.md)、
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
 [R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md)、
@@ -471,6 +473,12 @@ basefee、prevrandao 与 gaslimit 的 allocation-free `UInt256`，通用 wide en
 `0x44` 被解释成 pre-Paris DIFFICULTY；显式截断的 `callerLow`/`selfLow` 也归 SDK facade，
 EvmCtx/TipJar 不再直接 import Runtime，Anvil 门与 block JSON 精确对照。详见
 [R4-006](tasks/r4-006.md)。
+
+R4-007 已完成 source zero-argument custom-error ABI metadata：ABI emitter 从完整 structured
+op tree 收集 `.errorNamed`，与 Yul emitter 一样递归 `ite`/bounded `forBody`，按首次出现顺序
+去重并生成 `error Name()` JSON。应用新增 enum error 不再改 Emit 的 hard-coded error list；
+EvmVecLog/Stack artifact 已包含 malformed/oob/empty。Yul、bytecode、IR/digest 全部不变；
+parameterized source errors 仍需未来 typed IR contract。详见 [R4-007](tasks/r4-007.md)。
 
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical

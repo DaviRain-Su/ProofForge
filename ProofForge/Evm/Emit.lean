@@ -1558,30 +1558,43 @@ private def errorAbiCapExceeded : String :=
 private def errorAbiExpired : String :=
   "{\"type\":\"error\",\"name\":\"Expired\",\"inputs\":[]}"
 
-private def collectLogNames (fuel : Nat) (ops : Array IR.Op) : Array String :=
-  match fuel with
-  | 0 => #[]
-  | fuel' + 1 =>
-    ops.foldl (init := #[]) fun acc op =>
-      match op with
-      | .component call =>
-        match call.logName with
-        | some n => if acc.contains n then acc else acc.push n
-        | none => acc
-      | .ite _ _ _ t f =>
-        (collectLogNames fuel' t ++ collectLogNames fuel' f).foldl (init := acc) fun acc n =>
-          if acc.contains n then acc else acc.push n
-      | _ => acc
+private def errorAbiNamed (name : String) : String :=
+  "{\"type\":\"error\",\"name\":\"" ++ escapeJson name ++ "\",\"inputs\":[]}"
 
-private def hasErrorLeaf (fuel : Nat) (pred : IR.Op → Bool) (ops : Array IR.Op) : Bool :=
-  match fuel with
-  | 0 => false
-  | fuel' + 1 =>
-    ops.any fun op =>
-      pred op ||
-        match op with
-        | .ite _ _ _ t f => hasErrorLeaf fuel' pred t || hasErrorLeaf fuel' pred f
-        | _ => false
+/-- Collect unique metadata names from the full structured op tree in first-use order. ABI
+metadata must follow the same `ite`/bounded-`forBody` nesting that the Yul emitter consumes. -/
+private partial def collectOpNames (nameOf : IR.Op → Option String)
+    (ops : Array IR.Op) : Array String :=
+  ops.foldl (init := #[]) fun acc op =>
+    let acc :=
+      match nameOf op with
+      | some name => if acc.contains name then acc else acc.push name
+      | none => acc
+    let nested :=
+      match op with
+      | .ite _ _ _ t f => collectOpNames nameOf t ++ collectOpNames nameOf f
+      | .forBody _ body => collectOpNames nameOf body
+      | _ => #[]
+    nested.foldl (init := acc) fun acc name =>
+      if acc.contains name then acc else acc.push name
+
+private def collectLogNames (ops : Array IR.Op) : Array String :=
+  collectOpNames (fun
+    | .component call => call.logName
+    | _ => none) ops
+
+private def collectNamedErrorNames (ops : Array IR.Op) : Array String :=
+  collectOpNames (fun
+    | .errorNamed name => some name
+    | _ => none) ops
+
+private partial def hasErrorLeaf (pred : IR.Op → Bool) (ops : Array IR.Op) : Bool :=
+  ops.any fun op =>
+    pred op ||
+      match op with
+      | .ite _ _ _ t f => hasErrorLeaf pred t || hasErrorLeaf pred f
+      | .forBody _ body => hasErrorLeaf pred body
+      | _ => false
 
 private def receiveAbi : String :=
   "{\"type\":\"receive\",\"stateMutability\":\"payable\"}"
@@ -1589,30 +1602,34 @@ private def receiveAbi : String :=
 def emitAbiChecked (p : IR.Program) : Except String String := do
   let evs :=
     p.entries.foldl (init := #[]) fun acc m =>
-      (collectLogNames 8 m.ops).foldl (init := acc) fun acc n =>
+      (collectLogNames m.ops).foldl (init := acc) fun acc n =>
+        if acc.contains n then acc else acc.push n
+  let namedErrors :=
+    p.entries.foldl (init := #[]) fun acc m =>
+      (collectNamedErrorNames m.ops).foldl (init := acc) fun acc n =>
         if acc.contains n then acc else acc.push n
   let needIns := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun
+    hasErrorLeaf (fun
       | .component call => call.emitsInsufficient
       | _ => false) m.ops)
   let needUnauth := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun
+    hasErrorLeaf (fun
       | .component call => call.emitsUnauthorized
       | _ => false) m.ops)
   let needZero := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun
+    hasErrorLeaf (fun
       | .component call => call.emitsZeroAddress
       | _ => false) m.ops)
   let needPaused := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun
+    hasErrorLeaf (fun
       | .component call => call.emitsPaused
       | _ => false) m.ops)
   let needCap := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun
+    hasErrorLeaf (fun
       | .component call => call.emitsCapExceeded
       | _ => false) m.ops)
   let needExpired := p.entries.any (fun m =>
-    hasErrorLeaf 8 (fun
+    hasErrorLeaf (fun
       | .component call => call.emitsExpired
       | _ => false) m.ops)
   let needRecv := p.entries.any (fun m => m.ixName == "receive")
@@ -1628,6 +1645,7 @@ def emitAbiChecked (p : IR.Program) : Except String String := do
       (if needPaused then #[errorAbiPaused] else #[]) ++
       (if needCap then #[errorAbiCapExceeded] else #[]) ++
       (if needExpired then #[errorAbiExpired] else #[]) ++
+      namedErrors.map errorAbiNamed ++
       (if needRecv then #[receiveAbi] else #[]) ++
       entryItems
   return "[

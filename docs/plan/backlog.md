@@ -36,7 +36,8 @@ entry-value 与 calldata route policy，EVM-RT-2d 已把 permit 的固定 ecreco
 STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed contract；UInt256
 div/mod 已固定 checked 除零 revert 策略；EVM-RT-2e 已加入 schema-resolved ordered static
 UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation；R4-006 已补齐 full-width
-gas/basefee/prevrandao/gaslimit 并钉死 Cancun opcode 语义；R5-009 已在其上组合
+gas/basefee/prevrandao/gaslimit 并钉死 Cancun opcode 语义；R4-007 已让所有 source
+`.errorNamed` 叶自动进入 zero-argument custom-error ABI metadata；R5-009 已在其上组合
 reusable ReentrancyGuard policy。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
@@ -609,6 +610,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   DIFFICULTY 语义；`callerLow`/`selfLow` 截断投影也由 `Sdk.Context` 显式拥有，EvmCtx 和
   TipJar 均不再直接 import Runtime，Anvil 与当前 block 字段精确对照。详见
   `docs/plan/tasks/r4-006.md`。
+
+- R4-007 EVM source custom-error ABI metadata 已完成：ABI emitter 从完整 structured op tree
+  自动收集 `.errorNamed`，覆盖 `ite` 与 bounded `forBody`、按首次出现顺序去重，并输出与
+  既有 Yul selector-only revert 完全一致的 zero-argument error 项。新增 error enum 不再需要
+  修改硬编码 ABI 列表；EvmVecLog/Stack 的 malformed/oob/empty 已进入真实 artifact。该切片
+  不新增 Ops/IR/Runtime recipe，不改变 Yul、bytecode 或 digest。详见
+  `docs/plan/tasks/r4-007.md`。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零

@@ -256,6 +256,34 @@ private def mockClosedCtx : ClosedCall.Emit.Context Nat :=
   | .error _ => false
   | .ok (txt, _, _) => txt.contains "shl(224, 0x" && txt.contains "revert(0, 4)"
 
+-- ABI metadata follows the same full structured op tree as Yul: generic source enum errors are
+-- zero-argument custom errors, recurse through `ite` and bounded `forBody`, and deduplicate in
+-- first-use order rather than requiring a new hard-coded ABI case for every application error.
+#guard
+  match IR.fromProgram ProofForge.Golden.extractedCounter with
+  | .error _ => false
+  | .ok p =>
+      match p.entries.find? (·.ixName == "get") with
+      | none => false
+      | some get =>
+          let program : IR.Program := {
+            p with
+            entries := #[{ get with ops := #[
+              .ite .eq (.lit 0) (.lit 0)
+                #[.errorNamed "malformed"]
+                #[.forBody 2 #[.errorNamed "oob", .errorNamed "malformed"]]
+            ] }]
+          }
+          match Emit.emitAbiChecked program with
+          | .error _ => false
+          | .ok abi =>
+              let malformed := "{\"type\":\"error\",\"name\":\"malformed\",\"inputs\":[]}"
+              let oob := "{\"type\":\"error\",\"name\":\"oob\",\"inputs\":[]}"
+              abi.contains malformed && abi.contains oob &&
+                (abi.splitOn malformed).length == 2 &&
+                (abi.splitOn oob).length == 2 &&
+                abi.find malformed < abi.find oob
+
 -- Existing consumer regression: TipJar and Token keep the shared log/error spellings.
 #guard
   match Emit.emitYul ProofForge.Evm.Golden.extractedTipJar with

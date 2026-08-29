@@ -256,7 +256,7 @@ open Examples.EvmVecStack in
 fixed-vector dynamic-index load/store emission shapes -/
 
 private def expectVecLayout (module : Name) (expectedSlots : List (String × Nat))
-    (expectedVectors : List (String × Nat × Nat × Nat)) (expectedEntries : List String) :
+    (expectedVectors : List (String × Nat × Nat × Nat)) (expectedEntries expectedErrors : List String) :
     CommandElabM Unit := do
   let env ← getEnv
   let source ←
@@ -281,10 +281,13 @@ private def expectVecLayout (module : Name) (expectedSlots : List (String × Nat
     match ProofForge.Evm.Emit.emitYul program with
     | .ok yul => pure yul
     | .error reason => throwError reason
-  let _abi ←
+  let abi ←
     match ProofForge.Evm.Emit.emitAbiChecked program with
     | .ok abi => pure abi
     | .error reason => throwError reason
+  for errorName in expectedErrors do
+    unless abi.contains s!"\"type\":\"error\",\"name\":\"{errorName}\",\"inputs\":[]" do
+      throwError s!"{module}: ABI omitted source custom error {errorName}()"
   for (_, width) in expectedSlots do
     unless width == 8 do
       throwError s!"{module}: non-UInt64 leaf width survived extraction"
@@ -297,11 +300,11 @@ private def expectVecLayout (module : Name) (expectedSlots : List (String × Nat
 
 elab "#pf_guard_evm_vec_log" : command =>
   expectVecLayout `Examples.EvmVecLog logSlots [("entries", 3, 4, 1)]
-    ["record", "amend", "wipe", "countOf", "entryAt", "adminOf"]
+    ["record", "amend", "wipe", "countOf", "entryAt", "adminOf"] ["malformed", "oob"]
 
 elab "#pf_guard_evm_vec_stack" : command =>
   expectVecLayout `Examples.EvmVecStack stackSlots [("items", 0, 3, 1)]
-    ["push", "pop", "clearAll", "depthOf", "topOf"]
+    ["push", "pop", "clearAll", "depthOf", "topOf"] ["malformed", "empty"]
 
 #pf_guard_evm_vec_log
 #pf_guard_evm_vec_stack

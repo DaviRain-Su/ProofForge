@@ -121,7 +121,7 @@ EVM Runtime 以 Solidity 的 [types](https://docs.soliditylang.org/en/latest/typ
 | environment | caller/self/block number/timestamp/chain id/value/balance/immutables；full-width gasleft/basefee/prevrandao/gaslimit；solc 0.8.34 + Cancun target pin | coinbase、blockhash、code/codehash and broader target-version matrix | F1 |
 | call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send、explicit ordered reentrancy guard | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；code-existence policy | F1/F2 |
 | crypto | host Keccak selector tooling、closed ecrecover precompile plan | source hash API、sha256/ripemd/precompiles、ECDSA anti-malleability、EIP-191/712、ERC-1271、Merkle | F1/F2 |
-| log/error | typed bounded LOG0..4/custom-error plans behind closed events/errors | source-declared generic typed events/errors、dynamic indexed/data encoding、Panic/revert-data propagation | F1 |
+| log/error | typed bounded LOG0..4/custom-error plans behind closed events/errors；source enum 的 zero-argument named errors 已自动进入 ABI metadata | source-declared parameterized typed events/errors、dynamic indexed/data encoding、Panic/revert-data propagation | F1 |
 | resources | checked u256 math and bounded ABI frame | gas/code/init-code/memory/stack manifest and compiler-version feature gates | F1/F3 |
 
 不是所有 low-level EVM primitive 都应该直接变成默认安全 SDK。`delegatecall`、raw call、packed
