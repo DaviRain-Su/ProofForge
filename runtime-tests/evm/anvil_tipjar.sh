@@ -46,6 +46,14 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'gasLimit()(ui
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'prevRandao()(uint256)')" \
   "$block_randao" "PREVRANDAO"
 
+block_coinbase="$(printf '%s' "$block_env" | "$python" -I -S -c '
+import json, sys
+b = json.load(sys.stdin)
+print((b.get("miner") or b.get("beneficiary") or b.get("author")).lower())
+')"
+got_coinbase="$("$cast" call --rpc-url "$rpc" "$addr" 'coinbase()(address)' | tr '[:upper:]' '[:lower:]')"
+solana_lean_require_equal "$got_coinbase" "$block_coinbase" "COINBASE"
+
 self_low="$("$python" -I -S -c "print(int('$addr', 16) & ((1<<64)-1))")"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfLow()(uint64)')" \
   "$self_low" "evmSelf low-8"

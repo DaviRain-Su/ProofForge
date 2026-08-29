@@ -16,6 +16,7 @@ open ProofForge.Evm.Sdk
 #guard baseFee (init 0) == Context.baseFee
 #guard prevRandao (init 0) == Context.prevRandao
 #guard gasLimit (init 0) == Context.gasLimit
+#guard coinbase (init 0) == Context.coinbase
 #guard callerW0 (init 0) == Context.caller.w0
 #guard callerW1 (init 0) == Context.caller.w1
 #guard callerW2 (init 0) == Context.caller.w2

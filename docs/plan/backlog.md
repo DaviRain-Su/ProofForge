@@ -635,6 +635,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   compatibility，但后续 environment 能力不再扩 top-level Ops/IR/main Emit。EvmCtx/TipJar 的
   digest、Yul、ABI、bytecode 均逐字节不变。详见 `docs/plan/tasks/r4-008.md`。
 
+- R4-009 EVM coinbase/blockhash environment slice 已完成：`Sdk.Context` 新增完整 20-byte
+  `coinbase : Address` 与 `blockHash (UInt64) : UInt256`，production extraction 仍只生成
+  generic Component query。target-owned Environment interpreter 对每个结果只执行一次
+  COINBASE/BLOCKHASH 并复用三/四 limb 投影，没有新增 top-level Ops/IR/main Emit recipe、
+  allocation、storage 或 call。EvmCtx digest `14d95bb9d9e56f95`、bytecode 1,447 B；TipJar
+  digest `3387209f8b9b4b1f`、bytecode 2,480 B；focused Anvil 与真实 block beneficiary/hash
+  精确一致。详见 `docs/plan/tasks/r4-009.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、

@@ -493,6 +493,12 @@ EVM word 只观察一次并投影四 limb；legacy Golden constructors 暂留兼
 不再生成它们。canonical strings、cache keys、EvmCtx/TipJar digest、Yul/ABI/bin 均逐字节不变；
 后续 coinbase/blockhash/code query 只扩 target component。详见 [R4-008](tasks/r4-008.md)。
 
+R4-009 已验证这个边界可直接承载新能力：`Sdk.Context.coinbase` 返回完整 `Address`，
+`blockHash(UInt64)` 返回完整 `UInt256`，两者只扩 `Evm.Environment` query/interpreter 和既有
+Component bridge。每个三/四-limb 结果只执行一次 COINBASE/BLOCKHASH，再从 target cache
+投影；没有增加 top-level Ops/IR/main-Emit case、allocation、storage 或 call。EvmCtx/TipJar 的
+Anvil gate 与 block JSON 精确对照。详见 [R4-009](tasks/r4-009.md)。
+
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
 spelling 保留，因此 Token/Capped 等既有 IR/产物不漂移。Wide 的跨 64/192-bit Anvil matrix

@@ -56,6 +56,12 @@ SVM 发射器碰到这个叶子 fail closed。
 @[irreducible] def evmSelfW1 : UInt64 := 0
 @[irreducible] def evmSelfW2 : UInt64 := 0
 
+/-- Current block beneficiary (`COINBASE`) in the same three-limb address representation as
+`evmCaller20` and `evmSelf20`. -/
+@[irreducible] def evmCoinbaseW0 : UInt64 := 0
+@[irreducible] def evmCoinbaseW1 : UInt64 := 0
+@[irreducible] def evmCoinbaseW2 : UInt64 := 0
+
 /-- 完整 `CALLER`。抽出认三叶，不把 Addr20 当单一 UInt64。 -/
 def evmCaller20 : Addr20 :=
   { w0 := evmCallerW0, w1 := evmCallerW1, w2 := evmCallerW2 }
@@ -63,6 +69,10 @@ def evmCaller20 : Addr20 :=
 /-- 完整 `ADDRESS`。 -/
 def evmSelf20 : Addr20 :=
   { w0 := evmSelfW0, w1 := evmSelfW1, w2 := evmSelfW2 }
+
+/-- Full current block beneficiary address. -/
+def evmCoinbase20 : Addr20 :=
+  { w0 := evmCoinbaseW0, w1 := evmCoinbaseW1, w2 := evmCoinbaseW2 }
 
 /-- 构造期烘焙的 `uint64`。runtime `loadimmutable("imm0")`。宿主返回 0。 -/
 @[irreducible] def evmImmU64 : UInt64 := 0
@@ -114,6 +124,10 @@ the pre-Paris `DIFFICULTY` interpretation of opcode `0x44`; assembly pins the Ca
 
 /-- Current block gas limit (`GASLIMIT`) as a full EVM word. -/
 @[irreducible] def evmGasLimit256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- EVM `BLOCKHASH(number)` with its native 256-block availability semantics. Unavailable,
+current, and future block numbers return zero exactly as the VM specifies. -/
+@[irreducible] def evmBlockHash256 (_number : UInt64) : UInt256 := ⟨0, 0, 0, 0⟩
 
 /-- `eq(callvalue(), packed uint256)`。入口因此 payable。宿主返回 `amt.w0`。 -/
 @[irreducible] def evmDeposit256 (amt : UInt256) : UInt64 := amt.w0

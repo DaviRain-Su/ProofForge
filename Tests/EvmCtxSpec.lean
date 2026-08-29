@@ -12,6 +12,7 @@ open Lean Elab Command
 #guard caller (init 0) == Context.callerLow
 #guard height (init 0) == Context.blockNumber
 #guard gasLeft (init 0) == Context.gasLeft
+#guard blockHash (init 0) 37 == Context.blockHash 37
 
 #guard aggregate (init 0) ⟨11, ⟨3, true⟩⟩ (13, 17) #v[19, 23, 29] == (93, true)
 #guard optionValue (init 0) none == 5

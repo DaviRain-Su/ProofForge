@@ -44,6 +44,11 @@ def height (_s : State) : UInt64 :=
 def gasLeft (_s : State) : UInt256 :=
   Context.gasLeft
 
+/-- Full-width hash of a recent block. EVM returns zero outside its 256-block history window. -/
+@[pf_entry]
+def blockHash (_s : State) (number : UInt64) : UInt256 :=
+  Context.blockHash number
+
 /-- 把当前 block number 写入 dummy。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=

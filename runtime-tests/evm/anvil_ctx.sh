@@ -29,6 +29,13 @@ if [[ "$gas_left" -le 0 ]]; then
   exit 1
 fi
 
+previous="$(( $(solana_lean_to_dec "$bn") - 1 ))"
+previous_hash="$("$cast" block --rpc-url "$rpc" "$previous" --json |
+  "$python" -I -S -c 'import json,sys; print(int(json.load(sys.stdin)["hash"], 16))')"
+solana_lean_require_uint \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'blockHash(uint64)(uint256)' "$previous")" \
+  "$previous_hash" "BLOCKHASH previous block"
+
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" "$addr" 'stamp()' >/dev/null
 got_get="$("$cast" call --rpc-url "$rpc" "$addr" 'get()(uint64)')"
 bn2="$("$cast" block-number --rpc-url "$rpc")"
@@ -118,4 +125,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-ctx: ok (caller/number/gas + static/tagged aggregate ABI; engineering only)"
+echo "evm-anvil-ctx: ok (caller/number/gas/blockhash + static/tagged aggregate ABI; engineering only)"

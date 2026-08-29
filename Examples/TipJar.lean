@@ -69,6 +69,11 @@ def prevRandao (_s : State) : UInt256 :=
 def gasLimit (_s : State) : UInt256 :=
   Context.gasLimit
 
+/-- Full block beneficiary address. -/
+@[pf_entry]
+def coinbase (_s : State) : Address :=
+  Context.coinbase
+
 /-- `ADDRESS` 低 8 字节。完整 20B 用 `self20`。 -/
 @[pf_entry]
 def selfLow (_s : State) : UInt64 :=

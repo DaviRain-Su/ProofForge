@@ -56,9 +56,11 @@ private def Context.staticStorage (context : Context σ) : StaticStorage.Emit.Co
     indent := context.indent }
 
 private def Context.environment (context : Context σ) : Environment.Emit.Context σ :=
-  { fresh := context.fresh
+  { materialize := context.materialize
+    fresh := context.fresh
     rememberWide := context.rememberWide
     lookupWide := context.lookupWide
+    valKey := context.valKey
     indent := context.indent }
 
 def emitQuery (context : Context σ) (query : Component.Query) (operands : Array Ops.Val)

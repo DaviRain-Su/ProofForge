@@ -16,12 +16,19 @@ open ProofForge.Evm
 #guard (Environment.Query.gasLeft256 0).arity == 0
 #guard (Environment.Query.baseFee256 3).wellFormed
 #guard !(Environment.Query.gasLimit256 4).wellFormed
+#guard (Environment.Query.blockHash256 3).arity == 1
+#guard (Environment.Query.coinbase20 2).wellFormed
+#guard !(Environment.Query.coinbase20 3).wellFormed
 #guard
   (Environment.Query.prevRandao256 2).canonical (fun _ : UInt64 => "v") #[] == "erandao.2"
+#guard
+  (Environment.Query.blockHash256 1).canonical (fun _ : UInt64 => "v") #[37] ==
+    "env.blockHash256.1(v)"
 
 private def hasEnvironmentReturn (method : IR.Method) (wanted : Environment.Query) : Bool :=
   method.ops.any fun
-    | .returnU64 (.ext (.component (.environment found)) #[]) => found == wanted
+    | .returnU64 (.ext (.component (.environment found)) operands) =>
+        found == wanted && operands.size == wanted.arity
     | _ => false
 
 private def requireQuery (program : IR.Program) (methodName : String)
@@ -49,10 +56,15 @@ elab "#pf_guard_evm_environment_component" : command => do
   requireQuery tipJar "baseFee" .baseFee256
   requireQuery tipJar "prevRandao" .prevRandao256
   requireQuery tipJar "gasLimit" .gasLimit256
+  requireQuery ctx "blockHash" .blockHash256
+  for limb in [0, 1, 2] do
+    unless hasEnvironmentReturn
+        (tipJar.entries.find? (·.ixName == "coinbase")).get! (.coinbase20 limb) do
+      throwError s!"TipJar.coinbase limb {limb} escaped the Component bridge"
   unless IR.digestHex ctx == (ProofForge.Evm.Registry.digestOf "EvmCtx").getD "" do
-    throwError s!"EvmCtx digest changed during environment ownership refactor: {IR.digestHex ctx}"
+    throwError s!"EvmCtx registry digest is stale: {IR.digestHex ctx}"
   unless IR.digestHex tipJar == (ProofForge.Evm.Registry.digestOf "TipJar").getD "" do
-    throwError s!"TipJar digest changed during environment ownership refactor: {IR.digestHex tipJar}"
+    throwError s!"TipJar registry digest is stale: {IR.digestHex tipJar}"
   let ctxYul ←
     match ProofForge.Evm.Emit.emitYul ctx with
     | .ok yul => pure yul
@@ -62,7 +74,10 @@ elab "#pf_guard_evm_environment_component" : command => do
     | .ok yul => pure yul
     | .error reason => throwError reason
   unless ctxYul.contains " := gas()" && tipJarYul.contains " := basefee()" &&
-      tipJarYul.contains " := prevrandao()" && tipJarYul.contains " := gaslimit()" do
+      tipJarYul.contains " := prevrandao()" && tipJarYul.contains " := gaslimit()" &&
+      ctxYul.contains " := blockhash(" && tipJarYul.contains " := coinbase()" &&
+      (ctxYul.splitOn "blockhash(").length == 2 &&
+      (tipJarYul.splitOn "coinbase()").length == 2 do
     throwError "environment component omitted one or more pinned Cancun opcode bindings"
 
 #pf_guard_evm_environment_component
