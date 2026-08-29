@@ -6,17 +6,22 @@ import ProofForge.Svm.Registry
 import ProofForge.Evm.Assemble
 import ProofForge.Evm.IR
 import ProofForge.Evm.Registry
+import ProofForge.Wasm.Assemble
+import ProofForge.Wasm.IR
+import ProofForge.Wasm.Registry
 
 namespace ProofForge.Cli
 
 inductive Target where
   | svm
   | evm
+  | wasm
   deriving BEq, Repr, Inhabited
 
 def parseTarget : String → Option Target
   | "svm" | "solana" | "sbpf" => some .svm
   | "evm" => some .evm
+  | "wasm" | "xrpl" => some .wasm
   | _ => none
 
 structure Options where
@@ -29,10 +34,11 @@ private def usage : String :=
   "pf — ProofForge compiler\n" ++
     "\n" ++
     "Usage:\n" ++
-    "  pf build --target <svm|evm> [--out DIR] [Program ...]\n" ++
+    "  pf build --target <svm|evm|wasm> [--out DIR] [Program ...]\n" ++
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
+    "wasm writes Name.rs (XRPL Bedrock dialect Rust source; zero-tool)\n" ++
     "No program names means every registered source module for the selected target.\n"
 
 def parseArgs (args : List String) : Except String Options :=
@@ -126,6 +132,38 @@ private unsafe def extractEvmPrograms (names : Array String) :
   catch e =>
     return .error s!"source import failed: {e}"
 
+private def wasmProgramNames : Array String :=
+  Wasm.Registry.names
+
+private def selectWasmNames (names : Array String) : Except String (Array String) :=
+  if names.isEmpty then .ok wasmProgramNames
+  else
+    names.mapM fun n =>
+      match wasmProgramNames.find? (· == n) with
+      | some _ => .ok n
+      | none => .error s!"unknown wasm program {n}"
+
+private unsafe def extractWasmPrograms (names : Array String) :
+    IO (Except String (Array ProofForge.Wasm.IR.Program)) :=
+  try
+    Lean.initSearchPath (← Lean.findSysroot)
+    Lean.enableInitializersExecution
+    let moduleName (name : String) := Lean.Name.str `Examples name
+    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let env ← Lean.importModules modules {} (loadExts := true)
+    return names.mapM fun name =>
+      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.IR.fromExtracted with
+      | .error reason => .error s!"{name}: {reason}"
+      | .ok program =>
+        let digest := Wasm.IR.digestHex program
+        match Wasm.Registry.digestOf name with
+        | some expected =>
+            if digest == expected then .ok program
+            else .error s!"{name}: ir/mismatch: extracted wasm digest {digest} != fixture {expected}"
+        | none => .ok program
+  catch e =>
+    return .error s!"source import failed: {e}"
+
 unsafe def run (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .error reason =>
@@ -168,6 +206,22 @@ unsafe def run (args : List String) : IO UInt32 := do
           for program in programs do
             let r ← ProofForge.Evm.Assemble.assembleProgram opts.outDir program
             IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes)"
+          return 0
+    | .wasm =>
+      match selectWasmNames opts.names with
+      | .error reason =>
+        IO.eprintln s!"pf: {reason}"
+        return 1
+      | .ok names =>
+        match ← extractWasmPrograms names with
+        | .error reason =>
+          IO.eprintln s!"pf: {reason}"
+          return 1
+        | .ok programs =>
+          IO.FS.createDirAll opts.outDir
+          for program in programs do
+            let r ← ProofForge.Wasm.Assemble.assembleProgram opts.outDir program
+            IO.println s!"wrote {r.rsPath} ({r.rsSource.length} bytes; XRPL Bedrock source; deployable=false)"
           return 0
 
 end ProofForge.Cli

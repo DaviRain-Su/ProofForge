@@ -30,5 +30,6 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 | [research/06-wasm-feasibility.md](research/06-wasm-feasibility.md) | WASM 第三 target：Lean 自家编译器 vs 新 profile 的路线判定 |
+| [modules/wasm.md](modules/wasm.md) | WASM 第三 profile：XRPL Bedrock 方言 Rust 源发射器 |
 
 当前阶段：**SVM 全面收口**（见 [plan/svm-work-plan.md](plan/svm-work-plan.md)）；形式化是其中 Track A。Runtime/SDK 主体已落地，剩余缺口与证明/应用并行推进；WASM PR 保持开放不阻塞。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。

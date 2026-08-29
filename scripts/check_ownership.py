@@ -10,10 +10,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "Examples"
-TARGET_ROOTS = (ROOT / "ProofForge" / "Svm", ROOT / "ProofForge" / "Evm")
+TARGET_ROOTS = (ROOT / "ProofForge" / "Svm", ROOT / "ProofForge" / "Evm",
+                ROOT / "ProofForge" / "Wasm")
 
 DIRECT_EMIT_IMPORT = re.compile(
-    r"^\s*import\s+ProofForge\.(?:Svm|Evm)(?:\.[A-Za-z0-9_]+)*\.Emit\s*(?:--.*)?$",
+    r"^\s*import\s+ProofForge\.(?:Svm|Evm|Wasm)(?:\.[A-Za-z0-9_]+)*\.Emit\s*(?:--.*)?$",
     re.MULTILINE,
 )
 APPLICATION_IMPORT = re.compile(r"^\s*import\s+(?:Examples|Projects)(?:\.|\s|$)", re.MULTILINE)

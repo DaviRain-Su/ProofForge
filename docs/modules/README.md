@@ -19,3 +19,4 @@
 | [Cli](cli.md) | `pf build --target svm|evm` |
 | [Runtime](runtime.md) | `Svm.Runtime` / `Evm.Runtime` 宿主 stub；抽出按名认 |
 | [Evm](evm.md) | `Evm.Sdk` 合同 facade + Ops → Yul / ABI / locked solc |
+| [Wasm](wasm.md) | 第三个 profile：XRPL Bedrock 方言 Rust 源（zero-tool）+ digest |
