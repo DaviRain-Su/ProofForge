@@ -27,6 +27,7 @@ import Examples.XrplPeer
 import Examples.XrplFlag
 import Examples.XrplTab
 import Examples.XrplHand
+import Examples.XrplCrew
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -64,7 +65,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplFlag" == some "d71a13301ce82878"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTab" == some "71c98e39c2ee1a4f"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHand" == some "5c6813950576cdda"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCrew" == some "ca03e80ef4a8218a"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -124,6 +126,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplTab
 
 #pf_xrpl_build Examples.XrplHand
+
+#pf_xrpl_build Examples.XrplCrew
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -610,6 +614,33 @@ elab "#pf_xrpl_hand_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-hand: {source.length} bytes of WAT passed hand anchor check"
 
 #pf_xrpl_hand_emit_check Examples.XrplHand
+
+open Lean Elab Command in
+elab "#pf_xrpl_crew_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"setOp\") (result i32)",
+          "(func (export \"bump\") (result i32)",
+          "(func (export \"get\")",
+          "i64.eq",
+          "(i32.const 3)",
+          "(data (i32.const 64) \"owner0owner1owner2op0op1op2value\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing crew anchor: {anchor}\n{source}"
+        unless !source.contains "(param $pf_p0 i64)" do
+          throwError "XrplCrew must not take wasm i64 params"
+        logInfo m!"proofforge-xrpl-crew: {source.length} bytes of WAT passed crew anchor check"
+
+#pf_xrpl_crew_emit_check Examples.XrplCrew
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
