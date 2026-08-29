@@ -29,6 +29,8 @@ need_imports = (
     '(import "host_lib" "get_ledger_sqn"',
     '(import "host_lib" "get_parent_ledger_time"',
     '(import "host_lib" "compute_sha512_half"',
+    '(import "host_lib" "get_parent_ledger_hash"',
+    '(import "host_lib" "get_base_fee"',
 )
 need_exports_counter = (
     '(func (export "initialize") (result i32)',
@@ -53,6 +55,12 @@ need_exports_hash = (
     '(func (export "get")',
     '(call $compute_sha512_half',
 )
+need_exports_rt2 = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "stamp") (result i32)',
+    '(call $get_parent_ledger_hash',
+    '(call $get_base_fee)',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account")
 
 for wat in wats:
@@ -66,6 +74,8 @@ for wat in wats:
         exports = need_exports_own
     elif wat.stem == "XrplHash":
         exports = need_exports_hash
+    elif wat.stem == "XrplRt2":
+        exports = need_exports_rt2
     else:
         exports = need_exports_counter
     for needle in exports:

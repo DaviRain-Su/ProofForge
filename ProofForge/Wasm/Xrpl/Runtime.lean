@@ -39,6 +39,15 @@ def xrplSelf20 : AccountId :=
 @[irreducible] def xrplParentTime : UInt64 := 0
 
 /--
+`host_lib.get_parent_ledger_hash` 写出 32 字节，本叶只取第一个小端 UInt64。
+不是 EVM `blockhash`，完整 32B 仍 fail closed。
+-/
+@[irreducible] def xrplParentHashW0 : UInt64 := 0
+
+/-- `host_lib.get_base_fee`，i32 零扩展到 UInt64。不是 EVM `baseFee` UInt256。 -/
+@[irreducible] def xrplBaseFee : UInt64 := 0
+
+/--
 编译期 ASCII 字面量的 SHA-512Half。抽出器认这个名字，发射
 `host_lib.compute_sha512_half`。返回 32 字节 digest 的第一个小端 `u64`。
 宿主 stub 返回 0。完整 32B / 动态输入 / keccak 本剖面 fail closed。

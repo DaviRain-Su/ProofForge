@@ -127,7 +127,7 @@ XLS-0102 的 `home_le_field` / `sha512_half` **不是** 本镜像名字。
 
 | 切片 | Runtime | SDK 名 | 不做 |
 |---|---|---|---|
-| XRPL-RT-2 | `parentLedgerHash` 首 u64；`baseFee` | `Context.parentHashLo` / `baseFee` | 完整 32B 当返回值 |
+| XRPL-RT-2（[wsm-011](../tasks/wsm-011.md)） | `xrplParentHashW0` 首 u64；`xrplBaseFee` | `Context.parentHashLo` / `baseFee` | 完整 32B 当返回值 |
 | XRPL-LOG | 仅当本地证明 `trace_*` 不破坏共识 | `Log.num` | EVM LOG3 / event ABI |
 | XRPL-VEC | 定长：要么连续 JSON key，要么 `*_array_element_field`；IR 允许编译期下标 | `Storage.Vec n` | 无界 `Array`、运行时长度 |
 | XRPL-MAP | **禁止** keccak / RBTree。先做编译期 key 的「命名槽表」。AccountId 键要另证：把三叶拼进 key 名，或 nested object | 以后才叫 `Storage.Map` | `HashMap`、动态 key 字符串、跨合约目录 |

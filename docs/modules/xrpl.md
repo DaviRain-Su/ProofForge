@@ -52,7 +52,8 @@ WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
   magic）；`runtime-tests/xrpl/counter.sh` 起 Bedrock 本地节点、部署本仓
   `Counter.wasm`（`--skip-build`）、跑 initialize / increment / overflow / get。
   `ctx.sh` 验环境叶；`own.sh` 验三叶比较（非 owner 状态码 3）；
-  `hash.sh` 验 `compute_sha512_half("vault")` 首个小端 u64。
+  `hash.sh` 验 `compute_sha512_half("vault")` 首个小端 u64；
+  `rt2.sh` 验 parent hash 低 8 字节和 base fee。
   缺 Docker / bedrock 则 skip。不是「artifact 已被证明」。
 
 ## 摘要
@@ -71,7 +72,7 @@ WAT {name}.wat
 
 CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本身会被
 拒绝并提示它是家族不是链）。注册程序见 `Xrpl.Registry`；当前为 `Counter`
-（digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`、`XrplHash`。
+（digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`、`XrplHash`、`XrplRt2`。
 
 ## 与调研文档 WAT 设想的关系
 

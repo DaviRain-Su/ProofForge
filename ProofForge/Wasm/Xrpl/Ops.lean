@@ -18,6 +18,10 @@ inductive ValKind where
   | selfW0 | selfW1 | selfW2
   | ledgerSqn
   | parentTime
+  /-- First little-endian UInt64 of the 32-byte parent ledger hash. -/
+  | parentHashW0
+  /-- `get_base_fee` zero-extended to UInt64. Not EVM `baseFee` 256. -/
+  | baseFee
   /-- Compile-time ASCII seed; first little-endian UInt64 of SHA-512Half. -/
   | sha512HalfLit (seed : String)
   deriving BEq, Repr, Inhabited

@@ -82,6 +82,16 @@
       "name": "hashed",
       "parameters": [],
       "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "getHash",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "getFee",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
     }
   ]
 }

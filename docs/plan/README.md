@@ -181,6 +181,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-008](tasks/wsm-008.md) | done | XRPL-SDK：`pf_inline` 转到 Runtime，Ownable 仍是源码 if |
 | [wsm-009](tasks/wsm-009.md) | done | XRPL-SDK-EQ：可组合 `AccountId.eq`，Ownable 走 helper |
 | [wsm-010](tasks/wsm-010.md) | done | XRPL-SDK-ACCESS：`requireOwner`，Ownable 走门面 |
+| [wsm-011](tasks/wsm-011.md) | done | XRPL-RT-2：parent hash 首 u64 + base fee |
 
 
 积压：[backlog.md](backlog.md)
