@@ -27,6 +27,12 @@ raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)
 
 mkdir -p "$(dirname "$staged")"
 cp -f "$wasm" "$staged"
+# bedrock node start bind-mounts config_dir/xrpld.cfg; if the host path is
+# missing Docker creates a directory and rippled SIGSEGVs. Seed the files.
+mkdir -p "$fixture/.bedrock/node-config"
+rm -rf "$fixture/.bedrock/node-config/xrpld.cfg"
+cp -f "$fixture/node-config/xrpld.cfg" "$fixture/.bedrock/node-config/xrpld.cfg"
+cp -f "$fixture/node-config/genesis.json" "$fixture/.bedrock/node-config/genesis.json"
 
 cleanup() {
   if [[ -n "${bedrock:-}" ]]; then
@@ -36,63 +42,102 @@ cleanup() {
 trap cleanup EXIT
 
 echo "xrpl-local-counter: starting local node" >&2
+(cd "$fixture" && "$bedrock" node stop >/dev/null 2>&1) || true
 (cd "$fixture" && "$bedrock" node start)
+
+wallet="$(xrpl_genesis_seed)"
 
 deploy_out="$(cd "$fixture" && "$bedrock" deploy \
   --network local \
   --skip-build \
   --skip-abi \
-  --abi abi.json)"
+  --abi abi.json \
+  --wallet "$wallet")"
 echo "$deploy_out" >&2
 
-contract="$(xrpl_json_field "$deploy_out" ".data.contractAccount")"
-wallet="$(xrpl_json_field "$deploy_out" ".data.walletSeed")"
-[[ -n "$contract" && "$contract" != "null" ]] || {
-  echo "FAIL: deploy did not return contractAccount: $deploy_out" >&2
+contract="$(xrpl_field "$deploy_out" "Contract Account")"
+[[ -n "$contract" ]] || {
+  echo "FAIL: deploy did not return Contract Account: $deploy_out" >&2
   exit 1
 }
 
 xrpl_call() {
-  local fn="$1" params="${2:-}"
-  if [[ -n "$params" ]]; then
-    (cd "$fixture" && "$bedrock" call "$contract" "$fn" \
-      --network local --wallet "$wallet" --abi abi.json --params "$params")
-  else
-    (cd "$fixture" && "$bedrock" call "$contract" "$fn" \
-      --network local --wallet "$wallet" --abi abi.json)
+  local fn="$1"
+  local params="{}"
+  if [[ -n "${2:-}" ]]; then
+    params="$2"
   fi
+  local cfg
+  cfg="$(mktemp)"
+  XRPL_CFG="$cfg" \
+  XRPL_CONTRACT="$contract" XRPL_FN="$fn" XRPL_WALLET="$wallet" \
+    XRPL_ABI="$fixture/abi.json" XRPL_PARAMS="$params" \
+    "$python" -I -S -c '
+import json, os
+json.dump({
+    "contract_account": os.environ["XRPL_CONTRACT"],
+    "function_name": os.environ["XRPL_FN"],
+    "network_url": "ws://localhost:6006",
+    "wallet_seed": os.environ["XRPL_WALLET"],
+    "abi_path": os.environ["XRPL_ABI"],
+    "parameters": json.loads(os.environ.get("XRPL_PARAMS") or "{}"),
+}, open(os.environ["XRPL_CFG"], "w", encoding="utf-8"))
+'
+  local out
+  out="$(node "$here/call.js" "$cfg")"
+  rm -f "$cfg"
+  printf '%s\n' "$out"
+}
+
+xrpl_call_code() {
+  "$python" -I -S -c 'import json,sys; print(json.load(sys.stdin).get("returnCode"))' <<<"$1"
+}
+
+xrpl_call_value() {
+  "$python" -I -S -c '
+import json, sys
+obj = json.load(sys.stdin)
+v = obj.get("returnValue")
+if v is None or v == "":
+    print(0)
+    raise SystemExit
+if isinstance(v, int):
+    print(v)
+    raise SystemExit
+s = str(v)
+if s.startswith("0x") or s.startswith("0X"):
+    s = s[2:]
+try:
+    print(int(s, 16) if s else 0)
+except ValueError:
+    print(s)
+' <<<"$1"
 }
 
 init_out="$(xrpl_call initialize '{"initial_value":"0"}')"
-xrpl_require_equal "$(xrpl_json_field "$init_out" ".data.returnCode")" "0" \
-  "initialize status"
+xrpl_require_equal "$(xrpl_call_code "$init_out")" "0" "initialize status"
 
-get0="$(xrpl_call get)"
-xrpl_require_equal "$(xrpl_json_field "$get0" ".data.returnCode")" "0" "get after init status"
-xrpl_require_equal "$(xrpl_hex_u64 "$(xrpl_json_field "$get0" ".data.returnValue")")" "0" \
-  "initialize state"
+get0="$(xrpl_call get '{}')"
+xrpl_require_equal "$(xrpl_call_code "$get0")" "0" "get after init status"
+xrpl_require_equal "$(xrpl_call_value "$get0")" "0" "initialize state"
 
 inc_out="$(xrpl_call increment '{"amount":"1"}')"
-xrpl_require_equal "$(xrpl_json_field "$inc_out" ".data.returnCode")" "0" \
-  "increment status"
+xrpl_require_equal "$(xrpl_call_code "$inc_out")" "0" "increment status"
 
-get1="$(xrpl_call get)"
-xrpl_require_equal "$(xrpl_hex_u64 "$(xrpl_json_field "$get1" ".data.returnValue")")" "1" \
-  "increment state"
+get1="$(xrpl_call get '{}')"
+xrpl_require_equal "$(xrpl_call_value "$get1")" "1" "increment state"
 
 max_init="$(xrpl_call initialize "{\"initial_value\":\"$UINT64_MAX\"}")"
-xrpl_require_equal "$(xrpl_json_field "$max_init" ".data.returnCode")" "0" \
-  "max initialize status"
+xrpl_require_equal "$(xrpl_call_code "$max_init")" "0" "max initialize status"
 set +e
 ovf="$(xrpl_call increment '{"amount":"1"}')"
 ovf_status=$?
 set -e
 if [[ "$ovf_status" -eq 0 ]]; then
-  ovf_code="$(xrpl_json_field "$ovf" ".data.returnCode")"
-  xrpl_require_equal "$ovf_code" "1" "overflow increment status"
+  xrpl_require_equal "$(xrpl_call_code "$ovf")" "1" "overflow increment status"
 fi
-get_max="$(xrpl_call get)"
-xrpl_require_equal "$(xrpl_hex_u64 "$(xrpl_json_field "$get_max" ".data.returnValue")")" "$UINT64_MAX" \
+get_max="$(xrpl_call get '{}')"
+xrpl_require_equal "$(xrpl_call_value "$get_max")" "$UINT64_MAX" \
   "overflow must leave counter"
 
 echo "xrpl-local-counter: ok (initialize/get/increment/overflow; engineering only)"

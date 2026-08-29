@@ -48,8 +48,8 @@ elab "#pf_xrpl_emit_check " n:ident : command => do
     | .error reason => throwError reason
     | .ok source => do
         let anchors : Array String := #[
-          "(import \"host_lib\" \"home_le_field\"",
-          "(import \"host_lib\" \"set_data\"",
+          "(import \"host_lib\" \"get_current_ledger_obj_field\"",
+          "(import \"host_lib\" \"update_data\"",
           "(func (export \"initialize\")",
           "(func (export \"increment\")",
           "(func (export \"get\")",
