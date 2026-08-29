@@ -5,10 +5,11 @@
 > 学 EVM/SVM 的分层，不学 keccak slot / account bytes / CPI。
 >
 > **XLS-0101/0102 底层没完。** 已绿：emit/assemble、两套 host 表、用户卡片、
-> env 叶、`callerBalanceDrops`。发交易 host **已注册**（`build_txn` pokeBuild=0），
-> 但 `emit_built_txn` Payment = **-196 tecPSEUDO_ACCOUNT**；普通 Payment 打不进
-> 合约伪账户（`tecNO_PERMISSION`）。还缺：`setUserData(别人)`、程序拥有
-> ContractData（-22）、Parameters 502、多数 keylet。
+> env 叶、`callerBalanceDrops`、AccountRoot Sequence/Flags/OwnerCount。
+> 发交易 host **已注册**（`build_txn` pokeBuild=0），但 `emit_built_txn` Payment =
+> **-196 tecPSEUDO_ACCOUNT**。Create `InstanceParameters` / Call AMOUNT
+> `tfSendAmount` 都是 **temMALFORMED**（这版 AlphaNet 注资路径坏了）。
+> 还缺：`setUserData(别人)`、程序拥有 ContractData（-22）、Parameters 502、多数 keylet。
 > **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
 
 ## 0. 现在能写什么样的合约
@@ -149,11 +150,12 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
 2. **wsm-029 / wsm-033** — AccountRoot.Balance **已绿**（`callerBalanceDrops`）。
 3. **wsm-030** — `build_txn` **host 已绿**。`emit_built_txn` Payment **没落地**
-   （-196 / 伪账户无资金路径）。不开 `Sdk.Payments`。下一刀是 Create 时
-   `tfSendAmount` 注资，或换一条伪账户允许的发出路径。
-4. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
+   （-196）。Create/Call `tfSendAmount` 在 `3.3.0-rc1` 上 **temMALFORMED**。
+   不开 `Sdk.Payments`。等节点修注资，或换本地 alphanet 分支。
+4. **wsm-034** — AccountRoot Sequence/Flags/OwnerCount **已绿**（`XrplRoot`）。
+5. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
    下一刀才是 `setUserData(destination)` 探针。
-5. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+6. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 

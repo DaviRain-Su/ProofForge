@@ -62,7 +62,11 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
     let needHash := usesKind method.ops .parentHashW0
     let needFee := usesKind method.ops .baseFee
     let needBal := usesKind method.ops .callerBalanceDrops
-    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needBal) then #[]
+    let needSeq := usesKind method.ops .callerSequence
+    let needFlags := usesKind method.ops .callerFlags
+    let needOwnc := usesKind method.ops .callerOwnerCount
+    let needRoot := needBal || needSeq || needFlags || needOwnc
+    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot) then #[]
     else
     let err :=
       if view then #[]
@@ -150,10 +154,35 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
           indent level ("(local.set $st (call $" ++ host.getBaseFee ++ "))"),
           indent level "(local.set $pf_x_xfee (i64.extend_i32_u (local.get $st)))"
         ]
-    let bal :=
-      if !needBal || host.accountRootId.isEmpty || host.cacheLe.isEmpty || host.leField.isEmpty then #[]
+    let rootReady :=
+      !host.accountRootId.isEmpty && !host.cacheLe.isEmpty && !host.leField.isEmpty
+    let cache :=
+      if !needRoot || !rootReady then #[]
       else
-        -- Account at 0..19 from loadAccount; index 176; amount 208.
+        -- Account at 0..19 from loadAccount; index 176. Slot stays in $st.
+        #[
+          indent level ("(local.set $st (call $" ++ host.accountRootId ++
+            " (i32.const 0) (i32.const 20) (i32.const 176) (i32.const 32)))")
+        ] ++ err ++ #[
+          indent level ("(local.set $st (call $" ++ host.cacheLe ++
+            " (i32.const 176) (i32.const 32) (i32.const 0)))")
+        ] ++ err
+    let u32Field (sfield : Nat) (dest : String) : Array String :=
+      if !rootReady then #[]
+      else
+        #[
+          indent level ("(drop (call $" ++ host.leField ++
+            " (local.get $st) (i32.const " ++ toString sfield ++
+            ") (i32.const 208) (i32.const 8)))"),
+          indent level ("(local.set $" ++ dest ++
+            " (i64.extend_i32_u (i32.load (i32.const 208))))")
+        ]
+    let seq := if !needSeq then #[] else u32Field 131076 "pf_x_xseq"
+    let flags := if !needFlags then #[] else u32Field 131074 "pf_x_xflags"
+    let ownc := if !needOwnc then #[] else u32Field 131085 "pf_x_xownc"
+    let bal :=
+      if !needBal || !rootReady then #[]
+      else
         -- STAmount XRP big-endian; drops = packed & 0x01FFFFFFFFFFFFFF.
         let be :=
           (Array.range 8).foldl (fun acc i =>
@@ -162,20 +191,13 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
             if acc.isEmpty then byte
             else "(i64.or (i64.shl " ++ acc ++ " (i64.const 8)) " ++ byte ++ ")") ""
         #[
-          indent level ("(local.set $st (call $" ++ host.accountRootId ++
-            " (i32.const 0) (i32.const 20) (i32.const 176) (i32.const 32)))")
-        ] ++ err ++ #[
-          indent level ("(local.set $st (call $" ++ host.cacheLe ++
-            " (i32.const 176) (i32.const 32) (i32.const 0)))")
-        ] ++ err ++ #[
-          indent level ("(local.set $st (call $" ++ host.leField ++
+          indent level ("(drop (call $" ++ host.leField ++
             " (local.get $st) (i32.const 393218) (i32.const 208) (i32.const 48)))")
-          -- `$st` still holds the cache slot from cache_le until this call.
-        ] ++ err ++ #[
+        ] ++ #[
           indent level ("(local.set $pf_x_xbal (i64.and " ++ be ++
             " (i64.const 144115188075855871)))")
         ]
-    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ bal
+    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal
 
 def extraImports (host : Contract) : Array String :=
   let tx :=

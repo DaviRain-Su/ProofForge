@@ -26,6 +26,12 @@ inductive ValKind where
   | sha512HalfLit (seed : String)
   /-- Caller's AccountRoot.Balance as XRP drops (STAmount 57-bit mantissa). -/
   | callerBalanceDrops
+  /-- Caller's AccountRoot.Sequence, UInt32 zero-extended. -/
+  | callerSequence
+  /-- Caller's AccountRoot.Flags, UInt32 zero-extended. -/
+  | callerFlags
+  /-- Caller's AccountRoot.OwnerCount, UInt32 zero-extended. Cached snapshot. -/
+  | callerOwnerCount
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat

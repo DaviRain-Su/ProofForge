@@ -132,6 +132,9 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
 @[match_pattern] def Val.xrplSha512HalfLit (seed : String) : Val :=
   xrplLeaf (.sha512HalfLit seed)
 @[match_pattern] def Val.xrplCallerBalanceDrops : Val := xrplLeaf .callerBalanceDrops
+@[match_pattern] def Val.xrplCallerSequence : Val := xrplLeaf .callerSequence
+@[match_pattern] def Val.xrplCallerFlags : Val := xrplLeaf .callerFlags
+@[match_pattern] def Val.xrplCallerOwnerCount : Val := xrplLeaf .callerOwnerCount
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2

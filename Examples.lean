@@ -55,6 +55,7 @@ import Examples.XrplHold
 import Examples.XrplMark
 import Examples.XrplBal
 import Examples.XrplBalRt
+import Examples.XrplRoot
 import Examples.EvmBounded
 import Examples.EvmSearch
 import Examples.EvmFindIndex

@@ -67,6 +67,15 @@ namespace Context
 /-- Caller's XRP AccountRoot.Balance in drops. Not EVM `selfBalance`. -/
 @[pf_inline] def callerBalanceDrops : UInt64 := Runtime.xrplCallerBalanceDrops
 
+/-- AccountRoot.Sequence. Not SVM `clockSlot`. -/
+@[pf_inline] def callerSequence : UInt64 := Runtime.xrplCallerSequence
+
+/-- AccountRoot.Flags. -/
+@[pf_inline] def callerFlags : UInt64 := Runtime.xrplCallerFlags
+
+/-- AccountRoot.OwnerCount at cache_le. Creating ContractData may bump the live count. -/
+@[pf_inline] def callerOwnerCount : UInt64 := Runtime.xrplCallerOwnerCount
+
 end Context
 
 namespace Pausable
