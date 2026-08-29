@@ -385,6 +385,10 @@ payload 与普通 return data 由 Mollusk 同时验证，详见 [R3-016](tasks/r
 增加同样有界的 checked LIFO `pop`：empty=`0x1212`，成功只缩短
 active prefix 并读取旧尾 byte；不清 payload、不分配、不伪造 free/realloc，且继续只扩既有
 Component interpreter。MemoryOps Mollusk 13/13 通过；详见 [R3-018](tasks/r3-018.md)。
+R3-019 再把 Rust `Vec::truncate` 的只缩短语义放入 shared lifecycle：Vector64/Bytes 都先
+验证 active/capacity，仅在 requested length 更小时写 logical length；相等、更大及
+`UInt64.max` 均 no-op。两种容器不复制汇编，不清 payload、不分配或回收；MemoryOps
+Mollusk 15/15 通过；详见 [R3-019](tasks/r3-019.md)。
 R3 尚未完成；同类型多 handle、generic POD vector/record writer、rent-aware resize、
 runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 

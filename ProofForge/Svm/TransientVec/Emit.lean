@@ -63,6 +63,11 @@ private def emitSet (context : Context) (label : String) (config : Config)
   stxdw [r9 + 0], r1
 "
 
+private def emitTruncate (context : Context) (label : String) (config : Config)
+    (newLength : Ops.Val) : Except String String := do
+  let load ← context.loadValue newLength 8 0 s!"{label}_new_length"
+  return load ++ Transient.Emit.emitTruncate lifecycle config.capacity 8 label
+
 private def emitClear (label : String) (config : Config) : String :=
   Transient.Emit.emitClear lifecycle config.capacity label
 
@@ -115,6 +120,7 @@ def emitCall (context : Context) (label : String) :
   | .begin config => emitBegin label config
   | .push config value => emitPush context label config value
   | .set config index value => emitSet context label config index value
+  | .truncate config newLength => emitTruncate context label config newLength
   | .clear config => return emitClear label config
   | .finish config => return emitFinish label config
 

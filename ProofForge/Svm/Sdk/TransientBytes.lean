@@ -34,6 +34,10 @@ abbrev Bytes := ProofForge.Svm.TransientBytes.Config
 @[pf_inline] def Bytes.set (bytes : Bytes) (index byte : UInt64) : UInt64 :=
   transientBytesSet (UInt64.ofNat bytes.capacity) index byte
 
+/-- Shorten the live prefix to `newLength`; a length at or above the current length is a no-op. -/
+@[pf_inline] def Bytes.truncate (bytes : Bytes) (newLength : UInt64) : UInt64 :=
+  transientBytesTruncate (UInt64.ofNat bytes.capacity) newLength
+
 @[pf_inline] def Bytes.clear (bytes : Bytes) : UInt64 :=
   transientBytesClear (UInt64.ofNat bytes.capacity)
 

@@ -282,6 +282,11 @@ binds these stubs to one target-owned component. The host model cannot observe V
   let _ := value
   0
 
+@[irreducible] def transientVecTruncate (capacity newLength : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := newLength
+  0
+
 @[irreducible] def transientVecClear (capacity : UInt64) : UInt64 :=
   let _ := capacity
   0
@@ -321,6 +326,11 @@ VM heap memory. -/
   let _ := capacity
   let _ := index
   let _ := byte
+  0
+
+@[irreducible] def transientBytesTruncate (capacity newLength : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := newLength
   0
 
 @[irreducible] def transientBytesClear (capacity : UInt64) : UInt64 :=

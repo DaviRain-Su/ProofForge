@@ -66,6 +66,19 @@ def emitBegin (lifecycle : Lifecycle) (vector : FixedVec) (label : String) : Exc
   stxdw [r10 - {lifecycle.activeStack}], r1
 "
 
+/-- Match Rust `Vec::truncate`: shorten the live prefix when requested, otherwise do nothing.
+The requested length is already materialized in target scratch by the concrete component. -/
+def emitTruncate (lifecycle : Lifecycle) (capacity newLengthStack : Nat)
+    (label : String) : String :=
+  let done := s!"{lifecycle.kind}_truncate_done_{label}"
+  emitRequireActive lifecycle capacity label ++ s!"\
+  ldxdw r2, [r10 - {newLengthStack}]
+  ldxdw r3, [r10 - {lifecycle.lengthStack}]
+  jge r2, r3, {done}
+  stxdw [r10 - {lifecycle.lengthStack}], r2
+{done}:
+"
+
 /-- Reset logical length while retaining the same bump allocation and active handle. -/
 def emitClear (lifecycle : Lifecycle) (capacity : Nat) (label : String) : String :=
   emitRequireActive lifecycle capacity label ++ s!"\

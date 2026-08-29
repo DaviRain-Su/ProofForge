@@ -53,6 +53,7 @@ R3-013 source-visible transient bounded bytes/writer、
 R3-014 stable Clock/EpochSchedule/Rent SDK facade、
 R3-015 shared transient lifecycle emitter、
 R3-016 bounded transient log-data binding、
+R3-017/018 checked transient Vector64/Bytes pop、R3-019 shared transient truncate、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -480,6 +481,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `TransientBytes.Query` 与 target component interpreter。MemoryOps Mollusk 13/13 钉死 LIFO
   与 empty failure，digest `9a5da5482923cd69`、ELF 44,496 B。详见
   `docs/plan/tasks/r3-018.md`。
+
+- R3-019 shared transient truncate 已完成：`Transient.Vector64.truncate` 与
+  `Transient.Bytes.truncate` 复用 `Svm.Transient.Emit.Lifecycle` 的同一 checked length
+  transition。active/capacity gate 后，仅当 requested length 小于 current length 时缩短 active
+  prefix；相等、更大以及 `UInt64.max` 都按 Rust `Vec::truncate` 成功 no-op。实现不做减法，
+  不清 payload、不分配、不 free/reclaim/realloc、不暴露 pointer，也没有新增 top-level
+  Ops/IR/main-Emit recipe。MemoryOps Mollusk 15/15 通过，digest `96f938c65992b93a`、
+  ELF 48,448 B。详见 `docs/plan/tasks/r3-019.md`。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

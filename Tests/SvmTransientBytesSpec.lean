@@ -31,6 +31,12 @@ private def bytesSmall : TransientBytes.Config := { capacity := 3 }
 #guard
   (TransientBytes.Call.set bytes4 0 9 : TransientBytes.Call UInt64).wellFormed (fun _ => true)
 #guard
+  (TransientBytes.Call.truncate bytes4 2 :
+    TransientBytes.Call UInt64).wellFormed (fun _ => true)
+#guard
+  (TransientBytes.Call.truncate bytes4 2 :
+    TransientBytes.Call UInt64).canonical toString == "tbyte.truncate.4(2)"
+#guard
   (TransientBytes.Call.logData bytes4 : TransientBytes.Call UInt64).wellFormed (fun _ => true)
 #guard
   !((TransientBytes.Call.logData { capacity := 0 } :
@@ -55,6 +61,7 @@ private def bytesStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientBytes (.push _ _)) => some "push"
   | .component (.transientBytes (.appendLe64 _ _)) => some "appendLe64"
   | .component (.transientBytes (.set _ _ _)) => some "set"
+  | .component (.transientBytes (.truncate _ _)) => some "truncate"
   | .component (.transientBytes (.clear _)) => some "clear"
   | .component (.transientBytes (.finish _)) => some "finish"
   | .component (.transientBytes (.logData _)) => some "logData"
@@ -70,12 +77,14 @@ private def taggedStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientVec (.begin _)) => some "v.begin"
   | .component (.transientVec (.push _ _)) => some "v.push"
   | .component (.transientVec (.set _ _ _)) => some "v.set"
+  | .component (.transientVec (.truncate _ _)) => some "v.truncate"
   | .component (.transientVec (.clear _)) => some "v.clear"
   | .component (.transientVec (.finish _)) => some "v.finish"
   | .component (.transientBytes (.begin _)) => some "b.begin"
   | .component (.transientBytes (.push _ _)) => some "b.push"
   | .component (.transientBytes (.appendLe64 _ _)) => some "b.appendLe64"
   | .component (.transientBytes (.set _ _ _)) => some "b.set"
+  | .component (.transientBytes (.truncate _ _)) => some "b.truncate"
   | .component (.transientBytes (.clear _)) => some "b.clear"
   | .component (.transientBytes (.finish _)) => some "b.finish"
   | .component (.transientBytes (.logData _)) => some "b.logData"
@@ -107,6 +116,7 @@ elab "#pf_guard_transient_bytes" : command => do
       hasCall (fun | .push _ _ => true | _ => false) &&
       hasCall (fun | .appendLe64 _ _ => true | _ => false) &&
       hasCall (fun | .set _ _ _ => true | _ => false) &&
+      hasCall (fun | .truncate _ _ => true | _ => false) &&
       hasCall (fun | .clear _ => true | _ => false) &&
       hasCall (fun | .logData _ => true | _ => false) &&
       hasCall (fun | .finish _ => true | _ => false) do
@@ -133,6 +143,11 @@ elab "#pf_guard_transient_bytes" : command => do
     | throwError "missing bytesAppendLe64 method"
   unless filtered bytesStep appendGet == #["begin", "appendLe64", "get", "finish"] do
     throwError "bytesAppendLe64 effects were not preserved in source order"
+  let some truncateLength := program.methods.find? (·.ixName == "bytesLengthAfterTruncate")
+    | throwError "missing bytesLengthAfterTruncate method"
+  unless filtered bytesStep truncateLength ==
+      #["begin", "push", "push", "truncate", "length", "finish"] do
+    throwError "bytesLengthAfterTruncate effects were not preserved in source order"
   let some pop := program.methods.find? (·.ixName == "bytesPop")
     | throwError "missing bytesPop method"
   unless filtered bytesStep pop == #["begin", "push", "push", "pop", "finish"] do
@@ -176,6 +191,7 @@ elab "#pf_guard_transient_bytes" : command => do
       asm.contains "transient_bytes_push_range_" &&
       asm.contains "transient_bytes_push_room_" &&
       asm.contains "transient_bytes_get_bounds_" &&
+      asm.contains "transient_bytes_truncate_done_" &&
       asm.contains "transient_bytes_pop_nonempty_" &&
       asm.contains "one sol_log_data field views the active 12-byte payload buffer" &&
       asm.contains "call sol_log_data" &&

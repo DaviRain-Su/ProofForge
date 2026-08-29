@@ -97,6 +97,7 @@ inductive Call (V : Type) where
   | push (config : Config) (byte : V)
   | appendLe64 (config : Config) (value : V)
   | set (config : Config) (index byte : V)
+  | truncate (config : Config) (newLength : V)
   | clear (config : Config)
   | finish (config : Config)
   | logData (config : Config)
@@ -107,6 +108,7 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .push config byte => .push config (mapValue byte)
   | .appendLe64 config value => .appendLe64 config (mapValue value)
   | .set config index byte => .set config (mapValue index) (mapValue byte)
+  | .truncate config newLength => .truncate config (mapValue newLength)
   | .clear config => .clear config
   | .finish config => .finish config
   | .logData config => .logData config
@@ -116,13 +118,14 @@ def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .push config byte => return .push config (← mapValue byte)
   | .appendLe64 config value => return .appendLe64 config (← mapValue value)
   | .set config index byte => return .set config (← mapValue index) (← mapValue byte)
+  | .truncate config newLength => return .truncate config (← mapValue newLength)
   | .clear config => return .clear config
   | .finish config => return .finish config
   | .logData config => return .logData config
 
 def Call.values : Call V → Array V
   | .begin _ | .clear _ | .finish _ | .logData _ => #[]
-  | .push _ byte | .appendLe64 _ byte => #[byte]
+  | .push _ value | .appendLe64 _ value | .truncate _ value => #[value]
   | .set _ index byte => #[index, byte]
 
 def Call.effects (_call : Call V) : AccountStorage.EffectSummary := {}
@@ -134,6 +137,7 @@ def Call.wellFormed (valueWellFormed : V → Bool) : Call V → Bool
   | .begin config | .clear config | .finish config | .logData config => config.wellFormed
   | .push config byte => config.wellFormed && valueWellFormed byte
   | .appendLe64 config value => config.wellFormed && config.fitsLe64 && valueWellFormed value
+  | .truncate config newLength => config.wellFormed && valueWellFormed newLength
   | .set config index byte =>
       config.wellFormed && valueWellFormed index && valueWellFormed byte
 
@@ -143,6 +147,8 @@ def Call.canonical (renderValue : V → String) : Call V → String
   | .appendLe64 config value => s!"tbyte.appendLe64.{config.capacity}({renderValue value})"
   | .set config index byte =>
       s!"tbyte.set.{config.capacity}({renderValue index},{renderValue byte})"
+  | .truncate config newLength =>
+      s!"tbyte.truncate.{config.capacity}({renderValue newLength})"
   | .clear config => s!"tbyte.clear.{config.capacity}"
   | .finish config => s!"tbyte.finish.{config.capacity}"
   | .logData config => s!"tbyte.logData.{config.capacity}"

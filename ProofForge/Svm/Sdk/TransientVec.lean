@@ -29,6 +29,10 @@ abbrev Vector64 := ProofForge.Svm.TransientVec.Config
 @[pf_inline] def Vector64.set (vector : Vector64) (index value : UInt64) : UInt64 :=
   transientVecSet (UInt64.ofNat vector.capacity) index value
 
+/-- Shorten the live prefix to `newLength`; a length at or above the current length is a no-op. -/
+@[pf_inline] def Vector64.truncate (vector : Vector64) (newLength : UInt64) : UInt64 :=
+  transientVecTruncate (UInt64.ofNat vector.capacity) newLength
+
 @[pf_inline] def Vector64.clear (vector : Vector64) : UInt64 :=
   transientVecClear (UInt64.ofNat vector.capacity)
 

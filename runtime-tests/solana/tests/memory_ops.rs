@@ -251,6 +251,25 @@ fn transient_vector_push_set_get_clear_and_length() {
 }
 
 #[test]
+fn transient_vector_truncate_only_shortens_the_live_prefix() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    for (new_length, expected) in [(1u64, 1u64), (2, 2), (u64::MAX, 2)] {
+        invoke(
+            &mollusk,
+            program_id,
+            state.clone(),
+            data_key,
+            data.clone(),
+            "vectorLengthAfterTruncate",
+            &[new_length],
+            false,
+            &[Check::success(), Check::return_data(&expected.to_le_bytes())],
+        );
+    }
+}
+
+#[test]
 fn transient_vector_pop_is_lifo_and_rejects_empty() {
     let (program_id, mollusk, data_key, state) = setup();
     let data = Account::new(1_000_000, 24, &program_id);
@@ -340,6 +359,25 @@ fn transient_bytes_push_set_get_clear_and_length() {
         false,
         &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
     );
+}
+
+#[test]
+fn transient_bytes_truncate_only_shortens_the_live_prefix() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    for (new_length, expected) in [(1u64, 1u64), (2, 2), (u64::MAX, 2)] {
+        invoke(
+            &mollusk,
+            program_id,
+            state.clone(),
+            data_key,
+            data.clone(),
+            "bytesLengthAfterTruncate",
+            &[new_length],
+            false,
+            &[Check::success(), Check::return_data(&expected.to_le_bytes())],
+        );
+    }
 }
 
 #[test]

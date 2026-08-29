@@ -88,6 +88,18 @@ def vectorLengthAfterClear (_state : State) (value : UInt64) : UInt64 :=
   let _ := vector2.finish
   length
 
+/-- `truncate` shortens the live prefix but is a no-op for a requested length at or above the
+current length, matching Rust `Vec::truncate` without clearing or reallocating payload bytes. -/
+@[pf_entry]
+def vectorLengthAfterTruncate (_state : State) (newLength : UInt64) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push 11
+  let _ := vector2.push 22
+  let _ := vector2.truncate newLength
+  let length := vector2.length
+  let _ := vector2.finish
+  length
+
 /-- `pop` returns the former last element and shortens the invocation-local active prefix. -/
 @[pf_entry]
 def vectorPop (_state : State) (firstValue secondValue : UInt64) : UInt64 :=
@@ -160,6 +172,18 @@ def bytesLengthAfterClear (_state : State) (byte : UInt64) : UInt64 :=
   let _ := bytes4.begin
   let _ := bytes4.push byte
   let _ := bytes4.clear
+  let length := bytes4.length
+  let _ := bytes4.finish
+  length
+
+/-- Byte-buffer truncation shares the vector lifecycle rule: shrink the active prefix only, with
+no payload clearing, allocation, or reclaim. -/
+@[pf_entry]
+def bytesLengthAfterTruncate (_state : State) (newLength : UInt64) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push 0x11
+  let _ := bytes4.push 0x22
+  let _ := bytes4.truncate newLength
   let length := bytes4.length
   let _ := bytes4.finish
   length

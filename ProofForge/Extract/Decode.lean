@@ -3175,6 +3175,13 @@ private def decodeTransientVecCall (env : Environment) (e : Expr) :
       let value ← val env args[args.size - 1]!
       let call : Svm.TransientVec.Call Ops.Val := .set config index value
       if call.wellFormed (fun _ => true) then some (.transientVec call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientVecTruncate ||
+      endsWith e ".transientVecTruncate" then
+    if args.size < 2 then none else do
+      let config ← decodeTransientVecConfig env args[args.size - 2]!
+      let newLength ← val env args[args.size - 1]!
+      let call : Svm.TransientVec.Call Ops.Val := .truncate config newLength
+      if call.wellFormed (fun _ => true) then some (.transientVec call) else none
   else if isConstNamed e ``ProofForge.Svm.Runtime.transientVecClear ||
       endsWith e ".transientVecClear" then
     if args.size < 1 then none else do
@@ -3223,6 +3230,13 @@ private def decodeTransientBytesCall (env : Environment) (e : Expr) :
       let index ← val env args[args.size - 2]!
       let byte ← val env args[args.size - 1]!
       let call : Svm.TransientBytes.Call Ops.Val := .set config index byte
+      if call.wellFormed (fun _ => true) then some (.transientBytes call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesTruncate ||
+      endsWith e ".transientBytesTruncate" then
+    if args.size < 2 then none else do
+      let config ← decodeTransientBytesConfig env args[args.size - 2]!
+      let newLength ← val env args[args.size - 1]!
+      let call : Svm.TransientBytes.Call Ops.Val := .truncate config newLength
       if call.wellFormed (fun _ => true) then some (.transientBytes call) else none
   else if isConstNamed e ``ProofForge.Svm.Runtime.transientBytesClear ||
       endsWith e ".transientBytesClear" then
@@ -3779,12 +3793,14 @@ def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
       constants.contains ``ProofForge.Svm.Runtime.transientVecBegin ||
       constants.contains ``ProofForge.Svm.Runtime.transientVecPush ||
       constants.contains ``ProofForge.Svm.Runtime.transientVecSet ||
+      constants.contains ``ProofForge.Svm.Runtime.transientVecTruncate ||
       constants.contains ``ProofForge.Svm.Runtime.transientVecClear ||
       constants.contains ``ProofForge.Svm.Runtime.transientVecFinish ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesBegin ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesPush ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesAppendLe64 ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesSet ||
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesTruncate ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesClear ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesLogData ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesFinish then true

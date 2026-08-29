@@ -22,6 +22,11 @@ private def vector2 : TransientVec.Config := { capacity := 2 }
   (TransientVec.Call.push vector2 7 : TransientVec.Call UInt64).wellFormed (fun _ => true)
 #guard
   (TransientVec.Call.set vector2 0 9 : TransientVec.Call UInt64).wellFormed (fun _ => true)
+#guard
+  (TransientVec.Call.truncate vector2 1 : TransientVec.Call UInt64).wellFormed (fun _ => true)
+#guard
+  (TransientVec.Call.truncate vector2 1 : TransientVec.Call UInt64).canonical toString ==
+    "tv64.truncate.2(1)"
 #guard (TransientVec.Query.length vector2).wellFormed
 #guard (TransientVec.Query.get vector2).arity == 1
 #guard (TransientVec.Query.pop vector2).arity == 0
@@ -38,6 +43,7 @@ private def vectorStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientVec (.begin _)) => some "begin"
   | .component (.transientVec (.push _ _)) => some "push"
   | .component (.transientVec (.set _ _ _)) => some "set"
+  | .component (.transientVec (.truncate _ _)) => some "truncate"
   | .component (.transientVec (.clear _)) => some "clear"
   | .component (.transientVec (.finish _)) => some "finish"
   | .letLocal _ (.ext (.component (.transientVec (.length _))) #[]) => some "length"
@@ -68,6 +74,7 @@ elab "#pf_guard_transient_vector" : command => do
   unless hasCall (fun | .begin _ => true | _ => false) &&
       hasCall (fun | .push _ _ => true | _ => false) &&
       hasCall (fun | .set _ _ _ => true | _ => false) &&
+      hasCall (fun | .truncate _ _ => true | _ => false) &&
       hasCall (fun | .clear _ => true | _ => false) &&
       hasCall (fun | .finish _ => true | _ => false) do
     throwError "transient vector calls did not stay behind the component bridge"
@@ -93,6 +100,11 @@ elab "#pf_guard_transient_vector" : command => do
     | throwError "missing vectorLengthAfterClear method"
   unless vectorSteps clearLength == #["begin", "push", "clear", "length", "finish"] do
     throwError "vectorLengthAfterClear effects were not preserved in source order"
+  let some truncateLength := program.methods.find? (·.ixName == "vectorLengthAfterTruncate")
+    | throwError "missing vectorLengthAfterTruncate method"
+  unless vectorSteps truncateLength ==
+      #["begin", "push", "push", "truncate", "length", "finish"] do
+    throwError "vectorLengthAfterTruncate effects were not preserved in source order"
   let some pop := program.methods.find? (·.ixName == "vectorPop")
     | throwError "missing vectorPop method"
   unless vectorSteps pop == #["begin", "push", "push", "pop", "finish"] do
@@ -125,6 +137,7 @@ elab "#pf_guard_transient_vector" : command => do
       asm.contains "transient_vec_heap_position_" &&
       asm.contains "transient_vec_push_room_" &&
       asm.contains "transient_vec_get_bounds_" &&
+      asm.contains "transient_vec_truncate_done_" &&
       asm.contains "transient_vec_pop_nonempty_" &&
       asm.contains "lddw r0, 0x1201" && asm.contains "lddw r0, 0x1202" &&
       asm.contains "lddw r0, 0x1203" do

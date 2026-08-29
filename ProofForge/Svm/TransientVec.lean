@@ -79,6 +79,7 @@ inductive Call (V : Type) where
   | begin (config : Config)
   | push (config : Config) (value : V)
   | set (config : Config) (index value : V)
+  | truncate (config : Config) (newLength : V)
   | clear (config : Config)
   | finish (config : Config)
   deriving BEq, Repr, Inhabited
@@ -87,6 +88,7 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .begin config => .begin config
   | .push config value => .push config (mapValue value)
   | .set config index value => .set config (mapValue index) (mapValue value)
+  | .truncate config newLength => .truncate config (mapValue newLength)
   | .clear config => .clear config
   | .finish config => .finish config
 
@@ -94,12 +96,13 @@ def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .begin config => return .begin config
   | .push config value => return .push config (← mapValue value)
   | .set config index value => return .set config (← mapValue index) (← mapValue value)
+  | .truncate config newLength => return .truncate config (← mapValue newLength)
   | .clear config => return .clear config
   | .finish config => return .finish config
 
 def Call.values : Call V → Array V
   | .begin _ | .clear _ | .finish _ => #[]
-  | .push _ value => #[value]
+  | .push _ value | .truncate _ value => #[value]
   | .set _ index value => #[index, value]
 
 def Call.effects (_call : Call V) : AccountStorage.EffectSummary := {}
@@ -109,7 +112,8 @@ def Call.minAccounts (measure : V → Nat) (call : Call V) : Nat :=
 
 def Call.wellFormed (valueWellFormed : V → Bool) : Call V → Bool
   | .begin config | .clear config | .finish config => config.wellFormed
-  | .push config value => config.wellFormed && valueWellFormed value
+  | .push config value | .truncate config value =>
+      config.wellFormed && valueWellFormed value
   | .set config index value =>
       config.wellFormed && valueWellFormed index && valueWellFormed value
 
@@ -118,6 +122,8 @@ def Call.canonical (renderValue : V → String) : Call V → String
   | .push config value => s!"tv64.push.{config.capacity}({renderValue value})"
   | .set config index value =>
       s!"tv64.set.{config.capacity}({renderValue index},{renderValue value})"
+  | .truncate config newLength =>
+      s!"tv64.truncate.{config.capacity}({renderValue newLength})"
   | .clear config => s!"tv64.clear.{config.capacity}"
   | .finish config => s!"tv64.finish.{config.capacity}"
 
