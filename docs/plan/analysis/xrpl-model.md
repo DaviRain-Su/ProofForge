@@ -8,7 +8,7 @@
 EVM 是「合约地址里有一份持久存储」。
 SVM 是「程序无状态，数据在交易带来的账户字节里」。
 NEAR 是「每个合约账户自带 WASM + 持久 trie 存储 + 成熟 runtime 表」。
-XRPL（XLS-0101）是「账本上本来就有 AccountRoot / Trust line / AMM；WASM 是一次 `ContractCall` 里跑的脚本，经 `host_lib` 摸这些对象，自己的小状态塞进 `ContractData` JSON」。
+XRPL（XLS-0101）是「账本上本来就有 AccountRoot / Trust line / AMM；WASM 是一次 `ContractCall` 里跑的脚本，经 `host_lib` 摸这些对象，用户小状态塞进 **用户自己的** `ContractData` JSON」。逻辑一份，数据按账户分片——像 SVM，但不是每人一份 wasm（见 §1.1c）。
 
 它支持 WASM，**不等于**它是一条 WASM 智能合约链。WASM 在这里是账本对象的扩展，不是世界计算机。
 
@@ -91,6 +91,29 @@ XLS-0101 **设计里**的持久模型是另一套，而且是一等的：
 5. **不要**：wasm 堆当 map、把 AccountId 三叶拼进动态 key 字符串、抄 NEAR `storage_write` 签名到 `host_lib`。
 
 第 2 条绿之前，不要承诺「能做 NEAR 那种 Map」。能承诺的是：规范有按用户分片；实现要 host 允许非 caller Owner。
+
+### 1.1c 像 SVM 账户分片，不像「每人一份程序」
+
+对：**数据和逻辑拆开**。用户的 `bal` 不在合约金库里，在 **用户自己的** `ContractData` 上（Owner=用户账户）。A credit 两次、B credit 一次，是两张卡，不是一张表里的两行。这点和 SVM「数据在用户带来的账户里」同族。
+
+不对：**合约逻辑不是每人一份。**
+
+| | SVM | XRPL `XrplBal` |
+|---|---|---|
+| 程序 | **一份** `.so`，ProgramId 全局 | **一份** wasm，一个 `ContractAccount` |
+| 用户数据 | 用户（或 PDA）账户里的**原始字节** | 用户名下一块 JSON 卡片 |
+| 谁付租 | 数据账户的 lamports | 卡片 Owner 的 reserve（规范；AlphaNet 未单独量） |
+| 调用时带什么 | 交易必须列出要摸的账户 | `ContractCall` 只带合约 + 函数名；host 用 **caller** 当 Owner |
+| 程序有没有状态 | 无（可执行账户） | 合约账户几乎也不存用户余额（写它 -22） |
+| 布局 | 编译期字节偏移，程序定义、账户持有 | 编译期 JSON key，程序定义、用户持有 |
+
+SVM 不是「每人拷贝一份 Serum」。是 Serum 这一份程序，去读写你交易里列出来的那些账户。XRPL 也不是「每人拷贝一份 XrplBal.wasm」。是那一份 wasm，每次调用时 host 自动把「当前签名者」当成数据 Owner。
+
+所以：
+
+- 像 SVM 的地方：逻辑一份、数据按账户分片、用户付自己那份存储。
+- 不像 SVM 的地方：没有账户列表 / CPI / 原始字节布局；卡片是 JSON；一次调用默认只摸 **自己** 那张卡（给别人写还没绿）。
+- 更不像 EVM：不是合约地址里一张 `mapping`。
 
 ### 1.2 钱和别人怎么动
 
