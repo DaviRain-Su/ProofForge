@@ -30,6 +30,7 @@
 | `XrplFlag` | ContractCall Flags |
 | `XrplTab` | 4 槽 `xs_0`…`xs_3`；`sum4` 命名槽相加 |
 | `XrplHand` | 跨钱包 TwoStep：第二把钥匙部署到创世卡片，创世 `accept` |
+| `XrplCrew` | 跨钱包 operator：第二把钥匙 owner，创世 `setOp` 后 `bump` |
 
 这不是「只有一个 Counter」。这是 **单合约、命名 UInt64 槽、无循环、无用户目录**
 的状态机。EVM 的 Vault / ERC-20 / Uniswap 和 SVM 的 Token / Phoenix 都靠
@@ -167,7 +168,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 8. **wsm-037** — nested JSON `user_bal` → `{user:{bal}}`（AlphaNet）。不是 Map。
 9. **wsm-038** — TwoStep / dual role / `litBalanceDrops` / `txFlags` **已绿**。
 10. **wsm-039** — `forAccum` 编译期展开 + 跨钱包 TwoStep（`XrplHand`）**已绿**。运行时下标仍拒。
-11. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+11. **wsm-040** — 跨钱包 operator（`XrplCrew`）**已绿**。
+12. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 

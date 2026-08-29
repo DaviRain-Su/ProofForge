@@ -65,6 +65,7 @@ import Examples.XrplPeer
 import Examples.XrplFlag
 import Examples.XrplTab
 import Examples.XrplHand
+import Examples.XrplCrew
 import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster

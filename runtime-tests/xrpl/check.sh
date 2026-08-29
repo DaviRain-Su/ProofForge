@@ -181,6 +181,15 @@ need_exports_hand = (
     '(i32.const 3)',
     '(data (i32.const 64) "owner0owner1owner2pend0pend1pend2value")',
 )
+need_exports_crew = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "setOp") (result i32)',
+    '(func (export "bump") (result i32)',
+    '(func (export "get")',
+    'i64.eq',
+    '(i32.const 3)',
+    '(data (i32.const 64) "owner0owner1owner2op0op1op2value")',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -230,6 +239,8 @@ for wat in wats:
         exports = need_exports_tab
     elif wat.stem == "XrplHand":
         exports = need_exports_hand
+    elif wat.stem == "XrplCrew":
+        exports = need_exports_crew
     else:
         exports = need_exports_counter
     for needle in exports:
