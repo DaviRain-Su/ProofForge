@@ -84,7 +84,7 @@ XLS-0101 **设计里**的持久模型是另一套，而且是一等的：
 
 所以间接对齐 NEAR 集合的路是：
 
-1. **单用户卡片**（现在就能做）：caller 的 `"bal"`。不是 Map，是「自己的 STATE」。
+1. **每人一张卡**（[wsm-027](../tasks/wsm-027.md) `XrplBal` 已绿）：A credit 两次=2，B credit 一次=1。多用户靠 **不同 Owner**，不是一张总表。一次调用仍不能给别人写。
 2. **规范变种：user ContractData**（要对齐 NEAR `LookupMap<AccountId,_>`）：探针「合约代码给任意 AccountID 写一块」。绿了再开 Runtime 叶，SDK 才叫 `UserData.bal`，不叫 `Sdk.Map`。
 3. **编译期 JSON 槽表**（VEC-1 已绿）：`xs_0`… 挂在 **同一张** caller 卡片上。小登记表，不是无界 map。
 4. **nested object field**（wsm-024，未探针）：一张卡片里嵌一层对象。仍不是任意 key。

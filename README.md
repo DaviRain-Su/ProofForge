@@ -58,7 +58,8 @@ XRPL（`--target xrpl`；`wasm` 会被拒绝并提示选具体链）写出 `Name
 本地节点（缺 Docker / bedrock 则 skip）。活网零参数烟测是
 `runtime-tests/xrpl/smoke.sh`；零参数 Ownable 是 `gate.sh`（`renounce` 后再
 `bump` 状态码 3）；Pausable 是 `hold.sh`（`pause` 后再 `bump` 状态码 4）；
-owner+hash 是 `mark.sh`（`stamp` 写 SHA-512Half(`"vault"`) lo64）。
+owner+hash 是 `mark.sh`（`stamp` 写 SHA-512Half(`"vault"`) lo64）；
+每用户一张卡是 `bal.sh`（A=2 / B=1）。
 现成 Bedrock Docker **不能**模拟 AlphaNet。
 
 Mollusk（环境变量已改成 `PF_*_SO`）：

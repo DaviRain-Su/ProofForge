@@ -141,8 +141,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
 2. **wsm-023 `cache_le` 探针** — **import 已绿**（零 id -10）。下一刀才是 keylet + `le_field(Balance)`。
-3. **wsm-026 用户 ContractData** — **caller 可写、合约账户 -22**。下一刀 Example
-   只能是 **单用户** `"bal"`（caller 自己的积分）。多用户 mapping 还没有物理层。
+3. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
+   下一刀才是 `setUserData(destination)` 探针。
 4. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：

@@ -84,7 +84,8 @@ CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本�
 `XrplVec`（digest `e47db263444f8c7e`，编译期 JSON 槽 `xs_0`…`xs_2`）、
 `XrplSmoke`、`XrplGate`（digest `c2495d166a25c8e0`，零参数 Ownable + `renounce`）、
 `XrplHold`（digest `e99965ac007e0da8`，Ownable + Pausable，pause 后再 bump 状态码 4）、
-`XrplMark`（digest `20c54e937ffbf0fc`，owner 门后写 `sha512HalfLit "vault"`）。
+`XrplMark`（digest `20c54e937ffbf0fc`，owner 门后写 `sha512HalfLit "vault"`）、
+`XrplBal`（digest `cfae015ada92cdc9`，每 caller 一张 `"bal"` 卡）。
 `pf deploy` / `pf call` 只打 AlphaNet。
 
 ## 与调研文档 WAT 设想的关系
