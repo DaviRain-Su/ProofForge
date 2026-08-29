@@ -250,22 +250,29 @@ private def loadBe64 (ptr : Nat) : String :=
     if acc.isEmpty then byte
     else "(i64.or (i64.shl " ++ acc ++ " (i64.const 8)) " ++ byte ++ ")") ""
 
-/-- On a negative `$st`, return it unless it is a host "missing" code. -/
-private def returnUnlessMissing (host : Contract) (level : Nat) : Array String :=
+/-- Fail closed on a negative host status. Mutating entries can return the status; views trap
+because their exported result is `i64`. -/
+private def failOnHostError (level : Nat) (view : Bool) : Array String :=
+  let action := if view then "unreachable" else "(return (local.get $st))"
+  #[
+    indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+    indent (level + 2) ("(then " ++ action ++ "))")
+  ]
+
+/-- On a negative `$st`, fail unless it is a host "missing" code. -/
+private def failUnlessMissing (host : Contract) (level : Nat) (view : Bool) : Array String :=
   if host.missingFields.isEmpty then
-    #[
-      indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
-      indent (level + 2) "(then (return (local.get $st))))"
-    ]
+    failOnHostError level view
   else
     let eqs := host.missingFields.foldl (fun acc (code : Int) =>
       let eq := "(i32.eq (local.get $st) (i32.const " ++ toString code ++ "))"
       if acc.isEmpty then eq else "(i32.or " ++ acc ++ " " ++ eq ++ ")") ""
+    let action := if view then "unreachable" else "(return (local.get $st))"
     #[
       indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
       indent (level + 2) "(then",
       indent (level + 4) ("(if (i32.eqz " ++ eqs ++ ")"),
-      indent (level + 6) "(then (return (local.get $st))))))"
+      indent (level + 6) ("(then " ++ action ++ "))))")
     ]
 
 /-- Write every slot through the chain's storage host. -/
@@ -544,11 +551,7 @@ private def loadHostParams (host : Contract) (p : Program ValExt OpExt)
           ") (i32.const " ++ toString scratch ++
           ") (i32.const 8)))")
       let err :=
-        if view then #[]
-        else #[
-          indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
-          indent (level + 2) "(then (return (local.get $st))))"
-        ]
+        failOnHostError level view
       let load :=
         indent level ("(local.set " ++ localOfArg i ++
           " (i64.load (i32.const " ++ toString scratch ++ ")))")
@@ -566,11 +569,7 @@ private def loadAccount (host : Contract) (level : Nat) (view : Bool) : Array St
         ") (i32.const " ++ toString accountLen ++ ")))")
     ]
     let err :=
-      if view then #[]
-      else #[
-        indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
-        indent (level + 2) "(then (return (local.get $st))))"
-      ]
+      failOnHostError level view
     header ++ err
 
 private def loadSlots (host : Contract) (p : Program ValExt OpExt) (level : Nat)
@@ -609,7 +608,7 @@ private def loadSlots (host : Contract) (p : Program ValExt OpExt) (level : Nat)
             ") (i32.const " ++ toString storeOff ++
             ") (i32.const 8)))")
       let err :=
-        if view then #[] else returnUnlessMissing host level
+        failUnlessMissing host level view
       let load := #[
         indent level "(if (i32.gt_s (local.get $st) (i32.const 0))",
         indent (level + 2) "(then",
@@ -624,7 +623,7 @@ private def loadSlots (host : Contract) (p : Program ValExt OpExt) (level : Nat)
         " (i32.const " ++ toString host.sfieldData ++
         ") (i32.const 0) (i32.const " ++ toString blob ++ ")))")
     ]
-    let err := if view then #[] else returnUnlessMissing host level
+    let err := failUnlessMissing host level view
     let loads := p.slots.map fun slot =>
       indent (level + 4) ("(local.set " ++ localOfSlot slot.name ++
         " (i64.load (i32.const " ++ toString (slotOffset p slot.name) ++ ")))")

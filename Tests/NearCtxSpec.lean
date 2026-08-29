@@ -10,7 +10,7 @@ import Examples.EvmCtx
 open ProofForge
 open Lean Elab Command
 
-elab "#pf_near_reject " n:ident : command => do
+elab "#pf_near_ctx_reject " n:ident : command => do
   let env ← getEnv
   match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Near.IR.fromExtracted with
   | .ok _ => throwError "expected near to reject {n.getId} (foreign target leaf)"
@@ -18,9 +18,9 @@ elab "#pf_near_reject " n:ident : command => do
       unless reason.contains "near rejects" do
         throwError "unexpected near rejection reason: {reason}"
 
-#pf_near_reject Examples.Clock
+#pf_near_ctx_reject Examples.Clock
 
-#pf_near_reject Examples.EvmCtx
+#pf_near_ctx_reject Examples.EvmCtx
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject_near " n:ident : command => do
@@ -68,3 +68,45 @@ elab "#pf_near_ctx_emit_check " n:ident : command => do
         logInfo m!"proofforge-near-ctx-test: {source.length} bytes of WAT passed anchor check"
 
 #pf_near_ctx_emit_check Examples.NearCtx
+
+/- A user declaration that merely shares a Runtime leaf's final name must stay an ordinary
+constant. In particular, it must not become `env.block_index`. -/
+namespace Tests.NearNameCollision
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (_seed : UInt64) : State := { value := 0 }
+
+def blockIndex : UInt64 := 7
+
+@[pf_entry]
+def set (s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then .ok ({ s with value := 1 }, 1) else .error .overflow
+
+@[pf_entry]
+def get (_s : State) : UInt64 := blockIndex
+
+end Tests.NearNameCollision
+
+open Lean Elab Command in
+elab "#pf_near_name_collision_check" : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env `Tests.NearNameCollision none >>= ProofForge.Wasm.Near.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Near.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        unless source.contains "(i64.const 7)" do
+          throwError s!"near user blockIndex did not remain literal 7:\n{source}"
+        unless !source.contains "(call $pf_block_index)" do
+          throwError s!"near user blockIndex was mistaken for Runtime.blockIndex:\n{source}"
+
+#pf_near_name_collision_check

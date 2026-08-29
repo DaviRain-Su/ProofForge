@@ -97,6 +97,14 @@ private def usesKind (ops : Array Ops.Op) (want : Ops.ValKind) : Bool :=
       | _ => false
   ops.any (op 32)
 
+/-- XRPL views return `i64`, so a negative host status cannot be propagated as a result. -/
+private def failOnHostError (level : Nat) (view : Bool) : Array String :=
+  let action := if view then "unreachable" else "(return (local.get $st))"
+  #[
+    indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+    indent (level + 2) ("(then " ++ action ++ "))")
+  ]
+
 /-- Load only the env leaves this method actually reads. Unused AlphaNet
 `home_le_field(sfContractAccount)` returns -10 LedgerObjNotFound. -/
 def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) : Array String :=
@@ -149,12 +157,7 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
     let otherHex := accountLitHex method.ops
     if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot || needTxSeq || needTxFee || needTxFlags) && otherHex.isNone then #[]
     else
-    let err :=
-      if view then #[]
-      else #[
-        indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
-        indent (level + 2) "(then (return (local.get $st))))"
-      ]
+    let err := failOnHostError level view
     let caller :=
       if !needCaller then #[]
       else

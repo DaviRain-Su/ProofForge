@@ -159,6 +159,7 @@ elab "#pf_xrpl_emit_check " n:ident : command => do
           "i64.mul",
           "i64.div_u",
           "i64.rem_u",
+          "(then unreachable)",
           ";; digest=e029f72296e320be"
         ]
         for anchor in anchors do

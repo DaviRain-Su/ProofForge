@@ -17,21 +17,17 @@ namespace ProofForge.Extract
 /-- NEAR Runtime host reads. Matched by const name before any empty-arg UInt64
 unfold that would bake the irreducible stub body `0` into a literal. -/
 private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
-  if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockIndex || endsWith e ".blockIndex" then
+  if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockIndex then
     some Ops.Val.nearBlockIndex
-  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockTimestamp ||
-      endsWith e ".blockTimestamp" then
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockTimestamp then
     some Ops.Val.nearBlockTimestamp
-  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessor || endsWith e ".predecessor" then
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessor then
     some Ops.Val.nearPredecessor
-  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDeposit ||
-      endsWith e ".attachedDeposit" then
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDeposit then
     some Ops.Val.nearAttachedDeposit
-  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalance ||
-      endsWith e ".accountBalance" then
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalance then
     some Ops.Val.nearAccountBalance
-  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountId ||
-      endsWith e ".currentAccountId" then
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountId then
     some Ops.Val.nearCurrentAccountId
   else none
 

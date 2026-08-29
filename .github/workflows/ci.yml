@@ -177,19 +177,68 @@ jobs:
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
 
-  # Preserve the original required-check identity while making proof/guard, SVM, and EVM failures
-  # independently observable. This job fails unless all lanes complete successfully.
+  near:
+    name: NEAR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            ~/.local/bin
+            .lake/packages
+            runtime-tests/near/.venv
+          key: near-toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup', 'runtime-tests/near/requirements.txt') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build Lean libraries and guards
+        run: |
+          lake build
+          lake build Tests
+
+      - name: Build all NEAR programs
+        run: lake exe pf -- build --target near --out build/near
+
+      - name: Run NEAR wasm gate
+        run: runtime-tests/near/check.sh
+
+      - name: Run NEAR sandbox Counter gate
+        run: runtime-tests/near/counter.sh
+
+      - name: Run NEAR sandbox Context gate
+        run: runtime-tests/near/context.sh
+
+  # Preserve the original required-check identity while making proof/guard and target failures
+  # independently observable. This job fails unless every lane completes, including after an error.
   test:
     if: always()
-    needs: [lean, svm, evm]
+    needs: [lean, svm, evm, near]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require Lean, SVM, and EVM lanes
+      - name: Require Lean, SVM, EVM, and NEAR lanes
         env:
           LEAN_RESULT: ${{ needs.lean.result }}
           SVM_RESULT: ${{ needs.svm.result }}
           EVM_RESULT: ${{ needs.evm.result }}
+          NEAR_RESULT: ${{ needs.near.result }}
         run: |
           test "$LEAN_RESULT" = success
           test "$SVM_RESULT" = success
           test "$EVM_RESULT" = success
+          test "$NEAR_RESULT" = success

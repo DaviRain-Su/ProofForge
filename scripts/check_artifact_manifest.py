@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when build artifacts drift from SVM/EVM registry names, kinds, or digests."""
+"""Fail when build artifacts drift from target registry names, kinds, or digests."""
 
 from __future__ import annotations
 
@@ -231,19 +231,15 @@ def check_target(
     spec: TargetSpec,
     entries: dict[str, str],
     out_dir: Path,
-    *,
-    allow_other_kinds: bool,
-    foreign_stems: set[str] | None = None,
 ) -> list[str]:
     diags: list[str] = []
     if not out_dir.is_dir():
         return [f"missing out dir: {out_dir}"]
 
     other_suffixes = set()
-    if not allow_other_kinds:
-        for other in SPECS.values():
-            if other.key != spec.key:
-                other_suffixes.update(other.suffixes)
+    for other in SPECS.values():
+        if other.key != spec.key:
+            other_suffixes.update(other.suffixes)
 
     owned_stems: set[str] = set()
     for path, stem, suffix in iter_artifacts(out_dir):
@@ -252,8 +248,6 @@ def check_target(
             diags.append(f"unexpected kind: {rel}")
             continue
         if suffix not in spec.suffixes:
-            continue
-        if foreign_stems is not None and stem in foreign_stems:
             continue
         owned_stems.add(stem)
 
@@ -291,7 +285,6 @@ def diagnostics(
         specs = [SVM, EVM, XRPL, NEAR]
     else:
         specs = [SPECS[target]]
-    allow_other = target == "all"
     diags: list[str] = []
     loaded: list[tuple[TargetSpec, dict[str, str]]] = []
     for spec in specs:
@@ -304,20 +297,14 @@ def diagnostics(
         loaded.append((spec, entries))
         if not entries and entries_by_target is None and not load_diags:
             diags.append(f"empty registry: {spec.key}")
-    foreign_by_spec: dict[str, set[str]] = {}
-    if allow_other:
-        union = {name for _, entries in loaded for name in entries}
-        for spec, entries in loaded:
-            foreign_by_spec[spec.key] = union - set(entries)
     for spec, entries in loaded:
         if entries or entries_by_target is not None:
+            target_out_dir = out_dir / spec.key if target == "all" else out_dir
             diags.extend(
                 check_target(
                     spec,
                     entries,
-                    out_dir,
-                    allow_other_kinds=allow_other,
-                    foreign_stems=foreign_by_spec.get(spec.key, set()),
+                    target_out_dir,
                 )
             )
     return sorted(set(diags))
@@ -416,8 +403,8 @@ def self_test() -> int:
 
     svm_entries = {"Prog": "abc123"}
     evm_entries = {"Tok": "def456"}
-    xrpl_entries = {"Cnt": "fed789"}
-    near_entries = {"Jar": "ba9876"}
+    xrpl_entries = {"Counter": "fed789"}
+    near_entries = {"Counter": "ba9876"}
     injected = {"svm": svm_entries, "evm": evm_entries, "xrpl": xrpl_entries, "near": near_entries}
 
     def parse_real() -> None:
@@ -445,10 +432,10 @@ def self_test() -> int:
     def happy() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            _write_svm(out, "Prog", "abc123")
-            _write_evm(out, "Tok", "def456")
-            _write_xrpl(out, "Cnt", "fed789")
-            _write_near(out, "Jar", "ba9876")
+            _write_svm(out / "svm", "Prog", "abc123")
+            _write_evm(out / "evm", "Tok", "def456")
+            _write_xrpl(out / "xrpl", "Counter", "fed789")
+            _write_near(out / "near", "Counter", "ba9876")
             diags = diagnostics("all", out, entries_by_target=injected, pin_count=False)
             if diags:
                 raise AssertionError(diags)

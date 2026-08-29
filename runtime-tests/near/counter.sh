@@ -22,9 +22,11 @@ if [[ ! -x "$sandbox" ]]; then
     skip "near-sandbox not found"
   fi
 fi
-if ! "$sandbox" --version >/dev/null 2>&1; then
+version="$("$sandbox" --version 2>/dev/null || true)"
+if [[ -z "$version" ]]; then
   skip "near-sandbox present but not runnable on this host"
 fi
+[[ "$version" == *"release 2.13.0"* ]] || die "near-sandbox 2.13.0 required, got: $version"
 
 python="${PWD}/runtime-tests/near/.venv/bin/python"
 if [[ ! -x "$python" ]]; then
@@ -35,10 +37,8 @@ if ! "$python" -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import
 fi
 
 wasm="${PWD}/build/near/Counter.wasm"
-if [[ ! -f "$wasm" ]]; then
-  echo "near-local-counter: building Counter.wasm" >&2
-  lake exe pf -- build --target near --out build/near
-fi
+echo "near-local-counter: building Counter.wasm" >&2
+lake exe pf -- build --target near --out build/near Counter
 [[ -f "$wasm" ]] || die "missing $wasm"
 "$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$wasm" \
   || die "$wasm is not wasm"

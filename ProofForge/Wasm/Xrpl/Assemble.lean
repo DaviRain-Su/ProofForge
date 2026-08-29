@@ -58,15 +58,24 @@ def assembleProgramWith (emitFn : IR.Program → Except String String)
   let watPath := outDir / s!"{program.name}.wat"
   let wasmPath := outDir / s!"{program.name}.wasm"
   IO.FS.writeFile watPath source
+  if ← wasmPath.pathExists then
+    IO.FS.removeFile wasmPath
   let wat2wasm ← requireWat2Wasm
   let proc ← IO.Process.output {
     cmd := wat2wasm.toString
     args := #[watPath.toString, "-o", wasmPath.toString]
   }
   unless proc.exitCode == 0 do
+    if ← wasmPath.pathExists then
+      IO.FS.removeFile wasmPath
     throw <| IO.userError s!"assemble/tool: wat2wasm failed\n{proc.stderr}\n{proc.stdout}"
   unless (← wasmPath.pathExists) do
     throw <| IO.userError s!"assemble/tool: wat2wasm did not produce {wasmPath}"
+  let wasm ← IO.FS.readBinFile wasmPath
+  unless wasm.size ≥ 4 && wasm[0]! == 0x00 && wasm[1]! == 0x61 &&
+      wasm[2]! == 0x73 && wasm[3]! == 0x6d do
+    IO.FS.removeFile wasmPath
+    throw <| IO.userError s!"assemble/tool: wat2wasm produced invalid wasm at {wasmPath}"
   return { watPath, wasmPath, watSource := source }
 
 def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Result :=
