@@ -145,6 +145,9 @@ jobs:
       - name: Run XRPL local-node XrplRt2 gate
         run: runtime-tests/xrpl/rt2.sh
 
+      - name: Run XRPL local-node XrplVec gate
+        run: runtime-tests/xrpl/vec.sh
+
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
 

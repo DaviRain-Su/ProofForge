@@ -14,6 +14,8 @@
 | | 是什么 | 本仓 |
 |---|---|---|
 | XRPL 主网今天 | 没有 `ContractCreate` | `deployable=false` |
+| [AlphaNet](https://dev.to/dangell7/smart-contracts-on-xrpls-alphanet-1loo) | 公开开发网（约 2025-11 起），有 `ContractCreate` | **本仓不接**；工程门仍是本地 Bedrock |
+| WASM Devnet | Smart Escrow 测试网 | **不是** 本 target（escrow `finish()`，不是 Contract SLE） |
 | Bedrock 本地镜像 | 主账本形状的 rippled + wasm | **工程门** |
 | [XRPL EVM Sidechain](https://www.xrplevm.org/) | Cosmos + EVM，XRP 当 gas | **不是** 本 target |
 | Xahau / Hooks | 另一条链 / 账户钩子 | **不是** 本 target |
@@ -32,7 +34,7 @@ XLS 自己说：EVM 侧链给 Solidity 用；主账本 programmability 选 WASM�
 | 想做的 | 现在 | 要什么 |
 |---|---|---|
 | Ownable Counter / hash stamp | **已绿** | — |
-| 定长登记表、小 AMM 的 2～3 个池槽 | 存储形状够，IR 还不够 | VEC 探针 + 编译期下标 |
+| 定长登记表、小 AMM 的 2～3 个池槽 | **VEC-1 已绿**（编译期 `xs_0`…） | 更大表仍是源码展开，不是无界 Vec |
 | Uniswap 式 `mapping(address => uint)` 余额 | **没有** | 用户 `ContractData` 或 JSON Map；再加 Amount |
 | 真正的 swap（动 XRP / IOU） | **没有** | `submitTransaction` Payment / AMM；或读原生 AMM 对象 |
 | 把 EVM Uniswap 字节码搬过来 | **永远不要** | 地址、slot、CALL 都不是 XRPL |
@@ -98,7 +100,7 @@ CMP（wsm-006）是 Runtime 能力：三叶能比。SDK 的 `AccountId.eq`（wsm
 | `Hash.sha512HalfLit` | `xrplSha512HalfLit` |
 | `AccountId.eq` / `ofLimbs` | 三叶嵌套 `if` |
 
-没有：Access 门面、Vec、Map、Event、Payments。
+没有：Map、Event、Payments。Access / Hash / 编译期命名槽（VEC-1）已绿。
 
 ### wasm v0 子集（现在卡住 Vec/Map 的原因）
 
@@ -165,10 +167,11 @@ XLS-0102 的 `home_le_field` / `sha512_half` **不是** 本镜像名字。
 |---|---|---|---|
 | XRPL-RT-2（[wsm-011](../tasks/wsm-011.md)） | `xrplParentHashW0` 首 u64；`xrplBaseFee` | `Context.parentHashLo` / `baseFee` | 完整 32B 当返回值 |
 | XRPL-LOG | 仅当本地证明 `trace_*` 不破坏共识 | `Log.num` | EVM LOG3 / event ABI |
-| XRPL-VEC | 定长：编译期 JSON key `xs_0`…（array-element host 本镜像 trap） | 命名槽，暂不叫 `Storage.Vec` | 无界 `Array`、运行时长度、`set_data_array_element_field` |
+| XRPL-VEC | 定长：编译期 JSON key `xs_0`…（array-element host 本镜像 trap） | 命名槽，暂不叫 `Storage.Vec`。**VEC-1 已绿** | 无界 `Array`、运行时长度、`set_data_array_element_field` |
 | XRPL-MAP | **禁止** keccak / RBTree。先做编译期 key 的「命名槽表」。AccountId 键要另证：把三叶拼进 key 名，或 nested object | 以后才叫 `Storage.Map` | `HashMap`、动态 key 字符串、跨合约目录 |
 
-Vec/Map 是 **存储剖面升级**，不是在 `Sdk.lean` 里加函数。要改 `Wasm.IR` v0 子集和发射器的 key 布局。
+定长命名槽不改 v0 子集：每个 `xs_i` 就是一个 UInt64 `State` 字段，走已有 `set_data_object_field`。
+无界 Vec/Map 才是存储剖面升级，不能在 `Sdk.lean` 里假装有。
 
 ### 明确不做（本阶段）
 
@@ -185,7 +188,8 @@ Vec/Map 是 **存储剖面升级**，不是在 `Sdk.lean` 里加函数。要改 
 3. **探针** `set_data_array_element_field`（2026-08-29）：7 参数 import **能实例化**；
    调用写入 → `tecWASM_REJECTED`（wasm trap）。本镜像这条 host **不能当 Vec 物理层**。
    定长表改走编译期 JSON key `xs_0`…`xs_{n-1}`，仍用 `set_data_object_field`。
-4. **VEC-1**：编译期展开的命名槽，不依赖 array-element host。
+4. **VEC-1**（[wsm-012](../tasks/wsm-012.md)）：编译期 JSON key `xs_0`…`xs_2`，
+   已绿。不依赖 array-element host。
 5. Map 更后，且必须是 XRPL JSON 形状的设计，不是抄 EVM
 
 官方 Rust WASM SDK（escrow 为主）的完整对照见

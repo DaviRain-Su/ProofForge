@@ -150,8 +150,12 @@ for obj in result.get("account_objects") or []:
     if raw is None:
         print(0)
         raise SystemExit
-    s = str(raw)
-    print(int(s) if s.isdigit() else int(s, 16))
+    s = str(raw).strip().lower()
+    if s.startswith("0x"):
+        s = s[2:]
+    # This image stores UINT64 ContractJson values as unprefixed hex
+    # ("b" = 11, "16" = 22). All-digit hex must not be parsed as decimal.
+    print(int(s, 16) if s else 0)
     raise SystemExit
 raise SystemExit("missing ContractData for " + contract)
 ' "$owner" "$contract" "$key"

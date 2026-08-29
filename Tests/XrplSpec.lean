@@ -10,6 +10,7 @@ import Examples.XrplOwn
 import Examples.Hash
 import Examples.XrplHash
 import Examples.XrplRt2
+import Examples.XrplVec
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -30,7 +31,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplOwn" == some "d452894f75c0ff96"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHash" == some "ce42ea8b4607843e"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRt2" == some "1d6d712500b8daf0"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplVec" == some "e47db263444f8c7e"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -56,6 +58,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplHash
 
 #pf_xrpl_build Examples.XrplRt2
+
+#pf_xrpl_build Examples.XrplVec
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -199,3 +203,31 @@ elab "#pf_xrpl_rt2_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-rt2: {source.length} bytes of WAT passed rt2 anchor check"
 
 #pf_xrpl_rt2_emit_check Examples.XrplRt2
+
+open Lean Elab Command in
+elab "#pf_xrpl_vec_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"setAt\") (result i32)",
+          "(func (export \"get0\")",
+          "(func (export \"get1\")",
+          "(func (export \"get2\")",
+          "(data (i32.const 64) \"xs_0xs_1xs_2\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing vec anchor: {anchor}\n{source}"
+        unless !source.contains "set_data_array_element_field" do
+          throwError "wasm emit must not use set_data_array_element_field"
+        unless !source.contains "indexGet" do
+          throwError "wasm emit must not mention indexGet"
+        logInfo m!"proofforge-xrpl-vec: {source.length} bytes of WAT passed vec anchor check"
+
+#pf_xrpl_vec_emit_check Examples.XrplVec
