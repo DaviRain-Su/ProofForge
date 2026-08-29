@@ -679,10 +679,18 @@ event policy；batch、receiver callback、metadata URI、standard typed events 
 Extract 通用保留 inline helper control flow、展开命名 UInt256 constant limbs，并拒绝把 unmarked
 Bool host/runtime stub 常量折叠；没有增加 ERC-1155-specific lowering。详见 [R5-014](tasks/r5-014.md)。
 
+R5-015 已完成 persistent bounded StorageBitmap：`Evm.Sdk.StorageBitmap` 将 shared bounded
+BitSet 的 64-bit packed-word law 绑定到 compile-time-sized ordinary static State vector。
+`inRange` 是唯一 bounds authority，word/mask policy 只组合普通 UInt64 div/mod/shift/bitwise，
+consumer 仍显式写 selected state word；每个操作 O(1)，没有 runtime allocator、pointer、循环或
+新 Runtime/Ops/IR/Emit recipe。EvmFeatureFlags 与 EvmClaimBitmap 两个 consumer 分别覆盖
+owner-managed flags 和 one-time claims；bulk scan/enumeration 继续 fail closed。详见
+[R5-015](tasks/r5-015.md)。
+
 ### R6 — 双目标验收
 
 - CI-001 已把 shared Lean guards、SVM build/Mollusk/Surfpool 与 EVM build/Anvil 拆成三条
-  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 356-job Lean aggregate 不再在两个
+  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 360-job Lean aggregate 不再在两个
   target lane 重复执行。详见 [CI-001](tasks/ci-001.md)。
 - shared semantic fixtures：Counter、Escrow/Vault、Fungible ledger；共享行为规范，使用
   target-owned storage/ABI binding，不强求同一份物理 layout source。

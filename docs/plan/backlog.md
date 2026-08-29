@@ -76,10 +76,10 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-29）**：Lean 汇总 356 jobs；SVM manifest 全 57 programs；
+- **当前可验证基线（2026-08-29）**：Lean 汇总 360 jobs；SVM manifest 全 57 programs；
   Mollusk 全量 349/349（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
-  28 programs 且 Anvil 28/28。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 356-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  30 programs 且 Anvil 30/30。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
+  并保留汇总 `test` gate；完整 360-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
   `docs/plan/tasks/ci-001.md`。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
@@ -647,6 +647,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   allocator 或 hidden write。Extract 已通用修复 inline helper control-flow 保留、命名 UInt256
   常量 limb 投影与 unmarked Bool fail-closed；详见 `docs/plan/tasks/r5-014.md`。
 
+- R5-015 EVM persistent bounded StorageBitmap 已完成集成：`Evm.Sdk.StorageBitmap` 把 shared
+  `Core.Collections.BoundedBitSet` 的 64-bit packed-word 语义绑定到 ordinary static
+  `Vector UInt64 ((bits + 63) / 64)` State 字段。SDK 拥有统一 bounds/word/mask/read/set/clear/
+  toggle policy；consumer 继续显式拥有 literal State write。每次操作只读写一个 selected
+  word slot，shape 为 O(1) 且与 capacity 无关。EvmFeatureFlags（owner-managed）与
+  EvmClaimBitmap（permissionless one-time claim、partial final word）独立复用，并验证 63/64
+  boundary、final bit、OOB/no-alias、权限/replay 与 revert 后持久状态。没有 Runtime/Ops/IR/
+  Component/Emit 扩展、runtime slot allocator、pointer 或 hidden write；bulk enumeration/
+  clear-all 继续 fail closed。详见 `docs/plan/tasks/r5-015.md`。
+
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
   geometry；malformed bank、重复 region、非法 alignment 与 1,024-byte OOM 均在 emission 前
@@ -796,14 +806,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 356 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 360 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 57 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 349/349，其中 RawEntry 20/20、Phoenix-v1 profile
   76/76。
-- EVM registry 28 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
+- EVM registry 30 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /
-  GuardedPayout / Collectible / Badge / TipJar / Lang / Vault / Ownable / Token / Capped /
-  MultiToken / CraftToken / TwoStepCounter / Credits / Window / Phase / Wide / Const 均进入
+  EvmFeatureFlags / EvmClaimBitmap / GuardedPayout / Collectible / Badge / TipJar / Lang / Vault /
+  Ownable / Token / Capped / MultiToken / CraftToken / TwoStepCounter / Credits / Window / Phase /
+  Wide / Const 均进入
   Anvil 总门。`Addr20` 是一等 ABI `address`；
   显式 `UInt256` 使用 checked add/sub/mul、typed unsigned eq/lt/le/gt/ge 和 ABI `uint256`，
   以及 typed bitwise AND/OR/XOR/complement/logical shift 和 checked div/mod；默认算术仍是
@@ -812,7 +823,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `docs/plan/tasks/e-u256-004.md`。
   地址的 little-endian limbs → ABI word 转换由 runtime `pf_store_addr20` helper 统一实现，不再
   在每个 CFG case 展开二十条 `mstore8`；solc 0.8.34 strict Yul optimizer 可编译完整 Token，
-  全 28 个 build 与 Anvil 28/28 通过。详见 `docs/plan/tasks/evm-009.md`、
+  全 30 个 build 与 Anvil 30/30 通过。详见 `docs/plan/tasks/evm-009.md`、
   `docs/plan/tasks/r1-010.md`、`docs/plan/tasks/r5-001.md` 和 `docs/plan/tasks/r5-002.md`。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。

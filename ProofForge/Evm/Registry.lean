@@ -34,7 +34,9 @@ def entries : Array Entry := #[
   { name := "TwoStepCounter", digest := "3b08dde14972e728" },
   { name := "Credits", digest := "2cdeb3504c14ed59" },
   { name := "Wide", digest := "a190f187d58d188e" },
-  { name := "Const", digest := "81830f8855cd3dda" }
+  { name := "Const", digest := "81830f8855cd3dda" },
+  { name := "EvmFeatureFlags", digest := "5cc9bb266f23487f" },
+  { name := "EvmClaimBitmap", digest := "d91809979ad94cdc" }
 ]
 
 def names : Array String := entries.map (·.name)

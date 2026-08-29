@@ -50,6 +50,8 @@ import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage
 import Examples.EvmVecLog
 import Examples.EvmVecStack
+import Examples.EvmFeatureFlags
+import Examples.EvmClaimBitmap
 import Examples.GuardedPayout
 import Examples.Collectible
 import Examples.Badge
