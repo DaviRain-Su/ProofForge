@@ -25,6 +25,7 @@ private def cmpInstr : Cmp → String
 
 private structure EState where
   paramCount : Nat
+  hashSeedOff : Nat
   fresh : Nat := 0
   last : Option String := none
   pendingDest : Option String := none
@@ -111,14 +112,22 @@ private partial def renderVal (host : Contract) (extTag : ValExt → String) (st
   | .ext kind operands => do
       match sha512Seed? (extTag kind) with
       | some seed =>
-          -- Seed at 96, 32-byte digest at 160. First little-endian i64 is the leaf.
-          let stores := String.join (seed.toList.mapIdx fun i c =>
-            "(i32.store8 (i32.const " ++ toString (96 + i) ++
-            ") (i32.const " ++ toString c.toNat ++ ")) ")
-          return ("(block (result i64) " ++ stores ++
-            "(drop (call $" ++ host.computeSha512Half ++ " (i32.const 96) (i32.const " ++
-              toString seed.length ++
-              ") (i32.const 160) (i32.const 32))) (i64.load (i32.const 160)))")
+          if !seed.toList.all (·.toNat < 128) then
+            .error "extract/unsupported: XRPL SHA-512Half literal must be ASCII"
+          else
+            let outOff := st.hashSeedOff + seed.length
+            if outOff + 32 > 65536 then
+              .error "extract/unsupported: XRPL SHA-512Half literal exceeds wasm memory"
+            else
+              let stores := String.join (seed.toList.mapIdx fun i c =>
+                "(i32.store8 (i32.const " ++ toString (st.hashSeedOff + i) ++
+                ") (i32.const " ++ toString c.toNat ++ ")) ")
+              .ok ("(block (result i64) " ++ stores ++
+                "(local.set $st (call $" ++ host.computeSha512Half ++ " (i32.const " ++
+                  toString st.hashSeedOff ++ ") (i32.const " ++ toString seed.length ++
+                  ") (i32.const " ++ toString outOff ++ ") (i32.const 32))) " ++
+                "(if (i32.lt_s (local.get $st) (i32.const 0)) (then unreachable)) " ++
+                "(i64.load (i32.const " ++ toString outOff ++ ")))")
       | none =>
         match accountLitLimb? (extTag kind) with
         | some n => return ("(i64.const " ++ toString n.toNat ++ ")")
@@ -649,7 +658,11 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
     (extValCanon : ValExt → String)
     (loadEnv : Contract → Method ValExt OpExt → Nat → Bool → Array String) : Except String (Array String) := do
   let view := method.tupleArity.isSome
-  let st : EState := { paramCount := method.paramCount }
+  let keyBytes := p.slots.foldl (fun total slot => total + slot.name.length) 0
+  let st : EState := {
+    paramCount := method.paramCount
+    hashSeedOff := keyBase + keyBytes
+  }
   let region ← emitRegion host p extValCanon view 4 (defaultSlotOf p) method.ops.toList st
   unless region.terminal do
     throw s!"extract/unsupported: {method.ixName} does not end in a terminal"

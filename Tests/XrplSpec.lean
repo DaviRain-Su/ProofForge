@@ -68,6 +68,54 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCrew" == some "ca03e80ef4a8218a"
 #guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew"]
 
+namespace Tests.XrplHashNameCollision
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (_seed : UInt64) : State := { value := 0 }
+
+def xrplSha512HalfLit (_seed : String) : UInt64 := 7
+
+@[pf_entry]
+def set (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then .ok ({ value := 1 }, 1) else .error .overflow
+
+@[pf_entry]
+def get (_s : State) : UInt64 := xrplSha512HalfLit "user helper"
+
+end Tests.XrplHashNameCollision
+
+namespace Tests.XrplHashNonAscii
+
+open ProofForge.Wasm.Xrpl.Runtime
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (_seed : UInt64) : State := { value := 0 }
+
+@[pf_entry]
+def set (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then .ok ({ value := 1 }, 1) else .error .overflow
+
+@[pf_entry]
+def get (_s : State) : UInt64 := xrplSha512HalfLit "非ASCII"
+
+end Tests.XrplHashNonAscii
+
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
   let env ← getEnv
@@ -667,7 +715,7 @@ elab "#pf_xrpl_hash_emit_check " n:ident : command => do
           "(i32.const 117)",
           "(i32.const 108)",
           "(i32.const 116)",
-          "(call $compute_sha512_half"
+          "(local.set $st (call $compute_sha512_half"
         ]
         for anchor in anchors do
           unless source.contains anchor do
@@ -768,3 +816,23 @@ elab "#pf_xrpl_alphanet_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-alphanet: {source.length} bytes of WAT passed alphanet anchor check"
 
 #pf_xrpl_alphanet_emit_check Examples.Counter
+
+open Lean Elab Command in
+elab "#pf_xrpl_hash_hardening_check" : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env `Tests.XrplHashNameCollision none with
+  | .ok _ => throwError "user xrplSha512HalfLit was mistaken for the Runtime leaf"
+  | .error reason =>
+      unless reason.contains "Tests.XrplHashNameCollision.get" && reason.contains "body" do
+        throwError s!"unexpected user-helper rejection reason: {reason}"
+  match Extract.extractModuleIR env `Tests.XrplHashNonAscii none >>=
+      ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .ok source => throwError s!"XRPL accepted a non-ASCII SHA-512Half literal:\n{source}"
+    | .error reason =>
+        unless reason.contains "must be ASCII" do
+          throwError s!"unexpected non-ASCII rejection reason: {reason}"
+
+#pf_xrpl_hash_hardening_check
