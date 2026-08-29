@@ -197,6 +197,10 @@ XLS-0102 的 `home_le_field` / `sha512_half` **不是** 本镜像名字。
    已绿。不依赖 array-element host。
 5. Map 更后，且必须是 XRPL JSON 形状的设计，不是抄 EVM
 
+纯组合层（Access / Pausable / Mark）已在 wsm-017 收口。再往后见
+[xrpl-next.md](xrpl-next.md)：探针 → 用户 ContractData → `submitTransaction`。
+没有叶子就不要 `Sdk.Map` / `Sdk.Payments`。
+
 官方 Rust WASM SDK（escrow 为主）的完整对照见
 [xrpl-rust-sdk.md](xrpl-rust-sdk.md)。不要按 escrow `set_data` blob 来改本仓智能合约存储。
 
