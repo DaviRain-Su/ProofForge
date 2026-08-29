@@ -189,6 +189,17 @@ theorem createAccounts_wf_parts (accounts : CreateAccounts) (L : Nat)
     ProofForge.Svm.Sdk.CpiAccount.Handle.wellFormed, decide_eq_true_eq] at h
   exact ⟨h.1.1.1.1.1.1, h.1.1.1.1.1.2, h.1.1.1.1.2, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
+
+theorem recoverNestedAccounts_wf_parts (accounts : RecoverNestedAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.associatedTokenProgram.index + 1 < L ∧ accounts.nestedAssociatedAccount.index + 1 < L ∧
+    accounts.nestedMint.index + 1 < L ∧ accounts.destinationAssociatedAccount.index + 1 < L ∧
+    accounts.ownerAssociatedAccount.index + 1 < L ∧ accounts.ownerMint.index + 1 < L ∧
+    accounts.wallet.index + 1 < L ∧ accounts.tokenProgram.index + 1 < L := by
+  simp only [RecoverNestedAccounts.wellFormed, Bool.and_eq_true,
+    ProofForge.Svm.Sdk.CpiAccount.Handle.wellFormed, decide_eq_true_eq] at h
+  exact ⟨h.1.1.1.1.1.1.1, h.1.1.1.1.1.1.2, h.1.1.1.1.1.2, h.1.1.1.1.2, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+
 end Proofs
 
 end ProofForge.Svm.Sdk.AssociatedToken
