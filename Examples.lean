@@ -57,6 +57,7 @@ import Examples.XrplBal
 import Examples.XrplBalRt
 import Examples.XrplRoot
 import Examples.XrplTx
+import Examples.XrplSend
 import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster

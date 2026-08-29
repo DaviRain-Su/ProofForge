@@ -177,6 +177,24 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
     | .lit (.strVal s) => some (.xrplSha512HalfLit s)
     | _ => none
+  else if (endsWith e ".xrplAccountLitW0" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW0) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplAccountLitW0 s)
+    | _ => none
+  else if (endsWith e ".xrplAccountLitW1" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW1) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplAccountLitW1 s)
+    | _ => none
+  else if (endsWith e ".xrplAccountLitW2" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW2) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplAccountLitW2 s)
+    | _ => none
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -793,6 +811,13 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           endsWith baseE ".xrplCaller20" then
         some (match leaf with
           | "w0" => .xrplCallerW0 | "w1" => .xrplCallerW1 | _ => .xrplCallerW2)
+      else if (isConstNamed baseE ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLit ||
+          endsWith baseE ".xrplAccountLit") && baseE.getAppArgs.size ≥ 1 then
+        match strip baseE.getAppArgs[baseE.getAppArgs.size - 1]! with
+        | .lit (.strVal s) =>
+          some (match leaf with
+            | "w0" => .xrplAccountLitW0 s | "w1" => .xrplAccountLitW1 s | _ => .xrplAccountLitW2 s)
+        | _ => none
       else if isConstNamed baseE ``ProofForge.Wasm.Xrpl.Runtime.xrplSelf20 ||
           endsWith baseE ".xrplSelf20" then
         some (match leaf with
@@ -819,6 +844,8 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   else if endsWith e ".evmCaller20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 then
     none
   else if endsWith e ".xrplCaller20" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCaller20 then
+    none
+  else if endsWith e ".xrplAccountLit" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLit then
     none
   else if endsWith e ".xrplSelf20" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelf20 then
     none

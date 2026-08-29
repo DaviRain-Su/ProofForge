@@ -47,6 +47,37 @@ private def extLocal (tag : ValExt → String) (kind : ValExt) : String :=
 private def sha512Seed? (tag : String) : Option String :=
   if tag.startsWith "xsha." then some (tag.drop "xsha.".length |>.copy) else none
 
+/-- Compile-time AccountID limbs: `xacc0.{hex}` / `xacc1.{hex}` / `xacc2.{hex}`. -/
+private def accountLitLimb? (tag : String) : Option UInt64 :=
+  let rec nibble (c : Char) : Option Nat :=
+    let n := c.toNat
+    if n ≥ 48 && n ≤ 57 then some (n - 48)
+    else if n ≥ 97 && n ≤ 102 then some (n - 87)
+    else if n ≥ 65 && n ≤ 70 then some (n - 55)
+    else none
+  let rec bytes (cs : List Char) (acc : Array Nat) : Option (Array Nat) :=
+    match cs with
+    | c0 :: c1 :: rest =>
+      match nibble c0, nibble c1 with
+      | some hi, some lo => bytes rest (acc.push (hi * 16 + lo))
+      | _, _ => none
+    | [] => some acc
+    | _ => none
+  let rec leU64 (bs : Array Nat) (off len : Nat) : UInt64 :=
+    UInt64.ofNat ((Array.range len).foldl (fun a i =>
+      a + bs[off + i]! * (256 ^ i)
+    ) 0)
+  if tag.startsWith "xacc0." || tag.startsWith "xacc1." || tag.startsWith "xacc2." then
+    let hex := String.ofList (tag.toList.drop 6)
+    match bytes hex.toList #[] with
+    | some bs =>
+      if bs.size != 20 then none
+      else if tag.startsWith "xacc0." then some (leU64 bs 0 8)
+      else if tag.startsWith "xacc1." then some (leU64 bs 8 8)
+      else some (leU64 bs 16 4)
+    | none => none
+  else none
+
 private partial def renderVal (host : Contract) (extTag : ValExt → String) (st : EState)
     (v : Val ValExt) : Except String String :=
   match v with
@@ -88,7 +119,10 @@ private partial def renderVal (host : Contract) (extTag : ValExt → String) (st
             "(drop (call $" ++ host.computeSha512Half ++ " (i32.const 96) (i32.const " ++
               toString seed.length ++
               ") (i32.const 160) (i32.const 32))) (i64.load (i32.const 160)))")
-      | none => .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
+      | none =>
+        match accountLitLimb? (extTag kind) with
+        | some n => .ok ("(i64.const " ++ toString n.toNat ++ ")")
+        | none => .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
   | _ => .error "extract/unsupported: wasm v0 value"
 
 private def isExitOp : Op ValExt OpExt → Bool

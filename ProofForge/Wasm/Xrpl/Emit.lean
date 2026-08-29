@@ -20,6 +20,55 @@ private def indent (n : Nat) (s : String) : String :=
 /-- Scratch after account (0..19) and param (20..27) and store (28..36). -/
 private def envOff : Nat := 40
 
+private def hexBytes (hex : String) : Option (Array Nat) :=
+  let rec nibble (c : Char) : Option Nat :=
+    let n := c.toNat
+    if n ≥ 48 && n ≤ 57 then some (n - 48)
+    else if n ≥ 97 && n ≤ 102 then some (n - 87)
+    else if n ≥ 65 && n ≤ 70 then some (n - 55)
+    else none
+  let rec go (cs : List Char) (acc : Array Nat) : Option (Array Nat) :=
+    match cs with
+    | c0 :: c1 :: rest =>
+      match nibble c0, nibble c1 with
+      | some hi, some lo => go rest (acc.push (hi * 16 + lo))
+      | _, _ => none
+    | [] => some acc
+    | _ => none
+  go hex.toList #[]
+
+private def accountLitHexFromKind : Ops.ValKind → Option String
+  | .accountLitW0 h | .accountLitW1 h | .accountLitW2 h => some h
+  | _ => none
+
+private def accountLitHex (ops : Array Ops.Op) : Option String :=
+  let rec val (fuel : Nat) (v : Ops.Val) : Option String :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      match v with
+      | .ext k _ => accountLitHexFromKind k
+      | .field base _ => val fuel' base
+      | .select _ a b c d => val fuel' a <|> val fuel' b <|> val fuel' c <|> val fuel' d
+      | .addU64 a b | .subU64 a b | .mulU64 a b | .divU64 a b | .modU64 a b
+      | .bitAnd a b | .bitOr a b | .bitXor a b | .shiftL a b | .shiftR a b =>
+          val fuel' a <|> val fuel' b
+      | .bitNot a => val fuel' a
+      | .indexGet base _ idx _ _ => val fuel' base <|> val fuel' idx
+      | _ => none
+  let rec op (fuel : Nat) (x : Ops.Op) : Option String :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      match x with
+      | .checkedAddU64 a b | .checkedSubU64 a b | .checkedMulU64 a b
+      | .checkedDivU64 a b | .checkedModU64 a b => val 32 a <|> val 32 b
+      | .ite _ a b thn els =>
+          val 32 a <|> val 32 b <|> thn.findSome? (op fuel') <|> els.findSome? (op fuel')
+      | .storeField _ v | .okState v | .returnState v | .returnU64 v => val 32 v
+      | _ => none
+  ops.findSome? (op 32)
+
 private def usesKind (ops : Array Ops.Op) (want : Ops.ValKind) : Bool :=
   let rec val (fuel : Nat) (v : Ops.Val) : Bool :=
     match fuel with
@@ -68,7 +117,8 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
     let needTxSeq := usesKind method.ops .txSequence
     let needTxFee := usesKind method.ops .txFeeDrops
     let needRoot := needBal || needSeq || needFlags || needOwnc
-    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot || needTxSeq || needTxFee) then #[]
+    let otherHex := accountLitHex method.ops
+    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot || needTxSeq || needTxFee) && otherHex.isNone then #[]
     else
     let err :=
       if view then #[]
@@ -224,7 +274,16 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
           indent level ("(local.set $pf_x_xtfee (i64.and " ++ be ++
             " (i64.const 144115188075855871)))")
         ]
-    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee
+    let other :=
+      match otherHex.bind hexBytes with
+      | some bs =>
+        if bs.size != 20 then #[]
+        else
+          (Array.range 20).map fun i =>
+            indent level ("(i32.store8 (i32.const " ++ toString i ++
+              ") (i32.const " ++ toString bs[i]! ++ "))")
+      | none => #[]
+    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee ++ other
 
 def extraImports (host : Contract) : Array String :=
   let tx :=

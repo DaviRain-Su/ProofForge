@@ -19,6 +19,7 @@ import Examples.XrplBal
 import Examples.XrplBalRt
 import Examples.XrplRoot
 import Examples.XrplTx
+import Examples.XrplSend
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -48,7 +49,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBalRt" == some "dd80a5af3243dec2"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRoot" == some "a8e6569035ec2d13"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTx" == some "2a9d4e10cd7ecec9"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplSend" == some "64eb128e0be5a2c6"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -92,6 +94,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplRoot
 
 #pf_xrpl_build Examples.XrplTx
+
+#pf_xrpl_build Examples.XrplSend
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -370,6 +374,30 @@ elab "#pf_xrpl_tx_alphanet_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-tx: {source.length} bytes of WAT passed tx anchor check"
 
 #pf_xrpl_tx_alphanet_emit_check Examples.XrplTx
+
+open Lean Elab Command in
+elab "#pf_xrpl_send_alphanet_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emitAlphaNet program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(i32.store8 (i32.const 0) (i32.const 208))",
+          "(i32.store8 (i32.const 19) (i32.const 80))",
+          "(data (i32.const 64) \"bal\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"alphanet emit is missing send anchor: {anchor}\n{source}"
+        unless !source.contains "setUserData" do
+          throwError "wasm emit must not mention setUserData"
+        logInfo m!"proofforge-xrpl-send: {source.length} bytes of WAT passed send anchor check"
+
+#pf_xrpl_send_alphanet_emit_check Examples.XrplSend
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
