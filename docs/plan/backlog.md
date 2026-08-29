@@ -467,6 +467,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   已覆盖多 field、字符串、pubkey、numeric log 或 return-data API。详见
   `docs/plan/tasks/r3-016.md`。
 
+- R3-017 transient Vector64 pop 已完成：`Transient.Vector64.pop` 在既有 active/capacity gate
+  后拒绝 empty (`0x1202`)，原位把 logical length 减一并返回旧尾元素。它不分配、不清 payload、
+  不 reclaim/realloc，也不让 pointer 离开 target-owned emitter；Runtime leaf 只由既有 generic
+  Component bridge 解码。MemoryOps Mollusk 钉死 LIFO 与 empty failure，产物 digest
+  `e37f469f33e44884`、ELF 41,440 B。没有增加 top-level Ops/IR/main-Emit recipe。详见
+  `docs/plan/tasks/r3-017.md`。
+
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
   独立复用；replacement 会使旧 nominee 失效，accept/cancel 显式清零，不使用 hashed

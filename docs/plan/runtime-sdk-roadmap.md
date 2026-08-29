@@ -379,8 +379,10 @@ R3-015 又把两种 transient emitter 重复的 allocation、metadata、
 active/capacity validation、clear/finish 收口到一个 target-owned lifecycle interpreter，且
 保持 assembly byte-exact；详见 [R3-015](tasks/r3-015.md)。R3-016 再把 active byte prefix
 通过 syscall-adjacent `SolBytes` descriptor 绑定为一个 bounded `sol_log_data` field，exact
-payload 与普通 return data 由 Mollusk 同时验证，详见 [R3-016](tasks/r3-016.md)。R3 尚未完成；
-同类型多 handle、generic POD vector/record writer、rent-aware resize、runtime-selected
+payload 与普通 return data 由 Mollusk 同时验证，详见 [R3-016](tasks/r3-016.md)。R3-017 又在
+同一 Vector64 component 中增加 checked LIFO `pop`：empty 显式失败，length 原位缩短，不分配、
+清 payload 或伪造 reclaim，详见 [R3-017](tasks/r3-017.md)。R3 尚未完成；同类型多 handle、
+generic POD vector/record writer、rent-aware resize、runtime-selected
 ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 
 ### R4 — EVM Runtime

@@ -299,6 +299,10 @@ binds these stubs to one target-owned component. The host model cannot observe V
   let _ := index
   0
 
+@[irreducible] def transientVecPop (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
 /-! Invocation-local bounded byte buffer leaves. Extraction requires compile-time byte capacity
 and binds these stubs to one target-owned component; pushes and stores carry canonical `≤ 255`
 byte values and `appendLe64` uses one 8-byte little-endian record. The host model cannot observe

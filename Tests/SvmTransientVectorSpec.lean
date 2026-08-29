@@ -24,9 +24,13 @@ private def vector2 : TransientVec.Config := { capacity := 2 }
   (TransientVec.Call.set vector2 0 9 : TransientVec.Call UInt64).wellFormed (fun _ => true)
 #guard (TransientVec.Query.length vector2).wellFormed
 #guard (TransientVec.Query.get vector2).arity == 1
+#guard (TransientVec.Query.pop vector2).arity == 0
 #guard
   (TransientVec.Query.get vector2).canonical (fun _ : UInt64 => "i") #[0] ==
     "tv64.get.2(i)"
+#guard
+  (TransientVec.Query.pop vector2).canonical (fun _ : UInt64 => "unused") #[] ==
+    "tv64.pop.2"
 
 #pf_build Examples.MemoryOps
 
@@ -38,8 +42,10 @@ private def vectorStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientVec (.finish _)) => some "finish"
   | .letLocal _ (.ext (.component (.transientVec (.length _))) #[]) => some "length"
   | .letLocal _ (.ext (.component (.transientVec (.get _))) #[_]) => some "get"
+  | .letLocal _ (.ext (.component (.transientVec (.pop _))) #[]) => some "pop"
   | .returnU64 (.ext (.component (.transientVec (.length _))) #[]) => some "length"
   | .returnU64 (.ext (.component (.transientVec (.get _))) #[_]) => some "get"
+  | .returnU64 (.ext (.component (.transientVec (.pop _))) #[]) => some "pop"
   | _ => none
 
 private def vectorSteps (method : ProofForge.Svm.IR.Method) : Array String :=
@@ -73,7 +79,11 @@ elab "#pf_guard_transient_vector" : command => do
     | .letLocal _ (.ext (.svm (.component (.transientVec (.get _)))) #[_]) => true
     | .returnU64 (.ext (.svm (.component (.transientVec (.get _)))) #[_]) => true
     | _ => false
-  unless hasLength && hasGet do
+  let hasPop := source.methods.any fun method => method.ops.any fun
+    | .letLocal _ (.ext (.svm (.component (.transientVec (.pop _)))) #[]) => true
+    | .returnU64 (.ext (.svm (.component (.transientVec (.pop _)))) #[]) => true
+    | _ => false
+  unless hasLength && hasGet && hasPop do
     throwError "transient vector queries did not stay behind the component bridge"
   let some setGet := program.methods.find? (·.ixName == "vectorSetGet")
     | throwError "missing vectorSetGet method"
@@ -83,6 +93,14 @@ elab "#pf_guard_transient_vector" : command => do
     | throwError "missing vectorLengthAfterClear method"
   unless vectorSteps clearLength == #["begin", "push", "clear", "length", "finish"] do
     throwError "vectorLengthAfterClear effects were not preserved in source order"
+  let some pop := program.methods.find? (·.ixName == "vectorPop")
+    | throwError "missing vectorPop method"
+  unless vectorSteps pop == #["begin", "push", "push", "pop", "finish"] do
+    throwError "vectorPop effects were not preserved in source order"
+  let some popEmpty := program.methods.find? (·.ixName == "vectorPopEmpty")
+    | throwError "missing vectorPopEmpty method"
+  unless vectorSteps popEmpty == #["begin", "pop"] do
+    throwError "vectorPopEmpty did not preserve empty-pop validation order"
   let some afterFinish := program.methods.find? (·.ixName == "vectorAfterFinish")
     | throwError "missing vectorAfterFinish method"
   unless vectorSteps afterFinish == #["begin", "finish", "length"] do
@@ -107,6 +125,7 @@ elab "#pf_guard_transient_vector" : command => do
       asm.contains "transient_vec_heap_position_" &&
       asm.contains "transient_vec_push_room_" &&
       asm.contains "transient_vec_get_bounds_" &&
+      asm.contains "transient_vec_pop_nonempty_" &&
       asm.contains "lddw r0, 0x1201" && asm.contains "lddw r0, 0x1202" &&
       asm.contains "lddw r0, 0x1203" do
     throwError "bounded vector allocator, mutation, or explicit failure gates are missing"

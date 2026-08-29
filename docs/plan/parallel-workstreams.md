@@ -110,6 +110,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-SDK-11 source-visible transient bytes（已集成）** | SVM-SDK-10 | 一个 byte handle 可与一个 Vector64 同时 active；checked push/set/get/length/clear/finish + fixed `appendLe64`，显式 OOM/full/OOB/state/range，仍复用 shared bump allocator；不持久化 pointer、不伪造 realloc/free、不增加 top-level Ops/IR/main Emit；见 R3-013 |
 | **SVM-SDK-12 shared transient lifecycle（已集成）** | SVM-SDK-10/11 | Vector64/Bytes 共同的 allocation、metadata、active/capacity gate、clear/finish 由一个 target-owned interpreter 发射；concrete emitters 只拥有 element 语义，assembly byte-exact；见 R3-015 |
 | **SVM-SDK-13 bounded log-data（已集成）** | SVM-SDK-11/12 | active byte prefix 通过 syscall-adjacent `[addr,len]` descriptor 发布为一个 `sol_log_data` field；不复制 payload、不暴露 pointer，Mollusk 钉 exact payload + scalar return；见 R3-016 |
+| **SVM-SDK-14 transient Vector64 pop（已集成）** | SVM-SDK-10/12 | checked LIFO pop 原位缩短 active prefix 并返回旧尾元素；empty=`0x1202`，不分配、不清 payload、不伪造 reclaim/realloc，继续只扩 target component；见 R3-017 |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
 | **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
 | **EVM-SDK-5 bounded payments（已集成）** | EVM-SDK-1/2/3/4、EVM-RT-2 | `Evm.Sdk.Payments` 收口 Ether/ERC20/WETH/fixed-router facade；Vault/TipJar/Ownable 不再直连 lower Source boundary，产物不变；见 R5-005 |

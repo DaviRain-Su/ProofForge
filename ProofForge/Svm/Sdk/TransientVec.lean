@@ -41,4 +41,8 @@ abbrev Vector64 := ProofForge.Svm.TransientVec.Config
 @[pf_inline] def Vector64.get (vector : Vector64) (index : UInt64) : UInt64 :=
   transientVecGet (UInt64.ofNat vector.capacity) index
 
+/-- Remove and return the last live element. Empty vectors fail with the bounded-index error. -/
+@[pf_inline] def Vector64.pop (vector : Vector64) : UInt64 :=
+  transientVecPop (UInt64.ofNat vector.capacity)
+
 end ProofForge.Svm.Sdk.Transient

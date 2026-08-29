@@ -251,6 +251,34 @@ fn transient_vector_push_set_get_clear_and_length() {
 }
 
 #[test]
+fn transient_vector_pop_is_lifo_and_rejects_empty() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        data.clone(),
+        "vectorPop",
+        &[11, 22],
+        false,
+        &[Check::success(), Check::return_data(&22u64.to_le_bytes())],
+    );
+    invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        data,
+        "vectorPopEmpty",
+        &[],
+        false,
+        &[Check::err(ProgramError::Custom(0x1202))],
+    );
+}
+
+#[test]
 fn transient_vector_reports_bounds_stale_handle_and_oom() {
     let (program_id, mollusk, data_key, state) = setup();
     let data = Account::new(1_000_000, 24, &program_id);

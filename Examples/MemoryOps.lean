@@ -88,6 +88,22 @@ def vectorLengthAfterClear (_state : State) (value : UInt64) : UInt64 :=
   let _ := vector2.finish
   length
 
+/-- `pop` returns the former last element and shortens the invocation-local active prefix. -/
+@[pf_entry]
+def vectorPop (_state : State) (firstValue secondValue : UInt64) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push firstValue
+  let _ := vector2.push secondValue
+  let popped := vector2.pop
+  let _ := vector2.finish
+  popped
+
+/-- Empty `pop` must terminate with the vector's explicit bounds error. -/
+@[pf_entry]
+def vectorPopEmpty (_state : State) : UInt64 :=
+  let _ := vector2.begin
+  vector2.pop
+
 /-- Third push must terminate with the vector's explicit capacity error. -/
 @[pf_entry]
 def vectorOverflow (_state : State) : UInt64 :=
