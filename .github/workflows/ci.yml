@@ -124,6 +124,12 @@ jobs:
       - name: Build all EVM programs
         run: lake exe pf -- build --target evm --out build/evm
 
+      - name: Build all WASM programs
+        run: lake exe pf -- build --target wasm --out build/wasm
+
+      - name: Run XRPL Bedrock WASM source gate
+        run: runtime-tests/wasm/check.sh
+
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
 

@@ -93,3 +93,9 @@ import ProofForge.Evm.Emit
 import ProofForge.Evm.Golden
 import ProofForge.Evm.Assemble
 import ProofForge.Evm.Commands
+import ProofForge.Wasm.Ops
+import ProofForge.Wasm.IR
+import ProofForge.Wasm.Emit
+import ProofForge.Wasm.Registry
+import ProofForge.Wasm.Assemble
+import ProofForge.Wasm.Commands

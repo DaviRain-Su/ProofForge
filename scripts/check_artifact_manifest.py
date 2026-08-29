@@ -21,10 +21,11 @@ HEX_RE = re.compile(r"^[0-9a-f]+$")
 DIGEST_LINE = {
     "svm": re.compile(r"^;\s*digest=([0-9a-f]+)\s*$"),
     "evm": re.compile(r"^//\s*digest=([0-9a-f]+)\s*$"),
+    "wasm": re.compile(r"^//\s*digest=([0-9a-f]+)\s*$"),
 }
 
 # `.so` must win over `.s`; `Name.so`.endswith(".s") is true.
-SUFFIXES_BY_SPECIFICITY = (".idl.json", ".abi.json", ".so", ".bin", ".yul", ".s")
+SUFFIXES_BY_SPECIFICITY = (".idl.json", ".abi.json", ".so", ".bin", ".yul", ".rs", ".s")
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,14 @@ EVM = TargetSpec(
     suffixes=(".bin", ".yul", ".abi.json"),
     digest_suffix=".yul",
 )
-SPECS = {"svm": SVM, "evm": EVM}
+WASM = TargetSpec(
+    key="wasm",
+    registry_rel=Path("ProofForge/Wasm/Registry.lean"),
+    expected_count=1,
+    suffixes=(".rs",),
+    digest_suffix=".rs",
+)
+SPECS = {"svm": SVM, "evm": EVM, "wasm": WASM}
 ELF_MAGIC = b"\x7fELF"
 ELF64_CLASS = 2
 ELF64_DATA_LSB = 1
@@ -256,7 +264,10 @@ def diagnostics(
     entries_by_target: dict[str, dict[str, str]] | None = None,
     pin_count: bool = True,
 ) -> list[str]:
-    specs = [SVM, EVM] if target == "all" else [SPECS[target]]
+    if target == "all":
+        specs = [SVM, EVM, WASM]
+    else:
+        specs = [SPECS[target]]
     allow_other = target == "all"
     diags: list[str] = []
     for spec in specs:
@@ -329,6 +340,13 @@ def _write_evm(out: Path, name: str, digest: str, *, bin_hex: str = "deadbeef") 
     (out / f"{name}.abi.json").write_text("[]\n", encoding="utf-8")
 
 
+def _write_wasm(out: Path, name: str, digest: str) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f"{name}.rs").write_text(
+        f"// PROOF-FORGE-WASM-XRPL v0\n// digest={digest}\nfn stub() {{}}\n", encoding="utf-8"
+    )
+
+
 def _require(diags: list[str], needle: str, label: str) -> None:
     if not any(needle in item for item in diags):
         raise AssertionError(f"{label}: expected {needle!r} in {diags}")
@@ -348,25 +366,32 @@ def self_test() -> int:
 
     svm_entries = {"Prog": "abc123"}
     evm_entries = {"Tok": "def456"}
-    injected = {"svm": svm_entries, "evm": evm_entries}
+    wasm_entries = {"Cnt": "fed789"}
+    injected = {"svm": svm_entries, "evm": evm_entries, "wasm": wasm_entries}
 
     def parse_real() -> None:
         svm = parse_registry(ROOT / SVM.registry_rel)
         evm = parse_registry(ROOT / EVM.registry_rel)
+        wasm = parse_registry(ROOT / WASM.registry_rel)
         if len(svm) != SVM.expected_count:
             raise AssertionError(f"svm count {len(svm)}")
         if len(evm) != EVM.expected_count:
             raise AssertionError(f"evm count {len(evm)}")
+        if len(wasm) != WASM.expected_count:
+            raise AssertionError(f"wasm count {len(wasm)}")
         if svm["Counter"] != "3382e308fa0843e9":
             raise AssertionError("svm Counter digest")
         if evm["Counter"] != "254202356ee921d6":
             raise AssertionError("evm Counter digest")
+        if wasm["Counter"] != "335b688107a04afc":
+            raise AssertionError("wasm Counter digest")
 
     def happy() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             _write_svm(out, "Prog", "abc123")
             _write_evm(out, "Tok", "def456")
+            _write_wasm(out, "Cnt", "fed789")
             diags = diagnostics("all", out, entries_by_target=injected, pin_count=False)
             if diags:
                 raise AssertionError(diags)
@@ -513,7 +538,7 @@ def self_test() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--target", choices=("svm", "evm", "all"))
+    parser.add_argument("--target", choices=("svm", "evm", "wasm", "all"))
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     if args.self_test:
@@ -523,7 +548,7 @@ def main() -> int:
         return self_test()
     if args.target is None or args.out is None:
         print(
-            "usage: check_artifact_manifest.py --target svm|evm|all --out DIR",
+            "usage: check_artifact_manifest.py --target svm|evm|wasm|all --out DIR",
             file=sys.stderr,
         )
         return 2

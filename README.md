@@ -2,7 +2,7 @@
 
 Lean 4 多目标合约编译器。普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：Solana（sBPF）+ EVM（Yul）两个剖面。`@[pf_entry]` 标记入口。CLI 是 `pf`。
+当前：Solana（sBPF）+ EVM（Yul）+ WASM（XRPL Bedrock 方言 Rust 源，source-only）三个剖面。`@[pf_entry]` 标记入口。CLI 是 `pf`。
 
 和 [proof_forge](https://github.com/DaviRain-Su/proof_forge) 的关系：那边是 `program … where` DSL。这边复用 Lean 语法本身，抽出能 fail-closed 降到链上的子集。disc / layout 域名仍是 `proof-forge-solana-v1:`，链上字节不因改名而变。
 
@@ -30,10 +30,13 @@ sBPF/.so   Yul/.bin
 lake build
 lake exe pf -- build --target svm --out build/sbpf Counter
 lake exe pf -- build --target evm --out build/evm Counter
+lake exe pf -- build --target wasm --out build/wasm Counter
 ```
 
 SVM 写出 `Name.so` / `Name.s` / `Name.idl.json`（Solana IDL spec 0.1.0）。
 EVM 写出 `Name.bin` / `Name.yul` / `Name.abi.json`。
+WASM 写出 `Name.rs`（XRPL Bedrock / `xrpl_wasm_std` 方言；zero-tool，`deployable=false`；
+工程门 `runtime-tests/wasm/check.sh` 用本地 stub crate 做 cargo check）。
 
 Mollusk（环境变量已改成 `PF_*_SO`）：
 
