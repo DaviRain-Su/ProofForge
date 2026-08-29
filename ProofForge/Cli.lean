@@ -6,22 +6,24 @@ import ProofForge.Svm.Registry
 import ProofForge.Evm.Assemble
 import ProofForge.Evm.IR
 import ProofForge.Evm.Registry
-import ProofForge.Wasm.Assemble
-import ProofForge.Wasm.IR
-import ProofForge.Wasm.Registry
+import ProofForge.Wasm.Xrpl.Assemble
+import ProofForge.Wasm.Xrpl.IR
+import ProofForge.Wasm.Xrpl.Registry
 
 namespace ProofForge.Cli
 
+/-- A target names one concrete chain. `wasm` is a chain family, not a target: it is
+rejected with a hint so callers pick a member (e.g. `xrpl`). -/
 inductive Target where
   | svm
   | evm
-  | wasm
+  | xrpl
   deriving BEq, Repr, Inhabited
 
 def parseTarget : String → Option Target
   | "svm" | "solana" | "sbpf" => some .svm
   | "evm" => some .evm
-  | "wasm" | "xrpl" => some .wasm
+  | "xrpl" | "xrpl-bedrock" | "bedrock" => some .xrpl
   | _ => none
 
 structure Options where
@@ -34,11 +36,12 @@ private def usage : String :=
   "pf — ProofForge compiler\n" ++
     "\n" ++
     "Usage:\n" ++
-    "  pf build --target <svm|evm|wasm> [--out DIR] [Program ...]\n" ++
+    "  pf build --target <svm|evm|xrpl> [--out DIR] [Program ...]\n" ++
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
-    "wasm writes Name.rs (XRPL Bedrock dialect Rust source; zero-tool)\n" ++
+    "xrpl writes Name.rs (XRPL Bedrock dialect Rust source; zero-tool)\n" ++
+    "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
     "No program names means every registered source module for the selected target.\n"
 
 def parseArgs (args : List String) : Except String Options :=
@@ -49,7 +52,10 @@ def parseArgs (args : List String) : Except String Options :=
     | "--target" :: t :: rest =>
       match parseTarget t with
       | some tgt => go rest { o with target := tgt }
-      | none => .error s!"unknown target {t}"
+      | none =>
+          if t == "wasm" then
+            .error "wasm is a chain family, not a target; pick a concrete member (e.g. xrpl)"
+          else .error s!"unknown target {t}"
     | "--out" :: d :: rest => go rest { o with outDir := d }
     | flag :: rest =>
       if flag.startsWith "-" then .error s!"unknown flag {flag}"
@@ -132,19 +138,19 @@ private unsafe def extractEvmPrograms (names : Array String) :
   catch e =>
     return .error s!"source import failed: {e}"
 
-private def wasmProgramNames : Array String :=
-  Wasm.Registry.names
+private def xrplProgramNames : Array String :=
+  Wasm.Xrpl.Registry.names
 
-private def selectWasmNames (names : Array String) : Except String (Array String) :=
-  if names.isEmpty then .ok wasmProgramNames
+private def selectXrplNames (names : Array String) : Except String (Array String) :=
+  if names.isEmpty then .ok xrplProgramNames
   else
     names.mapM fun n =>
-      match wasmProgramNames.find? (· == n) with
+      match xrplProgramNames.find? (· == n) with
       | some _ => .ok n
-      | none => .error s!"unknown wasm program {n}"
+      | none => .error s!"unknown xrpl program {n}"
 
-private unsafe def extractWasmPrograms (names : Array String) :
-    IO (Except String (Array ProofForge.Wasm.IR.Program)) :=
+private unsafe def extractXrplPrograms (names : Array String) :
+    IO (Except String (Array ProofForge.Wasm.Xrpl.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
@@ -152,14 +158,14 @@ private unsafe def extractWasmPrograms (names : Array String) :
     let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
     let env ← Lean.importModules modules {} (loadExts := true)
     return names.mapM fun name =>
-      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.IR.fromExtracted with
+      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.Xrpl.IR.fromExtracted with
       | .error reason => .error s!"{name}: {reason}"
       | .ok program =>
-        let digest := Wasm.IR.digestHex program
-        match Wasm.Registry.digestOf name with
+        let digest := Wasm.Xrpl.IR.digestHex program
+        match Wasm.Xrpl.Registry.digestOf name with
         | some expected =>
             if digest == expected then .ok program
-            else .error s!"{name}: ir/mismatch: extracted wasm digest {digest} != fixture {expected}"
+            else .error s!"{name}: ir/mismatch: extracted xrpl digest {digest} != fixture {expected}"
         | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
@@ -207,20 +213,20 @@ unsafe def run (args : List String) : IO UInt32 := do
             let r ← ProofForge.Evm.Assemble.assembleProgram opts.outDir program
             IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes)"
           return 0
-    | .wasm =>
-      match selectWasmNames opts.names with
+    | .xrpl =>
+      match selectXrplNames opts.names with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
       | .ok names =>
-        match ← extractWasmPrograms names with
+        match ← extractXrplPrograms names with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
         | .ok programs =>
           IO.FS.createDirAll opts.outDir
           for program in programs do
-            let r ← ProofForge.Wasm.Assemble.assembleProgram opts.outDir program
+            let r ← ProofForge.Wasm.Xrpl.Assemble.assembleProgram opts.outDir program
             IO.println s!"wrote {r.rsPath} ({r.rsSource.length} bytes; XRPL Bedrock source; deployable=false)"
           return 0
 

@@ -1,7 +1,7 @@
-import ProofForge.Wasm.IR
-import ProofForge.Wasm.Emit
+import ProofForge.Wasm.Xrpl.IR
+import ProofForge.Wasm.Xrpl.Emit
 
-namespace ProofForge.Wasm.Assemble
+namespace ProofForge.Wasm.Xrpl.Assemble
 
 structure Result where
   rsPath : System.FilePath
@@ -18,4 +18,4 @@ def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Resul
   IO.FS.writeFile rsPath source
   return { rsPath, rsSource := source }
 
-end ProofForge.Wasm.Assemble
+end ProofForge.Wasm.Xrpl.Assemble

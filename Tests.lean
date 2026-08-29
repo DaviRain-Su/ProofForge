@@ -62,7 +62,7 @@ import Tests.CoreCodecSpec
 import Tests.CoreCollectionsSpec
 import Tests.CrossTargetCodecSpec
 import Tests.EvmBuildSpec
-import Tests.WasmSpec
+import Tests.XrplSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmSearchSpec

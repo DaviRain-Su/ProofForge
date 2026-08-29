@@ -150,11 +150,11 @@ jobs:
       - name: Check EVM artifact manifest
         run: python3 scripts/check_artifact_manifest.py --target evm --out build/evm
 
-      - name: Build all WASM programs
-        run: lake exe pf -- build --target wasm --out build/wasm
+      - name: Build all XRPL programs
+        run: lake exe pf -- build --target xrpl --out build/xrpl
 
-      - name: Run XRPL Bedrock WASM source gate
-        run: runtime-tests/wasm/check.sh
+      - name: Run XRPL Bedrock source gate
+        run: runtime-tests/xrpl/check.sh
 
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
