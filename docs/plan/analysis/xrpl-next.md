@@ -82,7 +82,7 @@ SVM `BumpAllocator` 活在 **账户字节里的持久 heap**。XRPL 持久状态
   **存储 Owner**（用户 ContractData）或 nested JSON，不是 `memory.grow`。
 - 有了分配器 **不能** 就「上层造 SDK」。缺的是账本形状，不是堆。
   NEAR 默认分配器是 `wee_alloc`（调用内）；`LookupMap` 走 `env.storage_write`。
-  详见 [xrpl-model.md](xrpl-model.md) §1.0。
+  详见 [xrpl-model.md](xrpl-model.md) §1.1a / §1.1b。
 
 ## 2. 切片（按依赖，一刀一事）
 

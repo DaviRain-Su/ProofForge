@@ -37,7 +37,7 @@ EVM                         SVM                        XRPL (XLS-0101)
 
 本仓 WAT：`(memory (export "memory") 1)`，64KiB，偏移钉死（0..19 Owner、20.. 参数、64+ 槽名）。那是 host 进出的 scratch，不是持久堆。SVM `BumpAllocator` 活在账户字节里，所以 Vec/Map 能跨交易；XRPL 不能把 bump 当 SDK 底座。
 
-### 1.0 NEAR 也有线性内存——分配器不是 Map
+### 1.1a NEAR 也有线性内存——分配器不是 Map
 
 NEAR 合约同样只有一块 wasm 线性内存。`near-sdk` 默认全局分配器是 **`wee_alloc 0.4.5`**
 （`near-sdk/src/lib.rs`：`#[global_allocator] static ALLOC: wee_alloc::WeeAlloc`）。
@@ -54,9 +54,43 @@ NEAR 合约同样只有一块 wasm 线性内存。`near-sdk` 默认全局分配�
 
 所以：NEAR 能做 Map，是因为 runtime 给了 **持久 trie**（`storage_write`），不是因为有了 `wee_alloc`。
 把 `wee_alloc` 搬到 XRPL 只能得到更好的本次调用缓冲；`Sdk.Map` 仍然假。
-XRPL 要对齐 NEAR 集合，缺的是 **任意 key 的持久 host**（或用户 ContractData），不是分配器。
+XRPL 要对齐 NEAR 集合，缺的不是分配器。变种见 §1.1b。
 
 Lean 合约也不走 Rust `#[global_allocator]`：本仓发射 WAT 直接写死偏移，不链 wee_alloc。
+
+### 1.1b XRPL 缺的 KV 能不能实现、变种是什么
+
+**不能**在 wasm 里实现一个和 NEAR `storage_write` 同构的任意 key trie。
+那是 runtime 给的账本能力。XRPL host 没有「任意字节 key → 任意字节 value」这条 syscall。
+
+XLS-0101 **设计里**的持久模型是另一套，而且是一等的：
+
+| 规范（XLS-0101） | 含义 | 像 NEAR 的哪一层 |
+|---|---|---|
+| 合约自己的 `ContractData` | 一块 STData/JSON，合约控制 | 顶层 `STATE`，不是 LookupMap |
+| **每用户一块** `ContractData` | ID = hash(`Owner` [+ `ContractAccount`])；`setUserData(this, account, {balance})` | **按账户分片的 map**，key 是 AccountID，不是任意字符串 |
+| `ContractUserDelete` | 用户删自己那块并跑 `user_delete` | 用户付 reserve、可自删 |
+| `contract_info(user_account)` | RPC 读某用户那块 | view |
+
+这是变种，不是 trie：key 空间是 **账户**，value 是那张 JSON 卡片。Uniswap 式 `mapping(address => uint)` 在规范里走这条，不走 keccak，也不走 `wee_alloc`。
+
+**AlphaNet 今天（本仓探针）卡在实现，不卡在规范：**
+
+| 操作 | 结果 |
+|---|---|
+| 写 caller 自己的卡片 | 绿（`bal=1`） |
+| 写合约账户当 Owner | **-22** |
+| 一次 `ContractCall` 里给 **别人** 写卡片 | 未证。规范例子是 `setUserData(this, destination, …)`；host 要接受非 caller 的 Owner |
+
+所以间接对齐 NEAR 集合的路是：
+
+1. **单用户卡片**（现在就能做）：caller 的 `"bal"`。不是 Map，是「自己的 STATE」。
+2. **规范变种：user ContractData**（要对齐 NEAR `LookupMap<AccountId,_>`）：探针「合约代码给任意 AccountID 写一块」。绿了再开 Runtime 叶，SDK 才叫 `UserData.bal`，不叫 `Sdk.Map`。
+3. **编译期 JSON 槽表**（VEC-1 已绿）：`xs_0`… 挂在 **同一张** caller 卡片上。小登记表，不是无界 map。
+4. **nested object field**（wsm-024，未探针）：一张卡片里嵌一层对象。仍不是任意 key。
+5. **不要**：wasm 堆当 map、把 AccountId 三叶拼进动态 key 字符串、抄 NEAR `storage_write` 签名到 `host_lib`。
+
+第 2 条绿之前，不要承诺「能做 NEAR 那种 Map」。能承诺的是：规范有按用户分片；实现要 host 允许非 caller Owner。
 
 ### 1.2 钱和别人怎么动
 
