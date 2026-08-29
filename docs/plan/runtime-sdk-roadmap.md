@@ -359,7 +359,10 @@ OOB、handle mismatch 和 OOM 都是独立 terminal error；MemoryOps 与 Accoun
 验证 dynamic value/index 和真实 heap failure。它没有扩 top-level Ops/IR/main Emit，也没有让
 pointer 进入 source/account state；详见 [R3-012](tasks/r3-012.md)。R3 尚未完成；多个并存
 transient handle、通用 element/byte writer 操作、rent-aware resize、runtime-selected ATA/Memo
-geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
+geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。R3-014 又以纯 `pf_inline`
+`Svm.Sdk.Sysvar` facade 收口已有 Clock、EpochSchedule 和 compile-time Rent Runtime leaves；
+Clock/Epoch/Rent 的 IR digest 与 target syscall 路径不变，没有形成第二套 syscall backend，
+详见 [R3-014](tasks/r3-014.md)。
 
 ### R4 — EVM Runtime
 

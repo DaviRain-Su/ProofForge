@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Epoch
 
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 structure State where
   dummy : UInt64
@@ -19,13 +19,14 @@ def init (_seed : UInt64) : State :=
 /-- view：当前 `EpochSchedule.slots_per_epoch`。 -/
 @[pf_entry]
 def span (_s : State) : UInt64 :=
-  slotsPerEpoch
+  Sysvar.EpochSchedule.slotsPerEpoch
 
 /-- 把 slots_per_epoch 写进状态。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := slotsPerEpoch }, slotsPerEpoch)
+    .ok ({ dummy := Sysvar.EpochSchedule.slotsPerEpoch },
+      Sysvar.EpochSchedule.slotsPerEpoch)
   else
     .error .overflow
 

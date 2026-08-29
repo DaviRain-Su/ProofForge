@@ -8,6 +8,7 @@ import ProofForge.Svm.Sdk.System
 import ProofForge.Svm.Sdk.Token
 import ProofForge.Svm.Sdk.AssociatedToken
 import ProofForge.Svm.Sdk.Memo
+import ProofForge.Svm.Sdk.Sysvar
 import ProofForge.Svm.Sdk.Transient
 import ProofForge.Svm.Sdk.TransientVec
 import ProofForge.Svm.Sdk.Memory
@@ -36,4 +37,7 @@ canonical program-id, owner, and base-state validation. `Sdk.Pda`, `Sdk.System`,
 `Sdk.AssociatedToken`, and `Sdk.Memo` provide compiler-erased names for current static program
 effects. Applications no longer repeat key limbs, CPI tags, account metas, signer seeds, or
 instruction-word recipes; the existing Runtime/IR verifier still owns their target validation.
+
+`Sdk.Sysvar` similarly gives contracts stable Clock, EpochSchedule, and compile-time Rent names
+without exposing raw Runtime stubs or introducing a second syscall implementation.
 -/

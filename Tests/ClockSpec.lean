@@ -3,13 +3,13 @@ import Examples.Clock
 namespace Tests.ClockSpec
 
 open Examples.Clock
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 #guard (init 0).stamped == 0
 #guard get (init 0) == 0
-#guard height (init 0) == clockSlot
-#guard era (init 0) == clockEpoch
-#guard key0 (init 0) == signerKey0
+#guard height (init 0) == Sysvar.Clock.slot
+#guard era (init 0) == Sysvar.Clock.epoch
+#guard key0 (init 0) == ProofForge.Svm.Runtime.signerKey0
 
 #guard
   match ProofForge.Svm.ABI.fieldOffset ProofForge.Golden.extractedClock "stamped" with

@@ -2,7 +2,7 @@ import ProofForge
 
 namespace Examples.Rent
 
-open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 structure State where
   dummy : UInt64
@@ -19,13 +19,13 @@ def init (_seed : UInt64) : State :=
 /-- 16 字节账户的 rent-exempt 下限。 -/
 @[pf_entry]
 def exempt (_s : State) : UInt64 :=
-  rentExemption 16
+  Sysvar.Rent.minimumBalance 16
 
 /-- 把 exemption 写进状态。`0 ≠ 1` 给无参 mutate 一条比较守卫。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := rentExemption 16 }, rentExemption 16)
+    .ok ({ dummy := Sysvar.Rent.minimumBalance 16 }, Sysvar.Rent.minimumBalance 16)
   else
     .error .overflow
 
