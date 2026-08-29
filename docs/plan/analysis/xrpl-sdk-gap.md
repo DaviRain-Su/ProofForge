@@ -14,9 +14,10 @@
 | | 是什么 | 本仓 |
 |---|---|---|
 | XRPL 主网今天 | 没有 `ContractCreate` | `deployable=false` |
-| [AlphaNet](https://alphanet.xrpl.org) | 公开开发网，network_id **21337**，`SmartContract` 已开 | `--target xrpl-alphanet`（XLS-0102 host 名）。nerdnest 21465 DNS 已挂 |
+| [AlphaNet](https://alphanet.xrpl.org) | 公开开发网，network_id **21337**，`SmartContract` 已开 | `--target xrpl-alphanet` + `runtime-tests/xrpl/smoke.sh` |
 | WASM Devnet | Smart Escrow 测试网 | **不是** 本 target（escrow `finish()`，不是 Contract SLE） |
-| Bedrock 本地镜像 | 主账本形状的 rippled + wasm | **工程门** |
+| Bedrock 本地镜像 `lejamon/rippled_smart_contract_vault_x86` | 另一套 host 名（`get_current_ledger_obj_field` / view `i64`） | **只当 Bedrock 门**；**不能**模拟 AlphaNet |
+| 本地 AlphaNet 模拟 | 应对齐 `alphanet` 分支 rippled（XLS-0102） | 还没有；不要用现成 Bedrock 镜像顶替 |
 | [XRPL EVM Sidechain](https://www.xrplevm.org/) | Cosmos + EVM，XRP 当 gas | **不是** 本 target |
 | Xahau / Hooks | 另一条链 / 账户钩子 | **不是** 本 target |
 

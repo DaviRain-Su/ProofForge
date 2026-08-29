@@ -73,6 +73,10 @@ structure Contract where
   viewResultI32 : Bool := false
   /-- AlphaNet `ldgr_index(ptr, len) -> i32` writes a little-endian u32. Bedrock is `() -> i32`. -/
   ledgerSqnBuffer : Bool := false
+  /-- When true, the storage-owner AccountID is `tx_field(sfieldTxAccount)` rather
+  than `home_le_field(sfieldAccount)`. AlphaNet `home_le_field(sfOwner)` returns
+  LedgerObjNotFound (-10). -/
+  ownerFromTx : Bool := false
   deriving Inhabited
 
 /-- Object-field storage (XRPL ContractData) rather than a packed Data blob. -/

@@ -1,6 +1,7 @@
 import ProofForge.Wasm.Emit
 import ProofForge.Wasm.Xrpl.IR
 import ProofForge.Wasm.Xrpl.Host
+import ProofForge.Wasm.Xrpl.Ops
 
 /-!
 # XRPL target emitter
@@ -19,42 +20,87 @@ private def indent (n : Nat) (s : String) : String :=
 /-- Scratch after account (0..19) and param (20..27) and store (28..36). -/
 private def envOff : Nat := 40
 
-/-- Load caller 20B, self 20B, ledger sqn, parent time into `$pf_x_*`. -/
-def loadEnv (host : Contract) (level : Nat) (view : Bool) : Array String :=
+private def usesKind (ops : Array Ops.Op) (want : Ops.ValKind) : Bool :=
+  let rec val (fuel : Nat) (v : Ops.Val) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      match v with
+      | .ext k _ => k == want
+      | .field base _ => val fuel' base
+      | .select _ a b c d => val fuel' a || val fuel' b || val fuel' c || val fuel' d
+      | .addU64 a b | .subU64 a b | .mulU64 a b | .divU64 a b | .modU64 a b
+      | .bitAnd a b | .bitOr a b | .bitXor a b | .shiftL a b | .shiftR a b =>
+          val fuel' a || val fuel' b
+      | .bitNot a => val fuel' a
+      | .indexGet base _ idx _ _ => val fuel' base || val fuel' idx
+      | _ => false
+  let rec op (fuel : Nat) (x : Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      match x with
+      | .checkedAddU64 a b | .checkedSubU64 a b | .checkedMulU64 a b
+      | .checkedDivU64 a b | .checkedModU64 a b => val 32 a || val 32 b
+      | .ite _ a b thn els =>
+          val 32 a || val 32 b || thn.any (op fuel') || els.any (op fuel')
+      | .storeField _ v | .okState v | .returnState v | .returnU64 v => val 32 v
+      | _ => false
+  ops.any (op 32)
+
+/-- Load only the env leaves this method actually reads. Unused AlphaNet
+`home_le_field(sfContractAccount)` returns -10 LedgerObjNotFound. -/
+def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) : Array String :=
   if host.getTxField.isEmpty then #[]
   else
+    let needCaller :=
+      usesKind method.ops .callerW0 || usesKind method.ops .callerW1 || usesKind method.ops .callerW2
+    let needSelf :=
+      usesKind method.ops .selfW0 || usesKind method.ops .selfW1 || usesKind method.ops .selfW2
+    let needSqn := usesKind method.ops .ledgerSqn
+    let needTime := usesKind method.ops .parentTime
+    let needHash := usesKind method.ops .parentHashW0
+    let needFee := usesKind method.ops .baseFee
+    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee) then #[]
+    else
     let err :=
       if view then #[]
       else #[
         indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
         indent (level + 2) "(then (return (local.get $st))))"
       ]
-    let caller := #[
-      indent level ("(local.set $st (call $" ++ host.getTxField ++
-        " (i32.const " ++ toString host.sfieldTxAccount ++
-        ") (i32.const " ++ toString envOff ++ ") (i32.const 20)))")
-    ] ++ err ++ #[
-      indent level ("(local.set $pf_x_xc0 (i64.load (i32.const " ++
-        toString envOff ++ ")))"),
-      indent level ("(local.set $pf_x_xc1 (i64.load (i32.const " ++
-        toString (envOff + 8) ++ ")))"),
-      indent level ("(local.set $pf_x_xc2 (i64.extend_i32_u (i32.load (i32.const " ++
-        toString (envOff + 16) ++ "))))")
-    ]
-    let self := #[
-      indent level ("(local.set $st (call $" ++ host.homeLeField ++
-        " (i32.const " ++ toString host.sfieldContractAccount ++
-        ") (i32.const " ++ toString envOff ++ ") (i32.const 20)))")
-    ] ++ err ++ #[
-      indent level ("(local.set $pf_x_xs0 (i64.load (i32.const " ++
-        toString envOff ++ ")))"),
-      indent level ("(local.set $pf_x_xs1 (i64.load (i32.const " ++
-        toString (envOff + 8) ++ ")))"),
-      indent level ("(local.set $pf_x_xs2 (i64.extend_i32_u (i32.load (i32.const " ++
-        toString (envOff + 16) ++ "))))")
-    ]
+    let caller :=
+      if !needCaller then #[]
+      else
+        #[
+          indent level ("(local.set $st (call $" ++ host.getTxField ++
+            " (i32.const " ++ toString host.sfieldTxAccount ++
+            ") (i32.const " ++ toString envOff ++ ") (i32.const 20)))")
+        ] ++ err ++ #[
+          indent level ("(local.set $pf_x_xc0 (i64.load (i32.const " ++
+            toString envOff ++ ")))"),
+          indent level ("(local.set $pf_x_xc1 (i64.load (i32.const " ++
+            toString (envOff + 8) ++ ")))"),
+          indent level ("(local.set $pf_x_xc2 (i64.extend_i32_u (i32.load (i32.const " ++
+            toString (envOff + 16) ++ "))))")
+        ]
+    let self :=
+      if !needSelf then #[]
+      else
+        #[
+          indent level ("(local.set $st (call $" ++ host.homeLeField ++
+            " (i32.const " ++ toString host.sfieldContractAccount ++
+            ") (i32.const " ++ toString envOff ++ ") (i32.const 20)))")
+        ] ++ err ++ #[
+          indent level ("(local.set $pf_x_xs0 (i64.load (i32.const " ++
+            toString envOff ++ ")))"),
+          indent level ("(local.set $pf_x_xs1 (i64.load (i32.const " ++
+            toString (envOff + 8) ++ ")))"),
+          indent level ("(local.set $pf_x_xs2 (i64.extend_i32_u (i32.load (i32.const " ++
+            toString (envOff + 16) ++ "))))")
+        ]
     let sqn :=
-      if host.getLedgerSqn.isEmpty then #[]
+      if !needSqn || host.getLedgerSqn.isEmpty then #[]
       else if host.ledgerSqnBuffer then
         #[
           indent level ("(local.set $st (call $" ++ host.getLedgerSqn ++
@@ -68,7 +114,7 @@ def loadEnv (host : Contract) (level : Nat) (view : Bool) : Array String :=
           indent level "(local.set $pf_x_xsqn (i64.extend_i32_u (local.get $st)))"
         ]
     let time :=
-      if host.getParentTime.isEmpty then #[]
+      if !needTime || host.getParentTime.isEmpty then #[]
       else if host.ledgerSqnBuffer then
         #[
           indent level ("(local.set $st (call $" ++ host.getParentTime ++
@@ -82,7 +128,7 @@ def loadEnv (host : Contract) (level : Nat) (view : Bool) : Array String :=
           indent level "(local.set $pf_x_xtime (i64.extend_i32_u (local.get $st)))"
         ]
     let hash :=
-      if host.getParentHash.isEmpty then #[]
+      if !needHash || host.getParentHash.isEmpty then #[]
       else #[
         indent level ("(local.set $st (call $" ++ host.getParentHash ++
           " (i32.const 160) (i32.const 32)))")
@@ -90,7 +136,7 @@ def loadEnv (host : Contract) (level : Nat) (view : Bool) : Array String :=
         indent level "(local.set $pf_x_xhash0 (i64.load (i32.const 160)))"
       ]
     let fee :=
-      if host.getBaseFee.isEmpty then #[]
+      if !needFee || host.getBaseFee.isEmpty then #[]
       else if host.ledgerSqnBuffer then
         #[
           indent level ("(local.set $st (call $" ++ host.getBaseFee ++

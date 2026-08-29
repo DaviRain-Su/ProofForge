@@ -66,7 +66,7 @@ if rg -q 'import "host_lib" "get_current_ledger_obj_field"' "$root/build/xrpl-al
   exit 1
 fi
 
-echo "xrpl-alphanet: artifact ok ($wasm). Live ContractCreate needs a funded wallet"
-echo "  and a submit-capable RPC (this public node often returns noCurrent)."
-echo "xrpl-alphanet: skip live submit (engineering artifact gate only)"
+echo "xrpl-alphanet: artifact ok ($wasm)."
+echo "  Live zero-arg deploy/call is runtime-tests/xrpl/smoke.sh (XrplSmoke)."
+echo "  Counter still needs Parameters; public RPC 502s those ContractCalls."
 exit 0

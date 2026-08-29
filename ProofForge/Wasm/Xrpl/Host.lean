@@ -81,7 +81,7 @@ def alphanet : Contract where
   sfieldData := 458779
   functionParam := "function_param"
   stiUint64 := 3
-  missingFields := #[-1, -2, -17]
+  missingFields := #[-1, -2, -10, -17]
   getDataObject := "get_data_object_field"
   setDataObject := "set_data_object_field"
   sfieldAccount := 524290
@@ -95,5 +95,6 @@ def alphanet : Contract where
   getBaseFee := ""
   viewResultI32 := true
   ledgerSqnBuffer := true
+  ownerFromTx := true
 
 end ProofForge.Wasm.Xrpl.Host
