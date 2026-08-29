@@ -17,7 +17,7 @@
 | [Assemble](assemble.md) | `Svm.Assemble`：`sbpf` 子进程 → `.so` + IDL |
 | [Idl](idl.md) | `Svm.Idl`：Solana IDL spec 0.1.0 |
 | [Cli](cli.md) | `pf build --target svm|evm` |
-| [Runtime](runtime.md) | `Svm.Runtime` / `Evm.Runtime` 宿主 stub；抽出按名认 |
+| [Runtime](runtime.md) | `Svm.Runtime` / `Evm.Runtime` / 规划中的 `Xrpl.Runtime` 宿主 stub；抽出按名认 |
 | [Evm](evm.md) | `Evm.Sdk` 合同 facade + Ops → Yul / ABI / locked solc |
 | [Wasm](wasm.md) | WASM 链家族：Lean → `.wasm`；链拥有 host import 表与存储布局 |
 | [Xrpl](xrpl.md) | `Wasm/Xrpl`：XRPL Bedrock；host import `host_lib` + 存储布局 |
