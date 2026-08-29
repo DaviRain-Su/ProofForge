@@ -98,6 +98,20 @@ storage_anchors = (
     '(func (export "remove")',
     '(func (export "has")',
 )
+vector_anchors = (
+    '(func (export "push")',
+    '(func (export "setFirst")',
+    '(func (export "pop")',
+    '(func (export "getAt")',
+    '(local $pf_v0 i64)',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+    '(call $pf_storage_read',
+    'i64.and',
+    'i64.shr_u',
+    'i64.shl',
+    'i64.or',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -115,6 +129,8 @@ for wat in wats:
         extra = output_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
+    elif wat.stem == "NearVector":
+        extra = vector_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

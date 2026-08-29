@@ -236,6 +236,9 @@ jobs:
       - name: Run NEAR sandbox raw storage gate
         run: runtime-tests/near/storage.sh
 
+      - name: Run NEAR sandbox direct Vector gate
+        run: runtime-tests/near/vector.sh
+
   # Preserve the original required-check identity while making proof/guard and target failures
   # independently observable. This job fails unless every lane completes, including after an error.
   test:

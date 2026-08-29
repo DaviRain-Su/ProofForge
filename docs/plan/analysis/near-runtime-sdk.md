@@ -53,7 +53,7 @@ Authoritative source anchors:
 | arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
 | Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | independent field keys | Near SDK policy; migration/version explicit |
-| `store::Vector` | SDK over KV, prefix + `u32_le` index | fixed source vectors rejected by wasm dynamic ops | Near storage binding after bytes/Borsh |
+| `store::Vector` | SDK over KV, prefix + `u32_le` index | **bounded direct UInt64 element layout foundation complete** in wsm-near-vector-001; full metadata/cache/generic API absent | Near storage binding after bytes/Borsh |
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | absent | Near storage binding; no host Map opcode |
 | IterableMap/TreeMap | SDK composition | absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | absent | explicit bounded Vector/LookupMap + head/length policy |
@@ -140,7 +140,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
 | N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
-| N5 collections | current-layout Vector → LookupMap/Set → IterableMap/Set → bounded Queue; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
+| N5 collections | **DirectVector64 element-layout foundation done in wsm-near-vector-001** → LookupMap/Set → IterableMap/Set → bounded Queue; full `store::Vector` metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
 | N7 promises | create/then/and, batch function-call/transfer actions, explicit return | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | bounded result count/status/read, typed Result decode, private self callback | success/failure/oversized result and rollback scenes |
@@ -159,8 +159,10 @@ It depends on full AccountId and u128 and is asynchronous.
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 5. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
-6. **NEAR-STORE-VECTOR (next):** current near-sdk-rs-compatible durable KV layout and explicit flush;
-   use the arena only for local codec/cache data, then add LookupMap/Set and a bounded Queue.
+6. **NEAR-STORE-VECTOR (wsm-near-vector-001 done):** bounded direct-write UInt64 elements use exact current
+   near-sdk-rs bare-prefix keys and Borsh values. Immediate persistence is explicit; full Rust
+   metadata/cache/Drop semantics wait for the `STATE` lifecycle instead of being simulated.
+   LookupMap/Set and a bounded Queue follow on the same raw-storage/arena substrate.
 7. **NEAR-PROMISE-1:** closed static receiver/method function call with explicit gas/deposit;
    callback/results follow in a separate slice.
 

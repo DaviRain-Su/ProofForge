@@ -46,6 +46,8 @@ private def localOfSlot (name : String) : String := "$" ++ name
 
 private def localOfTemp (i : Nat) : String := "$pf_r" ++ toString i
 
+private def localOfSource (i : Nat) : String := "$pf_v" ++ toString i
+
 /-- Packed ASCII keys start at this linear-memory offset. -/
 private def keyBase : Nat := 1024
 
@@ -177,6 +179,29 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
       let l ← renderVal st lhs
       let r ← renderVal st rhs
       return ("(i64.mul " ++ l ++ " " ++ r ++ ")")
+  | .bitAnd lhs rhs => do
+      let l ← renderVal st lhs
+      let r ← renderVal st rhs
+      return ("(i64.and " ++ l ++ " " ++ r ++ ")")
+  | .bitOr lhs rhs => do
+      let l ← renderVal st lhs
+      let r ← renderVal st rhs
+      return ("(i64.or " ++ l ++ " " ++ r ++ ")")
+  | .bitXor lhs rhs => do
+      let l ← renderVal st lhs
+      let r ← renderVal st rhs
+      return ("(i64.xor " ++ l ++ " " ++ r ++ ")")
+  | .bitNot value => do
+      let rendered ← renderVal st value
+      return ("(i64.xor " ++ rendered ++ " (i64.const -1))")
+  | .shiftL lhs rhs => do
+      let l ← renderVal st lhs
+      let r ← renderVal st rhs
+      return ("(i64.shl " ++ l ++ " " ++ r ++ ")")
+  | .shiftR lhs rhs => do
+      let l ← renderVal st lhs
+      let r ← renderVal st rhs
+      return ("(i64.shr_u " ++ l ++ " " ++ r ++ ")")
   | .ext .blockIndex #[] => .ok "(call $pf_block_index)"
   | .ext .blockTimestamp #[] =>
       .ok "(i64.div_u (call $pf_block_timestamp) (i64.const 1000000000))"
@@ -216,7 +241,7 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext (.storageResultByte capacity) #[index] => do
       let i ← renderVal st index
       return "(call $pf_storage_result_byte (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
-  | .local index => .error s!"extract/unsupported: near v0 value local {index}"
+  | .local index => .ok ("(local.get " ++ localOfSource index ++ ")")
   | .ext kind operands =>
       .error s!"extract/unsupported: near v0 value extension {repr kind}/{operands.size}"
   | _ => .error "extract/unsupported: near v0 value"
@@ -492,6 +517,23 @@ private partial def emitRegion (p : Program ValKind OpExt)
         throw "extract/unsupported: near v0 mutating region must end in a state or error exit"
   | op :: tail =>
     match op with
+    | .letLocal index value | .setLocal index value =>
+        let rendered ← renderVal st value
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { st with last := some (localOfSource index) }
+        return {
+          lines := #[indent level ("(local.set " ++ localOfSource index ++ " " ++
+            rendered ++ ")")] ++ region.lines
+          st := region.st
+          terminal := region.terminal }
+    | .joinLocal index =>
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { st with last := none }
+        return {
+          lines := #[indent level ("(local.set " ++ localOfSource index ++
+            " (i64.const 0))")] ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
     | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
         if view then throw "extract/unsupported: near v0 view cannot fail"
@@ -650,6 +692,7 @@ private partial def countTemps (ops : Array (Op ValKind OpExt)) : Nat :=
   walk ops.toList
 
 private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
+  | .letLocal _ value | .setLocal _ value => valHas value
   | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
   | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
       valHas lhs || valHas rhs
@@ -674,6 +717,16 @@ where
     | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
         valHas l || valHas r
     | _ => false
+
+private partial def sourceLocalCount (ops : Array (Op ValKind OpExt)) : Nat :=
+  ops.foldl (init := 0) fun count op =>
+    match op with
+    | .letLocal index _ | .joinLocal index | .setLocal index _ =>
+        Nat.max count (index + 1)
+    | .ite _ _ _ thn els =>
+        Nat.max count (Nat.max (sourceLocalCount thn) (sourceLocalCount els))
+    | .forBody _ body => Nat.max count (sourceLocalCount body)
+    | _ => count
 
 private def methodUses (kind : ValKind) (method : Method ValKind OpExt) : Bool :=
   method.ops.any (usesKind kind)
@@ -950,6 +1003,8 @@ private def renderFn (p : Program ValKind OpExt)
       lines := lines.push ("    (local " ++ currentAccountWordLocal i ++ " i64)")
   for slot in p.slots do
     lines := lines.push ("    (local " ++ localOfSlot slot.name ++ " i64)")
+  for i in List.range (sourceLocalCount method.ops) do
+    lines := lines.push ("    (local " ++ localOfSource i ++ " i64)")
   for i in List.range (Nat.max (countTemps method.ops) region.st.fresh) do
     lines := lines.push ("    (local " ++ localOfTemp i ++ " i64)")
   if methodUsesArena method then

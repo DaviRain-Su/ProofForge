@@ -7187,11 +7187,15 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       -- materialize them before a later account write, component call, or CPI consumes them.
       -- Substituting here would embed the read into the effect operand and could re-read mutated
       -- storage; it also prevents reusable storage-query facades from composing with components.
+      -- NEAR effects need the same treatment: zeta-reducing an ignored raw-storage result here
+      -- would silently erase the host mutation before the arm is decoded.
       let t :=
-        if containsStructuredStateLet env 64 t || mentionsSvmEffect env 64 t then t
+        if containsStructuredStateLet env 64 t || mentionsSvmEffect env 64 t ||
+            mentionsNearEffect env 64 t then t
         else substIteLets 64 t
       let f :=
-        if containsStructuredStateLet env 64 f || mentionsSvmEffect env 64 f then f
+        if containsStructuredStateLet env 64 f || mentionsSvmEffect env 64 f ||
+            mentionsNearEffect env 64 f then f
         else substIteLets 64 f
       let checkedSubMatches (candidate : Expr) : Bool :=
         match asCheckedSubGuard env candidate with
@@ -7265,6 +7269,24 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             -- recursively decoded sequence over `asStoreFields`, which only sees the final state
             -- value and would otherwise erase ignored writes preceding `.ok`.
             if hasAccDataWrite 8 thn then
+              match asCmp env condE with
+              | some (cmp, lv, rv) =>
+                  return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+              | none => pure ()
+            let rec hasNearEffect (fuel : Nat) (ops : Array Ops.Op) : Bool :=
+              match fuel with
+              | 0 => false
+              | fuel' + 1 => ops.any fun op =>
+                  match op with
+                  | .ext (.near _) => true
+                  | .ite _ _ _ nestedThen nestedElse =>
+                      hasNearEffect fuel' nestedThen || hasNearEffect fuel' nestedElse
+                  | .forBody _ body => hasNearEffect fuel' body
+                  | _ => false
+            -- A state-producing arm may also contain an ignored NEAR storage/log/memory result.
+            -- Prefer the recursively decoded sequence over `asStoreFields`; the latter sees only
+            -- the final state constructor and would silently discard the preceding host effect.
+            if hasNearEffect 8 thn then
               match asCmp env condE with
               | some (cmp, lv, rv) =>
                   return .ok #[.ite cmp lv rv thn #[.errorOverflow]]

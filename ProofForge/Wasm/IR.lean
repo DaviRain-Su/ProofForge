@@ -262,8 +262,12 @@ private def lowerOps {ValExt : Type} {OpExt : Type → Type}
 two's-complement `i64.add/sub/mul`; unchecked `/ %` is rejected because divide-by-zero
 traps outside the checked path. -/
 partial def valAllowed {ValExt : Type} : Val ValExt → Bool
-  | .arg _ | .lit _ => true
+  | .arg _ | .local _ | .lit _ => true
   | .field (.arg _) _ => true
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs =>
+      valAllowed lhs && valAllowed rhs
+  | .bitNot value => valAllowed value
   | .select _ lhs rhs thn els =>
       valAllowed lhs && valAllowed rhs && valAllowed thn && valAllowed els
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs =>
@@ -275,6 +279,8 @@ partial def valAllowed {ValExt : Type} : Val ValExt → Bool
 
 /-- Ops the v0 WAT renderer can express. -/
 partial def opAllowed {ValExt : Type} {OpExt : Type → Type} : Op ValExt OpExt → Bool
+  | .letLocal _ value | .setLocal _ value => valAllowed value
+  | .joinLocal _ => true
   | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
   | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
       valAllowed lhs && valAllowed rhs

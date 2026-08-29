@@ -17,7 +17,9 @@ String strict UTF-8）。wsm-near-output-001 使用 guest arena 为 bounded byte
 limb unsigned array view 输出同样的 canonical active prefix；scalar view 仍恰好返回
 8-byte little-endian。wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
-no-copy 语义。
+no-copy 语义。wsm-near-vector-001 在其上加入
+`DirectVector64`：四字节 compile-time prefix、`prefix || u32_le(index)` key 与 standalone
+Borsh UInt64 value；它 immediate-write，逻辑 length 仍由普通 ProofForge state 持有。
 
 ## Boundary
 
@@ -29,6 +31,7 @@ no-copy 语义。
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
 | `Near.Sdk.Storage` | bounded raw key/value、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
+| `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
@@ -51,7 +54,9 @@ no-copy 语义。
   可把 initial memory 规范化得更大，实际 grow 路径由 model + WAT gate 钉住）。不是
   「artifact 已被证明」；`output.sh` 验证 exact bytes/String/UInt16-array Borsh、input/output
   round-trip、capacity 和 output UTF-8 failures；`storage.sh` 验证 binary/empty keys、
-  insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has。
+  insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has；
+  `vector.sh` 验证 exact current element keys/Borsh values、get/set/push/pop、capacity rollback
+  与大 index 在 narrowing 前被拒绝。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
-`NearOutput`、`NearStorage`。
+`NearOutput`、`NearStorage`、`NearVector`。
