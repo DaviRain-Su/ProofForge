@@ -44,6 +44,7 @@ import Examples.TokenMs
 import Examples.TokenStateView
 import Examples.SelfLog
 import Examples.EvmCtx
+import Examples.XrplCtx
 import Examples.EvmBounded
 import Examples.EvmSearch
 import Examples.EvmFindIndex

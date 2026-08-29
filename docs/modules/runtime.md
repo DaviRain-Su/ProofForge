@@ -10,7 +10,7 @@
 |---|---|
 | `ProofForge.Svm.Runtime` | sysvar、AccountInfo、CPI、PDA、hash syscall |
 | `ProofForge.Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 |
-| `ProofForge.Wasm.Xrpl.Runtime` | XRPL `host_lib` 环境叶（caller/self/ledger）；[wsm-005](../plan/tasks/wsm-005.md) 规划中，尚未落地 |
+| `ProofForge.Wasm.Xrpl.Runtime` | XRPL `host_lib` 环境叶：`xrplCaller20` / `xrplSelf20` / `xrplLedgerSqn` / `xrplParentTime` |
 
 根层不再提供混合 façade。合约必须按 target 明确 `open ProofForge.Svm.Runtime`、
 `open ProofForge.Evm.Runtime` 或 `open ProofForge.Wasm.Xrpl.Runtime`，抽出器也只

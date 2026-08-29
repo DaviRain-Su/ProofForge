@@ -33,11 +33,15 @@ are rejected through the family-level convention with the chain name as prefix. 
 def mkRegistration {ValExt : Type} {OpExt : Type → Type}
     (chain : String) (valArity : ValExt → Nat)
     (cfgDialect : Core.CFG.Dialect ValExt OpExt)
-    (opWellFormed : Op ValExt OpExt → Bool) :
+    (opWellFormed : Op ValExt OpExt → Bool)
+    (projectValExt : Extract.IR.ValKind → Except String ValExt := Family.rejectValKind chain)
+    (projectOpExt : (Extract.IR.Val → Except String (Val ValExt)) →
+      Extract.IR.OpExt Extract.IR.Val → Except String (OpExt (Val ValExt)) :=
+        fun _ payload => Family.rejectOpExt chain payload) :
     Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt ValExt OpExt where
   name := chain.toUpper
-  projectValExt := Family.rejectValKind chain
-  projectOpExt := fun _ payload => Family.rejectOpExt chain payload
+  projectValExt := projectValExt
+  projectOpExt := projectOpExt
   projectionError := fun method reason =>
     if reason.startsWith s!"extract/unsupported: {chain} rejects" then
       s!"{reason} in {method}"
@@ -83,6 +87,7 @@ partial def valAllowed {ValExt : Type} : Val ValExt → Bool
       valAllowed lhs && valAllowed rhs && valAllowed thn && valAllowed els
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs =>
       valAllowed lhs && valAllowed rhs
+  | .ext _ operands => operands.isEmpty
   | _ => false
 
 /-- Ops the v0 WAT renderer can express. -/

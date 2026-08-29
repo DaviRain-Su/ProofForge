@@ -5,6 +5,7 @@ import ProofForge.Wasm.Xrpl.Commands
 import Examples.Counter
 import Examples.Clock
 import Examples.EvmCtx
+import Examples.XrplCtx
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -21,7 +22,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Ops.ValKind.arity .reserved == 0
 
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "Counter" == some "e029f72296e320be"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCtx" == some "f483be9d20810b57"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -38,6 +40,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 
 #pf_xrpl_build Examples.Counter
 
+#pf_xrpl_build Examples.XrplCtx
+
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
   let env ← getEnv
@@ -52,6 +56,9 @@ elab "#pf_xrpl_emit_check " n:ident : command => do
           "(import \"host_lib\" \"get_data_object_field\"",
           "(import \"host_lib\" \"set_data_object_field\"",
           "(import \"host_lib\" \"function_param\"",
+          "(import \"host_lib\" \"get_tx_field\"",
+          "(import \"host_lib\" \"get_ledger_sqn\"",
+          "(import \"host_lib\" \"get_parent_ledger_time\"",
           "(func (export \"initialize\") (result i32)",
           "(func (export \"increment\") (result i32)",
           "(func (export \"get\")",

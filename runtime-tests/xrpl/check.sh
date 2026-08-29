@@ -25,17 +25,29 @@ need_imports = (
     '(import "host_lib" "get_data_object_field"',
     '(import "host_lib" "set_data_object_field"',
     '(import "host_lib" "function_param"',
+    '(import "host_lib" "get_tx_field"',
+    '(import "host_lib" "get_ledger_sqn"',
+    '(import "host_lib" "get_parent_ledger_time"',
 )
-need_exports = (
+need_exports_counter = (
     '(func (export "initialize") (result i32)',
     '(func (export "increment") (result i32)',
     '(func (export "get")',
+)
+need_exports_ctx = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "stamp") (result i32)',
+    '(func (export "height")',
 )
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"')
 
 for wat in wats:
     text = wat.read_text(encoding="utf-8")
-    for needle in need_imports + need_exports:
+    for needle in need_imports:
+        if needle not in text:
+            sys.exit(f"xrpl check: {wat.name} missing {needle!r}")
+    exports = need_exports_ctx if wat.stem == "XrplCtx" else need_exports_counter
+    for needle in exports:
         if needle not in text:
             sys.exit(f"xrpl check: {wat.name} missing {needle!r}")
     for needle in forbid:

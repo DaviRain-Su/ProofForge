@@ -16,6 +16,9 @@ private def svmLeaf (kind : Svm.Ops.ValKind) : Val :=
 private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.evm kind) #[]
 
+private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
+  .ext (.xrpl kind) #[]
+
 @[match_pattern] def Val.clockSlot : Val := svmLeaf .clockSlot
 @[match_pattern] def Val.clockEpoch : Val := svmLeaf .clockEpoch
 @[match_pattern] def Val.unixTime : Val := svmLeaf .unixTime
@@ -116,6 +119,14 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.evmCallerW0 : Val := evmLeaf .callerW0
 @[match_pattern] def Val.evmCallerW1 : Val := evmLeaf .callerW1
 @[match_pattern] def Val.evmCallerW2 : Val := evmLeaf .callerW2
+@[match_pattern] def Val.xrplCallerW0 : Val := xrplLeaf .callerW0
+@[match_pattern] def Val.xrplCallerW1 : Val := xrplLeaf .callerW1
+@[match_pattern] def Val.xrplCallerW2 : Val := xrplLeaf .callerW2
+@[match_pattern] def Val.xrplSelfW0 : Val := xrplLeaf .selfW0
+@[match_pattern] def Val.xrplSelfW1 : Val := xrplLeaf .selfW1
+@[match_pattern] def Val.xrplSelfW2 : Val := xrplLeaf .selfW2
+@[match_pattern] def Val.xrplLedgerSqn : Val := xrplLeaf .ledgerSqn
+@[match_pattern] def Val.xrplParentTime : Val := xrplLeaf .parentTime
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2
@@ -323,6 +334,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .ext (.svm (.component call)) => call.anyValue predicate
+  | .ext (.xrpl _) => false
   | .evmComponent call => call.anyValue predicate
   | .errorTyped frame => frame.values.any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
@@ -348,6 +360,21 @@ private partial def isEvmContext : Val → Bool
 
 def hasEvmLeaf (ops : Array Op) : Bool :=
   walk ops (opValuesAny isEvmContext)
+
+private partial def isXrplLeaf : Val → Bool
+  | .ext (.xrpl _) _ => true
+  | .field base _ | .bitNot base => isXrplLeaf base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+  | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+      isXrplLeaf lhs || isXrplLeaf rhs
+  | .select _ lhs rhs thn els =>
+      isXrplLeaf lhs || isXrplLeaf rhs || isXrplLeaf thn || isXrplLeaf els
+  | .ext _ operands => operands.any isXrplLeaf
+  | _ => false
+
+def hasXrplLeaf (ops : Array Op) : Bool :=
+  walk ops (opValuesAny isXrplLeaf)
 
 def hasLangOp (ops : Array Op) : Bool :=
   walk ops fun op =>

@@ -118,6 +118,7 @@ def cfgDialect : Core.CFG.Dialect Ops.ValKind Ops.OpExt where
 private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
   | .svm kind => pure kind
   | .evm _ => throw "extract/unsupported: svm rejects evm value"
+  | .xrpl _ => throw "extract/unsupported: svm rejects xrpl value"
 
 private def projectCpiWord
     (projectVal : Extract.IR.Val → Except String Ops.Val) :
@@ -140,6 +141,7 @@ private def projectOpExt
   | .svm (.component call) =>
       return .component (← call.mapValuesM projectVal)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
+  | .xrpl _ => throw "extract/unsupported: svm rejects xrpl effect"
 
 /-- Static registration of the extractor-to-SVM projection. -/
 def extractRegistration :
@@ -150,6 +152,8 @@ def extractRegistration :
   projectionError := fun _ reason =>
     if reason.startsWith "extract/unsupported: svm rejects evm" then
       "extract/unsupported: svm rejects evm leaf"
+    else if reason.startsWith "extract/unsupported: svm rejects xrpl" then
+      "extract/unsupported: svm rejects xrpl leaf"
     else reason
   valArity := Ops.ValKind.arity
   opWellFormed := Ops.Op.wellFormed

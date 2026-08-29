@@ -3,6 +3,7 @@ import ProofForge.Core.IR
 import ProofForge.Core.CFG
 import ProofForge.Svm.Ops
 import ProofForge.Evm.Ops
+import ProofForge.Wasm.Xrpl.Ops
 
 namespace ProofForge.Extract.IR
 
@@ -10,16 +11,19 @@ namespace ProofForge.Extract.IR
 inductive ValKind where
   | svm (kind : Svm.Ops.ValKind)
   | evm (kind : Evm.Ops.ValKind)
+  | xrpl (kind : Wasm.Xrpl.Ops.ValKind)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
   | .svm kind => kind.arity
   | .evm kind => kind.arity
+  | .xrpl kind => kind.arity
 
 /-- Target effects stay strongly typed while sharing the extractor's recursive value type. -/
 inductive OpExt (V : Type) where
   | svm (payload : Svm.Ops.OpExt V)
   | evm (payload : Evm.Ops.OpExt V)
+  | xrpl (payload : Wasm.Xrpl.Ops.OpExt V)
   deriving BEq, Repr, Inhabited
 
 abbrev Cmp := Core.Ops.Cmp
@@ -48,13 +52,21 @@ private def mapEvmPayload (mapValue : Val → Val) : Evm.Ops.OpExt Val → Evm.O
 private def evmPayloadValues : Evm.Ops.OpExt Val → Array Val
   | .component call => call.values
 
+private def mapXrplPayload (_mapValue : Val → Val) : Wasm.Xrpl.Ops.OpExt Val → Wasm.Xrpl.Ops.OpExt Val
+  | .reserved => .reserved
+
+private def xrplPayloadValues : Wasm.Xrpl.Ops.OpExt Val → Array Val
+  | .reserved => #[]
+
 def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .svm payload => .svm (mapSvmPayload mapValue payload)
   | .evm payload => .evm (mapEvmPayload mapValue payload)
+  | .xrpl payload => .xrpl (mapXrplPayload mapValue payload)
 
 def OpExt.values : OpExt Val → Array Val
   | .svm payload => svmPayloadValues payload
   | .evm payload => evmPayloadValues payload
+  | .xrpl payload => xrplPayloadValues payload
 
 def cfgDialect : Core.CFG.Dialect ValKind OpExt where
   mapValues := OpExt.mapValues
@@ -84,9 +96,13 @@ private def svmExtWellFormed : Svm.Ops.OpExt Val → Bool
 private def evmExtWellFormed : Evm.Ops.OpExt Val → Bool
   | .component call => call.wellFormed (·.wellFormed ValKind.arity)
 
+private def xrplExtWellFormed : Wasm.Xrpl.Ops.OpExt Val → Bool
+  | .reserved => false
+
 def OpExt.wellFormed : OpExt Val → Bool
   | .svm payload => svmExtWellFormed payload
   | .evm payload => evmExtWellFormed payload
+  | .xrpl payload => xrplExtWellFormed payload
 
 def Op.wellFormed (op : Op) : Bool :=
   Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op

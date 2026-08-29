@@ -4,31 +4,29 @@ import ProofForge.Core.CFG
 /-!
 # XRPL target dialect
 
-Value/effect extensions owned by the XRPL Bedrock (XLS-0101) chain, one member of the
-WASM family (see `ProofForge.Wasm.Family`). v0 owns nothing: XRPL host capability keys —
-ledger time, caller account, hashing — are deliberately absent until their wasm-level
-import ABI is pinned (see `docs/modules/xrpl.md`). `reserved` keeps the dialect
-inhabited and is rejected by `wellFormed`; the registration in `ProofForge.Wasm.Xrpl.IR`
-fails closed on every svm/evm leaf via the family-level rejection instead.
+Value/effect extensions owned by XRPL Bedrock. Environment leaves are
+`host_lib` reads (caller / self / ledger); SVM/EVM leaves are rejected by
+registration. `reserved` stays rejected by `wellFormed`.
 -/
 
 namespace ProofForge.Wasm.Xrpl.Ops
 
-/-- XRPL-owned value intrinsics. v0 has none. -/
 inductive ValKind where
-  /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
+  /-- Placeholder; rejected by `wellFormed` on the effect side. -/
   | reserved
+  | callerW0 | callerW1 | callerW2
+  | selfW0 | selfW1 | selfW2
+  | ledgerSqn
+  | parentTime
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .reserved => 0
+  | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
 abbrev Cmp := ProofForge.Core.Ops.Cmp
 
-/-- XRPL-owned effects. v0 has none. -/
 inductive OpExt (V : Type) where
-  /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
 

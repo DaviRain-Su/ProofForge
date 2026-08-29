@@ -105,6 +105,7 @@ import ProofForge.Wasm.Host
 import ProofForge.Wasm.IR
 import ProofForge.Wasm.Emit
 import ProofForge.Wasm.Xrpl.Ops
+import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Wasm.Xrpl.Host
 import ProofForge.Wasm.Xrpl.IR
 import ProofForge.Wasm.Xrpl.Emit
