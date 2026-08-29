@@ -86,4 +86,39 @@ namespace UniswapV2
 
 end UniswapV2
 
+
+section Proofs
+
+/-! ## facade 委托透明性定理
+
+每个 `pf_inline` facade 恰好委托到对应的 Runtime 函数——
+证明 facade 不改变语义，只是重命名。这是「使用 facade 与直接调 Runtime 等价」
+的形式化表述。 -/
+
+theorem accept_eq (amount : UInt256) :
+    Ether.accept amount = Runtime.evmDeposit256 amount := rfl
+
+theorem send_eq (destination : Address) (amount : UInt256) :
+    Ether.send destination amount = Runtime.evmSendEth256 destination amount := rfl
+
+theorem receive_eq : Ether.receive = Runtime.evmReceive := rfl
+
+theorem transfer_eq (token destination : Address) (amount : UInt256) :
+    ERC20.transfer token destination amount = Runtime.evmTokenTransfer token destination amount := rfl
+
+theorem approve_eq (token spender : Address) (amount : UInt256) :
+    ERC20.approve token spender amount = Runtime.evmTokenApprove token spender amount := rfl
+
+theorem transferFrom_eq (token owner destination : Address) (amount : UInt256) :
+    ERC20.transferFrom token owner destination amount
+      = Runtime.evmTokenTransferFrom token owner destination amount := rfl
+
+theorem balanceOfSelf_eq (token : Address) :
+    ERC20.balanceOfSelf token = Runtime.evmTokenBalanceOfSelf token := rfl
+
+theorem allowance_eq (token owner spender : Address) :
+    ERC20.allowance token owner spender = Runtime.evmTokenAllowanceOf token owner spender := rfl
+
+end Proofs
+
 end ProofForge.Evm.Sdk
