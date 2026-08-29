@@ -135,7 +135,8 @@ UInt64。完整 32B / 动态输入 / keccak 仍 FC。`Examples.XrplHash` 把结�
 ### XRPL-SDK（[wsm-008](../tasks/wsm-008.md)）
 
 `Xrpl.Sdk.Context.caller / self / ledgerSqn`，全部 `@[pf_inline]` 转到 Runtime。
-Ownable 是源码嵌套 `if` 三叶，不是新 Op。8 字节 `callerLo` 只是截断视图。
+`AccountId.eq` 也是 `@[pf_inline]`，展开成三叶嵌套 `if`（[wsm-009](../tasks/wsm-009.md)）。
+Ownable 走这个 helper，不是新 Op。8 字节 `callerLo` 只是截断视图。
 
 ## 7. 明确 fail closed
 

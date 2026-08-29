@@ -26,7 +26,7 @@ open ProofForge
 
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "Counter" == some "e029f72296e320be"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCtx" == some "f483be9d20810b57"
-#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplOwn" == some "47645ee35068637f"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplOwn" == some "d452894f75c0ff96"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHash" == some "ce42ea8b4607843e"
 #guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash"]
 
