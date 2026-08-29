@@ -51,6 +51,8 @@ wasm="$root/build/xrpl-alphanet/probe-emit.wasm"
 "$wat2wasm" "$here/fixture/probe-emit.wat" -o "$wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: wat2wasm did not write $wasm" >&2; exit 1; }
 
+# AlphaNet 3.3.0-rc1: InstanceParameters on ContractCreate is temMALFORMED,
+# so Create-time tfSendAmount cannot fund the pseudo-account. Deploy bare.
 printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","wasm_path":"%s"}\n' \
   "$RPC" "$WALLET" "$wasm" >"$cfg"
 if ! deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"; then
@@ -92,17 +94,6 @@ else
   exit 1
 fi
 echo "xrpl-probe-emit: pokeBuild result=$build_result vmReturnCode=$build_code (builder host exists)" >&2
-
-# Ordinary Payment to a ContractAccount is tecNO_PERMISSION (pseudo-account).
-# Still try it so the log records that fact; pokeEmit runs either way.
-printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","destination":"%s","drops":"20000000"}\n' \
-  "$RPC" "$WALLET" "$contract" >"$cfg"
-if pay_out="$(node "$here/alphanet-rpc.js" pay "$cfg")"; then
-  echo "$pay_out" >&2
-else
-  echo "xrpl-probe-emit: fund contract: ordinary Payment rejected (expected tecNO_PERMISSION on pseudo-account)" >&2
-  echo "$pay_out" >&2
-fi
 
 emit_out="$(call_fn pokeEmit)"
 echo "pokeEmit $emit_out" >&2

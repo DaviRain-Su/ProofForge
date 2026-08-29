@@ -61,4 +61,13 @@ def xrplSelf20 : AccountId :=
 Not EVM `selfBalance`. IOU/MPT fail closed (mantissa only). -/
 @[irreducible] def xrplCallerBalanceDrops : UInt64 := 0
 
+/-- AccountRoot.Sequence (UInt32 LE → UInt64). Same cache as Balance. -/
+@[irreducible] def xrplCallerSequence : UInt64 := 0
+
+/-- AccountRoot.Flags (UInt32 LE → UInt64). -/
+@[irreducible] def xrplCallerFlags : UInt64 := 0
+
+/-- AccountRoot.OwnerCount (UInt32 LE → UInt64). Snapshot at cache_le. -/
+@[irreducible] def xrplCallerOwnerCount : UInt64 := 0
+
 end ProofForge.Wasm.Xrpl.Runtime

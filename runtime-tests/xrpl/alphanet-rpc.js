@@ -224,6 +224,27 @@ async function main() {
       ContractCode: wasm.toString("hex").toUpperCase(),
       Functions,
     };
+    // tfSendAmount = 0x00010000. Ordinary Payment to a ContractAccount is
+    // tecNO_PERMISSION; Create-time InstanceParameterValues is the treasury path.
+    if (cfg.send_amount_drops) {
+      const drops = String(cfg.send_amount_drops);
+      txJson.InstanceParameters = [
+        {
+          InstanceParameter: {
+            ParameterFlag: 65536,
+            ParameterType: { type: "AMOUNT" },
+          },
+        },
+      ];
+      txJson.InstanceParameterValues = [
+        {
+          InstanceParameterValue: {
+            ParameterFlag: 65536,
+            ParameterValue: { type: "AMOUNT", value: drops },
+          },
+        },
+      ];
+    }
     const signed = await signTx(url, secret, txJson);
     const submitted = await submitBlob(url, signed.tx_blob);
     if (submitted.engine_result !== "tesSUCCESS") {
@@ -232,12 +253,23 @@ async function main() {
     const hash = submitted.tx_json.hash;
     const tx = await waitTx(url, hash);
     const contract = createdContractAccount(tx.meta);
+    let contractBalance = null;
+    if (contract) {
+      try {
+        const cinfo = await rpcRetry(url, "account_info", {
+          account: contract,
+          ledger_index: "validated",
+        });
+        contractBalance = (cinfo.account_data || {}).Balance || null;
+      } catch (_) {}
+    }
     process.stdout.write(
       JSON.stringify({
         success: true,
         txHash: hash,
         result: (tx.meta || {}).TransactionResult,
         contractAccount: contract,
+        contractBalance,
         walletAddress: wallet.address,
         exports,
       }) + "\n"
