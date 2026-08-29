@@ -69,6 +69,10 @@ structure Contract where
   getParentHash : String := ""
   /-- Host `get_base_fee() -> i32`. Empty skips the base-fee leaf. Same shape as ledger sqn. -/
   getBaseFee : String := ""
+  /-- AlphaNet rejects view exports that return `i64`; Bedrock local still uses `i64`. -/
+  viewResultI32 : Bool := false
+  /-- AlphaNet `ldgr_index(ptr, len) -> i32` writes a little-endian u32. Bedrock is `() -> i32`. -/
+  ledgerSqnBuffer : Bool := false
   deriving Inhabited
 
 /-- Object-field storage (XRPL ContractData) rather than a packed Data blob. -/

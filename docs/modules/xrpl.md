@@ -72,7 +72,9 @@ WAT {name}.wat
 ```
 
 CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本身会被
-拒绝并提示它是家族不是链）。注册程序见 `Xrpl.Registry`；当前为 `Counter`
+拒绝并提示它是家族不是链）。活公开网用 `--target xrpl-alphanet`（别名
+`alphanet`）：同一 IR，host 名换成 XLS-0102（`home_le_field` / `tx_field` /
+`ldgr_index` / `sha512_half`），view 返回 `i32`。注册程序见 `Xrpl.Registry`；当前为 `Counter`
 （digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`、`XrplHash`、`XrplRt2`、
 `XrplVec`（digest `e47db263444f8c7e`，编译期 JSON 槽 `xs_0`…`xs_2`）。
 

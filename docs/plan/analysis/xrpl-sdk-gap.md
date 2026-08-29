@@ -14,7 +14,7 @@
 | | 是什么 | 本仓 |
 |---|---|---|
 | XRPL 主网今天 | 没有 `ContractCreate` | `deployable=false` |
-| [AlphaNet](https://dev.to/dangell7/smart-contracts-on-xrpls-alphanet-1loo) | 公开开发网（约 2025-11 起），有 `ContractCreate` | **本仓不接**；工程门仍是本地 Bedrock |
+| [AlphaNet](https://alphanet.xrpl.org) | 公开开发网，network_id **21337**，`SmartContract` 已开 | `--target xrpl-alphanet`（XLS-0102 host 名）。nerdnest 21465 DNS 已挂 |
 | WASM Devnet | Smart Escrow 测试网 | **不是** 本 target（escrow `finish()`，不是 Contract SLE） |
 | Bedrock 本地镜像 | 主账本形状的 rippled + wasm | **工程门** |
 | [XRPL EVM Sidechain](https://www.xrplevm.org/) | Cosmos + EVM，XRP 当 gas | **不是** 本 target |

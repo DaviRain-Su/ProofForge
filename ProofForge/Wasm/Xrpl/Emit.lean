@@ -55,16 +55,32 @@ def loadEnv (host : Contract) (level : Nat) (view : Bool) : Array String :=
     ]
     let sqn :=
       if host.getLedgerSqn.isEmpty then #[]
-      else #[
-        indent level ("(local.set $st (call $" ++ host.getLedgerSqn ++ "))"),
-        indent level "(local.set $pf_x_xsqn (i64.extend_i32_u (local.get $st)))"
-      ]
+      else if host.ledgerSqnBuffer then
+        #[
+          indent level ("(local.set $st (call $" ++ host.getLedgerSqn ++
+            " (i32.const 160) (i32.const 4)))")
+        ] ++ err ++ #[
+          indent level "(local.set $pf_x_xsqn (i64.extend_i32_u (i32.load (i32.const 160))))"
+        ]
+      else
+        #[
+          indent level ("(local.set $st (call $" ++ host.getLedgerSqn ++ "))"),
+          indent level "(local.set $pf_x_xsqn (i64.extend_i32_u (local.get $st)))"
+        ]
     let time :=
       if host.getParentTime.isEmpty then #[]
-      else #[
-        indent level ("(local.set $st (call $" ++ host.getParentTime ++ "))"),
-        indent level "(local.set $pf_x_xtime (i64.extend_i32_u (local.get $st)))"
-      ]
+      else if host.ledgerSqnBuffer then
+        #[
+          indent level ("(local.set $st (call $" ++ host.getParentTime ++
+            " (i32.const 160) (i32.const 4)))")
+        ] ++ err ++ #[
+          indent level "(local.set $pf_x_xtime (i64.extend_i32_u (i32.load (i32.const 160))))"
+        ]
+      else
+        #[
+          indent level ("(local.set $st (call $" ++ host.getParentTime ++ "))"),
+          indent level "(local.set $pf_x_xtime (i64.extend_i32_u (local.get $st)))"
+        ]
     let hash :=
       if host.getParentHash.isEmpty then #[]
       else #[
@@ -75,10 +91,18 @@ def loadEnv (host : Contract) (level : Nat) (view : Bool) : Array String :=
       ]
     let fee :=
       if host.getBaseFee.isEmpty then #[]
-      else #[
-        indent level ("(local.set $st (call $" ++ host.getBaseFee ++ "))"),
-        indent level "(local.set $pf_x_xfee (i64.extend_i32_u (local.get $st)))"
-      ]
+      else if host.ledgerSqnBuffer then
+        #[
+          indent level ("(local.set $st (call $" ++ host.getBaseFee ++
+            " (i32.const 160) (i32.const 4)))")
+        ] ++ err ++ #[
+          indent level "(local.set $pf_x_xfee (i64.extend_i32_u (i32.load (i32.const 160))))"
+        ]
+      else
+        #[
+          indent level ("(local.set $st (call $" ++ host.getBaseFee ++ "))"),
+          indent level "(local.set $pf_x_xfee (i64.extend_i32_u (local.get $st)))"
+        ]
     caller ++ self ++ sqn ++ time ++ hash ++ fee
 
 def extraImports (host : Contract) : Array String :=
@@ -91,16 +115,28 @@ def extraImports (host : Contract) : Array String :=
     ]
   let sqn :=
     if host.getLedgerSqn.isEmpty then #[]
-    else #[
-      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getLedgerSqn ++
-        "\" (func $" ++ host.getLedgerSqn ++ " (result i32)))"
-    ]
+    else if host.ledgerSqnBuffer then
+      #[
+        "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getLedgerSqn ++
+          "\" (func $" ++ host.getLedgerSqn ++ " (param i32 i32) (result i32)))"
+      ]
+    else
+      #[
+        "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getLedgerSqn ++
+          "\" (func $" ++ host.getLedgerSqn ++ " (result i32)))"
+      ]
   let time :=
     if host.getParentTime.isEmpty then #[]
-    else #[
-      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getParentTime ++
-        "\" (func $" ++ host.getParentTime ++ " (result i32)))"
-    ]
+    else if host.ledgerSqnBuffer then
+      #[
+        "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getParentTime ++
+          "\" (func $" ++ host.getParentTime ++ " (param i32 i32) (result i32)))"
+      ]
+    else
+      #[
+        "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getParentTime ++
+          "\" (func $" ++ host.getParentTime ++ " (result i32)))"
+      ]
   let hash :=
     if host.computeSha512Half.isEmpty then #[]
     else #[
@@ -117,14 +153,28 @@ def extraImports (host : Contract) : Array String :=
     ]
   let fee :=
     if host.getBaseFee.isEmpty then #[]
-    else #[
-      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getBaseFee ++
-        "\" (func $" ++ host.getBaseFee ++ " (result i32)))"
-    ]
+    else if host.ledgerSqnBuffer then
+      #[
+        "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getBaseFee ++
+          "\" (func $" ++ host.getBaseFee ++ " (param i32 i32) (result i32)))"
+      ]
+    else
+      #[
+        "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getBaseFee ++
+          "\" (func $" ++ host.getBaseFee ++ " (result i32)))"
+      ]
   tx ++ sqn ++ time ++ hash ++ parentHash ++ fee
 
 /-- Render one XRPL program as WAT. The digest line pins the canonical IR identity. -/
+def emitWith (host : Contract) (p : IR.Program) : Except String String :=
+  Wasm.Emit.emit host IR.extValCanon IR.extOpCanon p loadEnv (extraImports host)
+
+/-- Bedrock local host names. -/
 def emit (p : IR.Program) : Except String String :=
-  Wasm.Emit.emit Host.contract IR.extValCanon IR.extOpCanon p loadEnv (extraImports Host.contract)
+  emitWith Host.contract p
+
+/-- AlphaNet / XLS-0102 host names. -/
+def emitAlphaNet (p : IR.Program) : Except String String :=
+  emitWith Host.alphanet p
 
 end ProofForge.Wasm.Xrpl.Emit

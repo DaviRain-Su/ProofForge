@@ -18,12 +18,14 @@ inductive Target where
   | svm
   | evm
   | xrpl
+  | xrplAlphaNet
   deriving BEq, Repr, Inhabited
 
 def parseTarget : String → Option Target
   | "svm" | "solana" | "sbpf" => some .svm
   | "evm" => some .evm
   | "xrpl" | "xrpl-bedrock" | "bedrock" => some .xrpl
+  | "xrpl-alphanet" | "alphanet" => some .xrplAlphaNet
   | _ => none
 
 structure Options where
@@ -36,11 +38,12 @@ private def usage : String :=
   "pf — ProofForge compiler\n" ++
     "\n" ++
     "Usage:\n" ++
-    "  pf build --target <svm|evm|xrpl> [--out DIR] [Program ...]\n" ++
+    "  pf build --target <svm|evm|xrpl|xrpl-alphanet> [--out DIR] [Program ...]\n" ++
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
-    "xrpl writes Name.wat / Name.wasm (XRPL Bedrock; locked wat2wasm)\n" ++
+    "xrpl writes Name.wat / Name.wasm (XRPL Bedrock local; locked wat2wasm)\n" ++
+    "xrpl-alphanet same IR, XLS-0102 host names for live AlphaNet\n" ++
     "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
     "No program names means every registered source module for the selected target.\n"
 
@@ -228,6 +231,22 @@ unsafe def run (args : List String) : IO UInt32 := do
           for program in programs do
             let r ← ProofForge.Wasm.Xrpl.Assemble.assembleProgram opts.outDir program
             IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; deployable=false)"
+          return 0
+    | .xrplAlphaNet =>
+      match selectXrplNames opts.names with
+      | .error reason =>
+        IO.eprintln s!"pf: {reason}"
+        return 1
+      | .ok names =>
+        match ← extractXrplPrograms names with
+        | .error reason =>
+          IO.eprintln s!"pf: {reason}"
+          return 1
+        | .ok programs =>
+          IO.FS.createDirAll opts.outDir
+          for program in programs do
+            let r ← ProofForge.Wasm.Xrpl.Assemble.assembleAlphaNet opts.outDir program
+            IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; AlphaNet host)"
           return 0
 
 end ProofForge.Cli

@@ -48,9 +48,10 @@ private def requireWat2Wasm : IO System.FilePath := do
   | some reason => throw <| IO.userError reason
   | none => throw <| IO.userError s!"assemble/tool: wat2wasm {requiredWat2WasmVersion} not found"
 
-/-- Render WAT and assemble with locked `wat2wasm`. No rustc / bedrock / AlphaNet. -/
-def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Result := do
-  let source ← match Emit.emit program with
+/-- Render WAT and assemble with locked `wat2wasm`. No rustc / bedrock. -/
+def assembleProgramWith (emitFn : IR.Program → Except String String)
+    (outDir : System.FilePath) (program : IR.Program) : IO Result := do
+  let source ← match emitFn program with
     | .error reason => throw <| IO.userError reason
     | .ok src => pure src
   IO.FS.createDirAll outDir
@@ -67,5 +68,11 @@ def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Resul
   unless (← wasmPath.pathExists) do
     throw <| IO.userError s!"assemble/tool: wat2wasm did not produce {wasmPath}"
   return { watPath, wasmPath, watSource := source }
+
+def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Result :=
+  assembleProgramWith Emit.emit outDir program
+
+def assembleAlphaNet (outDir : System.FilePath) (program : IR.Program) : IO Result :=
+  assembleProgramWith Emit.emitAlphaNet outDir program
 
 end ProofForge.Wasm.Xrpl.Assemble
