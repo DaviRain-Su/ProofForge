@@ -73,6 +73,19 @@ def Handle.dataWordWellFormed (handle : Handle) (word : Nat)
 @[pf_inline] def Handle.ownedBySelf (handle : Handle) : UInt64 :=
   ownerIsSelf (UInt64.ofNat handle.index)
 
+/--
+Move `amount` lamports from the fixed `source` account to the fixed `destination` account. The
+two typed handles are erased at extraction, leaving only their static physical indexes; callers
+never supply raw offsets, pointers, or ABI markers. The target preflights both writable flags,
+source current-program ownership, source balance, destination overflow, and canonical-header
+distinctness (duplicate aliases fail closed) before either store; any failure is `Custom(1)` with
+no writes. A writable foreign-owned destination may be credited. Amount zero succeeds after the
+same validation, keeping the API contract stable. The signed total lamport delta is zero.
+-/
+@[pf_inline] def Handle.transferLamports (source destination : Handle) (amount : UInt64) :
+    UInt64 :=
+  Runtime.transferLamports (UInt64.ofNat source.index) (UInt64.ofNat destination.index) amount
+
 /-- Compile-time bounded remaining-account window. This is the target plan type itself, not a
 second source-side geometry structure. -/
 abbrev View := ProofForge.Svm.AccountView.View

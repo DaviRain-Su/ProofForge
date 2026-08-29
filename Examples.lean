@@ -83,3 +83,4 @@ import Examples.MemoryOps
 import Examples.TransientPair
 import Examples.TransientLedger
 import Examples.TransientOrderTape
+import Examples.LamportTransfer

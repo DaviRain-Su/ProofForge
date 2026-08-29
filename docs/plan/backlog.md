@@ -36,6 +36,9 @@ R2-007 又把已有 Clock/EpochSchedule/compile-time Rent lowering 收口到 tar
 Query 和同一个 generic Component bridge，production source 不再生成对应 top-level value recipe。
 R2-008 已在该稳定边界补齐 Clock leader-schedule epoch，以及 EpochSchedule 的 leader offset、
 warmup Bool、first-normal epoch/slot，并明确区分 40-byte native host layout 与 33-byte packed layout。
+R2-009 又为 static Account handles 增加 checked lamport mutation 和 backward duplicate-alias
+Loader-v3 walk；所有权限、owner、balance、overflow 与 canonical distinctness gate 均先于双 store，
+不走 System CPI，也不暴露 raw pointer/runtime account index。
 EVM-RT-2a typed call-result 已完成，并由 R5-012 收紧为 canonical ERC-20 Bool / code-backed
 empty-result policy，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
@@ -78,10 +81,10 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-29）**：Lean 汇总 368 jobs；SVM manifest 全 59 programs；
-  Mollusk 全量 363/363（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
+- **当前可验证基线（2026-08-29）**：Lean 汇总 372 jobs；SVM manifest 全 60 programs；
+  Mollusk 全量 375/375（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
   32 programs 且 Anvil 32/32。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 368-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  并保留汇总 `test` gate；完整 372-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
   `docs/plan/tasks/ci-001.md`。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
@@ -469,6 +472,17 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Clock/EpochSchedule views；R2-007/008 证据见 `docs/plan/tasks/r2-007.md` 和
   `docs/plan/tasks/r2-008.md`。
 
+- R2-009 checked physical lamport mutation 已完成：`Svm.Sdk.Account.Handle.transferLamports`
+  只接收两个编译期 handle 和 amount；`Svm.Lamports` Component 在任何 write 前检查 source/
+  destination writable、source owner=current program、余额充足、destination 加法不溢出和
+  canonical header 不同。带 effect 的 static Loader-v3 walk 解析 official backward duplicate
+  entry 并只前进 8 bytes；same-canonical、forward/self/out-of-range/malformed alias 全部
+  `Custom(1)` 且零写入。foreign-owned writable destination 合法，amount=0 仍执行相同验证；
+  成功只 debit/credit 各一次，总 signed delta 为零，不走 System CPI。`LamportTransfer`
+  digest `89371fff010c0595`、assembly 21,083 B、ELF 7,232 B，Mollusk 12/12。当前
+  AccountView+lamport effect 组合仍用 duplicate-rejecting variable walk。详见
+  `docs/plan/tasks/r2-009.md`。
+
 - R3-015 shared transient lifecycle emitter 已完成：`Svm.Transient.Emit.Lifecycle` 统一
   Vector64/Bytes 的 official-shaped bump allocation、pointer/length/capacity/active metadata、
   active/capacity gate、clear 与 non-reclaiming finish；两个具体 emitter 只保留 u64/byte
@@ -829,9 +843,9 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 368 jobs，汇总门覆盖全部 imported test modules 与 target guards。
-- SVM registry 59 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 363/363，其中 RawEntry 20/20、Phoenix-v1 profile
+- `lake build Tests` 当前 372 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 60 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+  `pf build` 当前通过；全套 Mollusk 375/375，其中 RawEntry 20/20、Phoenix-v1 profile
   76/76。
 - EVM registry 32 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /

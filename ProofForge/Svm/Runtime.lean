@@ -1446,4 +1446,21 @@ partition。
   let _ := acc
   0
 
+/--
+Checked physical lamport transfer from account `source` to account `destination`. Both indexes
+must be compile-time constants below `Svm.ABI.maxTxAccountLocks`; only `amount` is dynamic. The
+SVM target preflights every condition before either store: both accounts writable, source owned
+by the current program id, source balance ≥ `amount`, destination addition cannot overflow, and
+the two canonical header pointers differ (Loader-v3 duplicate aliases of the same account fail
+closed). Any failure is `Custom(1)` with no writes. A writable foreign-owned destination may be
+credited; destination ownership is not required. Amount zero is a validated no-op success. On
+success the target debits and credits exactly once, so the signed total lamport delta is zero.
+This is a direct header mutation, not a System CPI.
+-/
+@[irreducible] def transferLamports (source destination amount : UInt64) : UInt64 :=
+  let _ := source
+  let _ := destination
+  let _ := amount
+  0
+
 end ProofForge.Svm.Runtime

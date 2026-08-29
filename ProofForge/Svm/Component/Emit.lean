@@ -3,6 +3,7 @@ import ProofForge.Svm.AccountView.Emit
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.BatchRecorder.Emit
 import ProofForge.Svm.FifoCancel.Emit
+import ProofForge.Svm.Lamports.Emit
 import ProofForge.Svm.Memory.Emit
 import ProofForge.Svm.Sysvar.Emit
 import ProofForge.Svm.Telemetry.Emit
@@ -40,6 +41,11 @@ private def Context.fifoCancel (context : Context) : FifoCancel.Emit.Context :=
     loadOwnerIsSelf := context.loadOwnerIsSelf
     headerStack := context.headerStack
     accountCount := context.accountCount }
+
+private def Context.lamports (context : Context) : Lamports.Emit.Context :=
+  { loadValue := context.loadValue
+    loadOwnerIsSelf := context.loadOwnerIsSelf
+    headerStack := context.headerStack }
 
 private def Context.memory (context : Context) : Memory.Emit.Context :=
   { loadValue := context.loadValue
@@ -88,6 +94,7 @@ def emitCall (context : Context) (backend : Backend) (label : String) :
       BatchRecorder.Emit.emitCall context.batchRecorder label call
   | .fifoCancel call =>
       FifoCancel.Emit.emitCall context.fifoCancel backend.accountStorage label call
+  | .lamports call => Lamports.Emit.emitCall context.lamports label call
   | .memory call => Memory.Emit.emitCall context.memory label call
   | .telemetry call => Telemetry.Emit.emitCall context.telemetry label call
   | .transientVec call => TransientVec.Emit.emitCall context.transientVec label call

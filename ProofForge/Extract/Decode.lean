@@ -3308,10 +3308,27 @@ private def decodeTelemetryCall (env : Environment) (e : Expr) :
     if call.wellFormed (fun _ => true) then some (.telemetry call) else none
   else none
 
+private def decodeLamportsCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.transferLamports ||
+      endsWith e ".transferLamports" then
+    if args.size < 3 then none else do
+      let source ← staticNatVal? env args[args.size - 3]!
+      let destination ← staticNatVal? env args[args.size - 2]!
+      let amount ← val env args[args.size - 1]!
+      let call : Svm.Lamports.Call Ops.Val := .transfer source destination amount
+      if call.wellFormed (fun _ => true) Svm.Ops.maxTxAccountLocks then
+        some (.lamports call)
+      else none
+  else none
+
 private def decodeComponentCall (env : Environment) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
   decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e <|> decodeMemoryCall env e <|>
-    decodeTransientVecCall env e <|> decodeTransientBytesCall env e <|> decodeTelemetryCall env e
+    decodeTransientVecCall env e <|> decodeTransientBytesCall env e <|> decodeTelemetryCall env e <|>
+    decodeLamportsCall env e
 
 private def mentionsFifoCancelSource (e : Expr) : Bool :=
   e.getUsedConstantsAsSet.toList.any fun name =>
@@ -3838,7 +3855,8 @@ def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
       constants.contains ``ProofForge.Svm.Runtime.transientBytesTruncate ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesClear ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesLogData ||
-      constants.contains ``ProofForge.Svm.Runtime.transientBytesFinish then true
+      constants.contains ``ProofForge.Svm.Runtime.transientBytesFinish ||
+      constants.contains ``ProofForge.Svm.Runtime.transferLamports then true
   else
     match fuel with
     | 0 => false

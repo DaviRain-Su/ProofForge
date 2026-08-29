@@ -171,10 +171,48 @@ private def emitWalkAccountsVariable (n : Nat) (tag err : String) : String :=
   stxdw [r10 - {headerStack n}], r8
 "
 
-/-- Walk selection: only account-view programs traverse the runtime account count; every existing
-program keeps the byte-stable unrolled prefix walk. -/
+/--
+Alias-aware static walk for programs with a checked lamport transfer. A non-0xff marker byte is a
+Loader-v3 duplicate entry: `u8 prior_index` followed by seven zero bytes. The entry resolves the
+position's saved header cell to the earlier position's already-canonical header pointer and
+advances only 8 bytes. A forward, self, out-of-range, or nonzero-padding entry exits `Custom(1)`.
+Programs without the lamport effect keep the byte-stable strict walk above.
+-/
+private def emitWalkAccountsAliasing (n : Nat) (tag err : String) : String :=
+  Id.run do
+    let mut out := "  mov64 r8, r6\n  add64 r8, 8\n"
+    for i in [0:n] do
+      out := out ++ s!"\
+  ldxb r1, [r8 + 0]
+  jeq r1, 0xff, walk_full_{i}_{tag}
+  lddw r2, {i}
+  jlt r1, r2, walk_alias_{i}_{tag}
+  ja {err}
+walk_alias_{i}_{tag}:
+  ldxdw r2, [r8 + 0]
+  jne r2, r1, {err}
+  mov64 r3, r1
+  mul64 r3, 8
+  add64 r3, {headerStack 0}
+  mov64 r4, r10
+  sub64 r4, r3
+  ldxdw r4, [r4 + 0]
+  stxdw [r10 - {headerStack i}], r4
+  add64 r8, 8
+  ja walk_next_{i}_{tag}
+walk_full_{i}_{tag}:
+  stxdw [r10 - {headerStack i}], r8
+  ldxdw r4, [r8 + 80]
+{emitSkipAccount s!"{i}_{tag}"}walk_next_{i}_{tag}:
+"
+    out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
+
+/-- Walk selection: account-view programs traverse the runtime account count; components declaring
+the canonical-alias capability resolve duplicates in the static prefix; every other existing
+program keeps the byte-stable unrolled strict walk. -/
 private def emitWalkAccountsFor (p : IR.Program) (n : Nat) (tag err : String) : String :=
   if IR.usesAccountView p then emitWalkAccountsVariable n tag err
+  else if IR.requiresCanonicalAccountAliases p then emitWalkAccountsAliasing n tag err
   else emitWalkAccounts n tag err
 
 private partial def walkInvokeMetas (ops : Array IR.Op)

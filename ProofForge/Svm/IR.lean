@@ -748,6 +748,21 @@ account, so the prelude must walk the runtime account count instead of the unrol
 def usesAccountView (p : Program) : Bool :=
   p.methods.any fun method => Ops.hasAccountView (toSourceOps method.ops)
 
+/-- True when any target component requires physical account positions to resolve Loader-v3
+duplicate entries to their earlier canonical headers. Components declare this reusable ABI
+capability themselves; the program walk does not name or special-case individual SDK features. -/
+private partial def opsRequireCanonicalAccountAliases (ops : Array Op) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .component call => call.requiresCanonicalAccountAliases
+    | .ite _ _ _ thn els =>
+        opsRequireCanonicalAccountAliases thn || opsRequireCanonicalAccountAliases els
+    | .forBody _ body => opsRequireCanonicalAccountAliases body
+    | _ => false
+
+def requiresCanonicalAccountAliases (p : Program) : Bool :=
+  p.methods.any fun method => opsRequireCanonicalAccountAliases method.ops
+
 private partial def highestInvokeIndex (ops : Array Op) : Nat :=
   ops.foldl (init := 0) fun result op =>
     match op with

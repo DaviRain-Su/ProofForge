@@ -65,7 +65,8 @@ def entries : Array Entry := #[
   { name := "MemoryOps", digest := "96f938c65992b93a" },
   { name := "TransientPair", digest := "899815d9f910e597" },
   { name := "TransientLedger", digest := "a91e5e115c1f83b" },
-  { name := "TransientOrderTape", digest := "e203afd44ef6eea9" }
+  { name := "TransientOrderTape", digest := "e203afd44ef6eea9" },
+  { name := "LamportTransfer", digest := "89371fff010c0595" }
 ]
 
 def names : Array String := entries.map (·.name)
