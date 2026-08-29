@@ -12,6 +12,7 @@ import Examples.XrplHash
 import Examples.XrplRt2
 import Examples.XrplVec
 import Examples.XrplSmoke
+import Examples.XrplGate
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -34,7 +35,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRt2" == some "1d6d712500b8daf0"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplVec" == some "e47db263444f8c7e"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplSmoke" == some "f8f474cfdfa499f6"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplGate" == some "c2495d166a25c8e0"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -64,6 +66,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplVec
 
 #pf_xrpl_build Examples.XrplSmoke
+
+#pf_xrpl_build Examples.XrplGate
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -145,6 +149,35 @@ elab "#pf_xrpl_own_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-own: {source.length} bytes of WAT passed own anchor check"
 
 #pf_xrpl_own_emit_check Examples.XrplOwn
+
+open Lean Elab Command in
+elab "#pf_xrpl_gate_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"bump\") (result i32)",
+          "(func (export \"renounce\") (result i32)",
+          "(func (export \"get\")",
+          "i64.eq",
+          "(i32.const 3)",
+          "(data (i32.const 64) \"owner0owner1owner2value\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing gate anchor: {anchor}\n{source}"
+        unless !source.contains "eq_account" do
+          throwError "wasm emit must not add eq_account host"
+        unless !source.contains "(param $pf_p0 i64)" do
+          throwError "XrplGate must not take wasm i64 params"
+        logInfo m!"proofforge-xrpl-gate: {source.length} bytes of WAT passed gate anchor check"
+
+#pf_xrpl_gate_emit_check Examples.XrplGate
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

@@ -74,6 +74,11 @@
       "returns": { "type": "UINT32" }
     },
     {
+      "name": "renounce",
+      "parameters": [],
+      "returns": { "type": "UINT32" }
+    },
+    {
       "name": "ownerLo",
       "parameters": [],
       "returns": { "type": "UINT64" }

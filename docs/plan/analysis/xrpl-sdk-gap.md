@@ -102,6 +102,7 @@ CMP（wsm-006）是 Runtime 能力：三叶能比。SDK 的 `AccountId.eq`（wsm
 | `AccountId.eq` / `ofLimbs` | 三叶嵌套 `if` |
 
 没有：Map、Event、Payments。Access / Hash / 编译期命名槽（VEC-1）已绿。
+活网零参数 Ownable 是 `XrplGate`（`renounce` 后再 `bump` 状态码 3）。
 
 ### wasm v0 子集（现在卡住 Vec/Map 的原因）
 
