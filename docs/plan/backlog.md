@@ -47,6 +47,7 @@ R3-009 bounded static Memo facade、R3-010 general ATA facade、
 R3-011 canonical program-id / SPL Token base-state views、R3-012 source-visible transient Vector64、
 R3-013 source-visible transient bounded bytes/writer、
 R3-014 stable Clock/EpochSchedule/Rent SDK facade、
+R3-015 shared transient lifecycle emitter、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -443,6 +444,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   路径；本切片没有新增 syscall、Runtime leaf、Ops/IR/Component/Emit、scratch 或持久状态。
   详见 `docs/plan/tasks/r3-014.md`。generic sliced sysvar、Instructions sysvar、stack height、
   remaining compute 与其余 Clock/Epoch 字段仍属 R2/R3 Runtime backlog。
+
+- R3-015 shared transient lifecycle emitter 已完成：`Svm.Transient.Emit.Lifecycle` 统一
+  Vector64/Bytes 的 official-shaped bump allocation、pointer/length/capacity/active metadata、
+  active/capacity gate、clear 与 non-reclaiming finish；两个具体 emitter 只保留 u64/byte
+  element 操作与各自错误。source API、IR digest、assembly byte count 和 Mollusk 行为不变，
+  没有新增 top-level Ops/IR/CFG/main-Emit recipe 或 pointer-valued source/state。详见
+  `docs/plan/tasks/r3-015.md`。下一切片可在该 lifecycle 上增加同类型多 handle 或 generic
+  POD/record writer，而不再复制 allocator/metadata assembly。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

@@ -60,6 +60,7 @@ import ProofForge.Svm.ABICompat
 import ProofForge.Svm.Heap
 import ProofForge.Svm.Heap.Emit
 import ProofForge.Svm.Scratch
+import ProofForge.Svm.Transient.Emit
 import ProofForge.Svm.Memory
 import ProofForge.Svm.Memory.Emit
 import ProofForge.Svm.TransientVec

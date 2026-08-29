@@ -366,6 +366,9 @@ rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-20
 semantics 仍待完成。R3-014 又以纯 `pf_inline` `Svm.Sdk.Sysvar` facade 收口已有 Clock、
 EpochSchedule 和 compile-time Rent Runtime leaves；Clock/Epoch/Rent 的 IR digest 与 target
 syscall 路径不变，没有形成第二套 syscall backend，详见 [R3-014](tasks/r3-014.md)。
+R3-015 又把两种 transient emitter 重复的 allocation、metadata、
+active/capacity validation、clear/finish 收口到一个 target-owned lifecycle interpreter，且
+保持 assembly byte-exact；详见 [R3-015](tasks/r3-015.md)。
 
 ### R4 — EVM Runtime
 

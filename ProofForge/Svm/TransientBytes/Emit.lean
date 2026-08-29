@@ -1,5 +1,5 @@
-import ProofForge.Svm.Heap.Emit
 import ProofForge.Svm.Ops
+import ProofForge.Svm.Transient.Emit
 import ProofForge.Svm.TransientBytes
 
 namespace ProofForge.Svm.TransientBytes.Emit
@@ -7,37 +7,25 @@ namespace ProofForge.Svm.TransientBytes.Emit
 structure Context where
   loadValue : Ops.Val → Nat → Nat → String → Except String String
 
-private def failure (code : Nat) : String :=
-  s!"  lddw r0, 0x{Core.IR.u64Hex (UInt64.ofNat code)}\n  exit\n"
-
 private def activeMagic : Nat := 0x5046425954333401
 
+private def lifecycle : Transient.Emit.Lifecycle :=
+  { kind := "transient_bytes"
+    pointerStack
+    lengthStack
+    capacityStack
+    activeStack
+    activeMagic
+    oomErrorCode
+    stateErrorCode }
+
+private abbrev failure := Transient.Emit.failure
+
 private def emitRequireActive (config : Config) (label : String) : String :=
-  let active := s!"transient_bytes_active_{label}"
-  let capacity := s!"transient_bytes_capacity_{label}"
-  s!"\
-  ldxdw r1, [r10 - {TransientBytes.activeStack}]
-  lddw r2, {activeMagic}
-  jeq r1, r2, {active}
-{failure stateErrorCode}{active}:
-  ldxdw r1, [r10 - {TransientBytes.capacityStack}]
-  lddw r2, {config.capacity}
-  jeq r1, r2, {capacity}
-{failure stateErrorCode}{capacity}:
-"
+  Transient.Emit.emitRequireActive lifecycle config.capacity label
 
 private def emitBegin (label : String) (config : Config) : Except String String := do
-  let allocate ← Heap.Emit.emitAllocate "transient_bytes" label
-    config.fixedVec.buffer.capacityBytes config.fixedVec.buffer.alignment pointerStack
-    (failure oomErrorCode)
-  return allocate ++ s!"\
-  lddw r1, 0
-  stxdw [r10 - {lengthStack}], r1
-  lddw r1, {config.capacity}
-  stxdw [r10 - {capacityStack}], r1
-  lddw r1, {activeMagic}
-  stxdw [r10 - {activeStack}], r1
-"
+  Transient.Emit.emitBegin lifecycle config.fixedVec label
 
 private def emitPush (context : Context) (label : String) (config : Config)
     (byte : Ops.Val) : Except String String := do
@@ -110,19 +98,10 @@ private def emitSet (context : Context) (label : String) (config : Config)
 "
 
 private def emitClear (label : String) (config : Config) : String :=
-  emitRequireActive config label ++ s!"\
-  lddw r1, 0
-  stxdw [r10 - {lengthStack}], r1
-"
+  Transient.Emit.emitClear lifecycle config.capacity label
 
 private def emitFinish (label : String) (config : Config) : String :=
-  emitRequireActive config label ++ s!"\
-  lddw r1, 0
-  stxdw [r10 - {pointerStack}], r1
-  stxdw [r10 - {lengthStack}], r1
-  stxdw [r10 - {capacityStack}], r1
-  stxdw [r10 - {activeStack}], r1
-"
+  Transient.Emit.emitFinish lifecycle config.capacity label
 
 def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
     (stackOff nonce : Nat) (scope : String) : Except String String :=
