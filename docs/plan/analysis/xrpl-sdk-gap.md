@@ -3,6 +3,42 @@
 > 2026-08-29。权威排期仍是 [xrpl-runtime.md](xrpl-runtime.md)。
 > 本文回答：SDK 组合层还差什么，以及那些组合依赖哪些 **本链 Runtime / host**。
 > 不共享 SVM account bytes，不共享 EVM hashed slot。
+>
+> 链定位与「能不能做 Uniswap」见第 0 节。
+
+## 0. 这是哪条链、能不能做 Uniswap
+
+**不是侧链。** XLS-0101 WASM 智能合约的设计目标是进 **XRPL 主账本**（`ContractCreate` / `ContractCall` / `ContractData`）。
+和这些不是一回事：
+
+| | 是什么 | 本仓 |
+|---|---|---|
+| XRPL 主网今天 | 没有 `ContractCreate` | `deployable=false` |
+| Bedrock 本地镜像 | 主账本形状的 rippled + wasm | **工程门** |
+| [XRPL EVM Sidechain](https://www.xrplevm.org/) | Cosmos + EVM，XRP 当 gas | **不是** 本 target |
+| Xahau / Hooks | 另一条链 / 账户钩子 | **不是** 本 target |
+
+XLS 自己说：EVM 侧链给 Solidity 用；主账本 programmability 选 WASM，就是为了摸 XRPL 原生对象，而不是再桥一层。
+
+**存储上限（今天的本仓 + 本镜像）：**
+
+- 合约状态 = `ContractData` 里的 JSON 对象（命名 UInt64 槽）。
+- 用户数据在设计里是 **每个用户一块** `ContractData`（`Owner` = 用户），不是 EVM `mapping(address => uint)` 的 keccak slot。
+- 账本其它东西（XRP 余额、Trust line、AMM、NFT）**只读**；改它们要合约伪账户 **再提交一笔 XRPL 交易**（Payment / AMMDeposit…）。本仓还没有 `submitTransaction`。
+- wasm v0 IR 拒绝 vector / map / loop。定长表可以先做成编译期 key `xs_0`…，或探针 `set_data_array_element_field`。
+
+所以：
+
+| 想做的 | 现在 | 要什么 |
+|---|---|---|
+| Ownable Counter / hash stamp | **已绿** | — |
+| 定长登记表、小 AMM 的 2～3 个池槽 | 存储形状够，IR 还不够 | VEC 探针 + 编译期下标 |
+| Uniswap 式 `mapping(address => uint)` 余额 | **没有** | 用户 `ContractData` 或 JSON Map；再加 Amount |
+| 真正的 swap（动 XRP / IOU） | **没有** | `submitTransaction` Payment / AMM；或读原生 AMM 对象 |
+| 把 EVM Uniswap 字节码搬过来 | **永远不要** | 地址、slot、CALL 都不是 XRPL |
+
+比赛若交 **「Lean 写出、本地 Bedrock 跑通的 WASM 合约」**：Ownable + 小状态机现在就能交。
+若交 **「链上 Uniswap」**：要么走 EVM 侧链（Solidity），要么等本仓 VEC + 用户数据和/或原生 AMM 读/提交。不要承诺现在就能复刻 Uniswap v2。
 
 ## 1. 三层，不要混
 
@@ -129,7 +165,7 @@ XLS-0102 的 `home_le_field` / `sha512_half` **不是** 本镜像名字。
 |---|---|---|---|
 | XRPL-RT-2（[wsm-011](../tasks/wsm-011.md)） | `xrplParentHashW0` 首 u64；`xrplBaseFee` | `Context.parentHashLo` / `baseFee` | 完整 32B 当返回值 |
 | XRPL-LOG | 仅当本地证明 `trace_*` 不破坏共识 | `Log.num` | EVM LOG3 / event ABI |
-| XRPL-VEC | 定长：要么连续 JSON key，要么 `*_array_element_field`；IR 允许编译期下标 | `Storage.Vec n` | 无界 `Array`、运行时长度 |
+| XRPL-VEC | 定长：编译期 JSON key `xs_0`…（array-element host 本镜像 trap） | 命名槽，暂不叫 `Storage.Vec` | 无界 `Array`、运行时长度、`set_data_array_element_field` |
 | XRPL-MAP | **禁止** keccak / RBTree。先做编译期 key 的「命名槽表」。AccountId 键要另证：把三叶拼进 key 名，或 nested object | 以后才叫 `Storage.Map` | `HashMap`、动态 key 字符串、跨合约目录 |
 
 Vec/Map 是 **存储剖面升级**，不是在 `Sdk.lean` 里加函数。要改 `Wasm.IR` v0 子集和发射器的 key 布局。
@@ -146,8 +182,10 @@ Vec/Map 是 **存储剖面升级**，不是在 `Sdk.lean` 里加函数。要改 
 
 1. **SDK-ACCESS**（本刀）— 零新 host
 2. **RT-2** parent hash + base fee — 镜像已有，形状同 ledger sqn
-3. **探针** `set_data_array_element_field` / nested object：本地写一个下标，读回来。失败就停
-4. 探针绿了再开 **VEC-1**（定长 UInt64 向量，编译期 `n`）
+3. **探针** `set_data_array_element_field`（2026-08-29）：7 参数 import **能实例化**；
+   调用写入 → `tecWASM_REJECTED`（wasm trap）。本镜像这条 host **不能当 Vec 物理层**。
+   定长表改走编译期 JSON key `xs_0`…`xs_{n-1}`，仍用 `set_data_object_field`。
+4. **VEC-1**：编译期展开的命名槽，不依赖 array-element host。
 5. Map 更后，且必须是 XRPL JSON 形状的设计，不是抄 EVM
 
 官方 Rust WASM SDK（escrow 为主）的完整对照见
