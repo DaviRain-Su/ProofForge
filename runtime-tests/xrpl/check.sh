@@ -78,6 +78,16 @@ need_exports_gate = (
     'i64.eq',
     '(i32.const 3)',
 )
+need_exports_hold = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "bump") (result i32)',
+    '(func (export "pause") (result i32)',
+    '(func (export "unpause") (result i32)',
+    '(func (export "get")',
+    'i64.eq',
+    '(i32.const 3)',
+    '(i32.const 4)',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -99,6 +109,8 @@ for wat in wats:
         exports = need_exports_smoke
     elif wat.stem == "XrplGate":
         exports = need_exports_gate
+    elif wat.stem == "XrplHold":
+        exports = need_exports_hold
     else:
         exports = need_exports_counter
     for needle in exports:

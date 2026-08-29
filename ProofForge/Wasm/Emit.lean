@@ -381,6 +381,11 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
         unless tail.all isExitOp do
           throw "extract/unsupported: wasm v0 instructions follow terminal operation"
         return { lines := #[indent level "(i32.const 3)"], st, terminal := true }
+    | .errorNamed "paused" =>
+        if view then throw "extract/unsupported: wasm v0 view cannot fail"
+        unless tail.all isExitOp do
+          throw "extract/unsupported: wasm v0 instructions follow terminal operation"
+        return { lines := #[indent level "(i32.const 4)"], st, terminal := true }
     | .returnU64 value =>
         unless view do
           throw "extract/unsupported: wasm v0 mutating region cannot return a value"
