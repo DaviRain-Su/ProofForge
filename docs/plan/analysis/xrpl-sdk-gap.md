@@ -5,6 +5,7 @@
 > 不共享 SVM account bytes，不共享 EVM hashed slot。
 >
 > 链定位与「能不能做 Uniswap」见第 0 节。
+三条链物理模型对照见 [xrpl-model.md](xrpl-model.md)。
 
 ## 0. 这是哪条链、能不能做 Uniswap
 
