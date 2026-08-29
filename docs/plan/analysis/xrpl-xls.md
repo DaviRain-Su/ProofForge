@@ -19,8 +19,8 @@
 
 | XLS | 我们做到哪 | 没做 |
 |---|---|---|
-| **0101** Smart Contracts | AlphaNet `ContractCreate` / `Call`、用户 `ContractData` 卡片、`pf deploy` | 主网 `deployable=false`；合约当 Owner **-22**；`setUserData(别人)` 未证 |
-| **0102** WASM VM | 锁定 `wat2wasm`；两套 host 名（Bedrock / AlphaNet）；`trace_num` / `cache_le` 探针 | 完整 host 表、`submitTransaction`、view i32/i64 分网 |
+| **0101** Smart Contracts | AlphaNet `ContractCreate` / `Call`、用户 `ContractData` 卡片、`pf deploy` | 主网 `deployable=false`；合约当 Owner **-22**；`setUserData(别人)` 未证；§20 `submitTransaction` 是叙事伪代码 |
+| **0102** WASM VM | 锁定 `wat2wasm`；两套 host 名（Bedrock / AlphaNet）；`trace_num` / `cache_le` / Balance 读 | 完整 host 表；发交易走 Transia `build_txn`/`emit_built_txn`（**不是** 0102 §5.10 的 `set_data`） |
 | **0100** Smart Escrows | **明确不做**（`finish()` 不是 ContractCall） | 官方 Rust SDK 主菜；别抄 `set_data` blob |
 
 这不是「实现了 3 个 RFC 的全部条款」，是 **编译器 target 用到的那几条 host**。
@@ -31,7 +31,7 @@
 
 | XLS | 主网 | 对象 / 交易 | ProofForge |
 |---|---|---|---|
-| 账本本身（无编号） | 多年 | AccountRoot、Payment、OfferCreate、TrustSet、Escrow、PayChan | 以后 `submitTransaction` / `cache_le` |
+| 账本本身（无编号） | 多年 | AccountRoot、Payment、OfferCreate、TrustSet、Escrow、PayChan | 以后 `build_txn`+`emit_built_txn` / `cache_le` |
 | **20** NFT | 已开（V1_1） | NFTokenMint / Offer / Accept | 读 NFT 对象；别用 JSON 仿一套 NFT |
 | **30** AMM | **2024-03-22 已开** | AMMCreate / Deposit / Withdraw / Payment | 读 AMM SLE；发 AMMDeposit。**不要** WASM Uniswap |
 | **33** MPT | MPTokensV1 已进协议（V2 DEX 仍开发中） | MPTokenIssuance | 当资产类型读，不重做发行 |
@@ -89,7 +89,7 @@ WASM 存在是为了 **可编程**：在一次 `ContractCall` 里按条件去 **
 SDK  名字：Amm.deposit / Nft.owner / Payments.xrp
         │  @[pf_inline]，不新增 host
         ▼
-Runtime  叶子：cache_le(AMM) / submitTransaction(AMMDeposit)
+Runtime  叶子：cache_le(AMM) / emit_built_txn(AMMDeposit)
         │
         ▼
 host_lib  →  账本上已经存在的 SLE / 交易
@@ -100,14 +100,14 @@ host_lib  →  账本上已经存在的 SLE / 交易
 |---|---|---|---|
 | 用户自己的 JSON 卡 | `get_data_object_field` | `set_data_object_field`（Owner=caller） | **已绿**（XrplBal） |
 | AccountRoot.Balance | `cache_le` + `le_field` | 不能 wasm 里 `x+=`；要 Payment | **已绿** `Context.callerBalanceDrops`（XrplBalRt） |
-| AMM 池 | 读 `AMM` SLE | `submitTransaction` AMMDeposit | 未接线 |
+| AMM 池 | 读 `AMM` SLE | `emit_built_txn` AMMDeposit | 未接线。Payment emit 本身还卡在伪账户 -196 |
 | NFT / Oracle / MPT | 读对应 SLE | 铸/转是 NFTokenMint 等交易 | 未接线 |
 
-没有叶子就不要 SDK 名。`Amm.deposit` 在 `submitTransaction` 绿之前是假的。
+没有叶子就不要 SDK 名。`Amm.deposit` 在 `emit_built_txn` **Payment 落地**之前是假的（host 注册了不算绿）。
 包装齐了，上层才能写「若 Oracle 价 > X 则 AMMDeposit」这种业务；池子公式仍是 C++，不是我们的 wasm。
 
 ## 5. 一句话
 
 XLS-30 这种标准 **已经在主网跑**，实现者是 rippled，不是我们。
 合约层要做的是 **SDK 包装**（读 SLE + 提交交易），不是 78 份 RFC 各写一个 wasm 池子。
-摸之前要 `cache_le` / `submitTransaction` 绿。没绿不要开 `Sdk.Amm`。
+摸之前要 `cache_le` / `emit_built_txn` 绿。没绿不要开 `Sdk.Amm`。

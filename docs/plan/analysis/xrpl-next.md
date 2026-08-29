@@ -1,8 +1,15 @@
 # XRPL 下一阶段：复杂合约还差什么
 
-> 2026-08-29。HEAD `190f543`（wsm-017）。本文是 **wsm-018+** 的排期，
+> 2026-08-29。HEAD `6cbe156`（wsm-033）之后。本文是 **wsm-018+** 的排期，
 > 接 [xrpl-sdk-gap.md](xrpl-sdk-gap.md) / [xrpl-runtime.md](xrpl-runtime.md)。
 > 学 EVM/SVM 的分层，不学 keccak slot / account bytes / CPI。
+>
+> **XLS-0101/0102 底层没完。** 已绿：emit/assemble、两套 host 表、用户卡片、
+> env 叶、`callerBalanceDrops`。发交易 host **已注册**（`build_txn` pokeBuild=0），
+> 但 `emit_built_txn` Payment = **-196 tecPSEUDO_ACCOUNT**；普通 Payment 打不进
+> 合约伪账户（`tecNO_PERMISSION`）。还缺：`setUserData(别人)`、程序拥有
+> ContractData（-22）、Parameters 502、多数 keylet。
+> **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
 
 ## 0. 现在能写什么样的合约
 
@@ -37,8 +44,8 @@
 | 两步移交 Ownable | 活网要第二把钥匙验 `accept` | 工程，不是 IR |
 | 8～16 槽登记表 / 小池 | 源码展开 `xs_i` 太吵；要 IR 开 counted `for` 或宏 | **IR v0** |
 | `mapping(address => uint)` | 用户 `ContractData`（Owner=用户）或 nested JSON | **存储剖面** |
-| 读 XRP 余额 / Trust line | `cache_le` + `le_field`，本仓未探针 | **Runtime host** |
-| swap / 真转账 | `submitTransaction` Payment / AMMDeposit | **Runtime host** |
+| 读 XRP 余额 / Trust line | `cache_le` + `le_field` | **已绿** Balance；Trust line 未探针 |
+| swap / 真转账 | `build_txn` / `emit_built_txn` Payment（**不是**叙事名 `submitTransaction`） | **Runtime host** |
 | 日志 / 索引 | `trace_*` 未证是否共识副作用 | **探针** |
 | ERC-20 façade | 永远不要 | fail closed |
 
@@ -52,7 +59,7 @@
 | `Access` / `Pausable` / `Roles` | **已有** Access / Pausable；Roles 可源码 2～3 个 owner 槽 | EVM Revert selector / event |
 | `Storage.Vec` 连续 slot | 编译期 JSON key `xs_0`…（VEC-1） | 账户 stride / keccak |
 | `Storage.Map` / `AddressMap256` | 用户 ContractData 或 nested object | RBTree / keccak(slot,key) |
-| `Payments` CALL / System CPI | 宿主交易 `submitTransaction` | `call{value}` / `sol_invoke` |
+| `Payments` CALL / System CPI | 宿主交易 `build_txn` + `emit_built_txn` | `call{value}` / `sol_invoke` |
 | ERC-20 / SPL Token | IOU / MPToken 是账本对象 | ERC-20 字节码 |
 | `ClosedCall` / CPI | 合约调合约：XRPL 还没有成熟 ABI | delegatecall / 工厂 |
 | counted `for` | wasm v0 **拒绝 loop** | 假装有 Vec 迭代 |
@@ -125,7 +132,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 | id | Runtime | 能写的合约 | 不做 |
 |---|---|---|---|
 | **wsm-029** 读 AccountRoot.Balance | **探针绿**；Runtime 解码叶下一刀 | view 自己的 XRP | 改别人余额 |
-| **wsm-030** `submitTransaction` Payment | 合约伪账户再提交 | 从合约账户付 drops | 任意 tx 类型一把梭 |
+| **wsm-030** `build_txn` / `emit_built_txn` Payment | **host 已绿**（pokeBuild=0）。pokeEmit **-196** `tecPSEUDO_ACCOUNT`；普通 Payment 打合约 = `tecNO_PERMISSION`。叙事名 `submitTransaction` 不是 import | 从合约账户付 drops | 任意 tx 类型一把梭；不开 `Sdk.Payments` 直到 pokeEmit tesSUCCESS |
 | **wsm-031** 读原生 AMM 对象 | cache_le AMM | 报价只读 | 假装是 Uniswap v2 池 |
 
 没有 wsm-030，比赛交「链上 swap」是假的。有 wsm-026 没有 wsm-030，只能交
@@ -141,10 +148,12 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
 2. **wsm-029 / wsm-033** — AccountRoot.Balance **已绿**（`callerBalanceDrops`）。
-   下一刀 `submitTransaction` Payment。
-3. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
+3. **wsm-030** — `build_txn` **host 已绿**。`emit_built_txn` Payment **没落地**
+   （-196 / 伪账户无资金路径）。不开 `Sdk.Payments`。下一刀是 Create 时
+   `tfSendAmount` 注资，或换一条伪账户允许的发出路径。
+4. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
    下一刀才是 `setUserData(destination)` 探针。
-4. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+5. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 
