@@ -32,6 +32,10 @@ inductive ValKind where
   | callerFlags
   /-- Caller's AccountRoot.OwnerCount, UInt32 zero-extended. Cached snapshot. -/
   | callerOwnerCount
+  /-- Current ContractCall `sfSequence`, UInt32 zero-extended. Not AccountRoot.Sequence. -/
+  | txSequence
+  /-- Current ContractCall `sfFee` as XRP drops (STAmount 57-bit mantissa). -/
+  | txFeeDrops
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat

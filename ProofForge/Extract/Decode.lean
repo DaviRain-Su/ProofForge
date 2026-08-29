@@ -1257,6 +1257,12 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   else if endsWith e ".xrplCallerOwnerCount" ||
       isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerOwnerCount then
     some .xrplCallerOwnerCount
+  else if endsWith e ".xrplTxSequence" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplTxSequence then
+    some .xrplTxSequence
+  else if endsWith e ".xrplTxFeeDrops" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplTxFeeDrops then
+    some .xrplTxFeeDrops
   else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
     some .evmSelfW0
   else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then

@@ -70,4 +70,10 @@ Not EVM `selfBalance`. IOU/MPT fail closed (mantissa only). -/
 /-- AccountRoot.OwnerCount (UInt32 LE → UInt64). Snapshot at cache_le. -/
 @[irreducible] def xrplCallerOwnerCount : UInt64 := 0
 
+/-- Current `ContractCall` Sequence. Host: `tx_field(sfSequence=131076)`. -/
+@[irreducible] def xrplTxSequence : UInt64 := 0
+
+/-- Current `ContractCall` Fee in drops. Host: `tx_field(sfFee=393224)`. -/
+@[irreducible] def xrplTxFeeDrops : UInt64 := 0
+
 end ProofForge.Wasm.Xrpl.Runtime

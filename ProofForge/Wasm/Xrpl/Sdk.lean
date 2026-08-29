@@ -76,6 +76,12 @@ namespace Context
 /-- AccountRoot.OwnerCount at cache_le. Creating ContractData may bump the live count. -/
 @[pf_inline] def callerOwnerCount : UInt64 := Runtime.xrplCallerOwnerCount
 
+/-- Current `ContractCall` Sequence. Not AccountRoot.Sequence. -/
+@[pf_inline] def txSequence : UInt64 := Runtime.xrplTxSequence
+
+/-- Current `ContractCall` Fee in drops. Not EVM `gasprice`. -/
+@[pf_inline] def txFeeDrops : UInt64 := Runtime.xrplTxFeeDrops
+
 end Context
 
 namespace Pausable

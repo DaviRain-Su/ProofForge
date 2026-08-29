@@ -9,7 +9,8 @@
 > 发交易 host **已注册**（`build_txn` pokeBuild=0），但 `emit_built_txn` Payment =
 > **-196 tecPSEUDO_ACCOUNT**。Create `InstanceParameters` / Call AMOUNT
 > `tfSendAmount` 都是 **temMALFORMED**（这版 AlphaNet 注资路径坏了）。
-> 还缺：`setUserData(别人)`、程序拥有 ContractData（-22）、Parameters 502、多数 keylet。
+> 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
+> 还缺：程序拥有 ContractData（-22）、Parameters 502、多数 keylet、伪账户注资。
 > **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
 
 ## 0. 现在能写什么样的合约
@@ -153,9 +154,10 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
    （-196）。Create/Call `tfSendAmount` 在 `3.3.0-rc1` 上 **temMALFORMED**。
    不开 `Sdk.Payments`。等节点修注资，或换本地 alphanet 分支。
 4. **wsm-034** — AccountRoot Sequence/Flags/OwnerCount **已绿**（`XrplRoot`）。
-5. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
-   下一刀才是 `setUserData(destination)` 探针。
-6. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+5. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。
+6. **wsm-035** — 给别人写卡片 **已绿**（硬编码对方 AccountID）。`tx Sequence/Fee` 已绿。
+   `amm_id` host 在（零 issue -15）。不开 Sdk.Map / Sdk.Amm。
+7. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 

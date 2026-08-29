@@ -65,8 +65,10 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
     let needSeq := usesKind method.ops .callerSequence
     let needFlags := usesKind method.ops .callerFlags
     let needOwnc := usesKind method.ops .callerOwnerCount
+    let needTxSeq := usesKind method.ops .txSequence
+    let needTxFee := usesKind method.ops .txFeeDrops
     let needRoot := needBal || needSeq || needFlags || needOwnc
-    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot) then #[]
+    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needRoot || needTxSeq || needTxFee) then #[]
     else
     let err :=
       if view then #[]
@@ -197,7 +199,32 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
           indent level ("(local.set $pf_x_xbal (i64.and " ++ be ++
             " (i64.const 144115188075855871)))")
         ]
-    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal
+    let txSeq :=
+      if !needTxSeq || host.getTxField.isEmpty then #[]
+      else
+        #[
+          indent level ("(local.set $st (call $" ++ host.getTxField ++
+            " (i32.const 131076) (i32.const 208) (i32.const 8)))")
+        ] ++ err ++ #[
+          indent level "(local.set $pf_x_xtseq (i64.extend_i32_u (i32.load (i32.const 208))))"
+        ]
+    let txFee :=
+      if !needTxFee || host.getTxField.isEmpty then #[]
+      else
+        let be :=
+          (Array.range 8).foldl (fun acc i =>
+            let byte := "(i64.extend_i32_u (i32.load8_u (i32.const " ++
+              toString (208 + i) ++ ")))"
+            if acc.isEmpty then byte
+            else "(i64.or (i64.shl " ++ acc ++ " (i64.const 8)) " ++ byte ++ ")") ""
+        #[
+          indent level ("(local.set $st (call $" ++ host.getTxField ++
+            " (i32.const 393224) (i32.const 208) (i32.const 48)))")
+        ] ++ err ++ #[
+          indent level ("(local.set $pf_x_xtfee (i64.and " ++ be ++
+            " (i64.const 144115188075855871)))")
+        ]
+    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee
 
 def extraImports (host : Contract) : Array String :=
   let tx :=
