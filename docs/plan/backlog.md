@@ -751,6 +751,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `1d9437e16e664931`、bytecode 3,410 B；Anvil 核对零参数 ABI 调用只包含 exact 四字节
   selector。详见 `docs/plan/tasks/r4-014.md`。
 
+- R4-015 EVM Cancun blob context 已完成：`Sdk.Context.blobBaseFee : UInt256` 与
+  `blobHash : UInt64 → Bytes32` 通过既有 Environment Component 分别绑定 BLOBBASEFEE 和
+  BLOBHASH；numeric fee 与 source-order fixed bytes 不混用投影，每个四-limb 结果只观察
+  一次 opcode。它不开放 blob payload、allocation、storage/call effect 或 top-level
+  Ops/IR/main Emit recipe。EvmCtx digest `b4a1d16740330566`、bytecode 3,802 B；Anvil 核对
+  positive base fee 与普通非 blob 调用 index 0 的 exact zero hash。详见
+  `docs/plan/tasks/r4-015.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、

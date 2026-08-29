@@ -239,6 +239,8 @@ namespace Context
 @[pf_inline] def prevRandao : UInt256 := Runtime.evmPrevRandao256
 @[pf_inline] def gasLimit : UInt256 := Runtime.evmGasLimit256
 @[pf_inline] def gasPrice : UInt256 := Runtime.evmGasPrice256
+@[pf_inline] def blobBaseFee : UInt256 := Runtime.evmBlobBaseFee256
+@[pf_inline] def blobHash (index : UInt64) : Bytes32 := Runtime.evmBlobHash32 index
 @[pf_inline] def selector : Bytes4 := Runtime.evmSelector4
 /-- Exact current calldata byte length. This does not expose a calldata pointer or unchecked read. -/
 @[pf_inline] def calldataSize : UInt64 := Runtime.evmCalldataSize

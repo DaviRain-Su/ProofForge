@@ -13,6 +13,8 @@ open Lean Elab Command
 #guard height (init 0) == Context.blockNumber
 #guard gasLeft (init 0) == Context.gasLeft
 #guard gasPrice (init 0) == Context.gasPrice
+#guard blobBaseFee (init 0) == Context.blobBaseFee
+#guard blobHash (init 0) 3 == Context.blobHash 3
 #guard origin (init 0) == Context.origin
 #guard selector (init 0) == Context.selector
 #guard calldataSize (init 0) == Context.calldataSize

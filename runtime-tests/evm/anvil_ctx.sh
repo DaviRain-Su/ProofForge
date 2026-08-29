@@ -27,6 +27,17 @@ got_gas_price="$("$cast" call --rpc-url "$rpc" --from "$sender" --gas-price "$ga
   "$addr" 'gasPrice()(uint256)')"
 solana_lean_require_uint "$got_gas_price" "$gas_price" "GASPRICE full word"
 
+blob_base_fee="$(solana_lean_to_dec "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'blobBaseFee()(uint256)')")"
+if [[ "$blob_base_fee" -le 0 ]]; then
+  echo "FAIL: blobBaseFee must expose a positive Cancun BLOBBASEFEE, got $blob_base_fee" >&2
+  exit 1
+fi
+solana_lean_require_equal \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'blobHash(uint64)(bytes32)' 0)" \
+  "0x0000000000000000000000000000000000000000000000000000000000000000" \
+  "BLOBHASH absent transaction index"
+
 got_selector="$("$cast" call --rpc-url "$rpc" "$addr" 'selector()(bytes4)')"
 want_selector="$("$cast" sig 'selector()')"
 solana_lean_require_equal "$got_selector" "$want_selector" "msg.sig source-order bytes4"
@@ -169,4 +180,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-ctx: ok (caller/origin/selector/calldatasize/number/gasprice/gas/blockhash/address observations + static/tagged aggregate ABI; engineering only)"
+echo "evm-anvil-ctx: ok (caller/origin/selector/calldatasize/blob/number/gasprice/gas/blockhash/address observations + static/tagged aggregate ABI; engineering only)"

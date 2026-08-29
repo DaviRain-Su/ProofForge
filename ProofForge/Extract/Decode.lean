@@ -810,6 +810,18 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasPrice256 ||
             endsWith baseE ".evmGasPrice256" then
           some (.ext (.evm (.component (.environment (.gasPrice256 limb.toNat)))) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmBlobBaseFee256 ||
+            endsWith baseE ".evmBlobBaseFee256" then
+          some (.ext (.evm (.component (.environment (.blobBaseFee256 limb.toNat)))) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmBlobHash32 ||
+            endsWith baseE ".evmBlobHash32" then
+          let args := baseE.getAppArgs
+          if args.isEmpty then none
+          else
+            match asVal env fuel args[args.size - 1]! with
+            | some index =>
+                some (.ext (.evm (.component (.environment (.blobHash32 limb.toNat)))) #[index])
+            | none => none
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelector4 ||
             endsWith baseE ".evmSelector4" then
           if limb == 0 then some (.ext (.evm (.component (.environment .selector4))) #[])
@@ -4976,6 +4988,23 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
       .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 1)))) #[]),
       .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 2)))) #[]),
       .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 3)))) #[])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmBlobBaseFee256 ||
+      endsWith app ".evmBlobBaseFee256" then
+    some #[
+      .returnU64 (.ext (.evm (.component (.environment (.blobBaseFee256 0)))) #[]),
+      .returnU64 (.ext (.evm (.component (.environment (.blobBaseFee256 1)))) #[]),
+      .returnU64 (.ext (.evm (.component (.environment (.blobBaseFee256 2)))) #[]),
+      .returnU64 (.ext (.evm (.component (.environment (.blobBaseFee256 3)))) #[])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmBlobHash32 ||
+      endsWith app ".evmBlobHash32" then
+    let index := valAtEnd env args 0
+    some #[
+      .returnU64 (.ext (.evm (.component (.environment (.blobHash32 0)))) #[index]),
+      .returnU64 (.ext (.evm (.component (.environment (.blobHash32 1)))) #[index]),
+      .returnU64 (.ext (.evm (.component (.environment (.blobHash32 2)))) #[index]),
+      .returnU64 (.ext (.evm (.component (.environment (.blobHash32 3)))) #[index])
     ]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmSelector4 ||
       endsWith app ".evmSelector4" then

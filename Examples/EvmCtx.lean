@@ -49,6 +49,16 @@ def gasLeft (_s : State) : UInt256 :=
 def gasPrice (_s : State) : UInt256 :=
   Context.gasPrice
 
+/-- Cancun blob-gas base fee as a full EVM word. -/
+@[pf_entry]
+def blobBaseFee (_s : State) : UInt256 :=
+  Context.blobBaseFee
+
+/-- Versioned blob hash at one bounded transaction index; absent indexes return zero. -/
+@[pf_entry]
+def blobHash (_s : State) (index : UInt64) : Bytes32 :=
+  Context.blobHash index
+
 /-- Full transaction origin. Access-control code should continue to authorize `Context.caller`. -/
 @[pf_entry]
 def origin (_s : State) : Address :=

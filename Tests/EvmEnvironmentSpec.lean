@@ -23,6 +23,10 @@ open ProofForge.Evm
 #guard !(Environment.Query.origin20 3).wellFormed
 #guard (Environment.Query.gasPrice256 3).wellFormed
 #guard !(Environment.Query.gasPrice256 4).wellFormed
+#guard (Environment.Query.blobBaseFee256 3).wellFormed
+#guard !(Environment.Query.blobBaseFee256 4).wellFormed
+#guard (Environment.Query.blobHash32 3).arity == 1
+#guard !(Environment.Query.blobHash32 4).wellFormed
 #guard Environment.Query.selector4.arity == 0
 #guard Environment.Query.selector4.wellFormed
 #guard Environment.Query.calldataSize.arity == 0
@@ -93,6 +97,8 @@ elab "#pf_guard_evm_environment_component" : command => do
   requireQuery tipJar "prevRandao" .prevRandao256
   requireQuery tipJar "gasLimit" .gasLimit256
   requireQuery ctx "gasPrice" .gasPrice256
+  requireQuery ctx "blobBaseFee" .blobBaseFee256
+  requireQuery ctx "blobHash" .blobHash32
   let some selector := ctx.entries.find? (·.ixName == "selector")
     | throwError "missing EvmCtx.selector"
   unless hasEnvironmentReturn selector .selector4 do
@@ -133,11 +139,14 @@ elab "#pf_guard_evm_environment_component" : command => do
     | .error reason => throwError reason
   unless ctxYul.contains " := gas()" && tipJarYul.contains " := basefee()" &&
       tipJarYul.contains " := prevrandao()" && tipJarYul.contains " := gaslimit()" &&
-      ctxYul.contains " := gasprice()" && ctxYul.contains " := origin()" &&
+      ctxYul.contains " := gasprice()" && ctxYul.contains " := blobbasefee()" &&
+      ctxYul.contains " := blobhash(" && ctxYul.contains " := origin()" &&
       ctxYul.contains " := calldataload(0)" &&
       ctxYul.contains " := calldatasize()" &&
       ctxYul.contains " := blockhash(" && tipJarYul.contains " := coinbase()" &&
       (ctxYul.splitOn "gasprice()").length == 2 &&
+      (ctxYul.splitOn "blobbasefee()").length == 2 &&
+      (ctxYul.splitOn "blobhash(").length == 2 &&
       (ctxYul.splitOn "origin()").length == 2 &&
       (ctxYul.splitOn " := calldataload(0)").length == 2 &&
       (ctxYul.splitOn " := calldatasize()").length ≥ 2 &&

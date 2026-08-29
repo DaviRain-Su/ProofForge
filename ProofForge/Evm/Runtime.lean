@@ -138,6 +138,13 @@ the pre-Paris `DIFFICULTY` interpretation of opcode `0x44`; assembly pins the Ca
 /-- Effective transaction gas price (`GASPRICE`) as a full EVM word. -/
 @[irreducible] def evmGasPrice256 : UInt256 := ⟨0, 0, 0, 0⟩
 
+/-- Current blob gas base fee (`BLOBBASEFEE`) as a full EVM word. Requires Cancun. -/
+@[irreducible] def evmBlobBaseFee256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- Versioned hash for one transaction blob index (`BLOBHASH`). An out-of-range index returns the
+zero hash exactly as the EVM specifies. -/
+@[irreducible] def evmBlobHash32 (_index : UInt64) : Bytes32 := ⟨0, 0, 0, 0⟩
+
 /-- Current call selector (`msg.sig`) as source-order `bytes4`. Calls shorter than four bytes are
 rejected by the existing selector-dispatch route before an entry can observe this value. -/
 @[irreducible] def evmSelector4 : ProofForge.Core.Value.FixedBytes 4 := ⟨0, 0, 0, 0⟩

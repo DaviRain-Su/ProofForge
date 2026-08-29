@@ -18,6 +18,8 @@ inductive Query where
   | prevRandao256 (limb : Nat)
   | gasLimit256 (limb : Nat)
   | gasPrice256 (limb : Nat)
+  | blobBaseFee256 (limb : Nat)
+  | blobHash32 (limb : Nat)
   | selector4
   | calldataSize
   | coinbase20 (limb : Nat)
@@ -29,13 +31,13 @@ inductive Query where
   deriving BEq, Repr, Inhabited
 
 def Query.arity : Query → Nat
-  | .blockHash256 _ => 1
+  | .blockHash256 _ | .blobHash32 _ => 1
   | .codeSize20 | .codeHash32 _ | .balance256 _ => 3
   | _ => 0
 
 def Query.wellFormed : Query → Bool
   | .gasLeft256 limb | .baseFee256 limb | .prevRandao256 limb | .gasLimit256 limb
-  | .gasPrice256 limb =>
+  | .gasPrice256 limb | .blobBaseFee256 limb | .blobHash32 limb =>
       limb ≤ 3
   | .selector4 | .calldataSize => true
   | .coinbase20 limb | .origin20 limb => limb ≤ 2
@@ -61,6 +63,13 @@ def Query.canonical (_renderValue : V → String) (operands : Array V) : Query �
   | .gasPrice256 limb =>
       if operands.isEmpty then s!"env.gasPrice256.{limb}"
       else s!"invalid-env.gasPrice256.{limb}-{operands.size}"
+  | .blobBaseFee256 limb =>
+      if operands.isEmpty then s!"env.blobBaseFee256.{limb}"
+      else s!"invalid-env.blobBaseFee256.{limb}-{operands.size}"
+  | .blobHash32 limb =>
+      match operands with
+      | #[index] => s!"env.blobHash32.{limb}({_renderValue index})"
+      | _ => s!"invalid-env.blobHash32.{limb}-{operands.size}"
   | .selector4 =>
       if operands.isEmpty then "env.selector4"
       else s!"invalid-env.selector4-{operands.size}"
