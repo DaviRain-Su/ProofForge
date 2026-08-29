@@ -44,7 +44,7 @@
 
 | 生命周期 | 正确表示 | 当前状态 | 必须补齐 |
 |---|---|---|---|
-| source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有；两边 top-level one-limb bounded return 已有独立 target plan | collection persistence binding、tagged/nested dynamic shapes、wide/aggregate dynamic elements |
+| source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有；两边 top-level one-limb bounded/tagged return 已有独立 target plan | collection persistence binding、nested/constructed tagged shapes、wide/aggregate dynamic elements |
 | invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient` 有 buffer/fixed-vector/writer **plan** | 可提取的 bounded byte/vector operations；EVM bounded memory binding |
 | SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、ordered Map/RBMap、allocator 已有 u64/固定 schema | richer POD element/key/value shapes、set/bitset、versioned codecs |
 | EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有 | reusable bounded vector/set/queue/bitmap operations 与 documented gas bounds |
@@ -64,7 +64,7 @@
 |---|---|---|---|
 | integers/fixed bytes | Bool、u8/16/32/64、allocation-free u128/u256/`FixedBytes n`；u256 EVM arithmetic 已覆盖主要 unsigned op | signed widths、safe narrowing/casts、saturating/full-precision helpers、统一 overflow vocabulary | F0/F1 |
 | aggregate values | record/tuple/Option/bounded enum/fixed Vector；bounded input carrier；capacity-preserving bounded Vec semantics 与 cross-target scalar dynamic read；bounded Map/Set/Queue/BitSet、bytes、UTF-8 string logical contracts；bytes/string 已分别绑定 SVM/EVM input | collection persistence bindings、bounded mutation writeback、wide/aggregate dynamic elements；nested bounded shapes | F0 |
-| codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded/bytes/string input bindings；两边 independent top-level bounded output plan | tagged/nested/wide dynamic returns、version/discriminator、reusable account/storage codecs | F0 |
+| codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded/bytes/string input bindings；两边 independent top-level bounded/tagged output plan | nested/constructed/wide dynamic returns、version/discriminator、reusable account/storage codecs | F0 |
 | control/resources | checked arithmetic、bounded `for`、fixed scalar frame | per-method collection/codec/memory budget manifest；禁止隐式 allocation/clone/format | F1 |
 
 Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可以在 SVM 绑定为 Borsh
@@ -87,7 +87,7 @@ Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可�
 | sysvar/runtime query | Clock slot/epoch/unix、Rent、EpochSchedule | remaining Clock/Epoch fields、generic sliced sysvar、remaining compute/stack height、instructions sysvar；advanced sysvars on demand | F1/F2 |
 | crypto | literal SHA-256/Keccak first word、PDA host calls | full 32-byte/multi-slice hashes；Blake3/SHA-512/secp recovery/Poseidon/curve/big-mod-exp；signature-program instruction validation | F1/F2 |
 | log/error | authenticated bounded `sol_log_data` recorder、custom failure terminal | generic bounded log-data/numeric/key API；stable typed event convention；complete ProgramError/custom-code mapping | F1 |
-| serialization | exact scalar/static/tagged/bounded Borsh input、canonical bounded bytes/String（strict UTF-8）、top-level one-limb bounded Borsh return、raw entry、Token-2022 TLV envelope | tagged/nested/wide dynamic returns、Pack/POD/COption/versioned account codecs、strict reusable readers/writers | F0/F2 |
+| serialization | exact scalar/static/tagged/bounded Borsh input、canonical bounded bytes/String（strict UTF-8）、top-level one-limb bounded/tagged Borsh return、raw entry、Token-2022 TLV envelope | nested/constructed/wide dynamic returns、Pack/POD/COption/versioned account codecs、strict reusable readers/writers | F0/F2 |
 
 Rust 的 `Rc<RefCell<_>>` borrow API 是 Rust host representation，不应原样复制成 Lean SDK。
 ProofForge 要保存的是相同的安全合同：写权限、owner、alias、长度和 CPI 前状态必须被验证，且
@@ -116,7 +116,7 @@ EVM Runtime 以 Solidity 的 [types](https://docs.soliditylang.org/en/latest/typ
 
 | 类别 | 当前 source surface | 主要缺口 | 优先级 |
 |---|---|---|---|
-| values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、bounded dynamic-array/bytes/string input、top-level one-limb bounded dynamic output、strict UTF-8 | signed ints、safe casts、nested dynamic、tagged/wide dynamic return、dynamic constructor/fallback returndata | F0/F1 |
+| values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、bounded dynamic-array/bytes/string input、top-level one-limb bounded/tagged output、strict UTF-8 | signed ints、safe casts、nested/constructed/wide dynamic return、dynamic constructor/fallback returndata | F0/F1 |
 | data/storage | ordinary typed State flattening、static declarations、address/address-pair hashed maps | reusable bounded storage vector/set/queue/bitmap；explicit bounded memory/transient contracts；namespaced storage | F0/F2 |
 | environment | caller/self/block number/timestamp/chain id/value/balance/immutables | gasleft、basefee/prevrandao/coinbase/gaslimit、blockhash、code/codehash and target-version gates | F1 |
 | call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send、explicit ordered reentrancy guard | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；code-existence policy | F1/F2 |

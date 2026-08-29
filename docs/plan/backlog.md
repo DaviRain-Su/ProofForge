@@ -317,6 +317,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   recipe。RawEntry digest `21207ff5263a4d4a`、ELF 46,336 B，Mollusk 20/20；Surfpool 1.5.0
   以 46 个 Loader-v3 writes 部署核对。详见 `docs/plan/tasks/r1-021.md`。
 
+- R1-022 EVM Tagged Tuple v1 return binding 已完成：统一 `OutputPlan` sum 将 bounded dynamic 与
+  tagged tuple 编码收口到 Codec adapter；独立 `TaggedTupleOutputPlan` 从 fixed tagged source
+  frame 发布 `(bool,T)` / `(uint8,p0,...)` returndata，并在 output boundary 重新检查 tag、scalar
+  range 与 inactive-zero lanes，不复用 calldata plan/locals。首片支持 one-limb Option 与
+  unit/UInt64 enum payload；nested/richer/constructed tagged outputs 继续 fail closed。未新增
+  Core/EVM Ops、Runtime effect、Component 或 main CFG Emit recipe。EvmCtx digest
+  `ded60bb1bab650c8`、deployment bytecode 1,249 B，solc 0.8.34 与 Anvil 5 组 round trip 通过。
+  详见 `docs/plan/tasks/r1-022.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

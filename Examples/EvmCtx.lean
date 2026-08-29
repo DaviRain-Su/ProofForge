@@ -78,4 +78,12 @@ def taggedValue (_s : State) (request : TaggedRequest) : UInt64 :=
   | .one value => value + 10
   | .pair left right => left + right
 
+/-- Tagged results reuse the fixed shared source frame, while the output codec independently
+rebuilds and validates canonical Tagged Tuple v1 returndata. -/
+@[pf_entry]
+def echoOptionValue (_s : State) (value : Option UInt64) : Option UInt64 := value
+
+@[pf_entry]
+def echoTaggedValue (_s : State) (value : TaggedRequest) : TaggedRequest := value
+
 end Examples.EvmCtx

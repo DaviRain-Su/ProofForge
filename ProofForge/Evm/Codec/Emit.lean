@@ -22,8 +22,23 @@ def renderWordGuard (indent name : String) (type : Core.Codec.Scalar) :
       return indent ++ "if and(" ++ name ++ ", " ++ Codec.byteMask (32 - bytes) ++
         ") { " ++ revert0 ++ " }" ++ nl
 
-/-- Interpret fixed Tagged Tuple v1 guards from the codec plan. This is independent of contract
-Ops and storage: it only constrains already decoded input locals. -/
+/-- Render one fixed tagged-frame canonicality policy over caller-supplied expressions. Input and
+output adapters share this bounded policy interpreter, but retain separate plans and state. -/
+private def renderTaggedFrameGuards (indent tag : String) (payloadWords : Nat)
+    (payloadAt : Nat → String) (activePayloadWords : Array Nat) : Except String String := do
+  unless !activePayloadWords.isEmpty && activePayloadWords.all (· ≤ payloadWords) do
+    throw "evm/codec: malformed tagged tuple v1 guard"
+  let mut out := indent ++ "if iszero(lt(" ++ tag ++ ", " ++
+    toString activePayloadWords.size ++ ")) { " ++ revert0 ++ " }" ++ nl
+  for variant in [0:activePayloadWords.size] do
+    let active := activePayloadWords[variant]!
+    for lane in [active:payloadWords] do
+      out := out ++ indent ++ "if and(eq(" ++ tag ++ ", " ++ toString variant ++
+        "), " ++ payloadAt lane ++ ") { " ++ revert0 ++ " }" ++ nl
+  return out
+
+/-- Interpret fixed Tagged Tuple v1 guards from the input codec plan. This is independent of
+contract Ops and storage: it only constrains already decoded input locals. -/
 def renderTaggedGuards (indent argPrefix : String)
     (plans : Array Codec.AbiInputPlan) : Except String String := do
   let mut out := ""
@@ -31,19 +46,12 @@ def renderTaggedGuards (indent argPrefix : String)
   for plan in plans do
     for guard in plan.taggedGuards do
       unless guard.tagWord < plan.wordCount &&
-          guard.payloadStart + guard.payloadWords ≤ plan.wordCount &&
-          !guard.activePayloadWords.isEmpty &&
-          guard.activePayloadWords.all (· ≤ guard.payloadWords) do
+          guard.payloadStart + guard.payloadWords ≤ plan.wordCount do
         throw "evm/codec: malformed tagged tuple v1 guard"
       let tag := argPrefix ++ toString (base + guard.tagWord)
-      out := out ++ indent ++ "if iszero(lt(" ++ tag ++ ", " ++
-        toString guard.activePayloadWords.size ++ ")) { " ++ revert0 ++ " }" ++ nl
-      for variant in [0:guard.activePayloadWords.size] do
-        let active := guard.activePayloadWords[variant]!
-        for lane in [active:guard.payloadWords] do
-          let payload := argPrefix ++ toString (base + guard.payloadStart + lane)
-          out := out ++ indent ++ "if and(eq(" ++ tag ++ ", " ++ toString variant ++
-            "), " ++ payload ++ ") { " ++ revert0 ++ " }" ++ nl
+      out := out ++ (← renderTaggedFrameGuards indent tag guard.payloadWords
+        (fun lane => argPrefix ++ toString (base + guard.payloadStart + lane))
+        guard.activePayloadWords)
     base := base + plan.wordCount
   return out
 
@@ -215,8 +223,8 @@ def renderEntryArgs (plans : Array Codec.AbiInputPlan)
     out := out ++ "        if iszero(eq(abi_size, abi_tail)) { " ++ revert0 ++ " }" ++ nl
   return out
 
-/-- Generic bridge from the target codec interpreter to the main CFG value materializer. Dynamic
-result policy stays in this module; the main emitter supplies only source-value evaluation. -/
+/-- Generic bridge from the target codec interpreter to the main CFG value materializer. ABI
+output policy stays in this module; the main emitter supplies only source-value evaluation. -/
 structure ReturnContext (Value State : Type) where
   indent : String
   materialize : String → Value → State → Except String (String × String × State)
@@ -268,5 +276,53 @@ def renderDynamicReturn [Inhabited Value] (context : ReturnContext Value State)
         ", 31), not(31))" ++ nl ++
         indent ++ "return(0, add(64, " ++ padded ++ "))" ++ nl
   return (out, state)
+
+/-- Rebuild one fixed Tagged Tuple v1 result from the shared `tag,payload...` source frame. The
+output plan has no input offsets or decoded guard state; tag range and inactive-zero lanes are
+checked again immediately before publishing returndata. -/
+def renderTaggedTupleReturn [Inhabited Value] (context : ReturnContext Value State)
+    (plan : Codec.TaggedTupleOutputPlan) (values : Array Value) (state : State) :
+    Except String (String × State) := do
+  let indent := context.indent
+  unless !plan.words.isEmpty && values.size == plan.words.size &&
+      plan.words.size == 1 + plan.activePayloadWords.foldl (init := 0) max &&
+      (plan.words[0]! == .boolean || plan.words[0]! == .uint8) &&
+      (plan.words.extract 1 plan.words.size |>.all fun type => Codec.limbCount type == 1) do
+    throw "evm/codec: malformed tagged tuple output plan"
+  let mut out := ""
+  let mut state := state
+  let mut names : Array String := #[]
+  for i in [0:values.size] do
+    let name := if i == 0 then "abi_ret_tag" else "abi_ret_p" ++ toString (i - 1)
+    let (pre, expression, next) ← context.materialize indent values[i]! state
+    out := out ++ pre ++ indent ++ "let " ++ name ++ " := " ++ expression ++ nl
+    state := next
+    names := names.push name
+  out := out ++ (← renderWordGuard indent names[0]! plan.words[0]!)
+  for i in [1:plan.words.size] do
+    let type := plan.words[i]!
+    unless Codec.isFixedBytesCarrier type do
+      out := out ++ (← renderWordGuard indent names[i]! type)
+  out := out ++ (← renderTaggedFrameGuards indent names[0]! (plan.words.size - 1)
+    (fun lane => names[lane + 1]!) plan.activePayloadWords)
+  for i in [0:plan.words.size] do
+    let offset := i * 32
+    let type := plan.words[i]!
+    if Codec.isFixedBytesCarrier type then
+      out := out ++ indent ++ "pf_store_fixed_bytes(" ++ toString offset ++ ", " ++
+        names[i]! ++ ", 0, 0, 0, " ++ toString type.byteWidth ++ ")" ++ nl
+    else
+      out := out ++ indent ++ "mstore(" ++ toString offset ++ ", " ++ names[i]! ++ ")" ++ nl
+  return (out ++ indent ++ "return(0, " ++ toString (plan.words.size * 32) ++ ")" ++ nl,
+    state)
+
+/-- Interpret the single target-owned ABI output sum. Adding an output shape extends this adapter
+boundary rather than the main EVM operation emitter. -/
+def renderReturn [Inhabited Value] (context : ReturnContext Value State)
+    (plan : Codec.OutputPlan) (values : Array Value) (state : State) :
+    Except String (String × State) :=
+  match plan with
+  | .dynamic dynamic => renderDynamicReturn context dynamic values state
+  | .taggedTuple tagged => renderTaggedTupleReturn context tagged values state
 
 end ProofForge.Evm.Codec.Emit

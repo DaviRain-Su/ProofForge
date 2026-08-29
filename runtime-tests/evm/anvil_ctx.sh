@@ -68,6 +68,8 @@ solana_lean_require_uint "$tagged_pair" 40 "Tagged Tuple v1 pair"
 
 option_selector="$("$cast" sig 'optionValue((bool,uint64))')"
 tagged_selector="$("$cast" sig 'taggedValue((uint8,uint64,uint64))')"
+echo_option_selector="$("$cast" sig 'echoOptionValue((bool,uint64))')"
+echo_tagged_selector="$("$cast" sig 'echoTaggedValue((uint8,uint64,uint64))')"
 word_data() {
   local selector="$1"
   shift
@@ -75,6 +77,29 @@ word_data() {
     "import sys; print(sys.argv[1] + ''.join(f'{int(v):064x}' for v in sys.argv[2:]))" \
     "$selector" "$@"
 }
+
+return_words() {
+  "$python" -I -S -c \
+    "import sys; print('0x' + ''.join(f'{int(v):064x}' for v in sys.argv[1:]))" "$@"
+}
+
+# Output plans rebuild the same public fixed tuple from an independent source frame and re-run
+# tag/inactive-lane checks before publishing returndata.
+for case in \
+  "$echo_option_selector|0 0" \
+  "$echo_option_selector|1 37" \
+  "$echo_tagged_selector|0 0 0" \
+  "$echo_tagged_selector|1 7 0" \
+  "$echo_tagged_selector|2 11 29"; do
+  selector="${case%%|*}"
+  words="${case#*|}"
+  # shellcheck disable=SC2086
+  echoed="$("$cast" call --rpc-url "$rpc" "$addr" --data "$(word_data "$selector" $words)")"
+  # shellcheck disable=SC2086
+  expected="$(return_words $words)"
+  solana_lean_require_equal "$echoed" "$expected" "Tagged Tuple v1 result $words"
+done
+
 for malformed in \
   "$(word_data "$option_selector" 0 1)" \
   "$(word_data "$option_selector" 2 0)" \

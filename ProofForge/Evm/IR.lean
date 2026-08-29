@@ -234,8 +234,8 @@ structure Method where
   retCount : Nat := 1
   /-- Canonical identity for input guard semantics not encoded by the Solidity selector. -/
   inputPolicy : String := ""
-  /-- Target-owned dynamic output plan, independent of calldata-tail policy. -/
-  outputPlan : Option Codec.DynamicOutputPlan := none
+  /-- Target-owned ABI output plan, independent of calldata-tail and input-guard state. -/
+  outputPlan : Option Codec.OutputPlan := none
   /-- Canonical identity for output rules not represented in the function selector. -/
   outputPolicy : String := ""
   ops : Array Op := #[]
@@ -384,15 +384,15 @@ private def bindParams (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
 
 private structure BoundReturn where
   types : Array Core.Codec.Scalar
-  plan : Option Codec.DynamicOutputPlan := none
+  plan : Option Codec.OutputPlan := none
   policy : String := ""
 
 private def bindReturn (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String BoundReturn := do
-  if let some plan ← Codec.dynamicOutputPlan method.retSchema then
+  if let some plan ← Codec.outputPlan method.retSchema then
     let types := plan.sourceWords
     unless types.size == method.retCount do
-      throw s!"evm/codec: dynamic return metadata is incomplete for {method.ixName}"
+      throw s!"evm/codec: ABI return metadata is incomplete for {method.ixName}"
     return { types, plan := some plan, policy := plan.canonical }
   if method.retSchema == .unit || schemaIsScalar method.retSchema then
     return { types := method.retTypes }

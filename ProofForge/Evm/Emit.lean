@@ -1116,7 +1116,7 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
                 materializeVal p valueIndent "arg" method.paramCount paramTypes value state
             }
             let (text, next) ←
-              Codec.Emit.renderDynamicReturn context plan values finalState
+              Codec.Emit.renderReturn context plan values finalState
             body := body ++ text
             finalState := next
           else if schemaIsStaticAggregate method.retSchema then
@@ -1450,6 +1450,29 @@ private def abiJsonInputShape : Core.Codec.Schema → Except String AbiJsonShape
       return { type := "tuple", components }
   | schema => abiJsonShape schema
 
+/-- Output JSON follows the independent ABI output plan. Logical sums use the same public tuple
+shape as Tagged Tuple v1 inputs, without reusing calldata plans or decoded guard state. -/
+private def abiJsonOutputShape : Core.Codec.Schema → Except String AbiJsonShape
+  | schema@(.option payload) => do
+      let _ ← Codec.taggedTupleV1OutputPlan schema
+      return {
+        type := "tuple"
+        components := #[
+          ("present", { type := "bool" }),
+          ("value", ← abiJsonShape payload)
+        ]
+      }
+  | schema@(.enumeration ..) => do
+      let plan ← Codec.taggedTupleV1OutputPlan schema
+      let mut components : Array (String × AbiJsonShape) := #[
+        ("tag", { type := "uint8" })
+      ]
+      for i in [1:plan.words.size] do
+        components := components.push
+          ("p" ++ toString (i - 1), { type := ← Codec.abiType plan.words[i]! })
+      return { type := "tuple", components }
+  | schema => abiJsonShape schema
+
 private partial def renderAbiJsonParam (name : String) (shape : AbiJsonShape) : String :=
   let base := "{\"name\":\"" ++ escapeJson name ++ "\",\"type\":\"" ++ shape.type ++ "\""
   if shape.components.isEmpty then base ++ "}"
@@ -1477,7 +1500,7 @@ private def ctorAbi (p : IR.Program) : Except String String := do
 
 private def outputsJson (m : IR.Method) : Except String String := do
   unless m.retSchema == .unit do
-    return "[" ++ renderAbiJsonParam "" (← abiJsonShape m.retSchema) ++ "]"
+    return "[" ++ renderAbiJsonParam "" (← abiJsonOutputShape m.retSchema) ++ "]"
   let types ← m.resolvedRetTypes
   let mut outputs := #[]
   for type in types do

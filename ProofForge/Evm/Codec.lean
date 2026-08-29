@@ -150,6 +150,22 @@ inductive DynamicOutputPlan where
   | packedBytes (plan : PackedBytesOutputPlan)
   deriving Repr, BEq, Inhabited
 
+/-- Output-side Tagged Tuple v1 geometry. It deliberately contains no calldata offsets,
+input projections, or decoded guard state: returndata is rebuilt from the fixed shared source
+frame and checked again at the publication boundary. -/
+structure TaggedTupleOutputPlan where
+  typeName : String
+  words : Array Scalar
+  activePayloadWords : Array Nat
+  deriving Repr, BEq, Inhabited
+
+/-- One EVM ABI output policy. Dynamic tails and fixed tagged tuples are disjoint variants so a
+method cannot accidentally carry two incompatible return encoders. -/
+inductive OutputPlan where
+  | dynamic (plan : DynamicOutputPlan)
+  | taggedTuple (plan : TaggedTupleOutputPlan)
+  deriving Repr, BEq, Inhabited
+
 /-- Fixed source-frame geometry shared by dynamic inputs that support scalar indexed reads. Wire
 decoding remains variant-specific in the target codec interpreter. -/
 def DynamicInputPlan.indexedFrame : DynamicInputPlan → Nat × Array Scalar
@@ -190,6 +206,13 @@ def DynamicOutputPlan.sourceWords : DynamicOutputPlan → Array Scalar
       #[.uint32] ++ (Array.range array.capacity).flatMap fun _ => array.elementWords
   | .packedBytes bytes => #[.uint32] ++ Array.replicate bytes.capacity .uint8
 
+def TaggedTupleOutputPlan.sourceWords (plan : TaggedTupleOutputPlan) : Array Scalar :=
+  plan.words
+
+def OutputPlan.sourceWords : OutputPlan → Array Scalar
+  | .dynamic plan => plan.sourceWords
+  | .taggedTuple plan => plan.sourceWords
+
 /-- Canonical identity for output rules that are not visible in a Solidity function selector. -/
 def DynamicOutputPlan.canonical : DynamicOutputPlan → String
   | .boundedArray array =>
@@ -197,6 +220,14 @@ def DynamicOutputPlan.canonical : DynamicOutputPlan → String
         s!"element-words={array.elementWords.size})"
   | .packedBytes bytes =>
       s!"packed-bytes-return-v1(capacity={bytes.capacity};utf8={bytes.validateUtf8})"
+
+def TaggedTupleOutputPlan.canonical (plan : TaggedTupleOutputPlan) : String :=
+  let active := String.intercalate "," (plan.activePayloadWords.map toString).toList
+  s!"tagged-tuple-return-v1({plan.typeName};active=[{active}])"
+
+def OutputPlan.canonical : OutputPlan → String
+  | .dynamic plan => plan.canonical
+  | .taggedTuple plan => plan.canonical
 
 /-- Canonical identity for guard semantics not visible in the Solidity selector. Two enums can
 share the same fixed tuple type while activating different payload lanes, so target IR digests
@@ -330,6 +361,44 @@ private def enumPayloadWords : Schema → Except String Nat
       return items.size
   | _ => throw "evm/codec: tagged tuple v1 enum fields must be UInt64"
 
+/-- Derive Tagged Tuple v1 returndata geometry independently from the input plan. The first slice
+matches Extract's fixed tagged-result frame: one-limb scalar Option payloads and unit/UInt64 enum
+payloads. Constructed, richer, and nested tagged results remain fail closed. -/
+def taggedTupleV1OutputPlan : Schema → Except String TaggedTupleOutputPlan
+  | .option (.scalar type) => do
+      unless Scalar.isWellFormed type && limbCount type == 1 do
+        throw "evm/codec: tagged tuple v1 Option result requires a one-limb scalar payload"
+      pure {
+        typeName := "(bool," ++ (← abiType type) ++ ")"
+        words := #[.boolean, type]
+        activePayloadWords := #[0, 1]
+      }
+  | .option _ =>
+      throw "evm/codec: tagged tuple v1 Option result requires a one-limb scalar payload"
+  | .enumeration _ tagBits variants => do
+      unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
+        throw "evm/codec: tagged tuple v1 enum result requires a nonempty uint8 tag space"
+      let counts ← variants.mapM fun variant => enumPayloadWords variant.2
+      let payloadWords := counts.foldl (init := 0) max
+      unless 1 + payloadWords ≤ maxBoundedArrayLocalWords do
+        throw s!"evm/codec: tagged tuple result frame exceeds {maxBoundedArrayLocalWords} words"
+      let types := #["uint8"] ++ Array.replicate payloadWords "uint64"
+      pure {
+        typeName := "(" ++ String.intercalate "," types.toList ++ ")"
+        words := #[.uint8] ++ Array.replicate payloadWords .uint64
+        activePayloadWords := counts
+      }
+  | _ => throw "evm/codec: tagged tuple v1 output requires Option or enum"
+
+/-- Select exactly one target-owned ABI output policy. Static scalars/aggregates return `none` and
+continue through their existing fixed-word encoder. -/
+def outputPlan (schema : Schema) : Except String (Option OutputPlan) := do
+  if let some plan ← dynamicOutputPlan schema then
+    return some (.dynamic plan)
+  match schema with
+  | .option _ | .enumeration .. => return some (.taggedTuple (← taggedTupleV1OutputPlan schema))
+  | _ => pure none
+
 /-- **ProofForge EVM Tagged Tuple v1** is the explicit standard-ABI input policy for logical sums.
 
 * `Option<T>` is `(bool present,T value)`. An absent value requires every payload word to be zero.
@@ -337,7 +406,7 @@ private def enumPayloadWords : Schema → Except String Nat
   The tag is the source constructor ordinal and every lane inactive for that constructor is zero.
 
 The fixed tuple avoids dynamic offsets and gives every source projection one bounded ABI word.
-Tagged returns and dynamic tails are deliberately outside this input-only policy. -/
+Its input plan remains independent from the output plan selected above. -/
 def taggedTupleV1InputPlan : Schema → Except String AbiInputPlan
   | .option payload => do
       let payloadPlan ← staticInputPlan payload

@@ -303,10 +303,18 @@ elab "#pf_guard_aggregate_boundary_schemas" : command => do
     ops := #[.returnU64 (.lit 0), .returnU64 (.lit 0)]
   }
   match ProofForge.Evm.IR.fromExtracted { program with methods := #[init, taggedReturn] } with
-  | .error reason =>
-      unless reason.contains "option ABI tags" do
-        throwError s!"wrong EVM tagged return rejection: {reason}"
-  | .ok _ => throwError "EVM accepted a tagged return under the input-only policy"
+  | .error reason => throwError s!"EVM rejected a qualified tagged return: {reason}"
+  | .ok lowered =>
+      let some read := lowered.entries.find? (·.ixName == "read")
+        | throwError "EVM tagged return entry is missing"
+      unless read.retTypes == #[.boolean, .uint64] &&
+          read.outputPlan == some (.taggedTuple {
+            typeName := "(bool,uint64)"
+            words := #[.boolean, .uint64]
+            activePayloadWords := #[0, 1]
+          }) &&
+          read.outputPolicy == "tagged-tuple-return-v1((bool,uint64);active=[0,1])" do
+        throwError s!"wrong EVM Tagged Tuple v1 output binding: {repr read}"
   let wideResult : Extract.IR.Method := {
     kind := .get
     name := "AggregateGate.wideResult"

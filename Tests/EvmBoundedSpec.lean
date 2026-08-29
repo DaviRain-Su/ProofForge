@@ -83,14 +83,14 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       text.inputPolicy == "0=packed-bytes-v1(string;capacity=8;utf8=true)" &&
       echoValues.paramCount == 5 && echoValues.retCount == 5 &&
       echoValues.retTypes == #[.uint32, .uint16, .uint16, .uint16, .uint16] &&
-      echoValues.outputPlan == some (.boundedArray {
+      echoValues.outputPlan == some (.dynamic (.boundedArray {
         capacity := 4, elementTypeName := "uint16", elementWords := #[.uint16]
-      }) &&
+      })) &&
       echoValues.outputPolicy == "bounded-array-return-v1(uint16[];capacity=4;element-words=1)" &&
-      echoBytes.retCount == 9 && echoBytes.outputPlan == some (.packedBytes {
-        capacity := 8, validateUtf8 := false }) &&
-      echoString.retCount == 9 && echoString.outputPlan == some (.packedBytes {
-        capacity := 8, validateUtf8 := true }) &&
+      echoBytes.retCount == 9 && echoBytes.outputPlan == some (.dynamic (.packedBytes {
+        capacity := 8, validateUtf8 := false })) &&
+      echoString.retCount == 9 && echoString.outputPlan == some (.dynamic (.packedBytes {
+        capacity := 8, validateUtf8 := true })) &&
       makeString.paramCount == 9 && makeString.outputPlan == echoString.outputPlan do
     throwError s!"wrong EVM bounded ABI methods: {repr bounded}, {repr combined}, " ++
       s!"{repr bytes}, {repr text}"
