@@ -90,6 +90,9 @@ def emitQuery (context : Context σ) (query : Query) (operands : Array Ops.Val) 
   | .selector4, #[] =>
       return emitCachedWord context (fun src _ => packFixedBytesWord src 0 4)
         "selector4" "calldataload(0)" 0 st
+  | .calldataSize, #[] =>
+      let (result, next) := context.fresh st
+      return (context.indent ++ "let " ++ result ++ " := calldatasize()" ++ nl, result, next)
   | .coinbase20 limb, #[] =>
       return emitCachedWord context packAddrWord "coinbase20" "coinbase()" limb st
   | .origin20 limb, #[] =>

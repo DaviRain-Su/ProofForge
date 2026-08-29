@@ -744,6 +744,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   EvmCtx digest `22948730711563b5`、bytecode 3,108 B；Anvil 精确核对 `selector()` 自身的
   Solidity selector。详见 `docs/plan/tasks/r4-013.md`。
 
+- R4-014 EVM calldata length 已完成：`Sdk.Context.calldataSize : UInt64` 通过既有
+  Environment Component 观察 exact `CALLDATASIZE`，同时支持 direct return 与普通 scalar
+  composition。它不暴露 raw `msg.data`、pointer、unchecked byte read，也不新增 top-level
+  Ops/IR/main Emit recipe、allocation、storage 或 call。EvmCtx digest
+  `1d9437e16e664931`、bytecode 3,410 B；Anvil 核对零参数 ABI 调用只包含 exact 四字节
+  selector。详见 `docs/plan/tasks/r4-014.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、

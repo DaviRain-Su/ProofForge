@@ -142,6 +142,11 @@ the pre-Paris `DIFFICULTY` interpretation of opcode `0x44`; assembly pins the Ca
 rejected by the existing selector-dispatch route before an entry can observe this value. -/
 @[irreducible] def evmSelector4 : ProofForge.Core.Value.FixedBytes 4 := ⟨0, 0, 0, 0⟩
 
+/-- Exact byte length of the current call data (`msg.data.length` / `CALLDATASIZE`). The EVM
+instruction returns a full word, but calldata is already bounded by the transaction and target
+resource limits; the source contract exposes ProofForge's supported UInt64 resource envelope. -/
+@[irreducible] def evmCalldataSize : UInt64 := 0
+
 /-- EVM `BLOCKHASH(number)` with its native 256-block availability semantics. Unavailable,
 current, and future block numbers return zero exactly as the VM specifies. -/
 @[irreducible] def evmBlockHash256 (_number : UInt64) : UInt256 := ⟨0, 0, 0, 0⟩

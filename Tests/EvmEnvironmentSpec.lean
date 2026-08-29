@@ -25,6 +25,8 @@ open ProofForge.Evm
 #guard !(Environment.Query.gasPrice256 4).wellFormed
 #guard Environment.Query.selector4.arity == 0
 #guard Environment.Query.selector4.wellFormed
+#guard Environment.Query.calldataSize.arity == 0
+#guard Environment.Query.calldataSize.wellFormed
 #guard Environment.Query.codeSize20.arity == 3
 #guard (Environment.Query.codeHash32 3).wellFormed
 #guard !(Environment.Query.codeHash32 4).wellFormed
@@ -95,6 +97,10 @@ elab "#pf_guard_evm_environment_component" : command => do
     | throwError "missing EvmCtx.selector"
   unless hasEnvironmentReturn selector .selector4 do
     throwError "EvmCtx.selector escaped the Component bridge"
+  let some calldataSize := ctx.entries.find? (·.ixName == "calldataSize")
+    | throwError "missing EvmCtx.calldataSize"
+  unless hasEnvironmentReturn calldataSize .calldataSize do
+    throwError "EvmCtx.calldataSize escaped the Component bridge"
   requireQuery ctx "blockHash" .blockHash256
   requireQuery ctx "codeHash" .codeHash32
   requireQuery ctx "balance" .balance256
@@ -129,10 +135,12 @@ elab "#pf_guard_evm_environment_component" : command => do
       tipJarYul.contains " := prevrandao()" && tipJarYul.contains " := gaslimit()" &&
       ctxYul.contains " := gasprice()" && ctxYul.contains " := origin()" &&
       ctxYul.contains " := calldataload(0)" &&
+      ctxYul.contains " := calldatasize()" &&
       ctxYul.contains " := blockhash(" && tipJarYul.contains " := coinbase()" &&
       (ctxYul.splitOn "gasprice()").length == 2 &&
       (ctxYul.splitOn "origin()").length == 2 &&
       (ctxYul.splitOn " := calldataload(0)").length == 2 &&
+      (ctxYul.splitOn " := calldatasize()").length ≥ 2 &&
       (ctxYul.splitOn "blockhash(").length == 2 &&
       (tipJarYul.splitOn "coinbase()").length == 2 &&
       (ctxYul.splitOn "extcodesize(").length == 3 &&

@@ -19,6 +19,7 @@ inductive Query where
   | gasLimit256 (limb : Nat)
   | gasPrice256 (limb : Nat)
   | selector4
+  | calldataSize
   | coinbase20 (limb : Nat)
   | origin20 (limb : Nat)
   | blockHash256 (limb : Nat)
@@ -36,7 +37,7 @@ def Query.wellFormed : Query → Bool
   | .gasLeft256 limb | .baseFee256 limb | .prevRandao256 limb | .gasLimit256 limb
   | .gasPrice256 limb =>
       limb ≤ 3
-  | .selector4 => true
+  | .selector4 | .calldataSize => true
   | .coinbase20 limb | .origin20 limb => limb ≤ 2
   | .blockHash256 limb => limb ≤ 3
   | .codeSize20 => true
@@ -63,6 +64,9 @@ def Query.canonical (_renderValue : V → String) (operands : Array V) : Query �
   | .selector4 =>
       if operands.isEmpty then "env.selector4"
       else s!"invalid-env.selector4-{operands.size}"
+  | .calldataSize =>
+      if operands.isEmpty then "env.calldataSize"
+      else s!"invalid-env.calldataSize-{operands.size}"
   | .coinbase20 limb =>
       if operands.isEmpty then s!"env.coinbase20.{limb}"
       else s!"invalid-env.coinbase20.{limb}-{operands.size}"

@@ -13,7 +13,7 @@ def entries : Array Entry := #[
   { name := "Phase", digest := "bed1d2111e652ac1" },
   { name := "Flag", digest := "6056d4920876b4f7" },
   { name := "Maybe", digest := "6b602a44477483ee" },
-  { name := "EvmCtx", digest := "4eb0c4cd2c0b1239" },
+  { name := "EvmCtx", digest := "1d9437e16e664931" },
   { name := "EvmBounded", digest := "5258e5a9356a2a9e" },
   { name := "EvmStaticCounter", digest := "ce10997e74a7972b" },
   { name := "EvmStaticRoster", digest := "5994b0ab59e7399b" },

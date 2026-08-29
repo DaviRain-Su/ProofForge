@@ -59,6 +59,11 @@ def origin (_s : State) : Address :=
 def selector (_s : State) : Bytes4 :=
   Context.selector
 
+/-- Exact `msg.data.length` without exposing raw calldata memory. -/
+@[pf_entry]
+def calldataSize (_s : State) : UInt64 :=
+  Context.calldataSize
+
 /-- Full-width hash of a recent block. EVM returns zero outside its 256-block history window. -/
 @[pf_entry]
 def blockHash (_s : State) (number : UInt64) : UInt256 :=

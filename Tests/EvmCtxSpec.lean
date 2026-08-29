@@ -15,6 +15,7 @@ open Lean Elab Command
 #guard gasPrice (init 0) == Context.gasPrice
 #guard origin (init 0) == Context.origin
 #guard selector (init 0) == Context.selector
+#guard calldataSize (init 0) == Context.calldataSize
 #guard blockHash (init 0) 37 == Context.blockHash 37
 #guard codeSize (init 0) ⟨1, 2, 3⟩ == Address.codeSize ⟨1, 2, 3⟩
 #guard hasCode (init 0) ⟨1, 2, 3⟩ == Address.hasCode ⟨1, 2, 3⟩

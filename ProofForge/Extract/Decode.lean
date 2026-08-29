@@ -1152,6 +1152,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
       | some w0, some w1, some w2 =>
           some (.ext (.evm (.component (.environment .codeSize20))) #[w0, w1, w2])
       | _, _, _ => none
+  else if endsWith e ".evmCalldataSize" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmCalldataSize then
+    some (.ext (.evm (.component (.environment .calldataSize))) #[])
   else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller then
     some .evmCaller
   else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Evm.Runtime.evmBlockNumber then
@@ -4977,6 +4980,9 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmSelector4 ||
       endsWith app ".evmSelector4" then
     some #[.returnU64 (.ext (.evm (.component (.environment .selector4))) #[])]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmCalldataSize ||
+      endsWith app ".evmCalldataSize" then
+    some #[.returnU64 (.ext (.evm (.component (.environment .calldataSize))) #[])]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmBlockHash256 ||
       endsWith app ".evmBlockHash256" then
     let number := valAtEnd env args 0
