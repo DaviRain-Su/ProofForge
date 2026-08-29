@@ -139,8 +139,10 @@ UInt64。完整 32B / 动态输入 / keccak 仍 FC。`Examples.XrplHash` 把结�
 Ownable 走这个 helper，不是新 Op。8 字节 `callerLo` 只是截断视图。
 
 后续 SDK / Runtime 缺口（Vec、Map、日志、第二批 host）见
-[xrpl-sdk-gap.md](xrpl-sdk-gap.md)。官方 Rust crate 对照见
-[xrpl-rust-sdk.md](xrpl-rust-sdk.md)。不要把 SVM RBMap 或 EVM hashed Map 接到 XRPL。
+[xrpl-sdk-gap.md](xrpl-sdk-gap.md)。复杂合约下一阶段（用户 ContractData、
+`cache_le`、`submitTransaction`）见 [xrpl-next.md](xrpl-next.md)。
+官方 Rust crate 对照见 [xrpl-rust-sdk.md](xrpl-rust-sdk.md)。
+不要把 SVM RBMap 或 EVM hashed Map 接到 XRPL。
 
 ## 7. 明确 fail closed
 
