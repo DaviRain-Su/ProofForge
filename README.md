@@ -43,6 +43,9 @@ lake exe pf -- deploy XrplHold
 # lake exe pf -- call --contract rXXX initialize
 # lake exe pf -- call --contract rXXX bump
 # lake exe pf -- call --contract rXXX pause
+lake exe pf -- deploy XrplMark
+# lake exe pf -- call --contract rXXX initialize
+# lake exe pf -- call --contract rXXX stamp
 ```
 
 SVM 写出 `Name.so` / `Name.s` / `Name.idl.json`（Solana IDL spec 0.1.0）。
@@ -54,7 +57,8 @@ XRPL（`--target xrpl`；`wasm` 会被拒绝并提示选具体链）写出 `Name
 `runtime-tests/xrpl/check.sh` 断言 Bedrock import 表，`counter.sh` 起 Bedrock
 本地节点（缺 Docker / bedrock 则 skip）。活网零参数烟测是
 `runtime-tests/xrpl/smoke.sh`；零参数 Ownable 是 `gate.sh`（`renounce` 后再
-`bump` 状态码 3）；Pausable 是 `hold.sh`（`pause` 后再 `bump` 状态码 4）。
+`bump` 状态码 3）；Pausable 是 `hold.sh`（`pause` 后再 `bump` 状态码 4）；
+owner+hash 是 `mark.sh`（`stamp` 写 SHA-512Half(`"vault"`) lo64）。
 现成 Bedrock Docker **不能**模拟 AlphaNet。
 
 Mollusk（环境变量已改成 `PF_*_SO`）：

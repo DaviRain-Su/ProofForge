@@ -329,7 +329,7 @@ async function main() {
         return;
       }
       const s = String(raw).trim().toLowerCase().replace(/^0x/, "");
-      process.stdout.write(String(s ? parseInt(s, 16) : 0) + "\n");
+      process.stdout.write(String(s ? BigInt("0x" + s).toString(10) : 0) + "\n");
       return;
     }
     throw new Error("missing ContractData for " + cfg.contract_account);
