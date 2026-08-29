@@ -139,7 +139,7 @@ private structure BoundInput where
   schema : Core.Codec.Schema
   plan : Codec.BorshInputPlan
 
-private def bindMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
+private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundInput) := do
   if method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar then
     return (method, none)
@@ -157,11 +157,40 @@ private def bindMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     paramSchemas := scalarSchemas
     ops }, some { ixName := method.ixName, schema, plan })
 
-private def decorateMethod (inputs : Array BoundInput) (method : Method) : Method :=
-  match inputs.find? (·.ixName == method.ixName) with
+private structure BoundOutput where
+  ixName : String
+  schema : Core.Codec.Schema
+  plan : Codec.BorshOutputPlan
+
+private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
+    Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundOutput) := do
+  match method.retSchema with
+  | .boundedArray .. | .boundedBytes _ | .boundedString _ =>
+      unless method.kind == .get do
+        throw s!"near/codec: {method.ixName} bounded output currently requires a view"
+      let schema := method.retSchema
+      let plan ← Codec.outputPlan schema
+      unless method.retCount == plan.sourceValueCount do
+        throw s!"near/codec: {method.ixName} output frame does not match its Borsh plan"
+      return ({ method with
+        retWidths := #[8]
+        retTypes := #[.uint64]
+        retSchema := .scalar .uint64
+        retCount := 1 }, some { ixName := method.ixName, schema, plan })
+  | _ => return (method, none)
+
+private def decorateMethod (inputs : Array BoundInput) (outputs : Array BoundOutput)
+    (method : Method) : Method :=
+  let method := match inputs.find? (·.ixName == method.ixName) with
   | some input => { method with
       inputSchema := some input.schema
       inputPolicy := input.plan.canonical }
+  | none => method
+  match outputs.find? (·.ixName == method.ixName) with
+  | some output => { method with
+      outputSchema := some output.schema
+      outputPolicy := output.plan.canonical
+      tupleArity := some output.plan.sourceValueCount }
   | none => method
 
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
@@ -171,15 +200,18 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
   let projected ← Core.Target.projectProgram extractRegistration src
   let mut methods := #[]
   let mut inputs := #[]
+  let mut outputs := #[]
   for method in projected.methods do
-    let (bound, input?) ← bindMethod method
+    let (inputBound, input?) ← bindInput method
+    let (bound, output?) ← bindOutput inputBound
     methods := methods.push bound
     if let some input := input? then inputs := inputs.push input
+    if let some output := output? then outputs := outputs.push output
   let program ← Wasm.IR.fromProjected { projected with methods }
   return {
     program with
-    initializer := decorateMethod inputs program.initializer
-    entries := program.entries.map (decorateMethod inputs)
+    initializer := decorateMethod inputs outputs program.initializer
+    entries := program.entries.map (decorateMethod inputs outputs)
   }
 
 /-- Digest domain is chain-owned (`near-raw-u64|`), deliberately different from the

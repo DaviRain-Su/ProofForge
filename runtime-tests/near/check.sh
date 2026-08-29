@@ -72,6 +72,16 @@ memory_anchors = (
     '(func (export "roundTrip")',
     '(func (export "growAndReuse")',
 )
+output_anchors = (
+    '(local $pf_output_ptr i32)',
+    '(local $pf_output_length i64)',
+    '(call $pf_arena_alloc',
+    '(func (export "staticBytes")',
+    '(func (export "staticString")',
+    '(func (export "staticValues")',
+    '(func (export "echoBytes")',
+    '(call $pf_value_return (i64.add (i64.const 4)',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -85,6 +95,8 @@ for wat in wats:
         extra = bytes_anchors
     elif wat.stem == "NearMemory":
         extra = memory_anchors
+    elif wat.stem == "NearOutput":
+        extra = output_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

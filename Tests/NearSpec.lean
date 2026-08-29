@@ -21,9 +21,11 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Ops.ValKind.arity .reserved == 0
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
-#guard ProofForge.Wasm.Near.Registry.names == #["Counter", "NearCtx", "NearBytes", "NearMemory"]
+#guard ProofForge.Wasm.Near.Registry.names ==
+  #["Counter", "NearCtx", "NearBytes", "NearMemory", "NearOutput"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMemory" == some "830255873ad66d7c"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearOutput" == some "d455a43be10516e3"
 
 #guard ProofForge.Wasm.Near.Ops.OpExt.wellFormed
   (.logUtf8 "NEAR ✓" : ProofForge.Wasm.Near.Ops.OpExt ProofForge.Wasm.Near.Ops.Val)

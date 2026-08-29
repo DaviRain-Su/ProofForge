@@ -67,6 +67,11 @@ structure Method (ValExt : Type) (OpExt : Type → Type) where
   inputSchema : Option Core.Codec.Schema := none
   /-- Canonical target-owned input policy. This participates in the digest only when nonempty. -/
   inputPolicy : String := ""
+  /-- Optional target-owned logical output retained after a bounded result is rewritten to the
+  physical scalar metadata accepted by the shared WASM gate. -/
+  outputSchema : Option Core.Codec.Schema := none
+  /-- Canonical target-owned output policy. Empty preserves historical target digests. -/
+  outputPolicy : String := ""
   tupleArity : Option Nat := none
   echoDropped : Bool := false
   ops : Array (Op ValExt OpExt) := #[]
@@ -353,6 +358,8 @@ def fromProjected {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
     paramCount := initSrc.paramCount
     inputSchema := none
     inputPolicy := ""
+    outputSchema := none
+    outputPolicy := ""
     tupleArity := none
     ops := initSrc.ops
     evaluation := initSrc.evaluation
@@ -372,6 +379,8 @@ def fromProjected {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
       paramCount := m.paramCount
       inputSchema := none
       inputPolicy := ""
+      outputSchema := none
+      outputPolicy := ""
       tupleArity
       echoDropped
       ops := m.ops
@@ -470,7 +479,8 @@ private def methodCanon {ValExt : Type} {OpExt : Type → Type}
     | none => "mut"
   let echo := if method.echoDropped then "echo" else "noecho"
   let input := if method.inputPolicy.isEmpty then "" else s!":{method.inputPolicy}"
-  s!"{tag}:{method.ixName}:{method.paramCount}:{echo}{input}:[{opsCanon extValCanon extOpCanon method.ops}]"
+  let output := if method.outputPolicy.isEmpty then "" else s!":{method.outputPolicy}"
+  s!"{tag}:{method.ixName}:{method.paramCount}:{echo}{input}{output}:[{opsCanon extValCanon extOpCanon method.ops}]"
 
 def canonical {ValExt : Type} {OpExt : Type → Type}
     (digestDomain : String) (extValCanon : ValExt → String)

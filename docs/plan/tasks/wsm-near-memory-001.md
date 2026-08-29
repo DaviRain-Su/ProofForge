@@ -41,7 +41,7 @@ leak stale values.
 
 ## Next
 
-Use the arena as the invocation-local substrate for bounded Borsh output and later raw binary
-storage register copies. Keep persistent collection layout and lifecycle independent from arena
-addresses; after raw storage is verified, add current-layout Vector, LookupMap/Set, and a separately
-specified bounded Queue.
+The arena-backed bounded Borsh view output landed in wsm-near-output-001. Next use the same
+invocation-local substrate for raw binary storage register copies. Keep persistent collection
+layout and lifecycle independent from arena addresses; after raw storage is verified, add
+current-layout Vector, LookupMap/Set, and a separately specified bounded Queue.

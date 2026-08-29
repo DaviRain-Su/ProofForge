@@ -209,6 +209,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-log-001](tasks/wsm-near-log-001.md) | done | NEAR static UTF-8 logging effect |
 | [wsm-near-bytes-001](tasks/wsm-near-bytes-001.md) | done | NEAR canonical Borsh bounded bytes/string input + strict UTF-8 |
 | [wsm-near-memory-001](tasks/wsm-near-memory-001.md) | done | NEAR invocation-local checked Wasm arena + SDK `Buffer64` |
+| [wsm-near-output-001](tasks/wsm-near-output-001.md) | done | NEAR allocator-backed canonical bounded Borsh view output |
 
 ## SVM 全面工作计划（当前主线）
 

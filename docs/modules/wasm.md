@@ -47,4 +47,4 @@ ProofForge/Wasm/
 | 链 | 模块 | 状态 |
 |---|---|---|
 | XRPL Bedrock（XLS-0101） | [`Wasm/Xrpl`](xrpl.md) | Lean → WAT → `.wasm`（wsm-002）；本地四场景（wsm-003）；Runtime 叶子（wsm-005） |
-| NEAR Protocol | [`Wasm/Near`](near.md) | Lean → WAT → `.wasm`（bounded Borsh input + invocation-local guest arena；[wsm-040](../plan/tasks/wsm-040.md)） |
+| NEAR Protocol | [`Wasm/Near`](near.md) | Lean → WAT → `.wasm`（bounded Borsh input/output + invocation-local guest arena；[wsm-near-output-001](../plan/tasks/wsm-near-output-001.md)） |

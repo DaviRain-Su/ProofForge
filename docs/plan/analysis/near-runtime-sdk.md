@@ -51,7 +51,7 @@ Authoritative source anchors:
 | full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
 | u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance complete** in wsm-near-u128-001; gas/promise values absent | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | ASCII keys, fixed 8-byte values, read/write only | Near Runtime storage effect |
-| Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String Borsh input in wsm-near-bytes-001; raw UInt64 output; aggregate/JSON absent | Near entry adapter/codec |
+| Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | independent field keys | Near SDK policy; migration/version explicit |
 | `store::Vector` | SDK over KV, prefix + `u32_le` index | fixed source vectors rejected by wasm dynamic ops | Near storage binding after bytes/Borsh |
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | absent | Near storage binding; no host Map opcode |
@@ -63,8 +63,9 @@ Authoritative source anchors:
 | callback results | promise count/status/register + SDK decode | absent | bounded Runtime result read + SDK Result codec |
 | private/payable/init | generated entry guards | absent | entry-adapter policy over context/storage |
 
-Current NEAR therefore supports scalar state machines, context inspection, and one top-level
-bounded Borsh bytes/String input, not yet a general near-sdk-rs contract model.
+Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
+bytes/String input, and bounded bytes/String/unsigned-array view output. It is not yet a general
+near-sdk-rs contract model.
 
 ## 3. Storage and collection contracts
 
@@ -87,9 +88,9 @@ These cannot be called the same physical layout. In particular:
 
 An early compile-time `field_0 … field_n` component may be useful, but it must be named
 `FixedSlots` (or equivalent), not `store::Vector`, and must document that it is ProofForge-owned.
-The wsm-040 arena supplies only invocation-local serialized key/value buffers, codec scratch, and
-explicit caches. Every durable collection element, length, index, and lifecycle marker remains in
-NEAR KV storage; arena addresses must never become collection layout or persistent state.
+The wsm-near-memory-001 arena supplies only invocation-local serialized key/value buffers, codec
+scratch, and explicit caches. Every durable collection element, length, index, and lifecycle marker
+remains in NEAR KV storage; arena addresses must never become collection layout or persistent state.
 
 ## 4. Promise and transfer contract
 
@@ -137,7 +138,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | N0 identity | lossless host AccountId + equality/self-call guard (**wsm-020 done**) | all eight zero-fill stores; high-word/length equality; sandbox 9-byte boundary |
 | N1 byte/wide substrate | **UInt128 token context done** in wsm-near-u128-001, static UTF-8 data spans in wsm-near-log-001, and bounded bytes/string input frames/register reads done in wsm-near-bytes-001; dynamic return/panic/log spans remain | resource budget; malformed length/OOB/UTF-8 failures |
 | N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
-| N3 entry ABI | first canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded output/static aggregates next, then JSON named objects; generated decode/call/encode wrapper | golden bytes against Rust; exact cursor/padding |
+| N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
 | N5 collections | current-layout Vector → LookupMap/Set → IterableMap/Set → bounded Queue; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
@@ -154,9 +155,9 @@ It depends on full AccountId and u128 and is asynchronous.
    through bounded pointer-free consumers; future codec/storage/promise scratch builds on it.
 3. **NEAR-LOG:** static UTF-8 literals and exact sandbox observation are complete in wsm-near-log-001;
    extend the same effect to bounded dynamic spans after the bytes frame lands.
-4. **NEAR-BORSH-OUTPUT (next SDK slice):** add allocator-backed bounded output/static aggregates
-   without reusing the static input frame; JSON remains later and independent.
-5. **NEAR-STORAGE-RAW (following Runtime slice):** binary key/value read/write/remove/exists with
+4. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
+   output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
+5. **NEAR-STORAGE-RAW (next Runtime slice):** binary key/value read/write/remove/exists with
    explicit status results and allocator-backed bounded register reads.
 6. **NEAR-STORE-VECTOR:** current near-sdk-rs-compatible durable KV layout and explicit flush;
    use the arena only for local codec/cache data, then add LookupMap/Set and a bounded Queue.

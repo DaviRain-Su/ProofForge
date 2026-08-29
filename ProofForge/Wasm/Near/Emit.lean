@@ -244,6 +244,80 @@ private def returnU64Instr (expr : String) (level : Nat) : Array String :=
     indent level "(call $pf_value_return (i64.const 8) (i64.const 0))"
   ]
 
+private def outputPlanOf (method : Method ValKind OpExt) :
+    Except String (Option Codec.BorshOutputPlan) := do
+  match method.outputSchema with
+  | none =>
+      unless method.outputPolicy.isEmpty do
+        throw s!"near/codec: {method.ixName} output policy has no schema"
+      pure none
+  | some schema =>
+      let plan ← Codec.outputPlan schema
+      unless method.outputPolicy == plan.canonical do
+        throw s!"near/codec: {method.ixName} output policy does not match its schema"
+      pure (some plan)
+
+private def narrowMax : Nat → Option UInt64
+  | 1 => some 255
+  | 2 => some 65535
+  | 4 => some 4294967295
+  | 8 => none
+  | _ => none
+
+private def storeOutputElement (width offset : Nat) (value : String) : String :=
+  let op := match width with
+    | 1 => "i64.store8"
+    | 2 => "i64.store16"
+    | 4 => "i64.store32"
+    | _ => "i64.store"
+  "(" ++ op ++ " (i32.add (local.get $pf_output_ptr) (i32.const " ++
+    toString offset ++ ")) " ++ value ++ ")"
+
+/-- Serialize the fixed extractor frame into one canonical active Borsh prefix. Narrow scalar
+lanes are checked before stores so target lowering never silently truncates a malformed frame. -/
+private def returnBorshInstr (st : EState) (plan : Codec.BorshOutputPlan)
+    (values : Array (Val ValKind)) (level : Nat) : Except String (Array String) := do
+  unless values.size == plan.sourceValueCount do
+    throw "near/codec: bounded output plan does not match result leaves"
+  let length ← renderVal st values[0]!
+  let mut lines : Array String := #[
+    indent level ("(local.set $pf_output_length " ++ length ++ ")"),
+    indent level ("(if (i64.gt_u (local.get $pf_output_length) (i64.const " ++
+      toString plan.capacity ++ "))"),
+    indent (level + 2) "(then unreachable))",
+    indent level ("(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const " ++
+      toString plan.maxBytes ++ ") (i64.const 8)))"),
+    indent level "(i32.store (local.get $pf_output_ptr) (i32.wrap_i64 (local.get $pf_output_length)))"
+  ]
+  for i in [0:plan.capacity] do
+    let value ← renderVal st values[i + 1]!
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString i ++
+        ") (local.get $pf_output_length))"),
+      indent (level + 2) "(then"
+    ]
+    if let some maximum := narrowMax plan.elementWidth then
+      lines := lines ++ #[
+        indent (level + 4) ("(if (i64.gt_u " ++ value ++ " (i64.const " ++
+          toString maximum ++ "))"),
+        indent (level + 6) "(then unreachable))"
+      ]
+    lines := lines ++ #[
+      indent (level + 4) (storeOutputElement plan.elementWidth
+        (4 + i * plan.elementWidth) value),
+      indent (level + 2) "))"
+    ]
+  if plan.validateUtf8 then
+    lines := lines ++ #[
+      indent level "(if (i32.eqz (call $pf_utf8_valid (i32.add (local.get $pf_output_ptr) (i32.const 4)) (i32.wrap_i64 (local.get $pf_output_length))))",
+      indent (level + 2) "(then unreachable))"
+    ]
+  lines := lines.push (indent level
+    ("(call $pf_value_return (i64.add (i64.const 4) (i64.mul (local.get $pf_output_length) " ++
+      "(i64.const " ++ toString plan.elementWidth ++ "))) " ++
+      "(i64.extend_i32_u (local.get $pf_output_ptr)))"))
+  return lines
+
 private def emitChecked (st : EState) (kind : String) (lhs rhs : String) (level : Nat) :
     Except String (Array String × EState) := do
   let temp := localOfTemp st.fresh
@@ -309,7 +383,8 @@ private structure Region where
   terminal : Bool := false
 
 private partial def emitRegion (p : Program ValKind OpExt)
-    (view : Bool) (echo : Bool) (level : Nat) (defaultSlot : String)
+    (outputPlan : Option Codec.BorshOutputPlan) (view : Bool) (echo : Bool)
+    (level : Nat) (defaultSlot : String)
     (ops : List (Op ValKind OpExt)) (st : EState) : Except String Region := do
   match ops with
   | [] =>
@@ -329,17 +404,17 @@ private partial def emitRegion (p : Program ValKind OpExt)
             let (lines, st1) ← emitChecked st kind l r level
             let dest' := (fieldOf lhs).orElse (fun _ => st.pendingDest)
             let st' := { st1 with pendingDest := dest' }
-            let region ← emitRegion p view echo level defaultSlot tail st'
+            let region ← emitRegion p outputPlan view echo level defaultSlot tail st'
             return { lines := lines ++ region.lines, st := region.st, terminal := true }
         | none => throw "extract/unsupported: near v0 checked operation"
     | .ite cmp lhs rhs thn els =>
         let l ← renderVal st lhs
         let r ← renderVal st rhs
-        let thenRegion ← emitRegion p view echo (level + 4) defaultSlot thn.toList
+        let thenRegion ← emitRegion p outputPlan view echo (level + 4) defaultSlot thn.toList
           { st with last := none, pendingDest := none }
         unless thenRegion.terminal do
           throw "extract/unsupported: near v0 ite branch must end in a terminal"
-        let elseRegion ← emitRegion p view echo (level + 4) defaultSlot els.toList
+        let elseRegion ← emitRegion p outputPlan view echo (level + 4) defaultSlot els.toList
           { st with fresh := thenRegion.st.fresh, last := none, pendingDest := none }
         unless elseRegion.terminal do
           throw "extract/unsupported: near v0 ite branch must end in a terminal"
@@ -350,7 +425,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
           #[indent (level + 2) "))"]
         if tail.isEmpty || tail.all isExitOp then
           return { lines := iteLines, st := elseRegion.st, terminal := true }
-        let region ← emitRegion p view echo level defaultSlot tail
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
           { st with fresh := elseRegion.st.fresh, last := none, pendingDest := none }
         return { lines := iteLines ++ region.lines, st := region.st, terminal := true }
     | .storeField name value =>
@@ -359,7 +434,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let lines :=
           #[indent level ("(local.set " ++ localOfSlot name ++ " " ++ v ++ ")")] ++
           storeSlot p name ("(local.get " ++ localOfSlot name ++ ")") level
-        let region ← emitRegion p view echo level defaultSlot tail
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
           { st with last := some (localOfSlot name), pendingDest := some name }
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
     | .okState value | .returnState value =>
@@ -383,14 +458,14 @@ private partial def emitRegion (p : Program ValKind OpExt)
         return { lines := #[panicOverflow level], st, terminal := true }
     | .ext (.logUtf8 message) =>
         let (off, len) ← logOf p message
-        let region ← emitRegion p view echo level defaultSlot tail st
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail st
         return {
           lines := #[indent level ("(call $pf_log_utf8 (i64.const " ++ toString len ++
             ") (i64.const " ++ toString off ++ "))")] ++ region.lines
           st := region.st
           terminal := region.terminal }
     | .ext (.transientBuffer64Begin capacity) =>
-        let region ← emitRegion p view echo level defaultSlot tail st
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail st
         return {
           lines := #[indent level ("(call $pf_buffer64_begin (i64.const " ++
             toString capacity ++ "))")] ++ region.lines
@@ -399,14 +474,14 @@ private partial def emitRegion (p : Program ValKind OpExt)
     | .ext (.transientBuffer64Set capacity index value) =>
         let i ← renderVal st index
         let v ← renderVal st value
-        let region ← emitRegion p view echo level defaultSlot tail st
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail st
         return {
           lines := #[indent level ("(call $pf_buffer64_set (i64.const " ++
             toString capacity ++ ") " ++ i ++ " " ++ v ++ ")")] ++ region.lines
           st := region.st
           terminal := region.terminal }
     | .ext (.transientBuffer64Finish capacity) =>
-        let region ← emitRegion p view echo level defaultSlot tail st
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail st
         return {
           lines := #[indent level ("(call $pf_buffer64_finish (i64.const " ++
             toString capacity ++ "))")] ++ region.lines
@@ -418,10 +493,14 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let (values, skipped) := collectReturnU64s value tail
         unless skipped.all isExitOp do
           throw "extract/unsupported: near v0 instructions follow terminal operation"
-        unless values.size == 1 do
-          throw "extract/unsupported: near v0 view wants exactly one UInt64"
-        let v ← renderVal st values[0]!
-        return { lines := returnU64Instr v level, st, terminal := true }
+        match outputPlan with
+        | some plan =>
+            return { lines := ← returnBorshInstr st plan values level, st, terminal := true }
+        | none =>
+            unless values.size == 1 do
+              throw "extract/unsupported: near v0 view wants exactly one UInt64"
+            let v ← renderVal st values[0]!
+            return { lines := returnU64Instr v level, st, terminal := true }
     | _ => throw "extract/unsupported: near v0 op"
 
 private def defaultSlotOf (p : Program ValKind OpExt) : String :=
@@ -512,7 +591,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .joinLocal _ | .errorOverflow | .errorNamed _ => false
 
 private def methodUsesArena (method : Method ValKind OpExt) : Bool :=
-  method.ops.any opUsesArena
+  !method.outputPolicy.isEmpty || method.ops.any opUsesArena
 
 private def programUsesArena (p : Program ValKind OpExt) : Bool :=
   methodUsesArena p.initializer || p.entries.any methodUsesArena
@@ -684,13 +763,14 @@ private def loadSlots (p : Program ValKind OpExt) (level : Nat) : Array String :
 private def renderFn (p : Program ValKind OpExt)
     (method : Method ValKind OpExt) : Except String (Array String) := do
   let inputPlan ← inputPlanOf method
+  let outputPlan ← outputPlanOf method
   if inputPlan.isNone then
     unless method.paramCount ≤ 1 do
       throw s!"extract/unsupported: {method.ixName} wants at most one UInt64 parameter for near v0"
   let view := method.tupleArity.isSome
   let echo := method.echoDropped
   let st : EState := { paramCount := method.paramCount }
-  let region ← emitRegion p view echo 4 (defaultSlotOf p) method.ops.toList st
+  let region ← emitRegion p outputPlan view echo 4 (defaultSlotOf p) method.ops.toList st
   unless region.terminal do
     throw s!"extract/unsupported: {method.ixName} does not end in a terminal"
   let mut lines : Array String := #[]
@@ -701,6 +781,9 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push ("    (local " ++ localOfArg i ++ " i64)")
   if inputPlan.isSome then
     lines := lines.push "    (local $pf_input_size i64)"
+  if outputPlan.isSome then
+    lines := lines.push "    (local $pf_output_ptr i32)"
+    lines := lines.push "    (local $pf_output_length i64)"
   if methodUsesAny predecessorKinds method then
     lines := lines.push "    (local $pf_pred_len i64)"
     for i in List.range 8 do
@@ -850,13 +933,16 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     ""
   ]
 
-private def methodUsesUtf8Input (method : Method ValKind OpExt) : Bool :=
-  match method.inputSchema with
-  | some (.boundedString _) => true
-  | _ => false
+private def methodUsesUtf8Codec (method : Method ValKind OpExt) : Bool :=
+  (match method.inputSchema with
+    | some (.boundedString _) => true
+    | _ => false) ||
+  (match method.outputSchema with
+    | some (.boundedString _) => true
+    | _ => false)
 
-private def programUsesUtf8Input (p : Program ValKind OpExt) : Bool :=
-  methodUsesUtf8Input p.initializer || p.entries.any methodUsesUtf8Input
+private def programUsesUtf8Codec (p : Program ValKind OpExt) : Bool :=
+  methodUsesUtf8Codec p.initializer || p.entries.any methodUsesUtf8Codec
 
 /-- Strict Unicode-scalar UTF-8 validation over one already bounded memory span. Explicit Borsh
 lengths are always used; no NUL-terminated nearcore sentinel semantics enter this helper. -/
@@ -970,7 +1056,7 @@ def emit (p : IR.Program) : Except String String := do
   lines := lines ++ logData
   if programUsesArena p then
     lines := lines ++ arenaHelpers p
-  if programUsesUtf8Input p then
+  if programUsesUtf8Codec p then
     lines := lines ++ utf8Validator
   lines := lines.push ""
   lines := lines ++ (← renderFn p p.initializer)
