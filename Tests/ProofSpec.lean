@@ -7,6 +7,11 @@ import ProofForge.Evm.Sdk.Pausable
 import ProofForge.Evm.Sdk.Fungible
 import ProofForge.Evm.Sdk.Reentrancy
 import ProofForge.Evm.Sdk.Payments
+import ProofForge.Svm.Sdk.AssociatedToken
+import ProofForge.Svm.Sdk.Pda
+import ProofForge.Svm.Sdk.Memo
+import ProofForge.Svm.Sdk.Program
+import ProofForge.Svm.Sdk.Pubkey
 
 /-!
 # 第一批 kernel 证明的连通性抽查
@@ -34,6 +39,12 @@ import ProofForge.Evm.Sdk.Payments
 - `Examples.Tree.removeNode_size` / `init_wf` / `allocNode_wf`：
   `propext`（部分含 `Quot.sound`）
 - `Evm.Sdk.Payments` 委托透明性（accept/send/transfer/transferFrom/...）：零公理（rfl 级）
+- `Evm.Sdk.Reentrancy` fail-closed 包（unknown_neither / 互斥）：`propext`
+- `Evm.Sdk.Fungible` guard 链：`propext`（两个零公理）
+- `Svm.Sdk.AssociatedToken` 角色索引界（Create 7/Recover 8）：`propext`
+- `Svm.Sdk.Pda/Memo/System` wellFormed 界：`propext`
+- `Svm.Sdk.Program/Pubkey` 构造/等式透明性：`propext`
+- `Svm.Sdk.Storage.OrderedMap` 委托/slotValue/Allocator cursor：6 零公理
 - `Evm.Sdk.Reentrancy` fail-closed 包（unknown_neither / 互斥）：`propext`
 - `Evm.Sdk.Fungible` guard 链（canTransfer→canDebit/canCredit、canSpend→canDecrease）：
   两个零公理
