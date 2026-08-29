@@ -85,8 +85,12 @@ def emitQuery (context : Context σ) (query : Query) (operands : Array Ops.Val) 
       return emitCachedWord context packU256Word "randao256" "prevrandao()" limb st
   | .gasLimit256 limb, #[] =>
       return emitCachedWord context packU256Word "gaslimit256" "gaslimit()" limb st
+  | .gasPrice256 limb, #[] =>
+      return emitCachedWord context packU256Word "gasprice256" "gasprice()" limb st
   | .coinbase20 limb, #[] =>
       return emitCachedWord context packAddrWord "coinbase20" "coinbase()" limb st
+  | .origin20 limb, #[] =>
+      return emitCachedWord context packAddrWord "origin20" "origin()" limb st
   | .blockHash256 limb, #[number] =>
       let (prelude, value, afterValue) ← context.materialize number st
       let cacheKey := "blockhash256|" ++ context.valKey number

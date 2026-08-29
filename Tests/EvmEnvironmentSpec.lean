@@ -19,6 +19,10 @@ open ProofForge.Evm
 #guard (Environment.Query.blockHash256 3).arity == 1
 #guard (Environment.Query.coinbase20 2).wellFormed
 #guard !(Environment.Query.coinbase20 3).wellFormed
+#guard (Environment.Query.origin20 2).wellFormed
+#guard !(Environment.Query.origin20 3).wellFormed
+#guard (Environment.Query.gasPrice256 3).wellFormed
+#guard !(Environment.Query.gasPrice256 4).wellFormed
 #guard Environment.Query.codeSize20.arity == 3
 #guard (Environment.Query.codeHash32 3).wellFormed
 #guard !(Environment.Query.codeHash32 4).wellFormed
@@ -61,6 +65,7 @@ elab "#pf_guard_evm_environment_component" : command => do
   requireQuery tipJar "baseFee" .baseFee256
   requireQuery tipJar "prevRandao" .prevRandao256
   requireQuery tipJar "gasLimit" .gasLimit256
+  requireQuery ctx "gasPrice" .gasPrice256
   requireQuery ctx "blockHash" .blockHash256
   requireQuery ctx "codeHash" .codeHash32
   requireQuery ctx "balance" .balance256
@@ -72,6 +77,9 @@ elab "#pf_guard_evm_environment_component" : command => do
     unless hasEnvironmentReturn
         (tipJar.entries.find? (·.ixName == "coinbase")).get! (.coinbase20 limb) do
       throwError s!"TipJar.coinbase limb {limb} escaped the Component bridge"
+    unless hasEnvironmentReturn
+        (ctx.entries.find? (·.ixName == "origin")).get! (.origin20 limb) do
+      throwError s!"EvmCtx.origin limb {limb} escaped the Component bridge"
   unless IR.digestHex ctx == (ProofForge.Evm.Registry.digestOf "EvmCtx").getD "" do
     throwError s!"EvmCtx registry digest is stale: {IR.digestHex ctx}"
   unless IR.digestHex tipJar == (ProofForge.Evm.Registry.digestOf "TipJar").getD "" do
@@ -86,7 +94,10 @@ elab "#pf_guard_evm_environment_component" : command => do
     | .error reason => throwError reason
   unless ctxYul.contains " := gas()" && tipJarYul.contains " := basefee()" &&
       tipJarYul.contains " := prevrandao()" && tipJarYul.contains " := gaslimit()" &&
+      ctxYul.contains " := gasprice()" && ctxYul.contains " := origin()" &&
       ctxYul.contains " := blockhash(" && tipJarYul.contains " := coinbase()" &&
+      (ctxYul.splitOn "gasprice()").length == 2 &&
+      (ctxYul.splitOn "origin()").length == 2 &&
       (ctxYul.splitOn "blockhash(").length == 2 &&
       (tipJarYul.splitOn "coinbase()").length == 2 &&
       (ctxYul.splitOn "extcodesize(").length == 2 &&

@@ -44,6 +44,16 @@ def height (_s : State) : UInt64 :=
 def gasLeft (_s : State) : UInt256 :=
   Context.gasLeft
 
+/-- Effective transaction gas price as a full EVM word. -/
+@[pf_entry]
+def gasPrice (_s : State) : UInt256 :=
+  Context.gasPrice
+
+/-- Full transaction origin. Access-control code should continue to authorize `Context.caller`. -/
+@[pf_entry]
+def origin (_s : State) : Address :=
+  Context.origin
+
 /-- Full-width hash of a recent block. EVM returns zero outside its 256-block history window. -/
 @[pf_entry]
 def blockHash (_s : State) (number : UInt64) : UInt256 :=

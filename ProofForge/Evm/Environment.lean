@@ -17,7 +17,9 @@ inductive Query where
   | baseFee256 (limb : Nat)
   | prevRandao256 (limb : Nat)
   | gasLimit256 (limb : Nat)
+  | gasPrice256 (limb : Nat)
   | coinbase20 (limb : Nat)
+  | origin20 (limb : Nat)
   | blockHash256 (limb : Nat)
   | codeSize20
   | codeHash32 (limb : Nat)
@@ -30,9 +32,10 @@ def Query.arity : Query → Nat
   | _ => 0
 
 def Query.wellFormed : Query → Bool
-  | .gasLeft256 limb | .baseFee256 limb | .prevRandao256 limb | .gasLimit256 limb =>
+  | .gasLeft256 limb | .baseFee256 limb | .prevRandao256 limb | .gasLimit256 limb
+  | .gasPrice256 limb =>
       limb ≤ 3
-  | .coinbase20 limb => limb ≤ 2
+  | .coinbase20 limb | .origin20 limb => limb ≤ 2
   | .blockHash256 limb => limb ≤ 3
   | .codeSize20 => true
   | .codeHash32 limb => limb ≤ 3
@@ -52,9 +55,15 @@ def Query.canonical (_renderValue : V → String) (operands : Array V) : Query �
   | .gasLimit256 limb =>
       if operands.isEmpty then s!"egaslimit.{limb}"
       else s!"invalid-egaslimit.{limb}-{operands.size}"
+  | .gasPrice256 limb =>
+      if operands.isEmpty then s!"env.gasPrice256.{limb}"
+      else s!"invalid-env.gasPrice256.{limb}-{operands.size}"
   | .coinbase20 limb =>
       if operands.isEmpty then s!"env.coinbase20.{limb}"
       else s!"invalid-env.coinbase20.{limb}-{operands.size}"
+  | .origin20 limb =>
+      if operands.isEmpty then s!"env.origin20.{limb}"
+      else s!"invalid-env.origin20.{limb}-{operands.size}"
   | .blockHash256 limb =>
       match operands with
       | #[number] => s!"env.blockHash256.{limb}({_renderValue number})"

@@ -673,6 +673,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   >UInt64 Wei 与 nonexistent account 的 zero balance 精确核对。详见
   `docs/plan/tasks/r4-011.md`。
 
+- R4-012 EVM transaction context 已完成：`Sdk.Context.origin : Address` 与
+  `gasPrice : UInt256` 分别以完整三/四 limb 暴露 ORIGIN/GASPRICE；每个 opcode 只观察一次，
+  后续 limb 从 target cache 投影。两者继续只扩 Environment Component，没有 top-level
+  Ops/IR/main Emit recipe、allocation、storage 或 call；SDK 明确不鼓励以 origin 代替 caller
+  做授权。EvmCtx digest `2fcc4e438e1c4da1`、bytecode 2,964 B；Anvil 以完整 sender address
+  和显式 2 gwei `eth_call` gas price 核对。详见 `docs/plan/tasks/r4-012.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、

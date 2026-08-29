@@ -62,6 +62,11 @@ SVM 发射器碰到这个叶子 fail closed。
 @[irreducible] def evmCoinbaseW1 : UInt64 := 0
 @[irreducible] def evmCoinbaseW2 : UInt64 := 0
 
+/-- Transaction origin (`ORIGIN`) in the same allocation-free address representation as caller. -/
+@[irreducible] def evmOriginW0 : UInt64 := 0
+@[irreducible] def evmOriginW1 : UInt64 := 0
+@[irreducible] def evmOriginW2 : UInt64 := 0
+
 /-- 完整 `CALLER`。抽出认三叶，不把 Addr20 当单一 UInt64。 -/
 def evmCaller20 : Addr20 :=
   { w0 := evmCallerW0, w1 := evmCallerW1, w2 := evmCallerW2 }
@@ -73,6 +78,11 @@ def evmSelf20 : Addr20 :=
 /-- Full current block beneficiary address. -/
 def evmCoinbase20 : Addr20 :=
   { w0 := evmCoinbaseW0, w1 := evmCoinbaseW1, w2 := evmCoinbaseW2 }
+
+/-- Full transaction-origin address. Applications should still prefer `msg.sender` for access
+control; this query exposes EVM semantics rather than endorsing origin-based authorization. -/
+def evmOrigin20 : Addr20 :=
+  { w0 := evmOriginW0, w1 := evmOriginW1, w2 := evmOriginW2 }
 
 /-- 构造期烘焙的 `uint64`。runtime `loadimmutable("imm0")`。宿主返回 0。 -/
 @[irreducible] def evmImmU64 : UInt64 := 0
@@ -124,6 +134,9 @@ the pre-Paris `DIFFICULTY` interpretation of opcode `0x44`; assembly pins the Ca
 
 /-- Current block gas limit (`GASLIMIT`) as a full EVM word. -/
 @[irreducible] def evmGasLimit256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- Effective transaction gas price (`GASPRICE`) as a full EVM word. -/
+@[irreducible] def evmGasPrice256 : UInt256 := ⟨0, 0, 0, 0⟩
 
 /-- EVM `BLOCKHASH(number)` with its native 256-block availability semantics. Unavailable,
 current, and future block numbers return zero exactly as the VM specifies. -/

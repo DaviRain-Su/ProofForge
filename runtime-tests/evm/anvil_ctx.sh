@@ -19,6 +19,14 @@ want_caller="$("$python" -I -S -c "print(int('$sender', 16) & ((1<<64)-1))")"
 got_caller="$("$cast" call --rpc-url "$rpc" --from "$sender" "$addr" 'caller()(uint64)')"
 solana_lean_require_uint "$got_caller" "$want_caller" "caller low-8"
 
+got_origin="$("$cast" call --rpc-url "$rpc" --from "$sender" "$addr" 'origin()(address)')"
+solana_lean_require_equal "$got_origin" "$sender" "ORIGIN full address"
+
+gas_price=2000000000
+got_gas_price="$("$cast" call --rpc-url "$rpc" --from "$sender" --gas-price "$gas_price" \
+  "$addr" 'gasPrice()(uint256)')"
+solana_lean_require_uint "$got_gas_price" "$gas_price" "GASPRICE full word"
+
 bn="$("$cast" block-number --rpc-url "$rpc")"
 got_h="$("$cast" call --rpc-url "$rpc" "$addr" 'height()(uint64)')"
 solana_lean_require_uint "$got_h" "$(solana_lean_to_dec "$bn")" "height == block number"
@@ -146,4 +154,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-ctx: ok (caller/number/gas/blockhash/address observations + static/tagged aggregate ABI; engineering only)"
+echo "evm-anvil-ctx: ok (caller/origin/number/gasprice/gas/blockhash/address observations + static/tagged aggregate ABI; engineering only)"

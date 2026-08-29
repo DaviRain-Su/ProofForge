@@ -231,7 +231,9 @@ namespace Context
 @[pf_inline] def baseFee : UInt256 := Runtime.evmBaseFee256
 @[pf_inline] def prevRandao : UInt256 := Runtime.evmPrevRandao256
 @[pf_inline] def gasLimit : UInt256 := Runtime.evmGasLimit256
+@[pf_inline] def gasPrice : UInt256 := Runtime.evmGasPrice256
 @[pf_inline] def coinbase : Address := Runtime.evmCoinbase20
+@[pf_inline] def origin : Address := Runtime.evmOrigin20
 @[pf_inline] def blockHash (number : UInt64) : UInt256 := Runtime.evmBlockHash256 number
 
 end Context

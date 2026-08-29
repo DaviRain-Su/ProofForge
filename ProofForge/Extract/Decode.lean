@@ -806,6 +806,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasLimit256 ||
             endsWith baseE ".evmGasLimit256" then
           some (.ext (.evm (.component (.environment (.gasLimit256 limb.toNat)))) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasPrice256 ||
+            endsWith baseE ".evmGasPrice256" then
+          some (.ext (.evm (.component (.environment (.gasPrice256 limb.toNat)))) #[])
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmBalance256 ||
             endsWith baseE ".evmBalance256" then
           let args := baseE.getAppArgs
@@ -877,6 +880,10 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           endsWith baseE ".evmCoinbase20" then
         some (.ext (.evm (.component (.environment (.coinbase20
           (if leaf == "w0" then 0 else if leaf == "w1" then 1 else 2))))) #[])
+      else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmOrigin20 ||
+          endsWith baseE ".evmOrigin20" then
+        some (.ext (.evm (.component (.environment (.origin20
+          (if leaf == "w0" then 0 else if leaf == "w1" then 1 else 2))))) #[])
       else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmImm20b ||
           endsWith baseE ".evmImm20b" then
         some (match leaf with
@@ -897,6 +904,8 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   else if endsWith e ".evmSelf20" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 then
     none
   else if endsWith e ".evmCoinbase20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCoinbase20 then
+    none
+  else if endsWith e ".evmOrigin20" || isConstNamed e ``ProofForge.Evm.Runtime.evmOrigin20 then
     none
   else if endsWith e ".evmImm20b" || isConstNamed e ``ProofForge.Evm.Runtime.evmImm20b then
     none
@@ -1390,6 +1399,10 @@ private def addr20Leaves (env : Environment) (e : Expr) : Ops.Val × Ops.Val × 
     (.ext (.evm (.component (.environment (.coinbase20 0)))) #[],
       .ext (.evm (.component (.environment (.coinbase20 1)))) #[],
       .ext (.evm (.component (.environment (.coinbase20 2)))) #[])
+  else if isConstNamed e ``ProofForge.Evm.Runtime.evmOrigin20 || endsWith e ".evmOrigin20" then
+    (.ext (.evm (.component (.environment (.origin20 0)))) #[],
+      .ext (.evm (.component (.environment (.origin20 1)))) #[],
+      .ext (.evm (.component (.environment (.origin20 2)))) #[])
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmImm20b || endsWith e ".evmImm20b" then
     (.evmImmX0, .evmImmX1, .evmImmX2)
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmImm20 || endsWith e ".evmImm20" then
@@ -1587,6 +1600,7 @@ private def looksAddr20Expr (env : Environment) (e : Expr) : Bool :=
   isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" ||
     isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" ||
     isConstNamed e ``ProofForge.Evm.Runtime.evmCoinbase20 || endsWith e ".evmCoinbase20" ||
+    isConstNamed e ``ProofForge.Evm.Runtime.evmOrigin20 || endsWith e ".evmOrigin20" ||
     (addr20CtorFields env e).isSome ||
     (match e.getAppFn.constName? with
       | some n =>
@@ -4918,6 +4932,14 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
       .returnU64 (.ext (.evm (.component (.environment (.gasLimit256 2)))) #[]),
       .returnU64 (.ext (.evm (.component (.environment (.gasLimit256 3)))) #[])
     ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmGasPrice256 ||
+      endsWith app ".evmGasPrice256" then
+    some #[
+      .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 0)))) #[]),
+      .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 1)))) #[]),
+      .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 2)))) #[]),
+      .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 3)))) #[])
+    ]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmBlockHash256 ||
       endsWith app ".evmBlockHash256" then
     let number := valAtEnd env args 0
@@ -5918,6 +5940,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   else if isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 || endsWith e ".evmCaller20" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 || endsWith e ".evmSelf20" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmCoinbase20 || endsWith e ".evmCoinbase20" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmOrigin20 || endsWith e ".evmOrigin20" ||
       (addr20CtorFields env e).isSome ||
       (match e.getAppFn.constName? with
         | some n =>
