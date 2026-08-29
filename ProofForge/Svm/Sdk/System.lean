@@ -92,6 +92,27 @@ writable recipient, and account 3 is the System program. -/
       { acc := 2, signer := false, writable := true }]
     #[.u32le 11, .u64le lamports, .u64le (UInt64.ofNat seed.length), .ascii seed, .programId]
 
+
+section Proofs
+
+/-- wf → seed 非空。 -/
+theorem seed_wf_nonEmpty (seed : String) (h : wellFormed seed = true) :
+    seed.length ≠ 0 := by
+  unfold wellFormed ProofForge.Svm.Seed.Ascii.wellFormed at h
+  simp at h
+  intro hlen
+  have hempty : seed = "" := by simp [String.length] at hlen; exact hlen
+  exact h.1.1 hempty
+
+/-- wf → seed 长度 ≤ 32。 -/
+theorem seed_wf_bounded (seed : String) (h : wellFormed seed = true) :
+    seed.length ≤ 32 := by
+  unfold wellFormed ProofForge.Svm.Seed.Ascii.wellFormed at h
+  simp at h
+  exact h.1.2
+
+end Proofs
+
 end AsciiSeed
 
 
