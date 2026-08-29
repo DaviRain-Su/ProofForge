@@ -140,8 +140,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 ## 3. 建议立刻做的顺序
 
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
-2. **wsm-023 / wsm-029** — `cache_le` 零 id -10；**真 AccountRoot.Balance 探针已绿**
-   （`accountroot_id` + `le_field`）。下一刀 Runtime 叶解码 drops。
+2. **wsm-029 / wsm-033** — AccountRoot.Balance **已绿**（`callerBalanceDrops`）。
+   下一刀 `submitTransaction` Payment。
 3. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
    下一刀才是 `setUserData(destination)` 探针。
 4. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。

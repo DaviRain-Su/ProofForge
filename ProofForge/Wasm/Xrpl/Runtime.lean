@@ -57,4 +57,8 @@ def xrplSelf20 : AccountId :=
   let _ := seed
   0
 
+/-- Caller's XRP Balance in drops. Host: accountroot_id + cache_le + le_field.
+Not EVM `selfBalance`. IOU/MPT fail closed (mantissa only). -/
+@[irreducible] def xrplCallerBalanceDrops : UInt64 := 0
+
 end ProofForge.Wasm.Xrpl.Runtime

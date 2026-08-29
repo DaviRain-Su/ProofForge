@@ -61,7 +61,8 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
     let needTime := usesKind method.ops .parentTime
     let needHash := usesKind method.ops .parentHashW0
     let needFee := usesKind method.ops .baseFee
-    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee) then #[]
+    let needBal := usesKind method.ops .callerBalanceDrops
+    if !(needCaller || needSelf || needSqn || needTime || needHash || needFee || needBal) then #[]
     else
     let err :=
       if view then #[]
@@ -149,7 +150,32 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
           indent level ("(local.set $st (call $" ++ host.getBaseFee ++ "))"),
           indent level "(local.set $pf_x_xfee (i64.extend_i32_u (local.get $st)))"
         ]
-    caller ++ self ++ sqn ++ time ++ hash ++ fee
+    let bal :=
+      if !needBal || host.accountRootId.isEmpty || host.cacheLe.isEmpty || host.leField.isEmpty then #[]
+      else
+        -- Account at 0..19 from loadAccount; index 176; amount 208.
+        -- STAmount XRP big-endian; drops = packed & 0x01FFFFFFFFFFFFFF.
+        let be :=
+          (Array.range 8).foldl (fun acc i =>
+            let byte := "(i64.extend_i32_u (i32.load8_u (i32.const " ++
+              toString (208 + i) ++ ")))"
+            if acc.isEmpty then byte
+            else "(i64.or (i64.shl " ++ acc ++ " (i64.const 8)) " ++ byte ++ ")") ""
+        #[
+          indent level ("(local.set $st (call $" ++ host.accountRootId ++
+            " (i32.const 0) (i32.const 20) (i32.const 176) (i32.const 32)))")
+        ] ++ err ++ #[
+          indent level ("(local.set $st (call $" ++ host.cacheLe ++
+            " (i32.const 176) (i32.const 32) (i32.const 0)))")
+        ] ++ err ++ #[
+          indent level ("(local.set $st (call $" ++ host.leField ++
+            " (local.get $st) (i32.const 393218) (i32.const 208) (i32.const 48)))")
+          -- `$st` still holds the cache slot from cache_le until this call.
+        ] ++ err ++ #[
+          indent level ("(local.set $pf_x_xbal (i64.and " ++ be ++
+            " (i64.const 144115188075855871)))")
+        ]
+    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ bal
 
 def extraImports (host : Contract) : Array String :=
   let tx :=
@@ -209,7 +235,28 @@ def extraImports (host : Contract) : Array String :=
         "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getBaseFee ++
           "\" (func $" ++ host.getBaseFee ++ " (result i32)))"
       ]
-  tx ++ sqn ++ time ++ hash ++ parentHash ++ fee
+  let rootId :=
+    if host.accountRootId.isEmpty then #[]
+    else #[
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.accountRootId ++
+        "\" (func $" ++ host.accountRootId ++
+        " (param i32 i32 i32 i32) (result i32)))"
+    ]
+  let cache :=
+    if host.cacheLe.isEmpty then #[]
+    else #[
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.cacheLe ++
+        "\" (func $" ++ host.cacheLe ++
+        " (param i32 i32 i32) (result i32)))"
+    ]
+  let field :=
+    if host.leField.isEmpty then #[]
+    else #[
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.leField ++
+        "\" (func $" ++ host.leField ++
+        " (param i32 i32 i32 i32) (result i32)))"
+    ]
+  tx ++ sqn ++ time ++ hash ++ parentHash ++ fee ++ rootId ++ cache ++ field
 
 /-- Render one XRPL program as WAT. The digest line pins the canonical IR identity. -/
 def emitWith (host : Contract) (p : IR.Program) : Except String String :=
