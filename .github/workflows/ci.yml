@@ -13,6 +13,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lean:
+    name: Lean
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+          key: toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Check Runtime / SDK ownership boundaries
+        run: python3 scripts/check_ownership.py
+
+      - name: Check artifact manifest
+        run: python3 scripts/check_artifact_manifest.py --self-test
+
+      - name: Check kernel proofs have no placeholders
+        run: python3 scripts/check_no_sorry.py
+
+      - name: Build Lean libraries and guards
+        run: |
+          lake build
+          lake build Tests
+
   svm:
     name: SVM
     runs-on: ubuntu-24.04
@@ -47,19 +89,8 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
-      - name: Check Runtime / SDK ownership boundaries
-        run: python3 scripts/check_ownership.py
-
-      - name: Check artifact manifest
-        run: python3 scripts/check_artifact_manifest.py --self-test
-
-      - name: Check kernel proofs have no placeholders
-        run: python3 scripts/check_no_sorry.py
-
-      - name: Build Lean libraries and guards
-        run: |
-          lake build
-          lake build Tests
+      - name: Build program source modules
+        run: lake build Examples
 
       - name: Build all SVM programs
         run: lake exe pf -- build --target svm --out build/sbpf
@@ -107,19 +138,8 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
-      - name: Check Runtime / SDK ownership boundaries
-        run: python3 scripts/check_ownership.py
-
-      - name: Check artifact manifest
-        run: python3 scripts/check_artifact_manifest.py --self-test
-
-      - name: Check kernel proofs have no placeholders
-        run: python3 scripts/check_no_sorry.py
-
-      - name: Build Lean libraries and guards
-        run: |
-          lake build
-          lake build Tests
+      - name: Build program source modules
+        run: lake build Examples
 
       - name: Build all EVM programs
         run: lake exe pf -- build --target evm --out build/evm
@@ -127,17 +147,19 @@ jobs:
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
 
-  # Preserve the original required-check identity while making both target lanes independently
-  # observable. This job fails unless both complete successfully, including after a lane error.
+  # Preserve the original required-check identity while making proof/guard, SVM, and EVM failures
+  # independently observable. This job fails unless all lanes complete successfully.
   test:
     if: always()
-    needs: [svm, evm]
+    needs: [lean, svm, evm]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require SVM and EVM lanes
+      - name: Require Lean, SVM, and EVM lanes
         env:
+          LEAN_RESULT: ${{ needs.lean.result }}
           SVM_RESULT: ${{ needs.svm.result }}
           EVM_RESULT: ${{ needs.evm.result }}
         run: |
+          test "$LEAN_RESULT" = success
           test "$SVM_RESULT" = success
           test "$EVM_RESULT" = success

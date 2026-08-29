@@ -641,6 +641,9 @@ events、safe-transfer receiver callback 与 bounded ERC-1155 仍 fail closed。
 
 ### R6 — 双目标验收
 
+- CI-001 已把 shared Lean guards、SVM build/Mollusk/Surfpool 与 EVM build/Anvil 拆成三条
+  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 349-job Lean aggregate 不再在两个
+  target lane 重复执行。详见 [CI-001](tasks/ci-001.md)。
 - shared semantic fixtures：Counter、Escrow/Vault、Fungible ledger；共享行为规范，使用
   target-owned storage/ABI binding，不强求同一份物理 layout source。
 - resource manifest：每个 program/contract 的 CFG blocks、locals、stack/scratch、account/storage

@@ -72,8 +72,10 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 - **当前可验证基线（2026-08-29）**：Lean 汇总 349 jobs；SVM manifest 全 56 programs；
   Mollusk 全量 322/322（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
-  26 programs 且 Anvil 26/26。CI 将 SVM / EVM 分成独立并行 lane，并保留汇总 `test` gate；
-  一个 target 失败不再跳过或延迟另一个 target 的反馈。
+  26 programs 且 Anvil 26/26。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
+  并保留汇总 `test` gate；完整 349-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
+  `docs/plan/tasks/ci-001.md`。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
   当前 Token deployment bytecode 为 21,610 B；Surfpool 1.5.0 部署门见 P5 最新记录。
 - S0–S5：普通 Lean Counter 竖切到 Mollusk

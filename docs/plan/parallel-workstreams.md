@@ -58,7 +58,8 @@ Coordinator（当前线程）固定负责：
 - **PF-COORD-2**：审查并集成各 worker 的 target-local commits，统一处理顶层 imports、
   registries、capability matrix、digest 和 CI；
 - **PF-COORD-3**：每一 wave 的全 Lean、全 SVM build/Mollusk、全 EVM build/Anvil 和
-  ownership/reproducibility 门。
+  ownership/reproducibility 门。CI 中三类门独立并行，完整 Lean aggregate 只运行一次；
+  见 CI-001。
 
 `shared-lock` 不允许被“顺手”复制：如果 SVM Runtime agent 正在修改 Extract，其他 agent
 只能做 target-local plan/component/test，不能同时提交另一份 Extract patch。
