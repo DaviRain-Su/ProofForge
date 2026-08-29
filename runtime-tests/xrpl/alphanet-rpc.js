@@ -335,6 +335,46 @@ async function main() {
     throw new Error("missing ContractData for " + cfg.contract_account);
   }
 
+  if (cmd === "pay") {
+    const { xrpl } = loadXrpl();
+    const wallet = xrpl.Wallet.fromSeed(secret, { algorithm });
+    const dest = cfg.destination;
+    const drops = String(cfg.drops || "20000000");
+    if (!dest) throw new Error("pay wants destination");
+    const seq = (
+      await rpcRetry(url, "account_info", {
+        account: wallet.address,
+        ledger_index: "validated",
+      })
+    ).account_data.Sequence;
+    const txJson = {
+      TransactionType: "Payment",
+      Account: wallet.address,
+      Destination: dest,
+      Amount: drops,
+      Fee: cfg.fee || "12",
+      Sequence: seq,
+      NetworkID: networkId,
+    };
+    const signed = await signTx(url, secret, txJson);
+    const submitted = await submitBlob(url, signed.tx_blob);
+    if (submitted.engine_result !== "tesSUCCESS") {
+      throw new Error(submitted.engine_result + " " + (submitted.engine_result_message || ""));
+    }
+    const hash = submitted.tx_json.hash;
+    const tx = await waitTx(url, hash);
+    process.stdout.write(
+      JSON.stringify({
+        success: true,
+        txHash: hash,
+        result: (tx.meta || {}).TransactionResult,
+        destination: dest,
+        drops,
+      }) + "\n"
+    );
+    return;
+  }
+
   throw new Error("unknown command " + cmd);
 }
 

@@ -15,6 +15,7 @@ import Examples.XrplSmoke
 import Examples.XrplGate
 import Examples.XrplHold
 import Examples.XrplMark
+import Examples.XrplBal
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -40,7 +41,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplGate" == some "c2495d166a25c8e0"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHold" == some "e99965ac007e0da8"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMark" == some "20c54e937ffbf0fc"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBal" == some "cfae015ada92cdc9"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -76,6 +78,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplHold
 
 #pf_xrpl_build Examples.XrplMark
+
+#pf_xrpl_build Examples.XrplBal
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -255,6 +259,30 @@ elab "#pf_xrpl_mark_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-mark: {source.length} bytes of WAT passed mark anchor check"
 
 #pf_xrpl_mark_emit_check Examples.XrplMark
+
+open Lean Elab Command in
+elab "#pf_xrpl_bal_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"get\")",
+          "(data (i32.const 64) \"bal\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing bal anchor: {anchor}\n{source}"
+        unless !source.contains "(param $pf_p0 i64)" do
+          throwError "XrplBal must not take wasm i64 params"
+        logInfo m!"proofforge-xrpl-bal: {source.length} bytes of WAT passed bal anchor check"
+
+#pf_xrpl_bal_emit_check Examples.XrplBal
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

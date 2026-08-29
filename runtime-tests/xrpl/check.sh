@@ -97,6 +97,12 @@ need_exports_mark = (
     '(i32.const 3)',
     '(call $compute_sha512_half',
 )
+need_exports_bal = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "get")',
+    '(data (i32.const 64) "bal")',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -122,6 +128,8 @@ for wat in wats:
         exports = need_exports_hold
     elif wat.stem == "XrplMark":
         exports = need_exports_mark
+    elif wat.stem == "XrplBal":
+        exports = need_exports_bal
     else:
         exports = need_exports_counter
     for needle in exports:

@@ -197,6 +197,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-021](tasks/wsm-021.md) | done | 探针 `trace_num`（AlphaNet 绿；不开 Sdk.Log） |
 | [wsm-023](tasks/wsm-023.md) | done | 探针 `cache_le`（import 在；零 id → -10；不开 AccountRoot） |
 | [wsm-026](tasks/wsm-026.md) | blocked | 用户 ContractData：caller 可写；合约账户 **-22**；不做 wasm allocator |
+| [wsm-027](tasks/wsm-027.md) | done | 每用户一张卡（XrplBal）：A=2 / B=1，不是单用户金库 |
 
 ## SVM 全面工作计划（当前主线）
 
