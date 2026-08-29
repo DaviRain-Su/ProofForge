@@ -231,3 +231,34 @@ elab "#pf_xrpl_vec_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-vec: {source.length} bytes of WAT passed vec anchor check"
 
 #pf_xrpl_vec_emit_check Examples.XrplVec
+
+open Lean Elab Command in
+elab "#pf_xrpl_alphanet_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emitAlphaNet program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"host_lib\" \"home_le_field\"",
+          "(import \"host_lib\" \"tx_field\"",
+          "(import \"host_lib\" \"ldgr_index\"",
+          "(import \"host_lib\" \"sha512_half\"",
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"get\") (result i32)",
+          "(i32.const 524320)"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"alphanet emit is missing anchor: {anchor}\n{source}"
+        unless !source.contains "(import \"host_lib\" \"get_current_ledger_obj_field\"" do
+          throwError "alphanet emit still imports Bedrock get_current_ledger_obj_field"
+        unless !source.contains "(import \"host_lib\" \"get_ledger_sqn\"" do
+          throwError "alphanet emit still imports Bedrock get_ledger_sqn"
+        unless !source.contains "(func (export \"get\") (result i64)" do
+          throwError "alphanet views must return i32, not i64"
+        logInfo m!"proofforge-xrpl-alphanet: {source.length} bytes of WAT passed alphanet anchor check"
+
+#pf_xrpl_alphanet_emit_check Examples.Counter
