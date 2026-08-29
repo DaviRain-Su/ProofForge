@@ -305,6 +305,6 @@ private def mockClosedCtx : ClosedCall.Emit.Context Nat :=
 
 -- Consumer component/IR identity is preserved (registry digests).
 #guard IR.digestHex ProofForge.Evm.Golden.extractedVault == "a3ea1b5b2a69c0e3"
-#guard IR.digestHex ProofForge.Evm.Golden.extractedToken == "4da7ac248a0fb556"
+#guard IR.digestHex ProofForge.Evm.Golden.extractedToken == "59f8696f9b0e06db"
 
 end Tests.EvmLogErrorSpec

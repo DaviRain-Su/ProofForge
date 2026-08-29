@@ -92,7 +92,7 @@ def mapSurface (address : Address) (amount : UInt256) : UInt64 :=
     allowances.put address Context.caller
       (allowances.nextSub address Context.caller amount)
 
-#guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedToken == "4da7ac248a0fb556"
+#guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedToken == "59f8696f9b0e06db"
 #guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedCapped == "cb058e662f968f65"
 #guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedTipJar == "1582f2173f9b97b7"
 #guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedVault == "a3ea1b5b2a69c0e3"

@@ -117,7 +117,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-RT-ENV address balance（已集成）** | R4-008 Environment Component | `Address.balance : UInt256` 使用完整三-limb address 与单次 BALANCE observation；numeric 四-limb cache，不新增 top-level Ops/IR/main Emit；见 R4-011 |
 | **EVM-RT-ENV transaction context（已集成）** | R4-008 Environment Component | `Context.origin : Address` 与 `gasPrice : UInt256` 使用单次 ORIGIN/GASPRICE observation + cached limb projection；不新增 top-level Ops/IR/main Emit，origin 不作为 access-control 推荐；见 R4-012 |
 | **EVM-RT-ENV call selector（已集成）** | R4-008 Environment Component、shared FixedBytes | `Context.selector : Bytes4` 单次读取 calldata word 0 并按 source byte order 投影；不开放 arbitrary msg.data/pointer，不新增 top-level Ops/IR/main Emit；见 R4-013 |
-| **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
+| **EVM-RT-2a call result（已集成并由 R5-012 收紧）** | EVM-RT-1 | closed CALL/STATICCALL success + exact-word；ERC-20 只接受 exact canonical `1` 或 post-call code-backed empty，success-only empty 同样要求 code；≤32 copied bytes；显式 source result 不被 effect carrier 覆盖；见 R4-001/R5-012 |
 | **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
 | **EVM-SDK-5 bounded payments（已集成）** | EVM-SDK-1/2/3/4、EVM-RT-2 | `Evm.Sdk.Payments` 收口 Ether/ERC20/WETH/fixed-router facade；Vault/TipJar/Ownable 不再直连 lower Source boundary，产物不变；见 R5-005 |
 | **EVM-SDK-6a fungible debit（已集成）** | EVM-SDK-5 | explicit `AddressMap256` handle 的 balanceOf/canDebit/debit/insufficient；Token/Credits 独立复用且产物不变；见 R5-006 |
@@ -125,6 +125,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-SDK-6c allowance core（已集成）** | EVM-SDK-6b | explicit pair-map handle 的 approve/checked increase/decrease/spend policy；Token/Ownable 两个 consumer，permit owner 与 event ordering 留在 application；见 R5-008 |
 | **EVM-SDK-6d Reentrancy（已集成）** | EVM-RT-2e、EVM-SDK-2/5 | explicit UInt64 handle、nonzero sentinel、ordered enter/leave；GuardedPayout/EvmOrderedStorage 两 consumer + hostile callback；不新增 Runtime/IR/Emit recipe；见 R5-009 |
 | **EVM-SDK runtime-code observation（已集成）** | R4-010 Address codeSize | `Address.hasCode` 纯组合 existing EXTCODESIZE query + UInt64 compare；不冒充 EOA/authentication/call-success，不自动改 closed CALL，不新增 Runtime/IR/Emit；见 R5-011 |
+| **EVM-SDK safe closed-call result（已集成）** | EVM-RT-2a、R5-011 | `Evm.CallResult` 唯一 interpreter + `Sdk.Effect.thenTrue` canonical Bool composition；false/2/EOA-empty fail closed，code-backed no-return compatible；exact-32 比 OZ ≥32 更严格，revert bubbling 仍未开放；见 R5-012 |
 | **EVM-SDK-7/8 NFT assets** | EVM-SDK-6c/6d | reusable ERC-721 与 bounded ERC-1155 core；每个组件至少两个 consumer |
 
 ## 4. Worker 统一交付合同

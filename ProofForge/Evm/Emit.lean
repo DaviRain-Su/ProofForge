@@ -801,14 +801,19 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
 private inductive CFGResultHint where
   | plain
   | checked (destination : String)
+  | query
   | effect
   | stored
   | conflict
   deriving BEq, Inhabited
 
 private def cfgHintHasLast : CFGResultHint → Bool
-  | .checked _ | .effect => true
+  | .checked _ | .query | .effect => true
   | .plain | .stored | .conflict => false
+
+private def cfgHintReturnsLast : CFGResultHint → Bool
+  | .query => true
+  | .plain | .checked _ | .effect | .stored | .conflict => false
 
 private def mergeCFGHint (old next : CFGResultHint) : CFGResultHint :=
   if old == next then old else .conflict
@@ -829,6 +834,9 @@ private def cfgHintAfterInstructions (instructions : Array Ops.Op)
   instructions.foldl (init := incoming) fun hint instruction =>
     match instruction with
     | .storeField .. | .indexSet .. | .indexSetLeaf .. => .stored
+    | .ext (.component (.hashedMap (.getU64 ..)))
+    | .ext (.component (.hashedMap (.getAddr ..)))
+    | .ext (.component (.hashedMap (.getPair ..))) => .query
     | .ext _ => .effect
     | _ => hint
 
@@ -1101,8 +1109,11 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
       | .errorOverflow => body := body ++ indent ++ revert0 ++ nl
       | .errorNamed name => body := body ++ revertNamed indent name
       | .returnU64 value =>
+          -- A return after a mutation owns its explicit value; substituting the effect carrier
+          -- leaks an event/write result into the source ABI (for example an ERC-20 Boolean).
+          -- Legacy statement-shaped scalar map reads are the sole query carrier kept in `pf_last`.
           let (pre, expression, next) ←
-            if cfgHintHasLast afterHint then pure ("", "pf_last", finalState)
+            if cfgHintReturnsLast afterHint then pure ("", "pf_last", finalState)
             else materializeVal p indent "arg" method.paramCount paramTypes value finalState
           body := body ++ pre
           match retTypes.toList with

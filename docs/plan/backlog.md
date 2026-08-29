@@ -32,7 +32,8 @@ Token-2022 TLV envelope，并继续对所有未建模 extension fail closed；R2
 program-memory syscall 绑定为 checked account spans，pointer 只在 host call 边界瞬时存在。
 R2-006 已把 remaining compute、invocation stack height 与两个 allocation-free numeric logger
 收口到 target-owned Telemetry Query/Call，并继续只经过 generic Component bridge。
-EVM-RT-2a typed call-result 已完成，
+EVM-RT-2a typed call-result 已完成，并由 R5-012 收紧为 canonical ERC-20 Bool / code-backed
+empty-result policy，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
 entry-value 与 calldata route policy，EVM-RT-2d 已把 permit 的固定 ecrecover address/frame、
 STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed contract；UInt256
@@ -59,7 +60,8 @@ R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
 R5-008 checked allowance core、R5-009 reusable reentrancy policy、
-R5-010 persistent bounded EVM storage vector、R5-011 honest runtime-code observation policy；
+R5-010 persistent bounded EVM storage vector、R5-011 honest runtime-code observation policy、
+R5-012 safe closed-call result policy 与 explicit effect-result sequencing；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -588,6 +590,17 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `4eb0c4cd2c0b1239`、deployment bytecode 3,383 B。详见
   `docs/plan/tasks/r5-011.md`。
 
+- R5-012 EVM safe closed-call result policy 已完成：共享 `Evm.CallResult` 的 ERC-20 mutation
+  现在只接受 CALL success 后的 exact 32-byte canonical `1`，或 post-call target 仍有 runtime
+  code 时的 empty returndata；`0`、word `2`、其他长度与 EOA/no-code empty success 均原子
+  拒绝。success-only contract call 对 nonempty returndata 忽略、对 empty returndata 同样要求
+  code-backed target，permit 因无 Bool result 改用该 policy。`Evm.Sdk.Effect.thenTrue` 把 SDK
+  effect carrier 组合成 canonical Bool，Token 的 approve/transfer/transferFrom 不再返回 amount；
+  Extract/CFG 保留显式 `.ok (state, result)`，同时继续让三个 legacy scalar map query 使用其
+  query carrier。没有新增顶层 Ops/IR/component recipe；exact-32 比 OpenZeppelin 的 ≥32 更严格，
+  revert bubbling 仍 fail closed。false/2/EOA/no-return/内部 Token amount=12 的 Anvil 矩阵通过。
+  详见 `docs/plan/tasks/r5-012.md`。
+
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
   geometry；malformed bank、重复 region、非法 alignment 与 1,024-byte OOM 均在 emission 前
@@ -628,6 +641,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   最多复制 32 bytes returndata。`ClosedCall.Emit` 的既有 consumers 全部迁移且
   Vault/Token artifacts byte-identical；没有开放 arbitrary call、delegatecall/create 或隐藏
   allocation。详见 `docs/plan/tasks/r4-001.md`。
+  该历史策略的“任意 nonzero word / 无条件 empty”接受面已由 R5-012 取代；当前合同只接受
+  canonical `1`，或 post-call code-backed empty result。
 
 - R4-002 EVM typed LOG/custom-error plan 已完成：`Evm.LogError` 统一 LOG0..4 topic/data
   geometry 与 ABI custom-error selector/argument/revert-length geometry；NativeFx 和 permit

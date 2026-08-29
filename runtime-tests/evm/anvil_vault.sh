@@ -78,6 +78,12 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$token" 'balanceOf(ad
   100 "recipient token after pull"
 
 if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'pull(address,address,uint256)' "$recipient" "$recipient" 1 >/dev/null 2>&1; then
+  echo "FAIL: no-code token target unexpectedly accepted empty returndata" >&2
+  exit 1
+fi
+
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
     "$addr" 'pull(address,address,uint256)' "$token" "$recipient" 10000 >/dev/null 2>&1; then
   echo "FAIL: overdraw pull unexpectedly succeeded" >&2
   exit 1
@@ -91,6 +97,31 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)
   "$addr" 'pull(address,address,uint256)' "$token" "$recipient" 50 >/dev/null
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
   850 "USDT-style no-return transfer succeeds"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'setNoReturn(bool)' false >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'setReturnFalse(bool)' true >/dev/null
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'pull(address,address,uint256)' "$token" "$recipient" 10 >/dev/null 2>&1; then
+  echo "FAIL: false-returning token transfer unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
+  850 "false-returning transfer rolls back token state"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'setReturnFalse(bool)' false >/dev/null
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'setReturnTwo(bool)' true >/dev/null
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'pull(address,address,uint256)' "$token" "$recipient" 10 >/dev/null 2>&1; then
+  echo "FAIL: noncanonical bool word 2 unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'held(address)(uint256)' "$token")" \
+  850 "noncanonical bool transfer rolls back token state"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$token" 'setReturnTwo(bool)' false >/dev/null
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'allowed(address,address,address)(uint256)' "$token" "$addr" "$recipient")" \

@@ -7,6 +7,7 @@ contract ERC20Mock {
     mapping(address => mapping(address => uint256)) public allowance;
     bool public returnFalse;
     bool public noReturn;
+    bool public returnTwo;
 
     function mint(address to, uint256 amt) external {
         balanceOf[to] += amt;
@@ -18,6 +19,10 @@ contract ERC20Mock {
 
     function setNoReturn(bool v) external {
         noReturn = v;
+    }
+
+    function setReturnTwo(bool v) external {
+        returnTwo = v;
     }
 
     function transfer(address to, uint256 amt) external returns (bool) {
@@ -44,6 +49,12 @@ contract ERC20Mock {
     function finish() internal returns (bool) {
         if (noReturn) {
             assembly { return(0, 0) }
+        }
+        if (returnTwo) {
+            assembly {
+                mstore(0, 2)
+                return(0, 32)
+            }
         }
         if (returnFalse) {
             return false;

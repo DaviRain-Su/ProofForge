@@ -255,6 +255,16 @@ namespace Immutable
 
 end Immutable
 
+namespace Effect
+
+/-- Sequence a source-facing `UInt64` effect carrier and expose canonical success to a Boolean ABI.
+The target extractor preserves the nested runtime effect before lowering this expression to `true`.
+This keeps application code free of the carrier's arbitrary numeric result. -/
+@[pf_inline] def thenTrue (effect : UInt64) : Bool :=
+  (effect ||| 1) != 0
+
+end Effect
+
 namespace Event
 
 @[pf_inline] def tipped (amount : UInt64) : UInt64 := Runtime.evmLogTipped amount

@@ -11,10 +11,12 @@ Emitter interpreter for the typed call-result contract (EVM-RT-2a).
    returndata copied to `memory[0, retBound)` (`retBound ≤ 32`);
 2. the fail-closed success gate `if iszero(ok) { revert(0, 0) }`;
 3. the policy tail:
-   - `nonzeroWordOrEmpty` binds `rds := returndatasize()`, reverts unless `rds ∈ {0, 32}`, and reverts
-     when the 32-byte return word is zero;
+   - `canonicalTrueOrCodeBackedEmpty` binds `rds := returndatasize()`, accepts exactly one word only
+     when it equals canonical ABI `true`, and accepts empty data only when the target still has
+     runtime code after the call;
    - `exactWord` reverts unless `returndatasize() = 32` and binds the returned word;
-   - `ignored` adds nothing — returndata is never copied or consumed.
+   - `contractSuccess` never copies or consumes returndata, but an empty result requires runtime
+     code at the target after the call.
 
 Malformed requests (returndata beyond one word, msg.value on a STATICCALL, a missing or
 unexpected value expression) fail closed with an `extract/unsupported` error instead of
@@ -56,22 +58,24 @@ def emit (context : Context σ) (request : CallResult.Request) (target : String)
     indent ++ "let " ++ ok ++ " := " ++ invoke ++ nl ++
     indent ++ "if iszero(" ++ ok ++ ") { " ++ revert0 ++ " }" ++ nl
   match request.policy with
-  | .ignored =>
-      return (head, none, st1)
+  | .contractSuccess =>
+      return (head ++
+        indent ++ "if and(iszero(returndatasize()), iszero(extcodesize(" ++ target ++ "))) { " ++
+          revert0 ++ " }" ++ nl, none, st1)
   | .exactWord =>
       let (word, st2) := context.fresh st1
       return (head ++
         indent ++ "if iszero(eq(returndatasize(), " ++ abiWordSize ++ ")) { " ++
           revert0 ++ " }" ++ nl ++
         indent ++ "let " ++ word ++ " := mload(0)" ++ nl, some word, st2)
-  | .nonzeroWordOrEmpty =>
+  | .canonicalTrueOrCodeBackedEmpty =>
       let (rds, st2) := context.fresh st1
       return (head ++
         indent ++ "let " ++ rds ++ " := returndatasize()" ++ nl ++
-        indent ++ "if and(iszero(eq(" ++ rds ++ ", 0)), iszero(eq(" ++ rds ++
-          ", " ++ abiWordSize ++ "))) { " ++ revert0 ++ " }" ++ nl ++
-        indent ++ "if eq(" ++ rds ++ ", " ++ abiWordSize ++
-          ") { if iszero(mload(0)) { " ++ revert0 ++
-          " } }" ++ nl, none, st2)
+        indent ++ "switch " ++ rds ++ nl ++
+        indent ++ "case 0 { if iszero(extcodesize(" ++ target ++ ")) { " ++ revert0 ++ " } }" ++ nl ++
+        indent ++ "case " ++ abiWordSize ++ " { if iszero(eq(mload(0), 1)) { " ++ revert0 ++
+          " } }" ++ nl ++
+        indent ++ "default { " ++ revert0 ++ " }" ++ nl, none, st2)
 
 end ProofForge.Evm.CallResult.Emit

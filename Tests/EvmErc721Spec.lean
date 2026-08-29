@@ -48,8 +48,8 @@ private def expectDigest (moduleName : Name) (digest : String) : CommandElabM Un
     throwError s!"{moduleName} digest drifted: {IR.digestHex program}"
 
 private def expectErc721 : CommandElabM Unit := do
-  expectDigest `Examples.Collectible "32af75f51e2dd67"
-  expectDigest `Examples.Badge "1bd25262b1bc32d2"
+  expectDigest `Examples.Collectible "d520f4e720c2fb7b"
+  expectDigest `Examples.Badge "ea3aeabda40d9ffa"
 
 elab "#pf_guard_evm_erc721" : command => expectErc721
 

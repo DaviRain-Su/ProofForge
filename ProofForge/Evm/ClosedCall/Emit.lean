@@ -629,7 +629,7 @@ private def emitTokenPermit (context : Context σ)
   let (amt, s27) := context.fresh s26
   let (dead, s28) := context.fresh s27
   let (callTxt, _, s30) ← CallResult.Emit.emit context.callResult
-    (.erc20Mutation 228) tok none s28
+    (.successOnly 228) tok none s28
   let acc :=
     p0 ++ p1 ++ p2 ++ q0 ++ q1 ++ q2 ++ rA0 ++ rA1 ++ rA2 ++
     u0 ++ u1 ++ u2 ++ u3 ++ k0p ++ k1p ++ k2p ++ k3p ++ pv ++

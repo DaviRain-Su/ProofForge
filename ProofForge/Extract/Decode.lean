@@ -93,13 +93,14 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   let field := n.toString
   let user := isUserName env n || isBoundaryProjectionName n
   if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
+      isConstNamed e ``bne ||
       isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
       isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe") &&
       e.getAppArgs.size ≥ 2 then
     let args := e.getAppArgs
     let cmp : Ops.Cmp :=
       if isConstNamed e ``Eq || isConstNamed e ``BEq.beq then .eq
-      else if isConstNamed e ``Ne then .ne
+      else if isConstNamed e ``Ne || isConstNamed e ``bne then .ne
       else if isConstNamed e ``LT.lt then .lt
       else if isConstNamed e ``LE.le then .le
       else if isConstNamed e ``GT.gt then .gt
@@ -1238,6 +1239,10 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
       isConstNamed e ``ProofForge.Evm.Runtime.evmLogTransfer) ||
       (endsWith e ".evmLogApproval" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmLogApproval) ||
+      (endsWith e ".evmLogTransfer256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLogTransfer256) ||
+      (endsWith e ".evmLogApproval256" ||
+      isConstNamed e ``ProofForge.Evm.Runtime.evmLogApproval256) ||
       (endsWith e ".evmSendEth" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmSendEth) ||
       (endsWith e ".evmSendEth256" ||
@@ -1295,6 +1300,15 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         if args.size ≥ n + 1 then (asVal env fuel args[args.size - 1 - n]!).getD (.arg n)
         else .arg n
       some (.mapGetPair (get 6) (get 5) (get 4) (get 3) (get 2) (get 1) (get 0))
+      else if endsWith e ".evmLogTransfer256" ||
+          isConstNamed e ``ProofForge.Evm.Runtime.evmLogTransfer256 ||
+          endsWith e ".evmLogApproval256" ||
+          isConstNamed e ``ProofForge.Evm.Runtime.evmLogApproval256 then
+      -- Event stubs use the amount's low limb as their source-level carrier. Preserve that value
+      -- when a reusable SDK combinator sequences the effect into a wider result expression.
+      let projected := mkApp (mkConst ``ProofForge.Core.Value.UInt256.w0)
+        e.getAppArgs[e.getAppArgs.size - 1]!
+      asVal env fuel projected
       else
       asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]!
       else if isConstNamed e ``Bool.true || endsWith e ".true" then
@@ -1626,7 +1640,7 @@ private def asCmpCoreWithFuel (env : Environment) (fuel : Nat) (e : Expr) :
         | some lv, some rv => some (.eq, lv, rv)
         | _, _ => none
     | none => none
-  else if isConstNamed e ``Ne then
+  else if isConstNamed e ``Ne || isConstNamed e ``bne then
     match binArgs e with
     | some (l, r) =>
       match asVal env fuel l, asVal env fuel r with
@@ -2525,7 +2539,7 @@ private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
       let right ← scalarResultValues env fuel' args[args.size - 1]!
       return left ++ right
     else
-      (val env e).map (#[·])
+      (asBoolVal env fuel e <|> val env e).map (#[·])
 
 /-- Keep the historical scalar `okState` shorthand, but spell multi-leaf effectful results as the
 existing sequence of scalar returns. CFG lowering already joins that sequence into `returnU64s`. -/
@@ -5062,7 +5076,7 @@ private def retOfEvmOps (ops : Array Ops.Op) : Ops.Val :=
 private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
   let writes := collectEvmEffectOps env e
   if writes.size ≥ 1 then
-    some (writes.push (.returnU64 (retOfEvmOps writes)))
+    some (writes.push (.returnU64 ((findOkRet env e).getD (retOfEvmOps writes))))
   else
     collectEvmQueryOps env e
 

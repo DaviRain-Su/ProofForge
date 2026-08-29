@@ -72,6 +72,12 @@ private def mutEntry (mod ix : String) (paramCount : Nat) (widths : Array Nat)
     ops
   }
 
+private def boolMutEntry (mod ix : String) (paramCount : Nat) (widths : Array Nat)
+    (ops : Array IR.Op) : IR.Method :=
+  { mutEntry mod ix paramCount widths ops with
+    retTypes := #[.boolean]
+    retSchema := .scalar .boolean }
+
 private def dummyCtor (mod : String) : IR.Method :=
   {
     kind := .init
@@ -201,6 +207,16 @@ private def pausedNe0 (stateArg : Nat) : Ops.Val :=
 private def guardPaused (stateArg : Nat) (ok : Array IR.Op) : Array IR.Op :=
   #[.ite .ne (pausedNe0 stateArg) (.lit 0)
       #[nativeFx .revertPaused, .returnU64 (.lit 0)]
+      ok]
+
+private def guardZeroBool (key : Nat) (ok : Array IR.Op) : Array IR.Op :=
+  #[.ite .eq (eq20Zero key) (.lit 1)
+      #[nativeFx .revertZeroAddress, .returnU64 (.lit 1)]
+      ok]
+
+private def guardPausedBool (stateArg : Nat) (ok : Array IR.Op) : Array IR.Op :=
+  #[.ite .ne (pausedNe0 stateArg) (.lit 0)
+      #[nativeFx .revertPaused, .returnU64 (.lit 1)]
       ok]
 
 private def eqImmCaller : Ops.Val :=
@@ -453,14 +469,14 @@ def extractedToken : IR.Program :=
       ]
     }
     entries := #[
-      mutEntry "Token" "approve" 2 #[20, 32] (guardPaused 2 (guardZero 0 #[
+      boolMutEntry "Token" "approve" 2 #[20, 32] (guardPausedBool 2 (guardZeroBool 0 #[
         .ite .ne (.lit 0) (.lit 1)
           #[hashedCall (.setPair256 (.lit 1)
               (callerW 0) (callerW 1) (callerW 2)
               (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2")
               (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
             nativeFx (.logApproval256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
-            .returnU64 (u256Field 1 "w0")]
+            .returnU64 (.lit 1)]
             #[.errorOverflow]
             ])),
             mutEntry "Token" "burn" 1 #[32] (guardPaused 1 #[
@@ -584,18 +600,19 @@ def extractedToken : IR.Program :=
             .returnU64 (u256Field 2 "w0")]
           #[.errorOverflow]
       ]),
-      mutEntry "Token" "transfer" 2 #[20, 32] (guardPaused 2 (guardZero 0 #[
+      boolMutEntry "Token" "transfer" 2 #[20, 32] (guardPausedBool 2 (guardZeroBool 0 #[
         .ite .eq (ge256 callerBal 1) (.lit 1)
           #[setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
             setAddr256 0 0 (fun limb => arithGet 0 limb destBal 1),
             setCaller256 0 (fun limb => arithGet 1 limb callerBal 1),
             setAddr256 0 0 (fun limb => arithGet 0 limb destBal 1),
             nativeFx (.logTransfer256 (callerW 0) (callerW 1) (callerW 2) (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
-            .returnU64 (u256Field 1 "w0")]
+            .returnU64 (.lit 1)]
           #[nativeFx (.revertInsufficient (callerBal 0) (callerBal 1) (callerBal 2) (callerBal 3) (u256Field 1 "w0") (u256Field 1 "w1") (u256Field 1 "w2") (u256Field 1 "w3")),
-            .returnU64 (callerBal 0)]
+            .returnU64 (.lit 1)]
       ])),
-      mutEntry "Token" "transferFrom" 3 #[20, 20, 32] (guardPaused 3 (guardZero 1 #[
+      boolMutEntry "Token" "transferFrom" 3 #[20, 20, 32]
+          (guardPausedBool 3 (guardZeroBool 1 #[
         .ite .eq (ge256 pairAllow 2) (.lit 1)
           #[.ite .eq (ge256 ownerBal 2) (.lit 1)
               #[setAddr256 0 0 (fun limb => arithGet 1 limb ownerBal 2),
@@ -605,11 +622,11 @@ def extractedToken : IR.Program :=
                 setAddr256 0 1 (fun limb => arithGet 0 limb destFrom 2),
                 setPairCaller256 1 0 (fun limb => arithGet 1 limb pairAllow 2),
                 nativeFx (.logTransfer256 (addrField 0 "w0") (addrField 0 "w1") (addrField 0 "w2") (addrField 1 "w0") (addrField 1 "w1") (addrField 1 "w2") (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
-                .returnU64 (u256Field 2 "w0")]
+                .returnU64 (.lit 1)]
               #[nativeFx (.revertInsufficient (ownerBal 0) (ownerBal 1) (ownerBal 2) (ownerBal 3) (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
-                .returnU64 (ownerBal 0)]]
+                .returnU64 (.lit 1)]]
           #[nativeFx (.revertInsufficient (pairAllow 0) (pairAllow 1) (pairAllow 2) (pairAllow 3) (u256Field 2 "w0") (u256Field 2 "w1") (u256Field 2 "w2") (u256Field 2 "w3")),
-            .returnU64 (pairAllow 0)]
+            .returnU64 (.lit 1)]
       ])),
       mutEntry "Token" "unpause" 0 #[] (ownerGate #[
         .ite .ne (.lit 0) (.lit 1)

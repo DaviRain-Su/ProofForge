@@ -111,17 +111,17 @@ def permit (s : State) (owner spender : Address) (value deadline : UInt256)
 
 @[pf_entry]
 def approve (s : State) (spender : Address) (amount : UInt256) :
-    Except Error (State × UInt64) :=
+    Except Error (State × Bool) :=
   if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Access.runningViolation)
+      Effect.thenTrue Access.runningViolation)
   else if Address.isZero spender then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.zeroAddress)
+      Effect.thenTrue Revert.zeroAddress)
   else if (0 : UInt64) ≠ 1 then
     .ok ({ dummy := Fungible.Allowances.approve storage.allowances Context.caller spender amount,
            paused := s.paused, cap := s.cap, supply := s.supply },
-      Event.approval Context.caller spender amount)
+      Effect.thenTrue (Event.approval Context.caller spender amount))
   else
     .error .overflow
 
@@ -200,35 +200,35 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
 
 @[pf_entry]
 def transfer (s : State) (destination : Address) (amount : UInt256) :
-    Except Error (State × UInt64) :=
+    Except Error (State × Bool) :=
   if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Access.runningViolation)
+      Effect.thenTrue Access.runningViolation)
   else if Address.isZero destination then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.zeroAddress)
+      Effect.thenTrue Revert.zeroAddress)
   else if Fungible.Balances.canDebit storage.balances Context.caller amount then
     if Address.eq Context.caller destination ||
         Fungible.Balances.canCredit storage.balances destination amount then
       let movement :=
         Fungible.Balances.transfer storage.balances Context.caller destination amount
       .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
-        Event.transfer Context.caller destination amount)
+        Effect.thenTrue (Event.transfer Context.caller destination amount))
     else
       .error .overflow
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Fungible.Balances.insufficient storage.balances Context.caller amount)
+      Effect.thenTrue (Fungible.Balances.insufficient storage.balances Context.caller amount))
 
 @[pf_entry]
 def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
-    Except Error (State × UInt64) :=
+    Except Error (State × Bool) :=
   if s.paused != Pausable.running then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Access.runningViolation)
+      Effect.thenTrue Access.runningViolation)
   else if Address.isZero destination then
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.zeroAddress)
+      Effect.thenTrue Revert.zeroAddress)
   else if Fungible.Allowances.canSpend storage.allowances owner Context.caller amount then
     if Fungible.Balances.canDebit storage.balances owner amount then
       if Address.eq owner destination ||
@@ -237,15 +237,16 @@ def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
           (Fungible.Balances.transfer storage.balances owner destination amount) |||
           (Fungible.Allowances.spend storage.allowances owner Context.caller amount)
         .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
-          Event.transfer owner destination amount)
+          Effect.thenTrue (Event.transfer owner destination amount))
       else
         .error .overflow
     else
       .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        Fungible.Balances.insufficient storage.balances owner amount)
+        Effect.thenTrue (Fungible.Balances.insufficient storage.balances owner amount))
   else
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Fungible.Allowances.insufficient storage.allowances owner Context.caller amount)
+      Effect.thenTrue
+        (Fungible.Allowances.insufficient storage.allowances owner Context.caller amount))
 
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=
@@ -306,7 +307,7 @@ section Proofs
 
 /-- **transfer 不增发不通缩**：转账后 `supply` 不变。 -/
 theorem transfer_preserves_supply (s : State) (d : Address) (a : UInt256)
-    {t : State} {r : UInt64}
+    {t : State} {r : Bool}
     (h : transfer s d a = .ok (t, r)) : t.supply = s.supply := by
   unfold transfer at h
   split at h
@@ -377,7 +378,7 @@ theorem burn_supply_effect (s : State) (a : UInt256) {t : State} {r : UInt64}
 
 /-- **transferFrom 不动 supply**（余额走 hashed map，supply 只由 mint/burn 改变）。 -/
 theorem transferFrom_preserves_supply (s : State) (o d : Address) (a : UInt256)
-    {t : State} {r : UInt64}
+    {t : State} {r : Bool}
     (h : transferFrom s o d a = .ok (t, r)) : t.supply = s.supply := by
   unfold transferFrom at h
   split at h
@@ -406,7 +407,7 @@ theorem transferFrom_preserves_supply (s : State) (o d : Address) (a : UInt256)
 
 /-- **approve 不动 supply**。 -/
 theorem approve_preserves_supply (s : State) (sp : Address) (a : UInt256)
-    {t : State} {r : UInt64}
+    {t : State} {r : Bool}
     (h : approve s sp a = .ok (t, r)) : t.supply = s.supply := by
   unfold approve at h
   split at h
