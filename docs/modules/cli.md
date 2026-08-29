@@ -10,10 +10,16 @@
 ```
 pf build --target svm [--out DIR] [Name ...]
 pf build --target evm [--out DIR] [Name ...]
+pf build --target xrpl|xrpl-alphanet [--out DIR] [Name ...]
+pf deploy [--rpc URL] [--wallet SEED] Program
+pf call --contract ACCOUNT Function
 ```
 
 - `svm` / `solana` / `sbpf`：`.so` + `.s` + `.idl.json`
 - `evm`：`.bin` + `.yul` + `.abi.json`
+- `xrpl`：Bedrock 本地 host 表，`.wat` / `.wasm`
+- `xrpl-alphanet`：XLS-0102 host 表。`deploy` / `call` 默认这个 target，
+  包 `runtime-tests/xrpl/alphanet-rpc.js`，不是 bedrock
 - SVM 每次运行时加载 `Examples.Name` 并重新抽 IR；Phoenix 不再需要目录特判；
   digest 必须与 Golden 一致
 - 不写名字 = SVM 的全部登记源模块 / EVM 的全部 Golden 夹具

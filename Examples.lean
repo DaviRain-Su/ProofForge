@@ -50,6 +50,7 @@ import Examples.XrplHash
 import Examples.XrplRt2
 import Examples.XrplVec
 import Examples.XrplSmoke
+import Examples.XrplGate
 import Examples.EvmBounded
 import Examples.EvmSearch
 import Examples.EvmFindIndex

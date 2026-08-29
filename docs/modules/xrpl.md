@@ -80,7 +80,9 @@ CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本�
 现成 Bedrock Docker **不能**当 AlphaNet 本地模拟（host 表不同）。
 注册程序见 `Xrpl.Registry`；当前为 `Counter`
 （digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`、`XrplHash`、`XrplRt2`、
-`XrplVec`（digest `e47db263444f8c7e`，编译期 JSON 槽 `xs_0`…`xs_2`）。
+`XrplVec`（digest `e47db263444f8c7e`，编译期 JSON 槽 `xs_0`…`xs_2`）、
+`XrplSmoke`、`XrplGate`（digest `c2495d166a25c8e0`，零参数 Ownable + `renounce`）。
+`pf deploy` / `pf call` 只打 AlphaNet。
 
 ## 与调研文档 WAT 设想的关系
 

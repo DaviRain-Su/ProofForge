@@ -187,6 +187,10 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-009](tasks/wsm-009.md) | done | XRPL-SDK-EQ：可组合 `AccountId.eq`，Ownable 走 helper |
 | [wsm-010](tasks/wsm-010.md) | done | XRPL-SDK-ACCESS：`requireOwner`，Ownable 走门面 |
 | [wsm-011](tasks/wsm-011.md) | done | XRPL-RT-2：parent hash 首 u64 + base fee |
+| [wsm-012](tasks/wsm-012.md) | done | XRPL-VEC-1：编译期命名槽 `xs_0`…`xs_2` |
+| [wsm-013](tasks/wsm-013.md) | done | XRPL-ALPHANET：XLS-0102 host 表 |
+| [wsm-014](tasks/wsm-014.md) | done | AlphaNet 零参数烟测 + 本仓 deploy/call |
+| [wsm-015](tasks/wsm-015.md) | done | AlphaNet 零参数 Ownable（XrplGate + `pf deploy`/`pf call`） |
 
 ## SVM 全面工作计划（当前主线）
 
