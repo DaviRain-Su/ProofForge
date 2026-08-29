@@ -8,19 +8,24 @@ WASM 家族的第二条链：**NEAR Protocol**。经 `Core.Target.Registration` 
 `storage_write` / `value_return` / `panic_utf8`），组装器是锁定的
 `wat2wasm 1.0.41`。外来叶子经 [`Wasm.Family`](wasm.md) fail closed。
 
-v0 绑定历史仓 proof_forge 的 profile `near-wasm-raw-u64-v1`：这**不是** JSON
-ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。每个 method 的 `env.input`
-恰好为 `8 * paramCount` bytes little-endian；每个 `UInt64` `value_return`
-恰好为 8-byte little-endian。
+基础标量绑定历史仓 proof_forge 的 profile `near-wasm-raw-u64-v1`：这**不是** JSON
+ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。标量 method 的 `env.input`
+恰好为 `8 * paramCount` bytes little-endian。wsm-039 另为单个 `BoundedBytes` /
+`BoundedString` 参数绑定 canonical Borsh `u32_le(length) || active bytes`（capacity 1..64；
+String strict UTF-8）。当前每个 view 的 `UInt64` `value_return` 仍恰好为 8-byte little-endian；
+bounded output 尚未开放。
 
 ## Boundary
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
-| `Near.Ops` | NEAR 方言 `ValKind` / `OpExt`（v0 无宿主叶子） | 其它链的方言 |
+| `Near.Ops` | NEAR context 值叶、static log effect 与方言检查 | 其它链的方言、collection recipe |
 | `Near.Host` | import 模块 `env`、digest 域 `near-raw-u64\|`、header | XRPL `host_lib`、Data blob sfield |
-| `Near.IR` | registration 实例化、方言类型别名、ext canonical 标签 | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
-| `Near.Emit` | `env` import 表、KV 8-byte LE 存储、raw-u64 入口 ABI | XRPL Data-blob 发射器 |
+| `Near.Codec` | bounded bytes/String 的 canonical Borsh 输入计划与资源上限 | collection layout、JSON、output plan |
+| `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
+| `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
+| `Near.IR` | registration、方言标签、target-owned bounded input frame rewrite | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
+| `Near.Emit` | `env` import、KV 8-byte LE 存储、raw-u64/Borsh 输入、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
 | `Near.Registry` | 可构建模块 + canonical digest | 部署声明 |
 | `Near.Commands` | `#pf_near_build` / `#pf_near_dump` | 新 DSL |
@@ -35,6 +40,10 @@ ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。每个 method 的 `en
 - 工程门分两层：`runtime-tests/near/check.sh` 断言 import 表 + wasm magic；
   `runtime-tests/near/counter.sh` 起锁定 `near-sandbox 2.13.0`、部署本仓
   `Counter.wasm`、跑 initialize / increment / overflow / get。缺 sandbox /
-  python 依赖则 skip。不是「artifact 已被证明」。
+  python 依赖则 skip；`context.sh` 验证 context/log；`bytes.sh` 验证 exact Borsh、
+  inactive zeroing 和 UTF-8 正反矩阵；`memory.sh` 验证跨 source-declared 首页的 arena
+  分配/复用/清零以及 bounds、stale handle、wrong capacity、double begin traps（nearcore
+  可把 initial memory 规范化得更大，实际 grow 路径由 model + WAT gate 钉住）。不是
+  「artifact 已被证明」。
 
-CLI：`pf build --target near`。当前注册 `Counter`。
+CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`。

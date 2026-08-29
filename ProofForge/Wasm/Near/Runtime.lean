@@ -106,6 +106,32 @@ rejects dynamic strings and messages above the target-owned bound.
   let _ := message
   0
 
+/-!
+Invocation-local guest-Wasm arena leaves. Capacity is compile-time fixed by the SDK descriptor;
+the extractor rejects malformed geometry. The physical pointer remains target-owned and cannot
+enter source state or persistent storage.
+-/
+
+@[irreducible] def transientBuffer64Begin (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientBuffer64Set
+    (capacity : Nat) (index value : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  let _ := value
+  0
+
+@[irreducible] def transientBuffer64Get (capacity : Nat) (index : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  0
+
+@[irreducible] def transientBuffer64Finish (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
 /--
 `current_account_id` as the first 8 bytes of the UTF-8 account id,
 little-endian. View-safe — unlike `predecessor`. Not a 20-byte address,

@@ -139,8 +139,21 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Val.nearCurrentAccountIdW6 : Val := nearLeaf .currentAccountIdW6
 @[match_pattern] def Val.nearCurrentAccountIdW7 : Val := nearLeaf .currentAccountIdW7
 
+@[match_pattern] def Val.nearTransientBuffer64Get (capacity : Nat) (index : Val) : Val :=
+  .ext (.near (.transientBuffer64Get capacity)) #[index]
+
 @[match_pattern] def Op.nearLogUtf8 (message : String) : Op :=
   .ext (.near (.logUtf8 message))
+
+@[match_pattern] def Op.nearTransientBuffer64Begin (capacity : Nat) : Op :=
+  .ext (.near (.transientBuffer64Begin capacity))
+
+@[match_pattern] def Op.nearTransientBuffer64Set
+    (capacity : Nat) (index value : Val) : Op :=
+  .ext (.near (.transientBuffer64Set capacity index value))
+
+@[match_pattern] def Op.nearTransientBuffer64Finish (capacity : Nat) : Op :=
+  .ext (.near (.transientBuffer64Finish capacity))
 
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber

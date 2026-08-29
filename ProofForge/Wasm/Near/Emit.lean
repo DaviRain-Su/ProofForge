@@ -2,6 +2,7 @@ import ProofForge.Wasm.IR
 import ProofForge.Wasm.Near.Ops
 import ProofForge.Wasm.Near.IR
 import ProofForge.Wasm.Near.Host
+import ProofForge.Wasm.Near.Memory
 
 /-!
 # NEAR target emitter
@@ -63,6 +64,10 @@ observing bytes left by another register read. -/
 private def predecessorAccountOff : Nat := 64
 private def currentAccountOff : Nat := 128
 
+/-- Canonical Borsh input is copied only after its register length is bounded. The largest frame
+is 68 bytes and therefore remains disjoint from context scratch and storage keys. -/
+private def boundedInputOff : Nat := 256
+
 private def predecessorWordLocal : Nat → String
   | 0 => "$pf_pred"
   | i => "$pf_pred" ++ toString i
@@ -92,6 +97,9 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
   ops.foldl (init := #[]) fun messages op =>
     messages ++ match op with
       | .ext (.logUtf8 message) => #[message]
+      | .ext (.transientBuffer64Begin _)
+      | .ext (.transientBuffer64Set _ _ _)
+      | .ext (.transientBuffer64Finish _) => #[]
       | .ite _ _ _ thn els => logsOfOps thn ++ logsOfOps els
       | .forBody _ body => logsOfOps body
       | _ => #[]
@@ -190,6 +198,12 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext .currentAccountIdW5 #[] => .ok "(local.get $pf_self5)"
   | .ext .currentAccountIdW6 #[] => .ok "(local.get $pf_self6)"
   | .ext .currentAccountIdW7 #[] => .ok "(local.get $pf_self7)"
+  | .ext (.transientBuffer64Get capacity) #[index] => do
+      let i ← renderVal st index
+      return "(call $pf_buffer64_get (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
+  | .local index => .error s!"extract/unsupported: near v0 value local {index}"
+  | .ext kind operands =>
+      .error s!"extract/unsupported: near v0 value extension {repr kind}/{operands.size}"
   | _ => .error "extract/unsupported: near v0 value"
 
 private def isExitOp : Op ValKind OpExt → Bool
@@ -375,6 +389,29 @@ private partial def emitRegion (p : Program ValKind OpExt)
             ") (i64.const " ++ toString off ++ "))")] ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.transientBuffer64Begin capacity) =>
+        let region ← emitRegion p view echo level defaultSlot tail st
+        return {
+          lines := #[indent level ("(call $pf_buffer64_begin (i64.const " ++
+            toString capacity ++ "))")] ++ region.lines
+          st := region.st
+          terminal := region.terminal }
+    | .ext (.transientBuffer64Set capacity index value) =>
+        let i ← renderVal st index
+        let v ← renderVal st value
+        let region ← emitRegion p view echo level defaultSlot tail st
+        return {
+          lines := #[indent level ("(call $pf_buffer64_set (i64.const " ++
+            toString capacity ++ ") " ++ i ++ " " ++ v ++ ")")] ++ region.lines
+          st := region.st
+          terminal := region.terminal }
+    | .ext (.transientBuffer64Finish capacity) =>
+        let region ← emitRegion p view echo level defaultSlot tail st
+        return {
+          lines := #[indent level ("(call $pf_buffer64_finish (i64.const " ++
+            toString capacity ++ "))")] ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .returnU64 value =>
         unless view do
           throw "extract/unsupported: near v0 mutating region cannot return a value"
@@ -444,6 +481,42 @@ private def accountBalanceKinds : Array ValKind := #[
 private def methodUsesAny (kinds : Array ValKind) (method : Method ValKind OpExt) : Bool :=
   kinds.any (methodUses · method)
 
+private partial def valUsesArena : Val ValKind → Bool
+  | .ext (.transientBuffer64Get _) _ => true
+  | .ext _ operands => operands.any valUsesArena
+  | .field base _ | .bitNot base => valUsesArena base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs => valUsesArena lhs || valUsesArena rhs
+  | .indexGet base _ index _ _ => valUsesArena base || valUsesArena index
+  | .select _ lhs rhs thn els =>
+      valUsesArena lhs || valUsesArena rhs || valUsesArena thn || valUsesArena els
+  | _ => false
+
+private partial def opUsesArena : Op ValKind OpExt → Bool
+  | .ext (.transientBuffer64Begin _)
+  | .ext (.transientBuffer64Set _ _ _)
+  | .ext (.transientBuffer64Finish _) => true
+  | .ext (.logUtf8 _) | .ext .reserved => false
+  | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+  | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+      valUsesArena value
+  | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+  | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs
+  | .indexSetLeaf _ lhs rhs _ _ | .indexSet _ lhs rhs _ _ =>
+      valUsesArena lhs || valUsesArena rhs
+  | .ite _ lhs rhs thn els =>
+      valUsesArena lhs || valUsesArena rhs || thn.any opUsesArena || els.any opUsesArena
+  | .forBody _ body => body.any opUsesArena
+  | .joinLocal _ | .errorOverflow | .errorNamed _ => false
+
+private def methodUsesArena (method : Method ValKind OpExt) : Bool :=
+  method.ops.any opUsesArena
+
+private def programUsesArena (p : Program ValKind OpExt) : Bool :=
+  methodUsesArena p.initializer || p.entries.any methodUsesArena
+
 private def clearAccountBuffer (off level : Nat) : Array String :=
   (List.range 8).toArray.map fun i =>
     indent level ("(i64.store (i32.const " ++ toString (off + i * 8) ++
@@ -510,9 +583,64 @@ private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level
       3 currentAccountOff level currentAccountWordLocal
   return lines
 
-private def loadArg (count : Nat) (level : Nat) : Array String :=
-  if count == 0 then
-    #[
+private def inputPlanOf (method : Method ValKind OpExt) :
+    Except String (Option Codec.BorshInputPlan) :=
+  method.inputSchema.mapM Codec.inputPlan
+
+private def panicInput (level : Nat) : String :=
+  indent level ("(call $pf_panic_utf8 (i64.const 5) (i64.const " ++
+    toString panicInputOff ++ "))")
+
+private def loadArg (method : Method ValKind OpExt) (level : Nat) :
+    Except String (Array String) := do
+  if let some plan ← inputPlanOf method then
+    unless method.paramCount == plan.localCount do
+      throw s!"near/codec: {method.ixName} scalar frame does not match its Borsh input plan"
+    let mut lines : Array String := #[
+      indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
+      indent level ("(local.set $pf_input_size (call $pf_register_len (i64.const " ++
+        toString inputReg ++ ")) )"),
+      indent level "(if (i64.lt_u (local.get $pf_input_size) (i64.const 4))",
+      indent (level + 2) "(then",
+      panicInput (level + 4),
+      indent (level + 2) "))",
+      indent level ("(if (i64.gt_u (local.get $pf_input_size) (i64.const " ++
+        toString (4 + plan.capacity) ++ "))"),
+      indent (level + 2) "(then",
+      panicInput (level + 4),
+      indent (level + 2) "))",
+      indent level ("(call $pf_read_register (i64.const " ++ toString inputReg ++
+        ") (i64.const " ++ toString boundedInputOff ++ "))"),
+      indent level ("(local.set " ++ localOfArg 0 ++ " (i64.load32_u (i32.const " ++
+        toString boundedInputOff ++ ")) )"),
+      indent level ("(if (i64.gt_u (local.get " ++ localOfArg 0 ++ ") (i64.const " ++
+        toString plan.capacity ++ "))"),
+      indent (level + 2) "(then",
+      panicInput (level + 4),
+      indent (level + 2) "))",
+      indent level ("(if (i64.ne (local.get $pf_input_size) (i64.add (i64.const 4) " ++
+        "(local.get " ++ localOfArg 0 ++ ")))"),
+      indent (level + 2) "(then",
+      panicInput (level + 4),
+      indent (level + 2) "))"
+    ]
+    if plan.validateUtf8 then
+      lines := lines ++ #[
+        indent level ("(if (i32.eqz (call $pf_utf8_valid (i32.const " ++
+          toString (boundedInputOff + 4) ++ ") (i32.wrap_i64 (local.get " ++
+          localOfArg 0 ++ "))))"),
+        indent (level + 2) "(then",
+        panicInput (level + 4),
+        indent (level + 2) "))"
+      ]
+    for i in [0:plan.capacity] do
+      lines := lines.push (indent level ("(local.set " ++ localOfArg (1 + i) ++
+        " (if (result i64) (i64.lt_u (i64.const " ++ toString i ++ ") (local.get " ++
+        localOfArg 0 ++ ")) (then (i64.load8_u (i32.const " ++
+        toString (boundedInputOff + 4 + i) ++ "))) (else (i64.const 0))))"))
+    return lines
+  if method.paramCount == 0 then
+    return #[
       indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
       indent level ("(if (i64.ne (call $pf_register_len (i64.const " ++
         toString inputReg ++ ")) (i64.const 0))"),
@@ -521,8 +649,8 @@ private def loadArg (count : Nat) (level : Nat) : Array String :=
         toString panicInputOff ++ "))"),
       indent (level + 2) "))"
     ]
-  else if count == 1 then
-    #[
+  else if method.paramCount == 1 then
+    return #[
       indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
       indent level ("(if (i64.ne (call $pf_register_len (i64.const " ++
         toString inputReg ++ ")) (i64.const 8))"),
@@ -535,7 +663,7 @@ private def loadArg (count : Nat) (level : Nat) : Array String :=
       indent level ("(local.set " ++ localOfArg 0 ++ " (i64.load (i32.const 0)))")
     ]
   else
-    #[]
+    return #[]
 
 private def loadSlots (p : Program ValKind OpExt) (level : Nat) : Array String :=
   p.slots.foldl (init := #[]) fun acc slot =>
@@ -555,8 +683,10 @@ private def loadSlots (p : Program ValKind OpExt) (level : Nat) : Array String :
 
 private def renderFn (p : Program ValKind OpExt)
     (method : Method ValKind OpExt) : Except String (Array String) := do
-  unless method.paramCount ≤ 1 do
-    throw s!"extract/unsupported: {method.ixName} wants at most one UInt64 parameter for near v0"
+  let inputPlan ← inputPlanOf method
+  if inputPlan.isNone then
+    unless method.paramCount ≤ 1 do
+      throw s!"extract/unsupported: {method.ixName} wants at most one UInt64 parameter for near v0"
   let view := method.tupleArity.isSome
   let echo := method.echoDropped
   let st : EState := { paramCount := method.paramCount }
@@ -567,8 +697,10 @@ private def renderFn (p : Program ValKind OpExt)
   if method.echoDropped then
     lines := lines.push s!"  ;; v0 ABI: {method.ixName} value_returns 8-byte LE after store"
   lines := lines.push ("  (func (export \"" ++ method.ixName ++ "\")")
-  if method.paramCount == 1 then
-    lines := lines.push ("    (local " ++ localOfArg 0 ++ " i64)")
+  for i in [0:method.paramCount] do
+    lines := lines.push ("    (local " ++ localOfArg i ++ " i64)")
+  if inputPlan.isSome then
+    lines := lines.push "    (local $pf_input_size i64)"
   if methodUsesAny predecessorKinds method then
     lines := lines.push "    (local $pf_pred_len i64)"
     for i in List.range 8 do
@@ -587,7 +719,9 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push ("    (local " ++ localOfSlot slot.name ++ " i64)")
   for i in List.range (Nat.max (countTemps method.ops) region.st.fresh) do
     lines := lines.push ("    (local " ++ localOfTemp i ++ " i64)")
-  lines := lines ++ loadArg method.paramCount 4
+  if methodUsesArena method then
+    lines := lines.push "    (call $pf_arena_reset)"
+  lines := lines ++ (← loadArg method 4)
   lines := lines ++ (← loadHostPrelude method view 4)
   lines := lines ++ loadSlots p 4
   lines := lines ++ region.lines
@@ -611,8 +745,186 @@ private def dataSection (p : Program ValKind OpExt) : Array String :=
     else #[]
   keys ++ base ++ account
 
+private def staticDataEnd (p : Program ValKind OpExt) : Nat :=
+  let keyEnd := match (keyLayout p).back? with
+    | some (_, off, len) => off + len
+    | none => 0
+  let logEnd := match (logLayout p).back? with
+    | some (_, off, len) => off + len
+    | none => 0
+  let panicEnd :=
+    if predecessorKinds.any (programUses · p) || currentAccountKinds.any (programUses · p) then
+      panicAccountIdOff + 10
+    else
+      panicInputOff + 5
+  Nat.max panicEnd (Nat.max keyEnd logEnd)
+
+private def arenaBase (p : Program ValKind OpExt) : Nat :=
+  Memory.alignUp (staticDataEnd p) 8
+
+/-- Generic upward bump arena plus one fixed UInt64-buffer consumer. All addresses remain in
+target-owned globals. Arithmetic is widened to i64 before memory32 page/range checks. -/
+private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
+  let base := arenaBase p
+  #[
+    "  (global $pf_arena_cursor (mut i64) (i64.const " ++ toString base ++ "))",
+    "  (global $pf_buffer64_ptr (mut i32) (i32.const 0))",
+    "  (global $pf_buffer64_capacity (mut i64) (i64.const 0))",
+    "  (global $pf_buffer64_active (mut i32) (i32.const 0))",
+    "  (func $pf_arena_reset",
+    "    (global.set $pf_arena_cursor (i64.const " ++ toString base ++ "))",
+    "    (global.set $pf_buffer64_ptr (i32.const 0))",
+    "    (global.set $pf_buffer64_capacity (i64.const 0))",
+    "    (global.set $pf_buffer64_active (i32.const 0)))",
+    "  (func $pf_arena_alloc (param $bytes i64) (param $alignment i64) (result i32)",
+    "    (local $mask i64) (local $pointer i64) (local $finish i64)",
+    "    (local $current_pages i64) (local $current_bytes i64)",
+    "    (local $required_pages i64) (local $delta i64)",
+    "    (if (i32.or (i64.eqz (local.get $bytes)) (i64.eqz (local.get $alignment)))",
+    "      (then unreachable))",
+    "    (local.set $mask (i64.sub (local.get $alignment) (i64.const 1)))",
+    "    (if (i64.ne (i64.and (local.get $alignment) (local.get $mask)) (i64.const 0))",
+    "      (then unreachable))",
+    "    (if (i64.gt_u (local.get $alignment) (i64.const 4294967296))",
+    "      (then unreachable))",
+    "    (if (i64.gt_u (global.get $pf_arena_cursor)",
+    "        (i64.sub (i64.const 4294967295) (local.get $mask)))",
+    "      (then unreachable))",
+    "    (local.set $pointer",
+    "      (i64.and (i64.add (global.get $pf_arena_cursor) (local.get $mask))",
+    "        (i64.xor (local.get $mask) (i64.const -1))))",
+    "    (if (i64.gt_u (local.get $bytes)",
+    "        (i64.sub (i64.const 4294967296) (local.get $pointer)))",
+    "      (then unreachable))",
+    "    (local.set $finish (i64.add (local.get $pointer) (local.get $bytes)))",
+    "    (local.set $current_pages (i64.extend_i32_u (memory.size)))",
+    "    (local.set $current_bytes (i64.shl (local.get $current_pages) (i64.const 16)))",
+    "    (if (i64.gt_u (local.get $finish) (local.get $current_bytes))",
+    "      (then",
+    "        (local.set $required_pages",
+    "          (i64.shr_u (i64.add (local.get $finish) (i64.const 65535)) (i64.const 16)))",
+    "        (local.set $delta (i64.sub (local.get $required_pages) (local.get $current_pages)))",
+    "        (if (i32.eq (memory.grow (i32.wrap_i64 (local.get $delta))) (i32.const -1))",
+    "          (then unreachable))))",
+    "    (global.set $pf_arena_cursor (local.get $finish))",
+    "    (i32.wrap_i64 (local.get $pointer)))",
+    "  (func $pf_buffer64_begin (param $capacity i64)",
+    "    (local $i i64) (local $ptr i32)",
+    "    (if (i32.or (i64.eqz (local.get $capacity))",
+    "        (i64.gt_u (local.get $capacity) (i64.const 4096)))",
+    "      (then unreachable))",
+    "    (if (global.get $pf_buffer64_active) (then unreachable))",
+    "    (local.set $ptr",
+    "      (call $pf_arena_alloc (i64.shl (local.get $capacity) (i64.const 3)) (i64.const 8)))",
+    "    (global.set $pf_buffer64_ptr (local.get $ptr))",
+    "    (global.set $pf_buffer64_capacity (local.get $capacity))",
+    "    (global.set $pf_buffer64_active (i32.const 1))",
+    "    (loop $zero",
+    "      (if (i64.lt_u (local.get $i) (local.get $capacity))",
+    "        (then",
+    "          (i64.store (i32.add (local.get $ptr)",
+    "            (i32.wrap_i64 (i64.shl (local.get $i) (i64.const 3)))) (i64.const 0))",
+    "          (local.set $i (i64.add (local.get $i) (i64.const 1)))",
+    "          (br $zero)))))",
+    "  (func $pf_buffer64_set (param $capacity i64) (param $index i64) (param $value i64)",
+    "    (if (i32.eqz (global.get $pf_buffer64_active)) (then unreachable))",
+    "    (if (i64.ne (local.get $capacity) (global.get $pf_buffer64_capacity))",
+    "      (then unreachable))",
+    "    (if (i64.ge_u (local.get $index) (local.get $capacity)) (then unreachable))",
+    "    (i64.store (i32.add (global.get $pf_buffer64_ptr)",
+    "      (i32.wrap_i64 (i64.shl (local.get $index) (i64.const 3)))) (local.get $value)))",
+    "  (func $pf_buffer64_get (param $capacity i64) (param $index i64) (result i64)",
+    "    (if (i32.eqz (global.get $pf_buffer64_active)) (then unreachable))",
+    "    (if (i64.ne (local.get $capacity) (global.get $pf_buffer64_capacity))",
+    "      (then unreachable))",
+    "    (if (i64.ge_u (local.get $index) (local.get $capacity)) (then unreachable))",
+    "    (i64.load (i32.add (global.get $pf_buffer64_ptr)",
+    "      (i32.wrap_i64 (i64.shl (local.get $index) (i64.const 3))))))",
+    "  (func $pf_buffer64_finish (param $capacity i64)",
+    "    (if (i32.eqz (global.get $pf_buffer64_active)) (then unreachable))",
+    "    (if (i64.ne (local.get $capacity) (global.get $pf_buffer64_capacity))",
+    "      (then unreachable))",
+    "    (global.set $pf_buffer64_ptr (i32.const 0))",
+    "    (global.set $pf_buffer64_capacity (i64.const 0))",
+    "    (global.set $pf_buffer64_active (i32.const 0)))",
+    ""
+  ]
+
+private def methodUsesUtf8Input (method : Method ValKind OpExt) : Bool :=
+  match method.inputSchema with
+  | some (.boundedString _) => true
+  | _ => false
+
+private def programUsesUtf8Input (p : Program ValKind OpExt) : Bool :=
+  methodUsesUtf8Input p.initializer || p.entries.any methodUsesUtf8Input
+
+/-- Strict Unicode-scalar UTF-8 validation over one already bounded memory span. Explicit Borsh
+lengths are always used; no NUL-terminated nearcore sentinel semantics enter this helper. -/
+private def utf8Validator : Array String := #[
+  "  (func $pf_utf8_valid (param $ptr i32) (param $len i32) (result i32)",
+  "    (local $i i32) (local $b0 i32) (local $b1 i32) (local $b2 i32) (local $b3 i32)",
+  "    (local $ok i32)",
+  "    (block $invalid",
+  "      (loop $scan",
+  "        (if (i32.ge_u (local.get $i) (local.get $len))",
+  "          (then (return (i32.const 1))))",
+  "        (local.set $b0 (i32.load8_u (i32.add (local.get $ptr) (local.get $i))))",
+  "        (if (i32.le_u (local.get $b0) (i32.const 127))",
+  "          (then",
+  "            (local.set $i (i32.add (local.get $i) (i32.const 1)))",
+  "            (br $scan)))",
+  "        (if (i32.and (i32.ge_u (local.get $b0) (i32.const 194))",
+  "                     (i32.le_u (local.get $b0) (i32.const 223)))",
+  "          (then",
+  "            (br_if $invalid (i32.gt_u (i32.add (local.get $i) (i32.const 2)) (local.get $len)))",
+  "            (local.set $b1 (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $i) (i32.const 1)))))",
+  "            (br_if $invalid (i32.eqz (i32.and (i32.ge_u (local.get $b1) (i32.const 128))",
+  "                                                (i32.le_u (local.get $b1) (i32.const 191)))))",
+  "            (local.set $i (i32.add (local.get $i) (i32.const 2)))",
+  "            (br $scan)))",
+  "        (if (i32.and (i32.ge_u (local.get $b0) (i32.const 224))",
+  "                     (i32.le_u (local.get $b0) (i32.const 239)))",
+  "          (then",
+  "            (br_if $invalid (i32.gt_u (i32.add (local.get $i) (i32.const 3)) (local.get $len)))",
+  "            (local.set $b1 (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $i) (i32.const 1)))))",
+  "            (local.set $b2 (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $i) (i32.const 2)))))",
+  "            (local.set $ok",
+  "              (if (result i32) (i32.eq (local.get $b0) (i32.const 224))",
+  "                (then (i32.and (i32.ge_u (local.get $b1) (i32.const 160)) (i32.le_u (local.get $b1) (i32.const 191))))",
+  "                (else (if (result i32) (i32.eq (local.get $b0) (i32.const 237))",
+  "                  (then (i32.and (i32.ge_u (local.get $b1) (i32.const 128)) (i32.le_u (local.get $b1) (i32.const 159))))",
+  "                  (else (i32.and (i32.ge_u (local.get $b1) (i32.const 128)) (i32.le_u (local.get $b1) (i32.const 191))))))))",
+  "            (br_if $invalid (i32.eqz (local.get $ok)))",
+  "            (br_if $invalid (i32.eqz (i32.and (i32.ge_u (local.get $b2) (i32.const 128))",
+  "                                                (i32.le_u (local.get $b2) (i32.const 191)))))",
+  "            (local.set $i (i32.add (local.get $i) (i32.const 3)))",
+  "            (br $scan)))",
+  "        (if (i32.and (i32.ge_u (local.get $b0) (i32.const 240))",
+  "                     (i32.le_u (local.get $b0) (i32.const 244)))",
+  "          (then",
+  "            (br_if $invalid (i32.gt_u (i32.add (local.get $i) (i32.const 4)) (local.get $len)))",
+  "            (local.set $b1 (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $i) (i32.const 1)))))",
+  "            (local.set $b2 (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $i) (i32.const 2)))))",
+  "            (local.set $b3 (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $i) (i32.const 3)))))",
+  "            (local.set $ok",
+  "              (if (result i32) (i32.eq (local.get $b0) (i32.const 240))",
+  "                (then (i32.and (i32.ge_u (local.get $b1) (i32.const 144)) (i32.le_u (local.get $b1) (i32.const 191))))",
+  "                (else (if (result i32) (i32.eq (local.get $b0) (i32.const 244))",
+  "                  (then (i32.and (i32.ge_u (local.get $b1) (i32.const 128)) (i32.le_u (local.get $b1) (i32.const 143))))",
+  "                  (else (i32.and (i32.ge_u (local.get $b1) (i32.const 128)) (i32.le_u (local.get $b1) (i32.const 191))))))))",
+  "            (br_if $invalid (i32.eqz (local.get $ok)))",
+  "            (br_if $invalid (i32.eqz (i32.and (i32.ge_u (local.get $b2) (i32.const 128)) (i32.le_u (local.get $b2) (i32.const 191)))))",
+  "            (br_if $invalid (i32.eqz (i32.and (i32.ge_u (local.get $b3) (i32.const 128)) (i32.le_u (local.get $b3) (i32.const 191)))))",
+  "            (local.set $i (i32.add (local.get $i) (i32.const 4)))",
+  "            (br $scan)))",
+  "        (br $invalid)))",
+  "    (i32.const 0))"
+]
+
 def emit (p : IR.Program) : Except String String := do
   let logData ← logDataSection p
+  if programUsesArena p && Memory.pageBytes < arenaBase p then
+    throw "extract/unsupported: near static data leaves no room in the initial Wasm page"
   let mut lines : Array String := #[]
   lines := lines.push s!";; {Host.headerTag}"
   lines := lines.push s!";; digest={IR.digestHex p}"
@@ -656,6 +968,10 @@ def emit (p : IR.Program) : Except String String := do
   lines := lines.push "  (memory (export \"memory\") 1)"
   lines := lines ++ dataSection p
   lines := lines ++ logData
+  if programUsesArena p then
+    lines := lines ++ arenaHelpers p
+  if programUsesUtf8Input p then
+    lines := lines ++ utf8Validator
   lines := lines.push ""
   lines := lines ++ (← renderFn p p.initializer)
   lines := lines.push ""

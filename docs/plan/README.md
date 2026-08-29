@@ -207,6 +207,8 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-020](tasks/wsm-020.md) | done | NEAR lossless AccountId + full equality/self-call guard |
 | [wsm-near-u128-001](tasks/wsm-near-u128-001.md) | done | NEAR lossless u128 deposit/balance context |
 | [wsm-near-log-001](tasks/wsm-near-log-001.md) | done | NEAR static UTF-8 logging effect |
+| [wsm-near-bytes-001](tasks/wsm-near-bytes-001.md) | done | NEAR canonical Borsh bounded bytes/string input + strict UTF-8 |
+| [wsm-near-memory-001](tasks/wsm-near-memory-001.md) | done | NEAR invocation-local checked Wasm arena + SDK `Buffer64` |
 
 ## SVM 全面工作计划（当前主线）
 

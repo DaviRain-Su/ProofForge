@@ -1,5 +1,6 @@
 import ProofForge.Core.Ops
 import ProofForge.Core.CFG
+import ProofForge.Wasm.Near.Memory
 
 /-!
 # NEAR target dialect
@@ -31,11 +32,14 @@ inductive ValKind where
   | currentAccountIdLen
   | currentAccountIdW1 | currentAccountIdW2 | currentAccountIdW3 | currentAccountIdW4
   | currentAccountIdW5 | currentAccountIdW6 | currentAccountIdW7
+  /-- Read from the one active invocation-local UInt64 buffer. -/
+  | transientBuffer64Get (capacity : Nat)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
+  | .transientBuffer64Get _ => 1
   | .reserved => 0
   | _ => 0
 
@@ -46,6 +50,9 @@ abbrev Cmp := ProofForge.Core.Ops.Cmp
 UTF-8 literal that the emitter places in deterministic linear-memory data. -/
 inductive OpExt (V : Type) where
   | logUtf8 (message : String)
+  | transientBuffer64Begin (capacity : Nat)
+  | transientBuffer64Set (capacity : Nat) (index value : V)
+  | transientBuffer64Finish (capacity : Nat)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
@@ -54,17 +61,28 @@ abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
 
 def OpExt.wellFormed : OpExt Val → Bool
   | .logUtf8 message => message.toUTF8.size ≤ 1024
+  | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
+      Memory.buffer64CapacityValid capacity
+  | .transientBuffer64Set capacity index value =>
+      Memory.buffer64CapacityValid capacity &&
+        index.wellFormed ValKind.arity && value.wellFormed ValKind.arity
   | .reserved => false
 
 def Op.wellFormed (op : Op) : Bool :=
   ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op
 
-private def mapCfgPayload (_mapValue : Val → Val) : OpExt Val → OpExt Val
+private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .logUtf8 message => .logUtf8 message
+  | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
+  | .transientBuffer64Set capacity index value =>
+      .transientBuffer64Set capacity (mapValue index) (mapValue value)
+  | .transientBuffer64Finish capacity => .transientBuffer64Finish capacity
   | .reserved => .reserved
 
 private def cfgPayloadValues : OpExt Val → Array Val
   | .logUtf8 _ => #[]
+  | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
+  | .transientBuffer64Set _ index value => #[index, value]
   | .reserved => #[]
 
 def cfgDialect : Core.CFG.Dialect ValKind OpExt where

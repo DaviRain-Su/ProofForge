@@ -69,13 +69,22 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .near payload =>
       match payload with
       | .logUtf8 message => .near (.logUtf8 message)
+      | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
+      | .transientBuffer64Set capacity index value =>
+          .near (.transientBuffer64Set capacity (mapValue index) (mapValue value))
+      | .transientBuffer64Finish capacity => .near (.transientBuffer64Finish capacity)
       | .reserved => .near .reserved
 
 def OpExt.values : OpExt Val → Array Val
   | .svm payload => svmPayloadValues payload
   | .evm payload => evmPayloadValues payload
   | .xrpl payload => xrplPayloadValues payload
-  | .near _ => #[]
+  | .near payload =>
+      match payload with
+      | .logUtf8 _ => #[]
+      | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
+      | .transientBuffer64Set _ index value => #[index, value]
+      | .reserved => #[]
 
 def cfgDialect : Core.CFG.Dialect ValKind OpExt where
   mapValues := OpExt.mapValues
@@ -115,6 +124,11 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .near payload =>
       match payload with
       | .logUtf8 message => message.toUTF8.size ≤ 1024
+      | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
+          Wasm.Near.Memory.buffer64CapacityValid capacity
+      | .transientBuffer64Set capacity index value =>
+          Wasm.Near.Memory.buffer64CapacityValid capacity &&
+            index.wellFormed ValKind.arity && value.wellFormed ValKind.arity
       | .reserved => false
 
 def Op.wellFormed (op : Op) : Bool :=

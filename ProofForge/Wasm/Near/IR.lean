@@ -3,6 +3,7 @@ import ProofForge.Core.Target
 import ProofForge.Wasm.IR
 import ProofForge.Wasm.Near.Ops
 import ProofForge.Wasm.Near.Host
+import ProofForge.Wasm.Near.Codec
 
 /-!
 # NEAR target IR（薄封装）
@@ -34,6 +35,10 @@ private def projectOpExt
   | .near payload =>
       match payload with
       | .logUtf8 message => pure (.logUtf8 message)
+      | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
+      | .transientBuffer64Set capacity index value =>
+          return .transientBuffer64Set capacity (← _projectVal index) (← _projectVal value)
+      | .transientBuffer64Finish capacity => pure (.transientBuffer64Finish capacity)
       | .reserved => throw "extract/unsupported: near rejects reserved effect"
   | .svm _ => throw "extract/unsupported: near rejects svm effect"
   | .evm _ => throw "extract/unsupported: near rejects evm effect"
@@ -75,17 +80,107 @@ def extValCanon : Ops.ValKind → String
   | .currentAccountIdW3 => "ns3" | .currentAccountIdW4 => "ns4"
   | .currentAccountIdW5 => "ns5" | .currentAccountIdW6 => "ns6"
   | .currentAccountIdW7 => "ns7"
+  | .transientBuffer64Get capacity => s!"ntb64.get.{capacity}"
   | .reserved => "wext"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .logUtf8 message => s!"nlog:{message.toUTF8.size}:{message}"
+  | .transientBuffer64Begin capacity => s!"ntb64.begin.{capacity}"
+  | .transientBuffer64Set capacity index value =>
+      s!"ntb64.set.{capacity}({Wasm.IR.valCanon extValCanon index},{Wasm.IR.valCanon extValCanon value})"
+  | .transientBuffer64Finish capacity => s!"ntb64.finish.{capacity}"
   | .reserved => "wext"
 
 def slotNames (p : Program) : Array String :=
   Wasm.IR.slotNames p
 
-def fromExtracted (src : Extract.IR.Program) : Except String Program :=
-  Wasm.IR.fromExtracted extractRegistration src
+private def schemaIsScalar : Core.Codec.Schema → Bool
+  | .scalar _ => true
+  | _ => false
+
+private def rewritePayload
+    (rewriteValue : Ops.Val → Except String Ops.Val) :
+    Ops.OpExt Ops.Val → Except String (Ops.OpExt Ops.Val)
+  | .logUtf8 message => pure (.logUtf8 message)
+  | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
+  | .transientBuffer64Set capacity index value =>
+      return .transientBuffer64Set capacity (← rewriteValue index) (← rewriteValue value)
+  | .transientBuffer64Finish capacity => pure (.transientBuffer64Finish capacity)
+  | .reserved => pure .reserved
+
+private partial def rewriteInputRoot (method : Core.IR.Method Ops.ValKind Ops.OpExt)
+    (plan : Codec.BorshInputPlan) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg 0) "length" => pure (some (.arg 0))
+  | .field (.arg 0) name =>
+      match plan.valueIndex? name with
+      | some index => pure (some (.arg (1 + index)))
+      | none => throw s!"near/codec: unsupported bounded input projection {name}"
+  | .indexGet (.arg 0) name index length elementOffset => do
+      unless name == "values" && (length == 0 || length == plan.capacity) && elementOffset == 0 do
+        throw "near/codec: bounded index projection does not match its input plan"
+      let rewrittenIndex ←
+        Core.Target.rewriteValRoots (rewriteInputRoot method plan) index
+      let mut selected : Ops.Val := .lit 0
+      for i in [0:plan.capacity] do
+        selected := .select .eq rewrittenIndex (.lit (UInt64.ofNat i))
+          (.arg (1 + i)) selected
+      pure (some selected)
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: bounded input requires a scalar length or byte projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg plan.localCount))
+      else
+        pure none
+  | _ => pure none
+
+private structure BoundInput where
+  ixName : String
+  schema : Core.Codec.Schema
+  plan : Codec.BorshInputPlan
+
+private def bindMethod (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
+    Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundInput) := do
+  if method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar then
+    return (method, none)
+  unless method.paramCount == 1 && method.paramSchemas.size == 1 do
+    throw s!"near/codec: {method.ixName} supports exactly one bounded bytes/string parameter"
+  let schema := method.paramSchemas[0]!
+  let plan ← Codec.inputPlan schema
+  let ops ← Core.Target.rewriteOpsValues (rewriteInputRoot method plan) rewritePayload method.ops
+  let localCount := plan.localCount
+  let scalarSchemas := Array.replicate localCount (.scalar .uint64)
+  return ({ method with
+    paramCount := localCount
+    paramWidths := Array.replicate localCount 8
+    paramTypes := Array.replicate localCount .uint64
+    paramSchemas := scalarSchemas
+    ops }, some { ixName := method.ixName, schema, plan })
+
+private def decorateMethod (inputs : Array BoundInput) (method : Method) : Method :=
+  match inputs.find? (·.ixName == method.ixName) with
+  | some input => { method with
+      inputSchema := some input.schema
+      inputPolicy := input.plan.canonical }
+  | none => method
+
+def fromExtracted (src : Extract.IR.Program) : Except String Program := do
+  for method in src.methods do
+    unless method.annotations.isEmpty do
+      throw s!"extract/unsupported: wasm cannot consume target annotations on {method.ixName}"
+  let projected ← Core.Target.projectProgram extractRegistration src
+  let mut methods := #[]
+  let mut inputs := #[]
+  for method in projected.methods do
+    let (bound, input?) ← bindMethod method
+    methods := methods.push bound
+    if let some input := input? then inputs := inputs.push input
+  let program ← Wasm.IR.fromProjected { projected with methods }
+  return {
+    program with
+    initializer := decorateMethod inputs program.initializer
+    entries := program.entries.map (decorateMethod inputs)
+  }
 
 /-- Digest domain is chain-owned (`near-raw-u64|`), deliberately different from the
 SVM / EVM / XRPL domains. -/

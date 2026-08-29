@@ -114,9 +114,12 @@ import ProofForge.Wasm.Xrpl.Registry
 import ProofForge.Wasm.Xrpl.Assemble
 import ProofForge.Wasm.Xrpl.Commands
 import ProofForge.Wasm.Near.Ops
+import ProofForge.Wasm.Near.Memory
 import ProofForge.Wasm.Near.Runtime
 import ProofForge.Wasm.Near.Sdk
+import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Wasm.Near.Host
+import ProofForge.Wasm.Near.Codec
 import ProofForge.Wasm.Near.IR
 import ProofForge.Wasm.Near.Emit
 import ProofForge.Wasm.Near.Registry

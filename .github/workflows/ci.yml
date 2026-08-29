@@ -224,6 +224,12 @@ jobs:
       - name: Run NEAR sandbox Context gate
         run: runtime-tests/near/context.sh
 
+      - name: Run NEAR sandbox Borsh bytes gate
+        run: runtime-tests/near/bytes.sh
+
+      - name: Run NEAR sandbox memory arena gate
+        run: runtime-tests/near/memory.sh
+
   # Preserve the original required-check identity while making proof/guard and target failures
   # independently observable. This job fails unless every lane completes, including after an error.
   test:

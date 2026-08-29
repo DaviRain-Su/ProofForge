@@ -6,6 +6,7 @@ import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Wasm.Near.Runtime
+import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Evm.Codec
 import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Lexical
@@ -151,7 +152,17 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     Option Ops.Val :=
   let field := n.toString
   let user := isUserName env n || isBoundaryProjectionName env n
-  if let some leaf := nearRuntimeLeaf? e then
+  if isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Get &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some index =>
+        if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity.toNat then
+          some (.nearTransientBuffer64Get capacity.toNat index)
+        else none
+    | _, _ => none
+  else if let some leaf := nearRuntimeLeaf? e then
     some leaf
   else if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
       isConstNamed e ``bne ||
@@ -3112,8 +3123,22 @@ private def natOfVal : Ops.Val → Option Nat
   | .lit n => some n.toNat
   | _ => none
 
+private partial def staticNatTerm? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      let e := substLets fuel' (strip e)
+      if let some value := natLiteral? e then
+        some value
+      else if let some reduced := reduceCtorProjectionFuel? env fuel' e then
+        staticNatTerm? env fuel' reduced
+      else
+        match unfoldUserHelper env e with
+        | some (_, unfolded) => staticNatTerm? env fuel' (substLets fuel' unfolded)
+        | none => none
+
 private def staticNatVal? (env : Environment) (e : Expr) : Option Nat :=
-  (val env e >>= natOfVal) <|> do
+  staticNatTerm? env 64 e <|> (val env e >>= natOfVal) <|> do
     let .lit value ← asStaticLit env 64 e | none
     some value.toNat
 
@@ -5496,22 +5521,72 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
   else
     collectEvmQueryOps env e
 
-/-- Statically known NEAR UTF-8 logs. The payload stays an effect rather than a value so CFG
-rewrites cannot duplicate, discard, or reorder the host call as a pure scalar expression. -/
+/-- Preserve source lets that sequence NEAR effects before generic zeta reduction. Otherwise an
+ignored UInt64 sequencing result would erase the host/log or guest-memory mutation before
+`decodeExpr` can turn it into a typed effect. -/
+partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      e.getUsedConstantsAsSet.toList.any fun name =>
+        name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
+        name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
+        name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
+        name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
+        name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
+        name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
+        name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish ||
+        (Attr.isInline env name &&
+          match env.find? name with
+          | some (.defnInfo info) => mentionsNearEffect env fuel info.value
+          | _ => false)
+
+/-- NEAR logging and invocation-memory mutations stay effects so CFG rewrites cannot duplicate,
+discard, or reorder them as pure scalar expressions. Buffer capacities remain compile-time. -/
 private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
-  let rec find (fuel : Nat) (e : Expr) : Option String :=
+  let rec find (fuel : Nat) (e : Expr) : Option Ops.Op :=
     match fuel with
     | 0 => none
     | fuel' + 1 =>
       let e := strip e
       if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
-        e.getAppArgs.back? >>= staticString? env 64
+        (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin) &&
+          e.getAppArgs.size ≥ 1 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 1]! with
+        | some capacity =>
+            if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity then
+              some (.nearTransientBuffer64Begin capacity)
+            else none
+        | none => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some capacity, some index, some value =>
+            if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity then
+              some (.nearTransientBuffer64Set capacity index value)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish) &&
+          e.getAppArgs.size ≥ 1 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 1]! with
+        | some capacity =>
+            if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity then
+              some (.nearTransientBuffer64Finish capacity)
+            else none
+        | none => none
       else
         match unfoldUserHelper env e with
         | some (_, unfolded) => find fuel' unfolded
         | none => none
   match find 8 e with
-  | some message => some #[.nearLogUtf8 message, .returnU64 (.lit 0)]
+  | some effect => some #[effect, .returnU64 (.lit 0)]
   | none => none
 
 /-- A vector root is not a scalar slot. Mixed static/dynamic writeback can see an inline
@@ -6549,6 +6624,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .nearCurrentAccountIdW1 | .nearCurrentAccountIdW2 | .nearCurrentAccountIdW3
     | .nearCurrentAccountIdW4 | .nearCurrentAccountIdW5 | .nearCurrentAccountIdW6
     | .nearCurrentAccountIdW7
+    | .nearTransientBuffer64Get _ _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]

@@ -25,7 +25,8 @@ def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false)
   -- not be substituted into that later effect and re-read after the mutation.
   let hasStructuredState := containsStructuredStateLet env 128 body
   let hasSequencedSvmEffects := mentionsSvmEffect env 128 body
-  let retainLets := hasStructuredState || hasSequencedSvmEffects
+  let hasSequencedNearEffects := mentionsNearEffect env 128 body
+  let retainLets := hasStructuredState || hasSequencedSvmEffects || hasSequencedNearEffects
   let fullySubstituted := if retainLets then body else substLets 256 body
   let body :=
     if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
@@ -571,7 +572,14 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .ext (.svm (.component call)) =>
           .ext (.svm (.component (call.mapValues (flipVal fuel'))))
       | .ext (.xrpl payload) => .ext (.xrpl payload)
-      | .ext (.near payload) => .ext (.near payload)
+      | .ext (.near payload) =>
+          .ext (.near (match payload with
+            | .logUtf8 message => .logUtf8 message
+            | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
+            | .transientBuffer64Set capacity index value =>
+                .transientBuffer64Set capacity (flipVal fuel' index) (flipVal fuel' value)
+            | .transientBuffer64Finish capacity => .transientBuffer64Finish capacity
+            | .reserved => .reserved))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           .evmDeposit256 (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2) (flipVal fuel' a3)

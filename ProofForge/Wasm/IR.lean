@@ -62,6 +62,11 @@ structure Method (ValExt : Type) (OpExt : Type → Type) where
   name : String
   ixName : String
   paramCount : Nat := 0
+  /-- Optional target-owned logical input shape retained after parameters are rewritten to a
+  fixed scalar frame. Empty for the historical raw-u64 ABI and for XRPL. -/
+  inputSchema : Option Core.Codec.Schema := none
+  /-- Canonical target-owned input policy. This participates in the digest only when nonempty. -/
+  inputPolicy : String := ""
   tupleArity : Option Nat := none
   echoDropped : Bool := false
   ops : Array (Op ValExt OpExt) := #[]
@@ -258,8 +263,9 @@ partial def valAllowed {ValExt : Type} : Val ValExt → Bool
       valAllowed lhs && valAllowed rhs && valAllowed thn && valAllowed els
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs =>
       valAllowed lhs && valAllowed rhs
-  | .ext _ operands =>
-      operands.isEmpty || (operands.size == 3 && operands.all valAllowed)
+  -- Target registration checks extension arity; the chain emitter owns the intrinsic and may
+  -- consume recursively valid scalar operands (for example a bounded NEAR memory index).
+  | .ext _ operands => operands.all valAllowed
   | _ => false
 
 /-- Ops the v0 WAT renderer can express. -/
@@ -308,15 +314,11 @@ private def checkViewReturn {ValExt : Type} {OpExt : Type → Type}
   unless method.retCount == 1 do
     throw s!"extract/unsupported: {method.ixName} view result count {method.retCount} is out of range; wasm v0 wants exactly one"
 
-/-- Project the combined extractor dialect through one chain's registration and lower
-it into the shared wasm-family physical program. -/
-def fromExtracted {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
-    (registration : Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt ValExt OpExt)
-    (src : Extract.IR.Program) : Except String (Program ValExt OpExt) := do
-  for method in src.methods do
-    unless method.annotations.isEmpty do
-      throw s!"extract/unsupported: wasm cannot consume target annotations on {method.ixName}"
-  let source ← Core.Target.projectProgram registration src
+/-- Lower an already projected and target-bound source program into the shared WASM physical
+shape. Chain adapters may rewrite logical boundary parameters before this gate; all resulting
+values and operations must still satisfy the narrow WASM family subset below. -/
+def fromProjected {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
+    (source : Core.IR.Program ValExt OpExt) : Except String (Program ValExt OpExt) := do
   if source.slots.isEmpty then
     throw "extract/unsupported: wasm program has no slots"
   for slot in source.slots do
@@ -349,6 +351,8 @@ def fromExtracted {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
     name := initSrc.name
     ixName := initSrc.ixName
     paramCount := initSrc.paramCount
+    inputSchema := none
+    inputPolicy := ""
     tupleArity := none
     ops := initSrc.ops
     evaluation := initSrc.evaluation
@@ -366,6 +370,8 @@ def fromExtracted {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
       name := m.name
       ixName := m.ixName
       paramCount := m.paramCount
+      inputSchema := none
+      inputPolicy := ""
       tupleArity
       echoDropped
       ops := m.ops
@@ -377,6 +383,18 @@ def fromExtracted {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
     initializer := init
     entries
   }
+
+/-- Project the combined extractor dialect through one chain's registration and lower it into the
+shared wasm-family physical program. Targets with a non-scalar boundary first project explicitly,
+bind that boundary in their own IR module, and call `fromProjected`. -/
+def fromExtracted {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
+    (registration : Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt ValExt OpExt)
+    (src : Extract.IR.Program) : Except String (Program ValExt OpExt) := do
+  for method in src.methods do
+    unless method.annotations.isEmpty do
+      throw s!"extract/unsupported: wasm cannot consume target annotations on {method.ixName}"
+  let source ← Core.Target.projectProgram registration src
+  fromProjected source
 
 /-! ## Canonical digest
 
@@ -451,7 +469,8 @@ private def methodCanon {ValExt : Type} {OpExt : Type → Type}
     | some n => s!"view{n}"
     | none => "mut"
   let echo := if method.echoDropped then "echo" else "noecho"
-  s!"{tag}:{method.ixName}:{method.paramCount}:{echo}:[{opsCanon extValCanon extOpCanon method.ops}]"
+  let input := if method.inputPolicy.isEmpty then "" else s!":{method.inputPolicy}"
+  s!"{tag}:{method.ixName}:{method.paramCount}:{echo}{input}:[{opsCanon extValCanon extOpCanon method.ops}]"
 
 def canonical {ValExt : Type} {OpExt : Type → Type}
     (digestDomain : String) (extValCanon : ValExt → String)
