@@ -591,7 +591,7 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
       isConstNamed e ``ProofForge.Svm.Runtime.rentExemption) &&
       e.getAppArgs.size ≥ 1 then
     match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
-    | some (.lit n) => some (.rentExemption n)
+    | some (.lit n) => some (.ext (.svm (.component (.sysvar (.rentExemption n)))) #[])
     | _ => none
   else if (endsWith e ".accLamports" || isConstNamed e ``ProofForge.Svm.Runtime.accLamports) &&
       e.getAppArgs.size ≥ 1 then
@@ -1140,13 +1140,13 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     | some b => some (.field b s!"slot_tag")
     | none => none
   else if endsWith e ".clockSlot" || isConstNamed e ``ProofForge.Svm.Runtime.clockSlot then
-    some .clockSlot
+    some (.ext (.svm (.component (.sysvar (.clock .slot)))) #[])
   else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
-    some .clockEpoch
+    some (.ext (.svm (.component (.sysvar (.clock .epoch)))) #[])
   else if endsWith e ".unixTime" || isConstNamed e ``ProofForge.Svm.Runtime.unixTime then
-    some .unixTime
+    some (.ext (.svm (.component (.sysvar (.clock .unixTimestamp)))) #[])
   else if endsWith e ".slotsPerEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.slotsPerEpoch then
-    some .slotsPerEpoch
+    some (.ext (.svm (.component (.sysvar (.epochSchedule .slotsPerEpoch)))) #[])
   else if endsWith e ".cpiReturn" || isConstNamed e ``ProofForge.Svm.Runtime.cpiReturn then
     some .cpiReturn
   else if endsWith e ".signerKey0" || isConstNamed e ``ProofForge.Svm.Runtime.signerKey0 then

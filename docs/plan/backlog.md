@@ -32,6 +32,8 @@ Token-2022 TLV envelope，并继续对所有未建模 extension fail closed；R2
 program-memory syscall 绑定为 checked account spans，pointer 只在 host call 边界瞬时存在。
 R2-006 已把 remaining compute、invocation stack height 与两个 allocation-free numeric logger
 收口到 target-owned Telemetry Query/Call，并继续只经过 generic Component bridge。
+R2-007 又把已有 Clock/EpochSchedule/compile-time Rent lowering 收口到 target-owned Sysvar
+Query 和同一个 generic Component bridge，production source 不再生成对应 top-level value recipe。
 EVM-RT-2a typed call-result 已完成，并由 R5-012 收紧为 canonical ERC-20 Bool / code-backed
 empty-result policy，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
@@ -452,10 +454,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 - R3-014 stable sysvar SDK facade 已完成：`Svm.Sdk.Sysvar.Clock`、`.EpochSchedule` 和 `.Rent`
   把已有 Clock slot/epoch/unix、slots-per-epoch 与 compile-time rent-exemption Runtime contract
-  收口为应用侧稳定名称。Clock/Epoch/Rent 三个独立 consumer 保持原 IR digest 和 syscall
-  路径；本切片没有新增 syscall、Runtime leaf、Ops/IR/Component/Emit、scratch 或持久状态。
-  详见 `docs/plan/tasks/r3-014.md`。generic sliced sysvar、Instructions sysvar、stack height、
-  remaining compute 与其余 Clock/Epoch 字段仍属 R2/R3 Runtime backlog。
+  收口为应用侧稳定名称。R2-007 进一步让这些 Runtime leaves 统一 lowering 到 target-owned
+  `Svm.Sysvar.Query → Component.sysvar → Svm.Sysvar.Emit`，不再生成 production top-level value
+  recipe；legacy Golden 构造也委托同一 interpreter。Clock/Epoch/Rent 三个独立 consumer 的
+  digest、assembly、IDL 和 ELF 仍逐字节一致，Mollusk 14/14。
+  详见 `docs/plan/tasks/r3-014.md`。generic sliced sysvar、Instructions sysvar 与其余
+  Clock/Epoch 字段仍属 R2/R3 Runtime backlog；R2-007 证据见
+  `docs/plan/tasks/r2-007.md`。
 
 - R3-015 shared transient lifecycle emitter 已完成：`Svm.Transient.Emit.Lifecycle` 统一
   Vector64/Bytes 的 official-shaped bump allocation、pointer/length/capacity/active metadata、

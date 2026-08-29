@@ -5,8 +5,8 @@ import ProofForge.Svm.Runtime
 # SVM SDK sysvar facade
 
 Source-facing names for the currently supported Solana sysvar reads. The facade keeps contracts
-on the SDK boundary while erasing directly to the existing target-owned Runtime leaves: it adds no
-syscall, Op, IR node, component case, scratch allocation, or persistent state.
+on the SDK boundary while the Runtime leaves lower through the target-owned Sysvar query
+interpreter. It adds no top-level Op/IR case, scratch allocation, or persistent state.
 
 `Rent.minimumBalance` accepts a `Nat` because the current Runtime contract requires account data
 length to be known during extraction. Runtime-selected lengths remain fail closed until a bounded

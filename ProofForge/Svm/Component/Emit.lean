@@ -4,6 +4,7 @@ import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.BatchRecorder.Emit
 import ProofForge.Svm.FifoCancel.Emit
 import ProofForge.Svm.Memory.Emit
+import ProofForge.Svm.Sysvar.Emit
 import ProofForge.Svm.Telemetry.Emit
 import ProofForge.Svm.TransientBytes.Emit
 import ProofForge.Svm.TransientVec.Emit
@@ -70,6 +71,8 @@ def emitQuery (context : Context) (query : Component.Query) (operands : Array Op
       FifoCancel.Emit.emitQuery scope cancelQuery operands stackOff
   | .memory memoryQuery =>
       Memory.Emit.emitQuery context.memory memoryQuery operands stackOff nonce scope
+  | .sysvar sysvarQuery =>
+      Sysvar.Emit.emitQuery sysvarQuery operands stackOff scope
   | .telemetry telemetryQuery =>
       Telemetry.Emit.emitQuery telemetryQuery operands stackOff
   | .transientVec vectorQuery =>

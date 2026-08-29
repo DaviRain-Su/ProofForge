@@ -99,6 +99,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-RT-2b instruction effects（已集成）** | SVM-RT-2a | bounded return data、multi-seed PDA/CPI meta/signer seeds；复用同一 scratch plan，未知 shape fail closed；见 R2-003 |
 | **SVM-RT-3 Token-2022 TLV（envelope 已集成）** | SVM-RT-1/2 | allocation-free scalar cursor/bitmap 与 closed end/padding specialization 已落地；transfer-fee、hook/account requirements 继续按语义分片，未知 extension 不走 classic 82/165-byte path；见 R2-004 |
 | **SVM-RT-4 invocation telemetry（已集成）** | generic Component bridge | remaining compute、stack height、compute diagnostic、fixed five-word hexadecimal logger；exact official syscall symbols，scalar-only 且 allocation-free；不新增 top-level Ops/IR/main Emit；见 R2-006 |
+| **SVM-RT-5 sysvar component boundary（已集成）** | generic Component bridge | Clock/EpochSchedule/compile-time Rent 统一走 target-owned Query/interpreter；production source 不再生成 top-level value recipe，legacy Golden 委托同一实现，产物 byte-exact；见 R2-007 |
 | **SVM-SDK-2 transient（已集成）** | SVM-RT-2 | 直接复用 Heap/Scratch 的 invocation-local bounded buffer/fixed Vec/byte writer/signed-CPI codec composition；显式 capacity/alignment/frame/OOM，不复制 allocator/plan/lifetime，不能持久化 pointer；见 R3-003 |
 | **SVM-SDK-3 PDA/System foundation（已集成）** | SVM-RT-2 | static ASCII PDA bump/check/signed-create 与 fixed-account System transfer/create；example 只见 SDK 名称，`pf_inline` 通用展开，不增加名字特判或 CPI recipe；见 R3-004 |
 | **SVM-SDK-4 System core（已集成）** | SVM-SDK-3 | non-seeded assign/allocate/advanceNonce 直接组合既有 Runtime；SysAlloc/Nonce 只见 SDK 名称，canonical 产物不变；见 R3-005 |

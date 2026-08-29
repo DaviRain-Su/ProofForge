@@ -3,6 +3,7 @@ import ProofForge.Svm.AccountView
 import ProofForge.Svm.BatchRecorder
 import ProofForge.Svm.FifoCancel
 import ProofForge.Svm.Memory
+import ProofForge.Svm.Sysvar
 import ProofForge.Svm.Telemetry
 import ProofForge.Svm.TransientBytes
 import ProofForge.Svm.TransientVec
@@ -24,6 +25,7 @@ inductive Query where
   | accountView (query : AccountView.Query)
   | fifoCancel (query : FifoCancel.Query)
   | memory (query : Memory.Query)
+  | sysvar (query : Sysvar.Query)
   | telemetry (query : Telemetry.Query)
   | transientVec (query : TransientVec.Query)
   | transientBytes (query : TransientBytes.Query)
@@ -34,6 +36,7 @@ def Query.arity : Query → Nat
   | .accountView query => query.arity
   | .fifoCancel _ => 0
   | .memory query => query.arity
+  | .sysvar query => query.arity
   | .telemetry query => query.arity
   | .transientVec query => query.arity
   | .transientBytes query => query.arity
@@ -43,6 +46,7 @@ def Query.effects : Query → EffectSummary
   | .accountView query => query.effects
   | .fifoCancel _ => {}
   | .memory query => query.effects
+  | .sysvar query => query.effects
   | .telemetry query => query.effects
   | .transientVec query => query.effects
   | .transientBytes query => query.effects
@@ -52,6 +56,7 @@ def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
   | .accountView query => query.wellFormed accountLimit
   | .fifoCancel _ => true
   | .memory query => query.wellFormed accountLimit
+  | .sysvar query => query.wellFormed
   | .telemetry query => query.wellFormed
   | .transientVec query => query.wellFormed
   | .transientBytes query => query.wellFormed
@@ -61,6 +66,7 @@ def Query.needsWalk : Query → Bool
   | .accountView _ => true
   | .fifoCancel _ => false
   | .memory query => query.needsWalk
+  | .sysvar query => query.needsWalk
   | .telemetry query => query.needsWalk
   | .transientVec query => query.needsWalk
   | .transientBytes query => query.needsWalk
@@ -71,6 +77,7 @@ def Query.minAccounts (measure : V → Nat) (operands : Array V) : Query → Nat
   | .fifoCancel _ => operands.foldl (init := 0) fun current value =>
       Nat.max current (measure value)
   | .memory query => query.minAccounts measure operands
+  | .sysvar query => query.minAccounts measure operands
   | .telemetry query => query.minAccounts measure operands
   | .transientVec query => query.minAccounts measure operands
   | .transientBytes query => query.minAccounts measure operands
@@ -82,6 +89,7 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
       if operands.isEmpty then query.canonical
       else s!"invalid-{query.canonical}-{operands.size}"
   | .memory query => query.canonical renderValue operands
+  | .sysvar query => query.canonical renderValue operands
   | .telemetry query => query.canonical renderValue operands
   | .transientVec query => query.canonical renderValue operands
   | .transientBytes query => query.canonical renderValue operands

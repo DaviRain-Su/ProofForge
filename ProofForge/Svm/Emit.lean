@@ -8,9 +8,6 @@ namespace ProofForge.Svm.Emit
 
 def overflowCode : String := "0x1001"
 
-/-- Deep scratch stays clear of expression temporaries, walk headers, scalar locals, and CPI data.
-The `sol_get_return_data` window is planned separately in `Svm.Scratch.returnDataBank`. -/
-private def sysvarScratch : Nat := 3072
 /-- Heterogeneous PDA discovery may need 480 seed bytes, 15 descriptors, and a 32-byte result.
 It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
 PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
@@ -372,45 +369,6 @@ private partial def sourceValRepr : Ops.Val → String
   | .field base name => s!"ProofForge.Ops.Val.field ({sourceValRepr base}) {repr name}"
   | value => reprStr value
 
-/-- Clock 是 40 字节 `repr(C)`；`slot` 在 0，`epoch` 在 16。 -/
-private def emitLoadClockField (field : String) (off stackOff : Nat) (scope : String) : String :=
-  s!"\
-  ; load clock.{field} via sol_get_clock_sysvar
-  mov64 r1, r10
-  add64 r1, -{sysvarScratch}
-  call sol_get_clock_sysvar
-  jeq r0, 0, clock_{field}_ok_{scope}_{stackOff}
-  lddw r0, 0x1
-  exit
-clock_{field}_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - {sysvarScratch - off}]
-  stxdw [r10 - {stackOff}], r1
-"
-
-private def emitLoadClockSlot (stackOff : Nat) (scope : String) : String :=
-  emitLoadClockField "slot" 0 stackOff scope
-
-private def emitLoadClockEpoch (stackOff : Nat) (scope : String) : String :=
-  emitLoadClockField "epoch" 16 stackOff scope
-
-private def emitLoadUnixTime (stackOff : Nat) (scope : String) : String :=
-  emitLoadClockField "unix" 32 stackOff scope
-
-/-- EpochSchedule 是 33 字节 `repr(C)`；`slots_per_epoch` 在偏移 0。 -/
-private def emitLoadSlotsPerEpoch (stackOff : Nat) (scope : String) : String :=
-  s!"\
-  ; load slotsPerEpoch via sol_get_epoch_schedule_sysvar
-  mov64 r1, r10
-  add64 r1, -{sysvarScratch}
-  call sol_get_epoch_schedule_sysvar
-  jeq r0, 0, epoch_ok_{scope}_{stackOff}
-  lddw r0, 0x1
-  exit
-epoch_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - {sysvarScratch}]
-  stxdw [r10 - {stackOff}], r1
-"
-
 /-- 最近一次 CPI 的 8 字节返回。长度不是 8 则 Custom(1)。 -/
 private def emitLoadCpiReturn (stackOff : Nat) (scope : String) : Except String String := do
   let staging ← Scratch.returnDataStaging
@@ -429,23 +387,6 @@ private def emitLoadCpiReturn (stackOff : Nat) (scope : String) : Except String 
   exit
 cpi_ret_ok_{scope}_{stackOff}:
   ldxdw r1, [r10 - {payloadDist}]
-  stxdw [r10 - {stackOff}], r1
-"
-
-/-- Rent 是 17 字节 `repr(C)`；rate 在偏移 0。`exemption = rate * (128 + dataLen)`。 -/
-private def emitLoadRentExemption (dataLen stackOff : Nat) (scope : String) : String :=
-  s!"\
-  ; load rentExemption {dataLen} via sol_get_rent_sysvar
-  mov64 r1, r10
-  add64 r1, -{sysvarScratch}
-  call sol_get_rent_sysvar
-  jeq r0, 0, rent_ok_{scope}_{stackOff}
-  lddw r0, 0x1
-  exit
-rent_ok_{scope}_{stackOff}:
-  ldxdw r1, [r10 - {sysvarScratch}]
-  lddw r2, {128 + dataLen}
-  mul64 r1, r2
   stxdw [r10 - {stackOff}], r1
 "
 
@@ -955,13 +896,13 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .lit n =>
     .ok s!"  ; load lit {n}\n  lddw r1, 0x{IR.u64Hex n}\n  stxdw [r10 - {stackOff}], r1\n"
   | .ext .clockSlot #[] =>
-    .ok (emitLoadClockSlot stackOff scope)
+    Sysvar.Emit.emitQuery (.clock .slot) #[] stackOff scope
   | .ext .clockEpoch #[] =>
-    .ok (emitLoadClockEpoch stackOff scope)
+    Sysvar.Emit.emitQuery (.clock .epoch) #[] stackOff scope
   | .ext .unixTime #[] =>
-    .ok (emitLoadUnixTime stackOff scope)
+    Sysvar.Emit.emitQuery (.clock .unixTimestamp) #[] stackOff scope
   | .ext .slotsPerEpoch #[] =>
-    .ok (emitLoadSlotsPerEpoch stackOff scope)
+    Sysvar.Emit.emitQuery (.epochSchedule .slotsPerEpoch) #[] stackOff scope
   | .ext .cpiReturn #[] =>
     emitLoadCpiReturn stackOff scope
   | .ext .signerKey0 #[] =>
@@ -1035,7 +976,7 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
   | .ext (.checkPda seed) #[bump] =>
     emitLoadCheckPda p seed bump stackOff nonce scope
   | .ext (.rentExemption n) #[] =>
-    .ok (emitLoadRentExemption n.toNat stackOff scope)
+    Sysvar.Emit.emitQuery (.rentExemption n) #[] stackOff scope
   | .loopIx =>
     .ok s!"  ; load loop index\n  ldxdw r1, [r10 - {loopCounterScratch}]\n  stxdw [r10 - {stackOff}], r1\n"
   | .select .ge l r (.subU64 tl tr) (.lit 0) =>
