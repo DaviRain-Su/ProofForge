@@ -6,6 +6,7 @@ import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.Codec
+import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Ops
 
 open Lean
@@ -77,9 +78,17 @@ def addr20ProjLeaf (n : Name) : Option String :=
   if n == ``ProofForge.Evm.Runtime.Addr20.w0 || n.toString.endsWith ".Addr20.w0" then some "w0"
   else if n == ``ProofForge.Evm.Runtime.Addr20.w1 || n.toString.endsWith ".Addr20.w1" then some "w1"
   else if n == ``ProofForge.Evm.Runtime.Addr20.w2 || n.toString.endsWith ".Addr20.w2" then some "w2"
+  else if n == ``ProofForge.Wasm.Xrpl.Runtime.AccountId.w0 ||
+      n.toString.endsWith ".AccountId.w0" then some "w0"
+  else if n == ``ProofForge.Wasm.Xrpl.Runtime.AccountId.w1 ||
+      n.toString.endsWith ".AccountId.w1" then some "w1"
+  else if n == ``ProofForge.Wasm.Xrpl.Runtime.AccountId.w2 ||
+      n.toString.endsWith ".AccountId.w2" then some "w2"
   else if last == "w0" || last == "w1" || last == "w2" then
     match n with
-    | .str p _ => if p == addr20Name || p.toString.endsWith ".Addr20" then some last else none
+    | .str p _ =>
+        if p == addr20Name || p.toString.endsWith ".Addr20" ||
+            p.toString.endsWith ".AccountId" then some last else none
     | _ => none
   else none
 

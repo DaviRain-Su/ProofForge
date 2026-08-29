@@ -7,7 +7,8 @@ structure Entry where
   deriving BEq, Repr, Inhabited
 
 def entries : Array Entry := #[
-  { name := "Counter", digest := "e029f72296e320be" }
+  { name := "Counter", digest := "e029f72296e320be" },
+  { name := "XrplCtx", digest := "f483be9d20810b57" }
 ]
 
 def names : Array String := entries.map (·.name)

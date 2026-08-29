@@ -52,6 +52,21 @@
       "name": "nonzero",
       "parameters": [],
       "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "stamp",
+      "parameters": [],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "height",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "key0",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
     }
   ]
 }

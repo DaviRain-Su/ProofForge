@@ -19,18 +19,39 @@ abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
 abbrev Method := Wasm.IR.Method Ops.ValKind Ops.OpExt
 abbrev Program := Wasm.IR.Program Ops.ValKind Ops.OpExt
 
+private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
+  | .xrpl kind =>
+      match kind with
+      | .reserved => throw "extract/unsupported: xrpl rejects reserved value"
+      | k => pure k
+  | .svm _ => throw "extract/unsupported: xrpl rejects svm value"
+  | .evm _ => throw "extract/unsupported: xrpl rejects evm value"
+
+private def projectOpExt
+    (_projectVal : Extract.IR.Val → Except String Ops.Val) :
+    Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val)
+  | .xrpl .reserved => throw "extract/unsupported: xrpl rejects reserved effect"
+  | .svm _ => throw "extract/unsupported: xrpl rejects svm effect"
+  | .evm _ => throw "extract/unsupported: xrpl rejects evm effect"
+
 /-- Static registration of the extractor-to-XRPL projection. -/
 def extractRegistration :
     Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt Ops.ValKind Ops.OpExt :=
   Wasm.IR.mkRegistration Host.contract.name Ops.ValKind.arity Ops.cfgDialect Ops.Op.wellFormed
+    projectValExt projectOpExt
 
 def projectExtractedOps (ops : Array Extract.IR.Op) : Except String (Array Ops.Op) :=
   Core.Target.projectOps extractRegistration ops
 
-/-- v0 has no XRPL dialect extension leaves; the tag keeps the canonical spelling total. -/
-def extValCanon : Ops.ValKind → String := fun _ => "wext"
+def extValCanon : Ops.ValKind → String
+  | .reserved => "wext"
+  | .callerW0 => "xc0" | .callerW1 => "xc1" | .callerW2 => "xc2"
+  | .selfW0 => "xs0" | .selfW1 => "xs1" | .selfW2 => "xs2"
+  | .ledgerSqn => "xsqn"
+  | .parentTime => "xtime"
 
-def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String := fun _ => "wext"
+def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
+  | .reserved => "wext"
 
 def slotNames (p : Program) : Array String :=
   Wasm.IR.slotNames p

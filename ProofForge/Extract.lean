@@ -6,6 +6,7 @@ import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.Codec
+import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Lexical
 import ProofForge.Extract.Decode
 
@@ -512,6 +513,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           seed (bump.map (flipVal fuel'))
       | .ext (.svm (.component call)) =>
           .ext (.svm (.component (call.mapValues (flipVal fuel'))))
+      | .ext (.xrpl payload) => .ext (.xrpl payload)
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           .evmDeposit256 (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2) (flipVal fuel' a3)
@@ -952,6 +954,7 @@ private def opFields : Ops.Op → Array FieldUse
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
   | .ext (.svm (.component call)) => call.values.flatMap valFields
+  | .ext (.xrpl _) => #[]
   | .evmDeposit v => valFields v
   | .evmDeposit256 a0 a1 a2 a3 =>
       valFields a0 ++ valFields a1 ++ valFields a2 ++ valFields a3
@@ -1135,6 +1138,7 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
       | .ext (.svm (.component call)) =>
           return .ext (.svm (.component (← call.mapValuesM normalizeVal)))
+      | .ext (.xrpl payload) => pure (.ext (.xrpl payload))
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           return .evmDeposit256 (← normalizeVal a0) (← normalizeVal a1)
@@ -1305,6 +1309,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
         bump.bind (valEscapedArg limit)
   | .ext (.svm (.component call)) =>
       call.values.findSome? (valEscapedArg limit)
+  | .ext (.xrpl _) => none
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].findSome? (valEscapedArg limit)
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)

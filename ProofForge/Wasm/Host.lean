@@ -51,8 +51,18 @@ structure Contract where
   getDataObject : String := ""
   /-- Host function `set_data_object_field(acc, acc_len, key, key_len, data, data_len)`. -/
   setDataObject : String := ""
-  /-- sfield of the current contract AccountID (XRPL `sfContractAccount` = 524315). -/
+  /-- sfield of the data-owner AccountID (XRPL `sfOwner` = 524290). -/
   sfieldAccount : Nat := 0
+  /-- Host `get_tx_field(field, ptr, len) -> i32`. Empty means no tx-field env leaves. -/
+  getTxField : String := ""
+  /-- sfield of the transaction Account (XRPL `sfAccount` = 524289). -/
+  sfieldTxAccount : Nat := 0
+  /-- sfield of the contract AccountID on the Contract SLE (XRPL `sfContractAccount` = 524315). -/
+  sfieldContractAccount : Nat := 0
+  /-- Host `get_ledger_sqn() -> i32`. Empty skips the ledger-sqn leaf. -/
+  getLedgerSqn : String := ""
+  /-- Host `get_parent_ledger_time() -> i32`. Empty skips the parent-time leaf. -/
+  getParentTime : String := ""
   deriving Inhabited
 
 /-- Object-field storage (XRPL ContractData) rather than a packed Data blob. -/

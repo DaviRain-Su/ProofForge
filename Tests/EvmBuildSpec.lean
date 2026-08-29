@@ -7,6 +7,7 @@ import Examples.Phase
 import Examples.Flag
 import Examples.Maybe
 import Examples.Clock
+import Examples.XrplCtx
 import Examples.Transfer
 import Examples.EvmCtx
 import Examples.EvmStaticCounter
@@ -66,6 +67,12 @@ error: extract/unsupported: evm rejects svm leaf in stamp
 -/
 #guard_msgs (error) in
 #pf_evm_build Examples.Clock
+
+/--
+error: extract/unsupported: evm rejects xrpl leaf in stamp
+-/
+#guard_msgs (error) in
+#pf_evm_build Examples.XrplCtx
 
 /--
 error: extract/unsupported: evm rejects svm leaf in transfer

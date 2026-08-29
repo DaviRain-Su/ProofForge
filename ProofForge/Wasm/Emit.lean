@@ -40,7 +40,11 @@ private def localOfSlot (name : String) : String := "$" ++ name
 
 private def localOfTemp (i : Nat) : String := "$pf_r" ++ toString i
 
-private partial def renderVal (st : EState) (v : Val ValExt) : Except String String :=
+private def extLocal (tag : ValExt → String) (kind : ValExt) : String :=
+  "pf_x_" ++ tag kind
+
+private partial def renderVal (extTag : ValExt → String) (st : EState)
+    (v : Val ValExt) : Except String String :=
   match v with
   | .lit n => .ok ("(i64.const " ++ toString n.toNat ++ ")")
   | .arg i =>
@@ -51,24 +55,25 @@ private partial def renderVal (st : EState) (v : Val ValExt) : Except String Str
         .error "extract/unsupported: wasm v0 rejects aggregate parameter projections"
       else .ok ("(local.get " ++ localOfSlot name ++ ")")
   | .select cmp lhs rhs thn els => do
-      let l ← renderVal st lhs
-      let r ← renderVal st rhs
-      let t ← renderVal st thn
-      let f ← renderVal st els
+      let l ← renderVal extTag st lhs
+      let r ← renderVal extTag st rhs
+      let t ← renderVal extTag st thn
+      let f ← renderVal extTag st els
       return ("(if (result i64) (" ++ cmpInstr cmp ++ " " ++ l ++ " " ++ r ++
         ") (then " ++ t ++ ") (else " ++ f ++ "))")
   | .addU64 lhs rhs => do
-      let l ← renderVal st lhs
-      let r ← renderVal st rhs
+      let l ← renderVal extTag st lhs
+      let r ← renderVal extTag st rhs
       return ("(i64.add " ++ l ++ " " ++ r ++ ")")
   | .subU64 lhs rhs => do
-      let l ← renderVal st lhs
-      let r ← renderVal st rhs
+      let l ← renderVal extTag st lhs
+      let r ← renderVal extTag st rhs
       return ("(i64.sub " ++ l ++ " " ++ r ++ ")")
   | .mulU64 lhs rhs => do
-      let l ← renderVal st lhs
-      let r ← renderVal st rhs
+      let l ← renderVal extTag st lhs
+      let r ← renderVal extTag st rhs
       return ("(i64.mul " ++ l ++ " " ++ r ++ ")")
+  | .ext kind _ => .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
   | _ => .error "extract/unsupported: wasm v0 value"
 
 private def isExitOp : Op ValExt OpExt → Bool
@@ -245,7 +250,7 @@ private def checkedKind : Op ValExt OpExt → Option String
   | _ => none
 
 private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
-    (view : Bool) (level : Nat) (defaultSlot : String)
+    (extTag : ValExt → String) (view : Bool) (level : Nat) (defaultSlot : String)
     (ops : List (Op ValExt OpExt)) (st : EState) : Except String Region := do
   match ops with
   | [] =>
@@ -260,24 +265,24 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
         if view then throw "extract/unsupported: wasm v0 view cannot fail"
         match checkedKind op with
         | some kind =>
-            let l ← renderVal st lhs
-            let r ← renderVal st rhs
+            let l ← renderVal extTag st lhs
+            let r ← renderVal extTag st rhs
             let (raw, st1) ← emitChecked st kind l r
             let dest' := (fieldOf lhs).orElse (fun _ => st.pendingDest)
             let st' := { st1 with pendingDest := dest' }
             let lines := raw.map (indent level)
-            let region ← emitRegion host p view level defaultSlot tail st'
+            let region ← emitRegion host p extTag view level defaultSlot tail st'
             return { lines := lines ++ region.lines, st := region.st, terminal := true }
         | none => throw "extract/unsupported: wasm v0 checked operation"
     | .ite cmp lhs rhs thn els =>
-        let l ← renderVal st lhs
-        let r ← renderVal st rhs
+        let l ← renderVal extTag st lhs
+        let r ← renderVal extTag st rhs
         let head := indent level ("(if (" ++ cmpInstr cmp ++ " " ++ l ++ " " ++ r ++ ")")
-        let thenRegion ← emitRegion host p view (level + 4) defaultSlot thn.toList
+        let thenRegion ← emitRegion host p extTag view (level + 4) defaultSlot thn.toList
           { st with last := none, pendingDest := none }
         unless thenRegion.terminal do
           throw "extract/unsupported: wasm v0 ite branch must end in a terminal"
-        let elseRegion ← emitRegion host p view (level + 4) defaultSlot els.toList
+        let elseRegion ← emitRegion host p extTag view (level + 4) defaultSlot els.toList
           { st with fresh := thenRegion.st.fresh, last := none, pendingDest := none }
         unless elseRegion.terminal do
           throw "extract/unsupported: wasm v0 ite branch must end in a terminal"
@@ -293,16 +298,16 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
           #[indent (level + 2) "))"]
         if terminalIte then
           return { lines := iteLines, st := elseRegion.st, terminal := true }
-        let region ← emitRegion host p view level defaultSlot tail
+        let region ← emitRegion host p extTag view level defaultSlot tail
           { st with fresh := elseRegion.st.fresh, last := none, pendingDest := none }
         return { lines := iteLines ++ region.lines, st := region.st, terminal := true }
     | .storeField name value =>
         if view then throw "extract/unsupported: wasm v0 view cannot write state"
-        let v ← renderVal st value
+        let v ← renderVal extTag st value
         let lines :=
           #[indent level ("(local.set " ++ localOfSlot name ++ " " ++ v ++ ")")] ++
           persistSlots host p level
-        let region ← emitRegion host p view level defaultSlot tail
+        let region ← emitRegion host p extTag view level defaultSlot tail
           { st with last := some (localOfSlot name), pendingDest := some name }
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
     | .okState value | .returnState value =>
@@ -310,7 +315,7 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
         let dest := st.pendingDest <|> fieldOf value |>.getD defaultSlot
         let v ← match st.last with
           | some e => .ok ("(local.get " ++ e ++ ")")
-          | none => renderVal st value
+          | none => renderVal extTag st value
         unless tail.all isExitOp do
           throw "extract/unsupported: wasm v0 instructions follow terminal operation"
         let lines :=
@@ -331,7 +336,7 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
           throw "extract/unsupported: wasm v0 instructions follow terminal operation"
         unless values.size == 1 do
           throw "extract/unsupported: wasm v0 view result count is out of range"
-        let v ← renderVal st values[0]!
+        let v ← renderVal extTag st values[0]!
         return { lines := #[indent level v], st, terminal := true }
     | _ => throw "extract/unsupported: wasm v0 op"
 
@@ -447,10 +452,12 @@ private partial def countTemps (ops : Array (Op ValExt OpExt)) : Nat :=
   walk ops.toList
 
 private def renderFn (host : Contract) (p : Program ValExt OpExt)
-    (method : Method ValExt OpExt) : Except String (Array String) := do
+    (method : Method ValExt OpExt)
+    (extValCanon : ValExt → String)
+    (loadEnv : Contract → Nat → Bool → Array String) : Except String (Array String) := do
   let view := method.tupleArity.isSome
   let st : EState := { paramCount := method.paramCount }
-  let region ← emitRegion host p view 4 (defaultSlotOf p) method.ops.toList st
+  let region ← emitRegion host p extValCanon view 4 (defaultSlotOf p) method.ops.toList st
   unless region.terminal do
     throw s!"extract/unsupported: {method.ixName} does not end in a terminal"
   let resultTy := if view then "i64" else "i32"
@@ -470,12 +477,18 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
   if hostParams then
     for loc in paramLocals method.paramCount do
       lines := lines.push s!"    {loc}"
+  if !host.getTxField.isEmpty then
+    for name in #["pf_x_xc0", "pf_x_xc1", "pf_x_xc2",
+                  "pf_x_xs0", "pf_x_xs1", "pf_x_xs2",
+                  "pf_x_xsqn", "pf_x_xtime"] do
+      lines := lines.push s!"    (local ${name} i64)"
   for loc in slotLocals p do
     lines := lines.push s!"    {loc}"
   for loc in tempLocals (Nat.max (countTemps method.ops) region.st.fresh) do
     lines := lines.push s!"    {loc}"
   lines := lines ++ loadHostParams host p method.paramCount 4 view
   lines := lines ++ loadAccount host 4 view
+  lines := lines ++ loadEnv host 4 view
   lines := lines ++ loadSlots host p 4 view
   lines := lines ++ region.lines
   lines := lines.push "  )"
@@ -484,7 +497,9 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
 /-- Render one program as WAT. Digest line pins the canonical IR identity. -/
 def emit (host : Contract)
     (extValCanon : ValExt → String) (extOpCanon : OpExt (Val ValExt) → String)
-    (p : Program ValExt OpExt) : Except String String := do
+    (p : Program ValExt OpExt)
+    (loadEnv : Contract → Nat → Bool → Array String := fun _ _ _ => #[])
+    (extraImports : Array String := #[]) : Except String String := do
   let mut lines : Array String := #[]
   lines := lines.push s!";; {host.headerTag}"
   lines := lines.push s!";; digest={IR.digestHex host.digestDomain extValCanon extOpCanon p}"
@@ -512,15 +527,17 @@ def emit (host : Contract)
       ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.functionParam ++
         "\" (func $" ++ host.functionParam ++
         " (param i32 i32 i32 i32) (result i32)))")
+  for extra in extraImports do
+    lines := lines.push extra
   lines := lines.push "  (memory (export \"memory\") 1)"
   if host.objectStore && !p.slots.isEmpty then
     lines := lines.push
       ("  (data (i32.const " ++ toString keyBase ++ ") \"" ++ keyBlob p ++ "\")")
   lines := lines.push ""
-  lines := lines ++ (← renderFn host p p.initializer)
+  lines := lines ++ (← renderFn host p p.initializer extValCanon loadEnv)
   lines := lines.push ""
   for method in p.entries do
-    lines := lines ++ (← renderFn host p method)
+    lines := lines ++ (← renderFn host p method extValCanon loadEnv)
     lines := lines.push ""
   lines := lines.push ")"
   return String.intercalate "\n" lines.toList ++ "\n"

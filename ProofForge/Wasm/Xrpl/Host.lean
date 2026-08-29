@@ -31,6 +31,8 @@ def contract : Contract where
     ";; Storage: get/set_data_object_field, UINT64 STI 3 big-endian.",
     ";; Params: function_param copies UINT64 (STI 3) into linear memory;",
     ";; exports take no wasm arguments.",
+    ";; Env: get_tx_field(sfAccount), get_current_ledger_obj_field(sfContractAccount),",
+    ";; get_ledger_sqn, get_parent_ledger_time.",
     ";; Honesty: deployable=false on mainnet; no ContractCreate / AlphaNet claim.",
     ";; v0 ABI: views return i64; mutating entries return i32 status",
     ";; (error codes: 1 overflow/underflow, 2 divide-by-zero)."
@@ -45,5 +47,10 @@ def contract : Contract where
   getDataObject := "get_data_object_field"
   setDataObject := "set_data_object_field"
   sfieldAccount := 524290
+  getTxField := "get_tx_field"
+  sfieldTxAccount := 524289
+  sfieldContractAccount := 524315
+  getLedgerSqn := "get_ledger_sqn"
+  getParentTime := "get_parent_ledger_time"
 
 end ProofForge.Wasm.Xrpl.Host

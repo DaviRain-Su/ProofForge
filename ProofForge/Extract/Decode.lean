@@ -6,6 +6,7 @@ import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.Codec
+import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Lexical
 
 open Lean
@@ -782,6 +783,14 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           endsWith baseE ".evmCaller20" then
         some (match leaf with
           | "w0" => .evmCallerW0 | "w1" => .evmCallerW1 | _ => .evmCallerW2)
+      else if isConstNamed baseE ``ProofForge.Wasm.Xrpl.Runtime.xrplCaller20 ||
+          endsWith baseE ".xrplCaller20" then
+        some (match leaf with
+          | "w0" => .xrplCallerW0 | "w1" => .xrplCallerW1 | _ => .xrplCallerW2)
+      else if isConstNamed baseE ``ProofForge.Wasm.Xrpl.Runtime.xrplSelf20 ||
+          endsWith baseE ".xrplSelf20" then
+        some (match leaf with
+          | "w0" => .xrplSelfW0 | "w1" => .xrplSelfW1 | _ => .xrplSelfW2)
       else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelf20 ||
           endsWith baseE ".evmSelf20" then
         some (match leaf with
@@ -802,6 +811,10 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           | .bvar i => some (flattenField (.arg i) leaf)
           | _ => none
   else if endsWith e ".evmCaller20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 then
+    none
+  else if endsWith e ".xrplCaller20" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCaller20 then
+    none
+  else if endsWith e ".xrplSelf20" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelf20 then
     none
   else if endsWith e ".evmSelf20" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 then
     none
@@ -1052,6 +1065,22 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some .evmCallerW1
   else if endsWith e ".evmCallerW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW2 then
     some .evmCallerW2
+  else if endsWith e ".xrplCallerW0" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerW0 then
+    some .xrplCallerW0
+  else if endsWith e ".xrplCallerW1" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerW1 then
+    some .xrplCallerW1
+  else if endsWith e ".xrplCallerW2" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerW2 then
+    some .xrplCallerW2
+  else if endsWith e ".xrplSelfW0" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelfW0 then
+    some .xrplSelfW0
+  else if endsWith e ".xrplSelfW1" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelfW1 then
+    some .xrplSelfW1
+  else if endsWith e ".xrplSelfW2" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelfW2 then
+    some .xrplSelfW2
+  else if endsWith e ".xrplLedgerSqn" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplLedgerSqn then
+    some .xrplLedgerSqn
+  else if endsWith e ".xrplParentTime" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplParentTime then
+    some .xrplParentTime
   else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
     some .evmSelfW0
   else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then
@@ -2503,7 +2532,8 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.signerKeyN a) => some (.signerKeyN a)
             | some (.ownerIsSelf a) => some (.ownerIsSelf a)
             | some v =>
-              if Ops.hasEvmLeaf #[.returnU64 v] || Ops.isLangLeaf v then some v else none
+              if Ops.hasEvmLeaf #[.returnU64 v] || Ops.hasXrplLeaf #[.returnU64 v] ||
+                  Ops.isLangLeaf v then some v else none
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -5750,7 +5780,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. =>
         .ok #[.returnU64 v]
     | v =>
-      if Ops.hasEvmLeaf #[.returnU64 v] || Ops.isLangLeaf v then .ok #[.returnU64 v]
+      if Ops.hasEvmLeaf #[.returnU64 v] || Ops.hasXrplLeaf #[.returnU64 v] ||
+          Ops.isLangLeaf v then .ok #[.returnU64 v]
       else .error "extract/unsupported: body"
   else
     .error "extract/unsupported: body"
