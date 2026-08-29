@@ -67,6 +67,16 @@
       "name": "key0",
       "parameters": [],
       "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "bump",
+      "parameters": [],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "ownerLo",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
     }
   ]
 }

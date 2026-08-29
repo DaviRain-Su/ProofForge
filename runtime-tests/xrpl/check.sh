@@ -39,14 +39,26 @@ need_exports_ctx = (
     '(func (export "stamp") (result i32)',
     '(func (export "height")',
 )
-forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"')
+need_exports_own = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "bump") (result i32)',
+    '(func (export "get")',
+    'i64.eq',
+    '(i32.const 3)',
+)
+forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account")
 
 for wat in wats:
     text = wat.read_text(encoding="utf-8")
     for needle in need_imports:
         if needle not in text:
             sys.exit(f"xrpl check: {wat.name} missing {needle!r}")
-    exports = need_exports_ctx if wat.stem == "XrplCtx" else need_exports_counter
+    if wat.stem == "XrplCtx":
+        exports = need_exports_ctx
+    elif wat.stem == "XrplOwn":
+        exports = need_exports_own
+    else:
+        exports = need_exports_counter
     for needle in exports:
         if needle not in text:
             sys.exit(f"xrpl check: {wat.name} missing {needle!r}")

@@ -181,6 +181,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-002](tasks/wsm-002.md) | done | Lean → WAT → `.wasm`；XRPL 拥有 `host_lib` import 与存储布局 |
 | [wsm-003](tasks/wsm-003.md) | done | XRPL 本地链工程门：起节点、部署 Counter、四场景 |
 | [wsm-005](tasks/wsm-005.md) | done | XRPL-RT：AccountId + caller/self/ledger host 叶子 |
+| [wsm-006](tasks/wsm-006.md) | done | XRPL-CMP：三叶 AccountId 比较，unauthorized = 3 |
 
 ## SVM 全面工作计划（当前主线）
 

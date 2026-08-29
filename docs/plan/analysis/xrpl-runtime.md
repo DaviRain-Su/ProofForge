@@ -120,9 +120,11 @@ structure AccountId where
 
 不做：hash、event、Map、SDK、主网、NEAR 叶子。
 
-### XRPL-CMP（wsm-006）
+### XRPL-CMP（[wsm-006](../tasks/wsm-006.md)）
 
-源码 `if caller20 三叶相等`。不新增 host。Example：非 owner 调用失败（状态码钉死）。为 SDK Ownable 打底。
+源码嵌套 `if caller.w0/w1/w2 = owner0/1/2`。不新增 host。`errorNamed "unauthorized"`
+钉死 wasm `i32` 状态码 **3**。`Examples.XrplOwn`：genesis `init`+`bump` 改 `value`；
+第二账户 `bump` 返回 3 且槽不变。
 
 ### XRPL-HASH（wsm-007）
 
