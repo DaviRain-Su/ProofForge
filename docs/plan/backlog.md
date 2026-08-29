@@ -52,7 +52,8 @@ R3-016 bounded transient log-data binding、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
-R5-008 checked allowance core、R5-009 reusable reentrancy policy；
+R5-008 checked allowance core、R5-009 reusable reentrancy policy、
+R5-010 persistent bounded EVM storage vector；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -532,6 +533,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `store 2 → CALL → store 1`，没有隐藏 final write 或新 Runtime/Ops/IR/Component/Emit case。
   hostile Solidity callback 在 Anvil 观察到 entered=2，nested payout 原子拒绝；normal CALL、
   outer restore 与 failed-CALL rollback 均通过。详见 `docs/plan/tasks/r5-009.md`。
+
+- R5-010 EVM persistent bounded storage vector 已完成：`Evm.Sdk.StorageVec` 以普通 static
+  State 字段（`Vector UInt64 capacity` backing + 相邻显式 length scalar）绑定共享
+  `Core.Value.BoundedVec` active-prefix 语义。SDK 拥有纯决策（wellFormed/canPush/canPop/
+  canGet/canSet/canClear，full/OOB/malformed fail closed），consumer 保持每个物理 field write
+  显式；没有 runtime slot allocator、host pointer、新 Ops/IR/Emit recipe 或无界循环。
+  EvmVecLog（owner-gated log，capacity 4）与 EvmVecStack（permissionless LIFO，capacity 3）
+  独立复用；worst-case slot/gas shape 为 O(1) 且与 capacity 无关，stale-slot 与注入的
+  malformed-length 原子失败由 Anvil 直接核对。详见 `docs/plan/tasks/r5-010.md`。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

@@ -68,6 +68,7 @@ import Tests.EvmOrderedStorageSpec
 import Tests.EvmReentrancySpec
 import Tests.EvmErc721Spec
 import Tests.EvmRolesSpec
+import Tests.EvmStorageVecSpec
 import Tests.EvmPausableSpec
 import Tests.TipJarSpec
 import Tests.LangSpec

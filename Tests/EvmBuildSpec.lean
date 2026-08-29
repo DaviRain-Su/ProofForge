@@ -12,6 +12,8 @@ import Examples.EvmCtx
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage
+import Examples.EvmVecLog
+import Examples.EvmVecStack
 import Examples.GuardedPayout
 import Examples.TipJar
 import Examples.Lang
@@ -42,6 +44,10 @@ import Tests.Fixtures
 #pf_evm_build Examples.EvmStaticRoster
 
 #pf_evm_build Examples.EvmOrderedStorage
+
+#pf_evm_build Examples.EvmVecLog
+
+#pf_evm_build Examples.EvmVecStack
 
 #pf_evm_build Examples.GuardedPayout
 

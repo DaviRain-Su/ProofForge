@@ -47,7 +47,7 @@
 | source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有；两边 top-level one-limb bounded/tagged return 已有独立 target plan | collection persistence binding、nested/constructed tagged shapes、wide/aggregate dynamic elements |
 | invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient.Vector64` 已有一个 active handle 的 begin/push/set/clear/finish/length/get 与真实 OOM；buffer/writer 仍有 typed plan | 多 active handle、通用 element/byte writer、pop/insert/remove/iteration；EVM bounded memory binding |
 | SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、ordered Map/RBMap、allocator 已有 u64/固定 schema | richer POD element/key/value shapes、set/bitset、versioned codecs |
-| EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有 | reusable bounded vector/set/queue/bitmap operations 与 documented gas bounds |
+| EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有；bounded UInt64 storage vector（`Evm.Sdk.StorageVec`：compile-time capacity + explicit length + checked active-prefix push/pop/set/clear，O(1) gas shape 已文档化）已有 | reusable bounded set/queue/bitmap operations 与 richer storage-vector element shapes |
 
 因此：
 
@@ -132,7 +132,7 @@ typed bounded call 和验证后的 result contract。
 
 | 组件 | 当前 | 主要缺口 | 优先级 |
 |---|---|---|---|
-| collections/math | typed maps、static declarations、capacity-2 role set、checked u256 operations | bounded enumerable Set/Map/Queue/Bitmap/Checkpoints、SafeCast/Math/String/Bytes utilities | F0/F2 |
+| collections/math | typed maps、static declarations、capacity-2 role set、checked u256 operations、persistent bounded UInt64 storage vector | bounded enumerable Set/Map/Queue/Bitmap/Checkpoints、SafeCast/Math/String/Bytes utilities、richer storage-vector elements | F0/F2 |
 | access/safety | owner/two-step ownership、bounded static roles、explicit Pausable、OpenZeppelin-shaped nonzero-sentinel Reentrancy guard | typed Paused/Unpaused events, enumerable/admin roles, timelock/access manager | F1/F2 |
 | calls/payments | `Evm.Sdk.Payments` bounded Ether/ERC20/WETH/fixed-router facade；Vault/TipJar 只消费 SDK，typed closed result policy 保持不变 | code-existence policy、revert bubbling、pull payment/multicall；arbitrary call 继续留在 advanced boundary | F1/F2 |
 | signatures | permit-specific ecrecover/domain paths | ECDSA/SignatureChecker/EIP-712/nonce/deadline/Merkle reusable components | F2 |

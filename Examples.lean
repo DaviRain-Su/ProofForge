@@ -48,6 +48,8 @@ import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage
+import Examples.EvmVecLog
+import Examples.EvmVecStack
 import Examples.GuardedPayout
 import Examples.Collectible
 import Examples.Badge

@@ -114,6 +114,17 @@ solana_lean_require_storage() {
   solana_lean_require_uint "$raw" "$expected" "$message (slot $slot)"
 }
 
+# Anvil-only corruption probe: replace one full storage word so fail-closed malformed-state paths
+# can be exercised. Production/deployment scripts never call this helper.
+solana_lean_set_storage_word() {
+  local addr="$1" slot="$2" value="$3"
+  local slot_word value_word
+  slot_word="$("$python" -I -S -c "print(f'0x{int(\"$slot\"):064x}')")"
+  value_word="$("$python" -I -S -c "print(f'0x{int(\"$value\"):064x}')")"
+  "$cast" rpc --rpc-url "$rpc" anvil_setStorageAt \
+    "$addr" "$slot_word" "$value_word" >/dev/null
+}
+
 solana_lean_contract_address() {
   "$python" -I -S -c 'import json,sys; print(json.load(sys.stdin)["contractAddress"])'
 }
@@ -259,6 +270,40 @@ if len(blob) < 8+64 or not blob.startswith(sel):
 got=blob[8+24:8+64]
 if got != '$who':
     raise SystemExit(f'FAIL: $message: Unauthorized(0x{got}) != 0x$who')
+"
+}
+
+# eth_call must revert with the ABI error of the given signature (e.g. 'oob()'), no arguments.
+solana_lean_require_named_revert() {
+  local addr="$1" from="$2" data="$3" signature="$4" message="$5"
+  local sel
+  sel="$("$cast" keccak "$signature")"
+  sel="${sel#0x}"
+  sel="$(printf '%s' "$sel" | cut -c1-8 | tr 'A-Z' 'a-z')"
+  "$python" -I -S -c "
+import json, urllib.request, urllib.error
+rpc='$rpc'
+payload={
+  'jsonrpc':'2.0','id':1,'method':'eth_call',
+  'params':[{'to':'$addr','from':'$from','data':'$data'}, 'latest']
+}
+req=urllib.request.Request(rpc, data=json.dumps(payload).encode(),
+  headers={'Content-Type':'application/json'})
+try:
+    raw=urllib.request.urlopen(req).read().decode()
+except urllib.error.HTTPError as e:
+    raw=e.read().decode()
+resp=json.loads(raw)
+err=resp.get('error') or {}
+blob=(err.get('data') or '')
+if isinstance(blob, dict):
+    blob=blob.get('data') or blob.get('raw') or ''
+blob=str(blob).lower()
+if blob.startswith('0x'):
+    blob=blob[2:]
+sel='$sel'
+if len(blob) < 8 or not blob.startswith(sel):
+    raise SystemExit('FAIL: $message: missing $signature revert (got '+repr(err)+')')
 "
 }
 

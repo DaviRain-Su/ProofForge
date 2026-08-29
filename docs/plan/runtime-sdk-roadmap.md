@@ -74,7 +74,7 @@ instruction 增加 recipe opcode。
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input/output、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data、checked program-memory spans 与 Token-2022 TLV envelope | nested/constructed/wide dynamic return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation、program-memory span；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、checked account-memory facade，以及 invocation-local buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 与显式 OOM 传播仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input/output、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，以及独立 `OutputPlan` 的 top-level bounded dynamic/tagged result（strict UTF-8 String）、full-width gas/basefee/prevrandao/gaslimit 与 Cancun target pin、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | nested/constructed/wide dynamic return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；coinbase/blockhash/code query 与标准化资源 manifest |
-| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy | typed pause events、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
+| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`StorageVec` persistent bounded UInt64 vector | typed pause events、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return；wider storage-vector element shapes |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -112,7 +112,7 @@ Emit recipe；R1-011 进一步用同一 static/tagged/bounded logical schema 固
 account view、R5-001 Access foundation、R5-002 static storage declarations、R5-003 bounded
 roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption、R5-006 fungible debit
 ledger foundation、R5-007 checked credit/alias-safe transfer、R5-008 checked allowance core 与
-R5-009 reusable reentrancy policy 均已集成；独立 contract
+R5-009 reusable reentrancy policy 与 R5-010 persistent bounded storage vector 均已集成；独立 contract
 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
@@ -131,7 +131,7 @@ full-width gas/basefee/prevrandao/gaslimit 并固定 Cancun opcode 语义；UInt
 [E-U256-004](tasks/e-u256-004.md)、[R5-001](tasks/r5-001.md)、[R5-002](tasks/r5-002.md)、
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
 [R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md)、
-[R5-009](tasks/r5-009.md)、[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
+[R5-009](tasks/r5-009.md)、[R5-010](tasks/r5-010.md)、[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -533,6 +533,17 @@ nonzero sentinels、fail-closed gate 和 explicit static handle 组合 R4-005 or
 GuardedPayout/EvmOrderedStorage 两个 consumer 保持 `enter → CALL → leave` lexical order；真实
 hostile callback 观察 entered 状态并证明 nested call 拒绝，failed CALL 回滚 lock。应用仍拥有
 具体 call 与 typed error；没有 Reentrancy opcode/emitter recipe。详见 [R5-009](tasks/r5-009.md)。
+
+R5-010 已完成第一个 persistent bounded EVM storage vector：`Evm.Sdk.StorageVec` 把共享
+`Core.Value.BoundedVec` 的 active-prefix 语义绑定到普通 static State 字段——compile-time
+capacity 的 `Vector UInt64 capacity` backing field 加一个相邻的显式 runtime length scalar。
+SDK 拥有纯 `pf_inline` 的 wellFormed/canPush/canPop/canGet/canSet/canClear 决策（full/OOB/
+malformed 全部 fail closed，clear 也不会静默修复损坏 length），consumer 保持每个物理 field
+write 显式可见；descriptor 是
+extraction 前消去的 `Storage.Static` bundle，没有 runtime slot allocator、host pointer、新
+Ops/IR/Emit recipe 或无界循环。EvmVecLog（owner-gated append log，capacity 4）与
+EvmVecStack（permissionless LIFO，capacity 3）独立复用；文档化的 worst-case slot/gas shape
+是 O(1) 且与 capacity 无关。详见 [R5-010](tasks/r5-010.md)。
 
 ### R6 — 双目标验收
 
