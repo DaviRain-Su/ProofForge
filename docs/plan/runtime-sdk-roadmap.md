@@ -236,11 +236,16 @@ R1-020 已完成 shared tagged return frame：Extract 把 direct `Option` 与 pa
 宽度或 active-payload wire rule。首片支持 one-limb Option 与 unit/UInt64 enum payload；构造式
 tagged result 和 richer payload 继续 fail closed。详见 [R1-020](tasks/r1-020.md)。
 
+R1-021 已完成 SVM tagged Borsh output binding：独立 `BorshReturnPlan` 解释 fixed tagged
+source frame，检查 u8 tag 与 inactive-zero lanes，并只发布所选 Option/enum Borsh prefix；
+不复用 input cursor，不增加 Runtime/Ops/IR/Component/main Emit recipe。详见
+[R1-021](tasks/r1-021.md)。
+
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
 2. 定义 bounded codec schema：scalar、fixed bytes、tuple/record、enum、`Option`、固定/上限数组。
 3. SVM adapter 实现 Borsh little-endian、canonical tagged/bounded/bytes/String input、exact
-   cursor consumption 与独立 top-level bounded output；EVM adapter 实现 32-byte ABI word、static tuple、Tagged Tuple v1、
+   cursor consumption 与独立 top-level bounded/tagged output；EVM adapter 实现 32-byte ABI word、static tuple、Tagged Tuple v1、
    Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，并用独立 output plan 发布
    top-level one-limb bounded dynamic results。
 4. codec 只描述 wire，不拥有 account/storage geometry，也不执行业务 validation。

@@ -346,17 +346,17 @@ private def emitUtf8Guard (lengthOff : Nat) (err scope : String) (fresh : Nat) :
 /-- Serialize a bounded source frame to canonical Borsh output. The maximum frame is fixed in
 stack scratch, while `sol_set_return_data` observes only `u32 length || active elements`. String
 reuses the same strict UTF-8 scanner as input decoding before publishing any bytes. -/
-def emitBorshReturnValues
+private def emitBoundedBorshReturnValues
     (loadValue : Ops.Val → Nat → Nat → String → Except String String)
-    (scratchLimit : Nat) (plan : BorshReturnPlan) (values : Array Ops.Val)
+    (scratchLimit capacity : Nat) (widths : Array Nat) (validateUtf8 : Bool)
+    (values : Array Ops.Val)
     (fresh : Nat) (scope : String) : Except String String := do
-  let widths := plan.elementWidths
   unless !widths.isEmpty && widths.all fun width => 1 ≤ width && width ≤ 8 do
     throw "extract/unsupported: malformed bounded Borsh return element widths"
-  unless values.size == plan.sourceValueCount do
+  unless values.size == 1 + capacity * widths.size do
     throw "extract/unsupported: bounded Borsh return plan does not match result leaves"
   let elementBytes := widths.foldl (init := 0) (· + ·)
-  let scratchBytes := plan.maxBytes
+  let scratchBytes := 4 + capacity * elementBytes
   let stagingOff := scratchBytes + 8
   if stagingOff > scratchLimit then
     throw "extract/unsupported: bounded Borsh return exceeds scalar scratch"
@@ -372,14 +372,14 @@ def emitBorshReturnValues
     consumed := consumed + width
     nonce := nonce + 1
   let utf8 :=
-    if plan.validateUtf8 then s!"\
+    if validateUtf8 then s!"\
   mov64 r7, r10
   add64 r7, -{scratchBytes - 4}
 {emitUtf8Guard scratchBytes invalid (scope ++ "_return") nonce}"
     else ""
   return body ++ s!"\
   ldxw r1, [r10 - {scratchBytes}]
-  jgt r1, {plan.capacity}, {invalid}
+  jgt r1, {capacity}, {invalid}
 {utf8}\
   mov64 r1, r10
   add64 r1, -{scratchBytes}
@@ -393,6 +393,130 @@ def emitBorshReturnValues
   lddw r0, 0x1
   exit
 "
+
+/-- Publish canonical Borsh `Option<T>` from the fixed `tag,payload...` source frame. Absent
+payload lanes must be zero even though they are not returned, preserving a single canonical frame
+for target-independent source values. -/
+private def emitOptionBorshReturnValues
+    (loadValue : Ops.Val → Nat → Nat → String → Except String String)
+    (scratchLimit : Nat) (widths : Array Nat) (values : Array Ops.Val)
+    (fresh : Nat) (scope : String) : Except String String := do
+  unless !widths.isEmpty && widths.all fun width => 1 ≤ width && width ≤ 8 do
+    throw "extract/unsupported: malformed Option Borsh return payload widths"
+  unless values.size == 1 + widths.size do
+    throw "extract/unsupported: Option Borsh return plan does not match result leaves"
+  let scratchBytes := 1 + widths.foldl (init := 0) (· + ·)
+  let stagingOff := scratchBytes + 8
+  if stagingOff > scratchLimit then
+    throw "extract/unsupported: Option Borsh return exceeds scalar scratch"
+  let invalid := s!"borsh_return_invalid_{scope}_{fresh}"
+  let present := s!"borsh_return_option_present_{scope}_{fresh}"
+  let publish := s!"borsh_return_option_publish_{scope}_{fresh}"
+  let mut body ← loadValue values[0]! stagingOff fresh s!"{scope}_return_tag"
+  body := body ++ s!"  ldxdw r3, [r10 - {stagingOff}]\n  jgt r3, 1, {invalid}\n"
+  body := body ++ (← emitStoreStackLE stagingOff scratchBytes 1)
+  let mut consumed := 1
+  let mut nonce := fresh + 1
+  for i in [0:widths.size] do
+    body := body ++ (← loadValue values[i + 1]! stagingOff nonce s!"{scope}_return_payload_{i}")
+    body := body ++ (← emitStoreStackLE stagingOff (scratchBytes - consumed) widths[i]!)
+    consumed := consumed + widths[i]!
+    nonce := nonce + 1
+  let mut absentGuards := ""
+  for i in [0:widths.size] do
+    absentGuards := absentGuards ++
+      (← loadValue values[i + 1]! stagingOff nonce s!"{scope}_return_inactive_{i}") ++
+      s!"  ldxdw r1, [r10 - {stagingOff}]\n  jne r1, 0, {invalid}\n"
+    nonce := nonce + 1
+  return body ++ s!"\
+  ldxb r3, [r10 - {scratchBytes}]
+  jeq r3, 1, {present}
+{absentGuards}\
+  lddw r2, 1
+  ja {publish}
+{present}:
+  lddw r2, {scratchBytes}
+{publish}:
+  mov64 r1, r10
+  add64 r1, -{scratchBytes}
+  call sol_set_return_data
+  lddw r0, 0
+  exit
+{invalid}:
+  lddw r0, 0x1
+  exit
+"
+
+/-- Publish a canonical Borsh payload enum. The schema fixes one u8 ordinal and a maximum sequence
+of UInt64 lanes; the selected variant determines the returned prefix and every inactive lane must
+be zero. Runtime dispatch is bounded by the compile-time variant table. -/
+private def emitEnumBorshReturnValues
+    (loadValue : Ops.Val → Nat → Nat → String → Except String String)
+    (scratchLimit : Nat) (activePayloadWords : Array Nat) (values : Array Ops.Val)
+    (fresh : Nat) (scope : String) : Except String String := do
+  unless !activePayloadWords.isEmpty && activePayloadWords.size ≤ 256 do
+    throw "extract/unsupported: malformed enum Borsh return variants"
+  let maxWords := activePayloadWords.foldl (init := 0) max
+  unless values.size == 1 + maxWords do
+    throw "extract/unsupported: enum Borsh return plan does not match result leaves"
+  let scratchBytes := 1 + 8 * maxWords
+  let stagingOff := scratchBytes + 8
+  if stagingOff > scratchLimit then
+    throw "extract/unsupported: enum Borsh return exceeds scalar scratch"
+  let invalid := s!"borsh_return_invalid_{scope}_{fresh}"
+  let mut body ← loadValue values[0]! stagingOff fresh s!"{scope}_return_tag"
+  body := body ++ s!"  ldxdw r3, [r10 - {stagingOff}]\n  jge r3, {activePayloadWords.size}, {invalid}\n"
+  body := body ++ (← emitStoreStackLE stagingOff scratchBytes 1)
+  let mut nonce := fresh + 1
+  for i in [0:maxWords] do
+    body := body ++ (← loadValue values[i + 1]! stagingOff nonce s!"{scope}_return_payload_{i}")
+    body := body ++ (← emitStoreStackLE stagingOff (scratchBytes - 1 - 8 * i) 8)
+    nonce := nonce + 1
+  for i in [0:maxWords] do
+    let active := s!"borsh_return_enum_lane_active_{scope}_{fresh}_{i}"
+    body := body ++ s!"  ldxb r3, [r10 - {scratchBytes}]\n"
+    for tag in [0:activePayloadWords.size] do
+      if i < activePayloadWords[tag]! then
+        body := body ++ s!"  jeq r3, {tag}, {active}\n"
+    body := body ++
+      (← loadValue values[i + 1]! stagingOff nonce s!"{scope}_return_inactive_{i}") ++
+      s!"  ldxdw r1, [r10 - {stagingOff}]\n  jne r1, 0, {invalid}\n{active}:\n"
+    nonce := nonce + 1
+  let publish := s!"borsh_return_enum_publish_{scope}_{fresh}"
+  body := body ++ s!"  ldxb r3, [r10 - {scratchBytes}]\n"
+  let mut variantBodies := ""
+  for tag in [0:activePayloadWords.size] do
+    let selected := s!"borsh_return_enum_variant_{scope}_{fresh}_{tag}"
+    body := body ++ s!"  jeq r3, {tag}, {selected}\n"
+    variantBodies := variantBodies ++
+      s!"{selected}:\n  lddw r2, {1 + 8 * activePayloadWords[tag]!}\n  ja {publish}\n"
+  body := body ++ s!"  ja {invalid}\n{variantBodies}{publish}:\n"
+  return body ++ s!"\
+  mov64 r1, r10
+  add64 r1, -{scratchBytes}
+  call sol_set_return_data
+  lddw r0, 0
+  exit
+{invalid}:
+  lddw r0, 0x1
+  exit
+"
+
+/-- Interpret the target-owned Borsh output plan. This adapter extension is the only new emitter
+surface: no tagged or collection case is added to the main SVM operation emitter. -/
+def emitBorshReturnValues
+    (loadValue : Ops.Val → Nat → Nat → String → Except String String)
+    (scratchLimit : Nat) (plan : BorshReturnPlan) (values : Array Ops.Val)
+    (fresh : Nat) (scope : String) : Except String String :=
+  match plan with
+  | .boundedArray capacity widths =>
+      emitBoundedBorshReturnValues loadValue scratchLimit capacity widths false values fresh scope
+  | .packedBytes capacity validateUtf8 =>
+      emitBoundedBorshReturnValues loadValue scratchLimit capacity #[1] validateUtf8 values fresh scope
+  | .option widths =>
+      emitOptionBorshReturnValues loadValue scratchLimit widths values fresh scope
+  | .enumeration activePayloadWords =>
+      emitEnumBorshReturnValues loadValue scratchLimit activePayloadWords values fresh scope
 
 private partial def emitBorshDecode (context : Context) (base : Nat) (err scope : String)
     (fresh : Nat) : BorshDecode → Except String (String × Nat)

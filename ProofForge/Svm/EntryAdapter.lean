@@ -37,36 +37,39 @@ structure BorshPlan where
 
 def BorshPlan.localCount (plan : BorshPlan) : Nat := plan.localWidths.size
 
-/-- Target-owned dynamic Borsh return geometry. Source results are always a fixed scalar frame;
-the runtime length selects the active wire prefix. Keeping this separate from `BorshDecode`
-prevents input cursor rules from becoming an accidental output contract. -/
+/-- Target-owned conditional Borsh return geometry. Source results are always a fixed scalar
+frame; runtime length or tag selects the active wire prefix. Keeping this separate from
+`BorshDecode` prevents input cursor rules from becoming an accidental output contract. -/
 inductive BorshReturnPlan where
   | boundedArray (capacity : Nat) (elementWidths : Array Nat)
   | packedBytes (capacity : Nat) (validateUtf8 : Bool)
+  | option (payloadWidths : Array Nat)
+  | enumeration (activePayloadWords : Array Nat)
   deriving BEq, Repr, Inhabited
 
-def BorshReturnPlan.capacity : BorshReturnPlan → Nat
-  | .boundedArray capacity _ | .packedBytes capacity _ => capacity
-
-def BorshReturnPlan.elementWidths : BorshReturnPlan → Array Nat
-  | .boundedArray _ widths => widths
-  | .packedBytes .. => #[1]
-
-def BorshReturnPlan.validateUtf8 : BorshReturnPlan → Bool
-  | .boundedArray .. => false
-  | .packedBytes _ validateUtf8 => validateUtf8
-
 def BorshReturnPlan.sourceValueCount (plan : BorshReturnPlan) : Nat :=
-  1 + plan.capacity * plan.elementWidths.size
+  match plan with
+  | .boundedArray capacity widths => 1 + capacity * widths.size
+  | .packedBytes capacity _ => 1 + capacity
+  | .option widths => 1 + widths.size
+  | .enumeration counts => 1 + counts.foldl (init := 0) max
 
 def BorshReturnPlan.maxBytes (plan : BorshReturnPlan) : Nat :=
-  4 + plan.capacity * plan.elementWidths.foldl (init := 0) (· + ·)
+  match plan with
+  | .boundedArray capacity widths => 4 + capacity * widths.foldl (init := 0) (· + ·)
+  | .packedBytes capacity _ => 4 + capacity
+  | .option widths => 1 + widths.foldl (init := 0) (· + ·)
+  | .enumeration counts => 1 + 8 * counts.foldl (init := 0) max
 
 private def BorshReturnPlan.canonical : BorshReturnPlan → String
   | .boundedArray capacity widths =>
       s!"array.{capacity}.[{String.intercalate "," (widths.map toString).toList}]"
   | .packedBytes capacity validateUtf8 =>
       s!"{if validateUtf8 then "string" else "bytes"}.{capacity}"
+  | .option widths =>
+      s!"option.[{String.intercalate "," (widths.map toString).toList}]"
+  | .enumeration counts =>
+      s!"enum.[{String.intercalate "," (counts.map toString).toList}]"
 
 private partial def BorshDecode.canonical : BorshDecode → String
   | .sequence items =>
@@ -507,10 +510,29 @@ private def borshReturnPlanAt : Core.Codec.Schema → Except String BorshReturnP
       pure (.boundedArray capacity widths)
   | .boundedBytes capacity => pure (.packedBytes capacity false)
   | .boundedString capacity => pure (.packedBytes capacity true)
-  | _ => throw "extract/unsupported: SVM dynamic Borsh return requires a bounded value"
+  | .option payload => do
+      let leaves ← staticBorshLeaves payload
+      let widths := leaves.foldl (init := #[]) fun out leaf => out ++ leaf.widths
+      unless leaves.size == 1 && widths.size == 1 do
+        throw "extract/unsupported: SVM tagged Option returns require a one-limb scalar payload"
+      pure (.option widths)
+  | .enumeration _ tagBits variants => do
+      unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
+        throw "extract/unsupported: SVM tagged enum returns require a nonempty u8 tag space"
+      let counts ← variants.mapM fun variant =>
+        match variant.2 with
+        | .unit => pure 0
+        | .scalar (.uint 64) => pure 1
+        | .tuple items => do
+            unless items.all (· == .scalar .uint64) do
+              throw "extract/unsupported: SVM tagged enum return fields must be UInt64"
+            pure items.size
+        | _ => throw "extract/unsupported: SVM tagged enum return fields must be UInt64"
+      pure (.enumeration counts)
+  | _ => throw "extract/unsupported: SVM Borsh return requires a bounded or tagged value"
 
-/-- Derive a top-level dynamic Borsh output plan independently from the input decoder. Elements of
-a bounded vector must have static scalar shape; nested dynamic outputs remain fail closed. -/
+/-- Derive a top-level conditional Borsh output plan independently from the input decoder. Bounded
+elements and tagged payloads must fit the supported fixed scalar frame; nested outputs stay closed. -/
 def borshReturnPlan (schema : Core.Codec.Schema) : Except String BorshReturnPlan := do
   let _ ← Core.Codec.validate schema
   borshReturnPlanAt schema
@@ -576,14 +598,14 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
       pure (plans.foldl (init := #[]) (· ++ ·), plans.map (·.size), booleans, #[])
   let returnBorshPlan ←
     match retSchema with
-    | .boundedArray .. | .boundedBytes _ | .boundedString _ => do
+    | .option _ | .enumeration .. | .boundedArray .. | .boundedBytes _ | .boundedString _ => do
         let plan ← borshReturnPlan retSchema
         unless plan.sourceValueCount == retCount do
-          throw "extract/unsupported: SVM bounded Borsh return metadata is incomplete"
+          throw "extract/unsupported: SVM Borsh return metadata is incomplete"
         pure (some plan)
     | _ =>
         if hasTaggedSchema retSchema then
-          throw "extract/unsupported: SVM tagged Borsh return binding is not implemented"
+          throw "extract/unsupported: nested SVM Borsh return binding is not implemented"
         else pure none
   let inferredReturnWidths ←
     if returnBorshPlan.isSome then pure #[]

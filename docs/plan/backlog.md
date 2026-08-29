@@ -310,6 +310,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   one-limb Option 与 unit/UInt64 enum payload；constructed/richer tagged result 继续 fail closed。
   未新增 Core/target Ops、Runtime effect 或 Emit recipe。详见 `docs/plan/tasks/r1-020.md`。
 
+- R1-021 SVM tagged Borsh return binding 已完成：独立 `BorshReturnPlan` 从 fixed tagged source
+  frame 发布 canonical branch-dependent Option/enum bytes，检查 u8 ordinal 与 inactive-zero
+  lanes，不复用 input cursor。首片支持 one-limb Option 与 unit/UInt64 enum payload；nested/
+  richer/constructed tagged outputs 继续 fail closed。未新增 Runtime/Ops/IR/Component/main Emit
+  recipe。RawEntry digest `21207ff5263a4d4a`、ELF 46,336 B，Mollusk 20/20；Surfpool 1.5.0
+  以 46 个 Loader-v3 writes 部署核对。详见 `docs/plan/tasks/r1-021.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

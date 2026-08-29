@@ -109,6 +109,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing bounded-string return source method"
   let some sourceMakeBoundedString := source.methods.find? (·.ixName == "makeBoundedString")
     | throwError "missing constructed bounded-string source method"
+  let some sourceEchoOptionValue := source.methods.find? (·.ixName == "echoOptionValue")
+    | throwError "missing tagged Option return source method"
+  let some sourceEchoTaggedValue := source.methods.find? (·.ixName == "echoTaggedValue")
+    | throwError "missing tagged enum return source method"
   unless sourceEchoBoundedValues.annotations == #["svm.raw.v1:20:2:0"] &&
       sourceEchoBoundedValues.retSchema == .boundedArray 4 (.scalar .uint16) &&
       sourceEchoBoundedValues.retCount == 5 &&
@@ -119,8 +123,13 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceMakeBoundedString.annotations == #["svm.raw.v1:23:2:0"] &&
       sourceMakeBoundedString.paramWidths == #[4, 1, 1, 1, 1, 1, 1, 1, 1] &&
       sourceMakeBoundedString.retSchema == .boundedString 8 &&
-      sourceMakeBoundedString.retCount == 9 do
-    throwError "bounded return values were not expanded to fixed source frames"
+      sourceMakeBoundedString.retCount == 9 &&
+      sourceEchoOptionValue.annotations == #["svm.raw.v1:24:2:0"] &&
+      sourceEchoOptionValue.retSchema == .option (.scalar .uint64) &&
+      sourceEchoOptionValue.retCount == 2 &&
+      sourceEchoTaggedValue.annotations == #["svm.raw.v1:25:2:0"] &&
+      sourceEchoTaggedValue.retCount == 3 do
+    throwError "bounded/tagged return values were not expanded to fixed source frames"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -314,6 +323,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing projected bounded-string return method"
   let some makeBoundedString := program.methods.find? (·.ixName == "makeBoundedString")
     | throwError "missing projected constructed bounded-string method"
+  let some echoOptionValue := program.methods.find? (·.ixName == "echoOptionValue")
+    | throwError "missing projected tagged Option return method"
+  let some echoTaggedValue := program.methods.find? (·.ixName == "echoTaggedValue")
+    | throwError "missing projected tagged enum return method"
   match echoBoundedValues.entry, echoBoundedBytes.entry, echoBoundedString.entry,
       makeBoundedString.entry with
   | .raw values, .raw bytes, .raw string, .raw constructed =>
@@ -330,9 +343,20 @@ elab "#pf_guard_entry_adapter" : command => do
         throwError s!"wrong bounded Borsh return plans: {repr values}, {repr bytes}, " ++
           s!"{repr string}, {repr constructed}"
   | _, _, _, _ => throwError "bounded return method lost its raw adapter"
+  match echoOptionValue.entry, echoTaggedValue.entry with
+  | .raw option, .raw tagged =>
+      unless option.tag == 24 && option.returnBorshPlan == some (.option #[8]) &&
+          option.returnDataLen == 9 && option.returnScratchBytes == 17 &&
+          option.canonical.contains "borsh-return-schema.option.[8]" &&
+          tagged.tag == 25 && tagged.returnBorshPlan == some (.enumeration #[0, 1, 2]) &&
+          tagged.returnDataLen == 17 && tagged.returnScratchBytes == 25 &&
+          tagged.canonical.contains "borsh-return-schema.enum.[0,1,2]" do
+        throwError s!"wrong tagged Borsh return plans: {repr option}, {repr tagged}"
+  | _, _ => throwError "tagged return method lost its raw adapter"
   for (method, count) in [
       (echoBoundedValues, 5), (echoBoundedBytes, 9),
-      (echoBoundedString, 9), (makeBoundedString, 9)
+      (echoBoundedString, 9), (makeBoundedString, 9),
+      (echoOptionValue, 2), (echoTaggedValue, 3)
     ] do
     let graph ←
       match method.toCFG with
@@ -368,12 +392,15 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call boundedString" &&
       asm.contains "call echoBoundedValues" && asm.contains "call echoBoundedBytes" &&
       asm.contains "call echoBoundedString" && asm.contains "call makeBoundedString" &&
+      asm.contains "call echoOptionValue" && asm.contains "call echoTaggedValue" &&
       asm.contains "borsh_return_invalid_echoBoundedValues_" &&
       asm.contains "borsh_return_invalid_echoBoundedBytes_" &&
       asm.contains "borsh_return_invalid_echoBoundedString_" &&
       asm.contains "borsh_schema_utf8_loop_echoBoundedString_b0_return_" &&
       asm.contains "borsh_return_invalid_makeBoundedString_" &&
       asm.contains "borsh_schema_utf8_loop_makeBoundedString_b0_return_" &&
+      asm.contains "borsh_return_option_present_echoOptionValue_" &&
+      asm.contains "borsh_return_enum_variant_echoTaggedValue_" &&
       asm.contains "mul64 r2, 2" && asm.contains "mul64 r2, 1" &&
       asm.contains "decode recursive target-owned Borsh schema with exact cursor consumption" &&
       asm.contains "borsh_schema_none_optionValue_" &&
@@ -470,6 +497,20 @@ private def hasTaggedBounds (result : Except String EntryAdapter.MethodEntry)
   (paramSchemas := #[.boundedBytes 8]) (retSchema := .boundedBytes 8))
 #guard accepts (EntryAdapter.decode #["svm.raw.v1:22:2:0"] 1 #[] 9
   (paramSchemas := #[.boundedString 8]) (retSchema := .boundedString 8))
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:24:2:0"] 1 #[] 2
+  (paramSchemas := #[.option (.scalar .uint64)])
+  (retSchema := .option (.scalar .uint64)))
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:25:2:0"] 1 #[] 3
+  (paramSchemas := #[.enumeration "Request" 8 #[
+    ("idle", .unit),
+    ("one", .scalar .uint64),
+    ("pair", .tuple #[.scalar .uint64, .scalar .uint64])
+  ]])
+  (retSchema := .enumeration "Request" 8 #[
+    ("idle", .unit),
+    ("one", .scalar .uint64),
+    ("pair", .tuple #[.scalar .uint64, .scalar .uint64])
+  ]))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:20:2:0"] 1 #[] 4
   (paramSchemas := #[.boundedArray 4 (.scalar .uint16)])
   (retSchema := .boundedArray 4 (.scalar .uint16)))
@@ -478,7 +519,7 @@ private def hasTaggedBounds (result : Except String EntryAdapter.MethodEntry)
   (retSchema := .boundedArray 4 (.tuple #[.scalar .uint16, .scalar .uint16])))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 1 #[] 1
   (paramSchemas := #[.boundedArray 128 (.scalar .uint64)]))
-#guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 0 #[] 2
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:24:2:0"] 0 #[] 1
   (retSchema := .option (.scalar .uint64)))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:15:2:0"] 1 #[] 1
   (paramSchemas := #[.unit])

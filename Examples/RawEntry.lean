@@ -168,4 +168,12 @@ def makeBoundedString (_s : State) (length : UInt32)
     (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) : BoundedString 8 :=
   { length, values := #v[b0, b1, b2, b3, b4, b5, b6, b7] }
 
+/-- Tagged outputs reuse the same fixed logical frame as tagged inputs, while the SVM adapter
+independently selects canonical branch-dependent Borsh return bytes. -/
+@[pf_entry, pf_svm_raw 24 2 0]
+def echoOptionValue (_s : State) (value : Option UInt64) : Option UInt64 := value
+
+@[pf_entry, pf_svm_raw 25 2 0]
+def echoTaggedValue (_s : State) (value : TaggedRequest) : TaggedRequest := value
+
 end Examples.RawEntry

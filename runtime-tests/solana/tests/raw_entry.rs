@@ -26,6 +26,8 @@ const ECHO_BOUNDED_VALUES_TAG: u8 = 20;
 const ECHO_BOUNDED_BYTES_TAG: u8 = 21;
 const ECHO_BOUNDED_STRING_TAG: u8 = 22;
 const MAKE_BOUNDED_STRING_TAG: u8 = 23;
+const ECHO_OPTION_TAG: u8 = 24;
+const ECHO_TAGGED_TAG: u8 = 25;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -116,6 +118,26 @@ fn constructed_string_data(length: u32, bytes: &[u8]) -> Vec<u8> {
     data.extend_from_slice(&length.to_le_bytes());
     data.extend_from_slice(bytes);
     data.resize(13, 0);
+    data
+}
+
+fn tagged_option_data(value: Option<u64>) -> Vec<u8> {
+    let mut data = vec![ECHO_OPTION_TAG];
+    match value {
+        None => data.push(0),
+        Some(value) => {
+            data.push(1);
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    data
+}
+
+fn tagged_result_data(variant: u8, payload: &[u64]) -> Vec<u8> {
+    let mut data = vec![ECHO_TAGGED_TAG, variant];
+    for value in payload {
+        data.extend_from_slice(&value.to_le_bytes());
+    }
     data
 }
 
@@ -510,6 +532,30 @@ fn bounded_returns_publish_only_the_canonical_borsh_active_prefix() {
         (ECHO_BOUNDED_STRING_TAG, b"abcdefgh".to_vec()),
     ] {
         let data = bounded_bytes_data(tag, &values);
+        let expected = data[1..].to_vec();
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(&expected)],
+        );
+    }
+}
+
+#[test]
+fn tagged_returns_publish_canonical_branch_dependent_borsh() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+
+    let cases = [
+        tagged_option_data(None),
+        tagged_option_data(Some(37)),
+        tagged_result_data(0, &[]),
+        tagged_result_data(1, &[41]),
+        tagged_result_data(2, &[43, 47]),
+    ];
+    for data in cases {
         let expected = data[1..].to_vec();
         let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
         mollusk.process_and_validate_instruction(
