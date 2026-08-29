@@ -97,6 +97,29 @@
       "name": "poke",
       "parameters": [],
       "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "setAt",
+      "parameters": [
+        { "name": "index", "type": "UINT64", "flag": 0 },
+        { "name": "value", "type": "UINT64", "flag": 0 }
+      ],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "get0",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "get1",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "get2",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
     }
   ]
 }

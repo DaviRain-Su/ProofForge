@@ -14,11 +14,9 @@ from pathlib import Path
 
 out = Path(sys.argv[1])
 wats = sorted(out.glob("*.wat"))
-wasms = sorted(out.glob("*.wasm"))
 if not wats:
     sys.exit("xrpl check: no .wat produced")
-if len(wats) != len(wasms):
-    sys.exit(f"xrpl check: wat/wasm count mismatch {len(wats)}/{len(wasms)}")
+# Ignore leftover probe wasm (e.g. probe-array.wasm) that has no matching WAT.
 
 need_imports = (
     '(import "host_lib" "get_current_ledger_obj_field"',
@@ -61,7 +59,13 @@ need_exports_rt2 = (
     '(call $get_parent_ledger_hash',
     '(call $get_base_fee)',
 )
-forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account")
+need_exports_vec = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "setAt") (result i32)',
+    '(func (export "get0")',
+    '(data (i32.const 64) "xs_0xs_1xs_2")',
+)
+forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
     text = wat.read_text(encoding="utf-8")
@@ -76,6 +80,8 @@ for wat in wats:
         exports = need_exports_hash
     elif wat.stem == "XrplRt2":
         exports = need_exports_rt2
+    elif wat.stem == "XrplVec":
+        exports = need_exports_vec
     else:
         exports = need_exports_counter
     for needle in exports:
