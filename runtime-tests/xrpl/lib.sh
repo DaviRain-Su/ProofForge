@@ -120,3 +120,39 @@ print(m.group(1))
 xrpl_genesis_seed() {
   echo "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
 }
+
+xrpl_genesis_address() {
+  echo "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
+}
+
+# This host does not put view i64 results in meta.ReturnValue. State lives
+# in ContractData.ContractJson under the owner account (sfOwner).
+xrpl_slot_u64() {
+  local owner="$1" contract="$2" key="${3:-value}"
+  "$python" -I -S -c '
+import json, sys, urllib.request
+owner, contract, key = sys.argv[1], sys.argv[2], sys.argv[3]
+req = urllib.request.Request(
+    "http://localhost:5005",
+    data=json.dumps({
+        "method": "account_objects",
+        "params": [{"account": owner, "ledger_index": "validated"}],
+    }).encode(),
+    headers={"Content-Type": "application/json"},
+)
+result = json.load(urllib.request.urlopen(req, timeout=10))["result"]
+for obj in result.get("account_objects") or []:
+    if obj.get("LedgerEntryType") != "ContractData":
+        continue
+    if obj.get("ContractAccount") != contract:
+        continue
+    raw = (obj.get("ContractJson") or {}).get(key)
+    if raw is None:
+        print(0)
+        raise SystemExit
+    s = str(raw)
+    print(int(s) if s.isdigit() else int(s, 16))
+    raise SystemExit
+raise SystemExit("missing ContractData for " + contract)
+' "$owner" "$contract" "$key"
+}

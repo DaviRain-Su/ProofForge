@@ -58,6 +58,13 @@ function formatValue(type, value) {
   if (value === undefined || value === null) {
     throw new Error(`missing parameter value for type ${type}`);
   }
+  if (type === "UINT64") {
+    const n = BigInt(String(value));
+    if (n < 0n || n > 0xffffffffffffffffn) {
+      throw new Error(`UINT64 out of range: ${value}`);
+    }
+    return { type, value: n.toString(16).toUpperCase().padStart(16, "0") };
+  }
   return { type, value: String(value) };
 }
 

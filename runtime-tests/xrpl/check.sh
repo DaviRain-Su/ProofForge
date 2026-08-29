@@ -22,14 +22,16 @@ if len(wats) != len(wasms):
 
 need_imports = (
     '(import "host_lib" "get_current_ledger_obj_field"',
-    '(import "host_lib" "update_data"',
+    '(import "host_lib" "get_data_object_field"',
+    '(import "host_lib" "set_data_object_field"',
+    '(import "host_lib" "function_param"',
 )
 need_exports = (
-    '(func (export "initialize")',
-    '(func (export "increment")',
+    '(func (export "initialize") (result i32)',
+    '(func (export "increment") (result i32)',
     '(func (export "get")',
 )
-forbid = ("xrpl_wasm_std", "get_current_contract_call")
+forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"')
 
 for wat in wats:
     text = wat.read_text(encoding="utf-8")

@@ -46,6 +46,7 @@ echo "xrpl-local-counter: starting local node" >&2
 (cd "$fixture" && "$bedrock" node start)
 
 wallet="$(xrpl_genesis_seed)"
+owner="$(xrpl_genesis_address)"
 
 deploy_out="$(cd "$fixture" && "$bedrock" deploy \
   --network local \
@@ -116,16 +117,14 @@ except ValueError:
 
 init_out="$(xrpl_call initialize '{"initial_value":"0"}')"
 xrpl_require_equal "$(xrpl_call_code "$init_out")" "0" "initialize status"
+xrpl_require_equal "$(xrpl_slot_u64 "$owner" "$contract")" "0" "initialize state"
 
 get0="$(xrpl_call get '{}')"
 xrpl_require_equal "$(xrpl_call_code "$get0")" "0" "get after init status"
-xrpl_require_equal "$(xrpl_call_value "$get0")" "0" "initialize state"
 
 inc_out="$(xrpl_call increment '{"amount":"1"}')"
 xrpl_require_equal "$(xrpl_call_code "$inc_out")" "0" "increment status"
-
-get1="$(xrpl_call get '{}')"
-xrpl_require_equal "$(xrpl_call_value "$get1")" "1" "increment state"
+xrpl_require_equal "$(xrpl_slot_u64 "$owner" "$contract")" "1" "increment state"
 
 max_init="$(xrpl_call initialize "{\"initial_value\":\"$UINT64_MAX\"}")"
 xrpl_require_equal "$(xrpl_call_code "$max_init")" "0" "max initialize status"
@@ -136,8 +135,7 @@ set -e
 if [[ "$ovf_status" -eq 0 ]]; then
   xrpl_require_equal "$(xrpl_call_code "$ovf")" "1" "overflow increment status"
 fi
-get_max="$(xrpl_call get '{}')"
-xrpl_require_equal "$(xrpl_call_value "$get_max")" "$UINT64_MAX" \
+xrpl_require_equal "$(xrpl_slot_u64 "$owner" "$contract")" "$UINT64_MAX" \
   "overflow must leave counter"
 
 echo "xrpl-local-counter: ok (initialize/get/increment/overflow; engineering only)"

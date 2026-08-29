@@ -109,6 +109,82 @@ private def hostWrite (host : Contract) (p : Program ValExt OpExt) (level : Nat)
     indent (level + 2) "(then (return (local.get $st))))"
   ]
 
+/-- Linear-memory map for object-field storage (XRPL ContractData). -/
+private def accountOff : Nat := 0
+private def accountLen : Nat := 20
+private def paramOffObj : Nat := 20
+private def storeOff : Nat := 28
+private def keyBase : Nat := 64
+
+private def keyBlob (p : Program ValExt OpExt) : String :=
+  String.join (p.slots.map (·.name)).toList
+
+private def keyOffsetOf (p : Program ValExt OpExt) (name : String) : Nat :=
+  (p.slots.foldl (fun (acc : Nat × Bool) slot =>
+    if acc.2 then acc
+    else if slot.name == name then (acc.1, true)
+    else (acc.1 + slot.name.length, false)) (keyBase, false)).1
+
+/-- Big-endian store of an i64 local into 8 bytes at `ptr`. -/
+private def storeBe64 (level ptr : Nat) (localName : String) : Array String :=
+  (Array.range 8).map fun i =>
+    let shift := (7 - i) * 8
+    indent level ("(i32.store8 (i32.const " ++ toString (ptr + i) ++
+      ") (i32.wrap_i64 (i64.shr_u (local.get " ++ localName ++
+      ") (i64.const " ++ toString shift ++ "))))")
+
+/-- Big-endian load of 8 bytes at `ptr` as i64. -/
+private def loadBe64 (ptr : Nat) : String :=
+  (Array.range 8).foldl (fun acc i =>
+    let byte := "(i64.extend_i32_u (i32.load8_u (i32.const " ++
+      toString (ptr + i) ++ ")))"
+    if acc.isEmpty then byte
+    else "(i64.or (i64.shl " ++ acc ++ " (i64.const 8)) " ++ byte ++ ")") ""
+
+/-- On a negative `$st`, return it unless it is a host "missing" code. -/
+private def returnUnlessMissing (host : Contract) (level : Nat) : Array String :=
+  if host.missingFields.isEmpty then
+    #[
+      indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+      indent (level + 2) "(then (return (local.get $st))))"
+    ]
+  else
+    let eqs := host.missingFields.foldl (fun acc (code : Int) =>
+      let eq := "(i32.eq (local.get $st) (i32.const " ++ toString code ++ "))"
+      if acc.isEmpty then eq else "(i32.or " ++ acc ++ " " ++ eq ++ ")") ""
+    #[
+      indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+      indent (level + 2) "(then",
+      indent (level + 4) ("(if (i32.eqz " ++ eqs ++ ")"),
+      indent (level + 6) "(then (return (local.get $st))))))"
+    ]
+
+/-- Write every slot through the chain's storage host. -/
+private def persistSlots (host : Contract) (p : Program ValExt OpExt) (level : Nat) :
+    Array String :=
+  if !host.objectStore then
+    dumpSlots p level ++ hostWrite host p level
+  else
+    p.slots.flatMap fun slot =>
+      let keyOff := keyOffsetOf p slot.name
+      let hdr := #[
+        indent level ("(i32.store8 (i32.const " ++ toString storeOff ++
+          ") (i32.const " ++ toString host.stiUint64 ++ "))")
+      ]
+      let be := storeBe64 level (storeOff + 1) (localOfSlot slot.name)
+      let call := #[
+        indent level ("(local.set $st (call $" ++ host.setDataObject ++
+          " (i32.const " ++ toString accountOff ++
+          ") (i32.const " ++ toString accountLen ++
+          ") (i32.const " ++ toString keyOff ++
+          ") (i32.const " ++ toString slot.name.length ++
+          ") (i32.const " ++ toString storeOff ++
+          ") (i32.const 9)))"),
+        indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+        indent (level + 2) "(then (return (local.get $st))))"
+      ]
+      hdr ++ be ++ call
+
 private structure Region where
   lines : Array String := #[]
   st : EState
@@ -225,8 +301,7 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
         let v ← renderVal st value
         let lines :=
           #[indent level ("(local.set " ++ localOfSlot name ++ " " ++ v ++ ")")] ++
-          dumpSlots p level ++
-          hostWrite host p level
+          persistSlots host p level
         let region ← emitRegion host p view level defaultSlot tail
           { st with last := some (localOfSlot name), pendingDest := some name }
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
@@ -240,8 +315,7 @@ private partial def emitRegion (host : Contract) (p : Program ValExt OpExt)
           throw "extract/unsupported: wasm v0 instructions follow terminal operation"
         let lines :=
           #[indent level ("(local.set " ++ localOfSlot dest ++ " " ++ v ++ ")")] ++
-          dumpSlots p level ++
-          hostWrite host p level ++
+          persistSlots host p level ++
           #[indent level "(i32.const 0)"]
         return { lines, st, terminal := true }
     | .errorOverflow =>
@@ -268,36 +342,100 @@ private def paramDecl (count : Nat) : String :=
   String.intercalate " " ((List.range count).map (fun i =>
     "(param " ++ localOfArg i ++ " i64)"))
 
+private def paramLocals (count : Nat) : Array String :=
+  (Array.range count).map fun i => "(local " ++ localOfArg i ++ " i64)"
+
 private def slotLocals (p : Program ValExt OpExt) : Array String :=
   p.slots.map fun slot => "(local " ++ localOfSlot slot.name ++ " i64)"
 
 private def tempLocals (n : Nat) : Array String :=
   (Array.range n).map fun i => "(local " ++ localOfTemp i ++ " i64)"
 
+/-- Scratch for `function_param` so it does not clobber account/keys. -/
+private def paramScratch (host : Contract) (_p : Program ValExt OpExt) : Nat :=
+  if host.objectStore then paramOffObj else 0
+
+/-- Copy each ContractCall UINT64 into `$pf_p{i}` via `host.functionParam`. -/
+private def loadHostParams (host : Contract) (p : Program ValExt OpExt)
+    (count : Nat) (level : Nat) (view : Bool) : Array String :=
+  if host.functionParam.isEmpty || count == 0 then #[]
+  else
+    let scratch := paramScratch host p
+    (Array.range count).flatMap fun i =>
+      let header :=
+        indent level ("(local.set $st (call $" ++ host.functionParam ++
+          " (i32.const " ++ toString i ++
+          ") (i32.const " ++ toString host.stiUint64 ++
+          ") (i32.const " ++ toString scratch ++
+          ") (i32.const 8)))")
+      let err :=
+        if view then #[]
+        else #[
+          indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+          indent (level + 2) "(then (return (local.get $st))))"
+        ]
+      let load :=
+        indent level ("(local.set " ++ localOfArg i ++
+          " (i64.load (i32.const " ++ toString scratch ++ ")))")
+      #[header] ++ err ++ #[load]
+
+private def loadAccount (host : Contract) (level : Nat) (view : Bool) : Array String :=
+  if !host.objectStore then #[]
+  else
+    let header := #[
+      indent level ("(local.set $st (call $" ++ host.homeLeField ++
+        " (i32.const " ++ toString host.sfieldAccount ++
+        ") (i32.const " ++ toString accountOff ++
+        ") (i32.const " ++ toString accountLen ++ ")))")
+    ]
+    let err :=
+      if view then #[]
+      else #[
+        indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
+        indent (level + 2) "(then (return (local.get $st))))"
+      ]
+    header ++ err
+
 private def loadSlots (host : Contract) (p : Program ValExt OpExt) (level : Nat)
     (view : Bool) : Array String :=
-  let blob := blobLen p
-  let header := #[
-    indent level ("(local.set $st (call $" ++ host.homeLeField ++
-      " (i32.const " ++ toString host.sfieldData ++
-      ") (i32.const 0) (i32.const " ++ toString blob ++ ")))")
-  ]
-  let err :=
-    if view then #[]
-    else #[
-      indent level "(if (i32.lt_s (local.get $st) (i32.const 0))",
-      indent (level + 2) "(then (return (local.get $st))))"
+  if host.objectStore then
+    p.slots.flatMap fun slot =>
+      let keyOff := keyOffsetOf p slot.name
+      let call :=
+        indent level ("(local.set $st (call $" ++ host.getDataObject ++
+          " (i32.const " ++ toString accountOff ++
+          ") (i32.const " ++ toString accountLen ++
+          ") (i32.const " ++ toString keyOff ++
+          ") (i32.const " ++ toString slot.name.length ++
+          ") (i32.const " ++ toString storeOff ++
+          ") (i32.const 8)))")
+      let err :=
+        if view then #[] else returnUnlessMissing host level
+      let load := #[
+        indent level "(if (i32.gt_s (local.get $st) (i32.const 0))",
+        indent (level + 2) "(then",
+        indent (level + 4) ("(local.set " ++ localOfSlot slot.name ++
+          " " ++ loadBe64 storeOff ++ ")))")
+      ]
+      #[call] ++ err ++ load
+  else
+    let blob := blobLen p
+    let header := #[
+      indent level ("(local.set $st (call $" ++ host.homeLeField ++
+        " (i32.const " ++ toString host.sfieldData ++
+        ") (i32.const 0) (i32.const " ++ toString blob ++ ")))")
     ]
-  let loads := p.slots.map fun slot =>
-    indent (level + 4) ("(local.set " ++ localOfSlot slot.name ++
-      " (i64.load (i32.const " ++ toString (slotOffset p slot.name) ++ ")))")
-  let body :=
-    if p.slots.isEmpty then #[]
-    else
-      #[indent level "(if (i32.gt_s (local.get $st) (i32.const 0))",
-        indent (level + 2) "(then"] ++ loads ++
-      #[indent (level + 2) "))"]
-  header ++ err ++ body
+    let err := if view then #[] else returnUnlessMissing host level
+    let loads := p.slots.map fun slot =>
+      indent (level + 4) ("(local.set " ++ localOfSlot slot.name ++
+        " (i64.load (i32.const " ++ toString (slotOffset p slot.name) ++ ")))")
+    let body :=
+      if p.slots.isEmpty then #[]
+      else
+        #[indent level "(if (i32.gt_s (local.get $st) (i32.const 0))",
+          indent (level + 2) "(then"] ++ loads ++
+        #[indent (level + 2) "))"]
+    header ++ err ++ body
 
 private partial def countTemps (ops : Array (Op ValExt OpExt)) : Nat :=
   let rec walk : List (Op ValExt OpExt) → Nat
@@ -316,7 +454,8 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
   unless region.terminal do
     throw s!"extract/unsupported: {method.ixName} does not end in a terminal"
   let resultTy := if view then "i64" else "i32"
-  let params := paramDecl method.paramCount
+  let hostParams := !host.functionParam.isEmpty
+  let params := if hostParams then "" else paramDecl method.paramCount
   let sig :=
     if params.isEmpty then
       "  (func (export \"" ++ method.ixName ++ "\") (result " ++ resultTy ++ ")"
@@ -328,10 +467,15 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
     lines := lines.push s!"  ;; v0 ABI: {method.ixName} returns i32 status; public result elided"
   lines := lines.push sig
   lines := lines.push "    (local $st i32)"
+  if hostParams then
+    for loc in paramLocals method.paramCount do
+      lines := lines.push s!"    {loc}"
   for loc in slotLocals p do
     lines := lines.push s!"    {loc}"
   for loc in tempLocals (Nat.max (countTemps method.ops) region.st.fresh) do
     lines := lines.push s!"    {loc}"
+  lines := lines ++ loadHostParams host p method.paramCount 4 view
+  lines := lines ++ loadAccount host 4 view
   lines := lines ++ loadSlots host p 4 view
   lines := lines ++ region.lines
   lines := lines.push "  )"
@@ -350,10 +494,28 @@ def emit (host : Contract)
   lines := lines.push
     ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.homeLeField ++
       "\" (func $" ++ host.homeLeField ++ " (param i32 i32 i32) (result i32)))")
-  lines := lines.push
-    ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.setData ++
-      "\" (func $" ++ host.setData ++ " (param i32 i32) (result i32)))")
+  if host.objectStore then
+    lines := lines.push
+      ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.getDataObject ++
+        "\" (func $" ++ host.getDataObject ++
+        " (param i32 i32 i32 i32 i32 i32) (result i32)))")
+    lines := lines.push
+      ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.setDataObject ++
+        "\" (func $" ++ host.setDataObject ++
+        " (param i32 i32 i32 i32 i32 i32) (result i32)))")
+  else
+    lines := lines.push
+      ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.setData ++
+        "\" (func $" ++ host.setData ++ " (param i32 i32) (result i32)))")
+  if !host.functionParam.isEmpty then
+    lines := lines.push
+      ("  (import \"" ++ host.importModule ++ "\" \"" ++ host.functionParam ++
+        "\" (func $" ++ host.functionParam ++
+        " (param i32 i32 i32 i32) (result i32)))")
   lines := lines.push "  (memory (export \"memory\") 1)"
+  if host.objectStore && !p.slots.isEmpty then
+    lines := lines.push
+      ("  (data (i32.const " ++ toString keyBase ++ ") \"" ++ keyBlob p ++ "\")")
   lines := lines.push ""
   lines := lines ++ (← renderFn host p p.initializer)
   lines := lines.push ""

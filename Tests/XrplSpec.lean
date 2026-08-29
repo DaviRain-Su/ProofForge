@@ -49,12 +49,15 @@ elab "#pf_xrpl_emit_check " n:ident : command => do
     | .ok source => do
         let anchors : Array String := #[
           "(import \"host_lib\" \"get_current_ledger_obj_field\"",
-          "(import \"host_lib\" \"update_data\"",
-          "(func (export \"initialize\")",
-          "(func (export \"increment\")",
+          "(import \"host_lib\" \"get_data_object_field\"",
+          "(import \"host_lib\" \"set_data_object_field\"",
+          "(import \"host_lib\" \"function_param\"",
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"increment\") (result i32)",
           "(func (export \"get\")",
           "(func (export \"nonzero\")",
-          "(i32.const 458779)",
+          "(i32.const 524290)",
+          "(data (i32.const 64) \"value\")",
           "(return (i32.const 1))",
           "(return (i32.const 2))",
           "i64.add",
@@ -73,6 +76,10 @@ elab "#pf_xrpl_emit_check " n:ident : command => do
           throwError "wasm emit still mentions get_current_contract_call"
         unless !source.contains "\"get_data\"" do
           throwError "wasm emit still mentions get_data"
+        unless !source.contains "(param $pf_p0 i64)" do
+          throwError "wasm emit still uses wasm i64 params; XRPL fetches UINT64 via function_param"
+        unless !source.contains "update_data" do
+          throwError "wasm emit still uses update_data; this Bedrock image does not persist it"
         logInfo m!"proofforge-xrpl-test: {source.length} bytes of WAT passed anchor check"
 
 #pf_xrpl_emit_check Examples.Counter
