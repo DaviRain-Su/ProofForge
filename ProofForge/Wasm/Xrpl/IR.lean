@@ -56,6 +56,8 @@ def extValCanon : Ops.ValKind → String
   | .callerSequence => "xseq"
   | .callerFlags => "xflags"
   | .callerOwnerCount => "xownc"
+  | .txSequence => "xtseq"
+  | .txFeeDrops => "xtfee"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .reserved => "wext"

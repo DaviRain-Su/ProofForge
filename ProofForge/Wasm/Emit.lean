@@ -546,7 +546,8 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
     for name in #["pf_x_xc0", "pf_x_xc1", "pf_x_xc2",
                   "pf_x_xs0", "pf_x_xs1", "pf_x_xs2",
                   "pf_x_xsqn", "pf_x_xtime", "pf_x_xhash0", "pf_x_xfee", "pf_x_xbal",
-                  "pf_x_xseq", "pf_x_xflags", "pf_x_xownc"] do
+                  "pf_x_xseq", "pf_x_xflags", "pf_x_xownc",
+                  "pf_x_xtseq", "pf_x_xtfee"] do
       lines := lines.push s!"    (local ${name} i64)"
   for loc in slotLocals p do
     lines := lines.push s!"    {loc}"

@@ -37,7 +37,7 @@ XLS 自己说：EVM 侧链给 Solidity 用；主账本 programmability 选 WASM�
 |---|---|---|
 | Ownable Counter / hash stamp | **已绿** | — |
 | 定长登记表、小 AMM 的 2～3 个池槽 | **VEC-1 已绿**（编译期 `xs_0`…） | 更大表仍是源码展开，不是无界 Vec |
-| Uniswap 式 `mapping(address => uint)` 余额 | **没有** | 用户 `ContractData` 或 JSON Map；再加 Amount |
+| Uniswap 式 `mapping(address => uint)` 余额 | **半绿** | 硬编码对方 AccountID 能写对方卡片（wsm-035）；动态 AccountID 参数仍 502 |
 | 真正的 swap（动 XRP / IOU） | **没有** | `build_txn`+`emit_built_txn` Payment / AMM；或读原生 AMM 对象 |
 | 把 EVM Uniswap 字节码搬过来 | **永远不要** | 地址、slot、CALL 都不是 XRPL |
 
