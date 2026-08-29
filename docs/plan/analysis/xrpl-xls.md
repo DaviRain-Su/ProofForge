@@ -75,8 +75,39 @@ xls.xrpl.org 上还有大量 Ecosystem / System（钱包 URI、元数据、CTID�
 | P3 | NFT、Oracle、Credential | 只读场景 |
 | 不做 | Vault/Lending 的 C++ 引擎、Bridge、Escrow finish、侧链 EVM | 不是本 target |
 
-## 4. 一句话
+## 4. 合约层 = 包装协议对象（像 SDK），不是重写协议
 
-XLS-30 这种标准 **已经在主网跑**，实现者是 rippled，不是我们。  
-我们实现的是 **WASM 怎么摸这些对象**。摸之前要 `cache_le` / `submitTransaction` 绿。  
-没绿之前，不要把 78 份 RFC 开成任务卡。
+你的理解对。主账本已经有 Payment / AMM / NFT / MPT / DID / Oracle。
+WASM 存在是为了 **可编程**：在一次 `ContractCall` 里按条件去 **摸** 这些对象。
+
+那一层就是 ProofForge 的 Runtime → SDK：
+
+```diagram
+合约 Examples（积分、条件兑换、KYC 门）
+        │  普通 Lean + @[pf_entry]
+        ▼
+SDK  名字：Amm.deposit / Nft.owner / Payments.xrp
+        │  @[pf_inline]，不新增 host
+        ▼
+Runtime  叶子：cache_le(AMM) / submitTransaction(AMMDeposit)
+        │
+        ▼
+host_lib  →  账本上已经存在的 SLE / 交易
+             （C++ 实现的 XLS-30/20/…）
+```
+
+| 包装什么 | 读 | 写 | 今天 |
+|---|---|---|---|
+| 用户自己的 JSON 卡 | `get_data_object_field` | `set_data_object_field`（Owner=caller） | **已绿**（XrplBal） |
+| AccountRoot.Balance | `cache_le` + `le_field` | 不能 wasm 里 `x+=`；要 Payment | host 在，真 keylet 未绿 |
+| AMM 池 | 读 `AMM` SLE | `submitTransaction` AMMDeposit | 未接线 |
+| NFT / Oracle / MPT | 读对应 SLE | 铸/转是 NFTokenMint 等交易 | 未接线 |
+
+没有叶子就不要 SDK 名。`Amm.deposit` 在 `submitTransaction` 绿之前是假的。
+包装齐了，上层才能写「若 Oracle 价 > X 则 AMMDeposit」这种业务；池子公式仍是 C++，不是我们的 wasm。
+
+## 5. 一句话
+
+XLS-30 这种标准 **已经在主网跑**，实现者是 rippled，不是我们。
+合约层要做的是 **SDK 包装**（读 SLE + 提交交易），不是 78 份 RFC 各写一个 wasm 池子。
+摸之前要 `cache_le` / `submitTransaction` 绿。没绿不要开 `Sdk.Amm`。
