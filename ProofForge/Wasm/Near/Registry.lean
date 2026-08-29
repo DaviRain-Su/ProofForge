@@ -6,9 +6,8 @@ structure Entry where
   digest : String
   deriving BEq, Repr, Inhabited
 
-/-- Placeholder until `#pf_near_build` pins the `near-raw-u64|` identity. -/
 def entries : Array Entry := #[
-  { name := "Counter", digest := "PENDING" }
+  { name := "Counter", digest := "121a0c8f7e697642" }
 ]
 
 def names : Array String := entries.map (·.name)

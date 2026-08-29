@@ -18,7 +18,7 @@ mirrors the family emitter. Do not reuse XRPL's `host_lib` /
 namespace ProofForge.Wasm.Near.Emit
 
 open ProofForge.Wasm.IR (Program Method Val Op Cmp)
-open ProofForge.Wasm.Near (Host)
+open ProofForge.Wasm.Near.Host
 open ProofForge.Wasm.Near.Ops (ValKind OpExt)
 
 private def indent (n : Nat) (s : String) : String :=
