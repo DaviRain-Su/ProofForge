@@ -92,6 +92,11 @@
       "name": "getFee",
       "parameters": [],
       "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "poke",
+      "parameters": [],
+      "returns": { "type": "UINT32" }
     }
   ]
 }
