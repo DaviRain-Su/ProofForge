@@ -10,6 +10,7 @@ SVM 是「程序无状态，数据在交易带来的账户字节里」。
 NEAR 是「每个合约账户自带 WASM + 持久 trie 存储 + 成熟 runtime 表」。
 XRPL（XLS-0101）是「账本上本来就有 AccountRoot / Trust line / AMM；WASM 是一次 `ContractCall` 里跑的脚本，经 `host_lib` 摸这些对象，用户小状态塞进 **用户自己的** `ContractData` JSON」。逻辑一份，数据按账户分片——像 SVM，但不是每人一份 wasm（见 §1.1c）。
 树状结构不是「关联」就能搬：SVM 树长在程序拥有的账户字节里（见 §1.1d）。
+Map / PDA / Uniswap：用户口袋有，程序金库没有（见 §1.1e）。
 
 它支持 WASM，**不等于**它是一条 WASM 智能合约链。WASM 在这里是账本对象的扩展，不是世界计算机。
 
@@ -136,6 +137,37 @@ SVM 不是「每人拷贝一份 Serum」。是 Serum 这一份程序，去读写
 - **中间态**：一张卡里几个命名槽、以后 nested JSON。仍是记录，不是无界树。
 
 「差不太多」停在账户分片。树要程序拥有的存储，XRPL 现在没有。
+
+### 1.1e Map 有三种；Uniswap 卡在哪一种
+
+不必先谈红黑树。Solana 上「Map」常见是两件不同的事：
+
+| 哪种 | Solana | XRPL 今天 | Uniswap 用哪块 |
+|---|---|---|---|
+| **A. 用户口袋**（PDA / 用户账户） | 每个用户（或 `seeds=[user]` 的 PDA）一块字节，程序是账户 `owner` | 每个用户一张 `ContractData` 卡片，Owner=用户。`XrplBal` 已绿 | LP 余额、个人授权 |
+| **B. 程序金库**（一份全局状态） | 程序拥有的账户：池子、config、有时里面再放 Map/Vec | 写合约账户 **-22**。没有程序可写的那一块 | **储备、总 LP、手续费、pair 状态** |
+| **C. 任意 key 的 KV**（`storage_write` / keccak） | 少见；或账户内手写 map | 没有。不要抄 NEAR trie / EVM mapping | 不是 Uniswap v2 的必需品 |
+
+A 就是你说的「每个用户有他自己存东西的地方」。和 SVM PDA **同族**：逻辑一份，数据按账户分片。差别是 SVM 的 PDA 仍由 **程序** 当 `owner`（程序改字节、用户付钱）；XRPL 卡片的 Owner 是 **用户**，host 默认只让 caller 写自己的卡。
+
+Uniswap v2 同时要 A 和 B：
+
+```diagram
+swap(caller)
+  │
+  ├─ 读/写 池子储备     ← B 程序金库（XRPL：写合约 -22）
+  ├─ 改 caller 的 LP/余额 ← A 用户口袋（XRPL：XrplBal 绿）
+  └─ 转 token             ← EVM CALL；XRPL 要 Payment / 原生 AMM
+```
+
+所以：
+
+- **能做的**：积分、每人一份余额、每人一份配置。比赛交「Lean 写出、AlphaNet 跑通的分户状态机」可以。
+- **现在做不了的 Uniswap**：共享池。没有 B，就没有「一笔 swap 改储备」。不能把池子储备写在 caller 卡片上（下一个用户看不见）。
+- **XRPL 自己的出路**：主账本已经有 **原生 AMM 对象**。真 swap 更该 `cache_le` 读 AMM + `submitTransaction` AMMDeposit/Withdraw，而不是在 wasm 里重建 Uniswap 存储。EVM 侧链才是 Solidity Uniswap。
+- **B 若以后绿了**（合约当 Owner，或规范里的合约自己的 `ContractData`）：才能谈程序金库 + 用户卡两边写。那仍不是 C。
+
+担心「能不能上复杂项目」时，先问：状态是 **每人一份** 还是 **全网一份**。前者有；后者 AlphaNet 拒了。
 
 ### 1.2 钱和别人怎么动
 
