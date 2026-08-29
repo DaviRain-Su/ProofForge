@@ -52,6 +52,7 @@ import Examples.XrplVec
 import Examples.XrplSmoke
 import Examples.XrplGate
 import Examples.XrplHold
+import Examples.XrplMark
 import Examples.EvmBounded
 import Examples.EvmSearch
 import Examples.EvmFindIndex
