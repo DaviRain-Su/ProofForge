@@ -48,6 +48,11 @@ private def localOfTemp (i : Nat) : String := "$pf_r" ++ toString i
 /-- Packed ASCII keys start at this linear-memory offset. -/
 private def keyBase : Nat := 1024
 
+/-- Historical proof_forge canonicalRegisters: input=0, storage=1, evicted=2. -/
+private def inputReg : Nat := 0
+private def storageReg : Nat := 1
+private def evictedReg : Nat := 2
+
 private def panicOverflowOff : Nat := 2048
 private def panicDivOff : Nat := 2057
 private def panicInputOff : Nat := 2072
@@ -125,7 +130,8 @@ private def storeSlot (p : Program ValKind OpExt)
   #[
     indent level ("(i64.store (i32.const 8) " ++ expr ++ ")"),
     indent level ("(drop (call $pf_storage_write (i64.const " ++ toString len ++
-      ") (i64.const " ++ toString off ++ ") (i64.const 8) (i64.const 8) (i64.const 1)))")
+      ") (i64.const " ++ toString off ++ ") (i64.const 8) (i64.const 8) (i64.const " ++
+      toString evictedReg ++ ")))")
   ]
 
 private def returnU64Instr (expr : String) (level : Nat) : Array String :=
@@ -298,8 +304,9 @@ private partial def countTemps (ops : Array (Op ValKind OpExt)) : Nat :=
 private def loadArg (count : Nat) (level : Nat) : Array String :=
   if count == 0 then
     #[
-      indent level "(call $pf_input (i64.const 0))",
-      indent level "(if (i64.ne (call $pf_register_len (i64.const 0)) (i64.const 0))",
+      indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
+      indent level ("(if (i64.ne (call $pf_register_len (i64.const " ++
+        toString inputReg ++ ")) (i64.const 0))"),
       indent (level + 2) "(then",
       indent (level + 4) ("(call $pf_panic_utf8 (i64.const 5) (i64.const " ++
         toString panicInputOff ++ "))"),
@@ -307,13 +314,15 @@ private def loadArg (count : Nat) (level : Nat) : Array String :=
     ]
   else if count == 1 then
     #[
-      indent level "(call $pf_input (i64.const 0))",
-      indent level "(if (i64.ne (call $pf_register_len (i64.const 0)) (i64.const 8))",
+      indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
+      indent level ("(if (i64.ne (call $pf_register_len (i64.const " ++
+        toString inputReg ++ ")) (i64.const 8))"),
       indent (level + 2) "(then",
       indent (level + 4) ("(call $pf_panic_utf8 (i64.const 5) (i64.const " ++
         toString panicInputOff ++ "))"),
       indent (level + 2) "))",
-      indent level "(call $pf_read_register (i64.const 0) (i64.const 0))",
+      indent level ("(call $pf_read_register (i64.const " ++ toString inputReg ++
+        ") (i64.const 0))"),
       indent level ("(local.set " ++ localOfArg 0 ++ " (i64.load (i32.const 0)))")
     ]
   else
@@ -324,9 +333,11 @@ private def loadSlots (p : Program ValKind OpExt) (level : Nat) : Array String :
     let (off, len) := keyOf p slot.name
     acc ++ #[
       indent level ("(if (i64.eq (call $pf_storage_read (i64.const " ++ toString len ++
-        ") (i64.const " ++ toString off ++ ") (i64.const 0)) (i64.const 1))"),
+        ") (i64.const " ++ toString off ++ ") (i64.const " ++ toString storageReg ++
+        ")) (i64.const 1))"),
       indent (level + 2) "(then",
-      indent (level + 4) "(call $pf_read_register (i64.const 0) (i64.const 8))",
+      indent (level + 4) ("(call $pf_read_register (i64.const " ++ toString storageReg ++
+        ") (i64.const 8))"),
       indent (level + 4) ("(local.set " ++ localOfSlot slot.name ++
         " (i64.load (i32.const 8)))"),
       indent (level + 2) ")",
