@@ -190,14 +190,14 @@ XLS-30 自己写：AMM 是 **protocol native**，开发者 **不必** 为了兑�
 
 - 「实现不了」指的是：**用我们这套 WASM 卡片，仿不出 Uniswap 那种合约金库。**
 - 「主账本已经有」指的是：**兑换功能 2024 起就是账本交易，跟 WASM 无关。** 不经过 `host_lib`，也不需要程序可写的 `ContractData`。
-- WASM 以后若要「用」这个 AMM：`cache_le` 读 `AMM` 对象（只读）+ `submitTransaction` 发 `AMMDeposit`。那是 **调用** 原生对象，不是 **实现** 一个池子。
+- WASM 以后若要「用」这个 AMM：`cache_le` 读 `AMM` 对象（只读）+ `emit_built_txn` 发 `AMMDeposit`。那是 **调用** 原生对象，不是 **实现** 一个池子。
 - 想自写曲线 / Uniswap v3 式合约：要么等 WASM 能写程序金库，要么走 **EVM 侧链**。主账本不会因为有了 WASM 就把 XLS-30 拆掉重写成合约。
 
 ### 1.2 钱和别人怎么动
 
 | | EVM | SVM | XRPL WASM |
 |---|---|---|---|
-| 转原生币 | `call{value}` 改账户余额 | System CPI | wasm **不能**改 XRP；要 `submitTransaction` Payment |
+| 转原生币 | `call{value}` 改账户余额 | System CPI | wasm **不能**改 XRP；要 `build_txn`+`emit_built_txn` Payment |
 | Token | ERC-20 也是合约存储 | SPL = 账户字节 + mint | IOU / MPToken **就是** Trust line，不是再发一套 ERC-20 |
 | 调别人 | `CALL` / `DELEGATECALL` | `sol_invoke` | 没有成熟「合约调合约」；跨对象靠 host 读 + 再提交交易 |
 | 日志 | LOG → receipt | `sol_log` / return data | `trace_num` = rippled **调试打印**，共识不索引（本仓 AlphaNet poke=0，不开 Sdk.Log） |
@@ -249,7 +249,7 @@ XRPL 主账本 WASM 是另一条时间线和另一套合同：
 2. **存储 Owner 规则**（只能写 caller）
 3. **部署路径**（`wat2wasm` + 自签 `ContractCreate`，不是 `near deploy`）
 4. **零参数活网**（Parameters 502）
-5. **原生对象读写**（`cache_le` / `submitTransaction`）——还没绿
+5. **原生对象读写**（`cache_le` / `emit_built_txn`）——读 Balance 已绿；`build_txn` host 已绿；Payment 落地还没绿（伪账户 -196）
 
 Lean → WAT → `.wasm` 只解决「怎么出字节码」。生态缺口在 runtime 合同，不在编译器。
 

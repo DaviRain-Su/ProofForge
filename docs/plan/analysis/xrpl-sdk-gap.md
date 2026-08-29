@@ -28,7 +28,7 @@ XLS 自己说：EVM 侧链给 Solidity 用；主账本 programmability 选 WASM�
 
 - 合约状态 = `ContractData` 里的 JSON 对象（命名 UInt64 槽）。
 - 用户数据在设计里是 **每个用户一块** `ContractData`（`Owner` = 用户），不是 EVM `mapping(address => uint)` 的 keccak slot。
-- 账本其它东西（XRP 余额、Trust line、AMM、NFT）**只读**；改它们要合约伪账户 **再提交一笔 XRPL 交易**（Payment / AMMDeposit…）。本仓还没有 `submitTransaction`。
+- 账本其它东西（XRP 余额、Trust line、AMM、NFT）**只读**；改它们要合约伪账户 **再提交一笔 XRPL 交易**（Payment / AMMDeposit…）。真 import 是 Transia `build_txn` / `emit_built_txn`，**不是** XLS-0101 叙事名 `submitTransaction`。host 已注册（pokeBuild=0）；Payment 落地被伪账户挡住（-196 / `tecNO_PERMISSION`）。
 - wasm v0 IR 拒绝 vector / map / loop。定长表可以先做成编译期 key `xs_0`…，或探针 `set_data_array_element_field`。
 
 所以：
@@ -38,7 +38,7 @@ XLS 自己说：EVM 侧链给 Solidity 用；主账本 programmability 选 WASM�
 | Ownable Counter / hash stamp | **已绿** | — |
 | 定长登记表、小 AMM 的 2～3 个池槽 | **VEC-1 已绿**（编译期 `xs_0`…） | 更大表仍是源码展开，不是无界 Vec |
 | Uniswap 式 `mapping(address => uint)` 余额 | **没有** | 用户 `ContractData` 或 JSON Map；再加 Amount |
-| 真正的 swap（动 XRP / IOU） | **没有** | `submitTransaction` Payment / AMM；或读原生 AMM 对象 |
+| 真正的 swap（动 XRP / IOU） | **没有** | `build_txn`+`emit_built_txn` Payment / AMM；或读原生 AMM 对象 |
 | 把 EVM Uniswap 字节码搬过来 | **永远不要** | 地址、slot、CALL 都不是 XRPL |
 
 比赛若交 **「Lean 写出、本地 Bedrock 跑通的 WASM 合约」**：Ownable + 小状态机现在就能交。
@@ -199,7 +199,7 @@ XLS-0102 的 `home_le_field` / `sha512_half` **不是** 本镜像名字。
 5. Map 更后，且必须是 XRPL JSON 形状的设计，不是抄 EVM
 
 纯组合层（Access / Pausable / Mark）已在 wsm-017 收口。再往后见
-[xrpl-next.md](xrpl-next.md)：探针 → 用户 ContractData → `submitTransaction`。
+[xrpl-next.md](xrpl-next.md)：探针 → 用户 ContractData → `build_txn`/`emit_built_txn`。
 没有叶子就不要 `Sdk.Map` / `Sdk.Payments`。
 
 官方 Rust WASM SDK（escrow 为主）的完整对照见
