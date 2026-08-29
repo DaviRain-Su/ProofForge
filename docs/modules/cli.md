@@ -19,7 +19,10 @@ pf call --contract ACCOUNT Function
 - `evm`：`.bin` + `.yul` + `.abi.json`
 - `xrpl`：Bedrock 本地 host 表，`.wat` / `.wasm`
 - `xrpl-alphanet`：XLS-0102 host 表。`deploy` / `call` 默认这个 target，
-  包 `runtime-tests/xrpl/alphanet-rpc.js`，不是 bedrock
+  包 `runtime-tests/xrpl/alphanet-rpc.js`，不是 bedrock。
+  `pf deploy Program` 先 `assembleAlphaNet` 再 `ContractCreate`；
+  `pf call --contract ACCOUNT Function` 发零参数 `ContractCall`
+  （公开 RPC 对带 Parameters 的调用 HTTP 502）
 - SVM 每次运行时加载 `Examples.Name` 并重新抽 IR；Phoenix 不再需要目录特判；
   digest 必须与 Golden 一致
 - 不写名字 = SVM 的全部登记源模块 / EVM 的全部 Golden 夹具
