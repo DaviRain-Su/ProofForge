@@ -232,6 +232,25 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         some (.ext (.svm (.component (.memory query))) #[])
       else none
     | _, _, _, _, _ => none
+  else if (endsWith e ".transientVecLength" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.transientVecLength) && e.getAppArgs.size ≥ 1 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit capacity) =>
+      let query : Svm.TransientVec.Query := .length { capacity := capacity.toNat }
+      if query.wellFormed then
+        some (.ext (.svm (.component (.transientVec query))) #[])
+      else none
+    | _ => none
+  else if (endsWith e ".transientVecGet" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.transientVecGet) && e.getAppArgs.size ≥ 2 then
+    match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
+        asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some (.lit capacity), some index =>
+      let query : Svm.TransientVec.Query := .get { capacity := capacity.toNat }
+      if query.wellFormed then
+        some (.ext (.svm (.component (.transientVec query))) #[index])
+      else none
+    | _, _ => none
   else if (endsWith e ".accDataWordAt" ||
       isConstNamed e ``ProofForge.Svm.Runtime.accDataWordAt) && e.getAppArgs.size ≥ 5 then
     match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 5]!,
@@ -2997,9 +3016,52 @@ private def decodeMemoryCall (env : Environment) (e : Expr) :
       else none
   else none
 
+private def decodeTransientVecConfig (env : Environment) (capacity : Expr) :
+    Option Svm.TransientVec.Config := do
+  let capacity ← staticNatVal? env capacity
+  let config : Svm.TransientVec.Config := { capacity }
+  if config.wellFormed then some config else none
+
+private def decodeTransientVecCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.transientVecBegin ||
+      endsWith e ".transientVecBegin" then
+    if args.size < 1 then none else do
+      let config ← decodeTransientVecConfig env args[args.size - 1]!
+      return .transientVec (.begin config)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientVecPush ||
+      endsWith e ".transientVecPush" then
+    if args.size < 2 then none else do
+      let config ← decodeTransientVecConfig env args[args.size - 2]!
+      let value ← val env args[args.size - 1]!
+      let call : Svm.TransientVec.Call Ops.Val := .push config value
+      if call.wellFormed (fun _ => true) then some (.transientVec call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientVecSet ||
+      endsWith e ".transientVecSet" then
+    if args.size < 3 then none else do
+      let config ← decodeTransientVecConfig env args[args.size - 3]!
+      let index ← val env args[args.size - 2]!
+      let value ← val env args[args.size - 1]!
+      let call : Svm.TransientVec.Call Ops.Val := .set config index value
+      if call.wellFormed (fun _ => true) then some (.transientVec call) else none
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientVecClear ||
+      endsWith e ".transientVecClear" then
+    if args.size < 1 then none else do
+      let config ← decodeTransientVecConfig env args[args.size - 1]!
+      return .transientVec (.clear config)
+  else if isConstNamed e ``ProofForge.Svm.Runtime.transientVecFinish ||
+      endsWith e ".transientVecFinish" then
+    if args.size < 1 then none else do
+      let config ← decodeTransientVecConfig env args[args.size - 1]!
+      return .transientVec (.finish config)
+  else none
+
 private def decodeComponentCall (env : Environment) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
-  decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e <|> decodeMemoryCall env e
+  decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e <|> decodeMemoryCall env e <|>
+    decodeTransientVecCall env e
 
 private def mentionsFifoCancelSource (e : Expr) : Bool :=
   e.getUsedConstantsAsSet.toList.any fun name =>
@@ -3509,7 +3571,15 @@ def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
       constants.contains ``ProofForge.Svm.Runtime.fifoCancelBegin ||
       constants.contains ``ProofForge.Svm.Runtime.fifoCancelSide ||
       constants.contains ``ProofForge.Svm.Runtime.fifoCancelUpToSide ||
-      constants.contains ``ProofForge.Svm.Runtime.fifoCancelFinish then true
+      constants.contains ``ProofForge.Svm.Runtime.fifoCancelFinish ||
+      constants.contains ``ProofForge.Svm.Runtime.memoryCopy ||
+      constants.contains ``ProofForge.Svm.Runtime.memoryMove ||
+      constants.contains ``ProofForge.Svm.Runtime.memorySet ||
+      constants.contains ``ProofForge.Svm.Runtime.transientVecBegin ||
+      constants.contains ``ProofForge.Svm.Runtime.transientVecPush ||
+      constants.contains ``ProofForge.Svm.Runtime.transientVecSet ||
+      constants.contains ``ProofForge.Svm.Runtime.transientVecClear ||
+      constants.contains ``ProofForge.Svm.Runtime.transientVecFinish then true
   else
     match fuel with
     | 0 => false

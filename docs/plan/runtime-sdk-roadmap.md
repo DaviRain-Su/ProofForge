@@ -301,8 +301,9 @@ account/offset/length 经 component bridge 绑定到 `sol_memcpy_` / `sol_memmov
 `sol_memcmp_` / `sol_memset_`，运行时在形成瞬时 pointer 前检查实际 data length，写目标还要
 通过 writable 与 current-program owner gate。SDK 保留 memcpy non-overlap、memmove overlap 与
 exact signed-i32 comparison bits，不新增 top-level Ops/IR/main-Emit recipe，也不允许 pointer
-进入 source/account state。MemoryOps 与 AccountView 独立消费；source-visible invocation-local
-byte/vector mutation 和 OOM 传播仍属后续 R3。详见 [R2-005](tasks/r2-005.md)。
+进入 source/account state。MemoryOps 与 AccountView 独立消费；详见
+[R2-005](tasks/r2-005.md)。R3-012 已在同一 allocator contract 上补充 source-visible
+invocation-local `Vector64` mutation 与显式 OOM 传播。
 
 ### R3 — SVM SDK
 
@@ -351,8 +352,14 @@ Ata canonical IR 与产物不变，详见 [R3-010](tasks/r3-010.md)。R3-011 又
 System/Token/Token-2022/ATA/Memo identity 与 exact 82/165-byte SPL base-state parsing 收口到
 `Svm.Sdk.Pubkey` / `.Program` / `.Token`；完整 key/owner、state/COption/bool tags 和 unaligned
 supply 都直接组合既有 checked account leaves，Phoenix 删除本地 Token id limbs 后 digest
-不变，详见 [R3-011](tasks/r3-011.md)。R3 尚未完成；rent-aware resize、runtime-selected
-ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
+不变，详见 [R3-011](tasks/r3-011.md)。R3-012 又把 `Sdk.Transient` 的 descriptor-only
+`FixedVec` 落为 source-visible bounded `Vector64`：一个 invocation 内经共享 official-shaped
+downward bump emitter 分配固定 payload，提供 begin/push/set/clear/finish 与 length/get，full、
+OOB、handle mismatch 和 OOM 都是独立 terminal error；MemoryOps 与 AccountView 两个 consumer
+验证 dynamic value/index 和真实 heap failure。它没有扩 top-level Ops/IR/main Emit，也没有让
+pointer 进入 source/account state；详见 [R3-012](tasks/r3-012.md)。R3 尚未完成；多个并存
+transient handle、通用 element/byte writer 操作、rent-aware resize、runtime-selected ATA/Memo
+geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 
 ### R4 — EVM Runtime
 

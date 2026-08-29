@@ -103,4 +103,5 @@ import Tests.SvmSdkProgramSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
 import Tests.SvmMemorySpec
+import Tests.SvmTransientVectorSpec
 import Tests.ProofSpec

@@ -242,6 +242,41 @@ complete ranges and destination authorization before issuing the matching syscal
   let _ := byte
   0
 
+/-! Invocation-local bounded `Vec<u64>` leaves. Extraction requires compile-time capacity and
+binds these stubs to one target-owned component. The host model cannot observe VM heap memory. -/
+
+@[irreducible] def transientVecBegin (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientVecPush (capacity value : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := value
+  0
+
+@[irreducible] def transientVecSet (capacity index value : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  let _ := value
+  0
+
+@[irreducible] def transientVecClear (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientVecFinish (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientVecLength (capacity : UInt64) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def transientVecGet (capacity index : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  0
+
 /-- Open the invocation-local accumulators used by bounded FIFO cancellation. Persistent order and
 trader state remains in account bytes; this handle contains only scalar cursor keys, event index,
 and released-lot totals. -/

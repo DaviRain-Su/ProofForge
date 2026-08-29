@@ -29,6 +29,7 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 compile-time byte geometry for official program-memory host functions. -/
 @[pf_inline] private def firstPrefix : Memory.Span := Memory.Span.accountData 1 0 8
 @[pf_inline] private def secondPrefix : Memory.Span := Memory.Span.accountData 1 8 8
+@[pf_inline] private def stagingVector : Transient.Vector64 := Transient.Vector64.bounded 1
 
 @[pf_entry]
 def init (initial : UInt64) : State :=
@@ -82,6 +83,17 @@ def peekOwned (_s : State) (index : UInt64) : UInt64 :=
 @[pf_entry]
 def comparePrefixes (_s : State) : UInt64 :=
   Memory.compareI32Bits firstPrefix secondPrefix
+
+/-- Compose a runtime-selected account read with the invocation-only vector. The selected word is
+never copied into persistent state or represented by a heap pointer in source code. -/
+@[pf_entry]
+def stageSelected (_s : State) (index : UInt64) : UInt64 :=
+  let selected := window.peekData 0 index
+  let _ := stagingVector.begin
+  let _ := stagingVector.push selected
+  let staged := stagingVector.get 0
+  let _ := stagingVector.finish
+  staged
 
 /--
 Absorb the selected account's first data word plus `delta` into the state cell. The view read is

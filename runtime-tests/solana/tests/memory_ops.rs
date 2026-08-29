@@ -209,3 +209,67 @@ fn writes_fail_closed_on_permissions_owner_and_length() {
         &[Check::err(ProgramError::Custom(1))],
     );
 }
+
+#[test]
+fn transient_vector_push_set_get_clear_and_length() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        data.clone(),
+        "vectorSetGet",
+        &[11, 22, 33, 0],
+        false,
+        &[Check::success(), Check::return_data(&11u64.to_le_bytes())],
+    );
+    invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        data.clone(),
+        "vectorSetGet",
+        &[11, 22, 33, 1],
+        false,
+        &[Check::success(), Check::return_data(&33u64.to_le_bytes())],
+    );
+    invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        data,
+        "vectorLengthAfterClear",
+        &[55],
+        false,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+}
+
+#[test]
+fn transient_vector_reports_bounds_stale_handle_and_oom() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let data = Account::new(1_000_000, 24, &program_id);
+    for (name, error) in [
+        ("vectorOverflow", 0x1202),
+        ("vectorOutOfBounds", 0x1202),
+        ("vectorWrongCapacity", 0x1203),
+        ("vectorAfterFinish", 0x1203),
+        ("vectorOom", 0x1201),
+    ] {
+        invoke(
+            &mollusk,
+            program_id,
+            state.clone(),
+            data_key,
+            data.clone(),
+            name,
+            &[],
+            false,
+            &[Check::err(ProgramError::Custom(error))],
+        );
+    }
+}

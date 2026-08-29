@@ -1,6 +1,9 @@
 import ProofForge.Svm.BatchRecorder
 import ProofForge.Svm.Cpi.Emit
+import ProofForge.Svm.FifoCancel
+import ProofForge.Svm.Heap.Emit
 import ProofForge.Svm.Sdk.Transient
+import ProofForge.Svm.TransientVec
 
 namespace Tests.SvmTransientSpec
 
@@ -53,6 +56,27 @@ private def words : FixedVec :=
 #guard !words.indexFits 16
 #guard
   !({ words with buffer := { words.buffer with capacityBytes := 127 } }).wellFormed
+
+private def vector2 : TransientVec.Config := { capacity := 2 }
+private def vectorMax : TransientVec.Config := { capacity := 4095 }
+
+#guard vector2.wellFormed
+#guard vector2.fixedVec.buffer.capacityBytes == 16
+#guard vectorMax.wellFormed
+#guard !({ capacity := 4096 } : TransientVec.Config).wellFormed
+#guard TransientVec.pointerStack > FifoCancel.queryScratchEnd
+#guard TransientVec.activeStack < Scratch.returnDataBank.lowWater
+#guard TransientVec.oomErrorCode != TransientVec.boundsErrorCode
+#guard TransientVec.boundsErrorCode != TransientVec.stateErrorCode
+
+#guard
+  match Heap.Emit.emitAllocate "recorder" "fixture" 16 8 416
+      "  lddw r0, 0x1\n  exit\n" with
+  | .ok asm =>
+      asm.contains "recorder_heap_position_fixture" &&
+        asm.contains "lddw r3, 0xfffffffffffffff8" &&
+        asm.contains "stxdw [r10 - 416], r2"
+  | .error _ => false
 
 private def recorderConfig : BatchRecorder.Config :=
   { logAccount := 1, selfEntryTag := 42, authoritySeed := "pf", maxBytes := 1246,

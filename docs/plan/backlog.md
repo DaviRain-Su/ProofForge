@@ -44,7 +44,7 @@ R3-003 invocation-local transient SDK、R3-004 static PDA/System facade foundati
 R3-005 non-seeded System facade completion、R3-006 classic Token facade、
 R3-007 fixed ATA/Memo facades、R3-008 generic seeded System facade、
 R3-009 bounded static Memo facade、R3-010 general ATA facade、
-R3-011 canonical program-id / SPL Token base-state views、
+R3-011 canonical program-id / SPL Token base-state views、R3-012 source-visible transient Vector64、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -415,6 +415,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   program limbs 后 digest 保持 `af159cb894745102`。没有新增 Runtime/Ops/IR/Component/Emit，
   没有 Array/Map/pointer/heap。详见 `docs/plan/tasks/r3-011.md`。Rent-aware resize、runtime-
   selected/UTF-8 Memo geometry 与 Token-2022 extension semantics 仍是 R3 工作。
+
+- R3-012 source-visible transient Vector64 已完成：`Svm.Sdk.Transient.Vector64` 以编译期
+  capacity 绑定 invocation-only `u64` payload，提供 begin/push/set/clear/finish 与 length/get；
+  backend 复用与 BatchRecorder 相同的 official-shaped 32 KiB downward bump emitter，full/OOB、
+  stale 或 capacity-mismatched handle、OOM 分别返回 `0x1202`/`0x1203`/`0x1201`。`finish`
+  只关闭 handle，不伪造 deallocation；pointer 只存在于 target-owned metadata/syscall 邻接
+  代码，不进入 source、IR value 或 account state。MemoryOps 与 AccountView 独立消费，且
+  effect-preserving Extract 边界逐方法钉死 begin→mutation→query→finish 顺序；没有新增
+  top-level Ops/IR/main-Emit recipe。详见 `docs/plan/tasks/r3-012.md`。多个同时 active vector、
+  通用元素、pop/insert/remove/iteration 与 source-visible byte writer 仍是后续 R3 工作。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

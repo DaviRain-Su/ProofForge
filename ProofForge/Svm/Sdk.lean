@@ -9,6 +9,7 @@ import ProofForge.Svm.Sdk.Token
 import ProofForge.Svm.Sdk.AssociatedToken
 import ProofForge.Svm.Sdk.Memo
 import ProofForge.Svm.Sdk.Transient
+import ProofForge.Svm.Sdk.TransientVec
 import ProofForge.Svm.Sdk.Memory
 
 /-!

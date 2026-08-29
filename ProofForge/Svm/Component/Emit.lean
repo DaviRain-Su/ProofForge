@@ -4,6 +4,7 @@ import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.BatchRecorder.Emit
 import ProofForge.Svm.FifoCancel.Emit
 import ProofForge.Svm.Memory.Emit
+import ProofForge.Svm.TransientVec.Emit
 
 namespace ProofForge.Svm.Component.Emit
 
@@ -42,6 +43,9 @@ private def Context.memory (context : Context) : Memory.Emit.Context :=
     loadOwnerIsSelf := context.loadOwnerIsSelf
     headerStack := context.headerStack }
 
+private def Context.transientVec (context : Context) : TransientVec.Emit.Context :=
+  { loadValue := context.loadValue }
+
 /-- Backend implementations needed by component-owned dispatch. The main emitter supplies this
 record once and remains independent of individual component call constructors. -/
 structure Backend where
@@ -58,6 +62,8 @@ def emitQuery (context : Context) (query : Component.Query) (operands : Array Op
       FifoCancel.Emit.emitQuery scope cancelQuery operands stackOff
   | .memory memoryQuery =>
       Memory.Emit.emitQuery context.memory memoryQuery operands stackOff nonce scope
+  | .transientVec vectorQuery =>
+      TransientVec.Emit.emitQuery context.transientVec vectorQuery operands stackOff nonce scope
 
 def emitCall (context : Context) (backend : Backend) (label : String) :
     Component.Call Ops.Val → Except String String
@@ -68,5 +74,6 @@ def emitCall (context : Context) (backend : Backend) (label : String) :
   | .fifoCancel call =>
       FifoCancel.Emit.emitCall context.fifoCancel backend.accountStorage label call
   | .memory call => Memory.Emit.emitCall context.memory label call
+  | .transientVec call => TransientVec.Emit.emitCall context.transientVec label call
 
 end ProofForge.Svm.Component.Emit

@@ -1,6 +1,6 @@
 import ProofForge.Svm.BatchRecorder
 import ProofForge.Svm.Cpi.Emit
-import ProofForge.Svm.Heap
+import ProofForge.Svm.Heap.Emit
 import ProofForge.Svm.Ops
 
 namespace ProofForge.Svm.BatchRecorder.Emit
@@ -21,32 +21,6 @@ private def emitRequireActive (label : String) : String :=
   lddw r2, {activeMagic}
   jeq r1, r2, recorder_active_{label}
 {failClosed}recorder_active_{label}:
-"
-
-/-- Allocate from the same first-word, downward bump protocol used by Solana's Rust SDK. The SDK
-global allocator is fixed to the default 32 KiB even when a transaction requests a larger frame,
-so generated code deliberately uses the same conservative end address. -/
-private def emitHeapAllocate (label : String) (bytes : Nat) : String :=
-  let heapEnd := Heap.startAddress + Heap.defaultFrameBytes
-  let usableStart := Heap.startAddress + Heap.bumpWordBytes
-  s!"\
-  ; official Solana downward bump allocation bytes={bytes} align=8
-  lddw r4, {Heap.startAddress}
-  ldxdw r2, [r4 + 0]
-  jne r2, 0, recorder_heap_position_{label}
-  lddw r2, {heapEnd}
-recorder_heap_position_{label}:
-  lddw r3, {bytes}
-  jge r2, r3, recorder_heap_subtract_{label}
-{failClosed}recorder_heap_subtract_{label}:
-  sub64 r2, r3
-  lddw r3, 0xfffffffffffffff8
-  and64 r2, r3
-  lddw r3, {usableStart}
-  jge r2, r3, recorder_heap_commit_{label}
-{failClosed}recorder_heap_commit_{label}:
-  stxdw [r4 + 0], r2
-  stxdw [r10 - {BatchRecorder.pointerStack}], r2
 "
 
 private def emitDestinationBase (dynamic : Bool) : String :=
@@ -140,9 +114,11 @@ private def emitFlushBody (context : Context) (config : BatchRecorder.Config)
 private def emitBegin (context : Context) (label : String) (config : BatchRecorder.Config)
     (header : Array (BatchRecorder.Word Ops.Val)) (bump : Ops.Val) : Except String String := do
   let writer := config.transientWriter
+  let allocate ← Heap.Emit.emitAllocate "recorder" label writer.buffer.capacityBytes
+    writer.buffer.alignment BatchRecorder.pointerStack failClosed
   let loadBump ← context.loadValue bump 8 0 s!"{label}_bump"
   let headerBytes ← emitWords context label false 1 1 header
-  return emitHeapAllocate label writer.buffer.capacityBytes ++ loadBump ++ s!"\
+  return allocate ++ loadBump ++ s!"\
   ldxdw r1, [r10 - 8]
   stxdw [r10 - {BatchRecorder.bumpStack}], r1
   ldxdw r9, [r10 - {BatchRecorder.pointerStack}]

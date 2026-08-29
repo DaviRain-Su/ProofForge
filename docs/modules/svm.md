@@ -16,6 +16,7 @@
 | `Svm.AccountView` | compile-time `base`/`capacity` remaining-account window、runtime-safe index、read-only header/data 访问 | 写路径、persistent pointer、runtime geometry |
 | `Svm.Sdk.Pubkey/Program/Token` | compiler-erased 32-byte key、canonical program id、exact SPL base-state view | 链上 base58、account copy、Token-2022 extension 猜测 |
 | `Svm.BatchRecorder` | bounded begin/append/finish、SDK heap payload、dynamic signed self-CPI sink | persistent event container、source-visible pointer |
+| `Svm.TransientVec` | source-visible fixed-capacity invocation-local `Vector64`、explicit full/OOB/state/OOM | persistent pointer、隐式增长、通用 heap collection |
 | `Svm.Component` | 稳定 Query/Call bridge、effects/value traversal、component-owned emitter/scratch boundary | 业务协议语义、任意动态分配 |
 | `Svm.IR` | SVM-only `Op`、account-data byte offset、Vector byte stride | EVM storage slot / EVM effect |
 | `Svm.Solanalib` | bounded typed ALU/static-store semantics bridge | Loader、syscall、ELF、完整 emitter refinement |
@@ -66,6 +67,11 @@ compute-budget 上限 256 KiB；首 8 字节保存 bump，allocation 向下并�
 空，deallocation 不回收。这里的 transient heap 只活一个 invocation；账户内 Sokoban/Phoenix
 allocator 仍是固定容量、index/offset based 的持久字节布局，绝不能保存 heap pointer。
 SDK global allocator 本身仍固定使用 32 KiB；`BatchRecorder` 因此不假设 Agave 可选的大 frame。
+`Svm.Heap.Emit` 是这份协议的唯一 assembly interpreter，BatchRecorder 与
+`Svm.TransientVec` 共用它。source-facing `Sdk.Transient.Vector64` 只携带编译期 capacity；
+当前一个 invocation 只允许一个 active handle，payload 固定分配且 `finish` 不回收，full/OOB、
+inactive/capacity mismatch、OOM 分别 fail with `0x1202`、`0x1203`、`0x1201`。native address
+不进入 source value、IR value 或 account bytes。
 
 ## API
 
@@ -84,4 +90,5 @@ SDK global allocator 本身仍固定使用 32 KiB；`BatchRecorder` 因此不假
 ## Tests
 
 `Tests/EmitSpec.lean`、`Tests/IdlSpec.lean`、`Tests/BuildSpec.lean`、
-`Tests/SvmHeapSpec.lean`、`Tests/AccountViewSpec.lean`。汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。
+`Tests/SvmHeapSpec.lean`、`Tests/SvmTransientVectorSpec.lean`、`Tests/AccountViewSpec.lean`。
+汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。

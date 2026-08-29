@@ -45,7 +45,7 @@
 | 生命周期 | 正确表示 | 当前状态 | 必须补齐 |
 |---|---|---|---|
 | source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有；两边 top-level one-limb bounded/tagged return 已有独立 target plan | collection persistence binding、nested/constructed tagged shapes、wide/aggregate dynamic elements |
-| invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient` 有 buffer/fixed-vector/writer **plan** | 可提取的 bounded byte/vector operations；EVM bounded memory binding |
+| invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient.Vector64` 已有一个 active handle 的 begin/push/set/clear/finish/length/get 与真实 OOM；buffer/writer 仍有 typed plan | 多 active handle、通用 element/byte writer、pop/insert/remove/iteration；EVM bounded memory binding |
 | SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、ordered Map/RBMap、allocator 已有 u64/固定 schema | richer POD element/key/value shapes、set/bitset、versioned codecs |
 | EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps 已有 | reusable bounded vector/set/queue/bitmap operations 与 documented gas bounds |
 
@@ -82,7 +82,7 @@ Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可�
 | 类别 | 当前 source surface | 主要缺口 | 优先级 |
 |---|---|---|---|
 | AccountInfo | fixed Account/Signer handle；key/owner/data words、lamports/length/flags；read-only bounded remaining-account view；program-owned checked data word writes | 一等 32-byte address；checked lamport mutation；account resize/zero-fill；duplicate-account alias policy；完整 initialization/close helpers | F0/F1 |
-| memory | official-shaped 32 KiB downward bump model、bounded scratch plans；checked account spans 已绑定 `memcpy/memmove/memcmp/memset`，保留 non-overlap/overlap/exact-i32 语义并隐藏 transient pointer | source-visible bounded bytes/vector operations；显式 OOM propagation | F0/F1 |
+| memory | official-shaped 32 KiB downward bump model、bounded scratch plans；checked account spans 已绑定 `memcpy/memmove/memcmp/memset`；source-visible bounded `Vector64` 已绑定真实 heap，保留显式 OOM/full/OOB/handle errors | 多 handle、bounded bytes/writer 与 generic POD vectors；allocator/resource manifest | F0/F1 |
 | instruction/CPI/PDA | static bounded metas/data、multi-seed signed CPI、return-data staging、PDA find/check | bounded full return data + returned program-id check；more generic bounded instruction bytes；stack/sibling/instruction introspection only when required | F1 |
 | sysvar/runtime query | Clock slot/epoch/unix、Rent、EpochSchedule | remaining Clock/Epoch fields、generic sliced sysvar、remaining compute/stack height、instructions sysvar；advanced sysvars on demand | F1/F2 |
 | crypto | literal SHA-256/Keccak first word、PDA host calls | full 32-byte/multi-slice hashes；Blake3/SHA-512/secp recovery/Poseidon/curve/big-mod-exp；signature-program instruction validation | F1/F2 |
