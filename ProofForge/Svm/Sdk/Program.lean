@@ -71,4 +71,17 @@ attribute [pf_inline] Id.key
 @[pf_inline] def isSplToken (program : Account.Handle) : Bool :=
   classicToken.matches program || token2022.matches program
 
+
+section Proofs
+
+/-- Id.ofWords 的构造透明性。 -/
+theorem id_ofWords_eq (w0 w1 w2 w3 : UInt64) :
+    (Id.ofWords w0 w1 w2 w3).key = Pubkey.ofWords w0 w1 w2 w3 := rfl
+
+/-- system program id 的 key 是全零。 -/
+theorem system_key_zero :
+    system.key = Pubkey.ofWords 0 0 0 0 := rfl
+
+end Proofs
+
 end ProofForge.Svm.Sdk.Program
