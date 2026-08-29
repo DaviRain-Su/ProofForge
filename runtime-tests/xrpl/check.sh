@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-OUT=${OUT:-build/wasm}
+OUT=${OUT:-build/xrpl}
 lake exe pf -- build --target xrpl --out "$OUT"
 
 TMP=$(mktemp -d)
