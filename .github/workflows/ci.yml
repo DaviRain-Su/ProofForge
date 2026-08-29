@@ -127,7 +127,7 @@ jobs:
       - name: Build all XRPL programs
         run: lake exe pf -- build --target xrpl --out build/xrpl
 
-      - name: Run XRPL Bedrock source gate
+      - name: Run XRPL Bedrock wasm gate
         run: runtime-tests/xrpl/check.sh
 
       - name: Run Anvil integration suite

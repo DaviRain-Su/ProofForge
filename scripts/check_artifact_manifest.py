@@ -21,11 +21,11 @@ HEX_RE = re.compile(r"^[0-9a-f]+$")
 DIGEST_LINE = {
     "svm": re.compile(r"^;\s*digest=([0-9a-f]+)\s*$"),
     "evm": re.compile(r"^//\s*digest=([0-9a-f]+)\s*$"),
-    "xrpl": re.compile(r"^//\s*digest=([0-9a-f]+)\s*$"),
+    "xrpl": re.compile(r"^;;\s*digest=([0-9a-f]+)\s*$"),
 }
 
 # `.so` must win over `.s`; `Name.so`.endswith(".s") is true.
-SUFFIXES_BY_SPECIFICITY = (".idl.json", ".abi.json", ".so", ".bin", ".yul", ".rs", ".s")
+SUFFIXES_BY_SPECIFICITY = (".idl.json", ".abi.json", ".so", ".bin", ".yul", ".wasm", ".wat", ".rs", ".s")
 
 
 @dataclass(frozen=True)
@@ -55,8 +55,8 @@ XRPL = TargetSpec(
     key="xrpl",
     registry_rel=Path("ProofForge/Wasm/Xrpl/Registry.lean"),
     expected_count=1,
-    suffixes=(".rs",),
-    digest_suffix=".rs",
+    suffixes=(".wasm", ".wat"),
+    digest_suffix=".wat",
 )
 SPECS = {"svm": SVM, "evm": EVM, "xrpl": XRPL}
 ELF_MAGIC = b"\x7fELF"
@@ -173,6 +173,16 @@ def check_elf64(path: Path, rel: str, diags: list[str]) -> None:
         diags.append(f"not elf64: {rel}: bad version/ehsize")
 
 
+def check_wasm(path: Path, rel: str, diags: list[str]) -> None:
+    try:
+        header = path.read_bytes()[:4]
+    except OSError:
+        diags.append(f"malformed file: {rel}: unreadable")
+        return
+    if header != b"\x00asm":
+        diags.append(f"not wasm: {rel}")
+
+
 def check_bin_hex(path: Path, rel: str, diags: list[str]) -> None:
     try:
         text = path.read_text(encoding="utf-8").strip()
@@ -205,6 +215,8 @@ def check_expected_file(path: Path, spec: TargetSpec, suffix: str, diags: list[s
         check_elf64(path, rel, diags)
     elif suffix == ".bin":
         check_bin_hex(path, rel, diags)
+    elif suffix == ".wasm":
+        check_wasm(path, rel, diags)
 
 
 def check_target(
@@ -340,10 +352,12 @@ def _write_evm(out: Path, name: str, digest: str, *, bin_hex: str = "deadbeef") 
     (out / f"{name}.abi.json").write_text("[]\n", encoding="utf-8")
 
 
-def _write_xrpl(out: Path, name: str, digest: str) -> None:
+def _write_xrpl(out: Path, name: str, digest: str, *, wasm: bytes | None = b"\x00asm") -> None:
     out.mkdir(parents=True, exist_ok=True)
-    (out / f"{name}.rs").write_text(
-        f"// PROOF-FORGE-XRPL-BEDROCK v0\n// digest={digest}\nfn stub() {{}}\n", encoding="utf-8"
+    if wasm is not None:
+        (out / f"{name}.wasm").write_bytes(wasm)
+    (out / f"{name}.wat").write_text(
+        f";; PROOF-FORGE-XRPL-BEDROCK v0\n;; digest={digest}\n(module)\n", encoding="utf-8"
     )
 
 

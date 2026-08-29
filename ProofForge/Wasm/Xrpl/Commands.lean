@@ -19,7 +19,7 @@ elab "#pf_xrpl_build " n:ident : command => do
     match Emit.emit program with
     | .error reason => throwError reason
     | .ok source =>
-        unless source.contains "pub extern \"C\" fn" do
+        unless source.contains "(func (export" do
           throwError "assemble/tool: missing exported wasm entry"
         let digest := IR.digestHex program
         match Registry.digestOf program.name with
@@ -30,7 +30,7 @@ elab "#pf_xrpl_build " n:ident : command => do
         logInfo m!"proofforge-xrpl: program {program.name} slots = {IR.slotNames program}"
         logInfo m!"proofforge-xrpl: entries = {program.entries.map (·.ixName)}"
         logInfo m!"proofforge-xrpl: digest = {digest}"
-        logInfo m!"proofforge-xrpl: emitted {source.length} bytes of Rust"
+        logInfo m!"proofforge-xrpl: emitted {source.length} bytes of WAT"
 
 elab "#pf_xrpl_dump " n:ident : command => do
   let ns := n.getId

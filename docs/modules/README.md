@@ -19,5 +19,5 @@
 | [Cli](cli.md) | `pf build --target svm|evm` |
 | [Runtime](runtime.md) | `Svm.Runtime` / `Evm.Runtime` 宿主 stub；抽出按名认 |
 | [Evm](evm.md) | `Evm.Sdk` 合同 facade + Ops → Yul / ABI / locked solc |
-| [Wasm](wasm.md) | WASM 链家族：每链一个 target；共享 Core→Rust 发射，链拥有 Host / digest |
-| [Xrpl](xrpl.md) | `Wasm/Xrpl`：XRPL Bedrock 方言 Rust 源（zero-tool）+ digest |
+| [Wasm](wasm.md) | WASM 链家族：Lean → `.wasm`；链拥有 host import 表与存储布局 |
+| [Xrpl](xrpl.md) | `Wasm/Xrpl`：XRPL Bedrock；host import `host_lib` + 存储布局 |

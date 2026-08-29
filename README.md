@@ -2,7 +2,7 @@
 
 Lean 4 多目标合约编译器。普通 `def` 写合约，普通 `theorem` 证合约。不是一门新合约语言。
 
-当前：Solana（sBPF）+ EVM（Yul）+ WASM 家族第一条链 XRPL（Bedrock 方言 Rust 源，source-only）三个剖面。WASM 是链家族：每条 WASM 链一个 target（见 `ProofForge/Wasm/Family.lean`）；共享 Core→Rust 发射，不共享 Plan / digest 域 / 宿主合同。`@[pf_entry]` 标记入口。CLI 是 `pf`。
+当前：Solana（sBPF）+ EVM（Yul）+ WASM 家族第一条链 XRPL 三个剖面。WASM 是链家族：每条链一个 target，产物是 `.wasm`；链差在 host import 表和存储布局，不存在通用 wasmtime 宿主。`@[pf_entry]` 标记入口。CLI 是 `pf`。
 
 和 [proof_forge](https://github.com/DaviRain-Su/proof_forge) 的关系：那边是 `program … where` DSL。这边复用 Lean 语法本身，抽出能 fail-closed 降到链上的子集。disc / layout 域名仍是 `proof-forge-solana-v1:`，链上字节不因改名而变。
 
@@ -35,9 +35,9 @@ lake exe pf -- build --target xrpl --out build/xrpl Counter
 
 SVM 写出 `Name.so` / `Name.s` / `Name.idl.json`（Solana IDL spec 0.1.0）。
 EVM 写出 `Name.bin` / `Name.yul` / `Name.abi.json`。
-XRPL（`--target xrpl`；`wasm` 会被拒绝并提示选具体链）写出 `Name.rs`
-（XRPL Bedrock / `xrpl_wasm_std` 方言；zero-tool，`deployable=false`；
-工程门 `runtime-tests/xrpl/check.sh` 用本地 stub crate 做 cargo check）。
+XRPL（`--target xrpl`；`wasm` 会被拒绝并提示选具体链）写出 `Name.wat` /
+`Name.wasm`（XLS-0102 `host_lib` import；锁定 `wat2wasm 1.0.41`；
+主网 `deployable=false`；工程门 `runtime-tests/xrpl/check.sh` 断言 import 表）。
 
 Mollusk（环境变量已改成 `PF_*_SO`）：
 
