@@ -129,6 +129,20 @@ lookup_anchors = (
     'i64.shl',
     'i64.or',
 )
+queue_anchors = (
+    '(func (export "push")',
+    '(func (export "pop")',
+    '(func (export "getAt")',
+    '(func (export "hasAt")',
+    '(func (export "peek")',
+    '(func (export "getHead")',
+    '(call $pf_storage_has_key',
+    '(call $pf_storage_read',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+    'i64.lt_u',
+    'i64.sub',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -150,6 +164,8 @@ for wat in wats:
         extra = vector_anchors
     elif wat.stem == "NearLookup":
         extra = lookup_anchors
+    elif wat.stem == "NearQueue":
+        extra = queue_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

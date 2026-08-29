@@ -61,7 +61,9 @@ wsm-near-lookup-001 再加入 default-Identity `DirectLookupMap64` / `DirectLook
   insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has；
   `vector.sh` 验证 exact current element keys/Borsh values、get/set/push/pop、capacity rollback
   与大 index 在 narrowing 前被拒绝；`lookup.sh` 验证 Identity map/set exact keys、map Borsh
-  values、set empty values、insert/replace/remove status、namespace split 与 key reclamation。
+  values、set empty values、insert/replace/remove status、namespace split 与 key reclamation；
+  `queue.sh` 验证 ProofForge bounded FIFO 的 exact slots、wraparound、full/empty rollback、逐槽
+  reclamation、drained head reset 与 malformed metadata fail-closed。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
-`NearOutput`、`NearStorage`、`NearVector`、`NearLookup`。
+`NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`。

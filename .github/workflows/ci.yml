@@ -242,6 +242,9 @@ jobs:
       - name: Run NEAR sandbox direct LookupMap/LookupSet gate
         run: runtime-tests/near/lookup.sh
 
+      - name: Run NEAR sandbox bounded Queue gate
+        run: runtime-tests/near/queue.sh
+
   # Preserve the original required-check identity while making proof/guard and target failures
   # independently observable. This job fails unless every lane completes, including after an error.
   test:

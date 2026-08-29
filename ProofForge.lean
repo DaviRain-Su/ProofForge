@@ -121,6 +121,7 @@ import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Wasm.Near.Sdk.Storage
 import ProofForge.Wasm.Near.Sdk.Store.Codec
 import ProofForge.Wasm.Near.Sdk.Store.Lookup
+import ProofForge.Wasm.Near.Sdk.Store.Queue
 import ProofForge.Wasm.Near.Sdk.Store.Vector
 import ProofForge.Wasm.Near.Host
 import ProofForge.Wasm.Near.Codec

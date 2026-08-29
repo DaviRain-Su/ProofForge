@@ -143,7 +143,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
 | N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
-| N5 collections | **DirectVector64 done in wsm-near-vector-001 and direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001** → bounded Queue → IterableMap/Set; full `store::Vector` metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
+| N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, and ProofForge bounded Queue64 done in wsm-near-queue-001** → IterableMap/Set; full `store::Vector` metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
 | N7 promises | create/then/and, batch function-call/transfer actions, explicit return | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | bounded result count/status/read, typed Result decode, private self callback | success/failure/oversized result and rollback scenes |
@@ -167,8 +167,13 @@ It depends on full AccountId and u128 and is asynchronous.
    metadata/cache/Drop semantics wait for the `STATE` lifecycle instead of being simulated.
 7. **NEAR-STORE-LOOKUP (wsm-near-lookup-001 done):** default Identity UInt64 map/set keys and values match
    current near-sdk-rs durable bytes; direct map timing/raw statuses remain explicitly narrower.
-   A ProofForge-owned bounded Queue follows on the same raw-storage/arena substrate.
-8. **NEAR-PROMISE-1:** closed static receiver/method function call with explicit gas/deposit;
+8. **NEAR-STORE-QUEUE (wsm-near-queue-001 done):** ProofForge-owned bounded FIFO slots reuse the Vector
+   key/value recipe; caller state owns canonical head/length, wraparound, and drained reset while
+   pop immediately reclaims the front key. Current near-sdk-rs exports no Queue.
+9. **NEAR-STORE-ITERABLE:** compose bounded key vectors with direct lookup namespaces, pinning
+   index records, swap-remove reclamation, immediate persistence, and rollback semantics without
+   claiming near-sdk-rs cache/`Drop` timing.
+10. **NEAR-PROMISE-1:** closed static receiver/method function call with explicit gas/deposit;
    callback/results follow in a separate slice.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a

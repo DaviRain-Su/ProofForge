@@ -43,6 +43,6 @@ the host effect even though a direct `ResultBuffer` call worked.
 
 ## Next
 
-Specify a ProofForge-owned bounded persistent Queue over direct vector slots with explicit
-head/length, wraparound, stale-slot reclamation, and namespace rules. It must not be presented as
-an official near-sdk-rs collection because current `store::*` exports no Queue.
+The ProofForge-owned bounded persistent Queue landed in
+[wsm-near-queue-001](wsm-near-queue-001.md). Next compose bounded Identity IterableMap/IterableSet
+without claiming near-sdk-rs cache/`Drop` timing.
