@@ -6,10 +6,13 @@
 1. **host function / runtime**：wasm import 表。模块名、函数名都是链的。
    XRPL 是 `host_lib`（XLS-0102）；不是通用 `pf` import，也不是 wasmtime。
 2. **存储布局**：UInt64 槽如何落到 linear memory，以及经哪条 host 调用读写。
-   XRPL v0：home 对象 `Data` 字段（sfield 458779），读 `home_le_field`、写
-   `set_data`；槽按声明顺序每 8 字节小端打包。
-3. **入口 ABI**：export 的名字、参数、返回约定（XRPL：mutating `i32` 状态码，
-   view `i64`）。入口包装在共享发射器里，按 view/mutating 分支，不经本结构。
+   XRPL v0：`ContractData` JSON 对象字段（`get/set_data_object_field`），
+   每个槽一个 key；UINT64 写 `STI_UINT64` + 大端 8 字节。本 Bedrock
+   镜像的 `update_data` 不落账本。
+3. **入口 ABI**：export 名字与返回约定（mutating `i32` 状态码，view `i64`）
+   仍在共享发射器里分支。XRPL 不把 `UINT64` 当 wasm `i64` 参数传入；
+   值经 `host_lib.function_param` 拷进 linear memory。链用
+   `functionParam` 注入这条 import；空字符串表示参数走 wasm `(param i64)`。
 -/
 
 namespace ProofForge.Wasm.Host
@@ -28,10 +31,32 @@ structure Contract where
   importModule : String
   /-- Host function that reads a field of the home ledger object. -/
   homeLeField : String
-  /-- Host function that replaces the home object's Data blob. -/
+  /-- Host function that replaces the home object's Data blob.
+  Unused when `getDataObject` is set. -/
   setData : String
   /-- Numeric sfield id of the Data blob (XRPL: 458779). -/
   sfieldData : Nat
+  /-- Host function that copies a ContractCall parameter into linear memory.
+  Empty means the chain passes UInt64 args as wasm `(param i64)`. XRPL:
+  `function_param(index, STI_UINT64, ptr, len) -> i32`. -/
+  functionParam : String := ""
+  /-- Serialized-type code for UINT64 (XRPL STI_UINT64 = 3). -/
+  stiUint64 : Nat := 3
+  /-- Host errors that mean storage is not present yet. Mutating entries
+  treat these as zeros instead of returning them. Empty means any negative
+  load is fatal. -/
+  missingFields : Array Int := #[]
+  /-- Host function `get_data_object_field(acc, acc_len, key, key_len, out, out_len)`.
+  Non-empty selects ContractData object-field storage instead of the Data blob. -/
+  getDataObject : String := ""
+  /-- Host function `set_data_object_field(acc, acc_len, key, key_len, data, data_len)`. -/
+  setDataObject : String := ""
+  /-- sfield of the current contract AccountID (XRPL `sfContractAccount` = 524315). -/
+  sfieldAccount : Nat := 0
   deriving Inhabited
+
+/-- Object-field storage (XRPL ContractData) rather than a packed Data blob. -/
+def Contract.objectStore (c : Contract) : Bool :=
+  !c.getDataObject.isEmpty
 
 end ProofForge.Wasm.Host

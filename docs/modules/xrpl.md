@@ -4,16 +4,17 @@
 
 WASM 家族的第一条链：**XRPL Bedrock（XLS-0101）**。经
 `Core.Target.Registration` 注册。产物是 **`.wasm`**：Lean 直接 lowering 到
-WAT，import 表钉 XLS-0102 的 `host_lib`（读 `home_le_field`、写 `set_data`），
-组装器是锁定的 `wat2wasm 1.0.41`。外来叶子经 [`Wasm.Family`](wasm.md)
-fail closed。
+WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
+`get_current_ledger_obj_field`、写 `set_data_object_field`、参数
+`function_param`），组装器是锁定的 `wat2wasm 1.0.41`。外来叶子经
+[`Wasm.Family`](wasm.md) fail closed。
 
 ## Boundary
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
 | `Xrpl.Ops` | XRPL 方言 `ValKind` / `OpExt`（v0 无宿主叶子；`reserved` 仅保 inhabitance） | 其它链的方言 |
-| `Xrpl.Host` | import 模块 `host_lib`、`home_le_field` / `set_data`、sfield Data=`458779`、digest 域 `xrpl-bedrock\|` | Core→WAT 发射、v0 子集检查 |
+| `Xrpl.Host` | import 模块 `host_lib`、`get_current_ledger_obj_field` / `get/set_data_object_field` / `function_param`、digest 域 `xrpl-bedrock\|` | Core→WAT 发射、v0 子集检查 |
 | `Xrpl.IR` | registration 实例化、方言类型别名、ext canonical 标签 | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Xrpl.Emit` | 薄封装：把 `Xrpl.Host.contract` 注入 `Wasm.Emit` | 发射逻辑本身 |
 | `Xrpl.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / bedrock / AlphaNet |
@@ -22,8 +23,12 @@ fail closed。
 
 ## v0 子集（全部 fail closed）
 
-- 状态：全部 UInt64 槽（width 8），按声明顺序小端打包进 home 对象 `Data` blob；
-- 参数：scalar UInt64；view 结果：恰好一个 UInt64，export `-> i64`；
+- 状态：全部 UInt64 槽（width 8），每个槽一个 `ContractData.ContractJson` 字段
+  （STI_UINT64 + 大端 8 字节）；挂在 Contract SLE 的 `sfOwner` 下，因为合约
+  AccountRoot 余额为 0、不够 reserve。本镜像的 `update_data` 不落账本；
+- 参数：scalar UInt64，经 `function_param` 拷进 linear memory；export 无 wasm
+  参数。view 结果：恰好一个 UInt64，export `-> i64`（本宿主不填
+  `meta.ReturnValue`，工程门从 `ContractJson` 读状态）；
   mutating entry 只返回 `i32` 状态码（源声明的 public 返回值被省略，读 view）；
 - ops：checked 五则、`ite`、`okState` / `returnState` / `returnU64`、
   `errorOverflow`、`storeField`；loop / local / vector / map / `errorNamed` /
@@ -37,7 +42,7 @@ fail closed。
 - 组装器是锁定的 `wat2wasm 1.0.41`，对标 `solc 0.8.34` / `sbpf 0.2.2`；
   rustc / cargo / flint 不是 Tool Lock；
 - XLS-0102 目前只钉 Smart Escrow host；同名函数将可从 smart contracts 访问。
-  v0 只用 `host_lib.{home_le_field,set_data}`；
+  v0 用 `host_lib.{get_current_ledger_obj_field,get_data_object_field,set_data_object_field,function_param}`；
 - 工程门分两层：`runtime-tests/xrpl/check.sh` 断言产物形状（import 表 + wasm
   magic）；`runtime-tests/xrpl/counter.sh` 起 Bedrock 本地节点、部署本仓
   `Counter.wasm`（`--skip-build`）、跑 initialize / increment / overflow / get。
