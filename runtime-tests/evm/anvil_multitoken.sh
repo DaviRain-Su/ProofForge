@@ -1,53 +1,19 @@
 #!/usr/bin/env bash
 # MultiToken: owner-minted bounded ERC-1155 core consumer. Darwin + Linux.
-# Unregistered module: builds via a digest-pinned extract+assemble driver, not the pf registry.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=runtime-tests/evm/lib.sh
 source "$here/lib.sh"
 
-expected_digest="9f4ed1a356c0a3be"
-
 solana_lean_evm_init evm-anvil-multitoken
 bin="$root/build/evm/MultiToken.bin"
 if [[ ! -f "$bin" ]]; then
-  echo "building MultiToken.bin (unregistered; digest-pinned)" >&2
+  echo "building registered MultiToken.bin" >&2
   lake build Examples.MultiToken >/dev/null \
     || { echo "FAIL: lake build Examples.MultiToken failed" >&2; exit 1; }
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
-  cat > "$tmp/AssembleOne.lean" <<'EOF'
-import ProofForge.Extract
-import ProofForge.Evm.IR
-import ProofForge.Evm.Assemble
-
-unsafe def main (args : List String) : IO UInt32 := do
-  match args with
-  | [outDir, module, digest] =>
-    Lean.initSearchPath (← Lean.findSysroot)
-    Lean.enableInitializersExecution
-    let ns := module.toName
-    let env ← Lean.importModules #[{ module := ns }] {} (loadExts := true)
-    match ProofForge.Extract.extractModuleIR env ns with
-    | .error reason => IO.eprintln reason; return 1
-    | .ok source =>
-      match ProofForge.Evm.IR.fromExtracted source with
-      | .error reason => IO.eprintln reason; return 1
-      | .ok program =>
-        if ProofForge.Evm.IR.digestHex program != digest then
-          IO.eprintln s!"{module}: digest drifted: {ProofForge.Evm.IR.digestHex program}"
-          return 1
-        let r ← ProofForge.Evm.Assemble.assembleProgram outDir program
-        IO.println s!"wrote {r.binPath} ({r.binHex.length / 2} bytes)"
-        return 0
-  | _ => IO.eprintln "usage: AssembleOne <outDir> <module> <digest>"; return 1
-EOF
-  lake env lean --run "$tmp/AssembleOne.lean" \
-    "$root/build/evm" "Examples.MultiToken" "$expected_digest" \
-    || { echo "FAIL: extract/assemble MultiToken failed" >&2; exit 1; }
-  rm -rf "$tmp"
-  trap - EXIT
+  lake exe pf -- build --target evm --out "$root/build/evm" MultiToken >/dev/null \
+    || { echo "FAIL: build registered MultiToken failed" >&2; exit 1; }
 fi
 [[ -f "$bin" ]] || { echo "FAIL: missing $bin" >&2; exit 1; }
 solana_lean_start_anvil "${PF_EVM_PORT:-18574}" "$root/build/evm/anvil-multitoken.log"

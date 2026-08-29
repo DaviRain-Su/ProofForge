@@ -59,6 +59,8 @@ import Examples.Vault
 import Examples.Ownable
 import Examples.Token
 import Examples.Capped
+import Examples.MultiToken
+import Examples.CraftToken
 import Examples.TwoStepCounter
 import Examples.Credits
 import Examples.Wide

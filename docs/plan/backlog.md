@@ -66,7 +66,8 @@ R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment fa
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
 R5-008 checked allowance core、R5-009 reusable reentrancy policy、
 R5-010 persistent bounded EVM storage vector、R5-011 honest runtime-code observation policy、
-R5-012 safe closed-call result policy 与 explicit effect-result sequencing；
+R5-012 safe closed-call result policy、R5-013 bounded ERC-721 core、
+R5-014 bounded single-id ERC-1155 core 与 explicit effect-result sequencing；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -541,7 +542,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   不使用 Vector、hashed role map、runtime slot allocator、隐藏 write 或新 Ops/IR/Emit case。
   Anvil 覆盖 zero/duplicate/full/nonmember/unauthorized/closed policy；indexed Address return
   在 extraction 支持安全 OOB-zero 前不发布。详见 `docs/plan/tasks/r5-003.md`。Reentrancy 已由
-  R5-009 完成；ERC-721 bounded core 已由 R5-013 集成，bounded ERC-1155 仍未完成。
+  R5-009 完成；ERC-721 bounded core 已由 R5-013 集成，bounded single-id ERC-1155 已由
+  R5-014 集成。
 
 - R5-004 EVM Pausable policy 已完成：`Evm.Sdk.Pausable` 统一 canonical `UInt8` flags、
   fail-closed predicates、replacement transitions 与现有 `Paused()` terminal；
@@ -566,7 +568,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Runtime/Op/IR/Component/Emit case、slot allocator 或 selector/topic recipe。两个 source
   digest 与六份 Yul/ABI/bin 产物逐字节不变；详见 `docs/plan/tasks/r5-006.md`。Credit/mint、
   same-address-safe transfer 与 allowance core 已由 R5-007/008 完成；ERC-721 bounded core 已由
-  R5-013 集成，bounded ERC-1155 仍是 R5 工作。
+  R5-013 集成；bounded single-id ERC-1155 后由 R5-014 集成。
 
 - R5-007 EVM checked credit/alias-safe transfer 已完成：`Fungible.Balances` 新增
   canCredit/credit/canTransfer/transfer，credit 以 `next ≥ current` 拒绝 UInt256 wrap，transfer
@@ -577,7 +579,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   application；没有新 Runtime/Op/IR/Component/Emit case。Token/Vault ABI 不变，Anvil 覆盖重复
   mint/credit、wraparound rejection、direct/delegated self-transfer 与失败原子性；详见
   `docs/plan/tasks/r5-007.md`。Reusable allowance core 已由 R5-008 完成，ERC-721 bounded core
-  已由 R5-013 集成，bounded ERC-1155 仍是 R5 工作。
+  已由 R5-013 集成；bounded single-id ERC-1155 后由 R5-014 集成。
 
 - R5-008 EVM checked allowance core 已完成：`Fungible.Allowances` 在显式
   `AddressPairMap256` handle 上统一 allowanceOf/approve、checked increase/decrease/spend 与
@@ -587,7 +589,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   UInt256 checked subtraction。没有新 Runtime/Op/IR/Component/Emit case 或 allowance recipe。
   Token ABI 不变，Ownable ABI 的 uint64→uint256 是有意的 ledger contract 修正；Anvil 覆盖
   allowance wrap、over-spend 与失败原子性。详见 `docs/plan/tasks/r5-008.md`。ERC-721 bounded
-  core 已由 R5-013 集成，bounded ERC-1155 仍是 R5 工作。
+  core 已由 R5-013 集成；bounded single-id ERC-1155 后由 R5-014 集成。
 
 - R5-009 EVM reusable reentrancy policy 已完成：`Evm.Sdk.Reentrancy` 在显式
   `Storage.Static.Handle UInt64` 上统一 OpenZeppelin-compatible `1/2` sentinels、fail-closed
@@ -633,6 +635,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   与 unrestricted 256-bit id 仍 fail closed。此前独立 PR 已接 source/registry/test，但漏接 Anvil
   aggregate 与路线图；本切片补齐 26-contract 总门和文档。详见
   `docs/plan/tasks/r5-013.md`。
+
+- R5-014 EVM bounded ERC-1155 core 已完成集成：`Evm.Sdk.Erc1155` 在两个 compile-time
+  hashed-map handles 上提供 O(1) `(owner,id)` UInt256 balance、operator approval、checked
+  credit/debit/mint/burn 与 alias-safe transfer。token id 诚实限制为 top limb 为零的 192-bit
+  envelope，所有 auth/write predicates 在 `tokenKey` 截断前 gate；两个 consumer 也把 view
+  gate 写在 entry body，`id + 2^192` 不会读到或修改已有 balance。MultiToken/CraftToken 分别
+  拥有 owner-mint 与 open capped-mint policy；batch、receiver callback、metadata URI 和 standard
+  typed events 继续 fail closed。没有新增 Runtime/Ops/IR/Component/Emit recipe、runtime
+  allocator 或 hidden write。详见 `docs/plan/tasks/r5-014.md`。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

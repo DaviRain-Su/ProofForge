@@ -74,7 +74,7 @@ instruction 增加 recipe opcode。
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、target-owned Clock/EpochSchedule/Rent sysvar query（unsigned/Bool native fields complete）、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input/output、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data、checked program-memory spans 与 Token-2022 TLV envelope | signed timestamp、sliced/Instructions sysvar、nested/constructed/wide dynamic return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation、program-memory span；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、checked account-memory facade，以及可同类双 slot 的 invocation-local buffer/Vector64/writer | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；generic POD transient collection、更多 manifest-bounded slot 与 insert/remove/iteration 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input/output、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，以及独立 `OutputPlan` 的 top-level bounded dynamic/tagged result（strict UTF-8 String）、full-width gas/basefee/prevrandao/gaslimit/gasprice/blobbasefee、blobhash、caller/origin/coinbase、msg.sig/msg.data.length、blockhash 与 address balance/code observations、Cancun target pin、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | nested/constructed/wide dynamic return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；blob payload/bounded raw msg.data bytes 与标准化资源 manifest |
-| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`StorageVec` persistent bounded UInt64 vector；honest code observation + safe closed-call result policy | typed pause/ERC-721 events、bounded revert bubbling/generic call policy、ERC-721 receiver callback/full-width token id/standard Address views、bounded ERC-1155；dynamic indexed Address return；wider storage-vector element shapes |
+| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；`StorageVec` persistent bounded UInt64 vector；honest code observation + safe closed-call result policy | typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；wider storage-vector element shapes |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -113,8 +113,9 @@ account view、R5-001 Access foundation、R5-002 static storage declarations、R
 roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption、R5-006 fungible debit
 ledger foundation、R5-007 checked credit/alias-safe transfer、R5-008 checked allowance core 与
 R5-009 reusable reentrancy policy、R5-010 persistent bounded storage vector、R5-011 honest
-runtime-code observation policy、R5-012 safe closed-call result policy 与 R5-013 bounded
-ERC-721 core 均已集成；独立 contract 分别复用这些 SDK contracts。
+runtime-code observation policy、R5-012 safe closed-call result policy、R5-013 bounded
+ERC-721 core 与 R5-014 bounded single-id ERC-1155 core 均已集成；独立 contract 分别复用这些
+SDK contracts。
 SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
 return-data/multi-seed signer-tail geometry；SVM-RT-3 第一刀已建立 Token-2022 bounded TLV
@@ -136,7 +137,7 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R5-003](tasks/r5-003.md)、[R5-004](tasks/r5-004.md)、[R5-005](tasks/r5-005.md)、
 [R5-006](tasks/r5-006.md)、[R5-007](tasks/r5-007.md)、[R5-008](tasks/r5-008.md)、
 [R5-009](tasks/r5-009.md)、[R5-010](tasks/r5-010.md)、[R5-011](tasks/r5-011.md)、
-[R5-012](tasks/r5-012.md)、[R5-013](tasks/r5-013.md)、
+[R5-012](tasks/r5-012.md)、[R5-013](tasks/r5-013.md)、[R5-014](tasks/r5-014.md)、
 [R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
 这不表示 R2/R4/R5 已完成。
 
@@ -458,7 +459,7 @@ R5-006 已建立第一个 reusable fungible ledger 切片：`Evm.Sdk.Fungible.Ba
 业务 policy 独立复用。它只组合既有 hashed-map/UInt256/native-error component，没有新
 Runtime/Op/IR/Emit recipe；两个 program 的 Yul/ABI/bin 逐字节不变。Credit/mint、
 same-address-safe transfer 与 allowance 后由 R5-007/008 完成，bounded ERC-721 core 后由
-R5-013 集成；bounded ERC-1155 仍待后续。详见 [R5-006](tasks/r5-006.md)。
+R5-013 集成；bounded single-id ERC-1155 后由 R5-014 集成。详见 [R5-006](tasks/r5-006.md)。
 
 R5-007 已完成 checked additive credit 与 alias-safe transfer：`Fungible.Balances` 以
 `next ≥ current` 关闭 UInt256 credit wrap，并在 source/destination 相等时把 movement 降为
@@ -466,14 +467,14 @@ no-op。Token 以 `value ≤ cap - supply` 关闭 mint supply wrap，重复 mint
 delegated self-transfer 保持余额，delegated path 仍显式消费 allowance。Vault share ledger 是
 第二个 credit consumer。没有新 Runtime/Op/IR/Component/Emit case；Token/Vault ABI 不变，
 行为变更由 Anvil 覆盖。Allowance core 后由 R5-008 完成，bounded ERC-721 core 后由
-R5-013 集成；bounded ERC-1155 仍待后续。详见 [R5-007](tasks/r5-007.md)。
+R5-013 集成；bounded single-id ERC-1155 后由 R5-014 集成。详见 [R5-007](tasks/r5-007.md)。
 
 R5-008 已完成 explicit pair-handle allowance core：`Fungible.Allowances` 提供
 allowanceOf/approve、checked increase/decrease/spend 与 Insufficient terminal。Token/Ownable
 以不同应用 policy 复用；Token 的 pause/zero-address/permit/events 留在应用，Ownable fixture
 把旧 UInt64 overwrite 改为 UInt256 checked subtraction。没有新 Runtime/Op/IR/Component/Emit
 case；Token ABI 不变，Ownable ABI widening 是有意修正，Anvil 覆盖 wraparound 与 over-spend。
-Bounded ERC-721 core 后由 R5-013 集成；bounded ERC-1155 仍待后续。详见
+Bounded ERC-721 core 后由 R5-013 集成；bounded single-id ERC-1155 后由 R5-014 集成。详见
 [R5-008](tasks/r5-008.md)。
 
 R4-001 已完成 EVM-RT-2a typed call-result contract：`Evm.CallResult` 统一 success-only、
@@ -625,7 +626,7 @@ mint 关闭 cap/supply wrap，direct/delegated self-transfer 不再双写同一�
 
 R5-008 已完成 checked allowance core：Token/Ownable 复用显式 pair-handle 上的 set、checked
 increase/decrease/spend 与 Insufficient，permit ownership 和 event ordering 仍在应用。Bounded
-ERC-721 core 已由 R5-013 集成；bounded ERC-1155 尚未完成。
+ERC-721 core 已由 R5-013 集成；bounded single-id ERC-1155 已由 R5-014 集成。
 
 R5-009 已完成 reusable reentrancy policy：`Evm.Sdk.Reentrancy` 以 OpenZeppelin-compatible
 nonzero sentinels、fail-closed gate 和 explicit static handle 组合 R4-005 ordered effects。
@@ -665,8 +666,17 @@ Collectible/Badge 独立消费 mint/approve/transfer/burn policy。当前 key co
 UInt256 limb 为零的 192-bit token id，并在 view/auth/write 前统一 gate，因此不会把
 `id + 2^192` 截断成已有 token。它没有 ERC-721 opcode、selector/topic/offset magic、hidden
 write 或 runtime allocator。standard Address return、full 256-bit token id、typed standard
-events、safe-transfer receiver callback 与 bounded ERC-1155 仍 fail closed。详见
-[R5-013](tasks/r5-013.md)。
+events 与 safe-transfer receiver callback 仍 fail closed。Bounded single-id ERC-1155 后由
+R5-014 独立集成。详见 [R5-013](tasks/r5-013.md)。
+
+R5-014 已完成 bounded single-id ERC-1155 core：`Evm.Sdk.Erc1155` 只组合两个现有
+compile-time hashed-map handles，提供 UInt256 balance、operator approval、checked credit/
+debit/mint/burn 与 same-address-safe transfer。当前 token id envelope 与 Erc721 一样限制为
+top limb 零；auth/write predicates 和两个 consumer 的 entry-level views 都在 `tokenKey`
+截断前 gate。MultiToken/CraftToken 独立拥有 minter/cap/supply/error/event policy；batch、
+receiver callback、metadata URI、standard typed events 与 full-width id 继续 fail closed。
+两个 extractor condition 限制已显式记录为后续 hardening，不以隐藏 alias 或 magic constant
+掩盖。详见 [R5-014](tasks/r5-014.md)。
 
 ### R6 — 双目标验收
 

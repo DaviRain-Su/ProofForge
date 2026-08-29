@@ -3,10 +3,10 @@ import Examples.MultiToken
 import Examples.CraftToken
 
 /-!
-EVM-SDK-8 focused suite (unaggregated): bounded ERC-1155 key envelope, predicate surface, and
-two independent consumers with stable extracted digests. Live mint/burn/transfer/operator
-matrices live in `runtime-tests/evm/anvil_multitoken.sh` and `anvil_crafttoken.sh`; neither this
-spec nor the examples are wired into `Tests.lean`/`Examples.lean` yet (coordinator hook).
+EVM-SDK-8 focused suite: bounded ERC-1155 key envelope, predicate surface, and two independent
+consumers with stable extracted digests. Live mint/burn/transfer/operator matrices live in
+`runtime-tests/evm/anvil_multitoken.sh` and `anvil_crafttoken.sh`; the aggregate EVM gate builds and
+runs both consumers.
 -/
 
 namespace Tests.EvmErc1155Spec
