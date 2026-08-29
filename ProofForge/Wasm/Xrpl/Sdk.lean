@@ -6,7 +6,8 @@ import ProofForge.Wasm.Xrpl.Runtime
 
 Contract-facing names over existing Runtime leaves. Every public definition is
 `@[pf_inline]` and erases to `ProofForge.Wasm.Xrpl.Runtime.*`. No new host import,
-Op, or storage layout. Ownable remains a source `if` on three AccountId limbs.
+Op, or storage layout. Ownable and Pausable remain source `if`s on AccountId
+limbs and a UInt64 flag.
 -/
 
 namespace ProofForge.Wasm.Xrpl.Sdk
@@ -64,6 +65,20 @@ namespace Context
 @[pf_inline] def baseFee : UInt64 := Runtime.xrplBaseFee
 
 end Context
+
+namespace Pausable
+
+/-- Canonical running flag. Not EVM `Pausable.running` UInt8; XRPL stores UInt64. -/
+@[pf_inline] def running : UInt64 := 0
+
+/-- Canonical paused flag. -/
+@[pf_inline] def paused : UInt64 := 1
+
+/-- True only for the canonical running flag. Unknown values fail closed. -/
+@[pf_inline] def isRunning (flag : UInt64) : Bool :=
+  flag = running
+
+end Pausable
 
 namespace Access
 

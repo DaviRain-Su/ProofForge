@@ -79,6 +79,16 @@
       "returns": { "type": "UINT32" }
     },
     {
+      "name": "pause",
+      "parameters": [],
+      "returns": { "type": "UINT32" }
+    },
+    {
+      "name": "unpause",
+      "parameters": [],
+      "returns": { "type": "UINT32" }
+    },
+    {
       "name": "ownerLo",
       "parameters": [],
       "returns": { "type": "UINT64" }

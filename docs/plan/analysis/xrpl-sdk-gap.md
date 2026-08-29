@@ -103,6 +103,7 @@ CMP（wsm-006）是 Runtime 能力：三叶能比。SDK 的 `AccountId.eq`（wsm
 
 没有：Map、Event、Payments。Access / Hash / 编译期命名槽（VEC-1）已绿。
 活网零参数 Ownable 是 `XrplGate`（`renounce` 后再 `bump` 状态码 3）。
+Pausable 是 `XrplHold`（`pause` 后再 `bump` 状态码 4）。
 
 ### wasm v0 子集（现在卡住 Vec/Map 的原因）
 
@@ -157,8 +158,9 @@ XLS-0102 的 `home_le_field` / `sha512_half` **不是** 本镜像名字。
 
 | 切片 | 内容 |
 |---|---|
-| **XRPL-SDK-ACCESS** | `Access.requireOwner (owner : AccountId) : Bool` = `AccountId.eq Context.caller owner`。Ownable 走它 |
-| 两步移交 | 一个 pending 三叶，源码 `if`，仍不是新 Op |
+| **XRPL-SDK-ACCESS** | 已绿。`Access.requireOwner` |
+| **XRPL-SDK-PAUSE** | 已绿。`Pausable.isRunning`；`errorNamed "paused"` = 4 |
+| 两步移交 | 一个 pending 三叶，源码 `if`，仍不是新 Op。活网要第二把钥匙或 `renounce` 变体 |
 | owner+hash | `requireOwner` 之后写 `Hash.sha512HalfLit` |
 
 这些证明 SDK 是组合层，不是新链。

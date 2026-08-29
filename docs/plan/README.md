@@ -191,6 +191,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-013](tasks/wsm-013.md) | done | XRPL-ALPHANET：XLS-0102 host 表 |
 | [wsm-014](tasks/wsm-014.md) | done | AlphaNet 零参数烟测 + 本仓 deploy/call |
 | [wsm-015](tasks/wsm-015.md) | done | AlphaNet 零参数 Ownable（XrplGate + `pf deploy`/`pf call`） |
+| [wsm-016](tasks/wsm-016.md) | done | XRPL-SDK-PAUSE：零参数 Pausable（XrplHold，状态码 4） |
 
 ## SVM 全面工作计划（当前主线）
 

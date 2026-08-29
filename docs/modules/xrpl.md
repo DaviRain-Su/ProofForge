@@ -20,7 +20,7 @@ WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
 | `Xrpl.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / bedrock / AlphaNet |
 | `Xrpl.Registry` | 可构建模块 + canonical digest | 部署声明 |
 | `Xrpl.Commands` | `#pf_xrpl_build` / `#pf_xrpl_dump` | 新 DSL |
-| `Xrpl.Sdk` | `@[pf_inline]`：`Context`、`AccountId.eq`、`Access.requireOwner`、`Hash.sha512HalfLit` | 新 host / Vec / Map / EVM hashed storage |
+| `Xrpl.Sdk` | `@[pf_inline]`：`Context`、`AccountId.eq`、`Access.requireOwner`、`Pausable.isRunning`、`Hash.sha512HalfLit` | 新 host / Vec / Map / EVM hashed storage |
 
 ## v0 子集（全部 fail closed）
 
@@ -32,7 +32,8 @@ WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
   `meta.ReturnValue`，工程门从 `ContractJson` 读状态）；
   mutating entry 只返回 `i32` 状态码（源声明的 public 返回值被省略，读 view）；
 - ops：checked 五则、`ite`、`okState` / `returnState` / `returnU64`、
-  `errorOverflow`、钉死的 `errorNamed "unauthorized"`（wasm `i32` 状态码 3）、
+  `errorOverflow`、钉死的 `errorNamed "unauthorized"`（wasm `i32` 状态码 3）和
+  `errorNamed "paused"`（状态码 4）、
   `storeField`；loop / local / vector / map / 其它 named error /
   位运算 / 移位 / 未检查 `/ %` 全部拒绝；
 - 宿主 capability（wsm-005）：`Xrpl.Runtime.xrplCaller20` / `xrplSelf20` /
@@ -81,7 +82,8 @@ CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本�
 注册程序见 `Xrpl.Registry`；当前为 `Counter`
 （digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`、`XrplHash`、`XrplRt2`、
 `XrplVec`（digest `e47db263444f8c7e`，编译期 JSON 槽 `xs_0`…`xs_2`）、
-`XrplSmoke`、`XrplGate`（digest `c2495d166a25c8e0`，零参数 Ownable + `renounce`）。
+`XrplSmoke`、`XrplGate`（digest `c2495d166a25c8e0`，零参数 Ownable + `renounce`）、
+`XrplHold`（digest `e99965ac007e0da8`，Ownable + Pausable，pause 后再 bump 状态码 4）。
 `pf deploy` / `pf call` 只打 AlphaNet。
 
 ## 与调研文档 WAT 设想的关系
