@@ -49,6 +49,7 @@ import Examples.XrplOwn
 import Examples.XrplHash
 import Examples.XrplRt2
 import Examples.XrplVec
+import Examples.XrplSmoke
 import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster

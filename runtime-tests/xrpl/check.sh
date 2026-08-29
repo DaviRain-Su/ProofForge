@@ -65,6 +65,11 @@ need_exports_vec = (
     '(func (export "get0")',
     '(data (i32.const 64) "xs_0xs_1xs_2")',
 )
+need_exports_smoke = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "bump") (result i32)',
+    '(func (export "get")',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -82,6 +87,8 @@ for wat in wats:
         exports = need_exports_rt2
     elif wat.stem == "XrplVec":
         exports = need_exports_vec
+    elif wat.stem == "XrplSmoke":
+        exports = need_exports_smoke
     else:
         exports = need_exports_counter
     for needle in exports:

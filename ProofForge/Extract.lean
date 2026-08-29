@@ -644,7 +644,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | _ => ops
   let paramCount :=
     match kind with
-    | .init => if nLams = 0 then 1 else nLams
+    | .init => nLams
     | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
   let retTy := peelForalls info.type
   let paramSchemas ← inferParamSchemas env e kind

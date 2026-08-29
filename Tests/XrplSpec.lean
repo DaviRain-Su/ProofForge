@@ -11,6 +11,7 @@ import Examples.Hash
 import Examples.XrplHash
 import Examples.XrplRt2
 import Examples.XrplVec
+import Examples.XrplSmoke
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -32,7 +33,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHash" == some "ce42ea8b4607843e"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRt2" == some "1d6d712500b8daf0"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplVec" == some "e47db263444f8c7e"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplSmoke" == some "f8f474cfdfa499f6"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -60,6 +62,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplRt2
 
 #pf_xrpl_build Examples.XrplVec
+
+#pf_xrpl_build Examples.XrplSmoke
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -248,7 +252,7 @@ elab "#pf_xrpl_alphanet_emit_check " n:ident : command => do
           "(import \"host_lib\" \"sha512_half\"",
           "(func (export \"initialize\") (result i32)",
           "(func (export \"get\") (result i32)",
-          "(i32.const 524320)"
+          "(i32.const 524289)"
         ]
         for anchor in anchors do
           unless source.contains anchor do

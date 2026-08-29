@@ -445,9 +445,11 @@ private def loadHostParams (host : Contract) (p : Program ValExt OpExt)
 private def loadAccount (host : Contract) (level : Nat) (view : Bool) : Array String :=
   if !host.objectStore then #[]
   else
+    let hostFn := if host.ownerFromTx then host.getTxField else host.homeLeField
+    let field := if host.ownerFromTx then host.sfieldTxAccount else host.sfieldAccount
     let header := #[
-      indent level ("(local.set $st (call $" ++ host.homeLeField ++
-        " (i32.const " ++ toString host.sfieldAccount ++
+      indent level ("(local.set $st (call $" ++ hostFn ++
+        " (i32.const " ++ toString field ++
         ") (i32.const " ++ toString accountOff ++
         ") (i32.const " ++ toString accountLen ++ ")))")
     ]
@@ -512,7 +514,7 @@ private partial def countTemps (ops : Array (Op ValExt OpExt)) : Nat :=
 private def renderFn (host : Contract) (p : Program ValExt OpExt)
     (method : Method ValExt OpExt)
     (extValCanon : ValExt → String)
-    (loadEnv : Contract → Nat → Bool → Array String) : Except String (Array String) := do
+    (loadEnv : Contract → Method ValExt OpExt → Nat → Bool → Array String) : Except String (Array String) := do
   let view := method.tupleArity.isSome
   let st : EState := { paramCount := method.paramCount }
   let region ← emitRegion host p extValCanon view 4 (defaultSlotOf p) method.ops.toList st
@@ -546,7 +548,7 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
     lines := lines.push s!"    {loc}"
   lines := lines ++ loadHostParams host p method.paramCount 4 view
   lines := lines ++ loadAccount host 4 view
-  lines := lines ++ loadEnv host 4 view
+  lines := lines ++ loadEnv host method 4 view
   lines := lines ++ loadSlots host p 4 view
   lines := lines ++ region.lines
   lines := lines.push "  )"
@@ -556,7 +558,7 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
 def emit (host : Contract)
     (extValCanon : ValExt → String) (extOpCanon : OpExt (Val ValExt) → String)
     (p : Program ValExt OpExt)
-    (loadEnv : Contract → Nat → Bool → Array String := fun _ _ _ => #[])
+    (loadEnv : Contract → Method ValExt OpExt → Nat → Bool → Array String := fun _ _ _ _ => #[])
     (extraImports : Array String := #[]) : Except String String := do
   let mut lines : Array String := #[]
   lines := lines.push s!";; {host.headerTag}"
