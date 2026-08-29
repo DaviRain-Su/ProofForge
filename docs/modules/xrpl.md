@@ -35,7 +35,9 @@ WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
   `storeField`；loop / local / vector / map / 其它 named error /
   位运算 / 移位 / 未检查 `/ %` 全部拒绝；
 - 宿主 capability（wsm-005）：`Xrpl.Runtime.xrplCaller20` / `xrplSelf20` /
-  `xrplLedgerSqn` / `xrplParentTime`。hash 仍 fail closed。
+  `xrplLedgerSqn` / `xrplParentTime`。hash：`xrplSha512HalfLit` →
+  `host_lib.compute_sha512_half`，只返回首个小端 UInt64。完整 32B / 动态输入 /
+  keccak 仍 fail closed。
 
 ## 诚实边界
 
@@ -48,7 +50,8 @@ WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
 - 工程门分两层：`runtime-tests/xrpl/check.sh` 断言产物形状（import 表 + wasm
   magic）；`runtime-tests/xrpl/counter.sh` 起 Bedrock 本地节点、部署本仓
   `Counter.wasm`（`--skip-build`）、跑 initialize / increment / overflow / get。
-  `ctx.sh` 验环境叶；`own.sh` 验三叶比较（非 owner 状态码 3）。
+  `ctx.sh` 验环境叶；`own.sh` 验三叶比较（非 owner 状态码 3）；
+  `hash.sh` 验 `compute_sha512_half("vault")` 首个小端 u64。
   缺 Docker / bedrock 则 skip。不是「artifact 已被证明」。
 
 ## 摘要
@@ -67,7 +70,7 @@ WAT {name}.wat
 
 CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本身会被
 拒绝并提示它是家族不是链）。注册程序见 `Xrpl.Registry`；当前为 `Counter`
-（digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`。
+（digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`、`XrplHash`。
 
 ## 与调研文档 WAT 设想的关系
 

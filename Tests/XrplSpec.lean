@@ -7,6 +7,8 @@ import Examples.Clock
 import Examples.EvmCtx
 import Examples.XrplCtx
 import Examples.XrplOwn
+import Examples.Hash
+import Examples.XrplHash
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -25,7 +27,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "Counter" == some "e029f72296e320be"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCtx" == some "f483be9d20810b57"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplOwn" == some "47645ee35068637f"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHash" == some "ce42ea8b4607843e"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -40,11 +43,15 @@ elab "#pf_xrpl_reject " n:ident : command => do
 
 #pf_xrpl_reject Examples.EvmCtx
 
+#pf_xrpl_reject Examples.Hash
+
 #pf_xrpl_build Examples.Counter
 
 #pf_xrpl_build Examples.XrplCtx
 
 #pf_xrpl_build Examples.XrplOwn
+
+#pf_xrpl_build Examples.XrplHash
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -126,3 +133,37 @@ elab "#pf_xrpl_own_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-own: {source.length} bytes of WAT passed own anchor check"
 
 #pf_xrpl_own_emit_check Examples.XrplOwn
+
+open Lean Elab Command in
+elab "#pf_xrpl_hash_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"host_lib\" \"compute_sha512_half\"",
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"stamp\") (result i32)",
+          "(func (export \"get\")",
+          "(i32.const 118)",
+          "(i32.const 97)",
+          "(i32.const 117)",
+          "(i32.const 108)",
+          "(i32.const 116)",
+          "(call $compute_sha512_half"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing hash anchor: {anchor}\n{source}"
+        unless !source.contains "sha256Lit" do
+          throwError "wasm emit must not mention sha256Lit"
+        unless !source.contains "keccak256" do
+          throwError "wasm emit must not mention keccak256"
+        unless !source.contains "\"sha512_half\"" do
+          throwError "wasm emit must use compute_sha512_half, not sha512_half"
+        logInfo m!"proofforge-xrpl-hash: {source.length} bytes of WAT passed hash anchor check"
+
+#pf_xrpl_hash_emit_check Examples.XrplHash

@@ -43,6 +43,10 @@ private def localOfTemp (i : Nat) : String := "$pf_r" ++ toString i
 private def extLocal (tag : ValExt → String) (kind : ValExt) : String :=
   "pf_x_" ++ tag kind
 
+/-- Hash-lit seeds are spelled `xsha.{seed}` by XRPL `extValCanon`. -/
+private def sha512Seed? (tag : String) : Option String :=
+  if tag.startsWith "xsha." then some (tag.drop "xsha.".length |>.copy) else none
+
 private partial def renderVal (extTag : ValExt → String) (st : EState)
     (v : Val ValExt) : Except String String :=
   match v with
@@ -73,7 +77,18 @@ private partial def renderVal (extTag : ValExt → String) (st : EState)
       let l ← renderVal extTag st lhs
       let r ← renderVal extTag st rhs
       return ("(i64.mul " ++ l ++ " " ++ r ++ ")")
-  | .ext kind _ => .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
+  | .ext kind _ =>
+      match sha512Seed? (extTag kind) with
+      | some seed =>
+          -- Seed at 96, 32-byte digest at 160. First little-endian i64 is the leaf.
+          let stores := String.join (seed.toList.mapIdx fun i c =>
+            "(i32.store8 (i32.const " ++ toString (96 + i) ++
+            ") (i32.const " ++ toString c.toNat ++ ")) ")
+          .ok ("(block (result i64) " ++ stores ++
+            "(drop (call $compute_sha512_half (i32.const 96) (i32.const " ++
+              toString seed.length ++
+              ") (i32.const 160) (i32.const 32))) (i64.load (i32.const 160)))")
+      | none => .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
   | _ => .error "extract/unsupported: wasm v0 value"
 
 private def isExitOp : Op ValExt OpExt → Bool

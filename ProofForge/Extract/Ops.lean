@@ -127,6 +127,8 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
 @[match_pattern] def Val.xrplSelfW2 : Val := xrplLeaf .selfW2
 @[match_pattern] def Val.xrplLedgerSqn : Val := xrplLeaf .ledgerSqn
 @[match_pattern] def Val.xrplParentTime : Val := xrplLeaf .parentTime
+@[match_pattern] def Val.xrplSha512HalfLit (seed : String) : Val :=
+  xrplLeaf (.sha512HalfLit seed)
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2

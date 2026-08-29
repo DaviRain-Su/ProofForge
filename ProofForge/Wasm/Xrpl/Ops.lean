@@ -18,6 +18,8 @@ inductive ValKind where
   | selfW0 | selfW1 | selfW2
   | ledgerSqn
   | parentTime
+  /-- Compile-time ASCII seed; first little-endian UInt64 of SHA-512Half. -/
+  | sha512HalfLit (seed : String)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
