@@ -48,7 +48,7 @@ Authoritative source anchors:
 |---|---|---|---|
 | register ABI | nearcore host | bounded reads for input/storage/context | Runtime memory/register contract |
 | full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
-| u128 token/gas types | host LE-u128 + SDK wrappers | deposit/balance truncate to UInt64 | shared wide value + Near ABI binding |
+| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance complete** in wsm-021; gas/promise values absent | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | ASCII keys, fixed 8-byte values, read/write only | Near Runtime storage effect |
 | Borsh/JSON method ABI | generated SDK wrapper | raw zero/one UInt64 input, one UInt64 output | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | independent field keys | Near SDK policy; migration/version explicit |
@@ -131,7 +131,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | Phase | Deliverable | Gate before advancing |
 |---|---|---|
 | N0 identity | lossless host AccountId + equality/self-call guard (**wsm-020 done**) | all eight zero-fill stores; high-word/length equality; sandbox 9-byte boundary |
-| N1 byte/wide substrate | bounded bytes/string memory plan, UInt128 token values, bounded register reads, `value_return`/panic/log byte spans | resource budget; malformed length/OOB/UTF-8 failures |
+| N1 byte/wide substrate | **UInt128 token context done** in wsm-021; bounded bytes/string memory plan, register reads, `value_return`/panic/log byte spans remain | resource budget; malformed length/OOB/UTF-8 failures |
 | N2 entry ABI | canonical Borsh first, then JSON named objects; generated decode/call/encode wrapper | golden bytes against Rust; exact cursor/padding |
 | N3 raw storage | arbitrary binary key/value, read/write/remove/exists, evicted value; explicit prefix ownership | view write/remove rejection; storage status matrix |
 | N4 collections | current-layout Vector → LookupMap/Set → IterableMap/Set → bounded Queue; optional TreeMap last | independent consumers; layout golden tests; no hidden flush |
@@ -143,8 +143,8 @@ It depends on full AccountId and u128 and is asynchronous.
 
 ## 6. Near-term task cuts
 
-1. **NEAR-F0-BYTES:** bind existing bounded bytes/string and UInt128 values to a static,
-   allocation-free NEAR memory/register plan. Do not add collections yet.
+1. **NEAR-F0-BYTES:** UInt128 context binding is complete in wsm-021; next bind bounded
+   bytes/string to a static, allocation-free NEAR memory/register plan. Do not add collections yet.
 2. **NEAR-LOG:** add one bounded `log_utf8` Runtime effect and exact sandbox log observation.
 3. **NEAR-STORAGE-RAW:** binary key/value read/write/remove/exists with explicit status results.
 4. **NEAR-BORSH-ENTRY:** generated bounded Borsh input/output and stable state schema.

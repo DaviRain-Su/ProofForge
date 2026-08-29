@@ -127,7 +127,11 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext .predecessorW6 #[] => .ok "(local.get $pf_pred6)"
   | .ext .predecessorW7 #[] => .ok "(local.get $pf_pred7)"
   | .ext .attachedDeposit #[] => .ok "(local.get $pf_dep)"
+  | .ext .attachedDepositW0 #[] => .ok "(local.get $pf_dep)"
+  | .ext .attachedDepositW1 #[] => .ok "(local.get $pf_dep_hi)"
   | .ext .accountBalance #[] => .ok "(local.get $pf_bal)"
+  | .ext .accountBalanceW0 #[] => .ok "(local.get $pf_bal)"
+  | .ext .accountBalanceW1 #[] => .ok "(local.get $pf_bal_hi)"
   | .ext .currentAccountId #[] => .ok "(local.get $pf_self)"
   | .ext .currentAccountIdLen #[] => .ok "(local.get $pf_self_len)"
   | .ext .currentAccountIdW1 #[] => .ok "(local.get $pf_self1)"
@@ -372,6 +376,14 @@ private def currentAccountKinds : Array ValKind := #[
   .currentAccountIdW6, .currentAccountIdW7
 ]
 
+private def attachedDepositKinds : Array ValKind := #[
+  .attachedDeposit, .attachedDepositW0, .attachedDepositW1
+]
+
+private def accountBalanceKinds : Array ValKind := #[
+  .accountBalance, .accountBalanceW0, .accountBalanceW1
+]
+
 private def methodUsesAny (kinds : Array ValKind) (method : Method ValKind OpExt) : Bool :=
   kinds.any (methodUses · method)
 
@@ -402,31 +414,39 @@ private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level
     Except String (Array String) := do
   if view && methodUsesAny predecessorKinds method then
     throw s!"extract/unsupported: {method.ixName} view cannot read predecessor"
-  if view && methodUses .attachedDeposit method then
+  if view && methodUsesAny attachedDepositKinds method then
     throw s!"extract/unsupported: {method.ixName} view cannot read attachedDeposit"
   let mut lines : Array String := #[]
   if methodUsesAny predecessorKinds method then
     lines := lines ++ loadAccountId "$pf_predecessor_account_id" "$pf_pred_len"
       0 predecessorAccountOff level predecessorWordLocal
-  if methodUses .attachedDeposit method then
+  if methodUsesAny attachedDepositKinds method then
+    lines := lines.push (indent level "(call $pf_attached_deposit (i64.const 24))")
+    if methodUses .attachedDeposit method then
+      lines := lines ++ #[
+        indent level "(if (i64.ne (i64.load (i32.const 32)) (i64.const 0))",
+        indent (level + 2) "(then",
+        indent (level + 4) ("(call $pf_panic_utf8 (i64.const 8) (i64.const " ++
+          toString panicOverflowOff ++ "))"),
+        indent (level + 2) "))"
+      ]
     lines := lines ++ #[
-      indent level "(call $pf_attached_deposit (i64.const 24))",
-      indent level "(if (i64.ne (i64.load (i32.const 32)) (i64.const 0))",
-      indent (level + 2) "(then",
-      indent (level + 4) ("(call $pf_panic_utf8 (i64.const 8) (i64.const " ++
-        toString panicOverflowOff ++ "))"),
-      indent (level + 2) "))",
-      indent level "(local.set $pf_dep (i64.load (i32.const 24)))"
+      indent level "(local.set $pf_dep (i64.load (i32.const 24)))",
+      indent level "(local.set $pf_dep_hi (i64.load (i32.const 32)))"
     ]
-  if methodUses .accountBalance method then
+  if methodUsesAny accountBalanceKinds method then
+    lines := lines.push (indent level "(call $pf_account_balance (i64.const 40))")
+    if methodUses .accountBalance method then
+      lines := lines ++ #[
+        indent level "(if (i64.ne (i64.load (i32.const 48)) (i64.const 0))",
+        indent (level + 2) "(then",
+        indent (level + 4) ("(call $pf_panic_utf8 (i64.const 8) (i64.const " ++
+          toString panicOverflowOff ++ "))"),
+        indent (level + 2) "))"
+      ]
     lines := lines ++ #[
-      indent level "(call $pf_account_balance (i64.const 40))",
-      indent level "(if (i64.ne (i64.load (i32.const 48)) (i64.const 0))",
-      indent (level + 2) "(then",
-      indent (level + 4) ("(call $pf_panic_utf8 (i64.const 8) (i64.const " ++
-        toString panicOverflowOff ++ "))"),
-      indent (level + 2) "))",
-      indent level "(local.set $pf_bal (i64.load (i32.const 40)))"
+      indent level "(local.set $pf_bal (i64.load (i32.const 40)))",
+      indent level "(local.set $pf_bal_hi (i64.load (i32.const 48)))"
     ]
   if methodUsesAny currentAccountKinds method then
     lines := lines ++ loadAccountId "$pf_current_account_id" "$pf_self_len"
@@ -496,10 +516,12 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push "    (local $pf_pred_len i64)"
     for i in List.range 8 do
       lines := lines.push ("    (local " ++ predecessorWordLocal i ++ " i64)")
-  if methodUses .attachedDeposit method then
+  if methodUsesAny attachedDepositKinds method then
     lines := lines.push "    (local $pf_dep i64)"
-  if methodUses .accountBalance method then
+    lines := lines.push "    (local $pf_dep_hi i64)"
+  if methodUsesAny accountBalanceKinds method then
     lines := lines.push "    (local $pf_bal i64)"
+    lines := lines.push "    (local $pf_bal_hi i64)"
   if methodUsesAny currentAccountKinds method then
     lines := lines.push "    (local $pf_self_len i64)"
     for i in List.range 8 do
@@ -561,10 +583,10 @@ def emit (p : IR.Program) : Except String String := do
   if predecessorKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"predecessor_account_id\" (func $pf_predecessor_account_id (param i64)))"
-  if programUses .attachedDeposit p then
+  if attachedDepositKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"attached_deposit\" (func $pf_attached_deposit (param i64)))"
-  if programUses .accountBalance p then
+  if accountBalanceKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"account_balance\" (func $pf_account_balance (param i64)))"
   if currentAccountKinds.any (programUses · p) then

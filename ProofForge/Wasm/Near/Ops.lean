@@ -5,8 +5,8 @@ import ProofForge.Core.CFG
 # NEAR target dialect
 
 Value/effect extensions owned by the NEAR Protocol chain. v0 admits scalar
-context reads plus lossless 64-byte account-id leaves. Promise and hashing
-stay absent.
+context reads, lossless u128 token values, and lossless 64-byte account-id
+leaves. Promise and hashing stay absent.
 `reserved` is rejected by `wellFormed`.
 -/
 
@@ -21,8 +21,11 @@ inductive ValKind where
   | predecessorLen
   | predecessorW1 | predecessorW2 | predecessorW3 | predecessorW4
   | predecessorW5 | predecessorW6 | predecessorW7
+  /-- Legacy checked UInt64 leaves plus lossless u128 low/high leaves. -/
   | attachedDeposit
+  | attachedDepositW0 | attachedDepositW1
   | accountBalance
+  | accountBalanceW0 | accountBalanceW1
   /-- Legacy current-account w0 plus the remaining lossless AccountId leaves. -/
   | currentAccountId
   | currentAccountIdLen

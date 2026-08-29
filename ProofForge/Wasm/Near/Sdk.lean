@@ -9,6 +9,7 @@ they do not add Ops, IR nodes, or emitter cases. Promise / NEP-141 stay absent.
 -/
 
 notation "AccountId" => Runtime.AccountId
+notation "NearToken" => Runtime.NearToken
 
 namespace «AccountId»
 
@@ -50,12 +51,19 @@ namespace Context
 /-- Legacy low word. Not an identity; use `caller` for authorization. -/
 @[pf_inline] def callerLo : UInt64 := Runtime.predecessor
 
-/-- Init/entry only. Views that mention this fail closed at emit. -/
-@[pf_inline] def attachedDeposit : UInt64 :=
-  Runtime.attachedDeposit
+/-- Complete attached yoctoNEAR amount. Init/entry only; views fail closed. -/
+@[pf_inline] def attachedDeposit : NearToken :=
+  Runtime.attachedDeposit128
 
-@[pf_inline] def balanceOfSelf : UInt64 :=
-  Runtime.accountBalance
+/-- Legacy UInt64 projection. Traps if the attached amount exceeds UInt64. -/
+@[pf_inline] def attachedDepositLo : UInt64 := Runtime.attachedDeposit
+
+/-- Complete, view-safe current-account balance. -/
+@[pf_inline] def balanceOfSelf : NearToken :=
+  Runtime.accountBalance128
+
+/-- Legacy UInt64 balance. Traps if the current balance exceeds UInt64. -/
+@[pf_inline] def balanceOfSelfLo : UInt64 := Runtime.accountBalance
 
 /-- Complete current contract account id. View-safe. -/
 @[pf_inline] def self : AccountId :=

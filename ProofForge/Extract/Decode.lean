@@ -41,8 +41,16 @@ private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
     some Ops.Val.nearPredecessorW7
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDeposit then
     some Ops.Val.nearAttachedDeposit
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDepositW0 then
+    some Ops.Val.nearAttachedDepositW0
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDepositW1 then
+    some Ops.Val.nearAttachedDepositW1
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalance then
     some Ops.Val.nearAccountBalance
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalanceW0 then
+    some Ops.Val.nearAccountBalanceW0
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalanceW1 then
+    some Ops.Val.nearAccountBalanceW1
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountId then
     some Ops.Val.nearCurrentAccountId
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdLen then
@@ -811,7 +819,15 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
             some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, amount])
           | _, _ => none
       | none, none, none =>
-        if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
+        if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.attachedDeposit128 then
+          if leaf == "w0" then some Ops.Val.nearAttachedDepositW0
+          else if leaf == "w1" then some Ops.Val.nearAttachedDepositW1
+          else none
+        else if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.accountBalance128 then
+          if leaf == "w0" then some Ops.Val.nearAccountBalanceW0
+          else if leaf == "w1" then some Ops.Val.nearAccountBalanceW1
+          else none
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
             endsWith baseE ".evmMapGetAddr256" then
           let gargs := baseE.getAppArgs
           if gargs.size < 2 then none
@@ -6506,7 +6522,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .nearPredecessorLen
     | .nearPredecessorW1 | .nearPredecessorW2 | .nearPredecessorW3 | .nearPredecessorW4
     | .nearPredecessorW5 | .nearPredecessorW6 | .nearPredecessorW7
-    | .nearAttachedDeposit | .nearAccountBalance | .nearCurrentAccountId
+    | .nearAttachedDeposit | .nearAttachedDepositW0 | .nearAttachedDepositW1
+    | .nearAccountBalance | .nearAccountBalanceW0 | .nearAccountBalanceW1
+    | .nearCurrentAccountId
     | .nearCurrentAccountIdLen
     | .nearCurrentAccountIdW1 | .nearCurrentAccountIdW2 | .nearCurrentAccountIdW3
     | .nearCurrentAccountIdW4 | .nearCurrentAccountIdW5 | .nearCurrentAccountIdW6

@@ -1,4 +1,11 @@
+import ProofForge.Core.Value
+
 namespace ProofForge.Wasm.Near.Runtime
+
+/-! NEAR compatibility name for the shared, allocation-free u128 value. -/
+
+/-- YoctoNEAR amount, least-significant `UInt64` word first. -/
+abbrev NearToken := ProofForge.Core.Value.UInt128
 
 /--
 Lossless host-returned NEAR account id: byte length plus eight little-endian
@@ -65,18 +72,30 @@ def predecessorAccountId : AccountId :=
     w6 := predecessorW6
     w7 := predecessorW7 }
 
-/--
-`attached_deposit` as a UInt64. The host writes a little-endian u128; if the
-high limb is nonzero the contract traps (`overflow`). Init/entry only — view
-context cannot call `attached_deposit`.
--/
+/-- Legacy UInt64 `attached_deposit`. The emitter traps when the host u128 high
+word is nonzero. Use `attachedDeposit128` for the lossless amount. -/
 @[irreducible] def attachedDeposit : UInt64 := 0
 
-/--
-`account_balance` of the current account, same u128-truncation rule as
-`attachedDeposit`. View-safe.
--/
+/-- Dedicated lossless `attached_deposit` leaves. They are distinct from the
+legacy leaf because projecting `w0` from a valid u128 must not impose the old
+UInt64 overflow trap. Init/entry only. -/
+@[irreducible] def attachedDepositW0 : UInt64 := 0
+@[irreducible] def attachedDepositW1 : UInt64 := 0
+
+/-- Complete attached deposit as the host's little-endian u128. -/
+def attachedDeposit128 : NearToken :=
+  { w0 := attachedDepositW0, w1 := attachedDepositW1 }
+
+/-- Legacy UInt64 `account_balance`, trapping when its high word is nonzero.
+Use `accountBalance128` for the lossless, view-safe amount. -/
 @[irreducible] def accountBalance : UInt64 := 0
+
+@[irreducible] def accountBalanceW0 : UInt64 := 0
+@[irreducible] def accountBalanceW1 : UInt64 := 0
+
+/-- Complete current-account balance as the host's little-endian u128. -/
+def accountBalance128 : NearToken :=
+  { w0 := accountBalanceW0, w1 := accountBalanceW1 }
 
 /--
 `current_account_id` as the first 8 bytes of the UTF-8 account id,

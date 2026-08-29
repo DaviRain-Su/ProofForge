@@ -4,6 +4,8 @@
 Scenes:
   initialize(0) → get()==0
   full current AccountId is length + zero-padded 64-byte words
+  account_balance and attached_deposit preserve both u128 words
+  explicit legacy deposit projection traps when the high word is nonzero
   direct call passes full predecessor == current-account self check
   height() equals status.sync_info.latest_block_height
   stamp() stores that height; get() matches SuccessValue
@@ -35,7 +37,7 @@ def main() -> None:
     wasm = Path(_require("PF_NEAR_WASM"))
     client = NearClient(rpc, home)
 
-    print("=== suite: NearCtx (height / stamp / seconds) ===")
+    print("=== suite: NearCtx (account / u128 / height / time) ===")
     client.deploy(wasm)
 
     client.call("initialize", NearClient.encode_u64_le(0))
@@ -58,6 +60,41 @@ def main() -> None:
     if self_w1 != ord("r"):
         raise AssertionError(f"selfIdWord1() expected zero-padded 'r', got {self_w1:#x}")
     print("nearctx: full self AccountId == len(9) + test.nea/r words ok")
+
+    account_balance = client.view_account_balance(client.account_id)
+    balance_low = client.view_u64("selfBal")
+    balance_high = client.view_u64("selfBalHigh")
+    if balance_low != account_balance & ((1 << 64) - 1):
+        raise AssertionError(
+            f"selfBal() expected account balance low word "
+            f"{account_balance & ((1 << 64) - 1)}, got {balance_low}"
+        )
+    if balance_high != account_balance >> 64:
+        raise AssertionError(
+            f"selfBalHigh() expected account balance high word "
+            f"{account_balance >> 64}, got {balance_high}"
+        )
+    print(f"nearctx: account_balance u128 == ({balance_high:#x}, {balance_low:#x}) ok")
+
+    wide_deposit = (1 << 64) + 7
+    low_res = client.call("takeDeposit", b"", deposit=wide_deposit)
+    low_value = NearClient.success_value_bytes(low_res)
+    if low_value is None or len(low_value) < 8:
+        raise AssertionError(f"takeDeposit SuccessValue expected ≥8 bytes, got {low_value!r}")
+    if NearClient.decode_u64_le(low_value, 0) != 7:
+        raise AssertionError("takeDeposit must preserve the low word of a >u64 deposit")
+    high_res = client.call("takeDepositHigh", b"", deposit=wide_deposit)
+    high_value = NearClient.success_value_bytes(high_res)
+    if high_value is None or len(high_value) < 8:
+        raise AssertionError(
+            f"takeDepositHigh SuccessValue expected ≥8 bytes, got {high_value!r}"
+        )
+    if NearClient.decode_u64_le(high_value, 0) != 1:
+        raise AssertionError("takeDepositHigh must preserve the high word of a >u64 deposit")
+    client.call(
+        "takeDepositLegacy", b"", deposit=wide_deposit, expect_success=False
+    )
+    print("nearctx: >u64 attached_deposit full words pass; legacy UInt64 traps ok")
 
     self_call = client.call("checkSelfCall", b"")
     self_call_value = NearClient.success_value_bytes(self_call)

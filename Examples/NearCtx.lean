@@ -26,10 +26,15 @@ def height (_s : State) : UInt64 :=
 def seconds (_s : State) : UInt64 :=
   Context.unixTimeSeconds
 
-/-- view：本合约余额（u128 截断到 UInt64）。 -/
+/-- view：本合约完整 u128 余额的低 64 位；不会因高位非零而 trap。 -/
 @[pf_entry]
 def selfBal (_s : State) : UInt64 :=
-  Context.balanceOfSelf
+  Context.balanceOfSelf.w0
+
+/-- view：本合约完整 u128 余额的高 64 位。 -/
+@[pf_entry]
+def selfBalHigh (_s : State) : UInt64 :=
+  Context.balanceOfSelf.w1
 
 /-- view：本账户 id 前 8 字节 LE；完整身份用 `Context.self`。 -/
 @[pf_entry]
@@ -54,11 +59,27 @@ def stamp (_s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-/-- 付款入口：要求 attached deposit 的 lo64，hi64≠0 由 runtime trap。 -/
+/-- 付款入口：读取完整 attached deposit 的低 64 位；高位非零仍是有效金额。 -/
 @[pf_entry]
 def takeDeposit (_s : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ stamped := Context.attachedDeposit }, Context.attachedDeposit)
+    .ok ({ stamped := Context.attachedDeposit.w0 }, Context.attachedDeposit.w0)
+  else
+    .error .overflow
+
+/-- 付款入口：读取完整 attached deposit 的高 64 位。 -/
+@[pf_entry]
+def takeDepositHigh (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ stamped := Context.attachedDeposit.w1 }, Context.attachedDeposit.w1)
+  else
+    .error .overflow
+
+/-- 显式旧接口：attached deposit 超过 UInt64 时保留历史 overflow trap。 -/
+@[pf_entry]
+def takeDepositLegacy (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ stamped := Context.attachedDepositLo }, Context.attachedDepositLo)
   else
     .error .overflow
 

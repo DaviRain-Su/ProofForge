@@ -205,6 +205,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-rt-001](tasks/wsm-near-rt-001.md) | done | NEAR Runtime 叶子 + 薄 SDK（block/time/caller/deposit/balance） |
 | [wsm-019](tasks/wsm-019.md) | done | NEAR `current_account_id`（view-safe self，UInt64 前 8 字节） |
 | [wsm-020](tasks/wsm-020.md) | done | NEAR lossless AccountId + full equality/self-call guard |
+| [wsm-near-u128-001](tasks/wsm-near-u128-001.md) | done | NEAR lossless u128 deposit/balance context |
 
 ## SVM 全面工作计划（当前主线）
 

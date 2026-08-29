@@ -65,6 +65,9 @@ elab "#pf_near_ctx_emit_check " n:ident : command => do
           "(func (export \"height\")",
           "(func (export \"seconds\")",
           "(func (export \"selfBal\")",
+          "(func (export \"selfBalHigh\")",
+          "(func (export \"takeDepositHigh\")",
+          "(func (export \"takeDepositLegacy\")",
           "(func (export \"selfId\")",
           "(func (export \"selfIdLength\")",
           "(func (export \"selfIdWord1\")",
@@ -76,6 +79,10 @@ elab "#pf_near_ctx_emit_check " n:ident : command => do
           "(local $pf_self7 i64)",
           "(local $pf_pred_len i64)",
           "(local $pf_pred7 i64)",
+          "(local $pf_dep_hi i64)",
+          "(local $pf_bal_hi i64)",
+          "(local.set $pf_dep_hi (i64.load (i32.const 32)))",
+          "(local.set $pf_bal_hi (i64.load (i32.const 48)))",
           "(i64.store (i32.const 64) (i64.const 0))",
           "(i64.store (i32.const 128) (i64.const 0))",
           "(i64.gt_u (local.get $pf_self_len) (i64.const 64))"
@@ -126,6 +133,141 @@ elab "#pf_near_view_caller_reject" : command => do
           throwError s!"unexpected predecessor-view rejection: {reason}"
 
 #pf_near_view_caller_reject
+
+namespace Tests.NearTokenFull
+
+open ProofForge.Wasm.Near.Sdk
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (_seed : UInt64) : State := { value := 0 }
+
+@[pf_entry]
+def depositLow (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) != 1 then
+    .ok ({ value := Context.attachedDeposit.w0 }, Context.attachedDeposit.w0)
+  else .error .overflow
+
+@[pf_entry]
+def depositHigh (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) != 1 then
+    .ok ({ value := Context.attachedDeposit.w1 }, Context.attachedDeposit.w1)
+  else .error .overflow
+
+@[pf_entry]
+def balanceHigh (_s : State) : UInt64 := Context.balanceOfSelf.w1
+
+end Tests.NearTokenFull
+
+open Lean Elab Command in
+elab "#pf_near_token_full_check" : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env `Tests.NearTokenFull none >>= ProofForge.Wasm.Near.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Near.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"env\" \"attached_deposit\"",
+          "(import \"env\" \"account_balance\"",
+          "(local.set $pf_dep (i64.load (i32.const 24)))",
+          "(local.set $pf_dep_hi (i64.load (i32.const 32)))",
+          "(local.set $pf_bal_hi (i64.load (i32.const 48)))"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"full NearToken emit is missing anchor: {anchor}\n{source}"
+        unless !source.contains "(if (i64.ne (i64.load (i32.const 32))" do
+          throwError s!"full attached deposit unexpectedly retained UInt64 trap:\n{source}"
+        unless !source.contains "(if (i64.ne (i64.load (i32.const 48))" do
+          throwError s!"full account balance unexpectedly retained UInt64 trap:\n{source}"
+
+#pf_near_token_full_check
+
+namespace Tests.NearTokenLegacy
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (_seed : UInt64) : State := { value := 0 }
+
+@[pf_entry]
+def deposit (_s : State) : Except Error (State × UInt64) :=
+  let value := ProofForge.Wasm.Near.Sdk.Context.attachedDepositLo
+  if (0 : UInt64) != 1 then .ok ({ value }, value) else .error .overflow
+
+@[pf_entry]
+def balance (_state : State) : UInt64 :=
+  ProofForge.Wasm.Near.Sdk.Context.balanceOfSelfLo
+
+end Tests.NearTokenLegacy
+
+open Lean Elab Command in
+elab "#pf_near_token_legacy_check" : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env `Tests.NearTokenLegacy none >>= ProofForge.Wasm.Near.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Near.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source =>
+        unless source.contains "(if (i64.ne (i64.load (i32.const 32))" do
+          throwError s!"legacy UInt64 deposit is missing its high-word trap:\n{source}"
+        unless source.contains "(if (i64.ne (i64.load (i32.const 48))" do
+          throwError s!"legacy UInt64 balance is missing its high-word trap:\n{source}"
+
+#pf_near_token_legacy_check
+
+namespace Tests.NearViewDeposit
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (_seed : UInt64) : State := { value := 0 }
+
+@[pf_entry]
+def set (_state : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) != 1 then .ok ({ value := 1 }, 1) else .error .overflow
+
+@[pf_entry]
+def depositHigh (_s : State) : UInt64 :=
+  ProofForge.Wasm.Near.Sdk.Context.attachedDeposit.w1
+
+end Tests.NearViewDeposit
+
+open Lean Elab Command in
+elab "#pf_near_view_deposit_reject" : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env `Tests.NearViewDeposit none >>= ProofForge.Wasm.Near.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Near.Emit.emit program with
+    | .ok _ => throwError "near view unexpectedly admitted full attached deposit"
+    | .error reason =>
+        unless reason.contains "view cannot read attachedDeposit" do
+          throwError s!"unexpected deposit-view rejection: {reason}"
+
+#pf_near_view_deposit_reject
 
 /- A user declaration that merely shares a Runtime leaf's final name must stay an ordinary
 constant. In particular, it must not become `env.block_index`. -/

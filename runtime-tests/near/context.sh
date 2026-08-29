@@ -115,6 +115,6 @@ export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
-echo "near-local-context: RPC ready; running height/stamp/seconds scenes" >&2
+echo "near-local-context: RPC ready; running account/u128/height/time scenes" >&2
 "$python" runtime-tests/near/context.py
 echo "near-local-context: ok"
