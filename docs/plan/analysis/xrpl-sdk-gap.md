@@ -150,6 +150,9 @@ Vec/Map 是 **存储剖面升级**，不是在 `Sdk.lean` 里加函数。要改 
 4. 探针绿了再开 **VEC-1**（定长 UInt64 向量，编译期 `n`）
 5. Map 更后，且必须是 XRPL JSON 形状的设计，不是抄 EVM
 
+官方 Rust WASM SDK（escrow 为主）的完整对照见
+[xrpl-rust-sdk.md](xrpl-rust-sdk.md)。不要按 escrow `set_data` blob 来改本仓智能合约存储。
+
 ## 7. 验收句
 
 - SDK 新名字不改变 host import 表，digest 只因 IR 形状变
