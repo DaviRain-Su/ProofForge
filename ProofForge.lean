@@ -93,9 +93,10 @@ import ProofForge.Evm.Emit
 import ProofForge.Evm.Golden
 import ProofForge.Evm.Assemble
 import ProofForge.Evm.Commands
-import ProofForge.Wasm.Ops
-import ProofForge.Wasm.IR
-import ProofForge.Wasm.Emit
-import ProofForge.Wasm.Registry
-import ProofForge.Wasm.Assemble
-import ProofForge.Wasm.Commands
+import ProofForge.Wasm.Family
+import ProofForge.Wasm.Xrpl.Ops
+import ProofForge.Wasm.Xrpl.IR
+import ProofForge.Wasm.Xrpl.Emit
+import ProofForge.Wasm.Xrpl.Registry
+import ProofForge.Wasm.Xrpl.Assemble
+import ProofForge.Wasm.Xrpl.Commands

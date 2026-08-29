@@ -27,6 +27,7 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 | [research/06-wasm-feasibility.md](research/06-wasm-feasibility.md) | WASM 第三 target：Lean 自家编译器 vs 新 profile 的路线判定 |
-| [modules/wasm.md](modules/wasm.md) | WASM 第三 profile：XRPL Bedrock 方言 Rust 源发射器 |
+| [modules/wasm.md](modules/wasm.md) | WASM 链家族：每链一个 target 的组织纪律 |
+| [modules/xrpl.md](modules/xrpl.md) | WASM 家族成员：XRPL Bedrock 方言 Rust 源发射器 |
 
-当前阶段：**L4 + EVM + WASM/XRPL（source-only v0）**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。E-ADDR / E-U256 已并入：`Addr20` 是 `address`，`UInt256` 是显式 `uint256`。SVM 名不翻译。
+当前阶段：**L4 + EVM + WASM 家族第一条链 XRPL（source-only v0）**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。E-ADDR / E-U256 已并入：`Addr20` 是 `address`，`UInt256` 是显式 `uint256`。SVM 名不翻译。

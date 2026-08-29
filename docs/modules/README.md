@@ -19,4 +19,5 @@
 | [Cli](cli.md) | `pf build --target svm|evm` |
 | [Runtime](runtime.md) | `Svm.Runtime` / `Evm.Runtime` 宿主 stub；抽出按名认 |
 | [Evm](evm.md) | `Evm.Sdk` 合同 facade + Ops → Yul / ABI / locked solc |
-| [Wasm](wasm.md) | 第三个 profile：XRPL Bedrock 方言 Rust 源（zero-tool）+ digest |
+| [Wasm](wasm.md) | WASM 链家族纪律：每链一个 target，只共享外来叶子拒绝约定 |
+| [Xrpl](xrpl.md) | `Wasm/Xrpl`：XRPL Bedrock 方言 Rust 源（zero-tool）+ digest |

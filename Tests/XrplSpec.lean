@@ -1,13 +1,13 @@
 import ProofForge
-import ProofForge.Wasm.IR
-import ProofForge.Wasm.Emit
-import ProofForge.Wasm.Commands
+import ProofForge.Wasm.Xrpl.IR
+import ProofForge.Wasm.Xrpl.Emit
+import ProofForge.Wasm.Xrpl.Commands
 import Examples.Counter
 import Examples.Clock
 import Examples.EvmCtx
 
 /-!
-# WASM (XRPL Bedrock) target tests
+# XRPL Bedrock target tests (WASM family)
 
 v0 vertical slice: registration rejects foreign target leaves, the canonical digest is
 pinned against the registry, and the emitted Rust source carries the Bedrock-dialect
@@ -17,41 +17,41 @@ arithmetic with pinned error codes).
 
 open ProofForge
 
-#guard !ProofForge.Wasm.Ops.Op.wellFormed (.ext .reserved)
-#guard !(ProofForge.Wasm.Ops.OpExt.wellFormed
-  (.reserved : ProofForge.Wasm.Ops.OpExt ProofForge.Wasm.Ops.Val))
-#guard ProofForge.Wasm.Ops.ValKind.arity .reserved == 0
+#guard !ProofForge.Wasm.Xrpl.Ops.Op.wellFormed (.ext .reserved)
+#guard !(ProofForge.Wasm.Xrpl.Ops.OpExt.wellFormed
+  (.reserved : ProofForge.Wasm.Xrpl.Ops.OpExt ProofForge.Wasm.Xrpl.Ops.Val))
+#guard ProofForge.Wasm.Xrpl.Ops.ValKind.arity .reserved == 0
 
-#guard ProofForge.Wasm.Registry.digestOf "Counter" == some "335b688107a04afc"
-#guard ProofForge.Wasm.Registry.names == #["Counter"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "Counter" == some "e029f72296e320be"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter"]
 
 open Lean Elab Command in
-elab "#pf_wasm_reject " n:ident : command => do
+elab "#pf_xrpl_reject " n:ident : command => do
   let env ← getEnv
-  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.IR.fromExtracted with
-  | .ok _ => throwError "expected wasm to reject {n.getId} (foreign target leaf)"
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .ok _ => throwError "expected xrpl to reject {n.getId} (foreign target leaf)"
   | .error reason =>
-      unless reason.contains "wasm rejects" do
-        throwError "unexpected wasm rejection reason: {reason}"
+      unless reason.contains "xrpl rejects" do
+        throwError "unexpected xrpl rejection reason: {reason}"
 
-/-! Runtime leaves are not cross-target: the wasm profile fails closed on svm and evm
-values, same discipline as the EVM slice. -/
+/-! Runtime leaves are not cross-target: the XRPL profile fails closed on svm and evm
+values through the WASM family rejection, same discipline as the EVM slice. -/
 
-#pf_wasm_reject Examples.Clock
+#pf_xrpl_reject Examples.Clock
 
-#pf_wasm_reject Examples.EvmCtx
+#pf_xrpl_reject Examples.EvmCtx
 
 /-! Digest pin: extraction → registration → lowering must reproduce the registry digest. -/
 
-#pf_wasm_build Examples.Counter
+#pf_xrpl_build Examples.Counter
 
 open Lean Elab Command in
-elab "#pf_wasm_emit_check " n:ident : command => do
+elab "#pf_xrpl_emit_check " n:ident : command => do
   let env ← getEnv
-  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.IR.fromExtracted with
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
   | .error reason => throwError reason
   | .ok program =>
-    match ProofForge.Wasm.Emit.emit program with
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
     | .error reason => throwError reason
     | .ok source => do
         let anchors : Array String := #[
@@ -72,11 +72,11 @@ elab "#pf_wasm_emit_check " n:ident : command => do
           "checked_rem(pf_p0).ok_or(2i32)?",
           "Ok(0)",
           "Err(code) => if code < 0 { code } else { -code },",
-          "// digest=335b688107a04afc"
+          "// digest=e029f72296e320be"
         ]
         for anchor in anchors do
           unless source.contains anchor do
             throwError s!"wasm emit is missing anchor: {anchor}"
-        logInfo m!"proofforge-wasm-test: {source.length} bytes of Rust passed anchor check"
+        logInfo m!"proofforge-xrpl-test: {source.length} bytes of Rust passed anchor check"
 
-#pf_wasm_emit_check Examples.Counter
+#pf_xrpl_emit_check Examples.Counter

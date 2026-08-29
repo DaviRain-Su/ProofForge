@@ -1,15 +1,17 @@
 import ProofForge.Extract.IR
 import ProofForge.Core.Target
-import ProofForge.Wasm.Ops
+import ProofForge.Wasm.Family
+import ProofForge.Wasm.Xrpl.Ops
 
 /-!
-# WASM target IR
+# XRPL target IR
 
-Static registration of the extractor-to-WASM projection plus the physical program shape
-consumed by `ProofForge.Wasm.Emit`. v0 binds the WASM slice to XRPL Bedrock (XLS-0101):
-the artifact is a scaffold-xrp-dialect Rust source, the host contract is
-`xrpl_wasm_std` `get_data`/`set_data`, and the canonical digest domain is
-`wasm-xrpl|` — deliberately distinct from the SVM and EVM domains.
+Static registration of the extractor-to-XRPL projection plus the physical program shape
+consumed by `ProofForge.Wasm.Xrpl.Emit`. XRPL Bedrock (XLS-0101) is one member of the
+WASM family (see `ProofForge.Wasm.Family`): the artifact is a scaffold-xrp-dialect Rust
+source, the host contract is `xrpl_wasm_std` `get_data`/`set_data`, and the canonical
+digest domain is `xrpl-bedrock|` — deliberately distinct from the SVM and EVM domains
+and from any future wasm-family chain.
 
 v0 subset (fail closed on everything else):
 
@@ -25,28 +27,27 @@ v0 subset (fail closed on everything else):
   their XRPL wasm-level import ABI is pinned.
 -/
 
-namespace ProofForge.Wasm.IR
+namespace ProofForge.Wasm.Xrpl.IR
 
 abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
 
-private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
-  | .svm _ => throw "extract/unsupported: wasm rejects svm value"
-  | .evm _ => throw "extract/unsupported: wasm rejects evm value"
+private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind :=
+  Family.rejectValKind "xrpl"
 
 private def projectOpExt
     (_projectVal : Extract.IR.Val → Except String Ops.Val) :
-    Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val)
-  | .svm _ => throw "extract/unsupported: wasm rejects svm effect"
-  | .evm _ => throw "extract/unsupported: wasm rejects evm effect"
+    Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val) :=
+  Family.rejectOpExt "xrpl"
 
-/-- Static registration of the extractor-to-WASM projection. -/
+/-- Static registration of the extractor-to-XRPL projection. Foreign svm/evm leaves are
+rejected through the family-level convention. -/
 def extractRegistration :
     Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt Ops.ValKind Ops.OpExt where
-  name := "WASM"
+  name := "XRPL"
   projectValExt := projectValExt
   projectOpExt := projectOpExt
   projectionError := fun method reason =>
-    if reason.startsWith "extract/unsupported: wasm rejects" then
+    if reason.startsWith "extract/unsupported: xrpl rejects" then
       s!"{reason} in {method}"
     else reason
   valArity := Ops.ValKind.arity
@@ -201,8 +202,9 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
 
 /-! ## Canonical digest
 
-Domain `wasm-xrpl|` is pinned and deliberately different from the SVM / EVM domains:
-the host ABI norm differs, so artifacts must never be conflated across targets.
+Domain `xrpl-bedrock|` is pinned and deliberately different from the SVM / EVM domains
+and from any future wasm-family chain: host ABIs differ, so artifacts must never be
+conflated across chains.
 -/
 
 private def cmpTag : Ops.Cmp → String
@@ -273,9 +275,9 @@ def canonical (p : Program) : String :=
     (p.slots.map (fun s => s!"{s.name}:{s.width}")).toList
   let entries :=
     (p.entries.qsort (fun a b => a.ixName < b.ixName)).toList.map methodCanon
-  s!"wasm-xrpl|{p.name}|{slots}|{methodCanon p.initializer}|{String.intercalate "/" entries}"
+  s!"xrpl-bedrock|{p.name}|{slots}|{methodCanon p.initializer}|{String.intercalate "/" entries}"
 
 def digestHex (p : Program) : String :=
   Core.IR.u64Hex (Core.IR.fnv1a64 (canonical p))
 
-end ProofForge.Wasm.IR
+end ProofForge.Wasm.Xrpl.IR
