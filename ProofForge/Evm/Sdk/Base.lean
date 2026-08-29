@@ -18,6 +18,7 @@ import `ProofForge.Evm.Sdk`, whose umbrella also exposes reusable policy compone
 notation "Address" => Runtime.Addr20
 notation "UInt256" => Runtime.UInt256
 notation "Bytes32" => Runtime.Bytes32
+notation "Bytes4" => ProofForge.Core.Value.FixedBytes 4
 
 namespace «Address»
 
@@ -232,6 +233,7 @@ namespace Context
 @[pf_inline] def prevRandao : UInt256 := Runtime.evmPrevRandao256
 @[pf_inline] def gasLimit : UInt256 := Runtime.evmGasLimit256
 @[pf_inline] def gasPrice : UInt256 := Runtime.evmGasPrice256
+@[pf_inline] def selector : Bytes4 := Runtime.evmSelector4
 @[pf_inline] def coinbase : Address := Runtime.evmCoinbase20
 @[pf_inline] def origin : Address := Runtime.evmOrigin20
 @[pf_inline] def blockHash (number : UInt64) : UInt256 := Runtime.evmBlockHash256 number

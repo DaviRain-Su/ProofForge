@@ -49,8 +49,8 @@ private def packAddrWord (src : String) (word : Nat) : String :=
         orBytes (index + 1) count next
   orBytes 0 (if word == 2 then 4 else 8) "0"
 
-/-- Convert an EVM bytes32 word into the source FixedBytes little-endian limb representation. -/
-private def packBytes32Word (src : String) (word : Nat) : String :=
+/-- Convert bytes from one EVM word into the source FixedBytes little-endian limb representation. -/
+private def packFixedBytesWord (src : String) (word count : Nat) : String :=
   let rec orBytes (index remaining : Nat) (acc : String) : String :=
     match remaining with
     | 0 => acc
@@ -60,7 +60,7 @@ private def packBytes32Word (src : String) (word : Nat) : String :=
           if index == 0 then byteExpr
           else "or(" ++ acc ++ ", shl(" ++ toString (8 * index) ++ ", " ++ byteExpr ++ "))"
         orBytes (index + 1) count next
-  orBytes 0 8 "0"
+  orBytes 0 count "0"
 
 private def materializeAddress (context : Context σ) (w0 w1 w2 : Ops.Val) (st : σ) :
     Except String (String × String × σ) := do
@@ -87,6 +87,9 @@ def emitQuery (context : Context σ) (query : Query) (operands : Array Ops.Val) 
       return emitCachedWord context packU256Word "gaslimit256" "gaslimit()" limb st
   | .gasPrice256 limb, #[] =>
       return emitCachedWord context packU256Word "gasprice256" "gasprice()" limb st
+  | .selector4, #[] =>
+      return emitCachedWord context (fun src _ => packFixedBytesWord src 0 4)
+        "selector4" "calldataload(0)" 0 st
   | .coinbase20 limb, #[] =>
       return emitCachedWord context packAddrWord "coinbase20" "coinbase()" limb st
   | .origin20 limb, #[] =>
@@ -106,10 +109,13 @@ def emitQuery (context : Context σ) (query : Query) (operands : Array Ops.Val) 
       let cacheKey := "codehash32|" ++ context.valKey w0 ++ "|" ++ context.valKey w1 ++ "|" ++
         context.valKey w2
       match context.lookupWide st cacheKey with
-      | some _ => return emitCachedWord context packBytes32Word cacheKey "" limb st
+      | some _ =>
+          return emitCachedWord context (fun src word => packFixedBytesWord src word 8)
+            cacheKey "" limb st
       | none =>
           let (prelude, address, afterAddress) ← materializeAddress context w0 w1 w2 st
-          let (wordPrefix, result, next) := emitCachedWord context packBytes32Word cacheKey
+          let (wordPrefix, result, next) := emitCachedWord context
+            (fun src word => packFixedBytesWord src word 8) cacheKey
             ("extcodehash(" ++ address ++ ")") limb afterAddress
           return (prelude ++ wordPrefix, result, next)
   | .balance256 limb, #[w0, w1, w2] =>

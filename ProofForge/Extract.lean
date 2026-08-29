@@ -629,6 +629,11 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
   let ops := ops0.map (flipOp 128)
   let expandWide (ops : Array Ops.Op) (limbCount : Nat) : Array Ops.Op :=
     match ops.toList with
+    | [.returnU64 (.ext kind operands)] =>
+      if limbCount == 1 then #[.returnU64 (.ext kind operands)]
+      else
+        let names := #["w0", "w1", "w2", "w3"].extract 0 limbCount
+        names.map fun n => .returnU64 (flattenField (.ext kind operands) n)
     | [.returnU64 v] =>
       let names := #["w0", "w1", "w2", "w3"].extract 0 limbCount
       names.map fun n => .returnU64 (flattenField v n)

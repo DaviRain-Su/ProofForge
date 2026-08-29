@@ -27,6 +27,10 @@ got_gas_price="$("$cast" call --rpc-url "$rpc" --from "$sender" --gas-price "$ga
   "$addr" 'gasPrice()(uint256)')"
 solana_lean_require_uint "$got_gas_price" "$gas_price" "GASPRICE full word"
 
+got_selector="$("$cast" call --rpc-url "$rpc" "$addr" 'selector()(bytes4)')"
+want_selector="$("$cast" sig 'selector()')"
+solana_lean_require_equal "$got_selector" "$want_selector" "msg.sig source-order bytes4"
+
 bn="$("$cast" block-number --rpc-url "$rpc")"
 got_h="$("$cast" call --rpc-url "$rpc" "$addr" 'height()(uint64)')"
 solana_lean_require_uint "$got_h" "$(solana_lean_to_dec "$bn")" "height == block number"
@@ -154,4 +158,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-ctx: ok (caller/origin/number/gasprice/gas/blockhash/address observations + static/tagged aggregate ABI; engineering only)"
+echo "evm-anvil-ctx: ok (caller/origin/selector/number/gasprice/gas/blockhash/address observations + static/tagged aggregate ABI; engineering only)"

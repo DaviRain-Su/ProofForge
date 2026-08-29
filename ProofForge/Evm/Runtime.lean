@@ -138,6 +138,10 @@ the pre-Paris `DIFFICULTY` interpretation of opcode `0x44`; assembly pins the Ca
 /-- Effective transaction gas price (`GASPRICE`) as a full EVM word. -/
 @[irreducible] def evmGasPrice256 : UInt256 := ⟨0, 0, 0, 0⟩
 
+/-- Current call selector (`msg.sig`) as source-order `bytes4`. Calls shorter than four bytes are
+rejected by the existing selector-dispatch route before an entry can observe this value. -/
+@[irreducible] def evmSelector4 : ProofForge.Core.Value.FixedBytes 4 := ⟨0, 0, 0, 0⟩
+
 /-- EVM `BLOCKHASH(number)` with its native 256-block availability semantics. Unavailable,
 current, and future block numbers return zero exactly as the VM specifies. -/
 @[irreducible] def evmBlockHash256 (_number : UInt64) : UInt256 := ⟨0, 0, 0, 0⟩

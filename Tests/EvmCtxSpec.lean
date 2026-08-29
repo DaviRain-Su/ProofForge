@@ -14,6 +14,7 @@ open Lean Elab Command
 #guard gasLeft (init 0) == Context.gasLeft
 #guard gasPrice (init 0) == Context.gasPrice
 #guard origin (init 0) == Context.origin
+#guard selector (init 0) == Context.selector
 #guard blockHash (init 0) 37 == Context.blockHash 37
 #guard codeSize (init 0) ⟨1, 2, 3⟩ == Address.codeSize ⟨1, 2, 3⟩
 #guard codeHash (init 0) ⟨1, 2, 3⟩ == Address.codeHash ⟨1, 2, 3⟩

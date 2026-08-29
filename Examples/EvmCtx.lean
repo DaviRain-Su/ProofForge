@@ -54,6 +54,11 @@ def gasPrice (_s : State) : UInt256 :=
 def origin (_s : State) : Address :=
   Context.origin
 
+/-- Current call selector as Solidity-shaped `bytes4`. -/
+@[pf_entry]
+def selector (_s : State) : Bytes4 :=
+  Context.selector
+
 /-- Full-width hash of a recent block. EVM returns zero outside its 256-block history window. -/
 @[pf_entry]
 def blockHash (_s : State) (number : UInt64) : UInt256 :=

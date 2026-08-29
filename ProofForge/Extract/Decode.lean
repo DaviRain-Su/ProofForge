@@ -809,6 +809,10 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasPrice256 ||
             endsWith baseE ".evmGasPrice256" then
           some (.ext (.evm (.component (.environment (.gasPrice256 limb.toNat)))) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelector4 ||
+            endsWith baseE ".evmSelector4" then
+          if limb == 0 then some (.ext (.evm (.component (.environment .selector4))) #[])
+          else none
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmBalance256 ||
             endsWith baseE ".evmBalance256" then
           let args := baseE.getAppArgs
@@ -4940,6 +4944,9 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
       .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 2)))) #[]),
       .returnU64 (.ext (.evm (.component (.environment (.gasPrice256 3)))) #[])
     ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmSelector4 ||
+      endsWith app ".evmSelector4" then
+    some #[.returnU64 (.ext (.evm (.component (.environment .selector4))) #[])]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmBlockHash256 ||
       endsWith app ".evmBlockHash256" then
     let number := valAtEnd env args 0

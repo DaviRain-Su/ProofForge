@@ -114,6 +114,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **SVM-SDK-15 transient Bytes pop（已集成）** | SVM-SDK-11/12 | checked LIFO byte pop 原位缩短 active prefix 并返回旧尾 byte；empty=`0x1212`，不分配、不清 payload、不伪造 reclaim/realloc，继续只扩 target component；见 R3-018 |
 | **EVM-RT-ENV address balance（已集成）** | R4-008 Environment Component | `Address.balance : UInt256` 使用完整三-limb address 与单次 BALANCE observation；numeric 四-limb cache，不新增 top-level Ops/IR/main Emit；见 R4-011 |
 | **EVM-RT-ENV transaction context（已集成）** | R4-008 Environment Component | `Context.origin : Address` 与 `gasPrice : UInt256` 使用单次 ORIGIN/GASPRICE observation + cached limb projection；不新增 top-level Ops/IR/main Emit，origin 不作为 access-control 推荐；见 R4-012 |
+| **EVM-RT-ENV call selector（已集成）** | R4-008 Environment Component、shared FixedBytes | `Context.selector : Bytes4` 单次读取 calldata word 0 并按 source byte order 投影；不开放 arbitrary msg.data/pointer，不新增 top-level Ops/IR/main Emit；见 R4-013 |
 | **EVM-RT-2a call result（已集成）** | EVM-RT-1 | closed CALL/STATICCALL success + bounded empty/nonzero/exact-word policy；≤32 copied bytes；见 R4-001 |
 | **EVM-RT-2b/c/d effects（已集成）** | EVM-RT-2a | typed LOG0..4/custom error/payable 与 fixed ecrecover contract；exact returndata 防 stale memory，不开放其他 precompile/delegatecall/create/arbitrary callee；见 R4-002/003/004 |
 | **EVM-SDK-5 bounded payments（已集成）** | EVM-SDK-1/2/3/4、EVM-RT-2 | `Evm.Sdk.Payments` 收口 Ether/ERC20/WETH/fixed-router facade；Vault/TipJar/Ownable 不再直连 lower Source boundary，产物不变；见 R5-005 |

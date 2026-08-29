@@ -680,6 +680,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   做授权。EvmCtx digest `2fcc4e438e1c4da1`、bytecode 2,964 B；Anvil 以完整 sender address
   和显式 2 gwei `eth_call` gas price 核对。详见 `docs/plan/tasks/r4-012.md`。
 
+- R4-013 EVM call selector 已完成：`Sdk.Context.selector : Bytes4` 复用 shared
+  allocation-free `FixedBytes 4` source contract，由 Environment Component 单次读取
+  `calldataload(0)` 并按 source byte order 投影，不把 selector 偷换为数字，也不开放任意
+  `msg.data`、pointer、top-level Ops/IR/main Emit recipe、storage 或 call。通用 fixed-width
+  byte packer 同时继续服务 EXTCODEHASH，单-limb target query 不再被误解为 structure field。
+  EvmCtx digest `22948730711563b5`、bytecode 3,108 B；Anvil 精确核对 `selector()` 自身的
+  Solidity selector。详见 `docs/plan/tasks/r4-013.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
