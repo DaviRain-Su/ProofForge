@@ -65,7 +65,21 @@ def loadEnv (host : Contract) (level : Nat) (view : Bool) : Array String :=
         indent level ("(local.set $st (call $" ++ host.getParentTime ++ "))"),
         indent level "(local.set $pf_x_xtime (i64.extend_i32_u (local.get $st)))"
       ]
-    caller ++ self ++ sqn ++ time
+    let hash :=
+      if host.getParentHash.isEmpty then #[]
+      else #[
+        indent level ("(local.set $st (call $" ++ host.getParentHash ++
+          " (i32.const 160) (i32.const 32)))")
+      ] ++ err ++ #[
+        indent level "(local.set $pf_x_xhash0 (i64.load (i32.const 160)))"
+      ]
+    let fee :=
+      if host.getBaseFee.isEmpty then #[]
+      else #[
+        indent level ("(local.set $st (call $" ++ host.getBaseFee ++ "))"),
+        indent level "(local.set $pf_x_xfee (i64.extend_i32_u (local.get $st)))"
+      ]
+    caller ++ self ++ sqn ++ time ++ hash ++ fee
 
 def extraImports (host : Contract) : Array String :=
   let tx :=
@@ -94,7 +108,20 @@ def extraImports (host : Contract) : Array String :=
         "\" (func $" ++ host.computeSha512Half ++
         " (param i32 i32 i32 i32) (result i32)))"
     ]
-  tx ++ sqn ++ time ++ hash
+  let parentHash :=
+    if host.getParentHash.isEmpty then #[]
+    else #[
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getParentHash ++
+        "\" (func $" ++ host.getParentHash ++
+        " (param i32 i32) (result i32)))"
+    ]
+  let fee :=
+    if host.getBaseFee.isEmpty then #[]
+    else #[
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getBaseFee ++
+        "\" (func $" ++ host.getBaseFee ++ " (result i32)))"
+    ]
+  tx ++ sqn ++ time ++ hash ++ parentHash ++ fee
 
 /-- Render one XRPL program as WAT. The digest line pins the canonical IR identity. -/
 def emit (p : IR.Program) : Except String String :=

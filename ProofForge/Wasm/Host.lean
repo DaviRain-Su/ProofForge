@@ -65,6 +65,10 @@ structure Contract where
   getParentTime : String := ""
   /-- Host `compute_sha512_half(data, data_len, out, out_len) -> i32`. Empty skips hash lits. -/
   computeSha512Half : String := ""
+  /-- Host `get_parent_ledger_hash(ptr, len) -> i32`. Empty skips the parent-hash leaf. -/
+  getParentHash : String := ""
+  /-- Host `get_base_fee() -> i32`. Empty skips the base-fee leaf. Same shape as ledger sqn. -/
+  getBaseFee : String := ""
   deriving Inhabited
 
 /-- Object-field storage (XRPL ContractData) rather than a packed Data blob. -/

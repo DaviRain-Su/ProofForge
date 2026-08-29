@@ -533,7 +533,7 @@ private def renderFn (host : Contract) (p : Program ValExt OpExt)
   if !host.getTxField.isEmpty then
     for name in #["pf_x_xc0", "pf_x_xc1", "pf_x_xc2",
                   "pf_x_xs0", "pf_x_xs1", "pf_x_xs2",
-                  "pf_x_xsqn", "pf_x_xtime"] do
+                  "pf_x_xsqn", "pf_x_xtime", "pf_x_xhash0", "pf_x_xfee"] do
       lines := lines.push s!"    (local ${name} i64)"
   for loc in slotLocals p do
     lines := lines.push s!"    {loc}"

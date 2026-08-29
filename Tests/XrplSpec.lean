@@ -9,6 +9,7 @@ import Examples.XrplCtx
 import Examples.XrplOwn
 import Examples.Hash
 import Examples.XrplHash
+import Examples.XrplRt2
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -28,7 +29,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCtx" == some "f483be9d20810b57"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplOwn" == some "d452894f75c0ff96"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHash" == some "ce42ea8b4607843e"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRt2" == some "1d6d712500b8daf0"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -52,6 +54,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplOwn
 
 #pf_xrpl_build Examples.XrplHash
+
+#pf_xrpl_build Examples.XrplRt2
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -167,3 +171,31 @@ elab "#pf_xrpl_hash_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-hash: {source.length} bytes of WAT passed hash anchor check"
 
 #pf_xrpl_hash_emit_check Examples.XrplHash
+
+open Lean Elab Command in
+elab "#pf_xrpl_rt2_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(import \"host_lib\" \"get_parent_ledger_hash\"",
+          "(import \"host_lib\" \"get_base_fee\"",
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"stamp\") (result i32)",
+          "(func (export \"getHash\")",
+          "(func (export \"getFee\")",
+          "(call $get_parent_ledger_hash",
+          "(call $get_base_fee)"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing rt2 anchor: {anchor}\n{source}"
+        unless !source.contains "blockhash" do
+          throwError "wasm emit must not mention blockhash"
+        logInfo m!"proofforge-xrpl-rt2: {source.length} bytes of WAT passed rt2 anchor check"
+
+#pf_xrpl_rt2_emit_check Examples.XrplRt2

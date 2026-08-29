@@ -57,6 +57,12 @@ namespace Context
 /-- `host_lib.get_parent_ledger_time`. Not `evmTimestamp`. -/
 @[pf_inline] def parentTime : UInt64 := Runtime.xrplParentTime
 
+/-- First little-endian UInt64 of parent ledger hash. Not EVM `blockhash`. -/
+@[pf_inline] def parentHashLo : UInt64 := Runtime.xrplParentHashW0
+
+/-- `host_lib.get_base_fee`. Not EVM `baseFee` UInt256. -/
+@[pf_inline] def baseFee : UInt64 := Runtime.xrplBaseFee
+
 end Context
 
 namespace Access

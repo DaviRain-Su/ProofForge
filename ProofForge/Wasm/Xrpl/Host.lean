@@ -32,7 +32,8 @@ def contract : Contract where
     ";; Params: function_param copies UINT64 (STI 3) into linear memory;",
     ";; exports take no wasm arguments.",
     ";; Env: get_tx_field(sfAccount), get_current_ledger_obj_field(sfContractAccount),",
-    ";; get_ledger_sqn, get_parent_ledger_time, compute_sha512_half.",
+    ";; get_ledger_sqn, get_parent_ledger_time, get_parent_ledger_hash,",
+    ";; get_base_fee, compute_sha512_half.",
     ";; Honesty: deployable=false on mainnet; no ContractCreate / AlphaNet claim.",
     ";; v0 ABI: views return i64; mutating entries return i32 status",
     ";; (error codes: 1 overflow/underflow, 2 divide-by-zero)."
@@ -53,5 +54,7 @@ def contract : Contract where
   getLedgerSqn := "get_ledger_sqn"
   getParentTime := "get_parent_ledger_time"
   computeSha512Half := "compute_sha512_half"
+  getParentHash := "get_parent_ledger_hash"
+  getBaseFee := "get_base_fee"
 
 end ProofForge.Wasm.Xrpl.Host

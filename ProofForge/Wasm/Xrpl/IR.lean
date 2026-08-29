@@ -49,6 +49,8 @@ def extValCanon : Ops.ValKind → String
   | .selfW0 => "xs0" | .selfW1 => "xs1" | .selfW2 => "xs2"
   | .ledgerSqn => "xsqn"
   | .parentTime => "xtime"
+  | .parentHashW0 => "xhash0"
+  | .baseFee => "xfee"
   | .sha512HalfLit seed => s!"xsha.{seed}"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
