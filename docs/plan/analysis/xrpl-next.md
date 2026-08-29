@@ -124,7 +124,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 | id | Runtime | 能写的合约 | 不做 |
 |---|---|---|---|
-| **wsm-029** 读 AccountRoot.Balance | 接 wsm-023 | view 自己的 XRP | 改别人余额 |
+| **wsm-029** 读 AccountRoot.Balance | **探针绿**；Runtime 解码叶下一刀 | view 自己的 XRP | 改别人余额 |
 | **wsm-030** `submitTransaction` Payment | 合约伪账户再提交 | 从合约账户付 drops | 任意 tx 类型一把梭 |
 | **wsm-031** 读原生 AMM 对象 | cache_le AMM | 报价只读 | 假装是 Uniswap v2 池 |
 
@@ -140,7 +140,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 ## 3. 建议立刻做的顺序
 
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
-2. **wsm-023 `cache_le` 探针** — **import 已绿**（零 id -10）。下一刀才是 keylet + `le_field(Balance)`。
+2. **wsm-023 / wsm-029** — `cache_le` 零 id -10；**真 AccountRoot.Balance 探针已绿**
+   （`accountroot_id` + `le_field`）。下一刀 Runtime 叶解码 drops。
 3. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。一次调用仍不能给别人写。
    下一刀才是 `setUserData(destination)` 探针。
 4. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。

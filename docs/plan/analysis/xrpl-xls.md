@@ -99,7 +99,7 @@ host_lib  →  账本上已经存在的 SLE / 交易
 | 包装什么 | 读 | 写 | 今天 |
 |---|---|---|---|
 | 用户自己的 JSON 卡 | `get_data_object_field` | `set_data_object_field`（Owner=caller） | **已绿**（XrplBal） |
-| AccountRoot.Balance | `cache_le` + `le_field` | 不能 wasm 里 `x+=`；要 Payment | host 在，真 keylet 未绿 |
+| AccountRoot.Balance | `cache_le` + `le_field` | 不能 wasm 里 `x+=`；要 Payment | **探针绿**（STAmount 前 8B）；解码叶未开 |
 | AMM 池 | 读 `AMM` SLE | `submitTransaction` AMMDeposit | 未接线 |
 | NFT / Oracle / MPT | 读对应 SLE | 铸/转是 NFTokenMint 等交易 | 未接线 |
 
