@@ -7,6 +7,7 @@ import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.Codec
 import ProofForge.Wasm.Xrpl.Runtime
+import ProofForge.Wasm.Near.Runtime
 import ProofForge.Extract.Ops
 
 open Lean
@@ -90,6 +91,21 @@ def addr20ProjLeaf (n : Name) : Option String :=
         if p == addr20Name || p.toString.endsWith ".Addr20" ||
             p.toString.endsWith ".AccountId" then some last else none
     | _ => none
+  else none
+
+/-- Exact projections of the lossless NEAR AccountId. Keep this separate from
+the three-limb EVM/XRPL address recognizer: the shared `AccountId` suffix alone
+is not enough to identify a target-owned representation. -/
+def nearAccountIdProjLeaf (n : Name) : Option String :=
+  if n == ``ProofForge.Wasm.Near.Runtime.AccountId.length then some "length"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w0 then some "w0"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w1 then some "w1"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w2 then some "w2"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w3 then some "w3"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w4 then some "w4"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w5 then some "w5"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w6 then some "w6"
+  else if n == ``ProofForge.Wasm.Near.Runtime.AccountId.w7 then some "w7"
   else none
 
 def uint256ProjLeaf (n : Name) : Option String :=

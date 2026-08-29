@@ -3,6 +3,8 @@
 
 Scenes:
   initialize(0) → get()==0
+  full current AccountId is length + zero-padded 64-byte words
+  direct call passes full predecessor == current-account self check
   height() equals status.sync_info.latest_block_height
   stamp() stores that height; get() matches SuccessValue
   seconds() is a view (unix seconds from block_timestamp)
@@ -41,6 +43,31 @@ def main() -> None:
     if got != 0:
         raise AssertionError(f"after initialize(0): get() expected 0, got {got}")
     print("nearctx: initialize(0) → get()==0 ok")
+
+    self_id = client.view_u64("selfId")
+    expected = int.from_bytes(b"test.nea", "little")
+    if self_id != expected:
+        raise AssertionError(
+            f"selfId() expected first 8 UTF-8 bytes of test.near "
+            f"({expected:#x}), got {self_id:#x}"
+        )
+    self_len = client.view_u64("selfIdLength")
+    if self_len != len(b"test.near"):
+        raise AssertionError(f"selfIdLength() expected 9, got {self_len}")
+    self_w1 = client.view_u64("selfIdWord1")
+    if self_w1 != ord("r"):
+        raise AssertionError(f"selfIdWord1() expected zero-padded 'r', got {self_w1:#x}")
+    print("nearctx: full self AccountId == len(9) + test.nea/r words ok")
+
+    self_call = client.call("checkSelfCall", b"")
+    self_call_value = NearClient.success_value_bytes(self_call)
+    if self_call_value is None or len(self_call_value) < 8:
+        raise AssertionError(f"checkSelfCall SuccessValue expected ≥8 bytes, got {self_call_value!r}")
+    if NearClient.decode_u64_le(self_call_value, 0) != 1:
+        raise AssertionError("checkSelfCall must return 1 for direct self-account transaction")
+    if client.view_u64("get") != 1:
+        raise AssertionError("checkSelfCall must persist stamped=1")
+    print("nearctx: full predecessor == current account self-call gate ok")
 
     h0 = client.latest_block_height()
     view_h = client.view_u64("height")
@@ -82,14 +109,6 @@ def main() -> None:
         raise AssertionError("seconds() returned 0; sandbox block_timestamp should be live")
     print(f"nearctx: seconds() == {seconds} ok")
 
-    self_id = client.view_u64("selfId")
-    expected = int.from_bytes(b"test.nea", "little")
-    if self_id != expected:
-        raise AssertionError(
-            f"selfId() expected first 8 UTF-8 bytes of test.near "
-            f"({expected:#x}), got {self_id:#x}"
-        )
-    print(f"nearctx: selfId() == {self_id:#x} (test.nea) ok")
     print("suite NearCtx: PASS")
 
 

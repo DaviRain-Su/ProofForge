@@ -8,7 +8,7 @@ structure Entry where
 
 def entries : Array Entry := #[
   { name := "Counter", digest := "121a0c8f7e697642" },
-  { name := "NearCtx", digest := "9f4149b04ce7698e" }
+  { name := "NearCtx", digest := "c78928f6ba65661d" }
 ]
 
 def names : Array String := entries.map (·.name)

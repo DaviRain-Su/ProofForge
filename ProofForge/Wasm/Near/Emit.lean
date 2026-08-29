@@ -56,6 +56,20 @@ private def evictedReg : Nat := 2
 private def panicOverflowOff : Nat := 2048
 private def panicDivOff : Nat := 2057
 private def panicInputOff : Nat := 2072
+private def panicAccountIdOff : Nat := 2080
+
+/-- Dedicated zero-padded buffers prevent a shorter second account id from
+observing bytes left by another register read. -/
+private def predecessorAccountOff : Nat := 64
+private def currentAccountOff : Nat := 128
+
+private def predecessorWordLocal : Nat → String
+  | 0 => "$pf_pred"
+  | i => "$pf_pred" ++ toString i
+
+private def currentAccountWordLocal : Nat → String
+  | 0 => "$pf_self"
+  | i => "$pf_self" ++ toString i
 
 private def keyLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
   Id.run do
@@ -104,9 +118,25 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext .blockTimestamp #[] =>
       .ok "(i64.div_u (call $pf_block_timestamp) (i64.const 1000000000))"
   | .ext .predecessor #[] => .ok "(local.get $pf_pred)"
+  | .ext .predecessorLen #[] => .ok "(local.get $pf_pred_len)"
+  | .ext .predecessorW1 #[] => .ok "(local.get $pf_pred1)"
+  | .ext .predecessorW2 #[] => .ok "(local.get $pf_pred2)"
+  | .ext .predecessorW3 #[] => .ok "(local.get $pf_pred3)"
+  | .ext .predecessorW4 #[] => .ok "(local.get $pf_pred4)"
+  | .ext .predecessorW5 #[] => .ok "(local.get $pf_pred5)"
+  | .ext .predecessorW6 #[] => .ok "(local.get $pf_pred6)"
+  | .ext .predecessorW7 #[] => .ok "(local.get $pf_pred7)"
   | .ext .attachedDeposit #[] => .ok "(local.get $pf_dep)"
   | .ext .accountBalance #[] => .ok "(local.get $pf_bal)"
   | .ext .currentAccountId #[] => .ok "(local.get $pf_self)"
+  | .ext .currentAccountIdLen #[] => .ok "(local.get $pf_self_len)"
+  | .ext .currentAccountIdW1 #[] => .ok "(local.get $pf_self1)"
+  | .ext .currentAccountIdW2 #[] => .ok "(local.get $pf_self2)"
+  | .ext .currentAccountIdW3 #[] => .ok "(local.get $pf_self3)"
+  | .ext .currentAccountIdW4 #[] => .ok "(local.get $pf_self4)"
+  | .ext .currentAccountIdW5 #[] => .ok "(local.get $pf_self5)"
+  | .ext .currentAccountIdW6 #[] => .ok "(local.get $pf_self6)"
+  | .ext .currentAccountIdW7 #[] => .ok "(local.get $pf_self7)"
   | _ => .error "extract/unsupported: near v0 value"
 
 private def isExitOp : Op ValKind OpExt → Bool
@@ -331,19 +361,53 @@ where
 private def methodUses (kind : ValKind) (method : Method ValKind OpExt) : Bool :=
   method.ops.any (usesKind kind)
 
+private def predecessorKinds : Array ValKind := #[
+  .predecessor, .predecessorLen, .predecessorW1, .predecessorW2,
+  .predecessorW3, .predecessorW4, .predecessorW5, .predecessorW6, .predecessorW7
+]
+
+private def currentAccountKinds : Array ValKind := #[
+  .currentAccountId, .currentAccountIdLen, .currentAccountIdW1, .currentAccountIdW2,
+  .currentAccountIdW3, .currentAccountIdW4, .currentAccountIdW5,
+  .currentAccountIdW6, .currentAccountIdW7
+]
+
+private def methodUsesAny (kinds : Array ValKind) (method : Method ValKind OpExt) : Bool :=
+  kinds.any (methodUses · method)
+
+private def clearAccountBuffer (off level : Nat) : Array String :=
+  (List.range 8).toArray.map fun i =>
+    indent level ("(i64.store (i32.const " ++ toString (off + i * 8) ++
+      ") (i64.const 0))")
+
+private def loadAccountId (hostCall lenLocal : String) (register off level : Nat)
+    (wordLocal : Nat → String) : Array String :=
+  #[
+    indent level ("(call " ++ hostCall ++ " (i64.const " ++ toString register ++ "))"),
+    indent level ("(local.set " ++ lenLocal ++ " (call $pf_register_len (i64.const " ++
+      toString register ++ ")) )"),
+    indent level ("(if (i64.gt_u (local.get " ++ lenLocal ++ ") (i64.const 64))"),
+    indent (level + 2) "(then",
+    indent (level + 4) ("(call $pf_panic_utf8 (i64.const 10) (i64.const " ++
+      toString panicAccountIdOff ++ "))"),
+    indent (level + 2) "))"
+  ] ++ clearAccountBuffer off level ++ #[
+    indent level ("(call $pf_read_register (i64.const " ++ toString register ++
+      ") (i64.const " ++ toString off ++ "))")
+  ] ++ (List.range 8).toArray.map fun i =>
+    indent level ("(local.set " ++ wordLocal i ++ " (i64.load (i32.const " ++
+      toString (off + i * 8) ++ ")))")
+
 private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level : Nat) :
     Except String (Array String) := do
-  if view && methodUses .predecessor method then
+  if view && methodUsesAny predecessorKinds method then
     throw s!"extract/unsupported: {method.ixName} view cannot read predecessor"
   if view && methodUses .attachedDeposit method then
     throw s!"extract/unsupported: {method.ixName} view cannot read attachedDeposit"
   let mut lines : Array String := #[]
-  if methodUses .predecessor method then
-    lines := lines ++ #[
-      indent level "(call $pf_predecessor_account_id (i64.const 0))",
-      indent level "(call $pf_read_register (i64.const 0) (i64.const 16))",
-      indent level "(local.set $pf_pred (i64.load (i32.const 16)))"
-    ]
+  if methodUsesAny predecessorKinds method then
+    lines := lines ++ loadAccountId "$pf_predecessor_account_id" "$pf_pred_len"
+      0 predecessorAccountOff level predecessorWordLocal
   if methodUses .attachedDeposit method then
     lines := lines ++ #[
       indent level "(call $pf_attached_deposit (i64.const 24))",
@@ -364,12 +428,9 @@ private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level
       indent (level + 2) "))",
       indent level "(local.set $pf_bal (i64.load (i32.const 40)))"
     ]
-  if methodUses .currentAccountId method then
-    lines := lines ++ #[
-      indent level "(call $pf_current_account_id (i64.const 3))",
-      indent level "(call $pf_read_register (i64.const 3) (i64.const 56))",
-      indent level "(local.set $pf_self (i64.load (i32.const 56)))"
-    ]
+  if methodUsesAny currentAccountKinds method then
+    lines := lines ++ loadAccountId "$pf_current_account_id" "$pf_self_len"
+      3 currentAccountOff level currentAccountWordLocal
   return lines
 
 private def loadArg (count : Nat) (level : Nat) : Array String :=
@@ -431,14 +492,18 @@ private def renderFn (p : Program ValKind OpExt)
   lines := lines.push ("  (func (export \"" ++ method.ixName ++ "\")")
   if method.paramCount == 1 then
     lines := lines.push ("    (local " ++ localOfArg 0 ++ " i64)")
-  if methodUses .predecessor method then
-    lines := lines.push "    (local $pf_pred i64)"
+  if methodUsesAny predecessorKinds method then
+    lines := lines.push "    (local $pf_pred_len i64)"
+    for i in List.range 8 do
+      lines := lines.push ("    (local " ++ predecessorWordLocal i ++ " i64)")
   if methodUses .attachedDeposit method then
     lines := lines.push "    (local $pf_dep i64)"
   if methodUses .accountBalance method then
     lines := lines.push "    (local $pf_bal i64)"
-  if methodUses .currentAccountId method then
-    lines := lines.push "    (local $pf_self i64)"
+  if methodUsesAny currentAccountKinds method then
+    lines := lines.push "    (local $pf_self_len i64)"
+    for i in List.range 8 do
+      lines := lines.push ("    (local " ++ currentAccountWordLocal i ++ " i64)")
   for slot in p.slots do
     lines := lines.push ("    (local " ++ localOfSlot slot.name ++ " i64)")
   for i in List.range (Nat.max (countTemps method.ops) region.st.fresh) do
@@ -450,17 +515,22 @@ private def renderFn (p : Program ValKind OpExt)
   lines := lines.push "  )"
   return lines
 
+private def programUses (kind : ValKind) (p : IR.Program) : Bool :=
+  methodUses kind p.initializer || p.entries.any (methodUses kind)
+
 private def dataSection (p : Program ValKind OpExt) : Array String :=
   let keys := (keyLayout p).map fun (name, off, _) =>
     "  (data (i32.const " ++ toString off ++ ") \"" ++ name ++ "\")"
-  keys ++ #[
+  let base := #[
     "  (data (i32.const " ++ toString panicOverflowOff ++ ") \"overflow\")",
     "  (data (i32.const " ++ toString panicDivOff ++ ") \"divide-by-zero\")",
     "  (data (i32.const " ++ toString panicInputOff ++ ") \"input\")"
   ]
-
-private def programUses (kind : ValKind) (p : IR.Program) : Bool :=
-  methodUses kind p.initializer || p.entries.any (methodUses kind)
+  let account :=
+    if predecessorKinds.any (programUses · p) || currentAccountKinds.any (programUses · p) then
+      #["  (data (i32.const " ++ toString panicAccountIdOff ++ ") \"account-id\")"]
+    else #[]
+  keys ++ base ++ account
 
 def emit (p : IR.Program) : Except String String := do
   let mut lines : Array String := #[]
@@ -488,7 +558,7 @@ def emit (p : IR.Program) : Except String String := do
   if programUses .blockTimestamp p then
     lines := lines.push
       "  (import \"env\" \"block_timestamp\" (func $pf_block_timestamp (result i64)))"
-  if programUses .predecessor p then
+  if predecessorKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"predecessor_account_id\" (func $pf_predecessor_account_id (param i64)))"
   if programUses .attachedDeposit p then
@@ -497,7 +567,7 @@ def emit (p : IR.Program) : Except String String := do
   if programUses .accountBalance p then
     lines := lines.push
       "  (import \"env\" \"account_balance\" (func $pf_account_balance (param i64)))"
-  if programUses .currentAccountId p then
+  if currentAccountKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"current_account_id\" (func $pf_current_account_id (param i64)))"
   lines := lines.push "  (memory (export \"memory\") 1)"

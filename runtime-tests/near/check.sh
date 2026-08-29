@@ -46,6 +46,9 @@ ctx_exports = (
     '(func (export "seconds")',
     '(func (export "selfBal")',
     '(func (export "selfId")',
+    '(func (export "selfIdLength")',
+    '(func (export "selfIdWord1")',
+    '(func (export "checkSelfCall")',
 )
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 

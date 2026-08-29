@@ -22,7 +22,7 @@ open ProofForge
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
 #guard ProofForge.Wasm.Near.Registry.names == #["Counter", "NearCtx"]
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "9f4149b04ce7698e"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "c78928f6ba65661d"
 
 open Lean Elab Command in
 elab "#pf_near_reject " n:ident : command => do

@@ -4,9 +4,9 @@ import ProofForge.Core.CFG
 /-!
 # NEAR target dialect
 
-Value/effect extensions owned by the NEAR Protocol chain. v0 admits six host
-reads (block index / timestamp / predecessor / attached deposit / account
-balance / current account id). Promise, hashing, and Principal stay absent.
+Value/effect extensions owned by the NEAR Protocol chain. v0 admits scalar
+context reads plus lossless 64-byte account-id leaves. Promise and hashing
+stay absent.
 `reserved` is rejected by `wellFormed`.
 -/
 
@@ -16,10 +16,18 @@ namespace ProofForge.Wasm.Near.Ops
 inductive ValKind where
   | blockIndex
   | blockTimestamp
+  /-- Legacy predecessor w0 plus the remaining lossless AccountId leaves. -/
   | predecessor
+  | predecessorLen
+  | predecessorW1 | predecessorW2 | predecessorW3 | predecessorW4
+  | predecessorW5 | predecessorW6 | predecessorW7
   | attachedDeposit
   | accountBalance
+  /-- Legacy current-account w0 plus the remaining lossless AccountId leaves. -/
   | currentAccountId
+  | currentAccountIdLen
+  | currentAccountIdW1 | currentAccountIdW2 | currentAccountIdW3 | currentAccountIdW4
+  | currentAccountIdW5 | currentAccountIdW6 | currentAccountIdW7
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited

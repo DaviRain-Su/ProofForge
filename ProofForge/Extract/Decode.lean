@@ -23,12 +23,44 @@ private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
     some Ops.Val.nearBlockTimestamp
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessor then
     some Ops.Val.nearPredecessor
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorLen then
+    some Ops.Val.nearPredecessorLen
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW1 then
+    some Ops.Val.nearPredecessorW1
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW2 then
+    some Ops.Val.nearPredecessorW2
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW3 then
+    some Ops.Val.nearPredecessorW3
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW4 then
+    some Ops.Val.nearPredecessorW4
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW5 then
+    some Ops.Val.nearPredecessorW5
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW6 then
+    some Ops.Val.nearPredecessorW6
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW7 then
+    some Ops.Val.nearPredecessorW7
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDeposit then
     some Ops.Val.nearAttachedDeposit
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalance then
     some Ops.Val.nearAccountBalance
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountId then
     some Ops.Val.nearCurrentAccountId
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdLen then
+    some Ops.Val.nearCurrentAccountIdLen
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW1 then
+    some Ops.Val.nearCurrentAccountIdW1
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW2 then
+    some Ops.Val.nearCurrentAccountIdW2
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW3 then
+    some Ops.Val.nearCurrentAccountIdW3
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW4 then
+    some Ops.Val.nearCurrentAccountIdW4
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW5 then
+    some Ops.Val.nearCurrentAccountIdW5
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW6 then
+    some Ops.Val.nearCurrentAccountIdW6
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW7 then
+    some Ops.Val.nearCurrentAccountIdW7
   else none
 
 set_option maxRecDepth 2048 in
@@ -943,6 +975,36 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
               match strip baseE with
               | .bvar i => some (flattenField (.arg i) leaf)
               | _ => none
+  else if let some leaf := nearAccountIdProjLeaf n then
+    let args := e.getAppArgs
+    if args.isEmpty then none
+    else
+      let baseE := unfoldUserHelpers env 8 args[args.size - 1]!
+      if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.predecessorAccountId ||
+          endsWith baseE ".predecessorAccountId" then
+        some (match leaf with
+          | "length" => .nearPredecessorLen
+          | "w0" => .nearPredecessor
+          | "w1" => .nearPredecessorW1 | "w2" => .nearPredecessorW2
+          | "w3" => .nearPredecessorW3 | "w4" => .nearPredecessorW4
+          | "w5" => .nearPredecessorW5 | "w6" => .nearPredecessorW6
+          | _ => .nearPredecessorW7)
+      else if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.selfAccountId ||
+          endsWith baseE ".selfAccountId" then
+        some (match leaf with
+          | "length" => .nearCurrentAccountIdLen
+          | "w0" => .nearCurrentAccountId
+          | "w1" => .nearCurrentAccountIdW1 | "w2" => .nearCurrentAccountIdW2
+          | "w3" => .nearCurrentAccountIdW3 | "w4" => .nearCurrentAccountIdW4
+          | "w5" => .nearCurrentAccountIdW5 | "w6" => .nearCurrentAccountIdW6
+          | _ => .nearCurrentAccountIdW7)
+      else
+        match asVal env fuel baseE with
+        | some b => some (flattenField b leaf)
+        | none =>
+          match strip baseE with
+          | .bvar i => some (flattenField (.arg i) leaf)
+          | _ => none
   else if let some leaf := addr20ProjLeaf n then
     let args := e.getAppArgs
     if args.isEmpty then none
@@ -2790,9 +2852,25 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.nearBlockIndex) => some .nearBlockIndex
             | some (.nearBlockTimestamp) => some .nearBlockTimestamp
             | some (.nearPredecessor) => some .nearPredecessor
+            | some (.nearPredecessorLen) => some .nearPredecessorLen
+            | some (.nearPredecessorW1) => some .nearPredecessorW1
+            | some (.nearPredecessorW2) => some .nearPredecessorW2
+            | some (.nearPredecessorW3) => some .nearPredecessorW3
+            | some (.nearPredecessorW4) => some .nearPredecessorW4
+            | some (.nearPredecessorW5) => some .nearPredecessorW5
+            | some (.nearPredecessorW6) => some .nearPredecessorW6
+            | some (.nearPredecessorW7) => some .nearPredecessorW7
             | some (.nearAttachedDeposit) => some .nearAttachedDeposit
             | some (.nearAccountBalance) => some .nearAccountBalance
             | some (.nearCurrentAccountId) => some .nearCurrentAccountId
+            | some (.nearCurrentAccountIdLen) => some .nearCurrentAccountIdLen
+            | some (.nearCurrentAccountIdW1) => some .nearCurrentAccountIdW1
+            | some (.nearCurrentAccountIdW2) => some .nearCurrentAccountIdW2
+            | some (.nearCurrentAccountIdW3) => some .nearCurrentAccountIdW3
+            | some (.nearCurrentAccountIdW4) => some .nearCurrentAccountIdW4
+            | some (.nearCurrentAccountIdW5) => some .nearCurrentAccountIdW5
+            | some (.nearCurrentAccountIdW6) => some .nearCurrentAccountIdW6
+            | some (.nearCurrentAccountIdW7) => some .nearCurrentAccountIdW7
             | some (.clockEpoch) => some .clockEpoch
             | some (.unixTime) => some .unixTime
             | some (.slotsPerEpoch) => some .slotsPerEpoch
@@ -6425,7 +6503,14 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .ext (.svm (.component _)) _
     | .nearBlockIndex | .nearBlockTimestamp | .nearPredecessor
+    | .nearPredecessorLen
+    | .nearPredecessorW1 | .nearPredecessorW2 | .nearPredecessorW3 | .nearPredecessorW4
+    | .nearPredecessorW5 | .nearPredecessorW6 | .nearPredecessorW7
     | .nearAttachedDeposit | .nearAccountBalance | .nearCurrentAccountId
+    | .nearCurrentAccountIdLen
+    | .nearCurrentAccountIdW1 | .nearCurrentAccountIdW2 | .nearCurrentAccountIdW3
+    | .nearCurrentAccountIdW4 | .nearCurrentAccountIdW5 | .nearCurrentAccountIdW6
+    | .nearCurrentAccountIdW7
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
