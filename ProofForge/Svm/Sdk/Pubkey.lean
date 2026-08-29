@@ -56,4 +56,25 @@ attribute [pf_inline] Pubkey.word0 Pubkey.word1 Pubkey.word2 Pubkey.word3
   account.ownerWord 0 = program.keyWord 0 && account.ownerWord 1 = program.keyWord 1 &&
     account.ownerWord 2 = program.keyWord 2 && account.ownerWord 3 = program.keyWord 3
 
+
+section Proofs
+
+/-- **Pubkey.equals 的反身性**：同一个 key 与自身比较为 true。 -/
+theorem pubkey_equals_refl (key : Pubkey) : Pubkey.equals key key = true := by
+  unfold Pubkey.equals
+  cases key with
+  | mk w0 w1 w2 w3 => simp
+
+/-- **Pubkey.equals 的对称性**。 -/
+theorem pubkey_equals_symm (lhs rhs : Pubkey) (h : Pubkey.equals lhs rhs = true) :
+    Pubkey.equals rhs lhs = true := by
+  unfold Pubkey.equals at h ⊢
+  cases lhs with
+  | mk l0 l1 l2 l3 =>
+    cases rhs with
+    | mk r0 r1 r2 r3 =>
+      simp_all
+
+end Proofs
+
 end ProofForge.Svm.Sdk
