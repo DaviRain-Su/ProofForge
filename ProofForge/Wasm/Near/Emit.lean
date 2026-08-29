@@ -85,6 +85,55 @@ private def keyOf (p : Program ValKind OpExt) (name : String) : Nat × Nat :=
   | some (_, off, len) => (off, len)
   | none => (keyBase, 0)
 
+private def logDataBase : Nat := 4096
+private def maxLogDataBytes : Nat := 4096
+
+private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
+  ops.foldl (init := #[]) fun messages op =>
+    messages ++ match op with
+      | .ext (.logUtf8 message) => #[message]
+      | .ite _ _ _ thn els => logsOfOps thn ++ logsOfOps els
+      | .forBody _ body => logsOfOps body
+      | _ => #[]
+
+private def logMessages (p : Program ValKind OpExt) : Array String :=
+  let all := logsOfOps p.initializer.ops ++ p.entries.flatMap (logsOfOps ·.ops)
+  all.foldl (init := #[]) fun unique message =>
+    if unique.contains message then unique else unique.push message
+
+private def logLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
+  (logMessages p).foldl (init := #[]) fun layout message =>
+    let next := match layout.back? with
+      | some (_, off, len) => off + len
+      | none => logDataBase
+    layout.push (message, next, message.toUTF8.size)
+
+private def logOf (p : Program ValKind OpExt) (message : String) : Except String (Nat × Nat) :=
+  match (logLayout p).find? (fun item => item.1 == message) with
+  | some (_, off, len) => pure (off, len)
+  | none => throw "extract/unsupported: near log literal is missing from static layout"
+
+private def hexDigit (value : Nat) : Char :=
+  if value < 10 then Char.ofNat ('0'.toNat + value)
+  else Char.ofNat ('a'.toNat + value - 10)
+
+private def watBytes (message : String) : String :=
+  message.toUTF8.data.foldl (init := "") fun encoded byte =>
+    encoded ++ "\\" ++ String.singleton (hexDigit (byte.toNat / 16)) ++
+      String.singleton (hexDigit (byte.toNat % 16))
+
+private def logDataSection (p : Program ValKind OpExt) : Except String (Array String) := do
+  if (keyLayout p).any fun (_, off, len) => logDataBase < off + len then
+    throw "extract/unsupported: near static storage keys overlap log data"
+  let layout := logLayout p
+  let total := match layout.back? with
+    | some (_, off, len) => off + len - logDataBase
+    | none => 0
+  if maxLogDataBytes < total then
+    throw s!"extract/unsupported: near static log data {total} exceeds {maxLogDataBytes} bytes"
+  return layout.map fun (message, off, _) =>
+    "  (data (i32.const " ++ toString off ++ ") \"" ++ watBytes message ++ "\")"
+
 private partial def renderVal (st : EState) (v : Val ValKind) : Except String String :=
   match v with
   | .lit n => .ok ("(i64.const " ++ toString n.toNat ++ ")")
@@ -318,6 +367,14 @@ private partial def emitRegion (p : Program ValKind OpExt)
         unless tail.all isExitOp do
           throw "extract/unsupported: near v0 instructions follow terminal operation"
         return { lines := #[panicOverflow level], st, terminal := true }
+    | .ext (.logUtf8 message) =>
+        let (off, len) ← logOf p message
+        let region ← emitRegion p view echo level defaultSlot tail st
+        return {
+          lines := #[indent level ("(call $pf_log_utf8 (i64.const " ++ toString len ++
+            ") (i64.const " ++ toString off ++ "))")] ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .returnU64 value =>
         unless view do
           throw "extract/unsupported: near v0 mutating region cannot return a value"
@@ -555,6 +612,7 @@ private def dataSection (p : Program ValKind OpExt) : Array String :=
   keys ++ base ++ account
 
 def emit (p : IR.Program) : Except String String := do
+  let logData ← logDataSection p
   let mut lines : Array String := #[]
   lines := lines.push s!";; {Host.headerTag}"
   lines := lines.push s!";; digest={IR.digestHex p}"
@@ -574,6 +632,9 @@ def emit (p : IR.Program) : Except String String := do
     "  (import \"env\" \"value_return\" (func $pf_value_return (param i64 i64)))"
   lines := lines.push
     "  (import \"env\" \"panic_utf8\" (func $pf_panic_utf8 (param i64 i64)))"
+  if !(logMessages p).isEmpty then
+    lines := lines.push
+      "  (import \"env\" \"log_utf8\" (func $pf_log_utf8 (param i64 i64)))"
   if programUses .blockIndex p then
     lines := lines.push
       "  (import \"env\" \"block_index\" (func $pf_block_index (result i64)))"
@@ -594,6 +655,7 @@ def emit (p : IR.Program) : Except String String := do
       "  (import \"env\" \"current_account_id\" (func $pf_current_account_id (param i64)))"
   lines := lines.push "  (memory (export \"memory\") 1)"
   lines := lines ++ dataSection p
+  lines := lines ++ logData
   lines := lines.push ""
   lines := lines ++ (← renderFn p p.initializer)
   lines := lines.push ""

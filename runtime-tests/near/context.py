@@ -6,6 +6,7 @@ Scenes:
   full current AccountId is length + zero-padded 64-byte words
   account_balance and attached_deposit preserve both u128 words
   explicit legacy deposit projection traps when the high word is nonzero
+  static UTF-8 logging appears exactly in the function-call receipt
   direct call passes full predecessor == current-account self check
   height() equals status.sync_info.latest_block_height
   stamp() stores that height; get() matches SuccessValue
@@ -95,6 +96,32 @@ def main() -> None:
         "takeDepositLegacy", b"", deposit=wide_deposit, expect_success=False
     )
     print("nearctx: >u64 attached_deposit full words pass; legacy UInt64 traps ok")
+
+    log_res = client.call("logReady", b"")
+    receipt_logs: list[str] = []
+    for outcome in log_res.get("receipts_outcome", []):
+        logs = outcome.get("outcome", {}).get("logs", [])
+        if not isinstance(logs, list) or not all(isinstance(item, str) for item in logs):
+            raise AssertionError(f"logReady receipt has malformed logs: {logs!r}")
+        receipt_logs.extend(logs)
+    if receipt_logs != ["NEAR ✓"]:
+        raise AssertionError(f"logReady expected exactly ['NEAR ✓'], got {receipt_logs!r}")
+    if client.view_u64("get") != 1:
+        raise AssertionError("logReady must continue after logging and persist stamped=1")
+    print("nearctx: log_utf8 receipt == ['NEAR ✓'] and continuation persisted ok")
+
+    view_log = client.view_response_on(client.account_id, "logView")
+    if view_log.get("logs") != ["view ✓"]:
+        raise AssertionError(
+            f"logView expected exactly ['view ✓'], got {view_log.get('logs')!r}"
+        )
+    try:
+        view_log_result = bytes(view_log["result"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise AssertionError(f"logView has malformed result: {view_log!r}") from error
+    if len(view_log_result) < 8 or NearClient.decode_u64_le(view_log_result) != 2:
+        raise AssertionError(f"logView expected raw-u64 result 2, got {view_log_result!r}")
+    print("nearctx: view log_utf8 == ['view ✓'] and raw-u64 result==2 ok")
 
     self_call = client.call("checkSelfCall", b"")
     self_call_value = NearClient.success_value_bytes(self_call)

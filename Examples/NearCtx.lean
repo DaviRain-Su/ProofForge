@@ -83,6 +83,21 @@ def takeDepositLegacy (_s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+/-- 静态 UTF-8 日志：receipt 中必须精确出现一次 `NEAR ✓`。 -/
+@[pf_entry]
+def logReady (_s : State) : Except Error (State × UInt64) :=
+  let _ := Logs.write "NEAR ✓"
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ stamped := 1 }, 1)
+  else
+    .error .overflow
+
+/-- view 也允许日志，并继续返回 raw-u64 结果。 -/
+@[pf_entry]
+def logView (_s : State) : UInt64 :=
+  let _ := Logs.write "view ✓"
+  2
+
 /-- 入口：读 predecessor 前 8 字节。view 禁止。 -/
 @[pf_entry]
 def pingCaller (_s : State) : Except Error (State × UInt64) :=

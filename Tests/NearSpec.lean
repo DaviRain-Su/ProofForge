@@ -22,7 +22,13 @@ open ProofForge
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
 #guard ProofForge.Wasm.Near.Registry.names == #["Counter", "NearCtx"]
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "2030160107539932"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
+
+#guard ProofForge.Wasm.Near.Ops.OpExt.wellFormed
+  (.logUtf8 "NEAR ✓" : ProofForge.Wasm.Near.Ops.OpExt ProofForge.Wasm.Near.Ops.Val)
+#guard !ProofForge.Wasm.Near.Ops.OpExt.wellFormed
+  (.logUtf8 (String.ofList (List.replicate 1025 'x')) :
+    ProofForge.Wasm.Near.Ops.OpExt ProofForge.Wasm.Near.Ops.Val)
 
 open Lean Elab Command in
 elab "#pf_near_reject " n:ident : command => do
@@ -80,6 +86,8 @@ elab "#pf_near_emit_check " n:ident : command => do
             throwError s!"near emit is missing anchor: {anchor}\n{source}"
         unless !source.contains "host_lib" do
           throwError "near emit mentions XRPL host_lib"
+        unless !source.contains "\"log_utf8\"" do
+          throwError "Counter unexpectedly imports NEAR log_utf8"
         unless !source.contains "xrpl_wasm_std" do
           throwError "near emit still mentions xrpl_wasm_std"
         logInfo m!"proofforge-near-test: digest = {digest}"

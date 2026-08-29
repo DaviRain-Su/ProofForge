@@ -271,6 +271,8 @@ partial def opAllowed {ValExt : Type} {OpExt : Type → Type} : Op ValExt OpExt 
       valAllowed lhs && valAllowed rhs && thn.all opAllowed && els.all opAllowed
   | .storeField _ value | .okState value | .returnState value | .returnU64 value =>
       valAllowed value
+  -- Target registration already checked the payload; the chain emitter owns rendering.
+  | .ext _ => true
   | .errorOverflow => true
   | .errorNamed "unauthorized" => true
   | .errorNamed "paused" => true

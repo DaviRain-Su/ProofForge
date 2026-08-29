@@ -68,6 +68,7 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .xrpl payload => .xrpl (mapXrplPayload mapValue payload)
   | .near payload =>
       match payload with
+      | .logUtf8 message => .near (.logUtf8 message)
       | .reserved => .near .reserved
 
 def OpExt.values : OpExt Val → Array Val
@@ -113,6 +114,7 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .xrpl payload => xrplExtWellFormed payload
   | .near payload =>
       match payload with
+      | .logUtf8 message => message.toUTF8.size ≤ 1024
       | .reserved => false
 
 def Op.wellFormed (op : Op) : Bool :=

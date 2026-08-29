@@ -42,8 +42,10 @@ def ValKind.arity : ValKind → Nat
 abbrev Val := ProofForge.Core.Ops.Val ValKind
 abbrev Cmp := ProofForge.Core.Ops.Cmp
 
-/-- NEAR-owned effects. v0 has none. -/
+/-- NEAR-owned effects. Dynamic byte spans remain absent; v0 logging owns a bounded static
+UTF-8 literal that the emitter places in deterministic linear-memory data. -/
 inductive OpExt (V : Type) where
+  | logUtf8 (message : String)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
@@ -51,15 +53,18 @@ inductive OpExt (V : Type) where
 abbrev Op := ProofForge.Core.Ops.Op ValKind OpExt
 
 def OpExt.wellFormed : OpExt Val → Bool
+  | .logUtf8 message => message.toUTF8.size ≤ 1024
   | .reserved => false
 
 def Op.wellFormed (op : Op) : Bool :=
   ProofForge.Core.Ops.Op.wellFormed ValKind.arity OpExt.wellFormed op
 
 private def mapCfgPayload (_mapValue : Val → Val) : OpExt Val → OpExt Val
+  | .logUtf8 message => .logUtf8 message
   | .reserved => .reserved
 
 private def cfgPayloadValues : OpExt Val → Array Val
+  | .logUtf8 _ => #[]
   | .reserved => #[]
 
 def cfgDialect : Core.CFG.Dialect ValKind OpExt where

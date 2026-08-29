@@ -139,6 +139,9 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Val.nearCurrentAccountIdW6 : Val := nearLeaf .currentAccountIdW6
 @[match_pattern] def Val.nearCurrentAccountIdW7 : Val := nearLeaf .currentAccountIdW7
 
+@[match_pattern] def Op.nearLogUtf8 (message : String) : Op :=
+  .ext (.near (.logUtf8 message))
+
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber
 @[match_pattern] def Val.evmTimestamp : Val := evmLeaf .timestamp

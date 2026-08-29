@@ -33,6 +33,7 @@ private def projectOpExt
     Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val)
   | .near payload =>
       match payload with
+      | .logUtf8 message => pure (.logUtf8 message)
       | .reserved => throw "extract/unsupported: near rejects reserved effect"
   | .svm _ => throw "extract/unsupported: near rejects svm effect"
   | .evm _ => throw "extract/unsupported: near rejects evm effect"
@@ -76,7 +77,9 @@ def extValCanon : Ops.ValKind → String
   | .currentAccountIdW7 => "ns7"
   | .reserved => "wext"
 
-def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String := fun _ => "wext"
+def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
+  | .logUtf8 message => s!"nlog:{message.toUTF8.size}:{message}"
+  | .reserved => "wext"
 
 def slotNames (p : Program) : Array String :=
   Wasm.IR.slotNames p

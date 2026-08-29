@@ -98,6 +98,15 @@ def accountBalance128 : NearToken :=
   { w0 := accountBalanceW0, w1 := accountBalanceW1 }
 
 /--
+Emit one statically known UTF-8 message through `env.log_utf8`. The source return is always zero
+and exists only so ordinary Lean `let` sequencing can retain the Runtime effect. The extractor
+rejects dynamic strings and messages above the target-owned bound.
+-/
+@[irreducible] def logUtf8 (message : String) : UInt64 :=
+  let _ := message
+  0
+
+/--
 `current_account_id` as the first 8 bytes of the UTF-8 account id,
 little-endian. View-safe — unlike `predecessor`. Not a 20-byte address,
 not a complete identity; `selfAccountId` owns the complete 9-leaf value.

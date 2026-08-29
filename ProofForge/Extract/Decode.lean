@@ -5496,6 +5496,24 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
   else
     collectEvmQueryOps env e
 
+/-- Statically known NEAR UTF-8 logs. The payload stays an effect rather than a value so CFG
+rewrites cannot duplicate, discard, or reorder the host call as a pure scalar expression. -/
+private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  let rec find (fuel : Nat) (e : Expr) : Option String :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
+        e.getAppArgs.back? >>= staticString? env 64
+      else
+        match unfoldUserHelper env e with
+        | some (_, unfolded) => find fuel' unfolded
+        | none => none
+  match find 8 e with
+  | some message => some #[.nearLogUtf8 message, .returnU64 (.lit 0)]
+  | none => none
+
 /-- A vector root is not a scalar slot. Mixed static/dynamic writeback can see an inline
 helper's vector parameter as a changed structure field; discard that synthetic root store. -/
 private def dropVectorRootStores (dynamic stores : Array Ops.Op) : Array Ops.Op :=
@@ -5645,7 +5663,7 @@ def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr :=
     | .letE _ _ value body _ =>
         let effectful :=
           (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
-            (decodeEvmEffect env value).isSome ||
+            (decodeNearEffect env value).isSome || (decodeEvmEffect env value).isSome ||
             (findForIn env value).isSome || (findForBodyExpr env value).isSome
         -- A scalar captured before a CPI must remain a local: substituting its state-field read
         -- through the call can move that read after a later state write.
@@ -6386,6 +6404,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.component call, .returnU64 (.lit 0)]
   else if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
+  else if let some ops := decodeNearEffect env e then
+    .ok ops
   else if let some ops := decodeEvmEffect env e then
     .ok (mergeEvmStores localDepth ops (evmEffectStores env e))
   else if let some (n, addend) := findForIn env e then
@@ -6721,11 +6741,12 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       let ignoredInlineEffect :=
         if body.hasLooseBVar 0 then false
         else
-          match unfoldUserHelper env value with
-          | some (_, unfolded) =>
-              mentionsSvmRuntime env 8 unfolded || (findInvoke env 64 unfolded).isSome ||
-                mentionsSvmEffect env 64 unfolded
-          | none => false
+          (decodeNearEffect env value).isSome ||
+            match unfoldUserHelper env value with
+            | some (_, unfolded) =>
+                mentionsSvmRuntime env 8 unfolded || (findInvoke env 64 unfolded).isSome ||
+                  mentionsSvmEffect env 64 unfolded
+            | none => false
       if ignoredInlineEffect then
         match decodeExpr env fuel' value (preserveLocals := preserveLocals)
               (localDepth := localDepth) (stateType? := stateType?)
@@ -6740,7 +6761,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         | _, .error reason => return .error reason
       let effectful :=
         (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
-          (decodeEvmEffect env value).isSome ||
+          (decodeNearEffect env value).isSome || (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       let scalarControlProducer := isSequencedScalarProducer env ty value
       if scalarControlProducer then
@@ -6951,6 +6972,8 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
+    else if let some ops := decodeNearEffect env e then
+      return .ok ops
     else if let some ops := decodeEvmEffect env e then
       return .ok (mergeEvmStores localDepth ops (evmEffectStores env e))
     else if let some (n, addend) := findForIn env e then
@@ -7299,6 +7322,8 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           return .error (if stateful then s!"state loop then: {r}" else s!"ite then: {r}")
         | _, .error r =>
           return .error (if stateful then s!"state loop else: {r}" else s!"ite else: {r}")
+    else if let some ops := decodeNearEffect env e then
+      return .ok ops
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
     else if let some call := decodeComponentCall env e <|> findComponentCall env 8 e then

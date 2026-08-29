@@ -14,8 +14,8 @@ Historical proof_forge profile `near-wasm-raw-u64-v1` (docs/targets/03-near.md):
   This is **not** JSON ABI and **not** XRPL's C-param `i32`/`i64` export ABI.
 
 v0 uses this pair of storage calls plus `input` / `register_len` /
-`read_register` / `value_return` / `panic_utf8`. Predecessor, attached deposit,
-promises stay fail closed.
+`read_register` / `value_return` / `panic_utf8`, context reads, and bounded static
+`log_utf8`. Dynamic byte ABI, promises, and arbitrary storage stay fail closed.
 
 The family `Wasm.Host.Contract` still describes XRPL's Data-blob import shape.
 NEAR does not instantiate it; `Near.Emit` owns the env import table.

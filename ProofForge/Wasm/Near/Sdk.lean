@@ -74,6 +74,15 @@ namespace Context
 
 end Context
 
+namespace Logs
+
+/-- Log one compile-time UTF-8 string. The current static slice accepts at most 1024 UTF-8 bytes
+and returns zero for source sequencing; receipt logging remains the observable effect. -/
+@[pf_inline] def write (message : String) : UInt64 :=
+  Runtime.logUtf8 message
+
+end Logs
+
 namespace Access
 
 /-- Callback/private-entry predicate. Promise callbacks should require the

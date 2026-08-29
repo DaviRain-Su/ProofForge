@@ -40,6 +40,7 @@ ctx_imports = (
     '(import "env" "attached_deposit"',
     '(import "env" "account_balance"',
     '(import "env" "current_account_id"',
+    '(import "env" "log_utf8"',
 )
 ctx_exports = (
     '(func (export "height")',
@@ -49,6 +50,8 @@ ctx_exports = (
     '(func (export "takeDeposit")',
     '(func (export "takeDepositHigh")',
     '(func (export "takeDepositLegacy")',
+    '(func (export "logReady")',
+    '(func (export "logView")',
     '(func (export "selfId")',
     '(func (export "selfIdLength")',
     '(func (export "selfIdWord1")',
