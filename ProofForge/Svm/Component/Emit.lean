@@ -4,6 +4,7 @@ import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.BatchRecorder.Emit
 import ProofForge.Svm.FifoCancel.Emit
 import ProofForge.Svm.Memory.Emit
+import ProofForge.Svm.Telemetry.Emit
 import ProofForge.Svm.TransientBytes.Emit
 import ProofForge.Svm.TransientVec.Emit
 
@@ -44,6 +45,9 @@ private def Context.memory (context : Context) : Memory.Emit.Context :=
     loadOwnerIsSelf := context.loadOwnerIsSelf
     headerStack := context.headerStack }
 
+private def Context.telemetry (context : Context) : Telemetry.Emit.Context :=
+  { loadValue := context.loadValue }
+
 private def Context.transientVec (context : Context) : TransientVec.Emit.Context :=
   { loadValue := context.loadValue }
 
@@ -66,6 +70,8 @@ def emitQuery (context : Context) (query : Component.Query) (operands : Array Op
       FifoCancel.Emit.emitQuery scope cancelQuery operands stackOff
   | .memory memoryQuery =>
       Memory.Emit.emitQuery context.memory memoryQuery operands stackOff nonce scope
+  | .telemetry telemetryQuery =>
+      Telemetry.Emit.emitQuery telemetryQuery operands stackOff
   | .transientVec vectorQuery =>
       TransientVec.Emit.emitQuery context.transientVec vectorQuery operands stackOff nonce scope
   | .transientBytes bytesQuery =>
@@ -80,6 +86,7 @@ def emitCall (context : Context) (backend : Backend) (label : String) :
   | .fifoCancel call =>
       FifoCancel.Emit.emitCall context.fifoCancel backend.accountStorage label call
   | .memory call => Memory.Emit.emitCall context.memory label call
+  | .telemetry call => Telemetry.Emit.emitCall context.telemetry label call
   | .transientVec call => TransientVec.Emit.emitCall context.transientVec label call
   | .transientBytes call => TransientBytes.Emit.emitCall context.transientBytes label call
 

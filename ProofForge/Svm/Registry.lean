@@ -20,7 +20,7 @@ def entries : Array Entry := #[
   { name := "Transfer", digest := "f2da40e6199ba343" },
   { name := "Ping", digest := "2d14206f60b0cbd6" },
   { name := "Call", digest := "d61ef848389e963a" },
-  { name := "Info", digest := "a52527680ee65c03" },
+  { name := "Info", digest := "92992971c8b3fd12" },
   { name := "Peer", digest := "8c8ed8f343755cba" },
   { name := "Pda", digest := "1f1a994e206aa42b" },
   { name := "Signed", digest := "23102ccf4deeceda" },

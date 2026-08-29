@@ -307,6 +307,12 @@ exact signed-i32 comparison bits，不新增 top-level Ops/IR/main-Emit recipe�
 [R2-005](tasks/r2-005.md)。R3-012 已在同一 allocator contract 上补充 source-visible
 invocation-local `Vector64` mutation 与显式 OOM 传播。
 
+R2-006 已完成 allocation-free invocation telemetry：remaining compute 与 stack height 是
+target-owned Query，compute diagnostic 与 fixed five-word hexadecimal logger 是 target-owned
+Call；四者只穿过现有 generic Component bridge，并绑定 exact official symbols。API 不开放
+String/Array/Vec、pointer 或 allocation；compute 是会继续消耗的 snapshot，日志也不冒充 stable
+typed event。详见 [R2-006](tasks/r2-006.md)。
+
 ### R3 — SVM SDK
 
 SDK 按生命周期分两类，名字上也不能混：

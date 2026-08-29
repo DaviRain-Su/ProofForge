@@ -199,3 +199,36 @@ fn writable_flag_tracks_meta() {
 fn executable_flag_is_zero_for_data_account() {
     view("executable", false, false, BASE_LAMPORTS, 0);
 }
+
+#[test]
+fn top_level_stack_height_is_one() {
+    view("stackDepth", false, false, BASE_LAMPORTS, 1);
+}
+
+#[test]
+fn remaining_compute_units_is_a_live_snapshot() {
+    let (program_id, mollusk) = harness();
+    let compute_unit_limit = mollusk.compute_budget.compute_unit_limit;
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("computeUnits", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = info_state(true);
+    let account = state_account(&program_id, BASE_LAMPORTS, pre.clone());
+    let result = mollusk.process_instruction(&ix, &[(state_key, account)]);
+    assert!(result.raw_result.is_ok(), "compute query failed: {result:?}");
+    let remaining = u64::from_le_bytes(
+        result
+            .return_data
+            .as_slice()
+            .try_into()
+            .expect("one returned u64"),
+    );
+    assert!(remaining > 0 && remaining < compute_unit_limit);
+    assert_eq!(result.resulting_accounts[0].1.data, pre);
+}
+
+#[test]
+fn allocation_free_numeric_loggers_execute() {
+    view("logUnits", false, false, BASE_LAMPORTS, 0);
+    view("logValues", false, false, BASE_LAMPORTS, 0);
+}

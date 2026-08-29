@@ -250,6 +250,12 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         some (.ext (.svm (.component (.transientBytes query))) #[])
       else none
     | _ => none
+  else if (endsWith e ".remainingComputeUnits" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.remainingComputeUnits) && e.getAppArgs.isEmpty then
+    some (.ext (.svm (.component (.telemetry .remainingComputeUnits))) #[])
+  else if (endsWith e ".stackHeight" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.stackHeight) && e.getAppArgs.isEmpty then
+    some (.ext (.svm (.component (.telemetry .stackHeight))) #[])
   else if (endsWith e ".transientVecGet" ||
       isConstNamed e ``ProofForge.Svm.Runtime.transientVecGet) && e.getAppArgs.size ≥ 2 then
     match asStaticLit env fuel e.getAppArgs[e.getAppArgs.size - 2]!,
@@ -3131,10 +3137,28 @@ private def decodeTransientBytesCall (env : Environment) (e : Expr) :
       return .transientBytes (.finish config)
   else none
 
+private def decodeTelemetryCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if (isConstNamed e ``ProofForge.Svm.Runtime.logComputeUnits ||
+      endsWith e ".logComputeUnits") && args.isEmpty then
+    some (.telemetry .logComputeUnits)
+  else if (isConstNamed e ``ProofForge.Svm.Runtime.log64 || endsWith e ".log64") &&
+      args.size == 5 then do
+    let first ← val env args[args.size - 5]!
+    let second ← val env args[args.size - 4]!
+    let third ← val env args[args.size - 3]!
+    let fourth ← val env args[args.size - 2]!
+    let fifth ← val env args[args.size - 1]!
+    let call : Svm.Telemetry.Call Ops.Val := .log64 first second third fourth fifth
+    if call.wellFormed (fun _ => true) then some (.telemetry call) else none
+  else none
+
 private def decodeComponentCall (env : Environment) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
   decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e <|> decodeMemoryCall env e <|>
-    decodeTransientVecCall env e <|> decodeTransientBytesCall env e
+    decodeTransientVecCall env e <|> decodeTransientBytesCall env e <|> decodeTelemetryCall env e
 
 private def mentionsFifoCancelSource (e : Expr) : Bool :=
   e.getUsedConstantsAsSet.toList.any fun name =>

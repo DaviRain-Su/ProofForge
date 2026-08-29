@@ -58,4 +58,20 @@ def writable (_s : State) : UInt64 :=
 def executable (_s : State) : UInt64 :=
   isExecutable0
 
+@[pf_entry]
+def computeUnits (_s : State) : UInt64 :=
+  ProofForge.Svm.Sdk.Telemetry.remainingComputeUnits
+
+@[pf_entry]
+def stackDepth (_s : State) : UInt64 :=
+  ProofForge.Svm.Sdk.Telemetry.stackHeight
+
+@[pf_entry]
+def logUnits (_s : State) : UInt64 :=
+  ProofForge.Svm.Sdk.Telemetry.logComputeUnits
+
+@[pf_entry]
+def logValues (_s : State) : UInt64 :=
+  ProofForge.Svm.Sdk.Telemetry.log64 1 2 3 4 5
+
 end Examples.Info

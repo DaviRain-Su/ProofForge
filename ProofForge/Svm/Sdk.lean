@@ -13,6 +13,7 @@ import ProofForge.Svm.Sdk.Transient
 import ProofForge.Svm.Sdk.TransientVec
 import ProofForge.Svm.Sdk.TransientBytes
 import ProofForge.Svm.Sdk.Memory
+import ProofForge.Svm.Sdk.Telemetry
 
 /-!
 # ProofForge SVM SDK

@@ -43,6 +43,28 @@ namespace ProofForge.Svm.Runtime
 -/
 @[irreducible] def slotsPerEpoch : UInt64 := 0
 
+/-! Allocation-free invocation telemetry. Host stubs intentionally return zero; extracted SVM
+programs bind these leaves to the exact official syscall symbols through `Svm.Telemetry`. -/
+
+/-- Remaining compute units at the instant this query executes. The query itself consumes units. -/
+@[irreducible] def remainingComputeUnits : UInt64 := 0
+
+/-- Current invocation stack height: transaction-level instructions are 1 and each CPI adds 1. -/
+@[irreducible] def stackHeight : UInt64 := 0
+
+/-- Emit the runtime's standard remaining-compute diagnostic. No numeric result is returned. -/
+@[irreducible] def logComputeUnits : UInt64 := 0
+
+/-- Emit five `UInt64` values through Solana's allocation-free hexadecimal numeric logger. -/
+@[irreducible] def log64
+    (first second third fourth fifth : UInt64) : UInt64 :=
+  let _ := first
+  let _ := second
+  let _ := third
+  let _ := fourth
+  let _ := fifth
+  0
+
 /--
 Reverse the eight bytes of one `u64`. The source body gives host evaluation its exact semantics;
 the SVM extractor preserves the call as one value intrinsic and the emitter lowers it to sBPF

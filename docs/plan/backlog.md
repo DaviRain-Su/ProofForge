@@ -30,6 +30,8 @@ instruction/scratch layout；SVM-RT-2b 也已把 return-data 与 multi-seed sign
 同一个 bounded plan；SVM-RT-3 第一刀已用 allocation-free scalar cursor/bitmap 建立
 Token-2022 TLV envelope，并继续对所有未建模 extension fail closed；R2-005 已把官方四个
 program-memory syscall 绑定为 checked account spans，pointer 只在 host call 边界瞬时存在。
+R2-006 已把 remaining compute、invocation stack height 与两个 allocation-free numeric logger
+收口到 target-owned Telemetry Query/Call，并继续只经过 generic Component bridge。
 EVM-RT-2a typed call-result 已完成，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
 entry-value 与 calldata route policy，EVM-RT-2d 已把 permit 的固定 ecrecover address/frame、
@@ -570,6 +572,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   memcpy 静态拒绝 overlap，memmove 保留 overlap，memcmp 返回 exact i32 bits；source/IR/account
   state 均不出现 pointer 或 heap collection。MemoryOps 覆盖四个 host contracts，AccountView
   独立复用 compare。详见 `docs/plan/tasks/r2-005.md`。
+
+- R2-006 SVM invocation telemetry 已完成：`Svm.Sdk.Telemetry` 提供 remaining compute、
+  stack height、compute diagnostic 与 fixed five-word hexadecimal logger；target-owned
+  `Svm.Telemetry` 经 generic Component bridge 绑定四个 exact official syscall symbols，不新增
+  top-level Ops/IR/main-Emit recipe。所有参数/结果都是 scalar UInt64，没有 Array/String/Vec、
+  allocation 或 pointer；Mollusk 验证 top-level height=1、live compute snapshot 与两个 logger。
+  Info digest 为 `92992971c8b3fd12`、ELF 为 8,536 B；Surfpool 1.5.0 以九个 Loader-v3
+  writes 部署并核对 complete ProgramData bytes。详见 `docs/plan/tasks/r2-006.md`。
 
 - R4-001 EVM typed call-result contract 已完成：`Evm.CallResult` 用一个 interpreter 统一
   closed CALL/STATICCALL 的 success-only、exact-word 与 ERC-20 empty-or-nonzero-word policy，

@@ -3,6 +3,7 @@ import ProofForge.Svm.AccountView
 import ProofForge.Svm.BatchRecorder
 import ProofForge.Svm.FifoCancel
 import ProofForge.Svm.Memory
+import ProofForge.Svm.Telemetry
 import ProofForge.Svm.TransientBytes
 import ProofForge.Svm.TransientVec
 
@@ -23,6 +24,7 @@ inductive Query where
   | accountView (query : AccountView.Query)
   | fifoCancel (query : FifoCancel.Query)
   | memory (query : Memory.Query)
+  | telemetry (query : Telemetry.Query)
   | transientVec (query : TransientVec.Query)
   | transientBytes (query : TransientBytes.Query)
   deriving BEq, Repr, Inhabited
@@ -32,6 +34,7 @@ def Query.arity : Query → Nat
   | .accountView query => query.arity
   | .fifoCancel _ => 0
   | .memory query => query.arity
+  | .telemetry query => query.arity
   | .transientVec query => query.arity
   | .transientBytes query => query.arity
 
@@ -40,6 +43,7 @@ def Query.effects : Query → EffectSummary
   | .accountView query => query.effects
   | .fifoCancel _ => {}
   | .memory query => query.effects
+  | .telemetry query => query.effects
   | .transientVec query => query.effects
   | .transientBytes query => query.effects
 
@@ -48,6 +52,7 @@ def Query.wellFormed (accountLimit : Nat := 64) : Query → Bool
   | .accountView query => query.wellFormed accountLimit
   | .fifoCancel _ => true
   | .memory query => query.wellFormed accountLimit
+  | .telemetry query => query.wellFormed
   | .transientVec query => query.wellFormed
   | .transientBytes query => query.wellFormed
 
@@ -56,6 +61,7 @@ def Query.needsWalk : Query → Bool
   | .accountView _ => true
   | .fifoCancel _ => false
   | .memory query => query.needsWalk
+  | .telemetry query => query.needsWalk
   | .transientVec query => query.needsWalk
   | .transientBytes query => query.needsWalk
 
@@ -65,6 +71,7 @@ def Query.minAccounts (measure : V → Nat) (operands : Array V) : Query → Nat
   | .fifoCancel _ => operands.foldl (init := 0) fun current value =>
       Nat.max current (measure value)
   | .memory query => query.minAccounts measure operands
+  | .telemetry query => query.minAccounts measure operands
   | .transientVec query => query.minAccounts measure operands
   | .transientBytes query => query.minAccounts measure operands
 
@@ -75,6 +82,7 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
       if operands.isEmpty then query.canonical
       else s!"invalid-{query.canonical}-{operands.size}"
   | .memory query => query.canonical renderValue operands
+  | .telemetry query => query.canonical renderValue operands
   | .transientVec query => query.canonical renderValue operands
   | .transientBytes query => query.canonical renderValue operands
 
@@ -85,6 +93,7 @@ inductive Call (V : Type) where
   | batchRecorder (call : BatchRecorder.Call V)
   | fifoCancel (call : FifoCancel.Call V)
   | memory (call : Memory.Call V)
+  | telemetry (call : Telemetry.Call V)
   | transientVec (call : TransientVec.Call V)
   | transientBytes (call : TransientBytes.Call V)
   deriving BEq, Repr, Inhabited
@@ -94,6 +103,7 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .batchRecorder call => .batchRecorder (call.mapValues mapValue)
   | .fifoCancel call => .fifoCancel (call.mapValues mapValue)
   | .memory call => .memory (call.mapValues mapValue)
+  | .telemetry call => .telemetry (call.mapValues mapValue)
   | .transientVec call => .transientVec (call.mapValues mapValue)
   | .transientBytes call => .transientBytes (call.mapValues mapValue)
 
@@ -102,6 +112,7 @@ def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .batchRecorder call => return .batchRecorder (← call.mapValuesM mapValue)
   | .fifoCancel call => return .fifoCancel (← call.mapValuesM mapValue)
   | .memory call => return .memory (← call.mapValuesM mapValue)
+  | .telemetry call => return .telemetry (← call.mapValuesM mapValue)
   | .transientVec call => return .transientVec (← call.mapValuesM mapValue)
   | .transientBytes call => return .transientBytes (← call.mapValuesM mapValue)
 
@@ -110,6 +121,7 @@ def Call.values : Call V → Array V
   | .batchRecorder call => call.values
   | .fifoCancel call => call.values
   | .memory call => call.values
+  | .telemetry call => call.values
   | .transientVec call => call.values
   | .transientBytes call => call.values
 
@@ -124,6 +136,7 @@ def Call.effects : Call V → EffectSummary
   | .batchRecorder call => call.effects
   | .fifoCancel call => call.effects
   | .memory call => call.effects
+  | .telemetry call => call.effects
   | .transientVec call => call.effects
   | .transientBytes call => call.effects
 
@@ -132,6 +145,7 @@ def Call.minAccounts (measure : V → Nat) : Call V → Nat
   | .batchRecorder call => call.minAccounts measure
   | .fifoCancel call => call.minAccounts measure
   | .memory call => call.minAccounts measure
+  | .telemetry call => call.minAccounts measure
   | .transientVec call => call.minAccounts measure
   | .transientBytes call => call.minAccounts measure
 
@@ -140,6 +154,7 @@ def Call.wellFormed (valueWellFormed : V → Bool) (accountLimit : Nat := 64) : 
   | .batchRecorder call => call.wellFormed valueWellFormed accountLimit
   | .fifoCancel call => call.wellFormed valueWellFormed accountLimit
   | .memory call => call.wellFormed valueWellFormed accountLimit
+  | .telemetry call => call.wellFormed valueWellFormed
   | .transientVec call => call.wellFormed valueWellFormed
   | .transientBytes call => call.wellFormed valueWellFormed
 
@@ -148,6 +163,7 @@ def Call.canonical (renderValue : V → String) : Call V → String
   | .batchRecorder call => call.canonical renderValue
   | .fifoCancel call => call.canonical renderValue
   | .memory call => call.canonical renderValue
+  | .telemetry call => call.canonical renderValue
   | .transientVec call => call.canonical renderValue
   | .transientBytes call => call.canonical renderValue
 
@@ -156,6 +172,7 @@ def Call.usesCpi : Call V → Bool
   | .batchRecorder call => call.usesCpi
   | .fifoCancel call => call.usesCpi
   | .memory _ => false
+  | .telemetry _ => false
   | .transientVec _ => false
   | .transientBytes _ => false
 
@@ -164,6 +181,7 @@ def Call.stackScratchEnd : Call V → Nat
   | .batchRecorder call => call.stackScratchEnd
   | .fifoCancel call => call.stackScratchEnd
   | .memory _ => Component.stackScratchEnd
+  | .telemetry _ => Component.stackScratchEnd
   | .transientVec _ => Component.stackScratchEnd
   | .transientBytes _ => Component.stackScratchEnd
 
@@ -172,6 +190,7 @@ def Call.rawSelfEntries : Call V → Array (Nat × String)
   | .batchRecorder call => call.rawSelfEntries
   | .fifoCancel call => call.rawSelfEntries
   | .memory _ => #[]
+  | .telemetry _ => #[]
   | .transientVec _ => #[]
   | .transientBytes _ => #[]
 
