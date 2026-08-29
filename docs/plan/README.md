@@ -183,6 +183,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-005](tasks/wsm-005.md) | done | XRPL-RT：AccountId + caller/self/ledger host 叶子 |
 | [wsm-006](tasks/wsm-006.md) | done | XRPL-CMP：三叶 AccountId 比较，unauthorized = 3 |
 | [wsm-007](tasks/wsm-007.md) | done | XRPL-HASH：`compute_sha512_half` ASCII 字面量，首个小端 UInt64 |
+| [wsm-008](tasks/wsm-008.md) | done | XRPL-SDK：`pf_inline` 转到 Runtime，Ownable 仍是源码 if |
 
 ## SVM 全面工作计划（当前主线）
 
