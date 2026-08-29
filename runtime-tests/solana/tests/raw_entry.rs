@@ -22,6 +22,10 @@ const ENUM_SCHEMA_TAG: u8 = 16;
 const BOUNDED_SCHEMA_TAG: u8 = 17;
 const BOUNDED_BYTES_TAG: u8 = 18;
 const BOUNDED_STRING_TAG: u8 = 19;
+const ECHO_BOUNDED_VALUES_TAG: u8 = 20;
+const ECHO_BOUNDED_BYTES_TAG: u8 = 21;
+const ECHO_BOUNDED_STRING_TAG: u8 = 22;
+const MAKE_BOUNDED_STRING_TAG: u8 = 23;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -94,6 +98,24 @@ fn bounded_bytes_data(tag: u8, bytes: &[u8]) -> Vec<u8> {
     let mut data = vec![tag];
     data.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
     data.extend_from_slice(bytes);
+    data
+}
+
+fn bounded_u16_data(values: &[u16]) -> Vec<u8> {
+    let mut data = vec![ECHO_BOUNDED_VALUES_TAG];
+    data.extend_from_slice(&(values.len() as u32).to_le_bytes());
+    for value in values {
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+    data
+}
+
+fn constructed_string_data(length: u32, bytes: &[u8]) -> Vec<u8> {
+    assert!(bytes.len() <= 8);
+    let mut data = vec![MAKE_BOUNDED_STRING_TAG];
+    data.extend_from_slice(&length.to_le_bytes());
+    data.extend_from_slice(bytes);
+    data.resize(13, 0);
     data
 }
 
@@ -460,6 +482,95 @@ fn bounded_string_enforces_strict_utf8_before_source_observation() {
             &bounded_bytes_data(BOUNDED_STRING_TAG, &malformed),
         );
     }
+}
+
+#[test]
+fn bounded_returns_publish_only_the_canonical_borsh_active_prefix() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+
+    for values in [vec![], vec![11u16, 13], vec![17, 19, 23, 29]] {
+        let data = bounded_u16_data(&values);
+        let expected = data[1..].to_vec();
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(&expected)],
+        );
+    }
+
+    for (tag, values) in [
+        (ECHO_BOUNDED_BYTES_TAG, vec![]),
+        (ECHO_BOUNDED_BYTES_TAG, vec![0x80, 0xff]),
+        (ECHO_BOUNDED_BYTES_TAG, b"abcdefgh".to_vec()),
+        (ECHO_BOUNDED_STRING_TAG, vec![]),
+        (ECHO_BOUNDED_STRING_TAG, vec![0xe2, 0x82, 0xac]),
+        (ECHO_BOUNDED_STRING_TAG, b"abcdefgh".to_vec()),
+    ] {
+        let data = bounded_bytes_data(tag, &values);
+        let expected = data[1..].to_vec();
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(&expected)],
+        );
+    }
+}
+
+#[test]
+fn constructed_string_validates_utf8_at_the_output_boundary() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+
+    for text in [
+        vec![],
+        b"abc".to_vec(),
+        vec![0xc2, 0xa2],
+        vec![0xe2, 0x82, 0xac],
+        vec![0xf0, 0x9f, 0x92, 0xa9],
+        b"abcdefgh".to_vec(),
+    ] {
+        let data = constructed_string_data(text.len() as u32, &text);
+        let mut expected = (text.len() as u32).to_le_bytes().to_vec();
+        expected.extend_from_slice(&text);
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(&expected)],
+        );
+    }
+
+    for malformed in [
+        vec![0x80],
+        vec![0xc0, 0x80],
+        vec![0xe0, 0x80, 0x80],
+        vec![0xed, 0xa0, 0x80],
+        vec![0xe2, 0x82],
+        vec![0xf4, 0x90, 0x80, 0x80],
+        vec![0xf5, 0x80, 0x80, 0x80],
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &constructed_string_data(malformed.len() as u32, &malformed),
+        );
+    }
+    expect_raw_error(
+        &mollusk,
+        program_id,
+        program_id,
+        program_account,
+        true,
+        &constructed_string_data(9, b"abcdefgh"),
+    );
 }
 
 #[test]

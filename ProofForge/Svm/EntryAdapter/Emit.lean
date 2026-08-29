@@ -110,6 +110,24 @@ private def emitLoadLE (baseReg : String) (offset width : Nat) : Except String S
         out := out ++ "  or64 r1, r2\n"
       return out
 
+private def emitStoreStackLE (sourceOff destinationOff width : Nat) : Except String String := do
+  unless 1 ≤ width && width ≤ 8 do
+    throw s!"extract/unsupported: raw return width {width}"
+  let direct := match width with
+    | 1 => some "stxb"
+    | 2 => some "stxh"
+    | 4 => some "stxw"
+    | 8 => some "stxdw"
+    | _ => none
+  let mut out := s!"  ldxdw r1, [r10 - {sourceOff}]\n"
+  match direct with
+  | some store => return out ++ s!"  {store} [r10 - {destinationOff}], r1\n"
+  | none =>
+      for i in [0:width] do
+        out := out ++ s!"  stxb [r10 - {destinationOff - i}], r1\n"
+        if i + 1 < width then out := out ++ "  rsh64 r1, 8\n"
+      return out
+
 /-- Serialize a compile-time-shaped scalar product without a heap object or protocol operation.
 Each source value is already one widened scalar; this codec only chooses its exact little-endian
 wire width and calls the standard return-data syscall. A trailing narrow scalar reserves enough
@@ -275,7 +293,7 @@ private def emitUtf8Guard (lengthOff : Nat) (err scope : String) (fresh : Nat) :
   lddw r4, 128
   lddw r5, 191
 {loop}:
-  ldxdw r1, [r10 - {lengthOff}]
+  ldxw r1, [r10 - {lengthOff}]
   jge r2, r1, {done}
   mov64 r1, r7
   add64 r1, r2
@@ -323,6 +341,57 @@ private def emitUtf8Guard (lengthOff : Nat) (err scope : String) (fresh : Nat) :
   ja {loop}
 {done}:
   jne r3, 0, {err}
+"
+
+/-- Serialize a bounded source frame to canonical Borsh output. The maximum frame is fixed in
+stack scratch, while `sol_set_return_data` observes only `u32 length || active elements`. String
+reuses the same strict UTF-8 scanner as input decoding before publishing any bytes. -/
+def emitBorshReturnValues
+    (loadValue : Ops.Val → Nat → Nat → String → Except String String)
+    (scratchLimit : Nat) (plan : BorshReturnPlan) (values : Array Ops.Val)
+    (fresh : Nat) (scope : String) : Except String String := do
+  let widths := plan.elementWidths
+  unless !widths.isEmpty && widths.all fun width => 1 ≤ width && width ≤ 8 do
+    throw "extract/unsupported: malformed bounded Borsh return element widths"
+  unless values.size == plan.sourceValueCount do
+    throw "extract/unsupported: bounded Borsh return plan does not match result leaves"
+  let elementBytes := widths.foldl (init := 0) (· + ·)
+  let scratchBytes := plan.maxBytes
+  let stagingOff := scratchBytes + 8
+  if stagingOff > scratchLimit then
+    throw "extract/unsupported: bounded Borsh return exceeds scalar scratch"
+  let invalid := s!"borsh_return_invalid_{scope}_{fresh}"
+  let mut body ← loadValue values[0]! stagingOff fresh s!"{scope}_return_length"
+  body := body ++ (← emitStoreStackLE stagingOff scratchBytes 4)
+  let mut consumed := 4
+  let mut nonce := fresh + 1
+  for i in [1:values.size] do
+    let width := widths[(i - 1) % widths.size]!
+    body := body ++ (← loadValue values[i]! stagingOff nonce s!"{scope}_return_{i}")
+    body := body ++ (← emitStoreStackLE stagingOff (scratchBytes - consumed) width)
+    consumed := consumed + width
+    nonce := nonce + 1
+  let utf8 :=
+    if plan.validateUtf8 then s!"\
+  mov64 r7, r10
+  add64 r7, -{scratchBytes - 4}
+{emitUtf8Guard scratchBytes invalid (scope ++ "_return") nonce}"
+    else ""
+  return body ++ s!"\
+  ldxw r1, [r10 - {scratchBytes}]
+  jgt r1, {plan.capacity}, {invalid}
+{utf8}\
+  mov64 r1, r10
+  add64 r1, -{scratchBytes}
+  ldxw r2, [r10 - {scratchBytes}]
+  mul64 r2, {elementBytes}
+  add64 r2, 4
+  call sol_set_return_data
+  lddw r0, 0
+  exit
+{invalid}:
+  lddw r0, 0x1
+  exit
 "
 
 private partial def emitBorshDecode (context : Context) (base : Nat) (err scope : String)

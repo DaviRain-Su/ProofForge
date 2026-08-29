@@ -101,6 +101,26 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceString.annotations == #["svm.raw.v1:19:2:0"] &&
       sourceString.paramSchemas == #[.boundedString 8] do
     throwError "ordinary tagged/bounded source schemas were not preserved"
+  let some sourceEchoBoundedValues := source.methods.find? (·.ixName == "echoBoundedValues")
+    | throwError "missing bounded-vector return source method"
+  let some sourceEchoBoundedBytes := source.methods.find? (·.ixName == "echoBoundedBytes")
+    | throwError "missing bounded-bytes return source method"
+  let some sourceEchoBoundedString := source.methods.find? (·.ixName == "echoBoundedString")
+    | throwError "missing bounded-string return source method"
+  let some sourceMakeBoundedString := source.methods.find? (·.ixName == "makeBoundedString")
+    | throwError "missing constructed bounded-string source method"
+  unless sourceEchoBoundedValues.annotations == #["svm.raw.v1:20:2:0"] &&
+      sourceEchoBoundedValues.retSchema == .boundedArray 4 (.scalar .uint16) &&
+      sourceEchoBoundedValues.retCount == 5 &&
+      sourceEchoBoundedBytes.annotations == #["svm.raw.v1:21:2:0"] &&
+      sourceEchoBoundedBytes.retSchema == .boundedBytes 8 && sourceEchoBoundedBytes.retCount == 9 &&
+      sourceEchoBoundedString.annotations == #["svm.raw.v1:22:2:0"] &&
+      sourceEchoBoundedString.retSchema == .boundedString 8 && sourceEchoBoundedString.retCount == 9 &&
+      sourceMakeBoundedString.annotations == #["svm.raw.v1:23:2:0"] &&
+      sourceMakeBoundedString.paramWidths == #[4, 1, 1, 1, 1, 1, 1, 1, 1] &&
+      sourceMakeBoundedString.retSchema == .boundedString 8 &&
+      sourceMakeBoundedString.retCount == 9 do
+    throwError "bounded return values were not expanded to fixed source frames"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -286,6 +306,43 @@ elab "#pf_guard_entry_adapter" : command => do
       match method.toCFG with
       | .ok graph => pure graph
       | .error reason => throwError s!"bounded byte/string did not bind to fixed locals: {reason}"
+  let some echoBoundedValues := program.methods.find? (·.ixName == "echoBoundedValues")
+    | throwError "missing projected bounded-vector return method"
+  let some echoBoundedBytes := program.methods.find? (·.ixName == "echoBoundedBytes")
+    | throwError "missing projected bounded-bytes return method"
+  let some echoBoundedString := program.methods.find? (·.ixName == "echoBoundedString")
+    | throwError "missing projected bounded-string return method"
+  let some makeBoundedString := program.methods.find? (·.ixName == "makeBoundedString")
+    | throwError "missing projected constructed bounded-string method"
+  match echoBoundedValues.entry, echoBoundedBytes.entry, echoBoundedString.entry,
+      makeBoundedString.entry with
+  | .raw values, .raw bytes, .raw string, .raw constructed =>
+      unless values.tag == 20 && values.returnBorshPlan == some (.boundedArray 4 #[2]) &&
+          values.returnDataLen == 12 && values.returnScratchBytes == 20 &&
+          values.canonical.contains "borsh-return-schema.array.4.[2]" &&
+          bytes.tag == 21 && bytes.returnBorshPlan == some (.packedBytes 8 false) &&
+          bytes.returnDataLen == 12 && bytes.returnScratchBytes == 20 &&
+          string.tag == 22 && string.returnBorshPlan == some (.packedBytes 8 true) &&
+          string.returnDataLen == 12 && string.returnScratchBytes == 20 &&
+          constructed.tag == 23 && constructed.paramCount == 9 && constructed.dataLen == 13 &&
+          constructed.returnBorshPlan == some (.packedBytes 8 true) &&
+          constructed.returnDataLen == 12 && constructed.returnScratchBytes == 20 do
+        throwError s!"wrong bounded Borsh return plans: {repr values}, {repr bytes}, " ++
+          s!"{repr string}, {repr constructed}"
+  | _, _, _, _ => throwError "bounded return method lost its raw adapter"
+  for (method, count) in [
+      (echoBoundedValues, 5), (echoBoundedBytes, 9),
+      (echoBoundedString, 9), (makeBoundedString, 9)
+    ] do
+    let graph ←
+      match method.toCFG with
+      | .ok graph => pure graph
+      | .error reason => throwError s!"bounded return did not reach CFG: {reason}"
+    unless graph.blocks.any fun block =>
+        match block.terminator with
+        | .exit (.returnU64s values) => values.size == count
+        | _ => false do
+      throwError s!"{method.ixName} lost its fixed return frame"
   let bareWide := { echo128 with ops := #[.returnU64 (.arg 0)] }
   match bareWide.toCFG with
   | .error reason =>
@@ -309,6 +366,15 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call optionValue" && asm.contains "call taggedValue" &&
       asm.contains "call boundedValues" && asm.contains "call boundedBytes" &&
       asm.contains "call boundedString" &&
+      asm.contains "call echoBoundedValues" && asm.contains "call echoBoundedBytes" &&
+      asm.contains "call echoBoundedString" && asm.contains "call makeBoundedString" &&
+      asm.contains "borsh_return_invalid_echoBoundedValues_" &&
+      asm.contains "borsh_return_invalid_echoBoundedBytes_" &&
+      asm.contains "borsh_return_invalid_echoBoundedString_" &&
+      asm.contains "borsh_schema_utf8_loop_echoBoundedString_b0_return_" &&
+      asm.contains "borsh_return_invalid_makeBoundedString_" &&
+      asm.contains "borsh_schema_utf8_loop_makeBoundedString_b0_return_" &&
+      asm.contains "mul64 r2, 2" && asm.contains "mul64 r2, 1" &&
       asm.contains "decode recursive target-owned Borsh schema with exact cursor consumption" &&
       asm.contains "borsh_schema_none_optionValue_" &&
       asm.contains "borsh_schema_enum_done_taggedValue_" &&
@@ -397,6 +463,19 @@ private def hasTaggedBounds (result : Except String EntryAdapter.MethodEntry)
   (paramSchemas := #[.boundedBytes 8])) 5 13 9
 #guard hasTaggedBounds (EntryAdapter.decode #["svm.raw.v1:19:2:0"] 1 #[] 1
   (paramSchemas := #[.boundedString 8])) 5 13 9
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:20:2:0"] 1 #[] 5
+  (paramSchemas := #[.boundedArray 4 (.scalar .uint16)])
+  (retSchema := .boundedArray 4 (.scalar .uint16)))
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:21:2:0"] 1 #[] 9
+  (paramSchemas := #[.boundedBytes 8]) (retSchema := .boundedBytes 8))
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:22:2:0"] 1 #[] 9
+  (paramSchemas := #[.boundedString 8]) (retSchema := .boundedString 8))
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:20:2:0"] 1 #[] 4
+  (paramSchemas := #[.boundedArray 4 (.scalar .uint16)])
+  (retSchema := .boundedArray 4 (.scalar .uint16)))
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:20:2:0"] 1 #[] 5
+  (paramSchemas := #[.boundedArray 4 (.scalar .uint16)])
+  (retSchema := .boundedArray 4 (.tuple #[.scalar .uint16, .scalar .uint16])))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 1 #[] 1
   (paramSchemas := #[.boundedArray 128 (.scalar .uint64)]))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 0 #[] 2

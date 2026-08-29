@@ -219,11 +219,17 @@ Packed Bytes v1 独立解释 standard `bytes`/`string` packed tail、zero paddin
 strict UTF-8；Core/EVM Ops、Runtime effect、Component 和 main CFG Emit recipe 不变。详见
 [R1-017](tasks/r1-017.md)。
 
+R1-018 已完成 SVM top-level bounded output binding：独立 `BorshReturnPlan` 从 fixed source
+frame 发布 canonical active prefix，String 在 output boundary 再做 strict UTF-8；精确宽度
+copy 使用 disjoint staging，不复用 input decode geometry，也不增加 collection opcode 或
+Runtime effect。one-limb scalar 以外的 dynamic output 继续 fail closed。详见
+[R1-018](tasks/r1-018.md)。
+
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
 2. 定义 bounded codec schema：scalar、fixed bytes、tuple/record、enum、`Option`、固定/上限数组。
-3. SVM adapter 实现 Borsh little-endian、canonical tagged/bounded/bytes/String input 与 exact
-   cursor consumption；EVM adapter 实现 32-byte ABI word、static tuple、Tagged Tuple v1、
+3. SVM adapter 实现 Borsh little-endian、canonical tagged/bounded/bytes/String input、exact
+   cursor consumption 与独立 top-level bounded output；EVM adapter 实现 32-byte ABI word、static tuple、Tagged Tuple v1、
    Bounded Array v1 与 Packed Bytes v1 canonical dynamic input。
 4. codec 只描述 wire，不拥有 account/storage geometry，也不执行业务 validation。
 

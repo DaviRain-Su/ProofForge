@@ -286,6 +286,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   或 main CFG Emit recipe。EvmBounded digest `5d657469be1ed0fd`、deployment bytecode 1,421 B；
   solc 0.8.34 与 Anvil 正反矩阵通过。详见 `docs/plan/tasks/r1-017.md`。
 
+- R1-018 SVM bounded Borsh return binding 已完成：独立 `BorshReturnPlan` 把 top-level
+  `BoundedVec`、bytes 与 String 的 fixed source frame 编码成 canonical
+  `u32 length || active prefix`，不复用 input cursor plan；output String 在发布前独立执行
+  strict UTF-8 gate。精确宽度 copy 与 disjoint staging 防止通用表达式 scratch 覆盖动态
+  return frame。当前只支持 one-limb scalar element，nested/tagged/wide dynamic return 继续
+  fail closed；未新增 Core Ops、SVM Runtime effect、Component 或 collection recipe。RawEntry
+  digest `be5151d71eff6bba`、ELF 43,520 B；Mollusk 19/19 与 Surfpool Loader-v3 gate 通过。
+  详见 `docs/plan/tasks/r1-018.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

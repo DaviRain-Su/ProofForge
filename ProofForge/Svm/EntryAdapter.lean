@@ -37,6 +37,37 @@ structure BorshPlan where
 
 def BorshPlan.localCount (plan : BorshPlan) : Nat := plan.localWidths.size
 
+/-- Target-owned dynamic Borsh return geometry. Source results are always a fixed scalar frame;
+the runtime length selects the active wire prefix. Keeping this separate from `BorshDecode`
+prevents input cursor rules from becoming an accidental output contract. -/
+inductive BorshReturnPlan where
+  | boundedArray (capacity : Nat) (elementWidths : Array Nat)
+  | packedBytes (capacity : Nat) (validateUtf8 : Bool)
+  deriving BEq, Repr, Inhabited
+
+def BorshReturnPlan.capacity : BorshReturnPlan → Nat
+  | .boundedArray capacity _ | .packedBytes capacity _ => capacity
+
+def BorshReturnPlan.elementWidths : BorshReturnPlan → Array Nat
+  | .boundedArray _ widths => widths
+  | .packedBytes .. => #[1]
+
+def BorshReturnPlan.validateUtf8 : BorshReturnPlan → Bool
+  | .boundedArray .. => false
+  | .packedBytes _ validateUtf8 => validateUtf8
+
+def BorshReturnPlan.sourceValueCount (plan : BorshReturnPlan) : Nat :=
+  1 + plan.capacity * plan.elementWidths.size
+
+def BorshReturnPlan.maxBytes (plan : BorshReturnPlan) : Nat :=
+  4 + plan.capacity * plan.elementWidths.foldl (init := 0) (· + ·)
+
+private def BorshReturnPlan.canonical : BorshReturnPlan → String
+  | .boundedArray capacity widths =>
+      s!"array.{capacity}.[{String.intercalate "," (widths.map toString).toList}]"
+  | .packedBytes capacity validateUtf8 =>
+      s!"{if validateUtf8 then "string" else "bytes"}.{capacity}"
+
 private partial def BorshDecode.canonical : BorshDecode → String
   | .sequence items =>
       s!"s[{String.intercalate "," (items.map BorshDecode.canonical).toList}]"
@@ -86,6 +117,9 @@ structure RawEntry where
   returnWidths : Array Nat := #[]
   /-- Return widths inferred from typed metadata when no explicit packed-return annotation exists. -/
   inferredReturnWidths : Array Nat := #[]
+  /-- Dynamic top-level Borsh output plan. It is mutually exclusive with explicit/implicit fixed
+  return widths and never owns account or persistent-memory geometry. -/
+  returnBorshPlan : Option BorshReturnPlan := none
   /-- The first result leaf is a canonical 0/1 presence flag. Zero leaves return data unset; one
   serializes all later leaves according to `returnWidths`. -/
   optionalReturnData : Bool := false
@@ -171,7 +205,9 @@ def RawEntry.canonical (entry : RawEntry) : String :=
     else
       let options := String.intercalate "," (entry.optionWidths.map toString).toList
       s!"{base}.borsh-options.[{options}]"
-  if entry.optionalReturnData then
+  if let some plan := entry.returnBorshPlan then
+    s!"{base}.borsh-return-schema.{plan.canonical}"
+  else if entry.optionalReturnData then
     let returns := String.intercalate "," (entry.returnWidths.map toString).toList
     s!"{base}.optional-returns.[{returns}]"
   else if entry.returnWidths.isEmpty &&
@@ -184,14 +220,19 @@ def RawEntry.canonical (entry : RawEntry) : String :=
     s!"{base}.returns.[{returns}]"
 
 def RawEntry.returnDataLen (entry : RawEntry) : Nat :=
-  entry.wireReturnWidths.foldl (init := 0) (· + ·)
+  match entry.returnBorshPlan with
+  | some plan => plan.maxBytes
+  | none => entry.wireReturnWidths.foldl (init := 0) (· + ·)
 
-/-- A final narrow scalar still uses one full eight-byte temporary store. The padding is outside
-the bytes passed to `sol_set_return_data`, but remains part of the fixed scratch proof. -/
+/-- Dynamic returns use an exact packed output frame plus one disjoint eight-byte staging slot.
+Expression evaluation may use deeper generic scratch, but can no longer overlap published bytes. -/
 def RawEntry.returnScratchBytes (entry : RawEntry) : Nat :=
-  match entry.wireReturnWidths.back? with
-  | none => 0
-  | some width => entry.returnDataLen + (8 - width)
+  match entry.returnBorshPlan with
+  | some plan => plan.maxBytes + 8
+  | none =>
+      match entry.wireReturnWidths.back? with
+      | none => 0
+      | some width => entry.returnDataLen + (8 - width)
 
 private def supportedWidth (width : Nat) : Bool :=
   width == 1 || width == 2 || width == 4 || width == 8
@@ -457,6 +498,23 @@ def borshPlan (schema : Core.Codec.Schema) : Except String BorshPlan := do
   let _ ← Core.Codec.validate schema
   borshPlanAt "" schema
 
+private def borshReturnPlanAt : Core.Codec.Schema → Except String BorshReturnPlan
+  | .boundedArray capacity element => do
+      let leaves ← staticBorshLeaves element
+      let widths := leaves.foldl (init := #[]) fun out leaf => out ++ leaf.widths
+      unless leaves.size == 1 && widths.size == 1 do
+        throw "extract/unsupported: bounded Borsh returns currently require one-limb scalar elements"
+      pure (.boundedArray capacity widths)
+  | .boundedBytes capacity => pure (.packedBytes capacity false)
+  | .boundedString capacity => pure (.packedBytes capacity true)
+  | _ => throw "extract/unsupported: SVM dynamic Borsh return requires a bounded value"
+
+/-- Derive a top-level dynamic Borsh output plan independently from the input decoder. Elements of
+a bounded vector must have static scalar shape; nested dynamic outputs remain fail closed. -/
+def borshReturnPlan (schema : Core.Codec.Schema) : Except String BorshReturnPlan := do
+  let _ ← Core.Codec.validate schema
+  borshReturnPlanAt schema
+
 private partial def hasTaggedSchema : Core.Codec.Schema → Bool
   | .option _ | .enumeration .. | .boundedArray .. | .boundedBytes _ | .boundedString _ => true
   | .tuple items => items.any hasTaggedSchema
@@ -516,10 +574,20 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
       let booleans := (paramTypes.zip plans).foldl (init := #[]) fun out pair =>
         out ++ Array.replicate pair.2.size (pair.1 == .boolean)
       pure (plans.foldl (init := #[]) (· ++ ·), plans.map (·.size), booleans, #[])
-  if hasTaggedSchema retSchema then
-    throw "extract/unsupported: SVM tagged Borsh return binding is not implemented"
+  let returnBorshPlan ←
+    match retSchema with
+    | .boundedArray .. | .boundedBytes _ | .boundedString _ => do
+        let plan ← borshReturnPlan retSchema
+        unless plan.sourceValueCount == retCount do
+          throw "extract/unsupported: SVM bounded Borsh return metadata is incomplete"
+        pure (some plan)
+    | _ =>
+        if hasTaggedSchema retSchema then
+          throw "extract/unsupported: SVM tagged Borsh return binding is not implemented"
+        else pure none
   let inferredReturnWidths ←
-    if retTypes.isEmpty then
+    if returnBorshPlan.isSome then pure #[]
+    else if retTypes.isEmpty then
       match staticBorshLeaves retSchema with
       | .ok leaves =>
           let widths := leaves.foldl (init := #[]) fun out leaf => out ++ leaf.widths
@@ -605,10 +673,12 @@ private def decodeRaw (annotation : String) (paramCount : Nat)
       pure (some variant, #[], widths, true)
     else
       throw "extract/unsupported: malformed svm raw entry annotation"
+  if returnBorshPlan.isSome && (!returnWidths.isEmpty || optionalReturnData) then
+    throw "extract/unsupported: dynamic Borsh returns cannot use an explicit return annotation"
   let entry := {
     tag, accountCount, programAccount, paramCount, variant, paramWidths, paramLeafWidths,
     paramLeafCounts, paramLeafBooleans, paramBorshPlans, optionWidths, returnWidths,
-    inferredReturnWidths, optionalReturnData
+    inferredReturnWidths, returnBorshPlan, optionalReturnData
   }
   unless entry.maxDataLen ≤ 1024 do
     throw "extract/unsupported: svm raw entry data exceeds 1024 bytes"

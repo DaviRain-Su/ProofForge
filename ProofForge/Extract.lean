@@ -229,6 +229,44 @@ private def logicalReturnSchema (env : Environment) (kind : Core.IR.MethodKind) 
         throw "extract/unsupported: mutating boundary must return Except Error (State × Result)"
       return ← codecSchemaOfType env successArgs[successArgs.size - 1]!
 
+/-- Expand a top-level bounded result into its fixed scalar frame before either target chooses an
+output wire format. This is source projection only: Borsh/ABI length and padding remain target
+owned. Richer element shapes stay closed until recursive result projection is qualified. -/
+private def expandBoundedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.Op) :
+    Except String (Array Ops.Op) :=
+  match ops.toList, schema with
+  | [.returnU64 root], .boundedArray capacity (.scalar type)
+  | [.returnState root], .boundedArray capacity (.scalar type) => do
+      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
+        throw "extract/unsupported: bounded result currently requires one-limb scalar elements"
+      let mut result : Array Ops.Op := #[.returnU64 (.field root "length")]
+      for i in [0:capacity] do
+        result := result.push (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat i)) capacity 0))
+      pure result
+  | [.returnU64 root], .boundedBytes capacity | [.returnU64 root], .boundedString capacity
+  | [.returnState root], .boundedBytes capacity | [.returnState root], .boundedString capacity => do
+      let mut result : Array Ops.Op := #[.returnU64 (.field root "length")]
+      for i in [0:capacity] do
+        result := result.push (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat i)) capacity 0))
+      pure result
+  | leaves, .boundedArray capacity (.scalar type) => do
+      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
+        throw "extract/unsupported: bounded result currently requires one-limb scalar elements"
+      unless leaves.length == capacity + 1 do
+        throw "extract/unsupported: constructed bounded result has the wrong fixed-frame size"
+      leaves.toArray.mapM fun
+        | .returnU64 value | .returnState value => pure (.returnU64 value)
+        | _ => throw "extract/unsupported: constructed bounded result must contain scalar leaves"
+  | leaves, .boundedBytes capacity | leaves, .boundedString capacity => do
+      unless leaves.length == capacity + 1 do
+        throw "extract/unsupported: constructed bounded result has the wrong fixed-frame size"
+      leaves.toArray.mapM fun
+        | .returnU64 value | .returnState value => pure (.returnU64 value)
+        | _ => throw "extract/unsupported: constructed bounded result must contain scalar leaves"
+  | _, .boundedArray .. =>
+      throw "extract/unsupported: bounded result requires scalar elements"
+  | _, _ => pure ops
+
 private def markMethodArgs (kind : Core.IR.MethodKind) (count : Nat) (body : Expr) : Expr :=
   let marker (index : Nat) := mkApp (mkConst ``methodArgRef) (mkNatLit index)
   let abiIndex (dbIndex : Nat) : Nat :=
@@ -569,6 +607,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
   let paramTypes := scalarTypesOfSchemas paramSchemas
   let paramWidths := paramTypes.map legacyWidthOfScalar
   let retSchema ← logicalReturnSchema env kind retTy
+  let ops ← expandBoundedReturnOps retSchema ops
   let retWidths :=
     match kind with
     | .get =>
@@ -1345,6 +1384,10 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
   if isUInt64Type ret || (codecScalarOfType ret).isSome then
     return .get
   if ret.getAppFn.constName? == some ``Prod then
+    return .get
+  if ret.getAppFn.constName? == some boundedVecName ||
+      ret.getAppFn.constName? == some boundedBytesName ||
+      ret.getAppFn.constName? == some boundedStringName then
     return .get
   if let some structName := ret.getAppFn.constName? then
     if isStructure env structName && structName != ``UInt64 &&

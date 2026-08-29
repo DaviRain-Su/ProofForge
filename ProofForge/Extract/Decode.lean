@@ -1757,6 +1757,22 @@ private def asVectorLits (env : Environment) (e : Expr) : Option (Array Ops.Val)
     | none => none
   else none
 
+/-- A constructed bounded boundary value already has the target-neutral fixed frame expected by
+the codec adapters: one length followed by every compile-time-capacity slot. Keep this recognition
+separate from ordinary user structures because these compiler-owned polymorphic carriers are not
+persistent state and their capacity parameter is erased after extraction. -/
+private def asBoundedCtorFields (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let e := substLets 32 (strip e)
+  let ctor ← e.getAppFn.constName?
+  let .ctorInfo info ← env.find? ctor | none
+  unless info.induct == boundedVecName || info.induct == boundedBytesName ||
+      info.induct == boundedStringName do none
+  let args := e.getAppArgs
+  unless args.size ≥ 2 do none
+  let length ← val env args[args.size - 2]!
+  let values ← asVectorLits env args[args.size - 1]!
+  return #[length] ++ values
+
 /-- `xs.set i v`：只抽出被改的那一叶。 -/
 private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := strip e
@@ -5481,6 +5497,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.okState v]
   else if let some v := asOkScalar env e then
     .ok #[.okState v]
+  else if let some vs := asBoundedCtorFields env e then
+    .ok (returnStatesOf vs)
   else if let some vs := asStateFields env e then
     .ok (returnStatesOf vs)
   else if let some v := asStateMk env e then

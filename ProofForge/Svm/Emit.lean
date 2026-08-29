@@ -4653,9 +4653,12 @@ private def emitCFGInitialize (p : IR.Program) (marker scope : String)
 
 private def emitCFGReturnValues (p : IR.Program) (scope : String)
     (optionalReturnData : Bool) (packedWidths : Option (Array Nat))
+    (borshReturnPlan : Option EntryAdapter.BorshReturnPlan)
     (values : Array Ops.Val) (fresh : Nat) :
     Except String String :=
   if optionalReturnData then do
+    unless borshReturnPlan.isNone do
+      throw "extract/unsupported: optional and bounded Borsh return plans cannot overlap"
     let some presence := values[0]?
       | throw "extract/ir: optional return is missing its presence leaf"
     let some widths := packedWidths
@@ -4680,13 +4683,20 @@ private def emitCFGReturnValues (p : IR.Program) (scope : String)
 {present}:
 " ++ payload)
   else
-    let widths := packedWidths.getD (Array.replicate values.size 8)
-    EntryAdapter.Emit.emitReturnValues
-      (fun value stackOff nonce valueScope => loadVal p value stackOff nonce valueScope)
-      loopCounterScratch widths values fresh scope
+    match borshReturnPlan with
+    | some plan =>
+        EntryAdapter.Emit.emitBorshReturnValues
+          (fun value stackOff nonce valueScope => loadVal p value stackOff nonce valueScope)
+          loopCounterScratch plan values fresh scope
+    | none =>
+        let widths := packedWidths.getD (Array.replicate values.size 8)
+        EntryAdapter.Emit.emitReturnValues
+          (fun value stackOff nonce valueScope => loadVal p value stackOff nonce valueScope)
+          loopCounterScratch widths values fresh scope
 
 private def makeCFGNode (p : IR.Program) (marker handler : String)
     (optionalReturnData : Bool) (packedReturnWidths : Option (Array Nat))
+    (borshReturnPlan : Option EntryAdapter.BorshReturnPlan)
     (hints : Array (Core.CFG.BlockId × CFGResultHint))
     (block : Core.CFG.Block Ops.ValKind Ops.OpExt) : Except String CFGAsmNode := do
   unless block.params.isEmpty do
@@ -4748,10 +4758,12 @@ private def makeCFGNode (p : IR.Program) (marker handler : String)
           template := template ++ s!"  ; named error {name}\n  lddw r0, {code}\n  exit\n"
       | .returnU64 value =>
           template := template ++
-            (← emitCFGReturnValues p scope optionalReturnData packedReturnWidths #[value] fresh)
+            (← emitCFGReturnValues p scope optionalReturnData packedReturnWidths borshReturnPlan
+              #[value] fresh)
       | .returnU64s values =>
           template := template ++
-            (← emitCFGReturnValues p scope optionalReturnData packedReturnWidths values fresh)
+            (← emitCFGReturnValues p scope optionalReturnData packedReturnWidths borshReturnPlan
+              values fresh)
       | .returnState value =>
           let (exitText, _) ← emitOps p scope handler #[.returnState value] fresh
           template := template ++ exitText
@@ -4776,11 +4788,15 @@ private def emitCFGBody (p : IR.Program) (marker handler : String) (method : IR.
         let widths := entry.wireReturnWidths
         if widths.isEmpty then none else some widths
     | .generated => none
+  let borshReturnPlan := match method.entry with
+    | .raw entry => entry.returnBorshPlan
+    | .generated => none
   let nextId := graph.blocks.foldl (init := 0) fun next block => max next (block.id + 1)
   let mut nodes := Array.replicate nextId (default : CFGAsmNode)
   for block in graph.blocks do
     nodes := nodes.set! block.id
-      (← makeCFGNode p marker handler optionalReturnData packedReturnWidths hints block)
+      (← makeCFGNode p marker handler optionalReturnData packedReturnWidths borshReturnPlan
+        hints block)
   let layout := graph.reachable
   let (splitNodes, layout, nextId) ← splitLargeCFGNodes handler nodes layout nextId
   let (finalNodes, layout) ← insertCFGRelays handler splitNodes layout nextId 100000

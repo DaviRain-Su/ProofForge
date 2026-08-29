@@ -240,11 +240,15 @@ private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
         throw "extract/unsupported: raw entry cannot access managed State"
       let some schema := schemas[param]?
         | throw "extract/unsupported: raw aggregate parameter schema is missing"
-      let (.boundedArray capacity (.scalar _)) := schema
-        | throw "extract/unsupported: dynamic Borsh reads require scalar bounded arrays"
+      let capacity? := match schema with
+        | .boundedArray capacity (.scalar _) => some capacity
+        | .boundedBytes capacity | .boundedString capacity => some capacity
+        | _ => none
+      let some capacity := capacity?
+        | throw "extract/unsupported: dynamic Borsh reads require scalar bounded values"
       unless entry.usesSchemaBorsh && name == "values" &&
           (length == 0 || length == capacity) && elementOffset == 0 do
-        throw "extract/unsupported: bounded-array index projection does not match its Borsh plan"
+        throw "extract/unsupported: bounded index projection does not match its Borsh plan"
       let index ← rewriteRawArg schemas entry base index
       let mut selected : Ops.Val := .lit 0
       for i in [0:capacity] do
