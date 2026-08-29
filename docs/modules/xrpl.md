@@ -33,7 +33,9 @@ WAT，import 表钉本 Bedrock 镜像的 `host_lib`（读
 - ops：checked 五则、`ite`、`okState` / `returnState` / `returnU64`、
   `errorOverflow`、`storeField`；loop / local / vector / map / `errorNamed` /
   位运算 / 移位 / 未检查 `/ %` 全部拒绝；
-- 无宿主 capability：ledger time / caller / hashing 不在方言里。
+- 无宿主 capability（v0 / wsm-003）：ledger time / caller / hashing 不在方言里。
+  下一刀 [wsm-005](../plan/tasks/wsm-005.md) 开 `Xrpl.Runtime` 叶子；排期见
+  [xrpl-runtime.md](../plan/analysis/xrpl-runtime.md)。
 
 ## 诚实边界
 

@@ -45,4 +45,5 @@ ProofForge/Wasm/
 
 | 链 | 模块 | 状态 |
 |---|---|---|
-| XRPL Bedrock（XLS-0101） | [`Wasm/Xrpl`](xrpl.md) | Lean → WAT → `.wasm`（[wsm-002](../plan/tasks/wsm-002.md)） |
+| XRPL Bedrock（XLS-0101） | [`Wasm/Xrpl`](xrpl.md) | Lean → WAT → `.wasm`（wsm-002）；本地四场景（wsm-003）；Runtime 叶子 [wsm-005](../plan/tasks/wsm-005.md) |
+| NEAR Protocol | `Wasm/Near`（[PR #5](https://github.com/DaviRain-Su/ProofForge/pull/5)） | `env` 表 + sandbox Counter；Runtime 叶子未开，不要和 XRPL 共用 ValKind |
