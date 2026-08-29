@@ -113,3 +113,10 @@ import ProofForge.Wasm.Xrpl.Emit
 import ProofForge.Wasm.Xrpl.Registry
 import ProofForge.Wasm.Xrpl.Assemble
 import ProofForge.Wasm.Xrpl.Commands
+import ProofForge.Wasm.Near.Ops
+import ProofForge.Wasm.Near.Host
+import ProofForge.Wasm.Near.IR
+import ProofForge.Wasm.Near.Emit
+import ProofForge.Wasm.Near.Registry
+import ProofForge.Wasm.Near.Assemble
+import ProofForge.Wasm.Near.Commands

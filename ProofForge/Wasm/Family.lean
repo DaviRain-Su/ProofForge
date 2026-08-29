@@ -19,6 +19,7 @@ ProofForge/Wasm/
   IR.lean         -- 家族共享：程序形状、v0 子集、canonical 拼写（域由链注入）
   Emit.lean       -- 家族共享：Core → WAT（host contract 注入 import / 存储）
   Xrpl/           -- 每条具体链一个子目录
+  Near/           -- 第二条链：NEAR Protocol raw-u64（env host + KV）
 ```
 
 家族层共享：

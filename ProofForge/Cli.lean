@@ -9,16 +9,20 @@ import ProofForge.Evm.Registry
 import ProofForge.Wasm.Xrpl.Assemble
 import ProofForge.Wasm.Xrpl.IR
 import ProofForge.Wasm.Xrpl.Registry
+import ProofForge.Wasm.Near.Assemble
+import ProofForge.Wasm.Near.IR
+import ProofForge.Wasm.Near.Registry
 
 namespace ProofForge.Cli
 
 /-- A target names one concrete chain. `wasm` is a chain family, not a target: it is
-rejected with a hint so callers pick a member (e.g. `xrpl`). -/
+rejected with a hint so callers pick a member (e.g. `xrpl` or `near`). -/
 inductive Target where
   | svm
   | evm
   | xrpl
   | xrplAlphaNet
+  | near
   deriving BEq, Repr, Inhabited
 
 def parseTarget : String → Option Target
@@ -26,6 +30,7 @@ def parseTarget : String → Option Target
   | "evm" => some .evm
   | "xrpl" | "xrpl-bedrock" | "bedrock" => some .xrpl
   | "xrpl-alphanet" | "alphanet" => some .xrplAlphaNet
+  | "near" => some .near
   | _ => none
 
 inductive Command where
@@ -52,7 +57,7 @@ private def usage : String :=
   "pf — ProofForge compiler\n" ++
     "\n" ++
     "Usage:\n" ++
-    "  pf build --target <svm|evm|xrpl|xrpl-alphanet> [--out DIR] [Program ...]\n" ++
+    "  pf build --target <svm|evm|xrpl|xrpl-alphanet|near> [--out DIR] [Program ...]\n" ++
     "  pf deploy --target <xrpl|xrpl-alphanet> [--out DIR] [--rpc URL] [--wallet SEED] [--send-amount DROPS] Program\n" ++
     "  pf call --target <xrpl|xrpl-alphanet> --contract ACCOUNT [--rpc URL] [--wallet SEED] Function [UINT64 ...]\n" ++
     "\n" ++
@@ -60,12 +65,13 @@ private def usage : String :=
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
     "xrpl writes Name.wat / Name.wasm (XRPL Bedrock local; locked wat2wasm)\n" ++
     "xrpl-alphanet same IR, XLS-0102 host names for live AlphaNet\n" ++
+    "near writes Name.wat / Name.wasm (NEAR raw-u64; locked wat2wasm)\n" ++
     "deploy/call talk via runtime-tests/xrpl/alphanet-rpc.js.\n" ++
     "     --target xrpl = Bedrock/get_* names (local 2.6.1). xrpl-alphanet = XLS-0102.\n" ++
     "     --send-amount funds the pseudo-account (local 2.6.1 first-install only).\n" ++
     "     Public 3.3.0: Function ABI + increment(1) / initialize(7) live.\n" ++
-    "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
-    "No program names on build means every registered source module.\n"
+    "     wasm is a chain family, not a target; pick a member such as xrpl or near\n" ++
+    "No program names on build means every registered source module for the selected target.\n"
 
 def parseArgs (args : List String) : Except String Options :=
   let rec go (rest : List String) (o : Options) : Except String Options :=
@@ -77,7 +83,7 @@ def parseArgs (args : List String) : Except String Options :=
       | some tgt => go rest { o with target := tgt }
       | none =>
           if t == "wasm" then
-            .error "wasm is a chain family, not a target; pick a concrete member (e.g. xrpl)"
+            .error "wasm is a chain family, not a target; pick a concrete member (e.g. xrpl or near)"
           else .error s!"unknown target {t}"
     | "--out" :: d :: rest => go rest { o with outDir := d }
     | "--rpc" :: u :: rest => go rest { o with rpcUrl := u }
@@ -327,6 +333,38 @@ private def runCall (opts : Options) : IO UInt32 := do
     IO.print out
     return 0
 
+private def nearProgramNames : Array String :=
+  Wasm.Near.Registry.names
+
+private def selectNearNames (names : Array String) : Except String (Array String) :=
+  if names.isEmpty then .ok nearProgramNames
+  else
+    names.mapM fun n =>
+      match nearProgramNames.find? (· == n) with
+      | some _ => .ok n
+      | none => .error s!"unknown near program {n}"
+
+private unsafe def extractNearPrograms (names : Array String) :
+    IO (Except String (Array ProofForge.Wasm.Near.IR.Program)) :=
+  try
+    Lean.initSearchPath (← Lean.findSysroot)
+    Lean.enableInitializersExecution
+    let moduleName (name : String) := Lean.Name.str `Examples name
+    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let env ← Lean.importModules modules {} (loadExts := true)
+    return names.mapM fun name =>
+      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.Near.IR.fromExtracted with
+      | .error reason => .error s!"{name}: {reason}"
+      | .ok program =>
+        let digest := Wasm.Near.IR.digestHex program
+        match Wasm.Near.Registry.digestOf name with
+        | some expected =>
+            if digest == expected then .ok program
+            else .error s!"{name}: ir/mismatch: extracted near digest {digest} != fixture {expected}"
+        | none => .ok program
+  catch e =>
+    return .error s!"source import failed: {e}"
+
 unsafe def run (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .error reason =>
@@ -405,6 +443,22 @@ unsafe def run (args : List String) : IO UInt32 := do
           for program in programs do
             let r ← ProofForge.Wasm.Xrpl.Assemble.assembleAlphaNet opts.outDir program
             IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; AlphaNet host)"
+          return 0
+    | .near =>
+      match selectNearNames opts.names with
+      | .error reason =>
+        IO.eprintln s!"pf: {reason}"
+        return 1
+      | .ok names =>
+        match ← extractNearPrograms names with
+        | .error reason =>
+          IO.eprintln s!"pf: {reason}"
+          return 1
+        | .ok programs =>
+          IO.FS.createDirAll opts.outDir
+          for program in programs do
+            let r ← ProofForge.Wasm.Near.Assemble.assembleProgram opts.outDir program
+            IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; deployable=false)"
           return 0
 
 end ProofForge.Cli

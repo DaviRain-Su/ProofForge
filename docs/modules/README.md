@@ -21,3 +21,4 @@
 | [Evm](evm.md) | `Evm.Sdk` 合同 facade + Ops → Yul / ABI / locked solc |
 | [Wasm](wasm.md) | WASM 链家族：Lean → `.wasm`；链拥有 host import 表与存储布局 |
 | [Xrpl](xrpl.md) | `Wasm/Xrpl`：XRPL Bedrock；host import `host_lib` + 存储布局 |
+| [Near](near.md) | `Wasm/Near`：NEAR Protocol；host import `env` + KV raw-u64 |

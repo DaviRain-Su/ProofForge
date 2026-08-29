@@ -22,6 +22,7 @@ DIGEST_LINE = {
     "svm": re.compile(r"^;\s*digest=([0-9a-f]+)\s*$"),
     "evm": re.compile(r"^//\s*digest=([0-9a-f]+)\s*$"),
     "xrpl": re.compile(r"^;;\s*digest=([0-9a-f]+)\s*$"),
+    "near": re.compile(r"^;;\s*digest=([0-9a-f]+)\s*$"),
 }
 
 # `.so` must win over `.s`; `Name.so`.endswith(".s") is true.
@@ -58,7 +59,14 @@ XRPL = TargetSpec(
     suffixes=(".wasm", ".wat"),
     digest_suffix=".wat",
 )
-SPECS = {"svm": SVM, "evm": EVM, "xrpl": XRPL}
+NEAR = TargetSpec(
+    key="near",
+    registry_rel=Path("ProofForge/Wasm/Near/Registry.lean"),
+    expected_count=1,
+    suffixes=(".wasm", ".wat"),
+    digest_suffix=".wat",
+)
+SPECS = {"svm": SVM, "evm": EVM, "xrpl": XRPL, "near": NEAR}
 ELF_MAGIC = b"\x7fELF"
 ELF64_CLASS = 2
 ELF64_DATA_LSB = 1
@@ -225,6 +233,7 @@ def check_target(
     out_dir: Path,
     *,
     allow_other_kinds: bool,
+    foreign_stems: set[str] | None = None,
 ) -> list[str]:
     diags: list[str] = []
     if not out_dir.is_dir():
@@ -239,10 +248,12 @@ def check_target(
     owned_stems: set[str] = set()
     for path, stem, suffix in iter_artifacts(out_dir):
         rel = rel_to(path, out_dir)
-        if suffix in other_suffixes:
+        if suffix in other_suffixes and suffix not in spec.suffixes:
             diags.append(f"unexpected kind: {rel}")
             continue
         if suffix not in spec.suffixes:
+            continue
+        if foreign_stems is not None and stem in foreign_stems:
             continue
         owned_stems.add(stem)
 
@@ -277,11 +288,12 @@ def diagnostics(
     pin_count: bool = True,
 ) -> list[str]:
     if target == "all":
-        specs = [SVM, EVM, XRPL]
+        specs = [SVM, EVM, XRPL, NEAR]
     else:
         specs = [SPECS[target]]
     allow_other = target == "all"
     diags: list[str] = []
+    loaded: list[tuple[TargetSpec, dict[str, str]]] = []
     for spec in specs:
         if entries_by_target is not None:
             entries = entries_by_target[spec.key]
@@ -289,10 +301,25 @@ def diagnostics(
         else:
             entries, load_diags = load_entries(root, spec, pin_count=pin_count)
         diags.extend(load_diags)
-        if entries or entries_by_target is not None:
-            diags.extend(check_target(spec, entries, out_dir, allow_other_kinds=allow_other))
-        elif not load_diags:
+        loaded.append((spec, entries))
+        if not entries and entries_by_target is None and not load_diags:
             diags.append(f"empty registry: {spec.key}")
+    foreign_by_spec: dict[str, set[str]] = {}
+    if allow_other:
+        union = {name for _, entries in loaded for name in entries}
+        for spec, entries in loaded:
+            foreign_by_spec[spec.key] = union - set(entries)
+    for spec, entries in loaded:
+        if entries or entries_by_target is not None:
+            diags.extend(
+                check_target(
+                    spec,
+                    entries,
+                    out_dir,
+                    allow_other_kinds=allow_other,
+                    foreign_stems=foreign_by_spec.get(spec.key, set()),
+                )
+            )
     return sorted(set(diags))
 
 
@@ -361,6 +388,15 @@ def _write_xrpl(out: Path, name: str, digest: str, *, wasm: bytes | None = b"\x0
     )
 
 
+def _write_near(out: Path, name: str, digest: str, *, wasm: bytes | None = b"\x00asm") -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    if wasm is not None:
+        (out / f"{name}.wasm").write_bytes(wasm)
+    (out / f"{name}.wat").write_text(
+        f";; PROOF-FORGE-NEAR-RAW-U64 v0\n;; digest={digest}\n(module)\n", encoding="utf-8"
+    )
+
+
 def _require(diags: list[str], needle: str, label: str) -> None:
     if not any(needle in item for item in diags):
         raise AssertionError(f"{label}: expected {needle!r} in {diags}")
@@ -381,24 +417,30 @@ def self_test() -> int:
     svm_entries = {"Prog": "abc123"}
     evm_entries = {"Tok": "def456"}
     xrpl_entries = {"Cnt": "fed789"}
-    injected = {"svm": svm_entries, "evm": evm_entries, "xrpl": xrpl_entries}
+    near_entries = {"Jar": "ba9876"}
+    injected = {"svm": svm_entries, "evm": evm_entries, "xrpl": xrpl_entries, "near": near_entries}
 
     def parse_real() -> None:
         svm = parse_registry(ROOT / SVM.registry_rel)
         evm = parse_registry(ROOT / EVM.registry_rel)
         xrpl = parse_registry(ROOT / XRPL.registry_rel)
+        near = parse_registry(ROOT / NEAR.registry_rel)
         if len(svm) != SVM.expected_count:
             raise AssertionError(f"svm count {len(svm)}")
         if len(evm) != EVM.expected_count:
             raise AssertionError(f"evm count {len(evm)}")
         if len(xrpl) != XRPL.expected_count:
             raise AssertionError(f"xrpl count {len(xrpl)}")
+        if len(near) != NEAR.expected_count:
+            raise AssertionError(f"near count {len(near)}")
         if svm["Counter"] != "3382e308fa0843e9":
             raise AssertionError("svm Counter digest")
         if evm["Counter"] != "254202356ee921d6":
             raise AssertionError("evm Counter digest")
         if xrpl["Counter"] != "e029f72296e320be":
             raise AssertionError("xrpl Counter digest")
+        if near["Counter"] != "121a0c8f7e697642":
+            raise AssertionError("near Counter digest")
 
     def happy() -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -406,6 +448,7 @@ def self_test() -> int:
             _write_svm(out, "Prog", "abc123")
             _write_evm(out, "Tok", "def456")
             _write_xrpl(out, "Cnt", "fed789")
+            _write_near(out, "Jar", "ba9876")
             diags = diagnostics("all", out, entries_by_target=injected, pin_count=False)
             if diags:
                 raise AssertionError(diags)
@@ -552,7 +595,7 @@ def self_test() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--target", choices=("svm", "evm", "xrpl", "all"))
+    parser.add_argument("--target", choices=("svm", "evm", "xrpl", "near", "all"))
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     if args.self_test:
@@ -562,7 +605,7 @@ def main() -> int:
         return self_test()
     if args.target is None or args.out is None:
         print(
-            "usage: check_artifact_manifest.py --target svm|evm|xrpl|all --out DIR",
+            "usage: check_artifact_manifest.py --target svm|evm|xrpl|near|all --out DIR",
             file=sys.stderr,
         )
         return 2

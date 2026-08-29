@@ -180,6 +180,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-001](tasks/wsm-001.md) | done | WASM 家族 + XRPL Bedrock 方言 Rust 源 v0 竖切（过渡；产物不是 `.wasm`） |
 | [wsm-002](tasks/wsm-002.md) | done | Lean → WAT → `.wasm`；XRPL 拥有 `host_lib` import 与存储布局 |
 | [wsm-003](tasks/wsm-003.md) | done | XRPL 本地链工程门：起节点、部署 Counter、四场景 |
+| [wsm-004](tasks/wsm-004.md) | in-progress | WASM 家族第二条链：NEAR Protocol Lean → WAT → `.wasm`（raw-u64） |
 | [wsm-005](tasks/wsm-005.md) | done | XRPL-RT：AccountId + caller/self/ledger host 叶子 |
 | [wsm-006](tasks/wsm-006.md) | done | XRPL-CMP：三叶 AccountId 比较，unauthorized = 3 |
 | [wsm-007](tasks/wsm-007.md) | done | XRPL-HASH：`compute_sha512_half` ASCII 字面量，首个小端 UInt64 |
