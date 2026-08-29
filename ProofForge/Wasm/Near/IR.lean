@@ -19,16 +19,50 @@ abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
 abbrev Method := Wasm.IR.Method Ops.ValKind Ops.OpExt
 abbrev Program := Wasm.IR.Program Ops.ValKind Ops.OpExt
 
-/-- Static registration of the extractor-to-NEAR projection. -/
+private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
+  | .near kind =>
+      match kind with
+      | .reserved => throw "extract/unsupported: near rejects reserved value"
+      | k => pure k
+  | .svm _ => throw "extract/unsupported: near rejects svm value"
+  | .evm _ => throw "extract/unsupported: near rejects evm value"
+  | .xrpl _ => throw "extract/unsupported: near rejects xrpl value"
+
+private def projectOpExt
+    (_projectVal : Extract.IR.Val → Except String Ops.Val) :
+    Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val)
+  | .near payload =>
+      match payload with
+      | .reserved => throw "extract/unsupported: near rejects reserved effect"
+  | .svm _ => throw "extract/unsupported: near rejects svm effect"
+  | .evm _ => throw "extract/unsupported: near rejects evm effect"
+  | .xrpl _ => throw "extract/unsupported: near rejects xrpl effect"
+
+/-- Static registration of the extractor-to-NEAR projection. Foreign svm/evm leaves
+fail closed. NEAR host reads project through. -/
 def extractRegistration :
-    Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt Ops.ValKind Ops.OpExt :=
-  Wasm.IR.mkRegistration Host.chainName Ops.ValKind.arity Ops.cfgDialect Ops.Op.wellFormed
+    Core.Target.Registration Extract.IR.ValKind Extract.IR.OpExt Ops.ValKind Ops.OpExt where
+  name := "NEAR"
+  projectValExt := projectValExt
+  projectOpExt := projectOpExt
+  projectionError := fun method reason =>
+    if reason.startsWith "extract/unsupported: near rejects" then
+      s!"{reason} in {method}"
+    else reason
+  valArity := Ops.ValKind.arity
+  opWellFormed := Ops.Op.wellFormed
+  cfgDialect := Ops.cfgDialect
 
 def projectExtractedOps (ops : Array Extract.IR.Op) : Except String (Array Ops.Op) :=
   Core.Target.projectOps extractRegistration ops
 
-/-- v0 has no NEAR dialect extension leaves; the tag keeps the canonical spelling total. -/
-def extValCanon : Ops.ValKind → String := fun _ => "wext"
+def extValCanon : Ops.ValKind → String
+  | .blockIndex => "nblk"
+  | .blockTimestamp => "nts"
+  | .predecessor => "npred"
+  | .attachedDeposit => "ndep"
+  | .accountBalance => "nbal"
+  | .reserved => "wext"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String := fun _ => "wext"
 

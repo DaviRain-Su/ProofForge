@@ -21,7 +21,8 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Ops.ValKind.arity .reserved == 0
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
-#guard ProofForge.Wasm.Near.Registry.names == #["Counter"]
+#guard ProofForge.Wasm.Near.Registry.names == #["Counter", "NearCtx"]
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "f115765fbbe060d8"
 
 open Lean Elab Command in
 elab "#pf_near_reject " n:ident : command => do

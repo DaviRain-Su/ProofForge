@@ -26,6 +26,7 @@ private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
       | k => pure k
   | .svm _ => throw "extract/unsupported: xrpl rejects svm value"
   | .evm _ => throw "extract/unsupported: xrpl rejects evm value"
+  | .near _ => throw "extract/unsupported: xrpl rejects near value"
 
 private def projectOpExt
     (_projectVal : Extract.IR.Val → Except String Ops.Val) :
@@ -33,6 +34,7 @@ private def projectOpExt
   | .xrpl .reserved => throw "extract/unsupported: xrpl rejects reserved effect"
   | .svm _ => throw "extract/unsupported: xrpl rejects svm effect"
   | .evm _ => throw "extract/unsupported: xrpl rejects evm effect"
+  | .near _ => throw "extract/unsupported: xrpl rejects near effect"
 
 /-- Static registration of the extractor-to-XRPL projection. -/
 def extractRegistration :

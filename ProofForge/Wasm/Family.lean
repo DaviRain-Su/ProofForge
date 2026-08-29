@@ -40,6 +40,7 @@ def rejectValKind (target : String) : Extract.IR.ValKind → Except String α
   | .svm _ => throw s!"extract/unsupported: {target} rejects svm value"
   | .evm _ => throw s!"extract/unsupported: {target} rejects evm value"
   | .xrpl _ => throw s!"extract/unsupported: {target} rejects xrpl value"
+  | .near _ => throw s!"extract/unsupported: {target} rejects near value"
 
 /-- Reject a foreign target effect on behalf of one named wasm-family chain. -/
 def rejectOpExt {V : Type} {W : Type} (target : String)
@@ -48,5 +49,6 @@ def rejectOpExt {V : Type} {W : Type} (target : String)
   | .svm _ => throw s!"extract/unsupported: {target} rejects svm effect"
   | .evm _ => throw s!"extract/unsupported: {target} rejects evm effect"
   | .xrpl _ => throw s!"extract/unsupported: {target} rejects xrpl effect"
+  | .near _ => throw s!"extract/unsupported: {target} rejects near effect"
 
 end ProofForge.Wasm.Family

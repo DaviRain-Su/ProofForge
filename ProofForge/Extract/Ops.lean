@@ -19,6 +19,9 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
   .ext (.xrpl kind) #[]
 
+private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
+  .ext (.near kind) #[]
+
 @[match_pattern] def Val.clockSlot : Val := svmLeaf .clockSlot
 @[match_pattern] def Val.clockEpoch : Val := svmLeaf .clockEpoch
 @[match_pattern] def Val.unixTime : Val := svmLeaf .unixTime
@@ -108,6 +111,12 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
   svmLeaf (.findPdaSeeds seeds)
 @[match_pattern] def Val.checkPdaSeeds (account : Nat) (seeds : Array PdaSeed) : Val :=
   svmLeaf (.checkPdaSeeds account seeds)
+
+@[match_pattern] def Val.nearBlockIndex : Val := nearLeaf .blockIndex
+@[match_pattern] def Val.nearBlockTimestamp : Val := nearLeaf .blockTimestamp
+@[match_pattern] def Val.nearPredecessor : Val := nearLeaf .predecessor
+@[match_pattern] def Val.nearAttachedDeposit : Val := nearLeaf .attachedDeposit
+@[match_pattern] def Val.nearAccountBalance : Val := nearLeaf .accountBalance
 
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber
@@ -353,6 +362,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .ext (.svm (.component call)) => call.anyValue predicate
   | .ext (.xrpl _) => false
+  | .ext (.near _) => false
   | .evmComponent call => call.anyValue predicate
   | .errorTyped frame => frame.values.any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false

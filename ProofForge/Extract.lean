@@ -514,7 +514,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
       | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
-      | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
+      | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _
+      | .nearBlockIndex | .nearBlockTimestamp | .nearPredecessor
+      | .nearAttachedDeposit | .nearAccountBalance => v
       | .byteSwap64 word => .byteSwap64 (flipVal fuel' word)
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
       | .ext (.svm (.component query)) operands =>
@@ -569,6 +571,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .ext (.svm (.component call)) =>
           .ext (.svm (.component (call.mapValues (flipVal fuel'))))
       | .ext (.xrpl payload) => .ext (.xrpl payload)
+      | .ext (.near payload) => .ext (.near payload)
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           .evmDeposit256 (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2) (flipVal fuel' a3)
@@ -1017,6 +1020,7 @@ private def opFields : Ops.Op → Array FieldUse
         (match bump with | some v => valFields v | none => #[])
   | .ext (.svm (.component call)) => call.values.flatMap valFields
   | .ext (.xrpl _) => #[]
+  | .ext (.near _) => #[]
   | .evmDeposit v => valFields v
   | .evmDeposit256 a0 a1 a2 a3 =>
       valFields a0 ++ valFields a1 ++ valFields a2 ++ valFields a3
@@ -1203,6 +1207,7 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
       | .ext (.svm (.component call)) =>
           return .ext (.svm (.component (← call.mapValuesM normalizeVal)))
       | .ext (.xrpl payload) => pure (.ext (.xrpl payload))
+      | .ext (.near payload) => pure (.ext (.near payload))
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           return .evmDeposit256 (← normalizeVal a0) (← normalizeVal a1)
@@ -1374,6 +1379,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .ext (.svm (.component call)) =>
       call.values.findSome? (valEscapedArg limit)
   | .ext (.xrpl _) => none
+  | .ext (.near _) => none
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].findSome? (valEscapedArg limit)
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)

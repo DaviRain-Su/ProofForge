@@ -100,6 +100,12 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
       let l ← renderVal st lhs
       let r ← renderVal st rhs
       return ("(i64.mul " ++ l ++ " " ++ r ++ ")")
+  | .ext .blockIndex #[] => .ok "(call $pf_block_index)"
+  | .ext .blockTimestamp #[] =>
+      .ok "(i64.div_u (call $pf_block_timestamp) (i64.const 1000000000))"
+  | .ext .predecessor #[] => .ok "(local.get $pf_pred)"
+  | .ext .attachedDeposit #[] => .ok "(local.get $pf_dep)"
+  | .ext .accountBalance #[] => .ok "(local.get $pf_bal)"
   | _ => .error "extract/unsupported: near v0 value"
 
 private def isExitOp : Op ValKind OpExt → Bool
@@ -301,6 +307,64 @@ private partial def countTemps (ops : Array (Op ValKind OpExt)) : Nat :=
     | _ :: rest => walk rest
   walk ops.toList
 
+private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
+  | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+  | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
+      valHas lhs || valHas rhs
+  | .ite _ lhs rhs thn els =>
+      valHas lhs || valHas rhs || thn.any (usesKind kind) || els.any (usesKind kind)
+  | .storeField _ value | .okState value | .returnState value | .returnU64 value =>
+      valHas value
+  | _ => false
+where
+  valHas : Val ValKind → Bool
+    | .ext k _ => k == kind
+    | .select _ l r t f => valHas l || valHas r || valHas t || valHas f
+    | .addU64 l r | .subU64 l r | .mulU64 l r | .divU64 l r | .modU64 l r =>
+        valHas l || valHas r
+    | .field base _ | .bitNot base => valHas base
+    | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r =>
+        valHas l || valHas r
+    | _ => false
+
+private def methodUses (kind : ValKind) (method : Method ValKind OpExt) : Bool :=
+  method.ops.any (usesKind kind)
+
+private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level : Nat) :
+    Except String (Array String) := do
+  if view && methodUses .predecessor method then
+    throw s!"extract/unsupported: {method.ixName} view cannot read predecessor"
+  if view && methodUses .attachedDeposit method then
+    throw s!"extract/unsupported: {method.ixName} view cannot read attachedDeposit"
+  let mut lines : Array String := #[]
+  if methodUses .predecessor method then
+    lines := lines ++ #[
+      indent level "(call $pf_predecessor_account_id (i64.const 0))",
+      indent level "(call $pf_read_register (i64.const 0) (i64.const 16))",
+      indent level "(local.set $pf_pred (i64.load (i32.const 16)))"
+    ]
+  if methodUses .attachedDeposit method then
+    lines := lines ++ #[
+      indent level "(call $pf_attached_deposit (i64.const 24))",
+      indent level "(if (i64.ne (i64.load (i32.const 32)) (i64.const 0))",
+      indent (level + 2) "(then",
+      indent (level + 4) ("(call $pf_panic_utf8 (i64.const 8) (i64.const " ++
+        toString panicOverflowOff ++ "))"),
+      indent (level + 2) "))",
+      indent level "(local.set $pf_dep (i64.load (i32.const 24)))"
+    ]
+  if methodUses .accountBalance method then
+    lines := lines ++ #[
+      indent level "(call $pf_account_balance (i64.const 40))",
+      indent level "(if (i64.ne (i64.load (i32.const 48)) (i64.const 0))",
+      indent (level + 2) "(then",
+      indent (level + 4) ("(call $pf_panic_utf8 (i64.const 8) (i64.const " ++
+        toString panicOverflowOff ++ "))"),
+      indent (level + 2) "))",
+      indent level "(local.set $pf_bal (i64.load (i32.const 40)))"
+    ]
+  return lines
+
 private def loadArg (count : Nat) (level : Nat) : Array String :=
   if count == 0 then
     #[
@@ -360,11 +424,18 @@ private def renderFn (p : Program ValKind OpExt)
   lines := lines.push ("  (func (export \"" ++ method.ixName ++ "\")")
   if method.paramCount == 1 then
     lines := lines.push ("    (local " ++ localOfArg 0 ++ " i64)")
+  if methodUses .predecessor method then
+    lines := lines.push "    (local $pf_pred i64)"
+  if methodUses .attachedDeposit method then
+    lines := lines.push "    (local $pf_dep i64)"
+  if methodUses .accountBalance method then
+    lines := lines.push "    (local $pf_bal i64)"
   for slot in p.slots do
     lines := lines.push ("    (local " ++ localOfSlot slot.name ++ " i64)")
   for i in List.range (Nat.max (countTemps method.ops) region.st.fresh) do
     lines := lines.push ("    (local " ++ localOfTemp i ++ " i64)")
   lines := lines ++ loadArg method.paramCount 4
+  lines := lines ++ (← loadHostPrelude method view 4)
   lines := lines ++ loadSlots p 4
   lines := lines ++ region.lines
   lines := lines.push "  )"
@@ -378,6 +449,9 @@ private def dataSection (p : Program ValKind OpExt) : Array String :=
     "  (data (i32.const " ++ toString panicDivOff ++ ") \"divide-by-zero\")",
     "  (data (i32.const " ++ toString panicInputOff ++ ") \"input\")"
   ]
+
+private def programUses (kind : ValKind) (p : IR.Program) : Bool :=
+  methodUses kind p.initializer || p.entries.any (methodUses kind)
 
 def emit (p : IR.Program) : Except String String := do
   let mut lines : Array String := #[]
@@ -399,6 +473,21 @@ def emit (p : IR.Program) : Except String String := do
     "  (import \"env\" \"value_return\" (func $pf_value_return (param i64 i64)))"
   lines := lines.push
     "  (import \"env\" \"panic_utf8\" (func $pf_panic_utf8 (param i64 i64)))"
+  if programUses .blockIndex p then
+    lines := lines.push
+      "  (import \"env\" \"block_index\" (func $pf_block_index (result i64)))"
+  if programUses .blockTimestamp p then
+    lines := lines.push
+      "  (import \"env\" \"block_timestamp\" (func $pf_block_timestamp (result i64)))"
+  if programUses .predecessor p then
+    lines := lines.push
+      "  (import \"env\" \"predecessor_account_id\" (func $pf_predecessor_account_id (param i64)))"
+  if programUses .attachedDeposit p then
+    lines := lines.push
+      "  (import \"env\" \"attached_deposit\" (func $pf_attached_deposit (param i64)))"
+  if programUses .accountBalance p then
+    lines := lines.push
+      "  (import \"env\" \"account_balance\" (func $pf_account_balance (param i64)))"
   lines := lines.push "  (memory (export \"memory\") 1)"
   lines := lines ++ dataSection p
   lines := lines.push ""

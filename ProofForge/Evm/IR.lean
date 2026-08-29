@@ -111,12 +111,14 @@ private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
   | .evm kind => pure kind
   | .svm _ => throw "extract/unsupported: evm rejects svm value"
   | .xrpl _ => throw "extract/unsupported: evm rejects xrpl value"
+  | .near _ => throw "extract/unsupported: evm rejects near value"
 
 private def projectOpExt
     (projectVal : Extract.IR.Val → Except String Ops.Val) :
     Extract.IR.OpExt Extract.IR.Val → Except String (Ops.OpExt Ops.Val)
   | .svm _ => throw "extract/unsupported: evm rejects svm effect"
   | .xrpl _ => throw "extract/unsupported: evm rejects xrpl effect"
+  | .near _ => throw "extract/unsupported: evm rejects near effect"
   | .evm payload =>
       match payload with
       | .component call =>

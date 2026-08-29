@@ -5,6 +5,7 @@ import ProofForge.Attr
 import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
+import ProofForge.Wasm.Near.Runtime
 import ProofForge.Evm.Codec
 import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Lexical
@@ -12,6 +13,24 @@ import ProofForge.Extract.Lexical
 open Lean
 
 namespace ProofForge.Extract
+
+/-- NEAR Runtime host reads. Matched by const name before any empty-arg UInt64
+unfold that would bake the irreducible stub body `0` into a literal. -/
+private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
+  if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockIndex || endsWith e ".blockIndex" then
+    some Ops.Val.nearBlockIndex
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockTimestamp ||
+      endsWith e ".blockTimestamp" then
+    some Ops.Val.nearBlockTimestamp
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessor || endsWith e ".predecessor" then
+    some Ops.Val.nearPredecessor
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDeposit ||
+      endsWith e ".attachedDeposit" then
+    some Ops.Val.nearAttachedDeposit
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalance ||
+      endsWith e ".accountBalance" then
+    some Ops.Val.nearAccountBalance
+  else none
 
 set_option maxRecDepth 2048 in
 mutual
@@ -93,7 +112,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     Option Ops.Val :=
   let field := n.toString
   let user := isUserName env n || isBoundaryProjectionName env n
-  if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
+  if let some leaf := nearRuntimeLeaf? e then
+    some leaf
+  else if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
       isConstNamed e ``bne ||
       isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
       isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe") &&
@@ -1247,6 +1268,8 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   else if endsWith e ".evmCalldataSize" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmCalldataSize then
     some (.ext (.evm (.component (.environment .calldataSize))) #[])
+  else if let some leaf := nearRuntimeLeaf? e then
+    some leaf
   else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller then
     some .evmCaller
   else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Evm.Runtime.evmBlockNumber then
@@ -2766,6 +2789,11 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | none =>
             match val env st with
             | some (.clockSlot) => some .clockSlot
+            | some (.nearBlockIndex) => some .nearBlockIndex
+            | some (.nearBlockTimestamp) => some .nearBlockTimestamp
+            | some (.nearPredecessor) => some .nearPredecessor
+            | some (.nearAttachedDeposit) => some .nearAttachedDeposit
+            | some (.nearAccountBalance) => some .nearAccountBalance
             | some (.clockEpoch) => some .clockEpoch
             | some (.unixTime) => some .unixTime
             | some (.slotsPerEpoch) => some .slotsPerEpoch
@@ -6381,6 +6409,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
         | none => false) then
     let (w0, w1, w2, w3) := uint256Leaves env e
     .ok #[.returnU64 w0, .returnU64 w1, .returnU64 w2, .returnU64 w3]
+  else if let some leaf := nearRuntimeLeaf? e then
+    .ok #[.returnU64 leaf]
   else if let some v := val env e then
     match v with
     | .field _ _ => .ok #[.returnU64 v]
@@ -6395,6 +6425,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .ext (.svm (.component _)) _
+    | .nearBlockIndex | .nearBlockTimestamp | .nearPredecessor
+    | .nearAttachedDeposit | .nearAccountBalance
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]

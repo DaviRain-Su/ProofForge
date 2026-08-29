@@ -28,14 +28,33 @@ need_imports = (
 )
 need_exports = (
     '(func (export "initialize")',
-    '(func (export "increment")',
     '(func (export "get")',
+)
+counter_exports = (
+    '(func (export "increment")',
+)
+ctx_imports = (
+    '(import "env" "block_index"',
+    '(import "env" "block_timestamp"',
+    '(import "env" "predecessor_account_id"',
+    '(import "env" "attached_deposit"',
+    '(import "env" "account_balance"',
+)
+ctx_exports = (
+    '(func (export "height")',
+    '(func (export "seconds")',
+    '(func (export "selfBal")',
 )
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
     text = wat.read_text(encoding="utf-8")
-    for needle in need_imports + need_exports:
+    extra = ()
+    if wat.stem == "Counter":
+        extra = counter_exports
+    elif wat.stem == "NearCtx":
+        extra = ctx_imports + ctx_exports
+    for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")
     for needle in forbid:

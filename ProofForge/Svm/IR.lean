@@ -119,6 +119,7 @@ private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
   | .svm kind => pure kind
   | .evm _ => throw "extract/unsupported: svm rejects evm value"
   | .xrpl _ => throw "extract/unsupported: svm rejects xrpl value"
+  | .near _ => throw "extract/unsupported: svm rejects near value"
 
 private def projectCpiWord
     (projectVal : Extract.IR.Val → Except String Ops.Val) :
@@ -142,6 +143,7 @@ private def projectOpExt
       return .component (← call.mapValuesM projectVal)
   | .evm _ => throw "extract/unsupported: svm rejects evm effect"
   | .xrpl _ => throw "extract/unsupported: svm rejects xrpl effect"
+  | .near _ => throw "extract/unsupported: svm rejects near effect"
 
 /-- Static registration of the extractor-to-SVM projection. -/
 def extractRegistration :

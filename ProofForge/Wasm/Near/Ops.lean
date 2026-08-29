@@ -4,24 +4,28 @@ import ProofForge.Core.CFG
 /-!
 # NEAR target dialect
 
-Value/effect extensions owned by the NEAR Protocol chain, one member of the
-WASM family (see `ProofForge.Wasm.Family`). v0 owns nothing: NEAR host capability
-keys — predecessor / signer / attached deposit / promises — are deliberately
-absent until a later slice pins them. `reserved` keeps the dialect inhabited and
-is rejected by `wellFormed`; the registration in `ProofForge.Wasm.Near.IR` fails
-closed on every svm/evm leaf via the family-level rejection instead.
+Value/effect extensions owned by the NEAR Protocol chain. v0 admits five host
+reads (block index / timestamp / predecessor / attached deposit / account
+balance). Promise, hashing, and Principal stay absent. `reserved` is rejected
+by `wellFormed`.
 -/
 
 namespace ProofForge.Wasm.Near.Ops
 
-/-- NEAR-owned value intrinsics. v0 has none. -/
+/-- NEAR-owned value intrinsics. -/
 inductive ValKind where
+  | blockIndex
+  | blockTimestamp
+  | predecessor
+  | attachedDeposit
+  | accountBalance
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
   | .reserved => 0
+  | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
 abbrev Cmp := ProofForge.Core.Ops.Cmp
