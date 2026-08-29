@@ -3,6 +3,8 @@ import ProofForge.Svm.Cpi.Emit
 import ProofForge.Svm.FifoCancel
 import ProofForge.Svm.Heap.Emit
 import ProofForge.Svm.Sdk.Transient
+import ProofForge.Svm.Transient.Emit
+import ProofForge.Svm.TransientBytes
 import ProofForge.Svm.TransientVec
 
 namespace Tests.SvmTransientSpec
@@ -59,13 +61,39 @@ private def words : FixedVec :=
 
 private def vector2 : TransientVec.Config := { capacity := 2 }
 private def vectorMax : TransientVec.Config := { capacity := 4095 }
+private def vector2B : TransientVec.Config :=
+  { capacity := secondSlotWord 2 }
 
 #guard vector2.wellFormed
 #guard vector2.fixedVec.buffer.capacityBytes == 16
 #guard vectorMax.wellFormed
 #guard !({ capacity := 4096 } : TransientVec.Config).wellFormed
+
+-- The reusable handle identity: slot 0 keeps the plain-payload word; slot 1 packs itself above
+-- bit 32. A third slot and a zero payload are malformed in the same reusable contract.
+#guard vector2.slot == 0 && vector2.payload == 2
+#guard vector2B.wellFormed
+#guard vector2B.slot == 1 && vector2B.payload == 2
+#guard vector2B.fixedVec == vector2.fixedVec
+#guard vector2 != vector2B
+#guard (TransientVec.Call.begin vector2 : TransientVec.Call UInt64).canonical toString !=
+  (TransientVec.Call.begin vector2B : TransientVec.Call UInt64).canonical toString
+#guard
+  !({ capacity := 2 * handleSlotBit } : TransientVec.Config).wellFormed
+#guard
+  !({ capacity := handleSlotBit } : TransientVec.Config).wellFormed
 #guard TransientVec.pointerStack > FifoCancel.queryScratchEnd
 #guard TransientVec.activeStack < Scratch.returnDataBank.lowWater
+-- Same-kind slot banks are disjoint: slot 1 starts exactly one slotStride above slot 0 and ends
+-- before the byte-buffer bank.
+#guard TransientVec.pointerStack + ProofForge.Svm.Transient.Emit.slotStride ≤ TransientBytes.pointerStack
+#guard TransientVec.activeStack + ProofForge.Svm.Transient.Emit.slotStride + 8 ≤
+  TransientBytes.pointerStack
+-- The byte-kind slot banks stay below the shared `sol_log_data` descriptor and the deep
+-- account-storage scratch.
+#guard TransientBytes.pointerStack + ProofForge.Svm.Transient.Emit.slotStride + 24 ≤
+  TransientBytes.descriptorStack - 16
+#guard TransientBytes.descriptorStack ≤ 2488
 #guard TransientVec.oomErrorCode != TransientVec.boundsErrorCode
 #guard TransientVec.boundsErrorCode != TransientVec.stateErrorCode
 

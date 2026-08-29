@@ -1,5 +1,6 @@
 import Examples.AccountView
 import Examples.MemoryOps
+import Examples.TransientPair
 import Lean
 import ProofForge
 
@@ -55,6 +56,7 @@ private def bytesSmall : TransientBytes.Config := { capacity := 3 }
     "tbyte.pop.4"
 
 #pf_build Examples.MemoryOps
+#pf_build Examples.TransientPair
 
 private def bytesStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientBytes (.begin _)) => some "begin"
@@ -165,6 +167,48 @@ elab "#pf_guard_transient_bytes" : command => do
     | throwError "missing bytesAfterFinish method"
   unless filtered bytesStep afterFinish == #["begin", "finish", "length"] do
     throwError "bytesAfterFinish did not preserve stale-handle validation order"
+  -- Same-kind multi-handle evidence: two compile-time Bytes slots in the dedicated
+  -- `Examples.TransientPair` module decode through the same component bridge with distinct
+  -- erased words and per-slot isolation.
+  let pairSource ←
+    match ProofForge.Extract.extractModuleIR env `Examples.TransientPair with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let pairProgram ←
+    match ProofForge.Svm.IR.fromExtracted pairSource with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some pairSetGet := pairProgram.methods.find? (·.ixName == "bytesPairSetGet")
+    | throwError "missing bytesPairSetGet method"
+  unless filtered bytesStep pairSetGet ==
+      #["begin", "begin", "push", "push", "push", "push", "set", "get", "get", "finish",
+        "finish"] do
+    throwError "bytesPairSetGet did not interleave both same-kind byte slots in source order"
+  let pairBegins := pairSetGet.ops.filterMap fun
+    | .component (.transientBytes (.begin config)) => some config
+    | _ => none
+  unless pairBegins.size == 2 && pairBegins[0]! != pairBegins[1]! &&
+      pairBegins[0]!.slot == 0 && pairBegins[1]!.slot == 1 &&
+      pairBegins[0]!.fixedVec == pairBegins[1]!.fixedVec do
+    throwError "bytesPairSetGet did not decode two disjoint same-kind byte handles"
+  let some pairTruncate := pairProgram.methods.find?
+      (·.ixName == "bytesPairTruncateIsolated")
+    | throwError "missing bytesPairTruncateIsolated method"
+  unless filtered bytesStep pairTruncate ==
+      #["begin", "begin", "push", "push", "push", "truncate", "length", "length", "finish",
+        "finish"] do
+    throwError "bytesPairTruncateIsolated did not isolate truncate per slot"
+  let some pairOom := pairProgram.methods.find? (·.ixName == "bytesPairOom")
+    | throwError "missing bytesPairOom method"
+  unless filtered bytesStep pairOom == #["begin", "begin"] &&
+      (pairOom.ops.countP fun
+        | .component (.transientBytes (.begin config)) => config.slot == 1
+        | _ => false) == 1 do
+    throwError "bytesPairOom did not exhaust the heap from the alternate byte slot"
+  let some unbegun := pairProgram.methods.find? (·.ixName == "bytesPairUnbegunSlot")
+    | throwError "missing bytesPairUnbegunSlot method"
+  unless filtered bytesStep unbegun == #["begin", "push"] do
+    throwError "bytesPairUnbegunSlot did not open exactly one byte slot"
   let some withVector := program.methods.find? (·.ixName == "vectorWithBytes")
     | throwError "missing vectorWithBytes method"
   unless filtered taggedStep withVector ==
@@ -200,5 +244,18 @@ elab "#pf_guard_transient_bytes" : command => do
       asm.contains "lddw r0, 0x1211" && asm.contains "lddw r0, 0x1212" &&
       asm.contains "lddw r0, 0x1213" && asm.contains "lddw r0, 0x1214" do
     throwError "bounded byte allocator, mutation, canonical range, or explicit failure gates are missing"
+  -- The dedicated multi-handle program: same-kind second-slot metadata cells (pointer 2432,
+  -- length 2440, active 2456) back the shared lifecycle, below the unchanged
+  -- `sol_log_data` descriptor window at 2465..2480.
+  let pairAsm ←
+    match ProofForge.Svm.Emit.emitAsm pairProgram with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless pairAsm.contains "ldxdw r9, [r10 - 2432]" && pairAsm.contains "ldxdw r2, [r10 - 2440]" &&
+      pairAsm.contains "stxdw [r10 - 2440], r2" &&
+      pairAsm.contains "stxb [r10 - 2432]" == false do
+    throwError "same-kind second-slot byte metadata cells are missing"
+  unless pairAsm.contains "add64 r9, -2480" && pairAsm.contains "lddw r0, 0x1213" do
+    throwError "second-slot byte handles did not keep the descriptor and state gates"
 
 end Tests.SvmTransientBytesSpec

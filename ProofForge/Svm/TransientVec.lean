@@ -4,13 +4,16 @@ import ProofForge.Svm.Sdk.Transient
 /-!
 # Invocation-local bounded UInt64 vector
 
-Target-owned component contract for one source-visible transient vector. Payload storage comes
-from the official Solana downward bump heap; only pointer/length/capacity metadata lives in fixed
-invocation scratch. The source handle contains compile-time capacity only and is erased before IR.
+Target-owned component contract for source-visible transient vectors. Payload storage comes from
+the official Solana downward bump heap; only pointer/length/capacity metadata lives in fixed
+invocation scratch. The source handle contains a compile-time capacity word and is erased before
+IR.
 
-Exactly one transient vector handle is active at a time. Opening another replaces no persistent
-state but consumes another non-reclaiming bump allocation. Bounds, inactive/mismatched handles,
-capacity overflow, and OOM all fail with explicit program errors instead of forming a bad pointer.
+Each of the kind's two compile-time handle slots owns a private metadata bank, so two `Vector64`
+handles can be active together with disjoint payload regions and independent lengths/capacities.
+Opening another slot consumes another non-reclaiming bump allocation. Bounds, inactive/mismatched
+handles, capacity overflow, and OOM all fail with explicit program errors instead of forming a bad
+pointer.
 -/
 
 namespace ProofForge.Svm.TransientVec
@@ -18,7 +21,8 @@ namespace ProofForge.Svm.TransientVec
 open Sdk.Transient
 
 /-- Deep invocation-only metadata, disjoint from FIFO's `2056..2304` cells and fixed PDA/sysvar
-scratch. These cells may survive across ordinary component calls but never across invocations. -/
+scratch. Slot 0 owns `2312..2343`; slot 1 owns `2344..2375`, exactly one `slotStride` above. These
+cells may survive across ordinary component calls but never across invocations. -/
 def pointerStack : Nat := 2312
 def lengthStack : Nat := 2320
 def capacityStack : Nat := 2328
@@ -30,22 +34,27 @@ def oomErrorCode : Nat := 0x1201
 def boundsErrorCode : Nat := 0x1202
 def stateErrorCode : Nat := 0x1203
 
-/-- Compiler-erased vector geometry. Capacity is measured in `UInt64` elements. -/
+/-- Compiler-erased vector geometry. The `capacity` field is the reusable `Sdk.Transient` handle
+word: payload capacity in `UInt64` elements in its low 32 bits, handle slot above bit 32. -/
 structure Config where
   capacity : Nat
   deriving BEq, Repr, Inhabited
 
+def Config.payload (config : Config) : Nat := handlePayload config.capacity
+
+def Config.slot (config : Config) : Nat := handleSlot config.capacity
+
 def Config.fixedVec (config : Config) : FixedVec :=
   { buffer :=
       { name := "transientVec64"
-        capacityBytes := 8 * config.capacity
+        capacityBytes := 8 * config.payload
         alignment := 8
         frameBytes := ProofForge.Svm.Heap.defaultFrameBytes }
     elementBytes := 8
-    capacity := config.capacity }
+    capacity := config.payload }
 
 def Config.wellFormed (config : Config) : Bool :=
-  config.fixedVec.wellFormed
+  config.slot < maxHandleSlots && config.fixedVec.wellFormed
 
 inductive Query where
   | length (config : Config)

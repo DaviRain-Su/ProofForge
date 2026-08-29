@@ -4,16 +4,16 @@ import ProofForge.Svm.Sdk.Transient
 /-!
 # Invocation-local bounded byte buffer
 
-Target-owned component contract for one source-visible transient byte buffer/writer. Payload
+Target-owned component contract for source-visible transient byte buffer/writers. Payload
 storage comes from the shared official Solana downward bump heap; only pointer/length/capacity
-metadata lives in fixed invocation scratch. The source handle contains compile-time capacity only
-and is erased before IR.
+metadata lives in fixed invocation scratch. The source handle contains a compile-time capacity
+word and is erased before IR.
 
-Exactly one active byte-buffer handle is allowed alongside one active `TransientVec` handle in
-this slice; the two components own disjoint stack cells, so their metadata can never alias and
-their allocations compose through the same bump position. Byte bounds, inactive/mismatched
-handles, capacity overflow, out-of-range byte values (`> 255`), and OOM all fail with explicit
-terminal program errors instead of forming a bad pointer.
+Each of the kind's two compile-time handle slots owns a private metadata bank, so two `Bytes`
+handles can be active together, disjoint from every `TransientVec` handle. The two kinds compose
+through the same bump position. Byte bounds, inactive/mismatched handles, capacity overflow,
+out-of-range byte values (`> 255`), and OOM all fail with explicit terminal program errors instead
+of forming a bad pointer.
 -/
 
 namespace ProofForge.Svm.TransientBytes
@@ -21,12 +21,12 @@ namespace ProofForge.Svm.TransientBytes
 open Sdk.Transient
 
 /-- Deep invocation-only metadata, disjoint from FIFO's `2056..2304` cells and from
-`TransientVec`'s `2312..2343` cells. These cells may survive across ordinary component calls but
-never across invocations. -/
-def pointerStack : Nat := 2344
-def lengthStack : Nat := 2352
-def capacityStack : Nat := 2360
-def activeStack : Nat := 2368
+`TransientVec`'s `2312..2375` cells. Slot 0 owns `2400..2431`; slot 1 owns `2432..2463`. These
+cells may survive across ordinary component calls but never across invocations. -/
+def pointerStack : Nat := 2400
+def lengthStack : Nat := 2408
+def capacityStack : Nat := 2416
+def activeStack : Nat := 2424
 
 /-- Distinct terminal errors let clients and runtime tests distinguish allocator OOM, bounds/full,
 byte-range, and handle-lifetime violations. -/
@@ -38,31 +38,37 @@ def rangeErrorCode : Nat := 0x1214
 /-- Deepest stack offset of the 16-byte `SolBytes` descriptor used by `sol_log_data`. Its base is
 `r10 - descriptorStack`; the target emitter stores the active payload pointer at `[base + 0]` and
 its current length at `[base + 8]`. The descriptor exists only adjacent to syscall emission; the
-pointer never enters a source value, generic IR, or account state. The occupied `2377..2392` bytes
-are disjoint from FIFO's `2056..2304` and `AccountStorage`'s `2489..4096` deep scratch. -/
-def descriptorStack : Nat := 2392
+pointer never enters a source value, generic IR, or account state. The occupied `2465..2480` bytes
+are disjoint from FIFO's `2056..2304`, `TransientVec`'s `2312..2375`, and `AccountStorage`'s
+deep scratch at `2489..4096`. -/
+def descriptorStack : Nat := 2480
 
-/-- Compiler-erased byte-buffer geometry. Capacity is measured in bytes. -/
+/-- Compiler-erased byte-buffer geometry. The `capacity` field is the reusable `Sdk.Transient`
+handle word: byte capacity in its low 32 bits, handle slot above bit 32. -/
 structure Config where
   capacity : Nat
   deriving BEq, Repr, Inhabited
 
+def Config.payload (config : Config) : Nat := handlePayload config.capacity
+
+def Config.slot (config : Config) : Nat := handleSlot config.capacity
+
 def Config.fixedVec (config : Config) : FixedVec :=
   { buffer :=
       { name := "transientBytes"
-        capacityBytes := config.capacity
+        capacityBytes := config.payload
         alignment := 1
         frameBytes := ProofForge.Svm.Heap.defaultFrameBytes }
     elementBytes := 1
-    capacity := config.capacity }
+    capacity := config.payload }
 
 def Config.wellFormed (config : Config) : Bool :=
-  config.fixedVec.wellFormed
+  config.slot < maxHandleSlots && config.fixedVec.wellFormed
 
 /-- Static precondition for one fixed-width little-endian append: the completed record must be
 representable inside this buffer. -/
 def Config.fitsLe64 (config : Config) : Bool :=
-  8 ≤ config.capacity
+  8 ≤ config.payload
 
 inductive Query where
   | length (config : Config)

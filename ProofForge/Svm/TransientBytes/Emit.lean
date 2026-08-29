@@ -19,13 +19,21 @@ private def lifecycle : Transient.Emit.Lifecycle :=
     oomErrorCode
     stateErrorCode }
 
+/-- The source handle's own metadata bank: slot 0 keeps the historical cells, slot 1 sits one
+`slotStride` above. -/
+private def pointerCell (config : Config) : Nat :=
+  Transient.Emit.slotCell pointerStack config.slot
+
+private def lengthCell (config : Config) : Nat :=
+  Transient.Emit.slotCell lengthStack config.slot
+
 private abbrev failure := Transient.Emit.failure
 
 private def emitRequireActive (config : Config) (label : String) : String :=
-  Transient.Emit.emitRequireActive lifecycle config.capacity label
+  Transient.Emit.emitRequireActive lifecycle config.slot config.payload label
 
 private def emitBegin (label : String) (config : Config) : Except String String := do
-  Transient.Emit.emitBegin lifecycle config.fixedVec label
+  Transient.Emit.emitBegin lifecycle config.fixedVec config.slot label
 
 private def emitPush (context : Context) (label : String) (config : Config)
     (byte : Ops.Val) : Except String String := do
@@ -37,17 +45,17 @@ private def emitPush (context : Context) (label : String) (config : Config)
   mov64 r3, 255
   jle r2, r3, {inRange}
 {failure rangeErrorCode}{inRange}:\
-  ldxdw r2, [r10 - {lengthStack}]
-  lddw r3, {config.capacity}
+  ldxdw r2, [r10 - {lengthCell config}]
+  lddw r3, {config.payload}
   jlt r2, r3, {room}
 {failure boundsErrorCode}{room}:
-  ldxdw r9, [r10 - {pointerStack}]
+  ldxdw r9, [r10 - {pointerCell config}]
   add64 r9, r2
   ldxdw r1, [r10 - 8]
   stxb [r9 + 0], r1
-  ldxdw r2, [r10 - {lengthStack}]
+  ldxdw r2, [r10 - {lengthCell config}]
   add64 r2, 1
-  stxdw [r10 - {lengthStack}], r2
+  stxdw [r10 - {lengthCell config}], r2
 "
 
 private def emitAppendLe64 (context : Context) (label : String) (config : Config)
@@ -62,18 +70,18 @@ private def emitAppendLe64 (context : Context) (label : String) (config : Config
         text := text ++ "\n  rsh64 r1, 8"
     return "  ldxdw r1, [r10 - 8]\n" ++ text ++ "\n"
   return load ++ emitRequireActive config label ++ s!"\
-  ldxdw r2, [r10 - {lengthStack}]
+  ldxdw r2, [r10 - {lengthCell config}]
   add64 r2, 8
-  lddw r3, {config.capacity}
+  lddw r3, {config.payload}
   jle r2, r3, {room}
 {failure boundsErrorCode}{room}:
-  ldxdw r9, [r10 - {pointerStack}]
-  ldxdw r2, [r10 - {lengthStack}]
+  ldxdw r9, [r10 - {pointerCell config}]
+  ldxdw r2, [r10 - {lengthCell config}]
   add64 r9, r2
 " ++ stages ++ s!"\
-  ldxdw r2, [r10 - {lengthStack}]
+  ldxdw r2, [r10 - {lengthCell config}]
   add64 r2, 8
-  stxdw [r10 - {lengthStack}], r2
+  stxdw [r10 - {lengthCell config}], r2
 "
 
 private def emitSet (context : Context) (label : String) (config : Config)
@@ -88,10 +96,10 @@ private def emitSet (context : Context) (label : String) (config : Config)
   jle r2, r3, {inRange}
 {failure rangeErrorCode}{inRange}:\
   ldxdw r2, [r10 - 8]
-  ldxdw r3, [r10 - {lengthStack}]
+  ldxdw r3, [r10 - {lengthCell config}]
   jlt r2, r3, {inBounds}
 {failure boundsErrorCode}{inBounds}:
-  ldxdw r9, [r10 - {pointerStack}]
+  ldxdw r9, [r10 - {pointerCell config}]
   add64 r9, r2
   ldxdw r1, [r10 - 16]
   stxb [r9 + 0], r1
@@ -100,13 +108,13 @@ private def emitSet (context : Context) (label : String) (config : Config)
 private def emitTruncate (context : Context) (label : String) (config : Config)
     (newLength : Ops.Val) : Except String String := do
   let load ← context.loadValue newLength 8 0 s!"{label}_new_length"
-  return load ++ Transient.Emit.emitTruncate lifecycle config.capacity 8 label
+  return load ++ Transient.Emit.emitTruncate lifecycle config.payload 8 config.slot label
 
 private def emitClear (label : String) (config : Config) : String :=
-  Transient.Emit.emitClear lifecycle config.capacity label
+  Transient.Emit.emitClear lifecycle config.payload config.slot label
 
 private def emitFinish (label : String) (config : Config) : String :=
-  Transient.Emit.emitFinish lifecycle config.capacity label
+  Transient.Emit.emitFinish lifecycle config.payload config.slot label
 
 /-- Publish one official `sol_log_data` field: the descriptor (active payload pointer and current
 runtime length) is constructed in this component's adjacent deep-scratch cells and no copy of the
@@ -114,11 +122,11 @@ payload is made. Shared `emitRequireActive` keeps stale and capacity-mismatched 
 existing state error before any pointer can be formed. -/
 private def emitLogData (label : String) (config : Config) : Except String String :=
   return emitRequireActive config label ++ s!"\
-  ; one sol_log_data field views the active {config.capacity}-byte payload buffer\n\
+  ; one sol_log_data field views the active {config.payload}-byte payload buffer\n\
   mov64 r9, r10\n  add64 r9, -{descriptorStack}\n\
-  ldxdw r1, [r10 - {pointerStack}]\n\
+  ldxdw r1, [r10 - {pointerCell config}]\n\
   stxdw [r9 + 0], r1\n\
-  ldxdw r1, [r10 - {lengthStack}]\n\
+  ldxdw r1, [r10 - {lengthCell config}]\n\
   stxdw [r9 + 8], r1\n\
   mov64 r1, r9\n\
   lddw r2, 1\n  call sol_log_data\n"
@@ -128,7 +136,7 @@ def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
   match query, operands with
   | .length config, #[] =>
       return emitRequireActive config s!"{scope}_{nonce}_length" ++ s!"\
-  ldxdw r1, [r10 - {lengthStack}]
+  ldxdw r1, [r10 - {lengthCell config}]
   stxdw [r10 - {stackOff}], r1
 "
   | .get config, #[index] => do
@@ -137,10 +145,10 @@ def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
       let inBounds := s!"transient_bytes_get_bounds_{label}"
       return loadIndex ++ emitRequireActive config label ++ s!"\
   ldxdw r2, [r10 - {stackOff + 8}]
-  ldxdw r3, [r10 - {lengthStack}]
+  ldxdw r3, [r10 - {lengthCell config}]
   jlt r2, r3, {inBounds}
 {failure boundsErrorCode}{inBounds}:
-  ldxdw r9, [r10 - {pointerStack}]
+  ldxdw r9, [r10 - {pointerCell config}]
   add64 r9, r2
   ldxb r1, [r9 + 0]
   stxdw [r10 - {stackOff}], r1
@@ -149,12 +157,12 @@ def emitQuery (context : Context) (query : Query) (operands : Array Ops.Val)
       let label := s!"{scope}_{nonce}_{stackOff}_pop"
       let nonEmpty := s!"transient_bytes_pop_nonempty_{label}"
       return emitRequireActive config label ++ s!"\
-  ldxdw r2, [r10 - {lengthStack}]
+  ldxdw r2, [r10 - {lengthCell config}]
   jgt r2, 0, {nonEmpty}
 {failure boundsErrorCode}{nonEmpty}:
   sub64 r2, 1
-  stxdw [r10 - {lengthStack}], r2
-  ldxdw r9, [r10 - {pointerStack}]
+  stxdw [r10 - {lengthCell config}], r2
+  ldxdw r9, [r10 - {pointerCell config}]
   add64 r9, r2
   ldxb r1, [r9 + 0]
   stxdw [r10 - {stackOff}], r1

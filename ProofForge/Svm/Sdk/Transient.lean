@@ -1,3 +1,4 @@
+import ProofForge.Attr
 import ProofForge.Svm.Heap
 import ProofForge.Svm.Scratch
 
@@ -16,6 +17,39 @@ for the emitter/runtime boundary, but it is never an account-state handle.
 -/
 
 namespace ProofForge.Svm.Sdk.Transient
+
+/-! ## Reusable multi-handle identity -/
+
+/--
+Compile-time handle slots for one transient container kind. Every bounded transient kind owns two
+slots; each slot owns a private metadata bank (`Svm.Transient.Emit.slotCell`: four 8-byte cells,
+`Svm.Transient.Emit.slotStride` bytes apart) and its own disjoint `begin` allocation from the
+shared official downward bump heap. Simultaneous same-kind handles therefore never alias metadata
+or payload, while `begin` on the same slot is the historical re-open that replaces that slot's
+metadata only.
+
+Handle identity never reaches top-level Ops, IR, the main emitter, or the runtime-leaf signature:
+the single compiler-erased `capacity` word keeps the historical plain-payload encoding for slot 0
+and packs the slot index above bit 32 for slot 1, so extraction still decodes one static literal
+per operation and the target component splits the word back into capacity and slot.
+-/
+def maxHandleSlots : Nat := 2
+
+/-- Bit weight of the slot field inside the compiler-erased handle word. -/
+@[pf_inline] def handleSlotBit : Nat := 4294967296
+
+/-- Payload capacity (or byte capacity) carried by the erased word's low 32 bits. -/
+def handlePayload (word : Nat) : Nat := word % handleSlotBit
+
+/-- Slot index carried by the erased word. -/
+def handleSlot (word : Nat) : Nat := word / handleSlotBit
+
+/-- Slot-0 handle word: the historical plain-payload encoding. -/
+def firstSlotWord (payload : Nat) : Nat := payload
+
+/-- Slot-1 handle word: the payload with its slot packed above bit 32. Additive on literals so
+extraction decodes it without any new runtime leaf or opcode. -/
+@[pf_inline] def secondSlotWord (payload : Nat) : Nat := payload + handleSlotBit
 
 /-! ## Heap-backed buffers -/
 

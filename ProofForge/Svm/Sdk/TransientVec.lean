@@ -9,6 +9,11 @@ This is the bounded counterpart of an on-chain Rust `Vec<u64>`: capacity is comp
 payload allocation is invocation-only, growth never reallocates, and `finish` does not reclaim the
 Solana bump heap. OOM, full capacity, out-of-bounds access, and stale handles are explicit terminal
 program errors. No source or account value can contain the native pointer.
+
+Two same-kind compile-time handles can be active in one invocation: `bounded` opens the historical
+slot 0 and `boundedAlt` opens slot 1. Both slots decode to the same runtime leaves — the slot rides
+inside the compiler-erased capacity word shared by the whole `Sdk.Transient` — and each owns a
+private metadata bank and disjoint payload region while the other stays live.
 -/
 
 namespace ProofForge.Svm.Sdk.Transient
@@ -17,8 +22,15 @@ open ProofForge.Svm.Runtime
 
 abbrev Vector64 := ProofForge.Svm.TransientVec.Config
 
+/-- Slot-0 bounded vector: the historical handle encoding. -/
 @[pf_inline] def Vector64.bounded (capacity : Nat) : Vector64 :=
   { capacity }
+
+/-- Slot-1 bounded vector: same payload capacity, private metadata bank and payload region.
+The slot is additive on literals inside the erased capacity word, so extraction still sees one
+static `UInt64` argument and no new runtime leaf. -/
+@[pf_inline] def Vector64.boundedAlt (capacity : Nat) : Vector64 :=
+  { capacity := ProofForge.Svm.Sdk.Transient.secondSlotWord capacity }
 
 @[pf_inline] def Vector64.begin (vector : Vector64) : UInt64 :=
   transientVecBegin (UInt64.ofNat vector.capacity)

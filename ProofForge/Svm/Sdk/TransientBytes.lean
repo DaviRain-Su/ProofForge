@@ -11,6 +11,12 @@ reallocates, and `finish` does not reclaim the Solana bump heap. Every stored by
 against the canonical `≤ 255` range, `appendLe64` writes exactly eight little-endian bytes, and
 OOM, full capacity, out-of-bounds access, out-of-range byte values, and stale handles are explicit
 terminal program errors. The native pointer never reaches a source or account value.
+
+Two same-kind compile-time handles can be active in one invocation, alongside the two `Vector64`
+slots: `bounded` opens the historical slot 0 and `boundedAlt` opens slot 1. Both slots decode to
+the same runtime leaves — the slot rides inside the compiler-erased capacity word shared by the
+whole `Sdk.Transient` — and each owns a private metadata bank and disjoint payload region while
+the other handle stays live.
 -/
 
 namespace ProofForge.Svm.Sdk.Transient
@@ -19,8 +25,15 @@ open ProofForge.Svm.Runtime
 
 abbrev Bytes := ProofForge.Svm.TransientBytes.Config
 
+/-- Slot-0 bounded byte buffer: the historical handle encoding. -/
 @[pf_inline] def Bytes.bounded (capacity : Nat) : Bytes :=
   { capacity }
+
+/-- Slot-1 bounded byte buffer: same byte capacity, private metadata bank and payload region.
+The slot is additive on literals inside the erased capacity word, so extraction still sees one
+static `UInt64` argument and no new runtime leaf. -/
+@[pf_inline] def Bytes.boundedAlt (capacity : Nat) : Bytes :=
+  { capacity := ProofForge.Svm.Sdk.Transient.secondSlotWord capacity }
 
 @[pf_inline] def Bytes.begin (bytes : Bytes) : UInt64 :=
   transientBytesBegin (UInt64.ofNat bytes.capacity)

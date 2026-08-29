@@ -1,5 +1,6 @@
 import Examples.AccountView
 import Examples.MemoryOps
+import Examples.TransientPair
 import Lean
 import ProofForge
 
@@ -38,6 +39,7 @@ private def vector2 : TransientVec.Config := { capacity := 2 }
     "tv64.pop.2"
 
 #pf_build Examples.MemoryOps
+#pf_build Examples.TransientPair
 
 private def vectorStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientVec (.begin _)) => some "begin"
@@ -117,6 +119,72 @@ elab "#pf_guard_transient_vector" : command => do
     | throwError "missing vectorAfterFinish method"
   unless vectorSteps afterFinish == #["begin", "finish", "length"] do
     throwError "vectorAfterFinish did not preserve stale-handle validation order"
+  -- Same-kind multi-handle evidence: two compile-time Vector64 slots decode through the same
+  -- component bridge with distinct erased words and the shared lifecycle order. The evidence
+  -- lives in the dedicated unaggregated `Examples.TransientPair` module.
+  let pairSource ←
+    match ProofForge.Extract.extractModuleIR env `Examples.TransientPair with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let pairProgram ←
+    match ProofForge.Svm.IR.fromExtracted pairSource with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let some pairSetGet := pairProgram.methods.find? (·.ixName == "vectorPairSetGet")
+    | throwError "missing vectorPairSetGet method"
+  unless vectorSteps pairSetGet ==
+      #["begin", "begin", "push", "push", "push", "push", "set", "get", "get", "finish",
+        "finish"] do
+    throwError "vectorPairSetGet did not interleave both same-kind slots in source order"
+  let pairBegins := pairSetGet.ops.filterMap fun
+    | .component (.transientVec (.begin config)) => some config
+    | _ => none
+  unless pairBegins.size == 2 && pairBegins[0]! != pairBegins[1]! &&
+      pairBegins[0]!.slot == 0 && pairBegins[1]!.slot == 1 &&
+      pairBegins[0]!.fixedVec == pairBegins[1]!.fixedVec do
+    throwError "vectorPairSetGet did not decode two disjoint same-kind handles"
+  let some pairClear := pairProgram.methods.find? (·.ixName == "vectorPairClearIsolated")
+    | throwError "missing vectorPairClearIsolated method"
+  unless vectorSteps pairClear ==
+      #["begin", "begin", "push", "push", "push", "clear", "length", "length", "finish",
+        "finish"] do
+    throwError "vectorPairClearIsolated did not isolate clear per slot"
+  let some pairTruncate := pairProgram.methods.find?
+      (·.ixName == "vectorPairTruncateIsolated")
+    | throwError "missing vectorPairTruncateIsolated method"
+  unless vectorSteps pairTruncate ==
+      #["begin", "begin", "push", "push", "push", "push", "truncate", "length", "length",
+        "get", "finish", "finish"] do
+    throwError "vectorPairTruncateIsolated did not isolate truncate per slot"
+  let some pairPop := pairProgram.methods.find? (·.ixName == "vectorPairPopIsolated")
+    | throwError "missing vectorPairPopIsolated method"
+  unless vectorSteps pairPop ==
+      #["begin", "begin", "push", "push", "push", "push", "pop", "pop", "finish", "finish"] do
+    throwError "vectorPairPopIsolated did not isolate pop per slot"
+  let some pairFinish := pairProgram.methods.find?
+      (·.ixName == "vectorPairFinishIsolated")
+    | throwError "missing vectorPairFinishIsolated method"
+  unless vectorSteps pairFinish == #["begin", "begin", "push", "finish", "get", "finish"] do
+    throwError "vectorPairFinishIsolated did not keep slot 1 live after finishing slot 0"
+  let some fourPairs := pairProgram.methods.find? (·.ixName == "fourTransientPairs")
+    | throwError "missing fourTransientPairs method"
+  unless (vectorSteps fourPairs).count "begin" == 2 && (vectorSteps fourPairs).count "get" == 4 do
+    throwError "fourTransientPairs did not keep both vector slots live"
+  let some pairOom := pairProgram.methods.find? (·.ixName == "vectorPairOom")
+    | throwError "missing vectorPairOom method"
+  unless vectorSteps pairOom == #["begin", "begin"] do
+    throwError "vectorPairOom did not begin both same-kind slots"
+  unless (pairOom.ops.countP fun
+        | .component (.transientVec (.begin config)) => config.slot == 1
+        | _ => false) == 1 &&
+      pairOom.ops.any fun
+        | .component (.transientVec (.begin config)) => config.slot == 0 && config.payload == 100
+        | _ => false do
+    throwError "vectorPairOom did not exhaust the heap from the alternate slot"
+  let some unbegun := pairProgram.methods.find? (·.ixName == "vectorPairUnbegunSlot")
+    | throwError "missing vectorPairUnbegunSlot method"
+  unless vectorSteps unbegun == #["begin", "push"] do
+    throwError "vectorPairUnbegunSlot did not open exactly one slot"
   let accountSource ←
     match ProofForge.Extract.extractModuleIR env `Examples.AccountView with
     | .ok program => pure program
@@ -142,5 +210,16 @@ elab "#pf_guard_transient_vector" : command => do
       asm.contains "lddw r0, 0x1201" && asm.contains "lddw r0, 0x1202" &&
       asm.contains "lddw r0, 0x1203" do
     throwError "bounded vector allocator, mutation, or explicit failure gates are missing"
+  -- The dedicated multi-handle program: same-kind second-slot metadata cells (pointer 2344,
+  -- length 2352, active 2368) back the shared lifecycle interpreter, and the same program's OOM
+  -- and unbegun-slot methods pin the explicit failures.
+  let pairAsm ←
+    match ProofForge.Svm.Emit.emitAsm pairProgram with
+    | .ok asm => pure asm
+    | .error reason => throwError reason
+  unless pairAsm.contains "ldxdw r9, [r10 - 2344]" && pairAsm.contains "ldxdw r2, [r10 - 2352]" &&
+      pairAsm.contains "stxdw [r10 - 2352], r2" && pairAsm.contains "stxdw [r10 - 2368], r1" &&
+      pairAsm.contains "lddw r0, 0x1203" do
+    throwError "same-kind second-slot metadata cells are missing"
 
 end Tests.SvmTransientVectorSpec
