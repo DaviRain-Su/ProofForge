@@ -189,6 +189,8 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-016](tasks/wsm-016.md) | done | XRPL-SDK-PAUSE：零参数 Pausable（XrplHold，状态码 4） |
 | [wsm-017](tasks/wsm-017.md) | done | XRPL-SDK-MARK：owner 门后写 SHA-512Half（XrplMark） |
 | [wsm-018](tasks/wsm-018.md) | planned | 复杂合约缺口排期（[xrpl-next.md](analysis/xrpl-next.md)） |
+| [wsm-021](tasks/wsm-021.md) | done | 探针 `trace_num`（AlphaNet 绿；不开 Sdk.Log） |
+| [wsm-023](tasks/wsm-023.md) | done | 探针 `cache_le`（import 在；零 id → -10；不开 AccountRoot） |
 
 
 积压：[backlog.md](backlog.md)

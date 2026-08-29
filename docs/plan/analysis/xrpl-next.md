@@ -78,9 +78,9 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 | id | host | 成功长什么样 | 失败怎么办 |
 |---|---|---|---|
-| **wsm-021** | `trace_num` / `trace_account` | 本地调用不 `tecWASM_REJECTED`，账本状态可预期 | 继续禁；不当 EVM LOG |
+| **wsm-021** | `trace_num` | **已绿**（AlphaNet poke=0）。调试日志，**不开 Sdk.Log** | EVM LOG |
 | **wsm-022** | `get_tx_field` 扩 sfield（fee / seq） | `XrplCtx` 多两个槽对得上 | 只留 sfAccount |
-| **wsm-023** | `cache_le` + `get_ledger_obj_field` | 读 genesis AccountRoot 余额 | 不做 `Sdk.AccountRoot` |
+| **wsm-023** | `cache_le` | **import 已绿**；零 id → -10。还没读 Balance | 不做 `Sdk.AccountRoot` |
 | **wsm-024** | nested object field | 写/读一层 JSON 对象 | 不当 Map |
 | **wsm-025** | AlphaNet Parameters 502 | 公共 `submit` 带 UINT64 不再 502 | 活网继续零参数 |
 
@@ -115,8 +115,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 ## 4. 建议立刻做的顺序
 
-1. **wsm-021 `trace_num` 探针** — 半日；决定日志能不能当工程门。
-2. **wsm-023 `cache_le` 探针** — 读账本是 Rust SDK 的主菜，也是「复杂」的分界。
+1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
+2. **wsm-023 `cache_le` 探针** — **import 已绿**（零 id -10）。下一刀才是 keylet + `le_field(Balance)`。
 3. **wsm-026 用户 ContractData** — 设计 + 一刀 Example：`credit` / `debit` 按 caller 分槽。
    零参数活网：`credit` 给 caller 加 1，`get` 读 caller 槽（仍是 JSON key，但 key 可以是
    固定 `"bal"` 挂在 **用户** Owner 下，不是合约 Owner）。
