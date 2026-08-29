@@ -39,8 +39,9 @@ fail closed。
 - XLS-0102 目前只钉 Smart Escrow host；同名函数将可从 smart contracts 访问。
   v0 只用 `host_lib.{home_le_field,set_data}`；
 - 工程门分两层：`runtime-tests/xrpl/check.sh` 断言产物形状（import 表 + wasm
-  magic）。本地链部署是 [wsm-003](../plan/tasks/wsm-003.md)。缺 Docker /
-  bedrock 则 skip。不是「artifact 已被证明」。
+  magic）；`runtime-tests/xrpl/counter.sh` 起 Bedrock 本地节点、部署本仓
+  `Counter.wasm`（`--skip-build`）、跑 initialize / increment / overflow / get。
+  缺 Docker / bedrock 则 skip。不是「artifact 已被证明」。
 
 ## 摘要
 
