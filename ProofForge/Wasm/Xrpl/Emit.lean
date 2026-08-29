@@ -97,6 +97,10 @@ private def usesKind (ops : Array Ops.Op) (want : Ops.ValKind) : Bool :=
       | _ => false
   ops.any (op 32)
 
+/-- Reuse dead param/store/env scratch without touching account bytes or the key blob at 64+.
+The first word is copied to a local immediately, before slot loading overwrites this region. -/
+private def parentHashOff : Nat := 20
+
 /-- XRPL views return `i64`, so a negative host status cannot be propagated as a result. -/
 private def failOnHostError (level : Nat) (view : Bool) : Array String :=
   let action := if view then "unreachable" else "(return (local.get $st))"
@@ -199,7 +203,8 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
         ]
       else
         #[
-          indent level ("(local.set $st (call $" ++ host.getLedgerSqn ++ "))"),
+          indent level ("(local.set $st (call $" ++ host.getLedgerSqn ++ "))")
+        ] ++ err ++ #[
           indent level "(local.set $pf_x_xsqn (i64.extend_i32_u (local.get $st)))"
         ]
     let time :=
@@ -213,16 +218,18 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
         ]
       else
         #[
-          indent level ("(local.set $st (call $" ++ host.getParentTime ++ "))"),
+          indent level ("(local.set $st (call $" ++ host.getParentTime ++ "))")
+        ] ++ err ++ #[
           indent level "(local.set $pf_x_xtime (i64.extend_i32_u (local.get $st)))"
         ]
     let hash :=
       if !needHash || host.getParentHash.isEmpty then #[]
       else #[
         indent level ("(local.set $st (call $" ++ host.getParentHash ++
-          " (i32.const 160) (i32.const 32)))")
+          " (i32.const " ++ toString parentHashOff ++ ") (i32.const 32)))")
       ] ++ err ++ #[
-        indent level "(local.set $pf_x_xhash0 (i64.load (i32.const 160)))"
+        indent level ("(local.set $pf_x_xhash0 (i64.load (i32.const " ++
+          toString parentHashOff ++ ")))")
       ]
     let fee :=
       if !needFee || host.getBaseFee.isEmpty then #[]
@@ -235,7 +242,8 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
         ]
       else
         #[
-          indent level ("(local.set $st (call $" ++ host.getBaseFee ++ "))"),
+          indent level ("(local.set $st (call $" ++ host.getBaseFee ++ "))")
+        ] ++ err ++ #[
           indent level "(local.set $pf_x_xfee (i64.extend_i32_u (local.get $st)))"
         ]
     let rootReady :=

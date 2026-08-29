@@ -116,6 +116,30 @@ def get (_s : State) : UInt64 := xrplSha512HalfLit "非ASCII"
 
 end Tests.XrplHashNonAscii
 
+namespace Tests.XrplParentTime
+
+open ProofForge.Wasm.Xrpl.Sdk
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (_seed : UInt64) : State := { value := 0 }
+
+@[pf_entry]
+def set (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then .ok ({ value := 1 }, 1) else .error .overflow
+
+@[pf_entry]
+def get (_s : State) : UInt64 := Context.parentTime
+
+end Tests.XrplParentTime
+
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
   let env ← getEnv
@@ -746,12 +770,33 @@ elab "#pf_xrpl_rt2_emit_check " n:ident : command => do
           "(func (export \"stamp\") (result i32)",
           "(func (export \"getHash\")",
           "(func (export \"getFee\")",
-          "(call $get_parent_ledger_hash",
-          "(call $get_base_fee)"
+          "(call $get_parent_ledger_hash (i32.const 20) (i32.const 32))",
+          "(local.set $pf_x_xhash0 (i64.load (i32.const 20)))",
+          "(local.set $st (call $get_base_fee))"
         ]
         for anchor in anchors do
           unless source.contains anchor do
             throwError s!"wasm emit is missing rt2 anchor: {anchor}\n{source}"
+        let feeGuard := "(local.set $st (call $get_base_fee))\n" ++
+          "    (if (i32.lt_s (local.get $st) (i32.const 0))"
+        unless source.contains feeGuard do
+          throwError s!"wasm emit does not guard negative get_base_fee result:\n{source}"
+        match Extract.extractModuleIR env `Examples.XrplCtx none >>=
+            ProofForge.Wasm.Xrpl.IR.fromExtracted >>= ProofForge.Wasm.Xrpl.Emit.emit with
+        | .error reason => throwError reason
+        | .ok ctxSource =>
+          let guarded := "(local.set $st (call $get_ledger_sqn))\n" ++
+            "    (if (i32.lt_s (local.get $st) (i32.const 0))"
+          unless ctxSource.contains guarded do
+            throwError s!"wasm emit does not guard negative get_ledger_sqn result:\n{ctxSource}"
+        match Extract.extractModuleIR env `Tests.XrplParentTime none >>=
+            ProofForge.Wasm.Xrpl.IR.fromExtracted >>= ProofForge.Wasm.Xrpl.Emit.emit with
+        | .error reason => throwError reason
+        | .ok timeSource =>
+          let guarded := "(local.set $st (call $get_parent_ledger_time))\n" ++
+            "    (if (i32.lt_s (local.get $st) (i32.const 0))"
+          unless timeSource.contains guarded do
+            throwError s!"wasm emit does not guard negative get_parent_ledger_time result:\n{timeSource}"
         unless !source.contains "blockhash" do
           throwError "wasm emit must not mention blockhash"
         logInfo m!"proofforge-xrpl-rt2: {source.length} bytes of WAT passed rt2 anchor check"
