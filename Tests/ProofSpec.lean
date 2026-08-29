@@ -5,6 +5,7 @@ import Examples.Token
 import Examples.Tree
 import ProofForge.Evm.Sdk.Pausable
 import ProofForge.Evm.Sdk.Fungible
+import ProofForge.Evm.Sdk.Reentrancy
 
 /-!
 # 第一批 kernel 证明的连通性抽查
@@ -31,6 +32,7 @@ import ProofForge.Evm.Sdk.Fungible
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
 - `Examples.Tree.removeNode_size` / `init_wf` / `allocNode_wf`：
   `propext`（部分含 `Quot.sound`）
+- `Evm.Sdk.Reentrancy` fail-closed 包（unknown_neither / 互斥）：`propext`
 - `Evm.Sdk.Fungible` guard 链（canTransfer→canDebit/canCredit、canSpend→canDecrease）：
   两个零公理
 - `Evm.Sdk.Pausable` fail-closed 包（unknown_neither / 互斥 / 转换常值 /
