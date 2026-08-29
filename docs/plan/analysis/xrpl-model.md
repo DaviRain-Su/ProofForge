@@ -11,6 +11,7 @@ NEAR 是「每个合约账户自带 WASM + 持久 trie 存储 + 成熟 runtime �
 XRPL（XLS-0101）是「账本上本来就有 AccountRoot / Trust line / AMM；WASM 是一次 `ContractCall` 里跑的脚本，经 `host_lib` 摸这些对象，用户小状态塞进 **用户自己的** `ContractData` JSON」。逻辑一份，数据按账户分片——像 SVM，但不是每人一份 wasm（见 §1.1c）。
 树状结构不是「关联」就能搬：SVM 树长在程序拥有的账户字节里（见 §1.1d）。
 Map / PDA / Uniswap：用户口袋有，程序金库没有（见 §1.1e）。
+主账本 AMM 是 2024 起的协议对象（XLS-30），不是 WASM 写的（见 §1.1f）。
 
 它支持 WASM，**不等于**它是一条 WASM 智能合约链。WASM 在这里是账本对象的扩展，不是世界计算机。
 
@@ -164,10 +165,32 @@ swap(caller)
 
 - **能做的**：积分、每人一份余额、每人一份配置。比赛交「Lean 写出、AlphaNet 跑通的分户状态机」可以。
 - **现在做不了的 Uniswap**：共享池。没有 B，就没有「一笔 swap 改储备」。不能把池子储备写在 caller 卡片上（下一个用户看不见）。
-- **XRPL 自己的出路**：主账本已经有 **原生 AMM 对象**。真 swap 更该 `cache_le` 读 AMM + `submitTransaction` AMMDeposit/Withdraw，而不是在 wasm 里重建 Uniswap 存储。EVM 侧链才是 Solidity Uniswap。
+- **XRPL 自己的出路**：主账本已经有 **原生 AMM**（下一节）。真兑换该提交 `AMMDeposit` / Payment，而不是用 WASM 重建 Uniswap 存储。EVM 侧链才是 Solidity Uniswap。
 - **B 若以后绿了**（合约当 Owner，或规范里的合约自己的 `ContractData`）：才能谈程序金库 + 用户卡两边写。那仍不是 C。
 
-担心「能不能上复杂项目」时，先问：状态是 **每人一份** 还是 **全网一份**。前者有；后者 AlphaNet 拒了。
+担心「能不能上复杂项目」时，先问：状态是 **每人一份** 还是 **全网一份**。前者有；后者 WASM 拒了。全网一份的池子在主账本上是 **协议对象**，不是合约存储（§1.1f）。
+
+### 1.1f 原生 AMM 不是 WASM 写出来的
+
+之前说「按 WASM 的存储实现不了共享池」和「主账本已经有 AMM」**不矛盾**。那是两套东西：
+
+| | Uniswap on Ethereum | XRPL 原生 AMM（XLS-30） | 用 WASM 再写一个 Uniswap |
+|---|---|---|---|
+| 池子存在哪 | 合约 storage | **`AMM` 账本对象** + 一个特殊 `AccountRoot` 持有资产 | 合约 `ContractData`（写合约账户 **-22**） |
+| 公式谁算 | Solidity | **rippled C++**（`x*y=k`） | 我们的 wasm |
+| 怎么创建 | `constructor` / factory | 交易 **`AMMCreate`** | `ContractCreate` |
+| 怎么加池 / 换 | 合约函数 | **`AMMDeposit` / `AMMWithdraw` / `Payment`** | `ContractCall` |
+| 每交易对几个池 | 任意多个合约 | **协议层最多一个**（流动性不碎片化） | 若能写金库，仍是我们自己的碎片 |
+| 主网 | 多年 | **2024-03 amendment 已开** | `ContractCreate` **还没有** |
+
+XLS-30 自己写：AMM 是 **protocol native**，开发者 **不必** 为了兑换去写智能合约。储备在特殊账户的 Balance / trust line 上，不在 WASM JSON 里。任何人发 `AMMCreate`，共识按 C++ 规则改那个 `AMM` 对象——和 Payment 改 AccountRoot 是同一类机制。
+
+所以：
+
+- 「实现不了」指的是：**用我们这套 WASM 卡片，仿不出 Uniswap 那种合约金库。**
+- 「主账本已经有」指的是：**兑换功能 2024 起就是账本交易，跟 WASM 无关。** 不经过 `host_lib`，也不需要程序可写的 `ContractData`。
+- WASM 以后若要「用」这个 AMM：`cache_le` 读 `AMM` 对象（只读）+ `submitTransaction` 发 `AMMDeposit`。那是 **调用** 原生对象，不是 **实现** 一个池子。
+- 想自写曲线 / Uniswap v3 式合约：要么等 WASM 能写程序金库，要么走 **EVM 侧链**。主账本不会因为有了 WASM 就把 XLS-30 拆掉重写成合约。
 
 ### 1.2 钱和别人怎么动
 
