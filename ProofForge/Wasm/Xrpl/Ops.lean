@@ -40,6 +40,10 @@ inductive ValKind where
   | accountLitW0 (hex : String)
   | accountLitW1 (hex : String)
   | accountLitW2 (hex : String)
+  /-- Current ContractCall `sfFlags`, UInt32 zero-extended. -/
+  | txFlags
+  /-- Compile-time AccountID's AccountRoot.Balance in drops. Not a Map. -/
+  | litBalanceDrops (hex : String)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat

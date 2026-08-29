@@ -140,6 +140,9 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
 @[match_pattern] def Val.xrplAccountLitW0 (hex : String) : Val := xrplLeaf (.accountLitW0 hex)
 @[match_pattern] def Val.xrplAccountLitW1 (hex : String) : Val := xrplLeaf (.accountLitW1 hex)
 @[match_pattern] def Val.xrplAccountLitW2 (hex : String) : Val := xrplLeaf (.accountLitW2 hex)
+@[match_pattern] def Val.xrplTxFlags : Val := xrplLeaf .txFlags
+@[match_pattern] def Val.xrplLitBalanceDrops (hex : String) : Val :=
+  xrplLeaf (.litBalanceDrops hex)
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2

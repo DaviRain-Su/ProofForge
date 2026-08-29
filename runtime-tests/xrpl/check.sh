@@ -134,6 +134,37 @@ need_exports_nest = (
     '(func (export "get")',
     '(data (i32.const 64) "userbal")',
 )
+need_exports_step = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "bump") (result i32)',
+    '(func (export "propose") (result i32)',
+    '(func (export "accept") (result i32)',
+    '(func (export "get")',
+    'i64.eq',
+    '(i32.const 3)',
+    '(data (i32.const 64) "owner0owner1owner2pend0pend1pend2value")',
+)
+need_exports_role = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "bump") (result i32)',
+    '(func (export "setOp") (result i32)',
+    '(func (export "get")',
+    'i64.eq',
+    '(i32.const 3)',
+    '(data (i32.const 64) "owner0owner1owner2op0op1op2value")',
+)
+need_exports_peer = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "stamp") (result i32)',
+    '(func (export "get")',
+    '(data (i32.const 64) "drops")',
+)
+need_exports_flag = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "stamp") (result i32)',
+    '(func (export "get")',
+    '(data (i32.const 64) "flags")',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -171,6 +202,14 @@ for wat in wats:
         exports = need_exports_send
     elif wat.stem == "XrplNest":
         exports = need_exports_nest
+    elif wat.stem == "XrplStep":
+        exports = need_exports_step
+    elif wat.stem == "XrplRole":
+        exports = need_exports_role
+    elif wat.stem == "XrplPeer":
+        exports = need_exports_peer
+    elif wat.stem == "XrplFlag":
+        exports = need_exports_flag
     else:
         exports = need_exports_counter
     for needle in exports:

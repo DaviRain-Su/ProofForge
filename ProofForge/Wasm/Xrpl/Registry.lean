@@ -22,7 +22,11 @@ def entries : Array Entry := #[
   { name := "XrplRoot", digest := "a8e6569035ec2d13" },
   { name := "XrplTx", digest := "2a9d4e10cd7ecec9" },
   { name := "XrplSend", digest := "64eb128e0be5a2c6" },
-  { name := "XrplNest", digest := "5deed02b57389d2" }
+  { name := "XrplNest", digest := "5deed02b57389d2" },
+  { name := "XrplStep", digest := "8273bd4064e4745a" },
+  { name := "XrplRole", digest := "bae46704480482ee" },
+  { name := "XrplPeer", digest := "b808c0cc3278fb10" },
+  { name := "XrplFlag", digest := "d71a13301ce82878" }
   ]
 
 def names : Array String := entries.map (·.name)

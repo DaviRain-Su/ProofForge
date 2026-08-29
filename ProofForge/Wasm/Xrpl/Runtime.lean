@@ -94,4 +94,13 @@ Not EVM `selfBalance`. IOU/MPT fail closed (mantissa only). -/
 def xrplAccountLit (hex : String) : AccountId :=
   { w0 := xrplAccountLitW0 hex, w1 := xrplAccountLitW1 hex, w2 := xrplAccountLitW2 hex }
 
+/-- Current `ContractCall` Flags. Host: `tx_field(sfFlags=131074)`. -/
+@[irreducible] def xrplTxFlags : UInt64 := 0
+
+/-- Compile-time AccountID's XRP Balance in drops. Same host path as
+`xrplCallerBalanceDrops`, keylet from `hex`. Persist owner stays the caller. -/
+@[irreducible] def xrplLitBalanceDrops (hex : String) : UInt64 :=
+  let _ := hex
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

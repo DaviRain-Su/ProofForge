@@ -1,6 +1,6 @@
 # XRPL 下一阶段：复杂合约还差什么
 
-> 2026-08-29。HEAD `6cbe156`（wsm-033）之后。本文是 **wsm-018+** 的排期，
+> 2026-08-29。HEAD 本切片（wsm-038）之后。本文是 **wsm-018+** 的排期，
 > 接 [xrpl-sdk-gap.md](xrpl-sdk-gap.md) / [xrpl-runtime.md](xrpl-runtime.md)。
 > 学 EVM/SVM 的分层，不学 keccak slot / account bytes / CPI。
 >
@@ -24,6 +24,10 @@
 | `XrplHold` | Ownable + Pausable（状态码 4） |
 | `XrplMark` | owner 门后写 SHA-512Half 字面量 |
 | `XrplVec` | 编译期 3 槽表（Bedrock 本地；活网带参 502） |
+| `XrplStep` | TwoStep Ownable（`propose` / `accept`）；活网同钱包自提名 |
+| `XrplRole` | owner + operator；`setOp` 后 `requireOwnerOr` |
+| `XrplPeer` | 编译期 AccountID 的 XRP Balance（drops）；persist 仍是 caller |
+| `XrplFlag` | ContractCall Flags |
 
 这不是「只有一个 Counter」。这是 **单合约、命名 UInt64 槽、无循环、无用户目录**
 的状态机。EVM 的 Vault / ERC-20 / Uniswap 和 SVM 的 Token / Phoenix 都靠
@@ -100,8 +104,8 @@ SVM `BumpAllocator` 活在 **账户字节里的持久 heap**。XRPL 持久状态
 | id | 内容 | 活网怎么验 | 不做 |
 |---|---|---|---|
 | **wsm-018** VEC-8 | 编译期 `xs_0`…`xs_7`，仍 nested `if` | 带参，等 Parameters 502 解除；先 Bedrock | 不叫 `Storage.Vec`；不开 loop |
-| **wsm-019** Roles-2 | 两个 owner 三叶 + `requireOwner` 或 | 零参数：`renounce` 变体不够；要第二种子 | 不抄 EVM `Roles.Set2` 位图 |
-| **wsm-020** TwoStep | pending 三叶；`accept` 把 pending 写成 owner | 要第二把 AlphaNet 钱包 | 不新 Op |
+| **wsm-019** Roles-2 | **已绿**（`XrplRole`）。同钱包 `setOp` 自指 operator | 第二把钥匙才能证「非 owner 的 operator」 | 不抄 EVM `Roles.Set2` 位图 |
+| **wsm-020** TwoStep | **已绿**（`XrplStep`）。同钱包 `propose`+`accept` | 第二把钥匙才能证跨账户移交 | 不新 Op |
 
 A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
@@ -159,7 +163,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
    `amm_id` host 在（零 issue -15）。不开 Sdk.Map / Sdk.Amm。
 7. **wsm-036** — Lean `Context.accountLit hex` 覆盖存储 Owner。`XrplSend` 把 1 写到第二把钥匙的卡片。
 8. **wsm-037** — nested JSON `user_bal` → `{user:{bal}}`（AlphaNet）。不是 Map。
-9. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+9. **wsm-038** — TwoStep / dual role / `litBalanceDrops` / `txFlags` **已绿**。
+10. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 
@@ -169,6 +174,21 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 | 每用户余额的积分账本 | 不能 | wsm-026 |
 | 动 XRP 的 swap | 不能 | wsm-023 + wsm-030 |
 | EVM Uniswap 字节码 | 永远不要 | — |
+
+## 3.1 v0 能做完的已经做完
+
+本仓能接线的 Runtime / SDK 组合层（零参数、JSON 槽、三叶 AccountId、读 AccountRoot / tx_field、写别人卡片、nested JSON）到 wsm-038 收口。
+
+**节点挡住、本仓做不完：**
+
+| 缺口 | 现场 |
+|---|---|
+| 伪账户注资 / 发出 Payment | `emit_built_txn` = -196；Create `InstanceParameters` temMALFORMED；Payment 打合约 tecNO_PERMISSION |
+| 公共 ContractCall Parameters | HTTP 502 |
+| 程序拥有 ContractData | set 合约账户 = -22 |
+| Sdk.Amm / Sdk.Payments / Sdk.Map / Sdk.Nft | 上面三条没绿之前不开 |
+
+不要把 XRPL v0 说成「做完」。节点修之前，再切 SDK 也只是同一套叶子换名字。
 
 ## 4. 验收句
 
