@@ -14,8 +14,9 @@ Rust 源（`xrpl_wasm_std` 的 `get_current_contract_call` / `get_data` /
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
 | `Xrpl.Ops` | XRPL 方言 `ValKind` / `OpExt`（v0 无宿主叶子；`reserved` 仅保 inhabitance，`wellFormed` 拒绝） | 其它链的方言、XRPL host capability 键 |
-| `Xrpl.IR` | `extractRegistration`（经 Family 拒 svm/evm 叶）、v0 子集 fail-closed 检查、`Program` / `Method`、canonical digest（域 `xrpl-bedrock\|`） | Yul、sBPF、loop / vector / map |
-| `Xrpl.Emit` | `Program` → Bedrock 方言 Rust 源；checked `+ - * / %` → `checked_*` + 钉死错误码（1 overflow/underflow、2 divide-by-zero）；guard 算术 `wrapping_*`；view `-> u64`，mutating entry `-> i32` status | 真 XRPL host 语义、metering、部署 |
+| `Xrpl.Host` | 存储（`get_data`/`set_data`）、入口 ABI（`extern "C"` + `i32` 状态码 / `u64` view）、digest 域 `xrpl-bedrock\|`、header / prelude | 共享 Core→Rust 发射、v0 子集检查 |
+| `Xrpl.IR` | registration 实例化（经 Family 拒 svm/evm 叶）、方言类型别名、ext canonical 标签 | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
+| `Xrpl.Emit` | 薄封装：把 `Xrpl.Host.contract` 注入 `Wasm.Emit` | 发射逻辑本身 |
 | `Xrpl.Assemble` | zero-tool 写 `{name}.rs`（digest 行钉 canonical 身份） | rustc / cargo / bedrock / AlphaNet |
 | `Xrpl.Registry` | 可构建模块 + canonical digest | 部署声明 |
 | `Xrpl.Commands` | `#pf_xrpl_build` / `#pf_xrpl_dump` | 新 DSL |

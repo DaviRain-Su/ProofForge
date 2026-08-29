@@ -12,17 +12,23 @@ XRPL Bedrock 各自拥有不同的 host function、存储模型和入口 ABI；�
 
 ```text
 ProofForge/Wasm/
-  Family.lean     -- 本文件：家族级约定，不含任何链特化逻辑
-  Xrpl/           -- 每条具体链一个子目录（Ops / IR / Emit / Registry / Assemble / Commands）
+  Family.lean     -- 本文件：外来叶子 fail-closed 拒绝
+  Host.lean       -- 链间差异的注入面（存储 / host import / 入口 ABI）
+  IR.lean         -- 家族共享：程序形状、v0 子集、canonical 拼写（域由链注入）
+  Emit.lean       -- 家族共享：Core → Rust 发射（host contract 注入链特化文本）
+  Xrpl/           -- 每条具体链一个子目录
 ```
 
-家族层**只**共享跨链必然成立的最小约定：
+家族层共享且仅共享跨链必然成立的约定：
 
 - 对 svm / evm 叶子的 fail-closed 投影拒绝（`rejectValKind` / `rejectOpExt`）；
-- 语法约定：错误消息 `{target} rejects {svm|evm} {value|effect}`。
+- 语法约定：错误消息 `{target} rejects {svm|evm} {value|effect}`；
+- 经 Rust 编译到 wasm 的链所共用的 Core→Rust 程序形状、v0 子集检查、
+  canonical 拼写和发射器（`Wasm.IR` / `Wasm.Emit`）。
 
-家族层**禁止**共享：Plan、target IR、emitter、digest 域、宿主合同。这些全部由
-具体链子目录拥有；加第二条 WASM 链时新建 `Wasm/<Chain>/`，不横向修改既有链。
+家族层**禁止**共享：Plan、digest 域字符串、宿主合同实例。这三样由
+`Wasm/<Chain>/` 拥有（`Host.contract` 注入发射器；digest 域例如 `xrpl-bedrock|`）。
+加第二条 WASM 链时新建 `Wasm/<Chain>/`，不横向修改既有链的方言 / Host / Registry。
 -/
 
 namespace ProofForge.Wasm.Family
