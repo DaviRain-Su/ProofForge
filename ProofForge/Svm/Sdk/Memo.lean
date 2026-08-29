@@ -26,6 +26,15 @@ is callee account 1. -/
     #[{ acc := 0, signer := true, writable := false }]
     #[.ascii value]
 
+
+/-- wf → payload 长度 ≤ Memo.Ascii.maxBytes（512）。 -/
+theorem wf_bounded (value : String) (h : wellFormed value = true) :
+    value.length ≤ maxBytes := by
+  unfold wellFormed ProofForge.Svm.Memo.Ascii.wellFormed at h
+  simp at h
+  unfold maxBytes
+  exact h.1
+
 end Ascii
 
 /-- Compatibility spelling for the original fixed payload. New applications should select their
