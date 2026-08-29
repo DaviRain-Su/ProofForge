@@ -4,9 +4,8 @@ import ProofForge.Evm.Sdk
 Owner-minted bounded ERC-1155 consumer. The SDK owns the token-id key envelope, the
 (owner, id) balance and (owner, operator) operator maps, and checked mint/burn/transfer
 movement. This contract owns the immutable minter gate, zero-address policy, error ordering
-(`Unauthorized`/`ZeroAddress`/`Insufficient`), the entry-level pre-view key-envelope gate, and
-event usage (the existing Transfer event carries the moved amount; token ids and standard
-ERC-1155 typed events stay unlogged).
+(`Unauthorized`/`ZeroAddress`/`Insufficient`) and event usage (the existing Transfer event carries
+the moved amount; token ids and standard ERC-1155 typed events stay unlogged).
 -/
 
 namespace Examples.MultiToken
@@ -85,12 +84,10 @@ def transferFrom (s : State) (source to : Address) (tokenId : UInt256) (amount :
   else
     .ok (s, Erc1155.Balances.insufficient balances source tokenId amount)
 
-/-- Single-id balance view with the pre-view gate at entry level (view extraction only preserves
-entry-body branches): unencodable ids read as zero instead of aliasing a live balance. -/
+/-- Single-id balance view through the SDK-owned checked key-envelope gate. -/
 @[pf_entry]
 def balanceOf (_s : State) (owner : Address) (tokenId : UInt256) : UInt256 :=
-  if !Erc1155.canEncode tokenId then UInt256.zero
-  else Erc1155.Balances.balanceOfEncoded balances owner tokenId
+  Erc1155.Balances.balanceOf balances owner tokenId
 
 @[pf_entry]
 def isApprovedForAll (_s : State) (owner operator : Address) : Bool :=

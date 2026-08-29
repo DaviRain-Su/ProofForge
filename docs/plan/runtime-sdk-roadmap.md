@@ -672,16 +672,17 @@ R5-014 独立集成。详见 [R5-013](tasks/r5-013.md)。
 R5-014 已完成 bounded single-id ERC-1155 core：`Evm.Sdk.Erc1155` 只组合两个现有
 compile-time hashed-map handles，提供 UInt256 balance、operator approval、checked credit/
 debit/mint/burn 与 same-address-safe transfer。当前 token id envelope 与 Erc721 一样限制为
-top limb 零；auth/write predicates 和两个 consumer 的 entry-level views 都在 `tokenKey`
-截断前 gate。MultiToken/CraftToken 独立拥有 minter/cap/supply/error/event policy；batch、
-receiver callback、metadata URI、standard typed events 与 full-width id 继续 fail closed。
-两个 extractor condition 限制已显式记录为后续 hardening，不以隐藏 alias 或 magic constant
-掩盖。详见 [R5-014](tasks/r5-014.md)。
+top limb 零；auth/write predicates 与 SDK checked balance view 都在 `tokenKey` 截断前 gate，
+两个 consumer 不再重复 view branch。MultiToken/CraftToken 独立拥有 minter/cap/supply/error/
+event policy；batch、receiver callback、metadata URI、standard typed events 与 full-width id
+继续 fail closed。
+Extract 通用保留 inline helper control flow、展开命名 UInt256 constant limbs，并拒绝把 unmarked
+Bool host/runtime stub 常量折叠；没有增加 ERC-1155-specific lowering。详见 [R5-014](tasks/r5-014.md)。
 
 ### R6 — 双目标验收
 
 - CI-001 已把 shared Lean guards、SVM build/Mollusk/Surfpool 与 EVM build/Anvil 拆成三条
-  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 349-job Lean aggregate 不再在两个
+  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 356-job Lean aggregate 不再在两个
   target lane 重复执行。详见 [CI-001](tasks/ci-001.md)。
 - shared semantic fixtures：Counter、Escrow/Vault、Fungible ledger；共享行为规范，使用
   target-owned storage/ABI binding，不强求同一份物理 layout source。

@@ -1276,7 +1276,7 @@ def evictSeat (s : State) : Except Error (State × UInt64) :=
   evictSeatFor s (signerKey 1) (accKeyWord 1 1) (accKeyWord 1 2) (accKeyWord 1 3)
 
 /-- 官方 FIFORestingOrder 是否过期。0 是哨兵。 -/
-def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
+@[pf_inline] def expired (lastSlot lastTime nowSlot nowTime : UInt64) : Bool :=
   (lastSlot ≠ 0 && lastSlot < nowSlot) ||
     (lastTime ≠ 0 && lastTime < nowTime)
 

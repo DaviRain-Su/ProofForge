@@ -874,12 +874,16 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
             endsWith baseE ".evmDomainSeparator" then
           some (.ext (.evm (.domainSep256 limb.toNat)) #[])
         else
-          match asVal env fuel baseE with
-          | some b => some (flattenField b leaf)
+          let projected := mkApp (mkConst (limbConst leaf)) baseE
+          match reduceCtorProjection? env projected with
+          | some reduced => asVal env fuel reduced
           | none =>
-            match strip baseE with
-            | .bvar i => some (flattenField (.arg i) leaf)
-            | _ => none
+            match asVal env fuel baseE with
+            | some b => some (flattenField b leaf)
+            | none =>
+              match strip baseE with
+              | .bvar i => some (flattenField (.arg i) leaf)
+              | _ => none
   else if let some leaf := addr20ProjLeaf n then
     let args := e.getAppArgs
     if args.isEmpty then none
@@ -1824,21 +1828,8 @@ private def asBoolVal (env : Environment) (fuel : Nat) (e : Expr) : Option Ops.V
       match asCmp env e with
       | some (cmp, lhs, rhs) => some (.select cmp lhs rhs (.lit 1) (.lit 0))
       | none =>
-        match e.getAppFn.constName? with
-        | some name =>
-          match env.find? name with
-          | some (.defnInfo info) =>
-            let rec resultType (fuel : Nat) (type : Expr) : Expr :=
-              match fuel with
-              | 0 => type
-              | fuel' + 1 =>
-                match strip type with
-                | .forallE _ _ body _ => resultType fuel' body
-                | type => type
-            if (resultType 16 info.type).getAppFn.constName? == some ``Bool then
-              asBoolVal env fuel' (info.value.beta args)
-            else none
-          | _ => none
+        match unfoldUserHelper env e with
+        | some (_, unfolded) => asBoolVal env fuel' unfolded
         | none => none
 
 private def asCondition (env : Environment) (e : Expr) : Option (Ops.Cmp × Ops.Val × Ops.Val) :=
@@ -6421,6 +6412,15 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if (isConstNamed e0 ``ite || isConstNamed e0 ``dite) && e0.getAppArgs.size ≥ 5 then
       -- 已经是比较 / dite，不要再往下搜 forIn（循环体自己就是 ite）。
       pure ()
+    else if let some (name, unfolded) := unfoldUserHelper env e then
+      -- A marked helper owns its control flow. Expose that control flow before recursive
+      -- component/CPI discovery, which must never select a nested effect and erase an enclosing
+      -- branch (notably a checked wide-value view helper).
+      match decodeExpr env fuel' (substIteLets 256 unfolded) (stateful := stateful)
+          (preserveLocals := preserveLocals) (localDepth := localDepth)
+          (stateType? := stateType?) (deepScalars := deepScalars) with
+      | .ok ops => return .ok ops
+      | .error reason => return .error s!"extract/unsupported: inline {name}: {reason}"
     else if let some write := decodeAccDataWordSetAt env (normalizeStorageEffect env e) then
       -- `accDataWordSetAt*` returns its stored value at the source boundary. Keep that return
       -- contract available to reusable POD/container facades without adding another operation.
@@ -6789,12 +6789,6 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := decodeInvokeArgs env e <|> findInvoke env 8 e then
       return invokeOpsWithRet env e inv
-    else if let some (name, unfolded) := unfoldUserHelper env e then
-      match decodeExpr env fuel' (substIteLets 256 unfolded) (stateful := stateful)
-          (preserveLocals := preserveLocals) (localDepth := localDepth)
-          (stateType? := stateType?) (deepScalars := deepScalars) with
-      | .ok ops => return .ok ops
-      | .error reason => return .error s!"extract/unsupported: inline {name}: {reason}"
     else if let some reduced := reduceUInt64NewtypeMatch? env e then
       return decodeExpr env fuel' reduced (stateful := stateful)
         (preserveLocals := preserveLocals) (localDepth := localDepth)

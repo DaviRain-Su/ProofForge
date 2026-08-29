@@ -16,14 +16,12 @@ heap allocation, or host Map/Array ever reaches contract state.
 `AddressPairMap256` keys are `Address` pairs, so a token id is accepted only when its top UInt256
 limb is zero (`canEncode`): the supported id space is 192-bit. Every authorization and mutation
 predicate gates on `canEncode` *before* `tokenKey` truncation, and consumers gate every view the
-same way. The gate must sit at entry level because view extraction currently recognizes only
-branches written in the entry body; the raw SDK read is therefore named `balanceOfEncoded` to make
-its `canEncode` precondition visible rather than presenting a footgun as a checked `balanceOf`.
-`id + 2^192` can never alias a live `(owner, id)` balance through a view, authorization, or write.
+same way through the checked `balanceOf` helper. `id + 2^192` can never alias a live `(owner, id)`
+balance through a view, authorization, or write.
 
 ## Owned surface
 
-Single-id encoded balance reads, `setApprovalForAll`/`isApprovedForAll`, checked mint/credit,
+Single-id checked balance reads, `setApprovalForAll`/`isApprovedForAll`, checked mint/credit,
 checked burn/debit, and alias-safe `transfer` decisions/effects (equal source/destination is a
 successful no-op after the debit gate instead of two writes through the same hashed key). Credit
 rejects UInt256 wraparound; debit rejects underflow.
@@ -55,12 +53,18 @@ abbrev Operators := Storage.AddressPairMap
 
 namespace Balances
 
-/-- O(1) single-id balance read after the entry-level pre-view gate. The explicit `Encoded` suffix
-records the precondition `canEncode tokenId`; without it `tokenKey` would truncate and could alias
-another id. -/
+/-- O(1) single-id balance read after an explicit key-envelope check. The `Encoded` suffix records
+the precondition `canEncode tokenId`; without it `tokenKey` would truncate and could alias another
+id. Prefer the checked `balanceOf` facade at application boundaries. -/
 @[pf_inline] def balanceOfEncoded (balances : Balances) (owner : Address) (tokenId : UInt256) :
     UInt256 :=
   balances.get owner (tokenKey tokenId)
+
+/-- O(1) single-id balance read with the key-envelope gate inside the reusable SDK helper.
+Unencodable ids return zero and never reach the truncated map key. -/
+@[pf_inline] def balanceOf (balances : Balances) (owner : Address) (tokenId : UInt256) :
+    UInt256 :=
+  if canEncode tokenId then balanceOfEncoded balances owner tokenId else UInt256.zero
 
 /-- Credit is valid when the id encodes and the addition cannot wrap UInt256. -/
 @[pf_inline] def canCredit (balances : Balances) (owner : Address)

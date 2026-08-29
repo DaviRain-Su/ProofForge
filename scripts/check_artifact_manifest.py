@@ -39,14 +39,14 @@ class TargetSpec:
 SVM = TargetSpec(
     key="svm",
     registry_rel=Path("ProofForge/Svm/Registry.lean"),
-    expected_count=56,
+    expected_count=57,
     suffixes=(".so", ".s", ".idl.json"),
     digest_suffix=".s",
 )
 EVM = TargetSpec(
     key="evm",
     registry_rel=Path("ProofForge/Evm/Registry.lean"),
-    expected_count=26,
+    expected_count=28,
     suffixes=(".bin", ".yul", ".abi.json"),
     digest_suffix=".yul",
 )

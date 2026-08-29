@@ -20,10 +20,7 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
--- Application-owned per-id supply cap. NOTE: conditions must spell the literal inline — an
--- example-local `UInt256` constant inside an extracted branch condition is not unfolded by the
--- current Extract condition path and silently degrades. `maxPerId` pins the value for the spec;
--- keep the literal in `capped` in sync (guarded by Tests.EvmErc1155Spec).
+-- Application-owned per-id supply cap.
 @[pf_inline] def maxPerId : UInt256 := ⟨1000, 0, 0, 0⟩
 
 @[pf_inline] def balances : Erc1155.Balances :=
@@ -41,7 +38,7 @@ writes must stay behind the same `canEncode` envelope as the balance core. -/
   supply.nextAdd (Erc1155.tokenKey tokenId) amount
 
 @[pf_inline] def capped (tokenId : UInt256) (amount : UInt256) : Bool :=
-  UInt256.ge ⟨1000, 0, 0, 0⟩ (nextSupply tokenId amount)
+  UInt256.ge maxPerId (nextSupply tokenId amount)
 
 @[pf_entry]
 def init (_owner : Address) : State :=
@@ -107,10 +104,9 @@ def transferFrom (s : State) (source to : Address) (tokenId : UInt256) (amount :
 
 @[pf_entry]
 def balanceOf (_s : State) (owner : Address) (tokenId : UInt256) : UInt256 :=
-  if !Erc1155.canEncode tokenId then UInt256.zero
-  else Erc1155.Balances.balanceOfEncoded balances owner tokenId
+  Erc1155.Balances.balanceOf balances owner tokenId
 
-/-- Per-id supply view with the same pre-view gate as the balance core. -/
+/-- Per-id supply view with the same key-envelope gate as the balance core. -/
 @[pf_entry]
 def supplyOf (_s : State) (tokenId : UInt256) : UInt256 :=
   if !Erc1155.canEncode tokenId then UInt256.zero
