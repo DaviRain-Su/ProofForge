@@ -168,7 +168,7 @@ elab "#pf_guard_transient_bytes" : command => do
   unless filtered bytesStep afterFinish == #["begin", "finish", "length"] do
     throwError "bytesAfterFinish did not preserve stale-handle validation order"
   -- Same-kind multi-handle evidence: two compile-time Bytes slots in the dedicated
-  -- `Examples.TransientPair` module decode through the same component bridge with distinct
+  -- `Examples.TransientPair` consumer decode through the same component bridge with distinct
   -- erased words and per-slot isolation.
   let pairSource ←
     match ProofForge.Extract.extractModuleIR env `Examples.TransientPair with

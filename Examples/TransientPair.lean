@@ -5,8 +5,8 @@ import ProofForge
 
 This example is the non-Phoenix consumer for the two compile-time handle slots of each bounded
 transient container kind (`ProofForge.Svm.Sdk.Transient`: two `Vector64` slots, two `Bytes`
-slots). It is deliberately unaggregated: `Examples.lean`, the registries, and the `MemoryOps`
-digest fixtures are coordinator-owned wiring, so this module stays independent until integration.
+slots). It remains independent from `MemoryOps` while the normal `Examples` umbrella and SVM
+registry build it as a first-class consumer.
 
 Every method here composes the same shared downward bump heap and the same target-owned lifecycle
 interpreter as `Examples.MemoryOps`; only the same-kind slot isolation, unbegun-slot, and

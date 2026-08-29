@@ -121,7 +121,7 @@ elab "#pf_guard_transient_vector" : command => do
     throwError "vectorAfterFinish did not preserve stale-handle validation order"
   -- Same-kind multi-handle evidence: two compile-time Vector64 slots decode through the same
   -- component bridge with distinct erased words and the shared lifecycle order. The evidence
-  -- lives in the dedicated unaggregated `Examples.TransientPair` module.
+  -- lives in the dedicated `Examples.TransientPair` consumer.
   let pairSource ←
     match ProofForge.Extract.extractModuleIR env `Examples.TransientPair with
     | .ok program => pure program

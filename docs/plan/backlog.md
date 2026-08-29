@@ -60,6 +60,7 @@ R3-015 shared transient lifecycle emitter、
 R3-016 bounded transient log-data binding、
 R3-017/018 checked transient Vector64/Bytes pop、R3-019 shared transient truncate、
 R3-020 rent-exempt System/PDA create policy、
+R3-021 two-slot same-kind transient handle isolation、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -442,8 +443,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   只关闭 handle，不伪造 deallocation；pointer 只存在于 target-owned metadata/syscall 邻接
   代码，不进入 source、IR value 或 account state。MemoryOps 与 AccountView 独立消费，且
   effect-preserving Extract 边界逐方法钉死 begin→mutation→query→finish 顺序；没有新增
-  top-level Ops/IR/main-Emit recipe。详见 `docs/plan/tasks/r3-012.md`。多个同时 active vector、
-  通用元素、pop/insert/remove/iteration 仍是后续 R3 工作。
+  top-level Ops/IR/main-Emit recipe。详见 `docs/plan/tasks/r3-012.md`。R3-021 后续加入两个
+  同类型 slot；通用元素、更多 slot、insert/remove/iteration 仍是后续 R3 工作。
 
 - R3-013 source-visible transient bounded bytes 已完成：`Svm.Sdk.Transient.Bytes` 以编译期
   byte capacity 绑定同一 32 KiB downward bump allocator，提供 begin/push/set/get/length/
@@ -470,8 +471,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   active/capacity gate、clear 与 non-reclaiming finish；两个具体 emitter 只保留 u64/byte
   element 操作与各自错误。source API、IR digest、assembly byte count 和 Mollusk 行为不变，
   没有新增 top-level Ops/IR/CFG/main-Emit recipe 或 pointer-valued source/state。详见
-  `docs/plan/tasks/r3-015.md`。下一切片可在该 lifecycle 上增加同类型多 handle 或 generic
-  POD/record writer，而不再复制 allocator/metadata assembly。
+  `docs/plan/tasks/r3-015.md`。R3-021 已在该 lifecycle 上加入同类型双 handle；generic
+  POD/record writer 或更多 slot 仍不需要复制 allocator/metadata assembly。
 
 - R3-016 bounded transient log-data binding 已完成：`Transient.Bytes.logData` 把 active prefix
   作为一个官方 `sol_log_data` field 发布；`SolBytes` descriptor 只在 syscall 邻接的 16-byte
@@ -511,6 +512,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Mollusk 在自定义 Rent 下分别核对 payer debit、exact new-account balance/space/owner。digests
   `6ee1719e05c53163` / `ef405b71cc52f3ec`，ELF 9,584 / 14,408 B。详见
   `docs/plan/tasks/r3-020.md`。
+
+- R3-021 same-kind transient handle isolation 已完成：`Vector64.bounded` / `.boundedAlt` 与
+  `Bytes.bounded` / `.boundedAlt` 各提供两个编译期 slot。共享 handle-word contract 把 slot 与
+  32-bit capacity payload 在 source 消除前组合；共享 lifecycle interpreter 以 32-byte stride
+  选择独立 pointer/length/capacity/active metadata bank，每次 begin 仍从同一个 official-shaped
+  downward bump heap 获得互不重叠的 payload。clear/truncate/pop/finish、unbegun-slot 与 OOM
+  均按 slot 隔离；四个 handle 可在一个 invocation 同时 active。没有新增 Runtime leaf、
+  top-level Ops/IR/main-Emit recipe 或 persistent pointer。独立 `TransientPair` digest
+  `899815d9f910e597`、assembly 98,699 B、ELF 31,520 B，Mollusk 7/7；详见
+  `docs/plan/tasks/r3-021.md`。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
