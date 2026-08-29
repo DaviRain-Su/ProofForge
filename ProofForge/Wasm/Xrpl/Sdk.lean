@@ -59,6 +59,15 @@ namespace Context
 
 end Context
 
+namespace Access
+
+/-- Owner gate. Use as `if Access.requireOwner owner then … else .error .unauthorized`.
+Not EVM `Revert.unauthorized(address)`. -/
+@[pf_inline] def requireOwner (owner : AccountId) : Bool :=
+  AccountId.eq Context.caller owner
+
+end Access
+
 namespace Hash
 
 /-- Compile-time ASCII SHA-512Half, first little-endian UInt64. Not `sha256Lit`. -/
