@@ -402,5 +402,27 @@ theorem boundedVec_wf_count_disjoint (vec : BoundedVec) (w : Nat)
   rw [heq] at hfw
   omega
 
+
+
+/-- RbTree 的 links 和 parentColor 字段在同一账户（sameShape 保证）。 -/
+theorem rbTree_wf_same_region {tree : RbTree} {maxCapacity : Nat}
+    (h : tree.wellFormed maxCapacity = true) :
+    tree.links.region.account = tree.parentColor.region.account ∧
+    tree.links.region.strideWords = tree.parentColor.region.strideWords ∧
+    tree.links.region.capacity = tree.parentColor.region.capacity := by
+  simp only [RbTree.wellFormed, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  have hs : tree.links.region.sameShape tree.parentColor.region = true :=
+    h.1.1.1.1.1.2
+  simp only [Region.sameShape, Bool.and_eq_true, beq_iff_eq] at hs
+  exact ⟨hs.1.1.1.1, hs.1.1.1.2, hs.1.1.2⟩
+
+/-- RbTree 的 parentColor 字段在 links 槽的 stride 内。 -/
+theorem rbTree_wf_parentColor_contained {tree : RbTree} {maxCapacity : Nat}
+    (h : tree.wellFormed maxCapacity = true) :
+    tree.links.firstWord ≤ tree.parentColor.firstWord ∧
+    tree.parentColor.firstWord < tree.links.firstWord + tree.links.region.strideWords := by
+  simp only [RbTree.wellFormed, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  exact ⟨h.1.2, h.2⟩
+
 end Proofs
 end ProofForge.Svm.Sdk.Storage

@@ -49,6 +49,8 @@ import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage
 import Examples.GuardedPayout
+import Examples.Collectible
+import Examples.Badge
 import Examples.TipJar
 import Examples.Lang
 import Examples.Vault
