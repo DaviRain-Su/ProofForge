@@ -37,6 +37,27 @@ EVM                         SVM                        XRPL (XLS-0101)
 
 本仓 WAT：`(memory (export "memory") 1)`，64KiB，偏移钉死（0..19 Owner、20.. 参数、64+ 槽名）。那是 host 进出的 scratch，不是持久堆。SVM `BumpAllocator` 活在账户字节里，所以 Vec/Map 能跨交易；XRPL 不能把 bump 当 SDK 底座。
 
+### 1.0 NEAR 也有线性内存——分配器不是 Map
+
+NEAR 合约同样只有一块 wasm 线性内存。`near-sdk` 默认全局分配器是 **`wee_alloc 0.4.5`**
+（`near-sdk/src/lib.rs`：`#[global_allocator] static ALLOC: wee_alloc::WeeAlloc`）。
+它管的是本次调用里的 `Vec` / `String` / 序列化缓冲。
+
+持久集合 **不** 住在这个堆里：
+
+| 层 | NEAR | XRPL 今天 |
+|---|---|---|
+| 调用内堆 | `wee_alloc` → wasm linear memory | 固定偏移 scratch（无 malloc） |
+| 持久 KV | `env.storage_write` / `storage_read`（host `env`） | `set_data_object_field` → `ContractData` JSON |
+| `Vector` / `LookupMap` | 每个元素一个 **存储 key**（`prefix \|\| index`），`Drop` 时 `storage_write` | 没有任意 key 的 host；命名槽，Owner=caller |
+| 跨 `ContractCall` 的指针 | **无效**。下次调用 `state_read` 重建 | **无效**。XLS-0102 每次新建 VM |
+
+所以：NEAR 能做 Map，是因为 runtime 给了 **持久 trie**（`storage_write`），不是因为有了 `wee_alloc`。
+把 `wee_alloc` 搬到 XRPL 只能得到更好的本次调用缓冲；`Sdk.Map` 仍然假。
+XRPL 要对齐 NEAR 集合，缺的是 **任意 key 的持久 host**（或用户 ContractData），不是分配器。
+
+Lean 合约也不走 Rust `#[global_allocator]`：本仓发射 WAT 直接写死偏移，不链 wee_alloc。
+
 ### 1.2 钱和别人怎么动
 
 | | EVM | SVM | XRPL WASM |
@@ -78,7 +99,8 @@ XRPL 主账本 WASM 是另一条时间线和另一套合同：
 |---|---|---|
 | 主网合约 | 2018 起 | **还没有** `ContractCreate` |
 | 公开能跑的网 | mainnet / testnet | AlphaNet（本仓 21337，`3.3.0-rc1`）；旧 nerdnest 21465 已死 |
-| Runtime 表 | 多年稳定 `env` | Bedrock 本地名 ≠ XLS-0102 名；本仓要两套 host |
+| Runtime 表 | 多年稳定 `env`（含 `storage_write`） | Bedrock 本地名 ≠ XLS-0102 名；本仓要两套 host |
+| 分配器 | `wee_alloc`，**仅本次调用** | 固定 scratch；不要搬 wee_alloc 当 Map |
 | 持久存储 | 合约 trie，任意 key | JSON 命名槽；合约当 Owner 被拒 |
 | SDK | `near-sdk-rs` 覆盖存储/Promise/集合 | 官方 crate **以 escrow 为主**；智能合约 façade 薄 |
 | 钱 | 合约账户有余额，能转 | 改 XRP 要再提交 Payment；wasm 里 `x +=` 不动链上 XRP |
