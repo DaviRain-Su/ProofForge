@@ -25,6 +25,8 @@ import Examples.XrplStep
 import Examples.XrplRole
 import Examples.XrplPeer
 import Examples.XrplFlag
+import Examples.XrplTab
+import Examples.XrplHand
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -60,7 +62,9 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRole" == some "bae46704480482ee"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPeer" == some "b808c0cc3278fb10"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplFlag" == some "d71a13301ce82878"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTab" == some "71c98e39c2ee1a4f"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHand" == some "5c6813950576cdda"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -116,6 +120,10 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplPeer
 
 #pf_xrpl_build Examples.XrplFlag
+
+#pf_xrpl_build Examples.XrplTab
+
+#pf_xrpl_build Examples.XrplHand
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -548,6 +556,60 @@ elab "#pf_xrpl_flag_alphanet_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-flag: {source.length} bytes of WAT passed flag anchor check"
 
 #pf_xrpl_flag_alphanet_emit_check Examples.XrplFlag
+
+open Lean Elab Command in
+elab "#pf_xrpl_tab_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"fill0\") (result i32)",
+          "(func (export \"sum4\")",
+          "(func (export \"get0\")",
+          "(data (i32.const 64) \"xs_0xs_1xs_2xs_3\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing tab anchor: {anchor}\n{source}"
+        unless !source.contains "(loop" do
+          throwError "wasm emit must not contain wasm loop"
+        unless !source.contains "loopIx" do
+          throwError "wasm emit must not mention loopIx"
+        logInfo m!"proofforge-xrpl-tab: {source.length} bytes of WAT passed tab anchor check"
+
+#pf_xrpl_tab_emit_check Examples.XrplTab
+
+open Lean Elab Command in
+elab "#pf_xrpl_hand_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"initialize\") (result i32)",
+          "(func (export \"propose\") (result i32)",
+          "(func (export \"accept\") (result i32)",
+          "(func (export \"bump\") (result i32)",
+          "i64.eq",
+          "(i32.const 3)",
+          "(data (i32.const 64) \"owner0owner1owner2pend0pend1pend2value\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing hand anchor: {anchor}\n{source}"
+        unless !source.contains "(param $pf_p0 i64)" do
+          throwError "XrplHand must not take wasm i64 params"
+        logInfo m!"proofforge-xrpl-hand: {source.length} bytes of WAT passed hand anchor check"
+
+#pf_xrpl_hand_emit_check Examples.XrplHand
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
