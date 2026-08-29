@@ -15,6 +15,7 @@ open Lean Elab Command
 #guard blockHash (init 0) 37 == Context.blockHash 37
 #guard codeSize (init 0) ⟨1, 2, 3⟩ == Address.codeSize ⟨1, 2, 3⟩
 #guard codeHash (init 0) ⟨1, 2, 3⟩ == Address.codeHash ⟨1, 2, 3⟩
+#guard balance (init 0) ⟨1, 2, 3⟩ == Address.balance ⟨1, 2, 3⟩
 
 #guard aggregate (init 0) ⟨11, ⟨3, true⟩⟩ (13, 17) #v[19, 23, 29] == (93, true)
 #guard optionValue (init 0) none == 5

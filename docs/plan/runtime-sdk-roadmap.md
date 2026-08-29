@@ -507,6 +507,12 @@ R4-010 继续沿同一边界增加 `Address.codeSize : UInt64` 与 `Address.code
 nonexistent account 的 Anvil 语义均已核对；raw code bytes 继续不进入 safe SDK。详见
 [R4-010](tasks/r4-010.md)。
 
+R4-011 增加 `Address.balance : UInt256`，继续只扩 Environment Component。完整 Address
+进入 BALANCE，单次 numeric word observation 投影四 limb；它与 codeHash 的 FixedBytes
+byte-order 路径明确分离。funded sender 的 >UInt64 Wei 和 nonexistent account 均已由 Anvil
+对照节点余额；没有新增 allocation、storage、call 或 main Emit recipe。详见
+[R4-011](tasks/r4-011.md)。
+
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
 spelling 保留，因此 Token/Capped 等既有 IR/产物不漂移。Wide 的跨 64/192-bit Anvil matrix

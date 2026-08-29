@@ -50,6 +50,12 @@ solana_lean_require_equal \
   "$("$cast" call --rpc-url "$rpc" "$addr" 'codeHash(address)(bytes32)' "$empty_address")" \
   "0x0000000000000000000000000000000000000000000000000000000000000000" \
   "EXTCODEHASH nonexistent"
+solana_lean_require_uint \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'balance(address)(uint256)' "$sender")" \
+  "$("$cast" balance --rpc-url "$rpc" "$sender")" "BALANCE funded sender"
+solana_lean_require_uint \
+  "$("$cast" call --rpc-url "$rpc" "$addr" 'balance(address)(uint256)' "$empty_address")" \
+  0 "BALANCE nonexistent"
 
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" "$addr" 'stamp()' >/dev/null
 got_get="$("$cast" call --rpc-url "$rpc" "$addr" 'get()(uint64)')"
@@ -140,4 +146,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-ctx: ok (caller/number/gas/blockhash/code + static/tagged aggregate ABI; engineering only)"
+echo "evm-anvil-ctx: ok (caller/number/gas/blockhash/address observations + static/tagged aggregate ABI; engineering only)"

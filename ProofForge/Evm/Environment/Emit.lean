@@ -108,6 +108,16 @@ def emitQuery (context : Context σ) (query : Query) (operands : Array Ops.Val) 
           let (wordPrefix, result, next) := emitCachedWord context packBytes32Word cacheKey
             ("extcodehash(" ++ address ++ ")") limb afterAddress
           return (prelude ++ wordPrefix, result, next)
+  | .balance256 limb, #[w0, w1, w2] =>
+      let cacheKey := "balance256|" ++ context.valKey w0 ++ "|" ++ context.valKey w1 ++ "|" ++
+        context.valKey w2
+      match context.lookupWide st cacheKey with
+      | some _ => return emitCachedWord context packU256Word cacheKey "" limb st
+      | none =>
+          let (prelude, address, afterAddress) ← materializeAddress context w0 w1 w2 st
+          let (wordPrefix, result, next) := emitCachedWord context packU256Word cacheKey
+            ("balance(" ++ address ++ ")") limb afterAddress
+          return (prelude ++ wordPrefix, result, next)
   | _, _ => throw "extract/ir: malformed EVM environment query operands"
 
 end ProofForge.Evm.Environment.Emit

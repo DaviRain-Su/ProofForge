@@ -797,6 +797,23 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasLimit256 ||
             endsWith baseE ".evmGasLimit256" then
           some (.ext (.evm (.component (.environment (.gasLimit256 limb.toNat)))) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmBalance256 ||
+            endsWith baseE ".evmBalance256" then
+          let args := baseE.getAppArgs
+          if args.isEmpty then none
+          else
+            let address := args[args.size - 1]!
+            let a0 := asVal env fuel
+              (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w0) address)
+            let a1 := asVal env fuel
+              (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w1) address)
+            let a2 := asVal env fuel
+              (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.w2) address)
+            match a0, a1, a2 with
+            | some w0, some w1, some w2 =>
+                some (.ext (.evm (.component (.environment (.balance256 limb.toNat))))
+                  #[w0, w1, w2])
+            | _, _, _ => none
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmCodeHash32 ||
             endsWith baseE ".evmCodeHash32" then
           let args := baseE.getAppArgs
@@ -4900,6 +4917,18 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
       .returnU64 (.ext (.evm (.component (.environment (.blockHash256 1)))) #[number]),
       .returnU64 (.ext (.evm (.component (.environment (.blockHash256 2)))) #[number]),
       .returnU64 (.ext (.evm (.component (.environment (.blockHash256 3)))) #[number])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmBalance256 ||
+      endsWith app ".evmBalance256" then
+    let (w0, w1, w2) :=
+      match nthFromEnd args 0 with
+      | some address => addr20Leaves env address
+      | none => (.arg 0, .arg 1, .arg 2)
+    some #[
+      .returnU64 (.ext (.evm (.component (.environment (.balance256 0)))) #[w0, w1, w2]),
+      .returnU64 (.ext (.evm (.component (.environment (.balance256 1)))) #[w0, w1, w2]),
+      .returnU64 (.ext (.evm (.component (.environment (.balance256 2)))) #[w0, w1, w2]),
+      .returnU64 (.ext (.evm (.component (.environment (.balance256 3)))) #[w0, w1, w2])
     ]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmCodeHash32 ||
       endsWith app ".evmCodeHash32" then

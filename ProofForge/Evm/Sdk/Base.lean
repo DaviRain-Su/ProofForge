@@ -38,6 +38,9 @@ namespace «Address»
 @[pf_inline] def codeHash (address : Address) : Bytes32 :=
   Runtime.evmCodeHash32 address
 
+@[pf_inline] def balance (address : Address) : UInt256 :=
+  Runtime.evmBalance256 address
+
 end «Address»
 
 namespace «UInt256»

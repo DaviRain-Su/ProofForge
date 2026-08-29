@@ -59,6 +59,11 @@ def codeSize (_s : State) (address : Address) : UInt64 :=
 def codeHash (_s : State) (address : Address) : Bytes32 :=
   Address.codeHash address
 
+/-- Native-asset balance for a complete address as a numeric `uint256`. -/
+@[pf_entry]
+def balance (_s : State) (address : Address) : UInt256 :=
+  Address.balance address
+
 /-- 把当前 block number 写入 dummy。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=

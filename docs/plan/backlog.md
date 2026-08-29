@@ -658,6 +658,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `937893f551c87688`、bytecode 2,415 B；Anvil 核对 deployed self code size/hash 以及
   nonexistent account 的 size=0/hash=0。详见 `docs/plan/tasks/r4-010.md`。
 
+- R4-011 EVM address balance observation 已完成：`Sdk.Address.balance : UInt256` 把完整
+  三-limb Address 通过同一个 Environment Component 与 fixed address packing helper 绑定
+  BALANCE；单次 numeric EVM word observation 复用到四个 UInt256 limb，不采用 bytes32
+  byte-order projection，也不新增 top-level Ops/IR/main Emit recipe、allocation、storage 或
+  call。EvmCtx digest `fee845a63e2eff23`、bytecode 2,692 B；Anvil 对 funded sender 的
+  >UInt64 Wei 与 nonexistent account 的 zero balance 精确核对。详见
+  `docs/plan/tasks/r4-011.md`。
+
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、

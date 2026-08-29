@@ -136,6 +136,9 @@ current, and future block numbers return zero exactly as the VM specifies. -/
 not a numeric UInt256. -/
 @[irreducible] def evmCodeHash32 (_address : Addr20) : Bytes32 := ⟨0, 0, 0, 0⟩
 
+/-- Native-asset balance for a full address (`BALANCE`) as a numeric UInt256. -/
+@[irreducible] def evmBalance256 (_address : Addr20) : UInt256 := ⟨0, 0, 0, 0⟩
+
 /-- `eq(callvalue(), packed uint256)`。入口因此 payable。宿主返回 `amt.w0`。 -/
 @[irreducible] def evmDeposit256 (amt : UInt256) : UInt64 := amt.w0
 

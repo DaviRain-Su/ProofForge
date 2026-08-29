@@ -22,6 +22,8 @@ open ProofForge.Evm
 #guard Environment.Query.codeSize20.arity == 3
 #guard (Environment.Query.codeHash32 3).wellFormed
 #guard !(Environment.Query.codeHash32 4).wellFormed
+#guard (Environment.Query.balance256 3).arity == 3
+#guard !(Environment.Query.balance256 4).wellFormed
 #guard
   (Environment.Query.prevRandao256 2).canonical (fun _ : UInt64 => "v") #[] == "erandao.2"
 #guard
@@ -61,6 +63,7 @@ elab "#pf_guard_evm_environment_component" : command => do
   requireQuery tipJar "gasLimit" .gasLimit256
   requireQuery ctx "blockHash" .blockHash256
   requireQuery ctx "codeHash" .codeHash32
+  requireQuery ctx "balance" .balance256
   let some codeSize := ctx.entries.find? (·.ixName == "codeSize")
     | throwError "missing EvmCtx.codeSize"
   unless hasEnvironmentReturn codeSize .codeSize20 do
@@ -87,7 +90,8 @@ elab "#pf_guard_evm_environment_component" : command => do
       (ctxYul.splitOn "blockhash(").length == 2 &&
       (tipJarYul.splitOn "coinbase()").length == 2 &&
       (ctxYul.splitOn "extcodesize(").length == 2 &&
-      (ctxYul.splitOn "extcodehash(").length == 2 do
+      (ctxYul.splitOn "extcodehash(").length == 2 &&
+      (ctxYul.splitOn " := balance(").length == 2 do
     throwError "environment component omitted one or more pinned Cancun opcode bindings"
 
 #pf_guard_evm_environment_component
