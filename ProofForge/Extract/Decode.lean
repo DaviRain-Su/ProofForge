@@ -6920,7 +6920,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             match unfoldUserHelper env value with
             | some (_, unfolded) =>
                 mentionsSvmRuntime env 8 unfolded || (findInvoke env 64 unfolded).isSome ||
-                  mentionsSvmEffect env 64 unfolded
+                  mentionsSvmEffect env 64 unfolded || mentionsNearEffect env 64 unfolded
             | none => false
       if ignoredInlineEffect then
         match decodeExpr env fuel' value (preserveLocals := preserveLocals)
@@ -6936,7 +6936,8 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         | _, .error reason => return .error reason
       let effectful :=
         (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
-          (decodeNearEffect env value).isSome || (decodeEvmEffect env value).isSome ||
+          mentionsNearEffect env 16 value || (decodeNearEffect env value).isSome ||
+          (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       let scalarControlProducer := isSequencedScalarProducer env ty value
       if scalarControlProducer then

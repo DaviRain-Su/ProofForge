@@ -54,7 +54,7 @@ Authoritative source anchors:
 | Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | independent field keys | Near SDK policy; migration/version explicit |
 | `store::Vector` | SDK over KV, prefix + `u32_le` index | **bounded direct UInt64 element layout foundation complete** in wsm-near-vector-001; full metadata/cache/generic API absent | Near storage binding after bytes/Borsh |
-| LookupMap/LookupSet | SDK over KV + key codec/hash policy | absent | Near storage binding; no host Map opcode |
+| LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
 | IterableMap/TreeMap | SDK composition | absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | absent | explicit bounded Vector/LookupMap + head/length policy |
 | logs/events | `log_utf8`; NEP-297 SDK JSON | static UTF-8 literal effect in wsm-near-log-001; dynamic spans/events absent | Runtime log effect, then SDK event envelope |
@@ -64,8 +64,9 @@ Authoritative source anchors:
 | private/payable/init | generated entry guards | absent | entry-adapter policy over context/storage |
 
 Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
-bytes/String input, bounded bytes/String/unsigned-array view output, and bounded raw binary
-storage. It is not yet a general near-sdk-rs contract model.
+bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw binary storage,
+and direct fixed-width Vector/Identity LookupMap/LookupSet foundations. It is not yet a general
+near-sdk-rs contract model.
 
 ## 3. Storage and collection contracts
 
@@ -80,6 +81,8 @@ These cannot be called the same physical layout. In particular:
 
 - `store::Vector` uses a `u32` length and `prefix || u32_le(index)` keys through its index map.
 - `LookupMap` uses prefix + serialized/transformed key; identity/SHA-256/Keccak key policies differ.
+- wsm-near-lookup-001 implements only Identity `Prefix4 || Borsh(UInt64)`: map values are Borsh UInt64 and
+  set values are empty bytes. Map writes are immediate rather than cache/flush/Drop compatible.
 - `IterableMap` composes a Vector of keys and a LookupMap of value/index records.
 - current near-sdk-rs exports no persistent Queue. ProofForge must specify bounded capacity,
   head/tail arithmetic, stale-slot reachability, and storage reclamation itself.
@@ -140,7 +143,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
 | N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
-| N5 collections | **DirectVector64 element-layout foundation done in wsm-near-vector-001** → LookupMap/Set → IterableMap/Set → bounded Queue; full `store::Vector` metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
+| N5 collections | **DirectVector64 done in wsm-near-vector-001 and direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001** → bounded Queue → IterableMap/Set; full `store::Vector` metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
 | N7 promises | create/then/and, batch function-call/transfer actions, explicit return | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | bounded result count/status/read, typed Result decode, private self callback | success/failure/oversized result and rollback scenes |
@@ -162,8 +165,10 @@ It depends on full AccountId and u128 and is asynchronous.
 6. **NEAR-STORE-VECTOR (wsm-near-vector-001 done):** bounded direct-write UInt64 elements use exact current
    near-sdk-rs bare-prefix keys and Borsh values. Immediate persistence is explicit; full Rust
    metadata/cache/Drop semantics wait for the `STATE` lifecycle instead of being simulated.
-   LookupMap/Set and a bounded Queue follow on the same raw-storage/arena substrate.
-7. **NEAR-PROMISE-1:** closed static receiver/method function call with explicit gas/deposit;
+7. **NEAR-STORE-LOOKUP (wsm-near-lookup-001 done):** default Identity UInt64 map/set keys and values match
+   current near-sdk-rs durable bytes; direct map timing/raw statuses remain explicitly narrower.
+   A ProofForge-owned bounded Queue follows on the same raw-storage/arena substrate.
+8. **NEAR-PROMISE-1:** closed static receiver/method function call with explicit gas/deposit;
    callback/results follow in a separate slice.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a

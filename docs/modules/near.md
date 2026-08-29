@@ -20,6 +20,8 @@ storage key/value，并保留 nearcore 0/1 status、stale register、present-emp
 no-copy 语义。wsm-near-vector-001 在其上加入
 `DirectVector64`：四字节 compile-time prefix、`prefix || u32_le(index)` key 与 standalone
 Borsh UInt64 value；它 immediate-write，逻辑 length 仍由普通 ProofForge state 持有。
+wsm-near-lookup-001 再加入 default-Identity `DirectLookupMap64` / `DirectLookupSet64`：key 为
+`Prefix4 || Borsh(UInt64)`，map value 为 Borsh UInt64，set value 是 exact empty bytes。
 
 ## Boundary
 
@@ -31,7 +33,9 @@ Borsh UInt64 value；它 immediate-write，逻辑 length 仍由普通 ProofForge
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
 | `Near.Sdk.Storage` | bounded raw key/value、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
+| `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、Borsh UInt64/result decode | arbitrary `IntoStorageKey`、generic Borsh |
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
+| `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
@@ -56,7 +60,8 @@ Borsh UInt64 value；它 immediate-write，逻辑 length 仍由普通 ProofForge
   round-trip、capacity 和 output UTF-8 failures；`storage.sh` 验证 binary/empty keys、
   insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has；
   `vector.sh` 验证 exact current element keys/Borsh values、get/set/push/pop、capacity rollback
-  与大 index 在 narrowing 前被拒绝。
+  与大 index 在 narrowing 前被拒绝；`lookup.sh` 验证 Identity map/set exact keys、map Borsh
+  values、set empty values、insert/replace/remove status、namespace split 与 key reclamation。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
-`NearOutput`、`NearStorage`、`NearVector`。
+`NearOutput`、`NearStorage`、`NearVector`、`NearLookup`。

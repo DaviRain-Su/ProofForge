@@ -42,6 +42,7 @@ The slice also closes two compiler prerequisites exposed by a real collection co
 
 ## Next
 
-Build bounded direct LookupMap/LookupSet policies over the same key/value recipes, then specify a
-bounded Queue. Full Rust Vector metadata belongs with N9 `STATE` serialization/versioning rather
-than a second ad-hoc length key.
+Bounded direct Identity LookupMap/LookupSet policies landed in
+[wsm-near-lookup-001](wsm-near-lookup-001.md). Next specify a ProofForge-owned bounded Queue. Full
+Rust Vector metadata belongs with N9 `STATE` serialization/versioning rather than a second ad-hoc
+length key.

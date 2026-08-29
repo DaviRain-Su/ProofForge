@@ -112,6 +112,23 @@ vector_anchors = (
     'i64.shl',
     'i64.or',
 )
+lookup_anchors = (
+    '(func (export "mapGet")',
+    '(func (export "mapHas")',
+    '(func (export "mapPut")',
+    '(func (export "mapRemove")',
+    '(func (export "setHas")',
+    '(func (export "setInsert")',
+    '(func (export "setRemove")',
+    '(call $pf_storage_has_key',
+    '(call $pf_storage_read',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+    'i64.and',
+    'i64.shr_u',
+    'i64.shl',
+    'i64.or',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -131,6 +148,8 @@ for wat in wats:
         extra = storage_anchors
     elif wat.stem == "NearVector":
         extra = vector_anchors
+    elif wat.stem == "NearLookup":
+        extra = lookup_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

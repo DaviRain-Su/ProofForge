@@ -47,5 +47,6 @@ The current source API returns status, actual length, fit, and indexed bytes as 
 direct top-level bounded aggregate reconstructed after a storage effect is still rejected by the
 extractor's effect-sequencing boundary; it must not be advertised as supported until that adapter
 is implemented. The bounded direct-write Vector element-layout foundation landed in
-[wsm-near-vector-001](wsm-near-vector-001.md); LookupMap/Set and an explicitly specified bounded
-Queue follow. Arena bytes are scratch only, never persistent layout.
+[wsm-near-vector-001](wsm-near-vector-001.md), and direct Identity LookupMap/LookupSet landed in
+[wsm-near-lookup-001](wsm-near-lookup-001.md). An explicitly specified bounded Queue follows.
+Arena bytes are scratch only, never persistent layout.

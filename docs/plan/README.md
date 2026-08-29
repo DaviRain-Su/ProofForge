@@ -212,6 +212,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-output-001](tasks/wsm-near-output-001.md) | done | NEAR allocator-backed canonical bounded Borsh view output |
 | [wsm-near-storage-001](tasks/wsm-near-storage-001.md) | done | NEAR bounded raw binary storage + exact host status/register semantics |
 | [wsm-near-vector-001](tasks/wsm-near-vector-001.md) | done | NEAR bounded direct-write Vector64 element layout foundation |
+| [wsm-near-lookup-001](tasks/wsm-near-lookup-001.md) | done | NEAR direct Identity LookupMap64 / LookupSet64 layout foundation |
 
 ## SVM 全面工作计划（当前主线）
 
