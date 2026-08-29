@@ -31,15 +31,21 @@ lake build
 lake exe pf -- build --target svm --out build/sbpf Counter
 lake exe pf -- build --target evm --out build/evm Counter
 lake exe pf -- build --target xrpl --out build/xrpl Counter
+lake exe pf -- build --target xrpl-alphanet --out build/xrpl-alphanet XrplSmoke
+lake exe pf -- deploy XrplSmoke
+# lake exe pf -- call --contract rXXX initialize
+# lake exe pf -- call --contract rXXX bump
 ```
 
 SVM 写出 `Name.so` / `Name.s` / `Name.idl.json`（Solana IDL spec 0.1.0）。
 EVM 写出 `Name.bin` / `Name.yul` / `Name.abi.json`。
 XRPL（`--target xrpl`；`wasm` 会被拒绝并提示选具体链）写出 `Name.wat` /
-`Name.wasm`（XLS-0102 `host_lib` import；锁定 `wat2wasm 1.0.41`；
-主网 `deployable=false`；工程门 `runtime-tests/xrpl/check.sh` 断言 import 表，
-`runtime-tests/xrpl/counter.sh` 起 Bedrock 本地节点部署 Counter（缺 Docker /
-bedrock 则 skip）。
+`Name.wasm`。`--target xrpl` 是 Bedrock 本地 host 表；`--target xrpl-alphanet`
+是公开 AlphaNet 的 XLS-0102 名。`pf deploy` / `pf call` 只打 AlphaNet
+（`runtime-tests/xrpl/alphanet-rpc.js`，不是 bedrock）。工程门
+`runtime-tests/xrpl/check.sh` 断言 Bedrock import 表，`counter.sh` 起 Bedrock
+本地节点（缺 Docker / bedrock 则 skip）。活网零参数烟测是
+`runtime-tests/xrpl/smoke.sh`。现成 Bedrock Docker **不能**模拟 AlphaNet。
 
 Mollusk（环境变量已改成 `PF_*_SO`）：
 

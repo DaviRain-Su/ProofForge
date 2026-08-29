@@ -28,10 +28,22 @@ def parseTarget : String → Option Target
   | "xrpl-alphanet" | "alphanet" => some .xrplAlphaNet
   | _ => none
 
+inductive Command where
+  | build
+  | deploy
+  | call
+  deriving BEq, Repr, Inhabited
+
 structure Options where
+  command : Command := .build
   target : Target := .svm
   outDir : System.FilePath := "build/out"
   names : Array String := #[]
+  rpcUrl : String := "https://alphanet.xrpl.org"
+  wallet : String := "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
+  contract : String := ""
+  functionName : String := ""
+  callArgs : Array String := #[]
   help : Bool := false
 
 private def usage : String :=
@@ -39,13 +51,17 @@ private def usage : String :=
     "\n" ++
     "Usage:\n" ++
     "  pf build --target <svm|evm|xrpl|xrpl-alphanet> [--out DIR] [Program ...]\n" ++
+    "  pf deploy --target xrpl-alphanet [--out DIR] [--rpc URL] [--wallet SEED] Program\n" ++
+    "  pf call --target xrpl-alphanet --contract ACCOUNT [--rpc URL] [--wallet SEED] Function [UINT64 ...]\n" ++
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
     "xrpl writes Name.wat / Name.wasm (XRPL Bedrock local; locked wat2wasm)\n" ++
     "xrpl-alphanet same IR, XLS-0102 host names for live AlphaNet\n" ++
+    "deploy/call talk to AlphaNet via runtime-tests/xrpl/alphanet-rpc.js;\n" ++
+    "     not bedrock. Public RPC 502s ContractCall Parameters; use XrplSmoke.\n" ++
     "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
-    "No program names means every registered source module for the selected target.\n"
+    "No program names on build means every registered source module.\n"
 
 def parseArgs (args : List String) : Except String Options :=
   let rec go (rest : List String) (o : Options) : Except String Options :=
@@ -60,15 +76,29 @@ def parseArgs (args : List String) : Except String Options :=
             .error "wasm is a chain family, not a target; pick a concrete member (e.g. xrpl)"
           else .error s!"unknown target {t}"
     | "--out" :: d :: rest => go rest { o with outDir := d }
+    | "--rpc" :: u :: rest => go rest { o with rpcUrl := u }
+    | "--wallet" :: s :: rest => go rest { o with wallet := s }
+    | "--contract" :: a :: rest => go rest { o with contract := a }
     | flag :: rest =>
       if flag.startsWith "-" then .error s!"unknown flag {flag}"
-      else go rest { o with names := o.names.push flag }
+      else if o.command == .call && o.functionName.isEmpty then
+        go rest { o with functionName := flag }
+      else if o.command == .call then
+        go rest { o with callArgs := o.callArgs.push flag }
+      else
+        go rest { o with names := o.names.push flag }
   let args := args.dropWhile (· == "--")
-  let args :=
+  let (cmd, rest) :=
     match args with
-    | "build" :: rest => rest
-    | rest => rest
-  go args {}
+    | "build" :: rest => (Command.build, rest)
+    | "deploy" :: rest => (Command.deploy, rest)
+    | "call" :: rest => (Command.call, rest)
+    | rest => (Command.build, rest)
+  let start : Options :=
+    match cmd with
+    | .deploy | .call => { command := cmd, target := .xrplAlphaNet }
+    | .build => { command := cmd }
+  go rest start
 
 private def svmProgramNames : Array String :=
   Svm.Registry.names
@@ -173,6 +203,106 @@ private unsafe def extractXrplPrograms (names : Array String) :
   catch e =>
     return .error s!"source import failed: {e}"
 
+private def jsonEscape (s : String) : String :=
+  s.replace "\\" "\\\\" |>.replace "\"" "\\\""
+
+private def findAlphaNetRpc : IO System.FilePath := do
+  let cwd ← IO.currentDir
+  let here := cwd / "runtime-tests" / "xrpl" / "alphanet-rpc.js"
+  if ← here.pathExists then
+    return here
+  throw <| IO.userError "pf: runtime-tests/xrpl/alphanet-rpc.js not found (run from repo root)"
+
+private def writeTempJson (body : String) : IO System.FilePath := do
+  let tmp :=
+    match ← IO.getEnv "TMPDIR" with
+    | some d => System.FilePath.mk d
+    | none => "/tmp"
+  let path := tmp / s!"pf-alphanet-{← IO.monoNanosNow}.json"
+  IO.FS.writeFile path body
+  return path
+
+private def runAlphaNetJs (cmd : String) (cfgPath : System.FilePath) : IO (Except String String) := do
+  let js ← findAlphaNetRpc
+  let proc ← IO.Process.output {
+    cmd := "node"
+    args := #[js.toString, cmd, cfgPath.toString]
+  }
+  if proc.exitCode == 0 then
+    return .ok proc.stdout
+  return .error (if proc.stderr.isEmpty then proc.stdout else proc.stderr)
+
+private def defaultAlphaNetOut (opts : Options) : System.FilePath :=
+  if opts.outDir.toString == "build/out" then "build/xrpl-alphanet" else opts.outDir
+
+private unsafe def runDeploy (opts : Options) : IO UInt32 := do
+  unless opts.target == .xrplAlphaNet do
+    IO.eprintln "pf: deploy currently only supports --target xrpl-alphanet"
+    return 1
+  match selectXrplNames opts.names with
+  | .error reason =>
+    IO.eprintln s!"pf: {reason}"
+    return 1
+  | .ok names =>
+    if names.size != 1 then
+      IO.eprintln "pf: deploy wants exactly one program"
+      return 1
+    let name := names[0]!
+    let outDir := defaultAlphaNetOut opts
+    match ← extractXrplPrograms #[name] with
+    | .error reason =>
+      IO.eprintln s!"pf: {reason}"
+      return 1
+    | .ok programs =>
+      IO.FS.createDirAll outDir
+      let program := programs[0]!
+      let r ← ProofForge.Wasm.Xrpl.Assemble.assembleAlphaNet outDir program
+      IO.println s!"wrote {r.wasmPath}"
+      let cfg :=
+        "{\"rpc_url\":\"" ++ jsonEscape opts.rpcUrl ++
+          "\",\"network_id\":21337,\"wallet_seed\":\"" ++ jsonEscape opts.wallet ++
+          "\",\"wasm_path\":\"" ++ jsonEscape r.wasmPath.toString ++ "\"}"
+      let cfgPath ← writeTempJson cfg
+      let result ← runAlphaNetJs "deploy" cfgPath
+      try IO.FS.removeFile cfgPath catch _ => pure ()
+      match result with
+      | .error reason =>
+        IO.eprintln s!"pf: deploy failed\n{reason}"
+        return 1
+      | .ok out =>
+        IO.print out
+        return 0
+
+private def runCall (opts : Options) : IO UInt32 := do
+  unless opts.target == .xrplAlphaNet do
+    IO.eprintln "pf: call currently only supports --target xrpl-alphanet"
+    return 1
+  if opts.contract.isEmpty then
+    IO.eprintln "pf: call wants --contract ACCOUNT"
+    return 1
+  if opts.functionName.isEmpty then
+    IO.eprintln "pf: call wants a function name"
+    return 1
+  let params :=
+    if opts.callArgs.isEmpty then "[]"
+    else "[" ++ String.intercalate "," (opts.callArgs.toList.map (fun a => "\"" ++ jsonEscape a ++ "\"")) ++ "]"
+  let cfg :=
+    "{\"rpc_url\":\"" ++ jsonEscape opts.rpcUrl ++
+      "\",\"network_id\":21337,\"wallet_seed\":\"" ++ jsonEscape opts.wallet ++
+      "\",\"contract_account\":\"" ++ jsonEscape opts.contract ++
+      "\",\"function_name\":\"" ++ jsonEscape opts.functionName ++
+      "\",\"parameters\":" ++ params ++ "}"
+  let cfgPath ← writeTempJson cfg
+  let result ← runAlphaNetJs "call" cfgPath
+  try IO.FS.removeFile cfgPath catch _ => pure ()
+  match result with
+  | .error reason =>
+    IO.eprintln s!"pf: call failed\n{reason}"
+    return 1
+  | .ok out =>
+    IO.print out
+    return 0
+
 unsafe def run (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .error reason =>
@@ -183,6 +313,10 @@ unsafe def run (args : List String) : IO UInt32 := do
     if opts.help then
       IO.println usage
       return 0
+    match opts.command with
+    | .deploy => return ← runDeploy opts
+    | .call => return ← runCall opts
+    | .build =>
     match opts.target with
     | .svm =>
       match selectSvmNames opts.names with
