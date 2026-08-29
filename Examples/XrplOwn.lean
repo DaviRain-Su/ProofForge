@@ -24,23 +24,17 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 def init (_seed : UInt64) : State :=
   { owner0 := Context.callerW0, owner1 := Context.callerW1, owner2 := Context.callerW2, value := 0 }
 
-/-- 三叶全等才加 1。嵌套 `if`，不用 `&&`（那会变成 wasm v0 拒掉的 `bitAnd`）。 -/
+/-- 只有 owner 能加。比较走 SDK `AccountId.eq`（展开成三叶嵌套 `if`）。 -/
 @[pf_entry]
 def bump (s : State) : Except Error (State × UInt64) :=
-  if Context.callerW0 = s.owner0 then
-    if Context.callerW1 = s.owner1 then
-      if Context.callerW2 = s.owner2 then
-        if s.value ≤ u64Max - 1 then
-          -- Public result is dropped on the status ABI; a shared `let next` becomes
-          -- wasm-v0-rejected `letLocal`. Write the slot, return a literal.
-          .ok ({ owner0 := s.owner0, owner1 := s.owner1, owner2 := s.owner2,
-                 value := s.value + 1 }, (0 : UInt64))
-        else
-          .error .overflow
-      else
-        .error .unauthorized
+  if AccountId.eq Context.caller (AccountId.ofLimbs s.owner0 s.owner1 s.owner2) then
+    if s.value ≤ u64Max - 1 then
+      -- Public result is dropped on the status ABI; a shared `let next` becomes
+      -- wasm-v0-rejected `letLocal`. Write the slot, return a literal.
+      .ok ({ owner0 := s.owner0, owner1 := s.owner1, owner2 := s.owner2,
+             value := s.value + 1 }, (0 : UInt64))
     else
-      .error .unauthorized
+      .error .overflow
   else
     .error .unauthorized
 

@@ -13,6 +13,24 @@ namespace ProofForge.Wasm.Xrpl.Sdk
 
 notation "AccountId" => Runtime.AccountId
 
+namespace «AccountId»
+
+/-- Three-limb equality. Nested `if`, not `&&` (wasm v0 rejects `bitAnd`).
+Not EVM `eq20`, not a host. -/
+@[pf_inline] def eq (left right : AccountId) : Bool :=
+  if left.w0 = right.w0 then
+    if left.w1 = right.w1 then
+      left.w2 = right.w2
+    else
+      false
+  else
+    false
+
+@[pf_inline] def ofLimbs (w0 w1 w2 : UInt64) : AccountId :=
+  { w0, w1, w2 }
+
+end «AccountId»
+
 namespace Context
 
 @[pf_inline] def caller : AccountId := Runtime.xrplCaller20
