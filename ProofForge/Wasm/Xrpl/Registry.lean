@@ -9,7 +9,8 @@ structure Entry where
 def entries : Array Entry := #[
   { name := "Counter", digest := "e029f72296e320be" },
   { name := "XrplCtx", digest := "f483be9d20810b57" },
-  { name := "XrplOwn", digest := "47645ee35068637f" }
+  { name := "XrplOwn", digest := "47645ee35068637f" },
+  { name := "XrplHash", digest := "ce42ea8b4607843e" }
 ]
 
 def names : Array String := entries.map (·.name)

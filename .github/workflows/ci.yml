@@ -139,6 +139,9 @@ jobs:
       - name: Run XRPL local-node XrplOwn gate
         run: runtime-tests/xrpl/own.sh
 
+      - name: Run XRPL local-node XrplHash gate
+        run: runtime-tests/xrpl/hash.sh
+
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
 

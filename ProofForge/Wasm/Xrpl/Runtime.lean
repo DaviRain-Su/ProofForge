@@ -38,4 +38,14 @@ def xrplSelf20 : AccountId :=
 /-- `host_lib.get_parent_ledger_time`，i32 零扩展到 UInt64。不是 `evmTimestamp`。 -/
 @[irreducible] def xrplParentTime : UInt64 := 0
 
+/--
+编译期 ASCII 字面量的 SHA-512Half。抽出器认这个名字，发射
+`host_lib.compute_sha512_half`。返回 32 字节 digest 的第一个小端 `u64`。
+宿主 stub 返回 0。完整 32B / 动态输入 / keccak 本剖面 fail closed。
+不是 SVM `sha256Lit`，也不是 EVM `keccak256`。
+-/
+@[irreducible] def xrplSha512HalfLit (seed : String) : UInt64 :=
+  let _ := seed
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

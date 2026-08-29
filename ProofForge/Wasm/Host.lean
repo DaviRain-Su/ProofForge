@@ -63,6 +63,8 @@ structure Contract where
   getLedgerSqn : String := ""
   /-- Host `get_parent_ledger_time() -> i32`. Empty skips the parent-time leaf. -/
   getParentTime : String := ""
+  /-- Host `compute_sha512_half(data, data_len, out, out_len) -> i32`. Empty skips hash lits. -/
+  computeSha512Half : String := ""
   deriving Inhabited
 
 /-- Object-field storage (XRPL ContractData) rather than a packed Data blob. -/

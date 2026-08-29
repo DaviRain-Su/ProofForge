@@ -87,7 +87,14 @@ def extraImports (host : Contract) : Array String :=
       "  (import \"" ++ host.importModule ++ "\" \"" ++ host.getParentTime ++
         "\" (func $" ++ host.getParentTime ++ " (result i32)))"
     ]
-  tx ++ sqn ++ time
+  let hash :=
+    if host.computeSha512Half.isEmpty then #[]
+    else #[
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.computeSha512Half ++
+        "\" (func $" ++ host.computeSha512Half ++
+        " (param i32 i32 i32 i32) (result i32)))"
+    ]
+  tx ++ sqn ++ time ++ hash
 
 /-- Render one XRPL program as WAT. The digest line pins the canonical IR identity. -/
 def emit (p : IR.Program) : Except String String :=

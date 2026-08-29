@@ -171,6 +171,12 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
     | .lit (.strVal s) => some (.sha256Lit s)
     | _ => none
+  else if (endsWith e ".xrplSha512HalfLit" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSha512HalfLit) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplSha512HalfLit s)
+    | _ => none
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with

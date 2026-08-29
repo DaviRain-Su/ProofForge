@@ -77,6 +77,11 @@
       "name": "ownerLo",
       "parameters": [],
       "returns": { "type": "UINT64" }
+    },
+    {
+      "name": "hashed",
+      "parameters": [],
+      "returns": { "type": "UINT64" }
     }
   ]
 }

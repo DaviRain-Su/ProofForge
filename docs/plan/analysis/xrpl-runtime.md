@@ -126,9 +126,11 @@ structure AccountId where
 钉死 wasm `i32` 状态码 **3**。`Examples.XrplOwn`：genesis `init`+`bump` 改 `value`；
 第二账户 `bump` 返回 3 且槽不变。
 
-### XRPL-HASH（wsm-007）
+### XRPL-HASH（[wsm-007](../tasks/wsm-007.md)）
 
-仅当本镜像确认注册了 `compute_sha512_half`。返回首个小端 UInt64，完整 32B 仍 FC。对标 `sha256Lit`，不是 EVM `keccak256`。
+本镜像确认了 `host_lib.compute_sha512_half`（不是 stdlib 的 `sha512_half`）。
+`xrplSha512HalfLit "vault"` 对标 `sha256Lit`：ASCII 字面量 → SHA-512Half 首个小端
+UInt64。完整 32B / 动态输入 / keccak 仍 FC。`Examples.XrplHash` 把结果写入槽。
 
 ### XRPL-SDK（更后）
 

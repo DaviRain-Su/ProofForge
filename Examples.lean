@@ -46,6 +46,7 @@ import Examples.SelfLog
 import Examples.EvmCtx
 import Examples.XrplCtx
 import Examples.XrplOwn
+import Examples.XrplHash
 import Examples.EvmBounded
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster

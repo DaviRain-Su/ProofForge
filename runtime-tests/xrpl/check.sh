@@ -28,6 +28,7 @@ need_imports = (
     '(import "host_lib" "get_tx_field"',
     '(import "host_lib" "get_ledger_sqn"',
     '(import "host_lib" "get_parent_ledger_time"',
+    '(import "host_lib" "compute_sha512_half"',
 )
 need_exports_counter = (
     '(func (export "initialize") (result i32)',
@@ -46,6 +47,12 @@ need_exports_own = (
     'i64.eq',
     '(i32.const 3)',
 )
+need_exports_hash = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "stamp") (result i32)',
+    '(func (export "get")',
+    '(call $compute_sha512_half',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account")
 
 for wat in wats:
@@ -57,6 +64,8 @@ for wat in wats:
         exports = need_exports_ctx
     elif wat.stem == "XrplOwn":
         exports = need_exports_own
+    elif wat.stem == "XrplHash":
+        exports = need_exports_hash
     else:
         exports = need_exports_counter
     for needle in exports:
