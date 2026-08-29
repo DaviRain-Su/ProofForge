@@ -19,7 +19,9 @@ v0 子集（对家族所有链 fail closed；链方言可以更严，不能更�
 - ops：checked 五则、`ite`、`okState` / `returnState` / `returnU64`、
   `errorOverflow`、钉死的 `errorNamed "unauthorized"`（状态码 3）和
   `errorNamed "paused"`（状态码 4）、`storeField`。
-  loop / local / vector / map / 其它 named error / 位运算 / 未检查 `/ %` 全部拒绝；
+  loop / local / 运行时 vector 下标 / map / 其它 named error / 位运算 / 未检查 `/ %`
+  全部拒绝。编译期 `Vector UInt64 n` 叶、字面量下标、`forAccum`（上界 1..8）
+  先展开成命名槽 / nested `addU64`，再过这道门。
 - 无宿主 capability 叶：ledger time / caller / hashing 由各链在自己的方言里钉。
 -/
 
@@ -75,6 +77,168 @@ structure Program (ValExt : Type) (OpExt : Type → Type) where
 
 def slotNames (p : Program ValExt OpExt) : Array String :=
   p.slots.map (·.name)
+
+/-! ## Compile-time vector / forAccum lowering
+
+WASM v0 does not emit `loop` / `loopIx` / runtime `indexGet`. A `Vector UInt64 n`
+already flattens to slots `name_0`…`name_{n-1}`. Literal indices and bounded
+`forAccum` become those named slots and nested `addU64`. Runtime index and
+`forBody` stay rejected. -/
+
+private partial def substLoopIx {ValExt : Type} (i : UInt64) : Val ValExt → Val ValExt
+  | .loopIx => .lit i
+  | .field base n => .field (substLoopIx i base) n
+  | .indexGet base n idx len off =>
+      .indexGet (substLoopIx i base) n (substLoopIx i idx) len off
+  | .select cmp lhs rhs thn els =>
+      .select cmp (substLoopIx i lhs) (substLoopIx i rhs)
+        (substLoopIx i thn) (substLoopIx i els)
+  | .addU64 lhs rhs => .addU64 (substLoopIx i lhs) (substLoopIx i rhs)
+  | .subU64 lhs rhs => .subU64 (substLoopIx i lhs) (substLoopIx i rhs)
+  | .mulU64 lhs rhs => .mulU64 (substLoopIx i lhs) (substLoopIx i rhs)
+  | .divU64 lhs rhs => .divU64 (substLoopIx i lhs) (substLoopIx i rhs)
+  | .modU64 lhs rhs => .modU64 (substLoopIx i lhs) (substLoopIx i rhs)
+  | .bitAnd lhs rhs => .bitAnd (substLoopIx i lhs) (substLoopIx i rhs)
+  | .bitOr lhs rhs => .bitOr (substLoopIx i lhs) (substLoopIx i rhs)
+  | .bitXor lhs rhs => .bitXor (substLoopIx i lhs) (substLoopIx i rhs)
+  | .bitNot v => .bitNot (substLoopIx i v)
+  | .shiftL lhs rhs => .shiftL (substLoopIx i lhs) (substLoopIx i rhs)
+  | .shiftR lhs rhs => .shiftR (substLoopIx i lhs) (substLoopIx i rhs)
+  | .ext kind operands => .ext kind (operands.map (substLoopIx i))
+  | v => v
+
+private partial def lowerVal {ValExt : Type} : Val ValExt → Except String (Val ValExt)
+  | .arg i => .ok (.arg i)
+  | .lit n => .ok (.lit n)
+  | .loopIx => .error "extract/unsupported: wasm v0 rejects loopIx"
+  | .local _ => .error "extract/unsupported: wasm v0 rejects local"
+  | .field base n =>
+      match lowerVal base with
+      | .error e => .error e
+      | .ok b => .ok (.field b n)
+  | .indexGet base n (.lit k) len 0 =>
+      -- Extracted `len` is often 0; the real bound lives on Schema / slot names.
+      if len != 0 && k.toNat ≥ len then
+        .error s!"extract/unsupported: wasm v0 vector index {k.toNat} ≥ {len}"
+      else
+        lowerVal (.field base s!"{n}_{k.toNat}")
+  | .indexGet _ _ _ _ off =>
+      if off != 0 then
+        .error "extract/unsupported: wasm v0 rejects vector element offset"
+      else
+        .error "extract/unsupported: wasm v0 rejects runtime vector index"
+  | .select cmp lhs rhs thn els =>
+      match lowerVal lhs, lowerVal rhs, lowerVal thn, lowerVal els with
+      | .ok l, .ok r, .ok t, .ok f => .ok (.select cmp l r t f)
+      | .error e, _, _, _ => .error e
+      | _, .error e, _, _ => .error e
+      | _, _, .error e, _ => .error e
+      | _, _, _, .error e => .error e
+  | .addU64 lhs rhs =>
+      match lowerVal lhs, lowerVal rhs with
+      | .ok l, .ok r => .ok (.addU64 l r)
+      | .error e, _ => .error e
+      | _, .error e => .error e
+  | .subU64 lhs rhs =>
+      match lowerVal lhs, lowerVal rhs with
+      | .ok l, .ok r => .ok (.subU64 l r)
+      | .error e, _ => .error e
+      | _, .error e => .error e
+  | .mulU64 lhs rhs =>
+      match lowerVal lhs, lowerVal rhs with
+      | .ok l, .ok r => .ok (.mulU64 l r)
+      | .error e, _ => .error e
+      | _, .error e => .error e
+  | .ext kind operands =>
+      if operands.isEmpty then .ok (.ext kind operands)
+      else .error "extract/unsupported: wasm v0 rejects ext operands"
+  | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot _ | .shiftL .. | .shiftR ..
+  | .divU64 .. | .modU64 .. =>
+      .error "extract/unsupported: wasm v0 value"
+
+private partial def lowerOpsList {ValExt : Type} {OpExt : Type → Type} :
+    List (Op ValExt OpExt) → Except String (Array (Op ValExt OpExt))
+  | [] => pure #[]
+  | .forAccum n addend resultLocal :: rest => do
+      unless n > 0 && n ≤ 8 do
+        throw "extract/unsupported: wasm v0 forAccum bound must be 1..8"
+      let rec nest (i : Nat) (acc : Val ValExt) : Val ValExt :=
+        if i == n then acc
+        else nest (i + 1) (.addU64 acc (substLoopIx (UInt64.ofNat i) addend))
+      let sum ← lowerVal (nest 0 (.lit 0))
+      match rest with
+      | .returnU64 (.local j) :: more =>
+          unless j == resultLocal do
+            throw "extract/unsupported: wasm v0 forAccum result local mismatch"
+          return #[.returnU64 sum] ++ (← lowerOpsList more)
+      | _ =>
+          throw "extract/unsupported: wasm v0 forAccum wants returnU64 of the accumulator"
+  | .indexSet name (.lit k) value len 0 :: rest => do
+      unless len == 0 || k.toNat < len do
+        throw s!"extract/unsupported: wasm v0 vector index {k.toNat} ≥ {len}"
+      let v ← lowerVal value
+      return #[.storeField s!"{name}_{k.toNat}" v] ++ (← lowerOpsList rest)
+  | .indexSetLeaf name (.lit k) value len leaf :: rest => do
+      unless len == 0 || k.toNat < len do
+        throw s!"extract/unsupported: wasm v0 vector index {k.toNat} ≥ {len}"
+      unless leaf.isEmpty do
+        throw "extract/unsupported: wasm v0 rejects named vector element leaves"
+      let v ← lowerVal value
+      return #[.storeField s!"{name}_{k.toNat}" v] ++ (← lowerOpsList rest)
+  | .indexSet .. :: _ | .indexSetLeaf .. :: _ =>
+      throw "extract/unsupported: wasm v0 rejects runtime vector index"
+  | .forBody .. :: _ =>
+      throw "extract/unsupported: wasm v0 rejects forBody (no wasm loop)"
+  | .ite cmp lhs rhs thn els :: rest => do
+      let l ← lowerVal lhs
+      let r ← lowerVal rhs
+      let thn' ← lowerOpsList thn.toList
+      let els' ← lowerOpsList els.toList
+      return #[.ite cmp l r thn' els'] ++ (← lowerOpsList rest)
+  | .storeField n v :: rest => do
+      let v ← lowerVal v
+      return #[.storeField n v] ++ (← lowerOpsList rest)
+  | .okState v :: rest => do
+      let v ← lowerVal v
+      return #[.okState v] ++ (← lowerOpsList rest)
+  | .returnState v :: rest => do
+      let v ← lowerVal v
+      return #[.returnState v] ++ (← lowerOpsList rest)
+  | .returnU64 v :: rest => do
+      let v ← lowerVal v
+      return #[.returnU64 v] ++ (← lowerOpsList rest)
+  | .checkedAddU64 l r :: rest => do
+      let l ← lowerVal l
+      let r ← lowerVal r
+      return #[.checkedAddU64 l r] ++ (← lowerOpsList rest)
+  | .checkedSubU64 l r :: rest => do
+      let l ← lowerVal l
+      let r ← lowerVal r
+      return #[.checkedSubU64 l r] ++ (← lowerOpsList rest)
+  | .checkedMulU64 l r :: rest => do
+      let l ← lowerVal l
+      let r ← lowerVal r
+      return #[.checkedMulU64 l r] ++ (← lowerOpsList rest)
+  | .checkedDivU64 l r :: rest => do
+      let l ← lowerVal l
+      let r ← lowerVal r
+      return #[.checkedDivU64 l r] ++ (← lowerOpsList rest)
+  | .checkedModU64 l r :: rest => do
+      let l ← lowerVal l
+      let r ← lowerVal r
+      return #[.checkedModU64 l r] ++ (← lowerOpsList rest)
+  | .errorOverflow :: rest =>
+      return #[.errorOverflow] ++ (← lowerOpsList rest)
+  | .errorNamed n :: rest =>
+      return #[.errorNamed n] ++ (← lowerOpsList rest)
+  | .ext payload :: rest =>
+      return #[.ext payload] ++ (← lowerOpsList rest)
+  | _ :: _ =>
+      throw "extract/unsupported: wasm v0 op"
+
+private def lowerOps {ValExt : Type} {OpExt : Type → Type}
+    (ops : Array (Op ValExt OpExt)) : Except String (Array (Op ValExt OpExt)) :=
+  lowerOpsList ops.toList
 
 /-! ## v0 subset checks -/
 
@@ -153,6 +317,11 @@ def fromExtracted {ValExt : Type} [BEq ValExt] {OpExt : Type → Type}
   let mut sources : Array (Core.IR.Method ValExt OpExt) := #[]
   for method in source.methods do
     checkParams method
+    let ops ←
+      match lowerOps method.ops with
+      | .ok ops => pure ops
+      | .error reason => throw s!"{method.ixName}: {reason}"
+    let method := { method with ops }
     unless method.ops.all opAllowed do
       throw s!"extract/unsupported: {method.ixName} uses an op outside the wasm v0 subset"
     if method.kind == .init then

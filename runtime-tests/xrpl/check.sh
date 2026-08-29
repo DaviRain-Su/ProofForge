@@ -165,6 +165,22 @@ need_exports_flag = (
     '(func (export "get")',
     '(data (i32.const 64) "flags")',
 )
+need_exports_tab = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "fill0") (result i32)',
+    '(func (export "sum4")',
+    '(func (export "get0")',
+    '(data (i32.const 64) "xs_0xs_1xs_2xs_3")',
+)
+need_exports_hand = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "propose") (result i32)',
+    '(func (export "accept") (result i32)',
+    '(func (export "bump") (result i32)',
+    'i64.eq',
+    '(i32.const 3)',
+    '(data (i32.const 64) "owner0owner1owner2pend0pend1pend2value")',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -210,6 +226,10 @@ for wat in wats:
         exports = need_exports_peer
     elif wat.stem == "XrplFlag":
         exports = need_exports_flag
+    elif wat.stem == "XrplTab":
+        exports = need_exports_tab
+    elif wat.stem == "XrplHand":
+        exports = need_exports_hand
     else:
         exports = need_exports_counter
     for needle in exports:
