@@ -13,6 +13,9 @@ open ProofForge.Evm.Sdk
 #guard selfLow (init 0) == Context.selfLow
 #guard selfBal (init 0) == Context.selfBalance
 #guard callValue (init 0) == Context.callValue
+#guard baseFee (init 0) == Context.baseFee
+#guard prevRandao (init 0) == Context.prevRandao
+#guard gasLimit (init 0) == Context.gasLimit
 #guard callerW0 (init 0) == Context.caller.w0
 #guard callerW1 (init 0) == Context.caller.w1
 #guard callerW2 (init 0) == Context.caller.w2
@@ -49,6 +52,9 @@ open ProofForge.Evm.Sdk
   | .ok yul =>
       yul.contains "timestamp()" &&
         yul.contains "chainid()" &&
+        yul.contains "basefee()" &&
+        yul.contains "prevrandao()" &&
+        yul.contains "gaslimit()" &&
         yul.contains "callvalue()" &&
         yul.contains "selfbalance()" &&
         yul.contains "if iszero(eq(callvalue()" &&

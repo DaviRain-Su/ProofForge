@@ -94,7 +94,7 @@ def mapSurface (address : Address) (amount : UInt256) : UInt64 :=
 
 #guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedToken == "4da7ac248a0fb556"
 #guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedCapped == "cb058e662f968f65"
-#guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedTipJar == "754276e8063a7d08"
+#guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedTipJar == "1582f2173f9b97b7"
 #guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedVault == "a3ea1b5b2a69c0e3"
 #guard ProofForge.Evm.IR.digestHex ProofForge.Evm.Golden.extractedOwnable == "ce6397521bd115fa"
 

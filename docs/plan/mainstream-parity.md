@@ -118,7 +118,7 @@ EVM Runtime 以 Solidity 的 [types](https://docs.soliditylang.org/en/latest/typ
 |---|---|---|---|
 | values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、bounded dynamic-array/bytes/string input、top-level one-limb bounded/tagged output、strict UTF-8 | signed ints、safe casts、nested/constructed/wide dynamic return、dynamic constructor/fallback returndata | F0/F1 |
 | data/storage | ordinary typed State flattening、static declarations、address/address-pair hashed maps | reusable bounded storage vector/set/queue/bitmap；explicit bounded memory/transient contracts；namespaced storage | F0/F2 |
-| environment | caller/self/block number/timestamp/chain id/value/balance/immutables | gasleft、basefee/prevrandao/coinbase/gaslimit、blockhash、code/codehash and target-version gates | F1 |
+| environment | caller/self/block number/timestamp/chain id/value/balance/immutables；full-width gasleft/basefee/prevrandao/gaslimit；solc 0.8.34 + Cancun target pin | coinbase、blockhash、code/codehash and broader target-version matrix | F1 |
 | call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send、explicit ordered reentrancy guard | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；code-existence policy | F1/F2 |
 | crypto | host Keccak selector tooling、closed ecrecover precompile plan | source hash API、sha256/ripemd/precompiles、ECDSA anti-malleability、EIP-191/712、ERC-1271、Merkle | F1/F2 |
 | log/error | typed bounded LOG0..4/custom-error plans behind closed events/errors | source-declared generic typed events/errors、dynamic indexed/data encoding、Panic/revert-data propagation | F1 |

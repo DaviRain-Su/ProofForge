@@ -39,6 +39,11 @@ def caller (_s : State) : UInt64 :=
 def height (_s : State) : UInt64 :=
   evmBlockNumber
 
+/-- Full-width `GAS` observation. All four limbs come from one cached opcode result. -/
+@[pf_entry]
+def gasLeft (_s : State) : UInt256 :=
+  evmGasLeft256
+
 /-- 把当前 block number 写入 dummy。 -/
 @[pf_entry]
 def stamp (_s : State) : Except Error (State × UInt64) :=

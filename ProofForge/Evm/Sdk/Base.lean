@@ -215,6 +215,10 @@ namespace Context
 @[pf_inline] def chainId : UInt64 := Runtime.evmChainId
 @[pf_inline] def callValue : UInt256 := Runtime.evmCallValue256
 @[pf_inline] def selfBalance : UInt256 := Runtime.evmSelfBalance256
+@[pf_inline] def gasLeft : UInt256 := Runtime.evmGasLeft256
+@[pf_inline] def baseFee : UInt256 := Runtime.evmBaseFee256
+@[pf_inline] def prevRandao : UInt256 := Runtime.evmPrevRandao256
+@[pf_inline] def gasLimit : UInt256 := Runtime.evmGasLimit256
 
 end Context
 

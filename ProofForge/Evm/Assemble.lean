@@ -13,6 +13,10 @@ structure Result where
 
 def requiredSolcVersion : String := "0.8.34"
 
+/-- Pin opcode semantics as well as compiler syntax. In particular opcode `0x44` is
+`PREVRANDAO`, never the pre-Paris `DIFFICULTY` interpretation. -/
+def requiredEvmVersion : String := "cancun"
+
 /-- `solc, the solidity compiler…\nVersion: 0.8.34+commit…` -/
 def parseSolcVersion (stdout : String) : Option String :=
   match stdout.splitOn "Version: " with
@@ -79,7 +83,8 @@ def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Resul
   let solc ← requireSolc
   let proc ← IO.Process.output {
     cmd := solc.toString
-    args := #["--strict-assembly", "--optimize", "--bin", s!"{program.name}.yul"]
+    args := #["--strict-assembly", "--optimize", "--evm-version", requiredEvmVersion,
+      "--bin", s!"{program.name}.yul"]
     cwd := outDir
   }
   unless proc.exitCode == 0 do

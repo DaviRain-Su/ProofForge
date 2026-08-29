@@ -33,7 +33,8 @@ EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 pay
 entry-value 与 calldata route policy，EVM-RT-2d 已把 permit 的固定 ecrecover address/frame、
 STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed contract；UInt256
 div/mod 已固定 checked 除零 revert 策略；EVM-RT-2e 已加入 schema-resolved ordered static
-UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation；R5-009 已在其上组合
+UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation；R4-006 已补齐 full-width
+gas/basefee/prevrandao/gaslimit 并钉死 Cancun opcode 语义；R5-009 已在其上组合
 reusable ReentrancyGuard policy。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
 并行 SDK 线已完成 R3-001 persistent SVM foundation、R3-002 Account/Signer facade、
@@ -536,6 +537,12 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   source 不接触 slot 魔数。该 effect 与普通 final State writeback 分离，失败 CALL 由 EVM
   transaction rollback entered write。focused extraction、solc 和 Anvil 均通过；详见
   `docs/plan/tasks/r4-005.md`。R5-009 已组合此 effect 为 reusable Reentrancy policy。
+
+- R4-006 EVM full-width environment 已完成：`Runtime` / `Sdk.Context` 提供 allocation-free
+  `UInt256` gasleft/basefee/prevrandao/gaslimit；wide environment renderer 每个结果只读一次
+  opcode 并复用四 limb 投影。solc 0.8.34 assembly 显式固定 Cancun，避免 `0x44` 的旧
+  DIFFICULTY 语义；EvmCtx 和 TipJar 独立消费，Anvil 与当前 block 字段精确对照。详见
+  `docs/plan/tasks/r4-006.md`。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零

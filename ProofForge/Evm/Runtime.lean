@@ -101,6 +101,20 @@ def evmImm20b : Addr20 :=
 /-- 完整 `SELFBALANCE`。超宽不截断。宿主返回 0。 -/
 @[irreducible] def evmSelfBalance256 : UInt256 := ⟨0, 0, 0, 0⟩
 
+/-- Remaining gas at the point of the query. The target captures one `GAS` word and projects all
+four source limbs from that single observation. -/
+@[irreducible] def evmGasLeft256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- Current block base fee (`BASEFEE`) as a full EVM word. Requires the pinned Cancun target. -/
+@[irreducible] def evmBaseFee256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- Current beacon-chain randomness (`PREVRANDAO`) as a full EVM word. This must not be emitted as
+the pre-Paris `DIFFICULTY` interpretation of opcode `0x44`; assembly pins the Cancun target. -/
+@[irreducible] def evmPrevRandao256 : UInt256 := ⟨0, 0, 0, 0⟩
+
+/-- Current block gas limit (`GASLIMIT`) as a full EVM word. -/
+@[irreducible] def evmGasLimit256 : UInt256 := ⟨0, 0, 0, 0⟩
+
 /-- `eq(callvalue(), packed uint256)`。入口因此 payable。宿主返回 `amt.w0`。 -/
 @[irreducible] def evmDeposit256 (amt : UInt256) : UInt64 := amt.w0
 

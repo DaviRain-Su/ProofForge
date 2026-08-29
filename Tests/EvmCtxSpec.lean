@@ -11,6 +11,7 @@ open Lean Elab Command
 #guard get (init 0) == 0
 #guard caller (init 0) == evmCaller
 #guard height (init 0) == evmBlockNumber
+#guard gasLeft (init 0) == evmGasLeft256
 
 #guard aggregate (init 0) ⟨11, ⟨3, true⟩⟩ (13, 17) #v[19, 23, 29] == (93, true)
 #guard optionValue (init 0) none == 5
@@ -51,6 +52,8 @@ elab "#pf_guard_evm_aggregate_abi" : command => do
     | throwError "missing EVM tagged Option result entry"
   let some echoTagged := program.entries.find? (·.ixName == "echoTaggedValue")
     | throwError "missing EVM tagged enum result entry"
+  let some gasMethod := program.entries.find? (·.ixName == "gasLeft")
+    | throwError "missing EVM gas-left entry"
   unless optionMethod.logicalParamCount == 1 && optionMethod.paramCount == 2 &&
       optionMethod.paramTypes == #[.boolean, .uint64] &&
       optionMethod.selector == ProofForge.Crypto.Keccak.selector "optionValue"
@@ -75,8 +78,9 @@ elab "#pf_guard_evm_aggregate_abi" : command => do
         activePayloadWords := #[0, 1, 2]
       }) &&
       echoTagged.outputPolicy ==
-        "tagged-tuple-return-v1((uint8,uint64,uint64);active=[0,1,2])" do
-    throwError s!"wrong EVM Tagged Tuple v1 methods: {repr optionMethod}, {repr taggedMethod}"
+        "tagged-tuple-return-v1((uint8,uint64,uint64);active=[0,1,2])" &&
+      gasMethod.retTypes == #[.uint256] && gasMethod.retCount == 4 do
+    throwError s!"wrong EVM Tagged Tuple v1/environment methods: {repr optionMethod}, {repr taggedMethod}, {repr gasMethod}"
   let yul ←
     match ProofForge.Evm.Emit.emitYul program with
     | .ok yul => pure yul
@@ -95,6 +99,7 @@ elab "#pf_guard_evm_aggregate_abi" : command => do
       yul.contains "let abi_ret_tag := arg0" &&
       yul.contains "if and(eq(abi_ret_tag, 0), abi_ret_p0)" &&
       yul.contains "if and(eq(abi_ret_tag, 1), abi_ret_p1)" &&
+      yul.contains " := gas()" &&
       yul.contains "return(0, 96)" &&
       yul.contains "return(0, 64)" &&
       abi.contains "\"type\":\"tuple\",\"components\":[{\"name\":\"amount\"" &&
@@ -105,6 +110,7 @@ elab "#pf_guard_evm_aggregate_abi" : command => do
       abi.contains "\"name\":\"p1\",\"type\":\"uint64\"" &&
       abi.contains "\"name\":\"echoOptionValue\"" &&
       abi.contains "\"name\":\"echoTaggedValue\"" &&
+      abi.contains "\"name\":\"gasLeft\"" &&
       abi.contains "\"outputs\":[{\"name\":\"\",\"type\":\"tuple\"" do
     throwError "EVM aggregate/tagged calldata guards, return packing, or ABI JSON are incomplete"
 

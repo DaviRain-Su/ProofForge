@@ -22,6 +22,14 @@ inductive ValKind where
   | callValue256 (limb : Nat)
   /-- packed `selfbalance()` limb; `limb` is 0..3 (w0 lowest). -/
   | selfBalance256 (limb : Nat)
+  /-- packed `gas()` limb; all limbs share one observation through the emitter cache. -/
+  | gasLeft256 (limb : Nat)
+  /-- packed `basefee()` limb. -/
+  | baseFee256 (limb : Nat)
+  /-- packed Cancun `prevrandao()` limb. -/
+  | prevRandao256 (limb : Nat)
+  /-- packed `gaslimit()` limb. -/
+  | gasLimit256 (limb : Nat)
   /-- EIP-712 domain separator limb; `limb` is 0..3 (w0 lowest). -/
   | domainSep256 (limb : Nat)
   /-- Bounded EVM component query. New value vocabularies extend `Component.Query`. -/
@@ -66,6 +74,10 @@ def immW2 : Val := leaf .immW2
 def immX0 : Val := leaf .immX0
 def immX1 : Val := leaf .immX1
 def immX2 : Val := leaf .immX2
+def gasLeft256 (limb : Nat) : Val := leaf (.gasLeft256 limb)
+def baseFee256 (limb : Nat) : Val := leaf (.baseFee256 limb)
+def prevRandao256 (limb : Nat) : Val := leaf (.prevRandao256 limb)
+def gasLimit256 (limb : Nat) : Val := leaf (.gasLimit256 limb)
 def mapGetU64 (base key : Val) : Val :=
   .ext (.component (.hashedMap .getU64)) #[base, key]
 def mapGetAddr (base w0 w1 w2 : Val) : Val :=

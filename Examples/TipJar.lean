@@ -57,6 +57,18 @@ def chainId (_s : State) : UInt64 :=
 def timestamp (_s : State) : UInt64 :=
   Context.timestamp
 
+@[pf_entry]
+def baseFee (_s : State) : UInt256 :=
+  Context.baseFee
+
+@[pf_entry]
+def prevRandao (_s : State) : UInt256 :=
+  Context.prevRandao
+
+@[pf_entry]
+def gasLimit (_s : State) : UInt256 :=
+  Context.gasLimit
+
 /-- `ADDRESS` 低 8 字节。完整 20B 用 `self20`。 -/
 @[pf_entry]
 def selfLow (_s : State) : UInt64 :=

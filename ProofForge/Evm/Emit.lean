@@ -268,7 +268,9 @@ private def loadVal (p : IR.Program) (paramPrefix : String) (paramCount : Nat)
   | .loopIx => .ok "i"
   | .select .. => .error "extract/unsupported: evm select needs materialize"
   | .addU64 .. | .subU64 .. | .mulU64 .. | .divU64 .. | .modU64 .. |
-    .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext (.domainSep256 _) _ |
+    .ext (.callValue256 _) _ | .ext (.selfBalance256 _) _ | .ext (.gasLeft256 _) _ |
+    .ext (.baseFee256 _) _ | .ext (.prevRandao256 _) _ | .ext (.gasLimit256 _) _ |
+    .ext (.domainSep256 _) _ |
     .ext (.component _) _ =>
       .error "extract/unsupported: evm map/arith val needs materialize"
     | .ext _ _ => .error "extract/ir: malformed EVM value operands"
@@ -523,6 +525,14 @@ private partial def materializeVal (p : IR.Program) (indent paramPrefix : String
         return materializePackedEnvWord indent "cval256" "callvalue()" limb st
     | .ext (.selfBalance256 limb) #[] =>
         return materializePackedEnvWord indent "sbal256" "selfbalance()" limb st
+    | .ext (.gasLeft256 limb) #[] =>
+        return materializePackedEnvWord indent "gas256" "gas()" limb st
+    | .ext (.baseFee256 limb) #[] =>
+        return materializePackedEnvWord indent "basefee256" "basefee()" limb st
+    | .ext (.prevRandao256 limb) #[] =>
+        return materializePackedEnvWord indent "randao256" "prevrandao()" limb st
+    | .ext (.gasLimit256 limb) #[] =>
+        return materializePackedEnvWord indent "gaslimit256" "gaslimit()" limb st
     | .ext (.domainSep256 limb) #[] =>
         let (pre, ret, st1) := emitDomainSeparator indent st
         let (nm, st2) := fresh st1

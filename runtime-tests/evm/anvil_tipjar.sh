@@ -25,6 +25,27 @@ ts="$("$cast" block --rpc-url "$rpc" latest --json | "$python" -I -S -c 'import 
 got_ts="$("$cast" call --rpc-url "$rpc" "$addr" 'timestamp()(uint64)')"
 solana_lean_require_uint "$got_ts" "$(solana_lean_to_dec "$ts")" "evmTimestamp"
 
+block_env="$("$cast" block --rpc-url "$rpc" latest --json)"
+read -r block_base_fee block_gas_limit block_randao <<<"$(printf '%s' "$block_env" |
+  "$python" -I -S -c '
+import json, sys
+b = json.load(sys.stdin)
+def value(*names):
+    for name in names:
+        if name in b and b[name] is not None:
+            return int(b[name], 16) if isinstance(b[name], str) else int(b[name])
+    raise KeyError(names)
+print(value("baseFeePerGas", "base_fee_per_gas"),
+      value("gasLimit", "gas_limit"),
+      value("mixHash", "mix_hash", "prevRandao", "prev_randao"))
+')"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'baseFee()(uint256)')" \
+  "$block_base_fee" "BASEFEE"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'gasLimit()(uint256)')" \
+  "$block_gas_limit" "GASLIMIT"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'prevRandao()(uint256)')" \
+  "$block_randao" "PREVRANDAO"
+
 self_low="$("$python" -I -S -c "print(int('$addr', 16) & ((1<<64)-1))")"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'selfLow()(uint64)')" \
   "$self_low" "evmSelf low-8"

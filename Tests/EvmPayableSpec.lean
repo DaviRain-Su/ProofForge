@@ -187,7 +187,7 @@ private def mockNativeCtx : NativeFx.Emit.Context Nat :=
     !abi.contains "\"name\":\"receive\""
 
 -- Consumer component/IR identity is preserved (registry digests).
-#guard IR.digestHex ProofForge.Evm.Golden.extractedTipJar == "754276e8063a7d08"
+#guard IR.digestHex ProofForge.Evm.Golden.extractedTipJar == "1582f2173f9b97b7"
 #guard IR.digestHex ProofForge.Evm.Golden.extractedVault == "a3ea1b5b2a69c0e3"
 
 end Tests.EvmPayableSpec

@@ -713,6 +713,18 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelfBalance256 ||
             endsWith baseE ".evmSelfBalance256" then
           some (.ext (.evm (.selfBalance256 limb.toNat)) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasLeft256 ||
+            endsWith baseE ".evmGasLeft256" then
+          some (.ext (.evm (.gasLeft256 limb.toNat)) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmBaseFee256 ||
+            endsWith baseE ".evmBaseFee256" then
+          some (.ext (.evm (.baseFee256 limb.toNat)) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmPrevRandao256 ||
+            endsWith baseE ".evmPrevRandao256" then
+          some (.ext (.evm (.prevRandao256 limb.toNat)) #[])
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmGasLimit256 ||
+            endsWith baseE ".evmGasLimit256" then
+          some (.ext (.evm (.gasLimit256 limb.toNat)) #[])
         else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmDomainSeparator ||
             endsWith baseE ".evmDomainSeparator" then
           some (.ext (.evm (.domainSep256 limb.toNat)) #[])
@@ -4551,6 +4563,38 @@ private def queryOfRuntimeApp (env : Environment) (app : Expr) : Option (Array O
       .returnU64 (.ext (.evm (.selfBalance256 1)) #[]),
       .returnU64 (.ext (.evm (.selfBalance256 2)) #[]),
       .returnU64 (.ext (.evm (.selfBalance256 3)) #[])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmGasLeft256 ||
+      endsWith app ".evmGasLeft256" then
+    some #[
+      .returnU64 (.ext (.evm (.gasLeft256 0)) #[]),
+      .returnU64 (.ext (.evm (.gasLeft256 1)) #[]),
+      .returnU64 (.ext (.evm (.gasLeft256 2)) #[]),
+      .returnU64 (.ext (.evm (.gasLeft256 3)) #[])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmBaseFee256 ||
+      endsWith app ".evmBaseFee256" then
+    some #[
+      .returnU64 (.ext (.evm (.baseFee256 0)) #[]),
+      .returnU64 (.ext (.evm (.baseFee256 1)) #[]),
+      .returnU64 (.ext (.evm (.baseFee256 2)) #[]),
+      .returnU64 (.ext (.evm (.baseFee256 3)) #[])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmPrevRandao256 ||
+      endsWith app ".evmPrevRandao256" then
+    some #[
+      .returnU64 (.ext (.evm (.prevRandao256 0)) #[]),
+      .returnU64 (.ext (.evm (.prevRandao256 1)) #[]),
+      .returnU64 (.ext (.evm (.prevRandao256 2)) #[]),
+      .returnU64 (.ext (.evm (.prevRandao256 3)) #[])
+    ]
+  else if isConstNamed app ``ProofForge.Evm.Runtime.evmGasLimit256 ||
+      endsWith app ".evmGasLimit256" then
+    some #[
+      .returnU64 (.ext (.evm (.gasLimit256 0)) #[]),
+      .returnU64 (.ext (.evm (.gasLimit256 1)) #[]),
+      .returnU64 (.ext (.evm (.gasLimit256 2)) #[]),
+      .returnU64 (.ext (.evm (.gasLimit256 3)) #[])
     ]
   else if isConstNamed app ``ProofForge.Evm.Runtime.evmDomainSeparator ||
       endsWith app ".evmDomainSeparator" then

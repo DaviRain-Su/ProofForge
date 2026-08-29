@@ -23,6 +23,12 @@ bn="$("$cast" block-number --rpc-url "$rpc")"
 got_h="$("$cast" call --rpc-url "$rpc" "$addr" 'height()(uint64)')"
 solana_lean_require_uint "$got_h" "$(solana_lean_to_dec "$bn")" "height == block number"
 
+gas_left="$(solana_lean_to_dec "$("$cast" call --rpc-url "$rpc" "$addr" 'gasLeft()(uint256)')")"
+if [[ "$gas_left" -le 0 ]]; then
+  echo "FAIL: gasLeft must expose a positive full-width GAS observation, got $gas_left" >&2
+  exit 1
+fi
+
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" "$addr" 'stamp()' >/dev/null
 got_get="$("$cast" call --rpc-url "$rpc" "$addr" 'get()(uint64)')"
 bn2="$("$cast" block-number --rpc-url "$rpc")"
@@ -112,4 +118,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-ctx: ok (caller/number + static/tagged aggregate ABI; engineering only)"
+echo "evm-anvil-ctx: ok (caller/number/gas + static/tagged aggregate ABI; engineering only)"
