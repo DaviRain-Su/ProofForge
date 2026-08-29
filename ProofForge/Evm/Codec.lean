@@ -129,6 +129,27 @@ inductive DynamicInputPlan where
   | packedBytes (plan : PackedBytesPlan)
   deriving Repr, BEq, Inhabited
 
+/-- Output-side bounded-array geometry is intentionally distinct from calldata-tail geometry.
+The source frame remains fixed, while the standard ABI result publishes only its active prefix. -/
+structure BoundedArrayOutputPlan where
+  capacity : Nat
+  elementTypeName : String
+  elementWords : Array Scalar
+  deriving Repr, BEq, Inhabited
+
+/-- Output-side packed bytes policy. String results are validated again at the publication
+boundary, independently of any input validation that may have produced the source frame. -/
+structure PackedBytesOutputPlan where
+  capacity : Nat
+  validateUtf8 : Bool
+  deriving Repr, BEq, Inhabited
+
+/-- One standard-ABI dynamic output policy. It never reuses calldata offsets or cursor state. -/
+inductive DynamicOutputPlan where
+  | boundedArray (plan : BoundedArrayOutputPlan)
+  | packedBytes (plan : PackedBytesOutputPlan)
+  deriving Repr, BEq, Inhabited
+
 /-- Fixed source-frame geometry shared by dynamic inputs that support scalar indexed reads. Wire
 decoding remains variant-specific in the target codec interpreter. -/
 def DynamicInputPlan.indexedFrame : DynamicInputPlan → Nat × Array Scalar
@@ -162,6 +183,20 @@ def AbiInputPlan.packedBytes (plan : AbiInputPlan) : Option PackedBytesPlan :=
   match plan.dynamic with
   | some (.packedBytes bytes) => some bytes
   | _ => none
+
+/-- Fixed source-frame scalar metadata consumed by the output codec interpreter. -/
+def DynamicOutputPlan.sourceWords : DynamicOutputPlan → Array Scalar
+  | .boundedArray array =>
+      #[.uint32] ++ (Array.range array.capacity).flatMap fun _ => array.elementWords
+  | .packedBytes bytes => #[.uint32] ++ Array.replicate bytes.capacity .uint8
+
+/-- Canonical identity for output rules that are not visible in a Solidity function selector. -/
+def DynamicOutputPlan.canonical : DynamicOutputPlan → String
+  | .boundedArray array =>
+      s!"bounded-array-return-v1({array.elementTypeName}[];capacity={array.capacity};" ++
+        s!"element-words={array.elementWords.size})"
+  | .packedBytes bytes =>
+      s!"packed-bytes-return-v1(capacity={bytes.capacity};utf8={bytes.validateUtf8})"
 
 /-- Canonical identity for guard semantics not visible in the Solidity selector. Two enums can
 share the same fixed tuple type while activating different payload lanes, so target IR digests
@@ -259,6 +294,32 @@ def packedBytesV1InputPlan (capacity : Nat) (validateUtf8 : Bool) :
     projections
     dynamic := some (.packedBytes { capacity, validateUtf8 })
   }
+
+/-- Select an independent top-level dynamic result policy. A bounded result is represented during
+source execution as `length || capacity slots`, then encoded as the canonical standard-ABI active
+prefix. Nested/tagged dynamics and multi-limb elements remain fail closed. -/
+def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPlan) := do
+  let _ ← validate schema
+  match schema with
+  | .boundedArray capacity element =>
+      let elementWords := (← staticAbiLeaves element).map (·.type)
+      unless elementWords.size == 1 && limbCount elementWords[0]! == 1 do
+        throw "evm/codec: bounded array result currently requires one-limb scalar elements"
+      let localWords := 1 + capacity * elementWords.size
+      unless localWords ≤ maxBoundedArrayLocalWords do
+        throw s!"evm/codec: bounded array result frame exceeds {maxBoundedArrayLocalWords} words"
+      return some (.boundedArray {
+        capacity, elementTypeName := ← abiTypeOfSchema element, elementWords
+      })
+  | .boundedBytes capacity =>
+      unless 1 + capacity ≤ maxBoundedArrayLocalWords do
+        throw s!"evm/codec: packed bytes result frame exceeds {maxBoundedArrayLocalWords} words"
+      return some (.packedBytes { capacity, validateUtf8 := false })
+  | .boundedString capacity =>
+      unless 1 + capacity ≤ maxBoundedArrayLocalWords do
+        throw s!"evm/codec: packed bytes result frame exceeds {maxBoundedArrayLocalWords} words"
+      return some (.packedBytes { capacity, validateUtf8 := true })
+  | _ => pure none
 
 private def enumPayloadWords : Schema → Except String Nat
   | .unit => pure 0

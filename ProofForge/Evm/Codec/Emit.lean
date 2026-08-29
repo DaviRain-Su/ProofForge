@@ -47,22 +47,22 @@ def renderTaggedGuards (indent argPrefix : String)
     base := base + plan.wordCount
   return out
 
-/-- Validate strict Unicode-scalar UTF-8 directly over one packed ABI String payload. The scan is
-bounded by the already capacity-checked runtime length and allocates no target memory. -/
-private def renderUtf8Guard (indent dataName lengthName : String) (index : Nat) : String :=
-  let i := "abi_utf8_i" ++ toString index
-  let need := "abi_utf8_need" ++ toString index
-  let min := "abi_utf8_min" ++ toString index
-  let max := "abi_utf8_max" ++ toString index
-  let byte := "abi_utf8_byte" ++ toString index
+/-- Render one strict Unicode-scalar UTF-8 scanner over a target-owned byte accessor. Input
+calldata and output memory supply different accessors without duplicating the validation policy. -/
+private def renderUtf8Guard (namePrefix indent lengthName : String)
+    (byteAt : String → String) (index : Nat) : String :=
+  let i := namePrefix ++ "i" ++ toString index
+  let need := namePrefix ++ "need" ++ toString index
+  let min := namePrefix ++ "min" ++ toString index
+  let max := namePrefix ++ "max" ++ toString index
+  let byte := namePrefix ++ "byte" ++ toString index
   indent ++ "let " ++ i ++ " := 0" ++ nl ++
   indent ++ "let " ++ need ++ " := 0" ++ nl ++
   indent ++ "let " ++ min ++ " := 128" ++ nl ++
   indent ++ "let " ++ max ++ " := 191" ++ nl ++
   indent ++ "for { } lt(" ++ i ++ ", " ++ lengthName ++ ") { " ++ i ++
     " := add(" ++ i ++ ", 1) } {" ++ nl ++
-  indent ++ "  let " ++ byte ++ " := byte(0, calldataload(add(add(add(4, " ++
-    dataName ++ "), 32), " ++ i ++ ")))" ++ nl ++
+  indent ++ "  let " ++ byte ++ " := " ++ byteAt i ++ nl ++
   indent ++ "  switch " ++ need ++ nl ++
   indent ++ "  case 0 {" ++ nl ++
   indent ++ "    if gt(" ++ byte ++ ", 127) {" ++ nl ++
@@ -199,7 +199,9 @@ def renderEntryArgs (plans : Array Codec.AbiInputPlan)
             paddingIndex ++ "))) { " ++ revert0 ++ " }" ++ nl ++
           "        }" ++ nl
         if bytes.validateUtf8 then
-          out := out ++ renderUtf8Guard "        " dataName lengthName dynamicIndex
+          out := out ++ renderUtf8Guard "abi_utf8_" "        " lengthName (fun i =>
+            "byte(0, calldataload(add(add(add(4, " ++ dataName ++ "), 32), " ++ i ++ ")))"
+          ) dynamicIndex
         for i in [0:bytes.capacity] do
           out := out ++ "        if gt(" ++ lengthName ++ ", " ++ toString i ++ ") {" ++ nl ++
             "          arg" ++ toString (localWord + 1 + i) ++
@@ -212,5 +214,59 @@ def renderEntryArgs (plans : Array Codec.AbiInputPlan)
   if hasDynamic then
     out := out ++ "        if iszero(eq(abi_size, abi_tail)) { " ++ revert0 ++ " }" ++ nl
   return out
+
+/-- Generic bridge from the target codec interpreter to the main CFG value materializer. Dynamic
+result policy stays in this module; the main emitter supplies only source-value evaluation. -/
+structure ReturnContext (Value State : Type) where
+  indent : String
+  materialize : String → Value → State → Except String (String × String × State)
+
+/-- Interpret one bounded dynamic output plan. The fixed source frame is never returned directly:
+the encoder emits the canonical ABI offset/length header and only the active array or byte prefix. -/
+def renderDynamicReturn [Inhabited Value] (context : ReturnContext Value State)
+    (plan : Codec.DynamicOutputPlan) (values : Array Value) (state : State) :
+    Except String (String × State) := do
+  let indent := context.indent
+  unless values.size == plan.sourceWords.size do
+    throw s!"evm/codec: dynamic result has {values.size} source parts, expected {plan.sourceWords.size}"
+  let (lengthPre, length, state0) ← context.materialize indent values[0]! state
+  let mut state := state0
+  let mut out := lengthPre ++
+    indent ++ "mstore(0, 32)" ++ nl ++
+    indent ++ "mstore(32, " ++ length ++ ")" ++ nl
+  match plan with
+  | .boundedArray array =>
+      unless array.elementWords.size == 1 do
+        throw "evm/codec: malformed bounded array output plan"
+      out := out ++ indent ++ "if gt(" ++ length ++ ", " ++ toString array.capacity ++
+        ") { " ++ revert0 ++ " }" ++ nl
+      for i in [0:array.capacity] do
+        out := out ++ indent ++ "if gt(" ++ length ++ ", " ++ toString i ++ ") {" ++ nl
+        let (pre, value, next) ←
+          context.materialize (indent ++ "  ") values[1 + i]! state
+        state := next
+        out := out ++ pre ++ indent ++ "  mstore(" ++ toString (64 + i * 32) ++
+          ", " ++ value ++ ")" ++ nl ++ indent ++ "}" ++ nl
+      out := out ++ indent ++ "return(0, add(64, mul(" ++ length ++ ", 32)))" ++ nl
+  | .packedBytes bytes =>
+      out := out ++ indent ++ "if gt(" ++ length ++ ", " ++ toString bytes.capacity ++
+        ") { " ++ revert0 ++ " }" ++ nl
+      for word in [0:(bytes.capacity + 31) / 32] do
+        out := out ++ indent ++ "mstore(" ++ toString (64 + word * 32) ++ ", 0)" ++ nl
+      for i in [0:bytes.capacity] do
+        out := out ++ indent ++ "if gt(" ++ length ++ ", " ++ toString i ++ ") {" ++ nl
+        let (pre, value, next) ←
+          context.materialize (indent ++ "  ") values[1 + i]! state
+        state := next
+        out := out ++ pre ++ indent ++ "  mstore8(" ++ toString (64 + i) ++
+          ", " ++ value ++ ")" ++ nl ++ indent ++ "}" ++ nl
+      if bytes.validateUtf8 then
+        out := out ++ renderUtf8Guard "abi_ret_utf8_" indent length
+          (fun i => "byte(0, mload(add(64, " ++ i ++ ")))") 0
+      let padded := "abi_ret_padded"
+      out := out ++ indent ++ "let " ++ padded ++ " := and(add(" ++ length ++
+        ", 31), not(31))" ++ nl ++
+        indent ++ "return(0, add(64, " ++ padded ++ "))" ++ nl
+  return (out, state)
 
 end ProofForge.Evm.Codec.Emit

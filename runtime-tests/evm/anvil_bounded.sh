@@ -138,6 +138,54 @@ for invalid_utf8 in \
   fi
 done
 
+# Dynamic results use an output-only codec plan: the fixed source frame is encoded as the exact
+# standard-ABI active prefix rather than returned as capacity-sized scalar words.
+for case in \
+  '[]|[]' \
+  '[11,13]|[11, 13]' \
+  '[11,13,17,19]|[11, 13, 17, 19]'; do
+  input="${case%%|*}"
+  expected="${case#*|}"
+  echo_array="$("$cast" call --rpc-url "$rpc" "$addr" \
+    'echoBoundedValues(uint16[])(uint16[])' "$input")"
+  solana_lean_require_equal "$echo_array" "$expected" "bounded array dynamic result $input"
+done
+
+for input in 0x 0x0b0d 0x0b0d1113171d1f25; do
+  echo_bytes="$("$cast" call --rpc-url "$rpc" "$addr" \
+    'echoBoundedBytes(bytes)(bytes)' "$input")"
+  solana_lean_require_equal "$echo_bytes" "$input" "bounded bytes dynamic result $input"
+done
+
+echo_string="$("$cast" call --rpc-url "$rpc" "$addr" \
+  'echoBoundedString(string)(string)' abc)"
+solana_lean_require_equal "$echo_string" '"abc"' "bounded string dynamic result"
+
+make_signature='makeBoundedString(uint32,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8)(string)'
+made_string="$("$cast" call --rpc-url "$rpc" "$addr" "$make_signature" \
+  3 97 98 99 0 0 0 0 0)"
+solana_lean_require_equal "$made_string" '"abc"' "constructed UTF-8 dynamic result"
+
+# Output capacity and UTF-8 are checked at publication even when no dynamic input decoder ran.
+if "$cast" call --rpc-url "$rpc" "$addr" "$make_signature" \
+    9 97 98 99 0 0 0 0 0 >/dev/null 2>&1; then
+  echo "FAIL: over-capacity bounded dynamic result unexpectedly succeeded" >&2
+  exit 1
+fi
+for invalid_utf8 in \
+  '1 128 0 0 0 0 0 0 0' \
+  '2 192 128 0 0 0 0 0 0' \
+  '3 237 160 128 0 0 0 0 0' \
+  '2 226 130 0 0 0 0 0 0' \
+  '4 244 144 128 128 0 0 0 0'; do
+  # shellcheck disable=SC2086
+  if "$cast" call --rpc-url "$rpc" "$addr" "$make_signature" $invalid_utf8 \
+      >/dev/null 2>&1; then
+    echo "FAIL: invalid UTF-8 bounded result unexpectedly succeeded ($invalid_utf8)" >&2
+    exit 1
+  fi
+done
+
 combine_selector="$("$cast" sig 'combine(uint32,uint64[],bool,uint16[])')"
 combine_data() {
   "$python" -I -S -c \
@@ -156,4 +204,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-bounded: ok (array/bytes/string offset/length/tail/padding/UTF-8 matrix; engineering only)"
+echo "evm-anvil-bounded: ok (canonical dynamic input/output + UTF-8 matrix; engineering only)"

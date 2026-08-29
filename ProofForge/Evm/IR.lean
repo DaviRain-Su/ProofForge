@@ -234,6 +234,10 @@ structure Method where
   retCount : Nat := 1
   /-- Canonical identity for input guard semantics not encoded by the Solidity selector. -/
   inputPolicy : String := ""
+  /-- Target-owned dynamic output plan, independent of calldata-tail policy. -/
+  outputPlan : Option Codec.DynamicOutputPlan := none
+  /-- Canonical identity for output rules not represented in the function selector. -/
+  outputPolicy : String := ""
   ops : Array Op := #[]
   evaluation : Core.Evaluation Ops.ValKind := {}
   view : Bool := false
@@ -256,6 +260,8 @@ def Method.resolvedParamTypes (method : Method) : Except String (Array Core.Code
   resolveParamTypes method.paramCount method.paramTypes method.paramWidths
 
 def Method.resolvedRetTypes (method : Method) : Except String (Array Core.Codec.Scalar) := do
+  if let some plan := method.outputPlan then
+    return plan.sourceWords
   unless method.retTypes.isEmpty do
     unless method.retTypes.all Core.Codec.Scalar.isWellFormed do
       throw "evm/codec: invalid return scalar metadata"
@@ -376,15 +382,25 @@ private def bindParams (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     ops
   }
 
-private def bindRetTypes (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
-    Except String (Array Core.Codec.Scalar) := do
+private structure BoundReturn where
+  types : Array Core.Codec.Scalar
+  plan : Option Codec.DynamicOutputPlan := none
+  policy : String := ""
+
+private def bindReturn (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
+    Except String BoundReturn := do
+  if let some plan ← Codec.dynamicOutputPlan method.retSchema then
+    let types := plan.sourceWords
+    unless types.size == method.retCount do
+      throw s!"evm/codec: dynamic return metadata is incomplete for {method.ixName}"
+    return { types, plan := some plan, policy := plan.canonical }
   if method.retSchema == .unit || schemaIsScalar method.retSchema then
-    return method.retTypes
+    return { types := method.retTypes }
   let types := (← Codec.staticAbiLeaves method.retSchema).map (·.type)
   let sourceParts := types.foldl (init := 0) fun count type => count + Codec.limbCount type
   unless sourceParts == method.retCount do
     throw s!"evm/codec: aggregate return metadata is incomplete for {method.ixName}"
-  return types
+  return { types }
 
 def Method.toCFG (method : Method) : Except String CFG := do
   let source := toSourceOps method.ops
@@ -551,6 +567,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
   unless ctorSrc.ops.any (fun | .returnState _ => true | _ => false) do
     throw "extract/unsupported: init missing returnState"
   let (ctorParams, ctorOps, ctorEvaluation) ← lowerMethodBody ctorSrc
+  let ctorReturn ← bindReturn ctorSrc
   let ctor : Method := {
     kind := ctorSrc.kind
     name := ctorSrc.name
@@ -561,10 +578,12 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     paramTypes := ctorParams.types
     paramSchemas := ctorSrc.paramSchemas
     retWidths := ctorSrc.retWidths
-    retTypes := ← bindRetTypes ctorSrc
+    retTypes := ctorReturn.types
     retSchema := ctorSrc.retSchema
     retCount := 1
     inputPolicy := ctorParams.inputPolicy
+    outputPlan := ctorReturn.plan
+    outputPolicy := ctorReturn.policy
     ops := ctorOps
     evaluation := ctorEvaluation
     view := false
@@ -580,6 +599,7 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       else m.paramSchemas.mapM fun schema => return (← Codec.inputPlan schema).typeName
     let sel := Keccak.selector m.ixName abiTypes
     let view := m.kind == .get
+    let returns ← bindReturn m
     entries := entries.push {
       kind := m.kind
       name := m.name
@@ -590,10 +610,12 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
       paramTypes := params.types
       paramSchemas := m.paramSchemas
       retWidths := m.retWidths
-      retTypes := ← bindRetTypes m
+      retTypes := returns.types
       retSchema := m.retSchema
       retCount := m.retCount
       inputPolicy := params.inputPolicy
+      outputPlan := returns.plan
+      outputPolicy := returns.policy
       ops
       evaluation
       view
@@ -697,12 +719,15 @@ def canonical (p : Program) : String :=
     (p.slots.map (fun s => s!"{s.name}:{s.width}")).toList
   let ctorPolicy := if p.constructor.inputPolicy.isEmpty then ""
     else s!":{p.constructor.inputPolicy}"
-  let ctor := s!"ctor:{p.constructor.paramCount}{ctorPolicy}:[{opsCanon p.constructor.ops}]"
+  let ctorOutput := if p.constructor.outputPolicy.isEmpty then ""
+    else s!":{p.constructor.outputPolicy}"
+  let ctor := s!"ctor:{p.constructor.paramCount}{ctorPolicy}{ctorOutput}:[{opsCanon p.constructor.ops}]"
   let entries :=
     (p.entries.qsort (fun a b => a.ixName < b.ixName)).toList.map fun m =>
       let tag := if m.view then "view" else if m.payable then "pay" else "mut"
       let policy := if m.inputPolicy.isEmpty then "" else s!":{m.inputPolicy}"
-      let base := s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}{policy}"
+      let output := if m.outputPolicy.isEmpty then "" else s!":{m.outputPolicy}"
+      let base := s!"{tag}:{m.ixName}:{m.selector}:{m.paramCount}{policy}{output}"
       if (m.paramWidths.isEmpty || m.paramWidths.all (· == 8)) &&
           m.retCount == 1 && m.retWidths.isEmpty then
         s!"{base}:[{opsCanon m.ops}]"

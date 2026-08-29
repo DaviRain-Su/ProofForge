@@ -47,4 +47,22 @@ source execution. -/
 def boundedString (_s : State) (text : BoundedString 8) : UInt64 :=
   text.length.toUInt64 + text.values[0].toUInt64 + text.values[7].toUInt64
 
+/-- A bounded vector result uses an output-only standard-ABI plan. The fixed five-word source
+frame is encoded as the canonical `uint16[]` active prefix. -/
+@[pf_entry]
+def echoBoundedValues (_s : State) (items : BoundedVec UInt16 4) : BoundedVec UInt16 4 := items
+
+@[pf_entry]
+def echoBoundedBytes (_s : State) (bytes : BoundedBytes 8) : BoundedBytes 8 := bytes
+
+@[pf_entry]
+def echoBoundedString (_s : State) (text : BoundedString 8) : BoundedString 8 := text
+
+/-- Arbitrary scalar bytes may construct a String source frame. The output codec must reject
+malformed UTF-8 before publishing ABI returndata, even though no String input decoder ran. -/
+@[pf_entry]
+def makeBoundedString (_s : State) (length : UInt32)
+    (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) : BoundedString 8 :=
+  { length, values := #v[b0, b1, b2, b3, b4, b5, b6, b7] }
+
 end Examples.EvmBounded

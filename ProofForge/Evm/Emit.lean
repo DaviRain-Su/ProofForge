@@ -1109,7 +1109,17 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
           finalState := next
       | .returnU64s values =>
           if values.isEmpty then throw "evm/cfg: empty return tuple"
-          if schemaIsStaticAggregate method.retSchema then
+          if let some plan := method.outputPlan then
+            let context : Codec.Emit.ReturnContext Ops.Val Render := {
+              indent
+              materialize := fun valueIndent value state =>
+                materializeVal p valueIndent "arg" method.paramCount paramTypes value state
+            }
+            let (text, next) ←
+              Codec.Emit.renderDynamicReturn context plan values finalState
+            body := body ++ text
+            finalState := next
+          else if schemaIsStaticAggregate method.retSchema then
             let (text, next) ←
               emitStaticReturnWords p method indent paramTypes retTypes values finalState
             body := body ++ text

@@ -70,10 +70,10 @@ instruction 增加 recipe opcode。
 
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
-| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier 与 capacity-preserving operations、bounded Map/Set/Queue/BitSet logical semantics、distinct bounded bytes/UTF-8 string source contracts、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged、generic bounded 与 bytes/String input target binding；bounded scalar dynamic read；同一 logical schema 的 cross-target plan conformance | collection target bindings、bounded mutation writeback、wide/aggregate dynamic element、tagged/bounded return source contract、nested dynamic shapes 与更高 resource ceiling |
-| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec/bytes/String input（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/bounded return policy；Token-2022 extension 完整语义 |
+| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier 与 capacity-preserving operations、bounded Map/Set/Queue/BitSet logical semantics、distinct bounded bytes/UTF-8 string source contracts、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged、generic bounded 与 bytes/String input target binding；两边独立的 top-level bounded output plan；bounded scalar dynamic read；同一 logical schema 的 cross-target plan conformance | collection target bindings、bounded mutation writeback、wide/aggregate dynamic element、tagged/nested dynamic output、nested dynamic shapes 与更高 resource ceiling |
+| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、sysvar、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data 与 Token-2022 TLV envelope | tagged/nested/wide dynamic return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator，以及 invocation-local buffer/fixed Vec/writer/signed-CPI codec plan | Rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；部分能力仍以具体 component 暴露；更高层 transient source collection lowering 仍 fail closed |
-| EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input（strict UTF-8 String）、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | tagged/bounded return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；缺少标准化资源 manifest |
+| EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，以及独立 `DynamicOutputPlan` 的 top-level bounded dynamic result（strict UTF-8 String）、环境、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | tagged/nested/wide dynamic return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；缺少标准化资源 manifest |
 | EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy | typed pause events、code-existence/revert-bubbling policy、ERC-721/bounded ERC-1155；dynamic indexed Address return |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
@@ -225,12 +225,19 @@ copy 使用 disjoint staging，不复用 input decode geometry，也不增加 co
 Runtime effect。one-limb scalar 以外的 dynamic output 继续 fail closed。详见
 [R1-018](tasks/r1-018.md)。
 
+R1-019 已完成 EVM top-level bounded output binding：独立 `DynamicOutputPlan` 从 fixed source
+frame 发布 canonical standard-ABI offset/length 与 active word/packed-byte prefix；packed output
+显式清零 padding，String 在 output boundary 再做 strict UTF-8。该 policy identity 进入 EVM IR
+digest，不复用 calldata tail，也不增加 collection opcode 或 Runtime effect。详见
+[R1-019](tasks/r1-019.md)。
+
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
 2. 定义 bounded codec schema：scalar、fixed bytes、tuple/record、enum、`Option`、固定/上限数组。
 3. SVM adapter 实现 Borsh little-endian、canonical tagged/bounded/bytes/String input、exact
    cursor consumption 与独立 top-level bounded output；EVM adapter 实现 32-byte ABI word、static tuple、Tagged Tuple v1、
-   Bounded Array v1 与 Packed Bytes v1 canonical dynamic input。
+   Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，并用独立 output plan 发布
+   top-level one-limb bounded dynamic results。
 4. codec 只描述 wire，不拥有 account/storage geometry，也不执行业务 validation。
 
 ### R2 — SVM Runtime

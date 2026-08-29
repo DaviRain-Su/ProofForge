@@ -51,6 +51,14 @@ elab "#pf_guard_evm_bounded_abi" : command => do
     | throwError "missing boundedBytes entry"
   let some text := program.entries.find? (·.ixName == "boundedString")
     | throwError "missing boundedString entry"
+  let some echoValues := program.entries.find? (·.ixName == "echoBoundedValues")
+    | throwError "missing bounded array result entry"
+  let some echoBytes := program.entries.find? (·.ixName == "echoBoundedBytes")
+    | throwError "missing bounded bytes result entry"
+  let some echoString := program.entries.find? (·.ixName == "echoBoundedString")
+    | throwError "missing bounded string result entry"
+  let some makeString := program.entries.find? (·.ixName == "makeBoundedString")
+    | throwError "missing constructed bounded string result entry"
   unless bounded.logicalParamCount == 1 && bounded.paramCount == 5 &&
       bounded.paramTypes == #[.uint32, .uint64, .uint64, .uint64, .uint64] &&
       bounded.selector == ProofForge.Crypto.Keccak.selector "boundedValues" #["uint64[]"] &&
@@ -72,7 +80,18 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       text.logicalParamCount == 1 && text.paramCount == 9 &&
       text.paramTypes == bytes.paramTypes &&
       text.selector == ProofForge.Crypto.Keccak.selector "boundedString" #["string"] &&
-      text.inputPolicy == "0=packed-bytes-v1(string;capacity=8;utf8=true)" do
+      text.inputPolicy == "0=packed-bytes-v1(string;capacity=8;utf8=true)" &&
+      echoValues.paramCount == 5 && echoValues.retCount == 5 &&
+      echoValues.retTypes == #[.uint32, .uint16, .uint16, .uint16, .uint16] &&
+      echoValues.outputPlan == some (.boundedArray {
+        capacity := 4, elementTypeName := "uint16", elementWords := #[.uint16]
+      }) &&
+      echoValues.outputPolicy == "bounded-array-return-v1(uint16[];capacity=4;element-words=1)" &&
+      echoBytes.retCount == 9 && echoBytes.outputPlan == some (.packedBytes {
+        capacity := 8, validateUtf8 := false }) &&
+      echoString.retCount == 9 && echoString.outputPlan == some (.packedBytes {
+        capacity := 8, validateUtf8 := true }) &&
+      makeString.paramCount == 9 && makeString.outputPlan == echoString.outputPlan do
     throwError s!"wrong EVM bounded ABI methods: {repr bounded}, {repr combined}, " ++
       s!"{repr bytes}, {repr text}"
   let yul ←
@@ -96,11 +115,22 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       yul.contains "arg8 := byte(0, calldataload" &&
       yul.contains "let abi_utf8_need0 := 0" &&
       yul.contains "if abi_utf8_need0 { revert(0, 0) }" &&
+      yul.contains "mstore(0, 32)" && yul.contains "mstore(32, arg0)" &&
+      yul.contains "return(0, add(64, mul(arg0, 32)))" &&
+      yul.contains "mstore8(71," && yul.contains "let abi_ret_padded := and(add(arg0, 31)" &&
+      yul.contains "let abi_ret_utf8_need0 := 0" &&
+      yul.contains "if abi_ret_utf8_need0 { revert(0, 0) }" &&
       abi.contains "\"name\":\"arg0\",\"type\":\"uint64[]\"" &&
       abi.contains "\"name\":\"arg1\",\"type\":\"uint64[]\"" &&
       abi.contains "\"name\":\"arg3\",\"type\":\"uint16[]\"" &&
       abi.contains "\"name\":\"arg0\",\"type\":\"bytes\"" &&
-      abi.contains "\"name\":\"arg0\",\"type\":\"string\"" do
+      abi.contains "\"name\":\"arg0\",\"type\":\"string\"" &&
+      abi.contains "\"name\":\"echoBoundedValues\"" &&
+      abi.contains "\"outputs\":[{\"name\":\"\",\"type\":\"uint16[]\"}]" &&
+      abi.contains "\"name\":\"echoBoundedBytes\"" &&
+      abi.contains "\"outputs\":[{\"name\":\"\",\"type\":\"bytes\"}]" &&
+      abi.contains "\"name\":\"echoBoundedString\"" &&
+      abi.contains "\"outputs\":[{\"name\":\"\",\"type\":\"string\"}]" do
     throwError "bounded ABI offsets, bounds, zero frame, padding guards, or JSON are incomplete"
   let ctorSchema : ProofForge.Core.Codec.Schema := .boundedArray 2 (.scalar .uint64)
   let ctorPlan ←
@@ -144,6 +174,17 @@ elab "#pf_guard_evm_bounded_abi" : command => do
 #guard
   match ProofForge.Evm.Codec.inputPlan (.boundedBytes 64) with
   | .error reason => reason.contains "packed bytes local frame exceeds 64 words"
+  | .ok _ => false
+
+#guard
+  match ProofForge.Evm.Codec.dynamicOutputPlan
+      (.boundedArray 2 (.boundedArray 2 (.scalar .uint64))) with
+  | .error _ => true
+  | .ok _ => false
+
+#guard
+  match ProofForge.Evm.Codec.dynamicOutputPlan (.boundedString 64) with
+  | .error reason => reason.contains "result frame exceeds 64 words"
   | .ok _ => false
 
 end Tests.EvmBoundedSpec
