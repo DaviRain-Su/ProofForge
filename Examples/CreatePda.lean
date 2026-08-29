@@ -25,6 +25,15 @@ def openPda (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+/-- Create the same PDA with the current Rent minimum chosen inside the reusable SDK facade. -/
+@[pf_entry]
+def openRentExempt (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := ProofForge.Svm.Sdk.Pda.Ascii.createRentExempt "vault" 16
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
 /-- 同一条 CreateAccount，bump 钉死 0。syscall 必须失败。 -/
 @[pf_entry]
 def openBad (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=

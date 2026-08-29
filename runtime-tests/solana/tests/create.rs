@@ -8,6 +8,7 @@ use {
     solana_native_token::LAMPORTS_PER_SOL,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
+    solana_rent::Rent,
     std::{env, fs, path::PathBuf},
 };
 
@@ -71,15 +72,17 @@ fn system_program_keyed() -> (Pubkey, Account) {
 
 fn build_ix(
     program_id: Pubkey,
+    name: &str,
+    params: &[u64],
     payer: Pubkey,
     new_acc: Pubkey,
     system: Pubkey,
     new_signer: bool,
 ) -> Instruction {
-    let disc = instruction_discriminator("create", 1);
+    let disc = instruction_discriminator(name, params.len());
     Instruction::new_with_bytes(
         program_id,
-        &instruction_data(&disc, &[CREATE_LAMPORTS]),
+        &instruction_data(&disc, params),
         vec![
             AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, true),
@@ -95,7 +98,7 @@ fn create_allocates_account_owned_by_program() {
     let payer = Pubkey::new_unique();
     let new_acc = Pubkey::new_unique();
     let (system, system_acc) = system_program_keyed();
-    let ix = build_ix(program_id, payer, new_acc, system, true);
+    let ix = build_ix(program_id, "create", &[CREATE_LAMPORTS], payer, new_acc, system, true);
     mollusk.process_and_validate_instruction(
         &ix,
         &[
@@ -120,12 +123,44 @@ fn create_allocates_account_owned_by_program() {
 }
 
 #[test]
+fn create_rent_exempt_uses_current_sysvar_minimum() {
+    let (program_id, mut mollusk) = harness();
+    mollusk.sysvars.rent = Rent::with_lamports_per_byte(1234);
+    let payer = Pubkey::new_unique();
+    let new_acc = Pubkey::new_unique();
+    let (system, system_acc) = system_program_keyed();
+    let minimum = mollusk.sysvars.rent.minimum_balance(SPACE as usize);
+    let ix = build_ix(program_id, "createRentExempt", &[], payer, new_acc, system, true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
+            (payer, funded(BASE_LAMPORTS)),
+            (new_acc, funded(0)),
+            (system, system_acc),
+        ],
+        &[
+            Check::success(),
+            Check::return_data(&0u64.to_le_bytes()),
+            Check::account(&payer)
+                .lamports(BASE_LAMPORTS - minimum)
+                .build(),
+            Check::account(&new_acc)
+                .lamports(minimum)
+                .owner(&program_id)
+                .space(SPACE as usize)
+                .build(),
+        ],
+    );
+}
+
+#[test]
 fn create_missing_new_account_signer_fails() {
     let (program_id, mollusk) = harness();
     let payer = Pubkey::new_unique();
     let new_acc = Pubkey::new_unique();
     let (system, system_acc) = system_program_keyed();
-    let ix = build_ix(program_id, payer, new_acc, system, false);
+    let ix = build_ix(program_id, "create", &[CREATE_LAMPORTS], payer, new_acc, system, false);
     mollusk.process_and_validate_instruction(
         &ix,
         &[

@@ -23,6 +23,15 @@ def create (_s : State) (lamports : UInt64) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+/-- Create the same 16-byte account with the current Rent minimum chosen inside the SDK. -/
+@[pf_entry]
+def createRentExempt (_s : State) : Except Error (State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := ProofForge.Svm.Sdk.System.createRentExempt 16
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
 @[pf_entry]
 def get (_s : State) : UInt64 :=
   0

@@ -1,5 +1,6 @@
 import ProofForge.Attr
 import ProofForge.Svm.Runtime
+import ProofForge.Svm.Sdk.Sysvar
 import ProofForge.Svm.Seed
 
 /-!
@@ -20,6 +21,12 @@ namespace ProofForge.Svm.Sdk.System
 the owner is the current program id. Both instruction values may be dynamic scalars. -/
 @[pf_inline] def createAccount (lamports space : UInt64) : UInt64 :=
   ProofForge.Svm.Runtime.systemCreate lamports space
+
+/-- Create a current-program-owned account with the exact current Rent minimum for one
+compile-time data length. Keeping `space` static matches the current sysvar contract and prevents
+a runtime-selected allocation geometry from entering the SDK. -/
+@[pf_inline] def createRentExempt (space : Nat) : UInt64 :=
+  createAccount (Sysvar.Rent.minimumBalance space) (UInt64.ofNat space)
 
 /-- Closed `system.assign`: re-points account 0 (signer + writable) at the current program id.
 Fixed geometry: outer account 0 is the signer/writable target, outer account 1 is the System
@@ -73,6 +80,10 @@ base, account 1 is the writable derived account, and account 2 is the System pro
     #[.u32le 3, .accKey 0, .u64le (UInt64.ofNat seed.length), .ascii seed,
       .u64le lamports, .u64le space, .programId]
 
+/-- Seed-derived create with the exact current Rent minimum for one compile-time data length. -/
+@[pf_inline] def createRentExempt (seed : String) (space : Nat) : UInt64 :=
+  createAccount seed (Sysvar.Rent.minimumBalance space) (UInt64.ofNat space)
+
 /-- Assign `create_with_seed(base, seed, currentProgram)` to the current program.
 External account 0 is the signer base, account 1 is the writable derived account, and account 2 is
 the System program. -/
@@ -119,4 +130,3 @@ end AsciiSeed
 
 
 end ProofForge.Svm.Sdk.System
-

@@ -7,6 +7,7 @@ use {
     solana_instruction::{AccountMeta, Instruction},
     solana_native_token::LAMPORTS_PER_SOL,
     solana_pubkey::Pubkey,
+    solana_rent::Rent,
     std::{env, fs, path::PathBuf},
 };
 
@@ -72,14 +73,15 @@ fn system_program_keyed() -> (Pubkey, Account) {
 fn build_ix(
     program_id: Pubkey,
     name: &str,
+    params: &[u64],
     payer: Pubkey,
     pda: Pubkey,
     system: Pubkey,
 ) -> Instruction {
-    let disc = instruction_discriminator(name, 1);
+    let disc = instruction_discriminator(name, params.len());
     Instruction::new_with_bytes(
         program_id,
-        &instruction_data(&disc, &[CREATE_LAMPORTS]),
+        &instruction_data(&disc, params),
         vec![
             AccountMeta::new(common::dummy_state_key(&program_id), false),
             AccountMeta::new(payer, true),
@@ -95,7 +97,7 @@ fn create_pda_allocates_vault() {
     assert!((1..=255).contains(&bump));
     let payer = Pubkey::new_unique();
     let (system, system_acc) = system_program_keyed();
-    let ix = build_ix(program_id, "openPda", payer, pda, system);
+    let ix = build_ix(program_id, "openPda", &[CREATE_LAMPORTS], payer, pda, system);
     mollusk.process_and_validate_instruction(
         &ix,
         &[
@@ -120,11 +122,43 @@ fn create_pda_allocates_vault() {
 }
 
 #[test]
+fn create_pda_rent_exempt_uses_current_sysvar_minimum() {
+    let (program_id, pda, bump, mut mollusk) = harness();
+    mollusk.sysvars.rent = Rent::with_lamports_per_byte(1234);
+    assert!((1..=255).contains(&bump));
+    let payer = Pubkey::new_unique();
+    let (system, system_acc) = system_program_keyed();
+    let minimum = mollusk.sysvars.rent.minimum_balance(SPACE);
+    let ix = build_ix(program_id, "openRentExempt", &[], payer, pda, system);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
+            (payer, funded(BASE_LAMPORTS)),
+            (pda, funded(0)),
+            (system, system_acc),
+        ],
+        &[
+            Check::success(),
+            Check::return_data(&0u64.to_le_bytes()),
+            Check::account(&payer)
+                .lamports(BASE_LAMPORTS - minimum)
+                .build(),
+            Check::account(&pda)
+                .lamports(minimum)
+                .owner(&program_id)
+                .space(SPACE)
+                .build(),
+        ],
+    );
+}
+
+#[test]
 fn create_pda_wrong_bump_fails() {
     let (program_id, pda, _bump, mollusk) = harness();
     let payer = Pubkey::new_unique();
     let (system, system_acc) = system_program_keyed();
-    let ix = build_ix(program_id, "openBad", payer, pda, system);
+    let ix = build_ix(program_id, "openBad", &[CREATE_LAMPORTS], payer, pda, system);
     let result = mollusk.process_instruction(
         &ix,
         &[

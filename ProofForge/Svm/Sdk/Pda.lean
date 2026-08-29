@@ -1,5 +1,6 @@
 import ProofForge.Attr
 import ProofForge.Svm.Runtime
+import ProofForge.Svm.Sdk.Sysvar
 import ProofForge.Svm.Seed
 
 /-!
@@ -42,6 +43,11 @@ are static; `lamports` and `space` may be dynamic scalar instruction values. -/
       { acc := 1, signer := true, writable := true }]
     #[.u32le 0, .u64le lamports, .u64le space, .programId]
     seed (ProofForge.Svm.Runtime.findPda seed)
+
+/-- Create one current-program-owned PDA with the exact current Rent minimum for one
+compile-time data length. The PDA seed and account space both remain compiler-static. -/
+@[pf_inline] def createRentExempt (seed : String) (space : Nat) : UInt64 :=
+  createAccount seed (Sysvar.Rent.minimumBalance space) (UInt64.ofNat space)
 
 
 section Proofs

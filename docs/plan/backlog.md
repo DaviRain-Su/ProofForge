@@ -54,6 +54,7 @@ R3-014 stable Clock/EpochSchedule/Rent SDK facade、
 R3-015 shared transient lifecycle emitter、
 R3-016 bounded transient log-data binding、
 R3-017/018 checked transient Vector64/Bytes pop、R3-019 shared transient truncate、
+R3-020 rent-exempt System/PDA create policy、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -489,6 +490,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   不清 payload、不分配、不 free/reclaim/realloc、不暴露 pointer，也没有新增 top-level
   Ops/IR/main-Emit recipe。MemoryOps Mollusk 15/15 通过，digest `96f938c65992b93a`、
   ELF 48,448 B。详见 `docs/plan/tasks/r3-019.md`。
+
+- R3-020 rent-exempt System/PDA create policy 已完成：`System.createRentExempt`、
+  `System.AsciiSeed.createRentExempt` 与 `Pda.Ascii.createRentExempt` 把 compile-time account
+  space、已有 `Sysvar.Rent.minimumBalance` 和已有 CreateAccount CPI facade 组合起来。Rent
+  参数来自当前 invocation sysvar，不硬编码 lamports；space 仍静态，不开放 runtime account
+  geometry、resize/realloc/close，也不新增 Runtime/Ops/IR/Component/Emit。Create 与 CreatePda
+  Mollusk 在自定义 Rent 下分别核对 payer debit、exact new-account balance/space/owner。digests
+  `6ee1719e05c53163` / `ef405b71cc52f3ec`，ELF 9,584 / 14,408 B。详见
+  `docs/plan/tasks/r3-020.md`。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

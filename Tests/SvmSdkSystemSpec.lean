@@ -19,6 +19,7 @@ open ProofForge.Svm.Sdk
 #guard !System.AsciiSeed.wellFormed "λ"
 #guard System.AsciiSeed.allocate "ledger" 16 == 0
 #guard System.AsciiSeed.createAccount "ledger" 7 16 == 0
+#guard System.AsciiSeed.createRentExempt "ledger" 16 == 0
 #guard System.AsciiSeed.assign "ledger" == 0
 #guard System.AsciiSeed.transfer "ledger" 7 == 0
 
@@ -39,6 +40,15 @@ def createLedger (_s : Examples.SysSeed.State) (lamports : UInt64) :
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.createAccount "ledger" lamports 16
     .ok ({ dummy := 0 }, lamports)
+  else
+    .error .overflow
+
+@[pf_entry]
+def createRentExemptLedger (_s : Examples.SysSeed.State) :
+    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := System.AsciiSeed.createRentExempt "ledger" 16
+    .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
 
@@ -144,6 +154,7 @@ elab "#pf_guard_svm_alternate_system_seed" : command => do
     | .error reason => throwError reason
   let allocate ← extract ``AlternateSeed.allocateLedger
   let create ← extract ``AlternateSeed.createLedger
+  let createRentExempt ← extract ``AlternateSeed.createRentExemptLedger
   let assign ← extract ``AlternateSeed.assignLedger
   let transfer ← extract ``AlternateSeed.transferLedger
   unless hasInstructionData allocate
@@ -152,6 +163,9 @@ elab "#pf_guard_svm_alternate_system_seed" : command => do
       hasInstructionData create
         #[.u32le (.lit 3), .accKey 0, .u64le (.lit 6), .ascii "ledger", .u64le (.arg 0),
           .u64le (.lit 16), .programId] &&
+      hasInstructionData createRentExempt
+        #[.u32le (.lit 3), .accKey 0, .u64le (.lit 6), .ascii "ledger",
+          .u64le (.ext (.rentExemption 16) #[]), .u64le (.lit 16), .programId] &&
       hasInstructionData assign
         #[.u32le (.lit 10), .accKey 0, .u64le (.lit 6), .ascii "ledger", .programId] &&
       hasInstructionData transfer

@@ -390,6 +390,11 @@ R3-019 再把 Rust `Vec::truncate` 的只缩短语义放入 shared lifecycle：V
 验证 active/capacity，仅在 requested length 更小时写 logical length；相等、更大及
 `UInt64.max` 均 no-op。两种容器不复制汇编，不清 payload、不分配或回收；MemoryOps
 Mollusk 15/15 通过；详见 [R3-019](tasks/r3-019.md)。
+R3-020 又把 compile-time account space、已有 Rent sysvar query 与三种 CreateAccount facade
+组合成 `System`、`System.AsciiSeed` 和 `Pda.Ascii` 的 `createRentExempt`。它在 invocation
+读取当前 Rent minimum 后直接把结果送入既有 CPI data，Create/CreatePda 在自定义 Rent 下
+核对 exact lamports/space/owner；没有新增 Runtime/IR/Emit，也没有开放 runtime geometry、
+resize 或 close。详见 [R3-020](tasks/r3-020.md)。
 R3 尚未完成；同类型多 handle、generic POD vector/record writer、rent-aware resize、
 runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 
