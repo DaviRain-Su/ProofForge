@@ -6,11 +6,11 @@
 >
 > **XLS-0101/0102 底层没完。** 已绿：emit/assemble、两套 host 表、用户卡片、
 > env 叶、`callerBalanceDrops`、AccountRoot Sequence/Flags/OwnerCount。
-> 发交易 host **已注册**（`build_txn` pokeBuild=0），但 `emit_built_txn` Payment =
-> **-196 tecPSEUDO_ACCOUNT**。Create `InstanceParameters` / Call AMOUNT
-> `tfSendAmount` 都是 **temMALFORMED**（这版 AlphaNet 注资路径坏了）。
+> 发交易 host **已注册**（`build_txn` pokeBuild=0）。公开 3.3.0 **注资已绿**
+> （新 hash 第一次 Create 两数组 `tfSendAmount`）。`emit_built_txn` Payment 仍
+> **-196 tefBAD_AUTH**（不是没钱；`tecPSEUDO_ACCOUNT` 是 +196）。
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
-> 还缺：程序拥有 ContractData（-22）、Parameters 502、多数 keylet、伪账户注资。
+> 还缺：程序拥有 ContractData（-22）、公开 Parameters 打节点、emit -196 tefBAD_AUTH。
 > **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
 
 ## 0. 现在能写什么样的合约
@@ -157,9 +157,9 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
 2. **wsm-029 / wsm-033** — AccountRoot.Balance **已绿**（`callerBalanceDrops`）。
-3. **wsm-030 / wsm-032** — 本地 2.6.1 **Payment 已落地**（第一次 Create
-   只带 `InstanceParameterValues`，内层 Payment 大端 NetworkID）。公开 3.3.0
-   仍 **-196** / Create values **temMALFORMED**。不开 `Sdk.Payments` 直到公开网也绿。
+3. **wsm-030 / wsm-032** — 本地 2.6.1 **Payment 已落地**。公开 3.3.0
+   **注资已绿**（新 hash 第一次 Create 两数组 `tfSendAmount`）。`pokeEmit` 仍
+   **-196 tefBAD_AUTH**（伪账户签名预检；不是没钱）。不开 `Sdk.Payments`。
 4. **wsm-034** — AccountRoot Sequence/Flags/OwnerCount **已绿**（`XrplRoot`）。
 5. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。
 6. **wsm-035** — 给别人写卡片 **已绿**（硬编码对方 AccountID）。`tx Sequence/Fee` 已绿。

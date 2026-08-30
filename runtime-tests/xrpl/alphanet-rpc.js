@@ -89,6 +89,8 @@ async function rpcRetry(url, method, params, tries) {
         msg.startsWith("http ") ||
         msg === "timeout" ||
         msg.includes("noCurrent") ||
+        msg.includes("Current ledger is unavailable") ||
+        msg.includes("InsufficientNetworkMode") ||
         msg.includes("socket disconnected") ||
         msg.includes("ECONNRESET")
       ) {
@@ -244,19 +246,31 @@ async function main() {
       Functions,
     };
     // tfSendAmount = 0x00010000. Ordinary Payment to a ContractAccount is
-    // tecNO_PERMISSION. Create-time InstanceParameterValues funds the
-    // pseudo-account. Node `sign` cannot encode ParameterType (DataType),
-    // so omit InstanceParameters; the flag on the value is enough on 2.6.1-rc1.
+    // tecNO_PERMISSION. Create-time values fund the pseudo-account.
+    // Public 3.3.0: both arrays, ParameterType {type:AMOUNT}. First install
+    // of a wasm hash only; reinstall against an empty-ABI source is temMALFORMED.
+    // Local 2.6.1: node `sign` cannot encode ParameterType; values-only works.
     if (cfg.send_amount_drops) {
       const drops = String(cfg.send_amount_drops);
-      txJson.InstanceParameterValues = [
-        {
-          InstanceParameterValue: {
-            ParameterFlag: 65536,
-            ParameterValue: { type: "AMOUNT", value: drops },
-          },
+      const value = {
+        InstanceParameterValue: {
+          ParameterFlag: 65536,
+          ParameterValue: { type: "AMOUNT", value: drops },
         },
-      ];
+      };
+      txJson.InstanceParameterValues = [value];
+      // 3.3.0 has Gas and can sign ParameterType. 2.6.1 has
+      // ComputationAllowance; its sign rejects ParameterType.
+      if (fields.has("Gas")) {
+        txJson.InstanceParameters = [
+          {
+            InstanceParameter: {
+              ParameterFlag: 65536,
+              ParameterType: { type: "AMOUNT" },
+            },
+          },
+        ];
+      }
     }
     const signed = await signTx(url, secret, txJson);
     const submitted = await submitBlob(url, signed.tx_blob);
