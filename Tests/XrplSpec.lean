@@ -35,6 +35,7 @@ import Examples.XrplPool
 import Examples.XrplFund
 import Examples.XrplTreasury
 import Examples.XrplToken
+import Examples.XrplShare
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -96,7 +97,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplFund" == some "8cc80156ad30a85c"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTreasury" == some "4ace63cdcef0446b"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplToken" == some "d03a887e6b52e7a8"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplShare" == some "e53efc71c6393ba4"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -188,6 +190,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplTreasury
 
 #pf_xrpl_build Examples.XrplToken
+
+#pf_xrpl_build Examples.XrplShare
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -1128,6 +1132,36 @@ elab "#pf_xrpl_token_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-token: {source.length} bytes of WAT passed token anchor check"
 
 #pf_xrpl_token_emit_check Examples.XrplToken
+
+open Lean Elab Command in
+elab "#pf_xrpl_share_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"mintToB\") (result i32)",
+          "(func (export \"cashToB\") (result i32)",
+          "(func (export \"clawB\") (result i32)",
+          "(func (export \"pause\") (result i32)",
+          "(func (export \"freeze\") (result i32)",
+          "(i32.const 524313)",
+          "(import \"host_lib\" \"emit_built_txn\""
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing share anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Payments" do
+          throwError "wasm emit must not mention Sdk.Payments"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-share: {source.length} bytes of WAT passed share anchor check"
+
+#pf_xrpl_share_emit_check Examples.XrplShare
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

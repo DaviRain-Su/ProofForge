@@ -323,6 +323,17 @@ need_exports_treasury = (
     '(i32.const 524313)',
     '(import "host_lib" "emit_built_txn"',
 )
+need_exports_share = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "mintToB") (result i32)',
+    '(func (export "cashToB") (result i32)',
+    '(func (export "clawB") (result i32)',
+    '(func (export "pause") (result i32)',
+    '(func (export "freeze") (result i32)',
+    '(i32.const 524313)',
+    '(import "host_lib" "emit_built_txn"',
+)
 need_exports_token = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -428,6 +439,8 @@ for wat in wats:
         exports = need_exports_treasury
     elif wat.stem == "XrplToken":
         exports = need_exports_token
+    elif wat.stem == "XrplShare":
+        exports = need_exports_share
     else:
         exports = need_exports_counter
     for needle in exports:

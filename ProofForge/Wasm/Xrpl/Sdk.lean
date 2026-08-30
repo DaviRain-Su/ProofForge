@@ -252,6 +252,15 @@ Local 2.6.1 funded Create writes this card (pokeSelf 0). Public AlphaNet
 @[pf_inline] def callerUnlocked : Bool :=
   Context.peekLockLimbs Context.callerW0 Context.callerW1 Context.callerW2 = (0 : UInt64)
 
+/-- Load `bal` from the caller card after a dest `flushBal`.
+`s.bal` is stale once `$bal` was overwritten. Not a Map. -/
+@[pf_inline] def persistCaller : UInt64 :=
+  Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2
+
+/-- Load `supp` from the contract AccountID card. Rewrites persist Owner. -/
+@[pf_inline] def peekSelfSupp : UInt64 :=
+  Context.peekSuppLimbs Context.selfW0 Context.selfW1 Context.selfW2
+
 end Card
 
 namespace Pay
