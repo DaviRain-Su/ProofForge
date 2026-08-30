@@ -11,8 +11,8 @@
 > **-196 tefBAD_AUTH**（不是没钱；`tecPSEUDO_ACCOUNT` 是 +196）。
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
-> 公开 Parameters **已绿**（Create Function ABI + Call hex）。`increment(1)` 和
-> `initialize(7)` 都绿。空 ABI 带参才会打节点。
+> 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`
+> （`xs_1=5`，合约 `rhEHC56bwdojPJA2767wHC7V9i28S5tBh9`）都绿。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
@@ -181,7 +181,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 | 交什么 | 现在 | 还要 |
 |---|---|---|
 | Lean 写出、Bedrock/AlphaNet 跑通的 WASM 状态机 | **能交**（Gate/Hold/Mark） | — |
-| 每用户余额的积分账本 | 不能 | wsm-026 |
+| 每用户余额的积分账本 | 公开只能 caller 卡；本地注资后程序卡已绿 | 公开 tfSendAmount |
 | 动 XRP 的 swap | 不能 | wsm-023 + wsm-030 |
 | EVM Uniswap 字节码 | 永远不要 | — |
 

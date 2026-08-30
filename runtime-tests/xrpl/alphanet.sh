@@ -70,4 +70,5 @@ echo "xrpl-alphanet: artifact ok ($wasm)."
 echo "  Live zero-arg deploy/call is runtime-tests/xrpl/smoke.sh (XrplSmoke)."
 echo "  Live parameterized Counter is runtime-tests/xrpl/alphanet-counter.sh (increment(1))."
 echo "  Live initialize(7) is runtime-tests/xrpl/alphanet-init.sh (Function ABI required)."
+echo "  Live XrplVec setAt(1,5) is runtime-tests/xrpl/alphanet-vec.sh."
 exit 0
