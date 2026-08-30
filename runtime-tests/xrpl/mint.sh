@@ -149,4 +149,35 @@ rm -f "$cfg"
 [[ "$bal_a3" == "2" ]] || { echo "FAIL: A bal want 2 after unpause pay, got $bal_a3" >&2; exit 1; }
 [[ "$bal_b3" == "3" ]] || { echo "FAIL: B bal want 3 after unpause pay, got $bal_b3" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=3 pause-resume"
+# B is not the minter: pause/unpause unauthorized; halt stays 0 on A's card.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
+  "$RPC" "$WALLET_B" "$contract" >"$cfg"
+b_pause="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$b_pause" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==3, d' <<<"$b_pause"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"unpause"}\n' \
+  "$RPC" "$WALLET_B" "$contract" >"$cfg"
+b_unpause="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$b_unpause" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==3, d' <<<"$b_unpause"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"halt"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+halt_a="$(node "$here/alphanet-rpc.js" slot "$cfg" || echo missing)"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"halt"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+halt_b="$(node "$here/alphanet-rpc.js" slot "$cfg" || echo missing)"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a4="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b4="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$halt_a" == "0" || "$halt_a" == "missing" ]] || { echo "FAIL: A halt want 0/missing after B pause, got $halt_a" >&2; exit 1; }
+[[ "$halt_b" == "missing" || "$halt_b" == "0" ]] || { echo "FAIL: B halt should not be paused, got $halt_b" >&2; exit 1; }
+[[ "$bal_a4" == "2" ]] || { echo "FAIL: A bal want 2 after B pause, got $bal_a4" >&2; exit 1; }
+[[ "$bal_b4" == "3" ]] || { echo "FAIL: B bal want 3 after B pause, got $bal_b4" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=3 B-pause-denied"
