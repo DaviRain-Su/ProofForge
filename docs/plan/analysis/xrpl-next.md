@@ -12,7 +12,8 @@
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
 > 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
-> `XrplNest.credit(3)`（`user.bal=3`）、`XrplBal` A `credit(3)` / B `credit(5)` 都绿。
+> `XrplNest.credit(3)`（`user.bal=3`）、`XrplBal` A `credit(3)` / B `credit(5)`、
+> `XrplTab.setAt(3,7)`（`xs_3=7`）都绿。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
@@ -33,7 +34,7 @@
 | `XrplRole` | owner + operator；`setOp` 后 `requireOwnerOr` |
 | `XrplPeer` | 编译期 AccountID 的 XRP Balance（drops）；persist 仍是 caller |
 | `XrplFlag` | ContractCall Flags |
-| `XrplTab` | 4 槽 `xs_0`…`xs_3`；`sum4` 命名槽相加 |
+| `XrplTab` | 4 槽 `xs_0`…`xs_3`；活网 `setAt(3,7)` → `xs_3=7`，`sum4`=7 |
 | `XrplHand` | 跨钱包 TwoStep：第二把钥匙部署到创世卡片，创世 `accept` |
 | `XrplCrew` | 跨钱包 operator：第二把钥匙 owner，创世 `setOp` 后 `bump` |
 

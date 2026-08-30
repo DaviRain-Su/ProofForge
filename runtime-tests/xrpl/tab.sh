@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Live AlphaNet: compile-time Vector slots xs_0..xs_3. fill0 writes 1; sum4 is a view.
+# Live AlphaNet: compile-time slots xs_0..xs_3 via parameterized setAt.
+# setAt(index, value) needs Function ABI with two UINT64s. Missing RPC → skip.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,36 +40,38 @@ if [[ "$nid" != "21337" || "$smart" != "True" && "$smart" != "true" ]]; then
 fi
 echo "xrpl-alphanet-tab: $RPC $info" >&2
 
+echo "xrpl-alphanet-tab: building XrplTab.wasm" >&2
+lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" XrplTab
 wasm="$root/build/xrpl-alphanet/XrplTab.wasm"
-if [[ ! -f "$wasm" ]]; then
-  lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" XrplTab
-fi
+[[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","wasm_path":"%s"}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"setAt":2}}\n' \
   "$RPC" "$WALLET" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
 contract="$("$python" -I -S -c 'import json,sys; print(json.load(sys.stdin)["contractAccount"])' <<<"$deploy_out")"
-
-call_fn() {
-  local fn="$1"
-  printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","contract_account":"%s","function_name":"%s"}\n' \
-    "$RPC" "$WALLET" "$contract" "$fn" >"$cfg"
-  node "$here/alphanet-rpc.js" call "$cfg"
+[[ -n "$contract" && "$contract" != "None" && "$contract" != "null" ]] || {
+  echo "FAIL: deploy did not return contractAccount" >&2
+  exit 1
 }
 
-init_out="$(call_fn initialize)"
-echo "$init_out" >&2
-"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$init_out"
+# setAt(3, 7) → xs_3 = 7. Do not call initialize (zero slots).
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"setAt","parameters":["3","7"]}\n' \
+  "$RPC" "$WALLET" "$contract" >"$cfg"
+set_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$set_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$set_out"
 
-fill_out="$(call_fn fill0)"
-echo "$fill_out" >&2
-"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$fill_out"
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"sum4"}\n' \
+  "$RPC" "$WALLET" "$contract" >"$cfg"
+sum_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$sum_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==7, d' <<<"$sum_out"
 
-printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"xs_0"}\n' \
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"xs_3"}\n' \
   "$RPC" "$OWNER" "$contract" >"$cfg"
-xs0="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+value="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 rm -f "$cfg"
-[[ "$xs0" == "1" ]] || { echo "FAIL: expected xs_0=1, got $xs0" >&2; exit 1; }
+[[ "$value" == "7" ]] || { echo "FAIL: expected xs_3=7, got $value" >&2; exit 1; }
 
-echo "xrpl-alphanet-tab: ok contract=$contract xs_0=$xs0"
+echo "xrpl-alphanet-tab: ok contract=$contract xs_3=7"
