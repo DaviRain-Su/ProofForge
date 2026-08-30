@@ -196,6 +196,8 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-027](tasks/wsm-027.md) | done | 每用户一张卡（XrplBal）：A=2 / B=1，不是单用户金库 |
 | [wsm-029](tasks/wsm-029.md) | done | 探针读 AccountRoot.Balance（accountroot_id+cache_le+le_field） |
 | [wsm-033](tasks/wsm-033.md) | done | Runtime 叶 `callerBalanceDrops`（XrplBalRt，对账 account_info） |
+| [wsm-058](tasks/wsm-058.md) | done | `Sdk.Card` caller-card facade（XrplCard） |
+| [wsm-059](tasks/wsm-059.md) | done | 本地程序卡 `Card.storeSelf`（XrplVault）；公开仍 -22 |
 
 
 积压：[backlog.md](backlog.md)

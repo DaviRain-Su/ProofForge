@@ -62,6 +62,7 @@ import Examples.XrplPay
 import Examples.XrplMint
 import Examples.XrplLock
 import Examples.XrplCard
+import Examples.XrplVault
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

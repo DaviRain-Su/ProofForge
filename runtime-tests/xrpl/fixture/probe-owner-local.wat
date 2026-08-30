@@ -1,5 +1,5 @@
 ;; Local 2.6.1-rc1: get_tx_field / get_current_ledger_obj_field.
-;; sfContractAccount = 524315 on dangell/Bedrock (public 3.3.0 uses 524320).
+;; sfContractAccount = 524313 on transia/alphanet 2.6.1 (public 3.3.0 uses 524320).
 ;; Key "bal". UINT64 STI 3 big-endian value 1. Not Sdk.Map.
 (module
   (import "host_lib" "get_tx_field"

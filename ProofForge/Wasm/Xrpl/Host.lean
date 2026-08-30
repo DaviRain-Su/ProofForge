@@ -31,7 +31,7 @@ def contract : Contract where
     ";; Storage: get/set_data_object_field, UINT64 STI 3 big-endian.",
     ";; Params: function_param copies UINT64 (STI 3) into linear memory;",
     ";; exports take no wasm arguments.",
-    ";; Env: get_tx_field(sfAccount), get_current_ledger_obj_field(sfContractAccount),",
+    ";; Env: get_tx_field(sfAccount), get_current_ledger_obj_field(sfContractAccount=524313),",
     ";; get_ledger_sqn, get_parent_ledger_time, get_parent_ledger_hash,",
     ";; get_base_fee, compute_sha512_half.",
     ";; Honesty: deployable=false on mainnet; no ContractCreate / AlphaNet claim.",
@@ -50,7 +50,9 @@ def contract : Contract where
   sfieldAccount := 524290
   getTxField := "get_tx_field"
   sfieldTxAccount := 524289
-  sfieldContractAccount := 524315
+  -- transia/alphanet 2.6.1: ACCOUNT/25 = 524313. Not dangell/Bedrock 524315,
+  -- not public AlphaNet 3.3.0 524320.
+  sfieldContractAccount := 524313
   getLedgerSqn := "get_ledger_sqn"
   getParentTime := "get_parent_ledger_time"
   computeSha512Half := "compute_sha512_half"

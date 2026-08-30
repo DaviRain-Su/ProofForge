@@ -62,7 +62,9 @@ structure Contract where
   getTxField : String := ""
   /-- sfield of the transaction Account (XRPL `sfAccount` = 524289). -/
   sfieldTxAccount : Nat := 0
-  /-- sfield of the contract AccountID on the Contract SLE (XRPL `sfContractAccount` = 524315). -/
+  /-- sfield of the contract AccountID on the Contract SLE.
+  XRPL Bedrock/local 2.6.1 `sfContractAccount` = ACCOUNT/25 = 524313.
+  Public AlphaNet 3.3.0 uses 524320. -/
   sfieldContractAccount : Nat := 0
   /-- Host `get_ledger_sqn() -> i32`. Empty skips the ledger-sqn leaf. -/
   getLedgerSqn : String := ""

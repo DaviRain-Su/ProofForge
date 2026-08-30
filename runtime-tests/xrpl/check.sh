@@ -230,6 +230,14 @@ need_exports_mint = (
     '(i32.store8 (i32.const 92) (i32.const 97))',
     '(i32.store8 (i32.const 96) (i32.const 108))',
 )
+need_exports_vault = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "get")',
+    '(data (i32.const 64) "bal")',
+    '(i32.store8 (i32.const 88) (i32.const 115))',
+    '(i32.const 524313)',
+)
 need_exports_lock = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -301,6 +309,8 @@ for wat in wats:
         exports = need_exports_lock
     elif wat.stem == "XrplCard":
         exports = need_exports_lock
+    elif wat.stem == "XrplVault":
+        exports = need_exports_vault
     else:
         exports = need_exports_counter
     for needle in exports:

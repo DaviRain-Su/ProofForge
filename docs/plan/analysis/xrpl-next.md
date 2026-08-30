@@ -10,7 +10,9 @@
 > （新 hash 第一次 Create 两数组 `tfSendAmount`）。`emit_built_txn` Payment 仍
 > **-196 tefBAD_AUTH**（不是没钱；`tecPSEUDO_ACCOUNT` 是 +196）。
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
-> 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
+> 还缺：公开程序拥有 ContractData（-22）、公开 emit -196 tefBAD_AUTH。
+> 本地 2.6.1：emit Payment **绿**；funded `Card.storeSelf` / `XrplVault` **绿**
+> （caller.bal=5，合约卡 `supp=5`）。不要把本地绿当成公开绿。
 > 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
 > `XrplNest` A `credit(3)` / B `credit(5)`（nested `{user:{bal}}`）、`XrplBal` A `credit(3)` / B `credit(5)`、
 > `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` 积分转账、`XrplMint` A `mint(5)` / B `mint` 拒 / A `pay(B,2)` → A=3 B=2、`XrplLock` 每人一张卡 `lock`（进出 `pay` 状态码 5）都绿。
@@ -136,7 +138,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 | id | 物理模型 | 能写的合约 | 不做 |
 |---|---|---|---|
-| **wsm-026** 用户 ContractData | 公开 **blocked -22**；本地 2.6.1 **注资后绿**（合约卡 `bal=1`）。单用户 `"bal"` 公开就能做 | 公开程序卡要等注资 Create | keccak / wasm heap |
+| **wsm-026** 用户 ContractData | 公开 caller 卡 **绿**；公开程序卡 **-22**。本地 2.6.1 funded Create + `Card.storeSelf` **绿**（`XrplVault` caller.bal=5 contract.supp=5） | 公开程序卡仍被节点挡住 | keccak / wasm heap |
 | **wsm-027** Amount 三叶 | XRP drops 一个 UInt64；IOU 以后 | 记「欠多少 drops」 | ERC-20 |
 | **wsm-028** counted for | IR 允许编译期上界的 `for` | VEC-8 不再手写 8 个 `if` | 无界循环 / 递归 |
 
@@ -157,7 +159,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 | id | 内容 |
 |---|---|
-| **wsm-032** | **已跑** `transia/alphanet:latest` = 2.6.1-rc1 `dangell/smart-contracts` @ `56f16869`，nid **63456**。**不是** Bedrock Docker，也 **不是** 公开 3.3.0 / XLS-0102 名。host 是 `get_*`。本地 **emit Payment 绿**（values-only `tfSendAmount` + 大端 NetworkID）。公开 3.3.0 仍 -196 / temMALFORMED。合约账户卡仍 **-1**；Parameters **SIGSEGV** |
+| **wsm-032** | **已跑** `transia/alphanet:latest` = 2.6.1-rc1 `dangell/smart-contracts` @ `56f16869`，nid **63456**。**不是** Bedrock Docker，也 **不是** 公开 3.3.0 / XLS-0102 名。host 是 `get_*`。本地 **emit Payment 绿**（values-only `tfSendAmount` + 大端 NetworkID）。公开 3.3.0 仍 -196 / temMALFORMED。本地合约账户卡 **绿**（524313）；公开仍 **-22**；Parameters 本地 **skip**（2.6.1 不能签 Function.ParameterType） |
 
 ## 3. 建议立刻做的顺序
 

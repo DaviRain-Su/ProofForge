@@ -94,7 +94,7 @@ structure AccountId where
 | host | 签名 | 第一刀 |
 |---|---|---|
 | `get_tx_field` | `(i32 field, i32 ptr, i32 len) → i32` | `sfAccount=524289` → caller 20B |
-| `get_current_ledger_obj_field` | 已用 | `sfContractAccount=524315` → self 20B |
+| `get_current_ledger_obj_field` | 已用 | local 2.6.1 `sfContractAccount=524313`（ACCOUNT/25）→ self 20B；public 3.3.0 用 524320 |
 | `get_ledger_sqn` | `() → i32` | 当前账本序号，零扩展到 UInt64 |
 | `get_parent_ledger_time` | `() → i32` | parent close time，零扩展 |
 | `function_param` / `set_data_object_field` | 已用 | 不改 |

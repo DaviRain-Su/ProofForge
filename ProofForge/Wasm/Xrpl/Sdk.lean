@@ -231,6 +231,12 @@ namespace Card
 @[pf_inline] def restoreCaller : UInt64 :=
   Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2
 
+/-- Persist Owner := contract AccountID (`sfContractAccount`).
+Local 2.6.1 funded Create writes this card (pokeSelf 0). Public AlphaNet
+3.3.0 still returns host -22. Not a Map. -/
+@[pf_inline] def storeSelf : UInt64 :=
+  Context.storeOwnerLimbs Context.selfW0 Context.selfW1 Context.selfW2
+
 /-- True when `(w0,w1,w2)`'s `lock` is missing or 0. Rewrites persist Owner. -/
 @[pf_inline] def unlocked (w0 w1 w2 : UInt64) : Bool :=
   Context.peekLockLimbs w0 w1 w2 = (0 : UInt64)
