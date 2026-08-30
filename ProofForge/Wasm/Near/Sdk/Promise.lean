@@ -9,6 +9,8 @@ import ProofForge.Wasm.Near.Runtime
 The Promise foundation schedules a cross-contract function call with a static receiver and method,
 bounded byte arguments, lossless u128 deposit, and explicit gas. The emitter follows near-sdk-rs
 with `promise_batch_create` plus `promise_batch_action_function_call`.
+Native transfer uses the same static receiver and lossless u128 amount with
+`promise_batch_action_transfer`.
 
 Detached means no `promise_return`: the remote receipt still executes, but its success and result
 do not become the current call's result. Returned means `promise_return` forwards the remote
@@ -20,7 +22,7 @@ by nearcore in views. `read` preserves nearcore's 0 not-ready / 1 successful / 2
 only success has bytes. An out-of-range result index aborts. `callThenReturned` adds one static
 self-callback edge; its explicit callback arguments are independent of the child result channel.
 Strict fixed-width Borsh UInt64 decoding remains SDK policy over the active descriptor; additional
-scalar decoders, joins, and transfer actions remain outside this slice.
+scalar decoders and joins remain outside this slice.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Promises
@@ -42,6 +44,16 @@ literals accepted by the NEAR target. -/
     (deposit : Runtime.NearToken) (gas : UInt64) : UInt64 :=
   Runtime.promiseFunctionCallReturned argsCapacity receiver method arguments
     deposit.w0 deposit.w1 gas
+
+/-- Schedule one detached native transfer. `receiver` must be a static AccountId literal. -/
+@[pf_inline] def transferDetached
+    (receiver : String) (amount : Runtime.NearToken) : UInt64 :=
+  Runtime.promiseTransferDetached receiver amount.w0 amount.w1
+
+/-- Schedule one native transfer and forward its eventual success or failure. -/
+@[pf_inline] def transferReturned
+    (receiver : String) (amount : Runtime.NearToken) : UInt64 :=
+  Runtime.promiseTransferReturned receiver amount.w0 amount.w1
 
 /-- Schedule one child call, then one callback on the current contract, and forward the callback's
 eventual result. Both methods are static literals; the two bounded argument frames, deposits, and

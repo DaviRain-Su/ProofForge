@@ -29,6 +29,10 @@ private partial def promiseSteps : Array ProofForge.Extract.IR.Op → Array Stri
           #[s!"detached.{receiver}.{method}.{capacity}.{arguments.size}"]
       | .ext (.near (.promiseFunctionCallReturned receiver method capacity arguments _ _ _)) =>
           #[s!"returned.{receiver}.{method}.{capacity}.{arguments.size}"]
+      | .ext (.near (.promiseTransferDetached receiver _ _)) =>
+          #[s!"transfer.detached.{receiver}"]
+      | .ext (.near (.promiseTransferReturned receiver _ _)) =>
+          #[s!"transfer.returned.{receiver}"]
       | .ext (.near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childCapacity callbackCapacity childArguments callbackArguments _ _ _ _ _ _)) =>
           #[s!"then.{receiver}.{childMethod}.{callbackMethod}." ++
@@ -80,13 +84,17 @@ elab "#pf_near_promise_check" : command => do
   let thenSuccess := "then.receiver.test.near.recordValue.callbackSuccess.8.8.9.9"
   let thenFailure := "then.receiver.test.near.missing.callbackFailure.8.8.9.9"
   let thenOversized := "then.receiver.test.near.recordValue.callbackOversized.8.8.9.9"
-  unless steps.size == 10 && (steps.filter (· == detachedRecord)).size == 4 &&
+  let transferDetached := "transfer.detached.receiver.test.near"
+  let transferReturned := "transfer.returned.receiver.test.near"
+  unless steps.size == 13 && (steps.filter (· == detachedRecord)).size == 4 &&
       (steps.filter (· == detachedMissing)).size == 1 &&
       (steps.filter (· == returnedRecord)).size == 1 &&
       (steps.filter (· == returnedMissing)).size == 1 &&
       (steps.filter (· == thenSuccess)).size == 1 &&
       (steps.filter (· == thenFailure)).size == 1 &&
-      (steps.filter (· == thenOversized)).size == 1 do
+      (steps.filter (· == thenOversized)).size == 1 &&
+      (steps.filter (· == transferDetached)).size == 2 &&
+      (steps.filter (· == transferReturned)).size == 1 do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
   let decodes := source.methods.foldl (init := #[]) fun acc method =>
     acc ++ resultDecodes method.ops
@@ -127,6 +135,55 @@ elab "#pf_near_promise_check" : command => do
     throwError "returned Promise method must not overwrite promise_return with value_return"
   if returnedWat.contains "promise_batch_then" || returnedWat.contains "current_account_id" then
     throwError "plain returned Promise unexpectedly retained callback-only imports"
+  let transferDetachedMethod ← match program.entries.find? (·.ixName == "transferDetached") with
+    | some method => pure method
+    | none => throwError "missing transferDetached entry"
+  let transferDetachedWat ←
+    match Emit.emit { program with entries := #[transferDetachedMethod] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(import \"env\" \"promise_batch_create\"",
+      "(import \"env\" \"promise_batch_action_transfer\" " ++
+        "(func $pf_promise_batch_action_transfer (param i64 i64)))",
+      "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
+      "(i64.store (i32.wrap_i64 (local.get $pf_r0)) (i64.const 7))",
+      "(i64.store (i32.add (i32.wrap_i64 (local.get $pf_r0)) (i32.const 8)) (i64.const 1))",
+      "(call $pf_promise_batch_action_transfer (local.get $pf_r1) (local.get $pf_r0))" ] do
+    unless transferDetachedWat.contains anchor do
+      throwError s!"detached transfer WAT missing {anchor}\n{transferDetachedWat}"
+  if transferDetachedWat.contains "promise_batch_action_function_call" ||
+      transferDetachedWat.contains "promise_return" then
+    throwError "detached transfer retained function-call or returned-Promise imports"
+  match transferDetachedWat.splitOn "(call $pf_promise_batch_create" with
+  | [_beforeCreate, afterCreate] =>
+      unless afterCreate.contains "(call $pf_promise_batch_action_transfer" do
+        throwError "detached transfer action was appended before its batch was created"
+  | _ => throwError "detached transfer must create exactly one Promise batch"
+  let transferReturnedMethod ← match program.entries.find? (·.ixName == "transferReturned") with
+    | some method => pure method
+    | none => throwError "missing transferReturned entry"
+  let transferReturnedWat ←
+    match Emit.emit { program with entries := #[transferReturnedMethod] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(i64.store (i32.wrap_i64 (local.get $pf_r0)) (i64.const 11))",
+      "(i64.store (i32.add (i32.wrap_i64 (local.get $pf_r0)) (i32.const 8)) (i64.const 0))",
+      "(call $pf_promise_batch_action_transfer (local.get $pf_r1) (local.get $pf_r0))" ] do
+    unless transferReturnedWat.contains anchor do
+      throwError s!"returned transfer WAT missing {anchor}\n{transferReturnedWat}"
+  match transferReturnedWat.splitOn "(call $pf_promise_batch_action_transfer" with
+  | [_beforeAction, afterAction] =>
+      match afterAction.splitOn "(call $pf_promise_return" with
+      | [between, _afterReturn] =>
+          unless between.contains "(call $pf_storage_write" do
+            throwError "returned transfer was linked before caller-state persistence"
+      | _ => throwError "returned transfer must call promise_return exactly once"
+  | _ => throwError "returned transfer must append exactly one transfer action"
+  if transferReturnedWat.contains "promise_batch_action_function_call" ||
+      transferReturnedWat.contains "(call $pf_value_return" then
+    throwError "returned transfer retained a function-call action or overwrote promise_return"
   let sendThenSuccess ← match program.entries.find? (·.ixName == "sendThenSuccess") with
     | some method => pure method
     | none => throwError "missing sendThenSuccess entry"
@@ -242,6 +299,7 @@ elab "#pf_near_promise_check" : command => do
   let anchors := #[
     "(import \"env\" \"promise_batch_create\"",
     "(import \"env\" \"promise_batch_action_function_call\"",
+    "(import \"env\" \"promise_batch_action_transfer\"",
     "(import \"env\" \"promise_return\"",
     "(func (export \"send\")",
     "(func (export \"sendMissing\")",
@@ -250,6 +308,9 @@ elab "#pf_near_promise_check" : command => do
     "(func (export \"sendThenSuccess\")",
     "(func (export \"sendThenMissing\")",
     "(func (export \"sendThenOversized\")",
+    "(func (export \"transferDetached\")",
+    "(func (export \"transferReturned\")",
+    "(func (export \"transferTooMuch\")",
     "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
     "(i64.store (i32.wrap_i64",
     "(i32.const 8))",
@@ -279,6 +340,20 @@ elab "#pf_near_promise_check" : command => do
       unless reason.contains "view cannot create a promise" do
         throwError s!"wrong returned-view rejection: {reason}"
   | .ok _ => throwError "returned Promise call was accepted in a view"
+  let viewTransferDetached := { source with methods := source.methods.map fun method =>
+    if method.ixName == "transferDetached" then { method with kind := .get } else method }
+  match IR.fromExtracted viewTransferDetached >>= Emit.emit with
+  | .error reason =>
+      unless reason.contains "view cannot create a promise" do
+        throwError s!"wrong detached-transfer view rejection: {reason}"
+  | .ok _ => throwError "detached transfer was accepted in a view"
+  let viewTransferReturned := { source with methods := source.methods.map fun method =>
+    if method.ixName == "transferReturned" then { method with kind := .get } else method }
+  match IR.fromExtracted viewTransferReturned >>= Emit.emit with
+  | .error reason =>
+      unless reason.contains "view cannot create a promise" do
+        throwError s!"wrong returned-transfer view rejection: {reason}"
+  | .ok _ => throwError "returned transfer was accepted in a view"
   let viewThen := { source with methods := source.methods.map fun method =>
     if method.ixName == "sendThenSuccess" then { method with kind := .get } else method }
   match IR.fromExtracted viewThen >>= Emit.emit with
@@ -298,6 +373,29 @@ elab "#pf_near_promise_check" : command => do
       unless reason.contains "cannot return more than one promise" do
         throwError s!"wrong double-returned-Promise rejection: {reason}"
   | .ok _ => throwError "two returned Promises were accepted on one execution path"
+  let returnedTransferOp ←
+    match source.methods.find? (·.ixName == "transferReturned") with
+    | some method =>
+        match method.ops.find? fun op =>
+          match op with
+          | .ext (.near (.promiseTransferReturned _ _ _)) => true
+          | _ => false with
+        | some op => pure op
+        | none => throwError "missing returned-transfer effect"
+    | none => throwError "missing extracted transferReturned method"
+  let mixedReturned := { source with methods := source.methods.map fun method =>
+    if method.ixName == "sendReturned" then
+      { method with ops := method.ops.flatMap fun op =>
+          match op with
+          | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _)) =>
+              #[op, returnedTransferOp]
+          | _ => #[op] }
+    else method }
+  match IR.fromExtracted mixedReturned >>= Emit.emit with
+  | .error reason =>
+      unless reason.contains "cannot return more than one promise" do
+        throwError s!"wrong mixed-returned-Promise rejection: {reason}"
+  | .ok _ => throwError "returned call plus returned transfer was accepted on one path"
   logInfo m!"proofforge-near-promise: digest = {IR.digestHex program}"
 
 #pf_near_promise_check

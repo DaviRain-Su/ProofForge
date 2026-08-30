@@ -9,7 +9,8 @@ import ProofForge.Wasm.Near.Codec
 Value/effect extensions owned by the NEAR Protocol chain. v0 admits scalar
 context reads, lossless u128 token values, lossless 64-byte account-id leaves,
 invocation-memory operations, bounded raw storage, static Promise calls, one static self-callback
-edge, and bounded callback-result observation. Promise joins and hashing stay absent.
+edge, native transfers, and bounded callback-result observation. Promise joins and hashing stay
+absent.
 `reserved` is rejected by `wellFormed`.
 -/
 
@@ -69,6 +70,8 @@ inductive OpExt (V : Type) where
       (arguments : Array V) (depositLo depositHi gas : V)
   | promiseFunctionCallReturned (receiver method : String) (argsCapacity : Nat)
       (arguments : Array V) (depositLo depositHi gas : V)
+  | promiseTransferDetached (receiver : String) (amountLo amountHi : V)
+  | promiseTransferReturned (receiver : String) (amountLo amountHi : V)
   | promiseFunctionCallThenReturned (receiver childMethod callbackMethod : String)
       (childArgsCapacity callbackArgsCapacity : Nat)
       (childArguments callbackArguments : Array V)
@@ -105,6 +108,10 @@ def OpExt.wellFormed : OpExt Val → Bool
         storageFrameWellFormed argsCapacity arguments &&
         depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
         gas.wellFormed ValKind.arity
+  | .promiseTransferDetached receiver amountLo amountHi
+  | .promiseTransferReturned receiver amountLo amountHi =>
+      Codec.accountIdLiteralValid receiver && amountLo.wellFormed ValKind.arity &&
+        amountHi.wellFormed ValKind.arity
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -143,6 +150,10 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
       .promiseFunctionCallReturned receiver method argsCapacity (arguments.map mapValue)
         (mapValue depositLo) (mapValue depositHi) (mapValue gas)
+  | .promiseTransferDetached receiver amountLo amountHi =>
+      .promiseTransferDetached receiver (mapValue amountLo) (mapValue amountHi)
+  | .promiseTransferReturned receiver amountLo amountHi =>
+      .promiseTransferReturned receiver (mapValue amountLo) (mapValue amountHi)
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -172,6 +183,8 @@ private def cfgPayloadValues : OpExt Val → Array Val
       arguments ++ #[depositLo, depositHi, gas]
   | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
       arguments ++ #[depositLo, depositHi, gas]
+  | .promiseTransferDetached _ amountLo amountHi
+  | .promiseTransferReturned _ amountLo amountHi => #[amountLo, amountHi]
   | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
       childArguments ++ callbackArguments ++

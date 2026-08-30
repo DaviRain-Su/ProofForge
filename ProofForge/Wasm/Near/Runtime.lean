@@ -143,6 +143,22 @@ outcome. -/
   let _ := gas
   0
 
+/-- Schedule one native NEAR transfer without linking its receipt to the current method result. -/
+@[irreducible] def promiseTransferDetached
+    (receiver : String) (amountLo amountHi : UInt64) : UInt64 :=
+  let _ := receiver
+  let _ := amountLo
+  let _ := amountHi
+  0
+
+/-- Schedule one native NEAR transfer and forward the transfer receipt's eventual result. -/
+@[irreducible] def promiseTransferReturned
+    (receiver : String) (amountLo amountHi : UInt64) : UInt64 :=
+  let _ := receiver
+  let _ := amountLo
+  let _ := amountHi
+  0
+
 /-- Schedule one static child call followed by one static callback on the current contract, then
 forward the callback's eventual result. The child result is available to the callback only through
 `promiseResultsCount` / `promiseResultRead`; callback arguments remain an independent input frame. -/

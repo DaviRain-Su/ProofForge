@@ -67,6 +67,41 @@ def main() -> None:
         raise AssertionError("rejected external callback changed receiver state")
     print("near-promise: external callback rejected by full AccountId self-call guard")
 
+    # The receiver-signed deployment/initialization can still have a delayed gas-refund receipt at
+    # the first optimistic balance query. The intervening finalized callback call provides a stable
+    # baseline before exact transfer deltas are measured.
+    receiver_balance = client.view_account_balance(RECEIVER)
+    _call_u64(client, "transferDetached", 501)
+    next_receiver_balance = client.view_account_balance(RECEIVER)
+    if next_receiver_balance - receiver_balance != (1 << 64) + 7:
+        raise AssertionError(
+            "detached native transfer did not deliver the exact u128 amount: "
+            f"expected {(1 << 64) + 7}, got {next_receiver_balance - receiver_balance}"
+        )
+    if client.view_u64("get") != 501:
+        raise AssertionError("detached native transfer did not commit caller state")
+    print("near-promise: detached native transfer delivered exact low/high limbs")
+
+    returned_transfer = _call_u64(client, "transferReturned", 502)
+    if NearClient.success_value_bytes(returned_transfer) != b"":
+        raise AssertionError("returned native transfer did not forward an empty receipt result")
+    returned_receiver_balance = client.view_account_balance(RECEIVER)
+    if returned_receiver_balance - next_receiver_balance != 11:
+        raise AssertionError(
+            "returned native transfer did not deliver exactly 11 yoctoNEAR: "
+            f"got {returned_receiver_balance - next_receiver_balance}"
+        )
+    if client.view_u64("get") != 502:
+        raise AssertionError("returned native transfer did not commit caller state")
+    print("near-promise: returned native transfer forwarded its successful receipt")
+
+    _call_u64(client, "transferTooMuch", 503, expect_success=False)
+    if client.view_account_balance(RECEIVER) != returned_receiver_balance:
+        raise AssertionError("insufficient native transfer unexpectedly changed receiver balance")
+    if client.view_u64("get") != 502:
+        raise AssertionError("insufficient native transfer did not roll back caller state")
+    print("near-promise: insufficient native transfer failed synchronously and rolled back")
+
     _call_u64(client, "send", 77)
     if client.view_u64("get") != 77:
         raise AssertionError("detached sender did not commit its own state")

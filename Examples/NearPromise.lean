@@ -81,6 +81,25 @@ def callbackOversized (state : State) (callbackValue : UInt64) : Except Error (S
   else
     .error .overflow
 
+/-- Schedule a detached native transfer carrying `2^64 + 7` yoctoNEAR. -/
+@[pf_entry]
+def transferDetached (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.transferDetached receiver ({ w0 := 7, w1 := 1 } : NearToken)
+  .ok ({ state with marker := value }, value)
+
+/-- Persist caller state and forward a transfer-only receipt carrying 11 yoctoNEAR. -/
+@[pf_entry]
+def transferReturned (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.transferReturned receiver ({ w0 := 11, w1 := 0 } : NearToken)
+  .ok ({ state with marker := value }, value)
+
+/-- Synchronous balance validation must abort before this transfer or state update can commit. -/
+@[pf_entry]
+def transferTooMuch (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.transferDetached receiver
+    ({ w0 := 0xffffffffffffffff, w1 := 0xffffffffffffffff } : NearToken)
+  .ok ({ state with marker := value }, value)
+
 /-- Schedule a detached call carrying `2^64 + 7` yoctoNEAR. -/
 @[pf_entry]
 def send (state : State) (value : UInt64) : Except Error (State × UInt64) :=

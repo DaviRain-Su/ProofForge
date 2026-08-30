@@ -5642,6 +5642,8 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferDetached ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
@@ -5653,6 +5655,8 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
@@ -5676,6 +5680,38 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
       let e := strip e
       if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
         (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 1]!
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned
+        match staticString? env 64 args[args.size - 2]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some receiver, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver then
+              some (if returned then
+                .nearPromiseTransferReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferReturned) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferReturned
+        match staticString? env 64 args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some receiver, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver then
+              some (if returned then
+                .nearPromiseTransferReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
       else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned &&
           e.getAppArgs.size ≥ 11 then
         let args := e.getAppArgs

@@ -39,5 +39,6 @@ must still satisfy the separate Promise-result status/read checks.
 ## Next
 
 Keep general lifecycle policy separate: default non-payable, reusable private/init entry metadata,
-and `STATE` migration belong to N9. Within Promises, parallel `promise_and` and native transfer
-actions are the next independent Runtime/SDK slices.
+and `STATE` migration belong to N9. Static native transfer actions are complete in
+[wsm-near-promise-transfer-001](wsm-near-promise-transfer-001.md); parallel `promise_and` is the next
+independent Promise Runtime/SDK slice.

@@ -43,6 +43,12 @@ private def projectOpExt
           return .promiseFunctionCallReturned receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
             (← _projectVal depositHi) (← _projectVal gas)
+      | .promiseTransferDetached receiver amountLo amountHi =>
+          return .promiseTransferDetached receiver
+            (← _projectVal amountLo) (← _projectVal amountHi)
+      | .promiseTransferReturned receiver amountLo amountHi =>
+          return .promiseTransferReturned receiver
+            (← _projectVal amountLo) (← _projectVal amountHi)
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -136,6 +142,14 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
         s!"{argsCapacity}({canonValues arguments};" ++
         s!"{Wasm.IR.valCanon extValCanon depositLo}," ++
         s!"{Wasm.IR.valCanon extValCanon depositHi},{Wasm.IR.valCanon extValCanon gas})"
+  | .promiseTransferDetached receiver amountLo amountHi =>
+      s!"npromise.transfer.detached:{receiver.toUTF8.size}:{receiver}(" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi})"
+  | .promiseTransferReturned receiver amountLo amountHi =>
+      s!"npromise.transfer.returned:{receiver.toUTF8.size}:{receiver}(" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi})"
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -185,6 +199,12 @@ private def rewritePayload
       return .promiseFunctionCallReturned receiver method argsCapacity
         (← arguments.mapM rewriteValue) (← rewriteValue depositLo)
         (← rewriteValue depositHi) (← rewriteValue gas)
+  | .promiseTransferDetached receiver amountLo amountHi =>
+      return .promiseTransferDetached receiver
+        (← rewriteValue amountLo) (← rewriteValue amountHi)
+  | .promiseTransferReturned receiver amountLo amountHi =>
+      return .promiseTransferReturned receiver
+        (← rewriteValue amountLo) (← rewriteValue amountHi)
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>

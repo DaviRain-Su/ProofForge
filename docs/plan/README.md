@@ -221,6 +221,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-promise-then-001](tasks/wsm-near-promise-then-001.md) | done | NEAR static self-callback edge |
 | [wsm-near-promise-codec-001](tasks/wsm-near-promise-codec-001.md) | done | NEAR strict callback Borsh UInt64 decode |
 | [wsm-near-promise-private-001](tasks/wsm-near-promise-private-001.md) | done | NEAR full-AccountId private self-callback guard |
+| [wsm-near-promise-transfer-001](tasks/wsm-near-promise-transfer-001.md) | done | NEAR detached/returned static native transfer |
 
 ## SVM 全面工作计划（当前主线）
 

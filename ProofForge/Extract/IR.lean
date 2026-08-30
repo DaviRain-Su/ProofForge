@@ -75,6 +75,10 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
       | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallReturned receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
+      | .promiseTransferDetached receiver amountLo amountHi =>
+          .near (.promiseTransferDetached receiver (mapValue amountLo) (mapValue amountHi))
+      | .promiseTransferReturned receiver amountLo amountHi =>
+          .near (.promiseTransferReturned receiver (mapValue amountLo) (mapValue amountHi))
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -111,6 +115,8 @@ def OpExt.values : OpExt Val → Array Val
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
+      | .promiseTransferDetached _ amountLo amountHi
+      | .promiseTransferReturned _ amountLo amountHi => #[amountLo, amountHi]
       | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
           childArguments ++ callbackArguments ++
@@ -177,6 +183,10 @@ def OpExt.wellFormed : OpExt Val → Bool
             arguments.all (·.wellFormed ValKind.arity) &&
             depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
             gas.wellFormed ValKind.arity
+      | .promiseTransferDetached receiver amountLo amountHi
+      | .promiseTransferReturned receiver amountLo amountHi =>
+          Wasm.Near.Codec.accountIdLiteralValid receiver &&
+            amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
