@@ -5620,11 +5620,29 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
 /-- Flatten one logical bounded byte value into `length, byte₀ … byteₙ₋₁`. Constructors already
 carry literal leaves; a parameter or local root is projected so the target input binder can later
 rewrite it to canonical scalar locals. -/
+private def normalizeBoundedParameterFrame (capacity : Nat) (values : Array Ops.Val) :
+    Array Ops.Val := Id.run do
+  unless values.size == capacity + 1 do return values
+  let .field _ "length" := values[0]! | return values
+  let mut normalized : Array Ops.Val := #[values[0]!]
+  for position in [0:capacity] do
+    match values[position + 1]! with
+    | .indexGet base "values" (.local index) length elementOffset =>
+        unless index == position && (length == 0 || length == capacity) &&
+            elementOffset == 0 do
+          return values
+        normalized := normalized.push
+          (.indexGet base "values" (.lit (UInt64.ofNat position)) capacity 0)
+    | _ => return values
+  return normalized
+
 private def boundedStorageFrame? (env : Environment) (capacity : Nat) (e : Expr) :
     Option (Array Ops.Val) := do
   let e := substLets 32 (strip (unfoldUserHelpers env 8 e))
   if let some values := asBoundedCtorFields env e then
-    if values.size == capacity + 1 then return values else none
+    if values.size == capacity + 1 then
+      return normalizeBoundedParameterFrame capacity values
+    else none
   let root ← val env e
   let mut values : Array Ops.Val := #[.field root "length"]
   for index in [0:capacity] do
@@ -5639,6 +5657,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
   | fuel + 1, e =>
       e.getUsedConstantsAsSet.toList.any fun name =>
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
+        name == ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
@@ -5682,6 +5701,16 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
       let e := strip e
       if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
         (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 2]! with
+        | some capacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+              (boundedStorageFrame? env capacity args[args.size - 1]!).map fun message =>
+                .nearLogUtf8Bounded capacity message
+            else none
+        | none => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned) &&
           e.getAppArgs.size ≥ 2 then

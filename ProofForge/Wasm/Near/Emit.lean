@@ -129,6 +129,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
   ops.foldl (init := #[]) fun messages op =>
     messages ++ match op with
       | .ext (.logUtf8 message) => #[message]
+      | .ext (.logUtf8Bounded _ _) => #[]
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
       | .ext (.promiseTransferDetached _ _ _)
@@ -151,6 +152,16 @@ private def logMessages (p : Program ValKind OpExt) : Array String :=
   let all := logsOfOps p.initializer.ops ++ p.entries.flatMap (logsOfOps ·.ops)
   all.foldl (init := #[]) fun unique message =>
     if unique.contains message then unique else unique.push message
+
+private partial def hasBoundedLogOps (ops : Array (Op ValKind OpExt)) : Bool :=
+  ops.any fun
+    | .ext (.logUtf8Bounded _ _) => true
+    | .ite _ _ _ thn els => hasBoundedLogOps thn || hasBoundedLogOps els
+    | .forBody _ body => hasBoundedLogOps body
+    | _ => false
+
+private def programHasBoundedLog (p : Program ValKind OpExt) : Bool :=
+  hasBoundedLogOps p.initializer.ops || p.entries.any (hasBoundedLogOps ·.ops)
 
 private def logLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
   (logMessages p).foldl (init := #[]) fun layout message =>
@@ -994,6 +1005,15 @@ private partial def emitRegion (p : Program ValKind OpExt)
             ") (i64.const " ++ toString off ++ "))")] ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.logUtf8Bounded capacity message) =>
+        let staged ← stageStorageFrame st capacity message level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ #[indent level
+            ("(call $pf_log_utf8 " ++ staged.length ++ " " ++ staged.pointer ++ ")")] ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseFunctionCallDetached receiver method argsCapacity arguments
         depositLo depositHi gas) =>
         if view then throw "extract/unsupported: near view cannot create a promise"
@@ -1183,6 +1203,7 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
   | .ext payload =>
       match payload with
       | .logUtf8 _ | .transientBuffer64Begin _ | .transientBuffer64Finish _ | .reserved => false
+      | .logUtf8Bounded _ message => message.any valHas
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -1424,6 +1445,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseResultRead _ _) => true
+  | .ext (.logUtf8Bounded _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
@@ -2023,7 +2045,7 @@ def emit (p : IR.Program) : Except String String := do
     "  (import \"env\" \"value_return\" (func $pf_value_return (param i64 i64)))"
   lines := lines.push
     "  (import \"env\" \"panic_utf8\" (func $pf_panic_utf8 (param i64 i64)))"
-  if !(logMessages p).isEmpty then
+  if !(logMessages p).isEmpty || programHasBoundedLog p then
     lines := lines.push
       "  (import \"env\" \"log_utf8\" (func $pf_log_utf8 (param i64 i64)))"
   if !(promiseLiterals p).isEmpty then

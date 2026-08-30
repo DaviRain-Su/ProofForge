@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.NearBytes
 
 open ProofForge.Core.Value
+open ProofForge.Wasm.Near.Sdk
 
 structure State where
   value : UInt64
@@ -34,5 +35,11 @@ def inspectBytes (_s : State) (bytes : BoundedBytes 8) : UInt64 :=
 @[pf_entry]
 def inspectString (_s : State) (text : BoundedString 8) : UInt64 :=
   text.length.toUInt64 + text.values[0].toUInt64 + text.values[7].toUInt64
+
+/-- Stage and log exactly the active UTF-8 prefix, then continue to return its byte length. -/
+@[pf_entry]
+def logString (_s : State) (text : BoundedString 8) : UInt64 :=
+  let _ := Logs.writeBounded 8 text
+  text.length.toUInt64
 
 end Examples.NearBytes

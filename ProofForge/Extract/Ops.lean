@@ -168,6 +168,9 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Op.nearLogUtf8 (message : String) : Op :=
   .ext (.near (.logUtf8 message))
 
+@[match_pattern] def Op.nearLogUtf8Bounded (capacity : Nat) (message : Array Val) : Op :=
+  .ext (.near (.logUtf8Bounded capacity message))
+
 @[match_pattern] def Op.nearPromiseFunctionCallDetached
     (receiver method : String) (argsCapacity : Nat) (arguments : Array Val)
     (depositLo depositHi gas : Val) : Op :=
@@ -541,6 +544,7 @@ def hasEvmEffect (ops : Array Op) : Bool :=
 def hasNearEffect (ops : Array Op) : Bool :=
   walk ops fun
     | .ext (.near (.logUtf8 _))
+    | .ext (.near (.logUtf8Bounded _ _))
     | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _))

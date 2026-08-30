@@ -157,6 +157,8 @@ private def projectOpExt
   | .near payload =>
       match payload with
       | .logUtf8 message => pure (.logUtf8 message)
+      | .logUtf8Bounded capacity message =>
+          return .logUtf8Bounded capacity (← message.mapM _projectVal)
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           return .promiseFunctionCallDetached receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
@@ -269,6 +271,8 @@ private def canonValues (values : Array (Wasm.IR.Val Ops.ValKind)) : String :=
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .logUtf8 message => s!"nlog:{message.toUTF8.size}:{message}"
+  | .logUtf8Bounded capacity message =>
+      s!"nlog.bounded.{capacity}({canonValues message})"
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       s!"npromise.detached:{receiver.toUTF8.size}:{receiver}:{method.toUTF8.size}:{method}." ++
         s!"{argsCapacity}({canonValues arguments};" ++
@@ -345,10 +349,18 @@ private def schemaIsScalar : Core.Codec.Schema → Bool
   | .scalar _ => true
   | _ => false
 
+private partial def simplifyLiteralSelect : Ops.Val → Ops.Val
+  | .select .eq (.lit lhs) (.lit rhs) thn els =>
+      simplifyLiteralSelect (if lhs == rhs then thn else els)
+  | value => value
+
 private def rewritePayload
     (rewriteValue : Ops.Val → Except String Ops.Val) :
     Ops.OpExt Ops.Val → Except String (Ops.OpExt Ops.Val)
   | .logUtf8 message => pure (.logUtf8 message)
+  | .logUtf8Bounded capacity message => do
+      let rewritten ← message.mapM rewriteValue
+      return .logUtf8Bounded capacity (rewritten.map simplifyLiteralSelect)
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       return .promiseFunctionCallDetached receiver method argsCapacity
         (← arguments.mapM rewriteValue) (← rewriteValue depositLo)

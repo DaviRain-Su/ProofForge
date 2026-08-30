@@ -33,6 +33,25 @@ def _expect_u64(client: NearClient, method: str, args: bytes, expected: int) -> 
         raise AssertionError(f"{method}({args.hex()}): expected {expected}, got {got}")
 
 
+def _expect_log(client: NearClient, text: str) -> None:
+    wire = NearClient.borsh_bytes(text.encode())
+    response = client.view_response_on(client.account_id, "logString", wire)
+    if response.get("logs") != [text]:
+        raise AssertionError(
+            f"logString({text!r}): expected exact log {[text]!r}, "
+            f"got {response.get('logs')!r}"
+        )
+    try:
+        result = bytes(response["result"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise AssertionError(f"logString({text!r}) malformed result: {response!r}") from error
+    expected_length = len(text.encode())
+    if len(result) < 8 or NearClient.decode_u64_le(result) != expected_length:
+        raise AssertionError(
+            f"logString({text!r}): expected returned byte length {expected_length}, got {result!r}"
+        )
+
+
 def main() -> None:
     rpc = _require("PF_NEAR_RPC")
     home = Path(_require("PF_NEAR_HOME"))
@@ -68,6 +87,10 @@ def main() -> None:
         _expect_u64(client, "inspectString", NearClient.borsh_bytes(text.encode()), expected)
     print("near-bytes: ASCII and valid 2/3/4-byte Unicode scalar UTF-8 accepted ok")
 
+    for text in ("", "A", "é", "éééé", "abcdefgh"):
+        _expect_log(client, text)
+    print("near-bytes: bounded dynamic logs preserve empty/partial/full/multibyte active bytes ok")
+
     invalid_utf8 = (
         (b"\xc0\xaf", "overlong two-byte sequence"),
         (b"\xed\xa0\x80", "UTF-16 surrogate"),
@@ -78,6 +101,7 @@ def main() -> None:
     for raw, scene in invalid_utf8:
         wire = NearClient.borsh_bytes(raw)
         _expect_view_failure(client, "inspectString", wire, scene)
+        _expect_view_failure(client, "logString", wire, f"dynamic log {scene}")
         _expect_u64(client, "inspectBytes", wire, len(raw) + raw[0])
     print("near-bytes: malformed UTF-8 rejected as String but retained as bytes ok")
     print("suite NearBytes: PASS")

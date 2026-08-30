@@ -91,6 +91,12 @@ and returns zero for source sequencing; receipt logging remains the observable e
 @[pf_inline] def write (message : String) : UInt64 :=
   Runtime.logUtf8 message
 
+/-- Log the active bytes of one bounded UTF-8 string. Canonical `BoundedString` input is validated
+before source execution; internally constructed values must satisfy `BoundedString.wellFormed`. -/
+@[pf_inline] def writeBounded (capacity : Nat)
+    (message : ProofForge.Core.Value.BoundedString capacity) : UInt64 :=
+  Runtime.logUtf8Bounded capacity message
+
 end Logs
 
 namespace Access

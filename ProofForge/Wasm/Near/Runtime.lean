@@ -106,6 +106,18 @@ rejects dynamic strings and messages above the target-owned bound.
   let _ := message
   0
 
+/--
+Emit the active UTF-8 bytes of one bounded source string through `env.log_utf8`. The capacity is
+compile-time and the logical carrier remains pointer-free; extraction stages exactly `length`
+bytes through the invocation-local guest arena. Callers constructing the value internally must
+preserve `BoundedString.wellFormed`; canonical NEAR String input already enforces it.
+-/
+@[irreducible] def logUtf8Bounded (capacity : Nat)
+    (message : ProofForge.Core.Value.BoundedString capacity) : UInt64 :=
+  let _ := capacity
+  let _ := message
+  0
+
 /-!
 Detached cross-contract call foundation. Receiver and method are compile-time literals; arguments
 remain a bounded source frame, deposit is passed losslessly as two u64 limbs, and gas is an inline

@@ -69,6 +69,8 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .near payload =>
       match payload with
       | .logUtf8 message => .near (.logUtf8 message)
+      | .logUtf8Bounded capacity message =>
+          .near (.logUtf8Bounded capacity (message.map mapValue))
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallDetached receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
@@ -125,6 +127,7 @@ def OpExt.values : OpExt Val → Array Val
   | .near payload =>
       match payload with
       | .logUtf8 _ => #[]
+      | .logUtf8Bounded _ message => message
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -188,6 +191,10 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .near payload =>
       match payload with
       | .logUtf8 message => message.toUTF8.size ≤ 1024
+      | .logUtf8Bounded capacity message =>
+          Wasm.Near.Codec.storageCapacityValid capacity &&
+            message.size == capacity + 1 &&
+            message.all (·.wellFormed ValKind.arity)
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           Wasm.Near.Codec.accountIdLiteralValid receiver &&
             Wasm.Near.Codec.promiseMethodLiteralValid method &&

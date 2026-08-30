@@ -575,6 +575,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .ext (.near payload) =>
           .ext (.near (match payload with
             | .logUtf8 message => .logUtf8 message
+            | .logUtf8Bounded capacity message =>
+                .logUtf8Bounded capacity (message.map (flipVal fuel'))
             | .promiseFunctionCallDetached receiver method argsCapacity arguments
                 depositLo depositHi gas =>
                 .promiseFunctionCallDetached receiver method argsCapacity

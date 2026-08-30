@@ -104,6 +104,8 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   callback argument、failed/oversized fallback；还验证两个
   有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路。
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
+  `bytes.sh` 还验证 arena-backed bounded dynamic `log_utf8` 对 empty/partial/full/multibyte
+  active prefix 的精确 view logs，以及 malformed UTF-8 在日志效果前被拒绝。
   `counter.sh` 还在初始化前验证 paid mutator 先命中 non-payable，普通 mutator/view 再以精确
   missing-state panic fail closed 且不创建 KV state；初始化后还对账 exact 16-byte schema
   envelope，随后重复初始化与算术场景照常通过；同一 gate 还部署双字段升级代码，验证旧

@@ -63,6 +63,9 @@ bytes_anchors = (
     '(func $pf_utf8_valid',
     '(func (export "inspectBytes")',
     '(func (export "inspectString")',
+    '(func (export "logString")',
+    '(import "env" "log_utf8"',
+    '(call $pf_log_utf8 (local.get $pf_r0) (local.get $pf_r1))',
     '(call $pf_utf8_valid (i32.const 260)',
 )
 memory_anchors = (
