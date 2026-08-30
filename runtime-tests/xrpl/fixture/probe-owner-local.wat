@@ -38,9 +38,18 @@
       (then (return (local.get $st))))
     (call $write_bal))
 
+  ;; 2.6.1 server_definitions: sfContractAccount = ACCOUNT/25 = 524313.
   (func (export "pokeSelf") (result i32)
     (local $st i32)
-    (local.set $st (call $get_current_ledger_obj_field (i32.const 524315) (i32.const 0) (i32.const 20)))
+    (local.set $st (call $get_current_ledger_obj_field (i32.const 524313) (i32.const 0) (i32.const 20)))
+    (if (i32.lt_s (local.get $st) (i32.const 0))
+      (then (return (local.get $st))))
+    (call $write_bal))
+
+  ;; Contract SLE sfOwner = 524290 (Bedrock home field).
+  (func (export "pokeOwner") (result i32)
+    (local $st i32)
+    (local.set $st (call $get_current_ledger_obj_field (i32.const 524290) (i32.const 0) (i32.const 20)))
     (if (i32.lt_s (local.get $st) (i32.const 0))
       (then (return (local.get $st))))
     (call $write_bal))

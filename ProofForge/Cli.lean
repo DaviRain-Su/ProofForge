@@ -44,6 +44,8 @@ structure Options where
   contract : String := ""
   functionName : String := ""
   callArgs : Array String := #[]
+  /-- Create-time tfSendAmount drops. Empty = no InstanceParameterValues. -/
+  sendAmount : String := ""
   help : Bool := false
 
 private def usage : String :=
@@ -51,15 +53,17 @@ private def usage : String :=
     "\n" ++
     "Usage:\n" ++
     "  pf build --target <svm|evm|xrpl|xrpl-alphanet> [--out DIR] [Program ...]\n" ++
-    "  pf deploy --target xrpl-alphanet [--out DIR] [--rpc URL] [--wallet SEED] Program\n" ++
-    "  pf call --target xrpl-alphanet --contract ACCOUNT [--rpc URL] [--wallet SEED] Function [UINT64 ...]\n" ++
+    "  pf deploy --target <xrpl|xrpl-alphanet> [--out DIR] [--rpc URL] [--wallet SEED] [--send-amount DROPS] Program\n" ++
+    "  pf call --target <xrpl|xrpl-alphanet> --contract ACCOUNT [--rpc URL] [--wallet SEED] Function [UINT64 ...]\n" ++
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
     "xrpl writes Name.wat / Name.wasm (XRPL Bedrock local; locked wat2wasm)\n" ++
     "xrpl-alphanet same IR, XLS-0102 host names for live AlphaNet\n" ++
-    "deploy/call talk to AlphaNet via runtime-tests/xrpl/alphanet-rpc.js;\n" ++
-    "     not bedrock. Public RPC 502s ContractCall Parameters; use XrplSmoke.\n" ++
+    "deploy/call talk via runtime-tests/xrpl/alphanet-rpc.js.\n" ++
+    "     --target xrpl = Bedrock/get_* names (local 2.6.1). xrpl-alphanet = XLS-0102.\n" ++
+    "     --send-amount funds the pseudo-account (local 2.6.1 first-install only).\n" ++
+    "     Public 3.3.0 Create with values is still temMALFORMED; Parameters 502.\n" ++
     "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
     "No program names on build means every registered source module.\n"
 
@@ -79,6 +83,7 @@ def parseArgs (args : List String) : Except String Options :=
     | "--rpc" :: u :: rest => go rest { o with rpcUrl := u }
     | "--wallet" :: s :: rest => go rest { o with wallet := s }
     | "--contract" :: a :: rest => go rest { o with contract := a }
+    | "--send-amount" :: d :: rest => go rest { o with sendAmount := d }
     | flag :: rest =>
       if flag.startsWith "-" then .error s!"unknown flag {flag}"
       else if o.command == .call && o.functionName.isEmpty then
@@ -232,12 +237,14 @@ private def runAlphaNetJs (cmd : String) (cfgPath : System.FilePath) : IO (Excep
     return .ok proc.stdout
   return .error (if proc.stderr.isEmpty then proc.stdout else proc.stderr)
 
-private def defaultAlphaNetOut (opts : Options) : System.FilePath :=
-  if opts.outDir.toString == "build/out" then "build/xrpl-alphanet" else opts.outDir
+private def defaultXrplOut (opts : Options) : System.FilePath :=
+  if opts.outDir.toString == "build/out" then
+    if opts.target == .xrpl then "build/xrpl" else "build/xrpl-alphanet"
+  else opts.outDir
 
 private unsafe def runDeploy (opts : Options) : IO UInt32 := do
-  unless opts.target == .xrplAlphaNet do
-    IO.eprintln "pf: deploy currently only supports --target xrpl-alphanet"
+  unless opts.target == .xrplAlphaNet || opts.target == .xrpl do
+    IO.eprintln "pf: deploy supports --target xrpl or --target xrpl-alphanet"
     return 1
   match selectXrplNames opts.names with
   | .error reason =>
@@ -248,7 +255,7 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
       IO.eprintln "pf: deploy wants exactly one program"
       return 1
     let name := names[0]!
-    let outDir := defaultAlphaNetOut opts
+    let outDir := defaultXrplOut opts
     match ← extractXrplPrograms #[name] with
     | .error reason =>
       IO.eprintln s!"pf: {reason}"
@@ -256,12 +263,20 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
     | .ok programs =>
       IO.FS.createDirAll outDir
       let program := programs[0]!
-      let r ← ProofForge.Wasm.Xrpl.Assemble.assembleAlphaNet outDir program
+      let r ←
+        if opts.target == .xrpl then
+          ProofForge.Wasm.Xrpl.Assemble.assembleProgram outDir program
+        else
+          ProofForge.Wasm.Xrpl.Assemble.assembleAlphaNet outDir program
       IO.println s!"wrote {r.wasmPath}"
+      let fund :=
+        if opts.sendAmount.isEmpty then ""
+        else ",\"send_amount_drops\":\"" ++ jsonEscape opts.sendAmount ++ "\""
       let cfg :=
         "{\"rpc_url\":\"" ++ jsonEscape opts.rpcUrl ++
-          "\",\"network_id\":21337,\"wallet_seed\":\"" ++ jsonEscape opts.wallet ++
-          "\",\"wasm_path\":\"" ++ jsonEscape r.wasmPath.toString ++ "\"}"
+          "\",\"wallet_seed\":\"" ++ jsonEscape opts.wallet ++
+          "\",\"wasm_path\":\"" ++ jsonEscape r.wasmPath.toString ++ "\"" ++
+          fund ++ "}"
       let cfgPath ← writeTempJson cfg
       let result ← runAlphaNetJs "deploy" cfgPath
       try IO.FS.removeFile cfgPath catch _ => pure ()
@@ -274,8 +289,8 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
         return 0
 
 private def runCall (opts : Options) : IO UInt32 := do
-  unless opts.target == .xrplAlphaNet do
-    IO.eprintln "pf: call currently only supports --target xrpl-alphanet"
+  unless opts.target == .xrplAlphaNet || opts.target == .xrpl do
+    IO.eprintln "pf: call supports --target xrpl or --target xrpl-alphanet"
     return 1
   if opts.contract.isEmpty then
     IO.eprintln "pf: call wants --contract ACCOUNT"
@@ -288,7 +303,7 @@ private def runCall (opts : Options) : IO UInt32 := do
     else "[" ++ String.intercalate "," (opts.callArgs.toList.map (fun a => "\"" ++ jsonEscape a ++ "\"")) ++ "]"
   let cfg :=
     "{\"rpc_url\":\"" ++ jsonEscape opts.rpcUrl ++
-      "\",\"network_id\":21337,\"wallet_seed\":\"" ++ jsonEscape opts.wallet ++
+      "\",\"wallet_seed\":\"" ++ jsonEscape opts.wallet ++
       "\",\"contract_account\":\"" ++ jsonEscape opts.contract ++
       "\",\"function_name\":\"" ++ jsonEscape opts.functionName ++
       "\",\"parameters\":" ++ params ++ "}"

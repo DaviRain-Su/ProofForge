@@ -244,17 +244,11 @@ async function main() {
       Functions,
     };
     // tfSendAmount = 0x00010000. Ordinary Payment to a ContractAccount is
-    // tecNO_PERMISSION; Create-time InstanceParameterValues is the treasury path.
+    // tecNO_PERMISSION. Create-time InstanceParameterValues funds the
+    // pseudo-account. Node `sign` cannot encode ParameterType (DataType),
+    // so omit InstanceParameters; the flag on the value is enough on 2.6.1-rc1.
     if (cfg.send_amount_drops) {
       const drops = String(cfg.send_amount_drops);
-      txJson.InstanceParameters = [
-        {
-          InstanceParameter: {
-            ParameterFlag: 65536,
-            ParameterType: { type: "AMOUNT" },
-          },
-        },
-      ];
       txJson.InstanceParameterValues = [
         {
           InstanceParameterValue: {

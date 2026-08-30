@@ -32,6 +32,15 @@ namespace Tests.CliSpec
 
 #guard
   match ProofForge.Cli.parseArgs
+      ["deploy", "--target", "xrpl", "--rpc", "http://127.0.0.1:15005",
+        "--send-amount", "2000000000", "XrplSmoke"] with
+  | .ok o =>
+      o.command == .deploy && o.target == .xrpl && o.sendAmount == "2000000000" &&
+        o.rpcUrl == "http://127.0.0.1:15005" && o.names == #["XrplSmoke"]
+  | .error _ => false
+
+#guard
+  match ProofForge.Cli.parseArgs
       ["call", "--contract", "rContract", "bump"] with
   | .ok o =>
       o.command == .call && o.target == .xrplAlphaNet &&
