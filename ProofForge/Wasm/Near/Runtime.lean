@@ -135,6 +135,20 @@ Metadata remains compile-time; the target owns all JSON escaping and the final h
   let _ := amount
   0
 
+/-- Emit the exact no-memo NEP-141 v1.0.0 `ft_transfer` event for one ownership change. -/
+@[irreducible] def nep141FtTransfer
+    (oldOwner newOwner : AccountId) (amount : NearToken) : UInt64 :=
+  let _ := oldOwner
+  let _ := newOwner
+  let _ := amount
+  0
+
+/-- Emit the exact no-memo NEP-141 v1.0.0 `ft_burn` event for one owner/amount record. -/
+@[irreducible] def nep141FtBurn (owner : AccountId) (amount : NearToken) : UInt64 :=
+  let _ := owner
+  let _ := amount
+  0
+
 /-!
 Detached cross-contract call foundation. Receiver and method are compile-time literals; arguments
 remain a bounded source frame, deposit is passed losslessly as two u64 limbs, and gas is an inline

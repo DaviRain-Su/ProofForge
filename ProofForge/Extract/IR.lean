@@ -75,6 +75,11 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
           .near (.nep297StringData standard version event capacity (data.map mapValue))
       | .nep141FtMint owner amountLo amountHi =>
           .near (.nep141FtMint (owner.map mapValue) (mapValue amountLo) (mapValue amountHi))
+      | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
+          .near (.nep141FtTransfer (oldOwner.map mapValue) (newOwner.map mapValue)
+            (mapValue amountLo) (mapValue amountHi))
+      | .nep141FtBurn owner amountLo amountHi =>
+          .near (.nep141FtBurn (owner.map mapValue) (mapValue amountLo) (mapValue amountHi))
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallDetached receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
@@ -134,6 +139,9 @@ def OpExt.values : OpExt Val → Array Val
       | .logUtf8Bounded _ message => message
       | .nep297StringData _ _ _ _ data => data
       | .nep141FtMint owner amountLo amountHi => owner ++ #[amountLo, amountHi]
+      | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
+          oldOwner ++ newOwner ++ #[amountLo, amountHi]
+      | .nep141FtBurn owner amountLo amountHi => owner ++ #[amountLo, amountHi]
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -206,6 +214,13 @@ def OpExt.wellFormed : OpExt Val → Bool
             Wasm.Near.Codec.storageCapacityValid capacity && data.size == capacity + 1 &&
             data.all (·.wellFormed ValKind.arity)
       | .nep141FtMint owner amountLo amountHi =>
+          owner.size == 9 && owner.all (·.wellFormed ValKind.arity) &&
+            amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
+      | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
+          oldOwner.size == 9 && oldOwner.all (·.wellFormed ValKind.arity) &&
+            newOwner.size == 9 && newOwner.all (·.wellFormed ValKind.arity) &&
+            amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
+      | .nep141FtBurn owner amountLo amountHi =>
           owner.size == 9 && owner.all (·.wellFormed ValKind.arity) &&
             amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>

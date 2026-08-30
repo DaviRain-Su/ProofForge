@@ -227,7 +227,7 @@ jobs:
       - name: Run NEAR sandbox Borsh bytes gate
         run: runtime-tests/near/bytes.sh
 
-      - name: Run NEAR sandbox NEP-141 ft_mint event gate
+      - name: Run NEAR sandbox NEP-141 event gate
         run: runtime-tests/near/ft_event.sh
 
       - name: Run NEAR sandbox memory arena gate

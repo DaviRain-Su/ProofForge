@@ -164,6 +164,12 @@ private def projectOpExt
       | .nep141FtMint owner amountLo amountHi =>
           return .nep141FtMint (← owner.mapM _projectVal)
             (← _projectVal amountLo) (← _projectVal amountHi)
+      | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
+          return .nep141FtTransfer (← oldOwner.mapM _projectVal) (← newOwner.mapM _projectVal)
+            (← _projectVal amountLo) (← _projectVal amountHi)
+      | .nep141FtBurn owner amountLo amountHi =>
+          return .nep141FtBurn (← owner.mapM _projectVal)
+            (← _projectVal amountLo) (← _projectVal amountHi)
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           return .promiseFunctionCallDetached receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
@@ -285,6 +291,14 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
       s!"nevent.nep141.ft_mint({canonValues owner};" ++
         s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
         s!"{Wasm.IR.valCanon extValCanon amountHi})"
+  | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
+      s!"nevent.nep141.ft_transfer({canonValues oldOwner};{canonValues newOwner};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi})"
+  | .nep141FtBurn owner amountLo amountHi =>
+      s!"nevent.nep141.ft_burn({canonValues owner};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi})"
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       s!"npromise.detached:{receiver.toUTF8.size}:{receiver}:{method.toUTF8.size}:{method}." ++
         s!"{argsCapacity}({canonValues arguments};" ++
@@ -379,6 +393,12 @@ private def rewritePayload
         (rewritten.map simplifyLiteralSelect)
   | .nep141FtMint owner amountLo amountHi =>
       return .nep141FtMint (← owner.mapM rewriteValue)
+        (← rewriteValue amountLo) (← rewriteValue amountHi)
+  | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
+      return .nep141FtTransfer (← oldOwner.mapM rewriteValue) (← newOwner.mapM rewriteValue)
+        (← rewriteValue amountLo) (← rewriteValue amountHi)
+  | .nep141FtBurn owner amountLo amountHi =>
+      return .nep141FtBurn (← owner.mapM rewriteValue)
         (← rewriteValue amountLo) (← rewriteValue amountHi)
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       return .promiseFunctionCallDetached receiver method argsCapacity

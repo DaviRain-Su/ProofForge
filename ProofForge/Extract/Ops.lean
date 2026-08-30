@@ -178,6 +178,13 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Op.nearNep141FtMint (owner : Array Val) (amountLo amountHi : Val) : Op :=
   .ext (.near (.nep141FtMint owner amountLo amountHi))
 
+@[match_pattern] def Op.nearNep141FtTransfer (oldOwner newOwner : Array Val)
+    (amountLo amountHi : Val) : Op :=
+  .ext (.near (.nep141FtTransfer oldOwner newOwner amountLo amountHi))
+
+@[match_pattern] def Op.nearNep141FtBurn (owner : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.nep141FtBurn owner amountLo amountHi))
+
 @[match_pattern] def Op.nearPromiseFunctionCallDetached
     (receiver method : String) (argsCapacity : Nat) (arguments : Array Val)
     (depositLo depositHi gas : Val) : Op :=
@@ -554,6 +561,8 @@ def hasNearEffect (ops : Array Op) : Bool :=
     | .ext (.near (.logUtf8Bounded _ _))
     | .ext (.near (.nep297StringData _ _ _ _ _))
     | .ext (.near (.nep141FtMint _ _ _))
+    | .ext (.near (.nep141FtTransfer _ _ _ _))
+    | .ext (.near (.nep141FtBurn _ _ _))
     | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _))

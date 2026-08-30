@@ -77,11 +77,14 @@ ft_event_anchors = (
     '(func $pf_u128_decimal',
     '(local.set $bit (i64.const 128))',
     '(call $pf_arena_alloc (i64.const 528) (i64.const 1))',
+    '(call $pf_arena_alloc (i64.const 938) (i64.const 1))',
     '(call $pf_arena_alloc (i64.const 39) (i64.const 1))',
     '(func (export "mintZero")',
     '(func (export "mintTwo64")',
     '(func (export "mintTwo64PlusOne")',
     '(func (export "mintMax")',
+    '(func (export "transferMax")',
+    '(func (export "burnTwo64")',
 )
 memory_anchors = (
     '(func $pf_arena_reset',

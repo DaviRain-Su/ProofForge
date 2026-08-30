@@ -5,10 +5,11 @@ import ProofForge.Wasm.Near.Commands
 import Examples.NearFungibleTokenEvent
 
 /-!
-# Exact no-memo NEP-141 ft_mint event
+# Exact no-memo NEP-141 fungible-token events
 
-This pins event serialization only: complete AccountId staging, JSON escaping, full-u128 decimal,
-and one compact `EVENT_JSON:` log. It is not an FT state/method implementation.
+This pins mint/transfer/burn event serialization only: complete AccountId staging, JSON escaping,
+full-u128 decimal, official field order, and one compact `EVENT_JSON:` log. It is not an FT
+state/method implementation.
 -/
 
 open ProofForge
@@ -20,7 +21,20 @@ private def amountOf (method : ProofForge.Wasm.Near.IR.Method) : Option (UInt64 
         if owner.size == 9 then some (lo, hi) else none
     | _ => none
 
-elab "#pf_guard_near_ft_mint_event" : command => do
+private def hasExpectedTransfer (method : ProofForge.Wasm.Near.IR.Method) : Bool :=
+  method.ops.any fun
+    | .ext (.nep141FtTransfer oldOwner newOwner (.lit lo) (.lit hi)) =>
+        oldOwner.size == 9 && newOwner.size == 9 &&
+          lo == 18446744073709551615 && hi == 18446744073709551615
+    | _ => false
+
+private def hasExpectedBurn (method : ProofForge.Wasm.Near.IR.Method) : Bool :=
+  method.ops.any fun
+    | .ext (.nep141FtBurn owner (.lit lo) (.lit hi)) =>
+        owner.size == 9 && lo == 0 && hi == 1
+    | _ => false
+
+elab "#pf_guard_near_ft_events" : command => do
   let env ← getEnv
   let extracted ←
     match Extract.extractModuleIR env `Examples.NearFungibleTokenEvent none with
@@ -43,6 +57,20 @@ elab "#pf_guard_near_ft_mint_event" : command => do
       throwError s!"wrong {name} ft_mint payload: " ++
         ProofForge.Wasm.IR.opsCanon ProofForge.Wasm.Near.IR.extValCanon
           ProofForge.Wasm.Near.IR.extOpCanon method.ops
+  let some (transfer : ProofForge.Wasm.Near.IR.Method) :=
+      program.entries.find? (·.ixName == "transferMax")
+    | throwError "missing transferMax"
+  unless hasExpectedTransfer transfer do
+    let canon := ProofForge.Wasm.IR.opsCanon ProofForge.Wasm.Near.IR.extValCanon
+      ProofForge.Wasm.Near.IR.extOpCanon transfer.ops
+    throwError s!"wrong transferMax ft_transfer payload: {canon}"
+  let some (burn : ProofForge.Wasm.Near.IR.Method) :=
+      program.entries.find? (·.ixName == "burnTwo64")
+    | throwError "missing burnTwo64"
+  unless hasExpectedBurn burn do
+    let canon := ProofForge.Wasm.IR.opsCanon ProofForge.Wasm.Near.IR.extValCanon
+      ProofForge.Wasm.Near.IR.extOpCanon burn.ops
+    throwError s!"wrong burnTwo64 ft_burn payload: {canon}"
   let wat ←
     match ProofForge.Wasm.Near.Emit.emit program with
     | .ok source => pure source
@@ -57,23 +85,26 @@ elab "#pf_guard_near_ft_mint_event" : command => do
     "(local.set $i (i64.const 39))",
     "(br $output)",
     "(call $pf_arena_alloc (i64.const 528) (i64.const 1))",
+    "(call $pf_arena_alloc (i64.const 938) (i64.const 1))",
     "(call $pf_arena_alloc (i64.const 39) (i64.const 1))",
     "(call $pf_json_escape_byte",
     "(call $pf_u128_decimal",
     "(func (export \"mintZero\")",
     "(func (export \"mintTwo64\")",
     "(func (export \"mintTwo64PlusOne\")",
-    "(func (export \"mintMax\")"
+    "(func (export \"mintMax\")",
+    "(func (export \"transferMax\")",
+    "(func (export \"burnTwo64\")"
   ]
   for anchor in anchors do
     unless wat.contains anchor do
-      throwError s!"NEP-141 ft_mint WAT is missing {anchor}\n{wat}"
+      throwError s!"NEP-141 event WAT is missing {anchor}\n{wat}"
   if wat.contains "\"memo\"" then
-    throwError "NEP-141 ft_mint unexpectedly serialized memo"
+    throwError "NEP-141 event unexpectedly serialized memo"
   logInfo m!"proofforge-near-ft-event-test: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
 
-#pf_guard_near_ft_mint_event
+#pf_guard_near_ft_events
 #pf_near_build Examples.NearFungibleTokenEvent
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleTokenEvent" ==
-  some "f722b151ce6ec284"
+  some "c2e55cb7f673c6ee"

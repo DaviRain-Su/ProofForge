@@ -5672,6 +5672,8 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded ||
         name == ``ProofForge.Wasm.Near.Runtime.nep297StringData ||
         name == ``ProofForge.Wasm.Near.Runtime.nep141FtMint ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtTransfer ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtBurn ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
@@ -5748,6 +5750,29 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
         | some owner, some amountLo, some amountHi =>
             some (.nearNep141FtMint owner amountLo amountHi)
+        | _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtTransfer &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let oldOwner := args[args.size - 3]!
+        let newOwner := args[args.size - 2]!
+        let amount := args[args.size - 1]!
+        match nearAccountIdFrame? env oldOwner, nearAccountIdFrame? env newOwner,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some oldOwner, some newOwner, some amountLo, some amountHi =>
+            some (.nearNep141FtTransfer oldOwner newOwner amountLo amountHi)
+        | _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtBurn &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let owner := args[args.size - 2]!
+        let amount := args[args.size - 1]!
+        match nearAccountIdFrame? env owner,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some owner, some amountLo, some amountHi =>
+            some (.nearNep141FtBurn owner amountLo amountHi)
         | _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned) &&

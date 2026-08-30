@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact no-memo NEP-141 ft_mint events against local near-sandbox."""
+"""Exact no-memo NEP-141 mint/transfer/burn events against local near-sandbox."""
 
 from __future__ import annotations
 
@@ -26,14 +26,21 @@ def _receipt_logs(response: dict) -> list[str]:
     ]
 
 
-def _expect_mint(client: NearClient, method: str, amount: int) -> None:
-    response = client.call(method)
+def _expect_event(
+    client: NearClient,
+    method: str,
+    event: str,
+    data: dict[str, str],
+    *,
+    signer: str | None = None,
+) -> None:
+    response = client.call_on(client.account_id, method, signer=signer)
     expected = "EVENT_JSON:" + json.dumps(
         {
             "standard": "nep141",
             "version": "1.0.0",
-            "event": "ft_mint",
-            "data": [{"owner_id": client.account_id, "amount": str(amount)}],
+            "event": event,
+            "data": [data],
         },
         separators=(",", ":"),
     )
@@ -50,7 +57,7 @@ def main() -> None:
     wasm = Path(_require("PF_NEAR_WASM"))
     client = NearClient(rpc, home)
 
-    print("=== suite: NearFungibleTokenEvent (exact ft_mint event) ===")
+    print("=== suite: NearFungibleTokenEvent (exact mint/transfer/burn events) ===")
     client.deploy(wasm)
     client.call("initialize")
 
@@ -61,10 +68,36 @@ def main() -> None:
         ("mintMax", (1 << 128) - 1),
     )
     for method, amount in cases:
-        _expect_mint(client, method, amount)
-    if client.view_u64("get") != len(cases):
-        raise AssertionError("all four event methods must commit exactly once")
-    print("near-ft-event: exact owner, 0/2^64/2^64+1/max-u128 decimal, no memo, one log ok")
+        _expect_event(
+            client,
+            method,
+            "ft_mint",
+            {"owner_id": client.account_id, "amount": str(amount)},
+        )
+
+    transfer_caller = "transfer-caller.test.near"
+    client.create_subaccount_with_key(transfer_caller, 10**25)
+    _expect_event(
+        client,
+        "transferMax",
+        "ft_transfer",
+        {
+            "old_owner_id": transfer_caller,
+            "new_owner_id": client.account_id,
+            "amount": str((1 << 128) - 1),
+        },
+        signer=transfer_caller,
+    )
+    _expect_event(
+        client,
+        "burnTwo64",
+        "ft_burn",
+        {"owner_id": client.account_id, "amount": str(1 << 64)},
+    )
+    expected_calls = len(cases) + 2
+    if client.view_u64("get") != expected_calls:
+        raise AssertionError("all six event methods must commit exactly once")
+    print("near-ft-event: exact ordered fields, u128 decimal, no memo, one log ok")
     print("suite NearFungibleTokenEvent: PASS")
 
 
