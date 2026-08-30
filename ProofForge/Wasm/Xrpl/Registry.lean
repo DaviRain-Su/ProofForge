@@ -31,7 +31,7 @@ def entries : Array Entry := #[
   { name := "XrplHand", digest := "5c6813950576cdda" },
   { name := "XrplCrew", digest := "ca03e80ef4a8218a" },
   { name := "XrplPay", digest := "5f2a9ac1b78e08de" },
-  { name := "XrplMint", digest := "3aeac2fd4e14b8c5" },
+  { name := "XrplMint", digest := "aa7a5ca7cb887256" },
   { name := "XrplLock", digest := "d2c4673c64a8d0c" }
   ]
 

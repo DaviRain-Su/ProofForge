@@ -392,16 +392,95 @@ def takeFrom (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UIn
             else
               .error .overflow
           else
-            .error .overflow      else
+            .error .overflow
+        else
           .error .frozen
       else
         .error .frozen
-
     else
       .error .paused
   else
     .error .unauthorized
 
+
+/-- Compile-time spender burns `amount` from `(w0,w1,w2)`'s card. Cuts that
+card's `allw` and decrements `supp` on the minter card. Self-source only
+cuts `allw` and `supp` (no extra debit of the same card). Peek halt/supp
+on the minter card, then restore the source card before persist so `$bal`
+is not copied from the minter. Not a Map, not a PDA. -/
+@[pf_entry]
+def burnFrom (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
+  if Access.requireOwner spender then
+    if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
+      if Context.peekLockLimbs w0 w1 w2 = (0 : UInt64) then
+        if amount ≤ Context.peekAllwLimbs w0 w1 w2 then
+          if amount ≤ Context.peekOwnerLimbs w0 w1 w2 then
+            if amount ≤ Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" then
+              if Context.flushSupp
+                  (Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" - amount) ≤ u64Max then
+                if Context.storeOwnerLimbs w0 w1 w2 ≤ u64Max then
+                  if Context.flushAllw (Context.peekAllwLimbs w0 w1 w2 - amount) ≤ u64Max then
+                    if w0 = Context.callerW0 then
+                      if w1 = Context.callerW1 then
+                        if w2 = Context.callerW2 then
+                          if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
+                            if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                              if Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                                .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + (0 : UInt64) }, (0 : UInt64))
+                              else
+                                .error .overflow
+                            else
+                              .error .overflow
+                          else
+                            .error .overflow
+                        else if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
+                          if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                            if Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                              .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + (0 : UInt64) }, (0 : UInt64))
+                            else
+                              .error .overflow
+                          else
+                            .error .overflow
+                        else
+                          .error .overflow
+                      else if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
+                        if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                          if Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                            .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + (0 : UInt64) }, (0 : UInt64))
+                          else
+                            .error .overflow
+                        else
+                          .error .overflow
+                      else
+                        .error .overflow
+                    else if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
+                      if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                        if Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                          .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + (0 : UInt64) }, (0 : UInt64))
+                        else
+                          .error .overflow
+                      else
+                        .error .overflow
+                    else
+                      .error .overflow
+                  else
+                    .error .overflow
+                else
+                  .error .overflow
+              else
+                .error .overflow
+            else
+              .error .overflow
+          else
+            .error .overflow
+        else
+          .error .overflow
+      else
+        .error .frozen
+    else
+      .error .paused
+  else
+    .error .unauthorized
 
 /-- Caller writes `lock=1` on *this* card. Restore caller before persist.
 Not global `halt`. -/
