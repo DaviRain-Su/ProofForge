@@ -151,16 +151,15 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 | id | 内容 |
 |---|---|
-| **wsm-032** | **已跑** `transia/alphanet:latest` = 2.6.1-rc1 `dangell/smart-contracts` @ `56f16869`，nid **63456**。**不是** Bedrock Docker，也 **不是** 公开 3.3.0 / XLS-0102 名。host 是 `get_*`。三条仍挡：emit 过 NetworkID 后伪账户 **tecUNFUNDED_PAYMENT** + 关账本 assert；合约卡 **-17**；Parameters **SIGSEGV** |
+| **wsm-032** | **已跑** `transia/alphanet:latest` = 2.6.1-rc1 `dangell/smart-contracts` @ `56f16869`，nid **63456**。**不是** Bedrock Docker，也 **不是** 公开 3.3.0 / XLS-0102 名。host 是 `get_*`。本地 **emit Payment 绿**（values-only `tfSendAmount` + 大端 NetworkID）。公开 3.3.0 仍 -196 / temMALFORMED。合约账户卡仍 **-1**；Parameters **SIGSEGV** |
 
 ## 3. 建议立刻做的顺序
 
 1. **wsm-021 `trace_num` 探针** — **已绿**。不开 Sdk.Log。
 2. **wsm-029 / wsm-033** — AccountRoot.Balance **已绿**（`callerBalanceDrops`）。
-3. **wsm-030 / wsm-032** — `build_txn` **host 已绿**。公开 3.3.0 pokeEmit
-   **-196**。本地 2.6.1 过了 NetworkID 之后内层 Payment **tecUNFUNDED_PAYMENT**
-   （合约余额 0），关账本 assert。Create `InstanceParameters` 两边都拒。
-   不开 `Sdk.Payments`。
+3. **wsm-030 / wsm-032** — 本地 2.6.1 **Payment 已落地**（第一次 Create
+   只带 `InstanceParameterValues`，内层 Payment 大端 NetworkID）。公开 3.3.0
+   仍 **-196** / Create values **temMALFORMED**。不开 `Sdk.Payments` 直到公开网也绿。
 4. **wsm-034** — AccountRoot Sequence/Flags/OwnerCount **已绿**（`XrplRoot`）。
 5. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。
 6. **wsm-035** — 给别人写卡片 **已绿**（硬编码对方 AccountID）。`tx Sequence/Fee` 已绿。
