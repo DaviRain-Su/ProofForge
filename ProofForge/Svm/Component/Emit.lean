@@ -1,4 +1,5 @@
 import ProofForge.Svm.Component
+import ProofForge.Svm.AccountData.Emit
 import ProofForge.Svm.AccountView.Emit
 import ProofForge.Svm.AccountStorage.Emit
 import ProofForge.Svm.BatchRecorder.Emit
@@ -19,12 +20,19 @@ structure Context where
   loadValue : Ops.Val → Nat → Nat → String → Except String String
   loadOwnerIsSelf : Nat → Nat → String → String
   headerStack : Nat → Nat
+  originalDataLenStack : Nat → Nat
   accountCount : Nat
 
 private def Context.accountStorage (context : Context) : AccountStorage.Emit.Context :=
   { loadValue := context.loadValue
     loadOwnerIsSelf := context.loadOwnerIsSelf
     headerStack := context.headerStack }
+
+private def Context.accountData (context : Context) : AccountData.Emit.Context :=
+  { loadValue := context.loadValue
+    loadOwnerIsSelf := context.loadOwnerIsSelf
+    headerStack := context.headerStack
+    originalDataLenStack := context.originalDataLenStack }
 
 private def Context.accountView (context : Context) : AccountView.Emit.Context :=
   { loadValue := context.loadValue
@@ -88,6 +96,7 @@ def emitQuery (context : Context) (query : Component.Query) (operands : Array Op
 
 def emitCall (context : Context) (backend : Backend) (label : String) :
     Component.Call Ops.Val → Except String String
+  | .accountData call => AccountData.Emit.emitCall context.accountData label call
   | .accountStorage call =>
       AccountStorage.Emit.emitCall context.accountStorage backend.accountStorage label call
   | .batchRecorder call =>

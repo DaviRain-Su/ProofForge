@@ -19,6 +19,7 @@ private def u64Max : UInt64 := ~~~(0 : UInt64)
 @[pf_inline] private def first : Memory.Span := Memory.Span.accountData 1 0 8
 @[pf_inline] private def second : Memory.Span := Memory.Span.accountData 1 8 8
 @[pf_inline] private def overlappingDestination : Memory.Span := Memory.Span.accountData 1 4 8
+@[pf_inline] private def dataAccount : Account.Handle := Account.Handle.at 1
 @[pf_inline] private def vector2 : Transient.Vector64 := Transient.Vector64.bounded 2
 @[pf_inline] private def vector1 : Transient.Vector64 := Transient.Vector64.bounded 1
 @[pf_inline] private def vectorMax : Transient.Vector64 := Transient.Vector64.bounded 4095
@@ -65,6 +66,31 @@ def moveBytes (_state : State) : UInt64 :=
 @[pf_entry]
 def compareBytes (_state : State) : UInt64 :=
   Memory.compareI32Bits first second
+
+/-! ## Official-shaped fixed account-data resizing
+
+These entries use the same physical account 1 as the checked memory spans above. `resizeData`
+exposes a single dynamic requested length through the typed SDK handle; `shrinkThenGrow` proves
+that one invocation cannot observe stale truncated bytes after regrowth; `resizeThenFill` proves
+that a following checked span effect observes the new current length. No entry receives an account
+index, serialized offset, pointer, or capacity override.
+-/
+
+@[pf_entry]
+def resizeData (_state : State) (newLength : UInt64) : UInt64 :=
+  let _ := dataAccount.resizeData newLength
+  dataAccount.dataLen
+
+@[pf_entry]
+def shrinkThenGrow (_state : State) (shortLength restoredLength : UInt64) : UInt64 :=
+  let _ := dataAccount.resizeData shortLength
+  let _ := dataAccount.resizeData restoredLength
+  dataAccount.dataLen
+
+@[pf_entry]
+def resizeThenFill (_state : State) (newLength byte : UInt64) : UInt64 :=
+  let _ := dataAccount.resizeData newLength
+  Memory.set second byte
 
 /-- Allocate one bounded invocation vector, mutate an existing element, read through a runtime
 index, and close the source handle. `finish` deliberately does not reclaim the bump heap. -/

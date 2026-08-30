@@ -1463,4 +1463,18 @@ This is a direct header mutation, not a System CPI.
   let _ := amount
   0
 
+/-!
+Current Solana `AccountInfo::resize`-shaped mutation for one compile-time fixed external account.
+This changes the serialized account data length; it is not a heap allocation. The target requires
+the account to be writable, current-program-owned, distinct from managed state account zero, at
+most 10 MiB, and no more than 10,240 bytes above the invocation's original length. Growth is
+always zero-initialized, including shrink-then-grow in one invocation. Loader-v3 duplicate aliases
+among external account positions share one canonical header. Any failed preflight exits
+`Custom(1)` before changing length or payload. Account index zero is rejected during extraction.
+-/
+@[irreducible] def resizeAccountData (account newLength : UInt64) : UInt64 :=
+  let _ := account
+  let _ := newLength
+  0
+
 end ProofForge.Svm.Runtime

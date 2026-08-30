@@ -86,6 +86,21 @@ same validation, keeping the API contract stable. The signed total lamport delta
     UInt64 :=
   Runtime.transferLamports (UInt64.ofNat source.index) (UInt64.ofNat destination.index) amount
 
+/-!
+Resize one fixed external account's data using the current zero-initializing Solana
+`AccountInfo::resize` contract. This is a bounded direct account-ABI mutation, not System
+`Allocate`, heap `realloc`, or a persistent pointer. The target checks writable/current-program
+ownership, the 10 MiB ceiling, and the 10,240-byte growth budget relative to the invocation's
+original length before any change. A shrink preserves the retained prefix; a grow preserves the
+old prefix and zeroes every newly exposed byte.
+
+The managed ProofForge State account at physical index zero has a fixed extracted schema and is
+not an admissible resize handle. A fixed external position that aliases state account zero also
+fails closed. Duplicate aliases among external positions share their canonical account header.
+-/
+@[pf_inline] def Handle.resizeData (handle : Handle) (newLength : UInt64) : UInt64 :=
+  Runtime.resizeAccountData (UInt64.ofNat handle.index) newLength
+
 /-- Compile-time bounded remaining-account window. This is the target plan type itself, not a
 second source-side geometry structure. -/
 abbrev View := ProofForge.Svm.AccountView.View

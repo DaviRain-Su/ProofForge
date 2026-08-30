@@ -95,26 +95,40 @@ final account header. -/
 private def headerStack (i : Nat) : Nat :=
   512 + 8 * i
 
+/-- Immutable invocation-entry lengths follow the account-header cells and final instruction-data
+pointer. Only programs whose components declare the capability reserve this second fixed prefix. -/
+private def originalDataLenStack (accountCount account : Nat) : Nat :=
+  headerStack (accountCount + 1 + account)
+
 /-- Scalar locals start after both the static account-header prefix and component scratch.
 The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PDA/sysvar/component
 scratch owns 2048..4096. This single frame contract prevents composed target effects from
 clobbering source locals without giving individual intrinsics ad-hoc spill rules. -/
 private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
+  let walkEnd :=
+    if IR.requiresOriginalAccountDataLengths p then
+      originalDataLenStack (IR.cpiAccountCount p) (IR.cpiAccountCount p - 1) + 8
+    else
+      headerStack (IR.cpiAccountCount p) + 8
   let base := max (IR.componentStackScratchEnd p + 8)
-    (headerStack (IR.cpiAccountCount p) + 8)
+    walkEnd
   let offset := base + i * 8
   if offset < 1024 then some offset else none
 
-private def emitWalkAccounts (n : Nat) (tag err : String) : String :=
+private def emitWalkAccounts (n : Nat) (captureOriginal : Bool) (tag err : String) : String :=
   Id.run do
     let mut out := "  mov64 r8, r6\n  add64 r8, 8\n"
     for i in [0:n] do
+      let saveOriginal :=
+        if captureOriginal then
+          s!"  stxdw [r10 - {originalDataLenStack n i}], r4\n"
+        else ""
       out := out ++ s!"\
   ldxb r1, [r8 + 0]
   jne r1, 0xff, {err}
   stxdw [r10 - {headerStack i}], r8
   ldxdw r4, [r8 + 80]
-{emitSkipAccount s!"{i}_{tag}"}"
+{saveOriginal}{emitSkipAccount s!"{i}_{tag}"}"
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
 /--
@@ -125,17 +139,22 @@ the static prefix headers `0..n-1` for CPI/flag checks, and stores the instructi
 the actual final account in the trailing `headerStack n` cell. Every walked account's tag byte is
 verified; any shortfall below the static prefix or any count above the lock limit exits `Custom(1)`.
 -/
-private def emitWalkAccountsVariable (n : Nat) (tag err : String) : String :=
+private def emitWalkAccountsVariable (n : Nat) (captureOriginal : Bool)
+    (tag err : String) : String :=
   let static :=
     Id.run do
       let mut out := "  mov64 r8, r6\n  add64 r8, 8\n"
       for i in [0:n] do
+        let saveOriginal :=
+          if captureOriginal then
+            s!"  stxdw [r10 - {originalDataLenStack n i}], r4\n"
+          else ""
         out := out ++ s!"\
   ldxb r1, [r8 + 0]
   jne r1, 0xff, {err}
   stxdw [r10 - {headerStack i}], r8
   ldxdw r4, [r8 + 80]
-{emitSkipAccount s!"{i}_{tag}"}"
+{saveOriginal}{emitSkipAccount s!"{i}_{tag}"}"
       return out
   let loop := s!"view_walk_{tag}"
   let align := s!"view_al_{tag}"
@@ -178,10 +197,27 @@ position's saved header cell to the earlier position's already-canonical header 
 advances only 8 bytes. A forward, self, out-of-range, or nonzero-padding entry exits `Custom(1)`.
 Programs without the lamport effect keep the byte-stable strict walk above.
 -/
-private def emitWalkAccountsAliasing (n : Nat) (tag err : String) : String :=
+private def emitWalkAccountsAliasing (n : Nat) (captureOriginal : Bool)
+    (tag err : String) : String :=
   Id.run do
     let mut out := "  mov64 r8, r6\n  add64 r8, 8\n"
     for i in [0:n] do
+      let copyOriginal :=
+        if captureOriginal then
+          s!"\
+  mov64 r3, r1
+  mul64 r3, 8
+  add64 r3, {originalDataLenStack n 0}
+  mov64 r4, r10
+  sub64 r4, r3
+  ldxdw r4, [r4 + 0]
+  stxdw [r10 - {originalDataLenStack n i}], r4
+"
+        else ""
+      let saveOriginal :=
+        if captureOriginal then
+          s!"  stxdw [r10 - {originalDataLenStack n i}], r4\n"
+        else ""
       out := out ++ s!"\
   ldxb r1, [r8 + 0]
   jeq r1, 0xff, walk_full_{i}_{tag}
@@ -198,12 +234,13 @@ walk_alias_{i}_{tag}:
   sub64 r4, r3
   ldxdw r4, [r4 + 0]
   stxdw [r10 - {headerStack i}], r4
+{copyOriginal}\
   add64 r8, 8
   ja walk_next_{i}_{tag}
 walk_full_{i}_{tag}:
   stxdw [r10 - {headerStack i}], r8
   ldxdw r4, [r8 + 80]
-{emitSkipAccount s!"{i}_{tag}"}walk_next_{i}_{tag}:
+{saveOriginal}{emitSkipAccount s!"{i}_{tag}"}walk_next_{i}_{tag}:
 "
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
@@ -211,9 +248,11 @@ walk_full_{i}_{tag}:
 the canonical-alias capability resolve duplicates in the static prefix; every other existing
 program keeps the byte-stable unrolled strict walk. -/
 private def emitWalkAccountsFor (p : IR.Program) (n : Nat) (tag err : String) : String :=
-  if IR.usesAccountView p then emitWalkAccountsVariable n tag err
-  else if IR.requiresCanonicalAccountAliases p then emitWalkAccountsAliasing n tag err
-  else emitWalkAccounts n tag err
+  let captureOriginal := IR.requiresOriginalAccountDataLengths p
+  if IR.usesAccountView p then emitWalkAccountsVariable n captureOriginal tag err
+  else if IR.requiresCanonicalAccountAliases p then
+    emitWalkAccountsAliasing n captureOriginal tag err
+  else emitWalkAccounts n captureOriginal tag err
 
 private partial def walkInvokeMetas (ops : Array IR.Op)
     (acc : Array (Ops.CpiMeta × Bool)) : Array (Ops.CpiMeta × Bool) :=
@@ -995,6 +1034,7 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
           loadVal p value valueStackOff valueNonce valueScope
         loadOwnerIsSelf := emitLoadOwnerIsSelf p
         headerStack
+        originalDataLenStack := originalDataLenStack (IR.cpiAccountCount p)
         accountCount := IR.cpiAccountCount p }
       query operands stackOff nonce scope
   | .ext (.accLamportsN acc) #[] =>
@@ -4209,6 +4249,7 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
             loadVal p value stackOff nonce scope
           loadOwnerIsSelf := emitLoadOwnerIsSelf p
           headerStack
+          originalDataLenStack := originalDataLenStack (IR.cpiAccountCount p)
           accountCount := IR.cpiAccountCount p }
         { accountStorage := accountStorageMutationBackend p }
         storageLabel call)
@@ -4928,7 +4969,7 @@ private def emitRawSelfHandler (entry : Ops.RawSelfEntry) : String :=
   s!"\
 raw_self_entry:
   ; signed raw self-entry tag={entry.tag.toNat} seed={entry.authoritySeed}
-{emitWalkAccounts 1 "raw_self" "err_unknown_disc"}  ldxdw r7, [r10 - {headerStack 1}]
+{emitWalkAccounts 1 false "raw_self" "err_unknown_disc"}  ldxdw r7, [r10 - {headerStack 1}]
   ldxdw r1, [r7 + 0]
   jlt r1, 1, err_unknown_disc
   add64 r7, 8
@@ -5016,7 +5057,7 @@ def emitAsm (program : IR.Program) : Except String String := do
         let context : EntryAdapter.Emit.Context := {
           headerStack
           scalarLocalStackOff := scalarLocalStackOff methodProgram
-          walkAccounts := emitWalkAccounts
+          walkAccounts := emitWalkAccountsFor methodProgram
           signerChecks := emitWalkSignerChecks
         }
         handlers := handlers ++ (← EntryAdapter.Emit.emitHandler context m entry) ++ body ++ "\n"

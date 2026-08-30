@@ -71,8 +71,8 @@ instruction 增加 recipe opcode。
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
 | Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier 与 capacity-preserving operations、bounded Map/Set/Queue/BitSet logical semantics、distinct bounded bytes/UTF-8 string source contracts、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；SVM/EVM scalar、static aggregate、tagged、generic bounded 与 bytes/String input target binding；两边独立的 top-level bounded/tagged output plan；bounded scalar dynamic read；同一 logical schema 的 cross-target plan conformance | collection target bindings、bounded mutation writeback、wide/aggregate dynamic element、nested/constructed tagged output、nested dynamic shapes 与更高 resource ceiling |
-| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、target-owned Clock/EpochSchedule/Rent sysvar query（unsigned/Bool native fields complete）、checked fixed-account lamport debit/credit 与 backward duplicate-alias static walk、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input/output、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data、checked program-memory spans 与 Token-2022 TLV envelope | signed timestamp、sliced/Instructions sysvar、AccountView+lamport effect 的 alias-aware variable walk、nested/constructed/wide dynamic return policy；Token-2022 extension 完整语义 |
-| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation、program-memory span、checked lamport mutation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、`Account.Handle.transferLamports`、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、checked account-memory facade，以及可同类双 slot 的 invocation-local buffer/Vector64/writer 和 fixed-width UInt64 `Record64` | Rent-aware resize/close、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；wider/typed POD transient shapes、更多 manifest-bounded slot 与 insert/remove/iteration 仍 fail closed |
+| SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、target-owned Clock/EpochSchedule/Rent sysvar query（unsigned/Bool native fields complete）、checked fixed-account lamport debit/credit、checked zero-initializing account-data resize 与 backward duplicate-alias static walk、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input/output、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data、checked program-memory spans 与 Token-2022 TLV envelope | signed timestamp、sliced/Instructions sysvar、AccountView+direct mutation 的 alias-aware variable walk、nested/constructed/wide dynamic return policy；Token-2022 extension 完整语义 |
+| SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation、program-memory span、checked lamport mutation 与 `AccountData` resize；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、`Account.Handle.transferLamports` / `.resizeData`、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、checked account-memory facade，以及可同类双 slot 的 invocation-local buffer/Vector64/writer 和 fixed-width UInt64 `Record64` | rent top-up/close/reassign lifecycle、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；wider/typed POD transient shapes、更多 manifest-bounded slot 与 insert/remove/iteration 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input/output、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，以及独立 `OutputPlan` 的 top-level bounded dynamic/tagged result（strict UTF-8 String）、full-width gas/basefee/prevrandao/gaslimit/gasprice/blobbasefee、blobhash、caller/origin/coinbase、msg.sig/msg.data.length、blockhash 与 address balance/code observations、Cancun target pin、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | nested/constructed/wide dynamic return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；blob payload/bounded raw msg.data bytes 与标准化资源 manifest |
 | EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；`StorageVec` persistent bounded UInt64 vector；`StorageBitmap` packed static bit policy；`StorageRing` bounded persistent UInt64 FIFO；`StorageEnumerableSet` bounded persistent enumerable UInt64 set；honest code observation + safe closed-call result policy | typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；checkpoints、wide-key map 与 richer persistent element shapes |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
@@ -115,7 +115,8 @@ ledger foundation、R5-007 checked credit/alias-safe transfer、R5-008 checked a
 R5-009 reusable reentrancy policy、R5-010 persistent bounded storage vector、R5-011 honest
 runtime-code observation policy、R5-012 safe closed-call result policy、R5-013 bounded
 ERC-721 core、R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap 与
-R5-016 persistent StorageRing、R5-017 persistent StorageEnumerableSet 均已集成；独立
+R5-016 persistent StorageRing、R5-017 persistent StorageEnumerableSet，以及 R2-010 checked
+fixed-account data resize 均已集成；独立
 contract 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
@@ -130,7 +131,7 @@ zero-argument named errors 自动进入 ABI metadata；R4-008 再把 production 
 environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 固定 checked 零除 revert。R5-009 已组合 reusable ReentrancyGuard policy。详见
 [R2-001](tasks/r2-001.md)、[R2-002](tasks/r2-002.md)、[R2-003](tasks/r2-003.md)、
-[R2-004](tasks/r2-004.md)、[R2-005](tasks/r2-005.md)、
+[R2-004](tasks/r2-004.md)、[R2-005](tasks/r2-005.md)、[R2-010](tasks/r2-010.md)、
 [R4-001](tasks/r4-001.md)、[R4-002](tasks/r4-002.md)、[R4-003](tasks/r4-003.md)、
 [R4-004](tasks/r4-004.md)、[R4-005](tasks/r4-005.md)、[R4-006](tasks/r4-006.md)、
 [R4-007](tasks/r4-007.md)、[R4-008](tasks/r4-008.md)、
@@ -342,6 +343,15 @@ destination 与 validated zero no-op 可用；不走 System CPI、不暴露 poin
 AccountView 与该 effect 组合时仍走 variable walk 并拒绝 duplicate，后续再统一两种 walk。
 详见 [R2-009](tasks/r2-009.md)。
 
+R2-010 已补齐 official-shaped fixed-account data resize：source 只见编译期 external
+`Account.Handle` 和 requested length；target-owned `AccountData` Component 在任何写入前验证
+managed-state alias、writable、current-program owner、10 MiB ceiling 和相对 invocation-entry
+length 的 10,240-byte growth budget。Component capability 让通用 Loader-v3 walk 把原始长度
+保存在固定 stack cells，顺序 shrink/grow 和 backward duplicate alias 不依赖已改变的 current
+length。grow 先以 `sol_memset_` 清零新区域再发布长度，所有失败保持 payload/length 原子不变；
+不走 System Allocate、不开放 runtime account index、heap realloc、rent top-up 或 close。详见
+[R2-010](tasks/r2-010.md)。
+
 ### R3 — SVM SDK
 
 SDK 按生命周期分两类，名字上也不能混：
@@ -399,7 +409,7 @@ pointer 进入 source/account state；详见 [R3-012](tasks/r3-012.md)。R3-013 
 固定 `appendLe64`，并允许一个 Bytes 与一个 Vector64 以不相交 metadata 同时 active；四类
 terminal error 和 32 KiB exhaustion 都由真实 Mollusk 路径覆盖，详见
 [R3-013](tasks/r3-013.md)。R3 尚未完成；generic POD vector/record writer、更多 bounded handle、
-rent-aware resize、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension
+resize rent top-up/close、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension
 semantics 仍待完成。R3-014 又以纯 `pf_inline` `Svm.Sdk.Sysvar` facade 收口已有 Clock、
 EpochSchedule 和 compile-time Rent Runtime leaves；Clock/Epoch/Rent 的 IR digest 与 target
 syscall 路径不变，没有形成第二套 syscall backend，详见 [R3-014](tasks/r3-014.md)。
@@ -437,7 +447,7 @@ R3-023 再把一等 `Pubkey` 值建立在四个已有 account key/owner word pro
 `Pubkey.equals` 的 projection 写法钉住 extraction 的 matcher 边界。独立 `PubkeyGate`
 consumer 传递 fixed/runtime-supplied/projected key，Mollusk 24/24，无 word magic、无分配、
 无新底层词汇。详见 [R3-023](tasks/r3-023.md)。
-R3 尚未完成；wider/typed POD transient shapes、更多 manifest-bounded handle、rent-aware resize、
+R3 尚未完成；wider/typed POD transient shapes、更多 manifest-bounded handle、resize rent top-up/close、
 runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 
 ### R4 — EVM Runtime
@@ -727,7 +737,7 @@ snapshot mutable State query，并在 wide State leaf store 之间 snapshot 后�
 ### R6 — 双目标验收
 
 - CI-001 已把 shared Lean guards、SVM build/Mollusk/Surfpool 与 EVM build/Anvil 拆成三条
-  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 379-job Lean aggregate 不再在两个
+  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 382-job Lean aggregate 不再在两个
   target lane 重复执行。详见 [CI-001](tasks/ci-001.md)。
 - shared semantic fixtures：Counter、Escrow/Vault、Fungible ledger；共享行为规范，使用
   target-owned storage/ABI binding，不强求同一份物理 layout source。

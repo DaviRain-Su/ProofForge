@@ -260,11 +260,14 @@ private def stateFindAssembly :=
     #[.arg 0, .arg 1, .arg 2, .arg 3] 160 0 "state_find_test"
 
 private def componentFifoCursorAssembly :=
+  let accountCount := 2
   ProofForge.Svm.Component.Emit.emitQuery
     { loadValue := findEmitContext.loadValue
       loadOwnerIsSelf := findEmitContext.loadOwnerIsSelf
       headerStack := findEmitContext.headerStack
-      accountCount := 2 }
+      originalDataLenStack := fun account =>
+        findEmitContext.headerStack (accountCount + 1 + account)
+      accountCount }
     (.accountStorage validFifoCursorQuery) #[.arg 0, .arg 1, .arg 2]
     160 0 "fifo_cursor_test"
 
@@ -569,6 +572,8 @@ private def recorderComponentEmitContext : ProofForge.Svm.Component.Emit.Context
   { loadValue := recorderEmitContext.loadValue
     loadOwnerIsSelf := fun _ _ _ => ""
     headerStack := recorderEmitContext.headerStack
+    originalDataLenStack := fun account =>
+      recorderEmitContext.headerStack (recorderEmitContext.accountCount + 1 + account)
     accountCount := recorderEmitContext.accountCount }
 
 private def unusedStorageBackend : ProofForge.Svm.Component.Emit.Backend :=

@@ -763,6 +763,20 @@ private partial def opsRequireCanonicalAccountAliases (ops : Array Op) : Bool :=
 def requiresCanonicalAccountAliases (p : Program) : Bool :=
   p.methods.any fun method => opsRequireCanonicalAccountAliases method.ops
 
+/-- True when a target component needs immutable invocation-entry account lengths. This is a
+walk-frame capability declared by components, not an account-data constructor known by IR. -/
+private partial def opsRequireOriginalAccountDataLengths (ops : Array Op) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .component call => call.requiresOriginalAccountDataLengths
+    | .ite _ _ _ thn els =>
+        opsRequireOriginalAccountDataLengths thn || opsRequireOriginalAccountDataLengths els
+    | .forBody _ body => opsRequireOriginalAccountDataLengths body
+    | _ => false
+
+def requiresOriginalAccountDataLengths (p : Program) : Bool :=
+  p.methods.any fun method => opsRequireOriginalAccountDataLengths method.ops
+
 private partial def highestInvokeIndex (ops : Array Op) : Nat :=
   ops.foldl (init := 0) fun result op =>
     match op with

@@ -1,4 +1,5 @@
 import ProofForge.Svm.AccountStorage
+import ProofForge.Svm.AccountData
 import ProofForge.Svm.AccountView
 import ProofForge.Svm.BatchRecorder
 import ProofForge.Svm.FifoCancel
@@ -98,6 +99,7 @@ def Query.canonical (renderValue : V → String) (operands : Array V) : Query �
 /-- Stable effect bridge for target-owned bounded components. New queue, map, allocator, recorder,
 or codec components extend this layer instead of adding top-level SVM Ops/IR/main-emitter cases. -/
 inductive Call (V : Type) where
+  | accountData (call : AccountData.Call V)
   | accountStorage (call : AccountStorage.Call V)
   | batchRecorder (call : BatchRecorder.Call V)
   | fifoCancel (call : FifoCancel.Call V)
@@ -109,6 +111,7 @@ inductive Call (V : Type) where
   deriving BEq, Repr, Inhabited
 
 def Call.mapValues (mapValue : α → β) : Call α → Call β
+  | .accountData call => .accountData (call.mapValues mapValue)
   | .accountStorage call => .accountStorage (call.mapValues mapValue)
   | .batchRecorder call => .batchRecorder (call.mapValues mapValue)
   | .fifoCancel call => .fifoCancel (call.mapValues mapValue)
@@ -119,6 +122,7 @@ def Call.mapValues (mapValue : α → β) : Call α → Call β
   | .transientBytes call => .transientBytes (call.mapValues mapValue)
 
 def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
+  | .accountData call => return .accountData (← call.mapValuesM mapValue)
   | .accountStorage call => return .accountStorage (← call.mapValuesM mapValue)
   | .batchRecorder call => return .batchRecorder (← call.mapValuesM mapValue)
   | .fifoCancel call => return .fifoCancel (← call.mapValuesM mapValue)
@@ -129,6 +133,7 @@ def Call.mapValuesM [Monad m] (mapValue : α → m β) : Call α → m (Call β)
   | .transientBytes call => return .transientBytes (← call.mapValuesM mapValue)
 
 def Call.values : Call V → Array V
+  | .accountData call => call.values
   | .accountStorage call => call.values
   | .batchRecorder call => call.values
   | .fifoCancel call => call.values
@@ -145,6 +150,7 @@ def Call.allValues (predicate : V → Bool) (call : Call V) : Bool :=
   call.values.all predicate
 
 def Call.effects : Call V → EffectSummary
+  | .accountData call => call.effects
   | .accountStorage call => call.effects
   | .batchRecorder call => call.effects
   | .fifoCancel call => call.effects
@@ -155,6 +161,7 @@ def Call.effects : Call V → EffectSummary
   | .transientBytes call => call.effects
 
 def Call.minAccounts (measure : V → Nat) : Call V → Nat
+  | .accountData call => call.minAccounts measure
   | .accountStorage call => call.minAccounts measure
   | .batchRecorder call => call.minAccounts measure
   | .fifoCancel call => call.minAccounts measure
@@ -165,6 +172,7 @@ def Call.minAccounts (measure : V → Nat) : Call V → Nat
   | .transientBytes call => call.minAccounts measure
 
 def Call.wellFormed (valueWellFormed : V → Bool) (accountLimit : Nat := 64) : Call V → Bool
+  | .accountData call => call.wellFormed valueWellFormed accountLimit
   | .accountStorage call => call.wellFormed valueWellFormed accountLimit
   | .batchRecorder call => call.wellFormed valueWellFormed accountLimit
   | .fifoCancel call => call.wellFormed valueWellFormed accountLimit
@@ -175,6 +183,7 @@ def Call.wellFormed (valueWellFormed : V → Bool) (accountLimit : Nat := 64) : 
   | .transientBytes call => call.wellFormed valueWellFormed
 
 def Call.canonical (renderValue : V → String) : Call V → String
+  | .accountData call => call.canonical renderValue
   | .accountStorage call => call.canonical renderValue
   | .batchRecorder call => call.canonical renderValue
   | .fifoCancel call => call.canonical renderValue
@@ -185,6 +194,7 @@ def Call.canonical (renderValue : V → String) : Call V → String
   | .transientBytes call => call.canonical renderValue
 
 def Call.usesCpi : Call V → Bool
+  | .accountData _ => false
   | .accountStorage _ => false
   | .batchRecorder call => call.usesCpi
   | .fifoCancel call => call.usesCpi
@@ -199,10 +209,18 @@ canonical account headers. This is an account-ABI capability, not a lamport-spec
 switch; future direct account effects can opt into the same walk without adding another program
 feature probe or main-emitter recipe. -/
 def Call.requiresCanonicalAccountAliases : Call V → Bool
-  | .lamports _ => true
+  | .accountData _ | .lamports _ => true
+  | _ => false
+
+/-- Whether a component needs the invocation-entry account lengths retained independently from
+the mutable Loader-v3 current-length words. The walk owns this ABI fact once so sequential effects
+do not infer an "original" length from already-mutated account data. -/
+def Call.requiresOriginalAccountDataLengths : Call V → Bool
+  | .accountData _ => true
   | _ => false
 
 def Call.stackScratchEnd : Call V → Nat
+  | .accountData _ => Component.stackScratchEnd
   | .accountStorage _ => Component.stackScratchEnd
   | .batchRecorder call => call.stackScratchEnd
   | .fifoCancel call => call.stackScratchEnd
@@ -213,6 +231,7 @@ def Call.stackScratchEnd : Call V → Nat
   | .transientBytes _ => Component.stackScratchEnd
 
 def Call.rawSelfEntries : Call V → Array (Nat × String)
+  | .accountData _ => #[]
   | .accountStorage _ => #[]
   | .batchRecorder call => call.rawSelfEntries
   | .fifoCancel call => call.rawSelfEntries

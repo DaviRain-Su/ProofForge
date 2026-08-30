@@ -39,6 +39,10 @@ warmup Bool、first-normal epoch/slot，并明确区分 40-byte native host layo
 R2-009 又为 static Account handles 增加 checked lamport mutation 和 backward duplicate-alias
 Loader-v3 walk；所有权限、owner、balance、overflow 与 canonical distinctness gate 均先于双 store，
 不走 System CPI，也不暴露 raw pointer/runtime account index。
+R2-010 又为同一 fixed-handle SDK 增加 official-shaped zero-initializing account-data resize；
+通用 walk 按 Component capability 保存 invocation-entry length，target 在 length/payload 写入前
+统一验证 managed-state alias、writable、owner、10 MiB ceiling 与 +10,240 growth budget，不把
+resize 冒充 heap allocation，也不开放 raw pointer、runtime geometry、rent top-up 或 close。
 EVM-RT-2a typed call-result 已完成，并由 R5-012 收紧为 canonical ERC-20 Bool / code-backed
 empty-result policy，
 EVM-RT-2b 已统一 typed LOG0..4/custom-error plan，EVM-RT-2c 也已统一 payable/receive
@@ -83,10 +87,10 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-30）**：Lean 汇总 379 jobs；SVM manifest 全 61 programs；
-  Mollusk 全量 399/399（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
+- **当前可验证基线（2026-08-30）**：Lean 汇总 382 jobs；SVM manifest 全 61 programs；
+  Mollusk 全量 404/404（MemoryOps 20/20、Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
   34 programs 且 Anvil 34/34。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 379-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  并保留汇总 `test` gate；完整 382-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
   `docs/plan/tasks/ci-001.md`。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由 shared pre-state snapshot lowering 修复，
@@ -413,7 +417,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   上校验 1–32 ASCII bytes 与长度一致性；没有新 Op/IR/Component/Emit variant 或 recipe。
   `"ledger"` 四路径证明 API 非 `"vault"` 特判，空/超长/错长度均 fail closed；两个 canonical
   digest 与六份 assembly/ELF/IDL 产物逐字节不变。详见
-  `docs/plan/tasks/r3-008.md`。Rent-aware resize、general ATA、Token state/program-id policy
+  `docs/plan/tasks/r3-008.md`。Resize rent top-up/close、general ATA、Token state/program-id policy
   与 Token-2022 extension semantics 仍是 R3 工作。
 
 - R3-009 bounded static Memo facade 已完成：`Svm.Sdk.Memo.Ascii.write` 接收最多 512 bytes
@@ -441,7 +445,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   165/82-byte base layout、state/COption/bool tags，并读取 amount、mint、authority、unaligned
   supply 与 decimals。独立 TokenStateView Mollusk 4/4；PhoenixV1Profile 删除四个本地 Token
   program limbs 后 digest 保持 `af159cb894745102`。没有新增 Runtime/Ops/IR/Component/Emit，
-  没有 Array/Map/pointer/heap。详见 `docs/plan/tasks/r3-011.md`。Rent-aware resize、runtime-
+  没有 Array/Map/pointer/heap。详见 `docs/plan/tasks/r3-011.md`。Resize rent top-up/close、runtime-
   selected/UTF-8 Memo geometry 与 Token-2022 extension semantics 仍是 R3 工作。
 
 - R3-012 source-visible transient Vector64 已完成：`Svm.Sdk.Transient.Vector64` 以编译期
@@ -484,6 +488,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   digest `89371fff010c0595`、assembly 21,083 B、ELF 7,232 B，Mollusk 12/12。当前
   AccountView+lamport effect 组合仍用 duplicate-rejecting variable walk。详见
   `docs/plan/tasks/r2-009.md`。
+
+- R2-010 checked account-data resize 已完成：`Svm.Sdk.Account.Handle.resizeData` 通过
+  target-owned `AccountData` Component 绑定 Loader-v3 当前长度和 `sol_memset_`。通用 walk
+  保存不可变 invocation-entry length；managed-state alias、readonly、foreign owner、10 MiB
+  ceiling、+10,241 growth 全在任何写入前失败，exact +10,240、shrink→grow zeroing 和后续
+  checked span effect 由 MemoryOps Mollusk 20/20 覆盖。没有新增 top-level Ops/IR/main Emit
+  case，也没有 persistent pointer、heap realloc、System Allocate、rent top-up 或 close。详见
+  `docs/plan/tasks/r2-010.md`。
 
 - R3-015 shared transient lifecycle emitter 已完成：`Svm.Transient.Emit.Lifecycle` 统一
   Vector64/Bytes 的 official-shaped bump allocation、pointer/length/capacity/active metadata、
@@ -869,10 +881,10 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 379 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 382 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 61 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 399/399，其中 RawEntry 20/20、Phoenix-v1 profile
-  76/76。
+  `pf build` 当前通过；全套 Mollusk 404/404，其中 MemoryOps 20/20、RawEntry 20/20、
+  Phoenix-v1 profile 76/76。
 - EVM registry 34 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /
   EvmFeatureFlags / EvmClaimBitmap / EvmRingMailbox / EvmRingHistory / GuardedPayout /

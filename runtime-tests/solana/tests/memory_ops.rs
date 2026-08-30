@@ -78,6 +78,177 @@ fn setup() -> (Pubkey, Mollusk, Pubkey, Account) {
     )
 }
 
+fn resizable_account(program_id: &Pubkey, data: Vec<u8>) -> Account {
+    let mut account = Account::new(10_000_000_000, data.len(), program_id);
+    account.data = data;
+    account
+}
+
+#[test]
+fn account_resize_grows_with_zeroes_and_shrinks_to_the_prefix() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let original = (1u8..=8).collect::<Vec<_>>();
+    let grown = invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        resizable_account(&program_id, original.clone()),
+        "resizeData",
+        &[16],
+        true,
+        &[Check::success(), Check::return_data(&16u64.to_le_bytes())],
+    );
+    let state = account_after(&grown, &dummy_state_key(&program_id));
+    let data = account_after(&grown, &data_key);
+    assert_eq!(data.data.len(), 16);
+    assert_eq!(&data.data[..8], original);
+    assert_eq!(&data.data[8..], &[0; 8]);
+
+    let shrunk = invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        data,
+        "resizeData",
+        &[6],
+        true,
+        &[Check::success(), Check::return_data(&6u64.to_le_bytes())],
+    );
+    let data = account_after(&shrunk, &data_key);
+    assert_eq!(data.data, original[..6]);
+}
+
+#[test]
+fn account_resize_shrink_then_grow_zeroes_reexposed_bytes() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let original = (1u8..=8).collect::<Vec<_>>();
+    let resized = invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        resizable_account(&program_id, original.clone()),
+        "shrinkThenGrow",
+        &[4, 12],
+        true,
+        &[Check::success(), Check::return_data(&12u64.to_le_bytes())],
+    );
+    let data = account_after(&resized, &data_key);
+    assert_eq!(data.data.len(), 12);
+    assert_eq!(&data.data[..4], &original[..4]);
+    assert_eq!(&data.data[4..], &[0; 8]);
+}
+
+#[test]
+fn account_resize_is_visible_to_following_checked_memory_effects() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let original = (1u8..=8).collect::<Vec<_>>();
+    let resized = invoke(
+        &mollusk,
+        program_id,
+        state,
+        data_key,
+        resizable_account(&program_id, original.clone()),
+        "resizeThenFill",
+        &[16, 0xab],
+        true,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let data = account_after(&resized, &data_key);
+    assert_eq!(&data.data[..8], original);
+    assert_eq!(&data.data[8..], &[0xab; 8]);
+}
+
+#[test]
+fn account_resize_enforces_original_growth_budget_and_account_ceiling_atomically() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let original = vec![0x5a; 8];
+    let boundary = invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        resizable_account(&program_id, original.clone()),
+        "resizeData",
+        &[8 + 10_240],
+        true,
+        &[
+            Check::success(),
+            Check::return_data(&(8u64 + 10_240).to_le_bytes()),
+        ],
+    );
+    let boundary_data = account_after(&boundary, &data_key);
+    assert_eq!(boundary_data.data.len(), 8 + 10_240);
+    assert_eq!(&boundary_data.data[..8], original);
+    assert!(boundary_data.data[8..].iter().all(|byte| *byte == 0));
+
+    for requested in [8u64 + 10_241, 10 * 1024 * 1024 + 1] {
+        let failed = invoke(
+            &mollusk,
+            program_id,
+            state.clone(),
+            data_key,
+            resizable_account(&program_id, original.clone()),
+            "resizeData",
+            &[requested],
+            true,
+            &[Check::err(ProgramError::Custom(1))],
+        );
+        assert_eq!(account_after(&failed, &data_key).data, original);
+    }
+}
+
+#[test]
+fn account_resize_rejects_readonly_foreign_owned_and_managed_state_aliases() {
+    let (program_id, mollusk, data_key, state) = setup();
+    let original = vec![0x5a; 8];
+    let readonly = invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        resizable_account(&program_id, original.clone()),
+        "resizeData",
+        &[16],
+        false,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(account_after(&readonly, &data_key).data, original);
+
+    let foreign_owner = Pubkey::new_unique();
+    let foreign = invoke(
+        &mollusk,
+        program_id,
+        state.clone(),
+        data_key,
+        resizable_account(&foreign_owner, original.clone()),
+        "resizeData",
+        &[16],
+        true,
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(account_after(&foreign, &data_key).data, original);
+
+    let state_key = dummy_state_key(&program_id);
+    let alias_ix = instruction(
+        program_id,
+        state_key,
+        "resizeData",
+        &[24],
+        false,
+        false,
+        vec![AccountMeta::new(state_key, false)],
+    );
+    let alias = mollusk.process_and_validate_instruction(
+        &alias_ix,
+        &[(state_key, state.clone())],
+        &[Check::err(ProgramError::Custom(1))],
+    );
+    assert_eq!(account_after(&alias, &state_key).data, state.data);
+}
+
 #[test]
 fn memset_memcpy_and_memcmp_round_trip() {
     let (program_id, mollusk, data_key, state) = setup();

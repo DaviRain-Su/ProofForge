@@ -3324,11 +3324,26 @@ private def decodeLamportsCall (env : Environment) (e : Expr) :
       else none
   else none
 
+private def decodeAccountDataCall (env : Environment) (e : Expr) :
+    Option (Svm.Component.Call Ops.Val) :=
+  let e := strip e
+  let args := e.getAppArgs
+  if isConstNamed e ``ProofForge.Svm.Runtime.resizeAccountData ||
+      endsWith e ".resizeAccountData" then
+    if args.size < 2 then none else do
+      let account ← staticNatVal? env args[args.size - 2]!
+      let newLength ← val env args[args.size - 1]!
+      let call : Svm.AccountData.Call Ops.Val := .resize account newLength
+      if call.wellFormed (fun _ => true) Svm.Ops.maxTxAccountLocks then
+        some (.accountData call)
+      else none
+  else none
+
 private def decodeComponentCall (env : Environment) (e : Expr) :
     Option (Svm.Component.Call Ops.Val) :=
   decodeBatchRecorderCall env e <|> decodeFifoCancelCall env e <|> decodeMemoryCall env e <|>
     decodeTransientVecCall env e <|> decodeTransientBytesCall env e <|> decodeTelemetryCall env e <|>
-    decodeLamportsCall env e
+    decodeLamportsCall env e <|> decodeAccountDataCall env e
 
 private def mentionsFifoCancelSource (e : Expr) : Bool :=
   e.getUsedConstantsAsSet.toList.any fun name =>
@@ -3856,7 +3871,8 @@ def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
       constants.contains ``ProofForge.Svm.Runtime.transientBytesClear ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesLogData ||
       constants.contains ``ProofForge.Svm.Runtime.transientBytesFinish ||
-      constants.contains ``ProofForge.Svm.Runtime.transferLamports then true
+      constants.contains ``ProofForge.Svm.Runtime.transferLamports ||
+      constants.contains ``ProofForge.Svm.Runtime.resizeAccountData then true
   else
     match fuel with
     | 0 => false
