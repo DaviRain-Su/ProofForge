@@ -601,6 +601,22 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                   (flipVal fuel' childDepositHi) (flipVal fuel' childGas)
                   (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
                   (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAndThenReturned
+                leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+                leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+                leftArguments rightArguments callbackArguments
+                leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAndThenReturned
+                  leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+                  leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (rightArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' rightDepositLo)
+                  (flipVal fuel' rightDepositHi) (flipVal fuel' rightGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
             | .promiseResultRead capacity index =>
                 .promiseResultRead capacity (flipVal fuel' index)
             | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity

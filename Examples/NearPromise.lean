@@ -20,6 +20,7 @@ inductive Error where
 @[pf_inline] private def receiver : String := "receiver.test.near"
 @[pf_inline] private def callGas : UInt64 := 20_000_000_000_000
 @[pf_inline] private def callbackGas : UInt64 := 20_000_000_000_000
+@[pf_inline] private def joinedChildGas : UInt64 := 8_000_000_000_000
 
 @[pf_entry]
 def init (_seed : UInt64) : State :=
@@ -47,6 +48,11 @@ def record (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def recordValue (state : State) (value : UInt64) : Except Error (State × UInt64) :=
   .ok ({ state with marker := value }, value)
+
+/-- Pure child used to observe joined Promise results without coupling receiver state updates. -/
+@[pf_entry]
+def echo (_state : State) (value : UInt64) : UInt64 :=
+  value
 
 /-- Self-callback success branch: child bytes and normal callback input are separate channels. -/
 @[pf_entry]
@@ -78,6 +84,23 @@ def callbackOversized (state : State) (callbackValue : UInt64) : Except Error (S
     let _ := result.read 0
     let childValue := result.borshUInt64D 999
     .ok ({ state with marker := callbackValue }, childValue)
+  else
+    .error .overflow
+
+/-- Authenticated two-input callback. Reads remain ordered and independent, so one failed child
+cannot prevent observation of the other successful child. -/
+@[pf_entry]
+def callbackJoined (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Access.isSelfCall then
+    if Promises.resultsCount == 2 then
+      let result : Promises.ResultBuffer := 8
+      let _ := result.read 0
+      let left := result.borshUInt64D 999
+      let _ := result.read 1
+      let right := result.borshUInt64D 999
+      .ok ({ state with marker := callbackValue, depositLo := left, depositHi := right }, right)
+    else
+      .error .overflow
   else
     .error .overflow
 
@@ -149,6 +172,33 @@ def sendThenOversized (state : State) (value : UInt64) : Except Error (State × 
   let _ := Promises.callThenReturned receiver "recordValue" (borshUInt64 456)
     ({ w0 := 0, w1 := 0 } : NearToken) callGas
     "callbackOversized" (borshUInt64 79) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join two successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAndSuccess (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAndThenReturned
+    receiver "echo" (borshUInt64 123) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 456) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined" (borshUInt64 80) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed right child retains left/right callback-result ordering. -/
+@[pf_entry]
+def sendAndRightMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAndThenReturned
+    receiver "echo" (borshUInt64 123) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 456) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined" (borshUInt64 81) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed left child does not short-circuit the successful right child read. -/
+@[pf_entry]
+def sendAndLeftMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAndThenReturned
+    receiver "missing" (borshUInt64 123) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 456) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined" (borshUInt64 82) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
   .ok ({ state with marker := value }, value)
 
 /-- The caller succeeds while this detached receipt fails remotely on an absent method. -/

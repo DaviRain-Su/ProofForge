@@ -6,7 +6,7 @@ WASM 家族的第二条链：**NEAR Protocol**。经 `Core.Target.Registration` 
 产物是 **`.wasm`**：Lean 直接 lowering 到 WAT，import 表钉 NEAR runtime 的
 `env`（`input` / `register_len` / `read_register` / `storage_read` /
 `storage_write` / `storage_remove` / `storage_has_key` / `value_return` /
-`panic_utf8` / `promise_batch_create` / `promise_batch_then` /
+`panic_utf8` / `promise_batch_create` / `promise_and` / `promise_batch_then` /
 `promise_batch_action_function_call` / `promise_batch_action_transfer` / `promise_return` /
 `promise_results_count` / `promise_result`，按程序条件裁剪），组装器是锁定的
 `wat2wasm 1.0.41`。外来叶子经
@@ -34,7 +34,8 @@ wsm-near-promise-result/then/codec/private-001 在其上加入 bounded callback 
 fallback，以及在读取 dependency result 前执行的完整 predecessor/current AccountId 鉴权。
 wsm-near-promise-transfer-001 再加入静态 receiver、lossless u128 amount 的 detached/returned
 native transfer；两者都用 arena staging exact 16-byte LE amount，后者在 state 持久化后链接
-receipt result。
+receipt result。wsm-near-promise-and-001 加入闭合的两个有序静态 child → `promise_and` →
+self callback 图；joint Promise 只作为 callback dependency，最终只返回 callback receipt。
 
 ## Boundary
 
@@ -50,7 +51,7 @@ receipt result。
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、Borsh UInt64/result decode | arbitrary `IntoStorageKey`、generic Borsh |
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |
-| `Near.Sdk.Promises` | static detached/returned function call/native transfer、child→self callback、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、parallel joins、generic Borsh |
+| `Near.Sdk.Promises` | static detached/returned function call/native transfer、child→self callback、两个有序 child join、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、arbitrary-N/nested joins、generic Borsh |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
@@ -87,7 +88,8 @@ receipt result。
   caller/receiver receipt state 语义；还验证 detached `2^64+7` 与 returned `11` native transfer
   的 exact receiver balance delta，以及 max-u128 余额不足时 balance/state rollback；并验证外部
   predecessor 在读取 result 前被完整 AccountId guard 拒绝且不改状态，以及真实 self callback
-  的 exact Borsh UInt64 decode、独立 callback argument、failed/oversized fallback。
+  的 exact Borsh UInt64 decode、独立 callback argument、failed/oversized fallback；还验证两个
+  有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路。
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、

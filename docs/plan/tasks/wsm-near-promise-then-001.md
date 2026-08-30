@@ -46,4 +46,4 @@ Exact Borsh UInt64 result decoding over `ResultBuffer` is complete in
 use full current/predecessor AccountId equality in
 [wsm-near-promise-private-001](wsm-near-promise-private-001.md). Static native transfer actions are
 complete in [wsm-near-promise-transfer-001](wsm-near-promise-transfer-001.md); parallel
-`promise_and` remains a later independent slice.
+`promise_and` is complete in [wsm-near-promise-and-001](wsm-near-promise-and-001.md).

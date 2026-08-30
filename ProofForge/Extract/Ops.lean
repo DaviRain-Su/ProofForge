@@ -198,6 +198,20 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     childArgsCapacity callbackArgsCapacity childArguments callbackArguments
     childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallAndThenReturned
+    (leftReceiver leftMethod rightReceiver rightMethod callbackMethod : String)
+    (leftArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments rightArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAndThenReturned
+    leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+    leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+    leftArguments rightArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
 @[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
   .ext (.near (.promiseResultRead capacity index))
 

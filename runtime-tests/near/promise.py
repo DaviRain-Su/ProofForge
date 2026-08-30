@@ -181,15 +181,52 @@ def main() -> None:
         raise AssertionError("oversized-result child did not execute with value 456")
     print("near-promise: bounded callback kept length 8/fits false without truncation")
 
+    joined_success = _call_u64(client, "sendAndSuccess", 604)
+    if NearClient.success_value_bytes(joined_success) != NearClient.encode_u64_le(456):
+        raise AssertionError("joined callback did not forward the successful right result")
+    if client.view_u64("get") != 80:
+        raise AssertionError("joined callback did not commit its independent argument 80")
+    if client.view_u64("receivedDepositLo") != 123 or client.view_u64(
+        "receivedDepositHi"
+    ) != 456:
+        raise AssertionError("joined callback did not preserve successful left/right result order")
+    print("near-promise: ordered join exposed two successful child results to one callback")
+
+    joined_right_failure = _call_u64(
+        client, "sendAndRightMissing", 605, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined_right_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("right-child failure did not forward the right-result fallback")
+    if client.view_u64("get") != 81:
+        raise AssertionError("right-child failure did not run and commit callback argument 81")
+    if client.view_u64("receivedDepositLo") != 123 or client.view_u64(
+        "receivedDepositHi"
+    ) != 999:
+        raise AssertionError("right-child failure changed left/right result ordering or fallback")
+    print("near-promise: failed right child retained successful left result and ordered fallback")
+
+    joined_left_failure = _call_u64(
+        client, "sendAndLeftMissing", 606, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined_left_failure) != NearClient.encode_u64_le(456):
+        raise AssertionError("left-child failure did not forward the successful right result")
+    if client.view_u64("get") != 82:
+        raise AssertionError("left-child failure did not run and commit callback argument 82")
+    if client.view_u64("receivedDepositLo") != 999 or client.view_u64(
+        "receivedDepositHi"
+    ) != 456:
+        raise AssertionError("left-child failure short-circuited or reordered the right result")
+    print("near-promise: failed left child did not short-circuit successful right result")
+
     _call_u64(client, "sendThenFail", 111, expect_success=False)
-    if client.view_u64("get") != 79:
+    if client.view_u64("get") != 82:
         raise AssertionError("caller panic did not roll back caller state")
     if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("caller panic did not discard its staged outgoing receipt")
     print("near-promise: caller panic discarded staged receipt and rolled back")
 
     _call_u64(client, "sendTooMuch", 222, expect_success=False)
-    if client.view_u64("get") != 79:
+    if client.view_u64("get") != 82:
         raise AssertionError("synchronous deposit failure did not roll back caller state")
     if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("synchronous deposit failure emitted an outgoing receipt")

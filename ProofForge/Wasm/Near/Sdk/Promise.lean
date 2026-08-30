@@ -21,8 +21,9 @@ and roll back the caller.
 by nearcore in views. `read` preserves nearcore's 0 not-ready / 1 successful / 2 failed status;
 only success has bytes. An out-of-range result index aborts. `callThenReturned` adds one static
 self-callback edge; its explicit callback arguments are independent of the child result channel.
+`callAndThenReturned` closes two ordered static children through one internal join and self callback.
 Strict fixed-width Borsh UInt64 decoding remains SDK policy over the active descriptor; additional
-scalar decoders and joins remain outside this slice.
+scalar decoders and general Promise handles remain outside this slice.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Promises
@@ -68,6 +69,28 @@ gas budgets are independent. The callback runs after either child success or chi
   Runtime.promiseFunctionCallThenReturned childArgsCapacity callbackArgsCapacity
     receiver childMethod callbackMethod childArguments callbackArguments
     childDeposit.w0 childDeposit.w1 childGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+/-- Schedule two ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0 and 1 preserve left/right
+input order even when either child fails. -/
+@[pf_inline] def callAndThenReturned
+    {leftArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAndThenReturned
+    leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+    leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+    leftArguments rightArguments callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
     callbackDeposit.w0 callbackDeposit.w1 callbackGas
 
 /-- Number of callback inputs for this invocation. Ordinary calls report zero. -/

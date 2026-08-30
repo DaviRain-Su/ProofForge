@@ -42,6 +42,7 @@ The Runtime stages a receipt action; it does not model transfer as synchronous b
 
 ## Next
 
-Parallel `promise_and` is now the next independent Promise graph slice. Dynamic AccountId and
-general multi-action builders should follow only with an explicit source-level handle and lifecycle
-contract; broader result codecs remain separate.
+The closed ordered two-child `promise_and` graph is complete in
+[wsm-near-promise-and-001](wsm-near-promise-and-001.md). Dynamic AccountId, arbitrary-N/nested
+joins, and general multi-action builders should follow only with an explicit source-level handle
+and lifecycle contract; broader result codecs remain separate.

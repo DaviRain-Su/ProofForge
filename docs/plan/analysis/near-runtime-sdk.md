@@ -58,7 +58,7 @@ Authoritative source anchors:
 | IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
 | logs/events | `log_utf8`; NEP-297 SDK JSON | static UTF-8 literal effect in wsm-near-log-001; dynamic spans/events absent | Runtime log effect, then SDK event envelope |
-| cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, plus one returned authenticated self-callback edge complete** in wsm-near-promise-001/002, wsm-near-promise-transfer-001, wsm-near-promise-then-001, and wsm-near-promise-private-001; joins absent | Runtime promise effects, then typed SDK builder |
+| cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, authenticated self-callback, and closed ordered two-child join complete** in wsm-near-promise-001/002/then/private/transfer/and-001 | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | **static detached/returned lossless-u128 transfer complete** in wsm-near-promise-transfer-001 | Runtime batch/action; never synchronous balance mutation |
 | callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
 | private/payable/init | generated entry guards | full-AccountId callback-body guard complete in wsm-near-promise-private-001; general entry metadata absent | entry-adapter policy over context/storage |
@@ -68,7 +68,8 @@ bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw
 fixed-width Vector/Identity LookupMap/LookupSet/IterableMap/IterableSet and ProofForge Queue
 foundations, explicit detached and returned static cross-contract function calls, one returned
 static self-callback edge authenticated by full AccountId equality, and bounded callback-result
-observation with strict UInt64 decode, plus explicit detached and returned static native transfers.
+observation with strict UInt64 decode, explicit detached and returned static native transfers, and
+one closed ordered two-child join feeding a self callback.
 It is not yet a general near-sdk-rs contract model.
 
 ## 3. Storage and collection contracts
@@ -139,7 +140,10 @@ forwarded result. Bounded callback-result inspection preserves exact status and 
 successful register. The first static self-callback edge now uses `promise_batch_then`, keeps
 callback input independent, and returns the callback receipt. Strict UInt64 decoding and a full
 predecessor/current AccountId guard now run before dependency-result access; broader codecs and
-joins remain absent.
+general Promise handles remain absent. The closed join edge stages two concrete Promise indices in
+left/right order, immediately calls `promise_and(ptr, 2)`, uses the joint Promise only as a
+`promise_batch_then` dependency, and returns only the callback receipt. Failed children still
+release the callback and retain their ordered status-2 result slots.
 
 Native transfer now uses `promise_batch_create(receiver)` plus
 `promise_batch_action_transfer(index, amountPtr)`. Its exact 16-byte LE u128 amount frame is staged
@@ -158,7 +162,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
 | N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
-| N7 promises | **detached/returned static batch calls, native transfer actions, and one static self-callback edge done in wsm-near-promise-001/002, wsm-near-promise-transfer-001, and wsm-near-promise-then-001**; joins remain | receipt DAG/gas/deposit/failure sandbox scenes |
+| N7 promises | **detached/returned static batch calls, native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | non-payable default, payable/private/init guards, `STATE` version/migration | repeated init, deposit rejection, migration fixtures |
 | N10 standards | NEP-141/145 building blocks only after storage, events, transfer/call semantics | standard-specific integration suites |
@@ -207,6 +211,10 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
     transfers stage exact lossless-u128 amounts through the arena, append the transfer action to a
     concrete batch, distinguish return linkage explicitly, and pin exact sandbox balance deltas and
     synchronous insufficient-balance rollback.
+16. **NEAR-PROMISE-AND-1 (wsm-near-promise-and-001 done):** two ordered static child calls stage
+    their concrete indices in one aligned arena span, immediately form `promise_and`, feed that
+    joint dependency to one authenticated self callback, and return only the callback receipt.
+    Success plus either one-sided failure pin result order and non-short-circuiting callback reads.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

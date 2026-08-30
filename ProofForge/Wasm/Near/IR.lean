@@ -58,6 +58,21 @@ private def projectOpExt
             (← _projectVal childDepositHi) (← _projectVal childGas)
             (← _projectVal callbackDepositLo) (← _projectVal callbackDepositHi)
             (← _projectVal callbackGas)
+      | .promiseFunctionCallAndThenReturned
+          leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+          leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+          leftArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          return .promiseFunctionCallAndThenReturned
+            leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+            leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+            (← leftArguments.mapM _projectVal) (← rightArguments.mapM _projectVal)
+            (← callbackArguments.mapM _projectVal)
+            (← _projectVal leftDepositLo) (← _projectVal leftDepositHi) (← _projectVal leftGas)
+            (← _projectVal rightDepositLo) (← _projectVal rightDepositHi) (← _projectVal rightGas)
+            (← _projectVal callbackDepositLo) (← _projectVal callbackDepositHi)
+            (← _projectVal callbackGas)
       | .promiseResultRead capacity index =>
           return .promiseResultRead capacity (← _projectVal index)
       | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
@@ -163,6 +178,27 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
         s!"{Wasm.IR.valCanon extValCanon callbackDepositLo}," ++
         s!"{Wasm.IR.valCanon extValCanon callbackDepositHi}," ++
         s!"{Wasm.IR.valCanon extValCanon callbackGas})"
+  | .promiseFunctionCallAndThenReturned
+      leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+      leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+      leftArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+      callbackDepositLo callbackDepositHi callbackGas =>
+      s!"npromise.and.then.returned:{leftReceiver.toUTF8.size}:{leftReceiver}:" ++
+        s!"{leftMethod.toUTF8.size}:{leftMethod}:{rightReceiver.toUTF8.size}:{rightReceiver}:" ++
+        s!"{rightMethod.toUTF8.size}:{rightMethod}:{callbackMethod.toUTF8.size}:{callbackMethod}." ++
+        s!"{leftArgsCapacity}.{rightArgsCapacity}.{callbackArgsCapacity}(" ++
+        s!"{canonValues leftArguments};{canonValues rightArguments};" ++
+        s!"{canonValues callbackArguments};" ++
+        s!"{Wasm.IR.valCanon extValCanon leftDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon leftDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon leftGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon rightDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon rightDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon rightGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon callbackDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon callbackDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon callbackGas})"
   | .promiseResultRead capacity index =>
       s!"npromise.result.read.{capacity}({Wasm.IR.valCanon extValCanon index})"
   | .transientBuffer64Begin capacity => s!"ntb64.begin.{capacity}"
@@ -212,6 +248,22 @@ private def rewritePayload
         childArgsCapacity callbackArgsCapacity (← childArguments.mapM rewriteValue)
         (← callbackArguments.mapM rewriteValue) (← rewriteValue childDepositLo)
         (← rewriteValue childDepositHi) (← rewriteValue childGas)
+        (← rewriteValue callbackDepositLo) (← rewriteValue callbackDepositHi)
+        (← rewriteValue callbackGas)
+  | .promiseFunctionCallAndThenReturned
+      leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+      leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+      leftArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+      callbackDepositLo callbackDepositHi callbackGas =>
+      return .promiseFunctionCallAndThenReturned
+        leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+        leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+        (← leftArguments.mapM rewriteValue) (← rightArguments.mapM rewriteValue)
+        (← callbackArguments.mapM rewriteValue)
+        (← rewriteValue leftDepositLo) (← rewriteValue leftDepositHi)
+        (← rewriteValue leftGas) (← rewriteValue rightDepositLo)
+        (← rewriteValue rightDepositHi) (← rewriteValue rightGas)
         (← rewriteValue callbackDepositLo) (← rewriteValue callbackDepositHi)
         (← rewriteValue callbackGas)
   | .promiseResultRead capacity index =>

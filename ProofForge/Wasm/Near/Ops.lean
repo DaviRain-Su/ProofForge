@@ -77,6 +77,13 @@ inductive OpExt (V : Type) where
       (childArguments callbackArguments : Array V)
       (childDepositLo childDepositHi childGas : V)
       (callbackDepositLo callbackDepositHi callbackGas : V)
+  | promiseFunctionCallAndThenReturned
+      (leftReceiver leftMethod rightReceiver rightMethod callbackMethod : String)
+      (leftArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat)
+      (leftArguments rightArguments callbackArguments : Array V)
+      (leftDepositLo leftDepositHi leftGas : V)
+      (rightDepositLo rightDepositHi rightGas : V)
+      (callbackDepositLo callbackDepositHi callbackGas : V)
   | promiseResultRead (capacity : Nat) (index : V)
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
@@ -123,6 +130,21 @@ def OpExt.wellFormed : OpExt Val → Bool
         childDepositHi.wellFormed ValKind.arity && childGas.wellFormed ValKind.arity &&
         callbackDepositLo.wellFormed ValKind.arity &&
         callbackDepositHi.wellFormed ValKind.arity && callbackGas.wellFormed ValKind.arity
+  | .promiseFunctionCallAndThenReturned
+      leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+      leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+      leftArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+      callbackDepositLo callbackDepositHi callbackGas =>
+      Codec.accountIdLiteralValid leftReceiver && Codec.promiseMethodLiteralValid leftMethod &&
+        Codec.accountIdLiteralValid rightReceiver && Codec.promiseMethodLiteralValid rightMethod &&
+        Codec.promiseMethodLiteralValid callbackMethod &&
+        storageFrameWellFormed leftArgsCapacity leftArguments &&
+        storageFrameWellFormed rightArgsCapacity rightArguments &&
+        storageFrameWellFormed callbackArgsCapacity callbackArguments &&
+        #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
+          callbackDepositLo, callbackDepositHi, callbackGas].all
+          (·.wellFormed ValKind.arity)
   | .promiseResultRead capacity index =>
       Codec.storageCapacityValid capacity && index.wellFormed ValKind.arity
   | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
@@ -162,6 +184,20 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
         (callbackArguments.map mapValue) (mapValue childDepositLo) (mapValue childDepositHi)
         (mapValue childGas) (mapValue callbackDepositLo) (mapValue callbackDepositHi)
         (mapValue callbackGas)
+  | .promiseFunctionCallAndThenReturned
+      leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+      leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+      leftArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+      callbackDepositLo callbackDepositHi callbackGas =>
+      .promiseFunctionCallAndThenReturned
+        leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+        leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+        (leftArguments.map mapValue) (rightArguments.map mapValue)
+        (callbackArguments.map mapValue)
+        (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
+        (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
+        (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas)
   | .promiseResultRead capacity index => .promiseResultRead capacity (mapValue index)
   | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
   | .transientBuffer64Set capacity index value =>
@@ -189,6 +225,13 @@ private def cfgPayloadValues : OpExt Val → Array Val
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
       childArguments ++ callbackArguments ++
         #[childDepositLo, childDepositHi, childGas,
+          callbackDepositLo, callbackDepositHi, callbackGas]
+  | .promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _
+      leftArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+      callbackDepositLo callbackDepositHi callbackGas =>
+      leftArguments ++ rightArguments ++ callbackArguments ++
+        #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
           callbackDepositLo, callbackDepositHi, callbackGas]
   | .promiseResultRead _ index => #[index]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]

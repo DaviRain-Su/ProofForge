@@ -87,6 +87,20 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
             (callbackArguments.map mapValue) (mapValue childDepositLo) (mapValue childDepositHi)
             (mapValue childGas) (mapValue callbackDepositLo) (mapValue callbackDepositHi)
             (mapValue callbackGas))
+      | .promiseFunctionCallAndThenReturned
+          leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+          leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+          leftArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          .near (.promiseFunctionCallAndThenReturned
+            leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+            leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+            (leftArguments.map mapValue) (rightArguments.map mapValue)
+            (callbackArguments.map mapValue)
+            (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
+            (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
+            (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas))
       | .promiseResultRead capacity index =>
           .near (.promiseResultRead capacity (mapValue index))
       | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
@@ -121,6 +135,13 @@ def OpExt.values : OpExt Val → Array Val
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
           childArguments ++ callbackArguments ++
             #[childDepositLo, childDepositHi, childGas,
+              callbackDepositLo, callbackDepositHi, callbackGas]
+      | .promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _
+          leftArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          leftArguments ++ rightArguments ++ callbackArguments ++
+            #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
               callbackDepositLo, callbackDepositHi, callbackGas]
       | .promiseResultRead _ index => #[index]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
@@ -203,6 +224,27 @@ def OpExt.wellFormed : OpExt Val → Bool
             childDepositHi.wellFormed ValKind.arity && childGas.wellFormed ValKind.arity &&
             callbackDepositLo.wellFormed ValKind.arity &&
             callbackDepositHi.wellFormed ValKind.arity && callbackGas.wellFormed ValKind.arity
+      | .promiseFunctionCallAndThenReturned
+          leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+          leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+          leftArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+            Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+            Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity &&
+            leftArguments.size == leftArgsCapacity + 1 &&
+            rightArguments.size == rightArgsCapacity + 1 &&
+            callbackArguments.size == callbackArgsCapacity + 1 &&
+            (leftArguments ++ rightArguments ++ callbackArguments ++
+              #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
+                callbackDepositLo, callbackDepositHi, callbackGas]).all
+              (·.wellFormed ValKind.arity)
       | .promiseResultRead capacity index =>
           Wasm.Near.Codec.storageCapacityValid capacity &&
             index.wellFormed ValKind.arity
