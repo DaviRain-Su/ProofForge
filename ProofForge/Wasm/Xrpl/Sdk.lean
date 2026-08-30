@@ -176,6 +176,15 @@ Allowance granted to the compile-time spender. Not a Map. -/
 @[pf_inline] def peekAllwLimbs (w0 w1 w2 : UInt64) : UInt64 :=
   Runtime.xrplPeekAllw w0 w1 w2
 
+/-- Persist `v` onto the current Owner card under JSON key `lock`.
+Per-user freeze. Not global `halt`, not a Map. -/
+@[pf_inline] def flushLock (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushLock v
+
+/-- Load `lock` from `(w0,w1,w2)`'s card (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekLockLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekLock w0 w1 w2
+
 end Context
 
 namespace Pausable

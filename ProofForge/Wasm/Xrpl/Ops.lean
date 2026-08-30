@@ -66,11 +66,15 @@ inductive ValKind where
   | flushAllw
   /-- Rewrite persist Owner, load that card's `allw` (missing → 0). -/
   | peekAllw
+  /-- Persist operand onto the current Owner card under JSON key `lock`. -/
+  | flushLock
+  /-- Rewrite persist Owner, load that card's `lock` (missing → 0). -/
+  | peekLock
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .storeOwner | .peekOwner | .peekHalt | .peekSupp | .peekCap | .peekAllw => 3
-  | .flushBal | .flushHalt | .flushSupp | .flushCap | .flushAllw => 1
+  | .storeOwner | .peekOwner | .peekHalt | .peekSupp | .peekCap | .peekAllw | .peekLock => 3
+  | .flushBal | .flushHalt | .flushSupp | .flushCap | .flushAllw | .flushLock => 1
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind

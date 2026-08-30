@@ -60,6 +60,7 @@ import Examples.XrplTx
 import Examples.XrplSend
 import Examples.XrplPay
 import Examples.XrplMint
+import Examples.XrplLock
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

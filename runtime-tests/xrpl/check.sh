@@ -222,6 +222,18 @@ need_exports_mint = (
     '(i32.store8 (i32.const 72) (i32.const 99))',
     '(i32.store8 (i32.const 92) (i32.const 97))',
 )
+need_exports_lock = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "pay") (result i32)',
+    '(func (export "freeze") (result i32)',
+    '(func (export "unfreeze") (result i32)',
+    '(func (export "get")',
+    '(i32.const 5)',
+    '(call $function_param',
+    '(data (i32.const 64) "bal")',
+    '(i32.store8 (i32.const 96) (i32.const 108))',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -277,6 +289,8 @@ for wat in wats:
         exports = need_exports_pay
     elif wat.stem == "XrplMint":
         exports = need_exports_mint
+    elif wat.stem == "XrplLock":
+        exports = need_exports_lock
     else:
         exports = need_exports_counter
     for needle in exports:

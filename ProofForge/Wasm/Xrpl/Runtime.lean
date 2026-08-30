@@ -167,4 +167,16 @@ persist Owner. Not a Map. -/
   let _ := w2
   0
 
+/-- Persist `v` onto the current Owner card under JSON key `lock`. -/
+@[irreducible] def xrplFlushLock (v : UInt64) : UInt64 :=
+  v
+
+/-- Load `lock` from the card owned by `(w0,w1,w2)` (missing → 0). Rewrites
+persist Owner. Per-user freeze, not global `halt`. Not a Map. -/
+@[irreducible] def xrplPeekLock (w0 w1 w2 : UInt64) : UInt64 :=
+  let _ := w0
+  let _ := w1
+  let _ := w2
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

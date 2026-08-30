@@ -36,7 +36,7 @@ def contract : Contract where
     ";; get_base_fee, compute_sha512_half.",
     ";; Honesty: deployable=false on mainnet; no ContractCreate / AlphaNet claim.",
     ";; v0 ABI: views return i64; mutating entries return i32 status",
-    ";; (error codes: 1 overflow/underflow, 2 divide-by-zero, 3 unauthorized, 4 paused)."
+    ";; (error codes: 1 overflow/underflow, 2 divide-by-zero, 3 unauthorized, 4 paused, 5 frozen)."
   ]
   importModule := "host_lib"
   homeLeField := "get_current_ledger_obj_field"

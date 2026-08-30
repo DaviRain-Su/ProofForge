@@ -13,7 +13,7 @@
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
 > 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
 > `XrplNest` A `credit(3)` / B `credit(5)`（nested `{user:{bal}}`）、`XrplBal` A `credit(3)` / B `credit(5)`、
-> `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` 积分转账、`XrplMint` A `mint(5)` / B `mint` 拒 / A `pay(B,2)` → A=3 B=2 都绿。
+> `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` 积分转账、`XrplMint` A `mint(5)` / B `mint` 拒 / A `pay(B,2)` → A=3 B=2、`XrplLock` 每人一张卡 `lock`（进出 `pay` 状态码 5）都绿。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
@@ -177,7 +177,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 11. **wsm-040** — 跨钱包 operator（`XrplCrew`）**已绿**。
 12. **XrplPay** — 内部积分转账：先 peek dest，再切回 caller `flushBal`。余额不足不扣款。不是 XRP Payment。
 13. **XrplMint** — 编译期 minter 才能 mint / `mintTo` / `setCap`；编译期 spender 才能 `takeFrom`（源卡是参数三叶，跟 `pay` 一样 `storeOwnerLimbs`；自卡只扣 `allw` 不动 `bal`）；任何人可 `burn` / `approve` / `pay`（halt/supp peek 后切回 caller 再 persist；自 pay 不 debit/credit 同一张卡）；`halt` / `supp` / `cap` 在 minter 卡上，`allw` 在授权人卡上；暂停后 mint/pay/`mintTo`/`burn`/`takeFrom`/`setCap`/`approve` 状态码 4。`supp` 随 mint/mintTo 增、burn 减，pay 不变。`cap=0` 不限额；非零 cap 必须 `≥ supp`。不是 Map。
-14. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+14. **XrplLock** — 每人一张卡 `lock`（JSON key，scratch 96 / 值 112）。`freeze`/`unfreeze` 写 caller 卡；`pay` 先 peek caller lock 再 peek dest lock，任一非零 → 状态码 5，不扣款。不是全局 `halt`，不是 PDA，不是 Map。
+15. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 

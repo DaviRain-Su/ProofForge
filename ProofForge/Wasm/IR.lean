@@ -17,8 +17,9 @@ v0 子集（对家族所有链 fail closed；链方言可以更严，不能更�
 - params：scalar `UInt64`；view 结果恰好一个 `UInt64`；mutating entry 只返回
   状态码（源声明的 public 返回值省略，`echoDropped` 记录）；
 - ops：checked 五则、`ite`、`okState` / `returnState` / `returnU64`、
-  `errorOverflow`、钉死的 `errorNamed "unauthorized"`（状态码 3）和
-  `errorNamed "paused"`（状态码 4）、`storeField`。
+  `errorOverflow`、钉死的 `errorNamed "unauthorized"`（状态码 3）、
+  `errorNamed "paused"`（状态码 4）和 `errorNamed "frozen"`（状态码 5）、
+  `storeField`。
   loop / local / 运行时 vector 下标 / map / 其它 named error / 位运算 / 未检查 `/ %`
   全部拒绝。编译期 `Vector UInt64 n` 叶、字面量下标、`forAccum`（上界 1..8）
   先展开成命名槽 / nested `addU64`，再过这道门。
@@ -279,6 +280,7 @@ partial def opAllowed {ValExt : Type} {OpExt : Type → Type} : Op ValExt OpExt 
   | .errorOverflow => true
   | .errorNamed "unauthorized" => true
   | .errorNamed "paused" => true
+  | .errorNamed "frozen" => true
   | _ => false
 
 /-- Views are infallible on-chain reads: any checked or error op is rejected. -/
