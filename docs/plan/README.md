@@ -202,6 +202,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-061](tasks/wsm-061.md) | done | 本地 `Pay.emitToCallerDrops`（XrplTip 384）；公开仍 -196 |
 | [wsm-062](tasks/wsm-062.md) | done | 本地 `Pay.emitToLit`（XrplGift → B +192）；公开仍 -196 |
 | [wsm-063](tasks/wsm-063.md) | done | 本地程序卡积分兑 XRP（XrplCash）；公开仍 -22/-196 |
+| [wsm-064](tasks/wsm-064.md) | done | 本地暂停门金库（XrplBank）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)
