@@ -63,7 +63,7 @@ private def usage : String :=
     "deploy/call talk via runtime-tests/xrpl/alphanet-rpc.js.\n" ++
     "     --target xrpl = Bedrock/get_* names (local 2.6.1). xrpl-alphanet = XLS-0102.\n" ++
     "     --send-amount funds the pseudo-account (local 2.6.1 first-install only).\n" ++
-    "     Public 3.3.0: first-install tfSendAmount funds; Function ABI needed for Parameters.\n" ++
+    "     Public 3.3.0: Function ABI + increment(1) live; do not call initialize(0).\n" ++
     "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
     "No program names on build means every registered source module.\n"
 

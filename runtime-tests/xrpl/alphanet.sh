@@ -68,5 +68,6 @@ fi
 
 echo "xrpl-alphanet: artifact ok ($wasm)."
 echo "  Live zero-arg deploy/call is runtime-tests/xrpl/smoke.sh (XrplSmoke)."
-echo "  Counter still needs Parameters; public RPC 502s those ContractCalls."
+echo "  Live parameterized Counter is runtime-tests/xrpl/alphanet-counter.sh (increment(1))."
+echo "  Do not call initialize on Counter; increment(1) is the live parameter path."
 exit 0

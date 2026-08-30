@@ -15,7 +15,7 @@
 | | 是什么 | 本仓 |
 |---|---|---|
 | XRPL 主网今天 | 没有 `ContractCreate` | `deployable=false` |
-| [AlphaNet](https://alphanet.xrpl.org) | 公开开发网，network_id **21337**，`SmartContract` 已开 | `--target xrpl-alphanet` + `runtime-tests/xrpl/smoke.sh` |
+| [AlphaNet](https://alphanet.xrpl.org) | 公开开发网，network_id **21337**，`SmartContract` 已开 | `--target xrpl-alphanet` + `smoke.sh` / `alphanet-counter.sh` |
 | WASM Devnet | Smart Escrow 测试网 | **不是** 本 target（escrow `finish()`，不是 Contract SLE） |
 | Bedrock 本地镜像 `lejamon/rippled_smart_contract_vault_x86` | 另一套 host 名（`get_current_ledger_obj_field` / view `i64`） | **只当 Bedrock 门**；**不能**模拟 AlphaNet |
 | 本地 AlphaNet 模拟 | 应对齐 `alphanet` 分支 rippled（XLS-0102） | 还没有；不要用现成 Bedrock 镜像顶替 |
