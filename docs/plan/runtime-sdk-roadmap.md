@@ -431,6 +431,11 @@ limb stride 与 record capacity，payload/slot geometry 自动派生；`append1.
 验证完整 arity/capacity，count/access/truncate/drop/clear 保持 stride alignment。两个不同 record
 shape/policy 的非 Phoenix consumer 通过真实 Mollusk；没有新增 Runtime leaf、Ops/IR/Component
 或 main Emit case。详见 [R3-022](tasks/r3-022.md)。
+R3-023 再把一等 `Pubkey` 值建立在四个已有 account key/owner word projection 上：
+`Account.Handle.key`/`.owner` 投影、`Pubkey.notEquals`、`sameKey`/`ownerIsKeyOf` 收口为值相等；
+`Pubkey.equals` 的 projection 写法钉住 extraction 的 matcher 边界。独立 `PubkeyGate`
+consumer 传递 fixed/runtime-supplied/projected key，Mollusk 24/24，无 word magic、无分配、
+无新底层词汇。详见 [R3-023](tasks/r3-023.md)。
 R3 尚未完成；wider/typed POD transient shapes、更多 manifest-bounded handle、rent-aware resize、
 runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 仍待完成。
 

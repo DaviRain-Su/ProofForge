@@ -114,4 +114,5 @@ import Tests.SvmTransientBytesSpec
 import Tests.SvmTransientRecordSpec
 import Tests.SvmTelemetrySpec
 import Tests.LamportTransferSpec
+import Tests.SvmSdkPubkeySpec
 import Tests.ProofSpec

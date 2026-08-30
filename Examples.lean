@@ -84,3 +84,4 @@ import Examples.TransientPair
 import Examples.TransientLedger
 import Examples.TransientOrderTape
 import Examples.LamportTransfer
+import Examples.PubkeyGate

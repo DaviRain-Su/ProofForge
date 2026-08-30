@@ -65,6 +65,7 @@ R3-017/018 checked transient Vector64/Bytes pop、R3-019 shared transient trunca
 R3-020 rent-exempt System/PDA create policy、
 R3-021 two-slot same-kind transient handle isolation、
 R3-022 invocation-local fixed-width UInt64 POD records、
+R3-023 first-class allocation-free Pubkey values、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -551,6 +552,20 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   164,824 / 169,400 B；focused Mollusk 14/14。更宽 record、typed wide field、更多 slot、
   insert/remove-at/iteration 与任何持久化 pointer 继续 fail closed。详见
   `docs/plan/tasks/r3-022.md`。
+
+- R3-023 first-class allocation-free SVM `Pubkey` values 已完成：`Account.Handle.key` /
+  `.owner` 把固定账户的完整 32-byte key/owner 投影为一等 `Pubkey` 值，`Pubkey.notEquals`
+  补足不等式，`sameKey` / `ownerIsKeyOf` 收口为投影上的值相等；`Pubkey.equals` 改写为
+  `pf_inline` word projections（extraction 不 iota-reduce 多 discriminant matcher，该边界已
+  写入定义注释）。新增 kernel 证明 `pubkey_notEquals_iff`。独立非 Phoenix consumer
+  `Examples.PubkeyGate` 在普通 Lean source 里传递/比较多个 Pubkey：fixed key、由四个 scalar
+  entry word 构造的 runtime-supplied key、从三个静态账户投影的 key/owner，共用同一 `grants`
+  policy，应用侧无 word magic。digest `8374e353a1923c12`、assembly 57,874 B、ELF 19,416 B、
+  ELF SHA-256 `51ff1e0b4ad6c4f07af47f31bacd93b084b865a9e570f3ca7f4d49631ec8577a`；focused
+  Mollusk 24/24 覆盖四个 limb 的 equal/different（含 word0 之外差异）、owner/key 匹配、
+  canonical executable+key+owner 认证、gated mutation 原子性与 duplicate-alias/truncated
+  invocation fail-closed。Pubkey 作为整体 entry 参数/返回值仍是 target-binding 范围，不由
+  该 API 暗示。详见 `docs/plan/tasks/r3-023.md`。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
