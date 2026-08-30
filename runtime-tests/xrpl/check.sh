@@ -215,6 +215,8 @@ need_exports_mint = (
     '(func (export "takeFrom") (result i32)',
     '(func (export "freeze") (result i32)',
     '(func (export "unfreeze") (result i32)',
+    '(func (export "freezeOf") (result i32)',
+    '(func (export "unfreezeOf") (result i32)',
     '(func (export "get")',
     '(i32.const 3)',
     '(i32.const 4)',

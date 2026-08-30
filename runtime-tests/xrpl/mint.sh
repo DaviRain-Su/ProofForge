@@ -52,7 +52,7 @@ lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" Xr
 wasm="$root/build/xrpl-alphanet/XrplMint.wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4,"burn":1,"setCap":1,"approve":1,"takeFrom":4}}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4,"burn":1,"setCap":1,"approve":1,"takeFrom":4,"freezeOf":3,"unfreezeOf":3}}\n' \
   "$RPC" "$WALLET_A" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
@@ -623,4 +623,48 @@ rm -f "$cfg"
 [[ "$bal_a13" == "2" ]] || { echo "FAIL: A bal want 2 after dest freeze, got $bal_a13" >&2; exit 1; }
 [[ "$bal_b13" == "6" ]] || { echo "FAIL: B bal want 6 after dest freeze, got $bal_b13" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=6 freeze=status5"
+# Minter freezeOf(B): B cannot pay; A cannot pay into B. Not a PDA.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"freezeOf","parameters":["%s","%s","%s"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+fr_of="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$fr_of" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$fr_of"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"lock"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+lock_b="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+[[ "$lock_b" == "1" ]] || { echo "FAIL: B lock want 1 after freezeOf, got $lock_b" >&2; exit 1; }
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+of_pay="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$of_pay" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==5, d' <<<"$of_pay"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"freezeOf","parameters":["%s","%s","%s"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+of_denied="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$of_denied" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==3, d' <<<"$of_denied"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"unfreezeOf","parameters":["%s","%s","%s"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+un_of="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$un_of" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$un_of"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"lock"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+lock_b0="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a14="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b14="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$lock_b0" == "0" ]] || { echo "FAIL: B lock want 0 after unfreezeOf, got $lock_b0" >&2; exit 1; }
+[[ "$bal_a14" == "2" ]] || { echo "FAIL: A bal want 2 after freezeOf, got $bal_a14" >&2; exit 1; }
+[[ "$bal_b14" == "6" ]] || { echo "FAIL: B bal want 6 after freezeOf, got $bal_b14" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=6 freezeOf=status5"

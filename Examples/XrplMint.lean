@@ -432,6 +432,47 @@ def unfreeze (s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
+/-- Minter writes `lock=1` onto `(w0,w1,w2)`'s card. Restore caller before
+persist so `$bal` is not copied onto the dest card. Not a PDA. -/
+@[pf_entry]
+def freezeOf (s : State) (w0 w1 w2 : UInt64) : Except Error (State × UInt64) :=
+  if Access.requireOwner minter then
+    if Context.storeOwnerLimbs w0 w1 w2 ≤ u64Max then
+      if Context.flushLock (1 : UInt64) ≤ u64Max then
+        if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+          if s.bal ≤ u64Max then
+            .ok ({ bal := s.bal + (0 : UInt64) }, (0 : UInt64))
+          else
+            .error .overflow
+        else
+          .error .overflow
+      else
+        .error .overflow
+    else
+      .error .overflow
+  else
+    .error .unauthorized
+
+/-- Minter writes `lock=0` onto `(w0,w1,w2)`'s card. Restore caller before persist. -/
+@[pf_entry]
+def unfreezeOf (s : State) (w0 w1 w2 : UInt64) : Except Error (State × UInt64) :=
+  if Access.requireOwner minter then
+    if Context.storeOwnerLimbs w0 w1 w2 ≤ u64Max then
+      if Context.flushLock (0 : UInt64) ≤ u64Max then
+        if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+          if s.bal ≤ u64Max then
+            .ok ({ bal := s.bal + (0 : UInt64) }, (0 : UInt64))
+          else
+            .error .overflow
+        else
+          .error .overflow
+      else
+        .error .overflow
+    else
+      .error .overflow
+  else
+    .error .unauthorized
+
 @[pf_entry]
 def get (s : State) : UInt64 :=
   s.bal
