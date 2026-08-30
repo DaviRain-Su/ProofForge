@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowRight, GitBranch } from "lucide-react";
+import { Architecture } from "@/components/architecture";
 import { CodeBlock } from "@/components/code-block";
 import { Pipeline } from "@/components/pipeline";
 import { SiteShell } from "@/components/site-shell";
@@ -86,18 +87,30 @@ function HomePage() {
       <div className="rule mx-auto max-w-6xl" />
       <section className="mx-auto max-w-6xl px-5 py-16">
         <p className="font-mono text-[11px] tracking-[0.18em] text-subtle uppercase">
-          {copy(lang, { zh: "编译链", en: "Pipeline" })}
+          {copy(lang, { zh: "架构", en: "Architecture" })}
         </p>
         <h2 className="mt-3 font-display text-4xl tracking-tight">
           {copy(lang, { zh: "一条主语，两条降低。", en: "One subject. Two lowerings." })}
         </h2>
         <p className="mt-3 max-w-2xl text-muted">
           {copy(lang, {
+            zh: "普通 Lean 进，fail-closed 检查，抽出 Core，再分到 Solana 与 EVM。不画内部模块。",
+            en: "Ordinary Lean in, fail-closed check, extract Core, then split to Solana and EVM. No internal modules.",
+          })}
+        </p>
+        <div className="mt-8">
+          <Architecture />
+        </div>
+        <p className="mt-10 font-mono text-[11px] tracking-[0.18em] text-subtle uppercase">
+          {copy(lang, { zh: "各级职责", en: "What each stage owns" })}
+        </p>
+        <p className="mt-3 max-w-2xl text-muted">
+          {copy(lang, {
             zh: "点每一级看它拥有什么。Core 不做 syscall，target 不重做类型检查。",
             en: "Open a stage to see what it owns. Core does not emit syscalls. Targets do not re-typecheck.",
           })}
         </p>
-        <div className="mt-8">
+        <div className="mt-6">
           <Pipeline />
         </div>
       </section>

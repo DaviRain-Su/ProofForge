@@ -1,5 +1,6 @@
 import { Github, Menu } from "lucide-react";
 import { ProofMark } from "@/components/mark";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { copy, MCP, NAV, REPO } from "@/lib/content";
@@ -53,6 +54,7 @@ export function SiteHeader({ path }: { path: string }) {
           >
             {lang === "zh" ? "EN" : "中文"}
           </Button>
+          <ThemeToggle />
           <Button asChild variant="ghost" size="icon" className="hidden sm:inline-flex">
             <a href={REPO} target="_blank" rel="noreferrer" aria-label="GitHub">
               <Github className="size-4" />
