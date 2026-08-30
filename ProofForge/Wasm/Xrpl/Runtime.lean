@@ -134,4 +134,15 @@ persist Owner. Not a Map. -/
   let _ := w2
   0
 
+/-- Persist `v` onto the current Owner card under JSON key `supp`. -/
+@[irreducible] def xrplFlushSupp (v : UInt64) : UInt64 :=
+  v
+
+/-- Load `supp` from the card owned by `(w0,w1,w2)` (missing → 0). -/
+@[irreducible] def xrplPeekSupp (w0 w1 w2 : UInt64) : UInt64 :=
+  let _ := w0
+  let _ := w1
+  let _ := w2
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

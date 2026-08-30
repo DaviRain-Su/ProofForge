@@ -1,9 +1,10 @@
 import ProofForge
 
 /-!
-Owner-gated mint plus anyone-can-pay points, with a pause flag on the
-minter card (`halt` JSON key). Not XRP, not Sdk.Map. `State` stays one
-`bal` slot so persist does not copy pause onto dest cards.
+Owner-gated mint plus anyone-can-pay points, with a pause flag (`halt`)
+and total supply (`supp`) on the minter card. Not XRP, not Sdk.Map.
+`State` stays one `bal` slot so persist does not copy pause/supply onto
+dest cards.
 -/
 namespace Examples.XrplMint
 
@@ -30,14 +31,21 @@ def init : State :=
   { bal := 0 }
 
 /-- Only the compile-time minter may add `delta` to *this caller's* card.
-Peek `halt` on the minter card, then restore caller before persist. -/
+Bump `supp` on the minter card, then restore caller before persist. -/
 @[pf_entry]
 def mint (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   if Access.requireOwner minter then
     if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
-      if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
-        if s.bal ≤ u64Max - delta then
-          .ok ({ bal := s.bal + delta }, (0 : UInt64))
+      if s.bal ≤ u64Max - delta then
+        if Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max - delta then
+          if Context.flushSupp
+              (Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" + delta) ≤ u64Max then
+            if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+              .ok ({ bal := s.bal + delta }, (0 : UInt64))
+            else
+              .error .overflow
+          else
+            .error .overflow
         else
           .error .overflow
       else
@@ -52,8 +60,18 @@ def mint (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
 def mintTo (_s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
   if Access.requireOwner minter then
     if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
-      if Context.peekOwnerLimbs w0 w1 w2 ≤ u64Max - amount then
-        .ok ({ bal := Context.peekOwnerLimbs w0 w1 w2 + amount }, (0 : UInt64))
+      if Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max - amount then
+        if Context.peekOwnerLimbs w0 w1 w2 ≤ u64Max - amount then
+          if Context.storeOwnerLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max then
+            if Context.flushSupp
+                (Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" + amount) ≤ u64Max then
+              .ok ({ bal := Context.peekOwnerLimbs w0 w1 w2 + amount }, (0 : UInt64))
+            else
+              .error .overflow
+          else
+            .error .overflow
+        else
+          .error .overflow
       else
         .error .overflow
     else
@@ -83,13 +101,21 @@ def pay (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) 
   else
     .error .paused
 
-/-- Burn `amount` from *this caller's* card. Pause-gated. Underflow is a no-op. -/
+/-- Burn `amount` from *this caller's* card. Pause-gated. Underflow is a no-op.
+Decrements `supp` on the minter card. -/
 @[pf_entry]
 def burn (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
-    if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
-      if amount ≤ s.bal then
-        .ok ({ bal := s.bal - amount }, (0 : UInt64))
+    if amount ≤ s.bal then
+      if amount ≤ Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" then
+        if Context.flushSupp
+            (Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" - amount) ≤ u64Max then
+          if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+            .ok ({ bal := s.bal - amount }, (0 : UInt64))
+          else
+            .error .overflow
+        else
+          .error .overflow
       else
         .error .overflow
     else

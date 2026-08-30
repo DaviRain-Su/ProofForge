@@ -135,6 +135,22 @@ Keep pause off the per-user `bal` slot. -/
     (Runtime.xrplAccountLitW1 hex)
     (Runtime.xrplAccountLitW2 hex)
 
+/-- Persist `v` onto the current Owner card under JSON key `supp`.
+Total supply lives on the minter card, not per-user `bal`. -/
+@[pf_inline] def flushSupp (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushSupp v
+
+/-- Load `supp` from `(w0,w1,w2)`'s card (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekSuppLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekSupp w0 w1 w2
+
+/-- `supp` on a compile-time AccountID. Hex is 40 lowercase chars. -/
+@[pf_inline] def peekSuppLit (hex : String) : UInt64 :=
+  Runtime.xrplPeekSupp
+    (Runtime.xrplAccountLitW0 hex)
+    (Runtime.xrplAccountLitW1 hex)
+    (Runtime.xrplAccountLitW2 hex)
+
 end Context
 
 namespace Pausable

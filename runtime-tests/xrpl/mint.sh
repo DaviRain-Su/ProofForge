@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Live AlphaNet: owner-gated mint + anyone-can-pay points.
 # A mint(5); B mint(1) → unauthorized; A pay(B,2) → A=3 B=2.
+# `supp` on the minter card tracks total supply; pay does not change it.
 # Not XRP, not Sdk.Map. Missing RPC → skip.
 set -euo pipefail
 
@@ -96,9 +97,17 @@ bal_a="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
   "$RPC" "$OWNER_B" "$contract" >"$cfg"
 bal_b="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_a="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+supp_b="$(node "$here/alphanet-rpc.js" slot "$cfg" || echo missing)"
 rm -f "$cfg"
 [[ "$bal_a" == "3" ]] || { echo "FAIL: A bal want 3 got $bal_a" >&2; exit 1; }
 [[ "$bal_b" == "2" ]] || { echo "FAIL: B bal want 2 got $bal_b" >&2; exit 1; }
+[[ "$supp_a" == "5" ]] || { echo "FAIL: A supp want 5 after mint+pay, got $supp_a" >&2; exit 1; }
+[[ "$supp_b" == "missing" || "$supp_b" == "0" ]] || { echo "FAIL: B supp should stay missing/0, got $supp_b" >&2; exit 1; }
 
 printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
   "$RPC" "$WALLET_A" "$contract" >"$cfg"
@@ -209,14 +218,14 @@ rm -f "$cfg"
 [[ "$bal_a5" == "2" ]] || { echo "FAIL: A bal want 2 after mintTo, got $bal_a5" >&2; exit 1; }
 [[ "$bal_b5" == "7" ]] || { echo "FAIL: B bal want 7 after mintTo, got $bal_b5" >&2; exit 1; }
 
-# Dest overflow: fill B to u64Max, then mintTo(B,1) → status 1, A stays 2.
-printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","18446744073709551608"]}\n' \
-  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
-fill_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
-echo "$fill_out" >&2
-"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$fill_out"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_a5="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$supp_a5" == "9" ]] || { echo "FAIL: A supp want 9 after mintTo, got $supp_a5" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","1"]}\n' \
+# Supply overflow: mintTo more than u64Max - supp → status 1, cards stay.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","18446744073709551615"]}\n' \
   "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
 ov_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$ov_out" >&2
@@ -228,9 +237,13 @@ bal_a6="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
   "$RPC" "$OWNER_B" "$contract" >"$cfg"
 bal_b6="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_a6="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 rm -f "$cfg"
-[[ "$bal_a6" == "2" ]] || { echo "FAIL: A bal want 2 after dest overflow, got $bal_a6" >&2; exit 1; }
-[[ "$bal_b6" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after fill, got $bal_b6" >&2; exit 1; }
+[[ "$bal_a6" == "2" ]] || { echo "FAIL: A bal want 2 after supp overflow, got $bal_a6" >&2; exit 1; }
+[[ "$bal_b6" == "7" ]] || { echo "FAIL: B bal want 7 after supp overflow, got $bal_b6" >&2; exit 1; }
+[[ "$supp_a6" == "9" ]] || { echo "FAIL: A supp want 9 after supp overflow, got $supp_a6" >&2; exit 1; }
 
 # Burn 1 from A. Underflow burn(9) is a no-op. Pause blocks burn.
 printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"burn","parameters":["1"]}\n' \
@@ -249,6 +262,11 @@ printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
   "$RPC" "$OWNER_A" "$contract" >"$cfg"
 bal_a7="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 [[ "$bal_a7" == "1" ]] || { echo "FAIL: A bal want 1 after burn, got $bal_a7" >&2; exit 1; }
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_a7="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+[[ "$supp_a7" == "8" ]] || { echo "FAIL: A supp want 8 after burn, got $supp_a7" >&2; exit 1; }
 
 printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
   "$RPC" "$WALLET_A" "$contract" >"$cfg"
@@ -270,6 +288,12 @@ printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
 bal_b8="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 rm -f "$cfg"
 [[ "$bal_a8" == "1" ]] || { echo "FAIL: A bal want 1 after paused burn, got $bal_a8" >&2; exit 1; }
-[[ "$bal_b8" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after paused burn, got $bal_b8" >&2; exit 1; }
+[[ "$bal_b8" == "7" ]] || { echo "FAIL: B bal want 7 after paused burn, got $bal_b8" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=max burn"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_a8="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$supp_a8" == "8" ]] || { echo "FAIL: A supp want 8 after paused burn, got $supp_a8" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=7 supp=8"

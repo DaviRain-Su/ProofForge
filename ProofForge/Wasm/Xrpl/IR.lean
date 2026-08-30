@@ -68,6 +68,8 @@ def extValCanon : Ops.ValKind → String
   | .peekOwner => "xpeek"
   | .flushHalt => "xflushh"
   | .peekHalt => "xpeelh"
+  | .flushSupp => "xflushs"
+  | .peekSupp => "xpeeks"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .reserved => "wext"
