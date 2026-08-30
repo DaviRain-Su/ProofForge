@@ -251,6 +251,9 @@ jobs:
       - name: Run NEAR sandbox direct LookupMap/LookupSet gate
         run: runtime-tests/near/lookup.sh
 
+      - name: Run NEAR sandbox closed fungible-ledger gate
+        run: runtime-tests/near/ledger.sh
+
       - name: Run NEAR sandbox bounded Queue gate
         run: runtime-tests/near/queue.sh
 

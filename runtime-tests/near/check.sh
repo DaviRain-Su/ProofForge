@@ -193,6 +193,26 @@ lookup_anchors = (
     'i64.shl',
     'i64.or',
 )
+ledger_anchors = (
+    '(func (export "mintSelfOne")',
+    '(func (export "mintSelfTwo64")',
+    '(func (export "mintSelfMax")',
+    '(func (export "burnSelfOne")',
+    '(func (export "burnSelfMax")',
+    '(func (export "transferCallerToSelfOne")',
+    '(func (export "transferCallerToSelfZero")',
+    '(func (export "seedSelfMalformed8")',
+    '(func (export "seedSelfMalformed20")',
+    '(func (export "fixtureSetSupplyMax")',
+    '(call $pf_arena_alloc (i64.const 72) (i64.const 1))',
+    '(call $pf_storage_read',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+    'i64.add',
+    'i64.sub',
+    'i64.lt_u',
+    'i64.ge_u',
+)
 queue_anchors = (
     '(func (export "push")',
     '(func (export "pop")',
@@ -296,6 +316,8 @@ for wat in wats:
         extra = vector_anchors
     elif wat.stem == "NearLookup":
         extra = lookup_anchors
+    elif wat.stem == "NearFungibleLedger":
+        extra = ledger_anchors
     elif wat.stem == "NearQueue":
         extra = queue_anchors
     elif wat.stem == "NearIterable":

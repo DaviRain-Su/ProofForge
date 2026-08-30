@@ -31,7 +31,10 @@ wsm-near-u128-arithmetic-001 adds target-owned unsigned two-limb `NearToken` add
 and carry/borrow result limbs; result limbs require their matching predicate and do not yet imply
 an FT ledger. `DirectAccountNearTokenMap` now separately provides a closed default-Identity
 AccountId-to-NearToken foundation with exact `prefix4 || u32_le(length) || active bytes` keys and
-16-byte little-endian values; it does not implement balances, supply, or public FT methods.
+16-byte little-endian values. `Near.Sdk.Fungible.Ledger` now interprets an active map snapshot for
+the closed fixture's checked balance/total-supply mint, burn, and transfer policy. It deliberately
+does not implement public FT methods, JSON ABI, registration, storage management, resolver,
+attached-deposit policy, or automatic event coupling.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity
@@ -72,6 +75,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、exact Borsh UInt64/NearToken values and strict result decode | AccountId keys、arbitrary `IntoStorageKey`、generic Borsh、ledger policy |
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |
+| `Near.Sdk.Fungible.Ledger` | exact/missing active balance snapshot validity and closed checked ledger composition boundary | public NEP-141 ABI、registration/storage management、resolver、deposit checks、events |
 | `Near.Sdk.Promises` | static detached/returned function call/native transfer、child→self callback、两个有序 child join、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、arbitrary-N/nested joins、generic Borsh |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame 与 private/payable/migration policy binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |

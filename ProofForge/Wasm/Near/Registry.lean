@@ -11,6 +11,7 @@ def entries : Array Entry := #[
   { name := "NearCtx", digest := "8233f27ab39f6133" },
   { name := "NearBytes", digest := "3b15034031dcf0a2" },
   { name := "NearFungibleTokenEvent", digest := "768db0d9cec95f94" },
+  { name := "NearFungibleLedger", digest := "b91759b7d8a8fac7" },
   { name := "NearTokenArithmetic", digest := "4257ab75e505d1f6" },
   { name := "NearTokenStorage", digest := "92e4c2bf2a7f74a0" },
   { name := "NearMemory", digest := "830255873ad66d7c" },
