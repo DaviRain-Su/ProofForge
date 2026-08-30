@@ -58,7 +58,7 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRoot" == some "a8e6569035ec2d13"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTx" == some "2a9d4e10cd7ecec9"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplSend" == some "64eb128e0be5a2c6"
-#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplNest" == some "5deed02b57389d2"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplNest" == some "860982785dab0d6d"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplStep" == some "8273bd4064e4745a"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRole" == some "bae46704480482ee"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPeer" == some "b808c0cc3278fb10"
@@ -444,6 +444,7 @@ elab "#pf_xrpl_nest_alphanet_emit_check " n:ident : command => do
           "(import \"host_lib\" \"set_data_nested_object_field\"",
           "(import \"host_lib\" \"get_data_nested_object_field\"",
           "(func (export \"credit\") (result i32)",
+          "(call $function_param (i32.const 0) (i32.const 3) (i32.const 20) (i32.const 8))",
           "(data (i32.const 64) \"userbal\")"
         ]
         for anchor in anchors do

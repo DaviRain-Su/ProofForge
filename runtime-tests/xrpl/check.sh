@@ -132,6 +132,7 @@ need_exports_nest = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
     '(func (export "get")',
+    '(call $function_param',
     '(data (i32.const 64) "userbal")',
 )
 need_exports_step = (

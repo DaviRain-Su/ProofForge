@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Live AlphaNet: nested JSON slot user_bal → {user:{bal}}.
+# credit(delta) needs Function ABI with one UINT64. Missing RPC → skip.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,42 +40,40 @@ if [[ "$nid" != "21337" || "$smart" != "True" && "$smart" != "true" ]]; then
 fi
 echo "xrpl-alphanet-nest: $RPC $info" >&2
 
+echo "xrpl-alphanet-nest: building XrplNest.wasm" >&2
+lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" XrplNest
 wasm="$root/build/xrpl-alphanet/XrplNest.wasm"
-if [[ ! -f "$wasm" ]]; then
-  lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" XrplNest
-fi
+[[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","wasm_path":"%s"}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"credit":1}}\n' \
   "$RPC" "$WALLET" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
 contract="$("$python" -I -S -c 'import json,sys; print(json.load(sys.stdin)["contractAccount"])' <<<"$deploy_out")"
-
-call_fn() {
-  local fn="$1"
-  printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","contract_account":"%s","function_name":"%s"}\n' \
-    "$RPC" "$WALLET" "$contract" "$fn" >"$cfg"
-  node "$here/alphanet-rpc.js" call "$cfg"
+[[ -n "$contract" && "$contract" != "None" && "$contract" != "null" ]] || {
+  echo "FAIL: deploy did not return contractAccount" >&2
+  exit 1
 }
 
-init_out="$(call_fn initialize)"
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"initialize"}\n' \
+  "$RPC" "$WALLET" "$contract" >"$cfg"
+init_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$init_out" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$init_out"
 
-credit_out="$(call_fn credit)"
+# credit(3) → user.bal = 3. Nested JSON, not a Map.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"credit","parameters":["3"]}\n' \
+  "$RPC" "$WALLET" "$contract" >"$cfg"
+credit_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$credit_out" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$credit_out"
-
-credit2="$(call_fn credit)"
-echo "$credit2" >&2
-"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("vmReturnCode")==0, d' <<<"$credit2"
 
 printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"user_bal"}\n' \
   "$RPC" "$OWNER" "$contract" >"$cfg"
 bal="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 rm -f "$cfg"
-[[ "$bal" == "2" ]] || {
-  echo "FAIL: nested user.bal want 2 got $bal" >&2
+[[ "$bal" == "3" ]] || {
+  echo "FAIL: nested user.bal want 3 got $bal" >&2
   exit 1
 }
 
