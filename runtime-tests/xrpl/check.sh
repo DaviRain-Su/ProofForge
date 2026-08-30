@@ -262,6 +262,14 @@ need_exports_gift = (
     '(import "host_lib" "emit_built_txn"',
     '(i32.const 208)',
 )
+need_exports_cash = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "cash") (result i32)',
+    '(func (export "get")',
+    '(i32.const 524313)',
+    '(import "host_lib" "emit_built_txn"',
+)
 need_exports_lock = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -341,6 +349,8 @@ for wat in wats:
         exports = need_exports_tip
     elif wat.stem == "XrplGift":
         exports = need_exports_gift
+    elif wat.stem == "XrplCash":
+        exports = need_exports_cash
     else:
         exports = need_exports_counter
     for needle in exports:

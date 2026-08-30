@@ -66,6 +66,7 @@ import Examples.XrplVault
 import Examples.XrplEmit
 import Examples.XrplTip
 import Examples.XrplGift
+import Examples.XrplCash
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

@@ -47,6 +47,7 @@
 | `Pay.emitToCallerDrops` → STAmount `0x40…` OR drops | `XrplTip.ping`（编译期 384） | `tip.sh` |
 | `Pay.emitToLit hex` → 192 drops to compile-time AccountID | `XrplGift.ping`（钱包 B） | `gift.sh` |
 | `Card.storeSelf` → 合约 AccountID 卡 | `XrplVault.credit` | `vault.sh` |
+| `storeSelf` + `emitToCaller` 兑 192 drops | `XrplCash.credit` / `cash` | `cash.sh` |
 | caller 卡 / dest 卡 / `supp` `lock` `allw` | Mint / Lock / Pay / Card | 公开脚本仍有效 |
 
 本地 `sfContractAccount` = ACCOUNT/25 = **524313**。公开是 **524320**。不要写回 524315。
