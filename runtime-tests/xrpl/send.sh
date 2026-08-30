@@ -50,7 +50,7 @@ lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" Xr
 wasm="$root/build/xrpl-alphanet/XrplSend.wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"credit":3}}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"credit":4}}\n' \
   "$RPC" "$WALLET_A" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
@@ -70,7 +70,7 @@ init_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$init_out" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$init_out"
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"credit","parameters":["%s","%s","%s"]}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"credit","parameters":["%s","%s","%s","7"]}\n' \
   "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
 credit_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$credit_out" >&2
@@ -80,8 +80,8 @@ printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
   "$RPC" "$OWNER_B" "$contract" >"$cfg"
 bal="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 rm -f "$cfg"
-[[ "$bal" == "$DEST_W2" ]] || {
-  echo "FAIL: B bal want dest.w2=$DEST_W2 got $bal" >&2
+[[ "$bal" == "7" ]] || {
+  echo "FAIL: B bal want 7 got $bal" >&2
   exit 1
 }
 
