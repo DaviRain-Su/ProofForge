@@ -69,5 +69,5 @@ fi
 echo "xrpl-alphanet: artifact ok ($wasm)."
 echo "  Live zero-arg deploy/call is runtime-tests/xrpl/smoke.sh (XrplSmoke)."
 echo "  Live parameterized Counter is runtime-tests/xrpl/alphanet-counter.sh (increment(1))."
-echo "  Do not call initialize on Counter; increment(1) is the live parameter path."
+echo "  Live initialize(7) is runtime-tests/xrpl/alphanet-init.sh (Function ABI required)."
 exit 0

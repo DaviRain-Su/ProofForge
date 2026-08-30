@@ -11,8 +11,10 @@
 > **-196 tefBAD_AUTH**（不是没钱；`tecPSEUDO_ACCOUNT` 是 +196）。
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
-> 公开 Parameters **已绿**（Create Function ABI + Call hex）。`Counter.increment(1)` 活网绿。
-> emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**。
+> 公开 Parameters **已绿**（Create Function ABI + Call hex）。`increment(1)` 和
+> `initialize(7)` 都绿。空 ABI 带参才会打节点。
+> emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
+> inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
 
 ## 0. 现在能写什么样的合约
