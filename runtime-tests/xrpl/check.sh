@@ -101,6 +101,7 @@ need_exports_bal = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
     '(func (export "get")',
+    '(call $function_param',
     '(data (i32.const 64) "bal")',
 )
 need_exports_balrt = (

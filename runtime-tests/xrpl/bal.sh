@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Live AlphaNet gate: per-caller ContractData cards (XLS-0101 user shards).
-# Wallet A credits twice → A's bal=2. Wallet B credits once → B's bal=1, A stays 2.
+# Wallet A credit(3) → A's bal=3. Wallet B credit(5) → B's bal=5, A stays 3.
 # That is multi-user by Owner, not a single vault. Missing RPC → skip.
 set -euo pipefail
 
@@ -44,21 +44,38 @@ if [[ "$nid" != "21337" || "$smart" != "True" && "$smart" != "true" ]]; then
 fi
 echo "xrpl-alphanet-bal: $RPC $info" >&2
 
+echo "xrpl-alphanet-bal: building XrplBal.wasm" >&2
+lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" XrplBal
 wasm="$root/build/xrpl-alphanet/XrplBal.wasm"
-if [[ ! -f "$wasm" ]]; then
-  lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" XrplBal
-fi
+[[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","wasm_path":"%s"}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"credit":1}}\n' \
   "$RPC" "$WALLET_A" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
 contract="$("$python" -I -S -c 'import json,sys; print(json.load(sys.stdin)["contractAccount"])' <<<"$deploy_out")"
+[[ -n "$contract" && "$contract" != "None" && "$contract" != "null" ]] || {
+  echo "FAIL: deploy did not return contractAccount" >&2
+  exit 1
+}
 
 call_as() {
   local seed="$1" fn="$2"
-  printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","contract_account":"%s","function_name":"%s"}\n' \
-    "$RPC" "$seed" "$contract" "$fn" >"$cfg"
+  shift 2
+  if [[ $# -eq 0 ]]; then
+    printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"%s"}\n' \
+      "$RPC" "$seed" "$contract" "$fn" >"$cfg"
+  else
+    local params="["
+    local first=1
+    for a in "$@"; do
+      if [[ $first -eq 1 ]]; then first=0; else params+=","; fi
+      params+="\"$a\""
+    done
+    params+="]"
+    printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"%s","parameters":%s}\n' \
+      "$RPC" "$seed" "$contract" "$fn" "$params" >"$cfg"
+  fi
   node "$here/alphanet-rpc.js" call "$cfg"
 }
 
@@ -73,32 +90,30 @@ init_out="$(call_as "$WALLET_A" initialize)"
 echo "$init_out" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$init_out"
 
-credit_a1="$(call_as "$WALLET_A" credit)"
-echo "$credit_a1" >&2
-"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("vmReturnCode")==0, d' <<<"$credit_a1"
-credit_a2="$(call_as "$WALLET_A" credit)"
-echo "$credit_a2" >&2
-"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("vmReturnCode")==0, d' <<<"$credit_a2"
+# credit(3) on A's card. Nested JSON is XrplNest; this is a flat caller card.
+credit_a="$(call_as "$WALLET_A" credit 3)"
+echo "$credit_a" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("vmReturnCode")==0, d' <<<"$credit_a"
 bal_a="$(slot_as "$OWNER_A")"
-[[ "$bal_a" == "2" ]] || { echo "FAIL: A bal want 2 got $bal_a" >&2; exit 1; }
+[[ "$bal_a" == "3" ]] || { echo "FAIL: A bal want 3 got $bal_a" >&2; exit 1; }
 
 printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","destination":"%s","drops":"20000000"}\n' \
   "$RPC" "$WALLET_A" "$OWNER_B" >"$cfg"
 if ! pay_out="$(node "$here/alphanet-rpc.js" pay "$cfg")"; then
   echo "xrpl-alphanet-bal: skip: cannot fund second wallet $OWNER_B" >&2
   rm -f "$cfg"
-  echo "xrpl-alphanet-bal: partial ok contract=$contract A=2 (B unfunded)"
+  echo "xrpl-alphanet-bal: partial ok contract=$contract A=3 (B unfunded)"
   exit 0
 fi
 echo "$pay_out" >&2
 
-credit_b="$(call_as "$WALLET_B" credit)"
+credit_b="$(call_as "$WALLET_B" credit 5)"
 echo "$credit_b" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$credit_b"
 bal_b="$(slot_as "$OWNER_B")"
 bal_a2="$(slot_as "$OWNER_A")"
 rm -f "$cfg"
-[[ "$bal_b" == "1" ]] || { echo "FAIL: B bal want 1 got $bal_b" >&2; exit 1; }
-[[ "$bal_a2" == "2" ]] || { echo "FAIL: A bal should stay 2, got $bal_a2" >&2; exit 1; }
+[[ "$bal_b" == "5" ]] || { echo "FAIL: B bal want 5 got $bal_b" >&2; exit 1; }
+[[ "$bal_a2" == "3" ]] || { echo "FAIL: A bal should stay 3, got $bal_a2" >&2; exit 1; }
 
-echo "xrpl-alphanet-bal: ok contract=$contract A=$OWNER_A bal=2 B=$OWNER_B bal=1"
+echo "xrpl-alphanet-bal: ok contract=$contract A=$OWNER_A bal=3 B=$OWNER_B bal=5"

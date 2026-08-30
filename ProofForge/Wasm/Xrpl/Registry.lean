@@ -17,7 +17,7 @@ def entries : Array Entry := #[
   { name := "XrplGate", digest := "c2495d166a25c8e0" },
   { name := "XrplHold", digest := "e99965ac007e0da8" },
   { name := "XrplMark", digest := "20c54e937ffbf0fc" },
-  { name := "XrplBal", digest := "cfae015ada92cdc9" },
+  { name := "XrplBal", digest := "3177150879f2b85a" },
   { name := "XrplBalRt", digest := "dd80a5af3243dec2" },
   { name := "XrplRoot", digest := "a8e6569035ec2d13" },
   { name := "XrplTx", digest := "2a9d4e10cd7ecec9" },
