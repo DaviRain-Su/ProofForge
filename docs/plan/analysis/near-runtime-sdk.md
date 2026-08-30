@@ -49,7 +49,7 @@ Authoritative source anchors:
 | guest linear-memory allocation | near-sdk-rs guest allocator over Wasm `memory.grow`; no nearcore malloc host import | **checked invocation-local arena + `Buffer64` complete** in wsm-near-memory-001 | Near Memory/Emit substrate; SDK exposes bounded consumers, never raw pointers |
 | register ABI | nearcore host | bounded reads for input/context/raw storage/callback results; exact status and stale-register rules | Runtime memory/register contract |
 | full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
-| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance and checked add/sub complete** in wsm-near-u128-001/u128-arithmetic-001; explicit gas and lossless Promise deposit complete in wsm-near-promise-001 | shared wide value + Near ABI binding |
+| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance, checked add/sub, and exact Borsh storage values complete** in wsm-near-u128-001/u128-arithmetic-001/u128-storage-001; explicit gas and lossless Promise deposit complete | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
 | Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | **one-time init, fail-closed entries, versioned schema envelope, and authenticated split-key migration complete** in wsm-near-init/uninitialized/state-envelope/migration-001 | broader state codecs/version chains explicit |
@@ -179,8 +179,8 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 4. **NEAR-NEP-141-EVENT:** exact v1.0.0 `ft_mint`, `ft_transfer`, and `ft_burn` serialization,
    including bounded optional memo variants, is complete in wsm-near-nep141-event-001/002/003.
    FT balances, supply, methods, and storage management remain separate later slices.
-   The ledger dependency chain starts with checked NearToken add/sub in
-   wsm-near-u128-arithmetic-001, then exact Borsh-u128 values and full AccountId Identity keys.
+   The ledger dependency chain now has checked NearToken add/sub and exact Borsh-u128 values in
+   wsm-near-u128-arithmetic-001/u128-storage-001; full AccountId Identity keys remain next.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

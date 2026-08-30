@@ -75,6 +75,7 @@ import Examples.NearVector
 import Examples.NearLookup
 import Examples.NearFungibleTokenEvent
 import Examples.NearTokenArithmetic
+import Examples.NearTokenStorage
 import Examples.EvmBounded
 import Examples.EvmSearch
 import Examples.EvmFindIndex

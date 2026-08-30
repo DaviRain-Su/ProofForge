@@ -72,6 +72,28 @@ def Prefix4.wellFormed (tag : Prefix4) : Bool :=
       ((value >>> 56) &&& 0xff).toUInt8
     ] }
 
+/-- Standalone Borsh `u128`: exactly 16 little-endian bytes, low limb first. -/
+@[pf_inline] def borshNearToken (value : UInt128) : BoundedBytes 16 :=
+  { length := 16
+    values := #v[
+      (value.w0 &&& 0xff).toUInt8,
+      ((value.w0 >>> 8) &&& 0xff).toUInt8,
+      ((value.w0 >>> 16) &&& 0xff).toUInt8,
+      ((value.w0 >>> 24) &&& 0xff).toUInt8,
+      ((value.w0 >>> 32) &&& 0xff).toUInt8,
+      ((value.w0 >>> 40) &&& 0xff).toUInt8,
+      ((value.w0 >>> 48) &&& 0xff).toUInt8,
+      ((value.w0 >>> 56) &&& 0xff).toUInt8,
+      (value.w1 &&& 0xff).toUInt8,
+      ((value.w1 >>> 8) &&& 0xff).toUInt8,
+      ((value.w1 >>> 16) &&& 0xff).toUInt8,
+      ((value.w1 >>> 24) &&& 0xff).toUInt8,
+      ((value.w1 >>> 32) &&& 0xff).toUInt8,
+      ((value.w1 >>> 40) &&& 0xff).toUInt8,
+      ((value.w1 >>> 48) &&& 0xff).toUInt8,
+      ((value.w1 >>> 56) &&& 0xff).toUInt8
+    ] }
+
 /-- Decode the active exact-width raw-storage result, or return `fallback` for absent,
 oversized, or malformed values. This consumes no storage operation by itself. -/
 @[pf_inline] def resultUInt64D (fallback : UInt64) : UInt64 :=
@@ -87,6 +109,43 @@ oversized, or malformed values. This consumes no storage operation by itself. -/
           ((result.byte 5).toUInt64 <<< 40) |||
           ((result.byte 6).toUInt64 <<< 48) |||
           ((result.byte 7).toUInt64 <<< 56)
+      else fallback
+    else fallback
+  else fallback
+
+/-- Decode the low limb of one exact 16-byte Borsh `u128` from the active storage result. -/
+@[pf_inline] def resultNearTokenW0D (fallback : UInt64) : UInt64 :=
+  let result : ResultBuffer := 16
+  if result.status = 1 then
+    if result.fits then
+      if result.length = 16 then
+        (result.byte 0).toUInt64 |||
+          ((result.byte 1).toUInt64 <<< 8) |||
+          ((result.byte 2).toUInt64 <<< 16) |||
+          ((result.byte 3).toUInt64 <<< 24) |||
+          ((result.byte 4).toUInt64 <<< 32) |||
+          ((result.byte 5).toUInt64 <<< 40) |||
+          ((result.byte 6).toUInt64 <<< 48) |||
+          ((result.byte 7).toUInt64 <<< 56)
+      else fallback
+    else fallback
+  else fallback
+
+/-- Decode the high limb of one exact 16-byte Borsh `u128` from the active storage result. Both
+limb decoders apply the same status/fits/exact-length gate before observing any result byte. -/
+@[pf_inline] def resultNearTokenW1D (fallback : UInt64) : UInt64 :=
+  let result : ResultBuffer := 16
+  if result.status = 1 then
+    if result.fits then
+      if result.length = 16 then
+        (result.byte 8).toUInt64 |||
+          ((result.byte 9).toUInt64 <<< 8) |||
+          ((result.byte 10).toUInt64 <<< 16) |||
+          ((result.byte 11).toUInt64 <<< 24) |||
+          ((result.byte 12).toUInt64 <<< 32) |||
+          ((result.byte 13).toUInt64 <<< 40) |||
+          ((result.byte 14).toUInt64 <<< 48) |||
+          ((result.byte 15).toUInt64 <<< 56)
       else fallback
     else fallback
   else fallback

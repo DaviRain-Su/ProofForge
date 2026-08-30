@@ -22,9 +22,10 @@ open ProofForge
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
 #guard ProofForge.Wasm.Near.Registry.names ==
-  #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearTokenArithmetic", "NearMemory", "NearOutput", "NearStorage", "NearVector",
+  #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearTokenArithmetic", "NearTokenStorage", "NearMemory", "NearOutput", "NearStorage", "NearVector",
     "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult", "NearMigration"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" == some "4257ab75e505d1f6"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenStorage" == some "92e4c2bf2a7f74a0"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMemory" == some "830255873ad66d7c"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearOutput" == some "feb5dcaddfa46a16"

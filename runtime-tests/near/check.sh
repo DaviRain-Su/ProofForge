@@ -103,6 +103,20 @@ token_arithmetic_anchors = (
     'i64.ge_u',
     'i64.extend_i32_u',
 )
+token_storage_anchors = (
+    '(func (export "readW0")',
+    '(func (export "readW1")',
+    '(func (export "putMixed")',
+    '(func (export "putShort")',
+    '(func (export "putOversized")',
+    '(func (export "remove")',
+    '(call $pf_storage_read',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+    '(i64.const 16)',
+    'i64.shl',
+    'i64.or',
+)
 memory_anchors = (
     '(func $pf_arena_reset',
     '(func $pf_arena_alloc',
@@ -258,6 +272,8 @@ for wat in wats:
         extra = ft_event_anchors
     elif wat.stem == "NearTokenArithmetic":
         extra = token_arithmetic_anchors
+    elif wat.stem == "NearTokenStorage":
+        extra = token_storage_anchors
     elif wat.stem == "NearMemory":
         extra = memory_anchors
     elif wat.stem == "NearOutput":

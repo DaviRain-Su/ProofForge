@@ -233,6 +233,9 @@ jobs:
       - name: Run NEAR sandbox checked u128 gate
         run: runtime-tests/near/token_arithmetic.sh
 
+      - name: Run NEAR sandbox Borsh u128 storage-value gate
+        run: runtime-tests/near/token_storage.sh
+
       - name: Run NEAR sandbox memory arena gate
         run: runtime-tests/near/memory.sh
 
