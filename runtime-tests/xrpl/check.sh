@@ -213,14 +213,18 @@ need_exports_mint = (
     '(func (export "setCap") (result i32)',
     '(func (export "approve") (result i32)',
     '(func (export "takeFrom") (result i32)',
+    '(func (export "freeze") (result i32)',
+    '(func (export "unfreeze") (result i32)',
     '(func (export "get")',
     '(i32.const 3)',
     '(i32.const 4)',
+    '(i32.const 5)',
     '(call $function_param',
     '(data (i32.const 64) "bal")',
     '(i32.store8 (i32.const 88) (i32.const 115))',
     '(i32.store8 (i32.const 72) (i32.const 99))',
     '(i32.store8 (i32.const 92) (i32.const 97))',
+    '(i32.store8 (i32.const 96) (i32.const 108))',
 )
 need_exports_lock = (
     '(func (export "initialize") (result i32)',

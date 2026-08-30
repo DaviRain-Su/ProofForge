@@ -70,7 +70,7 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHand" == some "5c6813950576cdda"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCrew" == some "ca03e80ef4a8218a"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPay" == some "5f2a9ac1b78e08de"
-#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMint" == some "f6cff05afab045f3"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMint" == some "817c3e5c63e324ab"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplLock" == some "d2c4673c64a8d0c"
 #guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock"]
 
@@ -707,17 +707,21 @@ elab "#pf_xrpl_mint_alphanet_emit_check " n:ident : command => do
           "(func (export \"setCap\") (result i32)",
           "(func (export \"approve\") (result i32)",
           "(func (export \"takeFrom\") (result i32)",
+          "(func (export \"freeze\") (result i32)",
+          "(func (export \"unfreeze\") (result i32)",
           "(i32.const 3)",
           "(i32.const 4)",
+          "(i32.const 5)",
           "(call $function_param (i32.const 0) (i32.const 3) (i32.const 20) (i32.const 8))",
           "(data (i32.const 64) \"bal\")",
           "(i32.store8 (i32.const 88) (i32.const 115))",
           "(i32.store8 (i32.const 72) (i32.const 99))",
-          "(i32.store8 (i32.const 92) (i32.const 97))"
+          "(i32.store8 (i32.const 92) (i32.const 97))",
+          "(i32.store8 (i32.const 96) (i32.const 108))"
         ]
         for anchor in anchors do
           unless source.contains anchor do
-            throwError s!"alphanet emit is missing mint anchor: {anchor}\\n{source}"
+            throwError s!"alphanet emit is missing mint anchor: {anchor}\n{source}"
         unless !source.contains "Sdk.Map" do
           throwError "wasm emit must not mention Sdk.Map"
         logInfo m!"proofforge-xrpl-mint: {source.length} bytes of WAT passed mint anchor check"
