@@ -170,4 +170,21 @@ rm -f "$cfg"
 [[ "$bal_a5" == "4" ]] || { echo "FAIL: A bal should stay 4 after dest overflow, got $bal_a5" >&2; exit 1; }
 [[ "$bal_b5" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after cap, got $bal_b5" >&2; exit 1; }
 
-echo "xrpl-alphanet-pay: ok contract=$contract A.bal=4 B.bal=max dest-overflow-noop"
+# Zero amount: A pay(B, 0) succeeds; cards stay A=4 B=max.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","0"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+zero_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$zero_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$zero_out"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a6="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b6="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a6" == "4" ]] || { echo "FAIL: A bal want 4 after zero-pay, got $bal_a6" >&2; exit 1; }
+[[ "$bal_b6" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after zero-pay, got $bal_b6" >&2; exit 1; }
+
+echo "xrpl-alphanet-pay: ok contract=$contract A.bal=4 B.bal=max zero-pay"
