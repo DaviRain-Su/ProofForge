@@ -56,6 +56,8 @@ import Examples.EvmRingMailbox
 import Examples.EvmRingHistory
 import Examples.EvmAllowlist
 import Examples.EvmIdRegistry
+import Examples.EvmConfigMap
+import Examples.EvmScoreMap
 import Examples.EvmCheckpointBook
 import Examples.EvmCheckpointTrace
 import Examples.GuardedPayout

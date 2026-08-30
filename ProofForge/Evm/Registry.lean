@@ -41,6 +41,8 @@ def entries : Array Entry := #[
   { name := "EvmRingHistory", digest := "51b492f52021f6ec" },
   { name := "EvmAllowlist", digest := "5398786232c20c14" },
   { name := "EvmIdRegistry", digest := "92520ed7aaa372d0" },
+  { name := "EvmConfigMap", digest := "6bcde246def26437" },
+  { name := "EvmScoreMap", digest := "2f0fb0f0f9dd7663" },
   { name := "EvmCheckpointBook", digest := "ba538445e3647f45" },
   { name := "EvmCheckpointTrace", digest := "904229061bdc4a3e" }
 ]

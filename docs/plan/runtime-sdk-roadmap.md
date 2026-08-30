@@ -1,6 +1,6 @@
 # Runtime / SDK 双目标路线图
 
-> 更新：2026-08-28。本文是 SVM 与 EVM 后续 Runtime / SDK 工作的权威排期；
+> 更新：2026-08-30。本文是 SVM 与 EVM 后续 Runtime / SDK 工作的权威排期；
 > [backlog.md](backlog.md) 记录已经落地的证据和当前 Phoenix 切片。
 > 多 agent 并行时的 write set、shared-lock 和交付合同见
 > [并行开发执行图](parallel-workstreams.md)。
@@ -74,7 +74,7 @@ instruction 增加 recipe opcode。
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、target-owned Clock/EpochSchedule/Rent sysvar query（unsigned/Bool native fields complete）、checked fixed-account lamport debit/credit、checked zero-initializing account-data resize 与 backward duplicate-alias static walk、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return（含 generic compiler-owned SDK record whole-value binding）、Option/payload-enum tagged input/output、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data、checked program-memory spans 与 Token-2022 TLV envelope | signed timestamp、sliced/Instructions sysvar、AccountView+direct mutation 的 alias-aware variable walk、nested/constructed/wide dynamic return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation、program-memory span、checked lamport mutation 与 `AccountData` resize；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、`Account.Handle.transferLamports` / `.resizeData` / `.closeTo`、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、checked account-memory facade，以及可同类双 slot 的 invocation-local buffer/Vector64/writer 和 fixed-width UInt64 `Record64` | rent top-up/owner-reassign lifecycle、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；wider/typed POD transient shapes、更多 manifest-bounded slot 与 insert/remove/iteration 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input/output、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，以及独立 `OutputPlan` 的 top-level bounded dynamic/tagged result（strict UTF-8 String）、full-width gas/basefee/prevrandao/gaslimit/gasprice/blobbasefee、blobhash、caller/origin/coinbase、msg.sig/msg.data.length、blockhash 与 address balance/code observations、Cancun target pin、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | nested/constructed/wide dynamic return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；blob payload/bounded raw msg.data bytes 与标准化资源 manifest |
-| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；persistent bounded UInt64 `StorageVec`/`StorageBitmap`/`StorageRing`/`StorageEnumerableSet`/`StorageCheckpoints`；honest code observation + safe closed-call result policy | typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；wide-key map、wider checkpoints 与 richer persistent element shapes |
+| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；persistent bounded UInt64 `StorageVec`/`StorageBitmap`/`StorageRing`/`StorageEnumerableSet`/`StorageEnumerableMap`/`StorageCheckpoints`；honest code observation + safe closed-call result policy | typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；wide-key/value map、wider checkpoints 与 richer persistent element shapes |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -116,7 +116,7 @@ R5-009 reusable reentrancy policy、R5-010 persistent bounded storage vector、R
 runtime-code observation policy、R5-012 safe closed-call result policy、R5-013 bounded
 ERC-721 core、R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap 与
 R5-016 persistent StorageRing、R5-017 persistent StorageEnumerableSet、
-R5-018 persistent StorageCheckpoints，以及 R2-010 checked
+R5-018 persistent StorageCheckpoints、R5-019 persistent StorageEnumerableMap，以及 R2-010 checked
 fixed-account data resize 均已集成；独立
 contract 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
@@ -142,7 +142,7 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R5-009](tasks/r5-009.md)、[R5-010](tasks/r5-010.md)、[R5-011](tasks/r5-011.md)、
 [R5-012](tasks/r5-012.md)、[R5-013](tasks/r5-013.md)、[R5-014](tasks/r5-014.md)、
 [R5-015](tasks/r5-015.md)、[R5-016](tasks/r5-016.md)、[R5-017](tasks/r5-017.md)、
-[R5-018](tasks/r5-018.md)、
+[R5-018](tasks/r5-018.md)、[R5-019](tasks/r5-019.md)、
 [R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
 这不表示 R2/R4/R5 已完成。
 
@@ -756,10 +756,20 @@ zero/unsupported geometry fail closed。EvmCheckpointBook/EvmCheckpointTrace 两
 没有 checkpoint-specific Runtime/Ops/IR/Component/Emit、allocator 或 pointer。详见
 [R5-018](tasks/r5-018.md)。
 
+R5-019 已完成 persistent bounded StorageEnumerableMap：existing fixed key vector/live count/
+position+1 index 与 distinct key→value `U64Map` 组合 O(1) insert/update/lookup/indexed access/
+swap-remove。position namespace 单独证明 presence，使 key/value zero 均可用；middle remove
+修复 moved-key position 并清除 removed position/value，last/only remove 只清两份 hashed
+payload。EvmConfigMap/EvmScoreMap 两个 consumer 保留 literal State vector/count writes 与
+显式 map effects，并用不同 owner/full/malformed-view policy 验证 SDK 与业务边界。descriptor
+拒绝 namespace alias，所有 malformed evidence 在 store 前 fail closed；没有 map-specific
+Runtime/Ops/IR/Component/Emit、allocator、pointer 或 capacity scan。详见
+[R5-019](tasks/r5-019.md)。
+
 ### R6 — 双目标验收
 
 - CI-001 已把 shared Lean guards、SVM build/Mollusk/Surfpool 与 EVM build/Anvil 拆成三条
-  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 386-job Lean aggregate 不再在两个
+  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 390-job Lean aggregate 不再在两个
   target lane 重复执行。详见 [CI-001](tasks/ci-001.md)。
 - shared semantic fixtures：Counter、Escrow/Vault、Fungible ledger；共享行为规范，使用
   target-owned storage/ABI binding，不强求同一份物理 layout source。

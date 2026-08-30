@@ -144,6 +144,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-SDK-10 persistent StorageRing（已集成）** | Core bounded Queue、EVM-SDK-2/5 | compile-time UInt64 payload/head/live static geometry；O(1) checked push/pop/peek/get/clear、modulo wraparound、malformed metadata fail closed；EvmRingMailbox/EvmRingHistory 两 consumer；不新增 Runtime/Ops/IR/Emit；见 R5-016 |
 | **EVM-SDK-11 persistent StorageEnumerableSet（已集成）** | Core bounded Set、EVM-SDK-2/10、generic effect sequencing | compile-time fixed UInt64 vector + live count + key→position+1 map；O(1) insert/contains/valueAt/swap-remove，key zero 与 malformed backing fail-closed；EvmAllowlist/EvmIdRegistry 两 consumer；generic mutable-query snapshot 保证 effect/State write 共享 pre-state，不新增 set-specific Runtime/Ops/IR/Emit；见 R5-017 |
 | **EVM-SDK-12 persistent StorageCheckpoints（已集成）** | EVM-SDK-2/5、fixed-vector extraction | adjacent static UInt64 keys/values vectors + live count；capacity 1..4、strict persisted order、monotonic append、same-latest overwrite、latest/first-≥ lower-bound；Book/Trace 两 consumer + Anvil corruption；不新增 Runtime/Ops/IR/Component/Emit/allocator；见 R5-018 |
+| **EVM-SDK-13 persistent StorageEnumerableMap（已集成）** | EVM-SDK-11、typed hashed maps、generic effect sequencing | fixed UInt64 keys/count/position+1 index + disjoint key→value namespace；O(1) insert/update/lookup/index/swap-remove，key/value zero、dual-map clear 与 moved-key position repair；ConfigMap/ScoreMap 两 consumer + Anvil corruption；不新增 Runtime/Ops/IR/Component/Emit/allocator/scan；见 R5-019 |
 
 ## 4. Worker 统一交付合同
 
