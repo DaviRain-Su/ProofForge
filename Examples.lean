@@ -70,6 +70,7 @@ import Examples.XrplCash
 import Examples.XrplBank
 import Examples.XrplSafe
 import Examples.XrplPool
+import Examples.XrplFund
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

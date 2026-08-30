@@ -176,6 +176,13 @@ Allowance granted to the compile-time spender. Not a Map. -/
 @[pf_inline] def peekAllwLimbs (w0 w1 w2 : UInt64) : UInt64 :=
   Runtime.xrplPeekAllw w0 w1 w2
 
+/-- `allw` on a compile-time AccountID. Hex is 40 lowercase chars. -/
+@[pf_inline] def peekAllwLit (hex : String) : UInt64 :=
+  Runtime.xrplPeekAllw
+    (Runtime.xrplAccountLitW0 hex)
+    (Runtime.xrplAccountLitW1 hex)
+    (Runtime.xrplAccountLitW2 hex)
+
 /-- Persist `v` onto the current Owner card under JSON key `lock`.
 Per-user freeze. Not global `halt`, not a Map. -/
 @[pf_inline] def flushLock (v : UInt64) : UInt64 :=

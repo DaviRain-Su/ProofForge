@@ -301,6 +301,18 @@ need_exports_pool = (
     '(import "host_lib" "emit_built_txn"',
     '(i32.const 208)',
 )
+need_exports_fund = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "sendToB") (result i32)',
+    '(func (export "cashToB") (result i32)',
+    '(func (export "setCap10") (result i32)',
+    '(func (export "grantOp") (result i32)',
+    '(func (export "pause") (result i32)',
+    '(i32.const 524313)',
+    '(import "host_lib" "emit_built_txn"',
+    '(i32.store8 (i32.const 72) (i32.const 99))',
+)
 need_exports_lock = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -388,6 +400,8 @@ for wat in wats:
         exports = need_exports_safe
     elif wat.stem == "XrplPool":
         exports = need_exports_pool
+    elif wat.stem == "XrplFund":
+        exports = need_exports_fund
     else:
         exports = need_exports_counter
     for needle in exports:
