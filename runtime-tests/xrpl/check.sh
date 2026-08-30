@@ -127,7 +127,8 @@ need_exports_send = (
     '(func (export "credit") (result i32)',
     '(func (export "get")',
     '(data (i32.const 64) "bal")',
-    '(i32.store8 (i32.const 0) (i32.const 208))',
+    '(call $function_param',
+    '(i64.store (i32.const 0)',
 )
 need_exports_nest = (
     '(func (export "initialize") (result i32)',

@@ -151,6 +151,12 @@ private partial def lowerVal {ValExt : Type} : Val ValExt → Except String (Val
       | _, .error e => .error e
   | .ext kind operands =>
       if operands.isEmpty then .ok (.ext kind operands)
+      else if operands.size == 3 then
+        match lowerVal operands[0]!, lowerVal operands[1]!, lowerVal operands[2]! with
+        | .ok a, .ok b, .ok c => .ok (.ext kind #[a, b, c])
+        | .error e, _, _ => .error e
+        | _, .error e, _ => .error e
+        | _, _, .error e => .error e
       else .error "extract/unsupported: wasm v0 rejects ext operands"
   | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot _ | .shiftL .. | .shiftR ..
   | .divU64 .. | .modU64 .. =>
@@ -252,7 +258,8 @@ partial def valAllowed {ValExt : Type} : Val ValExt → Bool
       valAllowed lhs && valAllowed rhs && valAllowed thn && valAllowed els
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs =>
       valAllowed lhs && valAllowed rhs
-  | .ext _ operands => operands.isEmpty
+  | .ext _ operands =>
+      operands.isEmpty || (operands.size == 3 && operands.all valAllowed)
   | _ => false
 
 /-- Ops the v0 WAT renderer can express. -/

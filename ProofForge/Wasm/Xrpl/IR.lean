@@ -63,6 +63,7 @@ def extValCanon : Ops.ValKind → String
   | .accountLitW2 hex => s!"xacc2.{hex}"
   | .txFlags => "xtflags"
   | .litBalanceDrops hex => s!"xlitbal.{hex}"
+  | .storeOwner => "xsto"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .reserved => "wext"
