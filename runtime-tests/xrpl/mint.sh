@@ -118,6 +118,12 @@ paused_pay="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$paused_pay" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_pay"
 
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+paused_mto="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$paused_mto" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_mto"
+
 printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
   "$RPC" "$OWNER_A" "$contract" >"$cfg"
 bal_a2="$(node "$here/alphanet-rpc.js" slot "$cfg")"
@@ -203,4 +209,27 @@ rm -f "$cfg"
 [[ "$bal_a5" == "2" ]] || { echo "FAIL: A bal want 2 after mintTo, got $bal_a5" >&2; exit 1; }
 [[ "$bal_b5" == "7" ]] || { echo "FAIL: B bal want 7 after mintTo, got $bal_b5" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=7 mintTo"
+# Dest overflow: fill B to u64Max, then mintTo(B,1) → status 1, A stays 2.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","18446744073709551608"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+fill_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$fill_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$fill_out"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+ov_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$ov_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==1, d' <<<"$ov_out"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a6="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b6="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a6" == "2" ]] || { echo "FAIL: A bal want 2 after dest overflow, got $bal_a6" >&2; exit 1; }
+[[ "$bal_b6" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after fill, got $bal_b6" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=max mintTo-overflow"
