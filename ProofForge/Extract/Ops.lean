@@ -157,6 +157,10 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
   .ext (.xrpl .flushSupp) #[v]
 @[match_pattern] def Val.xrplPeekSupp (w0 w1 w2 : Val) : Val :=
   .ext (.xrpl .peekSupp) #[w0, w1, w2]
+@[match_pattern] def Val.xrplFlushCap (v : Val) : Val :=
+  .ext (.xrpl .flushCap) #[v]
+@[match_pattern] def Val.xrplPeekCap (w0 w1 w2 : Val) : Val :=
+  .ext (.xrpl .peekCap) #[w0, w1, w2]
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2

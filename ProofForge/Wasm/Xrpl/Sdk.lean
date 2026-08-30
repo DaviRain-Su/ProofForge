@@ -151,6 +151,22 @@ Total supply lives on the minter card, not per-user `bal`. -/
     (Runtime.xrplAccountLitW1 hex)
     (Runtime.xrplAccountLitW2 hex)
 
+/-- Persist `v` onto the current Owner card under JSON key `cap`.
+`0` means unlimited (same as a missing field). -/
+@[pf_inline] def flushCap (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushCap v
+
+/-- Load `cap` from `(w0,w1,w2)`'s card (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekCapLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekCap w0 w1 w2
+
+/-- `cap` on a compile-time AccountID. Hex is 40 lowercase chars. -/
+@[pf_inline] def peekCapLit (hex : String) : UInt64 :=
+  Runtime.xrplPeekCap
+    (Runtime.xrplAccountLitW0 hex)
+    (Runtime.xrplAccountLitW1 hex)
+    (Runtime.xrplAccountLitW2 hex)
+
 end Context
 
 namespace Pausable

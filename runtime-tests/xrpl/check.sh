@@ -210,12 +210,14 @@ need_exports_mint = (
     '(func (export "burn") (result i32)',
     '(func (export "pause") (result i32)',
     '(func (export "unpause") (result i32)',
+    '(func (export "setCap") (result i32)',
     '(func (export "get")',
     '(i32.const 3)',
     '(i32.const 4)',
     '(call $function_param',
     '(data (i32.const 64) "bal")',
     '(i32.store8 (i32.const 88) (i32.const 115))',
+    '(i32.store8 (i32.const 72) (i32.const 99))',
 )
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 

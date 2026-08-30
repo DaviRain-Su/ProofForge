@@ -52,7 +52,7 @@ lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" Xr
 wasm="$root/build/xrpl-alphanet/XrplMint.wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4,"burn":1}}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4,"burn":1,"setCap":1}}\n' \
   "$RPC" "$WALLET_A" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
@@ -296,4 +296,59 @@ supp_a8="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 rm -f "$cfg"
 [[ "$supp_a8" == "8" ]] || { echo "FAIL: A supp want 8 after paused burn, got $supp_a8" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=7 supp=8"
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"unpause"}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+unpause2="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$unpause2" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$unpause2"
+
+# Cap: missing/0 is unlimited. setCap(8) with supp=8 blocks mint; setCap(9) allows mint(1).
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"setCap","parameters":["8"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+cap8="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$cap8" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$cap8"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mint","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+cap_mint="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$cap_mint" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==1, d' <<<"$cap_mint"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"setCap","parameters":["9"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+cap9="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$cap9" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$cap9"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mint","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+cap_ok="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$cap_ok" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$cap_ok"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"setCap","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" >"$cfg"
+b_cap="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$b_cap" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==3, d' <<<"$b_cap"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a9="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_a9="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"cap"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+cap_a="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"cap"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+cap_b="$(node "$here/alphanet-rpc.js" slot "$cfg" || echo missing)"
+rm -f "$cfg"
+[[ "$bal_a9" == "2" ]] || { echo "FAIL: A bal want 2 after cap mint, got $bal_a9" >&2; exit 1; }
+[[ "$supp_a9" == "9" ]] || { echo "FAIL: A supp want 9 after cap mint, got $supp_a9" >&2; exit 1; }
+[[ "$cap_a" == "9" ]] || { echo "FAIL: A cap want 9, got $cap_a" >&2; exit 1; }
+[[ "$cap_b" == "missing" || "$cap_b" == "0" ]] || { echo "FAIL: B cap should stay missing/0, got $cap_b" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=7 supp=9 cap=9"
