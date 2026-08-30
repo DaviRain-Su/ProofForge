@@ -83,6 +83,20 @@ def pay (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) 
   else
     .error .paused
 
+/-- Burn `amount` from *this caller's* card. Pause-gated. Underflow is a no-op. -/
+@[pf_entry]
+def burn (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
+  if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
+    if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+      if amount ≤ s.bal then
+        .ok ({ bal := s.bal - amount }, (0 : UInt64))
+      else
+        .error .overflow
+    else
+      .error .overflow
+  else
+    .error .paused
+
 /-- Minter writes `halt=1` onto its own card. Persist `s.bal` so the
 extractor keeps a field projection (not a bare State arg). -/
 @[pf_entry]

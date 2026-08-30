@@ -51,7 +51,7 @@ lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" Xr
 wasm="$root/build/xrpl-alphanet/XrplMint.wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4}}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4,"burn":1}}\n' \
   "$RPC" "$WALLET_A" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
@@ -232,4 +232,44 @@ rm -f "$cfg"
 [[ "$bal_a6" == "2" ]] || { echo "FAIL: A bal want 2 after dest overflow, got $bal_a6" >&2; exit 1; }
 [[ "$bal_b6" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after fill, got $bal_b6" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=max mintTo-overflow"
+# Burn 1 from A. Underflow burn(9) is a no-op. Pause blocks burn.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"burn","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+burn_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$burn_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$burn_out"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"burn","parameters":["9"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+under_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$under_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==1, d' <<<"$under_out"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a7="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+[[ "$bal_a7" == "1" ]] || { echo "FAIL: A bal want 1 after burn, got $bal_a7" >&2; exit 1; }
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+pause2="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$pause2" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$pause2"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"burn","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+paused_burn="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$paused_burn" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_burn"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a8="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b8="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a8" == "1" ]] || { echo "FAIL: A bal want 1 after paused burn, got $bal_a8" >&2; exit 1; }
+[[ "$bal_b8" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after paused burn, got $bal_b8" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=max burn"
