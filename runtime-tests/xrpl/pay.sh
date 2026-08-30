@@ -130,4 +130,21 @@ rm -f "$cfg"
 [[ "$bal_a3" == "4" ]] || { echo "FAIL: A bal want 4 after reverse, got $bal_a3" >&2; exit 1; }
 [[ "$bal_b3" == "1" ]] || { echo "FAIL: B bal want 1 after reverse, got $bal_b3" >&2; exit 1; }
 
-echo "xrpl-alphanet-pay: ok contract=$contract A.bal=4 B.bal=1 reverse"
+# Self-pay: A pay(A, 1) is alias-safe. Flush then credit the same card → A stays 4, B stays 1.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$SRC_W0" "$SRC_W1" "$SRC_W2" >"$cfg"
+self_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$self_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$self_out"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a4="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b4="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a4" == "4" ]] || { echo "FAIL: A bal want 4 after self-pay, got $bal_a4" >&2; exit 1; }
+[[ "$bal_b4" == "1" ]] || { echo "FAIL: B bal want 1 after self-pay, got $bal_b4" >&2; exit 1; }
+
+echo "xrpl-alphanet-pay: ok contract=$contract A.bal=4 B.bal=1 self-pay"
