@@ -435,7 +435,8 @@ def extraImports (host : Contract) (p : IR.Program) : Array String :=
         " (param i32 i32 i32 i32) (result i32)))"
     ]
   let needPay :=
-    usesKind p.initializer.ops .emitPay || p.entries.any (fun m => usesKind m.ops .emitPay)
+    usesKind p.initializer.ops .emitPay || usesKind p.initializer.ops .emitPayDrops ||
+      p.entries.any (fun m => usesKind m.ops .emitPay || usesKind m.ops .emitPayDrops)
   let pay :=
     if !needPay || host.buildTxn.isEmpty || host.addTxnField.isEmpty || host.emitBuiltTxn.isEmpty then #[]
     else #[

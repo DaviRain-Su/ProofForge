@@ -72,11 +72,13 @@ inductive ValKind where
   | peekLock
   /-- Local 2.6.1: emit Payment 192 drops to caller. Public AlphaNet -196. Not Sdk.Payments. -/
   | emitPay
+  /-- Local 2.6.1: emit Payment of operand drops to caller. Public -196. Not Sdk.Payments. -/
+  | emitPayDrops
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
   | .storeOwner | .peekOwner | .peekHalt | .peekSupp | .peekCap | .peekAllw | .peekLock => 3
-  | .flushBal | .flushHalt | .flushSupp | .flushCap | .flushAllw | .flushLock => 1
+  | .flushBal | .flushHalt | .flushSupp | .flushCap | .flushAllw | .flushLock | .emitPayDrops => 1
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind

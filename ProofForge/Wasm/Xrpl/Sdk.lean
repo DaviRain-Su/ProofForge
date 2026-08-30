@@ -254,6 +254,11 @@ is tefBAD_AUTH -196. Not `Sdk.Payments`. -/
 @[pf_inline] def emitToCaller : UInt64 :=
   Runtime.xrplEmitPay
 
+/-- Local 2.6.1: emit Payment of `drops` to the caller. Public -196.
+Not `Sdk.Payments`. -/
+@[pf_inline] def emitToCallerDrops (drops : UInt64) : UInt64 :=
+  Runtime.xrplEmitPayDrops drops
+
 end Pay
 
 namespace Hash

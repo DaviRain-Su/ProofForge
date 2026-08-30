@@ -303,6 +303,12 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   else if endsWith e ".xrplEmitPay" ||
       isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplEmitPay then
     some .xrplEmitPay
+  else if (endsWith e ".xrplEmitPayDrops" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplEmitPayDrops) &&
+      e.getAppArgs.size ≥ 1 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some v => some (.xrplEmitPayDrops v)
+    | none => none
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with

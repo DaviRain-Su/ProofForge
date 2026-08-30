@@ -184,4 +184,9 @@ drops to the caller. Host stub 0. Public AlphaNet is tefBAD_AUTH -196.
 Not `Sdk.Payments`, not a Map. -/
 @[irreducible] def xrplEmitPay : UInt64 := 0
 
+/-- Same host path as `xrplEmitPay`, Amount = `0x40…` OR `drops`. Host stub 0. -/
+@[irreducible] def xrplEmitPayDrops (drops : UInt64) : UInt64 :=
+  let _ := drops
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

@@ -199,6 +199,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-058](tasks/wsm-058.md) | done | `Sdk.Card` caller-card facade（XrplCard） |
 | [wsm-059](tasks/wsm-059.md) | done | 本地程序卡 `Card.storeSelf`（XrplVault）；公开仍 -22 |
 | [wsm-060](tasks/wsm-060.md) | done | 本地 `Pay.emitToCaller`（XrplEmit）；公开仍 -196 |
+| [wsm-061](tasks/wsm-061.md) | done | 本地 `Pay.emitToCallerDrops`（XrplTip 384）；公开仍 -196 |
 
 
 积压：[backlog.md](backlog.md)

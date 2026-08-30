@@ -20,7 +20,8 @@
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
-> **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
+> **不要开公开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
+> 开发策略：[xrpl-local.md](xrpl-local.md) — 本地能 tesSUCCESS 的继续接线；公开 -196/-22 先放。
 
 ## 0. 现在能写什么样的合约
 
@@ -46,13 +47,13 @@
 **另一套物理模型**，抄名字没用。
 
 ```diagram
-今天能做                         还不能做
+公开已绿                         本地已绿（公开先放）
 ┌─────────────────────┐         ┌──────────────────────────┐
-│ 几个 UInt64 JSON 槽  │         │ 每用户一块余额            │
-│ owner / pause / hash │         │ 读别人的 AccountRoot      │
-│ 3 槽定长表 xs_0..    │         │ 从 wasm 发 Payment / AMM  │
-│ 零参数活网           │         │ 运行时 Vec / 动态 key     │
+│ caller 卡 / Mint    │         │ emit Payment 192 drops   │
+│ Parameters / nested │         │ Card.storeSelf 程序卡    │
+│ 编译期 JSON 槽      │         │                          │
 └─────────────────────┘         └──────────────────────────┘
+公开仍挡：emit -196、程序卡 -22。不要开 Sdk.Payments / Sdk.Map。
 ```
 
 ## 1. 卡在哪一层（不要再加 SDK 空名）
@@ -197,16 +198,16 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 本仓能接线的 Runtime / SDK 组合层（零参数、JSON 槽、三叶 AccountId、读 AccountRoot / tx_field、写别人卡片、nested JSON）到 wsm-038 收口。
 
-**节点挡住、本仓做不完：**
+**公开节点挡住、公开门面先放；本地已经接线：**
 
-| 缺口 | 现场 |
-|---|---|
-| 伪账户注资 / 发出 Payment | `emit_built_txn` = -196；Create `InstanceParameters` temMALFORMED；Payment 打合约 tecNO_PERMISSION |
-| 公共 ContractCall Parameters | HTTP 502 |
-| 程序拥有 ContractData | set 合约账户 = -22 |
-| Sdk.Amm / Sdk.Payments / Sdk.Map / Sdk.Nft | 上面三条没绿之前不开 |
+| 缺口 | 公开 3.3.0 | 本地 2.6.1 |
+|---|---|---|
+| 发出 Payment | `emit_built_txn` = -196 tefBAD_AUTH | **绿** `Pay.emitToCaller` / `XrplEmit.ping` |
+| 程序拥有 ContractData | set 合约账户 = -22 | **绿** `Card.storeSelf` / `XrplVault` |
+| ContractCall Parameters | **绿** | 2.6.1 不能签 Function.ParameterType（skip） |
+| 公开 Sdk.Payments / Sdk.Map | 上面两条公开没绿之前不开 | 本地用 `Pay.*` / `Card.storeSelf`，不叫这两个名 |
 
-不要把 XRPL v0 说成「做完」。节点修之前，再切 SDK 也只是同一套叶子换名字。
+开发继续走本地，见 [xrpl-local.md](xrpl-local.md)。不要把 XRPL v0 说成公开「做完」。
 
 ## 4. 验收句
 

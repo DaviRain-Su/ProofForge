@@ -18,7 +18,7 @@
 | [AlphaNet](https://alphanet.xrpl.org) | 公开开发网，network_id **21337**，`SmartContract` 已开 | `--target xrpl-alphanet` + `smoke.sh` / `alphanet-counter.sh` |
 | WASM Devnet | Smart Escrow 测试网 | **不是** 本 target（escrow `finish()`，不是 Contract SLE） |
 | Bedrock 本地镜像 `lejamon/rippled_smart_contract_vault_x86` | 另一套 host 名（`get_current_ledger_obj_field` / view `i64`） | **只当 Bedrock 门**；**不能**模拟 AlphaNet |
-| 本地 AlphaNet 模拟 | 应对齐 `alphanet` 分支 rippled（XLS-0102） | 还没有；不要用现成 Bedrock 镜像顶替 |
+| 本地 transia/alphanet 2.6.1 | nid **63456**，旧 `get_*` host；emit / 程序卡已绿 | `--target xrpl`；**不是**公开 3.3.0 模拟器。策略见 [xrpl-local.md](xrpl-local.md) |
 | [XRPL EVM Sidechain](https://www.xrplevm.org/) | Cosmos + EVM，XRP 当 gas | **不是** 本 target |
 | Xahau / Hooks | 另一条链 / 账户钩子 | **不是** 本 target |
 

@@ -456,6 +456,60 @@ private partial def renderVal (host : Contract) (extTag : ValExt → String) (st
               " (if (i32.lt_s (local.get $st) (i32.const 0))" ++
               " (then (return (local.get $st))))" ++
               " (i64.extend_i32_s (local.get $st)))")
+          else if tag == "xpayd" then
+            unless operands.size = 1 do
+              throw "extract/unsupported: emitPayDrops wants one value"
+            if host.buildTxn.isEmpty || host.addTxnField.isEmpty ||
+                host.emitBuiltTxn.isEmpty || host.getTxField.isEmpty then
+              throw "extract/unsupported: emitPayDrops wants build_txn"
+            let drops ← renderVal host extTag st operands[0]!
+            -- STAmount = 0x4000000000000000 | drops (57-bit mantissa). Scratch 224+.
+            let nidStores :=
+              if host.ledgerSqnBuffer then ""
+              else
+                "(i32.store8 (i32.const 256) (i32.const 0x00))" ++
+                "(i32.store8 (i32.const 257) (i32.const 0x00))" ++
+                "(i32.store8 (i32.const 258) (i32.const 0xF7))" ++
+                "(i32.store8 (i32.const 259) (i32.const 0xE0))"
+            let nidField :=
+              if host.ledgerSqnBuffer then ""
+              else
+                " (local.set $st (call $" ++ host.addTxnField ++
+                " (i32.load (i32.const 260)) (i32.const 131073) (i32.const 256) (i32.const 4)))" ++
+                " (if (i32.lt_s (local.get $st) (i32.const 0))" ++
+                " (then (return (local.get $st))))"
+            return ("(block (result i64) (i32.store8 (i32.const 224) (i32.const 0x14))" ++
+              " (local.set $st (call $" ++ host.getTxField ++
+              " (i32.const " ++ toString host.sfieldTxAccount ++
+              ") (i32.const 225) (i32.const 20))) (if (i32.lt_s (local.get $st)" ++
+              " (i32.const 0)) (then (return (local.get $st))))" ++
+              " (i64.store (i32.const 264) (i64.or (i64.const 4611686018427387904) " ++
+              drops ++ "))" ++
+              " (i32.store8 (i32.const 248) (i32.wrap_i64 (i64.shr_u (i64.load (i32.const 264)) (i64.const 56))))" ++
+              " (i32.store8 (i32.const 249) (i32.wrap_i64 (i64.shr_u (i64.load (i32.const 264)) (i64.const 48))))" ++
+              " (i32.store8 (i32.const 250) (i32.wrap_i64 (i64.shr_u (i64.load (i32.const 264)) (i64.const 40))))" ++
+              " (i32.store8 (i32.const 251) (i32.wrap_i64 (i64.shr_u (i64.load (i32.const 264)) (i64.const 32))))" ++
+              " (i32.store8 (i32.const 252) (i32.wrap_i64 (i64.shr_u (i64.load (i32.const 264)) (i64.const 24))))" ++
+              " (i32.store8 (i32.const 253) (i32.wrap_i64 (i64.shr_u (i64.load (i32.const 264)) (i64.const 16))))" ++
+              " (i32.store8 (i32.const 254) (i32.wrap_i64 (i64.shr_u (i64.load (i32.const 264)) (i64.const 8))))" ++
+              " (i32.store8 (i32.const 255) (i32.wrap_i64 (i64.load (i32.const 264)))) " ++ nidStores ++
+              " (local.set $st (call $" ++ host.buildTxn ++ " (i32.const 0)))" ++
+              " (if (i32.lt_s (local.get $st) (i32.const 0))" ++
+              " (then (return (local.get $st))))" ++
+              " (i32.store (i32.const 260) (local.get $st))" ++
+              " (local.set $st (call $" ++ host.addTxnField ++
+              " (i32.load (i32.const 260)) (i32.const 393217) (i32.const 248) (i32.const 8)))" ++
+              " (if (i32.lt_s (local.get $st) (i32.const 0))" ++
+              " (then (return (local.get $st))))" ++
+              " (local.set $st (call $" ++ host.addTxnField ++
+              " (i32.load (i32.const 260)) (i32.const 524291) (i32.const 224) (i32.const 21)))" ++
+              " (if (i32.lt_s (local.get $st) (i32.const 0))" ++
+              " (then (return (local.get $st))))" ++ nidField ++
+              " (local.set $st (call $" ++ host.emitBuiltTxn ++
+              " (i32.load (i32.const 260))))" ++
+              " (if (i32.lt_s (local.get $st) (i32.const 0))" ++
+              " (then (return (local.get $st))))" ++
+              " (i64.extend_i32_s (local.get $st)))")
           else
             return ("(local.get $" ++ extLocal extTag kind ++ ")")
   | _ => .error "extract/unsupported: wasm v0 value"
