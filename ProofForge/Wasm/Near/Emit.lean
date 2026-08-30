@@ -463,6 +463,29 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext .accountBalance #[] => .ok "(local.get $pf_bal)"
   | .ext .accountBalanceW0 #[] => .ok "(local.get $pf_bal)"
   | .ext .accountBalanceW1 #[] => .ok "(local.get $pf_bal_hi)"
+  | .ext kind #[leftLo, leftHi, rightLo, rightHi] => do
+      let a0 ← renderVal st leftLo
+      let a1 ← renderVal st leftHi
+      let b0 ← renderVal st rightLo
+      let b1 ← renderVal st rightHi
+      let addLow := "(i64.add " ++ a0 ++ " " ++ b0 ++ ")"
+      let carry := "(i64.extend_i32_u (i64.lt_u " ++ addLow ++ " " ++ a0 ++ "))"
+      let addHighBase := "(i64.add " ++ a1 ++ " " ++ b1 ++ ")"
+      let addHigh := "(i64.add " ++ addHighBase ++ " " ++ carry ++ ")"
+      let borrow := "(i64.extend_i32_u (i64.lt_u " ++ a0 ++ " " ++ b0 ++ "))"
+      if kind == .nearTokenAddOk then
+        return "(i64.extend_i32_u (i32.eqz (i32.or (i64.lt_u " ++ addHighBase ++ " " ++
+          a1 ++ ") (i64.lt_u " ++ addHigh ++ " " ++ addHighBase ++ "))))"
+      else if kind == .nearTokenAddW0 then return addLow
+      else if kind == .nearTokenAddW1 then return addHigh
+      else if kind == .nearTokenSubOk then
+        return "(i64.extend_i32_u (i32.or (i64.gt_u " ++ a1 ++ " " ++ b1 ++
+          ") (i32.and (i64.eq " ++ a1 ++ " " ++ b1 ++ ") (i64.ge_u " ++ a0 ++ " " ++
+          b0 ++ "))))"
+      else if kind == .nearTokenSubW0 then return "(i64.sub " ++ a0 ++ " " ++ b0 ++ ")"
+      else if kind == .nearTokenSubW1 then
+        return "(i64.sub (i64.sub " ++ a1 ++ " " ++ b1 ++ ") " ++ borrow ++ ")"
+      else throw s!"extract/unsupported: near v0 value extension {repr kind}/4"
   | .ext .currentAccountId #[] => .ok "(local.get $pf_self)"
   | .ext .currentAccountIdLen #[] => .ok "(local.get $pf_self_len)"
   | .ext .currentAccountIdW1 #[] => .ok "(local.get $pf_self1)"

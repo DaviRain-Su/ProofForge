@@ -129,6 +129,18 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Val.nearAccountBalance : Val := nearLeaf .accountBalance
 @[match_pattern] def Val.nearAccountBalanceW0 : Val := nearLeaf .accountBalanceW0
 @[match_pattern] def Val.nearAccountBalanceW1 : Val := nearLeaf .accountBalanceW1
+@[match_pattern] def Val.nearTokenAddOk (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenAddOk) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenAddW0 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenAddW0) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenAddW1 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenAddW1) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenSubOk (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenSubOk) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenSubW0 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenSubW0) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenSubW1 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenSubW1) #[leftLo, leftHi, rightLo, rightHi]
 @[match_pattern] def Val.nearCurrentAccountId : Val := nearLeaf .currentAccountId
 @[match_pattern] def Val.nearCurrentAccountIdLen : Val := nearLeaf .currentAccountIdLen
 @[match_pattern] def Val.nearCurrentAccountIdW1 : Val := nearLeaf .currentAccountIdW1

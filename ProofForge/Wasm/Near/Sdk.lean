@@ -22,6 +22,36 @@ optional bounded memos are available; a fungible-token contract remains absent.
 notation "AccountId" => Runtime.AccountId
 notation "NearToken" => Runtime.NearToken
 
+namespace «NearToken»
+
+@[pf_inline] def zero : NearToken := ⟨0, 0⟩
+
+/-- True exactly when unsigned 128-bit addition is representable. -/
+@[pf_inline] def canAdd (left right : NearToken) : Bool :=
+  Runtime.nearTokenAddOk left.w0 left.w1 right.w0 right.w1 != 0
+
+/-- Low modular result limb. Precondition: `canAdd left right`. -/
+@[pf_inline] def addW0 (left right : NearToken) : UInt64 :=
+  Runtime.nearTokenAddW0 left.w0 left.w1 right.w0 right.w1
+
+/-- High result limb including the low-limb carry. Precondition: `canAdd left right`. -/
+@[pf_inline] def addW1 (left right : NearToken) : UInt64 :=
+  Runtime.nearTokenAddW1 left.w0 left.w1 right.w0 right.w1
+
+/-- True exactly when `left ≥ right` as unsigned 128-bit values. -/
+@[pf_inline] def canSub (left right : NearToken) : Bool :=
+  Runtime.nearTokenSubOk left.w0 left.w1 right.w0 right.w1 != 0
+
+/-- Low modular result limb. Precondition: `canSub left right`. -/
+@[pf_inline] def subW0 (left right : NearToken) : UInt64 :=
+  Runtime.nearTokenSubW0 left.w0 left.w1 right.w0 right.w1
+
+/-- High result limb including the low-limb borrow. Precondition: `canSub left right`. -/
+@[pf_inline] def subW1 (left right : NearToken) : UInt64 :=
+  Runtime.nearTokenSubW1 left.w0 left.w1 right.w0 right.w1
+
+end «NearToken»
+
 namespace «AccountId»
 
 /-- Lossless equality over the length and all 64 bytes. Nested `if` keeps the

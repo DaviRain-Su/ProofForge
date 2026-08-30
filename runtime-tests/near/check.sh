@@ -91,6 +91,18 @@ ft_event_anchors = (
     '(func (export "transferMemo")',
     '(func (export "burnMemo")',
 )
+token_arithmetic_anchors = (
+    '(func (export "addCarryOk")',
+    '(func (export "addOverflowOk")',
+    '(func (export "subBorrowOk")',
+    '(func (export "subUnderflowOk")',
+    'i64.add',
+    'i64.sub',
+    'i64.lt_u',
+    'i64.gt_u',
+    'i64.ge_u',
+    'i64.extend_i32_u',
+)
 memory_anchors = (
     '(func $pf_arena_reset',
     '(func $pf_arena_alloc',
@@ -244,6 +256,8 @@ for wat in wats:
         extra = bytes_anchors
     elif wat.stem == "NearFungibleTokenEvent":
         extra = ft_event_anchors
+    elif wat.stem == "NearTokenArithmetic":
+        extra = token_arithmetic_anchors
     elif wat.stem == "NearMemory":
         extra = memory_anchors
     elif wat.stem == "NearOutput":

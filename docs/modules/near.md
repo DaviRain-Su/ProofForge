@@ -25,6 +25,9 @@ no-copy 语义。wsm-near-vector-001 在其上加入
 Borsh UInt64 value；它 immediate-write，逻辑 length 仍由普通 ProofForge state 持有。
 wsm-near-lookup-001 再加入 default-Identity `DirectLookupMap64` / `DirectLookupSet64`：key 为
 `Prefix4 || Borsh(UInt64)`，map value 为 Borsh UInt64，set value 是 exact empty bytes。
+wsm-near-u128-arithmetic-001 adds target-owned unsigned two-limb `NearToken` add/sub predicates
+and carry/borrow result limbs; result limbs require their matching predicate and do not yet imply
+an AccountId-keyed balance map or FT ledger.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity
 IterableMap64/IterableSet64。wsm-near-promise-001/002 加入静态 receiver/method、bounded
 arguments、lossless u128 deposit、explicit gas 的 detached/returned Promise function call；
@@ -57,6 +60,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 | `Near.Codec` | bounded bytes/String 输入与 bounded view 输出的 canonical Borsh 计划/资源上限 | collection layout、JSON、mutating bounded output |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Context/Access` | lossless context wrappers、full-AccountId equality/self-call predicate | general private/payable/init entry metadata |
+| `Near.Sdk.NearToken` | checked unsigned u128 add/sub predicates and little-endian carry/borrow limbs | Borsh persistence、balances、supply、public FT methods |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
 | `Near.Sdk.Storage` | bounded raw key/value、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、Borsh UInt64/result decode | arbitrary `IntoStorageKey`、generic Borsh |
@@ -113,6 +117,8 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   quote/backslash/control、非 ASCII 与 16-byte 专用编译 capacity 边界，同时继续对账 no-memo 输出
   byte-exact 不变。每个效果只发一个 compact log；这不是 generic JSON ABI，也不实现余额、
   供应量、FT 方法或完整 NEP-141 合约。
+  `token_arithmetic.sh` verifies checked two-limb carry/borrow, max overflow, underflow and unsigned
+  high-bit ordering against near-sandbox without any storage mutation.
   `counter.sh` 还在初始化前验证 paid mutator 先命中 non-payable，普通 mutator/view 再以精确
   missing-state panic fail closed 且不创建 KV state；初始化后还对账 exact 16-byte schema
   envelope，随后重复初始化与算术场景照常通过；同一 gate 还部署双字段升级代码，验证旧
@@ -120,6 +126,6 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   `value` old key 转换后得到 exact 新字段/envelope、重复 migration 失败且新版本继续可写。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
-`NearFungibleTokenEvent`、`NearMemory`、
+`NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearMemory`、
 `NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

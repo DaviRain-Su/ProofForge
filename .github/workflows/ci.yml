@@ -230,6 +230,9 @@ jobs:
       - name: Run NEAR sandbox NEP-141 event gate
         run: runtime-tests/near/ft_event.sh
 
+      - name: Run NEAR sandbox checked u128 gate
+        run: runtime-tests/near/token_arithmetic.sh
+
       - name: Run NEAR sandbox memory arena gate
         run: runtime-tests/near/memory.sh
 

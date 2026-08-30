@@ -49,7 +49,7 @@ Authoritative source anchors:
 | guest linear-memory allocation | near-sdk-rs guest allocator over Wasm `memory.grow`; no nearcore malloc host import | **checked invocation-local arena + `Buffer64` complete** in wsm-near-memory-001 | Near Memory/Emit substrate; SDK exposes bounded consumers, never raw pointers |
 | register ABI | nearcore host | bounded reads for input/context/raw storage/callback results; exact status and stale-register rules | Runtime memory/register contract |
 | full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
-| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance complete** in wsm-near-u128-001; explicit gas and lossless Promise deposit complete in wsm-near-promise-001 | shared wide value + Near ABI binding |
+| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance and checked add/sub complete** in wsm-near-u128-001/u128-arithmetic-001; explicit gas and lossless Promise deposit complete in wsm-near-promise-001 | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
 | Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | **one-time init, fail-closed entries, versioned schema envelope, and authenticated split-key migration complete** in wsm-near-init/uninitialized/state-envelope/migration-001 | broader state codecs/version chains explicit |
@@ -156,7 +156,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | Phase | Deliverable | Gate before advancing |
 |---|---|---|
 | N0 identity | lossless host AccountId + equality/self-call guard (**wsm-020 done**) | all eight zero-fill stores; high-word/length equality; sandbox 9-byte boundary |
-| N1 byte/wide substrate | **UInt128 token context done** in wsm-near-u128-001, static UTF-8 data spans in wsm-near-log-001, and bounded bytes/string input frames/register reads done in wsm-near-bytes-001; dynamic return/panic/log spans remain | resource budget; malformed length/OOB/UTF-8 failures |
+| N1 byte/wide substrate | **UInt128 token context and checked two-limb add/sub done** in wsm-near-u128-001/u128-arithmetic-001, static UTF-8 data spans in wsm-near-log-001, and bounded bytes/string input frames/register reads done in wsm-near-bytes-001 | resource budget; malformed length/OOB/UTF-8 failures |
 | N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
 | N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
@@ -179,6 +179,8 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 4. **NEAR-NEP-141-EVENT:** exact v1.0.0 `ft_mint`, `ft_transfer`, and `ft_burn` serialization,
    including bounded optional memo variants, is complete in wsm-near-nep141-event-001/002/003.
    FT balances, supply, methods, and storage management remain separate later slices.
+   The ledger dependency chain starts with checked NearToken add/sub in
+   wsm-near-u128-arithmetic-001, then exact Borsh-u128 values and full AccountId Identity keys.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

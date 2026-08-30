@@ -156,7 +156,31 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     Option Ops.Val :=
   let field := n.toString
   let user := isUserName env n || isBoundaryProjectionName env n
-  if isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Get &&
+  if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddOk ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW0 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW1 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubOk ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubW0 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubW1) &&
+      e.getAppArgs.size ≥ 4 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 4]!, asVal env fuel args[args.size - 3]!,
+        asVal env fuel args[args.size - 2]!, asVal env fuel args[args.size - 1]! with
+    | some leftLo, some leftHi, some rightLo, some rightHi =>
+        if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddOk then
+          some (.nearTokenAddOk leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW0 then
+          some (.nearTokenAddW0 leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW1 then
+          some (.nearTokenAddW1 leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubOk then
+          some (.nearTokenSubOk leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubW0 then
+          some (.nearTokenSubW0 leftLo leftHi rightLo rightHi)
+        else
+          some (.nearTokenSubW1 leftLo leftHi rightLo rightHi)
+    | _, _, _, _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Get &&
       e.getAppArgs.size ≥ 2 then
     let args := e.getAppArgs
     let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
@@ -7180,6 +7204,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .nearPredecessorW5 | .nearPredecessorW6 | .nearPredecessorW7
     | .nearAttachedDeposit | .nearAttachedDepositW0 | .nearAttachedDepositW1
     | .nearAccountBalance | .nearAccountBalanceW0 | .nearAccountBalanceW1
+    | .nearTokenAddOk .. | .nearTokenAddW0 .. | .nearTokenAddW1 ..
+    | .nearTokenSubOk .. | .nearTokenSubW0 .. | .nearTokenSubW1 ..
     | .nearCurrentAccountId
     | .nearCurrentAccountIdLen
     | .nearCurrentAccountIdW1 | .nearCurrentAccountIdW2 | .nearCurrentAccountIdW3

@@ -97,6 +97,26 @@ Use `accountBalance128` for the lossless, view-safe amount. -/
 def accountBalance128 : NearToken :=
   { w0 := accountBalanceW0, w1 := accountBalanceW1 }
 
+/-!
+Pure full-width token arithmetic leaves. Wasm i64 arithmetic wraps, so result limbs are modular;
+callers must enforce the matching `Ok` predicate before using them as checked arithmetic. Keeping
+carry and borrow target-owned avoids invoking checked UInt64 operations before the second limb can
+observe the wrap.
+-/
+
+@[irreducible] def nearTokenAddOk
+    (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenAddW0
+    (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenAddW1
+    (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenSubOk
+    (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenSubW0
+    (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenSubW1
+    (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
+
 /--
 Emit one statically known UTF-8 message through `env.log_utf8`. The source return is always zero
 and exists only so ordinary Lean `let` sequencing can retain the Runtime effect. The extractor

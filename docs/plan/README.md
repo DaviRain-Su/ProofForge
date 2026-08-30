@@ -206,6 +206,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-019](tasks/wsm-019.md) | done | NEAR `current_account_id`（view-safe self，UInt64 前 8 字节） |
 | [wsm-020](tasks/wsm-020.md) | done | NEAR lossless AccountId + full equality/self-call guard |
 | [wsm-near-u128-001](tasks/wsm-near-u128-001.md) | done | NEAR lossless u128 deposit/balance context |
+| [wsm-near-u128-arithmetic-001](tasks/wsm-near-u128-arithmetic-001.md) | done | NEAR checked two-limb NearToken add/sub prerequisite |
 | [wsm-near-log-001](tasks/wsm-near-log-001.md) | done | NEAR static UTF-8 logging effect |
 | [wsm-near-log-dynamic-001](tasks/wsm-near-log-dynamic-001.md) | done | NEAR bounded dynamic UTF-8 logging through guest arena |
 | [wsm-near-event-001](tasks/wsm-near-event-001.md) | done | exact bounded NEP-297 string-data envelope + JSON escaping |
