@@ -24,6 +24,17 @@ SVM IR     EVM IR
 sBPF/.so   Yul/.bin
 ```
 
+## 网站
+
+产品站源码在 [`website/`](website/)，不另开仓库。GitHub Pages：
+[https://davirain-su.github.io/ProofForge/](https://davirain-su.github.io/ProofForge/)。
+
+```bash
+cd website && npm install && npm run dev
+```
+
+首次合并后在 **Settings → Pages → Source** 选 GitHub Actions。
+
 ## 构建
 
 ```bash
