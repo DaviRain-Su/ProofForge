@@ -147,4 +147,27 @@ rm -f "$cfg"
 [[ "$bal_a4" == "4" ]] || { echo "FAIL: A bal want 4 after self-pay, got $bal_a4" >&2; exit 1; }
 [[ "$bal_b4" == "1" ]] || { echo "FAIL: B bal want 1 after self-pay, got $bal_b4" >&2; exit 1; }
 
-echo "xrpl-alphanet-pay: ok contract=$contract A.bal=4 B.bal=1 self-pay"
+# Dest overflow: B credit(u64Max-1) → B=max; A pay(B,1) → status 1, A stays 4.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"credit","parameters":["18446744073709551614"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" >"$cfg"
+cap_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$cap_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$cap_out"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+ov_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$ov_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==1, d' <<<"$ov_out"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a5="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b5="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a5" == "4" ]] || { echo "FAIL: A bal should stay 4 after dest overflow, got $bal_a5" >&2; exit 1; }
+[[ "$bal_b5" == "18446744073709551615" ]] || { echo "FAIL: B bal want u64Max after cap, got $bal_b5" >&2; exit 1; }
+
+echo "xrpl-alphanet-pay: ok contract=$contract A.bal=4 B.bal=max dest-overflow-noop"

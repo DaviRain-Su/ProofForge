@@ -13,7 +13,7 @@
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
 > 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
 > `XrplNest` A `credit(3)` / B `credit(5)`（nested `{user:{bal}}`）、`XrplBal` A `credit(3)` / B `credit(5)`、
-> `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` A `credit(5)` 再 `pay(B,2)` → A=3 B=2，B `pay(A,1)` → A=4 B=1，A `pay(A,1)` 自转账仍 4/1 都绿。
+> `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` A `credit(5)` 再 `pay(B,2)` → A=3 B=2，B `pay(A,1)` → A=4 B=1，A `pay(A,1)` 自转账仍 4/1，dest=`u64Max` 时 `pay(B,1)` 不扣 A 都绿。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
