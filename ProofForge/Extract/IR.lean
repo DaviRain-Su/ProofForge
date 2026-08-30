@@ -317,11 +317,11 @@ def OpExt.wellFormed : OpExt Val → Bool
       | .storageRemove resultCapacity keyCapacity key
       | .storageHasKey resultCapacity keyCapacity key =>
           Wasm.Near.Codec.storageCapacityValid resultCapacity &&
-            Wasm.Near.Codec.storageCapacityValid keyCapacity &&
+            Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity &&
             key.size == keyCapacity + 1 && key.all (·.wellFormed ValKind.arity)
       | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
           Wasm.Near.Codec.storageCapacityValid resultCapacity &&
-            Wasm.Near.Codec.storageCapacityValid keyCapacity &&
+            Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity &&
             Wasm.Near.Codec.storageCapacityValid valueCapacity &&
             key.size == keyCapacity + 1 && value.size == valueCapacity + 1 &&
             key.all (·.wellFormed ValKind.arity) && value.all (·.wellFormed ValKind.arity)

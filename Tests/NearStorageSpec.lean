@@ -13,7 +13,14 @@ open ProofForge.Wasm.Near
 #guard Codec.storageCapacityValid 64
 #guard !Codec.storageCapacityValid 0
 #guard !Codec.storageCapacityValid 65
+#guard Codec.rawStorageKeyCapacityValid 65
+#guard Codec.rawStorageKeyCapacityValid 72
+#guard !Codec.rawStorageKeyCapacityValid 0
+#guard !Codec.rawStorageKeyCapacityValid 73
 #guard ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.wellFormed 8
+#guard !ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.wellFormed 65
+#guard match Codec.inputPlan (.boundedBytes 65) with | .error _ => true | .ok _ => false
+#guard match Codec.outputPlan (.boundedBytes 65) with | .error _ => true | .ok _ => false
 
 private def extractStorageStep : ProofForge.Extract.IR.Op → Option String
   | .ext (.near (.storageRead result key _)) => some s!"read.{result}.{key}"
@@ -42,7 +49,9 @@ elab "#pf_near_storage_check" : command => do
       sourceSteps.contains "read.8.2" &&
       sourceSteps.contains "read.4.4" && sourceSteps.contains "remove.8.4" &&
       sourceSteps.contains "has.8.4" && sourceSteps.contains "write.8.1.8" &&
-      sourceSteps.contains "has.8.1" do
+      sourceSteps.contains "has.8.1" && sourceSteps.contains "write.8.72.8" &&
+      sourceSteps.contains "read.8.72" && sourceSteps.contains "remove.8.72" &&
+      sourceSteps.contains "has.8.72" do
     throwError s!"extractor lost raw storage effects: {repr sourceSteps}"
   let program ←
     match IR.fromExtracted source with
@@ -69,6 +78,10 @@ elab "#pf_near_storage_check" : command => do
     "(call $pf_storage_read",
     "(call $pf_storage_remove",
     "(call $pf_storage_has_key",
+    "(func (export \"putMaximumKey\")",
+    "(func (export \"readMaximumKeyByte\")",
+    "(func (export \"removeMaximumKey\")",
+    "(call $pf_arena_alloc (i64.const 72) (i64.const 1))",
     "(func (export \"staleByteAfterMiss\")",
     "(i64.const 3)",
     "(if (i64.gt_u (global.get $pf_storage_result_status) (i64.const 1))",

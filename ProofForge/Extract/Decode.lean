@@ -2305,7 +2305,9 @@ private def findListVals (env : Environment) (fuel : Nat) (e : Expr) : Option (A
   | fuel' + 1 =>
     let e := strip e
     if isConstNamed e ``List.cons || endsWith e ".cons" then
-      some (collectListVals env 16 e)
+      -- Recognition may traverse the largest internal raw-storage key literal. Acceptance remains
+      -- owned by each consumer's capacity predicate after this syntax-only flattening step.
+      some (collectListVals env 80 e)
     else
       e.getAppArgs.findSome? (findListVals env fuel')
 
@@ -6128,7 +6130,7 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
             staticNatVal? env args[args.size - 2]! with
         | some resultCapacity, some keyCapacity =>
             if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
-                ProofForge.Wasm.Near.Codec.storageCapacityValid keyCapacity then
+                ProofForge.Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity then
               (boundedStorageFrame? env keyCapacity args[args.size - 1]!).map fun key =>
                 .nearStorageRead resultCapacity keyCapacity key
             else none
@@ -6141,7 +6143,7 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
             staticNatVal? env args[args.size - 3]! with
         | some resultCapacity, some keyCapacity, some valueCapacity =>
             if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
-                ProofForge.Wasm.Near.Codec.storageCapacityValid keyCapacity &&
+                ProofForge.Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity &&
                 ProofForge.Wasm.Near.Codec.storageCapacityValid valueCapacity then
               match boundedStorageFrame? env keyCapacity args[args.size - 2]!,
                   boundedStorageFrame? env valueCapacity args[args.size - 1]! with
@@ -6158,7 +6160,7 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
             staticNatVal? env args[args.size - 2]! with
         | some resultCapacity, some keyCapacity =>
             if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
-                ProofForge.Wasm.Near.Codec.storageCapacityValid keyCapacity then
+                ProofForge.Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity then
               (boundedStorageFrame? env keyCapacity args[args.size - 1]!).map fun key =>
                 if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRemove then
                   .nearStorageRemove resultCapacity keyCapacity key

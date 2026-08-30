@@ -20,7 +20,9 @@ String strict UTF-8）。wsm-near-output-001 使用 guest arena 为 bounded byte
 limb unsigned array view 输出同样的 canonical active prefix；scalar view 仍恰好返回
 8-byte little-endian。wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
-no-copy 语义。wsm-near-vector-001 在其上加入
+no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，
+容纳 `Prefix4 || u32_le(64) || AccountId bytes`；value/result/public Borsh 仍限 64。
+wsm-near-vector-001 在其上加入
 `DirectVector64`：四字节 compile-time prefix、`prefix || u32_le(index)` key 与 standalone
 Borsh UInt64 value；它 immediate-write，逻辑 length 仍由普通 ProofForge state 持有。
 wsm-near-lookup-001 再加入 default-Identity `DirectLookupMap64` / `DirectLookupSet64`：key 为
@@ -64,7 +66,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 | `Near.Sdk.Context/Access` | lossless context wrappers、full-AccountId equality/self-call predicate | general private/payable/init entry metadata |
 | `Near.Sdk.NearToken` | checked unsigned u128 add/sub predicates and little-endian carry/borrow limbs | balances、supply、public FT methods |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
-| `Near.Sdk.Storage` | bounded raw key/value、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
+| `Near.Sdk.Storage` | internal raw key（1..72）、bounded value/result（1..64）、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、exact Borsh UInt64/NearToken values and strict result decode | AccountId keys、arbitrary `IntoStorageKey`、generic Borsh、ledger policy |
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |

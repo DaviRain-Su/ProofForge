@@ -731,8 +731,11 @@ private structure StagedStorageFrame where
 Only active bytes are narrowed/stored; capacity bytes are allocated so length zero still passes a
 valid guest pointer to nearcore. -/
 private def stageStorageFrame (st : EState) (capacity : Nat)
-    (values : Array (Val ValKind)) (level : Nat) : Except String StagedStorageFrame := do
-  unless Codec.storageCapacityValid capacity && values.size == capacity + 1 do
+    (values : Array (Val ValKind)) (level : Nat) (storageKey := false) :
+    Except String StagedStorageFrame := do
+  let capacityValid := if storageKey then Codec.rawStorageKeyCapacityValid capacity
+    else Codec.storageCapacityValid capacity
+  unless capacityValid && values.size == capacity + 1 do
     throw "extract/unsupported: near raw storage frame geometry"
   let length ← renderVal st values[0]!
   let lengthLocal := localOfTemp st.fresh
@@ -1587,7 +1590,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
           st := region.st
           terminal := region.terminal }
     | .ext (.storageRead resultCapacity keyCapacity key) =>
-        let staged ← stageStorageFrame st keyCapacity key level
+        let staged ← stageStorageFrame st keyCapacity key level true
         let status := "(call $pf_storage_read " ++ staged.length ++ " " ++ staged.pointer ++
           " (i64.const " ++ toString rawStorageReg ++ "))"
         let lines := staged.lines ++ resetStorageResult resultCapacity level ++
@@ -1596,7 +1599,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .ext (.storageWrite resultCapacity keyCapacity valueCapacity key value) =>
         if view then throw "extract/unsupported: near view cannot write raw storage"
-        let stagedKey ← stageStorageFrame st keyCapacity key level
+        let stagedKey ← stageStorageFrame st keyCapacity key level true
         let stagedValue ← stageStorageFrame stagedKey.st valueCapacity value level
         let status := "(call $pf_storage_write " ++ stagedKey.length ++ " " ++
           stagedKey.pointer ++ " " ++ stagedValue.length ++ " " ++ stagedValue.pointer ++
@@ -1608,7 +1611,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .ext (.storageRemove resultCapacity keyCapacity key) =>
         if view then throw "extract/unsupported: near view cannot remove raw storage"
-        let staged ← stageStorageFrame st keyCapacity key level
+        let staged ← stageStorageFrame st keyCapacity key level true
         let status := "(call $pf_storage_remove " ++ staged.length ++ " " ++ staged.pointer ++
           " (i64.const " ++ toString rawStorageReg ++ "))"
         let lines := staged.lines ++ resetStorageResult resultCapacity level ++
@@ -1616,7 +1619,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
         return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .ext (.storageHasKey resultCapacity keyCapacity key) =>
-        let staged ← stageStorageFrame st keyCapacity key level
+        let staged ← stageStorageFrame st keyCapacity key level true
         let status := "(call $pf_storage_has_key " ++ staged.length ++ " " ++ staged.pointer ++ ")"
         let lines := staged.lines ++ resetStorageResult resultCapacity level ++
           finishStorageResult resultCapacity status none level

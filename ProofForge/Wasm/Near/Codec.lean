@@ -14,11 +14,19 @@ namespace ProofForge.Wasm.Near.Codec
 payloads. This is a ProofForge compilation limit, not a Borsh or nearcore protocol limit. -/
 def maxBoundedBytesCapacity : Nat := 64
 
-/-- Raw storage keys, values, and copied register results reuse the bounded-byte compiler budget.
+/-- Storage values and copied register results reuse the public bounded-byte compiler budget.
 This is not nearcore's protocol limit. A capacity of at least one still represents an empty byte
-sequence through runtime `length = 0`. -/
+sequence through runtime `length = 0`; internal raw keys have their separate bound below. -/
 def storageCapacityValid (capacity : Nat) : Bool :=
   1 ≤ capacity && capacity ≤ maxBoundedBytesCapacity
+
+/-- Internal raw-storage keys may additionally hold `Prefix4 || Borsh(AccountId)`, whose largest
+injective representation is four namespace bytes, a four-byte length, and 64 active UTF-8 bytes.
+Values, register results, public bounded ABI frames, logs, and promises retain the 64-byte budget. -/
+def maxRawStorageKeyCapacity : Nat := 72
+
+def rawStorageKeyCapacityValid (capacity : Nat) : Bool :=
+  1 ≤ capacity && capacity ≤ maxRawStorageKeyCapacity
 
 /-- Keep the specialized event's statically selected scalar frame below nearcore's per-function
 control-flow limit. This is a ProofForge compilation limit, not a NEP-141 memo limit. -/

@@ -180,11 +180,15 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
    including bounded optional memo variants, is complete in wsm-near-nep141-event-001/002/003.
    FT balances, supply, methods, and storage management remain separate later slices.
    The ledger dependency chain now has checked NearToken add/sub and exact Borsh-u128 values in
-   wsm-near-u128-arithmetic-001/u128-storage-001; full AccountId Identity keys remain next.
+   wsm-near-u128-arithmetic-001/u128-storage-001. The internal raw-key budget is independently
+   widened to the exact 72-byte `Prefix4 || Borsh(AccountId)` maximum in
+   wsm-near-storage-key-001; the specialized Identity map remains next.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
+   **NEAR-STORAGE-KEY (wsm-near-storage-key-001 done):** only internal key frames accept 1..72;
+   values/results/public Borsh frames retain 1..64, and an exact 72-byte raw key is sandbox-pinned.
 7. **NEAR-STORE-VECTOR (wsm-near-vector-001 done):** bounded direct-write UInt64 elements use exact current
    near-sdk-rs bare-prefix keys and Borsh values. Immediate persistence is explicit; full Rust
    metadata/cache/Drop semantics wait for the `STATE` lifecycle instead of being simulated.

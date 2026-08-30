@@ -149,6 +149,10 @@ storage_anchors = (
     '(func (export "readSmallFits")',
     '(func (export "remove")',
     '(func (export "has")',
+    '(func (export "putMaximumKey")',
+    '(func (export "readMaximumKeyByte")',
+    '(func (export "removeMaximumKey")',
+    '(call $pf_arena_alloc (i64.const 72) (i64.const 1))',
 )
 vector_anchors = (
     '(func (export "push")',

@@ -119,6 +119,10 @@ private def storageFrameWellFormed (capacity : Nat) (values : Array Val) : Bool 
   Codec.storageCapacityValid capacity && values.size == capacity + 1 &&
     values.all (·.wellFormed ValKind.arity)
 
+private def storageKeyFrameWellFormed (capacity : Nat) (values : Array Val) : Bool :=
+  Codec.rawStorageKeyCapacityValid capacity && values.size == capacity + 1 &&
+    values.all (·.wellFormed ValKind.arity)
+
 private def accountIdFrameWellFormed (values : Array Val) : Bool :=
   values.size == 9 && values.all (·.wellFormed ValKind.arity)
 
@@ -200,9 +204,9 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .storageRead resultCapacity keyCapacity key
   | .storageRemove resultCapacity keyCapacity key
   | .storageHasKey resultCapacity keyCapacity key =>
-      Codec.storageCapacityValid resultCapacity && storageFrameWellFormed keyCapacity key
+      Codec.storageCapacityValid resultCapacity && storageKeyFrameWellFormed keyCapacity key
   | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
-      Codec.storageCapacityValid resultCapacity && storageFrameWellFormed keyCapacity key &&
+      Codec.storageCapacityValid resultCapacity && storageKeyFrameWellFormed keyCapacity key &&
         storageFrameWellFormed valueCapacity value
   | .reserved => false
 

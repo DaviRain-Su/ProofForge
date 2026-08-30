@@ -11,6 +11,7 @@ from near_rpc import NearClient, NearRpcError
 
 
 BINARY_KEY = b"\x00\xff\x01"
+MAXIMUM_IDENTITY_KEY = b"PFID" + (64).to_bytes(4, "little") + bytes(range(64))
 
 
 def _require(name: str) -> str:
@@ -108,6 +109,25 @@ def main() -> None:
     if client.view_state_values().get(b"") != empty_key_value:
         raise AssertionError("near state does not contain the exact empty key/value")
     print("near-storage: zero-length key accepted and persisted ok")
+
+    maximum_value = b"key72"
+    if _call_u64(client, "putMaximumKey", NearClient.borsh_bytes(maximum_value)) != 0:
+        raise AssertionError("first exact-72-byte key write must return inserted status 0")
+    if client.view_u64("hasMaximumKey") != 1:
+        raise AssertionError("exact-72-byte key must be present")
+    actual = bytes(
+        client.view_u64("readMaximumKeyByte", NearClient.encode_u64_le(index))
+        for index in range(len(maximum_value))
+    )
+    if actual != maximum_value:
+        raise AssertionError(f"exact-72-byte key value mismatch: {actual!r}")
+    if client.view_state_values().get(MAXIMUM_IDENTITY_KEY) != maximum_value:
+        raise AssertionError("near state does not contain the exact active 72-byte key")
+    if _call_u64(client, "removeMaximumKey") != 1:
+        raise AssertionError("exact-72-byte key removal must return present status 1")
+    if client.view_u64("hasMaximumKey") != 0 or MAXIMUM_IDENTITY_KEY in client.view_state_values():
+        raise AssertionError("exact-72-byte key remained after removal")
+    print("near-storage: exact 72-byte key write/read/remove and reclamation ok")
     print("suite NearStorage: PASS")
 
 
