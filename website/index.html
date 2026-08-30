@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh" class="antialiased" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ProofForge</title>
+    <meta
+      name="description"
+      content="Lean 4 compiler profile. Ordinary defs write contracts; ordinary theorems prove them. Solana sBPF and EVM Yul."
+    />
+    <meta name="theme-color" content="#0B0B0C" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Instrument+Serif:ital@0;1&display=swap"
+    />
+    <script>
+      (function () {
+        try {
+          var r = localStorage.getItem("pf-theme");
+          if (!r) return;
+          var m = JSON.parse(r).state.mode;
+          if (m === "light" || m === "dark") {
+            document.documentElement.setAttribute("data-theme", m);
+            document.documentElement.style.colorScheme = m;
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -12,3 +12,6 @@ __pycache__/
 /runtime-tests/**/target/
 phoenix-v1
 .amp/portals/
+
+website/node_modules/
+website/dist/
