@@ -43,6 +43,10 @@ syntax (name := pf_svm_raw_variant_return)
 syntax (name := pf_svm_raw_variant_optional_return)
   "pf_svm_raw_variant_optional_return" num num num num "[" num,* "]" : attr
 
+/-- Declare the exact prior NEAR state-schema digest accepted by one migration entry. -/
+syntax (name := pf_near_migrate)
+  "pf_near_migrate" num : attr
+
 private partial def syntaxNatLiterals (node : Syntax) : Array Nat :=
   match node.isNatLit? with
   | some value => #[value]
@@ -103,6 +107,25 @@ initialize pfNearPayableAttr : TagAttribute ←
       match env.find? decl with
       | some (.defnInfo _) => pure ()
       | _ => throwError "extract/unsupported: pf_near_payable is not a definition"
+
+/-- Mark one NEAR mutator as an explicit migration from one exact prior schema digest. Target
+binding additionally requires an explicit private attribute and rejects payable migration. -/
+initialize pfNearMigrateAttr : ParametricAttribute Nat ←
+  registerParametricAttribute {
+    name := `pf_near_migrate
+    descr := "declare an authenticated NEAR migration from one exact state-schema digest"
+    getParam := fun decl stx => do
+      let values := syntaxNatLiterals stx
+      unless values.size == 1 do
+        throwError "invalid pf_near_migrate syntax"
+      let digest := values[0]!
+      unless digest ≤ 18446744073709551615 do
+        throwError "extract/unsupported: pf_near_migrate digest must fit UInt64"
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure digest
+      | _ => throwError "extract/unsupported: pf_near_migrate is not a definition"
+  }
 
 /--
 Attach one packed-u8 Solana wire entry to a `@[pf_entry]` method without introducing an executable
@@ -290,6 +313,9 @@ def isNearPrivate (env : Environment) (decl : Name) : Bool :=
 def isNearPayable (env : Environment) (decl : Name) : Bool :=
   pfNearPayableAttr.hasTag env decl
 
+def nearMigrationDigest? (env : Environment) (decl : Name) : Option Nat :=
+  pfNearMigrateAttr.getParam? env decl
+
 /-- Opaque source metadata. Only the NEAR target may decode these strings. -/
 def nearEntryAnnotations (env : Environment) (decl : Name) : Array String := Id.run do
   let mut annotations := #[]
@@ -297,6 +323,8 @@ def nearEntryAnnotations (env : Environment) (decl : Name) : Array String := Id.
     annotations := annotations.push "near.private.v1"
   if isNearPayable env decl then
     annotations := annotations.push "near.payable.v1"
+  if let some digest := nearMigrationDigest? env decl then
+    annotations := annotations.push s!"near.migrate.v1:{digest}"
   return annotations
 
 def svmRawEntry? (env : Environment) (decl : Name) : Option SvmRawEntry :=

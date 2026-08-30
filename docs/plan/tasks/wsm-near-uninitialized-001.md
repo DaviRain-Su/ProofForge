@@ -44,6 +44,6 @@ lifecycle work.
 ## Next
 
 The versioned metadata is complete in
-[wsm-near-state-envelope-001](wsm-near-state-envelope-001.md). An explicit authenticated migration
-entry remains required before claiming upgrade compatibility or general near-sdk-rs state
-serialization.
+[wsm-near-state-envelope-001](wsm-near-state-envelope-001.md), and its explicit authenticated
+split-key upgrade path is complete in [wsm-near-migration-001](wsm-near-migration-001.md). General
+near-sdk-rs state serialization remains outside the boundary.

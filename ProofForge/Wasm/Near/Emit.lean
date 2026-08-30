@@ -1263,6 +1263,9 @@ private def methodEntryPolicy (method : Method ValKind OpExt) : IR.EntryPolicy :
 private def methodPrivate (method : Method ValKind OpExt) : Bool :=
   (methodEntryPolicy method).isPrivate
 
+private def methodMigrationFrom (method : Method ValKind OpExt) : Option UInt64 :=
+  (methodEntryPolicy method).migrateFrom
+
 /-- Explicit metadata supports donation-only entries. Existing deposit observation remains a
 payable capability for source compatibility. `emit` validates the canonical policy first. -/
 private def methodPayable (method : Method ValKind OpExt) : Bool :=
@@ -1348,7 +1351,7 @@ private def depositGuard (p : Program ValKind OpExt) (method : Method ValKind Op
     indent (level + 2) "))"
   ]
 
-private def uninitializedGuard (p : Program ValKind OpExt)
+private def stateEnvelopeGuard (p : Program ValKind OpExt) (expectedDigest : UInt64)
     (level : Nat) : Except String (Array String) := do
   let (missingOff, missingLen) ← uninitializedMessageOf p
   let (incompatibleOff, incompatibleLen) ← incompatibleStateMessageOf p
@@ -1374,11 +1377,15 @@ private def uninitializedGuard (p : Program ValKind OpExt)
       toString stateMetadataOff ++ ")) (i64.const " ++ toString stateMetadataMagic ++ "))"),
     indent (level + 8) ("(i64.ne (i64.load (i32.const " ++
       toString (stateMetadataOff + 8) ++ ")) (i64.const " ++
-      toString (IR.stateSchemaDigest p) ++ ")))"),
+      toString expectedDigest ++ ")))"),
     indent (level + 2) "(then",
     incompatiblePanic,
     indent (level + 2) "))"
   ]
+
+private def uninitializedGuard (p : Program ValKind OpExt)
+    (level : Nat) : Except String (Array String) :=
+  stateEnvelopeGuard p (IR.stateSchemaDigest p) level
 
 private partial def valUsesArena : Val ValKind → Bool
   | .ext (.transientBuffer64Get _) _
@@ -1658,9 +1665,11 @@ private def renderFn (p : Program ValKind OpExt)
   let view := method.tupleArity.isSome
   let echo := method.echoDropped
   let isPrivate := methodPrivate method
+  let migrateFrom := methodMigrationFrom method
+  let writesStateEnvelope := initializer || migrateFrom.isSome
   if view && methodUses .promiseResultsCount method then
     throw "extract/unsupported: near view cannot count promise results"
-  let st : EState := { paramCount := method.paramCount, initializer }
+  let st : EState := { paramCount := method.paramCount, initializer := writesStateEnvelope }
   let region ← emitRegion p outputPlan view echo 4 (defaultSlotOf p) method.ops.toList st
   unless region.terminal do
     throw s!"extract/unsupported: {method.ixName} does not end in a terminal"
@@ -1706,9 +1715,11 @@ private def renderFn (p : Program ValKind OpExt)
   lines := lines ++ (← loadHostPrelude method view 4)
   if initializer then
     lines := lines ++ initializedGuard p 4
-  else
-    lines := lines ++ (← uninitializedGuard p 4)
-  lines := lines ++ loadSlots p 4
+  else match migrateFrom with
+    | some oldDigest => lines := lines ++ (← stateEnvelopeGuard p oldDigest 4)
+    | none => lines := lines ++ (← uninitializedGuard p 4)
+  if migrateFrom.isNone then
+    lines := lines ++ loadSlots p 4
   lines := lines ++ region.lines
   lines := lines.push "  )"
   return lines

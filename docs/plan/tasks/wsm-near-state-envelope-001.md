@@ -39,6 +39,6 @@ fail closed until migrated.
 
 ## Next
 
-Add one private migration entry policy with explicit old-envelope dispatch, per-key conversion, and
-the invariant transformed state first → new envelope last. Do not add an unauthenticated
-`ignore_state` equivalent.
+Completed by [wsm-near-migration-001](wsm-near-migration-001.md): one explicitly private migration
+entry dispatches an exact old envelope, converts explicit old keys, and advances transformed state
+first → new envelope last without an unauthenticated `ignore_state` equivalent.

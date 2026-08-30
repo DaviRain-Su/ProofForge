@@ -24,15 +24,25 @@ abbrev Program := Wasm.IR.Program Ops.ValKind Ops.OpExt
 structure EntryPolicy where
   isPrivate : Bool := false
   payable : Bool := false
+  migrateFrom : Option UInt64 := none
   deriving BEq, Repr, Inhabited
 
 /-- One spelling for digesting and emitter validation. Empty preserves historical methods. -/
 def EntryPolicy.canonical (policy : EntryPolicy) : String :=
-  match policy.isPrivate, policy.payable with
-  | false, false => ""
-  | true, false => "near.entry.v1:private"
-  | false, true => "near.entry.v1:payable"
-  | true, true => "near.entry.v1:private,payable"
+  match policy.migrateFrom with
+  | some digest =>
+      let capability := match policy.isPrivate, policy.payable with
+        | false, false => "migrate-from"
+        | true, false => "private,migrate-from"
+        | false, true => "payable,migrate-from"
+        | true, true => "private,payable,migrate-from"
+      s!"near.entry.v2:{capability}:{digest.toNat}"
+  | none =>
+      match policy.isPrivate, policy.payable with
+      | false, false => ""
+      | true, false => "near.entry.v1:private"
+      | false, true => "near.entry.v1:payable"
+      | true, true => "near.entry.v1:private,payable"
 
 /-- Parse only canonical target-owned policy values; malformed manually-built IR fails closed. -/
 def EntryPolicy.ofCanonical : String → Except String EntryPolicy
@@ -40,18 +50,97 @@ def EntryPolicy.ofCanonical : String → Except String EntryPolicy
   | "near.entry.v1:private" => pure { isPrivate := true }
   | "near.entry.v1:payable" => pure { payable := true }
   | "near.entry.v1:private,payable" => pure { isPrivate := true, payable := true }
-  | policy => throw s!"extract/unsupported: malformed near entry policy {policy}"
+  | policy => do
+      let parts := policy.splitOn ":"
+      if parts.length == 3 && parts[0]! == "near.entry.v2" &&
+          parts[1]! == "private,migrate-from" then
+        let some digest := parts[2]!.toNat?
+          | throw s!"extract/unsupported: malformed near entry policy {policy}"
+        unless digest ≤ 18446744073709551615 do
+          throw s!"extract/unsupported: malformed near entry policy {policy}"
+        let parsed : EntryPolicy := {
+          isPrivate := true
+          migrateFrom := some (UInt64.ofNat digest)
+        }
+        unless parsed.canonical == policy do
+          throw s!"extract/unsupported: malformed near entry policy {policy}"
+        return parsed
+      throw s!"extract/unsupported: malformed near entry policy {policy}"
+
+private partial def valUsesSourceState (paramCount : Nat) : Wasm.IR.Val Ops.ValKind → Bool
+  | .arg index => paramCount ≤ index
+  | .local _ | .lit _ | .loopIx => false
+  | .field base _ | .bitNot base => valUsesSourceState paramCount base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valUsesSourceState paramCount lhs || valUsesSourceState paramCount rhs
+  | .indexGet base _ index _ _ =>
+      valUsesSourceState paramCount base || valUsesSourceState paramCount index
+  | .select _ lhs rhs thn els =>
+      valUsesSourceState paramCount lhs || valUsesSourceState paramCount rhs ||
+        valUsesSourceState paramCount thn || valUsesSourceState paramCount els
+  | .ext _ operands => operands.any (valUsesSourceState paramCount)
+
+private partial def opUsesSourceState (paramCount : Nat) : Wasm.IR.Op Ops.ValKind Ops.OpExt → Bool
+  | .letLocal _ value | .setLocal _ value | .forAccum _ value _
+  | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
+      valUsesSourceState paramCount value
+  | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+  | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
+      valUsesSourceState paramCount lhs || valUsesSourceState paramCount rhs
+  | .ite _ lhs rhs thn els =>
+      valUsesSourceState paramCount lhs || valUsesSourceState paramCount rhs ||
+        thn.any (opUsesSourceState paramCount) || els.any (opUsesSourceState paramCount)
+  | .forBody _ body => body.any (opUsesSourceState paramCount)
+  | .indexSetLeaf _ index value _ _ | .indexSet _ index value _ _ =>
+      valUsesSourceState paramCount index || valUsesSourceState paramCount value
+  | .ext payload =>
+      (Ops.cfgDialect.values payload).any (valUsesSourceState paramCount)
+  | .joinLocal _ | .errorOverflow | .errorNamed _ => false
 
 def entryPolicyOf (method : Method) : Except String EntryPolicy := do
   let policy ← EntryPolicy.ofCanonical method.entryPolicy
   if method.tupleArity.isSome && policy.payable then
     throw s!"extract/unsupported: {method.ixName} view cannot be payable"
+  if policy.migrateFrom.isSome then
+    unless method.kind == .increment do
+      throw s!"extract/unsupported: {method.ixName} migration must be a mutating entry"
+    unless policy.isPrivate && !policy.payable do
+      throw s!"extract/unsupported: {method.ixName} migration must be private and non-payable"
+    unless method.paramCount == 0 do
+      throw s!"extract/unsupported: {method.ixName} migration cannot accept public parameters"
+    if method.ops.any (opUsesSourceState method.paramCount) then
+      throw s!"extract/unsupported: {method.ixName} migration must read old state through explicit storage keys"
   return policy
+
+/-- ProofForge-owned persistent-state schema identity. Method logic and the program name are
+deliberately absent, so upgrades remain compatible exactly while ordered slot name/width/ABI stays
+stable. FNV-1a-64 is pinned by `Core.IR.fnv1a64`; this is an engineering mismatch detector, not a
+collision-resistant commitment. -/
+def stateSchemaCanonical (p : Program) : String :=
+  let slots := p.slots.map fun slot =>
+    s!"{slot.name.toUTF8.size}:{slot.name}:{slot.width}:{slot.abi.toUTF8.size}:{slot.abi}"
+  s!"near-state-schema-v1|{p.slots.size}|" ++ String.intercalate "/" slots.toList
+
+def stateSchemaDigest (p : Program) : UInt64 :=
+  Core.IR.fnv1a64 (stateSchemaCanonical p)
+
+def stateSchemaDigestHex (p : Program) : String :=
+  Core.IR.u64Hex (stateSchemaDigest p)
 
 def validateEntryPolicies (program : Program) : Except String Unit := do
   let _ ← entryPolicyOf program.initializer
+  let mut migrations := 0
   for method in program.entries do
-    let _ ← entryPolicyOf method
+    let policy ← entryPolicyOf method
+    if let some oldDigest := policy.migrateFrom then
+      migrations := migrations + 1
+      if oldDigest == stateSchemaDigest program then
+        throw s!"extract/unsupported: {method.ixName} migration source schema equals current schema"
+  unless migrations ≤ 1 do
+    throw "extract/unsupported: near supports at most one migration entry"
 
 private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
   | .near kind =>
@@ -377,18 +466,41 @@ private structure BoundEntry where
 private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry := do
   let privateAnnotations := method.annotations.filter (· == "near.private.v1")
   let payableAnnotations := method.annotations.filter (· == "near.payable.v1")
-  unless privateAnnotations.size + payableAnnotations.size == method.annotations.size do
+  let migrationAnnotations := method.annotations.filter (·.startsWith "near.migrate.v1:")
+  unless privateAnnotations.size + payableAnnotations.size + migrationAnnotations.size ==
+      method.annotations.size do
     throw s!"extract/unsupported: near cannot consume foreign target annotations on {method.ixName}"
   unless privateAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near private annotations"
   unless payableAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near payable annotations"
+  unless migrationAnnotations.size ≤ 1 do
+    throw s!"extract/unsupported: {method.ixName} has duplicate near migration annotations"
+  let migrateFrom ← match migrationAnnotations[0]? with
+    | none => pure none
+    | some annotation => do
+        let parts := annotation.splitOn ":"
+        unless parts.length == 2 && parts[0]! == "near.migrate.v1" do
+          throw s!"extract/unsupported: malformed near migration annotation on {method.ixName}"
+        let some digest := parts[1]!.toNat?
+          | throw s!"extract/unsupported: malformed near migration annotation on {method.ixName}"
+        unless digest ≤ 18446744073709551615 do
+          throw s!"extract/unsupported: malformed near migration annotation on {method.ixName}"
+        pure (some (UInt64.ofNat digest))
   let policy : EntryPolicy := {
     isPrivate := !privateAnnotations.isEmpty
     payable := !payableAnnotations.isEmpty
+    migrateFrom
   }
   if method.kind == .get && policy.payable then
     throw s!"extract/unsupported: {method.ixName} view cannot be payable"
+  if policy.migrateFrom.isSome then
+    unless method.kind == .increment do
+      throw s!"extract/unsupported: {method.ixName} migration must be a mutating entry"
+    unless policy.isPrivate do
+      throw s!"extract/unsupported: {method.ixName} migration requires pf_near_private"
+    if policy.payable then
+      throw s!"extract/unsupported: {method.ixName} migration cannot be payable"
   return { ixName := method.ixName, policy }
 
 private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
@@ -450,20 +562,5 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
 SVM / EVM / XRPL domains. -/
 def digestHex (p : Program) : String :=
   Wasm.IR.digestHex Host.digestDomain extValCanon extOpCanon p
-
-/-- ProofForge-owned persistent-state schema identity. Method logic and the program name are
-deliberately absent, so upgrades remain compatible exactly while ordered slot name/width/ABI stays
-stable. FNV-1a-64 is pinned by `Core.IR.fnv1a64`; this is an engineering mismatch detector, not a
-collision-resistant commitment. -/
-def stateSchemaCanonical (p : Program) : String :=
-  let slots := p.slots.map fun slot =>
-    s!"{slot.name.toUTF8.size}:{slot.name}:{slot.width}:{slot.abi.toUTF8.size}:{slot.abi}"
-  s!"near-state-schema-v1|{p.slots.size}|" ++ String.intercalate "/" slots.toList
-
-def stateSchemaDigest (p : Program) : UInt64 :=
-  Core.IR.fnv1a64 (stateSchemaCanonical p)
-
-def stateSchemaDigestHex (p : Program) : String :=
-  Core.IR.u64Hex (stateSchemaDigest p)
 
 end ProofForge.Wasm.Near.IR

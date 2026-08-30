@@ -195,6 +195,16 @@ promise_result_anchors = (
     '(call $pf_register_len (i64.const 4)',
     '(call $pf_read_register (i64.const 4)',
 )
+migration_anchors = (
+    '(func (export "migrate")',
+    '(func (export "revisionOf")',
+    '(import "env" "predecessor_account_id"',
+    '(import "env" "current_account_id"',
+    '(i64.const 10223451468950344877)',
+    '(i64.const 11209400244185005294)',
+    '(global.set $pf_storage_result_status (call $pf_storage_read',
+    '(call $pf_storage_result_byte',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -224,6 +234,8 @@ for wat in wats:
         extra = promise_anchors
     elif wat.stem == "NearPromiseResult":
         extra = promise_result_anchors
+    elif wat.stem == "NearMigration":
+        extra = migration_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

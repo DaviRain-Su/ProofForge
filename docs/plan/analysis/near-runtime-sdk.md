@@ -52,7 +52,7 @@ Authoritative source anchors:
 | u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance complete** in wsm-near-u128-001; explicit gas and lossless Promise deposit complete in wsm-near-promise-001 | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
 | Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
-| contract `STATE` lifecycle | SDK Borsh convention | **one-time init, fail-closed ordinary entries, and versioned schema envelope complete** in wsm-near-init/uninitialized/state-envelope-001; field values remain independent keys | authenticated migration explicit |
+| contract `STATE` lifecycle | SDK Borsh convention | **one-time init, fail-closed entries, versioned schema envelope, and authenticated split-key migration complete** in wsm-near-init/uninitialized/state-envelope/migration-001 | broader state codecs/version chains explicit |
 | `store::Vector` | SDK over KV, prefix + `u32_le` index | **bounded direct UInt64 element layout foundation complete** in wsm-near-vector-001; full metadata/cache/generic API absent | Near storage binding after bytes/Borsh |
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
 | IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
@@ -61,7 +61,7 @@ Authoritative source anchors:
 | cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, authenticated self-callback, and closed ordered two-child join complete** in wsm-near-promise-001/002/then/private/transfer/and-001 | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | **static detached/returned lossless-u128 transfer complete** in wsm-near-promise-transfer-001 | Runtime batch/action; never synchronous balance mutation |
 | callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
-| private/payable/init | generated entry guards | **explicit private/payable metadata, generated private/non-payable ordering, donation-only payable, repeated-init/uninitialized/schema guards complete**; migration entry absent | entry-adapter policy over context/storage |
+| private/payable/init | generated entry guards | **explicit private/payable/migration metadata, generated wrapper ordering, donation-only payable, repeated-init/uninitialized/schema/migration guards complete** | entry-adapter policy over context/storage |
 
 Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
 bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw binary storage,
@@ -164,7 +164,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
 | N7 promises | **detached/returned static batch calls, native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
-| N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, and versioned schema envelope done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope-001; authenticated migration remains | private/deposit/state ordering, migration fixtures |
+| N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
 | N10 standards | NEP-141/145 building blocks only after storage, events, transfer/call semantics | standard-specific integration suites |
 
 ## 6. Near-term task cuts
@@ -236,7 +236,11 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 21. **NEAR-STATE-ENVELOPE-1 (wsm-near-state-envelope-001 done):** exact
     `PFNRST01 || fnv1a64(schema)_le` metadata binds ordered slot name/width/ABI without binding
     executable methods. Entries distinguish missing from malformed/legacy/foreign schemas using a
-    dedicated register and fail closed before state/result reads; authenticated migration remains.
+    dedicated register and fail closed before state/result reads.
+22. **NEAR-MIGRATION-1 (wsm-near-migration-001 done):** an explicitly private, non-payable,
+    zero-argument entry dispatches one declared old schema envelope, forbids implicit current-state
+    reads, converts explicit old split keys, persists transformed fields, and advances the current
+    envelope last. The sandbox gate performs a genuine Counter V1 → two-field V2 code upgrade.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

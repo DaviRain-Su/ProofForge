@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Engineering local-node gate for Counter. Missing near-sandbox → skip (exit 0).
-# Deploys ProofForge Counter.wasm only; never runs cargo/near-sdk.
+# Engineering local-node gate for Counter lifecycle and schema migration. Missing near-sandbox →
+# skip (exit 0). Deploys only ProofForge Wasm; never runs cargo/near-sdk.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -37,11 +37,15 @@ if ! "$python" -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import
 fi
 
 wasm="${PWD}/build/near/Counter.wasm"
-echo "near-local-counter: building Counter.wasm" >&2
-lake exe pf -- build --target near --out build/near Counter
+migration_wasm="${PWD}/build/near/NearMigration.wasm"
+echo "near-local-counter: building Counter.wasm + NearMigration.wasm" >&2
+lake exe pf -- build --target near --out build/near Counter NearMigration
 [[ -f "$wasm" ]] || die "missing $wasm"
-"$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$wasm" \
-  || die "$wasm is not wasm"
+[[ -f "$migration_wasm" ]] || die "missing $migration_wasm"
+for artifact in "$wasm" "$migration_wasm"; do
+  "$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$artifact" \
+    || die "$artifact is not wasm"
+done
 
 workdir="$(mktemp -d "${TMPDIR:-/tmp}/near-counter.XXXXXX")"
 sandbox_pid=""
@@ -114,7 +118,8 @@ done
 export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
+export PF_NEAR_MIGRATION_WASM="$migration_wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
-echo "near-local-counter: RPC ready; running lifecycle/arithmetic scenes" >&2
+echo "near-local-counter: RPC ready; running lifecycle/arithmetic/migration scenes" >&2
 "$python" runtime-tests/near/counter.py
 echo "near-local-counter: ok"

@@ -44,6 +44,9 @@ wsm-near-state-envelope-001 把 marker 收紧为 exact 16-byte
 `PFNRST01 || fnv1a64(ordered slot schema)_le`；方法逻辑升级不改变 schema identity，而字段
 name/width/ABI 或顺序变化会在任何 state/result read 前精确 fail closed。它是 ProofForge
 split-key 元数据，不是 near-sdk-rs 的 Borsh `STATE`。
+wsm-near-migration-001 在其上加入 `@[pf_near_migrate OLD_DIGEST]`：必须显式 private、
+non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old envelope，migration body
+不能读取 current `State`，必须按旧 key 显式转换；成功时先写新字段、最后推进新 envelope。
 
 ## Boundary
 
@@ -60,7 +63,7 @@ split-key 元数据，不是 near-sdk-rs 的 Borsh `STATE`。
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |
 | `Near.Sdk.Promises` | static detached/returned function call/native transfer、child→self callback、两个有序 child join、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、arbitrary-N/nested joins、generic Borsh |
-| `Near.IR` | registration、方言标签、target-owned bounded input/output frame binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
+| `Near.IR` | registration、方言标签、target-owned bounded input/output frame 与 private/payable/migration policy binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
 | `Near.Registry` | 可构建模块 + canonical digest | 部署声明 |
@@ -103,8 +106,10 @@ split-key 元数据，不是 near-sdk-rs 的 Borsh `STATE`。
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
   `counter.sh` 还在初始化前验证 paid mutator 先命中 non-payable，普通 mutator/view 再以精确
   missing-state panic fail closed 且不创建 KV state；初始化后还对账 exact 16-byte schema
-  envelope，随后重复初始化与算术场景照常通过。
+  envelope，随后重复初始化与算术场景照常通过；同一 gate 还部署双字段升级代码，验证旧
+  envelope 令 ordinary view fail closed、外部 migration 被 private guard 拒绝、同账户按
+  `value` old key 转换后得到 exact 新字段/envelope、重复 migration 失败且新版本继续可写。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
 `NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
-`NearPromise`、`NearPromiseResult`。
+`NearPromise`、`NearPromiseResult`、`NearMigration`。

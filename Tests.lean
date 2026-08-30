@@ -75,6 +75,7 @@ import Tests.NearQueueSpec
 import Tests.NearIterableSpec
 import Tests.NearPromiseSpec
 import Tests.NearPromiseResultSpec
+import Tests.NearMigrationSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmSearchSpec

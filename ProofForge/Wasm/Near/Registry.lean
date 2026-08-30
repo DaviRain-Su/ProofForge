@@ -18,7 +18,8 @@ def entries : Array Entry := #[
   { name := "NearQueue", digest := "f04d9a0d673b7fed" },
   { name := "NearIterable", digest := "8c0ece42e2b091ff" },
   { name := "NearPromise", digest := "ed5abd7c35a96c45" },
-  { name := "NearPromiseResult", digest := "ff7ea8988ba01999" }
+  { name := "NearPromiseResult", digest := "ff7ea8988ba01999" },
+  { name := "NearMigration", digest := "19a760409263b854" }
 ]
 
 def names : Array String := entries.map (·.name)
