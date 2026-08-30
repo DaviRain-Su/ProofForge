@@ -8,8 +8,8 @@ import ProofForge.Wasm.Near.Codec
 
 Value/effect extensions owned by the NEAR Protocol chain. v0 admits scalar
 context reads, lossless u128 token values, lossless 64-byte account-id leaves,
-invocation-memory operations, bounded raw storage, and one detached static Promise call.
-Promise graphs/results and hashing stay absent.
+invocation-memory operations, bounded raw storage, static Promise calls, and bounded callback
+result observation. Promise chaining/joins and hashing stay absent.
 `reserved` is rejected by `wellFormed`.
 -/
 
@@ -41,12 +41,18 @@ inductive ValKind where
   | storageResultLength (capacity : Nat)
   | storageResultFits (capacity : Nat)
   | storageResultByte (capacity : Nat)
+  /-- Callback-result count plus metadata and byte access for the latest bounded read. -/
+  | promiseResultsCount
+  | promiseResultStatus (capacity : Nat)
+  | promiseResultLength (capacity : Nat)
+  | promiseResultFits (capacity : Nat)
+  | promiseResultByte (capacity : Nat)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .transientBuffer64Get _ | .storageResultByte _ => 1
+  | .transientBuffer64Get _ | .storageResultByte _ | .promiseResultByte _ => 1
   | .reserved => 0
   | _ => 0
 
@@ -61,6 +67,7 @@ inductive OpExt (V : Type) where
       (arguments : Array V) (depositLo depositHi gas : V)
   | promiseFunctionCallReturned (receiver method : String) (argsCapacity : Nat)
       (arguments : Array V) (depositLo depositHi gas : V)
+  | promiseResultRead (capacity : Nat) (index : V)
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
   | transientBuffer64Finish (capacity : Nat)
@@ -91,6 +98,8 @@ def OpExt.wellFormed : OpExt Val → Bool
         storageFrameWellFormed argsCapacity arguments &&
         depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
         gas.wellFormed ValKind.arity
+  | .promiseResultRead capacity index =>
+      Codec.storageCapacityValid capacity && index.wellFormed ValKind.arity
   | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
       Memory.buffer64CapacityValid capacity
   | .transientBuffer64Set capacity index value =>
@@ -116,6 +125,7 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
       .promiseFunctionCallReturned receiver method argsCapacity (arguments.map mapValue)
         (mapValue depositLo) (mapValue depositHi) (mapValue gas)
+  | .promiseResultRead capacity index => .promiseResultRead capacity (mapValue index)
   | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
   | .transientBuffer64Set capacity index value =>
       .transientBuffer64Set capacity (mapValue index) (mapValue value)
@@ -136,6 +146,7 @@ private def cfgPayloadValues : OpExt Val → Array Val
       arguments ++ #[depositLo, depositHi, gas]
   | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
       arguments ++ #[depositLo, depositHi, gas]
+  | .promiseResultRead _ index => #[index]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
   | .transientBuffer64Set _ index value => #[index, value]
   | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key

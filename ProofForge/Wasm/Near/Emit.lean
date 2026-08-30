@@ -58,6 +58,8 @@ private def storageReg : Nat := 1
 private def evictedReg : Nat := 2
 /-- Dedicated bounded raw-storage register; status 0 is always branched before consulting it. -/
 private def rawStorageReg : Nat := 3
+/-- Dedicated callback-result register; only status 1 may be consulted. -/
+private def promiseResultReg : Nat := 4
 
 private def panicOverflowOff : Nat := 2048
 private def panicDivOff : Nat := 2057
@@ -106,6 +108,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.logUtf8 message) => #[message]
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
+      | .ext (.promiseResultRead _ _) => #[]
       | .ext (.transientBuffer64Begin _)
       | .ext (.transientBuffer64Set _ _ _)
       | .ext (.transientBuffer64Finish _)
@@ -160,6 +163,17 @@ private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
 
 private def programReturnsPromise (p : Program ValKind OpExt) : Bool :=
   opsReturnPromise p.initializer.ops || p.entries.any (opsReturnPromise ·.ops)
+
+private partial def opsReadPromiseResult (ops : Array (Op ValKind OpExt)) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .ext (.promiseResultRead _ _) => true
+    | .ite _ _ _ thn els => opsReadPromiseResult thn || opsReadPromiseResult els
+    | .forBody _ body => opsReadPromiseResult body
+    | _ => false
+
+private def programReadsPromiseResult (p : Program ValKind OpExt) : Bool :=
+  opsReadPromiseResult p.initializer.ops || p.entries.any (opsReadPromiseResult ·.ops)
 
 private def promiseLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
   (promiseLiterals p).foldl (init := #[]) fun layout literal =>
@@ -296,6 +310,16 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext (.storageResultByte capacity) #[index] => do
       let i ← renderVal st index
       return "(call $pf_storage_result_byte (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
+  | .ext .promiseResultsCount #[] => .ok "(call $pf_promise_results_count)"
+  | .ext (.promiseResultStatus capacity) #[] =>
+      .ok ("(call $pf_promise_result_status (i64.const " ++ toString capacity ++ "))")
+  | .ext (.promiseResultLength capacity) #[] =>
+      .ok ("(call $pf_promise_result_length (i64.const " ++ toString capacity ++ "))")
+  | .ext (.promiseResultFits capacity) #[] =>
+      .ok ("(call $pf_promise_result_fits (i64.const " ++ toString capacity ++ "))")
+  | .ext (.promiseResultByte capacity) #[index] => do
+      let i ← renderVal st index
+      return "(call $pf_promise_result_byte (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
   | .local index => .ok ("(local.get " ++ localOfSource index ++ ")")
   | .ext kind operands =>
       .error s!"extract/unsupported: near v0 value extension {repr kind}/{operands.size}"
@@ -592,6 +616,44 @@ private def finishStorageResult (capacity : Nat) (status : String)
       indent (level + 2) "))"
     ]
 
+private def resetPromiseResult (capacity level : Nat) : Array String := #[
+  indent level "(global.set $pf_promise_result_active (i32.const 1))",
+  indent level ("(global.set $pf_promise_result_capacity (i64.const " ++
+    toString capacity ++ "))"),
+  indent level "(global.set $pf_promise_result_status (i64.const 0))",
+  indent level "(global.set $pf_promise_result_length (i64.const 0))",
+  indent level "(global.set $pf_promise_result_fits (i64.const 1))",
+  indent level "(global.set $pf_promise_result_ptr (i32.const 0))"
+]
+
+/-- Preserve nearcore's exact 0/1/2 result status. Only status 1 writes the selected host register,
+so not-ready and failed results leave neutral metadata and never inspect stale register bytes. -/
+private def finishPromiseResult (capacity : Nat) (status : String) (level : Nat) : Array String := #[
+  indent level ("(global.set $pf_promise_result_status " ++ status ++ ")"),
+  indent level "(if (i64.gt_u (global.get $pf_promise_result_status) (i64.const 2))",
+  indent (level + 2) "(then unreachable))",
+  indent level "(if (i64.eq (global.get $pf_promise_result_status) (i64.const 1))",
+  indent (level + 2) "(then",
+  indent (level + 4) ("(global.set $pf_promise_result_length (call $pf_register_len (i64.const " ++
+    toString promiseResultReg ++ ")) )"),
+  indent (level + 4) "(if (i64.eq (global.get $pf_promise_result_length) (i64.const -1))",
+  indent (level + 6) "(then unreachable))",
+  indent (level + 4) ("(if (i64.gt_u (global.get $pf_promise_result_length) (i64.const " ++
+    toString capacity ++ "))"),
+  indent (level + 6) "(then (global.set $pf_promise_result_fits (i64.const 0)))",
+  indent (level + 6) "(else",
+  indent (level + 8) "(if (i64.ne (global.get $pf_promise_result_length) (i64.const 0))",
+  indent (level + 10) "(then",
+  indent (level + 12) "(global.set $pf_promise_result_ptr",
+  indent (level + 14) "(call $pf_arena_alloc (global.get $pf_promise_result_length) (i64.const 1)))",
+  indent (level + 12) ("(call $pf_read_register (i64.const " ++
+    toString promiseResultReg ++
+    ") (i64.extend_i32_u (global.get $pf_promise_result_ptr)))"),
+  indent (level + 10) "))",
+  indent (level + 6) "))",
+  indent (level + 2) "))"
+]
+
 private structure Region where
   lines : Array String := #[]
   st : EState
@@ -724,6 +786,15 @@ private partial def emitRegion (p : Program ValKind OpExt)
           lines := staged.lines ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseResultRead capacity index) =>
+        if view then throw "extract/unsupported: near view cannot read promise results"
+        let index ← renderVal st index
+        let status := "(call $pf_promise_result " ++ index ++ " (i64.const " ++
+          toString promiseResultReg ++ "))"
+        let lines := resetPromiseResult capacity level ++
+          finishPromiseResult capacity status level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail st
+        return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .ext (.transientBuffer64Begin capacity) =>
         let region ← emitRegion p outputPlan view echo level defaultSlot tail st
         return {
@@ -827,6 +898,7 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
+      | .promiseResultRead _ index => valHas index
       | .transientBuffer64Set _ index value => valHas index || valHas value
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key.any valHas
       | .storageWrite _ _ _ key value => key.any valHas || value.any valHas
@@ -882,7 +954,11 @@ private partial def valUsesArena : Val ValKind → Bool
   | .ext (.storageResultStatus _) _
   | .ext (.storageResultLength _) _
   | .ext (.storageResultFits _) _
-  | .ext (.storageResultByte _) _ => true
+  | .ext (.storageResultByte _) _
+  | .ext (.promiseResultStatus _) _
+  | .ext (.promiseResultLength _) _
+  | .ext (.promiseResultFits _) _
+  | .ext (.promiseResultByte _) _ => true
   | .ext _ operands => operands.any valUsesArena
   | .field base _ | .bitNot base => valUsesArena base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -904,6 +980,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.storageHasKey _ _ _) => true
   | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
+  | .ext (.promiseResultRead _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
@@ -1098,6 +1175,8 @@ private def renderFn (p : Program ValKind OpExt)
       throw s!"extract/unsupported: {method.ixName} wants at most one UInt64 parameter for near v0"
   let view := method.tupleArity.isSome
   let echo := method.echoDropped
+  if view && methodUses .promiseResultsCount method then
+    throw "extract/unsupported: near view cannot count promise results"
   let st : EState := { paramCount := method.paramCount }
   let region ← emitRegion p outputPlan view echo 4 (defaultSlotOf p) method.ops.toList st
   unless region.terminal do
@@ -1194,6 +1273,12 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     "  (global $pf_storage_result_length (mut i64) (i64.const 0))",
     "  (global $pf_storage_result_fits (mut i64) (i64.const 1))",
     "  (global $pf_storage_result_active (mut i32) (i32.const 0))",
+    "  (global $pf_promise_result_ptr (mut i32) (i32.const 0))",
+    "  (global $pf_promise_result_capacity (mut i64) (i64.const 0))",
+    "  (global $pf_promise_result_status (mut i64) (i64.const 0))",
+    "  (global $pf_promise_result_length (mut i64) (i64.const 0))",
+    "  (global $pf_promise_result_fits (mut i64) (i64.const 1))",
+    "  (global $pf_promise_result_active (mut i32) (i32.const 0))",
     "  (func $pf_arena_reset",
     "    (global.set $pf_arena_cursor (i64.const " ++ toString base ++ "))",
     "    (global.set $pf_buffer64_ptr (i32.const 0))",
@@ -1204,7 +1289,13 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     "    (global.set $pf_storage_result_status (i64.const 0))",
     "    (global.set $pf_storage_result_length (i64.const 0))",
     "    (global.set $pf_storage_result_fits (i64.const 1))",
-    "    (global.set $pf_storage_result_active (i32.const 0)))",
+    "    (global.set $pf_storage_result_active (i32.const 0))",
+    "    (global.set $pf_promise_result_ptr (i32.const 0))",
+    "    (global.set $pf_promise_result_capacity (i64.const 0))",
+    "    (global.set $pf_promise_result_status (i64.const 0))",
+    "    (global.set $pf_promise_result_length (i64.const 0))",
+    "    (global.set $pf_promise_result_fits (i64.const 1))",
+    "    (global.set $pf_promise_result_active (i32.const 0)))",
     "  (func $pf_arena_alloc (param $bytes i64) (param $alignment i64) (result i32)",
     "    (local $mask i64) (local $pointer i64) (local $finish i64)",
     "    (local $current_pages i64) (local $current_bytes i64)",
@@ -1295,6 +1386,28 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     "      (i32.and (i64.ne (global.get $pf_storage_result_fits) (i64.const 0))",
     "        (i64.lt_u (local.get $index) (global.get $pf_storage_result_length)))",
     "      (then (i64.load8_u (i32.add (global.get $pf_storage_result_ptr)",
+    "        (i32.wrap_i64 (local.get $index)))))",
+    "      (else (i64.const 0))))",
+    "  (func $pf_promise_result_check (param $capacity i64)",
+    "    (if (i32.eqz (global.get $pf_promise_result_active)) (then unreachable))",
+    "    (if (i64.ne (local.get $capacity) (global.get $pf_promise_result_capacity))",
+    "      (then unreachable)))",
+    "  (func $pf_promise_result_status (param $capacity i64) (result i64)",
+    "    (call $pf_promise_result_check (local.get $capacity))",
+    "    (global.get $pf_promise_result_status))",
+    "  (func $pf_promise_result_length (param $capacity i64) (result i64)",
+    "    (call $pf_promise_result_check (local.get $capacity))",
+    "    (global.get $pf_promise_result_length))",
+    "  (func $pf_promise_result_fits (param $capacity i64) (result i64)",
+    "    (call $pf_promise_result_check (local.get $capacity))",
+    "    (global.get $pf_promise_result_fits))",
+    "  (func $pf_promise_result_byte (param $capacity i64) (param $index i64) (result i64)",
+    "    (call $pf_promise_result_check (local.get $capacity))",
+    "    (if (result i64)",
+    "      (i32.and (i64.eq (global.get $pf_promise_result_status) (i64.const 1))",
+    "        (i32.and (i64.ne (global.get $pf_promise_result_fits) (i64.const 0))",
+    "          (i64.lt_u (local.get $index) (global.get $pf_promise_result_length))))",
+    "      (then (i64.load8_u (i32.add (global.get $pf_promise_result_ptr)",
     "        (i32.wrap_i64 (local.get $index)))))",
     "      (else (i64.const 0))))",
     ""
@@ -1413,6 +1526,12 @@ def emit (p : IR.Program) : Except String String := do
   if programReturnsPromise p then
     lines := lines.push
       "  (import \"env\" \"promise_return\" (func $pf_promise_return (param i64)))"
+  if programUses .promiseResultsCount p then
+    lines := lines.push
+      "  (import \"env\" \"promise_results_count\" (func $pf_promise_results_count (result i64)))"
+  if programReadsPromiseResult p then
+    lines := lines.push
+      "  (import \"env\" \"promise_result\" (func $pf_promise_result (param i64 i64) (result i64)))"
   if programUses .blockIndex p then
     lines := lines.push
       "  (import \"env\" \"block_index\" (func $pf_block_index (result i64)))"

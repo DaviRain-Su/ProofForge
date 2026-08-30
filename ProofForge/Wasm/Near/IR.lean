@@ -43,6 +43,8 @@ private def projectOpExt
           return .promiseFunctionCallReturned receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
             (← _projectVal depositHi) (← _projectVal gas)
+      | .promiseResultRead capacity index =>
+          return .promiseResultRead capacity (← _projectVal index)
       | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
       | .transientBuffer64Set capacity index value =>
           return .transientBuffer64Set capacity (← _projectVal index) (← _projectVal value)
@@ -102,6 +104,11 @@ def extValCanon : Ops.ValKind → String
   | .storageResultLength capacity => s!"nstore.length.{capacity}"
   | .storageResultFits capacity => s!"nstore.fits.{capacity}"
   | .storageResultByte capacity => s!"nstore.byte.{capacity}"
+  | .promiseResultsCount => "npromise.results.count"
+  | .promiseResultStatus capacity => s!"npromise.result.status.{capacity}"
+  | .promiseResultLength capacity => s!"npromise.result.length.{capacity}"
+  | .promiseResultFits capacity => s!"npromise.result.fits.{capacity}"
+  | .promiseResultByte capacity => s!"npromise.result.byte.{capacity}"
   | .reserved => "wext"
 
 private def canonValues (values : Array (Wasm.IR.Val Ops.ValKind)) : String :=
@@ -119,6 +126,8 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
         s!"{argsCapacity}({canonValues arguments};" ++
         s!"{Wasm.IR.valCanon extValCanon depositLo}," ++
         s!"{Wasm.IR.valCanon extValCanon depositHi},{Wasm.IR.valCanon extValCanon gas})"
+  | .promiseResultRead capacity index =>
+      s!"npromise.result.read.{capacity}({Wasm.IR.valCanon extValCanon index})"
   | .transientBuffer64Begin capacity => s!"ntb64.begin.{capacity}"
   | .transientBuffer64Set capacity index value =>
       s!"ntb64.set.{capacity}({Wasm.IR.valCanon extValCanon index},{Wasm.IR.valCanon extValCanon value})"
@@ -153,6 +162,8 @@ private def rewritePayload
       return .promiseFunctionCallReturned receiver method argsCapacity
         (← arguments.mapM rewriteValue) (← rewriteValue depositLo)
         (← rewriteValue depositHi) (← rewriteValue gas)
+  | .promiseResultRead capacity index =>
+      return .promiseResultRead capacity (← rewriteValue index)
   | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
   | .transientBuffer64Set capacity index value =>
       return .transientBuffer64Set capacity (← rewriteValue index) (← rewriteValue value)

@@ -144,6 +144,41 @@ outcome. -/
   0
 
 /-!
+Callback-result foundation. `promiseResultsCount` is immutable invocation context. Every
+`promiseResultRead` replaces one invocation-local bounded descriptor. Status is the exact nearcore
+ABI: 0 not ready, 1 successful, 2 failed. Only status 1 writes the host register, so the target
+must not inspect it for the other statuses. An out-of-range result index aborts in nearcore.
+-/
+
+@[irreducible] def promiseResultsCount : UInt64 := 0
+
+@[irreducible] def promiseResultRead (capacity : Nat) (index : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  0
+
+/-- Exact nearcore 0/1/2 status for the latest Promise-result read. -/
+@[irreducible] def promiseResultStatus (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+/-- Successful result length, including an oversized length; zero for status 0/2. -/
+@[irreducible] def promiseResultLength (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+/-- One unless a successful result exceeded the declared capacity. Meaningful with status 1. -/
+@[irreducible] def promiseResultFits (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+/-- Byte from the latest bounded successful copy. Unavailable or uncopied lanes read as zero. -/
+@[irreducible] def promiseResultByte (capacity : Nat) (index : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := index
+  0
+
+/-!
 Invocation-local guest-Wasm arena leaves. Capacity is compile-time fixed by the SDK descriptor;
 the extractor rejects malformed geometry. The physical pointer remains target-owned and cannot
 enter source state or persistent storage.

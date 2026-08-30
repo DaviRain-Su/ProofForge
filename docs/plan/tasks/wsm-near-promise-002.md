@@ -40,5 +40,7 @@ receiver/method values, and dynamic unbounded arguments remain outside this slic
 
 ## Next
 
-Add bounded callback result count/status/read primitives before introducing `promise_then`, so
-callback decoding and private self-callback authentication have an independently tested substrate.
+Bounded callback result count/status/read primitives are complete in
+[wsm-near-promise-result-001](wsm-near-promise-result-001.md). Introduce `promise_then` next so
+genuine callback success/failure/oversized-result scenes exercise that independently tested
+substrate before typed decoding and private self-callback policy are added.

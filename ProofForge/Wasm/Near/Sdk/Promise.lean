@@ -1,5 +1,6 @@
 import ProofForge.Attr
 import ProofForge.Core.Value
+import ProofForge.Wasm.Near.Codec
 import ProofForge.Wasm.Near.Runtime
 
 /-!
@@ -12,8 +13,12 @@ with `promise_batch_create` plus `promise_batch_action_function_call`.
 Detached means no `promise_return`: the remote receipt still executes, but its success and result
 do not become the current call's result. Returned means `promise_return` forwards the remote
 receipt's eventual success, failure, and result. Synchronous host validation failures still abort
-and roll back the caller. Chaining, callbacks/results, joins, and transfer actions remain outside
-this slice.
+and roll back the caller.
+
+`ResultBuffer` provides bounded callback-result observation. Result count and reads are prohibited
+by nearcore in views. `read` preserves nearcore's 0 not-ready / 1 successful / 2 failed status;
+only success has bytes. An out-of-range result index aborts. Chaining, typed result decoding, joins,
+and transfer actions remain outside this slice.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Promises
@@ -35,5 +40,35 @@ literals accepted by the NEAR target. -/
     (deposit : Runtime.NearToken) (gas : UInt64) : UInt64 :=
   Runtime.promiseFunctionCallReturned argsCapacity receiver method arguments
     deposit.w0 deposit.w1 gas
+
+/-- Number of callback inputs for this invocation. Ordinary calls report zero. -/
+@[pf_inline] def resultsCount : UInt64 :=
+  Runtime.promiseResultsCount
+
+/-- Compile-time bound for one invocation-local Promise-result copy. -/
+abbrev ResultBuffer := Nat
+
+def ResultBuffer.wellFormed (buffer : ResultBuffer) : Bool :=
+  ProofForge.Wasm.Near.Codec.storageCapacityValid buffer
+
+@[pf_inline] def ResultBuffer.bounded (capacity : Nat) : ResultBuffer :=
+  capacity
+
+/-- Read one callback input into this bounded descriptor. An index outside `resultsCount` aborts. -/
+@[pf_inline] def ResultBuffer.read (buffer : ResultBuffer) (index : UInt64) : UInt64 :=
+  Runtime.promiseResultRead buffer index
+
+@[pf_inline] def ResultBuffer.status (buffer : ResultBuffer) : UInt64 :=
+  Runtime.promiseResultStatus buffer
+
+@[pf_inline] def ResultBuffer.length (buffer : ResultBuffer) : UInt64 :=
+  Runtime.promiseResultLength buffer
+
+/-- Whether a successful result fit. Status 0/2 have no bytes and retain the neutral value true. -/
+@[pf_inline] def ResultBuffer.fits (buffer : ResultBuffer) : Bool :=
+  Runtime.promiseResultFits buffer != 0
+
+@[pf_inline] def ResultBuffer.byte (buffer : ResultBuffer) (index : UInt64) : UInt8 :=
+  (Runtime.promiseResultByte buffer index).toUInt8
 
 end ProofForge.Wasm.Near.Sdk.Promises

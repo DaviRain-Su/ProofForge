@@ -585,6 +585,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                 .promiseFunctionCallReturned receiver method argsCapacity
                   (arguments.map (flipVal fuel')) (flipVal fuel' depositLo)
                   (flipVal fuel' depositHi) (flipVal fuel' gas)
+            | .promiseResultRead capacity index =>
+                .promiseResultRead capacity (flipVal fuel' index)
             | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
             | .transientBuffer64Set capacity index value =>
                 .transientBuffer64Set capacity (flipVal fuel' index) (flipVal fuel' value)

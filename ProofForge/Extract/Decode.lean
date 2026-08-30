@@ -72,6 +72,8 @@ private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
     some Ops.Val.nearCurrentAccountIdW6
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW7 then
     some Ops.Val.nearCurrentAccountIdW7
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultsCount then
+    some Ops.Val.nearPromiseResultsCount
   else none
 
 set_option maxRecDepth 2048 in
@@ -191,6 +193,35 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         let capacity := capacity.toNat
         if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
           some (.nearStorageResultByte capacity index)
+        else none
+    | _, _ => none
+  else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultStatus ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultLength ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultFits) &&
+      e.getAppArgs.size ≥ 1 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 1]!
+    match asStaticLit env fuel capacityExpr with
+    | some (.lit capacity) =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultStatus then
+            some (.nearPromiseResultStatus capacity)
+          else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultLength then
+            some (.nearPromiseResultLength capacity)
+          else
+            some (.nearPromiseResultFits capacity)
+        else none
+    | _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultByte &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some index =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          some (.nearPromiseResultByte capacity index)
         else none
     | _, _ => none
   else if let some leaf := nearRuntimeLeaf? e then
@@ -1804,30 +1835,34 @@ private partial def valNodeCount : Ops.Val → Nat
   | .ext _ operands =>
       1 + operands.foldl (init := 0) fun total operand => total + valNodeCount operand
 
-private partial def readsMutableNearStorageResult : Ops.Val → Bool
+private partial def readsMutableNearResult : Ops.Val → Bool
   | .arg _ | .local _ | .lit _ | .loopIx => false
-  | .field base _ | .bitNot base => readsMutableNearStorageResult base
+  | .field base _ | .bitNot base => readsMutableNearResult base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
   | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
   | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
-      readsMutableNearStorageResult lhs || readsMutableNearStorageResult rhs
+      readsMutableNearResult lhs || readsMutableNearResult rhs
   | .indexGet base _ index _ _ =>
-      readsMutableNearStorageResult base || readsMutableNearStorageResult index
+      readsMutableNearResult base || readsMutableNearResult index
   | .select _ lhs rhs thn els =>
-      readsMutableNearStorageResult lhs || readsMutableNearStorageResult rhs ||
-        readsMutableNearStorageResult thn || readsMutableNearStorageResult els
+      readsMutableNearResult lhs || readsMutableNearResult rhs ||
+        readsMutableNearResult thn || readsMutableNearResult els
   | .ext (.near (.storageResultStatus _)) _
   | .ext (.near (.storageResultLength _)) _
   | .ext (.near (.storageResultFits _)) _
-  | .ext (.near (.storageResultByte _)) _ => true
-  | .ext _ operands => operands.any readsMutableNearStorageResult
+  | .ext (.near (.storageResultByte _)) _
+  | .ext (.near (.promiseResultStatus _)) _
+  | .ext (.near (.promiseResultLength _)) _
+  | .ext (.near (.promiseResultFits _)) _
+  | .ext (.near (.promiseResultByte _)) _ => true
+  | .ext _ operands => operands.any readsMutableNearResult
 
 /-- Materialize scalar source values whose substitution would duplicate bounded control flow or
 re-evaluate a target read after a later effect. -/
 private def shouldMaterializeLocal (_type : Expr) (value : Ops.Val) : Bool :=
   match value with
   | .field .. | .indexGet .. | .select .. | .ext .. => true
-  | value => readsMutableNearStorageResult value || valNodeCount value ≥ 1024
+  | value => readsMutableNearResult value || valNodeCount value ≥ 1024
 
 private def localScalarValue? (env : Environment) (fuel : Nat) (value : Expr) : Option Ops.Val :=
   let rec go (fuel : Nat) (value : Expr) : Option Ops.Val :=
@@ -5594,6 +5629,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
@@ -5603,6 +5639,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.storageHasKey ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish ||
@@ -5673,6 +5710,16 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                     depositLo depositHi gas
             else none
         | _, _, _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some capacity, some index =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+              some (.nearPromiseResultRead capacity index)
+            else none
+        | _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin) &&
           e.getAppArgs.size ≥ 1 then

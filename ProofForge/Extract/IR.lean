@@ -75,6 +75,8 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
       | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallReturned receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
+      | .promiseResultRead capacity index =>
+          .near (.promiseResultRead capacity (mapValue index))
       | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
       | .transientBuffer64Set capacity index value =>
           .near (.transientBuffer64Set capacity (mapValue index) (mapValue value))
@@ -101,6 +103,7 @@ def OpExt.values : OpExt Val → Array Val
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
+      | .promiseResultRead _ index => #[index]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
       | .transientBuffer64Set _ index value => #[index, value]
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key
@@ -161,6 +164,9 @@ def OpExt.wellFormed : OpExt Val → Bool
             arguments.all (·.wellFormed ValKind.arity) &&
             depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
             gas.wellFormed ValKind.arity
+      | .promiseResultRead capacity index =>
+          Wasm.Near.Codec.storageCapacityValid capacity &&
+            index.wellFormed ValKind.arity
       | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
           Wasm.Near.Memory.buffer64CapacityValid capacity
       | .transientBuffer64Set capacity index value =>

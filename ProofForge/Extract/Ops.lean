@@ -151,6 +151,17 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Val.nearStorageResultByte (capacity : Nat) (index : Val) : Val :=
   .ext (.near (.storageResultByte capacity)) #[index]
 
+@[match_pattern] def Val.nearPromiseResultsCount : Val :=
+  nearLeaf .promiseResultsCount
+@[match_pattern] def Val.nearPromiseResultStatus (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultStatus capacity)
+@[match_pattern] def Val.nearPromiseResultLength (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultLength capacity)
+@[match_pattern] def Val.nearPromiseResultFits (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultFits capacity)
+@[match_pattern] def Val.nearPromiseResultByte (capacity : Nat) (index : Val) : Val :=
+  .ext (.near (.promiseResultByte capacity)) #[index]
+
 @[match_pattern] def Op.nearLogUtf8 (message : String) : Op :=
   .ext (.near (.logUtf8 message))
 
@@ -165,6 +176,9 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     (depositLo depositHi gas : Val) : Op :=
   .ext (.near (.promiseFunctionCallReturned receiver method argsCapacity arguments
     depositLo depositHi gas))
+
+@[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
+  .ext (.near (.promiseResultRead capacity index))
 
 @[match_pattern] def Op.nearTransientBuffer64Begin (capacity : Nat) : Op :=
   .ext (.near (.transientBuffer64Begin capacity))

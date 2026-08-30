@@ -1,6 +1,6 @@
 # NEAR Runtime / SDK capability plan
 
-> Updated 2026-08-29. This document maps the official `nearcore` host ABI and current
+> Updated 2026-08-30. This document maps the official `nearcore` host ABI and current
 > `near-sdk-rs` architecture to ProofForge ownership boundaries. It is a dependency plan, not a
 > claim of Rust SDK compatibility or mainnet readiness.
 
@@ -47,7 +47,7 @@ Authoritative source anchors:
 | Capability | Official owner | ProofForge now | Required owner here |
 |---|---|---|---|
 | guest linear-memory allocation | near-sdk-rs guest allocator over Wasm `memory.grow`; no nearcore malloc host import | **checked invocation-local arena + `Buffer64` complete** in wsm-near-memory-001 | Near Memory/Emit substrate; SDK exposes bounded consumers, never raw pointers |
-| register ABI | nearcore host | bounded reads for input/context/raw storage; exact status and stale-register rules | Runtime memory/register contract |
+| register ABI | nearcore host | bounded reads for input/context/raw storage/callback results; exact status and stale-register rules | Runtime memory/register contract |
 | full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
 | u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance complete** in wsm-near-u128-001; explicit gas and lossless Promise deposit complete in wsm-near-promise-001 | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
@@ -58,16 +58,16 @@ Authoritative source anchors:
 | IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
 | logs/events | `log_utf8`; NEP-297 SDK JSON | static UTF-8 literal effect in wsm-near-log-001; dynamic spans/events absent | Runtime log effect, then SDK event envelope |
-| cross-contract call | promise receipt/action host ABI | **detached and returned static batch function calls complete** in wsm-near-promise-001/002; chaining/results absent | Runtime promise effects, then typed SDK builder |
+| cross-contract call | promise receipt/action host ABI | **detached and returned static batch function calls complete** in wsm-near-promise-001/002; chaining absent | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | absent | Runtime batch/action; never synchronous balance mutation |
-| callback results | promise count/status/register + SDK decode | absent | bounded Runtime result read + SDK Result codec |
+| callback results | promise count/status/register + SDK decode | **bounded count/status/register read complete** in wsm-near-promise-result-001; typed decode/chaining scenes absent | bounded Runtime result read + SDK Result codec |
 | private/payable/init | generated entry guards | absent | entry-adapter policy over context/storage |
 
 Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
 bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw binary storage,
 fixed-width Vector/Identity LookupMap/LookupSet/IterableMap/IterableSet and ProofForge Queue
-foundations, plus explicit detached and returned static cross-contract function calls. It is not yet a general
-near-sdk-rs contract model.
+foundations, explicit detached and returned static cross-contract function calls, and bounded
+callback-result observation. It is not yet a general near-sdk-rs contract model.
 
 ## 3. Storage and collection contracts
 
@@ -131,9 +131,10 @@ Scheduling success is not remote execution success. `promise_result` status 1 is
 which returned bytes may be read. Parallel joins cannot receive actions or be returned directly.
 The SDK must reserve callback gas, authenticate self callbacks with full AccountId equality, and
 make detach versus return explicit; it must not copy Rust `Drop`-realization implicitly.
-The explicit returned path now calls `promise_return` only after caller state persistence; this
-links the child outcome without waiting and prevents a later scalar `value_return` from replacing
-the forwarded result. Callback result inspection and chaining are still absent.
+The explicit returned path calls `promise_return` only after caller state persistence; this links
+the child outcome without waiting and prevents a later scalar `value_return` from replacing the
+forwarded result. Bounded callback-result inspection now preserves exact status and only reads a
+successful register; chaining and typed decoding are still absent.
 
 Native transfer is `promise_batch_create(receiver)` plus `promise_batch_action_transfer(amount)`.
 It depends on full AccountId and u128 and is asynchronous.
@@ -150,7 +151,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
 | N7 promises | **detached and explicit returned static batch function calls done in wsm-near-promise-001/002**; then/and and transfer actions remain | receipt DAG/gas/deposit/failure sandbox scenes |
-| N8 callbacks | bounded result count/status/read, typed Result decode, private self callback | success/failure/oversized result and rollback scenes |
+| N8 callbacks | **bounded result count/status/read done in wsm-near-promise-result-001**; typed Result decode and private self callback remain | success/failure/oversized result and rollback scenes |
 | N9 lifecycle | non-payable default, payable/private/init guards, `STATE` version/migration | repeated init, deposit rejection, migration fixtures |
 | N10 standards | NEP-141/145 building blocks only after storage, events, transfer/call semantics | standard-specific integration suites |
 
@@ -183,6 +184,10 @@ It depends on full AccountId and u128 and is asynchronous.
 11. **NEAR-PROMISE-2 (wsm-near-promise-002 done):** explicit static returned call shares Promise staging,
     persists caller state, and then links the concrete receipt with final `promise_return`. Remote
     success bytes and failure propagate; callback inspection and `promise_then` remain later.
+12. **NEAR-PROMISE-RESULT-1 (wsm-near-promise-result-001 done):** exact callback input count and
+    bounded status/register reads use a dedicated descriptor, inspect bytes only for status 1,
+    expose oversized lengths without copying, and reject views. Genuine callback success/failure
+    scenes follow with `promise_then`; typed Borsh decoding remains later.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

@@ -174,6 +174,21 @@ promise_anchors = (
     '(call $pf_arena_alloc (i64.const 16) (i64.const 8))',
     '(i64.const 20000000000000)',
 )
+promise_result_anchors = (
+    '(func (export "resultsCount")',
+    '(func (export "resultStatus")',
+    '(func (export "resultLength")',
+    '(func (export "resultFits")',
+    '(func (export "resultByte")',
+    '(import "env" "promise_results_count"',
+    '(import "env" "promise_result"',
+    '(global $pf_promise_result_status (mut i64)',
+    '(func $pf_promise_result_byte',
+    '(call $pf_promise_results_count',
+    '(call $pf_promise_result',
+    '(call $pf_register_len (i64.const 4)',
+    '(call $pf_read_register (i64.const 4)',
+)
 forbid = ("host_lib", "xrpl_wasm_std", "get_current_contract_call")
 
 for wat in wats:
@@ -201,6 +216,8 @@ for wat in wats:
         extra = iterable_anchors
     elif wat.stem == "NearPromise":
         extra = promise_anchors
+    elif wat.stem == "NearPromiseResult":
+        extra = promise_result_anchors
     for needle in need_imports + need_exports + extra:
         if needle not in text:
             sys.exit(f"near check: {wat.name} missing {needle!r}")

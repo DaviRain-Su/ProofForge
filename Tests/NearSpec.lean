@@ -23,7 +23,7 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
 #guard ProofForge.Wasm.Near.Registry.names ==
   #["Counter", "NearCtx", "NearBytes", "NearMemory", "NearOutput", "NearStorage", "NearVector",
-    "NearLookup", "NearQueue", "NearIterable", "NearPromise"]
+    "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMemory" == some "830255873ad66d7c"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearOutput" == some "d455a43be10516e3"
@@ -33,6 +33,7 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearQueue" == some "f04d9a0d673b7fed"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearIterable" == some "8c0ece42e2b091ff"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearPromise" == some "545af93c8ad1ec37"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearPromiseResult" == some "ff7ea8988ba01999"
 
 #guard ProofForge.Wasm.Near.Ops.OpExt.wellFormed
   (.logUtf8 "NEAR ✓" : ProofForge.Wasm.Near.Ops.OpExt ProofForge.Wasm.Near.Ops.Val)
