@@ -7,7 +7,8 @@ Each wallet that calls `credit` therefore owns its own `ContractData`
 with key `bal`. That is the XLS-0101 user-data shard, not a NEAR trie
 and not a single-user contract vault.
 
-Zero function parameters: public AlphaNet 502s ContractCall Parameters.
+`credit` takes one UINT64 via `function_param`. Each wallet still owns
+its own `ContractData` (Owner = caller). Not a Map.
 -/
 namespace Examples.XrplBal
 
@@ -25,11 +26,11 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 def init : State :=
   { bal := 0 }
 
-/-- Add 1 to *this caller's* card. Another wallet has a different Owner. -/
+/-- Add `delta` to *this caller's* card. Another wallet has a different Owner. -/
 @[pf_entry]
-def credit (s : State) : Except Error (State × UInt64) :=
-  if s.bal ≤ u64Max - 1 then
-    .ok ({ bal := s.bal + 1 }, (0 : UInt64))
+def credit (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
+  if s.bal ≤ u64Max - delta then
+    .ok ({ bal := s.bal + delta }, (0 : UInt64))
   else
     .error .overflow
 

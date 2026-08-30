@@ -11,8 +11,8 @@
 > **-196 tefBAD_AUTH**（不是没钱；`tecPSEUDO_ACCOUNT` 是 +196）。
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
-> 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`
-> （`xs_1=5`，合约 `rhEHC56bwdojPJA2767wHC7V9i28S5tBh9`）都绿。
+> 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
+> `XrplNest.credit(3)`（`user.bal=3`）、`XrplBal` A `credit(3)` / B `credit(5)` 都绿。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
@@ -166,7 +166,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
    **注资已绿**（新 hash 第一次 Create 两数组 `tfSendAmount`）。`pokeEmit` 仍
    **-196 tefBAD_AUTH**（伪账户签名预检；不是没钱）。不开 `Sdk.Payments`。
 4. **wsm-034** — AccountRoot Sequence/Flags/OwnerCount **已绿**（`XrplRoot`）。
-5. **wsm-027 XrplBal** — **已绿**：每人一张卡（A=2 / B=1）。
+5. **wsm-027 XrplBal** — **已绿**：每人一张卡（A `credit(3)`=3 / B `credit(5)`=5）。
 6. **wsm-035** — 给别人写卡片 **已绿**（硬编码对方 AccountID）。`tx Sequence/Fee` 已绿。
    `amm_id` host 在（零 issue -15）。不开 Sdk.Map / Sdk.Amm。
 7. **wsm-036** — Lean `Context.accountLit hex` 覆盖存储 Owner。`XrplSend` 把 1 写到第二把钥匙的卡片。

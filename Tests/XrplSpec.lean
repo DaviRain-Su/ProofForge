@@ -53,7 +53,7 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplGate" == some "c2495d166a25c8e0"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHold" == some "e99965ac007e0da8"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMark" == some "20c54e937ffbf0fc"
-#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBal" == some "cfae015ada92cdc9"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBal" == some "3177150879f2b85a"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBalRt" == some "dd80a5af3243dec2"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRoot" == some "a8e6569035ec2d13"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTx" == some "2a9d4e10cd7ecec9"
@@ -321,6 +321,7 @@ elab "#pf_xrpl_bal_emit_check " n:ident : command => do
           "(func (export \"initialize\") (result i32)",
           "(func (export \"credit\") (result i32)",
           "(func (export \"get\")",
+          "(call $function_param (i32.const 0) (i32.const 3) (i32.const 20) (i32.const 8))",
           "(data (i32.const 64) \"bal\")"
         ]
         for anchor in anchors do
