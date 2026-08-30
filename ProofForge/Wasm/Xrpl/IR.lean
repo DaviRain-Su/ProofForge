@@ -66,6 +66,8 @@ def extValCanon : Ops.ValKind → String
   | .storeOwner => "xsto"
   | .flushBal => "xflush"
   | .peekOwner => "xpeek"
+  | .flushHalt => "xflushh"
+  | .peekHalt => "xpeelh"
 
 def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .reserved => "wext"

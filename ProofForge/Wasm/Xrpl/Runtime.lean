@@ -122,4 +122,16 @@ Host stub returns 0. Not a Map, not a Payment. -/
   let _ := w2
   0
 
+/-- Persist `v` onto the current Owner card under JSON key `halt`. -/
+@[irreducible] def xrplFlushHalt (v : UInt64) : UInt64 :=
+  v
+
+/-- Load `halt` from the card owned by `(w0,w1,w2)` (missing → 0). Rewrites
+persist Owner. Not a Map. -/
+@[irreducible] def xrplPeekHalt (w0 w1 w2 : UInt64) : UInt64 :=
+  let _ := w0
+  let _ := w1
+  let _ := w2
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

@@ -206,8 +206,11 @@ need_exports_mint = (
     '(func (export "initialize") (result i32)',
     '(func (export "mint") (result i32)',
     '(func (export "pay") (result i32)',
+    '(func (export "pause") (result i32)',
+    '(func (export "unpause") (result i32)',
     '(func (export "get")',
     '(i32.const 3)',
+    '(i32.const 4)',
     '(call $function_param',
     '(data (i32.const 64) "bal")',
 )

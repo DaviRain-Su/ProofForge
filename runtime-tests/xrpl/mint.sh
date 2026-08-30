@@ -100,4 +100,53 @@ rm -f "$cfg"
 [[ "$bal_a" == "3" ]] || { echo "FAIL: A bal want 3 got $bal_a" >&2; exit 1; }
 [[ "$bal_b" == "2" ]] || { echo "FAIL: B bal want 2 got $bal_b" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=3 B.bal=2 B-mint-denied"
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+pause_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$pause_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$pause_out"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mint","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+paused_mint="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$paused_mint" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_mint"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+paused_pay="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$paused_pay" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_pay"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a2="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b2="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+[[ "$bal_a2" == "3" ]] || { echo "FAIL: A bal should stay 3 while paused, got $bal_a2" >&2; exit 1; }
+[[ "$bal_b2" == "2" ]] || { echo "FAIL: B bal should stay 2 while paused, got $bal_b2" >&2; exit 1; }
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"unpause"}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+unpause_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$unpause_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$unpause_out"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+resume_pay="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$resume_pay" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$resume_pay"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a3="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b3="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a3" == "2" ]] || { echo "FAIL: A bal want 2 after unpause pay, got $bal_a3" >&2; exit 1; }
+[[ "$bal_b3" == "3" ]] || { echo "FAIL: B bal want 3 after unpause pay, got $bal_b3" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=3 pause-resume"

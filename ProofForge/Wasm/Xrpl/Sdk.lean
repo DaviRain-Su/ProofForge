@@ -112,6 +112,29 @@ persist Owner. Not `setUserData`. -/
 @[pf_inline] def peekOwnerLimbs (w0 w1 w2 : UInt64) : UInt64 :=
   Runtime.xrplPeekOwner w0 w1 w2
 
+/-- Persist `v` onto the current Owner card under JSON key `halt`.
+Keep pause off the per-user `bal` slot. -/
+@[pf_inline] def flushHalt (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushHalt v
+
+/-- Load `halt` from `(w0,w1,w2)`'s card (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekHaltLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekHalt w0 w1 w2
+
+/-- `halt` on a compile-time AccountID. Hex is 40 lowercase chars. -/
+@[pf_inline] def peekHaltLit (hex : String) : UInt64 :=
+  Runtime.xrplPeekHalt
+    (Runtime.xrplAccountLitW0 hex)
+    (Runtime.xrplAccountLitW1 hex)
+    (Runtime.xrplAccountLitW2 hex)
+
+/-- Persist Owner := compile-time AccountID. Returns w2. -/
+@[pf_inline] def storeOwnerLit (hex : String) : UInt64 :=
+  Runtime.xrplStoreOwner
+    (Runtime.xrplAccountLitW0 hex)
+    (Runtime.xrplAccountLitW1 hex)
+    (Runtime.xrplAccountLitW2 hex)
+
 end Context
 
 namespace Pausable
