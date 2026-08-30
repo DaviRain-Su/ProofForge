@@ -15,7 +15,7 @@ ran=0
 skipped=0
 for case in counter pair flag maybe ctx bounded static_counter static_roster ordered_storage \
     vec_log vec_stack bitmap_flags bitmap_claims ring_mailbox ring_history reentrancy \
-    allowlist id_registry \
+    allowlist id_registry checkpoint_book checkpoint_trace \
     collectible badge tipjar lang vault \
     ownable token window phase wide const capped multitoken crafttoken twostep_counter credits; do
   script="$here/anvil_$case.sh"

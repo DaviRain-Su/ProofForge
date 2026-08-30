@@ -10,6 +10,7 @@ import ProofForge.Evm.Sdk.StorageVec
 import ProofForge.Evm.Sdk.StorageBitmap
 import ProofForge.Evm.Sdk.StorageRing
 import ProofForge.Evm.Sdk.StorageEnumerableSet
+import ProofForge.Evm.Sdk.StorageCheckpoints
 import ProofForge.Evm.Sdk.Roles
 import ProofForge.Evm.Sdk.Reentrancy
 
@@ -19,6 +20,6 @@ import ProofForge.Evm.Sdk.Reentrancy
 Contract-facing umbrella for EVM values, typed storage handles, target effects, reusable access /
 pause/reentrancy/payment/fungible/ERC-721/bounded-ERC-1155 ledger policy components, compile-time
 static storage declarations, persistent bounded UInt64 storage vectors/bitmaps/ring queues/
-enumerable sets, and bounded static role sets. Applications import this module rather than target
-Runtime, Ops, IR, or Emit internals.
+enumerable sets/checkpoints, and bounded static role sets. Applications import this module rather
+than target Runtime, Ops, IR, or Emit internals.
 -/

@@ -75,6 +75,7 @@ import Tests.EvmStorageVecSpec
 import Tests.EvmBitmapSpec
 import Tests.EvmStorageRingSpec
 import Tests.EvmStorageEnumerableSetSpec
+import Tests.EvmStorageCheckpointsSpec
 import Tests.EvmPausableSpec
 import Tests.TipJarSpec
 import Tests.LangSpec

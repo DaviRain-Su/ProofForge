@@ -40,7 +40,9 @@ def entries : Array Entry := #[
   { name := "EvmRingMailbox", digest := "5f2a66d9732449cd" },
   { name := "EvmRingHistory", digest := "51b492f52021f6ec" },
   { name := "EvmAllowlist", digest := "5398786232c20c14" },
-  { name := "EvmIdRegistry", digest := "92520ed7aaa372d0" }
+  { name := "EvmIdRegistry", digest := "92520ed7aaa372d0" },
+  { name := "EvmCheckpointBook", digest := "ba538445e3647f45" },
+  { name := "EvmCheckpointTrace", digest := "904229061bdc4a3e" }
 ]
 
 def names : Array String := entries.map (·.name)
