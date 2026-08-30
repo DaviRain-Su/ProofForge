@@ -54,6 +54,8 @@ import Examples.EvmFeatureFlags
 import Examples.EvmClaimBitmap
 import Examples.EvmRingMailbox
 import Examples.EvmRingHistory
+import Examples.EvmAllowlist
+import Examples.EvmIdRegistry
 import Examples.GuardedPayout
 import Examples.Collectible
 import Examples.Badge

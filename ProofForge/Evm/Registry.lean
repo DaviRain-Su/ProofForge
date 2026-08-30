@@ -27,18 +27,20 @@ def entries : Array Entry := #[
   { name := "Lang", digest := "d2a43e6bf208bff0" },
   { name := "Vault", digest := "bb2f93cb28d7501" },
   { name := "Ownable", digest := "2dc1afccaffe17c4" },
-  { name := "Token", digest := "269a68fd54506509" },
+  { name := "Token", digest := "b69773a11a64286e" },
   { name := "Capped", digest := "bd609aceeaafd713" },
   { name := "MultiToken", digest := "c688769941bd4cfe" },
   { name := "CraftToken", digest := "2e6738a3705bc7dd" },
   { name := "TwoStepCounter", digest := "3b08dde14972e728" },
-  { name := "Credits", digest := "2cdeb3504c14ed59" },
+  { name := "Credits", digest := "b419d86e92ae9e9e" },
   { name := "Wide", digest := "a190f187d58d188e" },
   { name := "Const", digest := "81830f8855cd3dda" },
   { name := "EvmFeatureFlags", digest := "5cc9bb266f23487f" },
   { name := "EvmClaimBitmap", digest := "d91809979ad94cdc" },
   { name := "EvmRingMailbox", digest := "5f2a66d9732449cd" },
-  { name := "EvmRingHistory", digest := "51b492f52021f6ec" }
+  { name := "EvmRingHistory", digest := "51b492f52021f6ec" },
+  { name := "EvmAllowlist", digest := "5398786232c20c14" },
+  { name := "EvmIdRegistry", digest := "92520ed7aaa372d0" }
 ]
 
 def names : Array String := entries.map (·.name)

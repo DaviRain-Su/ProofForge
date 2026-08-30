@@ -2,9 +2,10 @@ import ProofForge
 
 /-!
 Extractor regression for one EVM success transition that combines target effects with ordinary
-state writes. The effect is sequenced first, every changed state leaf follows, and exactly one
-explicit result terminates the successful branch. This is independent of any SDK container so a
-future source abstraction cannot hide a compiler regression.
+state writes. Mutable target queries needed by those writes are snapshotted first, the effect is
+sequenced next, every changed state leaf follows, and exactly one explicit result terminates the
+successful branch. This is independent of any SDK container so a future source abstraction cannot
+hide a compiler regression.
 -/
 
 namespace Tests.EvmEffectStateSpec
@@ -38,6 +39,19 @@ def putAndRecord (s : State) (index key value : UInt64) : Except Error (State ×
   if h : index.toNat < 2 then
     .ok ({ s with items := s.items.set index.toNat value h, count := s.count + 1 },
       Effect.thenTrue (positions.put key (s.count + 1)))
+  else
+    .error .malformed
+
+/-- A map query determines an ordinary Vector write index while the same success transition
+clears that map entry. The query must be observed before the target effect, not re-evaluated by
+the later Vector store after the clear. -/
+@[pf_entry]
+def clearAndRecord (s : State) (key value : UInt64) : Except Error (State × Bool) :=
+  if h : (positions.get key - 1).toNat < 2 then
+    .ok ({ s with
+            items := s.items.set (positions.get key - 1).toNat value h,
+            count := s.count + 1 },
+      Effect.thenTrue (positions.put key 0))
   else
     .error .malformed
 
@@ -89,6 +103,19 @@ private def isReturn : Op → Bool
   | .returnU64 _ => true
   | _ => false
 
+private partial def hasMapQuery : ProofForge.Extract.IR.Val → Bool
+  | .ext (.evm (.component (.hashedMap _))) _ => true
+  | .field base _ | .bitNot base => hasMapQuery base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs => hasMapQuery lhs || hasMapQuery rhs
+  | .indexGet base _ index _ _ => hasMapQuery base || hasMapQuery index
+  | .select _ lhs rhs thn els =>
+      hasMapQuery lhs || hasMapQuery rhs || hasMapQuery thn || hasMapQuery els
+  | .ext _ operands => operands.any hasMapQuery
+  | _ => false
+
 private partial def findSequence (fuel : Nat) (ops : Array Op)
     (predicate : Array Op → Bool) : Option (Array Op) :=
   if predicate ops then some ops
@@ -131,6 +158,36 @@ private def expectEffectStateMerge : CommandElabM Unit := do
     | throwError "mixed effect/state sequence lost its return"
   unless effectIndex < vectorIndex && vectorIndex < scalarIndex && scalarIndex < returnIndex do
     throwError "mixed effect/state ordering drifted"
+
+  let some method := mixed.methods.find? (·.ixName == "clearAndRecord")
+    | throwError "mixed effect/state fixture omitted clearAndRecord"
+  let some sequence := findSequence 16 method.ops fun ops =>
+      ops.any isMapSet && ops.any isIndexSet && storeNames ops == #["count"]
+    | throwError "query-indexed effect/state sequence was not preserved"
+  let snapshots := sequence.filterMap fun
+    | .letLocal index value => if hasMapQuery value then some index else none
+    | _ => none
+  unless snapshots.size == 1 do
+    throwError "mutable EVM query was not snapshotted exactly once before the effect"
+  let snapshot := snapshots[0]!
+  let some snapshotIndex := sequence.findIdx? fun
+      | .letLocal index value => index == snapshot && hasMapQuery value
+      | _ => false
+    | throwError "mutable EVM query snapshot is missing"
+  let some effectIndex := sequence.findIdx? isMapSet
+    | throwError "query-indexed sequence lost its map effect"
+  let some vectorIndex := sequence.findIdx? fun
+      | .indexSetLeaf _ (.local index) _ _ _ | .indexSet _ (.local index) _ _ _ =>
+          index == snapshot
+      | _ => false
+    | throwError "Vector write did not consume the pre-effect query snapshot"
+  let some scalarIndex := sequence.findIdx? fun | .storeField "count" _ => true | _ => false
+    | throwError "query-indexed sequence lost its scalar write"
+  let some returnIndex := sequence.findIdx? isReturn
+    | throwError "query-indexed sequence lost its return"
+  unless snapshotIndex < effectIndex && effectIndex < vectorIndex &&
+      vectorIndex < scalarIndex && scalarIndex < returnIndex do
+    throwError "query snapshot/effect/state ordering drifted"
 
   let wide ←
     match ProofForge.Extract.extractModuleIR env `Tests.EvmEffectStateSpec.WideFixture with

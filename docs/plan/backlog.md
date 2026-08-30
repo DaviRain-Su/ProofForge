@@ -73,7 +73,8 @@ R5-008 checked allowance core、R5-009 reusable reentrancy policy、
 R5-010 persistent bounded EVM storage vector、R5-011 honest runtime-code observation policy、
 R5-012 safe closed-call result policy、R5-013 bounded ERC-721 core、
 R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap、
-R5-016 persistent bounded storage ring queue 与 explicit effect-result sequencing；
+R5-016 persistent bounded storage ring queue 与 explicit effect-result sequencing、
+R5-017 persistent bounded enumerable set 与 mutable-query snapshot sequencing；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -82,14 +83,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-29）**：Lean 汇总 372 jobs；SVM manifest 全 60 programs；
-  Mollusk 全量 375/375（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
-  32 programs 且 Anvil 32/32。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 372-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+- **当前可验证基线（2026-08-30）**：Lean 汇总 379 jobs；SVM manifest 全 61 programs；
+  Mollusk 全量 399/399（Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
+  34 programs 且 Anvil 34/34。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
+  并保留汇总 `test` gate；完整 379-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
   `docs/plan/tasks/ci-001.md`。
-  solc 0.8.34 的 Token Yul `StackTooDeepError` 已由共享 runtime address encoder 修复，
-  当前 Token deployment bytecode 为 21,610 B；Surfpool 1.5.0 部署门见 P5 最新记录。
+  solc 0.8.34 的 Token Yul `StackTooDeepError` 已由 shared pre-state snapshot lowering 修复，
+  当前 Token deployment bytecode 为 21,714 B；Surfpool 1.5.0 部署门见 P5 最新记录。
 - S0–S5：普通 Lean Counter 竖切到 Mollusk
 - 多字段 UInt64；从 `init` 返回 structure 收字段；Pair `.so` / Mollusk 4/4
 - Loader 偏移按 `dataLen` 算
@@ -709,6 +710,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   （permissionless dequeue/clear/reuse）独立复用；没有新增 Runtime/Ops/IR/Component/Emit、
   runtime allocator 或 pointer。详见 `docs/plan/tasks/r5-016.md`。
 
+- R5-017 EVM persistent bounded enumerable `UInt64` set 已完成集成：
+  `Evm.Sdk.StorageEnumerableSet` 以 fixed vector + live count + key→position+1 map 提供
+  O(1) insert/contains/indexed access/swap-remove，支持 key zero；malformed count、伪造
+  position 与 backing mismatch 全部 fail closed。Allowlist 与 permissionless ID registry 两个
+  consumer 只组合 SDK descriptor/policy，没有协议专属 Ops/IR/Emit。generic extractor 同时在
+  invalidating map-write/CALL effect 前 snapshot mutable State query，并在 wide leaf store 间保存
+  共同 pre-state，解决 map clear 后重读 position 及多 limb State 自污染；既有 Token 在 solc
+  0.8.34 的 StackTooDeep 也随正确 snapshot lowering 消失。详见
+  `docs/plan/tasks/r5-017.md`。
+
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
   geometry；malformed bank、重复 region、非法 alignment 与 1,024-byte OOM 均在 emission 前
@@ -858,14 +869,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 372 jobs，汇总门覆盖全部 imported test modules 与 target guards。
-- SVM registry 60 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 375/375，其中 RawEntry 20/20、Phoenix-v1 profile
+- `lake build Tests` 当前 379 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 61 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+  `pf build` 当前通过；全套 Mollusk 399/399，其中 RawEntry 20/20、Phoenix-v1 profile
   76/76。
-- EVM registry 32 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
+- EVM registry 34 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /
   EvmFeatureFlags / EvmClaimBitmap / EvmRingMailbox / EvmRingHistory / GuardedPayout /
-  Collectible / Badge / TipJar / Lang / Vault /
+  EvmAllowlist / EvmIdRegistry / Collectible / Badge / TipJar / Lang / Vault /
   Ownable / Token / Capped / MultiToken / CraftToken / TwoStepCounter / Credits / Window / Phase /
   Wide / Const 均进入
   Anvil 总门。`Addr20` 是一等 ABI `address`；
@@ -876,7 +887,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `docs/plan/tasks/e-u256-004.md`。
   地址的 little-endian limbs → ABI word 转换由 runtime `pf_store_addr20` helper 统一实现，不再
   在每个 CFG case 展开二十条 `mstore8`；solc 0.8.34 strict Yul optimizer 可编译完整 Token，
-  全 32 个 build 与 Anvil 32/32 通过。详见 `docs/plan/tasks/evm-009.md`、
+  全 34 个 build 与 Anvil 34/34 通过。详见 `docs/plan/tasks/evm-009.md`、
   `docs/plan/tasks/r1-010.md`、`docs/plan/tasks/r5-001.md` 和 `docs/plan/tasks/r5-002.md`。
 - Phoenix Mollusk 8/8：ask/bid 挂单、reduce、双向撮合、费用收取、真实 base/quote deposit/withdraw、trader topology 删除后的 surviving root、ask/bid order topology 与满书 exact address reuse、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、认证 audit `Program data`，及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门承担。
 - `postAskFunds → detached → insertAskOrder` 的 aggregate `baseLocked` / `baseFree` stores 已恢复：`flattenLeaves` 先 reduce constructor projection，再给闭包了 bounded tree walk 的 scalar 字段足够 decoder fuel。IR 门钉住 `postAsk` 的 `baseLocked`/`baseFree` 和 `postBid` 的 `quoteLocked`/`quoteFree`。

@@ -5650,6 +5650,39 @@ private partial def valReadsWritten (written : Array String) : Ops.Val → Bool
         valReadsWritten written thn || valReadsWritten written els
   | .ext _ operands => operands.any (valReadsWritten written)
 
+/-- A target query whose observation can change after an EVM storage write or external call.
+The component effect summary, rather than a container-specific pattern, owns this distinction. -/
+private partial def valReadsMutableEvmState : Ops.Val → Bool
+  | .arg _ | .local _ | .lit _ | .loopIx => false
+  | .field base _ | .bitNot base => valReadsMutableEvmState base
+  | .indexGet base _ index _ _ =>
+      valReadsMutableEvmState base || valReadsMutableEvmState index
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs
+  | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs
+  | .divU64 lhs rhs | .modU64 lhs rhs =>
+      valReadsMutableEvmState lhs || valReadsMutableEvmState rhs
+  | .select _ lhs rhs thn els =>
+      valReadsMutableEvmState lhs || valReadsMutableEvmState rhs ||
+        valReadsMutableEvmState thn || valReadsMutableEvmState els
+  | .ext (.evm (.component query)) operands =>
+      let effects := query.effects
+      effects.readsStorage || effects.externalCall || operands.any valReadsMutableEvmState
+  | .ext _ operands => operands.any valReadsMutableEvmState
+
+/-- Whether an EVM effect can invalidate a mutable target query that appears in a later ordinary
+State store. Logs and pure reads do not force snapshots; storage writes and external calls do. -/
+private partial def evmEffectsInvalidateQueries (ops : Array Ops.Op) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .ext (.evm (.component call)) =>
+        let effects := call.effects
+        effects.writesStorage || effects.externalCall
+    | .ite _ _ _ thn els =>
+        evmEffectsInvalidateQueries thn || evmEffectsInvalidateQueries els
+    | .forBody _ body => evmEffectsInvalidateQueries body
+    | _ => false
+
 private structure SnapshotState where
   written : Array String := #[]
   bindings : Array (Ops.Val × Nat) := #[]
@@ -5666,43 +5699,54 @@ private def SnapshotState.snapshot (base : Nat) (state : SnapshotState)
         prelude := state.prelude.push (.letLocal localIx value) },
       .local localIx)
 
-/--
-Lean record-update RHS expressions all observe the pre-update value. Keep flat write Ops, but
-snapshot only expressions that a preceding write in this same source update would invalidate.
--/
-private def snapshotStateUpdate (base : Nat) (ops : Array Ops.Op) : Array Ops.Op := Id.run do
+/-- Lower one simultaneous State update while collecting every required pre-write snapshot.
+`snapshotMutableEvm` additionally freezes target queries before an effect head that can invalidate
+them; this keeps that target sequencing concern out of SDK containers and ordinary State lowering. -/
+private def snapshotStateOps (base : Nat) (ops : Array Ops.Op)
+    (snapshotMutableEvm : Bool := false) : SnapshotState × Array Ops.Op := Id.run do
   let mut state : SnapshotState := {}
   let mut body : Array Ops.Op := #[]
+  let needsSnapshot (state : SnapshotState) (value : Ops.Val) : Bool :=
+    valReadsWritten state.written value ||
+      (snapshotMutableEvm && valReadsMutableEvmState value)
   for op in ops do
     match op with
     | .indexSetLeaf name index value len leaf =>
       let (next, index) :=
-        if valReadsWritten state.written index then state.snapshot base index else (state, index)
+        if needsSnapshot state index then state.snapshot base index else (state, index)
       state := next
       let (next, value) :=
-        if valReadsWritten state.written value then state.snapshot base value else (state, value)
+        if needsSnapshot state value then state.snapshot base value else (state, value)
       state := { next with written := next.written.push name }
       body := body.push (.indexSetLeaf name index value len leaf)
     | .indexSet name index value len offset =>
       let (next, index) :=
-        if valReadsWritten state.written index then state.snapshot base index else (state, index)
+        if needsSnapshot state index then state.snapshot base index else (state, index)
       state := next
       let (next, value) :=
-        if valReadsWritten state.written value then state.snapshot base value else (state, value)
+        if needsSnapshot state value then state.snapshot base value else (state, value)
       state := { next with written := next.written.push name }
       body := body.push (.indexSet name index value len offset)
     | .storeField name value =>
       let (next, value) :=
-        if valReadsWritten state.written value then state.snapshot base value else (state, value)
+        if needsSnapshot state value then state.snapshot base value else (state, value)
       state := { next with written := next.written.push name }
       body := body.push (.storeField name value)
     | .okState value =>
       let (next, value) :=
-        if valReadsWritten state.written value then state.snapshot base value else (state, value)
+        if needsSnapshot state value then state.snapshot base value else (state, value)
       state := next
       body := body.push (.okState value)
     | op => body := body.push op
-  return state.prelude ++ body
+  return (state, body)
+
+/--
+Lean record-update RHS expressions all observe the pre-update value. Keep flat write Ops, but
+snapshot only expressions that a preceding write in this same source update would invalidate.
+-/
+private def snapshotStateUpdate (base : Nat) (ops : Array Ops.Op) : Array Ops.Op :=
+  let (state, body) := snapshotStateOps base ops
+  state.prelude ++ body
 
 private def decodeYieldState (env : Environment) (fuel localDepth : Nat) (state : Expr)
     (appliedBases : Array Expr := #[]) (stateType? : Option Name := none)
@@ -5964,10 +6008,9 @@ dynamic fixed-vector writes plus the complete leaf diff. Effect-bearing leaf val
 op list only (a carrier field's runtime put must not also become a store), synthetic vector
 roots are dropped, and unchanged leaves never reach this filter because the leaf diff omits
 them. This keeps one success branch's literal `State` update and its runtime effects coherent
-instead of silently erasing the non-wide half of the transition. Stores in an effect sequence
-are emitted after the effect head and the leaf diff reads only pre-transition projections, so
-the plain op order is already snapshot-correct: no `snapshotStateUpdate` is applied here, and
-existing effect+wide-store programs keep all of their wide leaf writes. -/
+instead of silently erasing the non-wide half of the transition. `mergeEvmStores` snapshots any
+mutable target queries in these stores before an invalidating effect head, then emits the effects
+before the final State writes. -/
 private def evmEffectStores (env : Environment) (e : Expr) :
     Array Ops.Op :=
   let dynamic := collectIndexSets env e (deduplicate := true)
@@ -5982,18 +6025,21 @@ private def evmEffectStores (env : Environment) (e : Expr) :
   dynamic ++ dropVectorRootStores dynamic staticStores
 
 /-- Evm effect sequences keep their own op list; the same success branch's state-leaf stores
-rejoin right before the trailing result instead of being discarded for lacking a wide leaf
-name. -/
-private def mergeEvmStores (evmOps stores : Array Ops.Op) : Array Ops.Op :=
+rejoin right before the trailing result instead of being discarded for lacking a wide leaf name.
+Any State-store operand that reads mutable EVM state is evaluated into a lexical local before a
+storage-writing/external-call effect can change that observation. -/
+private def mergeEvmStores (localDepth : Nat) (evmOps stores : Array Ops.Op) : Array Ops.Op :=
   let evmHead :=
     if evmOps.back?.any (fun | .returnU64 _ => true | _ => false) then evmOps.pop else evmOps
   if stores.isEmpty then evmOps
   else
+    let (snapshot, stores) :=
+      snapshotStateOps localDepth stores (evmEffectsInvalidateQueries evmHead)
     let tail : Array Ops.Op :=
       match evmOps.back? with
       | some op@(.returnU64 _) => #[op]
       | _ => #[]
-    evmHead ++ stores ++ tail
+    snapshot.prelude ++ evmHead ++ stores ++ tail
 
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) (stateType? : Option Name := none) (deepScalars : Bool := false) :
@@ -6010,7 +6056,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   else if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
   else if let some ops := decodeEvmEffect env e then
-    .ok (mergeEvmStores ops (evmEffectStores env e))
+    .ok (mergeEvmStores localDepth ops (evmEffectStores env e))
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
   else if let some result := asYieldStores env e localDepth stateType? deepScalars then
@@ -6492,7 +6538,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
     else if let some ops := decodeEvmEffect env e then
-      return .ok (mergeEvmStores ops (evmEffectStores env e))
+      return .ok (mergeEvmStores localDepth ops (evmEffectStores env e))
     else if let some (n, addend) := findForIn env e then
       return .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
     else if let some (n, bodyE) := findForBodyExpr env e then
@@ -6644,7 +6690,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             | .ok ops => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
             | .error reason => return .error reason
           | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
-            let ops := mergeEvmStores evmOps (evmEffectStores env t)
+            let ops := mergeEvmStores localDepth evmOps (evmEffectStores env t)
             return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
             if structuredThen || hasNestedIte 64 t then

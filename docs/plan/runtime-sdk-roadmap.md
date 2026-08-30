@@ -74,7 +74,7 @@ instruction 增加 recipe opcode。
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、target-owned Clock/EpochSchedule/Rent sysvar query（unsigned/Bool native fields complete）、checked fixed-account lamport debit/credit 与 backward duplicate-alias static walk、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return、Option/payload-enum tagged input/output、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data、checked program-memory spans 与 Token-2022 TLV envelope | signed timestamp、sliced/Instructions sysvar、AccountView+lamport effect 的 alias-aware variable walk、nested/constructed/wide dynamic return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation、program-memory span、checked lamport mutation；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、`Account.Handle.transferLamports`、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue、ordered Map/RBMap、one-based allocator、checked account-memory facade，以及可同类双 slot 的 invocation-local buffer/Vector64/writer 和 fixed-width UInt64 `Record64` | Rent-aware resize/close、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；wider/typed POD transient shapes、更多 manifest-bounded slot 与 insert/remove/iteration 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input/output、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，以及独立 `OutputPlan` 的 top-level bounded dynamic/tagged result（strict UTF-8 String）、full-width gas/basefee/prevrandao/gaslimit/gasprice/blobbasefee、blobhash、caller/origin/coinbase、msg.sig/msg.data.length、blockhash 与 address balance/code observations、Cancun target pin、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | nested/constructed/wide dynamic return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；blob payload/bounded raw msg.data bytes 与标准化资源 manifest |
-| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；`StorageVec` persistent bounded UInt64 vector；`StorageBitmap` packed static bit policy；`StorageRing` bounded persistent UInt64 FIFO；honest code observation + safe closed-call result policy | typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；enumerable set/checkpoints 与 richer persistent element shapes |
+| EVM SDK | `Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；`StorageVec` persistent bounded UInt64 vector；`StorageBitmap` packed static bit policy；`StorageRing` bounded persistent UInt64 FIFO；`StorageEnumerableSet` bounded persistent enumerable UInt64 set；honest code observation + safe closed-call result policy | typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；checkpoints、wide-key map 与 richer persistent element shapes |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -115,7 +115,8 @@ ledger foundation、R5-007 checked credit/alias-safe transfer、R5-008 checked a
 R5-009 reusable reentrancy policy、R5-010 persistent bounded storage vector、R5-011 honest
 runtime-code observation policy、R5-012 safe closed-call result policy、R5-013 bounded
 ERC-721 core、R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap 与
-R5-016 persistent StorageRing 均已集成；独立 contract 分别复用这些 SDK contracts。
+R5-016 persistent StorageRing、R5-017 persistent StorageEnumerableSet 均已集成；独立
+contract 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
 instruction/scratch geometry 收口为 typed bounded plan；SVM-RT-2b 已继续统一
 return-data/multi-seed signer-tail geometry；SVM-RT-3 第一刀已建立 Token-2022 bounded TLV
@@ -714,10 +715,19 @@ full/empty/OOB，wraparound 与 drain-to-empty/clear 都保持 canonical metadat
 consumer 的 Anvil 矩阵覆盖真实 storage wrap/reuse 和原子失败；没有新增 Runtime/Ops/IR/
 Component/Emit 或 runtime allocator。详见 [R5-016](tasks/r5-016.md)。
 
+R5-017 已完成 persistent bounded StorageEnumerableSet：fixed `Vector UInt64 capacity`、
+explicit live count 与 key→position+1 `U64Map` 组合成 O(1) insert/contains/indexed access/
+swap-remove，key zero 可用，malformed count/position/backing mismatch 全部 fail closed。
+EvmAllowlist 与 EvmIdRegistry 独立消费同一 descriptor/policy；consumer 保留 literal State
+vector/count update 与显式 map put，不引入 set-specific Runtime/Ops/IR/Emit。为保证这些
+simultaneous updates 观察共同 pre-state，generic extractor 会在 invalidating EVM effect 前
+snapshot mutable State query，并在 wide State leaf store 之间 snapshot 后续计算。详见
+[R5-017](tasks/r5-017.md)。
+
 ### R6 — 双目标验收
 
 - CI-001 已把 shared Lean guards、SVM build/Mollusk/Surfpool 与 EVM build/Anvil 拆成三条
-  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 372-job Lean aggregate 不再在两个
+  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 379-job Lean aggregate 不再在两个
   target lane 重复执行。详见 [CI-001](tasks/ci-001.md)。
 - shared semantic fixtures：Counter、Escrow/Vault、Fungible ledger；共享行为规范，使用
   target-owned storage/ABI binding，不强求同一份物理 layout source。

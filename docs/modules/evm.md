@@ -9,7 +9,7 @@
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
-| `Evm.Sdk` | 合同侧 `Address` / `UInt256`、静态 storage layout、typed map、checked fungible ledger、explicit reentrancy policy、context / immutable / event / revert / closed-call facade | SVM 账户几何、业务协议、运行时 layout 对象 |
+| `Evm.Sdk` | 合同侧 `Address` / `UInt256`、静态 storage layout、typed map、checked fungible ledger、explicit reentrancy policy、bounded persistent vector/bitmap/ring/enumerable-set policy、context / immutable / event / revert / closed-call facade | SVM 账户几何、业务协议、运行时 layout 对象 |
 | `Evm.Runtime` | 环境 opcode、`Addr20` / `UInt256`、LOG、hashed Map、封闭 ERC-20 | SVM sysvar / CPI |
 | `Crypto.Keccak` | Ethereum Keccak-256、ABI selector（公共库） | 链上 opcode |
 | `Evm.IR` | EVM-only `Op`、typed storage slot/Vector stride、constructor、selector、digest | Loader V3、账户 disc、SVM op |
@@ -49,6 +49,13 @@ nonzero sentinels 和既有 ordered `storeNow` effect。应用显式书写 enter
 hostile callback 可见 entered 状态，failed CALL 由交易回滚 lock；没有 raw slot、hidden State
 write 或 Reentrancy-specific Ops/IR/Emit recipe。
 
+`Sdk.StorageEnumerableSet` 把 fixed `Vector UInt64 capacity`、explicit live count 与
+key→position+1 `U64Map` 组合为 O(1) insert/contains/indexed access/swap-remove policy。
+position zero 保留给 absent，所以 key zero 仍可表示；descriptor 统一 capacity 与 map namespace，
+decision 在任何 write 前拒绝 malformed count、伪造 position 与 backing mismatch。consumer
+继续显式写 ordinary State vector/count 并执行 map put；SDK 不隐藏 storage effect，也不提供
+需要 O(n) mapping clear 的 bulk clear。
+
 SDK facade 直接 `@[pf_inline]` 到既有 source/runtime 叶，不增加 Ops、IR 或 emitter case；
 canonical 拼写仍是 `vg` / `mseta256` / `ttxfer` / `permit` / `edep` /
 `elog3.Transfer` / `err.ZeroAddress`。仅 facade adoption 保持旧产物；checked credit/alias-safe
@@ -66,6 +73,13 @@ EVM conversion；SVM 叶子（`clockSlot` / `signerKey0` /
 `evmDeposit` 让该 entry payable；程序若有任一 payable 入口，去掉全局 `callvalue()` 守卫，
 非 payable 入口本地守卫。`evmSendEth` 是封闭 value CALL。`evmLogTipped` 是 LOG1。窄槽
 `UInt8/16/32` 各占一个 storage word。`Option UInt64` 是 tag+payload 两槽。
+
+同一 successful transition 同时包含 component effect 与 ordinary State store 时，Extract 会先
+snapshot 后续依赖的 mutable target query，再按 effect → State stores → return 排序。这样 map
+write 或 CALL 不会让后续 vector/count write 重读已经改变的 storage；LOG 不会使 storage
+query 失效，因此不触发额外 snapshot。多 limb/leaf State store 也不会由前一 leaf 污染共同
+pre-state。query/effect 的可变性来自
+`Component.Query.effects` / `Component.Call.effects`，不是协议或容器名特判。
 
 每个 target-owned method 通过 `Method.toCFG` 后生成 Yul：入口预声明 CFG locals，`pf_pc`
 dispatcher 的每个 `case` 对应一个 basic block，branch / checked success / overflow 只改下一
@@ -107,6 +121,8 @@ Anvil（工程门，不是 refinement）：
 - `runtime-tests/evm/anvil_ownable.sh`：`constructor(address)` / `ownerOf()(address)`、非 owner revert、Incremented log、UInt256 approve / checked allowance spend / over-spend atomicity
 - `runtime-tests/evm/anvil_token.sh`：checked additive mint、direct/delegated self-transfer、checked allowance increase/decrease/spend、wrap/不足原子保持、LOG3 Transfer/Approval
 - `runtime-tests/evm/anvil_capped.sh`：第二个合约复用 owner + pause + 固定 cap；非 owner / paused / 超 cap 分别解码 Unauthorized / Paused / CapExceeded
+- `runtime-tests/evm/anvil_allowlist.sh`：owner-gated set insert/zero-key/contains/index/swap-remove/full/malformed atomicity
+- `runtime-tests/evm/anvil_id_registry.sh`：permissionless set reuse、typed full error、nonreverting malformed membership fallback
 - `runtime-tests/evm/anvil_window.sh`：固定长 Vector 两槽；`setTail` 只写第二叶，第一叶保持
 - `runtime-tests/evm/anvil_phase.sh`：零 payload variant 的 idle/live tag 往返与 view
 - `runtime-tests/evm/anvil_wide.sh`：`uint256` ABI、跨 64-bit 边界 add/sub/mul、typed compare、bitwise/shift、溢出 revert
