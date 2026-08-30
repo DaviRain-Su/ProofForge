@@ -276,6 +276,7 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
       for m in #[program.initializer] ++ program.entries do
         if m.paramCount > 0 then
           if !fp.isEmpty then fp := fp ++ ","
+          -- On-chain export is ixName (`init` → `initialize`).
           fp := fp ++ "\"" ++ jsonEscape m.ixName ++ "\":" ++ toString m.paramCount
       let params :=
         if fp.isEmpty then ""
