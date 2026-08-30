@@ -227,6 +227,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-payable-001](tasks/wsm-near-payable-001.md) | done | NEAR non-payable-by-default entry guards |
 | [wsm-near-entry-policy-001](tasks/wsm-near-entry-policy-001.md) | done | NEAR explicit private/payable entry metadata |
 | [wsm-near-uninitialized-001](tasks/wsm-near-uninitialized-001.md) | done | NEAR fail-closed ordinary entry lifecycle |
+| [wsm-near-state-envelope-001](tasks/wsm-near-state-envelope-001.md) | done | NEAR versioned STATE schema envelope |
 
 ## SVM 全面工作计划（当前主线）
 

@@ -451,4 +451,19 @@ SVM / EVM / XRPL domains. -/
 def digestHex (p : Program) : String :=
   Wasm.IR.digestHex Host.digestDomain extValCanon extOpCanon p
 
+/-- ProofForge-owned persistent-state schema identity. Method logic and the program name are
+deliberately absent, so upgrades remain compatible exactly while ordered slot name/width/ABI stays
+stable. FNV-1a-64 is pinned by `Core.IR.fnv1a64`; this is an engineering mismatch detector, not a
+collision-resistant commitment. -/
+def stateSchemaCanonical (p : Program) : String :=
+  let slots := p.slots.map fun slot =>
+    s!"{slot.name.toUTF8.size}:{slot.name}:{slot.width}:{slot.abi.toUTF8.size}:{slot.abi}"
+  s!"near-state-schema-v1|{p.slots.size}|" ++ String.intercalate "/" slots.toList
+
+def stateSchemaDigest (p : Program) : UInt64 :=
+  Core.IR.fnv1a64 (stateSchemaCanonical p)
+
+def stateSchemaDigestHex (p : Program) : String :=
+  Core.IR.u64Hex (stateSchemaDigest p)
+
 end ProofForge.Wasm.Near.IR

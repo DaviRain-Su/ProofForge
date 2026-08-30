@@ -43,5 +43,7 @@ lifecycle work.
 
 ## Next
 
-Define a versioned `STATE` metadata envelope and explicit migration entry contract before claiming
-schema compatibility or general near-sdk-rs state serialization.
+The versioned metadata is complete in
+[wsm-near-state-envelope-001](wsm-near-state-envelope-001.md). An explicit authenticated migration
+entry remains required before claiming upgrade compatibility or general near-sdk-rs state
+serialization.

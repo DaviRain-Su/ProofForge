@@ -62,6 +62,9 @@ private def evictedReg : Nat := 2
 private def rawStorageReg : Nat := 3
 /-- Dedicated callback-result register; only status 1 may be consulted. -/
 private def promiseResultReg : Nat := 4
+/-- Dedicated STATE-envelope register. A missing storage read leaves registers stale, so this must
+not alias scalar/raw/callback reads and its status is always checked before its length. -/
+private def stateMetadataReg : Nat := 5
 
 private def panicOverflowOff : Nat := 2048
 private def panicDivOff : Nat := 2057
@@ -76,10 +79,18 @@ private def panicInitialized : String := "The contract has already been initiali
 
 private def panicUninitialized : String := "The contract is not initialized"
 
+private def panicStateIncompatible : String := "The contract state version is incompatible"
+
 /-- Dedicated zero-padded buffers prevent a shorter second account id from
 observing bytes left by another register read. -/
 private def predecessorAccountOff : Nat := 64
 private def currentAccountOff : Nat := 128
+
+/-- Exact 16-byte `PFNRST01 || schemaDigestLE` STATE envelope scratch. The preceding account-id
+range ends at 192 and bounded input starts at 256. -/
+private def stateMetadataOff : Nat := 192
+private def stateMetadataLength : Nat := 16
+private def stateMetadataMagic : UInt64 := 0x31305453524e4650
 
 /-- Canonical Borsh input is copied only after its register length is bounded. The largest frame
 is 68 bytes and therefore remains disjoint from context scratch and storage keys. -/
@@ -469,10 +480,15 @@ private def initializedGuard (p : Program ValKind OpExt) (level : Nat) : Array S
     (init := guard stateKeyOff stateKey.length)
     fun lines (_, off, len) => lines ++ guard off len
 
-private def markInitialized (level : Nat) : Array String := #[
+private def markInitialized (p : Program ValKind OpExt) (level : Nat) : Array String := #[
+  indent level ("(i64.store (i32.const " ++ toString stateMetadataOff ++ ") (i64.const " ++
+    toString stateMetadataMagic ++ "))"),
+  indent level ("(i64.store (i32.const " ++ toString (stateMetadataOff + 8) ++
+    ") (i64.const " ++ toString (IR.stateSchemaDigest p) ++ "))"),
   indent level ("(drop (call $pf_storage_write (i64.const " ++ toString stateKey.length ++
-    ") (i64.const " ++ toString stateKeyOff ++ ") (i64.const 1) (i64.const " ++
-    toString stateKeyOff ++ ") (i64.const " ++ toString evictedReg ++ ")))")
+    ") (i64.const " ++ toString stateKeyOff ++ ") (i64.const " ++
+    toString stateMetadataLength ++ ") (i64.const " ++ toString stateMetadataOff ++
+    ") (i64.const " ++ toString evictedReg ++ ")))")
 ]
 
 private def returnU64Instr (expr : String) (level : Nat) : Array String :=
@@ -938,7 +954,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
                 throw "extract/unsupported: near v0 instructions follow terminal operation"
               let v ← renderVal st value
               let mut lines : Array String := #[]
-              if st.initializer then lines := lines ++ markInitialized level
+              if st.initializer then lines := lines ++ markInitialized p level
               match st.pendingPromiseReturn with
               | some promiseLocal =>
                   lines := lines.push (indent level
@@ -956,7 +972,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let mut lines :=
           #[indent level ("(local.set " ++ localOfSlot dest ++ " " ++ v ++ ")")] ++
           storeSlot p dest ("(local.get " ++ localOfSlot dest ++ ")") level
-        if st.initializer then lines := lines ++ markInitialized level
+        if st.initializer then lines := lines ++ markInitialized p level
         match st.pendingPromiseReturn with
         | some promiseLocal =>
             lines := lines.push (indent level
@@ -1271,7 +1287,8 @@ private def privateMessage (method : Method ValKind OpExt) : String :=
   "Method " ++ method.ixName ++ " is private"
 
 private def lifecycleMessages (p : Program ValKind OpExt) : Array String :=
-  let initial := if p.entries.isEmpty then #[] else #[panicUninitialized]
+  let initial :=
+    if p.entries.isEmpty then #[] else #[panicUninitialized, panicStateIncompatible]
   (#[p.initializer] ++ p.entries).foldl (init := initial) fun messages method =>
     let messages :=
       if methodPrivate method then messages.push (privateMessage method) else messages
@@ -1303,6 +1320,11 @@ private def uninitializedMessageOf (p : Program ValKind OpExt) : Except String (
   | some (_, off, len) => pure (off, len)
   | none => throw "extract/unsupported: near uninitialized panic is missing from static layout"
 
+private def incompatibleStateMessageOf (p : Program ValKind OpExt) : Except String (Nat × Nat) :=
+  match (lifecycleLayout p).find? (fun item => item.1 == panicStateIncompatible) with
+  | some (_, off, len) => pure (off, len)
+  | none => throw "extract/unsupported: near incompatible-state panic is missing from static layout"
+
 private def lifecycleDataSection (p : Program ValKind OpExt) : Except String (Array String) := do
   let layout := lifecycleLayout p
   let total := match layout.back? with
@@ -1328,14 +1350,33 @@ private def depositGuard (p : Program ValKind OpExt) (method : Method ValKind Op
 
 private def uninitializedGuard (p : Program ValKind OpExt)
     (level : Nat) : Except String (Array String) := do
-  let (off, len) ← uninitializedMessageOf p
+  let (missingOff, missingLen) ← uninitializedMessageOf p
+  let (incompatibleOff, incompatibleLen) ← incompatibleStateMessageOf p
+  let incompatiblePanic :=
+    indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++
+      toString incompatibleLen ++ ") (i64.const " ++ toString incompatibleOff ++ "))")
   return #[
-    indent level ("(if (i64.eq (call $pf_storage_has_key (i64.const " ++
+    indent level ("(if (i64.eq (call $pf_storage_read (i64.const " ++
       toString stateKey.length ++ ") (i64.const " ++ toString stateKeyOff ++
-      ")) (i64.const 0))"),
+      ") (i64.const " ++ toString stateMetadataReg ++ ")) (i64.const 0))"),
     indent (level + 2) "(then",
-    indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++ toString len ++
-      ") (i64.const " ++ toString off ++ "))"),
+    indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++ toString missingLen ++
+      ") (i64.const " ++ toString missingOff ++ "))"),
+    indent (level + 2) "))",
+    indent level ("(if (i64.ne (call $pf_register_len (i64.const " ++
+      toString stateMetadataReg ++ ")) (i64.const " ++ toString stateMetadataLength ++ "))"),
+    indent (level + 2) "(then",
+    incompatiblePanic,
+    indent (level + 2) "))",
+    indent level ("(call $pf_read_register (i64.const " ++ toString stateMetadataReg ++
+      ") (i64.const " ++ toString stateMetadataOff ++ "))"),
+    indent level ("(if (i32.or (i64.ne (i64.load (i32.const " ++
+      toString stateMetadataOff ++ ")) (i64.const " ++ toString stateMetadataMagic ++ "))"),
+    indent (level + 8) ("(i64.ne (i64.load (i32.const " ++
+      toString (stateMetadataOff + 8) ++ ")) (i64.const " ++
+      toString (IR.stateSchemaDigest p) ++ ")))"),
+    indent (level + 2) "(then",
+    incompatiblePanic,
     indent (level + 2) "))"
   ]
 

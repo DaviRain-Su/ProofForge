@@ -448,7 +448,8 @@ elab "#pf_near_promise_check" : command => do
       unless beforeRead.contains "(call $pf_input" do
         throwError "callback result was read before ordinary input decoding"
       unless beforeRead.contains
-          "(call $pf_storage_has_key (i64.const 5) (i64.const 2096)) (i64.const 0)" do
+          ("(call $pf_storage_read (i64.const 5) (i64.const 2096) (i64.const 5)) " ++
+            "(i64.const 0)") do
         throwError "callback result was read before the missing-STATE guard"
   | _ => throwError "callbackSuccess must read its Promise result exactly once after guards"
   let callbackFailure ← match program.entries.find? (·.ixName == "callbackFailure") with
@@ -498,7 +499,8 @@ elab "#pf_near_promise_check" : command => do
   match afterJoinedPredecessor.splitOn "(call $pf_promise_result (i64.const 0)" with
   | [beforeLeft, afterLeft] =>
       unless beforeLeft.contains
-          "(call $pf_storage_has_key (i64.const 5) (i64.const 2096)) (i64.const 0)" do
+          ("(call $pf_storage_read (i64.const 5) (i64.const 2096) (i64.const 5)) " ++
+            "(i64.const 0)") do
         throwError "joined callback read dependency results before the missing-STATE guard"
       match afterLeft.splitOn "(call $pf_promise_result (i64.const 1)" with
       | [_between, _afterRight] => pure ()

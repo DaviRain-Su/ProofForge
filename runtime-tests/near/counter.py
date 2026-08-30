@@ -78,6 +78,15 @@ def main() -> None:
     print("counter: paid initialize rejected before state creation ok")
 
     client.call("initialize", NearClient.encode_u64_le(0))
+    expected_state_envelope = b"PFNRST01" + bytes.fromhex("ad143be1f1fee08d")
+    actual_state_envelope = client.view_state_values().get(b"STATE")
+    if actual_state_envelope != expected_state_envelope:
+        raise AssertionError(
+            "STATE envelope mismatch: "
+            f"expected {expected_state_envelope.hex()}, "
+            f"got {actual_state_envelope.hex() if actual_state_envelope else None}"
+        )
+    print("counter: exact versioned STATE schema envelope ok")
     got = client.view_u64("get")
     if got != 0:
         raise AssertionError(f"after initialize(0): get() expected 0, got {got}")

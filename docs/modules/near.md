@@ -40,6 +40,10 @@ wsm-near-init/payable/entry-policy/uninitialized-001 再钉入口生命周期：
 private 先于 non-payable，参数解码后 ordinary state-consuming entry 必须见到 `STATE` marker，
 否则精确 panic `The contract is not initialized`。这是类似 near-sdk-rs `PanicOnDefault` 的
 ProofForge fail-closed 策略；不声称 near-sdk-rs 的普通 `Default` 也必然拒绝未初始化调用。
+wsm-near-state-envelope-001 把 marker 收紧为 exact 16-byte
+`PFNRST01 || fnv1a64(ordered slot schema)_le`；方法逻辑升级不改变 schema identity，而字段
+name/width/ABI 或顺序变化会在任何 state/result read 前精确 fail closed。它是 ProofForge
+split-key 元数据，不是 near-sdk-rs 的 Borsh `STATE`。
 
 ## Boundary
 
@@ -98,7 +102,8 @@ ProofForge fail-closed 策略；不声称 near-sdk-rs 的普通 `Default` 也必
   有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路。
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
   `counter.sh` 还在初始化前验证 paid mutator 先命中 non-payable，普通 mutator/view 再以精确
-  missing-state panic fail closed 且不创建 KV state，随后初始化、重复初始化与算术场景照常通过。
+  missing-state panic fail closed 且不创建 KV state；初始化后还对账 exact 16-byte schema
+  envelope，随后重复初始化与算术场景照常通过。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
 `NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、

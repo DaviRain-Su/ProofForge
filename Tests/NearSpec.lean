@@ -67,14 +67,33 @@ elab "#pf_near_emit_check " n:ident : command => do
     | .ok source => do
         let digest := ProofForge.Wasm.Near.IR.digestHex program
         let uninitializedGuard :=
-          "(if (i64.eq (call $pf_storage_has_key (i64.const 5) (i64.const 2096)) " ++
-            "(i64.const 0))"
+          "(if (i64.eq (call $pf_storage_read (i64.const 5) (i64.const 2096) " ++
+            "(i64.const 5)) (i64.const 0))"
         let uninitializedPanic :=
           "(call $pf_panic_utf8 (i64.const 31) (i64.const 12288))"
         let uninitializedData :=
           "(data (i32.const 12288) \"\\54\\68\\65\\20\\63\\6f\\6e\\74\\72\\61" ++
             "\\63\\74\\20\\69\\73\\20\\6e\\6f\\74\\20\\69\\6e\\69\\74" ++
             "\\69\\61\\6c\\69\\7a\\65\\64\")"
+        let schemaCanonical := ProofForge.Wasm.Near.IR.stateSchemaCanonical program
+        let schemaDigest := ProofForge.Wasm.Near.IR.stateSchemaDigest program
+        unless schemaCanonical == "near-state-schema-v1|1|5:value:8:6:u64-le" &&
+            schemaDigest == (0x8de0fef1e13b14ad : UInt64) do
+          throwError s!"unexpected Counter state schema identity: {schemaCanonical} / {schemaDigest}"
+        let logicUpgrade := { program with entries := program.entries.reverse }
+        unless ProofForge.Wasm.Near.IR.stateSchemaDigest logicUpgrade == schemaDigest do
+          throwError "method-only upgrade changed the state schema identity"
+        let renamedSchema := { program with slots := program.slots.map fun slot =>
+          { slot with name := slot.name ++ "2" } }
+        unless ProofForge.Wasm.Near.IR.stateSchemaDigest renamedSchema != schemaDigest do
+          throwError "renamed state slot preserved the schema identity"
+        let widenedSchema := { program with slots := program.slots.map fun slot =>
+          { slot with width := slot.width + 8 } }
+        let changedAbiSchema := { program with slots := program.slots.map fun slot =>
+          { slot with abi := slot.abi ++ ".v2" } }
+        unless ProofForge.Wasm.Near.IR.stateSchemaDigest widenedSchema != schemaDigest &&
+            ProofForge.Wasm.Near.IR.stateSchemaDigest changedAbiSchema != schemaDigest do
+          throwError "physical width/ABI change preserved the state schema identity"
         match ProofForge.Wasm.Near.Registry.digestOf program.name with
         | some want =>
             if digest != want then
@@ -147,17 +166,22 @@ elab "#pf_near_emit_check " n:ident : command => do
           | [_before, after] => pure after
           | _ => throwError "initializer must check its legacy scalar slot after STATE"
         let afterStateStore ← match afterLegacyGuard.splitOn
-            "(call $pf_storage_write (i64.const 5) (i64.const 2096) (i64.const 1)" with
+            ("(call $pf_storage_write (i64.const 5) (i64.const 2096) (i64.const 16) " ++
+              "(i64.const 192)") with
           | [before, after] =>
               unless before.contains
-                  "(call $pf_storage_write (i64.const 5) (i64.const 1024) (i64.const 8)" do
+                  "(call $pf_storage_write (i64.const 5) (i64.const 1024) (i64.const 8)" &&
+                  before.contains
+                    "(i64.store (i32.const 192) (i64.const 3544425623580460624))" &&
+                  before.contains
+                    "(i64.store (i32.const 200) (i64.const 10223451468950344877))" do
                 throwError "initializer marked STATE before persisting its scalar state"
               pure after
           | _ => throwError "initializer must write the STATE marker exactly once"
         unless !afterStateStore.contains "(call $pf_storage_write (i64.const 5) (i64.const 2096)" do
           throwError "initializer wrote the STATE marker more than once"
         unless (source.splitOn
-            "(call $pf_storage_write (i64.const 5) (i64.const 2096) (i64.const 1)").length == 2 do
+            "(call $pf_storage_write (i64.const 5) (i64.const 2096) (i64.const 16)").length == 2 do
           throwError "STATE marker write must occur exactly once in the whole module"
         match ProofForge.Wasm.Near.Emit.emit {
             program with initializer := {
@@ -181,6 +205,11 @@ elab "#pf_near_emit_check " n:ident : command => do
                 throwError s!"{method.ixName} checked STATE before input decoding"
               unless after.contains uninitializedPanic do
                 throwError s!"{method.ixName} lost the exact uninitialized panic"
+              unless after.contains "(call $pf_register_len (i64.const 5)) (i64.const 16)" &&
+                  after.contains "(i64.load (i32.const 192)) " &&
+                  after.contains "(i64.load (i32.const 200)) " &&
+                  after.contains "(call $pf_panic_utf8 (i64.const 42) (i64.const 12319))" do
+                throwError s!"{method.ixName} lost STATE length/version/schema validation"
               match after.splitOn "(call $pf_storage_read" with
               | [beforeRead, _afterRead] =>
                   unless beforeRead.contains uninitializedPanic do
