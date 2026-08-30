@@ -17,7 +17,7 @@ inductive Error where
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
-/-- No arguments. AlphaNet public `submit` rejects UINT64 Parameters with HTTP 502. -/
+/-- No arguments. Parameterized Call needs Function ABI on Create; empty ABI crashes the node. -/
 @[pf_entry]
 def init : State :=
   { value := 0 }
