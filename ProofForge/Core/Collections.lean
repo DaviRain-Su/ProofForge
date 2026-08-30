@@ -402,7 +402,7 @@ end BoundedQueue
 
 /-! ## Fixed bit-set semantics -/
 
-def bitSetWordCount (capacity : Nat) : Nat :=
+@[pf_inline] def bitSetWordCount (capacity : Nat) : Nat :=
   (capacity + 63) / 64
 
 /-- A compile-time-capacity bit set packed into fixed `UInt64` words. There is no runtime length,
@@ -412,6 +412,30 @@ structure BoundedBitSet (capacity : Nat) where
 
 namespace BoundedBitSet
 
+/-! The packed-word operations below are target-neutral policy. SVM account storage and EVM
+storage slots bind them independently; neither physical layout belongs in this namespace. -/
+
+@[pf_inline] def inRange (capacity index : UInt64) : Bool :=
+  index < capacity
+
+@[pf_inline] def wordIndexOf (index : UInt64) : UInt64 :=
+  index / 64
+
+@[pf_inline] def maskOf (index : UInt64) : UInt64 :=
+  (1 : UInt64) <<< (index % 64)
+
+@[pf_inline] def containsOf (word index : UInt64) : Bool :=
+  word &&& maskOf index != 0
+
+@[pf_inline] def insertOf (word index : UInt64) : UInt64 :=
+  word ||| maskOf index
+
+@[pf_inline] def removeOf (word index : UInt64) : UInt64 :=
+  word &&& ~~~(maskOf index)
+
+@[pf_inline] def toggleOf (word index : UInt64) : UInt64 :=
+  word ^^^ maskOf index
+
 def empty (capacity : Nat) : BoundedBitSet capacity :=
   { words := Vector.replicate (bitSetWordCount capacity) 0 }
 
@@ -419,8 +443,7 @@ def contains (set : BoundedBitSet capacity) (index : UInt64) : Bool :=
   if index.toNat < capacity then
     let wordIndex := index.toNat / 64
     if h : wordIndex < bitSetWordCount capacity then
-      let mask := (1 : UInt64) <<< (index % 64)
-      (set.words[wordIndex]'h &&& mask) != 0
+      containsOf (set.words[wordIndex]'h) index
     else
       false
   else
@@ -433,9 +456,8 @@ def update? (set : BoundedBitSet capacity) (index : UInt64) (present : Bool) :
   if index.toNat < capacity then
     let wordIndex := index.toNat / 64
     if h : wordIndex < bitSetWordCount capacity then
-      let mask := (1 : UInt64) <<< (index % 64)
       let word := set.words[wordIndex]'h
-      let next := if present then word ||| mask else word &&& ~~~mask
+      let next := if present then insertOf word index else removeOf word index
       some { words := set.words.set wordIndex next h }
     else
       none

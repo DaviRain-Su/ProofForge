@@ -72,6 +72,7 @@ R3-022 invocation-local fixed-width UInt64 POD records、
 R3-023 first-class allocation-free Pubkey values、
 R3-024 generic whole-value SDK record boundary、
 R3-025 fixed-account close/refund composition、
+R3-026 persistent bounded SVM bit set、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -90,11 +91,11 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-30）**：Lean 汇总 390 jobs；SVM manifest 全 61 programs；
-  Mollusk 全量 409/409（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
+- **当前可验证基线（2026-08-30）**：Lean 汇总 396 jobs；SVM manifest 全 63 programs；
+  Mollusk 全量 412/412（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
   RawEntry 21/21、Keys 9/9）；EVM manifest 全
   38 programs 且 Anvil 38/38。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 390-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  并保留汇总 `test` gate；完整 396-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
   `docs/plan/tasks/ci-001.md`。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由 shared pre-state snapshot lowering 修复，
@@ -606,6 +607,18 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   owner reassignment、runtime-selected geometry 与 pointer/heap 仍不开放。详见
   `docs/plan/tasks/r3-025.md`。
 
+- R3-026 SVM persistent bounded BitSet 已完成：shared `Core.Collections.BoundedBitSet` 统一
+  bounds/word/mask/contains/insert/remove/toggle 纯策略，EVM `StorageBitmap` 与新
+  `Svm.Sdk.StorageBitSet` 分别绑定 static slots 和 fixed account words，不共享物理 layout。
+  SVM descriptor 从 bit capacity 自动派生 `(bits + 63) / 64` 个 one-based UInt64 words；generic
+  compile-time Nat division extraction 避免 caller 重复 magic word count。FeatureBits（128 bits）
+  与 ClaimBits（130 bits）两个独立 consumer 覆盖 word boundary、partial final word、幂等、
+  replay/OOB rollback 和 short-account failure；每次操作至多读一个 word、mutation 至多写该
+  word。digests `bb35806f97c686de` / `fe994472751df324`，ELF 12,176 / 5,952 B。FeatureBits
+  exact ELF 已由 Surfpool 1.5.0 经 13 个正常 Loader-v3 writes 部署并逐字节核对；未使用 Test
+  Validator。没有新 Runtime/Ops/IR/Component/Emit、allocator、pointer、runtime length 或
+  bulk scan。详见 `docs/plan/tasks/r3-026.md`。
+
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
   独立复用；replacement 会使旧 nominee 失效，accept/cancel 显式清零，不使用 hashed
@@ -926,9 +939,9 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 390 jobs，汇总门覆盖全部 imported test modules 与 target guards。
-- SVM registry 61 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 409/409，其中 MemoryOps 20/20、LamportTransfer 15/15、
+- `lake build Tests` 当前 396 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 63 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+  `pf build` 当前通过；全套 Mollusk 412/412，其中 MemoryOps 20/20、LamportTransfer 15/15、
   RawEntry 21/21、Keys 9/9、Phoenix-v1 profile 76/76。
 - EVM registry 38 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /

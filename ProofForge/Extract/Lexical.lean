@@ -811,6 +811,13 @@ private partial def staticNat? (env : Environment) (fuel : Nat) (e : Expr) : Opt
             staticNat? env fuel' args[args.size - 1]! with
         | some left, some right => some (left * right)
         | _, _ => none
+      else if (isConstNamed e ``HDiv.hDiv || isConstNamed e ``Nat.div) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticNat? env fuel' args[args.size - 2]!,
+            staticNat? env fuel' args[args.size - 1]! with
+        | some left, some right => some (left / right)
+        | _, _ => none
       else if isConstNamed e ``ite && e.getAppArgs.size ≥ 4 then
         let args := e.getAppArgs
         match staticBool? env fuel' args[args.size - 4]! with

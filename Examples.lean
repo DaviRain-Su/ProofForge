@@ -81,6 +81,8 @@ import Examples.Tree
 import Examples.RawEntry
 import Examples.JobQueue
 import Examples.TicketLine
+import Examples.FeatureBits
+import Examples.ClaimBits
 import Examples.PhoenixV1Layout
 import Examples.Phoenix
 import Examples.PhoenixV1Profile

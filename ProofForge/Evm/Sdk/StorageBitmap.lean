@@ -134,35 +134,35 @@ extraction. -/
 /-- The single bounds gate shared by every bit operation: `index` names a real bit of the
 compile-time capacity. -/
 @[pf_inline] def inRange (bits index : UInt64) : Bool :=
-  index < bits
+  Core.Collections.BoundedBitSet.inRange bits index
 
 /-- Word-table index of a bit: `index / 64`. Meaningful under `inRange`; extraction lowers it
 to one `div`, never a loop. -/
 @[pf_inline] def wordIndexOf (index : UInt64) : UInt64 :=
-  index / 64
+  Core.Collections.BoundedBitSet.wordIndexOf index
 
 /-- Single-bit mask of a bit inside its word: `1 <<< (index % 64)`. Under `inRange` the shift
 amount is below 64, so host `UInt64` semantics and EVM `shl` agree exactly. -/
 @[pf_inline] def maskOf (index : UInt64) : UInt64 :=
-  (1 : UInt64) <<< (index % 64)
+  Core.Collections.BoundedBitSet.maskOf index
 
 /-- Read decision over an already-loaded word: is this bit set? Matches
 `BoundedBitSet.contains`'s word test. -/
 @[pf_inline] def containsOf (word index : UInt64) : Bool :=
-  word &&& maskOf index != 0
+  Core.Collections.BoundedBitSet.containsOf word index
 
 /-- Word value after setting the bit; matches `BoundedBitSet.update? … true`. Idempotent:
 setting a set bit writes back the same word. -/
 @[pf_inline] def setOf (word index : UInt64) : UInt64 :=
-  word ||| maskOf index
+  Core.Collections.BoundedBitSet.insertOf word index
 
 /-- Word value after clearing the bit; matches `BoundedBitSet.update? … false`. Idempotent:
 clearing a clear bit writes back the same word. -/
 @[pf_inline] def clearOf (word index : UInt64) : UInt64 :=
-  word &&& ~~~(maskOf index)
+  Core.Collections.BoundedBitSet.removeOf word index
 
 /-- Word value after toggling the bit. Toggling twice restores the exact original word. -/
 @[pf_inline] def toggleOf (word index : UInt64) : UInt64 :=
-  word ^^^ maskOf index
+  Core.Collections.BoundedBitSet.toggleOf word index
 
 end ProofForge.Evm.Sdk.StorageBitmap

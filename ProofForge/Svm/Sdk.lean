@@ -2,6 +2,7 @@ import ProofForge.Svm.Sdk.Account
 import ProofForge.Svm.Sdk.Pubkey
 import ProofForge.Svm.Sdk.Program
 import ProofForge.Svm.Sdk.Storage
+import ProofForge.Svm.Sdk.StorageBitSet
 import ProofForge.Svm.Sdk.Queue
 import ProofForge.Svm.Sdk.Pda
 import ProofForge.Svm.Sdk.System
@@ -20,8 +21,8 @@ import ProofForge.Svm.Sdk.Telemetry
 # ProofForge SVM SDK
 
 Source-facing facade for reusable SVM components. Applications describe fixed account geometry
-once, then compose persistent POD fields, bounded vectors, ordered maps, allocators, FIFO
-queues, and invocation-local transient buffers without defining protocol-specific operations
+once, then compose persistent POD fields, bounded vectors, packed bit sets, ordered maps,
+allocators, FIFO queues, and invocation-local transient buffers without defining protocol-specific operations
 or emitter cases.
 
 All persistent state remains inside statically bounded Solana account-data regions. Component
