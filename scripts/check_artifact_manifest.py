@@ -54,7 +54,7 @@ EVM = TargetSpec(
 XRPL = TargetSpec(
     key="xrpl",
     registry_rel=Path("ProofForge/Wasm/Xrpl/Registry.lean"),
-    expected_count=36,
+    expected_count=38,
     suffixes=(".wasm", ".wat"),
     digest_suffix=".wat",
 )

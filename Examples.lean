@@ -71,6 +71,8 @@ import Examples.XrplBank
 import Examples.XrplSafe
 import Examples.XrplPool
 import Examples.XrplFund
+import Examples.XrplTreasury
+import Examples.XrplToken
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

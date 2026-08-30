@@ -52,6 +52,8 @@
 | + per-user `lock` 挡 cash（状态码 5） | `XrplSafe` freeze/cash | `safe.sh` |
 | 积分转 B + 兑 XRP 给 B + pause/freeze | `XrplPool` | `pool.sh` |
 | + `cap=10` + B operator pause | `XrplFund` | `fund.sh` |
+| + clawB / burn / cashSelf | `XrplTreasury` | `treasury.sh` |
+| + pause / freeze 合成 11 export | `XrplToken` | `token.sh` |
 | caller 卡 / dest 卡 / `supp` `lock` `allw` | Mint / Lock / Pay / Card | 公开脚本仍有效 |
 
 本地 `sfContractAccount` = ACCOUNT/25 = **524313**。公开是 **524320**。不要写回 524315。

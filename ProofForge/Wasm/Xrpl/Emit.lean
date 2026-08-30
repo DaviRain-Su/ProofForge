@@ -344,16 +344,10 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
                 " (i64.const 144115188075855871)))")
             ]
         | none => #[]
-    let other :=
-      match otherHex.bind hexBytes with
-      | some bs =>
-        if bs.size != 20 || needLitBal then #[]
-        else
-          (Array.range 20).map fun i =>
-            indent level ("(i32.store8 (i32.const " ++ toString i ++
-              ") (i32.const " ++ toString bs[i]! ++ "))")
-      | none => #[]
-    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee ++ txFlags ++ litBal ++ other
+    -- Compile-time AccountID limbs render as `i64.const`. Do not write the
+    -- 20-byte lit into mem[0]: that clobbers persist Owner before loadSlots
+    -- and `$bal` comes off the wrong card.
+    caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee ++ txFlags ++ litBal
 
 def extraImports (host : Contract) (p : IR.Program) : Array String :=
   let tx :=
