@@ -51,9 +51,9 @@ wasm="$root/build/xrpl-alphanet/probe-emit.wasm"
 "$wat2wasm" "$here/fixture/probe-emit.wat" -o "$wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: wat2wasm did not write $wasm" >&2; exit 1; }
 
-# AlphaNet 3.3.0-rc1: InstanceParameters on ContractCreate is temMALFORMED,
-# so Create-time tfSendAmount cannot fund the pseudo-account. Deploy bare.
-printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","wasm_path":"%s"}\n' \
+# First-install of a new wasm hash: both InstanceParameters + Values with
+# tfSendAmount. Reinstall of an empty-ABI source is temMALFORMED.
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","send_amount_drops":"2000000000"}\n' \
   "$RPC" "$WALLET" "$wasm" >"$cfg"
 if ! deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"; then
   echo "FAIL: ContractCreate rejected build_txn/add_txn_field/emit_built_txn (host not registered)" >&2

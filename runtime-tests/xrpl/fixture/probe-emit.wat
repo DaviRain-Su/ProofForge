@@ -55,5 +55,25 @@
       (local.get $idx) (i32.const 524291) (i32.const 0) (i32.const 21)))
     (if (i32.lt_s (local.get $st) (i32.const 0))
       (then (return (local.get $st))))
+    ;; Public 3.3.0 / 21337 = 0x00005359.
+    (i32.store8 (i32.const 40) (i32.const 0x00))
+    (i32.store8 (i32.const 41) (i32.const 0x00))
+    (i32.store8 (i32.const 42) (i32.const 0x53))
+    (i32.store8 (i32.const 43) (i32.const 0x59))
+    (local.set $st (call $add_txn_field
+      (local.get $idx) (i32.const 131073) (i32.const 40) (i32.const 4)))
+    (if (i32.lt_s (local.get $st) (i32.const 0))
+      (then (return (local.get $st))))
+    ;; sfFlags=131074. tfInnerBatchTxn = 0x40000000. Without it, 3.3.0
+    ;; preclaim treats the inner Payment as a signed pseudo-account tx
+    ;; and returns tefBAD_AUTH (-196).
+    (i32.store8 (i32.const 44) (i32.const 0x40))
+    (i32.store8 (i32.const 45) (i32.const 0x00))
+    (i32.store8 (i32.const 46) (i32.const 0x00))
+    (i32.store8 (i32.const 47) (i32.const 0x00))
+    (local.set $st (call $add_txn_field
+      (local.get $idx) (i32.const 131074) (i32.const 44) (i32.const 4)))
+    (if (i32.lt_s (local.get $st) (i32.const 0))
+      (then (return (local.get $st))))
     (call $emit_built_txn (local.get $idx)))
 )
