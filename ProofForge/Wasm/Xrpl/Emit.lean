@@ -434,9 +434,36 @@ def extraImports (host : Contract) (p : IR.Program) : Array String :=
         "\" (func $" ++ host.leField ++
         " (param i32 i32 i32 i32) (result i32)))"
     ]
+  let rec isPayKind : Ops.ValKind → Bool
+    | .emitPay | .emitPayDrops | .emitPayToLit _ => true
+    | _ => false
+  let rec usesPay (fuel : Nat) (v : Ops.Val) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      match v with
+      | .ext k ops => isPayKind k || ops.any (usesPay fuel')
+      | .field base _ => usesPay fuel' base
+      | .select _ a b c d => usesPay fuel' a || usesPay fuel' b || usesPay fuel' c || usesPay fuel' d
+      | .addU64 a b | .subU64 a b | .mulU64 a b | .divU64 a b | .modU64 a b
+      | .bitAnd a b | .bitOr a b | .bitXor a b | .shiftL a b | .shiftR a b =>
+          usesPay fuel' a || usesPay fuel' b
+      | .bitNot a => usesPay fuel' a
+      | .indexGet base _ idx _ _ => usesPay fuel' base || usesPay fuel' idx
+      | _ => false
+  let rec usesPayOp (fuel : Nat) (x : Ops.Op) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel' + 1 =>
+      match x with
+      | .checkedAddU64 a b | .checkedSubU64 a b | .checkedMulU64 a b
+      | .checkedDivU64 a b | .checkedModU64 a b => usesPay 32 a || usesPay 32 b
+      | .ite _ a b thn els =>
+          usesPay 32 a || usesPay 32 b || thn.any (usesPayOp fuel') || els.any (usesPayOp fuel')
+      | .storeField _ v | .okState v | .returnState v | .returnU64 v => usesPay 32 v
+      | _ => false
   let needPay :=
-    usesKind p.initializer.ops .emitPay || usesKind p.initializer.ops .emitPayDrops ||
-      p.entries.any (fun m => usesKind m.ops .emitPay || usesKind m.ops .emitPayDrops)
+    p.initializer.ops.any (usesPayOp 32) || p.entries.any (fun m => m.ops.any (usesPayOp 32))
   let pay :=
     if !needPay || host.buildTxn.isEmpty || host.addTxnField.isEmpty || host.emitBuiltTxn.isEmpty then #[]
     else #[

@@ -309,6 +309,12 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     match asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
     | some v => some (.xrplEmitPayDrops v)
     | none => none
+  else if (endsWith e ".xrplEmitPayToLit" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplEmitPayToLit) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplEmitPayToLit s)
+    | _ => none
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with

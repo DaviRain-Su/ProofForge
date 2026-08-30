@@ -486,6 +486,17 @@ async function main() {
     return;
   }
 
+  if (cmd === "balance") {
+    const account = cfg.account;
+    if (!account) throw new Error("balance wants account");
+    const info = await rpcRetry(url, "account_info", {
+      account,
+      ledger_index: "validated",
+    });
+    process.stdout.write(String((info.account_data || {}).Balance || "0") + "\n");
+    return;
+  }
+
   throw new Error("unknown command " + cmd);
 }
 

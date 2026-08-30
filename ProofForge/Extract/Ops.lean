@@ -172,6 +172,8 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
 @[match_pattern] def Val.xrplEmitPay : Val := xrplLeaf .emitPay
 @[match_pattern] def Val.xrplEmitPayDrops (v : Val) : Val :=
   .ext (.xrpl .emitPayDrops) #[v]
+@[match_pattern] def Val.xrplEmitPayToLit (hex : String) : Val :=
+  xrplLeaf (.emitPayToLit hex)
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2

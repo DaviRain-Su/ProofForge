@@ -74,6 +74,8 @@ inductive ValKind where
   | emitPay
   /-- Local 2.6.1: emit Payment of operand drops to caller. Public -196. Not Sdk.Payments. -/
   | emitPayDrops
+  /-- Local 2.6.1: emit Payment 192 drops to a compile-time AccountID. Public -196. -/
+  | emitPayToLit (hex : String)
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat

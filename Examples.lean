@@ -65,6 +65,7 @@ import Examples.XrplCard
 import Examples.XrplVault
 import Examples.XrplEmit
 import Examples.XrplTip
+import Examples.XrplGift
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

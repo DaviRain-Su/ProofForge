@@ -189,4 +189,10 @@ Not `Sdk.Payments`, not a Map. -/
   let _ := drops
   0
 
+/-- Local 2.6.1 Payment of 192 drops to a compile-time 20-byte AccountID.
+`hex` is 40 lowercase chars. Host stub 0. Public -196. Not `Sdk.Payments`. -/
+@[irreducible] def xrplEmitPayToLit (hex : String) : UInt64 :=
+  let _ := hex
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

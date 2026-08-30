@@ -259,6 +259,11 @@ Not `Sdk.Payments`. -/
 @[pf_inline] def emitToCallerDrops (drops : UInt64) : UInt64 :=
   Runtime.xrplEmitPayDrops drops
 
+/-- Local 2.6.1: emit Payment 192 drops to a compile-time AccountID.
+`hex` is 40 lowercase chars. Public -196. Not `Sdk.Payments`. -/
+@[pf_inline] def emitToLit (hex : String) : UInt64 :=
+  Runtime.xrplEmitPayToLit hex
+
 end Pay
 
 namespace Hash
