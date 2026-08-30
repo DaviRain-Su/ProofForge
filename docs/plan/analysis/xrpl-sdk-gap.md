@@ -201,6 +201,8 @@ XLS-0102 的 `home_le_field` / `sha512_half` **不是** 本镜像名字。
 纯组合层（Access / Pausable / Mark）已在 wsm-017 收口。再往后见
 [xrpl-next.md](xrpl-next.md)：探针 → 用户 ContractData → `build_txn`/`emit_built_txn`。
 没有叶子就不要 `Sdk.Map` / `Sdk.Payments`。
+本地 2.6.1 已有 `Pay.emitToCaller`（`xrplEmitPay`）和 `Card.storeSelf`。
+公开 3.3.0 仍是 -196 / -22，所以公开门面继续关。
 
 官方 Rust WASM SDK（escrow 为主）的完整对照见
 [xrpl-rust-sdk.md](xrpl-rust-sdk.md)。不要按 escrow `set_data` blob 来改本仓智能合约存储。

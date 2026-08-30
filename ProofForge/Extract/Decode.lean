@@ -300,6 +300,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         asVal env fuel args[args.size - 1]! with
     | some w0, some w1, some w2 => some (.xrplPeekLock w0 w1 w2)
     | _, _, _ => none
+  else if endsWith e ".xrplEmitPay" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplEmitPay then
+    some .xrplEmitPay
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -1215,6 +1218,8 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some .xrplSelfW1
   else if endsWith e ".xrplSelfW2" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelfW2 then
     some .xrplSelfW2
+  else if endsWith e ".xrplEmitPay" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplEmitPay then
+    some .xrplEmitPay
   else if endsWith e ".xrplLedgerSqn" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplLedgerSqn then
     some .xrplLedgerSqn
   else if endsWith e ".xrplParentTime" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplParentTime then

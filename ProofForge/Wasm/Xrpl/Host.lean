@@ -58,6 +58,9 @@ def contract : Contract where
   computeSha512Half := "compute_sha512_half"
   getParentHash := "get_parent_ledger_hash"
   getBaseFee := "get_base_fee"
+  buildTxn := "build_txn"
+  addTxnField := "add_txn_field"
+  emitBuiltTxn := "emit_built_txn"
 
 /-- Live AlphaNet (network_id 21337, rippled 3.3.0-rc1 `alphanet`).
 XLS-0102 names: `home_le_field` / `tx_field` / `ldgr_index` / `sha512_half`.
@@ -103,5 +106,9 @@ def alphanet : Contract where
   viewResultI32 := true
   ledgerSqnBuffer := true
   ownerFromTx := true
+  -- Same emit host names as local 2.6.1. Public pokeEmit is still tefBAD_AUTH -196.
+  buildTxn := "build_txn"
+  addTxnField := "add_txn_field"
+  emitBuiltTxn := "emit_built_txn"
 
 end ProofForge.Wasm.Xrpl.Host

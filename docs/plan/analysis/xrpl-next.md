@@ -11,8 +11,9 @@
 > **-196 tefBAD_AUTH**（不是没钱；`tecPSEUDO_ACCOUNT` 是 +196）。
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
 > 还缺：公开程序拥有 ContractData（-22）、公开 emit -196 tefBAD_AUTH。
-> 本地 2.6.1：emit Payment **绿**；funded `Card.storeSelf` / `XrplVault` **绿**
-> （caller.bal=5，合约卡 `supp=5`）。不要把本地绿当成公开绿。
+> 本地 2.6.1：emit Payment **绿**（`XrplEmit.ping` tesSUCCESS/0）；funded
+> `Card.storeSelf` / `XrplVault` **绿**（caller.bal=5，合约卡 `supp=5`）。
+> 不要把本地绿当成公开绿。`Pay.emitToCaller` 不是公开 `Sdk.Payments`。
 > 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
 > `XrplNest` A `credit(3)` / B `credit(5)`（nested `{user:{bal}}`）、`XrplBal` A `credit(3)` / B `credit(5)`、
 > `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` 积分转账、`XrplMint` A `mint(5)` / B `mint` 拒 / A `pay(B,2)` → A=3 B=2、`XrplLock` 每人一张卡 `lock`（进出 `pay` 状态码 5）都绿。

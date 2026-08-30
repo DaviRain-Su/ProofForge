@@ -90,6 +90,12 @@ structure Contract where
   than `home_le_field(sfieldAccount)`. AlphaNet `home_le_field(sfOwner)` returns
   LedgerObjNotFound (-10). -/
   ownerFromTx : Bool := false
+  /-- Host `build_txn(tt) -> i32`. Empty skips emit-payment. Local 2.6.1 only. -/
+  buildTxn : String := ""
+  /-- Host `add_txn_field(index, sfield, ptr, len) -> i32`. -/
+  addTxnField : String := ""
+  /-- Host `emit_built_txn(index) -> i32`. Public AlphaNet is tefBAD_AUTH -196. -/
+  emitBuiltTxn : String := ""
   deriving Inhabited
 
 /-- Object-field storage (XRPL ContractData) rather than a packed Data blob. -/

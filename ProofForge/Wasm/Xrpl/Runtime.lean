@@ -179,4 +179,9 @@ persist Owner. Per-user freeze, not global `halt`. Not a Map. -/
   let _ := w2
   0
 
+/-- Local 2.6.1 `build_txn` / `add_txn_field` / `emit_built_txn` Payment of 192
+drops to the caller. Host stub 0. Public AlphaNet is tefBAD_AUTH -196.
+Not `Sdk.Payments`, not a Map. -/
+@[irreducible] def xrplEmitPay : UInt64 := 0
+
 end ProofForge.Wasm.Xrpl.Runtime

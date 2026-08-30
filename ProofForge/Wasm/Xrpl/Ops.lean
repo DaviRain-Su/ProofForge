@@ -70,6 +70,8 @@ inductive ValKind where
   | flushLock
   /-- Rewrite persist Owner, load that card's `lock` (missing → 0). -/
   | peekLock
+  /-- Local 2.6.1: emit Payment 192 drops to caller. Public AlphaNet -196. Not Sdk.Payments. -/
+  | emitPay
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat

@@ -247,6 +247,15 @@ Local 2.6.1 funded Create writes this card (pokeSelf 0). Public AlphaNet
 
 end Card
 
+namespace Pay
+
+/-- Local 2.6.1: emit Payment 192 drops to the caller. Public AlphaNet
+is tefBAD_AUTH -196. Not `Sdk.Payments`. -/
+@[pf_inline] def emitToCaller : UInt64 :=
+  Runtime.xrplEmitPay
+
+end Pay
+
 namespace Hash
 
 /-- Compile-time ASCII SHA-512Half, first little-endian UInt64. Not `sha256Lit`. -/

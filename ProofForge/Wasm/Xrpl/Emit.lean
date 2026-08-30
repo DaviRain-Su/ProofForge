@@ -355,7 +355,7 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
       | none => #[]
     caller ++ self ++ sqn ++ time ++ hash ++ fee ++ cache ++ seq ++ flags ++ ownc ++ bal ++ txSeq ++ txFee ++ txFlags ++ litBal ++ other
 
-def extraImports (host : Contract) : Array String :=
+def extraImports (host : Contract) (p : IR.Program) : Array String :=
   let tx :=
     if host.getTxField.isEmpty then #[]
     else #[
@@ -434,11 +434,23 @@ def extraImports (host : Contract) : Array String :=
         "\" (func $" ++ host.leField ++
         " (param i32 i32 i32 i32) (result i32)))"
     ]
-  tx ++ sqn ++ time ++ hash ++ parentHash ++ fee ++ rootId ++ cache ++ field
+  let needPay :=
+    usesKind p.initializer.ops .emitPay || p.entries.any (fun m => usesKind m.ops .emitPay)
+  let pay :=
+    if !needPay || host.buildTxn.isEmpty || host.addTxnField.isEmpty || host.emitBuiltTxn.isEmpty then #[]
+    else #[
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.buildTxn ++
+        "\" (func $" ++ host.buildTxn ++ " (param i32) (result i32)))",
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.addTxnField ++
+        "\" (func $" ++ host.addTxnField ++ " (param i32 i32 i32 i32) (result i32)))",
+      "  (import \"" ++ host.importModule ++ "\" \"" ++ host.emitBuiltTxn ++
+        "\" (func $" ++ host.emitBuiltTxn ++ " (param i32) (result i32)))"
+    ]
+  tx ++ sqn ++ time ++ hash ++ parentHash ++ fee ++ rootId ++ cache ++ field ++ pay
 
 /-- Render one XRPL program as WAT. The digest line pins the canonical IR identity. -/
 def emitWith (host : Contract) (p : IR.Program) : Except String String :=
-  Wasm.Emit.emit host IR.extValCanon IR.extOpCanon p loadEnv (extraImports host)
+  Wasm.Emit.emit host IR.extValCanon IR.extOpCanon p loadEnv (extraImports host p)
 
 /-- Bedrock local host names. -/
 def emit (p : IR.Program) : Except String String :=
