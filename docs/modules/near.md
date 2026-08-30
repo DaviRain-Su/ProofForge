@@ -28,8 +28,9 @@ wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 �
 IterableMap64/IterableSet64。wsm-near-promise-001/002 加入静态 receiver/method、bounded
 arguments、lossless u128 deposit、explicit gas 的 detached/returned Promise function call；
 前者不链接结果，后者在 caller state 持久化后用 `promise_return` 转发远端结果或失败。
-wsm-near-promise-result/then/codec-001 在其上加入 bounded callback result descriptor、静态
-child → self callback，以及 status/fits/exact-length 守卫的 Borsh UInt64 解码与显式 fallback。
+wsm-near-promise-result/then/codec/private-001 在其上加入 bounded callback result descriptor、
+静态 child → self callback、status/fits/exact-length 守卫的 Borsh UInt64 解码与显式
+fallback，以及在读取 dependency result 前执行的完整 predecessor/current AccountId 鉴权。
 
 ## Boundary
 
@@ -39,6 +40,7 @@ child → self callback，以及 status/fits/exact-length 守卫的 Borsh UInt64
 | `Near.Host` | import 模块 `env`、digest 域 `near-raw-u64\|`、header | XRPL `host_lib`、Data blob sfield |
 | `Near.Codec` | bounded bytes/String 输入与 bounded view 输出的 canonical Borsh 计划/资源上限 | collection layout、JSON、mutating bounded output |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
+| `Near.Sdk.Context/Access` | lossless context wrappers、full-AccountId equality/self-call predicate | general private/payable/init entry metadata |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
 | `Near.Sdk.Storage` | bounded raw key/value、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、Borsh UInt64/result decode | arbitrary `IntoStorageKey`、generic Borsh |
@@ -78,9 +80,10 @@ child → self callback，以及 status/fits/exact-length 守卫的 Borsh UInt64
   `promise.sh` 部署 caller/receiver 两个合约，验证 batch function-call 的 UInt64 argument、
   `2^64+7` deposit 两个 limb、zero deposit、detached remote failure、caller panic 丢弃 receipt，
   余额不足的同步失败与 rollback，以及 returned call 的 exact 8-byte result、远端失败传播和
-  caller/receiver receipt state 语义；并验证成功 child 的 exact Borsh UInt64 decode、独立
-  callback argument、failed/oversized fallback。`promise-result.sh` 另钉 ordinary call 的
-  result count 0 与越界 `promise_result` abort。
+  caller/receiver receipt state 语义；并验证外部 predecessor 在读取 result 前被完整 AccountId
+  guard 拒绝且不改状态，以及真实 self callback 的 exact Borsh UInt64 decode、独立 callback
+  argument、failed/oversized fallback。`promise-result.sh` 另钉 ordinary call 的 result count
+  0 与越界 `promise_result` abort。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
 `NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、

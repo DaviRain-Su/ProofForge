@@ -165,6 +165,17 @@ elab "#pf_near_promise_check" : command => do
     | .ok wat => pure wat
     | .error reason => throwError reason
   for anchor in #[
+      "(import \"env\" \"predecessor_account_id\"",
+      "(import \"env\" \"current_account_id\"",
+      "(i64.eq (local.get $pf_pred_len) (local.get $pf_self_len))",
+      "(i64.eq (local.get $pf_pred) (local.get $pf_self))",
+      "(i64.eq (local.get $pf_pred1) (local.get $pf_self1))",
+      "(i64.eq (local.get $pf_pred2) (local.get $pf_self2))",
+      "(i64.eq (local.get $pf_pred3) (local.get $pf_self3))",
+      "(i64.eq (local.get $pf_pred4) (local.get $pf_self4))",
+      "(i64.eq (local.get $pf_pred5) (local.get $pf_self5))",
+      "(i64.eq (local.get $pf_pred6) (local.get $pf_self6))",
+      "(i64.eq (local.get $pf_pred7) (local.get $pf_self7))",
       "(i64.eq (call $pf_promise_result_status (i64.const 8)) (i64.const 1))",
       "(i64.ne (call $pf_promise_result_fits (i64.const 8)) (i64.const 0))",
       "(i64.eq (call $pf_promise_result_length (i64.const 8)) (i64.const 8))",
@@ -176,6 +187,24 @@ elab "#pf_near_promise_check" : command => do
       throwError s!"strict callback UInt64 WAT missing {anchor}\n{callbackSuccessWat}"
   if callbackSuccessWat.contains "(local.set $marker (local.get $pf_v0))" then
     throwError "callback tuple result overwrote its independently persisted state field"
+  let callbackBody ← match callbackSuccessWat.splitOn "(func (export \"callbackSuccess\")" with
+    | [_preamble, body] => pure body
+    | _ => throwError "callbackSuccess WAT must contain exactly one exported body"
+  let afterPredecessor ← match callbackBody.splitOn "(call $pf_predecessor_account_id" with
+    | [_before, after] => pure after
+    | _ => throwError "callbackSuccess must read predecessor exactly once"
+  let afterCurrent ← match afterPredecessor.splitOn "(call $pf_current_account_id" with
+    | [_before, after] => pure after
+    | _ => throwError "callbackSuccess must read current account after predecessor"
+  unless afterCurrent.contains
+      "(then\n        (global.set $pf_promise_result_active (i32.const 1))" do
+    throwError "callback result read is not dominated by the self-call guard"
+  unless afterCurrent.contains
+      "(else\n        (call $pf_panic_utf8 (i64.const 8) (i64.const 2048))\n      ))" do
+    throwError "callback self-call rejection must panic before state persistence"
+  match afterCurrent.splitOn "(call $pf_promise_result (i64.const 0)" with
+  | [_beforeRead, _afterRead] => pure ()
+  | _ => throwError "callbackSuccess must read its Promise result exactly once after identity loads"
   let callbackFailure ← match program.entries.find? (·.ixName == "callbackFailure") with
     | some method => pure method
     | none => throwError "missing callbackFailure entry"
@@ -194,6 +223,18 @@ elab "#pf_near_promise_check" : command => do
       "(i64.ne (call $pf_promise_result_fits (i64.const 4)) (i64.const 0))" &&
       callbackOversizedWat.contains "(else (i64.const 999))" do
     throwError "oversized callback lost its capacity-4 UInt64 decode fallback"
+  for (name, callbackWat) in #[
+      ("callbackFailure", callbackFailureWat),
+      ("callbackOversized", callbackOversizedWat) ] do
+    for anchor in #[
+        "(call $pf_predecessor_account_id",
+        "(call $pf_current_account_id",
+        "(i64.eq (local.get $pf_pred_len) (local.get $pf_self_len))",
+        "(i64.eq (local.get $pf_pred) (local.get $pf_self))",
+        "(i64.eq (local.get $pf_pred7) (local.get $pf_self7))",
+        "(else\n        (call $pf_panic_utf8 (i64.const 8) (i64.const 2048))" ] do
+      unless callbackWat.contains anchor do
+        throwError s!"{name} lost private self-call guard anchor {anchor}"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat

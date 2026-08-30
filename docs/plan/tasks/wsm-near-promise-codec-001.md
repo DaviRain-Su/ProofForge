@@ -36,5 +36,6 @@ joins, and callback-entry authentication remain outside this slice.
 
 ## Next
 
-Authenticate callback entries with full predecessor/current AccountId equality before adding
-parallel `promise_and`, transfer actions, or broader result codecs.
+Callback entries now authenticate full predecessor/current AccountId equality in
+[wsm-near-promise-private-001](wsm-near-promise-private-001.md). Parallel `promise_and`, transfer
+actions, and broader result codecs remain independent follow-up slices.

@@ -58,17 +58,17 @@ Authoritative source anchors:
 | IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
 | logs/events | `log_utf8`; NEP-297 SDK JSON | static UTF-8 literal effect in wsm-near-log-001; dynamic spans/events absent | Runtime log effect, then SDK event envelope |
-| cross-contract call | promise receipt/action host ABI | **detached/returned static calls plus one returned static self-callback edge complete** in wsm-near-promise-001/002 and wsm-near-promise-then-001; joins absent | Runtime promise effects, then typed SDK builder |
+| cross-contract call | promise receipt/action host ABI | **detached/returned static calls plus one returned authenticated self-callback edge complete** in wsm-near-promise-001/002, wsm-near-promise-then-001, and wsm-near-promise-private-001; joins absent | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | absent | Runtime batch/action; never synchronous balance mutation |
-| callback results | promise count/status/register + SDK decode | **bounded count/status/register read and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result-001 and wsm-near-promise-then-001; typed decode absent | bounded Runtime result read + SDK Result codec |
-| private/payable/init | generated entry guards | absent | entry-adapter policy over context/storage |
+| callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
+| private/payable/init | generated entry guards | full-AccountId callback-body guard complete in wsm-near-promise-private-001; general entry metadata absent | entry-adapter policy over context/storage |
 
 Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
 bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw binary storage,
 fixed-width Vector/Identity LookupMap/LookupSet/IterableMap/IterableSet and ProofForge Queue
 foundations, explicit detached and returned static cross-contract function calls, one returned
-static self-callback edge, and bounded callback-result observation. It is not yet a general
-near-sdk-rs contract model.
+static self-callback edge authenticated by full AccountId equality, and bounded callback-result
+observation with strict UInt64 decode. It is not yet a general near-sdk-rs contract model.
 
 ## 3. Storage and collection contracts
 
@@ -136,8 +136,9 @@ The explicit returned path calls `promise_return` only after caller state persis
 the child outcome without waiting and prevents a later scalar `value_return` from replacing the
 forwarded result. Bounded callback-result inspection preserves exact status and only reads a
 successful register. The first static self-callback edge now uses `promise_batch_then`, keeps
-callback input independent, and returns the callback receipt; typed decoding, private callback
-guards, and joins remain absent.
+callback input independent, and returns the callback receipt. Strict UInt64 decoding and a full
+predecessor/current AccountId guard now run before dependency-result access; broader codecs and
+joins remain absent.
 
 Native transfer is `promise_batch_create(receiver)` plus `promise_batch_action_transfer(amount)`.
 It depends on full AccountId and u128 and is asynchronous.
@@ -154,7 +155,7 @@ It depends on full AccountId and u128 and is asynchronous.
 | N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
 | N7 promises | **detached/returned static batch calls and one static self-callback edge done in wsm-near-promise-001/002 and wsm-near-promise-then-001**; joins and transfer actions remain | receipt DAG/gas/deposit/failure sandbox scenes |
-| N8 callbacks | **bounded result count/status/read plus genuine chained result scenes done in wsm-near-promise-result-001 and wsm-near-promise-then-001**; typed Result decode and private guard remain | success/failure/oversized result and rollback scenes |
+| N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | non-payable default, payable/private/init guards, `STATE` version/migration | repeated init, deposit rejection, migration fixtures |
 | N10 standards | NEP-141/145 building blocks only after storage, events, transfer/call semantics | standard-specific integration suites |
 
@@ -190,11 +191,14 @@ It depends on full AccountId and u128 and is asynchronous.
 12. **NEAR-PROMISE-RESULT-1 (wsm-near-promise-result-001 done):** exact callback input count and
     bounded status/register reads use a dedicated descriptor, inspect bytes only for status 1,
     expose oversized lengths without copying, and reject views. Genuine callback scenes are covered
-    by the next completed slice; typed Borsh decoding remains later.
+    by the next completed slice; strict UInt64 decoding is covered by task 14.
 13. **NEAR-PROMISE-THEN-1 (wsm-near-promise-then-001 done):** one static child call creates a
     `promise_batch_then` self callback with independent bounded input/deposit/gas, returns the
     callback receipt after state persistence, and exercises genuine success/failure/oversized
-    dependency results. Typed result decode and private callback guards follow.
+    dependency results.
+14. **NEAR-PROMISE-CODEC/PRIVATE-1 (wsm-near-promise-codec/private-001 done):** strict Borsh UInt64
+    decoding requires successful exact eight-byte results, and callback bodies authenticate full
+    predecessor/current AccountId equality before any dependency read or state write.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

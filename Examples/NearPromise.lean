@@ -51,26 +51,35 @@ def recordValue (state : State) (value : UInt64) : Except Error (State × UInt64
 /-- Self-callback success branch: child bytes and normal callback input are separate channels. -/
 @[pf_entry]
 def callbackSuccess (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
-  let result : Promises.ResultBuffer := 8
-  let _ := result.read 0
-  let childValue := result.borshUInt64D 0
-  .ok ({ state with marker := callbackValue }, childValue)
+  if Access.isSelfCall then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let childValue := result.borshUInt64D 0
+    .ok ({ state with marker := callbackValue }, childValue)
+  else
+    .error .overflow
 
 /-- Self-callback failure branch: failed dependencies have status 2 and no bytes. -/
 @[pf_entry]
 def callbackFailure (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
-  let result : Promises.ResultBuffer := 8
-  let _ := result.read 0
-  let childValue := result.borshUInt64D 999
-  .ok ({ state with marker := callbackValue }, childValue)
+  if Access.isSelfCall then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let childValue := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue }, childValue)
+  else
+    .error .overflow
 
 /-- A successful eight-byte child result is intentionally oversized for this four-byte buffer. -/
 @[pf_entry]
 def callbackOversized (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
-  let result : Promises.ResultBuffer := 4
-  let _ := result.read 0
-  let childValue := result.borshUInt64D 999
-  .ok ({ state with marker := callbackValue }, childValue)
+  if Access.isSelfCall then
+    let result : Promises.ResultBuffer := 4
+    let _ := result.read 0
+    let childValue := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue }, childValue)
+  else
+    .error .overflow
 
 /-- Schedule a detached call carrying `2^64 + 7` yoctoNEAR. -/
 @[pf_entry]

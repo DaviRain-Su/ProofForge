@@ -42,5 +42,7 @@ receiver/method values, and dynamic unbounded arguments remain outside this slic
 
 Bounded callback result count/status/read primitives are complete in
 [wsm-near-promise-result-001](wsm-near-promise-result-001.md), and one static self-callback edge is
-complete in [wsm-near-promise-then-001](wsm-near-promise-then-001.md). Typed result decoding and
-private self-callback policy follow.
+complete in [wsm-near-promise-then-001](wsm-near-promise-then-001.md). Strict UInt64 decoding and
+full-AccountId private self-callback policy are complete in
+[wsm-near-promise-codec-001](wsm-near-promise-codec-001.md) and
+[wsm-near-promise-private-001](wsm-near-promise-private-001.md).

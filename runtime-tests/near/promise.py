@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static function-call and one self-callback Promise edge against near-sandbox."""
+"""Static function-call and authenticated self-callback Promise edge against near-sandbox."""
 
 from __future__ import annotations
 
@@ -48,6 +48,24 @@ def main() -> None:
     )
     if client.view_u64("get") != 0 or client.view_u64_on(RECEIVER, "get") != 0:
         raise AssertionError("caller and receiver must begin with marker zero")
+
+    rejected_callback = client.call_on(
+        RECEIVER,
+        "callbackSuccess",
+        NearClient.encode_u64_le(404),
+        expect_success=False,
+    )
+    failure_text = repr(rejected_callback.get("status", {})) + repr(
+        rejected_callback.get("receipts_outcome", [])
+    )
+    if "overflow" not in failure_text:
+        raise AssertionError(
+            "external callback call must fail at the self-call guard, "
+            f"got {failure_text}"
+        )
+    if client.view_u64_on(RECEIVER, "get") != 0:
+        raise AssertionError("rejected external callback changed receiver state")
+    print("near-promise: external callback rejected by full AccountId self-call guard")
 
     _call_u64(client, "send", 77)
     if client.view_u64("get") != 77:
