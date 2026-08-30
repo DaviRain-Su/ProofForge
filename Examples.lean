@@ -68,6 +68,7 @@ import Examples.XrplTip
 import Examples.XrplGift
 import Examples.XrplCash
 import Examples.XrplBank
+import Examples.XrplSafe
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

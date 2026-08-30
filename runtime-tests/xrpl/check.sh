@@ -279,6 +279,17 @@ need_exports_bank = (
     '(i32.const 524313)',
     '(import "host_lib" "emit_built_txn"',
 )
+need_exports_safe = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "cash") (result i32)',
+    '(func (export "freeze") (result i32)',
+    '(func (export "unfreeze") (result i32)',
+    '(func (export "pause") (result i32)',
+    '(i32.const 524313)',
+    '(import "host_lib" "emit_built_txn"',
+    '(i32.store8 (i32.const 96) (i32.const 108))',
+)
 need_exports_lock = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -362,6 +373,8 @@ for wat in wats:
         exports = need_exports_cash
     elif wat.stem == "XrplBank":
         exports = need_exports_bank
+    elif wat.stem == "XrplSafe":
+        exports = need_exports_safe
     else:
         exports = need_exports_counter
     for needle in exports:
