@@ -203,6 +203,14 @@ must not inspect it for the other statuses. An out-of-range result index aborts 
   let _ := index
   0
 
+/-- Strict decoder over the active callback-result descriptor. The target requires status 1,
+`fits`, and exact length 8 before reading little-endian bytes; otherwise it returns `fallback`. -/
+@[irreducible] def promiseResultBorshUInt64D
+    (capacity : Nat) (fallback : UInt64) : UInt64 :=
+  let _ := capacity
+  let _ := fallback
+  0
+
 /-!
 Invocation-local guest-Wasm arena leaves. Capacity is compile-time fixed by the SDK descriptor;
 the extractor rejects malformed geometry. The physical pointer remains target-owned and cannot

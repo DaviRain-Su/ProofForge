@@ -6,8 +6,10 @@ WASM 家族的第二条链：**NEAR Protocol**。经 `Core.Target.Registration` 
 产物是 **`.wasm`**：Lean 直接 lowering 到 WAT，import 表钉 NEAR runtime 的
 `env`（`input` / `register_len` / `read_register` / `storage_read` /
 `storage_write` / `storage_remove` / `storage_has_key` / `value_return` /
-`panic_utf8` / `promise_batch_create` / `promise_batch_action_function_call` / `promise_return`），组装器是锁定的
-`wat2wasm 1.0.41`。外来叶子经 [`Wasm.Family`](wasm.md) fail closed。
+`panic_utf8` / `promise_batch_create` / `promise_batch_then` /
+`promise_batch_action_function_call` / `promise_return` / `promise_results_count` /
+`promise_result`，按程序条件裁剪），组装器是锁定的 `wat2wasm 1.0.41`。外来叶子经
+[`Wasm.Family`](wasm.md) fail closed。
 
 基础标量绑定历史仓 proof_forge 的 profile `near-wasm-raw-u64-v1`：这**不是** JSON
 ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。标量 method 的 `env.input`
@@ -26,12 +28,14 @@ wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 �
 IterableMap64/IterableSet64。wsm-near-promise-001/002 加入静态 receiver/method、bounded
 arguments、lossless u128 deposit、explicit gas 的 detached/returned Promise function call；
 前者不链接结果，后者在 caller state 持久化后用 `promise_return` 转发远端结果或失败。
+wsm-near-promise-result/then/codec-001 在其上加入 bounded callback result descriptor、静态
+child → self callback，以及 status/fits/exact-length 守卫的 Borsh UInt64 解码与显式 fallback。
 
 ## Boundary
 
 | 模块 | 拥有 | 不拥有 |
 |---|---|---|
-| `Near.Ops` | NEAR context 值叶、static log、detached/returned Promise effect 与方言检查 | 其它链的方言、collection recipe |
+| `Near.Ops` | NEAR context 值叶、static log、Promise/callback/result value/effect 与方言检查 | 其它链的方言、collection recipe |
 | `Near.Host` | import 模块 `env`、digest 域 `near-raw-u64\|`、header | XRPL `host_lib`、Data blob sfield |
 | `Near.Codec` | bounded bytes/String 输入与 bounded view 输出的 canonical Borsh 计划/资源上限 | collection layout、JSON、mutating bounded output |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
@@ -40,7 +44,7 @@ arguments、lossless u128 deposit、explicit gas 的 detached/returned Promise f
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、Borsh UInt64/result decode | arbitrary `IntoStorageKey`、generic Borsh |
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |
-| `Near.Sdk.Promises` | static detached/returned batch function call、bounded args、u128 deposit、explicit gas | chaining/results/callbacks/joins/transfer |
+| `Near.Sdk.Promises` | static detached/returned/child→self callback、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、parallel joins、transfer、generic Borsh |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
@@ -74,8 +78,10 @@ arguments、lossless u128 deposit、explicit gas 的 detached/returned Promise f
   `promise.sh` 部署 caller/receiver 两个合约，验证 batch function-call 的 UInt64 argument、
   `2^64+7` deposit 两个 limb、zero deposit、detached remote failure、caller panic 丢弃 receipt，
   余额不足的同步失败与 rollback，以及 returned call 的 exact 8-byte result、远端失败传播和
-  caller/receiver receipt state 语义。
+  caller/receiver receipt state 语义；并验证成功 child 的 exact Borsh UInt64 decode、独立
+  callback argument、failed/oversized fallback。`promise-result.sh` 另钉 ordinary call 的
+  result count 0 与越界 `promise_result` abort。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
 `NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
-`NearPromise`。
+`NearPromise`、`NearPromiseResult`。

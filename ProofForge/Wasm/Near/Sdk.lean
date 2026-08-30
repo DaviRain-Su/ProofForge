@@ -13,8 +13,9 @@ namespace ProofForge.Wasm.Near.Sdk
 
 /-!
 Source-facing NEAR SDK. Names erase through `@[pf_inline]` to Runtime stubs;
-they do not add Ops, IR nodes, or emitter cases. Bounded Promise-result observation is available;
-Promise chaining, typed result decoding, and NEP-141 stay absent.
+they do not add Ops, IR nodes, or emitter cases. Bounded Promise-result observation, strict Borsh
+UInt64 result decoding, and one static Promise callback edge are available; joins and NEP-141 stay
+absent.
 -/
 
 notation "AccountId" => Runtime.AccountId

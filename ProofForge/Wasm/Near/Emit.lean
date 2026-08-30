@@ -34,6 +34,7 @@ private structure EState where
   fresh : Nat := 0
   last : Option String := none
   pendingDest : Option String := none
+  lastStored : Bool := false
   pendingPromiseReturn : Option String := none
   deriving Inhabited
 
@@ -212,6 +213,25 @@ private def watBytes (message : String) : String :=
     encoded ++ "\\" ++ String.singleton (hexDigit (byte.toNat / 16)) ++
       String.singleton (hexDigit (byte.toNat % 16))
 
+/-- Strict fixed-width Borsh decode over the active callback-result descriptor. Descriptor helper
+calls validate the compile-time capacity; byte reads occur only in the exact-success branch. -/
+private def promiseResultBorshUInt64D (capacity : Nat) (fallback : String) : String :=
+  let status := "(call $pf_promise_result_status (i64.const " ++ toString capacity ++ "))"
+  let fits := "(call $pf_promise_result_fits (i64.const " ++ toString capacity ++ "))"
+  let length := "(call $pf_promise_result_length (i64.const " ++ toString capacity ++ "))"
+  let byte (index : Nat) :=
+    "(call $pf_promise_result_byte (i64.const " ++ toString capacity ++
+      ") (i64.const " ++ toString index ++ "))"
+  let lane (index : Nat) :=
+    if index == 0 then byte index
+    else "(i64.shl " ++ byte index ++ " (i64.const " ++ toString (index * 8) ++ "))"
+  let value := (List.range 8).foldl (init := "") fun value index =>
+    if value.isEmpty then lane index else "(i64.or " ++ value ++ " " ++ lane index ++ ")"
+  "(if (result i64) (i32.and (i64.eq " ++ status ++ " (i64.const 1)) " ++
+    "(i32.and (i64.ne " ++ fits ++ " (i64.const 0)) " ++
+    "(i64.eq " ++ length ++ " (i64.const 8)))) " ++
+    "(then " ++ value ++ ") (else " ++ fallback ++ "))"
+
 private def logDataSection (p : Program ValKind OpExt) : Except String (Array String) := do
   if (keyLayout p).any fun (_, off, len) => logDataBase < off + len then
     throw "extract/unsupported: near static storage keys overlap log data"
@@ -335,6 +355,8 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext (.promiseResultByte capacity) #[index] => do
       let i ← renderVal st index
       return "(call $pf_promise_result_byte (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
+  | .ext (.promiseResultBorshUInt64D capacity) #[fallback] => do
+      return promiseResultBorshUInt64D capacity (← renderVal st fallback)
   | .local index => .ok ("(local.get " ++ localOfSource index ++ ")")
   | .ext kind operands =>
       .error s!"extract/unsupported: near v0 value extension {repr kind}/{operands.size}"
@@ -744,7 +766,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
             let r ← renderVal st rhs
             let (lines, st1) ← emitChecked st kind l r level
             let dest' := (fieldOf lhs).orElse (fun _ => st.pendingDest)
-            let st' := { st1 with pendingDest := dest' }
+            let st' := { st1 with pendingDest := dest', lastStored := false }
             let region ← emitRegion p outputPlan view echo level defaultSlot tail st'
             return { lines := lines ++ region.lines, st := region.st, terminal := true }
         | none => throw "extract/unsupported: near v0 checked operation"
@@ -776,10 +798,27 @@ private partial def emitRegion (p : Program ValKind OpExt)
           #[indent level ("(local.set " ++ localOfSlot name ++ " " ++ v ++ ")")] ++
           storeSlot p name ("(local.get " ++ localOfSlot name ++ ")") level
         let region ← emitRegion p outputPlan view echo level defaultSlot tail
-          { st with last := some (localOfSlot name), pendingDest := some name }
+          { st with last := some (localOfSlot name), pendingDest := some name, lastStored := true }
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
     | .okState value | .returnState value =>
         if view then throw "extract/unsupported: near v0 view cannot write state"
+        if st.lastStored then
+          match value with
+          | .local _ =>
+              -- The state field was already persisted by `storeField`; an explicitly materialized
+              -- tuple result is a separate return channel and must not overwrite that field.
+              unless tail.all isExitOp do
+                throw "extract/unsupported: near v0 instructions follow terminal operation"
+              let v ← renderVal st value
+              let mut lines : Array String := #[]
+              match st.pendingPromiseReturn with
+              | some promiseLocal =>
+                  lines := lines.push (indent level
+                    ("(call $pf_promise_return (local.get " ++ promiseLocal ++ "))"))
+              | none =>
+                  if echo then lines := lines ++ returnU64Instr v level
+              return { lines, st, terminal := true }
+          | _ => pure ()
         let dest := st.pendingDest <|> fieldOf value |>.getD defaultSlot
         let v ← match st.last with
           | some e => .ok ("(local.get " ++ e ++ ")")
@@ -1030,7 +1069,8 @@ private partial def valUsesArena : Val ValKind → Bool
   | .ext (.promiseResultStatus _) _
   | .ext (.promiseResultLength _) _
   | .ext (.promiseResultFits _) _
-  | .ext (.promiseResultByte _) _ => true
+  | .ext (.promiseResultByte _) _
+  | .ext (.promiseResultBorshUInt64D _) _ => true
   | .ext _ operands => operands.any valUsesArena
   | .field base _ | .bitNot base => valUsesArena base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs

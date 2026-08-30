@@ -217,6 +217,9 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-iterable-001](tasks/wsm-near-iterable-001.md) | done | NEAR bounded Identity IterableMap64 / IterableSet64 |
 | [wsm-near-promise-001](tasks/wsm-near-promise-001.md) | done | NEAR detached static Promise function call |
 | [wsm-near-promise-002](tasks/wsm-near-promise-002.md) | done | NEAR returned static Promise function call |
+| [wsm-near-promise-result-001](tasks/wsm-near-promise-result-001.md) | done | NEAR bounded callback-result substrate |
+| [wsm-near-promise-then-001](tasks/wsm-near-promise-then-001.md) | done | NEAR static self-callback edge |
+| [wsm-near-promise-codec-001](tasks/wsm-near-promise-codec-001.md) | done | NEAR strict callback Borsh UInt64 decode |
 
 ## SVM 全面工作计划（当前主线）
 

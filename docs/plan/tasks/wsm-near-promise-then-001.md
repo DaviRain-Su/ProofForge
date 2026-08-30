@@ -41,6 +41,7 @@ production lifecycle policy.
 
 ## Next
 
-Add typed bounded Borsh result decoding over `ResultBuffer`, then authenticate private self-callback
-entries using full current/predecessor AccountId equality. Parallel `promise_and` and transfer
-actions remain later independent slices.
+Exact Borsh UInt64 result decoding over `ResultBuffer` is complete in
+[wsm-near-promise-codec-001](wsm-near-promise-codec-001.md). Authenticate private self-callback
+entries using full current/predecessor AccountId equality next. Parallel `promise_and` and
+transfer actions remain later independent slices.

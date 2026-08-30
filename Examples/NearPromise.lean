@@ -53,31 +53,24 @@ def recordValue (state : State) (value : UInt64) : Except Error (State × UInt64
 def callbackSuccess (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
   let result : Promises.ResultBuffer := 8
   let _ := result.read 0
-  if Promises.resultsCount == 1 && result.status == 1 && result.length == 8 && result.fits &&
-      result.byte 0 == 123 then
-    .ok ({ state with marker := callbackValue }, callbackValue)
-  else
-    .error .overflow
+  let childValue := result.borshUInt64D 0
+  .ok ({ state with marker := callbackValue }, childValue)
 
 /-- Self-callback failure branch: failed dependencies have status 2 and no bytes. -/
 @[pf_entry]
 def callbackFailure (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
   let result : Promises.ResultBuffer := 8
   let _ := result.read 0
-  if Promises.resultsCount == 1 && result.status == 2 && result.length == 0 && result.fits then
-    .ok ({ state with marker := callbackValue }, callbackValue)
-  else
-    .error .overflow
+  let childValue := result.borshUInt64D 999
+  .ok ({ state with marker := callbackValue }, childValue)
 
 /-- A successful eight-byte child result is intentionally oversized for this four-byte buffer. -/
 @[pf_entry]
 def callbackOversized (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
   let result : Promises.ResultBuffer := 4
   let _ := result.read 0
-  if Promises.resultsCount == 1 && result.status == 1 && result.length == 8 && !result.fits then
-    .ok ({ state with marker := callbackValue }, callbackValue)
-  else
-    .error .overflow
+  let childValue := result.borshUInt64D 999
+  .ok ({ state with marker := callbackValue }, childValue)
 
 /-- Schedule a detached call carrying `2^64 + 7` yoctoNEAR. -/
 @[pf_entry]

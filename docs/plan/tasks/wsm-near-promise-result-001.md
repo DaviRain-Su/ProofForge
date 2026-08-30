@@ -45,5 +45,6 @@ entry guards, and native transfer remain outside this slice itself.
 
 One static `promise_batch_then` self-callback edge and its genuine near-sandbox success/failure/
 oversized matrix are complete in
-[wsm-near-promise-then-001](wsm-near-promise-then-001.md). Add typed bounded Borsh result decoding
-and private self-callback guards next.
+[wsm-near-promise-then-001](wsm-near-promise-then-001.md). Exact Borsh UInt64 result decoding is
+complete in [wsm-near-promise-codec-001](wsm-near-promise-codec-001.md); add private self-callback
+guards next.

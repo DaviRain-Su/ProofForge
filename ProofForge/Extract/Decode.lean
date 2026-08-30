@@ -224,6 +224,17 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           some (.nearPromiseResultByte capacity index)
         else none
     | _, _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultBorshUInt64D &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some fallback =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          some (.nearPromiseResultBorshUInt64D capacity fallback)
+        else none
+    | _, _ => none
   else if let some leaf := nearRuntimeLeaf? e then
     some leaf
   else if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
@@ -1854,7 +1865,8 @@ private partial def readsMutableNearResult : Ops.Val → Bool
   | .ext (.near (.promiseResultStatus _)) _
   | .ext (.near (.promiseResultLength _)) _
   | .ext (.near (.promiseResultFits _)) _
-  | .ext (.near (.promiseResultByte _)) _ => true
+  | .ext (.near (.promiseResultByte _)) _
+  | .ext (.near (.promiseResultBorshUInt64D _)) _ => true
   | .ext _ operands => operands.any readsMutableNearResult
 
 /-- Materialize scalar source values whose substitution would duplicate bounded control flow or

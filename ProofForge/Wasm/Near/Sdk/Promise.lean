@@ -19,7 +19,8 @@ and roll back the caller.
 by nearcore in views. `read` preserves nearcore's 0 not-ready / 1 successful / 2 failed status;
 only success has bytes. An out-of-range result index aborts. `callThenReturned` adds one static
 self-callback edge; its explicit callback arguments are independent of the child result channel.
-Typed result decoding, joins, and transfer actions remain outside this slice.
+Strict fixed-width Borsh UInt64 decoding remains SDK policy over the active descriptor; additional
+scalar decoders, joins, and transfer actions remain outside this slice.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Promises
@@ -86,5 +87,11 @@ def ResultBuffer.wellFormed (buffer : ResultBuffer) : Bool :=
 
 @[pf_inline] def ResultBuffer.byte (buffer : ResultBuffer) (index : UInt64) : UInt8 :=
   (Runtime.promiseResultByte buffer index).toUInt8
+
+/-- Decode one exact eight-byte little-endian Borsh `UInt64`. Any unavailable or malformed result
+returns `fallback`. Call `read` immediately before decoding this descriptor. -/
+@[pf_inline] def ResultBuffer.borshUInt64D
+    (buffer : ResultBuffer) (fallback : UInt64) : UInt64 :=
+  Runtime.promiseResultBorshUInt64D buffer fallback
 
 end ProofForge.Wasm.Near.Sdk.Promises

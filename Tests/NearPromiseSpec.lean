@@ -37,6 +37,35 @@ private partial def promiseSteps : Array ProofForge.Extract.IR.Op → Array Stri
       | .forBody _ body => promiseSteps body
       | _ => #[]
 
+private partial def resultDecodesVal : ProofForge.Extract.IR.Val → Array Nat
+  | .ext (.near (.promiseResultBorshUInt64D capacity)) operands =>
+      #[capacity] ++ operands.flatMap resultDecodesVal
+  | .ext _ operands => operands.flatMap resultDecodesVal
+  | .field base _ | .bitNot base => resultDecodesVal base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+  | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+      resultDecodesVal lhs ++ resultDecodesVal rhs
+  | .indexGet base _ index _ _ => resultDecodesVal base ++ resultDecodesVal index
+  | .select _ lhs rhs thn els =>
+      resultDecodesVal lhs ++ resultDecodesVal rhs ++
+        resultDecodesVal thn ++ resultDecodesVal els
+  | _ => #[]
+
+private partial def resultDecodes : Array ProofForge.Extract.IR.Op → Array Nat
+  | ops => ops.foldl (init := #[]) fun decodes op =>
+      decodes ++ match op with
+      | .letLocal _ value | .setLocal _ value | .storeField _ value | .okState value
+      | .returnU64 value | .returnState value => resultDecodesVal value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
+          resultDecodesVal lhs ++ resultDecodesVal rhs
+      | .ite _ lhs rhs thn els =>
+          resultDecodesVal lhs ++ resultDecodesVal rhs ++
+            resultDecodes thn ++ resultDecodes els
+      | .forBody _ body => resultDecodes body
+      | _ => #[]
+
 elab "#pf_near_promise_check" : command => do
   let env ← getEnv
   let source ←
@@ -59,6 +88,11 @@ elab "#pf_near_promise_check" : command => do
       (steps.filter (· == thenFailure)).size == 1 &&
       (steps.filter (· == thenOversized)).size == 1 do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
+  let decodes := source.methods.foldl (init := #[]) fun acc method =>
+    acc ++ resultDecodes method.ops
+  unless decodes.size == 3 && (decodes.filter (· == 8)).size == 2 &&
+      (decodes.filter (· == 4)).size == 1 do
+    throwError s!"extractor lost strict callback UInt64 decoders: {repr decodes}"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -124,6 +158,42 @@ elab "#pf_near_promise_check" : command => do
       "(local.get $pf_self_len) (i64.const 128)" ] do
     unless thenWat.contains anchor do
       throwError s!"NEAR callback WAT missing {anchor}\n{thenWat}"
+  let callbackSuccess ← match program.entries.find? (·.ixName == "callbackSuccess") with
+    | some method => pure method
+    | none => throwError "missing callbackSuccess entry"
+  let callbackSuccessWat ← match Emit.emit { program with entries := #[callbackSuccess] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(i64.eq (call $pf_promise_result_status (i64.const 8)) (i64.const 1))",
+      "(i64.ne (call $pf_promise_result_fits (i64.const 8)) (i64.const 0))",
+      "(i64.eq (call $pf_promise_result_length (i64.const 8)) (i64.const 8))",
+      "(call $pf_promise_result_byte (i64.const 8) (i64.const 7))",
+      "(i64.const 56)",
+      "(else (i64.const 0))",
+      "(i64.store (i32.const 0) (local.get $pf_v0))" ] do
+    unless callbackSuccessWat.contains anchor do
+      throwError s!"strict callback UInt64 WAT missing {anchor}\n{callbackSuccessWat}"
+  if callbackSuccessWat.contains "(local.set $marker (local.get $pf_v0))" then
+    throwError "callback tuple result overwrote its independently persisted state field"
+  let callbackFailure ← match program.entries.find? (·.ixName == "callbackFailure") with
+    | some method => pure method
+    | none => throwError "missing callbackFailure entry"
+  let callbackFailureWat ← match Emit.emit { program with entries := #[callbackFailure] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless callbackFailureWat.contains "(else (i64.const 999))" do
+    throwError "failed callback lost its explicit UInt64 decode fallback"
+  let callbackOversized ← match program.entries.find? (·.ixName == "callbackOversized") with
+    | some method => pure method
+    | none => throwError "missing callbackOversized entry"
+  let callbackOversizedWat ← match Emit.emit { program with entries := #[callbackOversized] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless callbackOversizedWat.contains
+      "(i64.ne (call $pf_promise_result_fits (i64.const 4)) (i64.const 0))" &&
+      callbackOversizedWat.contains "(else (i64.const 999))" do
+    throwError "oversized callback lost its capacity-4 UInt64 decode fallback"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat

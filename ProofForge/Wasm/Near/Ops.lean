@@ -47,12 +47,14 @@ inductive ValKind where
   | promiseResultLength (capacity : Nat)
   | promiseResultFits (capacity : Nat)
   | promiseResultByte (capacity : Nat)
+  | promiseResultBorshUInt64D (capacity : Nat)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .transientBuffer64Get _ | .storageResultByte _ | .promiseResultByte _ => 1
+  | .transientBuffer64Get _ | .storageResultByte _ | .promiseResultByte _
+  | .promiseResultBorshUInt64D _ => 1
   | .reserved => 0
   | _ => 0
 

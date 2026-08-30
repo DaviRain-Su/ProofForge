@@ -98,12 +98,12 @@ def main() -> None:
 
     then_success = _call_u64(client, "sendThenSuccess", 601)
     then_success_value = NearClient.success_value_bytes(then_success)
-    if then_success_value != NearClient.encode_u64_le(77):
+    if then_success_value != NearClient.encode_u64_le(123):
         raise AssertionError(
-            f"successful callback expected argument 77, got {then_success_value!r}"
+            f"successful callback expected decoded child value 123, got {then_success_value!r}"
         )
     if client.view_u64("get") != 77:
-        raise AssertionError("successful callback did not observe and commit the success branch")
+        raise AssertionError("successful callback did not preserve its separate argument 77")
     if client.view_u64_on(RECEIVER, "get") != 123:
         raise AssertionError("successful callback child did not return the expected value 123")
     print("near-promise: self callback observed exact successful child bytes and separate input")
@@ -111,8 +111,8 @@ def main() -> None:
     # The transaction's final value is successful, but the RPC result still contains the expected
     # failed child receipt, so the harness must permit a receipt-level failure here.
     then_failure = _call_u64(client, "sendThenMissing", 602, expect_success=False)
-    if NearClient.success_value_bytes(then_failure) != NearClient.encode_u64_le(78):
-        raise AssertionError("failed-child callback did not return marker 78")
+    if NearClient.success_value_bytes(then_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("failed-child callback did not return decoder fallback 999")
     if client.view_u64("get") != 78:
         raise AssertionError("failed child did not run the callback's status-2 branch")
     if client.view_u64_on(RECEIVER, "get") != 123:
@@ -120,8 +120,8 @@ def main() -> None:
     print("near-promise: failed child still ran callback with status 2 and no bytes")
 
     then_oversized = _call_u64(client, "sendThenOversized", 603)
-    if NearClient.success_value_bytes(then_oversized) != NearClient.encode_u64_le(79):
-        raise AssertionError("oversized-result callback did not return marker 79")
+    if NearClient.success_value_bytes(then_oversized) != NearClient.encode_u64_le(999):
+        raise AssertionError("oversized-result callback did not return decoder fallback 999")
     if client.view_u64("get") != 79:
         raise AssertionError("callback did not observe successful length 8 as oversized for bound 4")
     if client.view_u64_on(RECEIVER, "get") != 456:
