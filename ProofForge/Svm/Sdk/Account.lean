@@ -101,6 +101,25 @@ fails closed. Duplicate aliases among external positions share their canonical a
 @[pf_inline] def Handle.resizeData (handle : Handle) (newLength : UInt64) : UInt64 :=
   Runtime.resizeAccountData (UInt64.ofNat handle.index) newLength
 
+/-!
+Close one fixed program-owned account by shrinking its data to zero and moving its complete
+lamport balance to a fixed refund destination. This is ordinary SDK composition over the checked
+`resizeData` and `transferLamports` contracts above, not a new Runtime operation: extraction first
+snapshots the source balance, then preserves exactly one resize and one transfer in source order.
+
+The source must be a writable external account owned by the current program. The destination must
+be writable and canonically distinct, but may be foreign-owned. Runtime duplicate aliases,
+destination overflow, malformed account data, and all other underlying preflight failures remain
+`Custom(1)`. Solana instruction rollback makes a later transfer failure atomic with the earlier
+resize. No owner reassignment, pointer, heap allocation, or runtime-selected account geometry is
+introduced.
+-/
+@[pf_inline] def Handle.closeTo (source destination : Handle) : UInt64 :=
+  let balance := source.lamports
+  let _ := source.resizeData 0
+  let _ := source.transferLamports destination balance
+  balance
+
 /-- Compile-time bounded remaining-account window. This is the target plan type itself, not a
 second source-side geometry structure. -/
 abbrev View := ProofForge.Svm.AccountView.View

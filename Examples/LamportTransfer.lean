@@ -62,4 +62,14 @@ def moveAndPeek (s : State) (amount : UInt64) : Except Error (State × UInt64) :
   else
     .error .overflow
 
+/--
+Close the program-owned vault and refund its complete lamport balance to the recipient. The
+reusable SDK snapshots the balance, shrinks account data to zero, and drains the account through
+the existing checked transfer. This entry adds no application-specific low-level operation and
+does not change managed state.
+-/
+@[pf_entry]
+def closeVault (_s : State) : UInt64 :=
+  vault.closeTo recipient
+
 end Examples.LamportTransfer

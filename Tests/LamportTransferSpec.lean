@@ -23,6 +23,7 @@ open ProofForge.Svm.Runtime
 -- Host stubs are irreducible; extraction-time constants never fold into values.
 #guard vault.transferLamports recipient 7 == 0
 #guard vault.lamports == 0
+#guard vault.closeTo recipient == 0
 
 -- Static handle bounds still hold; the component rejects out-of-range and self transfers.
 #guard vault.wellFormed && recipient.wellFormed
@@ -58,6 +59,22 @@ partial def opsHaveTransfer (ops : Array ProofForge.Extract.IR.Op) : Bool :=
     | .forBody _ body => opsHaveTransfer body
     | _ => false
 
+/-- Ordered SDK composition markers, retaining the balance snapshot's local identity. -/
+inductive CloseStep where
+  | balance (snapshot : Nat)
+  | resize
+  | transfer (amount : ProofForge.Extract.IR.Val)
+  | returned (value : ProofForge.Extract.IR.Val)
+  deriving Repr
+
+private def closeSteps (ops : Array ProofForge.Extract.IR.Op) : Array CloseStep :=
+  ops.filterMap fun
+    | .letLocal snapshot (.ext (.svm (.accLamportsN 1)) #[]) => some (.balance snapshot)
+    | .ext (.svm (.component (.accountData (.resize 1 (.lit 0))))) => some .resize
+    | .ext (.svm (.component (.lamports (.transfer 1 2 amount)))) => some (.transfer amount)
+    | .returnU64 value => some (.returned value)
+    | _ => none
+
 /-- Extraction and emission contract for the whole example. -/
 elab "#pf_guard_lamport_transfer" : command => do
   let env ← getEnv
@@ -79,6 +96,14 @@ elab "#pf_guard_lamport_transfer" : command => do
     method.ixName == "move" && opsHaveTransfer method.ops
   unless moveHasTransfer do
     throwError "move did not lower to the lamports transfer component call"
+  let some close := source.methods.find? (·.ixName == "closeVault")
+    | throwError "missing closeVault SDK consumer"
+  match closeSteps close.ops with
+  | #[.balance snapshot, .resize, .transfer (.local amountLocal), .returned (.local returnLocal)] =>
+      unless snapshot == amountLocal && snapshot == returnLocal do
+        throwError "closeVault did not reuse its one pre-effect balance snapshot"
+  | steps =>
+      throwError s!"closeVault did not preserve balance → resize → transfer → return: {repr steps}"
   let asm ←
     match ProofForge.Svm.Emit.emitAsm program with
     | .ok asm => pure asm

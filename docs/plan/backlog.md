@@ -71,6 +71,7 @@ R3-021 two-slot same-kind transient handle isolation、
 R3-022 invocation-local fixed-width UInt64 POD records、
 R3-023 first-class allocation-free Pubkey values、
 R3-024 generic whole-value SDK record boundary、
+R3-025 fixed-account close/refund composition、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -90,7 +91,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 ## 已做
 
 - **当前可验证基线（2026-08-30）**：Lean 汇总 386 jobs；SVM manifest 全 61 programs；
-  Mollusk 全量 406/406（MemoryOps 20/20、Phoenix-v1 profile 76/76、RawEntry 21/21、Keys 9/9）；EVM manifest 全
+  Mollusk 全量 409/409（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
+  RawEntry 21/21、Keys 9/9）；EVM manifest 全
   36 programs 且 Anvil 36/36。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
   并保留汇总 `test` gate；完整 386-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
@@ -592,6 +594,18 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   pointer 或 persistent object。recursive/polymorphic/inherited/over-budget 与 nested dynamic
   shape 继续 fail closed。详见 `docs/plan/tasks/r3-024.md`。
 
+- R3-025 fixed-account close/refund composition 已完成：`Account.Handle.closeTo` 在普通
+  `pf_inline` Lean 中只组合已有 `lamports` snapshot、`resizeData 0` 与
+  `transferLamports`，不新增 Runtime/Ops/IR/Component/Emit。source 必须是 writable、
+  current-program-owned external fixed handle；destination 必须 writable/canonically distinct，
+  但可 foreign-owned。`Examples.LamportTransfer.closeVault` 的 extraction guard 钉死一次
+  pre-effect snapshot 和 balance → resize → transfer → return；Mollusk 15/15 覆盖 nonempty data
+  成功清零/全额退款，以及 destination overflow、same-canonical alias 在 resize 后失败时的
+  data/lamports 原子回滚。digest `795d11e30ee48fb5`、assembly 31,362 B、ELF 10,648 B、
+  ELF SHA-256 `f091c930106769bd466adf1c28d5887a9ca3aef1fe67fcb718451c0d3934d926`。rent top-up、
+  owner reassignment、runtime-selected geometry 与 pointer/heap 仍不开放。详见
+  `docs/plan/tasks/r3-025.md`。
+
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
   独立复用；replacement 会使旧 nominee 失效，accept/cancel 显式清零，不使用 hashed
@@ -904,8 +918,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 - `lake build Tests` 当前 386 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 61 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 406/406，其中 MemoryOps 20/20、RawEntry 21/21、
-  Keys 9/9、Phoenix-v1 profile 76/76。
+  `pf build` 当前通过；全套 Mollusk 409/409，其中 MemoryOps 20/20、LamportTransfer 15/15、
+  RawEntry 21/21、Keys 9/9、Phoenix-v1 profile 76/76。
 - EVM registry 36 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /
   EvmFeatureFlags / EvmClaimBitmap / EvmRingMailbox / EvmRingHistory / GuardedPayout /

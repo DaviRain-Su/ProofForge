@@ -6,7 +6,8 @@
 //! validated no-op, destination/source writable preflights, source current-program
 //! ownership, insufficient balance, crediting overflow, duplicate Loader-v3 aliases
 //! (same-canonical fails closed; alias of a distinct account resolves and succeeds),
-//! and the atomic state/balance hold on every failure.
+//! reusable SDK account close/refund composition, and the atomic state/data/balance hold
+//! on every failure.
 
 mod common;
 
@@ -28,6 +29,7 @@ const BASE_LAMPORTS: u64 = 10 * LAMPORTS_PER_SOL;
 const DATA_LEN: usize = 16;
 const VAULT_BALANCE: u64 = 1_000_000;
 const RECIPIENT_BALANCE: u64 = 500_000;
+const VAULT_DATA: [u8; 8] = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
 
 fn instruction_discriminator(name: &str, param_count: usize) -> [u8; 8] {
     let params = vec!["u64"; param_count].join(",");
@@ -91,7 +93,9 @@ fn state_account(program_id: &Pubkey, moved: u64) -> Account {
 
 /// Program-owned vault funding every transfer.
 fn vault_account(program_id: &Pubkey, lamports: u64) -> Account {
-    Account::new(lamports, 0, program_id)
+    let mut account = Account::new(lamports, VAULT_DATA.len(), program_id);
+    account.data = VAULT_DATA.to_vec();
+    account
 }
 
 /// Foreign-owned writable destination; the contract never requires self-ownership.
@@ -123,6 +127,14 @@ fn move_instruction(
     let mut data = disc.to_vec();
     data.extend_from_slice(&amount.to_le_bytes());
     Instruction::new_with_bytes(*program_id, &data, metas)
+}
+
+fn close_instruction(program_id: &Pubkey, metas: Vec<AccountMeta>) -> Instruction {
+    Instruction::new_with_bytes(
+        *program_id,
+        &instruction_discriminator("closeVault", 0),
+        metas,
+    )
 }
 
 /// Standard metas/accounts: writable state, writable vault, writable recipient.
@@ -176,6 +188,77 @@ fn move_and_peek_reads_post_debit_balance() {
             Check::account(&recipient_key())
                 .lamports(RECIPIENT_BALANCE + 250_000)
                 .build(),
+        ],
+    );
+}
+
+#[test]
+fn close_vault_shrinks_data_and_refunds_the_complete_balance() {
+    let (program_id, mollusk) = harness();
+    let fixture = fixture(&program_id);
+    let ix = close_instruction(&program_id, standard_metas());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &standard_accounts(&fixture),
+        &[
+            Check::success(),
+            Check::return_data(&VAULT_BALANCE.to_le_bytes()),
+            Check::account(&vault_key()).lamports(0).data(&[]).build(),
+            Check::account(&recipient_key())
+                .lamports(RECIPIENT_BALANCE + VAULT_BALANCE)
+                .build(),
+            Check::account(&state_key()).data(&state_data(0)).build(),
+        ],
+    );
+}
+
+#[test]
+fn close_vault_destination_overflow_rolls_back_the_prior_resize() {
+    let (program_id, mollusk) = harness();
+    let fixture = fixture(&program_id);
+    let brimming = (recipient_key(), recipient_account(u64::MAX));
+    let accounts = vec![fixture.state.clone(), fixture.vault.clone(), brimming];
+    let ix = close_instruction(&program_id, standard_metas());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &accounts,
+        &[
+            Check::err(ProgramError::Custom(1)),
+            Check::account(&vault_key())
+                .lamports(VAULT_BALANCE)
+                .data(&VAULT_DATA)
+                .build(),
+            Check::account(&recipient_key()).lamports(u64::MAX).build(),
+            Check::account(&state_key()).data(&state_data(0)).build(),
+        ],
+    );
+}
+
+#[test]
+fn close_vault_duplicate_refund_alias_rolls_back_the_prior_resize() {
+    let (program_id, mollusk) = harness();
+    let fixture = fixture(&program_id);
+    let metas = vec![
+        AccountMeta::new(state_key(), false),
+        AccountMeta::new(vault_key(), false),
+        AccountMeta::new(vault_key(), false),
+    ];
+    let accounts = vec![
+        fixture.state.clone(),
+        fixture.vault.clone(),
+        fixture.vault.clone(),
+    ];
+    let ix = close_instruction(&program_id, metas);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &accounts,
+        &[
+            Check::err(ProgramError::Custom(1)),
+            Check::account(&vault_key())
+                .lamports(VAULT_BALANCE)
+                .data(&VAULT_DATA)
+                .build(),
+            Check::account(&state_key()).data(&state_data(0)).build(),
         ],
     );
 }
