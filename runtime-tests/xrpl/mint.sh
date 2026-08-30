@@ -351,6 +351,30 @@ rm -f "$cfg"
 [[ "$cap_a" == "9" ]] || { echo "FAIL: A cap want 9, got $cap_a" >&2; exit 1; }
 [[ "$cap_b" == "missing" || "$cap_b" == "0" ]] || { echo "FAIL: B cap should stay missing/0, got $cap_b" >&2; exit 1; }
 
+# Nonzero cap below current supp is a no-op. setCap(0) is unlimited.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"setCap","parameters":["8"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+below="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$below" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==1, d' <<<"$below"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"cap"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+cap_stay="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+[[ "$cap_stay" == "9" ]] || { echo "FAIL: A cap want 9 after setCap(8)<supp, got $cap_stay" >&2; exit 1; }
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"setCap","parameters":["0"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+uncap="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$uncap" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$uncap"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"cap"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+cap_zero="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$cap_zero" == "0" ]] || { echo "FAIL: A cap want 0 after setCap(0), got $cap_zero" >&2; exit 1; }
+
 SRC_W0="4887904824787662773"
 SRC_W1="17928715436519199904"
 SRC_W2="3895982578"
