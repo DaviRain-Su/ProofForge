@@ -233,9 +233,23 @@ async function main() {
     });
     const seq = info.account_data.Sequence;
 
-    const Functions = exports.map((name) => ({
-      Function: { FunctionName: hexName(name) },
-    }));
+    const paramCounts = cfg.function_params || {};
+    const Functions = exports.map((name) => {
+      const fn = { Function: { FunctionName: hexName(name) } };
+      const n = Number(paramCounts[name] || 0);
+      // Create ABI must list ParameterType for every ContractCall value.
+      // Calling with Parameters against an empty ABI crashes 2.6.1 (SIGSEGV)
+      // and knocks 3.3.0 off the current ledger.
+      if (n > 0) {
+        fn.Function.Parameters = Array.from({ length: n }, () => ({
+          Parameter: {
+            ParameterFlag: 0,
+            ParameterType: { type: "UINT64" },
+          },
+        }));
+      }
+      return fn;
+    });
     const txJson = {
       TransactionType: "ContractCreate",
       Account: wallet.address,
@@ -327,15 +341,18 @@ async function main() {
     if (fields.has("Gas")) txJson.Gas = allowance;
     else if (fields.has("ComputationAllowance")) txJson.ComputationAllowance = allowance;
     if (cfg.parameters && cfg.parameters.length) {
-      txJson.Parameters = cfg.parameters.map((p) => ({
-        Parameter: {
-          ParameterFlag: 0,
-          ParameterValue: {
-            type: "UINT64",
-            value: typeof p === "string" ? p : BigInt(p).toString(16).toUpperCase().padStart(16, "0"),
+      txJson.Parameters = cfg.parameters.map((p) => {
+        const n = BigInt(typeof p === "string" && p.startsWith("0x") ? p : String(p));
+        return {
+          Parameter: {
+            ParameterFlag: 0,
+            ParameterValue: {
+              type: "UINT64",
+              value: n.toString(16).toUpperCase().padStart(16, "0"),
+            },
           },
-        },
-      }));
+        };
+      });
     }
     const signed = await signTx(url, secret, txJson);
     const submitted = await submitBlob(url, signed.tx_blob);

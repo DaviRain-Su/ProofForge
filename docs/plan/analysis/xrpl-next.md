@@ -10,7 +10,8 @@
 > （新 hash 第一次 Create 两数组 `tfSendAmount`）。`emit_built_txn` Payment 仍
 > **-196 tefBAD_AUTH**（不是没钱；`tecPSEUDO_ACCOUNT` 是 +196）。
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
-> 还缺：程序拥有 ContractData（-22）、公开 Parameters 打节点、emit -196 tefBAD_AUTH。
+> 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
+> 公开 Parameters **已绿**（Create 时 Function ABI 声明 UINT64；空 ABI 带参会打节点）。
 > **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
 
 ## 0. 现在能写什么样的合约

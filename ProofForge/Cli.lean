@@ -63,7 +63,7 @@ private def usage : String :=
     "deploy/call talk via runtime-tests/xrpl/alphanet-rpc.js.\n" ++
     "     --target xrpl = Bedrock/get_* names (local 2.6.1). xrpl-alphanet = XLS-0102.\n" ++
     "     --send-amount funds the pseudo-account (local 2.6.1 first-install only).\n" ++
-    "     Public 3.3.0 Create with values is still temMALFORMED; Parameters 502.\n" ++
+    "     Public 3.3.0: first-install tfSendAmount funds; Function ABI needed for Parameters.\n" ++
     "     wasm is a chain family, not a target; pick a member such as xrpl\n" ++
     "No program names on build means every registered source module.\n"
 
@@ -272,11 +272,19 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
       let fund :=
         if opts.sendAmount.isEmpty then ""
         else ",\"send_amount_drops\":\"" ++ jsonEscape opts.sendAmount ++ "\""
+      let mut fp := ""
+      for m in #[program.initializer] ++ program.entries do
+        if m.paramCount > 0 then
+          if !fp.isEmpty then fp := fp ++ ","
+          fp := fp ++ "\"" ++ jsonEscape m.ixName ++ "\":" ++ toString m.paramCount
+      let params :=
+        if fp.isEmpty then ""
+        else ",\"function_params\":{" ++ fp ++ "}"
       let cfg :=
         "{\"rpc_url\":\"" ++ jsonEscape opts.rpcUrl ++
           "\",\"wallet_seed\":\"" ++ jsonEscape opts.wallet ++
           "\",\"wasm_path\":\"" ++ jsonEscape r.wasmPath.toString ++ "\"" ++
-          fund ++ "}"
+          fund ++ params ++ "}"
       let cfgPath ← writeTempJson cfg
       let result ← runAlphaNetJs "deploy" cfgPath
       try IO.FS.removeFile cfgPath catch _ => pure ()

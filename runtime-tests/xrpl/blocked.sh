@@ -147,15 +147,15 @@ else
 fi
 
 # --- 3. Parameters ---
-# 2.6.1-rc1 SIGSEGV (docker exit 139) on submit of ContractCall+Parameters.
-# Default skip. XRPL_PROBE_PARAMS=1 reproduces the crash.
-param_result=skipped
-param_code=skipped
-if [[ "${XRPL_PROBE_PARAMS:-0}" == "1" ]]; then
+# 2.6.1 node `sign` of Function.ParameterType → temBAD_SIGNATURE / temMALFORMED.
+# Public 3.3.0: Create ABI + Call values is tesSUCCESS (probe-param). Skip here.
+if [[ "$nid" == "21337" ]]; then
   param_wasm="$root/build/xrpl-alphanet/probe-param-local.wasm"
   "$wat2wasm" "$here/fixture/probe-param-local.wat" -o "$param_wasm"
-  echo "xrpl-blocked: deploy param probe + parameterized bump (may SIGSEGV node)" >&2
-  if param_deploy="$(deploy "$param_wasm")"; then
+  echo "xrpl-blocked: deploy param probe with bump ABI" >&2
+  printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"bump":1}}\n' \
+    "$RPC" "$WALLET" "$param_wasm" >"$cfg"
+  if param_deploy="$(node "$here/alphanet-rpc.js" deploy "$cfg")"; then
     echo "$param_deploy" >&2
     param_c="$("$python" -I -S -c 'import json,sys; print(json.load(sys.stdin)["contractAccount"])' <<<"$param_deploy")"
     call_fn "$param_c" initialize >/dev/null
@@ -166,11 +166,12 @@ if [[ "${XRPL_PROBE_PARAMS:-0}" == "1" ]]; then
   else
     echo "xrpl-blocked: param deploy rejected" >&2
     param_result=rejected
+    param_code=missing
   fi
 else
-  echo "xrpl-blocked: skip Parameters (2.6.1-rc1 SIGSEGV; XRPL_PROBE_PARAMS=1 to reproduce)" >&2
-  param_result="SIGSEGV-recorded"
-  param_code="139"
+  echo "xrpl-blocked: skip Parameters on nid=$nid (2.6.1 cannot sign Function.ParameterType)" >&2
+  param_result="skip-local-sign"
+  param_code="n/a"
 fi
 
 rm -f "$cfg"
