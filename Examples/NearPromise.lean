@@ -44,8 +44,9 @@ def record (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
   let deposit := Context.attachedDeposit
   .ok ({ marker := value, depositLo := deposit.w0, depositHi := deposit.w1 }, value)
 
-/-- Receiver entry whose scalar result is forwarded by `sendReturned`. -/
-@[pf_entry]
+/-- Receiver entry whose scalar result is forwarded by `sendReturned`. Explicit payable metadata
+permits attached donations without forcing the body to observe their amount. -/
+@[pf_entry, pf_near_payable]
 def recordValue (state : State) (value : UInt64) : Except Error (State × UInt64) :=
   .ok ({ state with marker := value }, value)
 
@@ -55,52 +56,40 @@ def echo (_state : State) (value : UInt64) : UInt64 :=
   value
 
 /-- Self-callback success branch: child bytes and normal callback input are separate channels. -/
-@[pf_entry]
+@[pf_entry, pf_near_private]
 def callbackSuccess (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
-  if Access.isSelfCall then
-    let result : Promises.ResultBuffer := 8
-    let _ := result.read 0
-    let childValue := result.borshUInt64D 0
-    .ok ({ state with marker := callbackValue }, childValue)
-  else
-    .error .overflow
+  let result : Promises.ResultBuffer := 8
+  let _ := result.read 0
+  let childValue := result.borshUInt64D 0
+  .ok ({ state with marker := callbackValue }, childValue)
 
 /-- Self-callback failure branch: failed dependencies have status 2 and no bytes. -/
-@[pf_entry]
+@[pf_entry, pf_near_private]
 def callbackFailure (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
-  if Access.isSelfCall then
-    let result : Promises.ResultBuffer := 8
-    let _ := result.read 0
-    let childValue := result.borshUInt64D 999
-    .ok ({ state with marker := callbackValue }, childValue)
-  else
-    .error .overflow
+  let result : Promises.ResultBuffer := 8
+  let _ := result.read 0
+  let childValue := result.borshUInt64D 999
+  .ok ({ state with marker := callbackValue }, childValue)
 
 /-- A successful eight-byte child result is intentionally oversized for this four-byte buffer. -/
-@[pf_entry]
+@[pf_entry, pf_near_private]
 def callbackOversized (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
-  if Access.isSelfCall then
-    let result : Promises.ResultBuffer := 4
-    let _ := result.read 0
-    let childValue := result.borshUInt64D 999
-    .ok ({ state with marker := callbackValue }, childValue)
-  else
-    .error .overflow
+  let result : Promises.ResultBuffer := 4
+  let _ := result.read 0
+  let childValue := result.borshUInt64D 999
+  .ok ({ state with marker := callbackValue }, childValue)
 
 /-- Authenticated two-input callback. Reads remain ordered and independent, so one failed child
 cannot prevent observation of the other successful child. -/
-@[pf_entry]
+@[pf_entry, pf_near_private]
 def callbackJoined (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
-  if Access.isSelfCall then
-    if Promises.resultsCount == 2 then
-      let result : Promises.ResultBuffer := 8
-      let _ := result.read 0
-      let left := result.borshUInt64D 999
-      let _ := result.read 1
-      let right := result.borshUInt64D 999
-      .ok ({ state with marker := callbackValue, depositLo := left, depositHi := right }, right)
-    else
-      .error .overflow
+  if Promises.resultsCount == 2 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let right := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := right }, right)
   else
     .error .overflow
 

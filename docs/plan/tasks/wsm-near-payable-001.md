@@ -17,8 +17,9 @@ Apply NEAR's non-payable-by-default wrapper policy to initializers and mutating 
 - keep method-specific panic bytes in a bounded target-owned static region included in arena and
   initial-memory accounting.
 
-This capability rule is deliberately narrower than near-sdk-rs `#[payable]`: a method cannot yet
-accept a donation without observing the deposit. General target entry metadata remains future work.
+This slice's inferred capability is deliberately narrower than near-sdk-rs `#[payable]`; explicit
+donation-only policy is now provided by
+[wsm-near-entry-policy-001](wsm-near-entry-policy-001.md).
 Inlining and extraction materialize Runtime deposit leaves into the consuming method before this
 policy is classified.
 
@@ -33,5 +34,5 @@ policy is classified.
 
 ## Next
 
-Add reusable private entry metadata rather than inferring callback privacy from body logic. Donation-
-only payable methods should arrive with that same target-owned entry-policy channel.
+Completed by [wsm-near-entry-policy-001](wsm-near-entry-policy-001.md): reusable private metadata
+and donation-only payable share one target-owned entry-policy channel.

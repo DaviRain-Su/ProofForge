@@ -62,6 +62,9 @@ structure Method (ValExt : Type) (OpExt : Type → Type) where
   name : String
   ixName : String
   paramCount : Nat := 0
+  /-- Opaque target-owned entry-wrapper policy. Empty preserves historical target behavior and
+  digests; the owning chain must validate every nonempty value before emission. -/
+  entryPolicy : String := ""
   /-- Optional target-owned logical input shape retained after parameters are rewritten to a
   fixed scalar frame. Empty for the historical raw-u64 ABI and for XRPL. -/
   inputSchema : Option Core.Codec.Schema := none
@@ -485,9 +488,11 @@ private def methodCanon {ValExt : Type} {OpExt : Type → Type}
     | some n => s!"view{n}"
     | none => "mut"
   let echo := if method.echoDropped then "echo" else "noecho"
+  let entry := if method.entryPolicy.isEmpty then "" else s!":{method.entryPolicy}"
   let input := if method.inputPolicy.isEmpty then "" else s!":{method.inputPolicy}"
   let output := if method.outputPolicy.isEmpty then "" else s!":{method.outputPolicy}"
-  s!"{tag}:{method.ixName}:{method.paramCount}:{echo}{input}{output}:[{opsCanon extValCanon extOpCanon method.ops}]"
+  s!"{tag}:{method.ixName}:{method.paramCount}:{echo}{entry}{input}{output}:" ++
+    s!"[{opsCanon extValCanon extOpCanon method.ops}]"
 
 def canonical {ValExt : Type} {OpExt : Type → Type}
     (digestDomain : String) (extValCanon : ValExt → String)

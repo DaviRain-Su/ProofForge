@@ -20,6 +20,39 @@ abbrev CFG := Core.CFG.Graph Ops.ValKind Ops.OpExt
 abbrev Method := Wasm.IR.Method Ops.ValKind Ops.OpExt
 abbrev Program := Wasm.IR.Program Ops.ValKind Ops.OpExt
 
+/-- NEAR-generated wrapper capabilities. This is target metadata, never an executable source Op. -/
+structure EntryPolicy where
+  isPrivate : Bool := false
+  payable : Bool := false
+  deriving BEq, Repr, Inhabited
+
+/-- One spelling for digesting and emitter validation. Empty preserves historical methods. -/
+def EntryPolicy.canonical (policy : EntryPolicy) : String :=
+  match policy.isPrivate, policy.payable with
+  | false, false => ""
+  | true, false => "near.entry.v1:private"
+  | false, true => "near.entry.v1:payable"
+  | true, true => "near.entry.v1:private,payable"
+
+/-- Parse only canonical target-owned policy values; malformed manually-built IR fails closed. -/
+def EntryPolicy.ofCanonical : String → Except String EntryPolicy
+  | "" => pure {}
+  | "near.entry.v1:private" => pure { isPrivate := true }
+  | "near.entry.v1:payable" => pure { payable := true }
+  | "near.entry.v1:private,payable" => pure { isPrivate := true, payable := true }
+  | policy => throw s!"extract/unsupported: malformed near entry policy {policy}"
+
+def entryPolicyOf (method : Method) : Except String EntryPolicy := do
+  let policy ← EntryPolicy.ofCanonical method.entryPolicy
+  if method.tupleArity.isSome && policy.payable then
+    throw s!"extract/unsupported: {method.ixName} view cannot be payable"
+  return policy
+
+def validateEntryPolicies (program : Program) : Except String Unit := do
+  let _ ← entryPolicyOf program.initializer
+  for method in program.entries do
+    let _ ← entryPolicyOf method
+
 private def projectValExt : Extract.IR.ValKind → Except String Ops.ValKind
   | .near kind =>
       match kind with
@@ -337,6 +370,27 @@ private structure BoundOutput where
   schema : Core.Codec.Schema
   plan : Codec.BorshOutputPlan
 
+private structure BoundEntry where
+  ixName : String
+  policy : EntryPolicy
+
+private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry := do
+  let privateAnnotations := method.annotations.filter (· == "near.private.v1")
+  let payableAnnotations := method.annotations.filter (· == "near.payable.v1")
+  unless privateAnnotations.size + payableAnnotations.size == method.annotations.size do
+    throw s!"extract/unsupported: near cannot consume foreign target annotations on {method.ixName}"
+  unless privateAnnotations.size ≤ 1 do
+    throw s!"extract/unsupported: {method.ixName} has duplicate near private annotations"
+  unless payableAnnotations.size ≤ 1 do
+    throw s!"extract/unsupported: {method.ixName} has duplicate near payable annotations"
+  let policy : EntryPolicy := {
+    isPrivate := !privateAnnotations.isEmpty
+    payable := !payableAnnotations.isEmpty
+  }
+  if method.kind == .get && policy.payable then
+    throw s!"extract/unsupported: {method.ixName} view cannot be payable"
+  return { ixName := method.ixName, policy }
+
 private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundOutput) := do
   match method.retSchema with
@@ -354,8 +408,11 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
         retCount := 1 }, some { ixName := method.ixName, schema, plan })
   | _ => return (method, none)
 
-private def decorateMethod (inputs : Array BoundInput) (outputs : Array BoundOutput)
-    (method : Method) : Method :=
+private def decorateMethod (entries : Array BoundEntry) (inputs : Array BoundInput)
+    (outputs : Array BoundOutput) (method : Method) : Method :=
+  let method := match entries.find? (·.ixName == method.ixName) with
+  | some entry => { method with entryPolicy := entry.policy.canonical }
+  | none => method
   let method := match inputs.find? (·.ixName == method.ixName) with
   | some input => { method with
       inputSchema := some input.schema
@@ -369,9 +426,7 @@ private def decorateMethod (inputs : Array BoundInput) (outputs : Array BoundOut
   | none => method
 
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do
-  for method in src.methods do
-    unless method.annotations.isEmpty do
-      throw s!"extract/unsupported: wasm cannot consume target annotations on {method.ixName}"
+  let entries ← src.methods.mapM bindEntry
   let projected ← Core.Target.projectProgram extractRegistration src
   let mut methods := #[]
   let mut inputs := #[]
@@ -383,11 +438,13 @@ def fromExtracted (src : Extract.IR.Program) : Except String Program := do
     if let some input := input? then inputs := inputs.push input
     if let some output := output? then outputs := outputs.push output
   let program ← Wasm.IR.fromProjected { projected with methods }
-  return {
+  let program := {
     program with
-    initializer := decorateMethod inputs outputs program.initializer
-    entries := program.entries.map (decorateMethod inputs outputs)
+    initializer := decorateMethod entries inputs outputs program.initializer
+    entries := program.entries.map (decorateMethod entries inputs outputs)
   }
+  validateEntryPolicies program
+  return program
 
 /-- Digest domain is chain-owned (`near-raw-u64|`), deliberately different from the
 SVM / EVM / XRPL domains. -/

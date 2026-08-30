@@ -61,7 +61,7 @@ Authoritative source anchors:
 | cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, authenticated self-callback, and closed ordered two-child join complete** in wsm-near-promise-001/002/then/private/transfer/and-001 | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | **static detached/returned lossless-u128 transfer complete** in wsm-near-promise-transfer-001 | Runtime batch/action; never synchronous balance mutation |
 | callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
-| private/payable/init | generated entry guards | callback-body private guard, repeated-init guard, and **non-payable default with deposit-observation capability** complete; general private/donation-only payable metadata absent | entry-adapter policy over context/storage |
+| private/payable/init | generated entry guards | **explicit private/payable metadata, generated private/non-payable ordering, donation-only payable, repeated-init guard complete**; uninitialized-entry/version/migration policy absent | entry-adapter policy over context/storage |
 
 Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
 bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw binary storage,
@@ -164,7 +164,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N6 observability | static UTF-8 log plumbing done in wsm-near-log-001; bounded dynamic `log_utf8`, then exact NEP-297 `EVENT_JSON:` remain | exact bytes and log-limit failures |
 | N7 promises | **detached/returned static batch calls, native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
-| N9 lifecycle | **repeated-init and non-payable-by-default guards done** in wsm-near-init/payable-001; private metadata, donation-only payable, uninitialized-entry policy, `STATE` version/migration remain | repeated init, deposit rejection, migration fixtures |
+| N9 lifecycle | **repeated-init, non-payable-by-default, private and explicit payable wrappers done** in wsm-near-init/payable/entry-policy-001; uninitialized-entry policy and `STATE` version/migration remain | repeated init, private/deposit ordering, migration fixtures |
 | N10 standards | NEP-141/145 building blocks only after storage, events, transfer/call semantics | standard-specific integration suites |
 
 ## 6. Near-term task cuts
@@ -222,7 +222,12 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 18. **NEAR-PAYABLE-1 (wsm-near-payable-001 done):** initializers and mutating entries reject either
     nonzero attached-deposit word before decoding input, while views emit no guard and methods that
     explicitly observe `Context.attachedDeposit` accept the full u128 value. Donation-only payable
-    methods wait for general entry metadata.
+    methods are covered by the following explicit policy slice.
+19. **NEAR-ENTRY-POLICY-1 (wsm-near-entry-policy-001 done):** `pf_near_private` and
+    `pf_near_payable` survive extraction only as NEAR-owned metadata, participate in the canonical
+    digest, and generate wrappers in official private → non-payable → input order. Private compares
+    the full predecessor/current AccountId and panics with the exact method-specific message;
+    explicit payable admits donation-only mutators while payable views fail at lowering.
 
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

@@ -87,8 +87,10 @@ self callback 图；joint Promise 只作为 callback dependency，最终只返�
   余额不足的同步失败与 rollback，以及 returned call 的 exact 8-byte result、远端失败传播和
   caller/receiver receipt state 语义；还验证 detached `2^64+7` 与 returned `11` native transfer
   的 exact receiver balance delta，以及 max-u128 余额不足时 balance/state rollback；并验证外部
-  predecessor 在读取 result 前被完整 AccountId guard 拒绝且不改状态，以及真实 self callback
-  的 exact Borsh UInt64 decode、独立 callback argument、failed/oversized fallback；还验证两个
+  predecessor 在读取 result 前被 `@[pf_near_private]` 完整 AccountId wrapper 以精确 panic
+  拒绝且不改状态，并验证 private 先于 non-payable；`@[pf_near_payable]` 允许不读取 deposit
+  的 donation-only mutator。真实 self callback 继续验证 exact Borsh UInt64 decode、独立
+  callback argument、failed/oversized fallback；还验证两个
   有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路。
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static function-call and authenticated self-callback Promise edge against near-sandbox."""
+"""Static calls, entry policy, and authenticated self-callbacks against near-sandbox."""
 
 from __future__ import annotations
 
@@ -53,19 +53,35 @@ def main() -> None:
         RECEIVER,
         "callbackSuccess",
         NearClient.encode_u64_le(404),
+        deposit=1,
         expect_success=False,
     )
     failure_text = repr(rejected_callback.get("status", {})) + repr(
         rejected_callback.get("receipts_outcome", [])
     )
-    if "overflow" not in failure_text:
+    if "Method callbackSuccess is private" not in failure_text:
         raise AssertionError(
-            "external callback call must fail at the self-call guard, "
+            "external paid callback call must fail at the private guard before non-payable, "
             f"got {failure_text}"
         )
     if client.view_u64_on(RECEIVER, "get") != 0:
         raise AssertionError("rejected external callback changed receiver state")
-    print("near-promise: external callback rejected by full AccountId self-call guard")
+    print("near-promise: exact private guard won before non-payable on external paid callback")
+
+    donation = client.call_on(
+        RECEIVER,
+        "recordValue",
+        NearClient.encode_u64_le(303),
+        deposit=17,
+    )
+    if NearClient.success_value_bytes(donation) != NearClient.encode_u64_le(303):
+        raise AssertionError("donation-only payable entry lost its UInt64 result")
+    if client.view_u64_on(RECEIVER, "get") != 303:
+        raise AssertionError("donation-only payable entry did not commit receiver state")
+    client.call_on(RECEIVER, "recordValue", NearClient.encode_u64_le(0))
+    if client.view_u64_on(RECEIVER, "get") != 0:
+        raise AssertionError("recordValue reset after payable scene failed")
+    print("near-promise: explicit payable metadata accepted a body-independent donation")
 
     # The receiver-signed deployment/initialization can still have a delayed gas-refund receipt at
     # the first optimistic balance query. The intervening finalized callback call provides a stable

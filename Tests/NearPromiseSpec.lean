@@ -77,12 +77,101 @@ private partial def resultDecodes : Array ProofForge.Extract.IR.Op → Array Nat
       | .forBody _ body => resultDecodes body
       | _ => #[]
 
+namespace PrivateView
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | rejected
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (value : UInt64) : State := { value }
+
+@[pf_entry]
+def set (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  .ok ({ value }, value)
+
+@[pf_entry, pf_near_private]
+def secret (state : State) : UInt64 := state.value
+
+end PrivateView
+
+namespace PayableView
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | rejected
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (value : UInt64) : State := { value }
+
+@[pf_entry]
+def set (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  .ok ({ value }, value)
+
+@[pf_entry, pf_near_payable]
+def invalid (state : State) : UInt64 := state.value
+
+end PayableView
+
 elab "#pf_near_promise_check" : command => do
   let env ← getEnv
+  let privateViewSource ←
+    match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.PrivateView with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  match ProofForge.Svm.IR.fromExtracted privateViewSource with
+  | .error reason =>
+      unless reason.contains "cannot consume foreign target annotations" do
+        throwError s!"wrong SVM foreign-policy rejection: {reason}"
+  | .ok _ => throwError "SVM silently discarded NEAR entry metadata"
+  let privateView ←
+    match IR.fromExtracted privateViewSource with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let secret ← match privateView.entries.find? (·.ixName == "secret") with
+    | some method => pure method
+    | none => throwError "missing private view"
+  unless secret.entryPolicy == "near.entry.v1:private" do
+    throwError "private view lost its entry policy"
+  let secretWat ← match Emit.emit privateView with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  let secretBody ← match secretWat.splitOn "(func (export \"secret\")" with
+    | [_preamble, body] => pure body
+    | _ => throwError "private view WAT must contain exactly one exported body"
+  unless secretBody.contains "(call $pf_current_account_id" &&
+      secretBody.contains "(call $pf_predecessor_account_id" &&
+      !secretBody.contains "(call $pf_attached_deposit" do
+    throwError "private view wrapper imports or guard policy are wrong"
+  match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.PayableView >>=
+      IR.fromExtracted with
+  | .error reason =>
+      unless reason.contains "view cannot be payable" do
+        throwError s!"wrong payable-view rejection: {reason}"
+  | .ok _ => throwError "NEAR admitted a payable view"
   let source ←
     match ProofForge.Extract.extractModuleIR env `Examples.NearPromise with
     | .ok program => pure program
     | .error reason => throwError reason
+  let sourceRecordValue ← match source.methods.find? (·.ixName == "recordValue") with
+    | some method => pure method
+    | none => throwError "missing extracted recordValue method"
+  unless sourceRecordValue.annotations == #["near.payable.v1"] do
+    throwError "extractor lost NEAR payable metadata"
+  for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined"] do
+    let callback ← match source.methods.find? (·.ixName == name) with
+      | some method => pure method
+      | none => throwError s!"missing extracted {name} callback"
+    unless callback.annotations == #["near.private.v1"] do
+      throwError s!"extractor lost NEAR private metadata on {name}"
   let steps := source.methods.foldl (init := #[]) fun acc method => acc ++ promiseSteps method.ops
   let detachedRecord := "detached.receiver.test.near.record.8.9"
   let detachedMissing := "detached.receiver.test.near.missing.8.9"
@@ -121,6 +210,31 @@ elab "#pf_near_promise_check" : command => do
     match IR.fromExtracted source with
     | .ok program => pure program
     | .error reason => throwError reason
+  let recordValue ← match program.entries.find? (·.ixName == "recordValue") with
+    | some method => pure method
+    | none => throwError "missing lowered recordValue method"
+  unless recordValue.entryPolicy == "near.entry.v1:payable" do
+    throwError "NEAR IR lost canonical payable entry policy"
+  for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined"] do
+    let callback ← match program.entries.find? (·.ixName == name) with
+      | some method => pure method
+      | none => throwError s!"missing lowered {name} callback"
+    unless callback.entryPolicy == "near.entry.v1:private" do
+      throwError s!"NEAR IR lost canonical private entry policy on {name}"
+  let recordValueWat ← match Emit.emit { program with entries := #[recordValue] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  let recordValueBody ← match recordValueWat.splitOn "(func (export \"recordValue\")" with
+    | [_preamble, body] => pure body
+    | _ => throwError "recordValue WAT must contain exactly one exported body"
+  unless !recordValueBody.contains "(call $pf_attached_deposit" do
+    throwError "donation-only payable recordValue retained a non-payable guard"
+  match Emit.emit { program with initializer :=
+      { program.initializer with entryPolicy := "near.entry.v9:unknown" } } with
+  | .error reason =>
+      unless reason.contains "malformed near entry policy" do
+        throwError s!"wrong malformed entry-policy rejection: {reason}"
+  | .ok _ => throwError "emitter accepted malformed NEAR entry policy"
   for method in program.entries do
     match Emit.emit { program with entries := #[method] } with
     | .ok _ => pure ()
@@ -286,15 +400,15 @@ elab "#pf_near_promise_check" : command => do
   for anchor in #[
       "(import \"env\" \"predecessor_account_id\"",
       "(import \"env\" \"current_account_id\"",
-      "(i64.eq (local.get $pf_pred_len) (local.get $pf_self_len))",
-      "(i64.eq (local.get $pf_pred) (local.get $pf_self))",
-      "(i64.eq (local.get $pf_pred1) (local.get $pf_self1))",
-      "(i64.eq (local.get $pf_pred2) (local.get $pf_self2))",
-      "(i64.eq (local.get $pf_pred3) (local.get $pf_self3))",
-      "(i64.eq (local.get $pf_pred4) (local.get $pf_self4))",
-      "(i64.eq (local.get $pf_pred5) (local.get $pf_self5))",
-      "(i64.eq (local.get $pf_pred6) (local.get $pf_self6))",
-      "(i64.eq (local.get $pf_pred7) (local.get $pf_self7))",
+      "(i64.eq (local.get $pf_self_len) (local.get $pf_pred_len))",
+      "(i64.eq (local.get $pf_self) (local.get $pf_pred))",
+      "(i64.eq (local.get $pf_self1) (local.get $pf_pred1))",
+      "(i64.eq (local.get $pf_self2) (local.get $pf_pred2))",
+      "(i64.eq (local.get $pf_self3) (local.get $pf_pred3))",
+      "(i64.eq (local.get $pf_self4) (local.get $pf_pred4))",
+      "(i64.eq (local.get $pf_self5) (local.get $pf_pred5))",
+      "(i64.eq (local.get $pf_self6) (local.get $pf_pred6))",
+      "(i64.eq (local.get $pf_self7) (local.get $pf_pred7))",
       "(i64.eq (call $pf_promise_result_status (i64.const 8)) (i64.const 1))",
       "(i64.ne (call $pf_promise_result_fits (i64.const 8)) (i64.const 0))",
       "(i64.eq (call $pf_promise_result_length (i64.const 8)) (i64.const 8))",
@@ -309,21 +423,31 @@ elab "#pf_near_promise_check" : command => do
   let callbackBody ← match callbackSuccessWat.splitOn "(func (export \"callbackSuccess\")" with
     | [_preamble, body] => pure body
     | _ => throwError "callbackSuccess WAT must contain exactly one exported body"
-  let afterPredecessor ← match callbackBody.splitOn "(call $pf_predecessor_account_id" with
+  let afterCurrent ← match callbackBody.splitOn "(call $pf_current_account_id" with
     | [_before, after] => pure after
-    | _ => throwError "callbackSuccess must read predecessor exactly once"
-  let afterCurrent ← match afterPredecessor.splitOn "(call $pf_current_account_id" with
+    | _ => throwError "callbackSuccess must read current account exactly once"
+  let afterPredecessor ← match afterCurrent.splitOn "(call $pf_predecessor_account_id" with
     | [_before, after] => pure after
-    | _ => throwError "callbackSuccess must read current account after predecessor"
-  unless afterCurrent.contains
-      "(then\n        (global.set $pf_promise_result_active (i32.const 1))" do
-    throwError "callback result read is not dominated by the self-call guard"
-  unless afterCurrent.contains
-      "(else\n        (call $pf_panic_utf8 (i64.const 8) (i64.const 2048))\n      ))" do
-    throwError "callback self-call rejection must panic before state persistence"
-  match afterCurrent.splitOn "(call $pf_promise_result (i64.const 0)" with
-  | [_beforeRead, _afterRead] => pure ()
-  | _ => throwError "callbackSuccess must read its Promise result exactly once after identity loads"
+    | _ => throwError "callbackSuccess must read predecessor after current account"
+  let afterPrivate ← match afterPredecessor.splitOn
+      "(call $pf_panic_utf8 (i64.const 33)" with
+    | [before, after] =>
+        if before.contains "(call $pf_attached_deposit" || before.contains "(call $pf_input" ||
+            before.contains "(call $pf_promise_result" then
+          throwError "private guard did not precede deposit, input, and callback-result handling"
+        pure after
+    | _ => throwError "callbackSuccess must emit one exact private panic"
+  let afterDeposit ← match afterPrivate.splitOn "(call $pf_attached_deposit" with
+    | [before, after] =>
+        unless !before.contains "(call $pf_input" do
+          throwError "callback input was decoded before its non-payable guard"
+        pure after
+    | _ => throwError "private callback must retain one non-payable guard"
+  match afterDeposit.splitOn "(call $pf_promise_result (i64.const 0)" with
+  | [beforeRead, _afterRead] =>
+      unless beforeRead.contains "(call $pf_input" do
+        throwError "callback result was read before ordinary input decoding"
+  | _ => throwError "callbackSuccess must read its Promise result exactly once after guards"
   let callbackFailure ← match program.entries.find? (·.ixName == "callbackFailure") with
     | some method => pure method
     | none => throwError "missing callbackFailure entry"
@@ -361,13 +485,14 @@ elab "#pf_near_promise_check" : command => do
   let joinedBody ← match callbackJoinedWat.splitOn "(func (export \"callbackJoined\")" with
     | [_preamble, body] => pure body
     | _ => throwError "callbackJoined WAT must contain exactly one exported body"
-  let afterJoinedPredecessor ← match joinedBody.splitOn "(call $pf_predecessor_account_id" with
+  let afterJoinedCurrent ← match joinedBody.splitOn "(call $pf_current_account_id" with
     | [_before, after] => pure after
-    | _ => throwError "callbackJoined must read predecessor exactly once"
-  let afterJoinedCurrent ← match afterJoinedPredecessor.splitOn "(call $pf_current_account_id" with
+    | _ => throwError "callbackJoined must read current account exactly once"
+  let afterJoinedPredecessor ← match afterJoinedCurrent.splitOn
+      "(call $pf_predecessor_account_id" with
     | [_before, after] => pure after
-    | _ => throwError "callbackJoined must read current account after predecessor"
-  match afterJoinedCurrent.splitOn "(call $pf_promise_result (i64.const 0)" with
+    | _ => throwError "callbackJoined must read predecessor after current account"
+  match afterJoinedPredecessor.splitOn "(call $pf_promise_result (i64.const 0)" with
   | [_beforeLeft, afterLeft] =>
       match afterLeft.splitOn "(call $pf_promise_result (i64.const 1)" with
       | [_between, _afterRight] => pure ()
@@ -377,12 +502,12 @@ elab "#pf_near_promise_check" : command => do
       ("callbackFailure", callbackFailureWat),
       ("callbackOversized", callbackOversizedWat) ] do
     for anchor in #[
-        "(call $pf_predecessor_account_id",
         "(call $pf_current_account_id",
-        "(i64.eq (local.get $pf_pred_len) (local.get $pf_self_len))",
-        "(i64.eq (local.get $pf_pred) (local.get $pf_self))",
-        "(i64.eq (local.get $pf_pred7) (local.get $pf_self7))",
-        "(else\n        (call $pf_panic_utf8 (i64.const 8) (i64.const 2048))" ] do
+        "(call $pf_predecessor_account_id",
+        "(i64.eq (local.get $pf_self_len) (local.get $pf_pred_len))",
+        "(i64.eq (local.get $pf_self) (local.get $pf_pred))",
+        "(i64.eq (local.get $pf_self7) (local.get $pf_pred7))",
+        "(if (i32.eqz (i32.and" ] do
       unless callbackWat.contains anchor do
         throwError s!"{name} lost private self-call guard anchor {anchor}"
   let wat ←

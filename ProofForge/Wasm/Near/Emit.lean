@@ -1237,10 +1237,18 @@ private def accountBalanceKinds : Array ValKind := #[
 private def methodUsesAny (kinds : Array ValKind) (method : Method ValKind OpExt) : Bool :=
   kinds.any (methodUses · method)
 
-/-- Until target entry metadata lands, observing the full attached-deposit value is the explicit
-payable capability. Donation-only payable methods remain unsupported. -/
+private def methodEntryPolicy (method : Method ValKind OpExt) : IR.EntryPolicy :=
+  match IR.EntryPolicy.ofCanonical method.entryPolicy with
+  | .ok policy => policy
+  | .error _ => {}
+
+private def methodPrivate (method : Method ValKind OpExt) : Bool :=
+  (methodEntryPolicy method).isPrivate
+
+/-- Explicit metadata supports donation-only entries. Existing deposit observation remains a
+payable capability for source compatibility. `emit` validates the canonical policy first. -/
 private def methodPayable (method : Method ValKind OpExt) : Bool :=
-  methodUsesAny attachedDepositKinds method
+  (methodEntryPolicy method).payable || methodUsesAny attachedDepositKinds method
 
 private def methodNeedsDepositGuard (method : Method ValKind OpExt) : Bool :=
   method.tupleArity.isNone && !methodPayable method
@@ -1248,12 +1256,26 @@ private def methodNeedsDepositGuard (method : Method ValKind OpExt) : Bool :=
 private def nonPayableMethods (p : Program ValKind OpExt) : Array (Method ValKind OpExt) :=
   (#[p.initializer] ++ p.entries).filter methodNeedsDepositGuard
 
+private def privateMethods (p : Program ValKind OpExt) : Array (Method ValKind OpExt) :=
+  (#[p.initializer] ++ p.entries).filter methodPrivate
+
+private def programHasPrivate (p : Program ValKind OpExt) : Bool :=
+  !(privateMethods p).isEmpty
+
 private def nonPayableMessage (method : Method ValKind OpExt) : String :=
   "Method " ++ method.ixName ++ " doesn't accept deposit"
 
+private def privateMessage (method : Method ValKind OpExt) : String :=
+  "Method " ++ method.ixName ++ " is private"
+
+private def lifecycleMessages (p : Program ValKind OpExt) : Array String :=
+  (#[p.initializer] ++ p.entries).foldl (init := #[]) fun messages method =>
+    let messages :=
+      if methodPrivate method then messages.push (privateMessage method) else messages
+    if methodNeedsDepositGuard method then messages.push (nonPayableMessage method) else messages
+
 private def lifecycleLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
-  (nonPayableMethods p).foldl (init := #[]) fun layout method =>
-    let message := nonPayableMessage method
+  (lifecycleMessages p).foldl (init := #[]) fun layout message =>
     let next := match layout.back? with
       | some (_, off, len) => off + len
       | none => lifecycleDataBase
@@ -1265,6 +1287,13 @@ private def nonPayableMessageOf (p : Program ValKind OpExt)
   match (lifecycleLayout p).find? (fun item => item.1 == message) with
   | some (_, off, len) => pure (off, len)
   | none => throw "extract/unsupported: near non-payable panic is missing from static layout"
+
+private def privateMessageOf (p : Program ValKind OpExt)
+    (method : Method ValKind OpExt) : Except String (Nat × Nat) :=
+  let message := privateMessage method
+  match (lifecycleLayout p).find? (fun item => item.1 == message) with
+  | some (_, off, len) => pure (off, len)
+  | none => throw "extract/unsupported: near private panic is missing from static layout"
 
 private def lifecycleDataSection (p : Program ValKind OpExt) : Except String (Array String) := do
   let layout := lifecycleLayout p
@@ -1367,6 +1396,29 @@ private def loadAccountId (hostCall lenLocal : String) (register off level : Nat
   ] ++ (List.range 8).toArray.map fun i =>
     indent level ("(local.set " ++ wordLocal i ++ " (i64.load (i32.const " ++
       toString (off + i * 8) ++ ")))")
+
+private def privateGuard (p : Program ValKind OpExt) (method : Method ValKind OpExt)
+    (level : Nat) : Except String (Array String) := do
+  let (off, len) ← privateMessageOf p method
+  let comparisons :=
+    ["(i64.eq (local.get $pf_self_len) (local.get $pf_pred_len))"] ++
+      (List.range 8).map fun i =>
+        "(i64.eq (local.get " ++ currentAccountWordLocal i ++ ") (local.get " ++
+          predecessorWordLocal i ++ "))"
+  let same := comparisons.foldr
+    (fun comparison rest => "(i32.and " ++ comparison ++ " " ++ rest ++ ")")
+    "(i32.const 1)"
+  return (
+    loadAccountId "$pf_current_account_id" "$pf_self_len" 3 currentAccountOff level
+      currentAccountWordLocal ++
+    loadAccountId "$pf_predecessor_account_id" "$pf_pred_len" 0 predecessorAccountOff level
+      predecessorWordLocal ++ #[
+      indent level ("(if (i32.eqz " ++ same ++ ")"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++ toString len ++
+        ") (i64.const " ++ toString off ++ "))"),
+      indent (level + 2) "))"
+    ])
 
 private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level : Nat) :
     Except String (Array String) := do
@@ -1543,6 +1595,7 @@ private def renderFn (p : Program ValKind OpExt)
       throw "extract/unsupported: near initializer must return state"
   let view := method.tupleArity.isSome
   let echo := method.echoDropped
+  let isPrivate := methodPrivate method
   if view && methodUses .promiseResultsCount method then
     throw "extract/unsupported: near view cannot count promise results"
   let st : EState := { paramCount := method.paramCount, initializer }
@@ -1560,7 +1613,7 @@ private def renderFn (p : Program ValKind OpExt)
   if outputPlan.isSome then
     lines := lines.push "    (local $pf_output_ptr i32)"
     lines := lines.push "    (local $pf_output_length i64)"
-  if methodUsesAny predecessorKinds method then
+  if isPrivate || methodUsesAny predecessorKinds method then
     lines := lines.push "    (local $pf_pred_len i64)"
     for i in List.range 8 do
       lines := lines.push ("    (local " ++ predecessorWordLocal i ++ " i64)")
@@ -1570,9 +1623,9 @@ private def renderFn (p : Program ValKind OpExt)
   if methodUsesAny accountBalanceKinds method then
     lines := lines.push "    (local $pf_bal i64)"
     lines := lines.push "    (local $pf_bal_hi i64)"
-  if methodUsesAny currentAccountKinds method || methodChainsPromise method then
+  if isPrivate || methodUsesAny currentAccountKinds method || methodChainsPromise method then
     lines := lines.push "    (local $pf_self_len i64)"
-  if methodUsesAny currentAccountKinds method then
+  if isPrivate || methodUsesAny currentAccountKinds method then
     for i in List.range 8 do
       lines := lines.push ("    (local " ++ currentAccountWordLocal i ++ " i64)")
   for slot in p.slots do
@@ -1581,10 +1634,12 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push ("    (local " ++ localOfSource i ++ " i64)")
   for i in List.range (Nat.max (countTemps method.ops) region.st.fresh) do
     lines := lines.push ("    (local " ++ localOfTemp i ++ " i64)")
-  if methodUsesArena method then
-    lines := lines.push "    (call $pf_arena_reset)"
+  if isPrivate then
+    lines := lines ++ (← privateGuard p method 4)
   if methodNeedsDepositGuard method then
     lines := lines ++ (← depositGuard p method 4)
+  if methodUsesArena method then
+    lines := lines.push "    (call $pf_arena_reset)"
   lines := lines ++ (← loadArg method 4)
   lines := lines ++ (← loadHostPrelude method view 4)
   if initializer then
@@ -1609,7 +1664,8 @@ private def dataSection (p : Program ValKind OpExt) : Array String :=
       panicInitialized ++ "\")"
   ]
   let account :=
-    if predecessorKinds.any (programUses · p) || currentAccountKinds.any (programUses · p) then
+    if programHasPrivate p || predecessorKinds.any (programUses · p) ||
+        currentAccountKinds.any (programUses · p) then
       #["  (data (i32.const " ++ toString panicAccountIdOff ++ ") \"account-id\")"]
     else #[]
   keys ++ base ++ account
@@ -1863,6 +1919,7 @@ private def utf8Validator : Array String := #[
 ]
 
 def emit (p : IR.Program) : Except String String := do
+  IR.validateEntryPolicies p
   let logData ← logDataSection p
   let promiseData ← promiseDataSection p
   let lifecycleData ← lifecycleDataSection p
@@ -1924,7 +1981,7 @@ def emit (p : IR.Program) : Except String String := do
   if programUses .blockTimestamp p then
     lines := lines.push
       "  (import \"env\" \"block_timestamp\" (func $pf_block_timestamp (result i64)))"
-  if predecessorKinds.any (programUses · p) then
+  if programHasPrivate p || predecessorKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"predecessor_account_id\" (func $pf_predecessor_account_id (param i64)))"
   if attachedDepositKinds.any (programUses · p) || !(nonPayableMethods p).isEmpty then
@@ -1933,7 +1990,7 @@ def emit (p : IR.Program) : Except String String := do
   if accountBalanceKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"account_balance\" (func $pf_account_balance (param i64)))"
-  if currentAccountKinds.any (programUses · p) || programChainsPromise p then
+  if programHasPrivate p || currentAccountKinds.any (programUses · p) || programChainsPromise p then
     lines := lines.push
       "  (import \"env\" \"current_account_id\" (func $pf_current_account_id (param i64)))"
   lines := lines.push "  (memory (export \"memory\") 1)"

@@ -826,7 +826,8 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     match retSchema with
     | .scalar type => #[type]
     | _ => #[]
-  let annotations := (Attr.svmRawEntries env n).map (·.annotation)
+  let annotations :=
+    (Attr.svmRawEntries env n).map (·.annotation) ++ Attr.nearEntryAnnotations env n
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
     paramCount, paramWidths, paramTypes, paramSchemas, retWidths, retTypes, retSchema, retCount,

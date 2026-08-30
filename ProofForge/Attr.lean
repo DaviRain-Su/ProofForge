@@ -84,6 +84,26 @@ initialize pfBoundaryAttr : TagAttribute ←
       | some (.inductInfo _) => pure ()
       | _ => throwError "extract/unsupported: pf_boundary is not a structure or inductive"
 
+/-- Mark one NEAR entry as callable only when predecessor and current AccountId are equal. -/
+initialize pfNearPrivateAttr : TagAttribute ←
+  registerTagAttribute `pf_near_private
+    "declare a NEAR private entry wrapper"
+    fun decl => do
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure ()
+      | _ => throwError "extract/unsupported: pf_near_private is not a definition"
+
+/-- Mark one mutating NEAR entry or initializer as accepting an attached deposit. -/
+initialize pfNearPayableAttr : TagAttribute ←
+  registerTagAttribute `pf_near_payable
+    "declare a NEAR payable entry wrapper"
+    fun decl => do
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure ()
+      | _ => throwError "extract/unsupported: pf_near_payable is not a definition"
+
 /--
 Attach one packed-u8 Solana wire entry to a `@[pf_entry]` method without introducing an executable
 Op. Parameter widths come from the Lean method type; dispatch, account walking, and program-account
@@ -263,6 +283,21 @@ def isInline (env : Environment) (decl : Name) : Bool :=
 
 def isBoundary (env : Environment) (decl : Name) : Bool :=
   pfBoundaryAttr.hasTag env decl
+
+def isNearPrivate (env : Environment) (decl : Name) : Bool :=
+  pfNearPrivateAttr.hasTag env decl
+
+def isNearPayable (env : Environment) (decl : Name) : Bool :=
+  pfNearPayableAttr.hasTag env decl
+
+/-- Opaque source metadata. Only the NEAR target may decode these strings. -/
+def nearEntryAnnotations (env : Environment) (decl : Name) : Array String := Id.run do
+  let mut annotations := #[]
+  if isNearPrivate env decl then
+    annotations := annotations.push "near.private.v1"
+  if isNearPayable env decl then
+    annotations := annotations.push "near.payable.v1"
+  return annotations
 
 def svmRawEntry? (env : Environment) (decl : Name) : Option SvmRawEntry :=
   pfSvmRawAttr.getParam? env decl <|> pfSvmRawBorshOptionsAttr.getParam? env decl <|>

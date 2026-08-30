@@ -17,7 +17,7 @@ def entries : Array Entry := #[
   { name := "NearLookup", digest := "153fe4dc7e95c3f0" },
   { name := "NearQueue", digest := "f04d9a0d673b7fed" },
   { name := "NearIterable", digest := "8c0ece42e2b091ff" },
-  { name := "NearPromise", digest := "7ba98f4624b9cd34" },
+  { name := "NearPromise", digest := "ed5abd7c35a96c45" },
   { name := "NearPromiseResult", digest := "ff7ea8988ba01999" }
 ]
 
