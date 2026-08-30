@@ -12,7 +12,7 @@
 > 给别人写卡片 **已绿**（`set_data_object_field` 填对方 20B，不是 `setUserData` 名）。
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
 > 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
-> `XrplNest.credit(3)`（`user.bal=3`）、`XrplBal` A `credit(3)` / B `credit(5)`、
+> `XrplNest` A `credit(3)` / B `credit(5)`（nested `{user:{bal}}`）、`XrplBal` A `credit(3)` / B `credit(5)`、
 > `XrplTab.setAt(3,7)`（`xs_3=7`）都绿。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
@@ -171,7 +171,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 6. **wsm-035** — 给别人写卡片 **已绿**（硬编码对方 AccountID）。`tx Sequence/Fee` 已绿。
    `amm_id` host 在（零 issue -15）。不开 Sdk.Map / Sdk.Amm。
 7. **wsm-036** — Lean `Context.accountLit hex` 覆盖存储 Owner。`XrplSend` 把 1 写到第二把钥匙的卡片。
-8. **wsm-037** — nested JSON `user_bal` → `{user:{bal}}`（AlphaNet）。`credit(delta)` 一个 UINT64。不是 Map。
+8. **wsm-037** — nested JSON `user_bal` → `{user:{bal}}`（AlphaNet）。`credit(delta)` 一个 UINT64。双钱包 A=3 / B=5。不是 Map。
 9. **wsm-038** — TwoStep / dual role / `litBalanceDrops` / `txFlags` **已绿**。
 10. **wsm-039** — `forAccum` 编译期展开 + 跨钱包 TwoStep（`XrplHand`）**已绿**。运行时下标仍拒。
 11. **wsm-040** — 跨钱包 operator（`XrplCrew`）**已绿**。
