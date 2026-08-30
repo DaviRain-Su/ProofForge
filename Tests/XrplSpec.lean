@@ -31,6 +31,7 @@ import Examples.XrplGift
 import Examples.XrplCash
 import Examples.XrplBank
 import Examples.XrplSafe
+import Examples.XrplPool
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -88,7 +89,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCash" == some "86367a05030e0c5a"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBank" == some "6a344e3db8cdf235"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplSafe" == some "317c295ada5d467c"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPool" == some "57814a14c17161a5"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -172,6 +174,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplBank
 
 #pf_xrpl_build Examples.XrplSafe
+
+#pf_xrpl_build Examples.XrplPool
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -989,6 +993,37 @@ elab "#pf_xrpl_safe_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-safe: {source.length} bytes of WAT passed safe anchor check"
 
 #pf_xrpl_safe_emit_check Examples.XrplSafe
+
+open Lean Elab Command in
+elab "#pf_xrpl_pool_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"sendToB\") (result i32)",
+          "(func (export \"cashToB\") (result i32)",
+          "(func (export \"freeze\") (result i32)",
+          "(func (export \"pause\") (result i32)",
+          "(i32.const 524313)",
+          "(import \"host_lib\" \"emit_built_txn\"",
+          "(i32.const 208)",
+          "(i32.store8 (i32.const 96) (i32.const 108))"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing pool anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Payments" do
+          throwError "wasm emit must not mention Sdk.Payments"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-pool: {source.length} bytes of WAT passed pool anchor check"
+
+#pf_xrpl_pool_emit_check Examples.XrplPool
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
