@@ -15,6 +15,7 @@
 > `initialize(7)` 都绿。空 ABI 带参才会打节点。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
+> 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
 > **不要开 `Sdk.Amm` / `Sdk.Payments` / `Sdk.Nft`。**
 
 ## 0. 现在能写什么样的合约

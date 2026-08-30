@@ -174,17 +174,42 @@ async function waitTx(url, hash) {
   throw new Error("tx " + hash + " not validated in 40s");
 }
 
-async function fieldNames(url) {
-  const defs = await rpcRetry(url, "server_definitions", {});
+async function loadServerDefs(url) {
+  const raw = await rpcRetry(url, "server_definitions", {});
   const names = new Set();
-  for (const item of defs.FIELDS || []) {
+  for (const item of raw.FIELDS || []) {
     if (Array.isArray(item) && item[0]) names.add(item[0]);
   }
-  return names;
+  return { raw, names, defs: loadDefinitions(raw) };
 }
 
-async function signTx(url, secret, txJson) {
-  return rpcRetry(url, "sign", { secret, tx_json: txJson });
+function loadDefinitions(raw) {
+  const { codec } = loadXrpl();
+  const copy = { ...raw };
+  delete copy.status;
+  delete copy.hash;
+  return new codec.XrplDefinitions(copy);
+}
+
+async function signTx(url, secret, txJson, defs) {
+  // Prefer node sign: 3.3.0 currently temBAD_SIGNATURE on locally signed
+  // InstanceParameterValues too. Fall back to codec if node cannot encode
+  // ParameterType (2.6.1).
+  try {
+    return await rpcRetry(url, "sign", { secret, tx_json: txJson });
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (!defs || (!msg.includes("ParameterType") && !msg.includes("contents did not meet"))) {
+      throw e;
+    }
+    const { xrpl, codec, keypairs } = loadXrpl();
+    const wallet = xrpl.Wallet.fromSeed(secret, { algorithm: "secp256k1" });
+    const toSign = { ...txJson, SigningPubKey: wallet.publicKey };
+    const signing = codec.encodeForSigning(toSign, defs);
+    const sig = keypairs.sign(signing, wallet.privateKey);
+    const blob = codec.encode({ ...toSign, TxnSignature: sig }, defs);
+    return { tx_blob: blob, tx_json: { ...toSign, hash: null } };
+  }
 }
 
 async function submitBlob(url, blob) {
@@ -201,7 +226,9 @@ async function main() {
   const url = cfg.rpc_url || "https://alphanet.xrpl.org";
   const info0 = await rpcRetry(url, "server_info", {});
   const networkId = cfg.network_id || info0.info.network_id || 21337;
-  const fields = await fieldNames(url);
+  const serverDefs = await loadServerDefs(url);
+  const fields = serverDefs.names;
+  const defs = serverDefs.defs;
   const secret = cfg.wallet_seed;
   const algorithm = cfg.algorithm || "secp256k1";
 
@@ -287,7 +314,7 @@ async function main() {
         ];
       }
     }
-    const signed = await signTx(url, secret, txJson);
+    const signed = await signTx(url, secret, txJson, defs);
     const submitted = await submitBlob(url, signed.tx_blob);
     if (submitted.engine_result !== "tesSUCCESS") {
       throw new Error(submitted.engine_result + " " + (submitted.engine_result_message || ""));
@@ -355,7 +382,7 @@ async function main() {
         };
       });
     }
-    const signed = await signTx(url, secret, txJson);
+    const signed = await signTx(url, secret, txJson, defs);
     const submitted = await submitBlob(url, signed.tx_blob);
     const hash = submitted.tx_json && submitted.tx_json.hash;
     const applied =
@@ -440,7 +467,7 @@ async function main() {
       Sequence: seq,
       NetworkID: networkId,
     };
-    const signed = await signTx(url, secret, txJson);
+    const signed = await signTx(url, secret, txJson, defs);
     const submitted = await submitBlob(url, signed.tx_blob);
     if (submitted.engine_result !== "tesSUCCESS") {
       throw new Error(submitted.engine_result + " " + (submitted.engine_result_message || ""));
