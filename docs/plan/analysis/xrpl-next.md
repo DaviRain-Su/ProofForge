@@ -13,7 +13,7 @@
 > 还缺：程序拥有 ContractData（-22）、emit -196 tefBAD_AUTH。
 > 公开 Parameters **已绿**。`increment(1)`、`initialize(7)`、`XrplVec.setAt(1,5)`、
 > `XrplNest` A `credit(3)` / B `credit(5)`（nested `{user:{bal}}`）、`XrplBal` A `credit(3)` / B `credit(5)`、
-> `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` A `credit(5)` 再 `pay(B,2)` → A=3 B=2，B `pay(A,1)` → A=4 B=1，A `pay(A,1)` 自转账仍 4/1，dest=`u64Max` 时 `pay(B,1)` 不扣 A，`pay(B,0)` 零额仍 4/`u64Max` 都绿。
+> `XrplTab.setAt(3,7)`（`xs_3=7`）、`XrplSend.credit(w0,w1,w2,7)`、`XrplPay` 积分转账、`XrplMint` A `mint(5)` / B `mint` 拒 / A `pay(B,2)` → A=3 B=2 都绿。
 > emit 官方 Amount+Destination 仍 **-196 tefBAD_AUTH**（`checkSign` 伪账户检查在
 > inner-batch 旁路之前；`fixCleanup3_3_0` + `LendingProtocol` 已开）。合约卡 **-22**。
 > 新的 `tfSendAmount` Create 现为 **temBAD_SIGNATURE**（节点 sign 也拒）。
@@ -176,7 +176,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 10. **wsm-039** — `forAccum` 编译期展开 + 跨钱包 TwoStep（`XrplHand`）**已绿**。运行时下标仍拒。
 11. **wsm-040** — 跨钱包 operator（`XrplCrew`）**已绿**。
 12. **XrplPay** — 内部积分转账：先 peek dest，再切回 caller `flushBal`。余额不足不扣款。不是 XRP Payment。
-13. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+13. **XrplMint** — 编译期 minter 才能 mint；任何人可 pay。
+14. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 

@@ -21,6 +21,7 @@ import Examples.XrplRoot
 import Examples.XrplTx
 import Examples.XrplSend
 import Examples.XrplPay
+import Examples.XrplMint
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -68,7 +69,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHand" == some "5c6813950576cdda"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCrew" == some "ca03e80ef4a8218a"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPay" == some "5f2a9ac1b78e08de"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMint" == some "d1baca7baa94e196"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -132,6 +134,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplCrew
 
 #pf_xrpl_build Examples.XrplPay
+
+#pf_xrpl_build Examples.XrplMint
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -679,6 +683,31 @@ elab "#pf_xrpl_pay_alphanet_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-pay: {source.length} bytes of WAT passed pay anchor check"
 
 #pf_xrpl_pay_alphanet_emit_check Examples.XrplPay
+
+open Lean Elab Command in
+elab "#pf_xrpl_mint_alphanet_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emitAlphaNet program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"mint\") (result i32)",
+          "(func (export \"pay\") (result i32)",
+          "(i32.const 3)",
+          "(call $function_param (i32.const 0) (i32.const 3) (i32.const 20) (i32.const 8))",
+          "(data (i32.const 64) \"bal\")"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"alphanet emit is missing mint anchor: {anchor}\\n{source}"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-mint: {source.length} bytes of WAT passed mint anchor check"
+
+#pf_xrpl_mint_alphanet_emit_check Examples.XrplMint
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

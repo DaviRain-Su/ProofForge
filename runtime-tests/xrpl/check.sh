@@ -202,6 +202,15 @@ need_exports_pay = (
     '(call $function_param',
     '(data (i32.const 64) "bal")',
 )
+need_exports_mint = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "mint") (result i32)',
+    '(func (export "pay") (result i32)',
+    '(func (export "get")',
+    '(i32.const 3)',
+    '(call $function_param',
+    '(data (i32.const 64) "bal")',
+)
 forbid = ("xrpl_wasm_std", "get_current_contract_call", "(param $pf_p0 i64)", '"update_data"', "eq_account", "set_data_array_element_field")
 
 for wat in wats:
@@ -255,6 +264,8 @@ for wat in wats:
         exports = need_exports_crew
     elif wat.stem == "XrplPay":
         exports = need_exports_pay
+    elif wat.stem == "XrplMint":
+        exports = need_exports_mint
     else:
         exports = need_exports_counter
     for needle in exports:
