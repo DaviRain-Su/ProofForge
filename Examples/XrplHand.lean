@@ -27,7 +27,7 @@ inductive Error where
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
 /-- Genesis rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh. -/
-@[pf_inline] def genesis : AccountId :=
+@[pf_inline] def genesis : ProofForge.Wasm.Xrpl.Runtime.AccountId :=
   Context.accountLit "b5f762798a53d543a014caf8b297cff8f2f937e8"
 
 /-- Shared card is genesis's ContractData: mentioning `genesis` rewrites mem[0..19]

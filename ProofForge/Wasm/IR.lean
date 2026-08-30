@@ -119,9 +119,9 @@ private partial def substLoopIx {ValExt : Type} (i : UInt64) : Val ValExt → Va
 
 private partial def lowerVal {ValExt : Type} : Val ValExt → Except String (Val ValExt)
   | .arg i => .ok (.arg i)
+  | .local i => .ok (.local i)
   | .lit n => .ok (.lit n)
   | .loopIx => .error "extract/unsupported: wasm v0 rejects loopIx"
-  | .local _ => .error "extract/unsupported: wasm v0 rejects local"
   | .field base n =>
       match lowerVal base with
       | .error e => .error e
@@ -159,16 +159,13 @@ private partial def lowerVal {ValExt : Type} : Val ValExt → Except String (Val
       | .ok l, .ok r => .ok (.mulU64 l r)
       | .error e, _ => .error e
       | _, .error e => .error e
-  | .ext kind operands =>
-      if operands.isEmpty then .ok (.ext kind operands)
-      else if operands.size == 3 then
-        match lowerVal operands[0]!, lowerVal operands[1]!, lowerVal operands[2]! with
-        | .ok a, .ok b, .ok c => .ok (.ext kind #[a, b, c])
-        | .error e, _, _ => .error e
-        | _, .error e, _ => .error e
-        | _, _, .error e => .error e
-      else .error "extract/unsupported: wasm v0 rejects ext operands"
-  | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot _ | .shiftL .. | .shiftR ..
+  | .bitAnd lhs rhs => return .bitAnd (← lowerVal lhs) (← lowerVal rhs)
+  | .bitOr lhs rhs => return .bitOr (← lowerVal lhs) (← lowerVal rhs)
+  | .bitXor lhs rhs => return .bitXor (← lowerVal lhs) (← lowerVal rhs)
+  | .bitNot value => return .bitNot (← lowerVal value)
+  | .shiftL lhs rhs => return .shiftL (← lowerVal lhs) (← lowerVal rhs)
+  | .shiftR lhs rhs => return .shiftR (← lowerVal lhs) (← lowerVal rhs)
+  | .ext kind operands => return .ext kind (← operands.mapM lowerVal)
   | .divU64 .. | .modU64 .. =>
       .error "extract/unsupported: wasm v0 value"
 
@@ -211,6 +208,12 @@ private partial def lowerOpsList {ValExt : Type} {OpExt : Type → Type} :
       let thn' ← lowerOpsList thn.toList
       let els' ← lowerOpsList els.toList
       return #[.ite cmp l r thn' els'] ++ (← lowerOpsList rest)
+  | .letLocal i v :: rest => do
+      return #[.letLocal i (← lowerVal v)] ++ (← lowerOpsList rest)
+  | .setLocal i v :: rest => do
+      return #[.setLocal i (← lowerVal v)] ++ (← lowerOpsList rest)
+  | .joinLocal i :: rest =>
+      return #[.joinLocal i] ++ (← lowerOpsList rest)
   | .storeField n v :: rest => do
       let v ← lowerVal v
       return #[.storeField n v] ++ (← lowerOpsList rest)
@@ -249,8 +252,6 @@ private partial def lowerOpsList {ValExt : Type} {OpExt : Type → Type} :
       return #[.errorNamed n] ++ (← lowerOpsList rest)
   | .ext payload :: rest =>
       return #[.ext payload] ++ (← lowerOpsList rest)
-  | _ :: _ =>
-      throw "extract/unsupported: wasm v0 op"
 
 private def lowerOps {ValExt : Type} {OpExt : Type → Type}
     (ops : Array (Op ValExt OpExt)) : Except String (Array (Op ValExt OpExt)) :=
