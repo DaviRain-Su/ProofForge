@@ -133,7 +133,7 @@ private partial def codecSchemaOfTypeAt (env : Environment) (fuel : Nat)
     throw "extract/unsupported: FixedBytes boundary size must be a literal in 1..32"
   let some typeName := head
     | throw "extract/unsupported: polymorphic boundary type"
-  unless isUserType env typeName do
+  unless isUserType env typeName || Attr.isBoundary env typeName do
     throw s!"extract/unsupported: unsupported boundary type {typeName}"
   if ancestors.contains typeName then
     throw s!"extract/unsupported: recursive boundary type {typeName}"
@@ -310,6 +310,31 @@ private def expandTaggedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.
   | .option _, none | .enumeration .., none =>
       throw "extract/unsupported: constructed tagged results are not yet represented as a fixed source frame"
   | _, _ => pure ops
+
+/-- Project a compiler-owned static record result into the same fixed scalar frame already used
+for ordinary source records and wide scalars. The shared layer owns only logical field paths and
+little fixed limbs; Borsh/ABI widths, offsets, padding, and publication remain target-owned. -/
+private def expandStaticRecordReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.Op) :
+    Except String (Array Ops.Op) := do
+  let .record _ _ := schema | return ops
+  let root? := match ops.toList with
+    | [.returnU64 root] | [.returnState root] => some root
+    | _ => none
+  let some root := root? | return ops
+  let leaves ← Core.Codec.staticLeaves schema
+  let mut result : Array Ops.Op := #[]
+  for leaf in leaves do
+    let width := leaf.type.byteWidth
+    unless leaf.type.isWellFormed && 0 < width && width ≤ 32 do
+      throw "extract/unsupported: static record return has malformed scalar leaf"
+    let parts := (width + 7) / 8
+    let name := leaf.sourceName
+    if parts == 1 then
+      result := result.push (.returnU64 (.field root name))
+    else
+      for part in [0:parts] do
+        result := result.push (.returnU64 (.field root s!"{name}_w{part}"))
+  return result
 
 private def markMethodArgs (kind : Core.IR.MethodKind) (count : Nat) (body : Expr) : Expr :=
   let marker (index : Nat) := mkApp (mkConst ``methodArgRef) (mkNatLit index)
@@ -658,6 +683,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
   let retSchema ← logicalReturnSchema env kind retTy
   let ops ← expandBoundedReturnOps retSchema ops
   let ops ← expandTaggedReturnOps retSchema ops
+  let ops ← expandStaticRecordReturnOps retSchema ops
   let retWidths :=
     match kind with
     | .get =>
@@ -1444,6 +1470,8 @@ def inferKind (env : Environment) (n : Name) : Except String Core.IR.MethodKind 
         (match env.find? typeName with | some (.inductInfo _) => true | _ => false) then
       return .get
   if let some structName := ret.getAppFn.constName? then
+    if Attr.isBoundary env structName then
+      return .get
     if isStructure env structName && structName != ``UInt64 &&
         structName != ``Prod && structName != addr20Name &&
         structName != uint128Name && structName != uint256Name &&

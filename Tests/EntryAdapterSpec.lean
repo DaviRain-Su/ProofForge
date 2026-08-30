@@ -113,6 +113,11 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing tagged Option return source method"
   let some sourceEchoTaggedValue := source.methods.find? (·.ixName == "echoTaggedValue")
     | throwError "missing tagged enum return source method"
+  let some sourceEchoPubkey := source.methods.find? (·.ixName == "echoPubkey")
+    | throwError "missing Pubkey return source method"
+  let pubkeySchema := .record "ProofForge.Svm.Sdk.Pubkey" #[
+    ("word0", .scalar .uint64), ("word1", .scalar .uint64),
+    ("word2", .scalar .uint64), ("word3", .scalar .uint64)]
   unless sourceEchoBoundedValues.annotations == #["svm.raw.v1:20:2:0"] &&
       sourceEchoBoundedValues.retSchema == .boundedArray 4 (.scalar .uint16) &&
       sourceEchoBoundedValues.retCount == 5 &&
@@ -128,7 +133,11 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceEchoOptionValue.retSchema == .option (.scalar .uint64) &&
       sourceEchoOptionValue.retCount == 2 &&
       sourceEchoTaggedValue.annotations == #["svm.raw.v1:25:2:0"] &&
-      sourceEchoTaggedValue.retCount == 3 do
+      sourceEchoTaggedValue.retCount == 3 &&
+      sourceEchoPubkey.annotations == #["svm.raw.v1:26:2:0"] &&
+      sourceEchoPubkey.paramCount == 1 && sourceEchoPubkey.paramWidths.isEmpty &&
+      sourceEchoPubkey.paramSchemas == #[pubkeySchema] &&
+      sourceEchoPubkey.retSchema == pubkeySchema && sourceEchoPubkey.retCount == 4 do
     throwError "bounded/tagged return values were not expanded to fixed source frames"
   let program ←
     match IR.fromExtracted source with
@@ -353,10 +362,21 @@ elab "#pf_guard_entry_adapter" : command => do
           tagged.canonical.contains "borsh-return-schema.enum.[0,1,2]" do
         throwError s!"wrong tagged Borsh return plans: {repr option}, {repr tagged}"
   | _, _ => throwError "tagged return method lost its raw adapter"
+  let some echoPubkey := program.methods.find? (·.ixName == "echoPubkey")
+    | throwError "missing projected Pubkey method"
+  match echoPubkey.entry with
+  | .raw entry =>
+      unless entry.tag == 26 && entry.paramCount == 1 && entry.paramWidths.isEmpty &&
+          entry.paramLeafWidths == #[8, 8, 8, 8] && entry.paramLeafCounts == #[4] &&
+          entry.inferredReturnWidths == #[8, 8, 8, 8] && entry.dataLen == 33 &&
+          entry.returnDataLen == 32 && entry.returnScratchBytes == 32 &&
+          entry.canonical.contains "borsh-leaves.[8,8,8,8]" do
+        throwError s!"wrong Pubkey Borsh boundary plan: {repr entry}"
+  | .generated => throwError "Pubkey method lost its raw adapter"
   for (method, count) in [
       (echoBoundedValues, 5), (echoBoundedBytes, 9),
       (echoBoundedString, 9), (makeBoundedString, 9),
-      (echoOptionValue, 2), (echoTaggedValue, 3)
+      (echoOptionValue, 2), (echoTaggedValue, 3), (echoPubkey, 4)
     ] do
     let graph ←
       match method.toCFG with
@@ -393,6 +413,7 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call echoBoundedValues" && asm.contains "call echoBoundedBytes" &&
       asm.contains "call echoBoundedString" && asm.contains "call makeBoundedString" &&
       asm.contains "call echoOptionValue" && asm.contains "call echoTaggedValue" &&
+      asm.contains "call echoPubkey" && asm.contains "jne r1, 33, err_raw_echoPubkey" &&
       asm.contains "borsh_return_invalid_echoBoundedValues_" &&
       asm.contains "borsh_return_invalid_echoBoundedBytes_" &&
       asm.contains "borsh_return_invalid_echoBoundedString_" &&

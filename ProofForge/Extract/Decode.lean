@@ -91,7 +91,7 @@ stays navigable. `fuel` here is the caller's already-decremented budget. -/
 private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : Expr) :
     Option Ops.Val :=
   let field := n.toString
-  let user := isUserName env n || isBoundaryProjectionName n
+  let user := isUserName env n || isBoundaryProjectionName env n
   if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
       isConstNamed e ``bne ||
       isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
@@ -1986,6 +1986,23 @@ private def asBoundedCtorFields (env : Environment) (e : Expr) : Option (Array O
   let length ← val env args[args.size - 2]!
   let values ← asVectorLits env args[args.size - 1]!
   return #[length] ++ values
+
+/-- A reusable compiler-owned `@[pf_boundary]` value is source data, not persistent State.
+Unfold only explicitly bounded helpers to its constructor and expose every scalar field through
+the ordinary fixed return frame. Schema validation and target codecs still decide whether that
+frame is admissible and how it is serialized. -/
+private def asRegisteredBoundaryCtorFields (env : Environment) (e : Expr) :
+    Option (Array Ops.Val) := do
+  let e := substLets 32 (strip (unfoldUserHelpers env 16 e))
+  let ctor ← e.getAppFn.constName?
+  let .ctorInfo info ← env.find? ctor | none
+  unless Attr.isBoundary env info.induct do none
+  let args := e.getAppArgs
+  unless info.numFields ≤ args.size do none
+  let fields := args.extract (args.size - info.numFields) args.size
+  let values ← fields.mapM (val env)
+  unless values.size == info.numFields do none
+  return values
 
 /-- `xs.set i v`：只抽出被改的那一叶。 -/
 private def asVectorSet (env : Environment) (e : Expr) : Option Ops.Val :=
@@ -6121,6 +6138,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.okState v]
   else if let some vs := asBoundedCtorFields env e then
     .ok (returnStatesOf vs)
+  else if let some vs := asRegisteredBoundaryCtorFields env e then
+    .ok (vs.map fun value => .returnU64 value)
   else if let some vs := asStateFields env e then
     .ok (returnStatesOf vs)
   else if let some v := asStateMk env e then

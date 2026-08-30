@@ -28,6 +28,7 @@ const ECHO_BOUNDED_STRING_TAG: u8 = 22;
 const MAKE_BOUNDED_STRING_TAG: u8 = 23;
 const ECHO_OPTION_TAG: u8 = 24;
 const ECHO_TAGGED_TAG: u8 = 25;
+const ECHO_PUBKEY_TAG: u8 = 26;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -84,6 +85,12 @@ fn aggregate_data(
     for level in levels {
         data.extend_from_slice(&level.to_le_bytes());
     }
+    data
+}
+
+fn pubkey_data(key: &Pubkey) -> Vec<u8> {
+    let mut data = vec![ECHO_PUBKEY_TAG];
+    data.extend_from_slice(&key.to_bytes());
     data
 }
 
@@ -305,6 +312,37 @@ fn static_aggregates_use_source_order_borsh_and_canonical_bool() {
             trailing
         },
     ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &malformed,
+        );
+    }
+}
+
+#[test]
+fn sdk_pubkey_uses_the_generic_exact_static_record_boundary() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    let key = Pubkey::new_unique();
+    let data = pubkey_data(&key);
+    assert_eq!(data.len(), 33);
+    let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &raw_accounts(program_id, program_account.clone(), signer, None),
+        &[Check::success(), Check::return_data(&key.to_bytes())],
+    );
+
+    for malformed in [data[..data.len() - 1].to_vec(), {
+        let mut trailing = data;
+        trailing.push(0);
+        trailing
+    }] {
         expect_raw_error(
             &mollusk,
             program_id,

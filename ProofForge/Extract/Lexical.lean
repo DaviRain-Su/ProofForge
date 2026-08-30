@@ -532,14 +532,23 @@ def isUserName (env : Environment) (n : Name) : Bool :=
     | none => false
 
 /-- Compiler-owned boundary carriers expose ordinary source projections even though they live in
-the `ProofForge` namespace. Their target representation is still selected by the codec adapter. -/
-def isBoundaryProjectionName (n : Name) : Bool :=
+the `ProofForge` namespace. Their target representation is still selected by the codec adapter.
+The legacy bounded carriers remain explicit; reusable static SDK datatypes opt in once with
+`@[pf_boundary]`, rather than adding every projection name here. -/
+def isBoundaryProjectionName (env : Environment) (n : Name) : Bool :=
   n == ``ProofForge.Core.Value.BoundedVec.length ||
     n == ``ProofForge.Core.Value.BoundedVec.values ||
     n == ``ProofForge.Core.Value.BoundedBytes.length ||
     n == ``ProofForge.Core.Value.BoundedBytes.values ||
     n == ``ProofForge.Core.Value.BoundedString.length ||
-    n == ``ProofForge.Core.Value.BoundedString.values
+    n == ``ProofForge.Core.Value.BoundedString.values ||
+    Attr.isBoundary env n.getPrefix ||
+    match env.getProjectionFnInfo? n with
+    | some projection =>
+        match env.find? projection.ctorName with
+        | some (.ctorInfo ctor) => Attr.isBoundary env ctor.induct
+        | _ => false
+    | none => false
 
 /-- Recover the schema path owned by nested user-structure projections.
 `s.book.right` is represented by two projection applications but owns the flattened leaf
@@ -551,7 +560,7 @@ private def projectionPath (env : Environment) (fuel : Nat) (e : Expr) : Option 
     let e := strip e
     let n ← e.getAppFn.constName?
     let _ ← env.getProjectionFnInfo? n
-    if !isUserName env n && !isBoundaryProjectionName n then none else
+    if !isUserName env n && !isBoundaryProjectionName env n then none else
     let leaf := Core.IR.lastName n.toString
     let args := e.getAppArgs
     let parent :=
@@ -578,7 +587,7 @@ def vectorBaseName (env : Environment) (fuel : Nat) (e : Expr) : Option String :
         match env.find? n with
         | some info => info.type.getUsedConstantsAsSet.toList.any (· == ``Vector)
         | none => false
-      if (!isUserName env n && !isBoundaryProjectionName n) ||
+      if (!isUserName env n && !isBoundaryProjectionName env n) ||
           isReservedProj last || skipTy || !returnsVector then
         e.getAppArgs.findSome? (vectorBaseName env fuel')
       else projectionPath env fuel' e

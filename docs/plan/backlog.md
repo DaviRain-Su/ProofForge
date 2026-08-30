@@ -70,6 +70,7 @@ R3-020 rent-exempt System/PDA create policy、
 R3-021 two-slot same-kind transient handle isolation、
 R3-022 invocation-local fixed-width UInt64 POD records、
 R3-023 first-class allocation-free Pubkey values、
+R3-024 generic whole-value SDK record boundary、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -88,7 +89,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 ## 已做
 
 - **当前可验证基线（2026-08-30）**：Lean 汇总 382 jobs；SVM manifest 全 61 programs；
-  Mollusk 全量 404/404（MemoryOps 20/20、Phoenix-v1 profile 76/76、RawEntry 20/20）；EVM manifest 全
+  Mollusk 全量 406/406（MemoryOps 20/20、Phoenix-v1 profile 76/76、RawEntry 21/21、Keys 9/9）；EVM manifest 全
   34 programs 且 Anvil 34/34。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
   并保留汇总 `test` gate；完整 382-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
@@ -577,8 +578,18 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   ELF SHA-256 `51ff1e0b4ad6c4f07af47f31bacd93b084b865a9e570f3ca7f4d49631ec8577a`；focused
   Mollusk 24/24 覆盖四个 limb 的 equal/different（含 word0 之外差异）、owner/key 匹配、
   canonical executable+key+owner 认证、gated mutation 原子性与 duplicate-alias/truncated
-  invocation fail-closed。Pubkey 作为整体 entry 参数/返回值仍是 target-binding 范围，不由
-  该 API 暗示。详见 `docs/plan/tasks/r3-023.md`。
+  invocation fail-closed。该切片本身不暗示 entry/return wire；后续 R3-024 已用独立 generic
+  target-binding 完成 whole-value boundary。详见 `docs/plan/tasks/r3-023.md`。
+
+- R3-024 generic whole-value SDK record boundary 已完成：representation-free
+  `@[pf_boundary]` 让 compiler-owned finite datatype 一次性接入 shared generic static
+  schema/projection/fixed-result frame，各 target 仍独立拥有 wire policy。`Svm.Sdk.Pubkey`
+  以四个 UInt64 leaf 复用 exact Borsh adapter；`RawEntry.echoPubkey` 验证 33-byte input /
+  32-byte output round-trip 和 truncated/trailing rejection，`Keys.peerKey` 独立验证 account 1
+  完整 key 的 32-byte return。两者 digests 为 `66e55d05f3fe5838` / `f301e0648808a546`，
+  ELF 为 47,344 / 11,256 B；没有 Pubkey-specific Runtime/Ops/IR/Component/Emit、allocation、
+  pointer 或 persistent object。recursive/polymorphic/inherited/over-budget 与 nested dynamic
+  shape 继续 fail closed。详见 `docs/plan/tasks/r3-024.md`。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits
@@ -883,8 +894,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 - `lake build Tests` 当前 382 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 61 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 404/404，其中 MemoryOps 20/20、RawEntry 20/20、
-  Phoenix-v1 profile 76/76。
+  `pf build` 当前通过；全套 Mollusk 406/406，其中 MemoryOps 20/20、RawEntry 21/21、
+  Keys 9/9、Phoenix-v1 profile 76/76。
 - EVM registry 34 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /
   EvmFeatureFlags / EvmClaimBitmap / EvmRingMailbox / EvmRingHistory / GuardedPayout /

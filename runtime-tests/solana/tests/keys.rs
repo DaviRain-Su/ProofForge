@@ -1,5 +1,5 @@
 use {
-    mollusk_svm::{result::Check, Mollusk},
+    mollusk_svm::{program::create_program_account_loader_v3, result::Check, Mollusk},
     sha2::{Digest, Sha256},
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
@@ -15,6 +15,7 @@ const BASE_LAMPORTS: u64 = 10 * LAMPORTS_PER_SOL;
 const PEER_LAMPORTS: u64 = 3 * LAMPORTS_PER_SOL;
 const DATA_LEN: usize = 16;
 const PEER_DATA_LEN: usize = 24;
+const PEER_KEY_TAG: u8 = 26;
 
 fn instruction_discriminator(name: &str, param_count: usize) -> String {
     let params = vec!["u64"; param_count].join(",");
@@ -126,6 +127,29 @@ fn view_word(name: &str, expected: u64) {
             Check::return_data(&expected.to_le_bytes()),
             Check::account(&acc0).data(&pre).build(),
         ],
+    );
+}
+
+#[test]
+fn peer_key_returns_one_exact_sdk_pubkey_value() {
+    let (program_id, mollusk) = harness();
+    let peer = Pubkey::new_unique();
+    let owner = Pubkey::new_unique();
+    let ix = Instruction::new_with_bytes(
+        program_id,
+        &[PEER_KEY_TAG],
+        vec![
+            AccountMeta::new_readonly(program_id, false),
+            AccountMeta::new_readonly(peer, false),
+        ],
+    );
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (program_id, create_program_account_loader_v3(&program_id)),
+            (peer, peer_account(&owner)),
+        ],
+        &[Check::success(), Check::return_data(&peer.to_bytes())],
     );
 }
 

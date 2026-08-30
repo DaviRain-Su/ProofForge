@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.Keys
 
 open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 
 structure State where
   dummy : UInt64
@@ -67,5 +68,13 @@ def owner10 (_s : State) : UInt64 :=
 @[pf_entry]
 def owner13 (_s : State) : UInt64 :=
   accOwnerWord 1 3
+
+/-- Return account 1's complete key as one canonical 32-byte Borsh Pubkey value. Projection and
+serialization remain generic four-limb composition. The raw account contract keeps the existing
+fixed two-account geometry: current executable program at 0, projected account at 1. No key bytes
+are allocated or persisted. -/
+@[pf_entry, pf_svm_raw 26 2 0]
+def peerKey (_s : State) : Pubkey :=
+  (Account.Handle.at 1).key
 
 end Examples.Keys

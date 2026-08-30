@@ -3,6 +3,7 @@ import ProofForge
 namespace Examples.RawEntry
 
 open ProofForge.Svm.Runtime
+open ProofForge.Svm.Sdk
 open ProofForge.Core.Value
 
 structure State where
@@ -175,5 +176,11 @@ def echoOptionValue (_s : State) (value : Option UInt64) : Option UInt64 := valu
 
 @[pf_entry, pf_svm_raw 25 2 0]
 def echoTaggedValue (_s : State) (value : TaggedRequest) : TaggedRequest := value
+
+/-- A first-class SDK `Pubkey` reuses the generic static-record Borsh boundary: exactly four
+little-endian UInt64 leaves in and four leaves out. This adds no Pubkey-specific decoder,
+Runtime operation, allocation, pointer, or emitter recipe. -/
+@[pf_entry, pf_svm_raw 26 2 0]
+def echoPubkey (_s : State) (key : Pubkey) : Pubkey := key
 
 end Examples.RawEntry

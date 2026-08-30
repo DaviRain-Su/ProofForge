@@ -13,7 +13,7 @@ recipe on chain.
 namespace ProofForge.Svm.Sdk
 
 /-- One fixed 32-byte Solana public key in account-memory word order. -/
-structure Pubkey where
+@[pf_boundary] structure Pubkey where
   word0 : UInt64
   word1 : UInt64
   word2 : UInt64
@@ -49,19 +49,17 @@ existing key-word queries; nothing is copied on chain. -/
   Pubkey.ofWords (account.ownerWord 0) (account.ownerWord 1)
     (account.ownerWord 2) (account.ownerWord 3)
 
-/-- Compare a fixed key with the complete 32-byte key of one statically selected account. -/
+/-- Compare any first-class key value with the complete 32-byte key of one statically selected
+account. Direct projections keep both fixed and boundary-supplied values compiler-erased. -/
 @[pf_inline] def Pubkey.matchesKey (key : Pubkey) (account : Account.Handle) : Bool :=
-  match key with
-  | ⟨word0, word1, word2, word3⟩ =>
-      account.keyWord 0 = word0 && account.keyWord 1 = word1 &&
-        account.keyWord 2 = word2 && account.keyWord 3 = word3
+  account.keyWord 0 = key.word0 && account.keyWord 1 = key.word1 &&
+    account.keyWord 2 = key.word2 && account.keyWord 3 = key.word3
 
-/-- Compare a fixed key with the complete 32-byte owner of one statically selected account. -/
+/-- Compare any first-class key value with the complete 32-byte owner of one statically selected
+account. -/
 @[pf_inline] def Pubkey.matchesOwner (key : Pubkey) (account : Account.Handle) : Bool :=
-  match key with
-  | ⟨word0, word1, word2, word3⟩ =>
-      account.ownerWord 0 = word0 && account.ownerWord 1 = word1 &&
-        account.ownerWord 2 = word2 && account.ownerWord 3 = word3
+  account.ownerWord 0 = key.word0 && account.ownerWord 1 = key.word1 &&
+    account.ownerWord 2 = key.word2 && account.ownerWord 3 = key.word3
 
 /-- Compare the complete keys of two statically selected accounts by projecting both as
 Pubkey values and comparing the values; neither key is copied. -/

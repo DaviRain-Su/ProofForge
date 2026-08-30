@@ -68,6 +68,22 @@ initialize pfInlineAttr : TagAttribute ←
       | some (.defnInfo _) => pure ()
       | _ => throwError "extract/unsupported: pf_inline is not a definition"
 
+/-- Mark a compiler-owned structure or inductive as an ordinary logical contract-boundary
+value. This is intentionally representation-free: the shared codec still derives and validates
+its complete field/variant schema, while each target owns its wire layout. The marker exists so
+reusable SDK value types under the reserved `ProofForge` namespace do not need one-off extractor
+or emitter cases. -/
+initialize pfBoundaryAttr : TagAttribute ←
+  registerTagAttribute `pf_boundary
+    "allow a compiler-owned datatype to use the generic ProofForge boundary codec"
+    fun decl => do
+      unless decl.toString.startsWith "ProofForge." do
+        throwError "extract/unsupported: pf_boundary is reserved for compiler-owned ProofForge datatypes"
+      let env ← getEnv
+      match env.find? decl with
+      | some (.inductInfo _) => pure ()
+      | _ => throwError "extract/unsupported: pf_boundary is not a structure or inductive"
+
 /--
 Attach one packed-u8 Solana wire entry to a `@[pf_entry]` method without introducing an executable
 Op. Parameter widths come from the Lean method type; dispatch, account walking, and program-account
@@ -244,6 +260,9 @@ def isEntry (env : Environment) (decl : Name) : Bool :=
 
 def isInline (env : Environment) (decl : Name) : Bool :=
   pfInlineAttr.hasTag env decl
+
+def isBoundary (env : Environment) (decl : Name) : Bool :=
+  pfBoundaryAttr.hasTag env decl
 
 def svmRawEntry? (env : Environment) (decl : Name) : Option SvmRawEntry :=
   pfSvmRawAttr.getParam? env decl <|> pfSvmRawBorshOptionsAttr.getParam? env decl <|>
