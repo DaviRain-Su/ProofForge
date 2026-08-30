@@ -510,6 +510,23 @@ rm -f "$cfg"
 [[ "$bal_b_pay" == "6" ]] || { echo "FAIL: B bal want 6 after B pay, got $bal_b_pay" >&2; exit 1; }
 [[ "$supp_pay" == "8" ]] || { echo "FAIL: A supp want 8 after B pay, got $supp_pay" >&2; exit 1; }
 
+# Self-pay: B pay(B,1) must not debit/credit the same card.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+self_pay="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$self_pay" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$self_pay"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a_selfpay="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b_selfpay="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a_selfpay" == "2" ]] || { echo "FAIL: A bal want 2 after B self-pay, got $bal_a_selfpay" >&2; exit 1; }
+[[ "$bal_b_selfpay" == "6" ]] || { echo "FAIL: B bal want 6 after B self-pay, got $bal_b_selfpay" >&2; exit 1; }
+
 printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
   "$RPC" "$WALLET_A" "$contract" >"$cfg"
 pause3="$(node "$here/alphanet-rpc.js" call "$cfg")"
