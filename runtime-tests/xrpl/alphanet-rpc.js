@@ -152,15 +152,32 @@ function createdContractAccount(meta) {
   return null;
 }
 
+async function maybeAccept(url) {
+  try {
+    await rpc(url, "ledger_accept", {});
+  } catch (_) {}
+}
+
 async function waitTx(url, hash) {
+  await maybeAccept(url);
   for (let i = 0; i < 40; i++) {
     try {
       const tx = await rpcRetry(url, "tx", { transaction: hash });
       if (tx.validated || tx.meta) return tx;
     } catch (_) {}
-    await new Promise((r) => setTimeout(r, 1000));
+    await maybeAccept(url);
+    await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error("tx " + hash + " not validated in 40s");
+}
+
+async function fieldNames(url) {
+  const defs = await rpcRetry(url, "server_definitions", {});
+  const names = new Set();
+  for (const item of defs.FIELDS || []) {
+    if (Array.isArray(item) && item[0]) names.add(item[0]);
+  }
+  return names;
 }
 
 async function signTx(url, secret, txJson) {
@@ -179,7 +196,9 @@ async function main() {
   const cmd = process.argv[2];
   const cfg = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
   const url = cfg.rpc_url || "https://alphanet.xrpl.org";
-  const networkId = cfg.network_id || 21337;
+  const info0 = await rpcRetry(url, "server_info", {});
+  const networkId = cfg.network_id || info0.info.network_id || 21337;
+  const fields = await fieldNames(url);
   const secret = cfg.wallet_seed;
   const algorithm = cfg.algorithm || "secp256k1";
 
@@ -208,7 +227,7 @@ async function main() {
     const wallet = xrpl.Wallet.fromSeed(secret, { algorithm });
     const info = await rpcRetry(url, "account_info", {
       account: wallet.address,
-      ledger_index: "validated",
+      ledger_index: "current",
     });
     const seq = info.account_data.Sequence;
 
@@ -283,7 +302,7 @@ async function main() {
     const seq = (
       await rpcRetry(url, "account_info", {
         account: wallet.address,
-        ledger_index: "validated",
+        ledger_index: "current",
       })
     ).account_data.Sequence;
     const txJson = {
@@ -291,11 +310,14 @@ async function main() {
       Account: wallet.address,
       ContractAccount: cfg.contract_account,
       FunctionName: hexName(cfg.function_name),
-      Gas: parseInt(cfg.gas || "1000000", 10),
       Fee: cfg.fee || "1000000",
       Sequence: seq,
       NetworkID: networkId,
     };
+    // Public 3.3.0-rc1 uses Gas; transia/alphanet 2.6.1-rc1 uses ComputationAllowance.
+    const allowance = parseInt(cfg.gas || cfg.computation_allowance || "1000000", 10);
+    if (fields.has("Gas")) txJson.Gas = allowance;
+    else if (fields.has("ComputationAllowance")) txJson.ComputationAllowance = allowance;
     if (cfg.parameters && cfg.parameters.length) {
       txJson.Parameters = cfg.parameters.map((p) => ({
         Parameter: {
@@ -310,26 +332,24 @@ async function main() {
     const signed = await signTx(url, secret, txJson);
     const submitted = await submitBlob(url, signed.tx_blob);
     const hash = submitted.tx_json && submitted.tx_json.hash;
-    if (submitted.engine_result !== "tesSUCCESS" && submitted.engine_result !== "tecBYTECODE_REJECTED") {
-      process.stdout.write(
-        JSON.stringify({
-          success: false,
-          engine_result: submitted.engine_result,
-          engine_result_message: submitted.engine_result_message,
-          txHash: hash || null,
-        }) + "\n"
-      );
-      process.exit(1);
+    const applied =
+      submitted.engine_result === "tesSUCCESS" ||
+      (submitted.engine_result && String(submitted.engine_result).startsWith("tec"));
+    let tx = { meta: {} };
+    if (hash && applied) {
+      try {
+        tx = await waitTx(url, hash);
+      } catch (_) {}
     }
-    const tx = hash ? await waitTx(url, hash) : { meta: {} };
     const meta = tx.meta || {};
     process.stdout.write(
       JSON.stringify({
         success: meta.TransactionResult === "tesSUCCESS",
         engine_result: submitted.engine_result,
-        txHash: hash,
-        result: meta.TransactionResult,
-        vmReturnCode: meta.VMReturnCode ?? null,
+        engine_result_message: submitted.engine_result_message || null,
+        txHash: hash || null,
+        result: meta.TransactionResult || submitted.engine_result,
+        vmReturnCode: meta.VMReturnCode ?? meta.WasmReturnCode ?? null,
         gasUsed: meta.GasUsed ?? null,
       }) + "\n"
     );
@@ -382,7 +402,7 @@ async function main() {
     const seq = (
       await rpcRetry(url, "account_info", {
         account: wallet.address,
-        ledger_index: "validated",
+        ledger_index: "current",
       })
     ).account_data.Sequence;
     const txJson = {

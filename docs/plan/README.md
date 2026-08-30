@@ -192,6 +192,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-021](tasks/wsm-021.md) | done | 探针 `trace_num`（AlphaNet 绿；不开 Sdk.Log） |
 | [wsm-023](tasks/wsm-023.md) | done | 探针 `cache_le`（import 在；零 id → -10；不开 AccountRoot） |
 | [wsm-026](tasks/wsm-026.md) | blocked | 用户 ContractData：caller 可写；合约账户 **-22**；不做 wasm allocator |
+| [wsm-032](tasks/wsm-032.md) | done | 本地 `transia/alphanet` 2.6.1-rc1（nid 63456）；三条仍挡；不开 Sdk.Payments |
 | [wsm-027](tasks/wsm-027.md) | done | 每用户一张卡（XrplBal）：A=2 / B=1，不是单用户金库 |
 | [wsm-029](tasks/wsm-029.md) | done | 探针读 AccountRoot.Balance（accountroot_id+cache_le+le_field） |
 | [wsm-033](tasks/wsm-033.md) | done | Runtime 叶 `callerBalanceDrops`（XrplBalRt，对账 account_info） |
