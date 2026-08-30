@@ -579,6 +579,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                 .logUtf8Bounded capacity (message.map (flipVal fuel'))
             | .nep297StringData standard version event capacity data =>
                 .nep297StringData standard version event capacity (data.map (flipVal fuel'))
+            | .nep141FtMint owner amountLo amountHi =>
+                .nep141FtMint (owner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
             | .promiseFunctionCallDetached receiver method argsCapacity arguments
                 depositLo depositHi gas =>
                 .promiseFunctionCallDetached receiver method argsCapacity

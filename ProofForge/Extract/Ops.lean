@@ -175,6 +175,9 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     (capacity : Nat) (data : Array Val) : Op :=
   .ext (.near (.nep297StringData standard version event capacity data))
 
+@[match_pattern] def Op.nearNep141FtMint (owner : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.nep141FtMint owner amountLo amountHi))
+
 @[match_pattern] def Op.nearPromiseFunctionCallDetached
     (receiver method : String) (argsCapacity : Nat) (arguments : Array Val)
     (depositLo depositHi gas : Val) : Op :=
@@ -550,6 +553,7 @@ def hasNearEffect (ops : Array Op) : Bool :=
     | .ext (.near (.logUtf8 _))
     | .ext (.near (.logUtf8Bounded _ _))
     | .ext (.near (.nep297StringData _ _ _ _ _))
+    | .ext (.near (.nep141FtMint _ _ _))
     | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _))

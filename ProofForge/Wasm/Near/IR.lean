@@ -161,6 +161,9 @@ private def projectOpExt
           return .logUtf8Bounded capacity (← message.mapM _projectVal)
       | .nep297StringData standard version event capacity data =>
           return .nep297StringData standard version event capacity (← data.mapM _projectVal)
+      | .nep141FtMint owner amountLo amountHi =>
+          return .nep141FtMint (← owner.mapM _projectVal)
+            (← _projectVal amountLo) (← _projectVal amountHi)
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           return .promiseFunctionCallDetached receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
@@ -278,6 +281,10 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .nep297StringData standard version event capacity data =>
       s!"nevent.string:{standard.toUTF8.size}:{standard}:{version.toUTF8.size}:{version}:" ++
         s!"{event.toUTF8.size}:{event}.{capacity}({canonValues data})"
+  | .nep141FtMint owner amountLo amountHi =>
+      s!"nevent.nep141.ft_mint({canonValues owner};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi})"
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       s!"npromise.detached:{receiver.toUTF8.size}:{receiver}:{method.toUTF8.size}:{method}." ++
         s!"{argsCapacity}({canonValues arguments};" ++
@@ -370,6 +377,9 @@ private def rewritePayload
       let rewritten ← data.mapM rewriteValue
       return .nep297StringData standard version event capacity
         (rewritten.map simplifyLiteralSelect)
+  | .nep141FtMint owner amountLo amountHi =>
+      return .nep141FtMint (← owner.mapM rewriteValue)
+        (← rewriteValue amountLo) (← rewriteValue amountHi)
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       return .promiseFunctionCallDetached receiver method argsCapacity
         (← arguments.mapM rewriteValue) (← rewriteValue depositLo)

@@ -107,13 +107,16 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   `bytes.sh` 还验证 arena-backed bounded dynamic `log_utf8` 对 empty/partial/full/multibyte
   active prefix 的精确 view logs，以及 malformed UTF-8 在日志效果前被拒绝；同一 gate 还
   对账 bounded NEP-297 string-data 的 compact envelope、metadata/data JSON escaping 与单次
-  `log_utf8`。这不是 generic JSON ABI，也不是完整 NEP-141 合约。
+  `log_utf8`。`ft_event.sh` 另对账 exact no-memo NEP-141 v1.0.0 `ft_mint`，包括完整
+  AccountId 和 0 / 2^64 / 2^64+1 / max-u128 quoted decimal。这不是 generic JSON ABI，也不是
+  完整 NEP-141 合约。
   `counter.sh` 还在初始化前验证 paid mutator 先命中 non-payable，普通 mutator/view 再以精确
   missing-state panic fail closed 且不创建 KV state；初始化后还对账 exact 16-byte schema
   envelope，随后重复初始化与算术场景照常通过；同一 gate 还部署双字段升级代码，验证旧
   envelope 令 ordinary view fail closed、外部 migration 被 private guard 拒绝、同账户按
   `value` old key 转换后得到 exact 新字段/envelope、重复 migration 失败且新版本继续可写。
 
-CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
+CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
+`NearFungibleTokenEvent`、`NearMemory`、
 `NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

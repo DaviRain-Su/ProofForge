@@ -131,6 +131,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.logUtf8 message) => #[message]
       | .ext (.logUtf8Bounded _ _) => #[]
       | .ext (.nep297StringData _ _ _ _ _) => #[]
+      | .ext (.nep141FtMint _ _ _) => #[]
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
       | .ext (.promiseTransferDetached _ _ _)
@@ -158,12 +159,23 @@ private partial def hasBoundedLogOps (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun
     | .ext (.logUtf8Bounded _ _) => true
     | .ext (.nep297StringData _ _ _ _ _) => true
+    | .ext (.nep141FtMint _ _ _) => true
     | .ite _ _ _ thn els => hasBoundedLogOps thn || hasBoundedLogOps els
     | .forBody _ body => hasBoundedLogOps body
     | _ => false
 
 private def programHasBoundedLog (p : Program ValKind OpExt) : Bool :=
   hasBoundedLogOps p.initializer.ops || p.entries.any (hasBoundedLogOps ·.ops)
+
+private partial def hasFtMintOps (ops : Array (Op ValKind OpExt)) : Bool :=
+  ops.any fun
+    | .ext (.nep141FtMint _ _ _) => true
+    | .ite _ _ _ thn els => hasFtMintOps thn || hasFtMintOps els
+    | .forBody _ body => hasFtMintOps body
+    | _ => false
+
+private def programHasFtMint (p : Program ValKind OpExt) : Bool :=
+  hasFtMintOps p.initializer.ops || p.entries.any (hasFtMintOps ·.ops)
 
 private def logLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
   (logMessages p).foldl (init := #[]) fun layout message =>
@@ -820,6 +832,78 @@ private def stageNep297StringData (st : EState) (standard version event : String
     length := "(local.get " ++ outputLengthLocal ++ ")"
     st := st' }
 
+private def ftMintPrefix : Array UInt8 :=
+  "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_mint\",\"data\":[{\"owner_id\":\"".toUTF8.data
+
+private def ftMintAmountPrefix : Array UInt8 := "\",\"amount\":\"".toUTF8.data
+private def ftMintSuffix : Array UInt8 := "\"}]}".toUTF8.data
+
+/-- Stage one exact no-memo NEP-141 `ft_mint` envelope. AccountId bytes are reconstructed from
+the complete little-endian frame and escaped by the closed JSON helper. -/
+private def stageNep141FtMint (st : EState) (owner : Array (Val ValKind))
+    (amountLo amountHi : Val ValKind) (level : Nat) : Except String StagedEvent := do
+  unless owner.size == 9 do
+    throw "extract/unsupported: near NEP-141 owner frame geometry"
+  let ownerLength ← renderVal st owner[0]!
+  let amountLo ← renderVal st amountLo
+  let amountHi ← renderVal st amountHi
+  let ownerLengthLocal := localOfTemp st.fresh
+  let pointerLocal := localOfTemp (st.fresh + 1)
+  let outputLengthLocal := localOfTemp (st.fresh + 2)
+  let digitsPointerLocal := localOfTemp (st.fresh + 3)
+  let decimalLengthLocal := localOfTemp (st.fresh + 4)
+  let st' := { st with fresh := st.fresh + 5 }
+  let allocation := ftMintPrefix.size + 64 * 6 + ftMintAmountPrefix.size + 39 + ftMintSuffix.size
+  let mut lines := #[
+    indent level ("(local.set " ++ ownerLengthLocal ++ " " ++ ownerLength ++ ")"),
+    indent level ("(if (i64.gt_u (local.get " ++ ownerLengthLocal ++
+      ") (i64.const 64)) (then unreachable))"),
+    indent level ("(local.set " ++ pointerLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const " ++ toString allocation ++
+      ") (i64.const 1))))")
+  ]
+  for index in [0:ftMintPrefix.size] do
+    lines := lines.push (indent level
+      ("(i64.store8 (i32.add (i32.wrap_i64 (local.get " ++ pointerLocal ++
+        ")) (i32.const " ++ toString index ++ ")) (i64.const " ++
+        toString ftMintPrefix[index]!.toNat ++ "))"))
+  lines := lines.push (indent level ("(local.set " ++ outputLengthLocal ++ " (i64.const " ++
+    toString ftMintPrefix.size ++ "))"))
+  for index in [0:64] do
+    let word ← renderVal st owner[index / 8 + 1]!
+    let byte := "(i64.and (i64.shr_u " ++ word ++ " (i64.const " ++
+      toString ((index % 8) * 8) ++ ")) (i64.const 255))"
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        ownerLengthLocal ++ "))"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(local.set " ++ outputLengthLocal ++
+        " (call $pf_json_escape_byte " ++ byte ++ " (i32.wrap_i64 (local.get " ++
+        pointerLocal ++ ")) (local.get " ++ outputLengthLocal ++ ")))") ,
+      indent (level + 2) "))"
+    ]
+  for byte in ftMintAmountPrefix do
+    lines := lines ++ appendEventByte pointerLocal outputLengthLocal
+      ("(i64.const " ++ toString byte.toNat ++ ")") level
+  lines := lines ++ #[
+    indent level ("(local.set " ++ digitsPointerLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 39) (i64.const 1))))"),
+    indent level ("(local.set " ++ decimalLengthLocal ++ " (call $pf_u128_decimal " ++
+      amountLo ++ " " ++ amountHi ++ " (i32.wrap_i64 (local.get " ++ digitsPointerLocal ++
+      ")) (i32.add (i32.wrap_i64 (local.get " ++ pointerLocal ++
+      ")) (i32.wrap_i64 (local.get " ++ outputLengthLocal ++ ")))))"),
+    indent level ("(local.set " ++ outputLengthLocal ++ " (i64.add (local.get " ++
+      outputLengthLocal ++ ") (local.get " ++ decimalLengthLocal ++ ")))")
+  ]
+  for byte in ftMintSuffix do
+    lines := lines ++ appendEventByte pointerLocal outputLengthLocal
+      ("(i64.const " ++ toString byte.toNat ++ ")") level
+  return {
+    lines
+    pointer := "(local.get " ++ pointerLocal ++ ")"
+    length := "(local.get " ++ outputLengthLocal ++ ")"
+    st := st' }
+
 private structure StagedPromiseCall where
   lines : Array String
   promiseLocal : String
@@ -1162,6 +1246,15 @@ private partial def emitRegion (p : Program ValKind OpExt)
             region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.nep141FtMint owner amountLo amountHi) =>
+        let staged ← stageNep141FtMint st owner amountLo amountHi level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ #[indent level
+            ("(call $pf_log_utf8 " ++ staged.length ++ " " ++ staged.pointer ++ ")")] ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseFunctionCallDetached receiver method argsCapacity arguments
         depositLo depositHi gas) =>
         if view then throw "extract/unsupported: near view cannot create a promise"
@@ -1353,6 +1446,8 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
       | .logUtf8 _ | .transientBuffer64Begin _ | .transientBuffer64Finish _ | .reserved => false
       | .logUtf8Bounded _ message => message.any valHas
       | .nep297StringData _ _ _ _ data => data.any valHas
+      | .nep141FtMint owner amountLo amountHi =>
+          owner.any valHas || valHas amountLo || valHas amountHi
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -1596,6 +1691,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.promiseResultRead _ _) => true
   | .ext (.logUtf8Bounded _ _) => true
   | .ext (.nep297StringData _ _ _ _ _) => true
+  | .ext (.nep141FtMint _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
@@ -2091,6 +2187,97 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     ""
   ]
 
+/-- Closed helpers used only by the NEP-141 event effect. The decimal routine keeps 39
+little-endian base-10 digits, consumes source bits 127 down to 0, feeds each bit into digit zero,
+updates digits 0 through 38, then emits digits 38 down to 0 (including one zero digit). -/
+private def ftEventHelpers : Array String := #[
+  "  (func $pf_json_escape_byte (param $byte i64) (param $ptr i32) (param $len i64) (result i64)",
+  "    (local $nibble i64)",
+  "    (if (i32.or (i64.eq (local.get $byte) (i64.const 34)) (i64.eq (local.get $byte) (i64.const 92)))",
+  "      (then",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (i64.const 92))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 1)))) (local.get $byte))",
+  "        (return (i64.add (local.get $len) (i64.const 2)))))",
+  "    (if (i64.eq (local.get $byte) (i64.const 8))",
+  "      (then (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (i64.const 92))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 1)))) (i64.const 98))",
+  "        (return (i64.add (local.get $len) (i64.const 2)))))",
+  "    (if (i64.eq (local.get $byte) (i64.const 9))",
+  "      (then (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (i64.const 92))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 1)))) (i64.const 116))",
+  "        (return (i64.add (local.get $len) (i64.const 2)))))",
+  "    (if (i64.eq (local.get $byte) (i64.const 10))",
+  "      (then (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (i64.const 92))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 1)))) (i64.const 110))",
+  "        (return (i64.add (local.get $len) (i64.const 2)))))",
+  "    (if (i64.eq (local.get $byte) (i64.const 12))",
+  "      (then (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (i64.const 92))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 1)))) (i64.const 102))",
+  "        (return (i64.add (local.get $len) (i64.const 2)))))",
+  "    (if (i64.eq (local.get $byte) (i64.const 13))",
+  "      (then (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (i64.const 92))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 1)))) (i64.const 114))",
+  "        (return (i64.add (local.get $len) (i64.const 2)))))",
+  "    (if (i64.lt_u (local.get $byte) (i64.const 32))",
+  "      (then",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (i64.const 92))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 1)))) (i64.const 117))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 2)))) (i64.const 48))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 3)))) (i64.const 48))",
+  "        (local.set $nibble (i64.shr_u (local.get $byte) (i64.const 4)))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 4))))",
+  "          (if (result i64) (i64.lt_u (local.get $nibble) (i64.const 10))",
+  "            (then (i64.add (local.get $nibble) (i64.const 48)))",
+  "            (else (i64.add (local.get $nibble) (i64.const 87)))))",
+  "        (local.set $nibble (i64.and (local.get $byte) (i64.const 15)))",
+  "        (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (i64.add (local.get $len) (i64.const 5))))",
+  "          (if (result i64) (i64.lt_u (local.get $nibble) (i64.const 10))",
+  "            (then (i64.add (local.get $nibble) (i64.const 48)))",
+  "            (else (i64.add (local.get $nibble) (i64.const 87)))))",
+  "        (return (i64.add (local.get $len) (i64.const 6)))))",
+  "    (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (local.get $byte))",
+  "    (i64.add (local.get $len) (i64.const 1)))",
+  "  (func $pf_u128_decimal (param $lo i64) (param $hi i64) (param $digits i32) (param $out i32) (result i64)",
+  "    (local $bit i64) (local $i i64) (local $carry i64) (local $value i64)",
+  "    (local $digit i64) (local $length i64) (local $started i32)",
+  "    (local.set $i (i64.const 0))",
+  "    (block $zero_done (loop $zero",
+  "      (br_if $zero_done (i64.ge_u (local.get $i) (i64.const 39)))",
+  "      (i64.store8 (i32.add (local.get $digits) (i32.wrap_i64 (local.get $i))) (i64.const 0))",
+  "      (local.set $i (i64.add (local.get $i) (i64.const 1)))",
+  "      (br $zero)))",
+  "    (local.set $bit (i64.const 128))",
+  "    (block $bits_done (loop $bits",
+  "      (br_if $bits_done (i64.eqz (local.get $bit)))",
+  "      (local.set $bit (i64.sub (local.get $bit) (i64.const 1)))",
+  "      (local.set $carry",
+  "        (if (result i64) (i64.ge_u (local.get $bit) (i64.const 64))",
+  "          (then (i64.and (i64.shr_u (local.get $hi) (i64.sub (local.get $bit) (i64.const 64))) (i64.const 1)))",
+  "          (else (i64.and (i64.shr_u (local.get $lo) (local.get $bit)) (i64.const 1)))))",
+  "      (local.set $i (i64.const 0))",
+  "      (block $digits_done (loop $digits_loop",
+  "        (br_if $digits_done (i64.ge_u (local.get $i) (i64.const 39)))",
+  "        (local.set $value (i64.add (i64.shl (i64.load8_u (i32.add (local.get $digits) (i32.wrap_i64 (local.get $i)))) (i64.const 1)) (local.get $carry)))",
+  "        (i64.store8 (i32.add (local.get $digits) (i32.wrap_i64 (local.get $i))) (i64.rem_u (local.get $value) (i64.const 10)))",
+  "        (local.set $carry (i64.div_u (local.get $value) (i64.const 10)))",
+  "        (local.set $i (i64.add (local.get $i) (i64.const 1)))",
+  "        (br $digits_loop)))",
+  "      (br $bits)))",
+  "    (local.set $i (i64.const 39))",
+  "    (block $output_done (loop $output",
+  "      (br_if $output_done (i64.eqz (local.get $i)))",
+  "      (local.set $i (i64.sub (local.get $i) (i64.const 1)))",
+  "      (local.set $digit (i64.load8_u (i32.add (local.get $digits) (i32.wrap_i64 (local.get $i)))))",
+  "      (if (i32.or (i64.ne (local.get $digit) (i64.const 0)) (i32.or (local.get $started) (i64.eqz (local.get $i))))",
+  "        (then",
+  "          (i64.store8 (i32.add (local.get $out) (i32.wrap_i64 (local.get $length))) (i64.add (local.get $digit) (i64.const 48)))",
+  "          (local.set $length (i64.add (local.get $length) (i64.const 1)))",
+  "          (local.set $started (i32.const 1))))",
+  "      (br $output)))",
+  "    (local.get $length))",
+  ""
+]
+
 private def methodUsesUtf8Codec (method : Method ValKind OpExt) : Bool :=
   (match method.inputSchema with
     | some (.boundedString _) => true
@@ -2247,6 +2434,8 @@ def emit (p : IR.Program) : Except String String := do
   lines := lines ++ lifecycleData
   if programUsesArena p then
     lines := lines ++ arenaHelpers p
+  if programHasFtMint p then
+    lines := lines ++ ftEventHelpers
   if programUsesUtf8Codec p then
     lines := lines ++ utf8Validator
   lines := lines.push ""

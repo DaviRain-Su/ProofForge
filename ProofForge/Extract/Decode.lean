@@ -5649,6 +5649,18 @@ private def boundedStorageFrame? (env : Environment) (capacity : Nat) (e : Expr)
     values := values.push (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 0)
   return values
 
+private def nearAccountIdFrame? (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let length ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.length) e)
+  let w0 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w0) e)
+  let w1 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w1) e)
+  let w2 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w2) e)
+  let w3 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w3) e)
+  let w4 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w4) e)
+  let w5 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w5) e)
+  let w6 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w6) e)
+  let w7 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w7) e)
+  return #[length, w0, w1, w2, w3, w4, w5, w6, w7]
+
 /-- Preserve source lets that sequence NEAR effects before generic zeta reduction. Otherwise an
 ignored UInt64 sequencing result would erase the host/log or guest-memory mutation before
 `decodeExpr` can turn it into a typed effect. -/
@@ -5659,6 +5671,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded ||
         name == ``ProofForge.Wasm.Near.Runtime.nep297StringData ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtMint ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
@@ -5725,6 +5738,17 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 .nearNep297StringData standard version event capacity data
             else none
         | _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtMint &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let owner := args[args.size - 2]!
+        let amount := args[args.size - 1]!
+        match nearAccountIdFrame? env owner,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some owner, some amountLo, some amountHi =>
+            some (.nearNep141FtMint owner amountLo amountHi)
+        | _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned) &&
           e.getAppArgs.size ≥ 2 then

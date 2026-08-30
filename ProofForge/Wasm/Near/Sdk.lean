@@ -13,9 +13,10 @@ namespace ProofForge.Wasm.Near.Sdk
 
 /-!
 Source-facing NEAR SDK. Names erase through `@[pf_inline]` to Runtime stubs;
-they do not add Ops, IR nodes, or emitter cases. Bounded Promise-result observation, strict Borsh
-UInt64 result decoding, and full-AccountId self-callback authentication are available; joins and
-NEP-141 stay absent.
+they do not add Ops, IR nodes, or emitter cases unless explicitly documented as event effects.
+Bounded Promise-result observation, strict Borsh UInt64 result decoding, full-AccountId
+self-callback authentication, and exact `ft_mint` event serialization are available; a fungible
+token contract remains absent.
 -/
 
 notation "AccountId" => Runtime.AccountId
@@ -107,6 +108,15 @@ serde_json-compatible escaping in the target emitter. -/
 @[pf_inline] def writeStringData (standard version event : String) (capacity : Nat)
     (data : ProofForge.Core.Value.BoundedString capacity) : UInt64 :=
   Runtime.nep297StringData capacity standard version event data
+
+namespace FungibleToken
+
+/-- Emit one exact NEP-141 v1.0.0 `ft_mint` event. Amount is a quoted full-u128 decimal and the
+optional memo is deliberately omitted. Event support does not provide FT state or methods. -/
+@[pf_inline] def mint (owner : AccountId) (amount : NearToken) : UInt64 :=
+  Runtime.nep141FtMint owner amount
+
+end FungibleToken
 
 end Events
 

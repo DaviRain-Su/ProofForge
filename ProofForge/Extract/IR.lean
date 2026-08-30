@@ -73,6 +73,8 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
           .near (.logUtf8Bounded capacity (message.map mapValue))
       | .nep297StringData standard version event capacity data =>
           .near (.nep297StringData standard version event capacity (data.map mapValue))
+      | .nep141FtMint owner amountLo amountHi =>
+          .near (.nep141FtMint (owner.map mapValue) (mapValue amountLo) (mapValue amountHi))
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallDetached receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
@@ -131,6 +133,7 @@ def OpExt.values : OpExt Val → Array Val
       | .logUtf8 _ => #[]
       | .logUtf8Bounded _ message => message
       | .nep297StringData _ _ _ _ data => data
+      | .nep141FtMint owner amountLo amountHi => owner ++ #[amountLo, amountHi]
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -202,6 +205,9 @@ def OpExt.wellFormed : OpExt Val → Bool
           standard.toUTF8.size ≤ 64 && version.toUTF8.size ≤ 64 && event.toUTF8.size ≤ 64 &&
             Wasm.Near.Codec.storageCapacityValid capacity && data.size == capacity + 1 &&
             data.all (·.wellFormed ValKind.arity)
+      | .nep141FtMint owner amountLo amountHi =>
+          owner.size == 9 && owner.all (·.wellFormed ValKind.arity) &&
+            amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           Wasm.Near.Codec.accountIdLiteralValid receiver &&
             Wasm.Near.Codec.promiseMethodLiteralValid method &&

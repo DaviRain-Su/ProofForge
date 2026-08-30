@@ -72,6 +72,17 @@ bytes_anchors = (
     '(call $pf_arena_alloc (i64.const 135) (i64.const 1))',
     '(i64.const 117)',
 )
+ft_event_anchors = (
+    '(func $pf_json_escape_byte',
+    '(func $pf_u128_decimal',
+    '(local.set $bit (i64.const 128))',
+    '(call $pf_arena_alloc (i64.const 528) (i64.const 1))',
+    '(call $pf_arena_alloc (i64.const 39) (i64.const 1))',
+    '(func (export "mintZero")',
+    '(func (export "mintTwo64")',
+    '(func (export "mintTwo64PlusOne")',
+    '(func (export "mintMax")',
+)
 memory_anchors = (
     '(func $pf_arena_reset',
     '(func $pf_arena_alloc',
@@ -223,6 +234,8 @@ for wat in wats:
         extra = ctx_imports + ctx_exports
     elif wat.stem == "NearBytes":
         extra = bytes_anchors
+    elif wat.stem == "NearFungibleTokenEvent":
+        extra = ft_event_anchors
     elif wat.stem == "NearMemory":
         extra = memory_anchors
     elif wat.stem == "NearOutput":

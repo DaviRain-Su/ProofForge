@@ -68,6 +68,7 @@ inductive OpExt (V : Type) where
   | logUtf8 (message : String)
   | logUtf8Bounded (capacity : Nat) (message : Array V)
   | nep297StringData (standard version event : String) (capacity : Nat) (data : Array V)
+  | nep141FtMint (owner : Array V) (amountLo amountHi : V)
   | promiseFunctionCallDetached (receiver method : String) (argsCapacity : Nat)
       (arguments : Array V) (depositLo depositHi gas : V)
   | promiseFunctionCallReturned (receiver method : String) (argsCapacity : Nat)
@@ -105,12 +106,18 @@ private def storageFrameWellFormed (capacity : Nat) (values : Array Val) : Bool 
   Codec.storageCapacityValid capacity && values.size == capacity + 1 &&
     values.all (·.wellFormed ValKind.arity)
 
+private def accountIdFrameWellFormed (values : Array Val) : Bool :=
+  values.size == 9 && values.all (·.wellFormed ValKind.arity)
+
 def OpExt.wellFormed : OpExt Val → Bool
   | .logUtf8 message => message.toUTF8.size ≤ 1024
   | .logUtf8Bounded capacity message => storageFrameWellFormed capacity message
   | .nep297StringData standard version event capacity data =>
       standard.toUTF8.size ≤ 64 && version.toUTF8.size ≤ 64 && event.toUTF8.size ≤ 64 &&
         storageFrameWellFormed capacity data
+  | .nep141FtMint owner amountLo amountHi =>
+      accountIdFrameWellFormed owner && amountLo.wellFormed ValKind.arity &&
+        amountHi.wellFormed ValKind.arity
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       Codec.accountIdLiteralValid receiver && Codec.promiseMethodLiteralValid method &&
         storageFrameWellFormed argsCapacity arguments &&
@@ -175,6 +182,8 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .logUtf8Bounded capacity message => .logUtf8Bounded capacity (message.map mapValue)
   | .nep297StringData standard version event capacity data =>
       .nep297StringData standard version event capacity (data.map mapValue)
+  | .nep141FtMint owner amountLo amountHi =>
+      .nep141FtMint (owner.map mapValue) (mapValue amountLo) (mapValue amountHi)
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       .promiseFunctionCallDetached receiver method argsCapacity (arguments.map mapValue)
         (mapValue depositLo) (mapValue depositHi) (mapValue gas)
@@ -226,6 +235,7 @@ private def cfgPayloadValues : OpExt Val → Array Val
   | .logUtf8 _ => #[]
   | .logUtf8Bounded _ message => message
   | .nep297StringData _ _ _ _ data => data
+  | .nep141FtMint owner amountLo amountHi => owner ++ #[amountLo, amountHi]
   | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
       arguments ++ #[depositLo, depositHi, gas]
   | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>

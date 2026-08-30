@@ -10,6 +10,7 @@ def entries : Array Entry := #[
   { name := "Counter", digest := "121a0c8f7e697642" },
   { name := "NearCtx", digest := "8233f27ab39f6133" },
   { name := "NearBytes", digest := "3b15034031dcf0a2" },
+  { name := "NearFungibleTokenEvent", digest := "f722b151ce6ec284" },
   { name := "NearMemory", digest := "830255873ad66d7c" },
   { name := "NearOutput", digest := "feb5dcaddfa46a16" },
   { name := "NearStorage", digest := "2417f585ee0fea89" },

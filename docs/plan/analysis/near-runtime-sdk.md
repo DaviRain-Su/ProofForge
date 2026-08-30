@@ -57,7 +57,7 @@ Authoritative source anchors:
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
 | IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
-| logs/events | `log_utf8`; NEP-297 SDK JSON | static/bounded logs plus one exact bounded string-data envelope complete in wsm-near-log-001/log-dynamic-001/event-001 | standard-specific closed event payloads next; generic JSON absent |
+| logs/events | `log_utf8`; NEP-297 SDK JSON | static/bounded logs, bounded string-data envelope, and exact no-memo NEP-141 `ft_mint` complete | NEP-141 transfer/burn next; generic JSON absent |
 | cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, authenticated self-callback, and closed ordered two-child join complete** in wsm-near-promise-001/002/then/private/transfer/and-001 | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | **static detached/returned lossless-u128 transfer complete** in wsm-near-promise-transfer-001 | Runtime batch/action; never synchronous balance mutation |
 | callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
@@ -165,7 +165,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N7 promises | **detached/returned static batch calls, native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
-| N10 standards | NEP-141/145 building blocks only after storage, events, transfer/call semantics | standard-specific integration suites |
+| N10 standards | exact no-memo NEP-141 `ft_mint` event complete; no token state/method contract | transfer/burn events, then standard-specific integration suites |
 
 ## 6. Near-term task cuts
 
@@ -176,69 +176,72 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 3. **NEAR-LOG:** static literals, arena-backed bounded dynamic UTF-8 spans, and one exact bounded
    NEP-297 string-data envelope are complete in wsm-near-log-001/log-dynamic-001/event-001;
    standard-specific closed payloads follow, while generic JSON remains absent.
-4. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
+4. **NEAR-NEP-141-EVENT:** exact v1.0.0 no-memo `ft_mint` serialization is complete in
+   wsm-near-nep141-event-001. Transfer/burn event records follow; FT balances, supply, methods, and
+   storage management remain separate later slices.
+5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
-5. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
+6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
-6. **NEAR-STORE-VECTOR (wsm-near-vector-001 done):** bounded direct-write UInt64 elements use exact current
+7. **NEAR-STORE-VECTOR (wsm-near-vector-001 done):** bounded direct-write UInt64 elements use exact current
    near-sdk-rs bare-prefix keys and Borsh values. Immediate persistence is explicit; full Rust
    metadata/cache/Drop semantics wait for the `STATE` lifecycle instead of being simulated.
-7. **NEAR-STORE-LOOKUP (wsm-near-lookup-001 done):** default Identity UInt64 map/set keys and values match
+8. **NEAR-STORE-LOOKUP (wsm-near-lookup-001 done):** default Identity UInt64 map/set keys and values match
    current near-sdk-rs durable bytes; direct map timing/raw statuses remain explicitly narrower.
-8. **NEAR-STORE-QUEUE (wsm-near-queue-001 done):** ProofForge-owned bounded FIFO slots reuse the Vector
+9. **NEAR-STORE-QUEUE (wsm-near-queue-001 done):** ProofForge-owned bounded FIFO slots reuse the Vector
    key/value recipe; caller state owns canonical head/length, wraparound, and drained reset while
    pop immediately reclaims the front key. Current near-sdk-rs exports no Queue.
-9. **NEAR-STORE-ITERABLE (wsm-near-iterable-001 done):** bounded Identity UInt64 map/set layouts derive exact
+10. **NEAR-STORE-ITERABLE (wsm-near-iterable-001 done):** bounded Identity UInt64 map/set layouts derive exact
    `P || 'v'` and `P || 'm'` namespaces, preserve replacement order, and repair moved index records
    during fail-closed swap-remove. Immediate persistence does not claim Rust cache/`Drop` timing.
-10. **NEAR-PROMISE-1 (wsm-near-promise-001 done):** closed static receiver/method detached function call with
+11. **NEAR-PROMISE-1 (wsm-near-promise-001 done):** closed static receiver/method detached function call with
     bounded arguments, explicit gas, and lossless u128 deposit. It emits batch create/action without
     `promise_return`; chaining, callbacks, and results remain separate slices.
-11. **NEAR-PROMISE-2 (wsm-near-promise-002 done):** explicit static returned call shares Promise staging,
+12. **NEAR-PROMISE-2 (wsm-near-promise-002 done):** explicit static returned call shares Promise staging,
     persists caller state, and then links the concrete receipt with final `promise_return`. Remote
     success bytes and failure propagate; callback inspection and `promise_then` remain later.
-12. **NEAR-PROMISE-RESULT-1 (wsm-near-promise-result-001 done):** exact callback input count and
+13. **NEAR-PROMISE-RESULT-1 (wsm-near-promise-result-001 done):** exact callback input count and
     bounded status/register reads use a dedicated descriptor, inspect bytes only for status 1,
     expose oversized lengths without copying, and reject views. Genuine callback scenes are covered
-    by the next completed slice; strict UInt64 decoding is covered by task 14.
-13. **NEAR-PROMISE-THEN-1 (wsm-near-promise-then-001 done):** one static child call creates a
+    by the next completed slice; strict UInt64 decoding is covered by task 15.
+14. **NEAR-PROMISE-THEN-1 (wsm-near-promise-then-001 done):** one static child call creates a
     `promise_batch_then` self callback with independent bounded input/deposit/gas, returns the
     callback receipt after state persistence, and exercises genuine success/failure/oversized
     dependency results.
-14. **NEAR-PROMISE-CODEC/PRIVATE-1 (wsm-near-promise-codec/private-001 done):** strict Borsh UInt64
+15. **NEAR-PROMISE-CODEC/PRIVATE-1 (wsm-near-promise-codec/private-001 done):** strict Borsh UInt64
     decoding requires successful exact eight-byte results, and callback bodies authenticate full
     predecessor/current AccountId equality before any dependency read or state write.
-15. **NEAR-PROMISE-TRANSFER-1 (wsm-near-promise-transfer-001 done):** static detached/returned native
+16. **NEAR-PROMISE-TRANSFER-1 (wsm-near-promise-transfer-001 done):** static detached/returned native
     transfers stage exact lossless-u128 amounts through the arena, append the transfer action to a
     concrete batch, distinguish return linkage explicitly, and pin exact sandbox balance deltas and
     synchronous insufficient-balance rollback.
-16. **NEAR-PROMISE-AND-1 (wsm-near-promise-and-001 done):** two ordered static child calls stage
+17. **NEAR-PROMISE-AND-1 (wsm-near-promise-and-001 done):** two ordered static child calls stage
     their concrete indices in one aligned arena span, immediately form `promise_and`, feed that
     joint dependency to one authenticated self callback, and return only the callback receipt.
     Success plus either one-sided failure pin result order and non-short-circuiting callback reads.
-17. **NEAR-INIT-1 (wsm-near-init-001 done):** generated initializers decode arguments, reject the
+18. **NEAR-INIT-1 (wsm-near-init-001 done):** generated initializers decode arguments, reject the
     reserved `STATE` marker or any pre-marker scalar state, persist scalar fields, then write the
     marker. Repeated sandbox initialization fails without changing the first state; Borsh state
     layout, `ignore_state`, and migration/version policy remain absent.
-18. **NEAR-PAYABLE-1 (wsm-near-payable-001 done):** initializers and mutating entries reject either
+19. **NEAR-PAYABLE-1 (wsm-near-payable-001 done):** initializers and mutating entries reject either
     nonzero attached-deposit word before decoding input, while views emit no guard and methods that
     explicitly observe `Context.attachedDeposit` accept the full u128 value. Donation-only payable
     methods are covered by the following explicit policy slice.
-19. **NEAR-ENTRY-POLICY-1 (wsm-near-entry-policy-001 done):** `pf_near_private` and
+20. **NEAR-ENTRY-POLICY-1 (wsm-near-entry-policy-001 done):** `pf_near_private` and
     `pf_near_payable` survive extraction only as NEAR-owned metadata, participate in the canonical
     digest, and generate wrappers in official private → non-payable → input order. Private compares
     the full predecessor/current AccountId and panics with the exact method-specific message;
     explicit payable admits donation-only mutators while payable views fail at lowering.
-20. **NEAR-UNINITIALIZED-1 (wsm-near-uninitialized-001 done):** every ordinary state-consuming
+21. **NEAR-UNINITIALIZED-1 (wsm-near-uninitialized-001 done):** every ordinary state-consuming
     wrapper requires the canonical `STATE` marker after private/non-payable/input handling and
     before scalar field or callback-result reads. Missing state uses exact `PanicOnDefault` text and
     never creates implicit zero state. This is ProofForge's explicit-initializer policy: official
     near-sdk-rs `unwrap_or_default()` also permits non-panicking `Default` implementations.
-21. **NEAR-STATE-ENVELOPE-1 (wsm-near-state-envelope-001 done):** exact
+22. **NEAR-STATE-ENVELOPE-1 (wsm-near-state-envelope-001 done):** exact
     `PFNRST01 || fnv1a64(schema)_le` metadata binds ordered slot name/width/ABI without binding
     executable methods. Entries distinguish missing from malformed/legacy/foreign schemas using a
     dedicated register and fail closed before state/result reads.
-22. **NEAR-MIGRATION-1 (wsm-near-migration-001 done):** an explicitly private, non-payable,
+23. **NEAR-MIGRATION-1 (wsm-near-migration-001 done):** an explicitly private, non-payable,
     zero-argument entry dispatches one declared old schema envelope, forbids implicit current-state
     reads, converts explicit old split keys, persists transformed fields, and advances the current
     envelope last. The sandbox gate performs a genuine Counter V1 → two-field V2 code upgrade.
