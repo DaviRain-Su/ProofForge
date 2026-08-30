@@ -186,27 +186,30 @@ def pause (s : State) : Except Error (State × UInt64) :=
     .error .unauthorized
 
 /-- Minter writes `cap` onto its own card. `0` = unlimited. A nonzero cap
-below current `supp` is a no-op. Persist `s.bal` so the extractor keeps
-a field projection. -/
+below current `supp` is a no-op. Pause-gated. Persist `s.bal` so the
+extractor keeps a field projection. -/
 @[pf_entry]
 def setCap (s : State) (n : UInt64) : Except Error (State × UInt64) :=
   if Access.requireOwner minter then
-    if n = (0 : UInt64) then
-      if Context.storeOwnerLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max then
-        if Context.flushCap n ≤ u64Max then
-          if s.bal ≤ u64Max then
-            .ok ({ bal := s.bal + (0 : UInt64) }, (0 : UInt64))
+    if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
+      if n = (0 : UInt64) then
+        if Context.storeOwnerLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max then
+          if Context.flushCap n ≤ u64Max then
+            if s.bal ≤ u64Max then
+              .ok ({ bal := s.bal + (0 : UInt64) }, (0 : UInt64))
+            else
+              .error .overflow
           else
             .error .overflow
         else
           .error .overflow
-      else
-        .error .overflow
-    else if Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ n then
-      if Context.storeOwnerLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max then
-        if Context.flushCap n ≤ u64Max then
-          if s.bal ≤ u64Max then
-            .ok ({ bal := s.bal + (0 : UInt64) }, (0 : UInt64))
+      else if Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ n then
+        if Context.storeOwnerLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max then
+          if Context.flushCap n ≤ u64Max then
+            if s.bal ≤ u64Max then
+              .ok ({ bal := s.bal + (0 : UInt64) }, (0 : UInt64))
+            else
+              .error .overflow
           else
             .error .overflow
         else
@@ -214,7 +217,7 @@ def setCap (s : State) (n : UInt64) : Except Error (State × UInt64) :=
       else
         .error .overflow
     else
-      .error .overflow
+      .error .paused
   else
     .error .unauthorized
 

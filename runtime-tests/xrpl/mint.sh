@@ -133,6 +133,18 @@ paused_mto="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$paused_mto" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_mto"
 
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"setCap","parameters":["9"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+paused_cap="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$paused_cap" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_cap"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"approve","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" >"$cfg"
+paused_appr="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$paused_appr" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==4, d' <<<"$paused_appr"
+
 printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
   "$RPC" "$OWNER_A" "$contract" >"$cfg"
 bal_a2="$(node "$here/alphanet-rpc.js" slot "$cfg")"
