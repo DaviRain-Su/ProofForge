@@ -23,7 +23,9 @@ stale-register, empty-value, and oversized-result behavior. The first detached P
 static receiver/method literals, bounded arguments, lossless u128 deposit, and explicit gas through
 the batch function-call ABI; explicit returned calls link the concrete receipt. Bounded callback
 result reads preserve nearcore's 0/1/2 status, consult the register only on success, and expose
-oversized lengths without copying. Promise chaining and mutating bounded output stay fail closed.
+oversized lengths without copying. One static self-callback edge uses `promise_batch_then`, keeps
+normal callback arguments separate from dependency results, and returns the callback receipt.
+Promise joins and mutating bounded output stay fail closed.
 
 The family `Wasm.Host.Contract` still describes XRPL's Data-blob import shape.
 NEAR does not instantiate it; `Near.Emit` owns the env import table.

@@ -177,6 +177,16 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
   .ext (.near (.promiseFunctionCallReturned receiver method argsCapacity arguments
     depositLo depositHi gas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallThenReturned
+    (receiver childMethod callbackMethod : String)
+    (childArgsCapacity callbackArgsCapacity : Nat)
+    (childArguments callbackArguments : Array Val)
+    (childDepositLo childDepositHi childGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
+    childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+    childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas))
+
 @[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
   .ext (.near (.promiseResultRead capacity index))
 
@@ -508,6 +518,7 @@ def hasNearEffect (ops : Array Op) : Bool :=
     | .ext (.near (.logUtf8 _))
     | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
+    | .ext (.near (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _))
     | .ext (.near (.transientBuffer64Begin _))
     | .ext (.near (.transientBuffer64Set _ _ _))
     | .ext (.near (.transientBuffer64Finish _))

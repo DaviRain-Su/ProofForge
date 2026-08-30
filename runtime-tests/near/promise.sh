@@ -114,6 +114,6 @@ export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
-echo "near-local-promise: RPC ready; running detached + returned Promise scenes" >&2
+echo "near-local-promise: RPC ready; running static calls + self-callback scenes" >&2
 "$python" runtime-tests/near/promise.py
 echo "near-local-promise: ok"

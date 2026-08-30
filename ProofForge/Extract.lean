@@ -585,6 +585,16 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                 .promiseFunctionCallReturned receiver method argsCapacity
                   (arguments.map (flipVal fuel')) (flipVal fuel' depositLo)
                   (flipVal fuel' depositHi) (flipVal fuel' gas)
+            | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+                childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+                childDepositLo childDepositHi childGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+                  childArgsCapacity callbackArgsCapacity (childArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel')) (flipVal fuel' childDepositLo)
+                  (flipVal fuel' childDepositHi) (flipVal fuel' childGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
             | .promiseResultRead capacity index =>
                 .promiseResultRead capacity (flipVal fuel' index)
             | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity

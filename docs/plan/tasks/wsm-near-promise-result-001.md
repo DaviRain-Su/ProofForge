@@ -28,7 +28,7 @@ execution does not produce `NotReady`. Statuses 0/2 use neutral `length = 0`, `f
 readable bytes; callers must branch on status before interpreting metadata.
 
 Promise chaining (`promise_then`/batch-then), joins, typed Borsh result decoding, private callback
-entry guards, and native transfer remain outside this slice.
+entry guards, and native transfer remain outside this slice itself.
 
 ## Verification
 
@@ -43,6 +43,7 @@ entry guards, and native transfer remain outside this slice.
 
 ## Next
 
-Add one static `promise_then`/batch-then callback edge with explicit callback gas, static self
-receiver/method, bounded arguments, and a genuine near-sandbox success/failure result matrix over
-this substrate. Then add typed bounded Borsh result decoding and private self-callback guards.
+One static `promise_batch_then` self-callback edge and its genuine near-sandbox success/failure/
+oversized matrix are complete in
+[wsm-near-promise-then-001](wsm-near-promise-then-001.md). Add typed bounded Borsh result decoding
+and private self-callback guards next.

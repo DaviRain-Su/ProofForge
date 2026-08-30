@@ -2,7 +2,7 @@ import Examples.NearPromise
 import Lean
 import ProofForge
 
-/-! Static detached/returned Promise extraction, projection, and WAT invariants. -/
+/-! Static detached/returned Promise and one self-callback edge extraction/WAT invariants. -/
 
 namespace Tests.NearPromiseSpec
 
@@ -29,6 +29,10 @@ private partial def promiseSteps : Array ProofForge.Extract.IR.Op → Array Stri
           #[s!"detached.{receiver}.{method}.{capacity}.{arguments.size}"]
       | .ext (.near (.promiseFunctionCallReturned receiver method capacity arguments _ _ _)) =>
           #[s!"returned.{receiver}.{method}.{capacity}.{arguments.size}"]
+      | .ext (.near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
+          childCapacity callbackCapacity childArguments callbackArguments _ _ _ _ _ _)) =>
+          #[s!"then.{receiver}.{childMethod}.{callbackMethod}." ++
+            s!"{childCapacity}.{callbackCapacity}.{childArguments.size}.{callbackArguments.size}"]
       | .ite _ _ _ thn els => promiseSteps thn ++ promiseSteps els
       | .forBody _ body => promiseSteps body
       | _ => #[]
@@ -44,10 +48,16 @@ elab "#pf_near_promise_check" : command => do
   let detachedMissing := "detached.receiver.test.near.missing.8.9"
   let returnedRecord := "returned.receiver.test.near.recordValue.8.9"
   let returnedMissing := "returned.receiver.test.near.missing.8.9"
-  unless steps.size == 7 && (steps.filter (· == detachedRecord)).size == 4 &&
+  let thenSuccess := "then.receiver.test.near.recordValue.callbackSuccess.8.8.9.9"
+  let thenFailure := "then.receiver.test.near.missing.callbackFailure.8.8.9.9"
+  let thenOversized := "then.receiver.test.near.recordValue.callbackOversized.8.8.9.9"
+  unless steps.size == 10 && (steps.filter (· == detachedRecord)).size == 4 &&
       (steps.filter (· == detachedMissing)).size == 1 &&
       (steps.filter (· == returnedRecord)).size == 1 &&
-      (steps.filter (· == returnedMissing)).size == 1 do
+      (steps.filter (· == returnedMissing)).size == 1 &&
+      (steps.filter (· == thenSuccess)).size == 1 &&
+      (steps.filter (· == thenFailure)).size == 1 &&
+      (steps.filter (· == thenOversized)).size == 1 do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
   let program ←
     match IR.fromExtracted source with
@@ -81,6 +91,39 @@ elab "#pf_near_promise_check" : command => do
   | _ => throwError "returned Promise method must schedule exactly one function-call action"
   if returnedWat.contains "(call $pf_value_return" then
     throwError "returned Promise method must not overwrite promise_return with value_return"
+  if returnedWat.contains "promise_batch_then" || returnedWat.contains "current_account_id" then
+    throwError "plain returned Promise unexpectedly retained callback-only imports"
+  let sendThenSuccess ← match program.entries.find? (·.ixName == "sendThenSuccess") with
+    | some method => pure method
+    | none => throwError "missing sendThenSuccess entry"
+  let thenWat ← match Emit.emit { program with entries := #[sendThenSuccess] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  match thenWat.splitOn "(call $pf_promise_batch_then" with
+  | [beforeThen, afterThen] =>
+      unless beforeThen.contains "(call $pf_promise_batch_create" &&
+          beforeThen.contains "(call $pf_promise_batch_action_function_call" do
+        throwError "callback dependency was created before the child function-call action"
+      match afterThen.splitOn "(call $pf_promise_batch_action_function_call" with
+      | [_beforeCallbackAction, afterCallbackAction] =>
+          match afterCallbackAction.splitOn "(call $pf_promise_return" with
+          | [beforeReturn, _afterReturn] =>
+              unless beforeReturn.contains "(call $pf_storage_write" do
+                throwError "callback Promise was returned before caller-state persistence"
+          | _ => throwError "callback chain must return exactly one Promise"
+      | _ => throwError "callback chain must append exactly one callback action after then"
+  | _ => throwError "callback chain must call promise_batch_then exactly once"
+  for anchor in #[
+      "(import \"env\" \"promise_batch_then\" " ++
+        "(func $pf_promise_batch_then (param i64 i64 i64) (result i64)))",
+      "(import \"env\" \"current_account_id\" " ++
+        "(func $pf_current_account_id (param i64)))",
+      "(call $pf_current_account_id (i64.const 3))",
+      "(call $pf_read_register (i64.const 3) (i64.const 128))",
+      "(call $pf_promise_batch_then",
+      "(local.get $pf_self_len) (i64.const 128)" ] do
+    unless thenWat.contains anchor do
+      throwError s!"NEAR callback WAT missing {anchor}\n{thenWat}"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat
@@ -93,11 +136,15 @@ elab "#pf_near_promise_check" : command => do
     "(func (export \"sendMissing\")",
     "(func (export \"sendReturned\")",
     "(func (export \"sendReturnedMissing\")",
+    "(func (export \"sendThenSuccess\")",
+    "(func (export \"sendThenMissing\")",
+    "(func (export \"sendThenOversized\")",
     "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
     "(i64.store (i32.wrap_i64",
     "(i32.const 8))",
     "(call $pf_promise_batch_create (i64.const 18) (i64.const 8192))",
     "(call $pf_promise_batch_action_function_call",
+    "(call $pf_promise_batch_then",
     "(call $pf_promise_return",
     "(i64.const 6) (i64.const 8210)",
     "(i64.const 7) (i64.const 8216)",
@@ -121,6 +168,13 @@ elab "#pf_near_promise_check" : command => do
       unless reason.contains "view cannot create a promise" do
         throwError s!"wrong returned-view rejection: {reason}"
   | .ok _ => throwError "returned Promise call was accepted in a view"
+  let viewThen := { source with methods := source.methods.map fun method =>
+    if method.ixName == "sendThenSuccess" then { method with kind := .get } else method }
+  match IR.fromExtracted viewThen >>= Emit.emit with
+  | .error reason =>
+      unless reason.contains "view cannot create a promise" do
+        throwError s!"wrong callback-view rejection: {reason}"
+  | .ok _ => throwError "callback Promise chain was accepted in a view"
   let doubleReturned := { source with methods := source.methods.map fun method =>
     if method.ixName == "sendReturned" then
       { method with ops := method.ops.flatMap fun op =>

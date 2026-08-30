@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detached and returned static function-call Promise scenes against near-sandbox."""
+"""Static function-call and one self-callback Promise edge against near-sandbox."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def main() -> None:
     wasm = Path(_require("PF_NEAR_WASM"))
     client = NearClient(rpc, home)
 
-    print("=== suite: NearPromise (detached + returned static function calls) ===")
+    print("=== suite: NearPromise (static calls + self callback) ===")
     client.deploy(wasm)
     client.call("initialize", NearClient.encode_u64_le(0))
 
@@ -96,17 +96,49 @@ def main() -> None:
         raise AssertionError("absent returned method unexpectedly changed receiver state")
     print("near-promise: returned remote failure propagated after caller state committed")
 
-    _call_u64(client, "sendThenFail", 111, expect_success=False)
-    if client.view_u64("get") != 144:
-        raise AssertionError("caller panic did not roll back caller state")
+    then_success = _call_u64(client, "sendThenSuccess", 601)
+    then_success_value = NearClient.success_value_bytes(then_success)
+    if then_success_value != NearClient.encode_u64_le(77):
+        raise AssertionError(
+            f"successful callback expected argument 77, got {then_success_value!r}"
+        )
+    if client.view_u64("get") != 77:
+        raise AssertionError("successful callback did not observe and commit the success branch")
     if client.view_u64_on(RECEIVER, "get") != 123:
+        raise AssertionError("successful callback child did not return the expected value 123")
+    print("near-promise: self callback observed exact successful child bytes and separate input")
+
+    # The transaction's final value is successful, but the RPC result still contains the expected
+    # failed child receipt, so the harness must permit a receipt-level failure here.
+    then_failure = _call_u64(client, "sendThenMissing", 602, expect_success=False)
+    if NearClient.success_value_bytes(then_failure) != NearClient.encode_u64_le(78):
+        raise AssertionError("failed-child callback did not return marker 78")
+    if client.view_u64("get") != 78:
+        raise AssertionError("failed child did not run the callback's status-2 branch")
+    if client.view_u64_on(RECEIVER, "get") != 123:
+        raise AssertionError("missing child method unexpectedly changed receiver state")
+    print("near-promise: failed child still ran callback with status 2 and no bytes")
+
+    then_oversized = _call_u64(client, "sendThenOversized", 603)
+    if NearClient.success_value_bytes(then_oversized) != NearClient.encode_u64_le(79):
+        raise AssertionError("oversized-result callback did not return marker 79")
+    if client.view_u64("get") != 79:
+        raise AssertionError("callback did not observe successful length 8 as oversized for bound 4")
+    if client.view_u64_on(RECEIVER, "get") != 456:
+        raise AssertionError("oversized-result child did not execute with value 456")
+    print("near-promise: bounded callback kept length 8/fits false without truncation")
+
+    _call_u64(client, "sendThenFail", 111, expect_success=False)
+    if client.view_u64("get") != 79:
+        raise AssertionError("caller panic did not roll back caller state")
+    if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("caller panic did not discard its staged outgoing receipt")
     print("near-promise: caller panic discarded staged receipt and rolled back")
 
     _call_u64(client, "sendTooMuch", 222, expect_success=False)
-    if client.view_u64("get") != 144:
+    if client.view_u64("get") != 79:
         raise AssertionError("synchronous deposit failure did not roll back caller state")
-    if client.view_u64_on(RECEIVER, "get") != 123:
+    if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("synchronous deposit failure emitted an outgoing receipt")
     print("near-promise: insufficient balance failed synchronously before commit")
     print("suite NearPromise: PASS")

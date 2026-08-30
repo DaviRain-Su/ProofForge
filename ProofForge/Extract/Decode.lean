@@ -5629,6 +5629,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
@@ -5639,6 +5640,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.storageHasKey ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
@@ -5662,6 +5664,41 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
       let e := strip e
       if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
         (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned &&
+          e.getAppArgs.size ≥ 11 then
+        let args := e.getAppArgs
+        let childDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 11]!,
+            staticNatVal? env args[args.size - 10]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) childDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) childDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some childArgsCapacity, some callbackArgsCapacity,
+            some receiver, some childMethod, some callbackMethod,
+            some childDepositLo, some childDepositHi, some childGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid childMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid childArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env childArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some childArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallThenReturned receiver childMethod callbackMethod
+                    childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+                    childDepositLo childDepositHi childGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned) &&
           e.getAppArgs.size ≥ 6 then
@@ -5710,6 +5747,36 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                     depositLo depositHi gas
             else none
         | _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned &&
+          e.getAppArgs.size ≥ 13 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 13]!,
+            staticNatVal? env args[args.size - 12]!,
+            staticString? env 64 args[args.size - 11]!,
+            staticString? env 64 args[args.size - 10]!,
+            staticString? env 64 args[args.size - 9]!,
+            val env args[args.size - 6]!, val env args[args.size - 5]!,
+            val env args[args.size - 4]!, val env args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some childArgsCapacity, some callbackArgsCapacity,
+            some receiver, some childMethod, some callbackMethod,
+            some childDepositLo, some childDepositHi, some childGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid childMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid childArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env childArgsCapacity args[args.size - 8]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 7]! with
+              | some childArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallThenReturned receiver childMethod callbackMethod
+                    childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+                    childDepositLo childDepositHi childGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read) &&
           e.getAppArgs.size ≥ 2 then

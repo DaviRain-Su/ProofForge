@@ -143,6 +143,31 @@ outcome. -/
   let _ := gas
   0
 
+/-- Schedule one static child call followed by one static callback on the current contract, then
+forward the callback's eventual result. The child result is available to the callback only through
+`promiseResultsCount` / `promiseResultRead`; callback arguments remain an independent input frame. -/
+@[irreducible] def promiseFunctionCallThenReturned
+    (childArgsCapacity callbackArgsCapacity : Nat)
+    (receiver childMethod callbackMethod : String)
+    (childArguments : ProofForge.Core.Value.BoundedBytes childArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (childDepositLo childDepositHi childGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := childArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := receiver
+  let _ := childMethod
+  let _ := callbackMethod
+  let _ := childArguments
+  let _ := callbackArguments
+  let _ := childDepositLo
+  let _ := childDepositHi
+  let _ := childGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
 /-!
 Callback-result foundation. `promiseResultsCount` is immutable invocation context. Every
 `promiseResultRead` replaces one invocation-local bounded descriptor. Status is the exact nearcore

@@ -17,8 +17,9 @@ and roll back the caller.
 
 `ResultBuffer` provides bounded callback-result observation. Result count and reads are prohibited
 by nearcore in views. `read` preserves nearcore's 0 not-ready / 1 successful / 2 failed status;
-only success has bytes. An out-of-range result index aborts. Chaining, typed result decoding, joins,
-and transfer actions remain outside this slice.
+only success has bytes. An out-of-range result index aborts. `callThenReturned` adds one static
+self-callback edge; its explicit callback arguments are independent of the child result channel.
+Typed result decoding, joins, and transfer actions remain outside this slice.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Promises
@@ -40,6 +41,21 @@ literals accepted by the NEAR target. -/
     (deposit : Runtime.NearToken) (gas : UInt64) : UInt64 :=
   Runtime.promiseFunctionCallReturned argsCapacity receiver method arguments
     deposit.w0 deposit.w1 gas
+
+/-- Schedule one child call, then one callback on the current contract, and forward the callback's
+eventual result. Both methods are static literals; the two bounded argument frames, deposits, and
+gas budgets are independent. The callback runs after either child success or child failure. -/
+@[pf_inline] def callThenReturned {childArgsCapacity callbackArgsCapacity : Nat}
+    (receiver childMethod : String)
+    (childArguments : BoundedBytes childArgsCapacity)
+    (childDeposit : Runtime.NearToken) (childGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallThenReturned childArgsCapacity callbackArgsCapacity
+    receiver childMethod callbackMethod childArguments callbackArguments
+    childDeposit.w0 childDeposit.w1 childGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
 
 /-- Number of callback inputs for this invocation. Ordinary calls report zero. -/
 @[pf_inline] def resultsCount : UInt64 :=

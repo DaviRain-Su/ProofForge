@@ -43,6 +43,15 @@ private def projectOpExt
           return .promiseFunctionCallReturned receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
             (← _projectVal depositHi) (← _projectVal gas)
+      | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+          childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+          childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+          return .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+            childArgsCapacity callbackArgsCapacity (← childArguments.mapM _projectVal)
+            (← callbackArguments.mapM _projectVal) (← _projectVal childDepositLo)
+            (← _projectVal childDepositHi) (← _projectVal childGas)
+            (← _projectVal callbackDepositLo) (← _projectVal callbackDepositHi)
+            (← _projectVal callbackGas)
       | .promiseResultRead capacity index =>
           return .promiseResultRead capacity (← _projectVal index)
       | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
@@ -126,6 +135,19 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
         s!"{argsCapacity}({canonValues arguments};" ++
         s!"{Wasm.IR.valCanon extValCanon depositLo}," ++
         s!"{Wasm.IR.valCanon extValCanon depositHi},{Wasm.IR.valCanon extValCanon gas})"
+  | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+      childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+      childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+      s!"npromise.then.returned:{receiver.toUTF8.size}:{receiver}:" ++
+        s!"{childMethod.toUTF8.size}:{childMethod}:{callbackMethod.toUTF8.size}:{callbackMethod}." ++
+        s!"{childArgsCapacity}.{callbackArgsCapacity}(" ++
+        s!"{canonValues childArguments};{canonValues callbackArguments};" ++
+        s!"{Wasm.IR.valCanon extValCanon childDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon childDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon childGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon callbackDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon callbackDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon callbackGas})"
   | .promiseResultRead capacity index =>
       s!"npromise.result.read.{capacity}({Wasm.IR.valCanon extValCanon index})"
   | .transientBuffer64Begin capacity => s!"ntb64.begin.{capacity}"
@@ -162,6 +184,15 @@ private def rewritePayload
       return .promiseFunctionCallReturned receiver method argsCapacity
         (← arguments.mapM rewriteValue) (← rewriteValue depositLo)
         (← rewriteValue depositHi) (← rewriteValue gas)
+  | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+      childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+      childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+      return .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+        childArgsCapacity callbackArgsCapacity (← childArguments.mapM rewriteValue)
+        (← callbackArguments.mapM rewriteValue) (← rewriteValue childDepositLo)
+        (← rewriteValue childDepositHi) (← rewriteValue childGas)
+        (← rewriteValue callbackDepositLo) (← rewriteValue callbackDepositHi)
+        (← rewriteValue callbackGas)
   | .promiseResultRead capacity index =>
       return .promiseResultRead capacity (← rewriteValue index)
   | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)

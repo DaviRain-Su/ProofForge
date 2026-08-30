@@ -8,8 +8,8 @@ import ProofForge.Wasm.Near.Codec
 
 Value/effect extensions owned by the NEAR Protocol chain. v0 admits scalar
 context reads, lossless u128 token values, lossless 64-byte account-id leaves,
-invocation-memory operations, bounded raw storage, static Promise calls, and bounded callback
-result observation. Promise chaining/joins and hashing stay absent.
+invocation-memory operations, bounded raw storage, static Promise calls, one static self-callback
+edge, and bounded callback-result observation. Promise joins and hashing stay absent.
 `reserved` is rejected by `wellFormed`.
 -/
 
@@ -67,6 +67,11 @@ inductive OpExt (V : Type) where
       (arguments : Array V) (depositLo depositHi gas : V)
   | promiseFunctionCallReturned (receiver method : String) (argsCapacity : Nat)
       (arguments : Array V) (depositLo depositHi gas : V)
+  | promiseFunctionCallThenReturned (receiver childMethod callbackMethod : String)
+      (childArgsCapacity callbackArgsCapacity : Nat)
+      (childArguments callbackArguments : Array V)
+      (childDepositLo childDepositHi childGas : V)
+      (callbackDepositLo callbackDepositHi callbackGas : V)
   | promiseResultRead (capacity : Nat) (index : V)
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
@@ -98,6 +103,17 @@ def OpExt.wellFormed : OpExt Val → Bool
         storageFrameWellFormed argsCapacity arguments &&
         depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
         gas.wellFormed ValKind.arity
+  | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+      childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+      childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+      Codec.accountIdLiteralValid receiver && Codec.promiseMethodLiteralValid childMethod &&
+        Codec.promiseMethodLiteralValid callbackMethod &&
+        storageFrameWellFormed childArgsCapacity childArguments &&
+        storageFrameWellFormed callbackArgsCapacity callbackArguments &&
+        childDepositLo.wellFormed ValKind.arity &&
+        childDepositHi.wellFormed ValKind.arity && childGas.wellFormed ValKind.arity &&
+        callbackDepositLo.wellFormed ValKind.arity &&
+        callbackDepositHi.wellFormed ValKind.arity && callbackGas.wellFormed ValKind.arity
   | .promiseResultRead capacity index =>
       Codec.storageCapacityValid capacity && index.wellFormed ValKind.arity
   | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
@@ -125,6 +141,14 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
       .promiseFunctionCallReturned receiver method argsCapacity (arguments.map mapValue)
         (mapValue depositLo) (mapValue depositHi) (mapValue gas)
+  | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+      childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+      childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+      .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+        childArgsCapacity callbackArgsCapacity (childArguments.map mapValue)
+        (callbackArguments.map mapValue) (mapValue childDepositLo) (mapValue childDepositHi)
+        (mapValue childGas) (mapValue callbackDepositLo) (mapValue callbackDepositHi)
+        (mapValue callbackGas)
   | .promiseResultRead capacity index => .promiseResultRead capacity (mapValue index)
   | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
   | .transientBuffer64Set capacity index value =>
@@ -146,6 +170,11 @@ private def cfgPayloadValues : OpExt Val → Array Val
       arguments ++ #[depositLo, depositHi, gas]
   | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
       arguments ++ #[depositLo, depositHi, gas]
+  | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
+      childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+      childArguments ++ callbackArguments ++
+        #[childDepositLo, childDepositHi, childGas,
+          callbackDepositLo, callbackDepositHi, callbackGas]
   | .promiseResultRead _ index => #[index]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
   | .transientBuffer64Set _ index value => #[index, value]

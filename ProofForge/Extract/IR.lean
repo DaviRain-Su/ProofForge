@@ -75,6 +75,14 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
       | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallReturned receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
+      | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+          childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+          childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+          .near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
+            childArgsCapacity callbackArgsCapacity (childArguments.map mapValue)
+            (callbackArguments.map mapValue) (mapValue childDepositLo) (mapValue childDepositHi)
+            (mapValue childGas) (mapValue callbackDepositLo) (mapValue callbackDepositHi)
+            (mapValue callbackGas))
       | .promiseResultRead capacity index =>
           .near (.promiseResultRead capacity (mapValue index))
       | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
@@ -103,6 +111,11 @@ def OpExt.values : OpExt Val → Array Val
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
+      | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
+          childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+          childArguments ++ callbackArguments ++
+            #[childDepositLo, childDepositHi, childGas,
+              callbackDepositLo, callbackDepositHi, callbackGas]
       | .promiseResultRead _ index => #[index]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
       | .transientBuffer64Set _ index value => #[index, value]
@@ -164,6 +177,22 @@ def OpExt.wellFormed : OpExt Val → Bool
             arguments.all (·.wellFormed ValKind.arity) &&
             depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
             gas.wellFormed ValKind.arity
+      | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+          childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+          childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+          Wasm.Near.Codec.accountIdLiteralValid receiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid childMethod &&
+            Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+            Wasm.Near.Codec.storageCapacityValid childArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity &&
+            childArguments.size == childArgsCapacity + 1 &&
+            callbackArguments.size == callbackArgsCapacity + 1 &&
+            childArguments.all (·.wellFormed ValKind.arity) &&
+            callbackArguments.all (·.wellFormed ValKind.arity) &&
+            childDepositLo.wellFormed ValKind.arity &&
+            childDepositHi.wellFormed ValKind.arity && childGas.wellFormed ValKind.arity &&
+            callbackDepositLo.wellFormed ValKind.arity &&
+            callbackDepositHi.wellFormed ValKind.arity && callbackGas.wellFormed ValKind.arity
       | .promiseResultRead capacity index =>
           Wasm.Near.Codec.storageCapacityValid capacity &&
             index.wellFormed ValKind.arity

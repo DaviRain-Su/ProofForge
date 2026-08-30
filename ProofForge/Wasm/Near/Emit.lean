@@ -108,6 +108,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.logUtf8 message) => #[message]
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
+      | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseResultRead _ _) => #[]
       | .ext (.transientBuffer64Begin _)
       | .ext (.transientBuffer64Set _ _ _)
@@ -143,6 +144,8 @@ private partial def promiseLiteralsOfOps
     literals ++ match op with
       | .ext (.promiseFunctionCallDetached receiver method _ _ _ _ _) => #[receiver, method]
       | .ext (.promiseFunctionCallReturned receiver method _ _ _ _ _) => #[receiver, method]
+      | .ext (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
+          _ _ _ _ _ _ _ _ _ _) => #[receiver, childMethod, callbackMethod]
       | .ite _ _ _ thn els => promiseLiteralsOfOps thn ++ promiseLiteralsOfOps els
       | .forBody _ body => promiseLiteralsOfOps body
       | _ => #[]
@@ -157,12 +160,24 @@ private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun op =>
     match op with
     | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsReturnPromise thn || opsReturnPromise els
     | .forBody _ body => opsReturnPromise body
     | _ => false
 
 private def programReturnsPromise (p : Program ValKind OpExt) : Bool :=
   opsReturnPromise p.initializer.ops || p.entries.any (opsReturnPromise ·.ops)
+
+private partial def opsChainPromise (ops : Array (Op ValKind OpExt)) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ite _ _ _ thn els => opsChainPromise thn || opsChainPromise els
+    | .forBody _ body => opsChainPromise body
+    | _ => false
+
+private def programChainsPromise (p : Program ValKind OpExt) : Bool :=
+  opsChainPromise p.initializer.ops || p.entries.any (opsChainPromise ·.ops)
 
 private partial def opsReadPromiseResult (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun op =>
@@ -573,6 +588,38 @@ private def stagePromiseCall (p : Program ValKind OpExt) (st : EState)
   ]
   return { lines, promiseLocal, st := st' }
 
+/-- Stage one static callback action dependent on `childPromiseLocal`. The callback receiver is the
+current contract account copied by the entry prelude; its normal arguments remain independent of
+the dependency result channel. -/
+private def stagePromiseThen (p : Program ValKind OpExt) (st : EState)
+    (childPromiseLocal callbackMethod : String)
+    (argsCapacity : Nat) (arguments : Array (Val ValKind))
+    (depositLo depositHi gas : Val ValKind) (level : Nat) : Except String StagedPromiseCall := do
+  let (methodOff, methodLen) ← promiseLiteralOf p callbackMethod
+  let staged ← stageStorageFrame st argsCapacity arguments level
+  let depositLo ← renderVal staged.st depositLo
+  let depositHi ← renderVal staged.st depositHi
+  let gas ← renderVal staged.st gas
+  let depositPtrLocal := localOfTemp staged.st.fresh
+  let callbackPromiseLocal := localOfTemp (staged.st.fresh + 1)
+  let st' := { staged.st with fresh := staged.st.fresh + 2 }
+  let lines := staged.lines ++ #[
+    indent level ("(local.set " ++ depositPtrLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
+    indent level ("(i64.store (i32.wrap_i64 (local.get " ++ depositPtrLocal ++ ")) " ++
+      depositLo ++ ")"),
+    indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
+      ")) (i32.const 8)) " ++ depositHi ++ ")"),
+    indent level ("(local.set " ++ callbackPromiseLocal ++
+      " (call $pf_promise_batch_then (local.get " ++ childPromiseLocal ++
+      ") (local.get $pf_self_len) (i64.const " ++ toString currentAccountOff ++ ")))"),
+    indent level ("(call $pf_promise_batch_action_function_call (local.get " ++
+      callbackPromiseLocal ++ ") (i64.const " ++ toString methodLen ++ ") (i64.const " ++
+      toString methodOff ++ ") " ++ staged.length ++ " " ++ staged.pointer ++
+      " (local.get " ++ depositPtrLocal ++ ") " ++ gas ++ ")")
+  ]
+  return { lines, promiseLocal := callbackPromiseLocal, st := st' }
+
 private def resetStorageResult (capacity level : Nat) : Array String := #[
   indent level "(global.set $pf_storage_result_active (i32.const 1))",
   indent level ("(global.set $pf_storage_result_capacity (i64.const " ++
@@ -786,6 +833,23 @@ private partial def emitRegion (p : Program ValKind OpExt)
           lines := staged.lines ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
+        childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+        childDepositLo childDepositHi childGas
+        callbackDepositLo callbackDepositHi callbackGas) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        if st.pendingPromiseReturn.isSome then
+          throw "extract/unsupported: near method cannot return more than one promise"
+        let child ← stagePromiseCall p st receiver childMethod childArgsCapacity childArguments
+          childDepositLo childDepositHi childGas level
+        let callback ← stagePromiseThen p child.st child.promiseLocal callbackMethod
+          callbackArgsCapacity callbackArguments callbackDepositLo callbackDepositHi callbackGas level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { callback.st with pendingPromiseReturn := some callback.promiseLocal }
+        return {
+          lines := child.lines ++ callback.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseResultRead capacity index) =>
         if view then throw "extract/unsupported: near view cannot read promise results"
         let index ← renderVal st index
@@ -898,6 +962,11 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
+      | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
+          childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
+          childArguments.any valHas || callbackArguments.any valHas ||
+            valHas childDepositLo || valHas childDepositHi || valHas childGas ||
+            valHas callbackDepositLo || valHas callbackDepositHi || valHas callbackGas
       | .promiseResultRead _ index => valHas index
       | .transientBuffer64Set _ index value => valHas index || valHas value
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key.any valHas
@@ -926,6 +995,9 @@ private partial def sourceLocalCount (ops : Array (Op ValKind OpExt)) : Nat :=
 
 private def methodUses (kind : ValKind) (method : Method ValKind OpExt) : Bool :=
   method.ops.any (usesKind kind)
+
+private def methodChainsPromise (method : Method ValKind OpExt) : Bool :=
+  opsChainPromise method.ops
 
 private def predecessorKinds : Array ValKind := #[
   .predecessor, .predecessorLen, .predecessorW1, .predecessorW2,
@@ -980,6 +1052,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.storageHasKey _ _ _) => true
   | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
+  | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseResultRead _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
@@ -1064,6 +1137,19 @@ private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level
   if methodUsesAny currentAccountKinds method then
     lines := lines ++ loadAccountId "$pf_current_account_id" "$pf_self_len"
       3 currentAccountOff level currentAccountWordLocal
+  else if methodChainsPromise method then
+    lines := lines ++ #[
+      indent level "(call $pf_current_account_id (i64.const 3))",
+      indent level "(local.set $pf_self_len (call $pf_register_len (i64.const 3)) )",
+      indent level "(if (i64.gt_u (local.get $pf_self_len) (i64.const 64))",
+      indent (level + 2) "(then",
+      indent (level + 4) ("(call $pf_panic_utf8 (i64.const 10) (i64.const " ++
+        toString panicAccountIdOff ++ "))"),
+      indent (level + 2) "))"
+    ] ++ clearAccountBuffer currentAccountOff level ++ #[
+      indent level ("(call $pf_read_register (i64.const 3) (i64.const " ++
+        toString currentAccountOff ++ "))")
+    ]
   return lines
 
 private def inputPlanOf (method : Method ValKind OpExt) :
@@ -1202,8 +1288,9 @@ private def renderFn (p : Program ValKind OpExt)
   if methodUsesAny accountBalanceKinds method then
     lines := lines.push "    (local $pf_bal i64)"
     lines := lines.push "    (local $pf_bal_hi i64)"
-  if methodUsesAny currentAccountKinds method then
+  if methodUsesAny currentAccountKinds method || methodChainsPromise method then
     lines := lines.push "    (local $pf_self_len i64)"
+  if methodUsesAny currentAccountKinds method then
     for i in List.range 8 do
       lines := lines.push ("    (local " ++ currentAccountWordLocal i ++ " i64)")
   for slot in p.slots do
@@ -1523,6 +1610,9 @@ def emit (p : IR.Program) : Except String String := do
       "  (import \"env\" \"promise_batch_create\" (func $pf_promise_batch_create (param i64 i64) (result i64)))"
     lines := lines.push
       "  (import \"env\" \"promise_batch_action_function_call\" (func $pf_promise_batch_action_function_call (param i64 i64 i64 i64 i64 i64 i64)))"
+  if programChainsPromise p then
+    lines := lines.push
+      "  (import \"env\" \"promise_batch_then\" (func $pf_promise_batch_then (param i64 i64 i64) (result i64)))"
   if programReturnsPromise p then
     lines := lines.push
       "  (import \"env\" \"promise_return\" (func $pf_promise_return (param i64)))"
@@ -1547,7 +1637,7 @@ def emit (p : IR.Program) : Except String String := do
   if accountBalanceKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"account_balance\" (func $pf_account_balance (param i64)))"
-  if currentAccountKinds.any (programUses · p) then
+  if currentAccountKinds.any (programUses · p) || programChainsPromise p then
     lines := lines.push
       "  (import \"env\" \"current_account_id\" (func $pf_current_account_id (param i64)))"
   lines := lines.push "  (memory (export \"memory\") 1)"

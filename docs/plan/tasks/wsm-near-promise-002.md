@@ -26,7 +26,7 @@ failure. State committed by the already-successful caller receipt remains commit
 child fails.
 
 Promise chaining (`promise_then`), callbacks/result inspection, joins, native transfer, dynamic
-receiver/method values, and dynamic unbounded arguments remain outside this slice.
+receiver/method values, and dynamic unbounded arguments remain outside this slice itself.
 
 ## Verification
 
@@ -41,6 +41,6 @@ receiver/method values, and dynamic unbounded arguments remain outside this slic
 ## Next
 
 Bounded callback result count/status/read primitives are complete in
-[wsm-near-promise-result-001](wsm-near-promise-result-001.md). Introduce `promise_then` next so
-genuine callback success/failure/oversized-result scenes exercise that independently tested
-substrate before typed decoding and private self-callback policy are added.
+[wsm-near-promise-result-001](wsm-near-promise-result-001.md), and one static self-callback edge is
+complete in [wsm-near-promise-then-001](wsm-near-promise-then-001.md). Typed result decoding and
+private self-callback policy follow.
