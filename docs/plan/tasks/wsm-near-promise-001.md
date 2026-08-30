@@ -41,6 +41,6 @@ values, and dynamic unbounded arguments are outside this slice.
 
 ## Next
 
-Add an explicit returned/forwarded static function call using `promise_return`. Keep callback result
-inspection and `promise_then` in a subsequent slice so forwarding semantics remain independently
-testable.
+[wsm-near-promise-002](wsm-near-promise-002.md) adds the explicit returned/forwarded static call
+using `promise_return`. Callback result inspection and `promise_then` remain subsequent slices so
+forwarding semantics stay independently testable.

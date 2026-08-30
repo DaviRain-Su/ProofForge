@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Engineering local-node gate for detached static cross-contract calls.
+# Engineering local-node gate for detached and returned static cross-contract calls.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -114,6 +114,6 @@ export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
-echo "near-local-promise: RPC ready; running detached Promise scenes" >&2
+echo "near-local-promise: RPC ready; running detached + returned Promise scenes" >&2
 "$python" runtime-tests/near/promise.py
 echo "near-local-promise: ok"

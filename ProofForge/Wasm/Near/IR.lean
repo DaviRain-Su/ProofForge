@@ -39,6 +39,10 @@ private def projectOpExt
           return .promiseFunctionCallDetached receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
             (← _projectVal depositHi) (← _projectVal gas)
+      | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
+          return .promiseFunctionCallReturned receiver method argsCapacity
+            (← arguments.mapM _projectVal) (← _projectVal depositLo)
+            (← _projectVal depositHi) (← _projectVal gas)
       | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
       | .transientBuffer64Set capacity index value =>
           return .transientBuffer64Set capacity (← _projectVal index) (← _projectVal value)
@@ -110,6 +114,11 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
         s!"{argsCapacity}({canonValues arguments};" ++
         s!"{Wasm.IR.valCanon extValCanon depositLo}," ++
         s!"{Wasm.IR.valCanon extValCanon depositHi},{Wasm.IR.valCanon extValCanon gas})"
+  | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
+      s!"npromise.returned:{receiver.toUTF8.size}:{receiver}:{method.toUTF8.size}:{method}." ++
+        s!"{argsCapacity}({canonValues arguments};" ++
+        s!"{Wasm.IR.valCanon extValCanon depositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon depositHi},{Wasm.IR.valCanon extValCanon gas})"
   | .transientBuffer64Begin capacity => s!"ntb64.begin.{capacity}"
   | .transientBuffer64Set capacity index value =>
       s!"ntb64.set.{capacity}({Wasm.IR.valCanon extValCanon index},{Wasm.IR.valCanon extValCanon value})"
@@ -138,6 +147,10 @@ private def rewritePayload
   | .logUtf8 message => pure (.logUtf8 message)
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       return .promiseFunctionCallDetached receiver method argsCapacity
+        (← arguments.mapM rewriteValue) (← rewriteValue depositLo)
+        (← rewriteValue depositHi) (← rewriteValue gas)
+  | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
+      return .promiseFunctionCallReturned receiver method argsCapacity
         (← arguments.mapM rewriteValue) (← rewriteValue depositLo)
         (← rewriteValue depositHi) (← rewriteValue gas)
   | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)

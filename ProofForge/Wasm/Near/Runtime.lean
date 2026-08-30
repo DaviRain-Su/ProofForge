@@ -127,6 +127,22 @@ separate target effects.
   let _ := gas
   0
 
+/-- Schedule a static cross-contract call and forward its eventual result as the current method's
+result. The Promise remains asynchronous; nearcore links the returned receipt to the transaction
+outcome. -/
+@[irreducible] def promiseFunctionCallReturned (argsCapacity : Nat)
+    (receiver method : String)
+    (arguments : ProofForge.Core.Value.BoundedBytes argsCapacity)
+    (depositLo depositHi gas : UInt64) : UInt64 :=
+  let _ := argsCapacity
+  let _ := receiver
+  let _ := method
+  let _ := arguments
+  let _ := depositLo
+  let _ := depositHi
+  let _ := gas
+  0
+
 /-!
 Invocation-local guest-Wasm arena leaves. Capacity is compile-time fixed by the SDK descriptor;
 the extractor rejects malformed geometry. The physical pointer remains target-owned and cannot

@@ -32,7 +32,7 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearLookup" == some "153fe4dc7e95c3f0"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearQueue" == some "f04d9a0d673b7fed"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearIterable" == some "8c0ece42e2b091ff"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearPromise" == some "c50688a973523687"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearPromise" == some "545af93c8ad1ec37"
 
 #guard ProofForge.Wasm.Near.Ops.OpExt.wellFormed
   (.logUtf8 "NEAR ✓" : ProofForge.Wasm.Near.Ops.OpExt ProofForge.Wasm.Near.Ops.Val)

@@ -163,10 +163,14 @@ iterable_anchors = (
 promise_anchors = (
     '(func (export "send")',
     '(func (export "sendMissing")',
+    '(func (export "sendReturned")',
+    '(func (export "sendReturnedMissing")',
     '(import "env" "promise_batch_create"',
     '(import "env" "promise_batch_action_function_call"',
+    '(import "env" "promise_return"',
     '(call $pf_promise_batch_create',
     '(call $pf_promise_batch_action_function_call',
+    '(call $pf_promise_return',
     '(call $pf_arena_alloc (i64.const 16) (i64.const 8))',
     '(i64.const 20000000000000)',
 )

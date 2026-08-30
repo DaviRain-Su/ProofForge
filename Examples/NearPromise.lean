@@ -42,6 +42,11 @@ def record (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
   let deposit := Context.attachedDeposit
   .ok ({ marker := value, depositLo := deposit.w0, depositHi := deposit.w1 }, value)
 
+/-- Receiver entry whose scalar result is forwarded by `sendReturned`. -/
+@[pf_entry]
+def recordValue (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  .ok ({ state with marker := value }, value)
+
 /-- Schedule a detached call carrying `2^64 + 7` yoctoNEAR. -/
 @[pf_entry]
 def send (state : State) (value : UInt64) : Except Error (State × UInt64) :=
@@ -52,6 +57,20 @@ def send (state : State) (value : UInt64) : Except Error (State × UInt64) :=
 @[pf_entry]
 def sendZero (state : State) (value : UInt64) : Except Error (State × UInt64) :=
   let _ := Promises.callDetached receiver "record" (borshUInt64 value)
+    ({ w0 := 0, w1 := 0 } : NearToken) callGas
+  .ok ({ state with marker := value }, value)
+
+/-- Commit caller state and forward the receiver's eventual UInt64 result. -/
+@[pf_entry]
+def sendReturned (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callReturned receiver "recordValue" (borshUInt64 value)
+    ({ w0 := 0, w1 := 0 } : NearToken) callGas
+  .ok ({ state with marker := value }, value)
+
+/-- Commit caller state, but surface the absent remote method as the final transaction failure. -/
+@[pf_entry]
+def sendReturnedMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callReturned receiver "missing" (borshUInt64 value)
     ({ w0 := 0, w1 := 0 } : NearToken) callGas
   .ok ({ state with marker := value }, value)
 

@@ -160,6 +160,12 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
   .ext (.near (.promiseFunctionCallDetached receiver method argsCapacity arguments
     depositLo depositHi gas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallReturned
+    (receiver method : String) (argsCapacity : Nat) (arguments : Array Val)
+    (depositLo depositHi gas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallReturned receiver method argsCapacity arguments
+    depositLo depositHi gas))
+
 @[match_pattern] def Op.nearTransientBuffer64Begin (capacity : Nat) : Op :=
   .ext (.near (.transientBuffer64Begin capacity))
 
@@ -487,6 +493,7 @@ def hasNearEffect (ops : Array Op) : Bool :=
   walk ops fun
     | .ext (.near (.logUtf8 _))
     | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
+    | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
     | .ext (.near (.transientBuffer64Begin _))
     | .ext (.near (.transientBuffer64Set _ _ _))
     | .ext (.near (.transientBuffer64Finish _))

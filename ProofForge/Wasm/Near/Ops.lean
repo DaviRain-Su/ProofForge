@@ -59,6 +59,8 @@ inductive OpExt (V : Type) where
   | logUtf8 (message : String)
   | promiseFunctionCallDetached (receiver method : String) (argsCapacity : Nat)
       (arguments : Array V) (depositLo depositHi gas : V)
+  | promiseFunctionCallReturned (receiver method : String) (argsCapacity : Nat)
+      (arguments : Array V) (depositLo depositHi gas : V)
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
   | transientBuffer64Finish (capacity : Nat)
@@ -80,6 +82,11 @@ private def storageFrameWellFormed (capacity : Nat) (values : Array Val) : Bool 
 def OpExt.wellFormed : OpExt Val → Bool
   | .logUtf8 message => message.toUTF8.size ≤ 1024
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+      Codec.accountIdLiteralValid receiver && Codec.promiseMethodLiteralValid method &&
+        storageFrameWellFormed argsCapacity arguments &&
+        depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
+        gas.wellFormed ValKind.arity
+  | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
       Codec.accountIdLiteralValid receiver && Codec.promiseMethodLiteralValid method &&
         storageFrameWellFormed argsCapacity arguments &&
         depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
@@ -106,6 +113,9 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       .promiseFunctionCallDetached receiver method argsCapacity (arguments.map mapValue)
         (mapValue depositLo) (mapValue depositHi) (mapValue gas)
+  | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
+      .promiseFunctionCallReturned receiver method argsCapacity (arguments.map mapValue)
+        (mapValue depositLo) (mapValue depositHi) (mapValue gas)
   | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
   | .transientBuffer64Set capacity index value =>
       .transientBuffer64Set capacity (mapValue index) (mapValue value)
@@ -123,6 +133,8 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
 private def cfgPayloadValues : OpExt Val → Array Val
   | .logUtf8 _ => #[]
   | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
+      arguments ++ #[depositLo, depositHi, gas]
+  | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
       arguments ++ #[depositLo, depositHi, gas]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
   | .transientBuffer64Set _ index value => #[index, value]

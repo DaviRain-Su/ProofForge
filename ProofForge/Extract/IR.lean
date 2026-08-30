@@ -72,6 +72,9 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallDetached receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
+      | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
+          .near (.promiseFunctionCallReturned receiver method argsCapacity
+            (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
       | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
       | .transientBuffer64Set capacity index value =>
           .near (.transientBuffer64Set capacity (mapValue index) (mapValue value))
@@ -95,6 +98,8 @@ def OpExt.values : OpExt Val → Array Val
       match payload with
       | .logUtf8 _ => #[]
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
+          arguments ++ #[depositLo, depositHi, gas]
+      | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
       | .transientBuffer64Set _ index value => #[index, value]
@@ -141,6 +146,14 @@ def OpExt.wellFormed : OpExt Val → Bool
       match payload with
       | .logUtf8 message => message.toUTF8.size ≤ 1024
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
+          Wasm.Near.Codec.accountIdLiteralValid receiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid method &&
+            Wasm.Near.Codec.storageCapacityValid argsCapacity &&
+            arguments.size == argsCapacity + 1 &&
+            arguments.all (·.wellFormed ValKind.arity) &&
+            depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
+            gas.wellFormed ValKind.arity
+      | .promiseFunctionCallReturned receiver method argsCapacity arguments depositLo depositHi gas =>
           Wasm.Near.Codec.accountIdLiteralValid receiver &&
             Wasm.Near.Codec.promiseMethodLiteralValid method &&
             Wasm.Near.Codec.storageCapacityValid argsCapacity &&

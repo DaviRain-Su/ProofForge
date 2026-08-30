@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detached static function-call Promise scenes against local near-sandbox."""
+"""Detached and returned static function-call Promise scenes against near-sandbox."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def main() -> None:
     wasm = Path(_require("PF_NEAR_WASM"))
     client = NearClient(rpc, home)
 
-    print("=== suite: NearPromise (detached static function call) ===")
+    print("=== suite: NearPromise (detached + returned static function calls) ===")
     client.deploy(wasm)
     client.call("initialize", NearClient.encode_u64_le(0))
 
@@ -76,17 +76,37 @@ def main() -> None:
         raise AssertionError("absent remote method unexpectedly changed receiver state")
     print("near-promise: remote detached failure left committed caller state intact")
 
+    returned = _call_u64(client, "sendReturned", 123)
+    returned_value = NearClient.success_value_bytes(returned)
+    expected_value = NearClient.encode_u64_le(123)
+    if returned_value != expected_value:
+        raise AssertionError(
+            f"returned Promise SuccessValue expected {expected_value!r}, got {returned_value!r}"
+        )
+    if client.view_u64("get") != 123:
+        raise AssertionError("returned Promise caller did not commit its own state")
+    if client.view_u64_on(RECEIVER, "get") != 123:
+        raise AssertionError("returned Promise receiver did not commit its state")
+    print("near-promise: returned call forwarded exact 8-byte result and committed both receipts")
+
+    _call_u64(client, "sendReturnedMissing", 144, expect_success=False)
+    if client.view_u64("get") != 144:
+        raise AssertionError("returned child failure rolled back the successful caller receipt")
+    if client.view_u64_on(RECEIVER, "get") != 123:
+        raise AssertionError("absent returned method unexpectedly changed receiver state")
+    print("near-promise: returned remote failure propagated after caller state committed")
+
     _call_u64(client, "sendThenFail", 111, expect_success=False)
-    if client.view_u64("get") != 99:
+    if client.view_u64("get") != 144:
         raise AssertionError("caller panic did not roll back caller state")
-    if client.view_u64_on(RECEIVER, "get") != 88:
+    if client.view_u64_on(RECEIVER, "get") != 123:
         raise AssertionError("caller panic did not discard its staged outgoing receipt")
     print("near-promise: caller panic discarded staged receipt and rolled back")
 
     _call_u64(client, "sendTooMuch", 222, expect_success=False)
-    if client.view_u64("get") != 99:
+    if client.view_u64("get") != 144:
         raise AssertionError("synchronous deposit failure did not roll back caller state")
-    if client.view_u64_on(RECEIVER, "get") != 88:
+    if client.view_u64_on(RECEIVER, "get") != 123:
         raise AssertionError("synchronous deposit failure emitted an outgoing receipt")
     print("near-promise: insufficient balance failed synchronously before commit")
     print("suite NearPromise: PASS")

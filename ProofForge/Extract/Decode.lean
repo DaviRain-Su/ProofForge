@@ -5593,6 +5593,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
       e.getUsedConstantsAsSet.toList.any fun name =>
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
         name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
@@ -5601,6 +5602,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.storageRemove ||
         name == ``ProofForge.Wasm.Near.Runtime.storageHasKey ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish ||
@@ -5623,10 +5625,12 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
       let e := strip e
       if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
         (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
-      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callDetached &&
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned) &&
           e.getAppArgs.size ≥ 6 then
         let args := e.getAppArgs
         let deposit := args[args.size - 2]!
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned
         match staticNatVal? env args[args.size - 6]!,
             staticString? env 64 args[args.size - 5]!,
             staticString? env 64 args[args.size - 4]!,
@@ -5638,13 +5642,19 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
                 ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
               (boundedStorageFrame? env argsCapacity args[args.size - 3]!).map fun arguments =>
-                .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
-                  depositLo depositHi gas
+                if returned then
+                  .nearPromiseFunctionCallReturned receiver method argsCapacity arguments
+                    depositLo depositHi gas
+                else
+                  .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                    depositLo depositHi gas
             else none
         | _, _, _, _, _, _ => none
-      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached &&
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned) &&
           e.getAppArgs.size ≥ 7 then
         let args := e.getAppArgs
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned
         match staticNatVal? env args[args.size - 7]!,
             staticString? env 64 args[args.size - 6]!,
             staticString? env 64 args[args.size - 5]!,
@@ -5655,8 +5665,12 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
                 ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
               (boundedStorageFrame? env argsCapacity args[args.size - 4]!).map fun arguments =>
-                .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
-                  depositLo depositHi gas
+                if returned then
+                  .nearPromiseFunctionCallReturned receiver method argsCapacity arguments
+                    depositLo depositHi gas
+                else
+                  .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                    depositLo depositHi gas
             else none
         | _, _, _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||

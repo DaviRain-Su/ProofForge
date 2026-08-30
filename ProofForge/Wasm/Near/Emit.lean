@@ -34,6 +34,7 @@ private structure EState where
   fresh : Nat := 0
   last : Option String := none
   pendingDest : Option String := none
+  pendingPromiseReturn : Option String := none
   deriving Inhabited
 
 private def fieldOf : Val ValKind → Option String
@@ -104,6 +105,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
     messages ++ match op with
       | .ext (.logUtf8 message) => #[message]
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
+      | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
       | .ext (.transientBuffer64Begin _)
       | .ext (.transientBuffer64Set _ _ _)
       | .ext (.transientBuffer64Finish _)
@@ -137,6 +139,7 @@ private partial def promiseLiteralsOfOps
   ops.foldl (init := #[]) fun literals op =>
     literals ++ match op with
       | .ext (.promiseFunctionCallDetached receiver method _ _ _ _ _) => #[receiver, method]
+      | .ext (.promiseFunctionCallReturned receiver method _ _ _ _ _) => #[receiver, method]
       | .ite _ _ _ thn els => promiseLiteralsOfOps thn ++ promiseLiteralsOfOps els
       | .forBody _ body => promiseLiteralsOfOps body
       | _ => #[]
@@ -146,6 +149,17 @@ private def promiseLiterals (p : Program ValKind OpExt) : Array String :=
     p.entries.flatMap (promiseLiteralsOfOps ·.ops)
   all.foldl (init := #[]) fun unique literal =>
     if unique.contains literal then unique else unique.push literal
+
+private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
+    | .ite _ _ _ thn els => opsReturnPromise thn || opsReturnPromise els
+    | .forBody _ body => opsReturnPromise body
+    | _ => false
+
+private def programReturnsPromise (p : Program ValKind OpExt) : Bool :=
+  opsReturnPromise p.initializer.ops || p.entries.any (opsReturnPromise ·.ops)
 
 private def promiseLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
   (promiseLiterals p).foldl (init := #[]) fun layout literal =>
@@ -498,6 +512,43 @@ private def stageStorageFrame (st : EState) (capacity : Nat)
   let length := "(local.get " ++ lengthLocal ++ ")"
   return { lines := lines, pointer := pointer, length := length, st := st' }
 
+private structure StagedPromiseCall where
+  lines : Array String
+  promiseLocal : String
+  st : EState
+
+/-- Stage one bounded function-call action and retain its concrete Promise index. Detached and
+returned calls share this ABI sequence; only the caller decides whether to link the index with
+`promise_return`. -/
+private def stagePromiseCall (p : Program ValKind OpExt) (st : EState)
+    (receiver method : String) (argsCapacity : Nat) (arguments : Array (Val ValKind))
+    (depositLo depositHi gas : Val ValKind) (level : Nat) : Except String StagedPromiseCall := do
+  let (receiverOff, receiverLen) ← promiseLiteralOf p receiver
+  let (methodOff, methodLen) ← promiseLiteralOf p method
+  let staged ← stageStorageFrame st argsCapacity arguments level
+  let depositLo ← renderVal staged.st depositLo
+  let depositHi ← renderVal staged.st depositHi
+  let gas ← renderVal staged.st gas
+  let depositPtrLocal := localOfTemp staged.st.fresh
+  let promiseLocal := localOfTemp (staged.st.fresh + 1)
+  let st' := { staged.st with fresh := staged.st.fresh + 2 }
+  let lines := staged.lines ++ #[
+    indent level ("(local.set " ++ depositPtrLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
+    indent level ("(i64.store (i32.wrap_i64 (local.get " ++ depositPtrLocal ++ ")) " ++
+      depositLo ++ ")"),
+    indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
+      ")) (i32.const 8)) " ++ depositHi ++ ")"),
+    indent level ("(local.set " ++ promiseLocal ++
+      " (call $pf_promise_batch_create (i64.const " ++ toString receiverLen ++
+      ") (i64.const " ++ toString receiverOff ++ ")))"),
+    indent level ("(call $pf_promise_batch_action_function_call (local.get " ++
+      promiseLocal ++ ") (i64.const " ++ toString methodLen ++ ") (i64.const " ++
+      toString methodOff ++ ") " ++ staged.length ++ " " ++ staged.pointer ++
+      " (local.get " ++ depositPtrLocal ++ ") " ++ gas ++ ")")
+  ]
+  return { lines, promiseLocal, st := st' }
+
 private def resetStorageResult (capacity level : Nat) : Array String := #[
   indent level "(global.set $pf_storage_result_active (i32.const 1))",
   indent level ("(global.set $pf_storage_result_capacity (i64.const " ++
@@ -629,8 +680,13 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let mut lines :=
           #[indent level ("(local.set " ++ localOfSlot dest ++ " " ++ v ++ ")")] ++
           storeSlot p dest ("(local.get " ++ localOfSlot dest ++ ")") level
-        if echo then
-          lines := lines ++ returnU64Instr ("(local.get " ++ localOfSlot dest ++ ")") level
+        match st.pendingPromiseReturn with
+        | some promiseLocal =>
+            lines := lines.push (indent level
+              ("(call $pf_promise_return (local.get " ++ promiseLocal ++ "))"))
+        | none =>
+            if echo then
+              lines := lines ++ returnU64Instr ("(local.get " ++ localOfSlot dest ++ ")") level
         return { lines, st, terminal := true }
     | .errorOverflow =>
         if view then throw "extract/unsupported: near v0 view cannot fail"
@@ -648,32 +704,26 @@ private partial def emitRegion (p : Program ValKind OpExt)
     | .ext (.promiseFunctionCallDetached receiver method argsCapacity arguments
         depositLo depositHi gas) =>
         if view then throw "extract/unsupported: near view cannot create a promise"
-        let (receiverOff, receiverLen) ← promiseLiteralOf p receiver
-        let (methodOff, methodLen) ← promiseLiteralOf p method
-        let staged ← stageStorageFrame st argsCapacity arguments level
-        let depositLo ← renderVal staged.st depositLo
-        let depositHi ← renderVal staged.st depositHi
-        let gas ← renderVal staged.st gas
-        let depositPtrLocal := localOfTemp staged.st.fresh
-        let promiseLocal := localOfTemp (staged.st.fresh + 1)
-        let st' := { staged.st with fresh := staged.st.fresh + 2 }
-        let lines := staged.lines ++ #[
-          indent level ("(local.set " ++ depositPtrLocal ++
-            " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
-          indent level ("(i64.store (i32.wrap_i64 (local.get " ++ depositPtrLocal ++ ")) " ++
-            depositLo ++ ")"),
-          indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
-            ")) (i32.const 8)) " ++ depositHi ++ ")"),
-          indent level ("(local.set " ++ promiseLocal ++
-            " (call $pf_promise_batch_create (i64.const " ++ toString receiverLen ++
-            ") (i64.const " ++ toString receiverOff ++ ")))"),
-          indent level ("(call $pf_promise_batch_action_function_call (local.get " ++
-            promiseLocal ++ ") (i64.const " ++ toString methodLen ++ ") (i64.const " ++
-            toString methodOff ++ ") " ++ staged.length ++ " " ++ staged.pointer ++
-            " (local.get " ++ depositPtrLocal ++ ") " ++ gas ++ ")")
-        ]
-        let region ← emitRegion p outputPlan view echo level defaultSlot tail st'
-        return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
+        let staged ← stagePromiseCall p st receiver method argsCapacity arguments
+          depositLo depositHi gas level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
+    | .ext (.promiseFunctionCallReturned receiver method argsCapacity arguments
+        depositLo depositHi gas) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        if st.pendingPromiseReturn.isSome then
+          throw "extract/unsupported: near method cannot return more than one promise"
+        let staged ← stagePromiseCall p st receiver method argsCapacity arguments
+          depositLo depositHi gas level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { staged.st with pendingPromiseReturn := some staged.promiseLocal }
+        return {
+          lines := staged.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.transientBuffer64Begin capacity) =>
         let region ← emitRegion p outputPlan view echo level defaultSlot tail st
         return {
@@ -775,6 +825,8 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
       | .logUtf8 _ | .transientBuffer64Begin _ | .transientBuffer64Finish _ | .reserved => false
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
+      | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
+          arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .transientBuffer64Set _ index value => valHas index || valHas value
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key.any valHas
       | .storageWrite _ _ _ key value => key.any valHas || value.any valHas
@@ -851,6 +903,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.storageRemove _ _ _)
   | .ext (.storageHasKey _ _ _) => true
   | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => true
+  | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
@@ -1357,6 +1410,9 @@ def emit (p : IR.Program) : Except String String := do
       "  (import \"env\" \"promise_batch_create\" (func $pf_promise_batch_create (param i64 i64) (result i64)))"
     lines := lines.push
       "  (import \"env\" \"promise_batch_action_function_call\" (func $pf_promise_batch_action_function_call (param i64 i64 i64 i64 i64 i64 i64)))"
+  if programReturnsPromise p then
+    lines := lines.push
+      "  (import \"env\" \"promise_return\" (func $pf_promise_return (param i64)))"
   if programUses .blockIndex p then
     lines := lines.push
       "  (import \"env\" \"block_index\" (func $pf_block_index (result i64)))"
