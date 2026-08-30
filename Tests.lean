@@ -66,6 +66,7 @@ import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmStaticStorageSpec
 import Tests.EvmOrderedStorageSpec
+import Tests.EvmEffectStateSpec
 import Tests.EvmReentrancySpec
 import Tests.EvmErc721Spec
 import Tests.EvmErc1155Spec

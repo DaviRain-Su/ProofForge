@@ -183,8 +183,8 @@ private def expectDigest (moduleName : Name) (digest : String) : CommandElabM Un
     throwError s!"{moduleName} digest drifted: {IR.digestHex program}"
 
 private def expectErc1155 : CommandElabM Unit := do
-  expectDigest `Examples.MultiToken "1b6452b87efd2019"
-  expectDigest `Examples.CraftToken "5e5565fbbc6d9de2"
+  expectDigest `Examples.MultiToken "c688769941bd4cfe"
+  expectDigest `Examples.CraftToken "2e6738a3705bc7dd"
   let env ← getEnv
   let multi := (ProofForge.Extract.extractModuleIR env `Examples.MultiToken).toOption.get!
   let balanceOps := (multi.methods.find? (·.ixName == "balanceOf")).get!.ops

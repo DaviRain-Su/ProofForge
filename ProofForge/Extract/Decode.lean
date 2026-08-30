@@ -5959,22 +5959,41 @@ private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Na
       (deepScalars := deepScalars)
     return stores ++ returns
 
+/-- State-leaf stores that accompany an Evm effect sequence in the same success transition:
+dynamic fixed-vector writes plus the complete leaf diff. Effect-bearing leaf values stay in the
+op list only (a carrier field's runtime put must not also become a store), synthetic vector
+roots are dropped, and unchanged leaves never reach this filter because the leaf diff omits
+them. This keeps one success branch's literal `State` update and its runtime effects coherent
+instead of silently erasing the non-wide half of the transition. Stores in an effect sequence
+are emitted after the effect head and the leaf diff reads only pre-transition projections, so
+the plain op order is already snapshot-correct: no `snapshotStateUpdate` is applied here, and
+existing effect+wide-store programs keep all of their wide leaf writes. -/
+private def evmEffectStores (env : Environment) (e : Expr) :
+    Array Ops.Op :=
+  let dynamic := collectIndexSets env e (deduplicate := true)
+  let staticStores :=
+    match asStoreFields env e true with
+    | some stores => stores.filterMap fun
+        | .storeField name value =>
+            if Ops.hasEvmLeaf #[.returnU64 value] then none
+            else some (.storeField name value)
+        | _ => none
+    | none => #[]
+  dynamic ++ dropVectorRootStores dynamic staticStores
+
+/-- Evm effect sequences keep their own op list; the same success branch's state-leaf stores
+rejoin right before the trailing result instead of being discarded for lacking a wide leaf
+name. -/
 private def mergeEvmStores (evmOps stores : Array Ops.Op) : Array Ops.Op :=
   let evmHead :=
     if evmOps.back?.any (fun | .returnU64 _ => true | _ => false) then evmOps.pop else evmOps
-  let wideStores := stores.filterMap fun
-    | .storeField name value =>
-      if name.endsWith "_w0" || name.endsWith "_w1" || name.endsWith "_w2" || name.endsWith "_w3" then
-        some (.storeField name value)
-      else none
-    | _ => none
-  if wideStores.isEmpty then evmOps
+  if stores.isEmpty then evmOps
   else
     let tail : Array Ops.Op :=
       match evmOps.back? with
       | some op@(.returnU64 _) => #[op]
       | _ => #[]
-    evmHead ++ wideStores ++ tail
+    evmHead ++ stores ++ tail
 
 private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     (localDepth : Nat) (stateType? : Option Name := none) (deepScalars : Bool := false) :
@@ -5991,9 +6010,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   else if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
   else if let some ops := decodeEvmEffect env e then
-    match asStoreFields env e true with
-    | some stores => .ok (mergeEvmStores ops stores)
-    | none => .ok ops
+    .ok (mergeEvmStores ops (evmEffectStores env e))
   else if let some (n, addend) := findForIn env e then
     .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
   else if let some result := asYieldStores env e localDepth stateType? deepScalars then
@@ -6475,9 +6492,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
     else if let some ops := decodeEvmEffect env e then
-      match asStoreFields env e true with
-      | some stores => return .ok (mergeEvmStores ops stores)
-      | none => return .ok ops
+      return .ok (mergeEvmStores ops (evmEffectStores env e))
     else if let some (n, addend) := findForIn env e then
       return .ok #[.forAccum n addend localDepth, .returnU64 (.local localDepth)]
     else if let some (n, bodyE) := findForBodyExpr env e then
@@ -6628,11 +6643,8 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             match invokeOpsWithRet env t inv with
             | .ok ops => return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
             | .error reason => return .error reason
-          | some (cmp, lv, rv), none, some evmOps, _, stores?, _, _ =>
-            let ops :=
-              match stores? with
-              | some stores => mergeEvmStores evmOps stores
-              | none => evmOps
+          | some (cmp, lv, rv), none, some evmOps, _, _, _, _ =>
+            let ops := mergeEvmStores evmOps (evmEffectStores env t)
             return .ok #[.ite cmp lv rv ops #[.errorOverflow]]
           | some (cmp, lv, rv), none, none, some iset, _, _, _ =>
             if structuredThen || hasNestedIte 64 t then

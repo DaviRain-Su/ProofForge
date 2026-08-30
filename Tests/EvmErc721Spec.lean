@@ -49,7 +49,7 @@ private def expectDigest (moduleName : Name) (digest : String) : CommandElabM Un
 
 private def expectErc721 : CommandElabM Unit := do
   expectDigest `Examples.Collectible "d520f4e720c2fb7b"
-  expectDigest `Examples.Badge "ea3aeabda40d9ffa"
+  expectDigest `Examples.Badge "c15c71dbbc936fc7"
 
 elab "#pf_guard_evm_erc721" : command => expectErc721
 
