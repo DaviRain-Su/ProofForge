@@ -125,14 +125,16 @@ def mintTo (_s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt
 
 /-- Move `amount` from the caller card onto `(w0,w1,w2)`'s card.
 Peek dest first so overflow does not debit the caller. Anyone may pay
-while running. -/
+while running. Peek halt on the minter card, then restore caller before
+debit so `$bal` is not copied from the minter. -/
 @[pf_entry]
-def pay (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
+def pay (_s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
   if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
-    if amount ≤ s.bal then
+    if amount ≤ Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 then
       if Context.peekOwnerLimbs w0 w1 w2 ≤ u64Max - amount then
         if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
-          if Context.flushBal (s.bal - amount) ≤ u64Max then
+          if Context.flushBal
+              (Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 - amount) ≤ u64Max then
             .ok ({ bal := Context.peekOwnerLimbs w0 w1 w2 + amount }, (0 : UInt64))
           else
             .error .overflow
