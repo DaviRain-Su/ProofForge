@@ -63,7 +63,7 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRole" == some "bae46704480482ee"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPeer" == some "b808c0cc3278fb10"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplFlag" == some "d71a13301ce82878"
-#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTab" == some "71c98e39c2ee1a4f"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTab" == some "95e92ed0121f53e9"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHand" == some "5c6813950576cdda"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCrew" == some "ca03e80ef4a8218a"
 #guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew"]
@@ -574,9 +574,10 @@ elab "#pf_xrpl_tab_emit_check " n:ident : command => do
     | .ok source => do
         let anchors : Array String := #[
           "(func (export \"initialize\") (result i32)",
-          "(func (export \"fill0\") (result i32)",
+          "(func (export \"setAt\") (result i32)",
           "(func (export \"sum4\")",
           "(func (export \"get0\")",
+          "(call $function_param (i32.const 0) (i32.const 3) (i32.const 20) (i32.const 8))",
           "(data (i32.const 64) \"xs_0xs_1xs_2xs_3\")"
         ]
         for anchor in anchors do

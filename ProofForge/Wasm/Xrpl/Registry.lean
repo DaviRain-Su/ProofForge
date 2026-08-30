@@ -27,7 +27,7 @@ def entries : Array Entry := #[
   { name := "XrplRole", digest := "bae46704480482ee" },
   { name := "XrplPeer", digest := "b808c0cc3278fb10" },
   { name := "XrplFlag", digest := "d71a13301ce82878" },
-  { name := "XrplTab", digest := "71c98e39c2ee1a4f" },
+  { name := "XrplTab", digest := "95e92ed0121f53e9" },
   { name := "XrplHand", digest := "5c6813950576cdda" },
   { name := "XrplCrew", digest := "ca03e80ef4a8218a" }
   ]

@@ -169,9 +169,10 @@ need_exports_flag = (
 )
 need_exports_tab = (
     '(func (export "initialize") (result i32)',
-    '(func (export "fill0") (result i32)',
+    '(func (export "setAt") (result i32)',
     '(func (export "sum4")',
     '(func (export "get0")',
+    '(call $function_param',
     '(data (i32.const 64) "xs_0xs_1xs_2xs_3")',
 )
 need_exports_hand = (
