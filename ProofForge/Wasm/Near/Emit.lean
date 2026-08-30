@@ -130,6 +130,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
     messages ++ match op with
       | .ext (.logUtf8 message) => #[message]
       | .ext (.logUtf8Bounded _ _) => #[]
+      | .ext (.nep297StringData _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
       | .ext (.promiseTransferDetached _ _ _)
@@ -156,6 +157,7 @@ private def logMessages (p : Program ValKind OpExt) : Array String :=
 private partial def hasBoundedLogOps (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun
     | .ext (.logUtf8Bounded _ _) => true
+    | .ext (.nep297StringData _ _ _ _ _) => true
     | .ite _ _ _ thn els => hasBoundedLogOps thn || hasBoundedLogOps els
     | .forBody _ body => hasBoundedLogOps body
     | _ => false
@@ -294,6 +296,34 @@ private def watBytes (message : String) : String :=
   message.toUTF8.data.foldl (init := "") fun encoded byte =>
     encoded ++ "\\" ++ String.singleton (hexDigit (byte.toNat / 16)) ++
       String.singleton (hexDigit (byte.toNat % 16))
+
+private def jsonEscapedBytes (value : String) : Array UInt8 := Id.run do
+  let mut escaped := #[]
+  for byte in value.toUTF8.data do
+    match byte.toNat with
+    | 34 => escaped := escaped ++ #[92, 34]
+    | 92 => escaped := escaped ++ #[92, 92]
+    | 8 => escaped := escaped ++ #[92, 98]
+    | 9 => escaped := escaped ++ #[92, 116]
+    | 10 => escaped := escaped ++ #[92, 110]
+    | 12 => escaped := escaped ++ #[92, 102]
+    | 13 => escaped := escaped ++ #[92, 114]
+    | n =>
+        if n < 32 then
+          escaped := escaped ++ #[92, 117, 48, 48,
+            UInt8.ofNat (hexDigit (n / 16)).toNat,
+            UInt8.ofNat (hexDigit (n % 16)).toNat]
+        else
+          escaped := escaped.push byte
+  return escaped
+
+private def eventStringPrefix (standard version event : String) : Array UInt8 :=
+  "EVENT_JSON:{\"standard\":\"".toUTF8.data ++ jsonEscapedBytes standard ++
+    "\",\"version\":\"".toUTF8.data ++ jsonEscapedBytes version ++
+    "\",\"event\":\"".toUTF8.data ++ jsonEscapedBytes event ++
+    "\",\"data\":\"".toUTF8.data
+
+private def eventStringSuffix : Array UInt8 := "\"}".toUTF8.data
 
 /-- Strict fixed-width Borsh decode over the active callback-result descriptor. Descriptor helper
 calls validate the compile-time capacity; byte reads occur only in the exact-success branch. -/
@@ -681,6 +711,115 @@ private def stageStorageFrame (st : EState) (capacity : Nat)
   let length := "(local.get " ++ lengthLocal ++ ")"
   return { lines := lines, pointer := pointer, length := length, st := st' }
 
+private structure StagedEvent where
+  lines : Array String
+  pointer : String
+  length : String
+  st : EState
+
+private def appendEventByte (pointerLocal lengthLocal value : String) (level : Nat) : Array String := #[
+  indent level ("(i64.store8 (i32.add (i32.wrap_i64 (local.get " ++ pointerLocal ++
+    ")) (i32.wrap_i64 (local.get " ++ lengthLocal ++ "))) " ++ value ++ ")"),
+  indent level ("(local.set " ++ lengthLocal ++ " (i64.add (local.get " ++ lengthLocal ++
+    ") (i64.const 1)))")
+]
+
+private def dynamicHexDigit (nibble : String) : String :=
+  "(if (result i64) (i64.lt_u " ++ nibble ++ " (i64.const 10)) " ++
+    "(then (i64.add " ++ nibble ++ " (i64.const 48))) " ++
+    "(else (i64.add " ++ nibble ++ " (i64.const 87))))"
+
+/-- Serialize one closed NEP-297 string-data envelope into a checked arena allocation. The
+allocation is the exact worst case: fixed escaped metadata plus six bytes per dynamic source byte
+plus the closing quote/object. Active UTF-8 bytes are transformed exactly once. -/
+private def stageNep297StringData (st : EState) (standard version event : String)
+    (capacity : Nat) (data : Array (Val ValKind)) (level : Nat) : Except String StagedEvent := do
+  unless Codec.storageCapacityValid capacity && data.size == capacity + 1 do
+    throw "extract/unsupported: near NEP-297 string frame geometry"
+  let sourceLength ← renderVal st data[0]!
+  let sourceLengthLocal := localOfTemp st.fresh
+  let pointerLocal := localOfTemp (st.fresh + 1)
+  let outputLengthLocal := localOfTemp (st.fresh + 2)
+  let byteLocal := localOfTemp (st.fresh + 3)
+  let st' := { st with fresh := st.fresh + 4 }
+  let eventPrefix := eventStringPrefix standard version event
+  let suffix := eventStringSuffix
+  let allocation := eventPrefix.size + capacity * 6 + suffix.size
+  let mut lines := #[
+    indent level ("(local.set " ++ sourceLengthLocal ++ " " ++ sourceLength ++ ")"),
+    indent level ("(if (i64.gt_u (local.get " ++ sourceLengthLocal ++ ") (i64.const " ++
+      toString capacity ++ ")) (then unreachable))"),
+    indent level ("(local.set " ++ pointerLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const " ++ toString allocation ++
+      ") (i64.const 1))))")
+  ]
+  for index in [0:eventPrefix.size] do
+    lines := lines.push (indent level
+      ("(i64.store8 (i32.add (i32.wrap_i64 (local.get " ++ pointerLocal ++
+        ")) (i32.const " ++ toString index ++ ")) (i64.const " ++
+        toString eventPrefix[index]!.toNat ++ "))"))
+  lines := lines.push (indent level ("(local.set " ++ outputLengthLocal ++ " (i64.const " ++
+    toString eventPrefix.size ++ "))"))
+  for index in [0:capacity] do
+    let value ← renderVal st data[index + 1]!
+    let byte := "(local.get " ++ byteLocal ++ ")"
+    let highNibble := "(i64.shr_u " ++ byte ++ " (i64.const 4))"
+    let lowNibble := "(i64.and " ++ byte ++ " (i64.const 15))"
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        sourceLengthLocal ++ "))"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(local.set " ++ byteLocal ++ " " ++ value ++ ")"),
+      indent (level + 4) ("(if (i64.gt_u " ++ byte ++ " (i64.const 255)) (then unreachable))"),
+      indent (level + 4) ("(if (i32.or (i64.eq " ++ byte ++ " (i64.const 34)) " ++
+        "(i64.eq " ++ byte ++ " (i64.const 92)))"),
+      indent (level + 6) "(then"
+    ] ++ appendEventByte pointerLocal outputLengthLocal "(i64.const 92)" (level + 8) ++
+      appendEventByte pointerLocal outputLengthLocal byte (level + 8) ++ #[
+      indent (level + 6) "))"
+    ]
+    for short in #[(8, 98), (9, 116), (10, 110), (12, 102), (13, 114)] do
+      lines := lines ++ #[
+        indent (level + 4) ("(if (i64.eq " ++ byte ++ " (i64.const " ++
+          toString short.1 ++ "))"),
+        indent (level + 6) "(then"
+      ] ++ appendEventByte pointerLocal outputLengthLocal "(i64.const 92)" (level + 8) ++
+        appendEventByte pointerLocal outputLengthLocal
+          ("(i64.const " ++ toString short.2 ++ ")") (level + 8) ++ #[
+        indent (level + 6) "))"
+      ]
+    lines := lines ++ #[
+      indent (level + 4) ("(if (i32.and (i64.lt_u " ++ byte ++ " (i64.const 32)) " ++
+        "(i32.and (i64.ne " ++ byte ++ " (i64.const 8)) " ++
+        "(i32.and (i64.ne " ++ byte ++ " (i64.const 9)) " ++
+        "(i32.and (i64.ne " ++ byte ++ " (i64.const 10)) " ++
+        "(i32.and (i64.ne " ++ byte ++ " (i64.const 12)) " ++
+        "(i64.ne " ++ byte ++ " (i64.const 13)))))))"),
+      indent (level + 6) "(then"
+    ] ++ appendEventByte pointerLocal outputLengthLocal "(i64.const 92)" (level + 8) ++
+      appendEventByte pointerLocal outputLengthLocal "(i64.const 117)" (level + 8) ++
+      appendEventByte pointerLocal outputLengthLocal "(i64.const 48)" (level + 8) ++
+      appendEventByte pointerLocal outputLengthLocal "(i64.const 48)" (level + 8) ++
+      appendEventByte pointerLocal outputLengthLocal (dynamicHexDigit highNibble) (level + 8) ++
+      appendEventByte pointerLocal outputLengthLocal (dynamicHexDigit lowNibble) (level + 8) ++ #[
+      indent (level + 6) "))",
+      indent (level + 4) ("(if (i32.and (i64.ge_u " ++ byte ++ " (i64.const 32)) " ++
+        "(i32.and (i64.ne " ++ byte ++ " (i64.const 34)) " ++
+        "(i64.ne " ++ byte ++ " (i64.const 92))))"),
+      indent (level + 6) "(then"
+    ] ++ appendEventByte pointerLocal outputLengthLocal byte (level + 8) ++ #[
+      indent (level + 6) "))",
+      indent (level + 2) "))"
+    ]
+  for byte in suffix do
+    lines := lines ++ appendEventByte pointerLocal outputLengthLocal
+      ("(i64.const " ++ toString byte.toNat ++ ")") level
+  return {
+    lines
+    pointer := "(local.get " ++ pointerLocal ++ ")"
+    length := "(local.get " ++ outputLengthLocal ++ ")"
+    st := st' }
+
 private structure StagedPromiseCall where
   lines : Array String
   promiseLocal : String
@@ -1014,6 +1153,15 @@ private partial def emitRegion (p : Program ValKind OpExt)
             region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.nep297StringData standard version event capacity data) =>
+        let staged ← stageNep297StringData st standard version event capacity data level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ #[indent level
+            ("(call $pf_log_utf8 " ++ staged.length ++ " " ++ staged.pointer ++ ")")] ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseFunctionCallDetached receiver method argsCapacity arguments
         depositLo depositHi gas) =>
         if view then throw "extract/unsupported: near view cannot create a promise"
@@ -1204,6 +1352,7 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
       match payload with
       | .logUtf8 _ | .transientBuffer64Begin _ | .transientBuffer64Finish _ | .reserved => false
       | .logUtf8Bounded _ message => message.any valHas
+      | .nep297StringData _ _ _ _ data => data.any valHas
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -1446,6 +1595,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseResultRead _ _) => true
   | .ext (.logUtf8Bounded _ _) => true
+  | .ext (.nep297StringData _ _ _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>

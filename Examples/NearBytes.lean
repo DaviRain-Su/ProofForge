@@ -42,4 +42,16 @@ def logString (_s : State) (text : BoundedString 8) : UInt64 :=
   let _ := Logs.writeBounded 8 text
   text.length.toUInt64
 
+/-- Closed NEP-297 envelope over one bounded dynamic JSON string. -/
+@[pf_entry]
+def eventString (_s : State) (text : BoundedString 8) : UInt64 :=
+  let _ := Events.writeStringData "proof_forge" "1.0.0" "string_data" 8 text
+  text.length.toUInt64
+
+/-- Compile-time event metadata uses the same JSON escaping contract as dynamic data. -/
+@[pf_entry]
+def eventEscapedMetadata (_s : State) (text : BoundedString 8) : UInt64 :=
+  let _ := Events.writeStringData "proof\"forge" "1\\0" "string\n" 8 text
+  text.length.toUInt64
+
 end Examples.NearBytes

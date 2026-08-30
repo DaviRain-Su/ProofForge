@@ -118,6 +118,17 @@ preserve `BoundedString.wellFormed`; canonical NEAR String input already enforce
   let _ := message
   0
 
+/-- Emit one exact NEP-297 envelope whose `data` member is a bounded dynamic JSON string.
+Metadata remains compile-time; the target owns all JSON escaping and the final host log. -/
+@[irreducible] def nep297StringData (capacity : Nat) (standard version event : String)
+    (data : ProofForge.Core.Value.BoundedString capacity) : UInt64 :=
+  let _ := capacity
+  let _ := standard
+  let _ := version
+  let _ := event
+  let _ := data
+  0
+
 /-!
 Detached cross-contract call foundation. Receiver and method are compile-time literals; arguments
 remain a bounded source frame, deposit is passed losslessly as two u64 limbs, and gas is an inline

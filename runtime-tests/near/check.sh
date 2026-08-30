@@ -67,6 +67,10 @@ bytes_anchors = (
     '(import "env" "log_utf8"',
     '(call $pf_log_utf8 (local.get $pf_r0) (local.get $pf_r1))',
     '(call $pf_utf8_valid (i32.const 260)',
+    '(func (export "eventString")',
+    '(func (export "eventEscapedMetadata")',
+    '(call $pf_arena_alloc (i64.const 135) (i64.const 1))',
+    '(i64.const 117)',
 )
 memory_anchors = (
     '(func $pf_arena_reset',

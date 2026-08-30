@@ -57,7 +57,7 @@ Authoritative source anchors:
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
 | IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
-| logs/events | `log_utf8`; NEP-297 SDK JSON | static literals and bounded dynamic UTF-8 complete in wsm-near-log-001/log-dynamic-001; event envelope absent | exact SDK event envelope next |
+| logs/events | `log_utf8`; NEP-297 SDK JSON | static/bounded logs plus one exact bounded string-data envelope complete in wsm-near-log-001/log-dynamic-001/event-001 | standard-specific closed event payloads next; generic JSON absent |
 | cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, authenticated self-callback, and closed ordered two-child join complete** in wsm-near-promise-001/002/then/private/transfer/and-001 | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | **static detached/returned lossless-u128 transfer complete** in wsm-near-promise-transfer-001 | Runtime batch/action; never synchronous balance mutation |
 | callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
@@ -161,7 +161,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
 | N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
-| N6 observability | static and bounded dynamic `log_utf8` done in wsm-near-log-001/log-dynamic-001; exact NEP-297 `EVENT_JSON:` remains | exact event bytes and log-limit failures |
+| N6 observability | static and bounded dynamic `log_utf8` plus exact bounded NEP-297 string-data envelope done in wsm-near-log-001/log-dynamic-001/event-001 | exact standard-specific event bytes and host log limits |
 | N7 promises | **detached/returned static batch calls, native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
@@ -173,8 +173,9 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
    memory/register input plan with exact canonical Borsh input and strict String UTF-8.
 2. **NEAR-MEMORY (wsm-near-memory-001 done):** checked guest arena over Wasm linear memory, exposed only
    through bounded pointer-free consumers; future codec/storage/promise scratch builds on it.
-3. **NEAR-LOG:** static literals and arena-backed bounded dynamic UTF-8 spans with exact sandbox
-   observation are complete in wsm-near-log-001/log-dynamic-001; NEP-297 envelopes follow.
+3. **NEAR-LOG:** static literals, arena-backed bounded dynamic UTF-8 spans, and one exact bounded
+   NEP-297 string-data envelope are complete in wsm-near-log-001/log-dynamic-001/event-001;
+   standard-specific closed payloads follow, while generic JSON remains absent.
 4. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 5. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

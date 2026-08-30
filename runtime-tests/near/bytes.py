@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import struct
 import sys
 from pathlib import Path
@@ -52,6 +53,36 @@ def _expect_log(client: NearClient, text: str) -> None:
         )
 
 
+def _expect_event(
+    client: NearClient,
+    method: str,
+    standard: str,
+    version: str,
+    event: str,
+    text: str,
+) -> None:
+    wire = NearClient.borsh_bytes(text.encode())
+    response = client.view_response_on(client.account_id, method, wire)
+    envelope = "EVENT_JSON:" + json.dumps(
+        {
+            "standard": standard,
+            "version": version,
+            "event": event,
+            "data": text,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    if response.get("logs") != [envelope]:
+        raise AssertionError(
+            f"{method}({text!r}): expected exact log {[envelope]!r}, "
+            f"got {response.get('logs')!r}"
+        )
+    result = bytes(response.get("result", ()))
+    if len(result) < 8 or NearClient.decode_u64_le(result) != len(text.encode()):
+        raise AssertionError(f"{method}({text!r}): malformed byte-length result {result!r}")
+
+
 def main() -> None:
     rpc = _require("PF_NEAR_RPC")
     home = Path(_require("PF_NEAR_HOME"))
@@ -90,6 +121,11 @@ def main() -> None:
     for text in ("", "A", "é", "éééé", "abcdefgh"):
         _expect_log(client, text)
     print("near-bytes: bounded dynamic logs preserve empty/partial/full/multibyte active bytes ok")
+
+    for text in ("", 'A"\\/\x7f', "a\n\t\b", "\x01\x1f", "é😀"):
+        _expect_event(client, "eventString", "proof_forge", "1.0.0", "string_data", text)
+    _expect_event(client, "eventEscapedMetadata", 'proof"forge', "1\\0", "string\n", '"')
+    print("near-bytes: NEP-297 metadata/data JSON escaping and exact compact envelope ok")
 
     invalid_utf8 = (
         (b"\xc0\xaf", "overlong two-byte sequence"),

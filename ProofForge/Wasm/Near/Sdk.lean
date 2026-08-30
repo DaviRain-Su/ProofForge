@@ -99,6 +99,17 @@ before source execution; internally constructed values must satisfy `BoundedStri
 
 end Logs
 
+namespace Events
+
+/-- Emit one compact NEP-297 `EVENT_JSON:` envelope with a bounded string `data` value. This is a
+closed event serializer, not a generic JSON ABI. Metadata is compile-time and all strings receive
+serde_json-compatible escaping in the target emitter. -/
+@[pf_inline] def writeStringData (standard version event : String) (capacity : Nat)
+    (data : ProofForge.Core.Value.BoundedString capacity) : UInt64 :=
+  Runtime.nep297StringData capacity standard version event data
+
+end Events
+
 namespace Access
 
 /-- Callback/private-entry predicate. Promise callbacks should require the

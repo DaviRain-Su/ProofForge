@@ -5658,6 +5658,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
       e.getUsedConstantsAsSet.toList.any fun name =>
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep297StringData ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
@@ -5711,6 +5712,19 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 .nearLogUtf8Bounded capacity message
             else none
         | none => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep297StringData &&
+          e.getAppArgs.size ≥ 5 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 5]!,
+            staticString? env 64 args[args.size - 4]!,
+            staticString? env 64 args[args.size - 3]!,
+            staticString? env 64 args[args.size - 2]! with
+        | some capacity, some standard, some version, some event =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+              (boundedStorageFrame? env capacity args[args.size - 1]!).map fun data =>
+                .nearNep297StringData standard version event capacity data
+            else none
+        | _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned) &&
           e.getAppArgs.size ≥ 2 then
