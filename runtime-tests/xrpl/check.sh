@@ -214,6 +214,7 @@ need_exports_mint = (
     '(func (export "approve") (result i32)',
     '(func (export "takeFrom") (result i32)',
     '(func (export "burnFrom") (result i32)',
+    '(func (export "clawback") (result i32)',
     '(func (export "freeze") (result i32)',
     '(func (export "unfreeze") (result i32)',
     '(func (export "freezeOf") (result i32)',

@@ -552,6 +552,41 @@ def unfreezeOf (s : State) (w0 w1 w2 : UInt64) : Except Error (State × UInt64) 
   else
     .error .unauthorized
 
+/-- Minter burns `amount` from `(w0,w1,w2)`'s card without `allw`.
+Works on a frozen card. Decrements minter `supp`, then restores caller
+before persist so `$bal` is not copied onto the dest card. Not a PDA. -/
+@[pf_entry]
+def clawback (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
+  if Access.requireOwner minter then
+    if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
+      if amount ≤ Context.peekOwnerLimbs w0 w1 w2 then
+        if amount ≤ Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" then
+          if Context.flushSupp
+              (Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" - amount) ≤ u64Max then
+            if Context.storeOwnerLimbs w0 w1 w2 ≤ u64Max then
+              if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
+                if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                  if Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                    .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + (0 : UInt64) }, (0 : UInt64))
+                  else
+                    .error .overflow
+                else
+                  .error .overflow
+              else
+                .error .overflow
+            else
+              .error .overflow
+          else
+            .error .overflow
+        else
+          .error .overflow
+      else
+        .error .overflow
+    else
+      .error .paused
+  else
+    .error .unauthorized
+
 @[pf_entry]
 def get (s : State) : UInt64 :=
   s.bal

@@ -52,7 +52,7 @@ lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" Xr
 wasm="$root/build/xrpl-alphanet/XrplMint.wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4,"burn":1,"setCap":1,"approve":1,"takeFrom":4,"burnFrom":4,"freezeOf":3,"unfreezeOf":3}}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4,"burn":1,"setCap":1,"approve":1,"takeFrom":4,"burnFrom":4,"clawback":4,"freezeOf":3,"unfreezeOf":3}}\n' \
   "$RPC" "$WALLET_A" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
@@ -704,4 +704,37 @@ rm -f "$cfg"
 [[ "$supp_bf" == "7" ]] || { echo "FAIL: A supp want 7 after burnFrom, got $supp_bf" >&2; exit 1; }
 [[ "$allw_bf" == "0" ]] || { echo "FAIL: A allw want 0 after burnFrom, got $allw_bf" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=6 burnFrom=ok"
+# Minter clawback(B,1) needs no allw. B freeze then A clawback still works.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"freeze"}\n' \
+  "$RPC" "$WALLET_B" "$contract" >"$cfg"
+fr_cb="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$fr_cb" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$fr_cb"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"clawback","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+b_cb="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$b_cb" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==3, d' <<<"$b_cb"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"clawback","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+a_cb="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$a_cb" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$a_cb"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a16="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b16="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_cb="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a16" == "1" ]] || { echo "FAIL: A bal want 1 after clawback, got $bal_a16" >&2; exit 1; }
+[[ "$bal_b16" == "5" ]] || { echo "FAIL: B bal want 5 after clawback, got $bal_b16" >&2; exit 1; }
+[[ "$supp_cb" == "6" ]] || { echo "FAIL: A supp want 6 after clawback, got $supp_cb" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=5 clawback=ok"
