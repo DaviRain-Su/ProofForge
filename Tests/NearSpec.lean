@@ -79,6 +79,7 @@ elab "#pf_near_emit_check " n:ident : command => do
           "(import \"env\" \"storage_write\"",
           "(import \"env\" \"value_return\"",
           "(import \"env\" \"panic_utf8\"",
+          "(import \"env\" \"attached_deposit\"",
           "(data (i32.const 2096) \"STATE\")",
           "(data (i32.const 2101) \"The contract has already been initialized\")",
           "(func (export \"initialize\")",
@@ -106,8 +107,20 @@ elab "#pf_near_emit_check " n:ident : command => do
         unless !source.contains "xrpl_wasm_std" do
           throwError "near emit still mentions xrpl_wasm_std"
         let initializeBody ← match source.splitOn "(func (export \"initialize\")" with
-          | [_prefix, suffix] => pure suffix
+          | [_prefix, suffix] => pure ((suffix.splitOn "\n  (func (export").headD "")
           | _ => throwError "near emit must contain exactly one initializer wrapper"
+        let afterDepositGuard ← match initializeBody.splitOn
+            "(call $pf_attached_deposit (i64.const 24))" with
+          | [before, after] =>
+              unless !before.contains "(call $pf_input" do
+                throwError "initializer decoded input before enforcing non-payable policy"
+              unless after.contains "(i64.load (i32.const 24))" &&
+                  after.contains "(i64.load (i32.const 32))" do
+                throwError "initializer non-payable guard did not inspect the full u128 deposit"
+              pure after
+          | _ => throwError "initializer must read attached deposit exactly once"
+        unless afterDepositGuard.contains "(call $pf_panic_utf8 (i64.const 40)" do
+          throwError "initializer lost its exact method-specific non-payable panic"
         let afterStateGuard ← match initializeBody.splitOn
             "(call $pf_storage_has_key (i64.const 5) (i64.const 2096))" with
           | [before, after] =>
@@ -128,7 +141,10 @@ elab "#pf_near_emit_check " n:ident : command => do
               pure after
           | _ => throwError "initializer must write the STATE marker exactly once"
         unless !afterStateStore.contains "(call $pf_storage_write (i64.const 5) (i64.const 2096)" do
-          throwError "ordinary entries unexpectedly write the initializer STATE marker"
+          throwError "initializer wrote the STATE marker more than once"
+        unless (source.splitOn
+            "(call $pf_storage_write (i64.const 5) (i64.const 2096) (i64.const 1)").length == 2 do
+          throwError "STATE marker write must occur exactly once in the whole module"
         match ProofForge.Wasm.Near.Emit.emit {
             program with initializer := {
               program.initializer with ops := #[.returnU64 (.lit 0)] } } with
@@ -136,6 +152,11 @@ elab "#pf_near_emit_check " n:ident : command => do
             unless reason.contains "near initializer must return state" do
               throwError s!"unexpected scalar initializer rejection: {reason}"
         | .ok _ => throwError "scalar-return initializer bypassed STATE marker persistence"
+        let getBody ← match source.splitOn "(func (export \"get\")" with
+          | [_prefix, suffix] => pure ((suffix.splitOn "\n  (func (export").headD "")
+          | _ => throwError "near emit must contain exactly one get view"
+        unless !getBody.contains "(call $pf_attached_deposit" do
+          throwError "near view unexpectedly received a non-payable deposit guard"
         logInfo m!"proofforge-near-test: digest = {digest}"
         logInfo m!"proofforge-near-test: {source.length} bytes of WAT passed anchor check"
 

@@ -2,8 +2,10 @@
 """Counter lifecycle/arithmetic harness against local near-sandbox (engineering only).
 
 Scenes:
+  initialize with deposit fails before creating state
   initialize(0) → get()==0
   repeated initialize fails and preserves initialized state
+  increment with deposit fails and preserves state
   increment(1) ok → get()==1
   increment overflow (2^64-1) fails; state holds
   get is a view (8-byte LE)
@@ -37,6 +39,13 @@ def main() -> None:
     print("=== suite: Counter (initialize / increment / overflow / get) ===")
     client.deploy(wasm)
 
+    paid_init = client.call(
+        "initialize", NearClient.encode_u64_le(77), deposit=1, expect_success=False
+    )
+    if "Method initialize doesn't accept deposit" not in repr(paid_init):
+        raise AssertionError(f"paid initialize returned the wrong panic: {paid_init!r}")
+    print("counter: paid initialize rejected before state creation ok")
+
     client.call("initialize", NearClient.encode_u64_le(0))
     got = client.view_u64("get")
     if got != 0:
@@ -66,6 +75,18 @@ def main() -> None:
     if got != 1:
         raise AssertionError(f"after increment(1): get() expected 1, got {got}")
     print("counter: get()==1 ok")
+
+    paid_increment = client.call(
+        "increment", NearClient.encode_u64_le(9), deposit=1, expect_success=False
+    )
+    if "Method increment doesn't accept deposit" not in repr(paid_increment):
+        raise AssertionError(
+            f"paid increment returned the wrong panic: {paid_increment!r}"
+        )
+    got = client.view_u64("get")
+    if got != 1:
+        raise AssertionError(f"after paid increment: get() must stay 1, got {got}")
+    print("counter: paid increment rejected + state holds at 1 ok")
 
     max_u64 = (1 << 64) - 1
     client.call("increment", NearClient.encode_u64_le(max_u64), expect_success=False)

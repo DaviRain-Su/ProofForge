@@ -109,6 +109,8 @@ private def logDataBase : Nat := 4096
 private def maxLogDataBytes : Nat := 4096
 private def promiseDataBase : Nat := 8192
 private def maxPromiseDataBytes : Nat := 4096
+private def lifecycleDataBase : Nat := 12288
+private def maxLifecycleDataBytes : Nat := 4096
 
 private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
   ops.foldl (init := #[]) fun messages op =>
@@ -1235,6 +1237,58 @@ private def accountBalanceKinds : Array ValKind := #[
 private def methodUsesAny (kinds : Array ValKind) (method : Method ValKind OpExt) : Bool :=
   kinds.any (methodUses · method)
 
+/-- Until target entry metadata lands, observing the full attached-deposit value is the explicit
+payable capability. Donation-only payable methods remain unsupported. -/
+private def methodPayable (method : Method ValKind OpExt) : Bool :=
+  methodUsesAny attachedDepositKinds method
+
+private def methodNeedsDepositGuard (method : Method ValKind OpExt) : Bool :=
+  method.tupleArity.isNone && !methodPayable method
+
+private def nonPayableMethods (p : Program ValKind OpExt) : Array (Method ValKind OpExt) :=
+  (#[p.initializer] ++ p.entries).filter methodNeedsDepositGuard
+
+private def nonPayableMessage (method : Method ValKind OpExt) : String :=
+  "Method " ++ method.ixName ++ " doesn't accept deposit"
+
+private def lifecycleLayout (p : Program ValKind OpExt) : Array (String × Nat × Nat) :=
+  (nonPayableMethods p).foldl (init := #[]) fun layout method =>
+    let message := nonPayableMessage method
+    let next := match layout.back? with
+      | some (_, off, len) => off + len
+      | none => lifecycleDataBase
+    layout.push (message, next, message.toUTF8.size)
+
+private def nonPayableMessageOf (p : Program ValKind OpExt)
+    (method : Method ValKind OpExt) : Except String (Nat × Nat) :=
+  let message := nonPayableMessage method
+  match (lifecycleLayout p).find? (fun item => item.1 == message) with
+  | some (_, off, len) => pure (off, len)
+  | none => throw "extract/unsupported: near non-payable panic is missing from static layout"
+
+private def lifecycleDataSection (p : Program ValKind OpExt) : Except String (Array String) := do
+  let layout := lifecycleLayout p
+  let total := match layout.back? with
+    | some (_, off, len) => off + len - lifecycleDataBase
+    | none => 0
+  if maxLifecycleDataBytes < total then
+    throw s!"extract/unsupported: near lifecycle data {total} exceeds {maxLifecycleDataBytes} bytes"
+  return layout.map fun (message, off, _) =>
+    "  (data (i32.const " ++ toString off ++ ") \"" ++ watBytes message ++ "\")"
+
+private def depositGuard (p : Program ValKind OpExt) (method : Method ValKind OpExt)
+    (level : Nat) : Except String (Array String) := do
+  let (off, len) ← nonPayableMessageOf p method
+  return #[
+    indent level "(call $pf_attached_deposit (i64.const 24))",
+    indent level "(if (i32.or (i64.ne (i64.load (i32.const 24)) (i64.const 0))",
+    indent (level + 8) "(i64.ne (i64.load (i32.const 32)) (i64.const 0)))",
+    indent (level + 2) "(then",
+    indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++ toString len ++
+      ") (i64.const " ++ toString off ++ "))"),
+    indent (level + 2) "))"
+  ]
+
 private partial def valUsesArena : Val ValKind → Bool
   | .ext (.transientBuffer64Get _) _
   | .ext (.storageResultStatus _) _
@@ -1529,6 +1583,8 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push ("    (local " ++ localOfTemp i ++ " i64)")
   if methodUsesArena method then
     lines := lines.push "    (call $pf_arena_reset)"
+  if methodNeedsDepositGuard method then
+    lines := lines ++ (← depositGuard p method 4)
   lines := lines ++ (← loadArg method 4)
   lines := lines ++ (← loadHostPrelude method view 4)
   if initializer then
@@ -1568,8 +1624,11 @@ private def staticDataEnd (p : Program ValKind OpExt) : Nat :=
   let promiseEnd := match (promiseLayout p).back? with
     | some (_, off, len) => off + len
     | none => 0
+  let lifecycleEnd := match (lifecycleLayout p).back? with
+    | some (_, off, len) => off + len
+    | none => 0
   let panicEnd := panicInitializedOff + panicInitialized.length
-  Nat.max promiseEnd (Nat.max panicEnd (Nat.max keyEnd logEnd))
+  Nat.max lifecycleEnd (Nat.max promiseEnd (Nat.max panicEnd (Nat.max keyEnd logEnd)))
 
 private def arenaBase (p : Program ValKind OpExt) : Nat :=
   Memory.alignUp (staticDataEnd p) 8
@@ -1806,6 +1865,7 @@ private def utf8Validator : Array String := #[
 def emit (p : IR.Program) : Except String String := do
   let logData ← logDataSection p
   let promiseData ← promiseDataSection p
+  let lifecycleData ← lifecycleDataSection p
   if programUsesArena p && Memory.pageBytes < arenaBase p then
     throw "extract/unsupported: near static data leaves no room in the initial Wasm page"
   let mut lines : Array String := #[]
@@ -1867,7 +1927,7 @@ def emit (p : IR.Program) : Except String String := do
   if predecessorKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"predecessor_account_id\" (func $pf_predecessor_account_id (param i64)))"
-  if attachedDepositKinds.any (programUses · p) then
+  if attachedDepositKinds.any (programUses · p) || !(nonPayableMethods p).isEmpty then
     lines := lines.push
       "  (import \"env\" \"attached_deposit\" (func $pf_attached_deposit (param i64)))"
   if accountBalanceKinds.any (programUses · p) then
@@ -1880,6 +1940,7 @@ def emit (p : IR.Program) : Except String String := do
   lines := lines ++ dataSection p
   lines := lines ++ logData
   lines := lines ++ promiseData
+  lines := lines ++ lifecycleData
   if programUsesArena p then
     lines := lines ++ arenaHelpers p
   if programUsesUtf8Codec p then
