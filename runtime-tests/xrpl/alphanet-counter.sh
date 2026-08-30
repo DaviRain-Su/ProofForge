@@ -45,11 +45,8 @@ echo "xrpl-alphanet-counter: building Counter.wasm" >&2
 lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" Counter
 wasm="$root/build/xrpl-alphanet/Counter.wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
-# First-install of this hash must carry Function ABI. A later Create of the
-# same hash against a source that stored a different ABI is temMALFORMED.
-
-# increment/decrement/divide/modulo/scale take UINT64. initialize does too,
-# but calling it on 3.3.0 still knocks the node; omit it from this gate.
+# Existing Counter.wasm source on AlphaNet may lack initialize ABI.
+# Do not reinstall with a different ABI (temMALFORMED / HTTP 502).
 printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"increment":1,"decrement":1,"divide":1,"modulo":1,"scale":1}}\n' \
   "$RPC" "$WALLET" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"

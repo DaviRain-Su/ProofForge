@@ -39,10 +39,18 @@
       (then (return (local.get $st))))
     (call $write_bal))
 
-  ;; Write bal=1 under sfContractAccount (the contract SLE).
+  ;; Write bal=1 under home_le_field(sfContractAccount=524320).
   (func (export "pokeSelf") (result i32)
     (local $st i32)
     (local.set $st (call $home_le_field (i32.const 524320) (i32.const 0) (i32.const 20)))
+    (if (i32.lt_s (local.get $st) (i32.const 0))
+      (then (return (local.get $st))))
+    (call $write_bal))
+
+  ;; Same 20B via tx_field(sfContractAccount=524320), not home_le_field.
+  (func (export "pokeTxSelf") (result i32)
+    (local $st i32)
+    (local.set $st (call $tx_field (i32.const 524320) (i32.const 0) (i32.const 20)))
     (if (i32.lt_s (local.get $st) (i32.const 0))
       (then (return (local.get $st))))
     (call $write_bal))

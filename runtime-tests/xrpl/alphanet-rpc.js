@@ -91,6 +91,7 @@ async function rpcRetry(url, method, params, tries) {
         msg.includes("noCurrent") ||
         msg.includes("Current ledger is unavailable") ||
         msg.includes("InsufficientNetworkMode") ||
+        msg.includes("Not synced to the network") ||
         msg.includes("socket disconnected") ||
         msg.includes("ECONNRESET")
       ) {
