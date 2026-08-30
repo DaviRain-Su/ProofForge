@@ -44,9 +44,12 @@ inductive ValKind where
   | txFlags
   /-- Compile-time AccountID's AccountRoot.Balance in drops. Not a Map. -/
   | litBalanceDrops (hex : String)
+  /-- Persist Owner from three little-endian limbs (args or lits). Not a Map. -/
+  | storeOwner
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
+  | .storeOwner => 3
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind

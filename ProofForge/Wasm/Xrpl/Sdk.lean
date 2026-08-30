@@ -93,6 +93,15 @@ namespace Context
 @[pf_inline] def litBalanceDrops (hex : String) : UInt64 :=
   Runtime.xrplLitBalanceDrops hex
 
+/-- Persist the next store onto this AccountID's ContractData card.
+Returns `id.w2`. Not `setUserData`, not a Map. -/
+@[pf_inline] def storeOwner (id : AccountId) : UInt64 :=
+  Runtime.xrplStoreOwner id.w0 id.w1 id.w2
+
+/-- Same as `storeOwner`, three little-endian limbs. Extractor-friendly. -/
+@[pf_inline] def storeOwnerLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplStoreOwner w0 w1 w2
+
 end Context
 
 namespace Pausable

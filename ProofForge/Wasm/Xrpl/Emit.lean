@@ -47,7 +47,7 @@ private def accountLitHex (ops : Array Ops.Op) : Option String :=
     | 0 => none
     | fuel' + 1 =>
       match v with
-      | .ext k _ => accountLitHexFromKind k
+      | .ext k ops => accountLitHexFromKind k <|> ops.findSome? (val fuel')
       | .field base _ => val fuel' base
       | .select _ a b c d => val fuel' a <|> val fuel' b <|> val fuel' c <|> val fuel' d
       | .addU64 a b | .subU64 a b | .mulU64 a b | .divU64 a b | .modU64 a b
@@ -75,7 +75,7 @@ private def usesKind (ops : Array Ops.Op) (want : Ops.ValKind) : Bool :=
     | 0 => false
     | fuel' + 1 =>
       match v with
-      | .ext k _ => k == want
+      | .ext k ops => k == want || ops.any (val fuel')
       | .field base _ => val fuel' base
       | .select _ a b c d => val fuel' a || val fuel' b || val fuel' c || val fuel' d
       | .addU64 a b | .subU64 a b | .mulU64 a b | .divU64 a b | .modU64 a b
@@ -124,6 +124,7 @@ def loadEnv (host : Contract) (method : IR.Method) (level : Nat) (view : Bool) :
         | fuel' + 1 =>
           match v with
           | .ext (.litBalanceDrops _) _ => true
+          | .ext _ ops => ops.any (has fuel')
           | .field base _ => has fuel' base
           | .select _ a b c d => has fuel' a || has fuel' b || has fuel' c || has fuel' d
           | .addU64 a b | .subU64 a b | .mulU64 a b | .divU64 a b | .modU64 a b

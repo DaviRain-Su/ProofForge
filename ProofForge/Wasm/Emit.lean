@@ -108,26 +108,38 @@ private partial def renderVal (host : Contract) (extTag : ValExt → String) (st
       let l ← renderVal host extTag st lhs
       let r ← renderVal host extTag st rhs
       return ("(i64.mul " ++ l ++ " " ++ r ++ ")")
-  | .ext kind _ =>
+  | .ext kind operands => do
       match sha512Seed? (extTag kind) with
       | some seed =>
           -- Seed at 96, 32-byte digest at 160. First little-endian i64 is the leaf.
           let stores := String.join (seed.toList.mapIdx fun i c =>
             "(i32.store8 (i32.const " ++ toString (96 + i) ++
             ") (i32.const " ++ toString c.toNat ++ ")) ")
-          .ok ("(block (result i64) " ++ stores ++
+          return ("(block (result i64) " ++ stores ++
             "(drop (call $" ++ host.computeSha512Half ++ " (i32.const 96) (i32.const " ++
               toString seed.length ++
               ") (i32.const 160) (i32.const 32))) (i64.load (i32.const 160)))")
       | none =>
         match accountLitLimb? (extTag kind) with
-        | some n => .ok ("(i64.const " ++ toString n.toNat ++ ")")
+        | some n => return ("(i64.const " ++ toString n.toNat ++ ")")
         | none =>
           let tag := extTag kind
           if tag.startsWith "xlitbal." then
-            .ok "(local.get $pf_x_xlitbal)"
+            return "(local.get $pf_x_xlitbal)"
+          else if tag == "xsto" then
+            unless operands.size = 3 do
+              throw "extract/unsupported: storeOwner wants three limbs"
+            let w0 ← renderVal host extTag st operands[0]!
+            let w1 ← renderVal host extTag st operands[1]!
+            let w2 ← renderVal host extTag st operands[2]!
+            -- Rewrite persist Owner (mem[0..19]) then yield w2. i32.store
+            -- at 16 keeps the 4-byte limb off the param scratch at 20.
+            return ("(block (result i64) (i64.store (i32.const 0) " ++ w0 ++
+              ") (i64.store (i32.const 8) " ++ w1 ++
+              ") (i32.store (i32.const 16) (i32.wrap_i64 " ++ w2 ++
+              ")) (i64.extend_i32_u (i32.load (i32.const 16))))")
           else
-            .ok ("(local.get $" ++ extLocal extTag kind ++ ")")
+            return ("(local.get $" ++ extLocal extTag kind ++ ")")
   | _ => .error "extract/unsupported: wasm v0 value"
 
 private def isExitOp : Op ValExt OpExt → Bool

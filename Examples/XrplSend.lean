@@ -1,13 +1,10 @@
 import ProofForge
 
 /-!
-Credit a compile-time other AccountID's ContractData card.
-Live AlphaNet: `set_data_object_field` with that 20-byte Owner writes the
-other user's shard (probe-other). Public RPC still has no AccountID parameter
-(502), so the destination is a hex literal.
-
-Second-wallet fixture rLpgximdBvEHy8TxUwyj6mjCRNcJju5qGG =
-`d0bc2a540b15411f44a24dfb58d23ad5d9d9b350`.
+Credit another AccountID's ContractData card. Destination is three UINT64
+limbs via `function_param` (little-endian bytes 0..7 / 8..15 / 16..19).
+`Context.storeOwner` rewrites persist Owner before the store. Not a Map,
+not `setUserData`.
 -/
 namespace Examples.XrplSend
 
@@ -21,20 +18,15 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
-/-- Compile-time destination. Mentioning it rewrites mem[0..19] before persist. -/
-@[pf_inline] def dest : AccountId :=
-  Context.accountLit "d0bc2a540b15411f44a24dfb58d23ad5d9d9b350"
-
 @[pf_entry]
 def init : State :=
   { bal := 0 }
 
-/-- Write bal=1 onto `dest`'s card. Caller pays the ContractCall.
-Mentioning `dest.w2` rewrites mem[0..19] to that AccountID before persist. -/
+/-- Write `dest.w2` onto the card owned by `(w0,w1,w2)`. Caller pays. -/
 @[pf_entry]
-def credit (_s : State) : Except Error (State × UInt64) :=
+def credit (_s : State) (w0 w1 w2 : UInt64) : Except Error (State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    .ok ({ bal := dest.w2 }, (0 : UInt64))
+    .ok ({ bal := Context.storeOwnerLimbs w0 w1 w2 }, (0 : UInt64))
   else
     .error .overflow
 

@@ -103,4 +103,11 @@ def xrplAccountLit (hex : String) : AccountId :=
   let _ := hex
   0
 
+/-- Rewrite persist Owner to these three little-endian limbs, then return `w2`.
+Host stub returns `w2`. Extractor keeps the three operands. Not a Map. -/
+@[irreducible] def xrplStoreOwner (w0 w1 w2 : UInt64) : UInt64 :=
+  let _ := w0
+  let _ := w1
+  w2
+
 end ProofForge.Wasm.Xrpl.Runtime
