@@ -23,6 +23,7 @@ import Examples.XrplSend
 import Examples.XrplPay
 import Examples.XrplMint
 import Examples.XrplLock
+import Examples.XrplCard
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -72,7 +73,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPay" == some "5f2a9ac1b78e08de"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMint" == some "86625b1e737a9f82"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplLock" == some "d2c4673c64a8d0c"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCard" == some "3b84bf36c5c309d7"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -140,6 +142,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplMint
 
 #pf_xrpl_build Examples.XrplLock
+
+#pf_xrpl_build Examples.XrplCard
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -763,6 +767,8 @@ elab "#pf_xrpl_lock_alphanet_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-lock: {source.length} bytes of WAT passed lock anchor check"
 
 #pf_xrpl_lock_alphanet_emit_check Examples.XrplLock
+
+#pf_xrpl_lock_alphanet_emit_check Examples.XrplCard
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

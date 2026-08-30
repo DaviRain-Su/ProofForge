@@ -299,6 +299,8 @@ for wat in wats:
         exports = need_exports_mint
     elif wat.stem == "XrplLock":
         exports = need_exports_lock
+    elif wat.stem == "XrplCard":
+        exports = need_exports_lock
     else:
         exports = need_exports_counter
     for needle in exports:

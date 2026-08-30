@@ -178,7 +178,8 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 12. **XrplPay** — 内部积分转账：先 peek dest，再切回 caller `flushBal`。余额不足不扣款。不是 XRP Payment。
 13. **XrplMint** — 编译期 minter 才能 mint / `mintTo` / `setCap` / `freezeOf` / `unfreezeOf` / `clawback`；编译期 spender 才能 `takeFrom` / `burnFrom`；任何人可 `burn` / `approve` / `pay` / `freeze` / `unfreeze`。`clawback` 不靠 `allw`，冻结卡也能收；扣源 `bal`、减 `supp`，切回 caller persist。暂停后状态码 4；`lock≠0` 挡 mint/pay/`takeFrom`/`burnFrom`，不挡 `clawback`。不是 Map，不是 PDA。
 14. **XrplLock** — 每人一张卡 `lock`（JSON key，scratch 96 / 值 112）。`freeze`/`unfreeze` 写 caller 卡；`pay` 先 peek caller lock 再 peek dest lock，任一非零 → 状态码 5，不扣款。不是全局 `halt`，不是 PDA，不是 Map。
-15. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
+15. **Sdk.Card** — 组合已有 Runtime：`peekBal` / `select` / `restoreCaller` / `unlocked` / `callerUnlocked`。`XrplCard` 用这些名字写 freeze/pay，活网与 `XrplLock` 同形。不是新 host，不是 Map。
+16. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
 

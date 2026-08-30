@@ -217,6 +217,30 @@ Not EVM `Revert.unauthorized(address)`. -/
 
 end Access
 
+namespace Card
+
+/-- Load `bal` from `(w0,w1,w2)` (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekBal (w0 w1 w2 : UInt64) : UInt64 :=
+  Context.peekOwnerLimbs w0 w1 w2
+
+/-- Persist Owner := `(w0,w1,w2)`. Returns `w2`. -/
+@[pf_inline] def select (w0 w1 w2 : UInt64) : UInt64 :=
+  Context.storeOwnerLimbs w0 w1 w2
+
+/-- Persist Owner := current caller. Returns `callerW2`. -/
+@[pf_inline] def restoreCaller : UInt64 :=
+  Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2
+
+/-- True when `(w0,w1,w2)`'s `lock` is missing or 0. Rewrites persist Owner. -/
+@[pf_inline] def unlocked (w0 w1 w2 : UInt64) : Bool :=
+  Context.peekLockLimbs w0 w1 w2 = (0 : UInt64)
+
+/-- True when the current caller's `lock` is missing or 0. -/
+@[pf_inline] def callerUnlocked : Bool :=
+  Context.peekLockLimbs Context.callerW0 Context.callerW1 Context.callerW2 = (0 : UInt64)
+
+end Card
+
 namespace Hash
 
 /-- Compile-time ASCII SHA-512Half, first little-endian UInt64. Not `sha256Lit`. -/
