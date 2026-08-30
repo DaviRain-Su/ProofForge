@@ -12,6 +12,8 @@ from near_rpc import NearClient, NearRpcError
 
 MAP_PREFIX = b"MAP1"
 SET_PREFIX = b"SET1"
+BALANCE_PREFIX = b"BAL1"
+ISOLATED_BALANCE_PREFIX = b"ALT1"
 MAP_KEY = 7
 
 
@@ -26,9 +28,15 @@ def _key(prefix: bytes, value: int) -> bytes:
     return prefix + value.to_bytes(8, "little")
 
 
-def _call_u64(client: NearClient, method: str, value: int | None = None) -> int:
+def _call_u64(
+    client: NearClient,
+    method: str,
+    value: int | None = None,
+    *,
+    signer: str | None = None,
+) -> int:
     args = b"" if value is None else NearClient.encode_u64_le(value)
-    result = client.call(method, args)
+    result = client.call_on(client.account_id, method, args, signer=signer)
     raw = NearClient.success_value_bytes(result)
     if raw is None or len(raw) < 8:
         raise AssertionError(f"{method}: expected 8-byte SuccessValue, got {raw!r}")
@@ -125,6 +133,100 @@ def main() -> None:
     if client.view_u64("setHas", NearClient.encode_u64_le(maximum)) != 0:
         raise AssertionError("maximum UInt64 set member aliased another encoded key")
     print("near-lookup: full-width UInt64 identity key path ok")
+
+    def account_key(prefix: bytes, account_id: str) -> bytes:
+        raw = account_id.encode("utf-8")
+        return prefix + len(raw).to_bytes(4, "little") + raw
+
+    self_key = account_key(BALANCE_PREFIX, client.account_id)
+    isolated_self_key = account_key(ISOLATED_BALANCE_PREFIX, client.account_id)
+    if client.view_u64("tokenHasSelf") != 0:
+        raise AssertionError("missing AccountId token entry must not be present")
+    if client.view_u64("tokenReadSelfW0") != 0x1111111111111111:
+        raise AssertionError("missing token low limb did not fail closed to its fallback")
+    if _call_u64(client, "tokenPutSelfMixed") != 0:
+        raise AssertionError("first self token put must return inserted status 0")
+    mixed = (0xFEDCBA9876543210 << 64) | 0x0123456789ABCDEF
+    if client.view_state_values().get(self_key) != mixed.to_bytes(16, "little"):
+        raise AssertionError("self token key/value bytes do not match Prefix4+Borsh layout")
+    if client.view_u64("tokenReadSelfW0") != 0x0123456789ABCDEF:
+        raise AssertionError("self token low limb mismatch")
+    if client.view_u64("tokenReadSelfW1") != 0xFEDCBA9876543210:
+        raise AssertionError("self token high limb mismatch")
+    if client.view_u64("tokenHasSelfIsolated") != 0 or isolated_self_key in client.view_state_values():
+        raise AssertionError("alternate Prefix4 namespace aliased the balance map")
+
+    if _call_u64(client, "tokenSeedSelfMalformed8") != 1:
+        raise AssertionError("short malformed seed must replace the present self value")
+    if client.view_u64("tokenHasSelf") != 1:
+        raise AssertionError("short malformed value must remain present")
+    if client.view_u64("tokenReadSelfW0") != 0x1111111111111111:
+        raise AssertionError("short malformed low limb exposed partial or stale bytes")
+    if client.view_u64("tokenReadSelfW1") != 0x2222222222222222:
+        raise AssertionError("short malformed high limb exposed partial or stale bytes")
+    if len(client.view_state_values()[self_key]) != 8:
+        raise AssertionError("short malformed fixture did not persist exactly 8 bytes")
+    if _call_u64(client, "tokenPutSelfMixed") != 1:
+        raise AssertionError("normal value must replace short malformed value")
+    if client.view_u64("tokenReadSelfW0") != 0x0123456789ABCDEF:
+        raise AssertionError("normal read after malformed short value observed stale register")
+    if _call_u64(client, "tokenSeedSelfMalformed20") != 1:
+        raise AssertionError("long malformed seed must replace the present self value")
+    if client.view_u64("tokenHasSelf") != 1:
+        raise AssertionError("long malformed value must remain present")
+    if client.view_u64("tokenReadSelfW0") != 0x1111111111111111:
+        raise AssertionError("oversized malformed low limb exposed partial or stale bytes")
+    if client.view_u64("tokenReadSelfW1") != 0x2222222222222222:
+        raise AssertionError("oversized malformed high limb exposed partial or stale bytes")
+    if len(client.view_state_values()[self_key]) != 20:
+        raise AssertionError("long malformed fixture did not persist exactly 20 bytes")
+    if _call_u64(client, "tokenPutSelfMixed") != 1:
+        raise AssertionError("normal value must replace oversized malformed value")
+    if client.view_u64("tokenReadSelfW1") != 0xFEDCBA9876543210:
+        raise AssertionError("normal read after malformed long value observed stale register")
+    print("near-lookup: malformed short/oversized values fail closed and registers isolate ok")
+
+    if _call_u64(client, "tokenPutSelfZero") != 1:
+        raise AssertionError("zero replacement must report present status 1")
+    if client.view_u64("tokenHasSelf") != 1 or client.view_state_values().get(self_key) != bytes(16):
+        raise AssertionError("present zero token value became indistinguishable from missing")
+    print("near-lookup: AccountId self key, mixed/zero u128, replacement, and prefix isolation ok")
+
+    short_key = BALANCE_PREFIX + (2).to_bytes(4, "little") + b"aa"
+    if _call_u64(client, "tokenPutShortFixture") != 0:
+        raise AssertionError("short fixture token put must insert")
+    if client.view_u64("tokenHasShortFixture") != 1:
+        raise AssertionError("inactive AccountId carrier lanes changed short-key identity")
+    if client.view_u64("tokenReadShortW0") != 0x1111111111111111:
+        raise AssertionError("short fixture low limb mismatch")
+    if len(short_key) != 10 or short_key not in client.view_state_values():
+        raise AssertionError("short AccountId key did not use exact active-byte geometry")
+    if _call_u64(client, "tokenRemoveShortFixture") != 1 or short_key in client.view_state_values():
+        raise AssertionError("short AccountId removal did not reclaim storage")
+    print("near-lookup: short AccountId active bytes and inactive-padding isolation ok")
+
+    caller = f"balance-caller.{client.account_id}"
+    client.create_subaccount_with_key(caller, 10**25)
+    caller_key = account_key(BALANCE_PREFIX, caller)
+    if _call_u64(client, "tokenPutCallerMax", signer=caller) != 0:
+        raise AssertionError("caller max token put must insert")
+    if _call_u64(client, "tokenHasCaller", signer=caller) != 1:
+        raise AssertionError("caller token entry must be present")
+    if _call_u64(client, "tokenReadCallerW0", signer=caller) != maximum:
+        raise AssertionError("caller max low limb mismatch")
+    if _call_u64(client, "tokenReadCallerW1", signer=caller) != maximum:
+        raise AssertionError("caller max high limb mismatch")
+    if client.view_state_values().get(caller_key) != bytes([0xFF]) * 16:
+        raise AssertionError("caller full AccountId key or max u128 value bytes mismatch")
+    if caller_key == self_key:
+        raise AssertionError("distinct full AccountIds aliased")
+    print("near-lookup: distinct caller identity and maximum u128 value ok")
+
+    if _call_u64(client, "tokenRemoveSelf") != 1 or self_key in client.view_state_values():
+        raise AssertionError("self token removal did not reclaim storage")
+    if _call_u64(client, "tokenRemoveSelf") != 0:
+        raise AssertionError("absent self token removal must return status 0")
+    print("near-lookup: AccountId token removal status and reclamation ok")
     print("suite NearLookup: PASS")
 
 

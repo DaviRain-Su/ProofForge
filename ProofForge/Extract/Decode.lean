@@ -7,6 +7,7 @@ import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Wasm.Near.Runtime
 import ProofForge.Wasm.Near.Sdk.Promise
+import ProofForge.Wasm.Near.Sdk.Store.AccountTokenLookup
 import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Wasm.Near.Sdk.Storage
 import ProofForge.Evm.Codec
@@ -5662,6 +5663,55 @@ private def normalizeBoundedParameterFrame (capacity : Nat) (values : Array Ops.
     | _ => return values
   return normalized
 
+private def nearAccountIdFrame? (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let length ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.length) e)
+  let w0 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w0) e)
+  let w1 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w1) e)
+  let w2 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w2) e)
+  let w3 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w3) e)
+  let w4 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w4) e)
+  let w5 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w5) e)
+  let w6 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w6) e)
+  let w7 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w7) e)
+  return #[length, w0, w1, w2, w3, w4, w5, w6, w7]
+
+private partial def staticAccountTokenTag? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
+  staticNatVal? env e <|>
+    match fuel, strip e with
+    | fuel' + 1, .const name _ =>
+        match env.find? name with
+        | some (.defnInfo info) => staticAccountTokenTag? env fuel' info.value
+        | _ => none
+    | _, _ => none
+
+private def accountTokenStorageKeyFrame (tag : Ops.Val) (account : Array Ops.Val) : Array Ops.Val := Id.run do
+  let length := account[0]!
+  let byte (word : Ops.Val) (shift : Nat) : Ops.Val :=
+    .bitAnd (.shiftR word (.lit (UInt64.ofNat shift))) (.lit 0xff)
+  let mut values : Array Ops.Val := #[.addU64 length (.lit 8)]
+  for index in [0:4] do
+    values := values.push (byte tag (index * 8))
+  for index in [0:4] do
+    values := values.push (byte length (index * 8))
+  for wordIndex in [0:8] do
+    for byteIndex in [0:8] do
+      values := values.push (byte account[wordIndex + 1]! (byteIndex * 8))
+  values
+
+private def accountTokenLengthAdmissible (account : Array Ops.Val) : Bool :=
+  match staticUInt64? account[0]! with
+  | some length => 2 ≤ length && length ≤ 64
+  | none => true
+
+private def nearTokenStorageValueFrame (lo hi : Ops.Val) : Array Ops.Val := Id.run do
+  let byte (word : Ops.Val) (shift : Nat) : Ops.Val :=
+    .bitAnd (.shiftR word (.lit (UInt64.ofNat shift))) (.lit 0xff)
+  let mut values : Array Ops.Val := #[.lit 16]
+  for word in #[lo, hi] do
+    for byteIndex in [0:8] do
+      values := values.push (byte word (byteIndex * 8))
+  values
+
 private def boundedStorageFrame? (env : Environment) (capacity : Nat) (e : Expr) :
     Option (Array Ops.Val) := do
   let e := substLets 32 (strip (unfoldUserHelpers env 8 e))
@@ -5674,18 +5724,6 @@ private def boundedStorageFrame? (env : Environment) (capacity : Nat) (e : Expr)
   for index in [0:capacity] do
     values := values.push (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 0)
   return values
-
-private def nearAccountIdFrame? (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
-  let length ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.length) e)
-  let w0 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w0) e)
-  let w1 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w1) e)
-  let w2 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w2) e)
-  let w3 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w3) e)
-  let w4 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w4) e)
-  let w5 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w5) e)
-  let w6 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w6) e)
-  let w7 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w7) e)
-  return #[length, w0, w1, w2, w3, w4, w5, w6, w7]
 
 /-- Preserve source lets that sequence NEAR effects before generic zeta reduction. Otherwise an
 ignored UInt64 sequencing result would erase the host/log or guest-memory mutation before
@@ -5717,6 +5755,15 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.storageWrite ||
         name == ``ProofForge.Wasm.Near.Runtime.storageRemove ||
         name == ``ProofForge.Wasm.Near.Runtime.storageHasKey ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenRead ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenWrite ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenRemove ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenHasKey ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenFixtureWriteMalformed ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.put ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.remove ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned ||
@@ -6123,6 +6170,90 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
               some (.nearTransientBuffer64Finish capacity)
             else none
         | none => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.remove) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticAccountTokenTag? env 8 args[args.size - 2]!,
+            nearAccountIdFrame? env args[args.size - 1]! with
+        | some tag, some account =>
+            if tag ≤ 0xffffffff && accountTokenLengthAdmissible account then
+              let key := accountTokenStorageKeyFrame (.lit (UInt64.ofNat tag)) account
+              some (if isConstNamed e
+                  ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read then
+                .nearStorageRead 16 72 key
+              else if isConstNamed e
+                  ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has then
+                .nearStorageHasKey 16 72 key
+              else
+                .nearStorageRemove 16 72 key)
+            else none
+        | _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.put &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let value := args[args.size - 1]!
+        let tag? := staticAccountTokenTag? env 8 args[args.size - 3]!
+        let account? := nearAccountIdFrame? env args[args.size - 2]!
+        let lo? := val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) value)
+        let hi? := val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) value)
+        match tag?, account?, lo?, hi? with
+        | some tag, some account, some lo, some hi =>
+            if tag ≤ 0xffffffff && accountTokenLengthAdmissible account then
+              some (.nearStorageWrite 16 72 16
+                (accountTokenStorageKeyFrame (.lit (UInt64.ofNat tag)) account)
+                (nearTokenStorageValueFrame lo hi))
+            else none
+        | _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenRead ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenHasKey ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenRemove) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match val env args[args.size - 2]!,
+            nearAccountIdFrame? env args[args.size - 1]! with
+        | some tag, some account =>
+            if accountTokenLengthAdmissible account then
+              let key := accountTokenStorageKeyFrame tag account
+              some (if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenRead then
+                .nearStorageRead 16 72 key
+              else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenHasKey then
+                .nearStorageHasKey 16 72 key
+              else
+                .nearStorageRemove 16 72 key)
+            else none
+        | _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenWrite &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let value := args[args.size - 1]!
+        match val env args[args.size - 3]!,
+            nearAccountIdFrame? env args[args.size - 2]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) value),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) value) with
+        | some tag, some account, some lo, some hi =>
+            if accountTokenLengthAdmissible account then
+              some (.nearStorageWrite 16 72 16
+                (accountTokenStorageKeyFrame tag account)
+                (nearTokenStorageValueFrame lo hi))
+            else none
+        | _, _, _, _ => none
+      else if isConstNamed e
+          ``ProofForge.Wasm.Near.Runtime.accountNearTokenFixtureWriteMalformed &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticAccountTokenTag? env 8 args[args.size - 3]!,
+            nearAccountIdFrame? env args[args.size - 2]!,
+            staticNatVal? env args[args.size - 1]! with
+        | some tag, some account, some length =>
+            if tag ≤ 0xffffffff && accountTokenLengthAdmissible account && length ≤ 20 then
+              let value := (#[.lit (UInt64.ofNat length)] ++
+                (Array.range 20).map fun index => .lit (UInt64.ofNat (0xa0 + index)))
+              some (.nearStorageWrite 16 72 20
+                (accountTokenStorageKeyFrame (.lit (UInt64.ofNat tag)) account) value)
+            else none
+        | _, _, _ => none
       else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRead &&
           e.getAppArgs.size ≥ 3 then
         let args := e.getAppArgs
@@ -6173,7 +6304,17 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
         | some (_, unfolded) => find fuel' unfolded
         | none => none
   match find 8 e with
-  | some effect => some #[effect, .returnU64 (.lit 0)]
+  | some effect =>
+      let e := strip e
+      let result : Ops.Val :=
+        if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read ||
+            isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has ||
+            isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.put ||
+            isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.remove then
+          Ops.Val.nearStorageResultStatus 16
+        else
+          .lit 0
+      some #[effect, .returnU64 result]
   | none => none
 
 /-- A vector root is not a scalar slot. Mixed static/dynamic writeback can see an inline

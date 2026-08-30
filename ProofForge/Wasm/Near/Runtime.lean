@@ -408,6 +408,43 @@ only when it fits the declared result capacity. No guest pointer enters source c
   let _ := key
   0
 
+/-!
+Closed Identity AccountId-to-NearToken storage leaves. The extractor stages the exact
+`prefix4 || u32_le(account.length) || active account bytes` key and exact 16-byte Borsh value,
+then lowers to the same raw-storage operations above. Keeping the dynamic key geometry target-owned
+avoids treating inactive AccountId carrier lanes as identity bytes.
+-/
+
+@[irreducible] def accountNearTokenRead (tag : UInt64) (account : AccountId) : UInt64 :=
+  let _ := tag
+  let _ := account
+  0
+
+@[irreducible] def accountNearTokenHasKey (tag : UInt64) (account : AccountId) : UInt64 :=
+  let _ := tag
+  let _ := account
+  0
+
+@[irreducible] def accountNearTokenWrite
+    (tag : UInt64) (account : AccountId) (value : NearToken) : UInt64 :=
+  let _ := tag
+  let _ := account
+  let _ := value
+  0
+
+@[irreducible] def accountNearTokenRemove (tag : UInt64) (account : AccountId) : UInt64 :=
+  let _ := tag
+  let _ := account
+  0
+
+/-- Fixture-only malformed-value seed for exact-decoder runtime tests. Not an SDK operation. -/
+@[irreducible] def accountNearTokenFixtureWriteMalformed
+    (tag : UInt64) (account : AccountId) (length : UInt64) : UInt64 :=
+  let _ := tag
+  let _ := account
+  let _ := length
+  0
+
 /-- Raw nearcore 0/1 status for the latest operation. -/
 @[irreducible] def storageResultStatus (capacity : Nat) : UInt64 :=
   let _ := capacity

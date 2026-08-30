@@ -29,7 +29,9 @@ wsm-near-lookup-001 再加入 default-Identity `DirectLookupMap64` / `DirectLook
 `Prefix4 || Borsh(UInt64)`，map value 为 Borsh UInt64，set value 是 exact empty bytes。
 wsm-near-u128-arithmetic-001 adds target-owned unsigned two-limb `NearToken` add/sub predicates
 and carry/borrow result limbs; result limbs require their matching predicate and do not yet imply
-an AccountId-keyed balance map or FT ledger.
+an FT ledger. `DirectAccountNearTokenMap` now separately provides a closed default-Identity
+AccountId-to-NearToken foundation with exact `prefix4 || u32_le(length) || active bytes` keys and
+16-byte little-endian values; it does not implement balances, supply, or public FT methods.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity

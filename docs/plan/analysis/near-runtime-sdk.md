@@ -179,10 +179,11 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 4. **NEAR-NEP-141-EVENT:** exact v1.0.0 `ft_mint`, `ft_transfer`, and `ft_burn` serialization,
    including bounded optional memo variants, is complete in wsm-near-nep141-event-001/002/003.
    FT balances, supply, methods, and storage management remain separate later slices.
-   The ledger dependency chain now has checked NearToken add/sub and exact Borsh-u128 values in
-   wsm-near-u128-arithmetic-001/u128-storage-001. The internal raw-key budget is independently
+   The ledger dependency chain now has checked NearToken add/sub, exact Borsh-u128 values, and a
+   specialized raw-Identity Prefix4 AccountId-to-NearToken map in
+   wsm-near-u128-arithmetic-001/u128-storage-001/account-token-map-001. The internal raw-key budget is independently
    widened to the exact 72-byte `Prefix4 || Borsh(AccountId)` maximum in
-   wsm-near-storage-key-001; the specialized Identity map remains next.
+   wsm-near-storage-key-001. The closed ledger policy remains separate.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
