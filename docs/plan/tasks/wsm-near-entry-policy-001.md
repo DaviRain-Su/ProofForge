@@ -33,5 +33,6 @@ Add a target-owned generated-wrapper policy without introducing executable sourc
 
 ## Next
 
-Define uninitialized-entry behavior before adding `STATE` version/migration metadata. Keep those
-lifecycle choices separate from broader callback codecs and arbitrary Promise handles.
+Completed by [wsm-near-uninitialized-001](wsm-near-uninitialized-001.md): all ordinary
+state-consuming entries now require the canonical `STATE` marker. Version/migration metadata
+remains separate from broader callback codecs and arbitrary Promise handles.

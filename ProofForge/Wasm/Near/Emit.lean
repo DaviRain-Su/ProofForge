@@ -74,6 +74,8 @@ private def stateKey : String := "STATE"
 
 private def panicInitialized : String := "The contract has already been initialized"
 
+private def panicUninitialized : String := "The contract is not initialized"
+
 /-- Dedicated zero-padded buffers prevent a shorter second account id from
 observing bytes left by another register read. -/
 private def predecessorAccountOff : Nat := 64
@@ -1269,7 +1271,8 @@ private def privateMessage (method : Method ValKind OpExt) : String :=
   "Method " ++ method.ixName ++ " is private"
 
 private def lifecycleMessages (p : Program ValKind OpExt) : Array String :=
-  (#[p.initializer] ++ p.entries).foldl (init := #[]) fun messages method =>
+  let initial := if p.entries.isEmpty then #[] else #[panicUninitialized]
+  (#[p.initializer] ++ p.entries).foldl (init := initial) fun messages method =>
     let messages :=
       if methodPrivate method then messages.push (privateMessage method) else messages
     if methodNeedsDepositGuard method then messages.push (nonPayableMessage method) else messages
@@ -1295,6 +1298,11 @@ private def privateMessageOf (p : Program ValKind OpExt)
   | some (_, off, len) => pure (off, len)
   | none => throw "extract/unsupported: near private panic is missing from static layout"
 
+private def uninitializedMessageOf (p : Program ValKind OpExt) : Except String (Nat × Nat) :=
+  match (lifecycleLayout p).find? (fun item => item.1 == panicUninitialized) with
+  | some (_, off, len) => pure (off, len)
+  | none => throw "extract/unsupported: near uninitialized panic is missing from static layout"
+
 private def lifecycleDataSection (p : Program ValKind OpExt) : Except String (Array String) := do
   let layout := lifecycleLayout p
   let total := match layout.back? with
@@ -1312,6 +1320,19 @@ private def depositGuard (p : Program ValKind OpExt) (method : Method ValKind Op
     indent level "(call $pf_attached_deposit (i64.const 24))",
     indent level "(if (i32.or (i64.ne (i64.load (i32.const 24)) (i64.const 0))",
     indent (level + 8) "(i64.ne (i64.load (i32.const 32)) (i64.const 0)))",
+    indent (level + 2) "(then",
+    indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++ toString len ++
+      ") (i64.const " ++ toString off ++ "))"),
+    indent (level + 2) "))"
+  ]
+
+private def uninitializedGuard (p : Program ValKind OpExt)
+    (level : Nat) : Except String (Array String) := do
+  let (off, len) ← uninitializedMessageOf p
+  return #[
+    indent level ("(if (i64.eq (call $pf_storage_has_key (i64.const " ++
+      toString stateKey.length ++ ") (i64.const " ++ toString stateKeyOff ++
+      ")) (i64.const 0))"),
     indent (level + 2) "(then",
     indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++ toString len ++
       ") (i64.const " ++ toString off ++ "))"),
@@ -1644,6 +1665,8 @@ private def renderFn (p : Program ValKind OpExt)
   lines := lines ++ (← loadHostPrelude method view 4)
   if initializer then
     lines := lines ++ initializedGuard p 4
+  else
+    lines := lines ++ (← uninitializedGuard p 4)
   lines := lines ++ loadSlots p 4
   lines := lines ++ region.lines
   lines := lines.push "  )"

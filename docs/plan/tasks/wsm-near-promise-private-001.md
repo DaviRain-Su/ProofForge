@@ -39,5 +39,6 @@ must still satisfy the separate Promise-result status/read checks.
 ## Next
 
 Generated private metadata is complete in
-[wsm-near-entry-policy-001](wsm-near-entry-policy-001.md). Uninitialized-entry and `STATE`
-version/migration choices remain separate N9 lifecycle work.
+[wsm-near-entry-policy-001](wsm-near-entry-policy-001.md), and fail-closed ordinary entry state is
+complete in [wsm-near-uninitialized-001](wsm-near-uninitialized-001.md). `STATE` version/migration
+choices remain separate N9 lifecycle work.

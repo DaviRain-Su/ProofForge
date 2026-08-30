@@ -34,5 +34,7 @@ reserved `STATE` key.
 
 ## Next
 
-Add generated non-payable-by-default entry policy with explicit payable metadata. General private
-entry metadata, uninitialized-entry policy, and versioned migration remain separate lifecycle cuts.
+Generated non-payable/private/payable metadata is complete in
+[wsm-near-entry-policy-001](wsm-near-entry-policy-001.md), and ordinary missing-state behavior is
+complete in [wsm-near-uninitialized-001](wsm-near-uninitialized-001.md). Versioned migration
+remains a separate lifecycle cut.

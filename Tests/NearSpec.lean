@@ -66,6 +66,15 @@ elab "#pf_near_emit_check " n:ident : command => do
     | .error reason => throwError reason
     | .ok source => do
         let digest := ProofForge.Wasm.Near.IR.digestHex program
+        let uninitializedGuard :=
+          "(if (i64.eq (call $pf_storage_has_key (i64.const 5) (i64.const 2096)) " ++
+            "(i64.const 0))"
+        let uninitializedPanic :=
+          "(call $pf_panic_utf8 (i64.const 31) (i64.const 12288))"
+        let uninitializedData :=
+          "(data (i32.const 12288) \"\\54\\68\\65\\20\\63\\6f\\6e\\74\\72\\61" ++
+            "\\63\\74\\20\\69\\73\\20\\6e\\6f\\74\\20\\69\\6e\\69\\74" ++
+            "\\69\\61\\6c\\69\\7a\\65\\64\")"
         match ProofForge.Wasm.Near.Registry.digestOf program.name with
         | some want =>
             if digest != want then
@@ -82,6 +91,7 @@ elab "#pf_near_emit_check " n:ident : command => do
           "(import \"env\" \"attached_deposit\"",
           "(data (i32.const 2096) \"STATE\")",
           "(data (i32.const 2101) \"The contract has already been initialized\")",
+          uninitializedData,
           "(func (export \"initialize\")",
           "(func (export \"increment\")",
           "(func (export \"get\")",
@@ -100,6 +110,8 @@ elab "#pf_near_emit_check " n:ident : command => do
         for anchor in anchors do
           unless source.contains anchor do
             throwError s!"near emit is missing anchor: {anchor}\n{source}"
+        unless (source.splitOn uninitializedData).length == 2 do
+          throwError "near emit must deduplicate the exact uninitialized panic data"
         unless !source.contains "host_lib" do
           throwError "near emit mentions XRPL host_lib"
         unless !source.contains "\"log_utf8\"" do
@@ -128,6 +140,8 @@ elab "#pf_near_emit_check " n:ident : command => do
                 throwError "initializer consulted STATE before decoding its argument"
               pure after
           | _ => throwError "initializer must check the reserved STATE marker exactly once"
+        if initializeBody.contains uninitializedGuard then
+          throwError "initializer received the ordinary missing-STATE guard"
         let afterLegacyGuard ← match afterStateGuard.splitOn
             "(call $pf_storage_has_key (i64.const 5) (i64.const 1024))" with
           | [_before, after] => pure after
@@ -157,6 +171,22 @@ elab "#pf_near_emit_check " n:ident : command => do
           | _ => throwError "near emit must contain exactly one get view"
         unless !getBody.contains "(call $pf_attached_deposit" do
           throwError "near view unexpectedly received a non-payable deposit guard"
+        for method in program.entries do
+          let body ← match source.splitOn ("(func (export \"" ++ method.ixName ++ "\")") with
+            | [_prefix, suffix] => pure ((suffix.splitOn "\n  (func (export").headD "")
+            | _ => throwError s!"near emit must contain exactly one {method.ixName} wrapper"
+          match body.splitOn uninitializedGuard with
+          | [before, after] =>
+              unless before.contains "(call $pf_input" do
+                throwError s!"{method.ixName} checked STATE before input decoding"
+              unless after.contains uninitializedPanic do
+                throwError s!"{method.ixName} lost the exact uninitialized panic"
+              match after.splitOn "(call $pf_storage_read" with
+              | [beforeRead, _afterRead] =>
+                  unless beforeRead.contains uninitializedPanic do
+                    throwError s!"{method.ixName} read scalar state before its STATE guard"
+              | _ => throwError s!"{method.ixName} must read its scalar state exactly once"
+          | _ => throwError s!"{method.ixName} must check STATE existence exactly once"
         logInfo m!"proofforge-near-test: digest = {digest}"
         logInfo m!"proofforge-near-test: {source.length} bytes of WAT passed anchor check"
 

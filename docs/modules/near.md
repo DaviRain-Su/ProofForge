@@ -36,6 +36,10 @@ wsm-near-promise-transfer-001 再加入静态 receiver、lossless u128 amount �
 native transfer；两者都用 arena staging exact 16-byte LE amount，后者在 state 持久化后链接
 receipt result。wsm-near-promise-and-001 加入闭合的两个有序静态 child → `promise_and` →
 self callback 图；joint Promise 只作为 callback dependency，最终只返回 callback receipt。
+wsm-near-init/payable/entry-policy/uninitialized-001 再钉入口生命周期：初始化器只成功一次，
+private 先于 non-payable，参数解码后 ordinary state-consuming entry 必须见到 `STATE` marker，
+否则精确 panic `The contract is not initialized`。这是类似 near-sdk-rs `PanicOnDefault` 的
+ProofForge fail-closed 策略；不声称 near-sdk-rs 的普通 `Default` 也必然拒绝未初始化调用。
 
 ## Boundary
 
@@ -93,6 +97,8 @@ self callback 图；joint Promise 只作为 callback dependency，最终只返�
   callback argument、failed/oversized fallback；还验证两个
   有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路。
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
+  `counter.sh` 还在初始化前验证 paid mutator 先命中 non-payable，普通 mutator/view 再以精确
+  missing-state panic fail closed 且不创建 KV state，随后初始化、重复初始化与算术场景照常通过。
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、`NearMemory`、
 `NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、

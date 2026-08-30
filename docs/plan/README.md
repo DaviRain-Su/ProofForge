@@ -223,6 +223,10 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-promise-private-001](tasks/wsm-near-promise-private-001.md) | done | NEAR full-AccountId private self-callback guard |
 | [wsm-near-promise-transfer-001](tasks/wsm-near-promise-transfer-001.md) | done | NEAR detached/returned static native transfer |
 | [wsm-near-promise-and-001](tasks/wsm-near-promise-and-001.md) | done | NEAR ordered two-child Promise join + self callback |
+| [wsm-near-init-001](tasks/wsm-near-init-001.md) | done | NEAR one-time explicit initialization marker |
+| [wsm-near-payable-001](tasks/wsm-near-payable-001.md) | done | NEAR non-payable-by-default entry guards |
+| [wsm-near-entry-policy-001](tasks/wsm-near-entry-policy-001.md) | done | NEAR explicit private/payable entry metadata |
+| [wsm-near-uninitialized-001](tasks/wsm-near-uninitialized-001.md) | done | NEAR fail-closed ordinary entry lifecycle |
 
 ## SVM 全面工作计划（当前主线）
 

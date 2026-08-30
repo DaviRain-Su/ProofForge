@@ -2,6 +2,8 @@
 """Counter lifecycle/arithmetic harness against local near-sandbox (engineering only).
 
 Scenes:
+  ordinary call/view before initialize fail with exact missing-state panic
+  paid pre-initialize mutator fails non-payable before missing-state
   initialize with deposit fails before creating state
   initialize(0) → get()==0
   repeated initialize fails and preserves initialized state
@@ -38,6 +40,35 @@ def main() -> None:
 
     print("=== suite: Counter (initialize / increment / overflow / get) ===")
     client.deploy(wasm)
+
+    paid_preinit = client.call(
+        "increment", NearClient.encode_u64_le(1), deposit=1, expect_success=False
+    )
+    if "Method increment doesn't accept deposit" not in repr(paid_preinit):
+        raise AssertionError(
+            f"paid pre-initialize increment returned the wrong panic: {paid_preinit!r}"
+        )
+    print("counter: paid pre-initialize increment rejected before lifecycle guard ok")
+
+    preinit_call = client.call(
+        "increment", NearClient.encode_u64_le(1), expect_success=False
+    )
+    if "The contract is not initialized" not in repr(preinit_call):
+        raise AssertionError(
+            f"pre-initialize increment returned the wrong panic: {preinit_call!r}"
+        )
+    try:
+        client.view_u64("get")
+    except NearRpcError as error:
+        if "The contract is not initialized" not in repr(error):
+            raise AssertionError(
+                f"pre-initialize get returned the wrong panic: {error!r}"
+            ) from error
+    else:
+        raise AssertionError("pre-initialize get unexpectedly succeeded")
+    if client.view_state_values():
+        raise AssertionError("rejected pre-initialize entries created contract state")
+    print("counter: pre-initialize call/view rejected + state remains empty ok")
 
     paid_init = client.call(
         "initialize", NearClient.encode_u64_le(77), deposit=1, expect_success=False
