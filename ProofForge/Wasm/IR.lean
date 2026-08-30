@@ -151,6 +151,10 @@ private partial def lowerVal {ValExt : Type} : Val ValExt → Except String (Val
       | _, .error e => .error e
   | .ext kind operands =>
       if operands.isEmpty then .ok (.ext kind operands)
+      else if operands.size == 1 then
+        match lowerVal operands[0]! with
+        | .ok a => .ok (.ext kind #[a])
+        | .error e => .error e
       else if operands.size == 3 then
         match lowerVal operands[0]!, lowerVal operands[1]!, lowerVal operands[2]! with
         | .ok a, .ok b, .ok c => .ok (.ext kind #[a, b, c])
@@ -259,7 +263,8 @@ partial def valAllowed {ValExt : Type} : Val ValExt → Bool
   | .addU64 lhs rhs | .subU64 lhs rhs | .mulU64 lhs rhs =>
       valAllowed lhs && valAllowed rhs
   | .ext _ operands =>
-      operands.isEmpty || (operands.size == 3 && operands.all valAllowed)
+      operands.isEmpty ||
+        ((operands.size == 1 || operands.size == 3) && operands.all valAllowed)
   | _ => false
 
 /-- Ops the v0 WAT renderer can express. -/

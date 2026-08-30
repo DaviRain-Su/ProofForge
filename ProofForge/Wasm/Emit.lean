@@ -138,6 +138,45 @@ private partial def renderVal (host : Contract) (extTag : ValExt → String) (st
               ") (i64.store (i32.const 8) " ++ w1 ++
               ") (i32.store (i32.const 16) (i32.wrap_i64 " ++ w2 ++
               ")) (i64.extend_i32_u (i32.load (i32.const 16))))")
+          else if tag == "xflush" then
+            unless operands.size = 1 do
+              throw "extract/unsupported: flushBal wants one value"
+            let v ← renderVal host extTag st operands[0]!
+            -- Persist `$bal` onto the current Owner card, then yield `v`.
+            -- Slot/key are the `bal` card (offset 64, length 3).
+            let be := String.join ((Array.range 8).toList.map fun i =>
+              let shift := (7 - i) * 8
+              "(i32.store8 (i32.const " ++ toString (29 + i) ++
+                ") (i32.wrap_i64 (i64.shr_u (local.get $bal) (i64.const " ++
+                toString shift ++ ")))) ")
+            return ("(block (result i64) (local.set $bal " ++ v ++
+              ") (i32.store8 (i32.const 28) (i32.const " ++
+              toString host.stiUint64 ++ ")) " ++ be ++
+              "(local.set $st (call $" ++ host.setDataObject ++
+              " (i32.const 0) (i32.const 20) (i32.const 64) (i32.const 3)" ++
+              " (i32.const 28) (i32.const 9))) (if (i32.lt_s (local.get $st)" ++
+              " (i32.const 0)) (then (return (local.get $st)))) (local.get $bal))")
+          else if tag == "xpeek" then
+            unless operands.size = 3 do
+              throw "extract/unsupported: peekOwner wants three limbs"
+            let w0 ← renderVal host extTag st operands[0]!
+            let w1 ← renderVal host extTag st operands[1]!
+            let w2 ← renderVal host extTag st operands[2]!
+            let eqs := host.missingFields.foldl (fun acc (code : Int) =>
+              let eq := "(i32.eq (local.get $st) (i32.const " ++ toString code ++ "))"
+              if acc.isEmpty then eq else "(i32.or " ++ acc ++ " " ++ eq ++ ")") ""
+            let missing := if eqs.isEmpty then "(i32.const 0)" else eqs
+            return ("(block (result i64) (i64.store (i32.const 0) " ++ w0 ++
+              ") (i64.store (i32.const 8) " ++ w1 ++
+              ") (i32.store (i32.const 16) (i32.wrap_i64 " ++ w2 ++
+              ")) (local.set $st (call $" ++ host.getDataObject ++
+              " (i32.const 0) (i32.const 20) (i32.const 64) (i32.const 3)" ++
+              " (i32.const 28) (i32.const 8))) (if (result i64) (i32.lt_s" ++
+              " (local.get $st) (i32.const 0)) (then (if (result i64) (i32.eqz " ++
+              missing ++ ") (then (return (local.get $st))) (else (i64.const 0))))" ++
+              " (else (if (result i64) (i32.gt_s (local.get $st) (i32.const 0))" ++
+              " (then (i64.or (i64.shl (i64.or (i64.shl (i64.or (i64.shl (i64.or (i64.shl (i64.or (i64.shl (i64.or (i64.shl (i64.or (i64.shl (i64.extend_i32_u (i32.load8_u (i32.const 28))) (i64.const 8)) (i64.extend_i32_u (i32.load8_u (i32.const 29)))) (i64.const 8)) (i64.extend_i32_u (i32.load8_u (i32.const 30)))) (i64.const 8)) (i64.extend_i32_u (i32.load8_u (i32.const 31)))) (i64.const 8)) (i64.extend_i32_u (i32.load8_u (i32.const 32)))) (i64.const 8)) (i64.extend_i32_u (i32.load8_u (i32.const 33)))) (i64.const 8)) (i64.extend_i32_u (i32.load8_u (i32.const 34)))) (i64.const 8)) (i64.extend_i32_u (i32.load8_u (i32.const 35)))))" ++
+              " (else (i64.const 0))))))")
           else
             return ("(local.get $" ++ extLocal extTag kind ++ ")")
   | _ => .error "extract/unsupported: wasm v0 value"

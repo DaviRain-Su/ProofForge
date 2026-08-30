@@ -145,6 +145,10 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
   xrplLeaf (.litBalanceDrops hex)
 @[match_pattern] def Val.xrplStoreOwner (w0 w1 w2 : Val) : Val :=
   .ext (.xrpl .storeOwner) #[w0, w1, w2]
+@[match_pattern] def Val.xrplFlushBal (v : Val) : Val :=
+  .ext (.xrpl .flushBal) #[v]
+@[match_pattern] def Val.xrplPeekOwner (w0 w1 w2 : Val) : Val :=
+  .ext (.xrpl .peekOwner) #[w0, w1, w2]
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2

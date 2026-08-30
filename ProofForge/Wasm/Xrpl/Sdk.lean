@@ -102,6 +102,16 @@ Returns `id.w2`. Not `setUserData`, not a Map. -/
 @[pf_inline] def storeOwnerLimbs (w0 w1 w2 : UInt64) : UInt64 :=
   Runtime.xrplStoreOwner w0 w1 w2
 
+/-- Persist `v` onto the current Owner card. Then a later `peekOwnerLimbs`
+can switch cards. Not a Payment. -/
+@[pf_inline] def flushBal (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushBal v
+
+/-- Load `bal` from the card owned by `(w0,w1,w2)` (missing → 0). Rewrites
+persist Owner. Not `setUserData`. -/
+@[pf_inline] def peekOwnerLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekOwner w0 w1 w2
+
 end Context
 
 namespace Pausable

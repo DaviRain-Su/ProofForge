@@ -110,4 +110,16 @@ Host stub returns `w2`. Extractor keeps the three operands. Not a Map. -/
   let _ := w1
   w2
 
+/-- Persist `v` onto the current Owner card, then return `v`. Host stub returns `v`. -/
+@[irreducible] def xrplFlushBal (v : UInt64) : UInt64 :=
+  v
+
+/-- Rewrite persist Owner to `(w0,w1,w2)`, load that card's `bal` (missing → 0).
+Host stub returns 0. Not a Map, not a Payment. -/
+@[irreducible] def xrplPeekOwner (w0 w1 w2 : UInt64) : UInt64 :=
+  let _ := w0
+  let _ := w1
+  let _ := w2
+  0
+
 end ProofForge.Wasm.Xrpl.Runtime

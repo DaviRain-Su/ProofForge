@@ -210,6 +210,21 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         asVal env fuel args[args.size - 1]! with
     | some w0, some w1, some w2 => some (.xrplStoreOwner w0 w1 w2)
     | _, _, _ => none
+  else if (endsWith e ".xrplFlushBal" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplFlushBal) &&
+      e.getAppArgs.size ≥ 1 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some v => some (.xrplFlushBal v)
+    | none => none
+  else if (endsWith e ".xrplPeekOwner" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplPeekOwner) &&
+      e.getAppArgs.size ≥ 3 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 3]!,
+        asVal env fuel args[args.size - 2]!,
+        asVal env fuel args[args.size - 1]! with
+    | some w0, some w1, some w2 => some (.xrplPeekOwner w0 w1 w2)
+    | _, _, _ => none
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with

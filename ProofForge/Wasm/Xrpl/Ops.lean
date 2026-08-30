@@ -46,10 +46,15 @@ inductive ValKind where
   | litBalanceDrops (hex : String)
   /-- Persist Owner from three little-endian limbs (args or lits). Not a Map. -/
   | storeOwner
+  /-- Persist current `$bal` (operand) onto the current Owner card. -/
+  | flushBal
+  /-- Rewrite persist Owner to three limbs, load that card's `bal` (missing → 0). -/
+  | peekOwner
   deriving BEq, Repr, Inhabited
 
 def ValKind.arity : ValKind → Nat
-  | .storeOwner => 3
+  | .storeOwner | .peekOwner => 3
+  | .flushBal => 1
   | _ => 0
 
 abbrev Val := ProofForge.Core.Ops.Val ValKind
