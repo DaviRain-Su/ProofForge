@@ -404,6 +404,13 @@ a_take="$(node "$here/alphanet-rpc.js" call "$cfg")"
 echo "$a_take" >&2
 "$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==3, d' <<<"$a_take"
 
+# B's own card has no allw. Parameter limbs, not a Map.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"takeFrom","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+wrong_src="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$wrong_src" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==1, d' <<<"$wrong_src"
+
 printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"takeFrom","parameters":["%s","%s","%s","1"]}\n' \
   "$RPC" "$WALLET_B" "$contract" "$SRC_W0" "$SRC_W1" "$SRC_W2" >"$cfg"
 b_take="$(node "$here/alphanet-rpc.js" call "$cfg")"

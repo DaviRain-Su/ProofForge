@@ -255,30 +255,21 @@ def approve (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   else
     .error .paused
 
-/-- Compile-time spender pulls `amount` from the compile-time minter card
-onto this caller card. Cuts that card's `allw`. Underflow / missing
-allowance is a no-op. Source is genesis so we do not open a Map. -/
+/-- Compile-time spender pulls `amount` from `(w0,w1,w2)`'s card onto this
+caller card. Cuts that card's `allw`. Underflow / missing allowance is a
+no-op. Same `storeOwnerLimbs` rewrite as `pay`. Not a Map. -/
 @[pf_entry]
 def takeFrom (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
   if Access.requireOwner spender then
     if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
-      if w0 = ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW0 "b5f762798a53d543a014caf8b297cff8f2f937e8" then
-        if w1 = ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW1 "b5f762798a53d543a014caf8b297cff8f2f937e8" then
-          if w2 = ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW2 "b5f762798a53d543a014caf8b297cff8f2f937e8" then
-            if amount ≤ Context.peekAllwLimbs w0 w1 w2 then
-              if amount ≤ Context.peekOwnerLimbs w0 w1 w2 then
-                if s.bal ≤ u64Max - amount then
-                  if Context.storeOwnerLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max then
-                    if Context.flushAllw (Context.peekAllwLimbs w0 w1 w2 - amount) ≤ u64Max then
-                      if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
-                        if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
-                          .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + amount }, (0 : UInt64))
-                        else
-                          .error .overflow
-                      else
-                        .error .overflow
-                    else
-                      .error .overflow
+      if amount ≤ Context.peekAllwLimbs w0 w1 w2 then
+        if amount ≤ Context.peekOwnerLimbs w0 w1 w2 then
+          if s.bal ≤ u64Max - amount then
+            if Context.storeOwnerLimbs w0 w1 w2 ≤ u64Max then
+              if Context.flushAllw (Context.peekAllwLimbs w0 w1 w2 - amount) ≤ u64Max then
+                if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
+                  if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                    .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + amount }, (0 : UInt64))
                   else
                     .error .overflow
                 else
@@ -288,11 +279,11 @@ def takeFrom (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UIn
             else
               .error .overflow
           else
-            .error .unauthorized
+            .error .overflow
         else
-          .error .unauthorized
+          .error .overflow
       else
-        .error .unauthorized
+        .error .overflow
     else
       .error .paused
   else
