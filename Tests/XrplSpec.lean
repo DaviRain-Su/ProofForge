@@ -69,7 +69,7 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHand" == some "5c6813950576cdda"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCrew" == some "ca03e80ef4a8218a"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPay" == some "5f2a9ac1b78e08de"
-#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMint" == some "3a7f449aa52fbde8"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplMint" == some "8d5bd519f2a4865a"
 #guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint"]
 
 open Lean Elab Command in
@@ -695,6 +695,7 @@ elab "#pf_xrpl_mint_alphanet_emit_check " n:ident : command => do
     | .ok source => do
         let anchors : Array String := #[
           "(func (export \"mint\") (result i32)",
+          "(func (export \"mintTo\") (result i32)",
           "(func (export \"pay\") (result i32)",
           "(func (export \"pause\") (result i32)",
           "(func (export \"unpause\") (result i32)",

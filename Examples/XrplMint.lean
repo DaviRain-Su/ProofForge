@@ -47,6 +47,20 @@ def mint (s : State) (delta : UInt64) : Except Error (State × UInt64) :=
   else
     .error .unauthorized
 
+/-- Minter credits `(w0,w1,w2)`'s card. Peek dest first so overflow is a no-op. -/
+@[pf_entry]
+def mintTo (_s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
+  if Access.requireOwner minter then
+    if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
+      if Context.peekOwnerLimbs w0 w1 w2 ≤ u64Max - amount then
+        .ok ({ bal := Context.peekOwnerLimbs w0 w1 w2 + amount }, (0 : UInt64))
+      else
+        .error .overflow
+    else
+      .error .paused
+  else
+    .error .unauthorized
+
 /-- Move `amount` from the caller card onto `(w0,w1,w2)`'s card.
 Peek dest first so overflow does not debit the caller. Anyone may pay
 while running. -/

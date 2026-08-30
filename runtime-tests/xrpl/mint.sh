@@ -51,7 +51,7 @@ lake exe pf -- build --target xrpl-alphanet --out "$root/build/xrpl-alphanet" Xr
 wasm="$root/build/xrpl-alphanet/XrplMint.wasm"
 [[ -f "$wasm" ]] || { echo "FAIL: missing $wasm" >&2; exit 1; }
 
-printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"pay":4}}\n' \
+printf '{"rpc_url":"%s","wallet_seed":"%s","wasm_path":"%s","function_params":{"mint":1,"mintTo":4,"pay":4}}\n' \
   "$RPC" "$WALLET_A" "$wasm" >"$cfg"
 deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"
 echo "$deploy_out" >&2
@@ -180,4 +180,27 @@ rm -f "$cfg"
 [[ "$bal_a4" == "2" ]] || { echo "FAIL: A bal want 2 after B pause, got $bal_a4" >&2; exit 1; }
 [[ "$bal_b4" == "3" ]] || { echo "FAIL: B bal want 3 after B pause, got $bal_b4" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=3 B-pause-denied"
+# mintTo: minter credits B's card directly. B mintTo is unauthorized.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","4"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+mto="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$mto" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$mto"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"mintTo","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+mto_deny="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$mto_deny" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==3, d' <<<"$mto_deny"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a5="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b5="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a5" == "2" ]] || { echo "FAIL: A bal want 2 after mintTo, got $bal_a5" >&2; exit 1; }
+[[ "$bal_b5" == "7" ]] || { echo "FAIL: B bal want 7 after mintTo, got $bal_b5" >&2; exit 1; }
+
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=2 B.bal=7 mintTo"

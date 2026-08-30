@@ -205,6 +205,7 @@ need_exports_pay = (
 need_exports_mint = (
     '(func (export "initialize") (result i32)',
     '(func (export "mint") (result i32)',
+    '(func (export "mintTo") (result i32)',
     '(func (export "pay") (result i32)',
     '(func (export "pause") (result i32)',
     '(func (export "unpause") (result i32)',
