@@ -2,9 +2,10 @@ import ProofForge
 
 /-!
 Owner-gated mint plus anyone-can-pay points, with a pause flag (`halt`),
-total supply (`supp`), and mint cap (`cap`, 0 = unlimited) on the minter
-card. Not XRP, not Sdk.Map. `State` stays one `bal` slot so persist does
-not copy pause/supply/cap onto dest cards.
+total supply (`supp`), mint cap (`cap`, 0 = unlimited), and a compile-time
+spender allowance (`allw`) on each caller card. Not XRP, not Sdk.Map.
+`State` stays one `bal` slot so persist does not copy those keys onto dest
+cards.
 -/
 namespace Examples.XrplMint
 
@@ -25,6 +26,10 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 /-- Genesis `rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh`. -/
 @[pf_inline] def minter : AccountId :=
   Context.accountLit "b5f762798a53d543a014caf8b297cff8f2f937e8"
+
+/-- Wallet B `rLpgximdBvEHy8TxUwyj6mjCRNcJju5qGG`. Compile-time spender. -/
+@[pf_inline] def spender : AccountId :=
+  Context.accountLit "d0bc2a540b15411f44a24dfb58d23ad5d9d9b350"
 
 @[pf_entry]
 def init : State :=
@@ -212,6 +217,66 @@ def unpause (s : State) : Except Error (State × UInt64) :=
         .error .overflow
     else
       .error .overflow
+  else
+    .error .unauthorized
+
+/-- Caller writes `allw` on *this* card. Granted to the compile-time spender. -/
+@[pf_entry]
+def approve (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
+  if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
+    if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+      if Context.flushAllw amount ≤ u64Max then
+        if s.bal ≤ u64Max then
+          .ok ({ bal := s.bal + (0 : UInt64) }, (0 : UInt64))
+        else
+          .error .overflow
+      else
+        .error .overflow
+    else
+      .error .overflow
+  else
+    .error .paused
+
+/-- Compile-time spender pulls `amount` from the compile-time minter card
+onto this caller card. Cuts that card's `allw`. Underflow / missing
+allowance is a no-op. Source is genesis so we do not open a Map. -/
+@[pf_entry]
+def takeFrom (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) :=
+  if Access.requireOwner spender then
+    if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
+      if w0 = ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW0 "b5f762798a53d543a014caf8b297cff8f2f937e8" then
+        if w1 = ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW1 "b5f762798a53d543a014caf8b297cff8f2f937e8" then
+          if w2 = ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW2 "b5f762798a53d543a014caf8b297cff8f2f937e8" then
+            if amount ≤ Context.peekAllwLimbs w0 w1 w2 then
+              if amount ≤ Context.peekOwnerLimbs w0 w1 w2 then
+                if s.bal ≤ u64Max - amount then
+                  if Context.storeOwnerLit "b5f762798a53d543a014caf8b297cff8f2f937e8" ≤ u64Max then
+                    if Context.flushAllw (Context.peekAllwLimbs w0 w1 w2 - amount) ≤ u64Max then
+                      if Context.flushBal (Context.peekOwnerLimbs w0 w1 w2 - amount) ≤ u64Max then
+                        if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
+                          .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 + amount }, (0 : UInt64))
+                        else
+                          .error .overflow
+                      else
+                        .error .overflow
+                    else
+                      .error .overflow
+                  else
+                    .error .overflow
+                else
+                  .error .overflow
+              else
+                .error .overflow
+            else
+              .error .overflow
+          else
+            .error .unauthorized
+        else
+          .error .unauthorized
+      else
+        .error .unauthorized
+    else
+      .error .paused
   else
     .error .unauthorized
 

@@ -167,6 +167,15 @@ Total supply lives on the minter card, not per-user `bal`. -/
     (Runtime.xrplAccountLitW1 hex)
     (Runtime.xrplAccountLitW2 hex)
 
+/-- Persist `v` onto the current Owner card under JSON key `allw`.
+Allowance granted to the compile-time spender. Not a Map. -/
+@[pf_inline] def flushAllw (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushAllw v
+
+/-- Load `allw` from `(w0,w1,w2)`'s card (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekAllwLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekAllw w0 w1 w2
+
 end Context
 
 namespace Pausable

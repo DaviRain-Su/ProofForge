@@ -176,7 +176,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 10. **wsm-039** — `forAccum` 编译期展开 + 跨钱包 TwoStep（`XrplHand`）**已绿**。运行时下标仍拒。
 11. **wsm-040** — 跨钱包 operator（`XrplCrew`）**已绿**。
 12. **XrplPay** — 内部积分转账：先 peek dest，再切回 caller `flushBal`。余额不足不扣款。不是 XRP Payment。
-13. **XrplMint** — 编译期 minter 才能 mint / `mintTo` / `setCap`；任何人可 `burn`；`halt` / `supp` / `cap` 在 minter 卡上；暂停后 mint/pay/`mintTo`/`burn` 状态码 4。`supp` 随 mint/mintTo 增、burn 减，pay 不变。`cap=0` 不限额。
+13. **XrplMint** — 编译期 minter 才能 mint / `mintTo` / `setCap`；编译期 spender 才能 `takeFrom`；任何人可 `burn` / `approve`；`halt` / `supp` / `cap` 在 minter 卡上，`allw` 在授权人卡上；暂停后 mint/pay/`mintTo`/`burn`/`takeFrom` 状态码 4。`supp` 随 mint/mintTo 增、burn 减，pay 不变。`cap=0` 不限额。不是 Map。
 14. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
