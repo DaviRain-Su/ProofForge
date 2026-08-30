@@ -31,6 +31,7 @@ private def cmpInstr : Cmp → String
 
 private structure EState where
   paramCount : Nat
+  initializer : Bool := false
   fresh : Nat := 0
   last : Option String := none
   pendingDest : Option String := none
@@ -66,6 +67,12 @@ private def panicOverflowOff : Nat := 2048
 private def panicDivOff : Nat := 2057
 private def panicInputOff : Nat := 2072
 private def panicAccountIdOff : Nat := 2080
+private def stateKeyOff : Nat := 2096
+private def panicInitializedOff : Nat := 2101
+
+private def stateKey : String := "STATE"
+
+private def panicInitialized : String := "The contract has already been initialized"
 
 /-- Dedicated zero-padded buffers prevent a shorter second account id from
 observing bytes left by another register read. -/
@@ -442,6 +449,27 @@ private def storeSlot (p : Program ValKind OpExt)
       ") (i64.const " ++ toString off ++ ") (i64.const 8) (i64.const 8) (i64.const " ++
       toString evictedReg ++ ")))")
   ]
+
+private def initializedGuard (p : Program ValKind OpExt) (level : Nat) : Array String :=
+  let panic := indent (level + 4) ("(call $pf_panic_utf8 (i64.const " ++
+    toString panicInitialized.length ++ ") (i64.const " ++
+    toString panicInitializedOff ++ "))")
+  let guard (off len : Nat) := #[
+    indent level ("(if (i64.eq (call $pf_storage_has_key (i64.const " ++ toString len ++
+      ") (i64.const " ++ toString off ++ ")) (i64.const 1))"),
+    indent (level + 2) "(then",
+    panic,
+    indent (level + 2) "))"
+  ]
+  (keyLayout p).foldl
+    (init := guard stateKeyOff stateKey.length)
+    fun lines (_, off, len) => lines ++ guard off len
+
+private def markInitialized (level : Nat) : Array String := #[
+  indent level ("(drop (call $pf_storage_write (i64.const " ++ toString stateKey.length ++
+    ") (i64.const " ++ toString stateKeyOff ++ ") (i64.const 1) (i64.const " ++
+    toString stateKeyOff ++ ") (i64.const " ++ toString evictedReg ++ ")))")
+]
 
 private def returnU64Instr (expr : String) (level : Nat) : Array String :=
   #[
@@ -906,6 +934,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
                 throw "extract/unsupported: near v0 instructions follow terminal operation"
               let v ← renderVal st value
               let mut lines : Array String := #[]
+              if st.initializer then lines := lines ++ markInitialized level
               match st.pendingPromiseReturn with
               | some promiseLocal =>
                   lines := lines.push (indent level
@@ -923,6 +952,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let mut lines :=
           #[indent level ("(local.set " ++ localOfSlot dest ++ " " ++ v ++ ")")] ++
           storeSlot p dest ("(local.get " ++ localOfSlot dest ++ ")") level
+        if st.initializer then lines := lines ++ markInitialized level
         match st.pendingPromiseReturn with
         | some promiseLocal =>
             lines := lines.push (indent level
@@ -1440,18 +1470,28 @@ private def loadSlots (p : Program ValKind OpExt) (level : Nat) : Array String :
       indent (level + 2) ("(else (local.set " ++ localOfSlot slot.name ++ " (i64.const 0))))")
     ]
 
+private partial def supportsInitializerTerminal (ops : Array (Op ValKind OpExt)) : Bool :=
+  ops.all fun op => match op with
+    | .returnU64 _ => false
+    | .ite _ _ _ thn els => supportsInitializerTerminal thn && supportsInitializerTerminal els
+    | .forBody _ body => supportsInitializerTerminal body
+    | _ => true
+
 private def renderFn (p : Program ValKind OpExt)
-    (method : Method ValKind OpExt) : Except String (Array String) := do
+    (method : Method ValKind OpExt) (initializer : Bool) : Except String (Array String) := do
   let inputPlan ← inputPlanOf method
   let outputPlan ← outputPlanOf method
   if inputPlan.isNone then
     unless method.paramCount ≤ 1 do
       throw s!"extract/unsupported: {method.ixName} wants at most one UInt64 parameter for near v0"
+  if initializer then
+    unless supportsInitializerTerminal method.ops do
+      throw "extract/unsupported: near initializer must return state"
   let view := method.tupleArity.isSome
   let echo := method.echoDropped
   if view && methodUses .promiseResultsCount method then
     throw "extract/unsupported: near view cannot count promise results"
-  let st : EState := { paramCount := method.paramCount }
+  let st : EState := { paramCount := method.paramCount, initializer }
   let region ← emitRegion p outputPlan view echo 4 (defaultSlotOf p) method.ops.toList st
   unless region.terminal do
     throw s!"extract/unsupported: {method.ixName} does not end in a terminal"
@@ -1491,6 +1531,8 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push "    (call $pf_arena_reset)"
   lines := lines ++ (← loadArg method 4)
   lines := lines ++ (← loadHostPrelude method view 4)
+  if initializer then
+    lines := lines ++ initializedGuard p 4
   lines := lines ++ loadSlots p 4
   lines := lines ++ region.lines
   lines := lines.push "  )"
@@ -1505,7 +1547,10 @@ private def dataSection (p : Program ValKind OpExt) : Array String :=
   let base := #[
     "  (data (i32.const " ++ toString panicOverflowOff ++ ") \"overflow\")",
     "  (data (i32.const " ++ toString panicDivOff ++ ") \"divide-by-zero\")",
-    "  (data (i32.const " ++ toString panicInputOff ++ ") \"input\")"
+    "  (data (i32.const " ++ toString panicInputOff ++ ") \"input\")",
+    "  (data (i32.const " ++ toString stateKeyOff ++ ") \"" ++ stateKey ++ "\")",
+    "  (data (i32.const " ++ toString panicInitializedOff ++ ") \"" ++
+      panicInitialized ++ "\")"
   ]
   let account :=
     if predecessorKinds.any (programUses · p) || currentAccountKinds.any (programUses · p) then
@@ -1523,11 +1568,7 @@ private def staticDataEnd (p : Program ValKind OpExt) : Nat :=
   let promiseEnd := match (promiseLayout p).back? with
     | some (_, off, len) => off + len
     | none => 0
-  let panicEnd :=
-    if predecessorKinds.any (programUses · p) || currentAccountKinds.any (programUses · p) then
-      panicAccountIdOff + 10
-    else
-      panicInputOff + 5
+  let panicEnd := panicInitializedOff + panicInitialized.length
   Nat.max promiseEnd (Nat.max panicEnd (Nat.max keyEnd logEnd))
 
 private def arenaBase (p : Program ValKind OpExt) : Nat :=
@@ -1844,10 +1885,10 @@ def emit (p : IR.Program) : Except String String := do
   if programUsesUtf8Codec p then
     lines := lines ++ utf8Validator
   lines := lines.push ""
-  lines := lines ++ (← renderFn p p.initializer)
+  lines := lines ++ (← renderFn p p.initializer true)
   lines := lines.push ""
   for method in p.entries do
-    lines := lines ++ (← renderFn p method)
+    lines := lines ++ (← renderFn p method false)
     lines := lines.push ""
   lines := lines.push ")"
   return String.intercalate "\n" lines.toList ++ "\n"

@@ -115,6 +115,6 @@ export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
-echo "near-local-counter: RPC ready; running four scenes" >&2
+echo "near-local-counter: RPC ready; running lifecycle/arithmetic scenes" >&2
 "$python" runtime-tests/near/counter.py
 echo "near-local-counter: ok"

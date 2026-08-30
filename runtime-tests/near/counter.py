@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Counter four-scene harness against local near-sandbox (engineering only).
+"""Counter lifecycle/arithmetic harness against local near-sandbox (engineering only).
 
 Scenes:
   initialize(0) → get()==0
+  repeated initialize fails and preserves initialized state
   increment(1) ok → get()==1
   increment overflow (2^64-1) fails; state holds
   get is a view (8-byte LE)
@@ -41,6 +42,18 @@ def main() -> None:
     if got != 0:
         raise AssertionError(f"after initialize(0): get() expected 0, got {got}")
     print("counter: initialize(0) → get()==0 ok")
+
+    repeated = client.call(
+        "initialize", NearClient.encode_u64_le(99), expect_success=False
+    )
+    if "The contract has already been initialized" not in repr(repeated):
+        raise AssertionError(f"repeated initialize returned the wrong panic: {repeated!r}")
+    got = client.view_u64("get")
+    if got != 0:
+        raise AssertionError(
+            f"after repeated initialize(99): get() must stay 0, got {got}"
+        )
+    print("counter: repeated initialize fails + state holds at 0 ok")
 
     inc = client.call("increment", NearClient.encode_u64_le(1))
     sv = NearClient.success_value_bytes(inc)

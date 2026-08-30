@@ -79,6 +79,8 @@ elab "#pf_near_emit_check " n:ident : command => do
           "(import \"env\" \"storage_write\"",
           "(import \"env\" \"value_return\"",
           "(import \"env\" \"panic_utf8\"",
+          "(data (i32.const 2096) \"STATE\")",
+          "(data (i32.const 2101) \"The contract has already been initialized\")",
           "(func (export \"initialize\")",
           "(func (export \"increment\")",
           "(func (export \"get\")",
@@ -89,6 +91,8 @@ elab "#pf_near_emit_check " n:ident : command => do
           "i64.div_u",
           "i64.rem_u",
           "call $pf_storage_read",
+          "(call $pf_storage_has_key (i64.const 5) (i64.const 2096))",
+          "(call $pf_storage_has_key (i64.const 5) (i64.const 1024))",
           "call $pf_storage_write",
           "call $pf_value_return"
         ]
@@ -101,6 +105,37 @@ elab "#pf_near_emit_check " n:ident : command => do
           throwError "Counter unexpectedly imports NEAR log_utf8"
         unless !source.contains "xrpl_wasm_std" do
           throwError "near emit still mentions xrpl_wasm_std"
+        let initializeBody ← match source.splitOn "(func (export \"initialize\")" with
+          | [_prefix, suffix] => pure suffix
+          | _ => throwError "near emit must contain exactly one initializer wrapper"
+        let afterStateGuard ← match initializeBody.splitOn
+            "(call $pf_storage_has_key (i64.const 5) (i64.const 2096))" with
+          | [before, after] =>
+              unless before.contains "(local.set $pf_p0 (i64.load (i32.const 0)))" do
+                throwError "initializer consulted STATE before decoding its argument"
+              pure after
+          | _ => throwError "initializer must check the reserved STATE marker exactly once"
+        let afterLegacyGuard ← match afterStateGuard.splitOn
+            "(call $pf_storage_has_key (i64.const 5) (i64.const 1024))" with
+          | [_before, after] => pure after
+          | _ => throwError "initializer must check its legacy scalar slot after STATE"
+        let afterStateStore ← match afterLegacyGuard.splitOn
+            "(call $pf_storage_write (i64.const 5) (i64.const 2096) (i64.const 1)" with
+          | [before, after] =>
+              unless before.contains
+                  "(call $pf_storage_write (i64.const 5) (i64.const 1024) (i64.const 8)" do
+                throwError "initializer marked STATE before persisting its scalar state"
+              pure after
+          | _ => throwError "initializer must write the STATE marker exactly once"
+        unless !afterStateStore.contains "(call $pf_storage_write (i64.const 5) (i64.const 2096)" do
+          throwError "ordinary entries unexpectedly write the initializer STATE marker"
+        match ProofForge.Wasm.Near.Emit.emit {
+            program with initializer := {
+              program.initializer with ops := #[.returnU64 (.lit 0)] } } with
+        | .error reason =>
+            unless reason.contains "near initializer must return state" do
+              throwError s!"unexpected scalar initializer rejection: {reason}"
+        | .ok _ => throwError "scalar-return initializer bypassed STATE marker persistence"
         logInfo m!"proofforge-near-test: digest = {digest}"
         logInfo m!"proofforge-near-test: {source.length} bytes of WAT passed anchor check"
 
