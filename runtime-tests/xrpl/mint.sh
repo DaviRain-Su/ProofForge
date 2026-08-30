@@ -468,6 +468,27 @@ rm -f "$cfg"
 [[ "$allw_b_self" == "0" ]] || { echo "FAIL: B allw want 0 after self takeFrom, got $allw_b_self" >&2; exit 1; }
 [[ "$bal_a_self" == "1" ]] || { echo "FAIL: A bal want 1 after B self takeFrom, got $bal_a_self" >&2; exit 1; }
 
+# B burn(1) must debit B, not copy minter bal onto B.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"burn","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" >"$cfg"
+b_burn="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$b_burn" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$b_burn"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a_burn="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b_burn="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"supp"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+supp_burn="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a_burn" == "1" ]] || { echo "FAIL: A bal want 1 after B burn, got $bal_a_burn" >&2; exit 1; }
+[[ "$bal_b_burn" == "7" ]] || { echo "FAIL: B bal want 7 after B burn, got $bal_b_burn" >&2; exit 1; }
+[[ "$supp_burn" == "8" ]] || { echo "FAIL: A supp want 8 after B burn, got $supp_burn" >&2; exit 1; }
+
 printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
   "$RPC" "$WALLET_A" "$contract" >"$cfg"
 pause3="$(node "$here/alphanet-rpc.js" call "$cfg")"
@@ -488,6 +509,6 @@ printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
 bal_b11="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 rm -f "$cfg"
 [[ "$bal_a11" == "1" ]] || { echo "FAIL: A bal want 1 after paused takeFrom, got $bal_a11" >&2; exit 1; }
-[[ "$bal_b11" == "8" ]] || { echo "FAIL: B bal want 8 after paused takeFrom, got $bal_b11" >&2; exit 1; }
+[[ "$bal_b11" == "7" ]] || { echo "FAIL: B bal want 7 after paused takeFrom, got $bal_b11" >&2; exit 1; }
 
-echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=8 allw=1"
+echo "xrpl-alphanet-mint: ok contract=$contract A.bal=1 B.bal=7 allw=0"

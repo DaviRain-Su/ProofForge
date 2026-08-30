@@ -146,16 +146,17 @@ def pay (s : State) (w0 w1 w2 amount : UInt64) : Except Error (State × UInt64) 
     .error .paused
 
 /-- Burn `amount` from *this caller's* card. Pause-gated. Underflow is a no-op.
-Decrements `supp` on the minter card. -/
+Decrements `supp` on the minter card. Peek halt/supp on the minter card,
+then restore caller before persist so `$bal` is not copied from the minter. -/
 @[pf_entry]
-def burn (s : State) (amount : UInt64) : Except Error (State × UInt64) :=
+def burn (_s : State) (amount : UInt64) : Except Error (State × UInt64) :=
   if Pausable.isRunning (Context.peekHaltLit "b5f762798a53d543a014caf8b297cff8f2f937e8") then
-    if amount ≤ s.bal then
+    if amount ≤ Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 then
       if amount ≤ Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" then
         if Context.flushSupp
             (Context.peekSuppLit "b5f762798a53d543a014caf8b297cff8f2f937e8" - amount) ≤ u64Max then
           if Context.storeOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 ≤ u64Max then
-            .ok ({ bal := s.bal - amount }, (0 : UInt64))
+            .ok ({ bal := Context.peekOwnerLimbs Context.callerW0 Context.callerW1 Context.callerW2 - amount }, (0 : UInt64))
           else
             .error .overflow
         else
