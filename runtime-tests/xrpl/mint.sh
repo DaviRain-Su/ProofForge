@@ -441,6 +441,33 @@ rm -f "$cfg"
 [[ "$allw_a" == "1" ]] || { echo "FAIL: A allw want 1 after takeFrom, got $allw_a" >&2; exit 1; }
 [[ "$allw_b" == "missing" || "$allw_b" == "0" ]] || { echo "FAIL: B allw should stay missing/0, got $allw_b" >&2; exit 1; }
 
+# Self-source: B approve(1) then takeFrom(B,1) cuts allw only. bal stays 8.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"approve","parameters":["1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" >"$cfg"
+b_appr="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$b_appr" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$b_appr"
+
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"takeFrom","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+self_take="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$self_take" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$self_take"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b_self="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"allw"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+allw_b_self="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a_self="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_b_self" == "8" ]] || { echo "FAIL: B bal want 8 after self takeFrom, got $bal_b_self" >&2; exit 1; }
+[[ "$allw_b_self" == "0" ]] || { echo "FAIL: B allw want 0 after self takeFrom, got $allw_b_self" >&2; exit 1; }
+[[ "$bal_a_self" == "1" ]] || { echo "FAIL: A bal want 1 after B self takeFrom, got $bal_a_self" >&2; exit 1; }
+
 printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pause"}\n' \
   "$RPC" "$WALLET_A" "$contract" >"$cfg"
 pause3="$(node "$here/alphanet-rpc.js" call "$cfg")"
