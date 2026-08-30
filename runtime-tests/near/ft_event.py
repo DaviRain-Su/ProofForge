@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact no-memo NEP-141 mint/transfer/burn events against local near-sandbox."""
+"""Exact NEP-141 mint/transfer/burn events against local near-sandbox."""
 
 from __future__ import annotations
 
@@ -33,8 +33,12 @@ def _expect_event(
     data: dict[str, str],
     *,
     signer: str | None = None,
+    memo: str | None = None,
 ) -> None:
-    response = client.call_on(client.account_id, method, signer=signer)
+    args = b"" if memo is None else NearClient.borsh_string(memo)
+    response = client.call_on(client.account_id, method, args, signer=signer)
+    if memo is not None:
+        data = {**data, "memo": memo}
     expected = "EVENT_JSON:" + json.dumps(
         {
             "standard": "nep141",
@@ -43,11 +47,12 @@ def _expect_event(
             "data": [data],
         },
         separators=(",", ":"),
+        ensure_ascii=False,
     )
     logs = _receipt_logs(response)
     if logs != [expected]:
         raise AssertionError(f"{method}: expected {[expected]!r}, got {logs!r}")
-    if '"memo"' in logs[0]:
+    if memo is None and '"memo"' in logs[0]:
         raise AssertionError(f"{method}: memo must be omitted")
 
 
@@ -94,10 +99,44 @@ def main() -> None:
         "ft_burn",
         {"owner_id": client.account_id, "amount": str(1 << 64)},
     )
-    expected_calls = len(cases) + 2
+    _expect_event(
+        client,
+        "mintMemo",
+        "ft_mint",
+        {"owner_id": client.account_id, "amount": "0"},
+        memo="",
+    )
+    _expect_event(
+        client,
+        "transferMemo",
+        "ft_transfer",
+        {
+            "old_owner_id": transfer_caller,
+            "new_owner_id": client.account_id,
+            "amount": str((1 << 64) + 1),
+        },
+        signer=transfer_caller,
+        memo='"\\\b\t\n\f\r\x01',
+    )
+    _expect_event(
+        client,
+        "burnMemo",
+        "ft_burn",
+        {"owner_id": client.account_id, "amount": str((1 << 128) - 1)},
+        memo="雪😀",
+    )
+    boundary_memo = "x" * 16
+    _expect_event(
+        client,
+        "mintMemo",
+        "ft_mint",
+        {"owner_id": client.account_id, "amount": "0"},
+        memo=boundary_memo,
+    )
+    expected_calls = len(cases) + 6
     if client.view_u64("get") != expected_calls:
-        raise AssertionError("all six event methods must commit exactly once")
-    print("near-ft-event: exact ordered fields, u128 decimal, no memo, one log ok")
+        raise AssertionError("all event calls must commit exactly once")
+    print("near-ft-event: exact fields, u128 decimal, bounded memo escaping, one log ok")
     print("suite NearFungibleTokenEvent: PASS")
 
 

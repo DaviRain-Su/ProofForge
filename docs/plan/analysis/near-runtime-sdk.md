@@ -57,7 +57,7 @@ Authoritative source anchors:
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
 | IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
 | persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
-| logs/events | `log_utf8`; NEP-297 SDK JSON | static/bounded logs, bounded string-data envelope, and exact no-memo NEP-141 mint/transfer/burn complete | standard-specific integration next; generic JSON absent |
+| logs/events | `log_utf8`; NEP-297 SDK JSON | static/bounded logs, bounded string-data envelope, and exact NEP-141 mint/transfer/burn with bounded optional memos complete | standard-specific integration next; generic JSON absent |
 | cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, authenticated self-callback, and closed ordered two-child join complete** in wsm-near-promise-001/002/then/private/transfer/and-001 | Runtime promise effects, then typed SDK builder |
 | native transfer | Promise batch transfer action | **static detached/returned lossless-u128 transfer complete** in wsm-near-promise-transfer-001 | Runtime batch/action; never synchronous balance mutation |
 | callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
@@ -165,7 +165,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N7 promises | **detached/returned static batch calls, native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
-| N10 standards | exact no-memo NEP-141 mint/transfer/burn events complete; no token state/method contract | standard-specific integration suites |
+| N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; no token state/method contract | standard-specific integration suites |
 
 ## 6. Near-term task cuts
 
@@ -176,9 +176,9 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 3. **NEAR-LOG:** static literals, arena-backed bounded dynamic UTF-8 spans, and one exact bounded
    NEP-297 string-data envelope are complete in wsm-near-log-001/log-dynamic-001/event-001;
    standard-specific closed payloads follow, while generic JSON remains absent.
-4. **NEAR-NEP-141-EVENT:** exact v1.0.0 no-memo `ft_mint`, `ft_transfer`, and `ft_burn`
-   serialization is complete in wsm-near-nep141-event-001/002. FT balances, supply, methods, and
-   storage management remain separate later slices.
+4. **NEAR-NEP-141-EVENT:** exact v1.0.0 `ft_mint`, `ft_transfer`, and `ft_burn` serialization,
+   including bounded optional memo variants, is complete in wsm-near-nep141-event-001/002/003.
+   FT balances, supply, methods, and storage management remain separate later slices.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

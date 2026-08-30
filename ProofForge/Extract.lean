@@ -589,6 +589,16 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
             | .nep141FtBurn owner amountLo amountHi =>
                 .nep141FtBurn (owner.map (flipVal fuel'))
                   (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+                .nep141FtMintMemo memoCapacity (owner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi) (memo.map (flipVal fuel'))
+            | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+                .nep141FtTransferMemo memoCapacity (oldOwner.map (flipVal fuel'))
+                  (newOwner.map (flipVal fuel')) (flipVal fuel' amountLo)
+                  (flipVal fuel' amountHi) (memo.map (flipVal fuel'))
+            | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+                .nep141FtBurnMemo memoCapacity (owner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi) (memo.map (flipVal fuel'))
             | .promiseFunctionCallDetached receiver method argsCapacity arguments
                 depositLo depositHi gas =>
                 .promiseFunctionCallDetached receiver method argsCapacity

@@ -185,6 +185,18 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Op.nearNep141FtBurn (owner : Array Val) (amountLo amountHi : Val) : Op :=
   .ext (.near (.nep141FtBurn owner amountLo amountHi))
 
+@[match_pattern] def Op.nearNep141FtMintMemo (memoCapacity : Nat) (owner : Array Val)
+    (amountLo amountHi : Val) (memo : Array Val) : Op :=
+  .ext (.near (.nep141FtMintMemo memoCapacity owner amountLo amountHi memo))
+
+@[match_pattern] def Op.nearNep141FtTransferMemo (memoCapacity : Nat)
+    (oldOwner newOwner : Array Val) (amountLo amountHi : Val) (memo : Array Val) : Op :=
+  .ext (.near (.nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo))
+
+@[match_pattern] def Op.nearNep141FtBurnMemo (memoCapacity : Nat) (owner : Array Val)
+    (amountLo amountHi : Val) (memo : Array Val) : Op :=
+  .ext (.near (.nep141FtBurnMemo memoCapacity owner amountLo amountHi memo))
+
 @[match_pattern] def Op.nearPromiseFunctionCallDetached
     (receiver method : String) (argsCapacity : Nat) (arguments : Array Val)
     (depositLo depositHi gas : Val) : Op :=
@@ -563,6 +575,9 @@ def hasNearEffect (ops : Array Op) : Bool :=
     | .ext (.near (.nep141FtMint _ _ _))
     | .ext (.near (.nep141FtTransfer _ _ _ _))
     | .ext (.near (.nep141FtBurn _ _ _))
+    | .ext (.near (.nep141FtMintMemo _ _ _ _ _))
+    | .ext (.near (.nep141FtTransferMemo _ _ _ _ _ _))
+    | .ext (.near (.nep141FtBurnMemo _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _))

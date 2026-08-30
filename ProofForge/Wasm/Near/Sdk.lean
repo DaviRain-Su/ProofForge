@@ -15,8 +15,8 @@ namespace ProofForge.Wasm.Near.Sdk
 Source-facing NEAR SDK. Names erase through `@[pf_inline]` to Runtime stubs;
 they do not add Ops, IR nodes, or emitter cases unless explicitly documented as event effects.
 Bounded Promise-result observation, strict Borsh UInt64 result decoding, full-AccountId
-self-callback authentication, and exact NEP-141 mint/transfer/burn event serialization are
-available; a fungible-token contract remains absent.
+self-callback authentication, and exact NEP-141 mint/transfer/burn event serialization with
+optional bounded memos are available; a fungible-token contract remains absent.
 -/
 
 notation "AccountId" => Runtime.AccountId
@@ -126,6 +126,21 @@ then quoted full-u128 amount; optional memo is deliberately omitted. -/
 optional memo is deliberately omitted. -/
 @[pf_inline] def burn (owner : AccountId) (amount : NearToken) : UInt64 :=
   Runtime.nep141FtBurn owner amount
+
+/-- Emit `ft_mint` with one bounded UTF-8 memo after the quoted amount field. -/
+@[pf_inline] def mintWithMemo (owner : AccountId) (amount : NearToken) (memoCapacity : Nat)
+    (memo : ProofForge.Core.Value.BoundedString memoCapacity) : UInt64 :=
+  Runtime.nep141FtMintMemo memoCapacity owner amount memo
+
+/-- Emit `ft_transfer` with one bounded UTF-8 memo after the quoted amount field. -/
+@[pf_inline] def transferWithMemo (oldOwner newOwner : AccountId) (amount : NearToken)
+    (memoCapacity : Nat) (memo : ProofForge.Core.Value.BoundedString memoCapacity) : UInt64 :=
+  Runtime.nep141FtTransferMemo memoCapacity oldOwner newOwner amount memo
+
+/-- Emit `ft_burn` with one bounded UTF-8 memo after the quoted amount field. -/
+@[pf_inline] def burnWithMemo (owner : AccountId) (amount : NearToken) (memoCapacity : Nat)
+    (memo : ProofForge.Core.Value.BoundedString memoCapacity) : UInt64 :=
+  Runtime.nep141FtBurnMemo memoCapacity owner amount memo
 
 end FungibleToken
 

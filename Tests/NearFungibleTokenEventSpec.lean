@@ -5,11 +5,11 @@ import ProofForge.Wasm.Near.Commands
 import Examples.NearFungibleTokenEvent
 
 /-!
-# Exact no-memo NEP-141 fungible-token events
+# Exact NEP-141 fungible-token events
 
 This pins mint/transfer/burn event serialization only: complete AccountId staging, JSON escaping,
-full-u128 decimal, official field order, and one compact `EVENT_JSON:` log. It is not an FT
-state/method implementation.
+full-u128 decimal, official field order, optional bounded memo variants, and one compact
+`EVENT_JSON:` log. It is not an FT state/method implementation.
 -/
 
 open ProofForge
@@ -32,6 +32,26 @@ private def hasExpectedBurn (method : ProofForge.Wasm.Near.IR.Method) : Bool :=
   method.ops.any fun
     | .ext (.nep141FtBurn owner (.lit lo) (.lit hi)) =>
         owner.size == 9 && lo == 0 && hi == 1
+    | _ => false
+
+private def hasExpectedMintMemo (method : ProofForge.Wasm.Near.IR.Method) : Bool :=
+  method.ops.any fun
+    | .ext (.nep141FtMintMemo capacity owner (.lit lo) (.lit hi) memo) =>
+        capacity == 16 && owner.size == 9 && lo == 0 && hi == 0 && memo.size == 17
+    | _ => false
+
+private def hasExpectedTransferMemo (method : ProofForge.Wasm.Near.IR.Method) : Bool :=
+  method.ops.any fun
+    | .ext (.nep141FtTransferMemo capacity oldOwner newOwner (.lit lo) (.lit hi) memo) =>
+        capacity == 16 && oldOwner.size == 9 && newOwner.size == 9 &&
+          lo == 1 && hi == 1 && memo.size == 17
+    | _ => false
+
+private def hasExpectedBurnMemo (method : ProofForge.Wasm.Near.IR.Method) : Bool :=
+  method.ops.any fun
+    | .ext (.nep141FtBurnMemo capacity owner (.lit lo) (.lit hi) memo) =>
+        capacity == 16 && owner.size == 9 && lo == 18446744073709551615 &&
+          hi == 18446744073709551615 && memo.size == 17
     | _ => false
 
 elab "#pf_guard_near_ft_events" : command => do
@@ -71,6 +91,18 @@ elab "#pf_guard_near_ft_events" : command => do
     let canon := ProofForge.Wasm.IR.opsCanon ProofForge.Wasm.Near.IR.extValCanon
       ProofForge.Wasm.Near.IR.extOpCanon burn.ops
     throwError s!"wrong burnTwo64 ft_burn payload: {canon}"
+  let memoExpected : Array (String × (ProofForge.Wasm.Near.IR.Method → Bool)) := #[
+    ("mintMemo", hasExpectedMintMemo),
+    ("transferMemo", hasExpectedTransferMemo),
+    ("burnMemo", hasExpectedBurnMemo)
+  ]
+  for (name, predicate) in memoExpected do
+    let some method := program.entries.find? (·.ixName == name)
+      | throwError s!"missing {name}"
+    unless predicate method do
+      let canon := ProofForge.Wasm.IR.opsCanon ProofForge.Wasm.Near.IR.extValCanon
+        ProofForge.Wasm.Near.IR.extOpCanon method.ops
+      throwError s!"wrong {name} bounded memo payload: {canon}"
   let wat ←
     match ProofForge.Wasm.Near.Emit.emit program with
     | .ok source => pure source
@@ -86,6 +118,8 @@ elab "#pf_guard_near_ft_events" : command => do
     "(br $output)",
     "(call $pf_arena_alloc (i64.const 528) (i64.const 1))",
     "(call $pf_arena_alloc (i64.const 938) (i64.const 1))",
+    "(call $pf_arena_alloc (i64.const 634) (i64.const 1))",
+    "(call $pf_arena_alloc (i64.const 1044) (i64.const 1))",
     "(call $pf_arena_alloc (i64.const 39) (i64.const 1))",
     "(call $pf_json_escape_byte",
     "(call $pf_u128_decimal",
@@ -94,17 +128,22 @@ elab "#pf_guard_near_ft_events" : command => do
     "(func (export \"mintTwo64PlusOne\")",
     "(func (export \"mintMax\")",
     "(func (export \"transferMax\")",
-    "(func (export \"burnTwo64\")"
+    "(func (export \"burnTwo64\")",
+    "(func (export \"mintMemo\")",
+    "(func (export \"transferMemo\")",
+    "(func (export \"burnMemo\")",
+    "(i64.const 16)"
   ]
   for anchor in anchors do
     unless wat.contains anchor do
       throwError s!"NEP-141 event WAT is missing {anchor}\n{wat}"
-  if wat.contains "\"memo\"" then
-    throwError "NEP-141 event unexpectedly serialized memo"
   logInfo m!"proofforge-near-ft-event-test: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
 
 #pf_guard_near_ft_events
 #pf_near_build Examples.NearFungibleTokenEvent
 
+#guard ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid 16
+#guard !ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid 17
+
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleTokenEvent" ==
-  some "c2e55cb7f673c6ee"
+  some "768db0d9cec95f94"

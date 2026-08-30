@@ -170,6 +170,16 @@ private def projectOpExt
       | .nep141FtBurn owner amountLo amountHi =>
           return .nep141FtBurn (← owner.mapM _projectVal)
             (← _projectVal amountLo) (← _projectVal amountHi)
+      | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+          return .nep141FtMintMemo memoCapacity (← owner.mapM _projectVal)
+            (← _projectVal amountLo) (← _projectVal amountHi) (← memo.mapM _projectVal)
+      | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+          return .nep141FtTransferMemo memoCapacity (← oldOwner.mapM _projectVal)
+            (← newOwner.mapM _projectVal) (← _projectVal amountLo) (← _projectVal amountHi)
+            (← memo.mapM _projectVal)
+      | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+          return .nep141FtBurnMemo memoCapacity (← owner.mapM _projectVal)
+            (← _projectVal amountLo) (← _projectVal amountHi) (← memo.mapM _projectVal)
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           return .promiseFunctionCallDetached receiver method argsCapacity
             (← arguments.mapM _projectVal) (← _projectVal depositLo)
@@ -299,6 +309,18 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
       s!"nevent.nep141.ft_burn({canonValues owner};" ++
         s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
         s!"{Wasm.IR.valCanon extValCanon amountHi})"
+  | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+      s!"nevent.nep141.ft_mint.memo:{memoCapacity}({canonValues owner};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo},{Wasm.IR.valCanon extValCanon amountHi};" ++
+        s!"{canonValues memo})"
+  | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+      s!"nevent.nep141.ft_transfer.memo:{memoCapacity}({canonValues oldOwner};" ++
+        s!"{canonValues newOwner};{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi};{canonValues memo})"
+  | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+      s!"nevent.nep141.ft_burn.memo:{memoCapacity}({canonValues owner};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo},{Wasm.IR.valCanon extValCanon amountHi};" ++
+        s!"{canonValues memo})"
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       s!"npromise.detached:{receiver.toUTF8.size}:{receiver}:{method.toUTF8.size}:{method}." ++
         s!"{argsCapacity}({canonValues arguments};" ++
@@ -400,6 +422,16 @@ private def rewritePayload
   | .nep141FtBurn owner amountLo amountHi =>
       return .nep141FtBurn (← owner.mapM rewriteValue)
         (← rewriteValue amountLo) (← rewriteValue amountHi)
+  | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+      return .nep141FtMintMemo memoCapacity (← owner.mapM rewriteValue)
+        (← rewriteValue amountLo) (← rewriteValue amountHi) (← memo.mapM rewriteValue)
+  | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+      return .nep141FtTransferMemo memoCapacity (← oldOwner.mapM rewriteValue)
+        (← newOwner.mapM rewriteValue) (← rewriteValue amountLo) (← rewriteValue amountHi)
+        (← memo.mapM rewriteValue)
+  | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+      return .nep141FtBurnMemo memoCapacity (← owner.mapM rewriteValue)
+        (← rewriteValue amountLo) (← rewriteValue amountHi) (← memo.mapM rewriteValue)
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       return .promiseFunctionCallDetached receiver method argsCapacity
         (← arguments.mapM rewriteValue) (← rewriteValue depositLo)

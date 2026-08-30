@@ -71,6 +71,12 @@ inductive OpExt (V : Type) where
   | nep141FtMint (owner : Array V) (amountLo amountHi : V)
   | nep141FtTransfer (oldOwner newOwner : Array V) (amountLo amountHi : V)
   | nep141FtBurn (owner : Array V) (amountLo amountHi : V)
+  | nep141FtMintMemo (memoCapacity : Nat) (owner : Array V) (amountLo amountHi : V)
+      (memo : Array V)
+  | nep141FtTransferMemo (memoCapacity : Nat) (oldOwner newOwner : Array V)
+      (amountLo amountHi : V) (memo : Array V)
+  | nep141FtBurnMemo (memoCapacity : Nat) (owner : Array V) (amountLo amountHi : V)
+      (memo : Array V)
   | promiseFunctionCallDetached (receiver method : String) (argsCapacity : Nat)
       (arguments : Array V) (depositLo depositHi gas : V)
   | promiseFunctionCallReturned (receiver method : String) (argsCapacity : Nat)
@@ -126,6 +132,19 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .nep141FtBurn owner amountLo amountHi =>
       accountIdFrameWellFormed owner && amountLo.wellFormed ValKind.arity &&
         amountHi.wellFormed ValKind.arity
+  | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+      Codec.nep141MemoCapacityValid memoCapacity && accountIdFrameWellFormed owner &&
+        storageFrameWellFormed memoCapacity memo &&
+        amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
+  | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+      Codec.nep141MemoCapacityValid memoCapacity && accountIdFrameWellFormed oldOwner &&
+        accountIdFrameWellFormed newOwner &&
+        storageFrameWellFormed memoCapacity memo && amountLo.wellFormed ValKind.arity &&
+        amountHi.wellFormed ValKind.arity
+  | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+      Codec.nep141MemoCapacityValid memoCapacity && accountIdFrameWellFormed owner &&
+        storageFrameWellFormed memoCapacity memo &&
+        amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       Codec.accountIdLiteralValid receiver && Codec.promiseMethodLiteralValid method &&
         storageFrameWellFormed argsCapacity arguments &&
@@ -197,6 +216,15 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
         (mapValue amountLo) (mapValue amountHi)
   | .nep141FtBurn owner amountLo amountHi =>
       .nep141FtBurn (owner.map mapValue) (mapValue amountLo) (mapValue amountHi)
+  | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+      .nep141FtMintMemo memoCapacity (owner.map mapValue) (mapValue amountLo)
+        (mapValue amountHi) (memo.map mapValue)
+  | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+      .nep141FtTransferMemo memoCapacity (oldOwner.map mapValue) (newOwner.map mapValue)
+        (mapValue amountLo) (mapValue amountHi) (memo.map mapValue)
+  | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+      .nep141FtBurnMemo memoCapacity (owner.map mapValue) (mapValue amountLo)
+        (mapValue amountHi) (memo.map mapValue)
   | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
       .promiseFunctionCallDetached receiver method argsCapacity (arguments.map mapValue)
         (mapValue depositLo) (mapValue depositHi) (mapValue gas)
@@ -252,6 +280,10 @@ private def cfgPayloadValues : OpExt Val → Array Val
   | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
       oldOwner ++ newOwner ++ #[amountLo, amountHi]
   | .nep141FtBurn owner amountLo amountHi => owner ++ #[amountLo, amountHi]
+  | .nep141FtMintMemo _ owner amountLo amountHi memo
+  | .nep141FtBurnMemo _ owner amountLo amountHi memo => owner ++ #[amountLo, amountHi] ++ memo
+  | .nep141FtTransferMemo _ oldOwner newOwner amountLo amountHi memo =>
+      oldOwner ++ newOwner ++ #[amountLo, amountHi] ++ memo
   | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
       arguments ++ #[depositLo, depositHi, gas]
   | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>

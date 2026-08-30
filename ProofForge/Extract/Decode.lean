@@ -5674,6 +5674,9 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.nep141FtMint ||
         name == ``ProofForge.Wasm.Near.Runtime.nep141FtTransfer ||
         name == ``ProofForge.Wasm.Near.Runtime.nep141FtBurn ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtMintMemo ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtTransferMemo ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtBurnMemo ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
@@ -5774,6 +5777,49 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
         | some owner, some amountLo, some amountHi =>
             some (.nearNep141FtBurn owner amountLo amountHi)
         | _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtMintMemo &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some memoCapacity, some owner, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity then
+              (boundedStorageFrame? env memoCapacity args[args.size - 1]!).map fun memo =>
+                .nearNep141FtMintMemo memoCapacity owner amountLo amountHi memo
+            else none
+        | _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtTransferMemo &&
+          e.getAppArgs.size ≥ 5 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 5]!,
+            nearAccountIdFrame? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some memoCapacity, some oldOwner, some newOwner, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity then
+              (boundedStorageFrame? env memoCapacity args[args.size - 1]!).map fun memo =>
+                .nearNep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo
+            else none
+        | _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtBurnMemo &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some memoCapacity, some owner, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity then
+              (boundedStorageFrame? env memoCapacity args[args.size - 1]!).map fun memo =>
+                .nearNep141FtBurnMemo memoCapacity owner amountLo amountHi memo
+            else none
+        | _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned) &&
           e.getAppArgs.size ≥ 2 then

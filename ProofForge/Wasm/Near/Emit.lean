@@ -134,6 +134,9 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.nep141FtMint _ _ _) => #[]
       | .ext (.nep141FtTransfer _ _ _ _) => #[]
       | .ext (.nep141FtBurn _ _ _) => #[]
+      | .ext (.nep141FtMintMemo _ _ _ _ _) => #[]
+      | .ext (.nep141FtTransferMemo _ _ _ _ _ _) => #[]
+      | .ext (.nep141FtBurnMemo _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
       | .ext (.promiseTransferDetached _ _ _)
@@ -164,6 +167,9 @@ private partial def hasBoundedLogOps (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.nep141FtMint _ _ _) => true
     | .ext (.nep141FtTransfer _ _ _ _) => true
     | .ext (.nep141FtBurn _ _ _) => true
+    | .ext (.nep141FtMintMemo _ _ _ _ _) => true
+    | .ext (.nep141FtTransferMemo _ _ _ _ _ _) => true
+    | .ext (.nep141FtBurnMemo _ _ _ _ _) => true
     | .ite _ _ _ thn els => hasBoundedLogOps thn || hasBoundedLogOps els
     | .forBody _ body => hasBoundedLogOps body
     | _ => false
@@ -176,6 +182,9 @@ private partial def hasFtEventOps (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.nep141FtMint _ _ _) => true
     | .ext (.nep141FtTransfer _ _ _ _) => true
     | .ext (.nep141FtBurn _ _ _) => true
+    | .ext (.nep141FtMintMemo _ _ _ _ _) => true
+    | .ext (.nep141FtTransferMemo _ _ _ _ _ _) => true
+    | .ext (.nep141FtBurnMemo _ _ _ _ _) => true
     | .ite _ _ _ thn els => hasFtEventOps thn || hasFtEventOps els
     | .forBody _ body => hasFtEventOps body
     | _ => false
@@ -850,6 +859,7 @@ private def ftBurnPrefix : Array UInt8 :=
   "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_burn\",\"data\":[{\"owner_id\":\"".toUTF8.data
 
 private def ftAmountPrefix : Array UInt8 := "\",\"amount\":\"".toUTF8.data
+private def ftMemoPrefix : Array UInt8 := "\",\"memo\":\"".toUTF8.data
 private def ftEventSuffix : Array UInt8 := "\"}]}".toUTF8.data
 
 private structure FtEventBuffer where
@@ -931,6 +941,34 @@ private def appendFtAmount (buffer : FtEventBuffer) (amountLo amountHi : Val Val
   ]
   return { buffer with lines, st := st' }
 
+/-- Append the active prefix of one bounded UTF-8 memo through the same serde_json-compatible
+byte escaper. Inactive frame leaves are never inspected or serialized. -/
+private def appendFtMemo (buffer : FtEventBuffer) (capacity : Nat)
+    (memo : Array (Val ValKind)) (level : Nat) : Except String FtEventBuffer := do
+  unless Codec.nep141MemoCapacityValid capacity && memo.size == capacity + 1 do
+    throw "extract/unsupported: near NEP-141 memo frame geometry"
+  let sourceLength ← renderVal buffer.st memo[0]!
+  let sourceLengthLocal := localOfTemp buffer.st.fresh
+  let st' := { buffer.st with fresh := buffer.st.fresh + 1 }
+  let mut lines := buffer.lines ++ #[
+    indent level ("(local.set " ++ sourceLengthLocal ++ " " ++ sourceLength ++ ")"),
+    indent level ("(if (i64.gt_u (local.get " ++ sourceLengthLocal ++ ") (i64.const " ++
+      toString capacity ++ ")) (then unreachable))")
+  ]
+  for index in [0:capacity] do
+    let value ← renderVal buffer.st memo[index + 1]!
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        sourceLengthLocal ++ "))"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(if (i64.gt_u " ++ value ++ " (i64.const 255)) (then unreachable))"),
+      indent (level + 4) ("(local.set " ++ buffer.outputLengthLocal ++
+        " (call $pf_json_escape_byte " ++ value ++ " (i32.wrap_i64 (local.get " ++
+        buffer.pointerLocal ++ ")) (local.get " ++ buffer.outputLengthLocal ++ ")))") ,
+      indent (level + 2) "))"
+    ]
+  return { buffer with lines, st := st' }
+
 private def finishFtEvent (buffer : FtEventBuffer) : StagedEvent := {
   lines := buffer.lines
   pointer := "(local.get " ++ buffer.pointerLocal ++ ")"
@@ -969,6 +1007,50 @@ private def stageNep141FtBurn (st : EState) (owner : Array (Val ValKind))
   let buffer ← appendFtAccount buffer owner level
   let buffer := appendFtLiteral buffer ftAmountPrefix level
   let buffer ← appendFtAmount buffer amountLo amountHi level
+  return finishFtEvent (appendFtLiteral buffer ftEventSuffix level)
+
+/-- Stage one exact NEP-141 `ft_mint` envelope with the memo field present after amount. -/
+private def stageNep141FtMintMemo (st : EState) (memoCapacity : Nat)
+    (owner : Array (Val ValKind)) (amountLo amountHi : Val ValKind)
+    (memo : Array (Val ValKind)) (level : Nat) : Except String StagedEvent := do
+  let allocation := ftMintPrefix.size + 64 * 6 + ftAmountPrefix.size + 39 +
+    ftMemoPrefix.size + memoCapacity * 6 + ftEventSuffix.size
+  let buffer := startFtEvent st ftMintPrefix allocation level
+  let buffer ← appendFtAccount buffer owner level
+  let buffer := appendFtLiteral buffer ftAmountPrefix level
+  let buffer ← appendFtAmount buffer amountLo amountHi level
+  let buffer := appendFtLiteral buffer ftMemoPrefix level
+  let buffer ← appendFtMemo buffer memoCapacity memo level
+  return finishFtEvent (appendFtLiteral buffer ftEventSuffix level)
+
+/-- Stage one exact NEP-141 `ft_transfer` envelope with the memo field present after amount. -/
+private def stageNep141FtTransferMemo (st : EState) (memoCapacity : Nat)
+    (oldOwner newOwner : Array (Val ValKind)) (amountLo amountHi : Val ValKind)
+    (memo : Array (Val ValKind)) (level : Nat) : Except String StagedEvent := do
+  let allocation := ftTransferPrefix.size + 64 * 6 + ftTransferNewOwnerPrefix.size +
+    64 * 6 + ftAmountPrefix.size + 39 + ftMemoPrefix.size + memoCapacity * 6 + ftEventSuffix.size
+  let buffer := startFtEvent st ftTransferPrefix allocation level
+  let buffer ← appendFtAccount buffer oldOwner level
+  let buffer := appendFtLiteral buffer ftTransferNewOwnerPrefix level
+  let buffer ← appendFtAccount buffer newOwner level
+  let buffer := appendFtLiteral buffer ftAmountPrefix level
+  let buffer ← appendFtAmount buffer amountLo amountHi level
+  let buffer := appendFtLiteral buffer ftMemoPrefix level
+  let buffer ← appendFtMemo buffer memoCapacity memo level
+  return finishFtEvent (appendFtLiteral buffer ftEventSuffix level)
+
+/-- Stage one exact NEP-141 `ft_burn` envelope with the memo field present after amount. -/
+private def stageNep141FtBurnMemo (st : EState) (memoCapacity : Nat)
+    (owner : Array (Val ValKind)) (amountLo amountHi : Val ValKind)
+    (memo : Array (Val ValKind)) (level : Nat) : Except String StagedEvent := do
+  let allocation := ftBurnPrefix.size + 64 * 6 + ftAmountPrefix.size + 39 +
+    ftMemoPrefix.size + memoCapacity * 6 + ftEventSuffix.size
+  let buffer := startFtEvent st ftBurnPrefix allocation level
+  let buffer ← appendFtAccount buffer owner level
+  let buffer := appendFtLiteral buffer ftAmountPrefix level
+  let buffer ← appendFtAmount buffer amountLo amountHi level
+  let buffer := appendFtLiteral buffer ftMemoPrefix level
+  let buffer ← appendFtMemo buffer memoCapacity memo level
   return finishFtEvent (appendFtLiteral buffer ftEventSuffix level)
 
 private structure StagedPromiseCall where
@@ -1340,6 +1422,34 @@ private partial def emitRegion (p : Program ValKind OpExt)
             region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.nep141FtMintMemo memoCapacity owner amountLo amountHi memo) =>
+        let staged ← stageNep141FtMintMemo st memoCapacity owner amountLo amountHi memo level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ #[indent level
+            ("(call $pf_log_utf8 " ++ staged.length ++ " " ++ staged.pointer ++ ")")] ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
+    | .ext (.nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo) =>
+        let staged ← stageNep141FtTransferMemo st memoCapacity oldOwner newOwner
+          amountLo amountHi memo level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ #[indent level
+            ("(call $pf_log_utf8 " ++ staged.length ++ " " ++ staged.pointer ++ ")")] ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
+    | .ext (.nep141FtBurnMemo memoCapacity owner amountLo amountHi memo) =>
+        let staged ← stageNep141FtBurnMemo st memoCapacity owner amountLo amountHi memo level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ #[indent level
+            ("(call $pf_log_utf8 " ++ staged.length ++ " " ++ staged.pointer ++ ")")] ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseFunctionCallDetached receiver method argsCapacity arguments
         depositLo depositHi gas) =>
         if view then throw "extract/unsupported: near view cannot create a promise"
@@ -1537,6 +1647,12 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
           oldOwner.any valHas || newOwner.any valHas || valHas amountLo || valHas amountHi
       | .nep141FtBurn owner amountLo amountHi =>
           owner.any valHas || valHas amountLo || valHas amountHi
+      | .nep141FtMintMemo _ owner amountLo amountHi memo
+      | .nep141FtBurnMemo _ owner amountLo amountHi memo =>
+          owner.any valHas || valHas amountLo || valHas amountHi || memo.any valHas
+      | .nep141FtTransferMemo _ oldOwner newOwner amountLo amountHi memo =>
+          oldOwner.any valHas || newOwner.any valHas || valHas amountLo || valHas amountHi ||
+            memo.any valHas
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -1783,6 +1899,9 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.nep141FtMint _ _ _) => true
   | .ext (.nep141FtTransfer _ _ _ _) => true
   | .ext (.nep141FtBurn _ _ _) => true
+  | .ext (.nep141FtMintMemo _ _ _ _ _) => true
+  | .ext (.nep141FtTransferMemo _ _ _ _ _ _) => true
+  | .ext (.nep141FtBurnMemo _ _ _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>

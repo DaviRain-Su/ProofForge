@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Engineering local-node gate for exact no-memo NEP-141 mint/transfer/burn events.
+# Engineering local-node gate for exact NEP-141 mint/transfer/burn events and bounded memos.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

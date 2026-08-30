@@ -80,6 +80,15 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
             (mapValue amountLo) (mapValue amountHi))
       | .nep141FtBurn owner amountLo amountHi =>
           .near (.nep141FtBurn (owner.map mapValue) (mapValue amountLo) (mapValue amountHi))
+      | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+          .near (.nep141FtMintMemo memoCapacity (owner.map mapValue) (mapValue amountLo)
+            (mapValue amountHi) (memo.map mapValue))
+      | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+          .near (.nep141FtTransferMemo memoCapacity (oldOwner.map mapValue)
+            (newOwner.map mapValue) (mapValue amountLo) (mapValue amountHi) (memo.map mapValue))
+      | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+          .near (.nep141FtBurnMemo memoCapacity (owner.map mapValue) (mapValue amountLo)
+            (mapValue amountHi) (memo.map mapValue))
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           .near (.promiseFunctionCallDetached receiver method argsCapacity
             (arguments.map mapValue) (mapValue depositLo) (mapValue depositHi) (mapValue gas))
@@ -142,6 +151,10 @@ def OpExt.values : OpExt Val → Array Val
       | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
           oldOwner ++ newOwner ++ #[amountLo, amountHi]
       | .nep141FtBurn owner amountLo amountHi => owner ++ #[amountLo, amountHi]
+      | .nep141FtMintMemo _ owner amountLo amountHi memo
+      | .nep141FtBurnMemo _ owner amountLo amountHi memo => owner ++ #[amountLo, amountHi] ++ memo
+      | .nep141FtTransferMemo _ oldOwner newOwner amountLo amountHi memo =>
+          oldOwner ++ newOwner ++ #[amountLo, amountHi] ++ memo
       | .promiseFunctionCallDetached _ _ _ arguments depositLo depositHi gas =>
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseFunctionCallReturned _ _ _ arguments depositLo depositHi gas =>
@@ -223,6 +236,18 @@ def OpExt.wellFormed : OpExt Val → Bool
       | .nep141FtBurn owner amountLo amountHi =>
           owner.size == 9 && owner.all (·.wellFormed ValKind.arity) &&
             amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
+      | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo
+      | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+          owner.size == 9 && owner.all (·.wellFormed ValKind.arity) &&
+            Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity && memo.size == memoCapacity + 1 &&
+            memo.all (·.wellFormed ValKind.arity) && amountLo.wellFormed ValKind.arity &&
+            amountHi.wellFormed ValKind.arity
+      | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+          oldOwner.size == 9 && oldOwner.all (·.wellFormed ValKind.arity) &&
+            newOwner.size == 9 && newOwner.all (·.wellFormed ValKind.arity) &&
+            Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity && memo.size == memoCapacity + 1 &&
+            memo.all (·.wellFormed ValKind.arity) && amountLo.wellFormed ValKind.arity &&
+            amountHi.wellFormed ValKind.arity
       | .promiseFunctionCallDetached receiver method argsCapacity arguments depositLo depositHi gas =>
           Wasm.Near.Codec.accountIdLiteralValid receiver &&
             Wasm.Near.Codec.promiseMethodLiteralValid method &&

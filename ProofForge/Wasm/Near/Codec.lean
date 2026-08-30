@@ -20,6 +20,17 @@ sequence through runtime `length = 0`. -/
 def storageCapacityValid (capacity : Nat) : Bool :=
   1 ≤ capacity && capacity ≤ maxBoundedBytesCapacity
 
+/-- Keep the specialized event's statically selected scalar frame below nearcore's per-function
+control-flow limit. This is a ProofForge compilation limit, not a NEP-141 memo limit. -/
+def maxNep141MemoCapacity : Nat := 16
+
+/-- A single worst-case memo event must fit nearcore's 16,384-byte cumulative log budget even
+when it is the first log. Transfer has the largest fixed envelope (938 bytes); the memo field prefix
+adds ten bytes and each active source byte can expand to six JSON bytes. -/
+def nep141MemoCapacityValid (capacity : Nat) : Bool :=
+  storageCapacityValid capacity && capacity ≤ maxNep141MemoCapacity &&
+    938 + 10 + capacity * 6 ≤ 16384
+
 private def accountIdSeparator (byte : UInt8) : Bool :=
   byte == 0x2d || byte == 0x2e || byte == 0x5f
 
