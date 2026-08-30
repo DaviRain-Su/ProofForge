@@ -9,16 +9,16 @@ structure Entry where
 def entries : Array Entry := #[
   { name := "Counter", digest := "121a0c8f7e697642" },
   { name := "NearCtx", digest := "8233f27ab39f6133" },
-  { name := "NearBytes", digest := "97376ce24f4c70a0" },
+  { name := "NearBytes", digest := "2acf0192ce0f84a8" },
   { name := "NearMemory", digest := "830255873ad66d7c" },
-  { name := "NearOutput", digest := "d455a43be10516e3" },
-  { name := "NearStorage", digest := "81dd911358e341be" },
-  { name := "NearVector", digest := "25b961c16db0bb93" },
-  { name := "NearLookup", digest := "153fe4dc7e95c3f0" },
-  { name := "NearQueue", digest := "f04d9a0d673b7fed" },
-  { name := "NearIterable", digest := "8c0ece42e2b091ff" },
+  { name := "NearOutput", digest := "feb5dcaddfa46a16" },
+  { name := "NearStorage", digest := "2417f585ee0fea89" },
+  { name := "NearVector", digest := "cd60fb0f3ce40ade" },
+  { name := "NearLookup", digest := "4afa581d6e342cdf" },
+  { name := "NearQueue", digest := "a8bf10c3476ef45f" },
+  { name := "NearIterable", digest := "98d132f8e2c7cd5c" },
   { name := "NearPromise", digest := "ed5abd7c35a96c45" },
-  { name := "NearPromiseResult", digest := "ff7ea8988ba01999" },
+  { name := "NearPromiseResult", digest := "7f65ba128b01a035" },
   { name := "NearMigration", digest := "19a760409263b854" }
 ]
 

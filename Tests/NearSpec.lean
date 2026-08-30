@@ -26,14 +26,14 @@ open ProofForge
     "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult", "NearMigration"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMemory" == some "830255873ad66d7c"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearOutput" == some "d455a43be10516e3"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearStorage" == some "81dd911358e341be"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearVector" == some "25b961c16db0bb93"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearLookup" == some "153fe4dc7e95c3f0"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearQueue" == some "f04d9a0d673b7fed"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearIterable" == some "8c0ece42e2b091ff"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearOutput" == some "feb5dcaddfa46a16"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearStorage" == some "2417f585ee0fea89"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearVector" == some "cd60fb0f3ce40ade"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearLookup" == some "4afa581d6e342cdf"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearQueue" == some "a8bf10c3476ef45f"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearIterable" == some "98d132f8e2c7cd5c"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearPromise" == some "ed5abd7c35a96c45"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearPromiseResult" == some "ff7ea8988ba01999"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearPromiseResult" == some "7f65ba128b01a035"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMigration" == some "19a760409263b854"
 
 #guard ProofForge.Wasm.Near.Ops.OpExt.wellFormed

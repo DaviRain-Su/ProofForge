@@ -88,4 +88,4 @@ elab "#pf_guard_near_borsh_inputs" : command => do
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearBytes" == some "97376ce24f4c70a0"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearBytes" == some "2acf0192ce0f84a8"
