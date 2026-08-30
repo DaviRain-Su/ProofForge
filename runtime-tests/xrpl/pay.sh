@@ -89,8 +89,24 @@ bal_a="$(node "$here/alphanet-rpc.js" slot "$cfg")"
 printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
   "$RPC" "$OWNER_B" "$contract" >"$cfg"
 bal_b="$(node "$here/alphanet-rpc.js" slot "$cfg")"
-rm -f "$cfg"
 [[ "$bal_a" == "3" ]] || { echo "FAIL: A bal want 3 got $bal_a" >&2; exit 1; }
 [[ "$bal_b" == "2" ]] || { echo "FAIL: B bal want 2 got $bal_b" >&2; exit 1; }
 
-echo "xrpl-alphanet-pay: ok contract=$contract A.bal=3 B.bal=2"
+# Underflow: pay(B, 9) while A has 3 → status 1, cards unchanged.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","9"]}\n' \
+  "$RPC" "$WALLET_A" "$contract" "$DEST_W0" "$DEST_W1" "$DEST_W2" >"$cfg"
+under_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$under_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==1, d' <<<"$under_out"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a2="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b2="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a2" == "3" ]] || { echo "FAIL: A bal should stay 3 after underflow, got $bal_a2" >&2; exit 1; }
+[[ "$bal_b2" == "2" ]] || { echo "FAIL: B bal should stay 2 after underflow, got $bal_b2" >&2; exit 1; }
+
+echo "xrpl-alphanet-pay: ok contract=$contract A.bal=3 B.bal=2 underflow-noop"

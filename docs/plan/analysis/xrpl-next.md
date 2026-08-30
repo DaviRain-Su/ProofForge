@@ -175,7 +175,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 9. **wsm-038** — TwoStep / dual role / `litBalanceDrops` / `txFlags` **已绿**。
 10. **wsm-039** — `forAccum` 编译期展开 + 跨钱包 TwoStep（`XrplHand`）**已绿**。运行时下标仍拒。
 11. **wsm-040** — 跨钱包 operator（`XrplCrew`）**已绿**。
-12. **XrplPay** — 内部积分转账：caller 卡 `flushBal`，dest 卡 `peekOwnerLimbs`。不是 XRP Payment。
+12. **XrplPay** — 内部积分转账：先 peek dest，再切回 caller `flushBal`。余额不足不扣款。不是 XRP Payment。
 13. **不要** wasm bump allocator 当 SDK 底座（§1.1）。**不要** `Sdk.Map`。
 
 比赛路径：
