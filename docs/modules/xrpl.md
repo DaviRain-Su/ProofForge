@@ -77,7 +77,7 @@ CLI：`pf build --target xrpl`（别名 `xrpl-bedrock` / `bedrock`；`wasm` 本�
 `alphanet`）：同一 IR，host 名换成 XLS-0102（`home_le_field` / `tx_field` /
 `ldgr_index` / `sha512_half`），view 返回 `i32`，存储所有者走
 `tx_field(sfAccount)`。部署/调用是本仓
-`runtime-tests/xrpl/{alphanet-rpc.js,smoke.sh}`，不是 `bedrock deploy`。
+`runtime-tests/xrpl/{alphanet-rpc.js,smoke.sh,alphanet-counter.sh}`，不是 `bedrock deploy`。
 现成 Bedrock Docker **不能**当 AlphaNet 本地模拟（host 表不同）。
 注册程序见 `Xrpl.Registry`；当前为 `Counter`
 （digest `e029f72296e320be`）、`XrplCtx`、`XrplOwn`、`XrplHash`、`XrplRt2`、

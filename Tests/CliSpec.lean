@@ -41,6 +41,13 @@ namespace Tests.CliSpec
 
 #guard
   match ProofForge.Cli.parseArgs
+      ["call", "--target", "xrpl-alphanet", "--contract", "rC", "increment", "1"] with
+  | .ok o =>
+      o.command == .call && o.functionName == "increment" && o.callArgs == #["1"]
+  | .error _ => false
+
+#guard
+  match ProofForge.Cli.parseArgs
       ["call", "--contract", "rContract", "bump"] with
   | .ok o =>
       o.command == .call && o.target == .xrplAlphaNet &&
