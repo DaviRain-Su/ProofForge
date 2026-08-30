@@ -122,14 +122,14 @@ echo "pokeEmit $emit_out" >&2
 emit_code="$("$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); print(d.get("vmReturnCode"))' <<<"$emit_out")"
 emit_result="$("$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); print(d.get("result") or d.get("engine_result"))' <<<"$emit_out")"
 
-# --- 2. ContractData owner ---
-owner_wasm="$root/build/xrpl-alphanet/probe-owner-local.wasm"
-"$wat2wasm" "$here/fixture/probe-owner-local.wat" -o "$owner_wasm"
-echo "xrpl-blocked: deploy owner probe" >&2
+# --- 2. ContractData owner (funded first-install; 2.6.1 pokeSelf needs XRP) ---
+owner_wasm="$root/build/xrpl-alphanet/probe-self-local.wasm"
+"$wat2wasm" "$here/fixture/probe-self-local.wat" -o "$owner_wasm"
+echo "xrpl-blocked: deploy funded owner/self probe" >&2
 caller_code=missing
 self_code=missing
 sle_owner_code=missing
-if owner_deploy="$(deploy "$owner_wasm")"; then
+if owner_deploy="$(deploy "$owner_wasm" ',"send_amount_drops":"2000000000"')"; then
   echo "$owner_deploy" >&2
   owner_c="$("$python" -I -S -c 'import json,sys; print(json.load(sys.stdin)["contractAccount"])' <<<"$owner_deploy")"
   call_fn "$owner_c" initialize >/dev/null
