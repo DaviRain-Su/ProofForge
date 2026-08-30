@@ -29,6 +29,10 @@ OWNER_B="${XRPL_ALPHANET_OWNER_B:-rLpgximdBvEHy8TxUwyj6mjCRNcJju5qGG}"
 DEST_W0="2252104427062869200"
 DEST_W1="15364824358342992452"
 DEST_W2="1353963993"
+# Little-endian limbs of b5f762798a53d543a014caf8b297cff8f2f937e8 (A / genesis).
+SRC_W0="4887904824787662773"
+SRC_W1="17928715436519199904"
+SRC_W2="3895982578"
 
 cfg="$(mktemp)"
 printf '{"rpc_url":"%s"}\n' "$RPC" >"$cfg"
@@ -109,4 +113,21 @@ rm -f "$cfg"
 [[ "$bal_a2" == "3" ]] || { echo "FAIL: A bal should stay 3 after underflow, got $bal_a2" >&2; exit 1; }
 [[ "$bal_b2" == "2" ]] || { echo "FAIL: B bal should stay 2 after underflow, got $bal_b2" >&2; exit 1; }
 
-echo "xrpl-alphanet-pay: ok contract=$contract A.bal=3 B.bal=2 underflow-noop"
+# Reverse: B pay(A, 1) → A=4 B=1. Second wallet initiates.
+printf '{"rpc_url":"%s","wallet_seed":"%s","contract_account":"%s","function_name":"pay","parameters":["%s","%s","%s","1"]}\n' \
+  "$RPC" "$WALLET_B" "$contract" "$SRC_W0" "$SRC_W1" "$SRC_W2" >"$cfg"
+rev_out="$(node "$here/alphanet-rpc.js" call "$cfg")"
+echo "$rev_out" >&2
+"$python" -I -S -c 'import json,sys; d=json.load(sys.stdin); assert d.get("result")=="tesSUCCESS" and d.get("vmReturnCode")==0, d' <<<"$rev_out"
+
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_A" "$contract" >"$cfg"
+bal_a3="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+printf '{"rpc_url":"%s","owner":"%s","contract_account":"%s","key":"bal"}\n' \
+  "$RPC" "$OWNER_B" "$contract" >"$cfg"
+bal_b3="$(node "$here/alphanet-rpc.js" slot "$cfg")"
+rm -f "$cfg"
+[[ "$bal_a3" == "4" ]] || { echo "FAIL: A bal want 4 after reverse, got $bal_a3" >&2; exit 1; }
+[[ "$bal_b3" == "1" ]] || { echo "FAIL: B bal want 1 after reverse, got $bal_b3" >&2; exit 1; }
+
+echo "xrpl-alphanet-pay: ok contract=$contract A.bal=4 B.bal=1 reverse"
