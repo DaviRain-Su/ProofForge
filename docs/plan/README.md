@@ -196,7 +196,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-018](tasks/wsm-018.md) | planned | 复杂合约缺口排期（[xrpl-next.md](analysis/xrpl-next.md)） |
 | [wsm-021](tasks/wsm-021.md) | done | 探针 `trace_num`（AlphaNet 绿；不开 Sdk.Log） |
 | [wsm-023](tasks/wsm-023.md) | done | 探针 `cache_le`（import 在；零 id → -10；不开 AccountRoot） |
-| [wsm-026](tasks/wsm-026.md) | blocked | 用户 ContractData：caller 可写；合约账户 **-22**；不做 wasm allocator |
+| [wsm-026](tasks/wsm-026.md) | blocked | 公开合约卡 -22；本地 2.6.1 注资后可写；caller 卡公开已绿 |
 | [wsm-032](tasks/wsm-032.md) | done | 本地 emit 绿；公开 3.3.0 注资绿、pokeEmit 仍 -196 tefBAD_AUTH；不开 Sdk.Payments |
 | [wsm-027](tasks/wsm-027.md) | done | 每用户一张卡（XrplBal）：A=2 / B=1，不是单用户金库 |
 | [wsm-029](tasks/wsm-029.md) | done | 探针读 AccountRoot.Balance（accountroot_id+cache_le+le_field） |

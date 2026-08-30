@@ -135,7 +135,7 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 
 | id | 物理模型 | 能写的合约 | 不做 |
 |---|---|---|---|
-| **wsm-026** 用户 ContractData | **blocked**：caller 可写；合约账户 -22。单用户 `"bal"` 现在就能做 | 多用户要第二把钥匙或 host 改 | keccak / wasm heap |
+| **wsm-026** 用户 ContractData | 公开 **blocked -22**；本地 2.6.1 **注资后绿**（合约卡 `bal=1`）。单用户 `"bal"` 公开就能做 | 公开程序卡要等注资 Create | keccak / wasm heap |
 | **wsm-027** Amount 三叶 | XRP drops 一个 UInt64；IOU 以后 | 记「欠多少 drops」 | ERC-20 |
 | **wsm-028** counted for | IR 允许编译期上界的 `for` | VEC-8 不再手写 8 个 `if` | 无界循环 / 递归 |
 
