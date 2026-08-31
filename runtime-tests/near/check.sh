@@ -154,6 +154,20 @@ storage_anchors = (
     '(func (export "removeMaximumKey")',
     '(call $pf_arena_alloc (i64.const 72) (i64.const 1))',
 )
+storage_economics_anchors = (
+    '(import "env" "storage_usage" (func $pf_storage_usage (result i64)))',
+    '(func (export "usage")',
+    '(func (export "insertShort4")',
+    '(func (export "replaceShort4")',
+    '(func (export "growShort8")',
+    '(func (export "removeShort")',
+    '(func (export "removeMissing")',
+    '(func (export "insertLong4")',
+    '(func (export "removeLong")',
+    '(call $pf_storage_usage)',
+    '(call $pf_storage_write',
+    '(call $pf_storage_remove',
+)
 vector_anchors = (
     '(func (export "push")',
     '(func (export "setFirst")',
@@ -312,6 +326,8 @@ for wat in wats:
         extra = output_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
+    elif wat.stem == "NearStorageEconomics":
+        extra = storage_economics_anchors
     elif wat.stem == "NearVector":
         extra = vector_anchors
     elif wat.stem == "NearLookup":

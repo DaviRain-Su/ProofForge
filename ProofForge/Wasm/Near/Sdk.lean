@@ -87,6 +87,10 @@ namespace Context
 @[pf_inline] def unixTimeSeconds : UInt64 :=
   Runtime.blockTimestamp
 
+/-- Current contract storage usage in bytes. It reflects earlier writes in the same invocation. -/
+@[pf_inline] def storageUsage : UInt64 :=
+  Runtime.storageUsage
+
 /-- Complete immediate caller. Init/entry only; views fail closed at emit. -/
 @[pf_inline] def caller : AccountId :=
   Runtime.predecessorAccountId

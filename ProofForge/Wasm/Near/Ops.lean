@@ -20,6 +20,7 @@ namespace ProofForge.Wasm.Near.Ops
 inductive ValKind where
   | blockIndex
   | blockTimestamp
+  | storageUsage
   /-- Legacy predecessor w0 plus the remaining lossless AccountId leaves. -/
   | predecessor
   | predecessorLen

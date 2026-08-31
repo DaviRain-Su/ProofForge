@@ -25,6 +25,8 @@ private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
     some Ops.Val.nearBlockIndex
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockTimestamp then
     some Ops.Val.nearBlockTimestamp
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageUsage then
+    some Ops.Val.nearStorageUsage
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessor then
     some Ops.Val.nearPredecessor
   else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorLen then

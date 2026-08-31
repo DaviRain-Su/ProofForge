@@ -6,6 +6,7 @@ WASM 家族的第二条链：**NEAR Protocol**。经 `Core.Target.Registration` 
 产物是 **`.wasm`**：Lean 直接 lowering 到 WAT，import 表钉 NEAR runtime 的
 `env`（`input` / `register_len` / `read_register` / `storage_read` /
 `storage_write` / `storage_remove` / `storage_has_key` / `value_return` /
+`storage_usage` /
 `panic_utf8` / `promise_batch_create` / `promise_and` / `promise_batch_then` /
 `promise_batch_action_function_call` / `promise_batch_action_transfer` / `promise_return` /
 `promise_results_count` / `promise_result`，按程序条件裁剪），组装器是锁定的
@@ -35,6 +36,9 @@ AccountId-to-NearToken foundation with exact `prefix4 || u32_le(length) || activ
 the closed fixture's checked balance/total-supply mint, burn, and transfer policy. It deliberately
 does not implement public FT methods, JSON ABI, registration, storage management, resolver,
 attached-deposit policy, or automatic event coupling.
+wsm-near-storage-economics-001 adds the real invocation-dynamic `env.storage_usage` u64 context
+leaf. It deliberately exposes no `storage_byte_cost`: current near-sdk-rs/nearcore provide no such
+host import, and protocol `storage_amount_per_byte` must come from explicit trusted network config.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity
@@ -68,7 +72,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 | `Near.Host` | import 模块 `env`、digest 域 `near-raw-u64\|`、header | XRPL `host_lib`、Data blob sfield |
 | `Near.Codec` | bounded bytes/String 输入与 bounded view 输出的 canonical Borsh 计划/资源上限 | collection layout、JSON、mutating bounded output |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
-| `Near.Sdk.Context/Access` | lossless context wrappers、full-AccountId equality/self-call predicate | general private/payable/init entry metadata |
+| `Near.Sdk.Context/Access` | lossless context wrappers including dynamic storage usage、full-AccountId equality/self-call predicate | protocol-config storage byte price、general private/payable/init entry metadata |
 | `Near.Sdk.NearToken` | checked unsigned u128 add/sub predicates and little-endian carry/borrow limbs | balances、supply、public FT methods |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
 | `Near.Sdk.Storage` | internal raw key（1..72）、bounded value/result（1..64）、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
@@ -131,6 +135,9 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   high-bit ordering against near-sandbox without any storage mutation.
   `token_storage.sh` verifies exact 16-byte Borsh token values, mixed/max/zero limbs, missing and
   malformed-length fallback, stale-result isolation, immediate writes and removal.
+  `storage_economics.sh` verifies the real `storage_usage` host leaf around exact raw storage
+  effects: stable positive views, same-size replacement, key/value growth, absent remove and full
+  reclamation. It compares measured deltas and does not hard-code nearcore trie-record overhead.
   `counter.sh` 还在初始化前验证 paid mutator 先命中 non-payable，普通 mutator/view 再以精确
   missing-state panic fail closed 且不创建 KV state；初始化后还对账 exact 16-byte schema
   envelope，随后重复初始化与算术场景照常通过；同一 gate 还部署双字段升级代码，验证旧
@@ -139,5 +146,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearStorage`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

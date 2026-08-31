@@ -259,6 +259,7 @@ def projectExtractedOps (ops : Array Extract.IR.Op) : Except String (Array Ops.O
 def extValCanon : Ops.ValKind → String
   | .blockIndex => "nblk"
   | .blockTimestamp => "nts"
+  | .storageUsage => "nsusage"
   | .predecessor => "npred"
   | .predecessorLen => "nplen"
   | .predecessorW1 => "np1" | .predecessorW2 => "np2"

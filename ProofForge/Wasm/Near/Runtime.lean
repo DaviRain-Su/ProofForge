@@ -43,6 +43,10 @@ Not `Clock.unix_timestamp`, not EVM `TIMESTAMP`.
 -/
 @[irreducible] def blockTimestamp : UInt64 := 0
 
+/-- Current trie storage usage in bytes, including writes already performed in this invocation.
+Raw host ABI: view-safe `env.storage_usage() -> u64`. -/
+@[irreducible] def storageUsage : UInt64 := 0
+
 /--
 `predecessor_account_id` as the first 8 bytes of the UTF-8 account id,
 little-endian. Init/entry only: NEAR forbids this host call in view context,

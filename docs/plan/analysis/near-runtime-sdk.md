@@ -166,6 +166,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
 | N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked balance/total-supply ledger policy complete; no public token method contract | standard-specific integration suites |
+| N11 storage economics | real invocation-dynamic `storage_usage` complete; storage byte price requires explicit trusted protocol config | exact measured insert/replace/grow/remove deltas; no fabricated host price import |
 
 ## 6. Near-term task cuts
 
@@ -187,6 +188,10 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
    wsm-near-storage-key-001. wsm-near-fungible-ledger-001 composes those prerequisites with
    prechecked mint/burn/transfer and lossless total supply, but remains separate from public ABI,
    registration/storage management, resolver, deposits, and events.
+   wsm-near-storage-economics-001 adds the real nearcore `storage_usage` context leaf and measured
+   storage deltas. It intentionally does not guess `storage_amount_per_byte`: current near-sdk-rs
+   and nearcore expose no guest `storage_byte_cost`, so registration charging still needs an
+   explicit trusted network/config boundary.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

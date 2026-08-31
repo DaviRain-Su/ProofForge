@@ -34,6 +34,7 @@ private structure EState where
   initializer : Bool := false
   fresh : Nat := 0
   last : Option String := none
+  lastValue : Option (Val ValKind) := none
   pendingDest : Option String := none
   lastStored : Bool := false
   pendingPromiseReturn : Option String := none
@@ -448,6 +449,7 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext .blockIndex #[] => .ok "(call $pf_block_index)"
   | .ext .blockTimestamp #[] =>
       .ok "(i64.div_u (call $pf_block_timestamp) (i64.const 1000000000))"
+  | .ext .storageUsage #[] => .ok "(call $pf_storage_usage)"
   | .ext .predecessor #[] => .ok "(local.get $pf_pred)"
   | .ext .predecessorLen #[] => .ok "(local.get $pf_pred_len)"
   | .ext .predecessorW1 #[] => .ok "(local.get $pf_pred1)"
@@ -665,7 +667,7 @@ private def returnBorshInstr (st : EState) (plan : Codec.BorshOutputPlan)
 private def emitChecked (st : EState) (kind : String) (lhs rhs : String) (level : Nat) :
     Except String (Array String × EState) := do
   let temp := localOfTemp st.fresh
-  let st' := { st with fresh := st.fresh + 1, last := some temp }
+  let st' := { st with fresh := st.fresh + 1, last := some temp, lastValue := none }
   match kind with
   | "add" =>
       return (#[
@@ -1295,7 +1297,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
     | .letLocal index value | .setLocal index value =>
         let rendered ← renderVal st value
         let region ← emitRegion p outputPlan view echo level defaultSlot tail
-          { st with last := some (localOfSource index) }
+          { st with last := some (localOfSource index), lastValue := some value }
         return {
           lines := #[indent level ("(local.set " ++ localOfSource index ++ " " ++
             rendered ++ ")")] ++ region.lines
@@ -1303,7 +1305,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
           terminal := region.terminal }
     | .joinLocal index =>
         let region ← emitRegion p outputPlan view echo level defaultSlot tail
-          { st with last := none }
+          { st with last := none, lastValue := none }
         return {
           lines := #[indent level ("(local.set " ++ localOfSource index ++
             " (i64.const 0))")] ++ region.lines
@@ -1326,11 +1328,11 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let l ← renderVal st lhs
         let r ← renderVal st rhs
         let thenRegion ← emitRegion p outputPlan view echo (level + 4) defaultSlot thn.toList
-          { st with last := none, pendingDest := none }
+          { st with last := none, lastValue := none, pendingDest := none }
         unless thenRegion.terminal do
           throw "extract/unsupported: near v0 ite branch must end in a terminal"
         let elseRegion ← emitRegion p outputPlan view echo (level + 4) defaultSlot els.toList
-          { st with fresh := thenRegion.st.fresh, last := none, pendingDest := none }
+          { st with fresh := thenRegion.st.fresh, last := none, lastValue := none, pendingDest := none }
         unless elseRegion.terminal do
           throw "extract/unsupported: near v0 ite branch must end in a terminal"
         let head := indent level ("(if (" ++ cmpInstr cmp ++ " " ++ l ++ " " ++ r ++ ")")
@@ -1341,7 +1343,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         if tail.isEmpty || tail.all isExitOp then
           return { lines := iteLines, st := elseRegion.st, terminal := true }
         let region ← emitRegion p outputPlan view echo level defaultSlot tail
-          { st with fresh := elseRegion.st.fresh, last := none, pendingDest := none }
+          { st with fresh := elseRegion.st.fresh, last := none, lastValue := none, pendingDest := none }
         return { lines := iteLines ++ region.lines, st := region.st, terminal := true }
     | .storeField name value =>
         if view then throw "extract/unsupported: near v0 view cannot write state"
@@ -1350,7 +1352,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
           #[indent level ("(local.set " ++ localOfSlot name ++ " " ++ v ++ ")")] ++
           storeSlot p name ("(local.get " ++ localOfSlot name ++ ")") level
         let region ← emitRegion p outputPlan view echo level defaultSlot tail
-          { st with last := some (localOfSlot name), pendingDest := some name, lastStored := true }
+          { st with last := some (localOfSlot name), lastValue := some value, pendingDest := some name, lastStored := true }
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
     | .okState value | .returnState value =>
         if view then throw "extract/unsupported: near v0 view cannot write state"
@@ -1373,9 +1375,11 @@ private partial def emitRegion (p : Program ValKind OpExt)
               return { lines, st, terminal := true }
           | _ => pure ()
         let dest := st.pendingDest <|> fieldOf value |>.getD defaultSlot
-        let v ← match st.last with
-          | some e => .ok ("(local.get " ++ e ++ ")")
-          | none => renderVal st value
+        let v ← match st.last, st.lastValue with
+          | some e, some prior =>
+              if prior == value then .ok ("(local.get " ++ e ++ ")") else renderVal st value
+          | some e, none => .ok ("(local.get " ++ e ++ ")")
+          | none, _ => renderVal st value
         unless tail.all isExitOp do
           throw "extract/unsupported: near v0 instructions follow terminal operation"
         let mut lines :=
@@ -2651,6 +2655,9 @@ def emit (p : IR.Program) : Except String String := do
   if programUses .blockTimestamp p then
     lines := lines.push
       "  (import \"env\" \"block_timestamp\" (func $pf_block_timestamp (result i64)))"
+  if programUses .storageUsage p then
+    lines := lines.push
+      "  (import \"env\" \"storage_usage\" (func $pf_storage_usage (result i64)))"
   if programHasPrivate p || predecessorKinds.any (programUses · p) then
     lines := lines.push
       "  (import \"env\" \"predecessor_account_id\" (func $pf_predecessor_account_id (param i64)))"

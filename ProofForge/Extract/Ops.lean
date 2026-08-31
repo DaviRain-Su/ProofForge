@@ -114,6 +114,7 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 
 @[match_pattern] def Val.nearBlockIndex : Val := nearLeaf .blockIndex
 @[match_pattern] def Val.nearBlockTimestamp : Val := nearLeaf .blockTimestamp
+@[match_pattern] def Val.nearStorageUsage : Val := nearLeaf .storageUsage
 @[match_pattern] def Val.nearPredecessor : Val := nearLeaf .predecessor
 @[match_pattern] def Val.nearPredecessorLen : Val := nearLeaf .predecessorLen
 @[match_pattern] def Val.nearPredecessorW1 : Val := nearLeaf .predecessorW1
