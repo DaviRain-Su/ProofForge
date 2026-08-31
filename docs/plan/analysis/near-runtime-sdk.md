@@ -225,6 +225,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    32, and decoded canonical ASCII AccountId length is 2..64. The parser accepts standard value
    escapes that decode to valid AccountId bytes but deliberately requires the raw canonical key,
    rejects unknown fields, and does not claim serde_json or public NEP method compatibility.
+   **NEAR-JSON-U128-INPUT (wsm-near-json-u128-input-001 done):** one exact compiler-owned UInt128
+   parameter on view or mutating wrappers selects bounded `{"amount":"digits"}` parsing. The
+   reusable decimal-string component returns ordered `(w0,w1)`, accepts 1..39 canonical digits or
+   digit-producing Unicode escapes, and rejects overflow before multiply/add. Exact wire and
+   aggregate whitespace bounds are 279 and 32. Unlike near-sdk-rs U128 parsing, leading plus and
+   leading zeros reject, so this remains a named canonical subset rather than serde compatibility.
    **NEAR-FT-BALANCE-OF (wsm-near-ft-balance-of-001 done):** the exact snake-case
    `ft_balance_of` export composes that bounded AccountId object policy with one strict read of the
    existing `BAL2` ledger map and canonical quoted-u128 output. Missing and exact present-zero

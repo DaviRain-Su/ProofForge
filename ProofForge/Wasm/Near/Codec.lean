@@ -98,6 +98,11 @@ def maxJsonAccountWhitespace : Nat := 32
 ASCII bytes, and the separately bounded whitespace allowance. -/
 def maxJsonAccountInputBytes : Nat := 17 + 64 * 6 + maxJsonAccountWhitespace
 
+/-- Canonical quoted-u128 input allows the same bounded structural whitespace and up to 39
+decoded decimal digits, each represented raw or as one six-byte `\u00xx` escape. -/
+def maxJsonU128Whitespace : Nat := 32
+def maxJsonU128InputBytes : Nat := 13 + 39 * 6 + maxJsonU128Whitespace
+
 def accountIdSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.AccountId" #[
     ("length", .scalar .uint64),
@@ -111,20 +116,26 @@ it is deliberately narrower than generic serde_json-generated method wrappers. -
 inductive InputPlan where
   | borsh (plan : BorshInputPlan)
   | jsonAccountId
+  | jsonU128Amount
   deriving Repr, BEq, Inhabited
 
 def InputPlan.localCount : InputPlan → Nat
   | .borsh plan => plan.localCount
   | .jsonAccountId => 9
+  | .jsonU128Amount => 2
 
 def InputPlan.canonical : InputPlan → String
   | .borsh plan => plan.canonical
   | .jsonAccountId =>
       s!"near-json-account-id-object-bounded-v1(max-wire={maxJsonAccountInputBytes}," ++
         s!"ws={maxJsonAccountWhitespace},keys=canonical,unknown=reject)"
+  | .jsonU128Amount =>
+      s!"near-json-u128-amount-object-canonical-v1(max-wire={maxJsonU128InputBytes}," ++
+        s!"ws={maxJsonU128Whitespace},digits=1..39,unknown=reject)"
 
 def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == accountIdSchema then return .jsonAccountId
+  if schema == .scalar .uint128 then return .jsonU128Amount
   match schema with
   | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)
   | .boundedString capacity => .borsh <$> inputPlan (.boundedString capacity)

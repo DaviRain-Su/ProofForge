@@ -71,6 +71,7 @@ import Examples.NearBytes
 import Examples.NearMemory
 import Examples.NearOutput
 import Examples.NearJsonAccountInput
+import Examples.NearJsonAmountInput
 import Examples.NearStorage
 import Examples.NearStorageEconomics
 import Examples.NearStorageRegistration

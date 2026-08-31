@@ -564,6 +564,20 @@ private partial def rewriteJsonAccountInputRoot
         pure none
   | _ => pure none
 
+private partial def rewriteJsonU128InputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg 0) "w0" => pure (some (.arg 0))
+  | .field (.arg 0) "w1" => pure (some (.arg 1))
+  | .field (.arg 0) name => throw s!"near/codec: unsupported UInt128 input projection {name}"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: UInt128 input requires a scalar limb projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 2))
+      else
+        pure none
+  | _ => pure none
+
 private structure BoundInput where
   ixName : String
   schema : Core.Codec.Schema
@@ -571,7 +585,8 @@ private structure BoundInput where
 
 private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundInput) := do
-  if method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar then
+  if method.paramSchemas.isEmpty ||
+      (method.paramSchemas.all schemaIsScalar && method.paramSchemas != #[.scalar .uint128]) then
     return (method, none)
   unless method.paramCount == 1 && method.paramSchemas.size == 1 do
     throw s!"near/codec: {method.ixName} supports exactly one specialized input parameter"
@@ -582,6 +597,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
   let rewriteRoot := match plan with
     | .borsh borsh => rewriteInputRoot method borsh
     | .jsonAccountId => rewriteJsonAccountInputRoot method
+    | .jsonU128Amount => rewriteJsonU128InputRoot method
   let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount
   let scalarSchemas := Array.replicate localCount (.scalar .uint64)
