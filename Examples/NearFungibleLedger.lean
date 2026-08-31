@@ -46,6 +46,11 @@ def balanceSelfW1 (_state : State) : UInt64 :=
 @[pf_entry]
 def balanceSelfHas (_state : State) : UInt64 := balances.has Context.self
 
+/-- Public-shaped total-supply view over the closed ledger state. -/
+@[pf_entry]
+def ft_total_supply (state : State) : ProofForge.Core.Value.UInt128 :=
+  ⟨state.supplyW0, state.supplyW1⟩
+
 /-- Public-shaped view fixture over the closed ledger namespace. Its input grammar remains the
 bounded ProofForge AccountId object subset rather than a generic near-sdk serde wrapper. -/
 @[pf_entry]

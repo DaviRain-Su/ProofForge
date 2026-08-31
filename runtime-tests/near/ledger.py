@@ -72,6 +72,24 @@ def _json_balance_fails(client: NearClient, account: bytes, scene: str) -> None:
     raise AssertionError(f"{scene}: malformed stored value did not fail the view")
 
 
+def _json_supply(client: NearClient, wire: bytes = b"") -> int:
+    raw = client.view("ft_total_supply", wire)
+    if len(raw) < 3 or raw[:1] != b'"' or raw[-1:] != b'"':
+        raise AssertionError(f"ft_total_supply returned non-quoted-u128 bytes: {raw!r}")
+    value = int(raw[1:-1])
+    if raw != f'"{value}"'.encode():
+        raise AssertionError(f"ft_total_supply returned noncanonical decimal bytes: {raw!r}")
+    return value
+
+
+def _json_supply_fails(client: NearClient, wire: bytes, scene: str) -> None:
+    try:
+        client.view("ft_total_supply", wire)
+    except NearRpcError:
+        return
+    raise AssertionError(f"{scene}: nonempty no-argument input was accepted")
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
@@ -84,6 +102,10 @@ def main() -> None:
         raise AssertionError("missing balance must remain distinct from present zero")
     if _json_balance(client, b"missing.test.near") != 0:
         raise AssertionError("ft_balance_of missing account did not return quoted zero")
+    if _json_supply(client) != 0:
+        raise AssertionError("ft_total_supply initial value was not quoted zero")
+    _json_supply_fails(client, b"{}", "empty JSON object")
+    _json_supply_fails(client, b"not-json", "malformed nonempty bytes")
     _fail_unchanged(client, "burnSelfOne", "missing-balance underflow")
     before = client.view_state_values()
     _call(client, "mintSelfZero")
@@ -153,12 +175,16 @@ def main() -> None:
     _call(client, "fixtureResetSelf")
     print("near-ledger: balance/supply overflow and supply underflow are write-free ok")
 
-    _call(client, "mintSelfOne")
     _call(client, "mintSelfTwo64")
+    if _json_supply(client) != 1 << 64:
+        raise AssertionError("ft_total_supply high-limb-only value mismatch")
+    _call(client, "mintSelfOne")
     mixed = (1 << 64) + 1
     state = client.view_state_values()
     if _balance(state, self_id) != mixed or _supply(client) != mixed:
         raise AssertionError("mixed low/high mint did not preserve both limbs")
+    if _json_supply(client) != mixed:
+        raise AssertionError("ft_total_supply mixed limbs mismatch")
     if _json_balance(client, self_id.encode()) != mixed or \
         _json_balance(client, self_id.replace(".", "\\u002e").encode()) != mixed:
         raise AssertionError("ft_balance_of raw/escaped self query lost mixed limbs")
@@ -201,9 +227,13 @@ def main() -> None:
         raise AssertionError("maximum u128 mint mismatch")
     if _json_balance(client, self_id.encode()) != MAX_U128:
         raise AssertionError("ft_balance_of maximum quoted u128 mismatch")
+    if _json_supply(client) != MAX_U128:
+        raise AssertionError("ft_total_supply maximum quoted u128 mismatch")
     _call(client, "burnSelfMax")
     if self_key in client.view_state_values() or _supply(client) != 0:
         raise AssertionError("maximum burn did not reclaim balance and zero supply")
+    if _json_supply(client) != 0:
+        raise AssertionError("ft_total_supply did not return quoted zero after maximum burn")
     print("near-ledger: maximum u128 mint/burn and zero reclamation ok")
 
     _call(client, "mintCallerOne", signer=caller)

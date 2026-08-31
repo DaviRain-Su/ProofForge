@@ -28,6 +28,10 @@ wsm-near-ft-balance-of-001 composes those two exact policies into an exact `ft_b
 over the existing `BAL2` balance map. Missing and present-zero balances both return `"0"`, while
 malformed present values trap; the bounded input grammar remains narrower than serde_json, so the
 official-shaped view is not claimed as complete NEP-141 compliance.
+wsm-near-ft-total-supply-001 adds the companion exact `ft_total_supply` export over the same
+ledger state's two supply limbs. It returns canonical quoted u128, but ProofForge's existing
+zero-parameter wrapper requires exactly empty input; near-sdk-rs ignores request bytes for methods
+without arguments, so `{}` and arbitrary nonempty bodies are an explicit compatibility difference.
 wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
 no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，

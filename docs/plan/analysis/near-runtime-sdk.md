@@ -168,7 +168,7 @@ asynchronous; dynamic handles and multi-action builders are absent.
 | N7 promises | **detached/returned static batch calls, static/full-AccountId native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/account-transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
-| N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked balance/total-supply ledger policy and specialized bounded `ft_balance_of` view complete; no fully serde-compatible token contract | standard-specific integration suites |
+| N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked ledger plus specialized bounded `ft_balance_of`/`ft_total_supply` views complete; no fully near-sdk-compatible token contract | standard-specific integration suites |
 | N11 storage economics | real invocation-dynamic `storage_usage`, caller-only measured registration, exact-zero unregister, and supply-integrated force unregister complete; byte price remains explicit trusted config | variable AccountId-key cost/reclaim, speculative rollback, exact refunds; no public NEP-145 ABI |
 
 ## 6. Near-term task cuts
@@ -231,6 +231,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    balances both return `"0"`; malformed present 8/20-byte values fail the view instead of
    exposing partial or stale limbs. The input subset is still narrower than near-sdk serde, so
    this official-shaped method is not claimed as complete NEP-141 ABI compliance.
+   **NEAR-FT-TOTAL-SUPPLY (wsm-near-ft-total-supply-001 done):** the no-argument exact export reads
+   the integrated ledger state's `(supplyW0,supplyW1)` and emits one canonical quoted-u128 result,
+   with no balance-map operation or mutation. Existing ProofForge no-parameter wrappers require
+   exact zero-length input, unlike current near-sdk-rs generated wrappers, which do not inspect
+   request bytes at all for methods without regular arguments. `{}` and malformed nonempty bytes
+   therefore reject here, and full public compatibility is not claimed.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
    **NEAR-STORAGE-KEY (wsm-near-storage-key-001 done):** only internal key frames accept 1..72;

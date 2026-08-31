@@ -30,6 +30,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
     (source.methods.find? (·.ixName == name)).map (storageSteps ·.ops) |>.getD #[]
   unless methodSteps "mintSelfOne" == #["read.16.72", "write.16.72.16"] &&
       methodSteps "ft_balance_of" == #["read.16.72"] &&
+      methodSteps "ft_total_supply" == #[] &&
       methodSteps "burnSelfOne" ==
         #["read.16.72", "remove.16.72", "write.16.72.16"] &&
       methodSteps "transferCallerToSelfOne" ==
@@ -56,6 +57,13 @@ elab "#pf_near_fungible_ledger_check" : command => do
       balance.outputPolicy == "near-json-u128-string-v1" && balance.paramCount == 9 &&
       balance.tupleArity == some 2 do
     throwError "ft_balance_of lost its specialized AccountId-input/u128-output composition"
+  let some supply := program.entries.find? (·.ixName == "ft_total_supply")
+    | throwError "missing target ft_total_supply"
+  unless supply.inputSchema.isNone && supply.inputPolicy.isEmpty &&
+      supply.outputSchema == some (.scalar .uint128) &&
+      supply.outputPolicy == "near-json-u128-string-v1" && supply.paramCount == 0 &&
+      supply.tupleArity == some 2 do
+    throwError "ft_total_supply lost its no-input quoted-u128 view policy"
   for method in program.entries do
     match Emit.emit { program with entries := #[method] } with
     | .ok _ => pure ()
@@ -70,6 +78,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "(func (export \"transferCallerToSelfOne\")",
       "(func (export \"transferCallerToSelfZero\")",
       "(func (export \"ft_balance_of\")",
+      "(func (export \"ft_total_supply\")",
       "(func (export \"seedSelfMalformed8\")",
       "(func (export \"fixtureSetSupplyMax\")",
       "(call $pf_storage_read", "(call $pf_storage_write", "(call $pf_storage_remove",
@@ -104,11 +113,24 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !balanceBody.contains "(call $pf_log_utf8" &&
       !balanceBody.contains "(call $pf_promise" do
     throwError "ft_balance_of must read/value_return once without writes, logs, or promises"
+  let supplyBody ← match wat.splitOn "(func (export \"ft_total_supply\")" with
+    | [_before, tail] =>
+        match tail.splitOn "\n  )\n" with
+        | body :: _ => pure body
+        | [] => throwError "ft_total_supply body terminator is missing"
+    | _ => throwError "ft_total_supply must occur exactly once"
+  unless (supplyBody.splitOn "(call $pf_input").length == 2 &&
+      (supplyBody.splitOn "(call $pf_value_return").length == 2 &&
+      !supplyBody.contains "(call $pf_storage_write" &&
+      !supplyBody.contains "(call $pf_storage_remove" &&
+      !supplyBody.contains "(call $pf_log_utf8" &&
+      !supplyBody.contains "(call $pf_promise" do
+    throwError "ft_total_supply must enforce empty input and value_return once without effects"
   logInfo m!"proofforge-near-fungible-ledger: digest = {IR.digestHex program}"
 
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "bf1e9ebe7cb41b40"
+  some "954015ffa13ff1f1"
 
 end Tests.NearFungibleLedgerSpec
