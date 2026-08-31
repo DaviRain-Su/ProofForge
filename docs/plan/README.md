@@ -216,6 +216,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-075](tasks/wsm-075.md) | done | 本地受益人兑 XRP cashB after due（XrplPayout）；公开仍 -22/-196 |
 | [wsm-076](tasks/wsm-076.md) | done | 本地双向时间锁 A cancel / B claimB（XrplDual）；公开仍 -22/-196 |
 | [wsm-077](tasks/wsm-077.md) | done | SDK Gate.and2/ok；XrplLatch；公开仍 -22/-196 |
+| [wsm-078](tasks/wsm-078.md) | done | 本地 else-if 双向锁 A cancel / B cashB（XrplEscape）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)

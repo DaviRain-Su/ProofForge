@@ -52,7 +52,8 @@ def entries : Array Entry := #[
   { name := "XrplClaim", digest := "4857c33431f624cb" },
   { name := "XrplPayout", digest := "4d769f5622556277" },
   { name := "XrplDual", digest := "d8b9fb0c4ce39299" },
-  { name := "XrplLatch", digest := "d65b586272018aed" }
+  { name := "XrplLatch", digest := "d65b586272018aed" },
+  { name := "XrplEscape", digest := "396ce61f0cb686e" }
   ]
 
 def names : Array String := entries.map (·.name)
