@@ -4,8 +4,8 @@ import ProofForge
 
 /-!
 Host truth tables plus live SVM/EVM extraction for the same allocation-free bounded, saturating,
-and integer-logarithm component. The two consumers own different errors and state fields; neither
-gains a target component operation.
+integer-logarithm, and square-root component. The two consumers own different errors and state
+fields; neither gains a target component operation.
 -/
 
 namespace Tests.CoreMathSpec
@@ -63,6 +63,26 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 #guard Math.UInt64.log256 255 == 0
 #guard Math.UInt64.log256 256 == 1
 #guard Math.UInt64.log256 u64Max == 7
+#guard Math.UInt64.sqrt 0 == 0
+#guard Math.UInt64.sqrt 1 == 1
+#guard Math.UInt64.sqrt 2 == 1
+#guard Math.UInt64.sqrt 3 == 1
+#guard Math.UInt64.sqrt 4 == 2
+#guard Math.UInt64.sqrt 15 == 3
+#guard Math.UInt64.sqrt 16 == 4
+#guard Math.UInt64.sqrt 17 == 4
+#guard Math.UInt64.sqrt 18446744065119617025 == 4294967295
+#guard Math.UInt64.sqrt u64Max == 4294967295
+
+private def validFloorRoot (value : UInt64) : Bool :=
+  let root := Math.UInt64.sqrt value
+  if value == 0 then root == 0
+  else root ≤ value / root && value / (root + 1) < root + 1
+
+#guard (List.range 4096).all fun value => validFloorRoot (UInt64.ofNat value)
+#guard validFloorRoot 0x7fffffffffffffff
+#guard validFloorRoot 0x8000000000000000
+#guard validFloorRoot u64Max
 
 open Examples.BatchSizer in
 #guard (smaller (init 8) 11 4 == 4) && (larger (init 8) 11 4 == 11) &&
@@ -84,7 +104,7 @@ open Examples.BatchSizer in
   | .ok (state, result) => state.lastBatchCount == u64Max && result == u64Max
   | _ => false) &&
   binaryOrder (init 8) 65535 == 15 && decimalOrder (init 8) 1000000 == 6 &&
-  byteOrder (init 8) 0x100000000 == 4
+  byteOrder (init 8) 0x100000000 == 4 && capacityRoot (init 8) 1000000 == 1000
 
 open Examples.EvmPriceBand in
 #guard (lower (init 9) 13 5 == 5) && (upper (init 9) 13 5 == 13) &&
@@ -105,7 +125,7 @@ open Examples.EvmPriceBand in
   | .ok (state, result) => state.lastQuote == u64Max && result == u64Max
   | _ => false) &&
   binaryBand (init 9) u64Max == 63 && decimalBand (init 9) u64Max == 19 &&
-  byteBand (init 9) u64Max == 7
+  byteBand (init 9) u64Max == 7 && quoteRoot (init 9) u64Max == 4294967295
 
 /-- Pure shared math stays in ordinary target-neutral scalar Ops. -/
 private partial def noTargetEffects (ops : Array ProofForge.Extract.IR.Op) : Bool :=
@@ -145,6 +165,13 @@ private partial def loopBounds (ops : Array ProofForge.Extract.IR.Op) : Array Na
     | .forBody bound body => bounds.push bound ++ loopBounds body
     | _ => bounds
 
+private partial def noAccumLoop (ops : Array ProofForge.Extract.IR.Op) : Bool :=
+  ops.all fun
+    | .forAccum .. => false
+    | .ite _ _ _ yes no => noAccumLoop yes && noAccumLoop no
+    | .forBody _ body => noAccumLoop body
+    | _ => true
+
 private def methodValue? (program : ProofForge.Extract.IR.Program) (name : String) :
     Option ProofForge.Extract.IR.Val := do
   let method ← program.methods.find? (·.ixName == name)
@@ -183,6 +210,13 @@ elab "#pf_guard_core_math_no_effects" : command => do
         | throwError s!"{module}.{name}: missing integer-log consumer"
       unless loopBounds method.ops == #[expectedBound] do
         throwError s!"{module}.{name}: expected exactly one {expectedBound}-step bounded ladder"
+    let rootName := if module == `Examples.BatchSizer then "capacityRoot" else "quoteRoot"
+    let some root := source.methods.find? (·.ixName == rootName)
+      | throwError s!"{module}.{rootName}: missing integer-square-root consumer"
+    unless loopBounds root.ops == #[5, 6] do
+      throwError s!"{module}.{rootName}: expected exact five-step seed and six-step Newton ladders"
+    unless noAccumLoop root.ops do
+      throwError s!"{module}.{rootName}: Newton state was incorrectly lowered as additive accumulation"
 
 #pf_guard_core_math_no_effects
 #pf_build Examples.BatchSizer

@@ -130,6 +130,35 @@ fn integer_logs_cover_zero_powers_and_uint64_maximum() {
 }
 
 #[test]
+fn integer_square_root_covers_zero_squares_and_uint64_maximum() {
+    let (program_id, fixture, account) = initialized(7);
+    for (input, expected) in [
+        (0, 0u64),
+        (1, 1),
+        (2, 1),
+        (3, 1),
+        (4, 2),
+        (15, 3),
+        (16, 4),
+        (17, 4),
+        (18_446_744_065_119_617_025, 4_294_967_295),
+        (u64::MAX, 4_294_967_295),
+    ] {
+        fixture.call(
+            program_id,
+            account.clone(),
+            "capacityRoot",
+            &[input],
+            false,
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
+}
+
+#[test]
 fn ceil_div_handles_maximum_and_rejects_zero_atomically() {
     let (program_id, fixture, account) = initialized(7);
     let planned = fixture.call(

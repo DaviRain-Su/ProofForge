@@ -75,4 +75,9 @@ def decimalBand (_state : State) (quote : UInt64) : UInt64 :=
 def byteBand (_state : State) (quote : UInt64) : UInt64 :=
   Math.UInt64.log256 quote
 
+/-- Floor square root for quote normalization. -/
+@[pf_entry]
+def quoteRoot (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.sqrt quote
+
 end Examples.EvmPriceBand

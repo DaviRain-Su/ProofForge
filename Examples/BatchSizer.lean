@@ -75,4 +75,9 @@ def decimalOrder (_state : State) (value : UInt64) : UInt64 :=
 def byteOrder (_state : State) (value : UInt64) : UInt64 :=
   Math.UInt64.log256 value
 
+/-- Floor square root for two-dimensional capacity partitioning. -/
+@[pf_entry]
+def capacityRoot (_state : State) (capacity : UInt64) : UInt64 :=
+  Math.UInt64.sqrt capacity
+
 end Examples.BatchSizer

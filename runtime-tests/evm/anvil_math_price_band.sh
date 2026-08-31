@@ -41,6 +41,16 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'byteBand(uint64)(uint64)' 256)" 1 "byte log exact power"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'byteBand(uint64)(uint64)' "$max")" 7 "byte log maximum"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'quoteRoot(uint64)(uint64)' 0)" 0 "square root zero"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'quoteRoot(uint64)(uint64)' 3)" 1 "square root nonsquare floor"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'quoteRoot(uint64)(uint64)' 16)" 4 "square root exact square"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'quoteRoot(uint64)(uint64)' 18446744065119617025)" 4294967295 "largest UInt64 square"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'quoteRoot(uint64)(uint64)' "$max")" 4294967295 "square root maximum"
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'roundUp(uint64,uint64)(uint64)' "$max" 2)" "$half_up" "maximum ceil-div by two"
@@ -79,4 +89,4 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'scale(uint64)' 2 >/dev/null
 solana_lean_require_storage "$addr" 0 "$max" "saturating scale persists"
 
-echo "evm-anvil-math-price-band: ok (bounded/saturating/logarithmic UInt64 math; engineering only)"
+echo "evm-anvil-math-price-band: ok (bounded/saturating/logarithmic/root UInt64 math; engineering only)"

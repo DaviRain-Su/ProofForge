@@ -93,4 +93,25 @@ highest nonzero byte and therefore the floor base-2 logarithm divided by eight. 
       result := result + 1
   return result
 
+/-- Floor of the integer square root. The nontrivial branch derives a power-of-two estimate from
+the UInt64 magnitude, improves it to three halves of that estimate, then runs six bounded Newton
+steps. The final division-based correction avoids squaring an intermediate estimate. -/
+@[pf_inline] def sqrt (input : UInt64) : UInt64 :=
+  if input ≤ 1 then
+    input
+  else Id.run do
+    let mut value := input
+    let mut estimate : UInt64 := 1
+    for i in [0:5] do
+      let shift := (32 : UInt64) >>> UInt64.ofNat i
+      if 0 < value >>> shift then
+        value := value >>> shift
+        estimate := estimate <<< (shift >>> 1)
+    estimate := (estimate * 3) >>> 1
+    let mut quotient := input / estimate
+    for _ in [0:6] do
+      estimate := (estimate + quotient) >>> 1
+      quotient := input / estimate
+    return min estimate quotient
+
 end ProofForge.Core.Math.UInt64
