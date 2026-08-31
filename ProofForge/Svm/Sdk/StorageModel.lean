@@ -607,6 +607,149 @@ theorem queue_head_ne_slots (hwf : q.wellFormed = true) (pos : UInt64)
   have h2' : q.count.firstWord + 1 ≤ q.slots.firstWord := parts.2.2.2.2.2.2
   omega
 
+
+/-! ### BoundedQueue push / pop 的模型语义（组件级）
+
+与 `Sdk.Queue.push` / `BoundedQueue.pop` 的非满分支逐字对应的写入组合。
+守卫（满/空）行为由 no-op 定理覆盖；数值前提（`tail ∈ [1, cap]`、无回绕）
+作为显式假设 —— 它们是运行时不变量，发射层由 checked stubs 兜底。 -/
+
+/-- push 非满分支的写入序列（tail 显式给出）。 -/
+def mQueuePushAt (mem : AccountWords) (q : BoundedQueue) (tail value hd s : UInt64)
+    : AccountWords :=
+  mWriteField (mWriteField (mWriteField mem q.slots tail value) q.count 0 (s + 1))
+    q.head 0 hd
+
+/-- pop 非空分支的写入序列（head 新值显式给出）。 -/
+def mQueuePopAt (mem : AccountWords) (q : BoundedQueue) (remaining hd : UInt64)
+    : AccountWords :=
+  mWriteField (mWriteField mem q.count 0 remaining) q.head 0 hd
+
+/-- **push 三写组合**（tail 合法、stride = 1）：
+count 读回 = size + 1、slots tail 读回 = value。 -/
+theorem mQueuePushAt_twoWrites (mem : AccountWords) (q : BoundedQueue) (tail value hd : UInt64)
+    (hwf : q.wellFormed = true)
+    (hp1 : (1 : Nat) ≤ tail.toNat) (hp2 : tail.toNat ≤ q.slots.region.capacity) :
+    mReadField (mQueuePushAt mem q tail value hd (mReadField mem q.count 0)) q.count 0
+      = mReadField mem q.count 0 + 1 ∧
+    mReadField (mQueuePushAt mem q tail value hd (mReadField mem q.count 0)) q.slots tail
+      = value := by
+  have hwc := mFieldWord_queue_count q hwf
+  have hwh := mFieldWord_queue_head q hwf
+  have hws := mFieldWord_queue_slots q hwf tail hp1 hp2
+  have hnc : q.count.firstWord
+      ≠ q.slots.firstWord + (tail.toNat - 1) * q.slots.region.strideWords :=
+    queue_count_ne_slots q hwf tail hp1 hp2
+  have hnh : q.head.firstWord
+      ≠ q.slots.firstWord + (tail.toNat - 1) * q.slots.region.strideWords :=
+    queue_head_ne_slots q hwf tail hp1 hp2
+  have hch := queue_count_ne_head q hwf
+  unfold mQueuePushAt mWriteField mReadField
+  rw [hwc, hws, hwh]
+  constructor
+  · -- 读 count 词：绕过 head 写（count ≠ head）、slots 写（count ≠ slots）；count 写 same
+    simp only [mWriteWord, if_neg hch, if_pos rfl, if_neg hnc]
+    rfl
+  · -- 读 slots tail 词：绕过 head、count 两层；slots 写 same
+    simp only [mWriteWord,
+      show ¬ (q.slots.firstWord + (tail.toNat - 1) * q.slots.region.strideWords
+        = q.head.firstWord) from fun hc => hnh hc.symm,
+      if_pos rfl,
+      show ¬ (q.slots.firstWord + (tail.toNat - 1) * q.slots.region.strideWords
+        = q.count.firstWord) from fun hc => hnc hc.symm]
+    rfl
+
+
+/-- **pop 两写组合**：write count 与 write head 之后，slots head 词读不变、
+count 读回 = remaining。 -/
+theorem mQueuePopAt_twoWrites (mem : AccountWords) (q : BoundedQueue) (head remaining hd : UInt64)
+    (hwf : q.wellFormed = true) (hp : (1 : Nat) ≤ head.toNat)
+    (hcp : head.toNat ≤ q.slots.region.capacity) :
+    mReadField (mQueuePopAt mem q remaining hd) q.slots head
+      = mReadField mem q.slots head ∧
+    mReadField (mQueuePopAt mem q remaining hd) q.count 0 = remaining := by
+  have hwc' : mFieldWord q.count 0 = some q.count.firstWord :=
+    mFieldWord_queue_count q hwf
+  have hwh' : mFieldWord q.head 0 = some q.head.firstWord :=
+    mFieldWord_queue_head q hwf
+  have hws' : mFieldWord q.slots head
+      = some (q.slots.firstWord + (head.toNat - 1) * q.slots.region.strideWords) :=
+    mFieldWord_queue_slots q hwf head hp hcp
+  have hch := queue_count_ne_head q hwf
+  have hnc : q.count.firstWord
+      ≠ q.slots.firstWord + (head.toNat - 1) * q.slots.region.strideWords :=
+    queue_count_ne_slots q hwf head hp hcp
+  have hnh : q.head.firstWord
+      ≠ q.slots.firstWord + (head.toNat - 1) * q.slots.region.strideWords :=
+    queue_head_ne_slots q hwf head hp hcp
+  have e1 : mReadField (mQueuePopAt mem q remaining hd) q.slots head
+      = mReadField mem q.slots head := by
+    have step1 : mReadField (mWriteField (mWriteField mem q.count 0 remaining)
+        q.head 0 hd) q.slots head
+      = mReadField (mWriteField mem q.count 0 remaining) q.slots head :=
+        mReadField_write_other _ q.slots q.head _ _ hd
+          (hws') (hwh') (fun hc => hnh hc.symm)
+    have step2 : mReadField (mWriteField mem q.count 0 remaining) q.slots head
+      = mReadField mem q.slots head :=
+        mReadField_write_other _ q.slots q.count _ _ remaining
+          (hws') (hwc') (fun hc => hnc hc.symm)
+    exact step1.trans step2
+  have e2 : mReadField (mQueuePopAt mem q remaining hd) q.count 0
+      = mReadField (mWriteField mem q.count 0 remaining) q.count 0 := by
+    have step : mReadField (mWriteField (mWriteField mem q.count 0 remaining)
+        q.head 0 hd) q.count 0
+      = mReadField (mWriteField mem q.count 0 remaining) q.count 0 :=
+        mReadField_write_other _ q.count q.head _ _ hd
+          (hwc') (hwh') hch
+    exact step
+  rw [e1, e2, mReadField_write_same _ _ _ _ (q.count.firstWord) (hwc')]
+  exact ⟨rfl, rfl⟩
+
+
+/-- 模型版 push：与 `BoundedQueue.push` 逐字对应（环尾 + 双 header 写）。 -/
+def mQueuePush (mem : AccountWords) (q : BoundedQueue) (value : UInt64) : AccountWords × UInt64 :=
+  let size := mReadField mem q.count 0
+  let cap := BoundedQueue.capacity q
+  if cap ≤ size then (mem, 0)
+  else
+    let head := mReadField mem q.head 0
+    let raw := head + size
+    let tail := if head = 0 then 1
+      else if cap < raw then raw - cap
+      else raw
+    (mQueuePushAt mem q tail value (if head = 0 then 1 else head) size, tail)
+
+/-- 环后继：与 `Sdk.Queue.nextSlot` 逐字对应。 -/
+def mQueueNext (slot capacity : UInt64) : UInt64 :=
+  if slot = capacity then 1 else slot + 1
+
+/-- 模型版 pop：与 `BoundedQueue.pop` 逐字对应。 -/
+def mQueuePop (mem : AccountWords) (q : BoundedQueue) : AccountWords × UInt64 :=
+  let size := mReadField mem q.count 0
+  let head := mReadField mem q.head 0
+  if size = 0 ∨ head = 0 then (mem, 0)
+  else
+    let value := mReadField mem q.slots head
+    let remaining := size - 1
+    let hd := if remaining = 0 then 0 else mQueueNext head (BoundedQueue.capacity q)
+    (mQueuePopAt mem q remaining hd, value)
+
+/-- **push 满守卫无写**：cap ≤ size 时 push 返回 (mem, 0)。 -/
+theorem mQueuePush_full_noop (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hfull : BoundedQueue.capacity q ≤ mReadField mem q.count 0) :
+    mQueuePush mem q value = (mem, 0) := by
+  unfold mQueuePush
+  rw [if_pos hfull]
+
+/-- **pop 空守卫无写**：`size = 0` 或 `head = 0` 时不改内存、返回 0。 -/
+theorem mQueuePop_empty_noop (mem : AccountWords) (q : BoundedQueue)
+    (h : mReadField mem q.count 0 = 0 ∨ mReadField mem q.head 0 = 0) :
+    mQueuePop mem q = (mem, 0) := by
+  unfold mQueuePop
+  rcases h with hc | hr
+  · rw [if_pos (Or.inl hc)]
+  · rw [if_pos (Or.inr hr)]
+
 end QueueProofs
 
 end ProofForge.Svm.Sdk.StorageModel
