@@ -38,6 +38,7 @@ import Examples.XrplToken
 import Examples.XrplShare
 import Examples.XrplTake
 import Examples.XrplHoldEsc
+import Examples.XrplVest
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -102,7 +103,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplShare" == some "e53efc71c6393ba4"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplTake" == some "e31f80dc4c97ee66"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHoldEsc" == some "2d5fcf19a07dfde1"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplVest" == some "9ccd6e0b0e597393"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -200,6 +202,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplTake
 
 #pf_xrpl_build Examples.XrplHoldEsc
+
+#pf_xrpl_build Examples.XrplVest
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -1227,6 +1231,34 @@ elab "#pf_xrpl_holdesc_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-holdesc: {source.length} bytes of WAT passed holdesc anchor check"
 
 #pf_xrpl_holdesc_emit_check Examples.XrplHoldEsc
+
+open Lean Elab Command in
+elab "#pf_xrpl_vest_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"lockIn\") (result i32)",
+          "(func (export \"refund\") (result i32)",
+          "(i32.const 524313)",
+          "(i32.store8 (i32.const 76) (i32.const 100))",
+          "(i32.store8 (i32.const 100) (i32.const 101))"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing vest anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Payments" do
+          throwError "wasm emit must not mention Sdk.Payments"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-vest: {source.length} bytes of WAT passed vest anchor check"
+
+#pf_xrpl_vest_emit_check Examples.XrplVest
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do

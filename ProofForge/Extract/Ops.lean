@@ -173,6 +173,10 @@ private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
   .ext (.xrpl .flushEsc) #[v]
 @[match_pattern] def Val.xrplPeekEsc (w0 w1 w2 : Val) : Val :=
   .ext (.xrpl .peekEsc) #[w0, w1, w2]
+@[match_pattern] def Val.xrplFlushDue (v : Val) : Val :=
+  .ext (.xrpl .flushDue) #[v]
+@[match_pattern] def Val.xrplPeekDue (w0 w1 w2 : Val) : Val :=
+  .ext (.xrpl .peekDue) #[w0, w1, w2]
 @[match_pattern] def Val.xrplEmitPay : Val := xrplLeaf .emitPay
 @[match_pattern] def Val.xrplEmitPayDrops (v : Val) : Val :=
   .ext (.xrpl .emitPayDrops) #[v]

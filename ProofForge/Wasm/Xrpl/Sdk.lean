@@ -201,6 +201,15 @@ Escrow lives on the contract card, not per-user `bal`. -/
 @[pf_inline] def peekEscLimbs (w0 w1 w2 : UInt64) : UInt64 :=
   Runtime.xrplPeekEsc w0 w1 w2
 
+/-- Persist `v` onto the current Owner card under JSON key `due`.
+Vesting height lives on the contract card. -/
+@[pf_inline] def flushDue (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushDue v
+
+/-- Load `due` from `(w0,w1,w2)`'s card (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekDueLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekDue w0 w1 w2
+
 end Context
 
 namespace Pausable
@@ -282,6 +291,10 @@ first so this is the caller card. -/
 /-- Load `esc` from the contract AccountID card. Rewrites persist Owner. -/
 @[pf_inline] def peekSelfEsc : UInt64 :=
   Context.peekEscLimbs Context.selfW0 Context.selfW1 Context.selfW2
+
+/-- Load `due` from the contract AccountID card. Rewrites persist Owner. -/
+@[pf_inline] def peekSelfDue : UInt64 :=
+  Context.peekDueLimbs Context.selfW0 Context.selfW1 Context.selfW2
 
 end Card
 

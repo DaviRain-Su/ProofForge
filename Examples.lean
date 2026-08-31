@@ -76,6 +76,7 @@ import Examples.XrplToken
 import Examples.XrplShare
 import Examples.XrplTake
 import Examples.XrplHoldEsc
+import Examples.XrplVest
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

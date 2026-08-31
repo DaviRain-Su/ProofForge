@@ -211,6 +211,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-070](tasks/wsm-070.md) | done | 本地 share mintToB/cashToB + persistCaller（XrplShare）；公开仍 -22/-196 |
 | [wsm-071](tasks/wsm-071.md) | done | 本地 allowance grant/takeB（XrplTake）；公开仍 -22/-196 |
 | [wsm-072](tasks/wsm-072.md) | done | 本地托管 lockIn/releaseToB/refund（XrplHoldEsc）；公开仍 -22/-196 |
+| [wsm-073](tasks/wsm-073.md) | done | 本地时间门托管 due≤ledgerSqn（XrplVest）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)

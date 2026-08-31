@@ -78,6 +78,8 @@ def extValCanon : Ops.ValKind → String
   | .peekLock => "xpeekl"
   | .flushEsc => "xflushe"
   | .peekEsc => "xpeeke"
+  | .flushDue => "xflushd"
+  | .peekDue => "xpeekd"
   | .emitPay => "xpay"
   | .emitPayDrops => "xpayd"
   | .emitPayToLit hex => s!"xpayt.{hex}"
