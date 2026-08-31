@@ -251,6 +251,9 @@ jobs:
       - name: Run NEAR sandbox optional bounded memo JSON input gate
         run: runtime-tests/near/json_memo_input.sh
 
+      - name: Run NEAR sandbox combined bounded FT transfer argument gate
+        run: runtime-tests/near/json_ft_transfer_input.sh
+
       - name: Run NEAR sandbox raw storage gate
         run: runtime-tests/near/storage.sh
 

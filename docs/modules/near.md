@@ -32,6 +32,10 @@ wsm-near-json-memo-input-001 adds compiler-owned `OptionalMemo16` and canonical 
 `{"memo":null|string}` parsing. It preserves None versus Some-empty, decodes short/BMP/surrogate
 JSON escapes plus raw UTF-8 into at most 16 bytes, and remains a closed prerequisite rather than a
 generic serde wrapper.
+wsm-near-json-ft-transfer-input-001 combines those value decoders behind one bounded field loop for
+required `receiver_id`/`amount` and optional `memo`. All key permutations are accepted; duplicate,
+unknown, escaped-key, and trailing forms reject. The compiler-owned 15-leaf frame is parser-only
+and deliberately does not export or implement `ft_transfer`.
 wsm-near-ft-balance-of-001 composes those two exact policies into an exact `ft_balance_of` export
 over the existing `BAL2` balance map. Missing and present-zero balances both return `"0"`, while
 malformed present values trap; the bounded input grammar remains narrower than serde_json, so the
@@ -148,6 +152,8 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   `json_memo_input.sh` 验证 missing/null/Some-empty、short/BMP/surrogate/raw UTF-8 decode、
   decoded 16-byte/exact 139-wire/32 structural-whitespace bounds、inactive zeroing 与 malformed
   UTF-8/escape/object fail-closed matrix；
+  `json_ft_transfer_input.sh` 验证三字段任意排列、required/optional/duplicate presence、完整
+  AccountId/u128/memo leaves、exact 786-wire/32-whitespace geometry 与各 value decoder 的组合失败矩阵；
   `storage.sh` 验证 binary/empty keys、
   insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has；
   `vector.sh` 验证 exact current element keys/Borsh values、get/set/push/pop、capacity rollback
@@ -194,5 +200,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

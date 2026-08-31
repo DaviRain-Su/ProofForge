@@ -19,6 +19,7 @@ def entries : Array Entry := #[
   { name := "NearJsonAccountInput", digest := "94c66ff0e540880f" },
   { name := "NearJsonAmountInput", digest := "39187c79765d79a8" },
   { name := "NearJsonMemoInput", digest := "f3fa980c281bf1e6" },
+  { name := "NearJsonFtTransferInput", digest := "21ac8e6e13ab0ef8" },
   { name := "NearStorage", digest := "cd97bb762dac8be3" },
   { name := "NearStorageEconomics", digest := "9c98eca433f99470" },
   { name := "NearStorageRegistration", digest := "92f4f04bdcaeff81" },

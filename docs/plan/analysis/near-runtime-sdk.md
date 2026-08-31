@@ -237,6 +237,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    escapes, BMP escapes, and valid surrogate pairs, with exact 16 decoded-byte, 139 wire-byte, and
    32 structural-whitespace bounds. near-sdk has no memo length bound and accepts broader object
    grammar; this is a closed prerequisite for a later specialized transfer object.
+   **NEAR-JSON-FT-TRANSFER-INPUT (wsm-near-json-ft-transfer-input-001 done):** one compiler-owned
+   `FtTransferArgs` frame binds exactly receiver AccountId, full u128 amount, and optional memo.
+   A bounded field loop accepts every known-field permutation, enforces required/presence bits,
+   and reuses the checked value cursors. Exact geometry is 786 wire bytes and 32 aggregate
+   structural-whitespace bytes. Unknown keys reject (unlike the broader generated serde wrapper),
+   and this parser fixture intentionally has no standard `ft_transfer` export or ledger effect.
    **NEAR-FT-BALANCE-OF (wsm-near-ft-balance-of-001 done):** the exact snake-case
    `ft_balance_of` export composes that bounded AccountId object policy with one strict read of the
    existing `BAL2` ledger map and canonical quoted-u128 output. Missing and exact present-zero

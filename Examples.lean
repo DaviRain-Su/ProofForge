@@ -73,6 +73,7 @@ import Examples.NearOutput
 import Examples.NearJsonAccountInput
 import Examples.NearJsonAmountInput
 import Examples.NearJsonMemoInput
+import Examples.NearJsonFtTransferInput
 import Examples.NearStorage
 import Examples.NearStorageEconomics
 import Examples.NearStorageRegistration

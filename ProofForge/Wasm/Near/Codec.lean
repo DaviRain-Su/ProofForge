@@ -108,6 +108,13 @@ decoded UTF-8 bytes each represented by a six-byte JSON escape, and separately b
 def maxJsonMemoWhitespace : Nat := 32
 def maxJsonMemoInputBytes : Nat := 11 + 16 * 6 + maxJsonMemoWhitespace
 
+/-- Exact largest combined transfer-shaped wire: 40 structural bytes for three string fields,
+64 AccountId bytes, 39 decimal digits, and 16 memo bytes each in six-byte JSON escapes, plus the
+single aggregate structural-whitespace allowance. -/
+def maxJsonFtTransferWhitespace : Nat := 32
+def maxJsonFtTransferInputBytes : Nat :=
+  40 + 64 * 6 + 39 * 6 + 16 * 6 + maxJsonFtTransferWhitespace
+
 def accountIdSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.AccountId" #[
     ("length", .scalar .uint64),
@@ -121,6 +128,11 @@ def optionalMemo16Schema : Core.Codec.Schema :=
     ("present", .scalar .uint64), ("length", .scalar .uint64),
     ("w0", .scalar .uint64), ("w1", .scalar .uint64)]
 
+def ftTransferArgsSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.FtTransferArgs" #[
+    ("receiverId", accountIdSchema), ("amount", .scalar .uint128),
+    ("memo", optionalMemo16Schema)]
+
 /-- Closed target input policies. The AccountId plan accepts one bounded one-field JSON object;
 it is deliberately narrower than generic serde_json-generated method wrappers. -/
 inductive InputPlan where
@@ -128,6 +140,7 @@ inductive InputPlan where
   | jsonAccountId
   | jsonU128Amount
   | jsonOptionalMemo16
+  | jsonFtTransferArgs
   deriving Repr, BEq, Inhabited
 
 def InputPlan.localCount : InputPlan → Nat
@@ -135,6 +148,7 @@ def InputPlan.localCount : InputPlan → Nat
   | .jsonAccountId => 9
   | .jsonU128Amount => 2
   | .jsonOptionalMemo16 => 4
+  | .jsonFtTransferArgs => 15
 
 def InputPlan.canonical : InputPlan → String
   | .borsh plan => plan.canonical
@@ -147,11 +161,15 @@ def InputPlan.canonical : InputPlan → String
   | .jsonOptionalMemo16 =>
       s!"near-json-optional-memo16-object-canonical-v1(max-wire={maxJsonMemoInputBytes}," ++
         s!"ws={maxJsonMemoWhitespace},decoded-bytes=0..16,unknown=reject)"
+  | .jsonFtTransferArgs =>
+      s!"near-json-ft-transfer-args-bounded-v1(max-wire={maxJsonFtTransferInputBytes}," ++
+        s!"ws={maxJsonFtTransferWhitespace},order=any,keys=raw,unknown=reject)"
 
 def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == accountIdSchema then return .jsonAccountId
   if schema == .scalar .uint128 then return .jsonU128Amount
   if schema == optionalMemo16Schema then return .jsonOptionalMemo16
+  if schema == ftTransferArgsSchema then return .jsonFtTransferArgs
   match schema with
   | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)
   | .boundedString capacity => .borsh <$> inputPlan (.boundedString capacity)

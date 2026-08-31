@@ -183,6 +183,17 @@ json_memo_input_anchors = (
     '(func (export "memoW0")',
     '(func (export "memoW1")',
 )
+json_ft_transfer_input_anchors = (
+    '(func $pf_json_ft_transfer_args',
+    '(func $pf_json_ft_key',
+    '(func $pf_json_account_string',
+    '(func $pf_json_u128_string',
+    '(func $pf_json_memo_string',
+    '(i64.const 786)',
+    '(func (export "inspectReceiverLength")',
+    '(func (export "inspectAmountW1")',
+    '(func (export "inspectMemoPresent")',
+)
 storage_anchors = (
     '(global $pf_storage_result_status (mut i64)',
     '(func $pf_storage_result_byte',
@@ -420,6 +431,8 @@ for wat in wats:
         extra = json_amount_input_anchors
     elif wat.stem == "NearJsonMemoInput":
         extra = json_memo_input_anchors
+    elif wat.stem == "NearJsonFtTransferInput":
+        extra = json_ft_transfer_input_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
     elif wat.stem == "NearStorageEconomics":

@@ -2073,28 +2073,38 @@ private def methodUsesArena (method : Method ValKind OpExt) : Bool :=
   !method.outputPolicy.isEmpty || method.inputSchema == some Codec.accountIdSchema ||
     method.inputSchema == some (.scalar .uint128) ||
     method.inputSchema == some Codec.optionalMemo16Schema ||
+    method.inputSchema == some Codec.ftTransferArgsSchema ||
     method.ops.any opUsesArena
 
 private def programUsesArena (p : Program ValKind OpExt) : Bool :=
   methodUsesArena p.initializer || p.entries.any methodUsesArena
 
 private def methodUsesJsonAccountInput (method : Method ValKind OpExt) : Bool :=
-  method.inputSchema == some Codec.accountIdSchema
+  method.inputSchema == some Codec.accountIdSchema ||
+    method.inputSchema == some Codec.ftTransferArgsSchema
 
 private def programUsesJsonAccountInput (p : Program ValKind OpExt) : Bool :=
   methodUsesJsonAccountInput p.initializer || p.entries.any methodUsesJsonAccountInput
 
 private def methodUsesJsonU128Input (method : Method ValKind OpExt) : Bool :=
-  method.inputSchema == some (.scalar .uint128)
+  method.inputSchema == some (.scalar .uint128) ||
+    method.inputSchema == some Codec.ftTransferArgsSchema
 
 private def programUsesJsonU128Input (p : Program ValKind OpExt) : Bool :=
   methodUsesJsonU128Input p.initializer || p.entries.any methodUsesJsonU128Input
 
 private def methodUsesJsonOptionalMemoInput (method : Method ValKind OpExt) : Bool :=
-  method.inputSchema == some Codec.optionalMemo16Schema
+  method.inputSchema == some Codec.optionalMemo16Schema ||
+    method.inputSchema == some Codec.ftTransferArgsSchema
 
 private def programUsesJsonOptionalMemoInput (p : Program ValKind OpExt) : Bool :=
   methodUsesJsonOptionalMemoInput p.initializer || p.entries.any methodUsesJsonOptionalMemoInput
+
+private def methodUsesJsonFtTransferInput (method : Method ValKind OpExt) : Bool :=
+  method.inputSchema == some Codec.ftTransferArgsSchema
+
+private def programUsesJsonFtTransferInput (p : Program ValKind OpExt) : Bool :=
+  methodUsesJsonFtTransferInput p.initializer || p.entries.any methodUsesJsonFtTransferInput
 
 private def clearAccountBuffer (off level : Nat) : Array String :=
   (List.range 8).toArray.map fun i =>
@@ -2299,6 +2309,37 @@ private def loadArg (method : Method ValKind OpExt) (level : Nat) :
           " (i64.load (i32.add (local.get $pf_memo_ptr) (i32.const " ++
           toString (off * 8) ++ "))))"))
       return lines
+    if plan == .jsonFtTransferArgs then
+      let mut lines := #[
+        indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
+        indent level ("(local.set $pf_input_size (call $pf_register_len (i64.const " ++
+          toString inputReg ++ ")) )"),
+        indent level ("(if (i64.gt_u (local.get $pf_input_size) (i64.const " ++
+          toString Codec.maxJsonFtTransferInputBytes ++ "))"),
+        indent (level + 2) "(then",
+        panicInput (level + 4),
+        indent (level + 2) "))",
+        indent level ("(local.set $pf_input_ptr (call $pf_arena_alloc (i64.const " ++
+          toString Codec.maxJsonFtTransferInputBytes ++ ") (i64.const 1)))"),
+        indent level "(local.set $pf_ft_args_ptr (call $pf_arena_alloc (i64.const 120) (i64.const 8)))"
+      ]
+      for off in [0:15] do
+        lines := lines.push (indent level ("(i64.store (i32.add (local.get $pf_ft_args_ptr) " ++
+          "(i32.const " ++ toString (off * 8) ++ ")) (i64.const 0))"))
+      lines := lines ++ #[
+        indent level ("(call $pf_read_register (i64.const " ++ toString inputReg ++
+          ") (i64.extend_i32_u (local.get $pf_input_ptr)))"),
+        indent level ("(if (i64.eqz (call $pf_json_ft_transfer_args (local.get $pf_input_ptr) " ++
+          "(i32.wrap_i64 (local.get $pf_input_size)) (local.get $pf_ft_args_ptr)))"),
+        indent (level + 2) "(then",
+        panicInput (level + 4),
+        indent (level + 2) "))"
+      ]
+      for off in [0:15] do
+        lines := lines.push (indent level ("(local.set " ++ localOfArg off ++
+          " (i64.load (i32.add (local.get $pf_ft_args_ptr) (i32.const " ++
+          toString (off * 8) ++ "))))"))
+      return lines
     let .borsh plan := plan | throw "near/codec: unreachable input plan"
     let mut lines : Array String := #[
       indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
@@ -2432,6 +2473,9 @@ private def renderFn (p : Program ValKind OpExt)
   if inputPlan == some .jsonOptionalMemo16 then
     lines := lines.push "    (local $pf_input_ptr i32)"
     lines := lines.push "    (local $pf_memo_ptr i32)"
+  if inputPlan == some .jsonFtTransferArgs then
+    lines := lines.push "    (local $pf_input_ptr i32)"
+    lines := lines.push "    (local $pf_ft_args_ptr i32)"
   if outputPlan.isSome then
     lines := lines.push "    (local $pf_output_ptr i32)"
     lines := lines.push "    (local $pf_output_length i64)"
@@ -2787,6 +2831,7 @@ private def methodUsesUtf8Codec (method : Method ValKind OpExt) : Bool :=
     | some (.boundedString _) => true
     | _ => false) ||
   method.inputSchema == some Codec.optionalMemo16Schema ||
+  method.inputSchema == some Codec.ftTransferArgsSchema ||
   (match method.outputSchema with
     | some (.boundedString _) => true
     | _ => false)
@@ -3309,6 +3354,154 @@ private def jsonOptionalMemoInputHelpers : Array String := #[
   "    (i64.const 0))"
 ]
 
+/-- One bounded field-loop parser for the exact compiler-owned transfer argument frame. It reuses
+the checked decimal and memo string cursors and keeps raw canonical key spelling separate from
+decoded values. -/
+private def jsonFtTransferInputHelpers : Array String := #[
+  "  (func $pf_json_ft_key (param $ptr i32) (param $len i32) (param $pos i32) (result i32)",
+  "    (if (i32.le_u (i32.add (local.get $pos) (i32.const 13)) (local.get $len))",
+  "      (then (if (i32.and",
+  "        (i64.eq (i64.load (i32.add (local.get $ptr) (local.get $pos))) (i64.const 7311146929262785058))",
+  "        (i64.eq (i64.and (i64.load (i32.add (local.get $ptr) (i32.add (local.get $pos) (i32.const 8))))",
+  "                          (i64.const 1099511627775)) (i64.const 147713515378)))",
+  "        (then (return (i32.const 1))))))",
+  "    (if (i32.le_u (i32.add (local.get $pos) (i32.const 8)) (local.get $len))",
+  "      (then (if (i64.eq (i64.load (i32.add (local.get $ptr) (local.get $pos)))",
+  "                         (i64.const 2482730745247654178))",
+  "        (then (return (i32.const 2))))))",
+  "    (if (i32.le_u (i32.add (local.get $pos) (i32.const 6)) (local.get $len))",
+  "      (then (if (i64.eq (i64.and (i64.load (i32.add (local.get $ptr) (local.get $pos)))",
+  "                                  (i64.const 281474976710655))",
+  "                         (i64.const 37861972077858))",
+  "        (then (return (i32.const 3))))))",
+  "    (i32.const 0))",
+  "  (func $pf_json_account_string (param $ptr i32) (param $len i32) (param $pos i32) (param $out i32) (result i32)",
+  "    (local $i i32) (local $j i32) (local $n i32) (local $c i32)",
+  "    (local $e i32) (local $h i32) (local $sep i32)",
+  "    (block $invalid",
+  "      (br_if $invalid (i32.ge_u (local.get $pos) (local.get $len)))",
+  "      (br_if $invalid (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $pos))) (i32.const 34)))",
+  "      (local.set $i (i32.add (local.get $pos) (i32.const 1)))",
+  "      (block $done (loop $chars",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (local.set $c (i32.load8_u (i32.add (local.get $ptr) (local.get $i))))",
+  "        (if (i32.eq (local.get $c) (i32.const 34))",
+  "          (then (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $done)))",
+  "        (if (i32.eq (local.get $c) (i32.const 92))",
+  "          (then",
+  "            (local.set $i (i32.add (local.get $i) (i32.const 1)))",
+  "            (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "            (local.set $e (i32.load8_u (i32.add (local.get $ptr) (local.get $i))))",
+  "            (local.set $i (i32.add (local.get $i) (i32.const 1)))",
+  "            (if (i32.eq (local.get $e) (i32.const 117))",
+  "              (then",
+  "                (br_if $invalid (i32.gt_u (i32.add (local.get $i) (i32.const 4)) (local.get $len)))",
+  "                (local.set $c (i32.const 0)) (local.set $j (i32.const 0))",
+  "                (block $hex_done (loop $hex",
+  "                  (br_if $hex_done (i32.eq (local.get $j) (i32.const 4)))",
+  "                  (local.set $h (call $pf_json_account_hex (i32.load8_u (i32.add",
+  "                    (local.get $ptr) (i32.add (local.get $i) (local.get $j))))))",
+  "                  (br_if $invalid (i32.lt_s (local.get $h) (i32.const 0)))",
+  "                  (local.set $c (i32.or (i32.shl (local.get $c) (i32.const 4)) (local.get $h)))",
+  "                  (local.set $j (i32.add (local.get $j) (i32.const 1))) (br $hex)))",
+  "                (local.set $i (i32.add (local.get $i) (i32.const 4))))",
+  "              (else",
+  "                (local.set $c (call $pf_json_account_escape (local.get $e)))",
+  "                (br_if $invalid (i32.lt_s (local.get $c) (i32.const 0))))))",
+  "          (else",
+  "            (br_if $invalid (i32.or (i32.lt_u (local.get $c) (i32.const 32)) (i32.gt_u (local.get $c) (i32.const 126))))",
+  "            (local.set $i (i32.add (local.get $i) (i32.const 1)))))",
+  "        (br_if $invalid (i32.gt_u (local.get $c) (i32.const 127)))",
+  "        (if (i32.or",
+  "              (i32.and (i32.ge_u (local.get $c) (i32.const 97)) (i32.le_u (local.get $c) (i32.const 122)))",
+  "              (i32.and (i32.ge_u (local.get $c) (i32.const 48)) (i32.le_u (local.get $c) (i32.const 57))))",
+  "          (then (local.set $sep (i32.const 0)))",
+  "          (else",
+  "            (br_if $invalid (i32.eqz (i32.or (i32.eq (local.get $c) (i32.const 45))",
+  "              (i32.or (i32.eq (local.get $c) (i32.const 46)) (i32.eq (local.get $c) (i32.const 95))))))",
+  "            (br_if $invalid (i32.or (i32.eqz (local.get $n)) (local.get $sep)))",
+  "            (local.set $sep (i32.const 1))))",
+  "        (br_if $invalid (i32.ge_u (local.get $n) (i32.const 64)))",
+  "        (i32.store8 (i32.add (local.get $out) (i32.add (i32.const 8) (local.get $n))) (local.get $c))",
+  "        (local.set $n (i32.add (local.get $n) (i32.const 1))) (br $chars)))",
+  "      (br_if $invalid (i32.lt_u (local.get $n) (i32.const 2)))",
+  "      (br_if $invalid (local.get $sep))",
+  "      (i64.store (local.get $out) (i64.extend_i32_u (local.get $n)))",
+  "      (return (local.get $i)))",
+  "    (i32.const 0))",
+  "  (func $pf_json_ft_transfer_args (param $ptr i32) (param $len i32) (param $out i32) (result i64)",
+  "    (local $i i32) (local $before i32) (local $ws i32) (local $key i32)",
+  "    (local $seen i32) (local $bit i32)",
+  "    (block $invalid",
+  "      (local.set $before (local.get $i))",
+  "      (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "      (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "      (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "      (br_if $invalid (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 123)))",
+  "      (local.set $i (i32.add (local.get $i) (i32.const 1)))",
+  "      (block $done (loop $fields",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (local.set $key (call $pf_json_ft_key (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (br_if $invalid (i32.eqz (local.get $key)))",
+  "        (local.set $bit (i32.shl (i32.const 1) (i32.sub (local.get $key) (i32.const 1))))",
+  "        (br_if $invalid (i32.and (local.get $seen) (local.get $bit)))",
+  "        (if (i32.eq (local.get $key) (i32.const 1))",
+  "          (then (local.set $i (i32.add (local.get $i) (i32.const 13))))",
+  "          (else (if (i32.eq (local.get $key) (i32.const 2))",
+  "            (then (local.set $i (i32.add (local.get $i) (i32.const 8))))",
+  "            (else (local.set $i (i32.add (local.get $i) (i32.const 6)))))))",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (br_if $invalid (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 58)))",
+  "        (local.set $i (i32.add (local.get $i) (i32.const 1)))",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (if (i32.eq (local.get $key) (i32.const 1))",
+  "          (then",
+  "            (local.set $i (call $pf_json_account_string (local.get $ptr) (local.get $len) (local.get $i) (local.get $out)))",
+  "            (br_if $invalid (i32.eqz (local.get $i))))",
+  "          (else (if (i32.eq (local.get $key) (i32.const 2))",
+  "            (then",
+  "              (local.set $i (call $pf_json_u128_string (local.get $ptr) (local.get $len) (local.get $i)",
+  "                (i32.add (local.get $out) (i32.const 72))))",
+  "              (br_if $invalid (i32.eqz (local.get $i))))",
+  "            (else",
+  "              (if (i32.eq (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 34))",
+  "                (then",
+  "                  (local.set $i (call $pf_json_memo_string (local.get $ptr) (local.get $len) (local.get $i)",
+  "                    (i32.add (local.get $out) (i32.const 88))))",
+  "                  (br_if $invalid (i32.eqz (local.get $i)))",
+  "                  (i64.store (i32.add (local.get $out) (i32.const 88)) (i64.const 1)))",
+  "                (else",
+  "                  (br_if $invalid (i32.gt_u (i32.add (local.get $i) (i32.const 4)) (local.get $len)))",
+  "                  (br_if $invalid (i32.ne (i32.load (i32.add (local.get $ptr) (local.get $i))) (i32.const 1819047278)))",
+  "                  (local.set $i (i32.add (local.get $i) (i32.const 4)))))))))",
+  "        (local.set $seen (i32.or (local.get $seen) (local.get $bit)))",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (if (i32.eq (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 44))",
+  "          (then (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $fields)))",
+  "        (br_if $invalid (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 125)))",
+  "        (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $done)))",
+  "      (br_if $invalid (i32.ne (i32.and (local.get $seen) (i32.const 3)) (i32.const 3)))",
+  "      (local.set $before (local.get $i))",
+  "      (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "      (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "      (br_if $invalid (i32.gt_u (local.get $ws) (i32.const 32)))",
+  "      (br_if $invalid (i32.ne (local.get $i) (local.get $len)))",
+  "      (return (i64.const 1)))",
+  "    (i64.const 0))"
+]
+
 private def mul64Helpers : Array String := #[
   "  (func $pf_mul64_lo (param $a i64) (param $b i64) (result i64)",
   "    (local $a0 i64) (local $a1 i64) (local $b0 i64) (local $b1 i64)",
@@ -3438,6 +3631,8 @@ def emit (p : IR.Program) : Except String String := do
     lines := lines ++ jsonU128InputHelpers
   if programUsesJsonOptionalMemoInput p then
     lines := lines ++ jsonOptionalMemoInputHelpers
+  if programUsesJsonFtTransferInput p then
+    lines := lines ++ jsonFtTransferInputHelpers
   lines := lines.push ""
   lines := lines ++ (← renderFn p p.initializer true)
   lines := lines.push ""

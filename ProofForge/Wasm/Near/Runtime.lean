@@ -38,6 +38,14 @@ packed little-endian into `w0,w1`, and bytes at/above `length` are zero. -/
   w1 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact frame for the bounded canonical `ft_transfer`-shaped JSON parser.
+This is an input carrier only: it does not implement or claim the public NEP-141 method. -/
+@[pf_boundary] structure FtTransferArgs where
+  receiverId : AccountId
+  amount : ProofForge.Core.Value.UInt128
+  memo : OptionalMemo16
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /--
 Current block height. Extractor matches this name and the NEAR emitter
 imports `env.block_index` (u64, view-safe). Not Solana `Clock.slot`, not
