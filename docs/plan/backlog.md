@@ -93,7 +93,8 @@ R5-023 shared checked UInt128/UInt256→UInt8 SafeCast、
 R1-024 shared allocation-free UInt64 min/max/floor-average/checked-ceilDiv、
 R1-025 shared allocation-free UInt64 saturatingAdd/saturatingSub/saturatingMul、
 R1-026 shared allocation-free UInt64 floor log2/log10/log256、
-R1-027 shared allocation-free UInt64 floor integer sqrt；
+R1-027 shared allocation-free UInt64 floor integer sqrt、
+R1-028 shared allocation-free UInt64 ceiling log2/log10/log256/sqrt；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -404,7 +405,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   log256，统一把零映射到零；6/5/7-step static ladders 复用既有 bounded loop、local frame、
   compare/shift/div arithmetic，不把中间表达式指数复制到 target。BatchSizer/EvmPriceBand
   分别绑定 capacity/encoding 与 quote-band policy；extraction guard 钉住 exact loop bounds 并
-  拒绝 target extension effect。round-up log、wide/full-precision math 继续 fail closed。
+  拒绝 target extension effect。wide/full-precision math 继续 fail closed。
   详见 `docs/plan/tasks/r1-026.md`。
 
 - R1-027 shared UInt64 integer square root 已完成：`Core.Math.UInt64.sqrt` 与 Rust `u64::isqrt`
@@ -412,8 +413,16 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   seed、three-halves improvement、6-step Newton scalar frame 和 division correction。双标量
   `(estimate, quotient)` 明确拒绝旧 additive `forAccum` 误识别；BatchSizer/EvmPriceBand
   分别绑定 capacity-grid 与 quote-normalization policy。不新增 Runtime/Ops/IR/CFG/Component/
-  Emit、allocation、pointer 或 shared layout。round-up sqrt 与 wide root 继续 fail closed。
+  Emit、allocation、pointer 或 shared layout。wide root 继续 fail closed。
   详见 `docs/plan/tasks/r1-027.md`。
+
+- R1-028 shared UInt64 ceiling logarithms/root 已完成：`log2Ceil`、`log10Ceil`、
+  `log256Ceil` 和 `sqrtCeil` 使用 `input - 1` identity，把 OpenZeppelin upward-rounding
+  policy 复用到 R1-026/027 的同样 6/5/7-step magnitude ladders 与 5+6-step Newton frame。
+  零、one、exact power/square、next value 和 UInt64 maximum 均有 host/SVM/EVM 边界。
+  BatchSizer/EvmPriceBand 分别绑定 covering capacity 与 quote-band policy。不新增 Runtime/
+  Ops/IR/CFG/Component/Emit、allocation、power table 或 shared layout。详见
+  `docs/plan/tasks/r1-028.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

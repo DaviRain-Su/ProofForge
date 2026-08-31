@@ -73,6 +73,36 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 #guard Math.UInt64.sqrt 17 == 4
 #guard Math.UInt64.sqrt 18446744065119617025 == 4294967295
 #guard Math.UInt64.sqrt u64Max == 4294967295
+#guard Math.UInt64.log2Ceil 0 == 0
+#guard Math.UInt64.log2Ceil 1 == 0
+#guard Math.UInt64.log2Ceil 2 == 1
+#guard Math.UInt64.log2Ceil 3 == 2
+#guard Math.UInt64.log2Ceil 4 == 2
+#guard Math.UInt64.log2Ceil u64Max == 64
+#guard Math.UInt64.log10Ceil 0 == 0
+#guard Math.UInt64.log10Ceil 1 == 0
+#guard Math.UInt64.log10Ceil 9 == 1
+#guard Math.UInt64.log10Ceil 10 == 1
+#guard Math.UInt64.log10Ceil 11 == 2
+#guard Math.UInt64.log10Ceil 10000000000000000000 == 19
+#guard Math.UInt64.log10Ceil u64Max == 20
+#guard Math.UInt64.log256Ceil 0 == 0
+#guard Math.UInt64.log256Ceil 1 == 0
+#guard Math.UInt64.log256Ceil 255 == 1
+#guard Math.UInt64.log256Ceil 256 == 1
+#guard Math.UInt64.log256Ceil 257 == 2
+#guard Math.UInt64.log256Ceil u64Max == 8
+#guard Math.UInt64.sqrtCeil 0 == 0
+#guard Math.UInt64.sqrtCeil 1 == 1
+#guard Math.UInt64.sqrtCeil 2 == 2
+#guard Math.UInt64.sqrtCeil 3 == 2
+#guard Math.UInt64.sqrtCeil 4 == 2
+#guard Math.UInt64.sqrtCeil 15 == 4
+#guard Math.UInt64.sqrtCeil 16 == 4
+#guard Math.UInt64.sqrtCeil 17 == 5
+#guard Math.UInt64.sqrtCeil 18446744065119617025 == 4294967295
+#guard Math.UInt64.sqrtCeil 18446744065119617026 == 4294967296
+#guard Math.UInt64.sqrtCeil u64Max == 4294967296
 
 private def validFloorRoot (value : UInt64) : Bool :=
   let root := Math.UInt64.sqrt value
@@ -83,6 +113,18 @@ private def validFloorRoot (value : UInt64) : Bool :=
 #guard validFloorRoot 0x7fffffffffffffff
 #guard validFloorRoot 0x8000000000000000
 #guard validFloorRoot u64Max
+
+private def validCeilRoot (value : UInt64) : Bool :=
+  let root := Math.UInt64.sqrtCeil value
+  if value == 0 then root == 0
+  else
+    let lower := root - 1
+    lower * lower < value && (root == 4294967296 || value ≤ root * root)
+
+#guard (List.range 4096).all fun value => validCeilRoot (UInt64.ofNat value)
+#guard validCeilRoot 0x7fffffffffffffff
+#guard validCeilRoot 0x8000000000000000
+#guard validCeilRoot u64Max
 
 open Examples.BatchSizer in
 #guard (smaller (init 8) 11 4 == 4) && (larger (init 8) 11 4 == 11) &&
@@ -104,7 +146,9 @@ open Examples.BatchSizer in
   | .ok (state, result) => state.lastBatchCount == u64Max && result == u64Max
   | _ => false) &&
   binaryOrder (init 8) 65535 == 15 && decimalOrder (init 8) 1000000 == 6 &&
-  byteOrder (init 8) 0x100000000 == 4 && capacityRoot (init 8) 1000000 == 1000
+  byteOrder (init 8) 0x100000000 == 4 && capacityRoot (init 8) 1000000 == 1000 &&
+  binaryOrderUp (init 8) 65535 == 16 && decimalOrderUp (init 8) 1000001 == 7 &&
+  byteOrderUp (init 8) 0x100000001 == 5 && capacityRootUp (init 8) 1000001 == 1001
 
 open Examples.EvmPriceBand in
 #guard (lower (init 9) 13 5 == 5) && (upper (init 9) 13 5 == 13) &&
@@ -125,7 +169,9 @@ open Examples.EvmPriceBand in
   | .ok (state, result) => state.lastQuote == u64Max && result == u64Max
   | _ => false) &&
   binaryBand (init 9) u64Max == 63 && decimalBand (init 9) u64Max == 19 &&
-  byteBand (init 9) u64Max == 7 && quoteRoot (init 9) u64Max == 4294967295
+  byteBand (init 9) u64Max == 7 && quoteRoot (init 9) u64Max == 4294967295 &&
+  binaryBandUp (init 9) u64Max == 64 && decimalBandUp (init 9) u64Max == 20 &&
+  byteBandUp (init 9) u64Max == 8 && quoteRootUp (init 9) u64Max == 4294967296
 
 /-- Pure shared math stays in ordinary target-neutral scalar Ops. -/
 private partial def noTargetEffects (ops : Array ProofForge.Extract.IR.Op) : Bool :=
@@ -202,21 +248,26 @@ elab "#pf_guard_core_math_no_effects" : command => do
         throwError s!"{module}.{name}: saturating preflight no longer dominates its arithmetic"
     let logNames : Array (String × Nat) :=
       if module == `Examples.BatchSizer then
-        #[⟨"binaryOrder", 6⟩, ⟨"decimalOrder", 5⟩, ⟨"byteOrder", 7⟩]
+        #[⟨"binaryOrder", 6⟩, ⟨"decimalOrder", 5⟩, ⟨"byteOrder", 7⟩,
+          ⟨"binaryOrderUp", 6⟩, ⟨"decimalOrderUp", 5⟩, ⟨"byteOrderUp", 7⟩]
       else
-        #[⟨"binaryBand", 6⟩, ⟨"decimalBand", 5⟩, ⟨"byteBand", 7⟩]
+        #[⟨"binaryBand", 6⟩, ⟨"decimalBand", 5⟩, ⟨"byteBand", 7⟩,
+          ⟨"binaryBandUp", 6⟩, ⟨"decimalBandUp", 5⟩, ⟨"byteBandUp", 7⟩]
     for (name, expectedBound) in logNames do
       let some method := source.methods.find? (·.ixName == name)
         | throwError s!"{module}.{name}: missing integer-log consumer"
       unless loopBounds method.ops == #[expectedBound] do
         throwError s!"{module}.{name}: expected exactly one {expectedBound}-step bounded ladder"
-    let rootName := if module == `Examples.BatchSizer then "capacityRoot" else "quoteRoot"
-    let some root := source.methods.find? (·.ixName == rootName)
-      | throwError s!"{module}.{rootName}: missing integer-square-root consumer"
-    unless loopBounds root.ops == #[5, 6] do
-      throwError s!"{module}.{rootName}: expected exact five-step seed and six-step Newton ladders"
-    unless noAccumLoop root.ops do
-      throwError s!"{module}.{rootName}: Newton state was incorrectly lowered as additive accumulation"
+    let rootNames : Array String :=
+      if module == `Examples.BatchSizer then #["capacityRoot", "capacityRootUp"]
+      else #["quoteRoot", "quoteRootUp"]
+    for rootName in rootNames do
+      let some root := source.methods.find? (·.ixName == rootName)
+        | throwError s!"{module}.{rootName}: missing integer-square-root consumer"
+      unless loopBounds root.ops == #[5, 6] do
+        throwError s!"{module}.{rootName}: expected exact five-step seed and six-step Newton ladders"
+      unless noAccumLoop root.ops do
+        throwError s!"{module}.{rootName}: Newton state was incorrectly lowered as additive accumulation"
 
 #pf_guard_core_math_no_effects
 #pf_build Examples.BatchSizer

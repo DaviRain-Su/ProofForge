@@ -80,4 +80,24 @@ def byteBand (_state : State) (quote : UInt64) : UInt64 :=
 def quoteRoot (_state : State) (quote : UInt64) : UInt64 :=
   Math.UInt64.sqrt quote
 
+/-- First binary band whose power of two covers the quote. -/
+@[pf_entry]
+def binaryBandUp (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.log2Ceil quote
+
+/-- First decimal band whose power of ten covers the quote. -/
+@[pf_entry]
+def decimalBandUp (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.log10Ceil quote
+
+/-- First base-256 band whose power covers the quote. -/
+@[pf_entry]
+def byteBandUp (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.log256Ceil quote
+
+/-- Smallest integral normalization root whose square covers the quote. -/
+@[pf_entry]
+def quoteRootUp (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.sqrtCeil quote
+
 end Examples.EvmPriceBand

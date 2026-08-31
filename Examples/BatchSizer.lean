@@ -80,4 +80,24 @@ def byteOrder (_state : State) (value : UInt64) : UInt64 :=
 def capacityRoot (_state : State) (capacity : UInt64) : UInt64 :=
   Math.UInt64.sqrt capacity
 
+/-- First binary order whose power of two covers the capacity. -/
+@[pf_entry]
+def binaryOrderUp (_state : State) (value : UInt64) : UInt64 :=
+  Math.UInt64.log2Ceil value
+
+/-- First decimal order whose power of ten covers the capacity. -/
+@[pf_entry]
+def decimalOrderUp (_state : State) (value : UInt64) : UInt64 :=
+  Math.UInt64.log10Ceil value
+
+/-- First base-256 order whose power covers the encoded value. -/
+@[pf_entry]
+def byteOrderUp (_state : State) (value : UInt64) : UInt64 :=
+  Math.UInt64.log256Ceil value
+
+/-- Smallest square grid dimension that covers the capacity. -/
+@[pf_entry]
+def capacityRootUp (_state : State) (capacity : UInt64) : UInt64 :=
+  Math.UInt64.sqrtCeil capacity
+
 end Examples.BatchSizer

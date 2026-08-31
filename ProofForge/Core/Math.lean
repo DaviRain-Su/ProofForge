@@ -114,4 +114,69 @@ steps. The final division-based correction avoids squaring an intermediate estim
       quotient := input / estimate
     return min estimate quotient
 
+/-- Ceiling of the base-2 logarithm, returning zero for zero. For positive values above one,
+`⌈log₂ input⌉ = ⌊log₂ (input - 1)⌋ + 1`; the guarded subtraction avoids powers and overflow. -/
+@[pf_inline] def log2Ceil (input : UInt64) : UInt64 :=
+  Id.run do
+    let mut value := if input == 0 then 0 else input - 1
+    let mut result : UInt64 := 0
+    for i in [0:6] do
+      let shift := (32 : UInt64) >>> UInt64.ofNat i
+      if 0 < value >>> shift then
+        value := value >>> shift
+        result := result ||| shift
+    return result + if input ≤ 1 then 0 else 1
+
+/-- Ceiling of the base-10 logarithm, returning zero for zero. -/
+@[pf_inline] def log10Ceil (input : UInt64) : UInt64 :=
+  Id.run do
+    let mut value := if input == 0 then 0 else input - 1
+    let mut result : UInt64 := 0
+    for i in [0:5] do
+      let divisor : UInt64 :=
+        if i == 0 then 10000000000000000
+        else if i == 1 then 100000000
+        else if i == 2 then 10000
+        else if i == 3 then 100
+        else 10
+      if divisor ≤ value then
+        value := value / divisor
+        result := result ||| ((16 : UInt64) >>> UInt64.ofNat i)
+    return result + if input ≤ 1 then 0 else 1
+
+/-- Ceiling of the base-256 logarithm, returning zero for zero. -/
+@[pf_inline] def log256Ceil (input : UInt64) : UInt64 :=
+  Id.run do
+    let mut value := if input == 0 then 0 else input - 1
+    let mut result : UInt64 := 0
+    for _ in [0:7] do
+      if 0xff < value then
+        value := value >>> 8
+        result := result + 1
+    return result + if input ≤ 1 then 0 else 1
+
+/-- Ceiling of the integer square root. For positive inputs,
+`⌈√input⌉ = ⌊√(input - 1)⌋ + 1`; this avoids squaring the floor result. -/
+@[pf_inline] def sqrtCeil (input : UInt64) : UInt64 :=
+  if input == 0 then
+    0
+  else
+    let predecessor := input - 1
+    if predecessor ≤ 1 then
+      predecessor + 1
+    else Id.run do
+      let mut value := predecessor
+      let mut estimate : UInt64 := 1
+      for i in [0:5] do
+        let shift := (32 : UInt64) >>> UInt64.ofNat i
+        if 0 < value >>> shift then
+          value := value >>> shift
+          estimate := estimate <<< (shift >>> 1)
+      estimate := (estimate * 3) >>> 1
+      let mut quotient := predecessor / estimate
+      for _ in [0:6] do
+        estimate := (estimate + quotient) >>> 1
+        quotient := predecessor / estimate
+      return min estimate quotient + 1
+
 end ProofForge.Core.Math.UInt64

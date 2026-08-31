@@ -1,4 +1,4 @@
-//! Cross-target UInt64 math, SVM half: bounded helpers, saturation, and integer logarithms.
+//! Cross-target UInt64 math, SVM half: bounded helpers, saturation, and rounded integer math.
 
 mod common;
 
@@ -114,6 +114,18 @@ fn integer_logs_cover_zero_powers_and_uint64_maximum() {
         ("byteOrder", 255, 0),
         ("byteOrder", 256, 1),
         ("byteOrder", u64::MAX, 7),
+        ("binaryOrderUp", 1, 0),
+        ("binaryOrderUp", 3, 2),
+        ("binaryOrderUp", 4, 2),
+        ("binaryOrderUp", u64::MAX, 64),
+        ("decimalOrderUp", 9, 1),
+        ("decimalOrderUp", 10, 1),
+        ("decimalOrderUp", 11, 2),
+        ("decimalOrderUp", u64::MAX, 20),
+        ("byteOrderUp", 255, 1),
+        ("byteOrderUp", 256, 1),
+        ("byteOrderUp", 257, 2),
+        ("byteOrderUp", u64::MAX, 8),
     ] {
         fixture.call(
             program_id,
@@ -148,6 +160,32 @@ fn integer_square_root_covers_zero_squares_and_uint64_maximum() {
             program_id,
             account.clone(),
             "capacityRoot",
+            &[input],
+            false,
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
+
+    for (input, expected) in [
+        (0, 0u64),
+        (1, 1),
+        (2, 2),
+        (3, 2),
+        (4, 2),
+        (15, 4),
+        (16, 4),
+        (17, 5),
+        (18_446_744_065_119_617_025, 4_294_967_295),
+        (18_446_744_065_119_617_026, 4_294_967_296),
+        (u64::MAX, 4_294_967_296),
+    ] {
+        fixture.call(
+            program_id,
+            account.clone(),
+            "capacityRootUp",
             &[input],
             false,
             &[
