@@ -70,6 +70,7 @@ import Examples.NearCtx
 import Examples.NearBytes
 import Examples.NearMemory
 import Examples.NearOutput
+import Examples.NearJsonAccountInput
 import Examples.NearStorage
 import Examples.NearStorageEconomics
 import Examples.NearStorageRegistration

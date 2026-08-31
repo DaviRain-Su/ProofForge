@@ -90,6 +90,46 @@ def BorshInputPlan.valueIndex? (plan : BorshInputPlan) (name : String) : Option 
   let index ← (name.drop 7).toNat?
   if index < plan.capacity then some index else none
 
+/-- The bounded AccountId object subset allows at most 32 JSON whitespace bytes across the whole
+document. This is a ProofForge resource bound, not a serde_json or nearcore limit. -/
+def maxJsonAccountWhitespace : Nat := 32
+
+/-- Exact maximum wire geometry: `{"account_id":""}` (17 bytes), 64 bytes each escaped as six
+ASCII bytes, and the separately bounded whitespace allowance. -/
+def maxJsonAccountInputBytes : Nat := 17 + 64 * 6 + maxJsonAccountWhitespace
+
+def accountIdSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.AccountId" #[
+    ("length", .scalar .uint64),
+    ("w0", .scalar .uint64), ("w1", .scalar .uint64),
+    ("w2", .scalar .uint64), ("w3", .scalar .uint64),
+    ("w4", .scalar .uint64), ("w5", .scalar .uint64),
+    ("w6", .scalar .uint64), ("w7", .scalar .uint64)]
+
+/-- Closed target input policies. The AccountId plan accepts one bounded one-field JSON object;
+it is deliberately narrower than generic serde_json-generated method wrappers. -/
+inductive InputPlan where
+  | borsh (plan : BorshInputPlan)
+  | jsonAccountId
+  deriving Repr, BEq, Inhabited
+
+def InputPlan.localCount : InputPlan → Nat
+  | .borsh plan => plan.localCount
+  | .jsonAccountId => 9
+
+def InputPlan.canonical : InputPlan → String
+  | .borsh plan => plan.canonical
+  | .jsonAccountId =>
+      s!"near-json-account-id-object-bounded-v1(max-wire={maxJsonAccountInputBytes}," ++
+        s!"ws={maxJsonAccountWhitespace},keys=canonical,unknown=reject)"
+
+def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
+  if schema == accountIdSchema then return .jsonAccountId
+  match schema with
+  | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)
+  | .boundedString capacity => .borsh <$> inputPlan (.boundedString capacity)
+  | _ => throw "near/codec: unsupported specialized input schema"
+
 /-- Keep fixed return frames small enough for deterministic generated WAT. This is a compiler
 resource bound, not a Borsh or nearcore wire limit. -/
 def maxBoundedOutputCapacity : Nat := 64

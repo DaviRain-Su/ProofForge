@@ -72,6 +72,7 @@ import Tests.NearTokenArithmeticSpec
 import Tests.NearTokenStorageSpec
 import Tests.NearMemorySpec
 import Tests.NearOutputSpec
+import Tests.NearJsonAccountInputSpec
 import Tests.NearStorageSpec
 import Tests.NearStorageEconomicsSpec
 import Tests.NearStorageRegistrationSpec

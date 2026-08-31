@@ -152,6 +152,17 @@ output_anchors = (
     '(func (export "echoBytes")',
     '(call $pf_value_return (i64.add (i64.const 4)',
 )
+json_account_input_anchors = (
+    '(func $pf_json_account_id',
+    '(func $pf_json_account_key',
+    '(func $pf_json_account_hex',
+    '(i64.const 433)',
+    '(i32.const 32)',
+    '(func (export "accountLength")',
+    '(func (export "accountW0")',
+    '(func (export "accountW7")',
+    '(call $pf_json_account_id (local.get $pf_input_ptr)',
+)
 storage_anchors = (
     '(global $pf_storage_result_status (mut i64)',
     '(func $pf_storage_result_byte',
@@ -376,6 +387,8 @@ for wat in wats:
         extra = memory_anchors
     elif wat.stem == "NearOutput":
         extra = output_anchors
+    elif wat.stem == "NearJsonAccountInput":
+        extra = json_account_input_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
     elif wat.stem == "NearStorageEconomics":

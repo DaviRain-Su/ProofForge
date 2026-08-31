@@ -21,7 +21,9 @@ String strict UTF-8）。wsm-near-output-001 使用 guest arena 为 bounded byte
 limb unsigned array view 输出同样的 canonical active prefix；raw `UInt64` scalar view 仍恰好返回
 8-byte little-endian。wsm-near-json-u128-output-001 additionally binds only the exact two-leaf
 `UInt128` view schema to one canonical quoted-decimal JSON string (`near-json-u128-string-v1`),
-reusing the event decimal routine. It adds no JSON input, object, nullable, or generic JSON codec.
+reusing the event decimal routine. wsm-near-json-account-input-001 separately binds only the exact
+compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
+`{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.
 wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
 no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，
@@ -89,7 +91,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 |---|---|---|
 | `Near.Ops` | NEAR context 值叶、static log、Promise/callback/result value/effect 与方言检查 | 其它链的方言、collection recipe |
 | `Near.Host` | import 模块 `env`、digest 域 `near-raw-u64\|`、header | XRPL `host_lib`、Data blob sfield |
-| `Near.Codec` | bounded bytes/String canonical Borsh input/view output and specialized quoted-u128 JSON view output | JSON input/objects/null/bool/general strings、collection layout、mutating bounded output |
+| `Near.Codec` | bounded bytes/String canonical Borsh, specialized quoted-u128 JSON view output, and exact-schema bounded AccountId object view input | generic JSON、nullable/bool/general strings、multi-parameter/mutating JSON、collection layout |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Context/Access` | lossless context wrappers including dynamic storage usage、full-AccountId equality/self-call predicate | protocol-config storage byte price、general private/payable/init entry metadata |
 | `Near.Sdk.NearToken` | checked unsigned u128 add/sub and exact u128×u64 predicates/result limbs | byte-price policy、balances、supply、public FT methods |
@@ -121,7 +123,10 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   分配/复用/清零以及 bounds、stale handle、wrong capacity、double begin traps（nearcore
   可把 initial memory 规范化得更大，实际 grow 路径由 model + WAT gate 钉住）。不是
   「artifact 已被证明」；`output.sh` 验证 exact bytes/String/UInt16-array Borsh、input/output
-  round-trip、capacity 和 output UTF-8 failures；`storage.sh` 验证 binary/empty keys、
+  round-trip、capacity 和 output UTF-8 failures；`json_account_input.sh` 验证 bounded
+  `{"account_id":"..."}` view input 的 raw/escaped 2..64-byte decoding、九叶 carrier、exact
+  433-byte wire/32-whitespace bounds 与 malformed object/string/account fail-closed matrix；
+  `storage.sh` 验证 binary/empty keys、
   insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has；
   `vector.sh` 验证 exact current element keys/Borsh values、get/set/push/pop、capacity rollback
   与大 index 在 narrowing 前被拒绝；`lookup.sh` 验证 Identity map/set exact keys、map Borsh
@@ -167,5 +172,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearJsonAccountInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

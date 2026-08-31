@@ -1,3 +1,4 @@
+import ProofForge.Attr
 import ProofForge.Core.Value
 
 namespace ProofForge.Wasm.Near.Runtime
@@ -12,10 +13,10 @@ Lossless host-returned NEAR account id: byte length plus eight little-endian
 `UInt64` words (64-byte protocol maximum). Bytes above `length` are zero.
 
 This is a source value, not a pointer or a Rust `String`. Context host calls
-already guarantee a valid NEAR AccountId; future user-input decoding must
-validate syntax before constructing this type.
+already guarantee a valid NEAR AccountId; the compiler-owned bounded JSON input
+plan validates syntax before constructing it, and any future decoder must do likewise.
 -/
-structure AccountId where
+@[pf_boundary] structure AccountId where
   length : UInt64
   w0 : UInt64
   w1 : UInt64

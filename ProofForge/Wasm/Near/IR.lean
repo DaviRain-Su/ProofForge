@@ -541,20 +541,46 @@ private partial def rewriteInputRoot (method : Core.IR.Method Ops.ValKind Ops.Op
         pure none
   | _ => pure none
 
+private def accountInputFieldIndex? : String → Option Nat
+  | "length" => some 0
+  | "w0" => some 1 | "w1" => some 2 | "w2" => some 3 | "w3" => some 4
+  | "w4" => some 5 | "w5" => some 6 | "w6" => some 7 | "w7" => some 8
+  | _ => none
+
+private partial def rewriteJsonAccountInputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg 0) name =>
+      match accountInputFieldIndex? name with
+      | some index => pure (some (.arg index))
+      | none => throw s!"near/codec: unsupported AccountId input projection {name}"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: AccountId input requires a scalar field projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 9))
+      else
+        pure none
+  | _ => pure none
+
 private structure BoundInput where
   ixName : String
   schema : Core.Codec.Schema
-  plan : Codec.BorshInputPlan
+  plan : Codec.InputPlan
 
 private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundInput) := do
   if method.paramSchemas.isEmpty || method.paramSchemas.all schemaIsScalar then
     return (method, none)
   unless method.paramCount == 1 && method.paramSchemas.size == 1 do
-    throw s!"near/codec: {method.ixName} supports exactly one bounded bytes/string parameter"
+    throw s!"near/codec: {method.ixName} supports exactly one specialized input parameter"
   let schema := method.paramSchemas[0]!
-  let plan ← Codec.inputPlan schema
-  let ops ← Core.Target.rewriteOpsValues (rewriteInputRoot method plan) rewritePayload method.ops
+  let plan ← Codec.targetInputPlan schema
+  if plan == .jsonAccountId && method.kind != .get then
+    throw s!"near/codec: {method.ixName} JSON AccountId input currently requires a view"
+  let rewriteRoot := match plan with
+    | .borsh borsh => rewriteInputRoot method borsh
+    | .jsonAccountId => rewriteJsonAccountInputRoot method
+  let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount
   let scalarSchemas := Array.replicate localCount (.scalar .uint64)
   return ({ method with
